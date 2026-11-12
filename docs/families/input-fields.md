@@ -276,11 +276,12 @@ another implementation helper.
   unfinished entry or drop a rejected one.** They reveal a value rejection once
   the entry is complete and a text rejection at commit, show every rejection in
   a standalone field as a visible message with the invalid state and one
-  announcement, and keep rejected text at commit. A `warning` or `success`
-  caller status never hides a rejection. DateInput shows its message over a
-  caller `status`, and NumberInput and TimeInput show a caller `error` status
-  over theirs; NumberInput and TimeInput report each rejection through
-  `onEntryErrorChange`. A typed number is complete only at commit, so
+  announcement, and keep rejected text at commit while a form posts the
+  committed value's text. A `warning` or `success` caller status, or an
+  `error` status without a message, never hides a rejection's message. A caller
+  `error` status with a message shows in place of it on NumberInput and
+  TimeInput, and on DateInput only with `onEntryErrorChange`; NumberInput and
+  TimeInput report each rejection through `onEntryErrorChange`. A typed number is complete only at commit, so
   NumberInput reveals its rejections at Enter or blur and nothing while the
   person types. `spec:AST-118` owns the rule, including when each kind of entry
   is complete. FileInput's rejections are of picked files, which it
