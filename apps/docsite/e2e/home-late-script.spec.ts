@@ -5,7 +5,8 @@
  * @input Production docsite home page, with the page's own script held until
  *   the site shell is live
  * @output Regression proof that a page whose script arrives late hydrates its
- *   server HTML, and does not render it again
+ *   server HTML and does not render it again, and that the shell knows the
+ *   color mode before the page is live
  * @position Docsite browser tests; jsdom does not hydrate a streamed page
  */
 
@@ -41,7 +42,16 @@ for (const colorScheme of ['light', 'dark'] as const) {
       // The shell is live when its header controls have their tooltips.
       const nav = page.getByRole('navigation', {name: 'Astryx navigation'});
       await expect(nav.locator('[role="tooltip"]').first()).toBeAttached();
-      // The page is not: its theme reel does not advance.
+      // The shell names the OS color mode without the page.
+      await expect(
+        nav.getByRole('button', {
+          name:
+            colorScheme === 'dark'
+              ? 'Switch to light mode'
+              : 'Switch to dark mode',
+        }),
+      ).toBeVisible();
+      // The page is not live: its theme reel does not advance.
       const reel = page.getByRole('navigation', {
         name: 'Preview Astryx themes',
       });
@@ -63,3 +73,32 @@ for (const colorScheme of ['light', 'dark'] as const) {
     }
   });
 }
+
+test('the color mode toggle leaves the OS mode when a visitor uses it before the page is live', async ({
+  page,
+}) => {
+  await page.setViewportSize({width: 1440, height: 900});
+  await page.emulateMedia({colorScheme: 'dark'});
+  let releasePageScript = () => {};
+  const shellIsLive = new Promise<void>(resolve => {
+    releasePageScript = resolve;
+  });
+  await page.route(HOME_PAGE_SCRIPT, async route => {
+    await shellIsLive;
+    await route.continue();
+  });
+
+  try {
+    await page.goto('/', {waitUntil: 'domcontentloaded'});
+    const nav = page.getByRole('navigation', {name: 'Astryx navigation'});
+    await expect(nav.locator('[role="tooltip"]').first()).toBeAttached();
+    await nav.getByRole('button', {name: 'Switch to light mode'}).click();
+
+    releasePageScript();
+    await expect(
+      nav.getByRole('button', {name: 'Switch to dark mode'}),
+    ).toBeVisible();
+  } finally {
+    releasePageScript();
+  }
+});
