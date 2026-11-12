@@ -6,7 +6,7 @@
  * @file ChatLayout.tsx
  * @input Uses React, StyleX, theme tokens, useChatStreamScroll, useChatNewMessages,
  *   useChatKeyboard, the pooled resize observer, useGestureRecognizer,
- *   useAttachment, the keyboard dismissal pans and the composer's bounce
+ *   useAttachment and the keyboard dismissal pans
  * @output Exports ChatLayout component and ChatLayoutProps
  * @position Layout shell for full chat interfaces — messages in page flow, composer fixed to bottom
  *
@@ -38,7 +38,7 @@
  * - /apps/storybook/stories/ChatLayout.stories.tsx
  * - /packages/cli/assets/templates/blocks/components/ChatLayout/ (block examples)
  * - /packages/core/src/Chat/transcriptDismiss.ts (the dismiss line)
- * - /packages/core/src/Chat/composerBounce.ts (the dock container's bounce)
+ * - /packages/core/src/Chat/composerBounce.ts (the dock's bounce)
  */
 
 import {type ReactNode, useCallback, useMemo, useRef, useState} from 'react';
@@ -60,7 +60,6 @@ import {
   dismissKeyboardOnComposerDrag,
   holdPageUnderComposer,
 } from './transcriptDismiss';
-import {bounceComposer} from './composerBounce';
 import {useGestureRecognizer} from '../gestures/useGestureRecognizer';
 import {useAttachment} from '../hooks/useAttachment';
 import {themeProps} from '../utils/themeProps';
@@ -351,7 +350,6 @@ export function ChatLayout({
 }: ChatLayoutProps) {
   const t = useComponentTranslator();
   const rootRef = useRef<HTMLDivElement>(null);
-  const dockContainerRef = useRef<HTMLDivElement>(null);
 
   const scrollContainerRef = externalScrollRef ?? rootRef;
   const isSelfScrolling = !externalScrollRef;
@@ -394,12 +392,8 @@ export function ChatLayout({
     },
     [isSelfScrolling],
   );
-  const dockRef = useMergedRefs(
-    keyboard.dockRef,
-    observeDock,
-    dockContainerRef,
-  );
-  const {composerRef} = keyboard;
+  const dockRef = useMergedRefs(keyboard.dockRef, observeDock);
+  const {composerRef, bounceDock} = keyboard;
   const endRoom = keyboard.lift + (isSelfScrolling ? 0 : dockHeight);
 
   const defaultScrollButton = (
@@ -427,13 +421,12 @@ export function ChatLayout({
       ),
     pan =>
       dismissKeyboardAtCrossing(pan, fingerSpeed => {
-        const container = dockContainerRef.current;
         const composer = composerRef.current;
-        if (container != null && composer != null) {
+        if (composer != null) {
           // No deeper than the composer's bottom padding.
           const depth =
             Number.parseFloat(getComputedStyle(composer).paddingBottom) || 0;
-          bounceComposer(container, fingerSpeed, depth);
+          bounceDock(fingerSpeed, depth);
         }
       }),
   );

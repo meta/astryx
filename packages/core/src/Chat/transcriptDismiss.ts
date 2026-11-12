@@ -148,8 +148,8 @@ export function createKeyboardDismissPan(
 
 /**
  * The action of a pan from `createKeyboardDismissPan`. The moment the finger
- * reaches the line, or lifts there, it blurs the focused field, once, and
- * calls `onDismiss` with the finger's downward speed (px/s). Only where the
+ * reaches the line, or lifts there, it calls `onDismiss` with the finger's
+ * downward speed (px/s), then blurs the focused field, once. Only where the
  * finger is decides: a flick that lifts above the line keeps the keyboard,
  * however fast. It moves focus nowhere itself.
  */
@@ -176,8 +176,10 @@ export function dismissKeyboardAtCrossing(
   if (win == null || editable == null || getKeyboardHeight(win) <= 0) {
     return;
   }
-  editable.blur();
+  // A bounce that onDismiss starts is on screen first, so a ride the blur
+  // starts adds to it.
   onDismiss(Math.max(0, pan.velocity().y));
+  editable.blur();
 }
 
 /**
@@ -293,7 +295,6 @@ export function holdPageUnderComposer(composer: HTMLElement): () => void {
     containsAlongFlatTree(composer, origin) &&
     !isPageZoomedIn(doc) &&
     !scrollsInComposer(origin, composer, dx, dy);
-  // The hold listens only while a software keyboard is up.
   const follow = () => {
     const isUp = getKeyboardHeight(win) > 0;
     if (isUp && release == null) {

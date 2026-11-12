@@ -4,11 +4,12 @@
 
 /**
  * @file useChatKeyboard.ts
- * @input React refs, the keyboard module's height, focus routes and layout
- *   guide, the stream scroll's lock, the motion engine, the touch query and
- *   layout viewport height
+ * @input Refs, the keyboard module's height, guide and focus routes, the
+ *   stream scroll's lock, the motion engine, the composer's bounce, the touch
+ *   query and viewport height
  * @output Exports useChatKeyboard: the lift for ChatLayout's dock and message
- *   area, and the refs for its dock, message area and composer region
+ *   area, the refs for its dock, message area and composer region, and the
+ *   dock's bounce
  * @position ChatLayout's keyboard behavior (Chat/ChatLayout.tsx); internal
  *
  * The composer sits on the keyboard, as in Messages on iOS. Where the layout
@@ -17,8 +18,18 @@
  * SYNC: update Chat/ChatLayout.tsx, ChatLayout.doc.mjs and keyboard/README.md
  */
 
-import {useRef, useState, useSyncExternalStore, type RefObject} from 'react';
-import {createMotionEngine, type Animator} from '../motion/animator';
+import {
+  useCallback,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type RefObject,
+} from 'react';
+import {
+  createMotionEngine,
+  type Animator,
+  type MotionHandle,
+} from '../motion/animator';
 import {
   claimTapFocus,
   findTextEntryControl,
@@ -39,6 +50,7 @@ import {
 } from '../keyboard/keyboardTarget';
 import type {KeyboardTransition} from '../keyboard/keyboardModel';
 import {rideKeyboard} from '../keyboard/rideKeyboard';
+import {composerBounce} from './composerBounce';
 import {
   useInteractionModalityTrackingFor,
   type InteractionModality,
@@ -84,6 +96,14 @@ export interface UseChatKeyboardResult {
    * focus on it.
    */
   composerRef: RefObject<HTMLDivElement | null>;
+  /**
+   * Bounces the dock once, down and back to where it rests, on the
+   * keyboard's spring, as a drag dismisses the keyboard. It starts at
+   * `fingerSpeed` px/s and goes no deeper than `maxDepth` px. The dock's
+   * motion engine plays it, and a ride that starts during it adds to it.
+   * Nothing plays during a ride or under Reduce Motion.
+   */
+  bounceDock: (fingerSpeed: number, maxDepth: number) => void;
 }
 
 // The lift the layout shows: a store the ride's end and keyboard reports
@@ -201,6 +221,8 @@ export function useChatKeyboard({
   // ride's number, so only the latest one hands its translate back.
   const ridingRef = useRef(false);
   const rideRef = useRef(0);
+  // The dock's bounce while it plays: a ride that starts then adds to it.
+  const bounceRef = useRef<MotionHandle | null>(null);
   // Where the last ride took the dock's and the transcript's translates
   // (null: the transcript did not ride), until the layout takes them over.
   const dockTargetRef = useRef<number | null>(null);
@@ -287,8 +309,9 @@ export function useChatKeyboard({
       const ride = rideRef.current;
       // On the keyboard's own motion: Gboard's slide.
       const rides = [
-        rideKeyboard(dock.animator, shown, transition)?.finished ??
-          Promise.resolve(true),
+        rideKeyboard(dock.animator, shown, transition, {
+          additive: bounceRef.current != null,
+        })?.finished ?? Promise.resolve(true),
       ];
       if (atEnd) {
         rides.push(
@@ -476,11 +499,38 @@ export function useChatKeyboard({
     };
   }, [touchPresentation.isTouch, readModality]);
 
+  const bounceDock = useCallback(
+    (fingerSpeed: number, maxDepth: number) => {
+      const element = dock.animator.element;
+      // A ride hands its translate to the layout only when its own motion
+      // ends, so a bounce on top of it would cut it short.
+      if (element == null || ridingRef.current) {
+        return;
+      }
+      const bounce = composerBounce(element, fingerSpeed, maxDepth);
+      if (bounce == null) {
+        return;
+      }
+      const handle = dock.animator.animate(
+        {y: dock.animator.get('y')},
+        {spring: bounce.spring, velocity: {y: bounce.speed}},
+      );
+      bounceRef.current = handle;
+      void handle.finished.then(() => {
+        if (bounceRef.current === handle) {
+          bounceRef.current = null;
+        }
+      });
+    },
+    [dock.animator],
+  );
+
   return {
     lift,
     dockRef: dock.ref,
     messagesRef: messages.ref,
     composerRef,
+    bounceDock,
   };
 }
 

@@ -283,7 +283,7 @@ test('a drag that reaches the composer blurs its text as it crosses, before the 
 
 /**
  * The dock's motion, as `traceDock` records it: the composer's top every
- * frame, and the bounce the field's blur started, if any.
+ * frame, and the bounce the crossing started, if any.
  */
 interface DockTrace {
   frames: number[];
@@ -303,12 +303,14 @@ interface DockTrace {
 
 /**
  * Records the composer's top every frame. When the field loses focus, it
- * samples the animation that the blur started and that moves something in
+ * samples the animation that the crossing started and that moves something in
  * the dock container's subtree. Paused at each frame along it, it reads the
  * composer's and the scroll-to-bottom button's offsets from their tops at its
- * start. Then it plays the animation on from where it was. A transition of a
- * color or a shadow moves nothing, so it doesn't count. `dockTrace` reads the
- * record back.
+ * start. Then it plays the animation on from where it was. Once the animation
+ * has left the element, it checks that the composer is back where it started.
+ * A motion engine takes its animation off when its curve comes to rest. A
+ * transition of a color or a shadow moves nothing, so it doesn't count.
+ * `dockTrace` reads the record back.
  */
 async function traceDock(page: Page, composer: Locator, button: Locator) {
   await composer.evaluate(
@@ -333,6 +335,7 @@ async function traceDock(page: Page, composer: Locator, button: Locator) {
         (pill as Element).getBoundingClientRect().top,
       ];
       let sampled: Animation | null = null;
+      let restTop = 0;
       const sample = () => {
         const running = moving();
         if (trace.bounce != null || running.length === 0) {
@@ -348,6 +351,7 @@ async function traceDock(page: Page, composer: Locator, button: Locator) {
         animation.pause();
         animation.currentTime = 0;
         const [composerStart, buttonStart] = tops();
+        restTop = composerStart;
         const samples = [];
         for (let time = 0; time <= end; time += 1000 / 60) {
           animation.currentTime = time;
@@ -366,17 +370,20 @@ async function traceDock(page: Page, composer: Locator, button: Locator) {
           isAtRest: false,
         };
         trace.bounce = bounce;
-        void animation.finished.then(() => {
-          bounce.isAtRest = tops()[0] === composerStart;
-        });
       };
-      // The blur and the bounce it starts run in one task. So a microtask from
-      // the blur runs after the bounce has begun, whatever the frame rate.
+      // The bounce starts in the task that blurs the field. So a microtask
+      // from the blur runs after the bounce has begun, whatever the frame
+      // rate.
       dock.addEventListener('focusout', () => queueMicrotask(sample));
       const tick = () => {
-        trace.others += moving().filter(
+        const running = moving();
+        trace.others += running.filter(
           animation => animation !== sampled,
         ).length;
+        const {bounce} = trace;
+        if (bounce != null && !bounce.isAtRest && sampled != null) {
+          bounce.isAtRest = !running.includes(sampled) && tops()[0] === restTop;
+        }
         trace.frames.push(dock.getBoundingClientRect().top);
         if (trace.frames.length < 2000) {
           requestAnimationFrame(tick);

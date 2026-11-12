@@ -19,6 +19,8 @@ import {fileURLToPath} from 'node:url';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {act, render, screen} from '@testing-library/react';
 import {pointerQuery} from '../gestures/__tests__/pointerQuery';
+import {fakeAnimate} from '../motion/__tests__/fakeWebAnimation';
+import {getKeyboardLayoutGuide} from '../keyboard/keyboardLayoutGuide';
 import {ChatLayout} from './ChatLayout';
 
 type FakeViewport = EventTarget & {
@@ -135,17 +137,66 @@ function moveFinger(
   return time + steps * 16;
 }
 
-// jsdom has no Web Animations: records each `animate` call instead.
-function recordAnimations(): {target: Element; keyframes: Keyframe[]}[] {
-  const calls: {target: Element; keyframes: Keyframe[]}[] = [];
+interface RecordedAnimation {
+  target: Element;
+  keyframes: Keyframe[];
+  /** Ends it, as its own timeline would. */
+  finish: () => void;
+}
+
+// jsdom has no Web Animations: records each `animate` call, with its
+// element, and answers it with a stand-in that ends only on `finish`.
+function recordAnimations(): RecordedAnimation[] {
+  const calls: RecordedAnimation[] = [];
+  const {animate, animations} = fakeAnimate();
   Object.defineProperty(HTMLElement.prototype, 'animate', {
     configurable: true,
-    value(this: Element, keyframes: Keyframe[]) {
-      calls.push({target: this, keyframes});
-      return {} as Animation;
+    value(this: Element, ...args: Parameters<Element['animate']>) {
+      const animation = animate.apply(this, args);
+      const {finish} = animations[animations.length - 1];
+      calls.push({
+        target: this,
+        keyframes: (args[0] ?? []) as Keyframe[],
+        finish,
+      });
+      return animation;
     },
   });
   return calls;
+}
+
+// Chrome on Android: the guide publishes Gboard's slides. The keyboard guide
+// reads event times on performance.now()'s clock. Returns the restore.
+function rideGboard(): () => void {
+  Object.defineProperty(navigator, 'virtualKeyboard', {
+    configurable: true,
+    value: {overlaysContent: false},
+  });
+  const eventTime = vi
+    .spyOn(Event.prototype, 'timeStamp', 'get')
+    .mockImplementation(() => performance.now());
+  return () => {
+    eventTime.mockRestore();
+    Reflect.deleteProperty(navigator, 'virtualKeyboard');
+  };
+}
+
+// One dip, down and back, no deeper than `depth`: offsets that start and end
+// at 0 and rise to their deepest, then fall.
+function expectOneDip(keyframes: Keyframe[], depth: number) {
+  const offsets = keyframes.map(offsetOf);
+  expect(offsets[0]).toBe(0);
+  expect(offsets.at(-1)).toBe(0);
+  const deepest = Math.max(...offsets);
+  expect(deepest).toBeGreaterThan(0);
+  expect(deepest).toBeLessThanOrEqual(depth);
+  const turn = offsets.indexOf(deepest);
+  offsets.forEach((offset, index) => {
+    if (index > 0) {
+      const step = offset - offsets[index - 1];
+      expect(index <= turn ? step >= 0 : step <= 0).toBe(true);
+    }
+  });
 }
 
 // A keyframe's vertical offset, from its `translate`.
@@ -451,20 +502,86 @@ describe('ChatLayout dismisses the keyboard from a transcript drag (FR10)', () =
       expect(target.contains(screen.getByRole('button', {hidden: true}))).toBe(
         true,
       );
-      const offsets = keyframes.map(offsetOf);
-      expect(offsets[0]).toBe(0);
-      expect(offsets.at(-1)).toBe(0);
       // One dip, down and back, no deeper than the composer's bottom padding.
-      const deepest = Math.max(...offsets);
-      expect(deepest).toBeGreaterThan(0);
-      expect(deepest).toBeLessThanOrEqual(12);
-      const turn = offsets.indexOf(deepest);
-      offsets.forEach((offset, index) => {
-        if (index > 0) {
-          const step = offset - offsets[index - 1];
-          expect(index <= turn ? step >= 0 : step <= 0).toBe(true);
+      expectOneDip(keyframes, 12);
+    });
+
+    it('bounces on Gboard’s slide too: the slide down the blur starts adds to the bounce', async () => {
+      const restore = rideGboard();
+      try {
+        const animations = recordAnimations();
+        const {composer, field, line, transcript} = renderLayout();
+        composer.style.paddingBottom = '12px';
+        const dock = composer.parentElement;
+        showKeyboard(field);
+        await vi.waitFor(
+          () =>
+            expect(
+              animations.filter(({target}) => target === dock).length,
+            ).toBeGreaterThan(0),
+          {timeout: 2000, interval: 20},
+        );
+        // The slide up ends, and the layout takes the lift.
+        await act(async () => {
+          const {start, curve} = getKeyboardLayoutGuide(window).transition;
+          const end = start + (curve?.durationMs ?? 0) + 100;
+          await new Promise(resolve =>
+            setTimeout(resolve, Math.max(0, end - performance.now())),
+          );
+          animations.forEach(animation => animation.finish());
+          await new Promise(resolve => setTimeout(resolve, 50));
+        });
+        const before = animations.length;
+        const last = fingerDrag(transcript, 100, line + 40);
+        finger(transcript, 'touchend', line + 40, last + 100);
+        expect(document.activeElement).toBe(composer);
+        const docks = animations
+          .slice(before)
+          .filter(({target}) => target === dock);
+        // The bounce, then the slide down on top of it. Here the slide moves
+        // nothing. So the dock's last curve is the rest of the dip. It goes on
+        // deeper from where the bounce is, no deeper than the padding, then
+        // back to rest. A slide that replaced the bounce would only fall from
+        // there.
+        expect(docks.length).toBeGreaterThanOrEqual(2);
+        expectOneDip(docks[0].keyframes, 12);
+        const rest = (docks.at(-1)?.keyframes ?? []).map(offsetOf);
+        expect(Math.max(...rest)).toBeGreaterThan(rest[0]);
+        expect(Math.max(...rest)).toBeLessThanOrEqual(12);
+        expect(rest.at(-1)).toBe(0);
+      } finally {
+        restore();
+      }
+    });
+
+    it('plays no bounce while the dock rides the keyboard, so the ride still hands its translate to the layout', async () => {
+      const restore = rideGboard();
+      try {
+        const animations = recordAnimations();
+        const {composer, field, line, transcript} = renderLayout();
+        composer.style.paddingBottom = '12px';
+        const dock = composer.parentElement;
+        showKeyboard(field);
+        // The stand-in's animations end only on `finish`: the slide up stays on.
+        await vi.waitFor(
+          () =>
+            expect(
+              animations.filter(({target}) => target === dock).length,
+            ).toBeGreaterThan(0),
+          {timeout: 2000, interval: 20},
+        );
+        const before = animations.length;
+        const last = fingerDrag(transcript, 100, line + 40);
+        finger(transcript, 'touchend', line + 40, last + 100);
+        expect(document.activeElement).toBe(composer);
+        for (const {target, keyframes} of animations.slice(before)) {
+          expect(target === dock && keyframes.some(k => offsetOf(k) > 0)).toBe(
+            false,
+          );
         }
-      });
+      } finally {
+        restore();
+      }
     });
 
     it('moves nothing for a drag that stays above the composer, and nothing under Reduce Motion', () => {
@@ -663,13 +780,5 @@ describe('what the drag-to-dismiss loads', () => {
       "from '../gestures/types'",
     ]);
     expect(dismissal).not.toMatch(/addEventListener|subscribeInput/);
-  });
-
-  it('loads no animator: the bounce is one Web Animation of solved keyframes', () => {
-    const here = path.dirname(fileURLToPath(import.meta.url));
-    for (const file of ['ChatLayout.tsx', 'composerBounce.ts']) {
-      const source = fs.readFileSync(path.join(here, file), 'utf8');
-      expect(source).not.toMatch(/motion\/animator|motion\/rubberBand/);
-    }
   });
 });

@@ -195,7 +195,9 @@ and the curve the keyboard moves on: `curve`, Gboard's slide in Chrome on
 Android, values and no motion role (architecture:react-component-runtime
 INV11). `rideKeyboard` moves your element on the compositor from `start` on
 that curve. It lands the element at once when the transition is not animated,
-or when its slide has ended by the call. Hand the translate back to the layout
+or when its slide has ended by the call. With `additive`, the ride adds to a
+curve the element already plays, such as ChatLayout's bounce, instead of
+replacing it. Hand the translate back to the layout
 once the ride ends (BottomSheet's hook does, in one commit at rest). Under Reduce Motion
 nothing travels with the keyboard
 (design:reduced-motion): the animator's default cross-fades on a touch screen
