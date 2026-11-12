@@ -137,9 +137,9 @@
     "jscodeshift": "^17.4.0",
     "linkedom": "^0.18.15",
     "node-diff3": "3.2.1",
-    "postcss": "^8.5.23",
+    "postcss": "^8.5.32",
     "postcss-selector-parser": "^7.1.6",
-    "recast": "0.23.21",
+    "recast": "0.24.0",
     "zod": "^4.6.7"
   },
   "peerDependencies": {
@@ -158,7 +158,7 @@
     "@heroicons/react": "^2.2.0",
     "@stylexjs/stylex": "catalog:",
     "@types/babel__core": "^7.20.5",
-    "lucide-react": "^1.66.0",
+    "lucide-react": "^1.69.0",
     "recharts": "^3.10.1"
   }
 }
