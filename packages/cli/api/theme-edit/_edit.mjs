@@ -958,9 +958,11 @@ async function change(sub, slug, thing, value, options) {
         .trim()
         .toLowerCase()
         .replace(/\s+/g, ' ')
-        // Spacing around commas and parentheses is not part of a value.
-        .replace(/\s*([,()])\s*/g, '$1')
-        .replace(/^["']|["']$/g, '');
+        // Spacing around commas, slashes and parentheses, and the quote
+        // style, are not part of a value.
+        .replace(/\s*([,()/])\s*/g, '$1')
+        .replace(/'/g, '"')
+        .replace(/^"|"$/g, '');
     const half =
       s.thing === 'headings' && ['weight', 'tracking'].includes(norm(value));
     if (
@@ -1045,9 +1047,16 @@ async function change(sub, slug, thing, value, options) {
   if (sub === 'undo') {
     if (!prev) {
       const near = data.settings.filter(x => x.thing === s.thing).map(describe);
+      // headings has two halves: name the one that is set.
+      const otherHalf =
+        s.thing === 'headings'
+          ? data.settings.find(x => x.thing === 'headings' && x.axis !== s.axis)
+          : null;
       refuse(
         E.ERR_THEME_NOT_SET,
-        `The theme does not set ${describe({...s, value: '?'}).replace(' = ?', '')}.`,
+        otherHalf
+          ? `The theme sets only the headings ${otherHalf.axis ?? 'weight'} half (${describe(otherHalf)}), not its ${s.axis ?? 'weight'}; \`${P} undo ${slug} ${undoArgs(otherHalf)}\` removes the one that is set.`
+          : `The theme does not set ${describe({...s, value: '?'}).replace(' = ?', '')}.`,
         {
           also: near.length
             ? [`settings for ${s.thing}: ${near.join('; ')}`]
@@ -2129,11 +2138,16 @@ export async function themeEditUndo(theme, options = {}) {
   if (thing === 'base' || thing === 'mode') {
     requireProject(cwd);
     const now = loadTheme(cwd, theme, thing);
-    const {steps} = readHistory(themeFiles(cwd, theme).history);
+    const historyFile = themeFiles(cwd, theme).history;
+    const {steps, dropped} = readHistory(historyFile);
     const [first] = steps;
-    // The history keeps the last steps only: when it is full, or gone, its
-    // oldest step may not be how the theme was made.
-    const reachesStart = steps.length > 0 && steps.length < HISTORY_STEPS;
+    // `new` writes no history: with none, no change is saved (a new theme,
+    // or a history deleted). An empty one is every step undone, back to how
+    // the theme was made. A full one may have lost its oldest steps.
+    const noHistory = !fs.existsSync(historyFile);
+    const reachesStart =
+      (steps.length > 0 && steps.length < HISTORY_STEPS) ||
+      (!noHistory && steps.length === 0 && dropped === 0);
     /** @type {any} */
     let made = now;
     try {
@@ -2148,7 +2162,9 @@ export async function themeEditUndo(theme, options = {}) {
         E.ERR_THEME_NOT_SET,
         reachesStart
           ? `${thing} was never changed: it is ${of(now)}, as ${theme} was made.`
-          : `${thing} is ${of(now)}, and ${theme}'s history does not reach back to how it was made, so there is no earlier ${thing} to go back to. Set the ${thing} you want with \`${P} set ${theme} ${thing} …\` instead.`,
+          : noHistory
+            ? `${thing} is ${of(now)}, and ${theme} has no saved change (it has had none since it was made, or its history was deleted), so there is no earlier ${thing} to go back to.`
+            : `${thing} is ${of(now)}, and ${theme}'s history does not reach back to how it was made, so there is no earlier ${thing} to go back to. Set the ${thing} you want with \`${P} set ${theme} ${thing} …\` instead.`,
         {run: [`${P} show ${theme}`]},
       );
     return change('set', theme, thing, of(made), options);

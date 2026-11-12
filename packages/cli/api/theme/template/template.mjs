@@ -180,18 +180,38 @@ export function themeTemplate(options = {}) {
     );
   }
 
-  const record = fs.existsSync(resolved)
-    ? editorThemeRecord(path.dirname(resolved))
-    : null;
+  // The folder as it is on disk (`themes/T` is `themes/t` on a
+  // case-insensitive disk, or through a link).
+  const realDir = fs.existsSync(resolved)
+    ? fs.realpathSync(path.dirname(resolved))
+    : path.dirname(resolved);
+  const record = fs.existsSync(resolved) ? editorThemeRecord(realDir) : null;
   // The editor's own files are `<folder>.*` beside its settings; with
   // __editorFilesOnly any other file there (an earlier template) is the
   // person's.
+  // On a case-insensitive disk `T.theme.ts` is `t.theme.ts`: names are
+  // compared in any case, and an existing file by what it is on disk.
+  const folder = path.basename(realDir).toLowerCase();
+  const sameFile = (/** @type {string} */ other) => {
+    try {
+      const a = fs.statSync(resolved);
+      const b = fs.statSync(other);
+      return a.ino === b.ino && a.dev === b.dev;
+    } catch {
+      return false;
+    }
+  };
   const editorFile =
     record != null &&
     (!editorFilesOnly ||
-      path
-        .basename(resolved)
-        .startsWith(`${path.basename(path.dirname(resolved))}.`));
+      path.basename(resolved).toLowerCase().startsWith(`${folder}.`) ||
+      fs
+        .readdirSync(realDir)
+        .some(
+          f =>
+            f.toLowerCase().startsWith(`${folder}.`) &&
+            sameFile(path.join(realDir, f)),
+        ));
   const editorRecord = overwrite && editorFile ? record : null;
   if (editorRecord) {
     throw new AstryxError(

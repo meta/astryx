@@ -87,6 +87,7 @@ import {
   focusStateOf,
   valueProblem,
   partComponentDocs,
+  themeFiles,
 } from './_settings.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 
@@ -2181,9 +2182,10 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
               ...LIKE.filter(b => baseInstalled(ctx.project, b)),
               'none',
             ]);
+        const madeHere = fs.existsSync(themeFiles(ctx.project.cwd, v).settings);
         refuse(
           E.ERR_THEME_BAD_VALUE,
-          `base takes ${DIALS.base.values}, not "${v}".`,
+          `base takes ${DIALS.base.values}, not "${v}".${madeHere ? ` ${v} is a theme made here, and a theme builds only on a built-in one.` : ''}`,
           {
             didYouMean: near,
             // With nothing near, every base that works here, none first.

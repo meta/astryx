@@ -2626,3 +2626,42 @@ describe('colors17', () => {
     await themeEditUndo('p', {cwd, thing: 'font'});
   });
 });
+
+describe('hunt22', () => {
+  it('reads undo values in either quote style and spacing, names the headings half set, and tells a new theme from a lost history', async () => {
+    await themeEditNew('h22', {cwd, mode: 'dark-only'});
+    const fresh = await refusal(() =>
+      themeEditUndo('h22', {cwd, thing: 'mode'}),
+    );
+    expect(fresh.message).toContain('no saved change');
+    expect(fresh.message).not.toContain('does not reach back');
+    await themeEditSet('h22', 'corners', 'pill', {cwd});
+    await themeEditUndo('h22', {cwd});
+    const undone = await refusal(() =>
+      themeEditUndo('h22', {cwd, thing: 'mode'}),
+    );
+    expect(undone.message).toContain('was never changed');
+    await themeEditSet('h22', 'headings', 'tight', {cwd});
+    const half = await refusal(() =>
+      themeEditUndo('h22', {cwd, thing: 'headings', value: 'bold'}),
+    );
+    expect(half.message).toContain('only the headings tracking half');
+    await themeEditUndo('h22', {cwd, thing: 'headings'});
+    await themeEditSet(
+      'h22',
+      '--font-family-body',
+      `'Inter Tight', sans-serif`,
+      {cwd},
+    );
+    await themeEditUndo('h22', {
+      cwd,
+      thing: '--font-family-body',
+      value: `"Inter Tight",sans-serif`,
+    });
+    const mistyped = await refusal(() =>
+      themeEditSet('h22', 'base', 'p', {cwd}),
+    );
+    expect(mistyped.message).toContain('p is a theme made here');
+    fs.rmSync(path.join(cwd, 'themes', 'h22'), {recursive: true, force: true});
+  });
+});

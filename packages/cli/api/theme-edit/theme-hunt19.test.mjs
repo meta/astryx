@@ -178,6 +178,27 @@ describe('the experimental template in an editor theme folder', () => {
       }),
     ).toThrow(/belongs to a theme the theme editor made/);
 
+    // Another spelling of the same file (a case-insensitive disk, here a
+    // link) is the editor's file too.
+    fs.symlinkSync('g.theme.ts', path.join(dir(), 'G.theme.ts'));
+    fs.symlinkSync('g', path.join(path.dirname(dir()), 'G'));
+    try {
+      for (const targetPath of ['themes/g/G.theme.ts', 'themes/G/g.theme.ts'])
+        expect(
+          () =>
+            themeTemplate({
+              cwd,
+              targetPath,
+              overwrite: true,
+              __editorFilesOnly: true,
+            }),
+          targetPath,
+        ).toThrow(/belongs to a theme the theme editor made/);
+    } finally {
+      fs.unlinkSync(path.join(dir(), 'G.theme.ts'));
+      fs.unlinkSync(path.join(path.dirname(dir()), 'G'));
+    }
+
     themeTemplate({cwd, targetPath: 'themes/g/theme.template.ts'});
     fs.appendFileSync(path.join(dir(), 'theme.template.ts'), '// mine\n');
     expect(
@@ -237,9 +258,7 @@ describe('undo reports what it did', () => {
     const {themeEditUndo} = await import('./theme-edit.mjs');
     fs.rmSync(path.join(dir(), 'g.history.json'), {force: true});
     const err = await refusal(() => themeEditUndo('g', {cwd, thing: 'mode'}));
-    expect(err.message).toContain(
-      'history does not reach back to how it was made',
-    );
+    expect(err.message).toContain('has no saved change');
     expect(err.message).not.toContain('was never changed');
   }, 240_000);
 });
