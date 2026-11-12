@@ -510,6 +510,36 @@ describe('Tooltip', () => {
       });
     });
 
+    it('a tap on a text-entry control inside the trigger focuses it and does not open or close the tooltip', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <Tooltip
+          content="Tooltip text"
+          onOpenChange={onOpenChange}
+          touchTrigger="tap"
+          delay={0}>
+          <span>
+            Name <input aria-label="Name" />
+          </span>
+        </Tooltip>,
+      );
+      const field = screen.getByRole('textbox', {name: 'Name'});
+      tap(field);
+      act(() => field.focus());
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(onOpenChange).not.toHaveBeenCalled();
+      expect(field).toHaveFocus();
+
+      tap(screen.getByText(/Name/, {selector: 'span'}));
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(true);
+      });
+      onOpenChange.mockClear();
+      tap(field);
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    });
+
     it('stays shut on a tap when the trigger performs an action', async () => {
       const onOpenChange = vi.fn();
       render(
