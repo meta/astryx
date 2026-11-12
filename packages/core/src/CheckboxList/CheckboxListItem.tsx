@@ -27,7 +27,10 @@ import {CheckboxInput} from '../CheckboxInput/CheckboxInput';
 import type {CheckboxInputProps} from '../CheckboxInput/CheckboxInput';
 import type {InputStatus} from '../Field/types';
 import {CheckboxRowPressContext} from '../CheckboxInput/CheckboxRowPressContext';
-import {rowPressPaintStyles} from '../privateAttributes/press.stylex';
+import {
+  rowPressLayerStyles,
+  rowPressPaintStyles,
+} from '../privateAttributes/press.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {ListItem} from '../List/ListItem';
 import {ListContext} from '../List/ListContext';
@@ -380,6 +383,10 @@ export function CheckboxListItem({
           // fades with the row.
           rowOwnsPress && interactionOverlayStyles.pressedAlpha,
           isCheckedRow && styles.selected,
+          // The checked fill is the row's background colour, so the hover
+          // and pressed overlays paint as an image layer over it, as on a
+          // selected Item row.
+          isCheckedRow && rowPressLayerStyles.cellOnImage,
           xstyle,
         ] as StyleXStyles
       }
