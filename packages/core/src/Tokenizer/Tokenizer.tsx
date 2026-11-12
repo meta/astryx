@@ -467,8 +467,11 @@ const styles = stylex.create({
   },
   // UIKit paints a selected search token with the tint fill and no animation.
   // Forced colors drop that fill, so the selection takes the system's
-  // highlight there.
+  // highlight there. The browser also paints its own Canvas backplate behind
+  // forced-colors text, which hides HighlightText. With no forced adjustment,
+  // the name sits on Highlight. Both are the person's own contrast colors.
   tokenSelected: {
+    forcedColorAdjust: 'none',
     backgroundColor: {
       default: colorVars['--color-accent'],
       '@media (forced-colors: active)': 'Highlight',
