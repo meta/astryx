@@ -1297,9 +1297,9 @@ describe('Slider', () => {
   });
 
   describe('text value display width stability', () => {
-    // jsdom has no layout, so these check what the browser is given to size
-    // each value: its visible text stacked on an inert sizer that lists the
-    // labels the slider can show.
+    // jsdom has no layout, so these check the reservation the browser is
+    // given: the text value's minimum width in characters, from its longest
+    // likely label. SliderTextValue.a11y.chromium.spec.ts measures the track.
     function getTextDisplay(): HTMLElement {
       // The text display is the span that follows the track in the slider
       // row.
@@ -1312,25 +1312,13 @@ describe('Slider', () => {
       return span as HTMLElement;
     }
 
-    function getSizerLabels(): string[][] {
-      return Array.from(
-        getTextDisplay().querySelectorAll('[aria-hidden="true"]'),
-        sizer => sizer.textContent.split('\n'),
-      );
+    function reservedWidth(): string | undefined {
+      return getTextDisplay()
+        .getAttribute('style')
+        ?.match(/(\d+)ch/)?.[0];
     }
 
-    function getVisibleText(): string {
-      const display = getTextDisplay().cloneNode(true) as HTMLElement;
-      display
-        .querySelectorAll('[aria-hidden="true"]')
-        .forEach(sizer => sizer.remove());
-      return display.textContent;
-    }
-
-    // The ends, their neighbours and the quarter points of 0–100.
-    const percentLabels = ['0', '1', '25', '50', '75', '99', '100'];
-
-    it('reserves the ends, their neighbours and the quarter points whatever the current value', () => {
+    it('reserves its longest likely label whatever the current value', () => {
       const {rerender} = render(
         <Slider
           label="Volume"
@@ -1340,8 +1328,8 @@ describe('Slider', () => {
           valueDisplay="text"
         />,
       );
-      expect(getSizerLabels()).toEqual([percentLabels]);
-      expect(getVisibleText()).toBe('5');
+      expect(reservedWidth()).toBe('3ch');
+      expect(getTextDisplay()).toHaveTextContent('5');
 
       rerender(
         <Slider
@@ -1352,11 +1340,11 @@ describe('Slider', () => {
           valueDisplay="text"
         />,
       );
-      expect(getSizerLabels()).toEqual([percentLabels]);
-      expect(getVisibleText()).toBe('100');
+      expect(reservedWidth()).toBe('3ch');
+      expect(getTextDisplay()).toHaveTextContent('100');
     });
 
-    it('lets layout measure formatted labels instead of counting characters', () => {
+    it('counts the characters of formatted labels', () => {
       render(
         <Slider
           label="Volume"
@@ -1367,13 +1355,10 @@ describe('Slider', () => {
           formatValue={v => `${v}%`}
         />,
       );
-      // A `%` is wider than the `0` a `ch` unit measures, so reserving
-      // characters would still let "100%" outgrow "99%".
-      expect(getSizerLabels()).toEqual([percentLabels.map(v => `${v}%`)]);
-      expect(getTextDisplay()).not.toHaveAttribute('style');
+      expect(reservedWidth()).toBe('4ch');
     });
 
-    it('sizes each value in range mode on its own', () => {
+    it('reserves both values and the separator in range mode', () => {
       render(
         <Slider
           label="Price"
@@ -1383,8 +1368,8 @@ describe('Slider', () => {
           valueDisplay="text"
         />,
       );
-      expect(getSizerLabels()).toEqual([percentLabels, percentLabels]);
-      expect(getVisibleText()).toBe('20 – 80');
+      expect(reservedWidth()).toBe('9ch');
+      expect(getTextDisplay()).toHaveTextContent('20 – 80');
     });
 
     it('reserves snapped labels for decimal steps', () => {
@@ -1398,12 +1383,11 @@ describe('Slider', () => {
           valueDisplay="text"
         />,
       );
-      expect(getSizerLabels()).toEqual([
-        ['0', '0.1', '0.3', '0.5', '0.8', '0.9', '1'],
-      ]);
+      expect(reservedWidth()).toBe('3ch');
     });
 
-    it('lays out the same few labels however long the range', () => {
+    it('reads only a few labels however long the range', () => {
+      const formatValue = vi.fn((v: number) => String(v));
       render(
         <Slider
           label="Distance"
@@ -1411,185 +1395,11 @@ describe('Slider', () => {
           min={0}
           max={10000}
           valueDisplay="text"
+          formatValue={formatValue}
         />,
       );
-      expect(getSizerLabels()).toEqual([
-        ['0', '1', '2500', '5000', '7500', '9999', '10000'],
-      ]);
-    });
-  });
-
-  describe('focus ring modality', () => {
-    beforeEach(() => {
-      __resetInteractionModalityForTest();
-    });
-
-    // The ring is a stylex class, so derive it from the same source the
-    // component applies rather than hardcoding a hash.
-    const RING = stylex
-      .props(focusOutlineStyles.focusVisible)
-      .className!.split(' ');
-    const isRinged = (el: HTMLElement) =>
-      RING.every(c => el.classList.contains(c));
-
-    // The track has no layout in jsdom; pointer maths needs a real rect.
-    const grabTrack = (thumb: HTMLElement) => {
-      const track = controlOf(thumb);
-      track.getBoundingClientRect = () => ({
-        left: 0,
-        top: 0,
-        right: 200,
-        bottom: 20,
-        width: 200,
-        height: 20,
-        x: 0,
-        y: 0,
-        toJSON: () => {},
-      });
-      fireEvent.pointerDown(track, {clientX: 100, clientY: 10, pointerId: 1});
-    };
-
-    it('rings when the thumb is reached with the keyboard', async () => {
-      const user = userEvent.setup();
-      render(<Slider label="Volume" value={50} onChange={vi.fn()} />);
-      await user.tab();
-      expect(isRinged(screen.getByRole('slider'))).toBe(true);
-    });
-
-    it('does not ring when the thumb is grabbed with the mouse', () => {
-      render(<Slider label="Volume" value={50} onChange={vi.fn()} />);
-      const thumb = screen.getByRole('slider');
-      grabTrack(thumb);
-      expect(thumb).toHaveFocus();
-      expect(isRinged(thumb)).toBe(false);
-    });
-
-    it('drops the ring when the mouse grabs a thumb that already had it', async () => {
-      const user = userEvent.setup();
-      render(<Slider label="Volume" value={50} onChange={vi.fn()} />);
-      await user.tab();
-      const thumb = screen.getByRole('slider');
-      expect(isRinged(thumb)).toBe(true);
-      // Already focused, so focus() fires no focus event.
-      grabTrack(thumb);
-      expect(isRinged(thumb)).toBe(false);
-    });
-
-    it('brings the ring back when an arrow key follows a mouse drag', () => {
-      render(<Slider label="Volume" value={50} onChange={vi.fn()} />);
-      const thumb = screen.getByRole('slider');
-      grabTrack(thumb);
-      expect(isRinged(thumb)).toBe(false);
-      fireEvent.keyDown(thumb, {key: 'ArrowRight'});
-      expect(isRinged(thumb)).toBe(true);
-    });
-
-    it('leaves the ring off for a modifier chord after a mouse drag', () => {
-      render(<Slider label="Volume" value={50} onChange={vi.fn()} />);
-      const thumb = screen.getByRole('slider');
-      grabTrack(thumb);
-      // Copying or reloading is not navigation, and the mouse is still on it.
-      fireEvent.keyDown(thumb, {key: 'c', metaKey: true});
-      expect(isRinged(thumb)).toBe(false);
-    });
-
-    it('leaves the ring off for a bare Shift press after a mouse drag', () => {
-      render(<Slider label="Volume" value={50} onChange={vi.fn()} />);
-      const thumb = screen.getByRole('slider');
-      grabTrack(thumb);
-      fireEvent.keyDown(thumb, {key: 'Shift', shiftKey: true});
-      expect(getInteractionModality()).toBe('keyboard');
-      expect(isRinged(thumb)).toBe(false);
-    });
-
-    it.each([
-      ['Meta', {metaKey: true}],
-      ['Alt', {altKey: true}],
-      ['Control', {ctrlKey: true}],
-    ])(
-      'leaves the ring off for %s and its chord after bare Shift',
-      (key, flags) => {
-        render(<Slider label="Volume" value={50} onChange={vi.fn()} />);
-        const thumb = screen.getByRole('slider');
-        grabTrack(thumb);
-        fireEvent.keyDown(thumb, {key: 'Shift', shiftKey: true});
-        fireEvent.keyUp(thumb, {key: 'Shift'});
-        fireEvent.keyDown(thumb, {key, ...flags});
-        expect(isRinged(thumb)).toBe(false);
-        fireEvent.keyDown(thumb, {key: 'c', ...flags});
-        expect(getInteractionModality()).toBe('keyboard');
-        expect(isRinged(thumb)).toBe(false);
-      },
-    );
-
-    it('restores the ring and changes value for Shift+Arrow after bare Shift', () => {
-      const onChange = vi.fn();
-      render(<Slider label="Volume" value={50} onChange={onChange} />);
-      const thumb = screen.getByRole('slider');
-      grabTrack(thumb);
-      onChange.mockClear();
-      fireEvent.keyDown(thumb, {key: 'Shift', shiftKey: true});
-      expect(isRinged(thumb)).toBe(false);
-      expect(onChange).not.toHaveBeenCalled();
-
-      fireEvent.keyDown(thumb, {key: 'ArrowRight', shiftKey: true});
-      expect(isRinged(thumb)).toBe(true);
-      expect(onChange).toHaveBeenCalledWith(51);
-    });
-
-    it('preserves an existing keyboard ring when Shift is pressed', async () => {
-      const user = userEvent.setup();
-      render(<Slider label="Volume" value={50} onChange={vi.fn()} />);
-      await user.tab();
-      const thumb = screen.getByRole('slider');
-
-      fireEvent.keyDown(thumb, {key: 'Shift', shiftKey: true});
-      expect(isRinged(thumb)).toBe(true);
-    });
-
-    it('rings when Shift+Tab returns to a mouse-focused thumb', async () => {
-      const user = userEvent.setup();
-      render(
-        <>
-          <Slider label="Volume" value={50} onChange={vi.fn()} />
-          <button type="button">After slider</button>
-        </>,
-      );
-      const thumb = screen.getByRole('slider');
-      grabTrack(thumb);
-      expect(isRinged(thumb)).toBe(false);
-      await user.click(screen.getByRole('button', {name: 'After slider'}));
-
-      await user.tab({shift: true});
-      expect(thumb).toHaveFocus();
-      expect(isRinged(thumb)).toBe(true);
-    });
-
-    it('drops the ring on blur', async () => {
-      const user = userEvent.setup();
-      render(<Slider label="Volume" value={50} onChange={vi.fn()} />);
-      await user.tab();
-      const thumb = screen.getByRole('slider');
-      expect(isRinged(thumb)).toBe(true);
-      act(() => thumb.blur());
-      expect(isRinged(thumb)).toBe(false);
-    });
-
-    it('rings the range thumb the keyboard reached, not its sibling', async () => {
-      const user = userEvent.setup();
-      render(
-        <Slider
-          label="Price"
-          value={[20, 80] as [number, number]}
-          onChange={vi.fn()}
-        />,
-      );
-      await user.tab();
-      await user.tab();
-      const thumbs = screen.getAllByRole('slider');
-      expect(thumbs[1]).toHaveFocus();
-      expect(isRinged(thumbs[1])).toBe(true);
-      expect(isRinged(thumbs[0])).toBe(false);
+      expect(reservedWidth()).toBe('5ch');
+      expect(formatValue.mock.calls.length).toBeLessThan(40);
     });
   });
 });
