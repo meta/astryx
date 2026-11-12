@@ -77,6 +77,7 @@ import {
   baseModule,
   baseResolved,
   baseThemeFile,
+  themeCacheRoot,
 } from './_project.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 
@@ -189,6 +190,96 @@ export function themeFiles(cwd, slug) {
     previewPng: path.join(dir, 'preview.png'),
     sheetPng: path.join(dir, 'sheet.png'),
   };
+}
+
+/**
+ * Where the editor records the pictures it wrote into a theme folder (each
+ * by name with the hash of what it wrote), in the project's theme cache;
+ * null without one.
+ * @param {string} cwd
+ * @param {string} slug
+ */
+function writtenRecord(cwd, slug) {
+  const root = themeCacheRoot(cwd);
+  if (!root) return null;
+  const dir = path.resolve(themeFiles(cwd, slug).dir);
+  const key = createHash('sha256').update(dir).digest('hex').slice(0, 12);
+  return path.join(root, 'written', `${slug}-${key}.json`);
+}
+
+/** @param {string} file @returns {string | null} */
+const contentHash = file => {
+  try {
+    return createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+  } catch {
+    return null;
+  }
+};
+
+/** @param {string | null} rec @returns {Record<string, string>} */
+const readRecord = rec => {
+  if (!rec) return {};
+  try {
+    const json = JSON.parse(fs.readFileSync(rec, 'utf8'));
+    return json && typeof json === 'object' && !Array.isArray(json) ? json : {};
+  } catch {
+    return {};
+  }
+};
+
+/** @param {string} rec @param {Record<string, string>} map */
+const writeRecord = (rec, map) => {
+  try {
+    fs.mkdirSync(path.dirname(rec), {recursive: true});
+    fs.writeFileSync(rec, `${JSON.stringify(map, null, 2)}\n`);
+  } catch {
+    // Without a record nothing is removed later: the safe way round.
+  }
+};
+
+/**
+ * Record files the editor just wrote into a theme folder.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {string[]} files
+ */
+export function recordWritten(cwd, slug, files) {
+  const rec = writtenRecord(cwd, slug);
+  if (!rec) return;
+  const map = readRecord(rec);
+  for (const file of files) {
+    const hash = contentHash(file);
+    if (hash) map[path.basename(file)] = hash;
+  }
+  writeRecord(rec, map);
+}
+
+/**
+ * Whether the editor wrote this file in the theme folder and it is
+ * unchanged since.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {string} file
+ */
+export function editorWrote(cwd, slug, file) {
+  const map = readRecord(writtenRecord(cwd, slug));
+  const was = map[path.basename(file)];
+  return Boolean(was) && was === contentHash(file);
+}
+
+/**
+ * Drop names from the record of what the editor wrote.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {string[]} names
+ */
+function forgetWritten(cwd, slug, names) {
+  if (!names.length) return;
+  const rec = writtenRecord(cwd, slug);
+  if (!rec) return;
+  const map = readRecord(rec);
+  for (const n of names) delete map[n];
+  writeRecord(rec, map);
 }
 
 /**
@@ -3434,23 +3525,26 @@ export async function buildTheme(ctx, slug, data) {
     if (!fs.existsSync(f.ts)) writeWhole(f.ts, themeModuleSource(slug));
   });
   // Files an earlier build wrote that this one may not: the variants types
-  // of an older base, and section sheets of an older look.
+  // of an older base, and the pictures the editor took of an older look.
+  // Only a picture the editor recorded writing, unchanged since, goes: a
+  // file of the user's is never touched. Section sheets stay, marked as
+  // out of date like sheet.html.
   await step(() => {
+    const pictures = fs.existsSync(f.dir)
+      ? fs
+          .readdirSync(f.dir)
+          .filter(
+            n =>
+              /^(sheet|preview)(-[a-z-]+)?\.png$/.test(n) &&
+              editorWrote(cwd, slug, path.join(f.dir, n)),
+          )
+      : [];
     for (const file of [
       path.join(f.dir, `${slug}.variants.d.ts`),
-      ...(fs.existsSync(f.dir)
-        ? fs
-            .readdirSync(f.dir)
-            // Section sheets, and every picture: all show the look before
-            // this build. The full sheet and the preview page are written
-            // again by the commands that make them.
-            .filter(n =>
-              /^(sheet-[a-z-]+\.html|(sheet|preview)(-[a-z-]+)?\.png)$/.test(n),
-            )
-            .map(n => path.join(f.dir, n))
-        : []),
+      ...pictures.map(n => path.join(f.dir, n)),
     ])
       fs.rmSync(file, {force: true});
+    forgetWritten(cwd, slug, pictures);
   });
   let receipt = await step(() => runBuild(ctx, slug));
   const found = findOverrides(fs.readFileSync(f.css, 'utf8'), theme).filter(
@@ -4343,23 +4437,61 @@ export function refuseLinks(cwd, slug) {
   const f = themeFiles(cwd, slug);
   /** @param {string} p */
   const link = p => {
-    if (fs.lstatSync(p, {throwIfNoEntry: false})?.isSymbolicLink())
+    // A path under a file (themes written as a file) is not a link: its
+    // own refusal names it.
+    /** @type {fs.Stats | undefined} */
+    let st;
+    try {
+      st = fs.lstatSync(p, {throwIfNoEntry: false});
+    } catch {
+      return;
+    }
+    if (!st?.isSymbolicLink()) return;
+    const rel = path.relative(cwd, p) || p;
+    // A link whose target is gone: there is nothing to copy. Name where it
+    // points, so that file can be put back; nothing is removed for the user.
+    if (!fs.existsSync(p)) {
+      /** @type {string} */
+      let target;
+      try {
+        target = fs.readlinkSync(p);
+      } catch {
+        target = '';
+      }
       throw new AstryxError(
-        `${path.relative(cwd, p) || p} is a link; the editor writes a theme's own files only, never through a link. Replace the link with a copy of what it points to. Nothing was changed.`,
+        `${rel} is a link to ${target || 'a file'}, which does not exist; the editor writes a theme's own files only, never through a link. Put ${target || 'that file'} back, then replace the link with a copy of it. Nothing was changed.`,
         [
           {
-            name: `cp -rL ${quoteCommandArgument(path.relative(cwd, p))} ${quoteCommandArgument(`${path.relative(cwd, p)}.copy`)}`,
-            reason: 'copy what it points to, then put the copy in its place',
+            name: `ls -l ${quoteCommandArgument(path.relative(cwd, p))}`,
+            reason: 'shows where the link points',
           },
         ],
         ERROR_CODES.ERR_THEME_INVALID,
       );
+    }
+    throw new AstryxError(
+      `${rel} is a link; the editor writes a theme's own files only, never through a link. Replace the link with a copy of what it points to. Nothing was changed.`,
+      [
+        {
+          name: `cp -rL ${quoteCommandArgument(path.relative(cwd, p))} ${quoteCommandArgument(`${path.relative(cwd, p)}.copy`)}`,
+          reason: 'copy what it points to, then put the copy in its place',
+        },
+      ],
+      ERROR_CODES.ERR_THEME_INVALID,
+    );
   };
   link(f.root);
   link(f.dir);
   /** @param {string} d */
   const walk = d => {
-    if (!fs.lstatSync(d, {throwIfNoEntry: false})?.isDirectory()) return;
+    /** @type {fs.Stats | undefined} */
+    let st;
+    try {
+      st = fs.lstatSync(d, {throwIfNoEntry: false});
+    } catch {
+      return;
+    }
+    if (!st?.isDirectory()) return;
     for (const e of fs.readdirSync(d, {withFileTypes: true})) {
       const p = path.join(d, e.name);
       link(p);

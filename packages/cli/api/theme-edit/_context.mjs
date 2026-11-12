@@ -43,6 +43,7 @@ import {
   modesOf,
   nearest,
   refuse,
+  recordWritten,
   themeFiles,
   refuseThemesNotFolder,
 } from './_settings.mjs';
@@ -391,6 +392,14 @@ export async function pictures(project, shots, modes) {
       const r = await screenshot(project, html, out, m);
       if (!r.ok) return {files, problem: r.reason};
       files.push(r.file);
+      // A picture in a theme folder is recorded as the editor's, so a later
+      // change removes it and never a picture of the user's.
+      const slug = path.basename(path.dirname(out));
+      if (
+        path.resolve(path.dirname(out)) ===
+        path.resolve(themeFiles(project.cwd, slug).dir)
+      )
+        recordWritten(project.cwd, slug, [out]);
       if (r.cut) cut.push(r.file);
     }
   }
@@ -589,6 +598,20 @@ export async function previewAfter(ctx, slug, data, png) {
   // The sheet of every component is made by show only: after a change it
   // says, at its top, that it shows the theme as it was.
   const sheetStale = markSheetStale(f.sheet, slug, ctx.project.cwd);
+  // Section sheets the editor made (they carry its stamp) go out of date the
+  // same way; any other file is left as it is.
+  const sectionsStale = (
+    fs.existsSync(f.dir) ? fs.readdirSync(f.dir) : []
+  ).filter(n => {
+    if (!/^sheet-[a-z-]+\.html$/.test(n)) return false;
+    const file = path.join(f.dir, n);
+    try {
+      if (!SHEET_STAMP.test(fs.readFileSync(file, 'utf8'))) return false;
+    } catch {
+      return false;
+    }
+    return markSheetStale(file, slug, ctx.project.cwd);
+  });
   const shots =
     png && preview
       ? await pictures(
@@ -602,11 +625,15 @@ export async function previewAfter(ctx, slug, data, png) {
     pictures: shots.files,
     pictureProblem: shots.problem,
     notChecked: notChecked(cause),
-    ...(sheetStale
+    ...(sheetStale && !sectionsStale.length
       ? {
           sheetStale: `sheet.html shows ${slug} as it was before this change; ${P} show ${slug} makes it again`,
         }
-      : {}),
+      : sectionsStale.length
+        ? {
+            sheetStale: `${[...(sheetStale ? ['sheet.html'] : []), ...sectionsStale].join(', ')} show ${slug} as it was before this change; ${P} show ${slug} makes sheet.html again, and ${P} show ${slug} --section <section> a section's sheet`,
+          }
+        : {}),
   };
 }
 

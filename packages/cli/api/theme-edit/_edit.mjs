@@ -75,6 +75,7 @@ import {
   ownSourceTokenValues,
   ownPartTokens,
   freeThemeName,
+  refuseLinks,
   usableNewName,
 } from './_settings.mjs';
 import {checkSetting, exampleOf, storedProblems} from './_check.mjs';
@@ -1974,7 +1975,12 @@ export async function themeEditShow(theme, options = {}) {
     : await rendering(() => renderSheet(ctx, theme, data, {group: section}));
   // The full sheet records the build it shows, so a later change tells a
   // sheet that still matches (after an undo) from one that does not.
-  if (!noPages && !section) stampSheet(f.sheet, theme, cwd);
+  if (!noPages)
+    stampSheet(
+      section ? path.join(f.dir, `sheet-${section}.html`) : f.sheet,
+      theme,
+      cwd,
+    );
   const modes = modesOf(data);
   const shots =
     png && !noPages
@@ -2725,6 +2731,9 @@ export async function themeEditUndo(theme, options = {}) {
   // A file in the theme that is a folder or cannot be read is named first;
   // the damaged-settings path below never sees it.
   if (slugOk(theme)) refuseUnreadableFiles(cwd, theme);
+  // A link in the theme is refused as set refuses it, never read as an
+  // empty history.
+  if (slugOk(theme)) refuseLinks(cwd, theme);
   try {
     current = loadTheme(cwd, theme);
   } catch (e) {

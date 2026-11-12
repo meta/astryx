@@ -2003,10 +2003,14 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       if (unset) {
         // With no word, the one headings setting the theme has.
         const held = data.settings.filter(x => x.thing === 'headings');
+        // The half word in any letters: `Tracking`, `TIGHT`.
+        const w = String(v ?? '')
+          .trim()
+          .toLowerCase();
         s.axis =
-          HEADING_TRACKING[v] !== undefined || v === 'tracking'
+          HEADING_TRACKING[w] !== undefined || w === 'tracking'
             ? 'tracking'
-            : HEADING_WEIGHTS[v] !== undefined || v === 'weight'
+            : HEADING_WEIGHTS[w] !== undefined || w === 'weight'
               ? 'weight'
               : held.length === 1
                 ? (held[0].axis ?? 'weight')
