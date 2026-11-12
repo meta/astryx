@@ -191,6 +191,13 @@ const styles = stylex.create({
       transitionDuration: '0.01s',
     },
   },
+  // The dialog stays visible as soon as an open is committed. On the first
+  // `side="auto"` render the panel waits one layout pass for its edge to be
+  // measured, so AppShell does not inherit a hidden dialog while the drawer
+  // is still resolving its placement.
+  drawerPendingSide: {
+    display: 'none',
+  },
   drawerStart: {
     insetInlineStart: 0,
     borderInlineEndWidth: borderVars['--border-width'],
@@ -610,14 +617,14 @@ export function MobileNav({
         triggerElementRef.current =
           document.activeElement as HTMLElement | null;
         dialog.showModal();
+        // A fresh entrance is the only time the input hold belongs here. A
+        // reopen during a pending close keeps the existing modal and skips a
+        // second entrance hold.
+        releaseHoldRef.current = holdEntranceInput(dialog, {
+          entrance: drawerRef.current,
+          capMs: MAX_EXIT_MS,
+        });
       }
-      // Under a coarse primary pointer, nothing takes a touch until the
-      // slide-in ends, at most MAX_EXIT_MS in. A close holds nothing, because
-      // only an entrance is held. Under a fine one, nothing is held.
-      releaseHoldRef.current = holdEntranceInput(dialog, {
-        entrance: drawerRef.current,
-        capMs: MAX_EXIT_MS,
-      });
     } else if (!isOpen && dialog.open) {
       releaseHoldRef.current?.();
       releaseHoldRef.current = null;
@@ -712,7 +719,8 @@ export function MobileNav({
   );
 
   const isStart = resolvedSide === 'start';
-  const isAutoSidePending = isOpen && side === 'auto' && !autoSideResolved;
+  const isAutoSidePending =
+    isOpen && side === 'auto' && !autoSideResolved && !dialogRef.current?.open;
   const mergedDialogRef = useMergedRefs(ref, dialogRef);
   const navigationLabel =
     label ??
@@ -729,7 +737,7 @@ export function MobileNav({
           layerStructureReset.reset,
           styles.dialog,
           overlayPaddingReset.reset,
-          isPresentationHeld && !isAutoSidePending && styles.open,
+          isPresentationHeld && styles.open,
           styles.backdrop,
           isOpen && styles.backdropOpen,
           xstyle,
@@ -756,6 +764,7 @@ export function MobileNav({
               tabIndex={-1}
               {...stylex.props(
                 styles.drawer,
+                isAutoSidePending && styles.drawerPendingSide,
                 dynamicStyles.width(width),
                 isStart && styles.drawerStart,
                 isStart && isOpen && styles.drawerStartOpen,
