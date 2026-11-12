@@ -9,11 +9,21 @@
  * SYNC: When Token.tsx changes, update tests to match new behavior
  */
 
+import {createRef, type ComponentPropsWithRef, type KeyboardEvent} from 'react';
 import {describe, it, expect, vi} from 'vitest';
 import {render, screen, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import {InteractiveRoleContext} from '../InteractiveRoleContext/InteractiveRoleContext';
+import {LinkProvider} from '../Link/LinkProvider';
 import {Token} from './Token';
 import type {TokenColor} from './Token';
+
+function RouterLink({ref: _ref, ...props}: ComponentPropsWithRef<'a'>) {
+  if (props.href == null) {
+    throw new Error('RouterLink requires a destination');
+  }
+  return <a {...props} data-router-link="true" />;
+}
 
 describe('Token', () => {
   it('renders with label', () => {
@@ -564,6 +574,212 @@ describe('Token link with remove button', () => {
   });
 });
 
+describe('Token disabled links', () => {
+  it('preserves link focus, refs, and caller ARIA across disablement inside a trigger', async () => {
+    const user = userEvent.setup();
+    const ref = createRef<HTMLElement>();
+    const fixture = (isDisabled: boolean) => (
+      <InteractiveRoleContext value="button">
+        <button type="button">Before</button>
+        <Token
+          ref={ref}
+          label="Tag"
+          href="#destination"
+          isDisabled={isDisabled}
+          aria-disabled={false}
+          description="Tag details"
+          aria-describedby="reason"
+        />
+        <button type="button">After</button>
+        <p id="reason">Unavailable until approved</p>
+      </InteractiveRoleContext>
+    );
+    const {rerender} = render(fixture(false));
+    let link = screen.getByRole('link', {name: 'Tag'});
+    expect(link).toHaveAttribute('aria-disabled', 'false');
+    await user.tab();
+    await user.tab();
+    expect(link).toHaveFocus();
+
+    rerender(fixture(true));
+    link = screen.getByRole('link', {name: 'Tag'});
+    expect(ref.current).toBe(link);
+    expect(link).toHaveFocus();
+    expect(link).toHaveAttribute('aria-disabled', 'true');
+    expect(link).not.toHaveAttribute('disabled');
+    expect(link).not.toHaveAttribute('href');
+    expect(link).toHaveAttribute('aria-description', 'Tag details');
+    expect(link).toHaveAccessibleDescription('Unavailable until approved');
+    expect(screen.queryByRole('button', {name: 'Tag'})).not.toBeInTheDocument();
+    expect(fireEvent.click(link)).toBe(false);
+    await user.tab({shift: true});
+    expect(screen.getByRole('button', {name: 'Before'})).toHaveFocus();
+    await user.tab();
+    expect(link).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole('button', {name: 'After'})).toHaveFocus();
+
+    link.focus();
+    rerender(fixture(false));
+    link = screen.getByRole('link', {name: 'Tag'});
+    expect(ref.current).toBe(link);
+    expect(link).toHaveFocus();
+    expect(link).toHaveAttribute('href', '#destination');
+    expect(link).toHaveAttribute('aria-disabled', 'false');
+  });
+
+  it('preserves focus, the container ref, and both tab stops with a ref-less router', async () => {
+    const user = userEvent.setup();
+    const ref = createRef<HTMLElement>();
+    const onRemove = vi.fn();
+    const fixture = (isDisabled: boolean) => (
+      <LinkProvider component={RouterLink}>
+        <Token
+          ref={ref}
+          label="Tag"
+          href="#destination"
+          onRemove={onRemove}
+          isDisabled={isDisabled}
+        />
+      </LinkProvider>
+    );
+    const {rerender} = render(fixture(false));
+    const root = ref.current;
+    let link = screen.getByRole('link', {name: 'Tag'});
+    await user.tab();
+    expect(link).toHaveFocus();
+
+    rerender(fixture(true));
+    link = screen.getByRole('link', {name: 'Tag'});
+    expect(ref.current).toBe(root);
+    expect(link).toHaveFocus();
+    expect(link).not.toHaveAttribute('data-router-link');
+    expect(link).not.toHaveAttribute('href');
+    expect(link).not.toHaveAttribute('disabled');
+    expect(link).toHaveAttribute('aria-disabled', 'true');
+    await user.tab();
+    const remove = screen.getByRole('button', {name: 'Remove Tag'});
+    expect(remove).toHaveFocus();
+    expect(remove).not.toHaveAttribute('disabled');
+    expect(remove).toHaveAttribute('aria-disabled', 'true');
+    await user.tab({shift: true});
+    expect(link).toHaveFocus();
+
+    rerender(fixture(false));
+    link = screen.getByRole('link', {name: 'Tag'});
+    expect(link).toHaveFocus();
+    expect(link).toHaveAttribute('href', '#destination');
+    expect(link).toHaveAttribute('data-router-link', 'true');
+    expect(link).not.toHaveAttribute('aria-disabled');
+  });
+
+  for (const customLink of [false, true]) {
+    for (const removable of [false, true]) {
+      it(`keeps focus and tab exclusion without invoking a disabled router: custom=${customLink}, removable=${removable}`, () => {
+        const router = vi.fn(RouterLink);
+        const fixture = (isDisabled: boolean) => {
+          const token = (
+            <Token
+              label="Tag"
+              href="#destination"
+              isDisabled={isDisabled}
+              tabIndex={removable ? undefined : -1}
+              onRemove={removable ? () => {} : undefined}
+            />
+          );
+          return customLink ? (
+            <LinkProvider component={router}>{token}</LinkProvider>
+          ) : (
+            token
+          );
+        };
+        const {rerender} = render(fixture(false));
+        screen.getByRole('link', {name: 'Tag'}).focus();
+        router.mockClear();
+        rerender(fixture(true));
+        const disabled = screen.getByRole('link', {name: 'Tag'});
+        expect(disabled).toHaveFocus();
+        expect(disabled).toHaveAttribute('aria-disabled', 'true');
+        expect(disabled).not.toHaveAttribute('href');
+        expect(disabled).toHaveAttribute('tabindex', removable ? '0' : '-1');
+        expect(router).not.toHaveBeenCalled();
+        rerender(fixture(false));
+        expect(screen.getByRole('link', {name: 'Tag'})).toHaveFocus();
+        expect(screen.getByRole('link', {name: 'Tag'})).toHaveAttribute(
+          'href',
+          '#destination',
+        );
+      });
+    }
+  }
+
+  it('skips rejected destinations in the tab order before and after disablement', async () => {
+    const user = userEvent.setup();
+    const fixture = (href: string, isDisabled: boolean) => (
+      <>
+        <button type="button">Before</button>
+        <Token label="Tag" href={href} isDisabled={isDisabled} />
+        <Token
+          label="Removable"
+          href={href}
+          isDisabled={isDisabled}
+          onRemove={() => {}}
+        />
+        <button type="button">After</button>
+      </>
+    );
+    const {rerender} = render(fixture('javascript:alert(1)', false));
+    const before = screen.getByRole('button', {name: 'Before'});
+    const remove = screen.getByRole('button', {name: 'Remove Removable'});
+    const after = screen.getByRole('button', {name: 'After'});
+    await user.tab();
+    expect(before).toHaveFocus();
+    await user.tab();
+    expect(remove).toHaveFocus();
+    await user.tab();
+    expect(after).toHaveFocus();
+
+    rerender(fixture('javascript:alert(1)', true));
+    await user.tab({shift: true});
+    expect(remove).toHaveFocus();
+    await user.tab({shift: true});
+    expect(before).toHaveFocus();
+  });
+
+  it('skips a tab-excluded link before, during, and after disablement', async () => {
+    const user = userEvent.setup();
+    const fixture = (isDisabled: boolean) => (
+      <>
+        <button type="button">Before</button>
+        <Token
+          label="Tag"
+          href="#destination"
+          tabIndex={-1}
+          isDisabled={isDisabled}
+        />
+        <button type="button">After</button>
+      </>
+    );
+    const {rerender} = render(fixture(false));
+    const before = screen.getByRole('button', {name: 'Before'});
+    const after = screen.getByRole('button', {name: 'After'});
+    await user.tab();
+    expect(before).toHaveFocus();
+    await user.tab();
+    expect(after).toHaveFocus();
+
+    rerender(fixture(true));
+    await user.tab({shift: true});
+    expect(before).toHaveFocus();
+    await user.tab();
+    expect(after).toHaveFocus();
+
+    rerender(fixture(false));
+    await user.tab({shift: true});
+    expect(before).toHaveFocus();
+  });
+});
+
 describe('Token text overflow', () => {
   it('label element has overflow hidden and text-overflow ellipsis styles', () => {
     const {container} = render(<Token label="A very long label text" />);
@@ -684,24 +900,83 @@ describe('Token — owned handlers on the link+remove container', () => {
     openSpy.mockRestore();
   });
 
-  it("does not fire the container's delegation when disabled, but still forwards the caller's onMouseUp", () => {
+  it('blocks disabled activation and removal while preserving focus and inspection events', async () => {
+    const user = userEvent.setup();
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const handleActivation = vi.fn();
+    const handleRemove = vi.fn();
     const handleMouseUp = vi.fn();
-    render(
+    const handleFocus = vi.fn();
+    const handleBlur = vi.fn();
+    const handleEscape = vi.fn();
+    const handleKey = (event: KeyboardEvent<HTMLElement>) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        handleActivation();
+      } else if (event.key === 'Escape') {
+        handleEscape();
+      }
+    };
+    const fixture = (isDisabled: boolean) => (
       <Token
         label="Tag"
-        href="/test"
-        onRemove={() => {}}
+        href="#destination"
+        isDisabled={isDisabled}
+        onClick={handleActivation}
+        onRemove={handleRemove}
+        onClickCapture={handleActivation}
+        onDoubleClick={handleActivation}
+        onDoubleClickCapture={handleActivation}
+        onAuxClick={handleActivation}
+        onAuxClickCapture={handleActivation}
+        onContextMenu={handleActivation}
+        onDragStart={handleActivation}
+        onKeyDown={handleKey}
+        onKeyDownCapture={handleKey}
+        onKeyUp={handleKey}
+        onKeyUpCapture={handleKey}
         onMouseUp={handleMouseUp}
-        isDisabled
+        onFocus={handleFocus}
+        onBlur={handleBlur}
         icon={<span data-testid="icon">★</span>}
-      />,
+      />
     );
-
-    fireEvent.mouseUp(screen.getByTestId('icon'), {button: 1});
-
-    expect(handleMouseUp).toHaveBeenCalledOnce();
+    const {rerender} = render(fixture(true));
+    const link = screen.getByRole('link', {name: 'Tag'});
+    const remove = screen.getByRole('button', {name: 'Remove Tag'});
+    const icon = screen.getByTestId('icon');
+    await user.tab();
+    expect(link).toHaveFocus();
+    await user.keyboard('{Enter} ');
+    await user.tab();
+    expect(remove).toHaveFocus();
+    await user.keyboard('{Enter} ');
+    fireEvent.click(remove);
+    fireEvent.click(link);
+    fireEvent.doubleClick(icon);
+    fireEvent.click(icon, {ctrlKey: true});
+    fireEvent.contextMenu(icon);
+    fireEvent(icon, new MouseEvent('auxclick', {bubbles: true, button: 1}));
+    fireEvent.mouseUp(icon, {button: 1});
+    fireEvent.dragStart(icon);
+    expect(handleActivation).not.toHaveBeenCalled();
+    expect(handleRemove).not.toHaveBeenCalled();
     expect(openSpy).not.toHaveBeenCalled();
+    expect(handleMouseUp).toHaveBeenCalledWith(
+      expect.objectContaining({button: 1}),
+    );
+    expect(handleFocus).toHaveBeenCalled();
+    expect(handleBlur).toHaveBeenCalled();
+
+    await user.tab({shift: true});
+    expect(link).toHaveFocus();
+    await user.keyboard('{Escape}');
+    expect(handleEscape).toHaveBeenCalled();
+
+    rerender(fixture(false));
+    await user.dblClick(icon);
+    expect(handleActivation).toHaveBeenCalled();
+    await user.click(remove);
+    expect(handleRemove).toHaveBeenCalled();
     openSpy.mockRestore();
   });
 });

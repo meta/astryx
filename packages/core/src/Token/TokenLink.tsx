@@ -25,7 +25,13 @@
  * - /packages/core/src/Token/Token.test.tsx (tests for delegated behavior)
  */
 
-import type {ReactNode, CSSProperties, Ref, HTMLAttributes} from 'react';
+import type {
+  ReactNode,
+  CSSProperties,
+  Ref,
+  HTMLAttributes,
+  SyntheticEvent,
+} from 'react';
 import {useRef} from 'react';
 import {useClickableContainer} from '../hooks/useClickableContainer';
 import type {LinkComponentType} from '../Link/types';
@@ -33,6 +39,7 @@ import {composeEventHandlers} from '../utils';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {disabledInteractionProps} from '../utils/disabledInteraction';
+import {isSafeDestination} from '../utils/safeUrl';
 export interface TokenLinkProps extends HTMLAttributes<HTMLElement> {
   /** Ref forwarded to the container element. */
   ref?: Ref<HTMLElement>;
@@ -54,6 +61,38 @@ export interface TokenLinkProps extends HTMLAttributes<HTMLElement> {
   removeButton: ReactNode;
   /** Allow data-* attributes (e.g. data-testid, theme targets) on the container. */
   [dataAttr: `data-${string}`]: unknown;
+}
+
+function blockActivation(event: SyntheticEvent) {
+  event.preventDefault();
+  event.stopPropagation();
+}
+
+export function disabledTokenInteractionProps({
+  onKeyDownCapture,
+  onKeyUpCapture,
+}: HTMLAttributes<HTMLElement>) {
+  return {
+    onClickCapture: blockActivation,
+    onDoubleClickCapture: blockActivation,
+    onAuxClickCapture: blockActivation,
+    onContextMenuCapture: blockActivation,
+    onDragStartCapture: blockActivation,
+    onKeyDownCapture: (event: React.KeyboardEvent<HTMLElement>) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        blockActivation(event);
+      } else {
+        onKeyDownCapture?.(event);
+      }
+    },
+    onKeyUpCapture: (event: React.KeyboardEvent<HTMLElement>) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        blockActivation(event);
+      } else {
+        onKeyUpCapture?.(event);
+      }
+    },
+  };
 }
 
 /**
@@ -92,6 +131,7 @@ export function TokenLink({
     <span
       ref={useMergedRefs(ref, containerRef)}
       {...containerProps}
+      {...(isDisabled ? disabledTokenInteractionProps(containerProps) : null)}
       onClick={
         isDisabled ? onClickProp : composeEventHandlers(onClickProp, onClick)
       }
@@ -108,7 +148,7 @@ export function TokenLink({
           ref={linkRef as Ref<HTMLAnchorElement>}
           role="link"
           aria-disabled={true}
-          tabIndex={0}
+          tabIndex={isSafeDestination(href) ? 0 : undefined}
           {...linkStyleProps}
           {...disabledInteractionProps()}>
           {labelContent}
