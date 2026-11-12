@@ -126,8 +126,8 @@ The report reads only the local repository. It prints:
   cite or that the added lines route;
 - the global baseline claims that the linked components' review triggers route,
   read at the merge base;
-- the authored line count, with advice when it is over the size guideline, and
-  whether the change merges into the base;
+- the authored line count, with advice when the lines outside templates are
+  over the size guideline, and whether the change merges into the base;
 - the findings for items i to l, each with its file and line, the rule, and
   the fix;
 - the checklist items that apply to this change, each with its reason.

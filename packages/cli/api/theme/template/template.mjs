@@ -105,7 +105,19 @@ export function themeTemplate(options = {}) {
     resolved = assertWithin(targetPath, cwd, {label: 'theme template path'});
   } catch (err) {
     if (err instanceof PathSafetyError) {
-      throw new AstryxError(err.message, undefined, ERROR_CODES.ERR_PATH_TRAVERSAL);
+      throw new AstryxError(
+        err.message,
+        [
+          {
+            name: formatCliCommand(
+              `theme template ${THEME_TEMPLATE_DEFAULT_PATH}`,
+              cwd,
+            ),
+            reason: 'write the template in this project',
+          },
+        ],
+        ERROR_CODES.ERR_PATH_TRAVERSAL,
+      );
     }
     throw err;
   }
@@ -182,7 +194,21 @@ export function themeTemplate(options = {}) {
   }
 
   if (fs.existsSync(resolved) && !overwrite) {
-    return {type: 'theme.template', data: {path: relative, written: false, reason: 'exists'}};
+    // Whether --overwrite would replace this file, and if not, a path that
+    // takes the template, so the hint never names a command that refuses.
+    const overwritable =
+      !editorThemeRecord(path.dirname(resolved)) &&
+      isReplaceableThemeFile(resolved);
+    return {
+      type: 'theme.template',
+      data: {
+        path: relative,
+        written: false,
+        reason: 'exists',
+        overwritable,
+        alternative: overwritable ? null : freeTemplatePath(resolved, cwd),
+      },
+    };
   }
 
   // Our repo header has no business in someone else's source tree.
@@ -207,4 +233,24 @@ function isDirectory(file) {
   } catch {
     return false;
   }
+}
+
+/**
+ * A path near `file` that holds no file yet, for the template: the default
+ * name in its folder, then numbered names.
+ * @param {string} file
+ * @param {string} cwd
+ * @returns {string} relative to cwd, with `/`
+ */
+function freeTemplatePath(file, cwd) {
+  const dir = path.dirname(file);
+  for (let n = 1; n < 100; n += 1) {
+    const name =
+      n === 1 ? THEME_TEMPLATE_DEFAULT_PATH : `theme.template-${n}.ts`;
+    const candidate = path.join(dir, name);
+    if (!fs.existsSync(candidate)) {
+      return path.relative(cwd, candidate).split(path.sep).join('/');
+    }
+  }
+  return THEME_TEMPLATE_DEFAULT_PATH;
 }
