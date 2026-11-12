@@ -459,7 +459,7 @@ async function answer(subject, options, cwd) {
     };
   }
   // A question about the tool itself gets the command that answers it.
-  const tool = toolAnswer(t, env);
+  const tool = toolAnswer(t, env, ctx.project.target);
   if (tool === 'list') {
     const kind =
       /\b(dials?|tokens?|parts?|groups?|properties|property)\b/i
@@ -938,9 +938,10 @@ function colorsAnswer(env, dialCommands) {
  * the caller lists the kind the question names.
  * @param {string} t
  * @param {import('./_how-commands.mjs').HowTheme} env
+ * @param {Map<string, unknown>} targets the parts Core styles
  * @returns {Array<{text: string, commands: string[]}> | 'list' | null}
  */
-function toolAnswer(t, env) {
+function toolAnswer(t, env, targets) {
   const q = t
     .trim()
     .toLowerCase()
@@ -1014,7 +1015,7 @@ function toolAnswer(t, env) {
     ];
   // Screen-size, print and device conditions: the editor has none.
   if (
-    /(?<!\bno |\bnot )\b(below|above|under|over|wider than|narrower than)\s+(\d{3,}px|\d+em)\b|\b(screens?|viewports?|windows?) (below|above|under|over|less than|more than|wider than|narrower than)\s+\d+(px|em|rem)\b|\b(on|for) (mobile|phones?|tablets?|desktops?|touch( screens?)?|small screens?|large screens?|wide screens?|landscape|portrait)\b|\b(when )?print(ing)?\b|\bprint version\b|\bmedia quer/.test(
+    /\bmedia quer|^(on|for) (mobile|phones?|tablets?|desktops?|print)$|^(print|printing|print styles?)$/.test(
       q,
     )
   )
@@ -1030,13 +1031,30 @@ function toolAnswer(t, env) {
     /^(how (round|big|small|large|thick|dark|light|bold|wide|tall) (is|are)|what (is|are) the (current|available)|which \w+ (does|do|is|are)|what (font|color|colour|radius|accent) (does|do|is|are)|what (values|options|choices))\b|\b(right now|currently|at the moment)\??$|\bnow\?$/.exec(
       q,
     );
-  if (asks)
+  if (asks || /^which parts (are|does|do)\b/.test(q)) {
+    // The part or setting the question names gets its own lookup.
+    const named = q
+      .split(/[^a-z-]+/)
+      .find(
+        w =>
+          w.length > 2 &&
+          (targets.has(w) ||
+            targets.has(w.replace(/s$/, '')) ||
+            ['inputs', 'checks'].includes(w)),
+      );
+    const key =
+      named && !targets.has(named) && !['inputs', 'checks'].includes(named)
+        ? named.replace(/s$/, '')
+        : named;
     return [
       {
-        text: `show lists what ${env.slug} sets now; how <part> or how <setting> says what a part reads and the values a setting takes`,
-        commands: [`${P} show ${env.slug}`],
+        text: key
+          ? `how ${key} says what ${key} reads and what sets it; show lists what ${env.slug} sets now`
+          : `show lists what ${env.slug} sets now; how <part> or how <setting> says what a part reads and the values a setting takes`,
+        commands: [...(key ? [`${HOW} ${key}`] : []), `${P} show ${env.slug}`],
       },
     ];
+  }
   if (
     /\b((astryx|cli) version|version of (the )?(cli|astryx)|which cli|what cli)\b/.test(
       q,

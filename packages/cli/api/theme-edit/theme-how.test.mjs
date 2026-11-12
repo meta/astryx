@@ -3213,7 +3213,7 @@ const QUESTIONS_K = [
   ],
   ['no more than 2px borders', {top: /^set q --border-width 2px$/}],
   ['error text red', {top: null, text: /error text belong to the parts/}],
-  ['labels smaller', {top: null, text: /labels belong to the parts/}],
+  ['labels smaller', {top: /--on field-label$/}],
 ];
 
 describe('how answers final-6 questions', () => {
@@ -3361,7 +3361,7 @@ const QUESTIONS_M = [
   ['text selection highlight color #fde68a', null, /no setting/],
   [
     'below 600px, cards have no corners',
-    null,
+    /^set q corners square --on card$/,
     /no screen-size, print or device conditions/,
   ],
   [
@@ -3393,6 +3393,81 @@ describe('how answers final-7 questions', () => {
       const commands = top.sequence ? top.commands : [top.commands[0]];
       expect(commands.map(bare).join(' && ')).toMatch(want);
     });
+});
+
+/**
+ * Final-8 questions: a negated mode, the CSS cursor, device words beside an
+ * ask, state lookups, "not so", invalid numbers, labels, Tailwind classes,
+ * a pasted variant selector and resets.
+ * @type {Array<[string, RegExp | null, RegExp?]>}
+ */
+const QUESTIONS_N = [
+  [
+    "don't touch dark mode, make the accent orange",
+    /^set q --color-accent '#f97316' --mode light$/,
+  ],
+  ['cursor: pointer on cards', /^set q cursor pointer --on card$/],
+  [
+    'cursor color accent in inputs',
+    /^set q caret-color 'var\(--color-accent\)' --on inputs$/,
+  ],
+  [
+    'cards feel cramped on mobile',
+    /^set q spacing more --on card$/,
+    /no screen-size, print or device conditions/,
+  ],
+  ['which parts are in the inputs group', null, /how inputs says/],
+  ['not so round', /^set q corners less$/],
+  [
+    'avoid pure black text',
+    /^set q --color-text-primary '#(?!000000)[0-9a-f]{6}' --mode light$/,
+  ],
+  ['flat cards, not flat buttons', /^set q box-shadow none --on card$/],
+  ['corners NaNpx', null, /not a number/],
+  ['corners 1e3px', /^set q corners 1000px$/],
+  ['smaller labels on form fields', /--on field-label$/],
+  ['checkbox label bold', /^set q font-weight 700 --on checkbox-label$/],
+  ['border-2 on cards', /^set q border-width 2px --on card$/],
+  ['rounded-full buttons', /^set q corners pill --on button$/],
+  [
+    '.btn-primary { background: #16a34a }',
+    /^set q background '#16a34a' --on button --when variant:primary$/,
+  ],
+  ['角を四角に', /^set q corners square$/],
+];
+
+describe('how answers final-8 questions', () => {
+  for (const [question, want, text] of QUESTIONS_N)
+    it(question, async () => {
+      const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+      /** @type {Array<{text: string, commands: string[], sequence?: boolean}>} */
+      const results = data.results ?? [];
+      if (text) expect(results.map(r => r.text).join('\n')).toMatch(text);
+      const changes = results.filter(r =>
+        r.commands.some(c => / editor (set|undo) /.test(c)),
+      );
+      if (want === null) {
+        expect(changes).toEqual([]);
+        return;
+      }
+      const top = changes[0];
+      const commands = top.sequence ? top.commands : [top.commands[0]];
+      expect(commands.map(bare).join(' && ')).toMatch(want);
+    });
+
+  it('"remove all my changes" takes back every setting', async () => {
+    await themeEditNew('rc', {cwd, like: 'neutral'});
+    await themeEditSet('rc', 'accent', '#e11d48', {cwd});
+    await themeEditSet('rc', 'corners', 'pill', {cwd});
+    const {data} = await themeEditHow('remove all my changes', {
+      cwd,
+      theme: 'rc',
+    });
+    expect(data.results[0].commands.map(bare)).toEqual([
+      'undo rc accent',
+      'undo rc corners',
+    ]);
+  }, 120_000);
 });
 
 describe('how lookups', () => {

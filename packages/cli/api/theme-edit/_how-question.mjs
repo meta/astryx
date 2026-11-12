@@ -59,6 +59,7 @@ const TRANSLATE = /** @type {Array<[RegExp, string]>} */ (
       '圆|丸く|丸い|둥글게|둥근',
       'rounded',
     ],
+    ['cuadrad[oa]s|carrés|eckige', '四角|方形|네모', 'square'],
     ['esquinas?|coins|ecken|углы', '角', 'corners'],
     [
       'sombras?|ombres?|ombra|ombre|schatten|тен[ьи]|ظل',
@@ -695,7 +696,18 @@ function partLexicon(ctx) {
         .flatMap(key => [key, `${key}s`]),
     ]),
   ];
-  const lex = {parts: [...OVERRIDES, ...derived], vocab};
+  const lex = {
+    parts: [
+      ...OVERRIDES,
+      ...derived,
+      // "smaller labels on form fields": a field's label.
+      /** @type {[RegExp, PartRef]} */ ([
+        /(?<!\b(?:button|tab|badge|chip|nav|menu|link|checkbox|switch|radio)s? )\b(field |form |input )?labels?\b/,
+        {on: 'field-label'},
+      ]),
+    ],
+    vocab,
+  };
   lexicons.set(project, lex);
   return lex;
 }
@@ -722,6 +734,7 @@ const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
   [/\b(after i check|once checked|i check)\b/, 'checked'],
   [/\b(picked|chosen|choose|pick)\b/, 'selected'],
   [/\b(invalid|errors? state|has an error|with an error)\b/, 'invalid'],
+  [/\bvisited\b/, 'visited'],
   // Words for states a part may not have: the answer says so.
   [/\bread-?only\b/, 'readonly'],
   [
@@ -995,7 +1008,7 @@ function clausesOf(q, partWords) {
         /\?/.test(text));
     const neg =
       !askedFor &&
-      /\b(no|not|nothing|none of|don'?t|do not|never|without|remove|removing|get rid of|lose|drop|ditch|nix|scrap|kill|none|shouldn'?t|should not|mustn'?t|turn off|turn (the|it|them) off|switch off|stop|unbold\w*|unround\w*|disable|(?:revert|undo|take back) (?:the|those|that|these|my|our|all)|(?:shadows?|borders?|underlines?|outlines?|gradients?|uppercase|caps) (?:off|out|gone))\b/.test(
+      /\b(no|not|nothing|none of|don'?t|do not|never|avoid|without|remove|removing|get rid of|lose|drop|ditch|nix|scrap|kill|none|shouldn'?t|should not|mustn'?t|turn off|turn (the|it|them) off|switch off|stop|unbold\w*|unround\w*|disable|(?:revert|undo|take back) (?:the|those|that|these|my|our|all)|(?:shadows?|borders?|underlines?|outlines?|gradients?|uppercase|caps) (?:off|out|gone))\b/.test(
         negText
           .replace(/\bdisabled\b/g, ' ')
           // "not round enough" asks for more; "not so much" for less.
@@ -1413,10 +1426,37 @@ export function draftAnswer(ctx, env, question) {
   const TARGET = ctx.project.target;
   const TOKENS = ctx.project.core.tokenDefaults;
   const lex = partLexicon(ctx);
+  // "corners NaNpx": not a number; never a guess. After a CSS property the
+  // property's own check says why.
+  const notNumber = /\b(nan|-?infinity)(px|rem|em|%)?(?![a-z])/i.exec(question);
+  const afterProperty = notNumber
+    ? cssProperties().has(
+        (
+          /([a-z-]+)\s*:?\s*$/i.exec(question.slice(0, notNumber.index))?.[1] ??
+          ''
+        ).toLowerCase(),
+      )
+    : false;
+  if (notNumber && !afterProperty)
+    return {
+      parts: [],
+      aspects: [],
+      drafts: [
+        {
+          text: `${notNumber[0]} is not a number a theme can use; give a number, like 8px`,
+          options: [],
+        },
+      ],
+    };
   /** Family names written in quotes, kept as typed: qq<n>qq in the text. */
   const quoted = /** @type {string[]} */ ([]);
   let q = question
     .normalize('NFKC')
+    // ".btn-primary { … }": the primary button.
+    .replace(
+      /\.btn-(primary|secondary|ghost|destructive|danger)\b/g,
+      (_, v) => `${v === 'danger' ? 'destructive' : v} button `,
+    )
     // Markup and comment text are not part of the ask.
     .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, ' ')
     .replace(/<\/?[a-z][^>]*>/gi, ' ')
@@ -1610,6 +1650,22 @@ export function draftAnswer(ctx, env, question) {
       /,?\s*\bbut not\s+(?=(bold|italic|uppercase|rounded|round|shadowed|underlined|bordered|faded|dark|light|bright|big|small|too \w+)\b)/g,
       ' not ',
     )
+    // Tailwind classes: "border-2" is 2px, "rounded-full" a pill.
+    .replace(/\bborder-(\d)\b/g, 'border width $1px')
+    .replace(/\brounded-full\b/g, 'pill corners')
+    .replace(/\brounded-none\b/g, 'square corners')
+    // "1e3px" is 1000px.
+    .replace(
+      /\b(\d+(?:\.\d+)?)e([+-]?\d+)(px|rem|em)\b/gi,
+      (_, n, e, u) => `${Number(n) * 10 ** Number(e)}${u}`,
+    )
+    // "not so round", "not that dark": one step less, not the opposite.
+    .replace(
+      /\bnot (?:so|that|as|too) (round(?:ed)?|bold|dark|big|bright|spacious|thick)\b/g,
+      'less $1',
+    )
+    // "flat cards, not flat buttons": the second part stays as it is.
+    .replace(/^(.*\b(\w{3,})\b.*?),\s*(?:but )?not \2 [a-z ]+$/, '$1')
     .replace(/\b(everything|everywhere|all) but\b/g, '$1 except')
     .replace(
       /\b(apart from|other than|excluding|but not (on|in|for)|but not)\b/g,
@@ -1617,7 +1673,51 @@ export function draftAnswer(ctx, env, question) {
     )
     .replace(/\s+/g, ' ')
     .trim();
+  // "cramped on mobile": the editor has no media conditions; the rest of
+  // the ask is answered, with a note.
+  const MEDIA_RE = new RegExp(
+    String.raw`(?<!\bno |\bnot )\b(?:below|above|under|over|wider than|narrower than)\s+(?:\d{3,}px|\d+em)\b|\b(?:screens?|viewports?|windows?) (?:below|above|under|over|less than|more than|wider than|narrower than)\s+\d+(?:px|em|rem)\b|\b(?:on|for) (?:mobile|phones?|tablets?|desktops?|touch(?: screens?)?|small screens?|large screens?|wide screens?|landscape|portrait)\b|\b(?:when )?print(?:ing)?\b|\b(?:the )?print version\b`,
+    'g',
+  );
+  const media = MEDIA_RE.test(q);
+  if (media) q = q.replace(MEDIA_RE, ' ').replace(/\s+/g, ' ').trim();
   const clauses = clausesOf(q, lex.parts);
+  // "labels on form fields": the label, not the field it sits on.
+  for (const c of clauses)
+    if (c.parts.some(p => p.on === 'field-label')) {
+      // A checkbox's or switch's own label part, when Core has one.
+      const own = c.parts
+        .map(p => ({
+          on:
+            /** @type {Record<string, string>} */ ({
+              checks: 'checkbox-label',
+              checkbox: 'checkbox-label',
+              switch: 'switch-label',
+            })[p.on] ?? p.on,
+        }))
+        .filter(
+          p =>
+            /-label$/.test(p.on) && p.on !== 'field-label' && TARGET.has(p.on),
+        );
+      // "button labels": the label is the button's own text.
+      const owner = c.parts.filter(
+        p =>
+          p.on !== 'field-label' &&
+          ![
+            'inputs',
+            'field',
+            'checks',
+            'checkbox',
+            'switch',
+            'text-input',
+          ].includes(p.on),
+      );
+      c.parts = own.length
+        ? own
+        : owner.length
+          ? owner
+          : c.parts.filter(p => p.on === 'field-label');
+    }
   // "captions 12px": a clause led by a plural noun that names no part and
   // no change takes nothing from its neighbors.
   const unknownLead = (/** @type {Clause} */ c) => {
@@ -2084,8 +2184,17 @@ export function draftAnswer(ctx, env, question) {
   // clause after it.
   for (let i = 0; i < clauses.length; i++) {
     const c = clauses[i];
-    if (c.mode && !c.parts.length && !c.aspects.length && !c.colors.length)
-      for (const o of clauses.slice(i + 1)) o.mode ??= c.mode;
+    if (c.mode && !c.parts.length && !c.aspects.length && !c.colors.length) {
+      // "don't touch dark mode, …": the other mode.
+      const scope = c.neg ? (c.mode === 'dark' ? 'light' : 'dark') : c.mode;
+      for (const o of c.neg ? clauses : clauses.slice(i + 1))
+        if (o !== c) o.mode ??= scope;
+      if (c.neg) {
+        for (const o of clauses)
+          if (o !== c && o.mode === c.mode) o.mode = scope;
+        c.text = '';
+      }
+    }
   }
   // The tab's text is on the tab, not on its underline.
   for (const c of clauses)
@@ -2502,13 +2611,16 @@ export function draftAnswer(ctx, env, question) {
     }
     // Placeholder, caret and selection colors.
     if (
-      /\b(placeholders?|caret|cursor|selection|selected text highlight|text highlight)\b/.test(
+      /\b(placeholders?|caret|cursor colou?r|colou?r (of )?the cursor|selection|selected text highlight|text highlight)\b/.test(
         c.text,
       ) &&
       !/\bloading placeholder/.test(c.text)
     ) {
       const color = colorFor(c, 'fill');
-      const caret = /\b(caret|cursor)\b/.test(c.text);
+      const caret =
+        /\bcaret\b|\bcursor colou?r\b|\bcolou?r (of )?the cursor\b/.test(
+          c.text,
+        );
       if (caret && color) {
         const on = c.parts[0]?.on ?? 'inputs';
         const d = {
@@ -2550,10 +2662,7 @@ export function draftAnswer(ctx, env, question) {
     }
     // "error text red", "labels smaller": text that belongs to parts how
     // cannot pick alone is a lookup, never the whole theme's text.
-    if (
-      !c.parts.length &&
-      /\b(error (text|messages?)|(field |form |input )?labels?)\b/.test(c.text)
-    ) {
+    if (!c.parts.length && /\berror (text|messages?)\b/.test(c.text)) {
       const which = /\berror\b/.test(c.text) ? 'error text' : 'labels';
       push({
         text: `${which} belong to the parts that show them (an input's error message, a field's label); name the part, or look it up`,
@@ -2674,7 +2783,7 @@ export function draftAnswer(ctx, env, question) {
   function resetAnswer(c) {
     // "go back to the neutral theme", "start over": every setting.
     if (
-      /\b(back to|reset to|revert to|restore) (the )?(neutral|base|original|default|plain) theme\b|\bstart over\b|\breset (the )?(whole )?theme\b/.test(
+      /\b(back to|reset to|revert to|restore) (the )?(neutral|base|original|default|plain) theme\b|\bstart over\b|\breset (the )?(whole )?theme\b|\b(remove|undo|clear|drop|revert) (all|every one of|each of) (my |the )?(changes|settings|edits|overrides)\b|\bundo everything\b/.test(
         c.text,
       )
     ) {
@@ -4753,6 +4862,11 @@ export function draftAnswer(ctx, env, question) {
     });
   }
   result.push(...drafts.slice(0, clashes.length ? 0 : undefined));
+  if (media)
+    result.push({
+      text: 'the theme editor has no screen-size, print or device conditions: this applies on every screen; a media query needs your own CSS',
+      options: [],
+    });
   return {parts: partsSeen, aspects: aspectsSeen, drafts: result};
 }
 
