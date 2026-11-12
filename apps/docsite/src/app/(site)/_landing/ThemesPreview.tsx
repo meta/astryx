@@ -28,7 +28,20 @@ const butterTheme = themeObjects['@astryxdesign/theme-butter'];
 // Butter's bespoke showcase content (breakfast products + inventory) — the
 // same source of truth the /themes page feeds ThemeShowcaseStore, so this card
 // stays in sync with the themes page.
-const butterContent = getThemeShowcaseContent('butter');
+// The card shows the store at about a third of its size, so its photos are
+// about 100 px wide. These 320 px WebP copies are sharp at 3x pixel density
+// and replace the 704 px PNGs.
+const butterContent = {
+  ...getThemeShowcaseContent('butter'),
+  images: {
+    watch: '/landing/themes/butter-watch.webp',
+    headphones: '/landing/themes/butter-headphones.webp',
+    backpack: '/landing/themes/butter-backpack.webp',
+    wallet: '/landing/themes/butter-wallet.webp',
+    tumbler: '/landing/themes/butter-tumbler.webp',
+    throw_: '/landing/themes/butter-throw.webp',
+  },
+};
 
 // Swatch + "Aa" colors as Butter theme tokens (resolved via the Butter <Theme>
 // scope around the rail below) rather than hardcoded hex, so they stay in sync.

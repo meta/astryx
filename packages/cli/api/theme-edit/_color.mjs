@@ -687,13 +687,15 @@ export const isNumber = (v, name = '') => {
 export function isSafeValue(v) {
   // A shell comment ("# direct"), as a command run without a shell passes
   // it, is a comment too.
+  // `</` (a closing tag), control characters, comments and !important are
+  // refused anywhere; < and > only outside a quoted string.
   // eslint-disable-next-line no-control-regex
-  if (/[<>\u0000-\u001f\u007f]|\/\*|!important|(^|\s)#(\s|$)/i.test(v))
+  if (/<\/|[\u0000-\u001f\u007f]|\/\*|!important|(^|\s)#(\s|$)/i.test(v))
     return false;
   const outside = v
     .replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, '""')
     .replace(/url\(data:[^\s"'()\\]*\)/gi, 'url()');
-  if (/[;{}\\]/.test(outside)) return false;
+  if (/[;{}\\<>]/.test(outside)) return false;
   let depth = 0;
   for (const c of outside.replace(/""/g, '')) {
     if (c === '"' || c === "'") return false;

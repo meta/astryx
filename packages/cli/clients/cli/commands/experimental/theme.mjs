@@ -18,6 +18,7 @@
 
 import {getCliInvocation} from '../../../../foundation/env/package-manager.mjs';
 import {jsonOut} from '../../../../foundation/response/json.mjs';
+import {levenshteinDistance} from '../../../../foundation/text/levenshtein.mjs';
 import {NO_RESULT_SET, resultSet} from '../../../../foundation/debug/index.mjs';
 import {ERROR_CODES} from '../../../../foundation/response/error-codes.mjs';
 import {
@@ -43,8 +44,10 @@ import {
   themeEditUndo,
 } from '../../../../api/theme-edit/theme-edit.mjs';
 import {
-  fileExists,
-  isHowPicture,
+  builtInThemes,
+  editorCompileProblem,
+  editorThemeHold,
+  editorThemeRefusal,
 } from '../../../../api/theme-edit/_adapter.mjs';
 import {registerThemeSubcommands} from '../theme.mjs';
 import {doc as groupDoc} from '../experimental-theme.doc.mjs';
@@ -76,6 +79,7 @@ import {doc as previewAppFn} from '../../../../api/theme-edit/themeEditPreviewAp
 import {doc as previewListFn} from '../../../../api/theme-edit/themeEditPreviewList.doc.mjs';
 import {doc as previewRemoveFn} from '../../../../api/theme-edit/themeEditPreviewRemove.doc.mjs';
 import {doc as howFn} from '../../../../api/theme-edit/themeEditHow.doc.mjs';
+import {quoteCommandArgument} from '../../../../foundation/env/package-manager.mjs';
 
 const PREFIX = 'astryx experimental theme';
 const EDITOR = `${PREFIX} editor`;
@@ -251,6 +255,18 @@ function notCheckedLine(result) {
 }
 
 /**
+ * Text with C0 control characters and DEL shown as escapes (\u001b), so
+ * text a person typed cannot move the cursor or recolor the terminal.
+ * @param {string} text
+ */
+const escapeControls = text =>
+  String(text).replace(
+    // eslint-disable-next-line no-control-regex
+    /[\u0000-\u0008\u000b-\u001f\u007f]/g,
+    c => `\\u${`000${c.charCodeAt(0).toString(16)}`.slice(-4)}`,
+  );
+
+/**
  * Run one API call: errors become the CLI error envelope, results go to
  * JSON or to `render`.
  * @template T
@@ -269,8 +285,14 @@ async function run(program, call, render, answer) {
     const err = /** @type {import('../../../../api/error.mjs').AstryxError} */ (
       e
     );
-    return cliError(err.message, {
-      suggestions: err.suggestions,
+    // Suggested commands start the way this project runs the CLI, in JSON
+    // as in text. Echoed user text never drives the terminal: control
+    // characters print as escapes.
+    return cliError(escapeControls(err.message), {
+      suggestions: err.suggestions?.map(x => ({
+        ...x,
+        name: escapeControls(cmd(x.name)),
+      })),
       code: err.code ?? ERROR_CODES.ERR_UNKNOWN,
     });
   }
@@ -281,7 +303,20 @@ async function run(program, call, render, answer) {
     jsonOut(/** @type {any} */ (result));
     return answered;
   }
-  print([...notCheckedLine(result), ...render(result)]);
+  // --detail compact|brief (and --dense) print a change's status line
+  // alone; an answer (how, show, list) is the answer, and prints whole.
+  const o = program.opts();
+  const change = ['themeEdit.set', 'themeEdit.undo', 'themeEdit.new'].includes(
+    /** @type {any} */ (result)?.type,
+  );
+  const short =
+    change &&
+    (o.detail === 'compact' ||
+      o.detail === 'brief' ||
+      o.dense ||
+      o.lang === 'dense');
+  const lines = [...notCheckedLine(result), ...render(result)];
+  print(short ? lines.slice(0, notCheckedLine(result).length + 1) : lines);
   return answered;
 }
 
@@ -434,53 +469,52 @@ function lookupBlocks(d) {
   /** @param {string[]} cmds @param {boolean} [sequence] */
   const commandLines = (cmds, sequence) =>
     sequence && cmds.length > 1
-      ? [`  ${cmds.join(' && ')}`, '  sequence: run as one line, in this order']
-      : cmds.map(c => `  ${c}`);
-  /** @param {Array<{command: string, why: string}>} list */
-  const refusedLines = list =>
-    list.flatMap(r => [`  x ${r.command}`, `    not run: ${r.why}`]);
+      ? [cmds.join(' && '), 'sequence: run as one line, in this order']
+      : cmds;
+  /** @param {Array<{command: string, why: string}>} refusedList */
+  const refusedLines = refusedList =>
+    refusedList.flatMap(r => [`x ${r.command}`, `  not run: ${r.why}`]);
   /** @type {Array<string | import('../../formatters/index.mjs').Block>} */
   const blocks = [...(hint ? [String(hint)] : []), ...project(rest)];
   if (Array.isArray(results) && results.length)
     blocks.push(
       section('results:'),
-      text(
-        results
-          .flatMap((/** @type {any} */ r) => [
-            String(r.text),
-            ...commandLines(r.commands ?? [], r.sequence),
-            ...refusedLines(r.refused ?? []),
-          ])
-          .join('\n'),
+      list(
+        results.map((/** @type {any} */ r) => [
+          String(r.text),
+          ...commandLines(r.commands ?? [], r.sequence),
+          ...refusedLines(r.refused ?? []),
+        ]),
       ),
     );
   if (Array.isArray(examples) && examples.length)
-    blocks.push(section('examples:'), text(commandLines(examples).join('\n')));
+    blocks.push(section('examples:'), list(commandLines(examples)));
   if (Array.isArray(refused) && refused.length)
-    blocks.push(section('refused:'), text(refusedLines(refused).join('\n')));
+    blocks.push(
+      section('refused:'),
+      list(refused.map((/** @type {any} */ r) => refusedLines([r]))),
+    );
   if (Array.isArray(points) && points.length)
     blocks.push(
       section('points:'),
-      text(
-        points
-          .map(
-            (/** @type {any} */ x) => `  ${x.at}  ${x.color}  alpha ${x.alpha}`,
-          )
-          .join('\n'),
+      records(
+        points.map((/** @type {any} */ x) => ({
+          at: x.at,
+          color: x.color,
+          alpha: x.alpha,
+        })),
       ),
     );
   if (Array.isArray(items) && items.length) {
     if (items.some((/** @type {any} */ x) => Array.isArray(x.examples)))
       blocks.push(
         section('items:'),
-        text(
-          items
-            .flatMap((/** @type {any} */ x) => [
-              `${x.name}  ${x.values}`,
-              `  help: ${x.help}`,
-              ...commandLines(x.examples),
-            ])
-            .join('\n'),
+        list(
+          items.map((/** @type {any} */ x) => [
+            `${x.name}  ${x.values}`,
+            `help: ${x.help}`,
+            ...commandLines(x.examples),
+          ]),
         ),
       );
     else blocks.push(...project({items}).slice(1));
@@ -561,9 +595,28 @@ function explained(c, doc, {tokens = false} = {}) {
   return c;
 }
 
+/** Old and sibling names, and where each now is. */
+const MOVED = /** @type {Record<string, Record<string, string>>} */ ({
+  theme: {
+    build: 'compile',
+    set: 'editor set',
+    undo: 'editor undo',
+    show: 'editor show',
+    new: 'editor new',
+    how: 'editor how',
+    explain: 'editor how',
+    reset: 'editor undo',
+    palette: 'editor set',
+    help: '--help',
+  },
+  editor: {explain: 'how', reset: 'undo', help: '--help', palette: 'set'},
+  preview: {help: '--help'},
+});
+
 /**
- * A command group: bare, it prints its help; with an unknown word, the
- * unknown-subcommand error with every subcommand as a suggestion.
+ * A command group: bare, it prints its help (in JSON too, as the root
+ * does); with an unknown word, the unknown-subcommand error, leading with
+ * where a moved name now is, then the nearest subcommands.
  * @param {import('commander').Command} parent
  * @param {import('@astryxdesign/cli/authoring').CommandDoc} doc
  * @returns {import('commander').Command}
@@ -576,17 +629,54 @@ function defineGroup(parent, doc) {
       /** @type {import('commander').Command} */ c,
     ) => {
       const extras = c?.args ?? [];
+      const words = [];
+      for (let x = cmd; x && x.parent; x = x.parent) words.unshift(x.name());
+      const here = `${getCliInvocation()} ${words.join(' ')}`;
       if (extras.length > 0) {
+        const word = String(extras[0]).toLowerCase();
+        const group = doc.name.split(' ').at(-1) ?? '';
+        const moved =
+          MOVED[group]?.[word] ??
+          // `preview <theme>`: the pages for a theme.
+          (group === 'preview' && /^[a-z][a-z0-9-]*$/.test(word)
+            ? `add --theme ${word}`
+            : null);
+        const ranked = (cmd.commands ?? [])
+          .map(command => command.name())
+          .sort(
+            (a, b) =>
+              levenshteinDistance(word, a) - levenshteinDistance(word, b),
+          );
         return cliError(
-          `unknown subcommand '${doc.name} ${String(extras[0])}'`,
+          `unknown subcommand '${doc.name} ${String(extras[0])}'${moved ? `; it is ${here} ${moved}` : ''}`,
           {
-            suggestions: (cmd.commands ?? []).map(command => ({
-              name: command.name(),
-              reason: 'available subcommand',
-            })),
+            suggestions: [
+              ...(moved
+                ? [{name: `${here} ${moved}`, reason: 'do this instead'}]
+                : []),
+              ...ranked.map(name => ({
+                name: `${here} ${name}`,
+                reason: 'available subcommand',
+              })),
+            ],
             code: ERROR_CODES.ERR_UNKNOWN_SUBCOMMAND,
           },
         );
+      }
+      if (c?.optsWithGlobals?.().json) {
+        jsonOut(
+          /** @type {any} */ ({
+            type: 'help',
+            data: {
+              command: words.join(' '),
+              commands: (cmd.commands ?? []).map(command => ({
+                name: command.name(),
+                summary: command.summary() || command.description(),
+              })),
+            },
+          }),
+        );
+        return NO_RESULT_SET;
       }
       cmd.help();
       return NO_RESULT_SET;
@@ -630,14 +720,26 @@ export function registerExperimentalTheme(group, program) {
             if (extra.length)
               throw new AstryxError(
                 `new takes one theme name; "${extra.join(' ')}" is extra. For a base theme, use --like. Nothing was changed.`,
-                /^[a-z][a-z0-9-]*$/.test(extra[0])
+                // A built-in theme after the name is the base; other words
+                // were most likely part of the name.
+                builtInThemes().includes(extra[0])
                   ? [
                       {
                         name: `${EDITOR} new ${name} --like ${extra[0]}`,
                         reason: 'do this instead',
                       },
                     ]
-                  : [],
+                  : [
+                      {
+                        name: `${EDITOR} new ${quoteCommandArgument(
+                          [name, ...extra]
+                            .join('-')
+                            .toLowerCase()
+                            .replace(/[^a-z0-9-]+/g, '-'),
+                        )}`,
+                        reason: 'do this instead',
+                      },
+                    ],
                 ERROR_CODES.ERR_INVALID_ARGUMENT,
               );
             return themeEditNew(name, {
@@ -807,6 +909,25 @@ export function registerExperimentalTheme(group, program) {
     }).allowExcessArguments(false),
     previewAppDoc,
   );
+  {
+    // A folder name that starts with "-" reads as an option: say how to
+    // pass it.
+    const app = /** @type {any} */ (
+      preview.commands.find(
+        (/** @type {any} */ x) =>
+          x.name() === previewAppDoc.name.split(' ').pop(),
+      )
+    );
+    const unknown = app?.unknownOption?.bind(app);
+    if (app && unknown)
+      app.unknownOption = (/** @type {string} */ flag) =>
+        /^-[^-]/.test(flag) && flag.length > 2
+          ? app.error(
+              `error: unknown option '${flag}'. A folder name that starts with "-" goes after --: ${PREFIX} preview app -- ${flag}`,
+              {code: 'commander.unknownOption'},
+            )
+          : unknown(flag);
+  }
 
   explained(
     defineCommand(preview, previewListDoc, {
@@ -820,7 +941,7 @@ export function registerExperimentalTheme(group, program) {
               ? project(/** @type {any} */ (r.data))
               : [
                   ...project(/** @type {any} */ (r.data)),
-                  `Tip: ${PREFIX} preview add${o.path == null ? '' : ` --path '${String(o.path).replace(/'/g, `'\\''`)}'`}`,
+                  `Tip: ${PREFIX} preview add${o.path == null ? '' : ` --path ${quoteCommandArgument(String(o.path))}`}`,
                 ],
           r =>
             resultSet({
@@ -933,46 +1054,19 @@ export function registerExperimentalTheme(group, program) {
             },
           );
         }
-        // A picture first: the only other word is how many colors to list.
-        const picture = isHowPicture(rest[0] ?? '');
-        if (picture && rest.length > 2)
-          return cliError(
-            `After a picture, give only how many colors to list, not "${rest.slice(1).join(' ')}".`,
-            {
-              suggestions: [
-                {name: `${HOW} ${rest[0]} 5`, reason: 'do this instead'},
-              ],
-              code: ERROR_CODES.ERR_INVALID_ARGUMENT,
-            },
-          );
-        // A missing picture is the first thing to say, before a bad count.
-        if (
-          picture &&
-          rest.length === 2 &&
-          !/^[1-9]\d*$/.test(rest[1]) &&
-          fileExists(rest[0])
-        )
-          return cliError(
-            `The count after a picture must be a positive whole number, not "${rest[1]}".`,
-            {
-              suggestions: [
-                {name: `${HOW} ${rest[0]} 5`, reason: 'do this instead'},
-              ],
-              code: ERROR_CODES.ERR_INVALID_ARGUMENT,
-            },
-          );
+        // The API decides what the words are (a picture and a count, or a
+        // question); a picture is told by its extension here only to keep
+        // option words after it for the count.
+        const picture = /\.png$/i.test(rest[0] ?? '');
         const stray = picture ? null : strayOption('how', rest.slice(1));
         if (stray) return stray;
-        const count =
-          picture && rest.length === 2 ? Number(rest[1]) : undefined;
-        const subject = picture ? rest[0] : rest.join(' ');
         return run(
           program,
           () =>
-            themeEditHow(subject, {
+            themeEditHow(rest.join(' '), {
               cwd: process.cwd(),
               at: o.at ?? [],
-              count,
+              words: rest,
               theme: o.theme,
             }),
           r => lookupBlocks(/** @type {any} */ (r.data)),
@@ -1006,6 +1100,12 @@ export function registerExperimentalTheme(group, program) {
       template: templateDoc,
       targets: targetsDoc,
     },
-    {group: 'experimental theme', build: 'compile'},
+    {
+      group: 'experimental theme',
+      build: 'compile',
+      explain: editorThemeRefusal,
+      preflight: editorCompileProblem,
+      hold: editorThemeHold,
+    },
   );
 }

@@ -51,7 +51,7 @@
  * @property {string[]} pictures - PNG pictures taken (only with `png`).
  * @property {string | null} pictureProblem - Why no picture was taken, and how to get a browser for it.
  * @property {{code: string, cause: string} | null} notChecked - Set when the change is saved but the components could not be rendered, so it was not checked and has no preview: the cause, such as two copies of React.
- * @property {string[]} [previewStale] - Files of the in-app theme preview that were changed by hand, so they were not written again and still show the theme as it was.
+ * @property {string[]} [previewStale] - Files of the in-app theme preview that were not written again and still show the theme as it was: changed by hand, or a preview folder where a stopped preview change waits for the next preview command.
  */
 
 /**
@@ -161,7 +161,7 @@
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditUndoResponse
  * @property {'themeEdit.undo'} type
- * @property {{theme: string, action: 'step', undone: string[], settings: number, stepsLeft: number} & ThemeEditPreviewFields} data
+ * @property {{theme: string, action: 'step', undone: string[], settings: number, stepsLeft: number, changedTokens: string[], problems: string[]} & ThemeEditPreviewFields} data
  */
 
 /**
@@ -225,7 +225,7 @@
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditPreviewListResponse
  * @property {'themeEdit.previewList'} type
- * @property {{folder: string | null, theme: string | null, pages: Array<{id: string, label: string}>}} data
+ * @property {{folder: string | null, theme: string | null, pages: Array<{id: string, label: string}>, notes: string[]}} data - `notes`: what else to know, such as a theme the preview wears that is gone.
  */
 
 /**
@@ -251,6 +251,7 @@
  * @property {string} [theme] - The theme the suggested commands are for, checked against its settings (default: the only theme the editor made in the app; with several, the one an editor command changed last; with none, `my-theme`, which the answer makes first). An empty name is refused.
  * @property {string[]} [at] - With a PNG picture: pixel points x,y, whole numbers inside the picture ("40,20;300,180", "40,20 300,180", several entries, or a flat "40,20,300,180").
  * @property {number} [count] - With a PNG picture: how many main colors (default 14).
+ * @property {string[]} [words] - The words as typed after `how`: a picture first takes only a count after it (the count is read from the words); anything else is one question. Replaces `subject`.
  */
 
 /**

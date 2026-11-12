@@ -10,7 +10,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {
   themeEditNew,
   themeEditSet,
@@ -30,6 +30,14 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+
+// The page renders cost seconds and these tests read settings, builds and
+// files: a stand-in renders unless a test asks for the real thing.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
 
 const CLI = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const ts = createRequire(path.join(CLI, 'package.json'))('typescript');
@@ -136,8 +144,8 @@ describe('preview add', () => {
   it('refuses with no routes folder, naming --path and preview app', async () => {
     const r = await refusal(() => themeEditPreviewAdd(undefined, {cwd}));
     expect(r.code).toBe('ERR_NOT_FOUND');
-    expect(r.run.join(' ')).toContain('add --path <dir>');
-    expect(r.run.join(' ')).toContain('preview app <dir>');
+    expect(r.run.join(' ')).toContain('add --path app/theme-preview');
+    expect(r.run.join(' ')).toContain('preview app theme-app');
   });
 
   it('writes the route, the default pages and the data file in the app routes folder', async () => {
@@ -440,7 +448,8 @@ describe('preview options and errors', () => {
           theme: 'broken',
         }),
       );
-      expect(r.code).toBe('ERR_THEME_LOAD');
+      // The source no longer carries the settings: refused before the build.
+      expect(r.code).toBe('ERR_THEME_INVALID');
       expect(filesUnder(path.join(cwd, 'src/app/broken'))).toEqual([]);
     } finally {
       fs.rmSync(broken, {recursive: true, force: true});
@@ -453,7 +462,12 @@ describe('preview options and errors', () => {
     fs.writeFileSync(path.join(bare, 'package.json'), '{"name": "bare"}\n');
     try {
       const r = await themeEditPreviewList({cwd: bare});
-      expect(r.data).toEqual({folder: null, theme: null, pages: []});
+      expect(r.data).toEqual({
+        folder: null,
+        theme: null,
+        pages: [],
+        notes: [],
+      });
     } finally {
       fs.rmSync(bare, {recursive: true, force: true});
     }
@@ -654,9 +668,9 @@ describe('preview app', () => {
       expect(r.message).toContain('mine exists and is not empty');
       expect(r.run[0]).toMatch(/preview app mine-preview$/);
       expect(read('mine/src/app/layout.tsx')).toBe('MY LAYOUT\n');
-      expect(
-        (await refusal(() => themeEditPreviewApp('.', {cwd}))).code,
-      ).toBe('ERR_FILE_EXISTS');
+      expect((await refusal(() => themeEditPreviewApp('.', {cwd}))).code).toBe(
+        'ERR_FILE_EXISTS',
+      );
     } finally {
       fs.rmSync(app, {recursive: true, force: true});
     }

@@ -16,6 +16,7 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {UIKIT_GESTURES} from '../../motion/uikit/gestures';
 import {isFingerScroll, watchFingerScrolls} from '../fingerScroll';
+import {browserClock} from '../GestureArena';
 import {GestureHost} from '../GestureHost';
 import {LongPressGestureRecognizer} from '../LongPressGestureRecognizer';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
@@ -3375,6 +3376,105 @@ describe('GestureHost', () => {
     touch('touchmove', box, [{...finger, x: 40}], [{...finger, x: 40}], 16);
     box.dispatchEvent(new Event('touchcancel', {bubbles: true}));
     expect(states).toEqual(['began', 'cancelled']);
+  });
+
+  it('times a second document’s touches on that document’s own clock: a short tap starts no long press', () => {
+    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout', 'performance']});
+    vi.advanceTimersByTime(6000);
+    const frame = document.createElement('iframe');
+    document.body.append(frame);
+    const frameDocument = frame.contentDocument as Document;
+    const frameWindow = frameDocument.defaultView as Window & typeof globalThis;
+    // The frame opened after the page, so its clock reads 5 s less. Its
+    // events come stamped on that clock.
+    const frameNow = vi
+      .spyOn(frameWindow.performance, 'now')
+      .mockImplementation(() => performance.now() - 5000);
+    frameDocument.body.innerHTML = '<div id="box"></div>';
+    const box = frameDocument.getElementById('box') as HTMLElement;
+    const frameHost = new GestureHost(frameDocument, {
+      isPrimaryPointerCoarse: () => true,
+    });
+    const press = new LongPressGestureRecognizer({minimumPressDuration: 500});
+    const states: string[] = [];
+    press.addListener(r => states.push(r.state));
+    const detach = frameHost.attach(box, press);
+    const send = (type: 'touchstart' | 'touchend') => {
+      const event = new frameWindow.Event(type, {
+        bubbles: true,
+        cancelable: true,
+      });
+      const contact = {identifier: 1, clientX: 10, clientY: 10, target: box};
+      Object.defineProperty(event, 'changedTouches', {value: [contact]});
+      Object.defineProperty(event, 'touches', {
+        value: type === 'touchstart' ? [contact] : [],
+      });
+      Object.defineProperty(event, 'timeStamp', {
+        value: frameWindow.performance.now(),
+      });
+      box.dispatchEvent(event);
+    };
+    try {
+      send('touchstart');
+      vi.advanceTimersByTime(120);
+      send('touchend');
+      vi.advanceTimersByTime(1000);
+      expect(states).not.toContain('began');
+    } finally {
+      detach();
+      frameNow.mockRestore();
+      frame.remove();
+      vi.useRealTimers();
+    }
+  });
+
+  it('reads the page’s clock as it is at each touch: a hold that starts after fake timers replace it begins at its deadline', () => {
+    const pageHost = new GestureHost(document, {
+      isPrimaryPointerCoarse: () => true,
+    });
+    const {box} = mount('<div id="box"></div>');
+    const press = new LongPressGestureRecognizer({minimumPressDuration: 500});
+    const states: string[] = [];
+    press.addListener(r => states.push(r.state));
+    const detach = pageHost.attach(box, press);
+    // The page replaces its clock after the host exists, as fake timers do.
+    // jsdom stamps the touch with Date.now(), on the new clock's origin.
+    vi.useFakeTimers();
+    try {
+      const event = new Event('touchstart', {bubbles: true, cancelable: true});
+      const contact = {identifier: 1, clientX: 10, clientY: 10, target: box};
+      Object.defineProperty(event, 'changedTouches', {value: [contact]});
+      Object.defineProperty(event, 'touches', {value: [contact]});
+      box.dispatchEvent(event);
+      vi.advanceTimersByTime(499);
+      expect(states).not.toContain('began');
+      vi.advanceTimersByTime(1);
+      expect(states).toContain('began');
+    } finally {
+      detach();
+      vi.useRealTimers();
+    }
+  });
+
+  it('reads the page’s own clock object for the page’s document', () => {
+    const now = vi.spyOn(browserClock, 'now');
+    const pageHost = new GestureHost(document, {
+      isPrimaryPointerCoarse: () => true,
+    });
+    const {box} = mount('<div id="box"></div>');
+    const detach = pageHost.attach(
+      box,
+      new LongPressGestureRecognizer({minimumPressDuration: 500}),
+    );
+    const finger = {id: 1, x: 10, y: 10};
+    try {
+      touch('touchstart', box, [finger], [finger], performance.now());
+      expect(now).toHaveBeenCalled();
+      touch('touchend', box, [finger], [], performance.now());
+    } finally {
+      detach();
+      now.mockRestore();
+    }
   });
 
   it('reads epoch-stamped events on the arena clock', () => {

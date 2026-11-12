@@ -3,7 +3,7 @@
   "type": "search",
   "data": {
     "query": "delete",
-    "matchCount": 20,
+    "matchCount": 21,
     "results": [
       {
         "domain": "component",
@@ -61,6 +61,18 @@
         "title": "<text>",
         "command": "astryx docs global/uninstall reset",
         "parent": "astryx docs global/uninstall --index",
+        "mentions": []
+      },
+      {
+        "domain": "doc",
+        "name": "cli/api/functions/theme-build",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "title": "<text>",
+        "command": "astryx docs cli/api/functions/theme-build",
+        "parent": "astryx docs cli/api/functions",
         "mentions": []
       },
       {
@@ -230,17 +242,6 @@
         "description": "<text>",
         "import": "@astryxdesign/core/IconButton",
         "command": "astryx component IconButton",
-        "mentions": []
-      },
-      {
-        "domain": "component",
-        "name": "ToggleButton",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "import": "@astryxdesign/core/ToggleButton",
-        "command": "astryx component ToggleButton",
         "mentions": []
       }
     ]

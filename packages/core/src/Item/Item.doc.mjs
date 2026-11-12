@@ -196,7 +196,8 @@ export const docs = {
         {
           name: 'isDisabled',
           type: 'boolean',
-          description: 'Disabled state.',
+          description:
+            'Disabled state. Interactive rows stay keyboard-reachable but cannot activate.',
           default: 'false',
         },
         {

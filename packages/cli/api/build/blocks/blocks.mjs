@@ -11,7 +11,8 @@
  *   vocabulary of stemmed words and word pairs with their idf (x1024), two
  *   signed byte matrices that map request words and doc words into one space, the
  *   lexical weight, the blocks the matrices were fitted with, and the ranking
- *   coefficients.
+ *   coefficients. Optionally, a keeper from build's adapter (`keep`) that
+ *   reads back the per-block vectors kept for the same catalog.
  * @output `pickBlocks(...)`: block names, best first, as many as build's own
  *   list, and an entry (real score and reason) for each listed block search
  *   did not return.
@@ -38,7 +39,14 @@
  * slot build gave them; the best of the others fill the remaining slots.
  */
 
+import {createHash} from 'node:crypto';
 import {STOPWORDS} from '../../search/_query.mjs';
+
+/**
+ * Keeps a value derived from the catalog between runs (build's adapter does
+ * it beside the kept search catalog), or works it out.
+ * @typedef {<T>(key: unknown[], compute: () => T, codec: {encode: (value: T) => any, decode: (stored: any) => T}) => T} KeepCatalog
+ */
 
 /**
  * @typedef {object} BlockPickerWeights
@@ -325,14 +333,39 @@ const catalogs = new WeakMap();
  * @param {CatalogBlock[]} catalog
  * @param {CatalogComponent[]} components
  * @param {BlockPickerWeights} weights
+ * @param {KeepCatalog} [keep] keeps the value between runs (build's adapter)
  */
-function readCatalog(catalog, components, weights) {
+function readCatalog(catalog, components, weights, keep) {
   const key = JSON.stringify([
     catalog.map(b => [b.name, b.displayName, b.description]),
     components.map(c => [c.name, c.keywords]),
   ]);
   const cached = catalogs.get(weights);
   if (cached && cached.key === key) return cached;
+  const compute = () => computeCatalog(key, catalog, components, weights);
+  // A function of the catalog text and the shipped weights: where build's
+  // adapter keeps it between runs, a later run with the same text reads it
+  // back.
+  const read = keep
+    ? keep(
+        ['block-catalog', createHash('sha256').update(key).digest('hex')],
+        compute,
+        CATALOG_CODEC,
+      )
+    : compute();
+  catalogs.set(weights, read);
+  return read;
+}
+
+/**
+ * readCatalog's value, worked out.
+ * @param {string} key
+ * @param {CatalogBlock[]} catalog
+ * @param {CatalogComponent[]} components
+ * @param {BlockPickerWeights} weights
+ * @returns {{key: string, blocks: Map<string, {component: string, vector: Map<number, number>, projected: Float64Array}>, phrases: Map<string, [string[], number][]>}}
+ */
+function computeCatalog(key, catalog, components, weights) {
   const names = components.map(c => c.name).sort((a, b) => b.length - a.length);
   const keywords = new Map(components.map(c => [c.name, c.keywords ?? []]));
   /** @type {Map<string, {component: string, vector: Map<number, number>, projected: Float64Array}>} */
@@ -369,10 +402,53 @@ function readCatalog(catalog, components, weights) {
         list.push([phrase(k), 1 / (shared.get(k) ?? 1)]);
     phrases.set(c, list);
   }
-  const read = {key, blocks, phrases};
-  catalogs.set(weights, read);
-  return read;
+  return {key, blocks, phrases};
 }
+
+/**
+ * readCatalog's value as plain data and back: maps as entry lists, each
+ * projection as its numbers.
+ */
+const CATALOG_CODEC = {
+  /** @param {ReturnType<typeof computeCatalog>} read */
+  encode: read => ({
+    key: read.key,
+    blocks: [...read.blocks].map(([name, b]) => [
+      name,
+      b.component,
+      [...b.vector],
+      [...b.projected],
+    ]),
+    phrases: [...read.phrases],
+  }),
+  /**
+   * @param {any} stored
+   * @returns {ReturnType<typeof computeCatalog>}
+   */
+  decode: stored => ({
+    key: stored.key,
+    blocks: new Map(
+      stored.blocks.map(
+        (
+          /** @type {[string, string, [number, number][], number[]]} */ [
+            name,
+            component,
+            vector,
+            projected,
+          ],
+        ) => [
+          name,
+          {
+            component,
+            vector: new Map(vector),
+            projected: Float64Array.from(projected),
+          },
+        ],
+      ),
+    ),
+    phrases: new Map(stored.phrases),
+  }),
+};
 
 /**
  * How strongly the request names each component: its best phrase, longer
@@ -435,16 +511,17 @@ function writesName(words, block) {
  * @param {string} request
  * @param {{kitBlocks: string[], searched: BlockScore[], foreign: string[], catalog: CatalogBlock[], components: CatalogComponent[]}} signals
  * @param {BlockPickerWeights} weights
+ * @param {KeepCatalog} [keep] keeps the per-block vectors between runs
  * @returns {{names: string[], entries: Map<string, SearchResultEntry>}} as
  *   many names as build's own list, best first; an entry for each listed
  *   block search did not return
  */
-export function pickBlocks(request, signals, weights) {
+export function pickBlocks(request, signals, weights, keep) {
   const own = signals.kitBlocks;
   /** @type {Map<string, SearchResultEntry>} */
   const entries = new Map();
   if (own.length === 0) return {names: [], entries};
-  const cat = readCatalog(signals.catalog, signals.components, weights);
+  const cat = readCatalog(signals.catalog, signals.components, weights, keep);
   const side = requestSideOf(request, weights);
   /** @type {Map<string, {match: number, overlap: number}>} */
   const scored = new Map();
