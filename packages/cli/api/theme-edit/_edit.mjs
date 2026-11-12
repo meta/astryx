@@ -993,6 +993,29 @@ async function change(sub, slug, thing, value, options) {
           `comes after ${covers.map(describe).join(', ')}, so ${covers.length > 1 ? 'those parts show' : `${covers[0].on} shows`} this value now; set ${covers.length > 1 ? 'one' : 'it'} again to make it win`,
         ]
       : []),
+    // Core writes a part's derived variables (a button's or card's radius
+    // variable, read by what is drawn inside it) from plain declarations
+    // only: in a state they keep the plain value, and the result says so.
+    ...(sub === 'set' && s.state && s.on
+      ? (() => {
+          const prop =
+            s.thing === 'corners' || /radius$/.test(s.thing)
+              ? 'borderRadius'
+              : s.thing === 'padding' || s.thing === 'spacing'
+                ? 'padding'
+                : s.thing.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+          const vars = parts.flatMap(t =>
+            (ctx.derived?.[t] ?? [])
+              .filter(d => d.property === prop)
+              .flatMap(d => d.vars ?? []),
+          );
+          return vars.length
+            ? [
+                `in the ${s.state} state, ${[...new Set(vars)].join(', ')} (which Core sets from the plain value, for what is drawn inside the part) keeps the plain value`,
+              ]
+            : [];
+        })()
+      : []),
     // Phones keep the base theme's reading sizes (a coarse pointer below
     // the lg width), so a size change says where it applies.
     ...(sub === 'set' &&
@@ -1256,15 +1279,24 @@ export async function themeEditShow(theme, options = {}) {
   const stale = staleBuild(cwd, theme, data);
   const brokenSource = themeSourceProblem(cwd, theme);
   if (stale && !brokenSource && !readOnly) {
-    const before = fs.existsSync(f.settingsTs)
-      ? fs.readFileSync(f.settingsTs, 'utf8')
-      : null;
+    // Every file the build may rewrite or remove (the settings module, the
+    // variants types, section sheets, pictures), so a theme source that
+    // does not build leaves the folder exactly as it was.
+    const kept = new Map(
+      fs
+        .readdirSync(f.dir)
+        .filter(
+          n =>
+            n === path.basename(f.settingsTs) ||
+            n === `${theme}.variants.d.ts` ||
+            /^(sheet-[a-z-]+\.html|(sheet|preview)(-[a-z-]+)?\.png)$/.test(n),
+        )
+        .map(n => [path.join(f.dir, n), fs.readFileSync(path.join(f.dir, n))]),
+    );
     try {
       await buildTheme(ctx, theme, data);
     } catch (e) {
-      // The settings module goes back, so the theme stays stale until it
-      // builds.
-      if (before != null) writeWhole(f.settingsTs, before);
+      for (const [file, bytes] of kept) writeWhole(file, bytes);
       if (e instanceof AstryxError && e.code !== E.ERR_THEME_LOAD) throw e;
       // An own theme source that no longer builds is named, as `set` names
       // it; the old build is never shown as current.

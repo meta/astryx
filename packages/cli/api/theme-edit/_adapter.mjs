@@ -577,8 +577,18 @@ export function editorThemeRefusal(err, cwd) {
   )
     return null;
   const root = projectRoot(cwd);
-  const named = /"([a-z][a-z0-9-]*)"|'([a-z][a-z0-9-]*)'/.exec(err.message);
-  const slug = named ? editorThemeOf(root, named[1] ?? named[2]) : null;
+  // The name as typed, read the way the editor reads a theme name: a path
+  // to its folder or a file in it, in any case, names the theme.
+  const named = /"([^"]+)"|'([^']+)'/.exec(err.message);
+  const word = named
+    ? String(named[1] ?? named[2])
+        .trim()
+        .toLowerCase()
+        .replace(/^.*themes[\\/]/, '')
+        .replace(/[\\/].*$/, '')
+        .replace(/\.(theme\.ts|settings\.(json|ts)|css|js|ts)$/, '')
+    : '';
+  const slug = word ? editorThemeOf(root, word) : null;
   if (!slug) return null;
   // A local theme of that name (a fork in the app's own themes folder) is
   // one the stable commands take: their own message stands.

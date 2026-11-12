@@ -1,15 +1,17 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file The fourteenth pass over `astryx experimental theme editor`: corners
- * in a state write the derived variables Core writes for plain corners.
+ * @file Corners in a state: written as the CSS property alone (Core writes a
+ * part's derived variables from plain declarations only, and refuses them
+ * as theme input), with a note; the theme then compiles clean.
  */
 
+import {spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditSet} from './theme-edit.mjs';
-import {expandStateBlocks} from './_settings.mjs';
+import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -34,50 +36,88 @@ afterAll(() => {
   if (cwd) removeLinkedFixture(cwd);
 });
 
-const css = () => fs.readFileSync(path.join(cwd, 'themes/s/s.css'), 'utf8');
+const read = (/** @type {string} */ f) =>
+  fs.readFileSync(path.join(cwd, 'themes/s', f), 'utf8');
 
 describe('corners in a state', () => {
-  it('a button on hover gets its radius variable too', async () => {
-    await themeEditSet('s', 'corners', 'pill', {
+  it('a button on hover gets the radius, a note, and compiles clean', async () => {
+    const r = await themeEditSet('s', 'corners', 'pill', {
       cwd,
       on: 'button',
       state: 'hover',
     });
-    expect(css()).toMatch(
-      /\.astryx-button:hover[^{]*\{[^}]*border-radius: 9999px;[^}]*--_button-radius: 9999px;/,
+    expect(r.data.notes.join(' ')).toMatch(
+      /--_button-radius .* keeps the plain value/,
     );
-  }, 240_000);
-
-  it('a card on hover gets its inner radius variable', async () => {
-    await themeEditSet('s', 'border-radius', '19px', {
-      cwd,
-      on: 'card',
-      state: 'hover',
-    });
-    expect(css()).toMatch(
-      /\.astryx-card:hover[^{]*\{[^}]*border-radius: 19px;[^}]*--_card-radius: 19px;/,
+    expect(read('s.css')).toMatch(
+      /\.astryx-button:hover[^{]*\{[^}]*border-radius: 9999px;/,
     );
+    expect(read('s.settings.ts')).not.toMatch(/--_/);
+    const bin = path.resolve(
+      import.meta.dirname,
+      '../../clients/cli/bin/astryx.mjs',
+    );
+    const compiled = spawnSync(
+      process.execPath,
+      [
+        bin,
+        'experimental',
+        'theme',
+        'compile',
+        'themes/s/s.theme.ts',
+        '--json',
+      ],
+      {cwd, encoding: 'utf8'},
+    );
+    expect(compiled.status, compiled.stdout + compiled.stderr).toBe(0);
   }, 240_000);
 });
 
-describe('expandStateBlocks', () => {
-  it('writes vars, drops a replaced property, leaves plain blocks to Core', () => {
-    const components = {
-      card: {base: {borderRadius: '4px', ':hover': {borderRadius: '8px'}}},
-      'text-area': {base: {':focus-within': {paddingInline: '6px'}}},
-    };
-    expandStateBlocks(components, {
-      card: [{property: 'borderRadius', vars: ['--_card-radius']}],
-      'text-area': [
-        {property: 'paddingInline', vars: ['--_ta-pad'], replaces: true},
-      ],
+describe('final 8', () => {
+  it('F8-3: focus-within on a part that holds content is taken', async () => {
+    const r = await themeEditSet('s', 'background-color', '#ff0000', {
+      cwd,
+      on: 'dialog',
+      state: 'focus-within',
     });
-    expect(components.card.base).toEqual({
-      borderRadius: '4px',
-      ':hover': {borderRadius: '8px', '--_card-radius': '8px'},
-    });
-    expect(components['text-area'].base[':focus-within']).toEqual({
-      '--_ta-pad': '6px',
-    });
+    expect(r.data.setting.state).toBe('focus-within');
+  }, 240_000);
+
+  it('F8-5: padding in a state on an inputs member suggests --only', async () => {
+    const r = await refusal(() =>
+      themeEditSet('s', 'padding', '4px', {
+        cwd,
+        on: 'date-input',
+        state: 'hover',
+      }),
+    );
+    expect(r.run[0]).toMatch(/--on date-input --state hover --only$/);
   });
+
+  it('F8-1: a radius for one mode is refused as not a color, with a run that works', async () => {
+    const r = await refusal(() =>
+      themeEditSet('s', 'border-radius', '8px', {
+        cwd,
+        on: 'card',
+        mode: 'dark',
+      }),
+    );
+    expect(r.message).toMatch(/border-radius is not a color/);
+    expect(r.run).toEqual([
+      expect.stringMatching(/ border-radius 8px --on card$/),
+    ]);
+  });
+});
+
+describe('final 8, show and names', () => {
+  it('F8-N2: a theme source that does not build leaves every file in place', async () => {
+    await themeEditNew('g', {cwd});
+    const dir = path.join(cwd, 'themes/g');
+    const before = fs.readdirSync(dir).sort();
+    fs.appendFileSync(path.join(dir, 'g.theme.ts'), 'export const oops = {\n');
+    const {themeEditShow} = await import('./theme-edit.mjs');
+    const r = await refusal(() => themeEditShow('g', {cwd}));
+    expect(r.code).toBe('ERR_THEME_INVALID');
+    expect(fs.readdirSync(dir).sort()).toEqual(before);
+  }, 240_000);
 });

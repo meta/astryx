@@ -1042,6 +1042,19 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
             marks(n)),
       );
     };
+    // A part whose component takes children holds content that can take
+    // focus, so focus-within applies there (a dialog, a section, a field).
+    const holdsContent = (/** @type {string} */ t) => {
+      const comps = /** @type {Record<string, any>} */ (
+        ctx.project.components ?? {}
+      );
+      const pascal = t.replace(/(^|-)([a-z0-9])/g, (_, __, c) =>
+        c.toUpperCase(),
+      );
+      return [ctx.project.target.get(t)?.component, pascal].some(
+        n => n != null && 'children' in (comps[n]?.props ?? {}),
+      );
+    };
     // A part Core never styles in focus is not what takes focus (the
     // focusable element is inside it, or beside it).
     const focusable = (/** @type {string} */ t) =>
@@ -1061,7 +1074,8 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           // focusable is inside it (a switch's input sits beside its track).
           (s.state === 'focus-within' &&
             !keys(t, 'focus-within') &&
-            !focusable(t))),
+            !focusable(t) &&
+            !holdsContent(t))),
     );
     if (parts.length && dead.length === parts.length) {
       const bare = Object.keys(own(dead[0])).length === 0;
@@ -1093,31 +1107,34 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
     }
   }
   // Core expands a part's padding into its container tokens from a plain
-  // padding only; in a state the editor cannot write that expansion, so a
-  // state is refused there, with the plain run. (Derived variables such as
-  // a card's inner corners are written into the state block by the build.)
+  // padding only, so in a state that padding never reaches what sits edge
+  // to edge inside it: refused, judged on the part named (a group member
+  // spreads; when only another member is the reason, --only keeps it to
+  // the part named).
   if (!unset && s.on && s.state && ctx.derived) {
     const prop =
-      /radius$/.test(thing) || thing === 'corners'
-        ? 'borderRadius'
-        : /^padding/.test(thing) || thing === 'spacing'
-          ? 'padding'
-          : null;
-    // The editor writes a derived variable into the state block itself;
-    // only container padding, which Core expands into its own tokens, is
-    // not computed there.
+      /^padding/.test(thing) || thing === 'spacing' ? 'padding' : null;
+    const expands = (/** @type {string} */ t) =>
+      (ctx.derived?.[t] ?? []).some(
+        d => d.property === prop && d.expand === 'container',
+      );
+    const named = ctx.project.target.get(s.on) ? s.on : null;
     const hit = prop
-      ? partsOf(ctx, s).find(t =>
-          (ctx.derived?.[t] ?? []).some(
-            d => d.property === prop && d.expand === 'container',
-          ),
-        )
+      ? named && expands(named)
+        ? named
+        : partsOf(ctx, s).find(expands)
       : undefined;
     if (hit)
       refuse(
         E.ERR_THEME_NO_EFFECT,
-        `Core sets ${hit}'s inner ${prop === 'padding' ? 'padding' : 'corners'} (what sits edge to edge inside it) from a plain ${prop === 'padding' ? 'padding' : 'corner'} setting only, so with --state ${s.state} they would stay behind.`,
-        {run: [setLine(slug, thing, v, {...s, state: undefined})]},
+        `Core sets ${hit}'s inner padding (what sits edge to edge inside it) from a plain padding setting only, so with --state ${s.state} it would stay behind.`,
+        {
+          run: [
+            named && !expands(named) && !s.only
+              ? setLine(slug, thing, v, {...s, only: true})
+              : setLine(slug, thing, v, {...s, state: undefined}),
+          ],
+        },
       );
   }
   // On a group, a variant or state must belong to at least one member.
@@ -2185,7 +2202,13 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
     // With a state, the other mode would take one variant's value for
     // every variant, so any part whose variants read their own value needs
     // the variant named.
-    if (s.mode && !s.when) {
+    // Per-variant colors only: a value that is not a color is refused for
+    // --mode below, with the reason that holds.
+    if (
+      s.mode &&
+      !s.when &&
+      (COLOR_PROPS.test(prop) || (prop === 'background' && isColorValue(v)))
+    ) {
       const g = C.groupOfProp(
         prop === 'background' ? 'background-color' : prop,
       );
@@ -2286,8 +2309,12 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       !COLOR_PROPS.test(prop) &&
       !(prop === 'background' && isColorValue(v))
     ) {
-      const alt =
-        prop === 'border' || prop.startsWith('border-')
+      // A color mixed into the value (a border's) can go per mode on its
+      // own; a value with none (a radius) is just set for both modes.
+      const hasColor = /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i.test(v);
+      const alt = !hasColor
+        ? null
+        : prop === 'border' || prop.startsWith('border-')
           ? 'border-color'
           : prop === 'background'
             ? 'background-color'

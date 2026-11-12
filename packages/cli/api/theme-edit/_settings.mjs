@@ -1351,63 +1351,9 @@ export function compileTheme(ctx, data, base) {
         },
       ],
     };
-  expandStateBlocks(theme.components, ctx.derived ?? {});
   if (!Object.keys(theme.tokens).length) delete theme.tokens;
   if (!Object.keys(theme.components).length) delete theme.components;
   return theme;
-}
-
-/** Padding longhands that reach a part's `padding` entry. */
-const PADDING_LONGHANDS = new Set([
-  'paddingBlock',
-  'paddingInline',
-  'paddingTop',
-  'paddingBottom',
-  'paddingLeft',
-  'paddingRight',
-  'paddingBlockStart',
-  'paddingBlockEnd',
-  'paddingInlineStart',
-  'paddingInlineEnd',
-]);
-
-/**
- * Core writes a part's derived variables (a card's inner corners, a
- * button's radius variable) from its plain declarations only; in a state
- * block (`:hover`, `:is(:disabled,…)`) they would stay behind. The same
- * expansion is written into each state block here: every variable the
- * registry names for the property gets the value, and a property the
- * variable replaces goes. An entry that expands into container padding is
- * not computed here (set refuses that case).
- * @param {Record<string, Record<string, any>>} components
- * @param {Record<string, Array<{property: string, vars?: string[], replaces?: boolean, expand?: string}>>} registry
- */
-export function expandStateBlocks(components, registry) {
-  for (const [target, keys] of Object.entries(components ?? {})) {
-    const entries = registry[target];
-    if (!entries?.length) continue;
-    for (const block of Object.values(keys ?? {})) {
-      if (!block || typeof block !== 'object') continue;
-      for (const [key, styles] of Object.entries(block)) {
-        if (!key.startsWith(':') || !styles || typeof styles !== 'object')
-          continue;
-        for (const [prop, value] of Object.entries(styles)) {
-          if (typeof value !== 'string') continue;
-          const match = entries.filter(
-            e =>
-              e.property === prop ||
-              (e.property === 'padding' &&
-                PADDING_LONGHANDS.has(prop) &&
-                !e.replaces),
-          );
-          for (const e of match) {
-            for (const v of e.vars ?? []) styles[v] ??= value;
-            if (e.replaces && e.vars?.length) delete styles[prop];
-          }
-        }
-      }
-    }
-  }
 }
 
 /** Core's default type scale ratio. */
@@ -1965,10 +1911,35 @@ export async function resolvedTokens(ctx, slug) {
     v => v && typeof v === 'object' && typeof v.name === 'string',
   );
   const {core} = ctx.project;
-  const out = {
-    light: core.resolveThemeTokens(t, {mode: 'light'}),
-    dark: core.resolveThemeTokens(t, {mode: 'dark'}),
+  // A token value an own theme source gives as a number (8 for 8px)
+  // reads as its text, never as a crash.
+  const asText = (/** @type {Record<string, unknown>} */ m) =>
+    Object.fromEntries(
+      Object.entries(m ?? {}).map(([k, v]) => [
+        k,
+        typeof v === 'string' ? v : String(v),
+      ]),
+    );
+  // A token value that is not text (a number in an own theme source) is
+  // named, never a crash.
+  const resolve = (/** @type {'light' | 'dark'} */ mode) => {
+    try {
+      return asText(core.resolveThemeTokens(t, {mode}));
+    } catch (e) {
+      const bad = Object.entries(/** @type {any} */ (t)?.tokens ?? {}).find(
+        ([, v]) =>
+          typeof v !== 'string' && (typeof v !== 'object' || v == null),
+      );
+      throw new AstryxError(
+        bad
+          ? `${slug}.theme.ts gives ${bad[0]} the value ${JSON.stringify(bad[1])}, which is not text: a token value is a CSS value in quotes (such as '${bad[1]}px').`
+          : `${slug} could not be read: ${e instanceof Error ? e.message : String(e)}.`,
+        [{name: `${P} how --list tokens`, reason: 'every token and its type'}],
+        ERROR_CODES.ERR_THEME_INVALID,
+      );
+    }
   };
+  const out = {light: resolve('light'), dark: resolve('dark')};
   // The tokens each part sets for itself (the official themes lift
   // secondary text on some parts), for the contrast check; kept out of the
   // modes so nothing that lists the resolved tokens sees it.
