@@ -18,6 +18,7 @@
 
 import {useCallback, useEffect, useMemo, useRef} from 'react';
 import type {RefObject} from 'react';
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {PanGestureRecognizer} from '../gestures/PanGestureRecognizer';
 import {useGestureRecognizer} from '../gestures/useGestureRecognizer';
@@ -213,9 +214,8 @@ export function useToastBannerSwipe(
   const releasedRef = useRef(false);
   /** The card's speed toward its edge at a dismissing release (px/s). */
   const releaseVelocityRef = useRef(0);
-  // The recognizer's callbacks read the newest options.
-  const optionsRef = useRef(options);
-  optionsRef.current = options;
+  // The recognizer's callbacks read the newest committed options.
+  const optionsRef = useCommittedRef(options);
   // The card's one animator, shared with anything else that moves it. Only
   // this hook calls it, and only under a finger, so with a fine pointer the
   // card is useToastGesture's alone.
@@ -338,7 +338,7 @@ export function useToastBannerSwipe(
         }
       });
     },
-    [cardAnimator],
+    [cardAnimator, optionsRef],
   );
 
   // Keeps the pan recognizer, which lives outside React, heading toward the
@@ -422,7 +422,7 @@ export function useToastBannerSwipe(
           resumeTimer();
         }
       }),
-    [cardAnimator, pan, playExit, rootRef],
+    [cardAnimator, optionsRef, pan, playExit, rootRef],
   );
 
   // Everything before the first await runs in the call, so the retract starts
@@ -466,7 +466,7 @@ export function useToastBannerSwipe(
       );
     }
     await retractingRef.current;
-  }, [playExit, rootRef]);
+  }, [optionsRef, playExit, rootRef]);
 
   const rest = useCallback(() => {
     const exit = exitRef.current;

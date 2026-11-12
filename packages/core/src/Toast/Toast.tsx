@@ -20,6 +20,7 @@
 import {useCallback, useEffect, useRef} from 'react';
 import type {FocusEvent, ReactNode, RefObject} from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '../Button';
 import {Icon} from '../Icon';
@@ -425,11 +426,10 @@ export function ToastSurface({
     shouldIgnoreTarget: isInteractiveTarget,
   });
   cardRootRef.current = rootRef;
-  const onRetractRef = useRef(onRetract);
-  onRetractRef.current = onRetract;
+  const onRetractRef = useCommittedRef(onRetract);
   const handleRetract = useCallback(() => {
     onRetractRef.current?.();
-  }, []);
+  }, [onRetractRef]);
   const {retract, rest} = useToastBannerSwipe({
     rootRef,
     isNotification,
@@ -446,10 +446,8 @@ export function ToastSurface({
   // edge first, then the toast is dismissed (once, whoever asked). Otherwise
   // the dismissal is immediate and the exit is Toast's fade.
   const isDismissingRef = useRef(false);
-  const isExitingRef = useRef(isExiting);
-  isExitingRef.current = isExiting;
-  const onRetractEndRef = useRef(onRetractEnd);
-  onRetractEndRef.current = onRetractEnd;
+  const isExitingRef = useCommittedRef(isExiting);
+  const onRetractEndRef = useCommittedRef(onRetractEnd);
   requestDismissRef.current = (reason: ToastDismissReason) => {
     if (!isNotification) {
       onDismissRef.current(reason);
@@ -500,7 +498,7 @@ export function ToastSurface({
         onRetractEndRef.current?.();
       });
     }
-  }, [isNotification, isExiting, retract]);
+  }, [isNotification, isExiting, retract, onRetractEndRef]);
 
   const handleDismiss = useCallback(() => {
     requestDismissRef.current('manual');
