@@ -261,7 +261,7 @@ export function MetadataList({
         ? styles.gridStackedSingle
         : styles.gridStackedMulti;
     }
-    // Labels on the left
+    // Labels at the inline start
     if (columns === 'single' || columns === 1) {
       return styles.gridSingle;
     }

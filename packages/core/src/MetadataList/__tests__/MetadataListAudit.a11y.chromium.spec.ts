@@ -36,7 +36,6 @@ type AuditCase = {
   key: string;
   group: string;
   story: string;
-  args?: string;
   ready: string;
   mode: Mode;
   direction: Direction;
@@ -200,9 +199,9 @@ async function listShape(page: Page) {
       display: style.display,
       template: style.gridTemplateColumns,
       flexWrap: style.flexWrap,
-      titleIsHeading:
-        root.querySelector(':scope > div:first-child')?.getAttribute('role') ===
-        'heading',
+      headingInside:
+        root.querySelector('h1, h2, h3, h4, h5, h6, [role="heading"]') != null,
+      dlLabel: dl.getAttribute('aria-label'),
       titleAboveList:
         dl.previousElementSibling != null &&
         dl.previousElementSibling.getBoundingClientRect().bottom <=
@@ -382,7 +381,22 @@ for (const mode of ['light', 'dark'] as const) {
           (collapsed.button?.width ?? 0) >= 24,
         `toggle target ${collapsed.button?.width}x${collapsed.button?.height}`,
       );
-      await frame('collapsed', {collapsed});
+      const contrast = await contrastPairs(page, TEXT_PARTS);
+      check(
+        contrast.some(pair => pair.part === 'toggle'),
+        'the toggle was not measured',
+      );
+      for (const pair of contrast) {
+        check(
+          pair.unreadable.length === 0,
+          `${pair.part} colors not read: ${pair.unreadable.join(', ')}`,
+        );
+        check(
+          pair.ratio >= pair.threshold,
+          `${pair.part} contrast ${pair.ratio} below ${pair.threshold}`,
+        );
+      }
+      await frame('collapsed', {collapsed, contrast});
 
       const toggle = page.getByRole('button', {name: 'Show more', exact: true});
       await toggle.hover();
@@ -449,6 +463,14 @@ for (const mode of ['light', 'dark'] as const) {
         `${again.entries.length} entries after Space`,
       );
       check(again.button?.expanded === 'false', 'toggle did not collapse');
+      const focusAfterCollapse = await page.evaluate(
+        () => document.activeElement?.textContent ?? null,
+      );
+      check(
+        focusAfterCollapse === 'Show more',
+        `focus moved to ${focusAfterCollapse}`,
+      );
+      await frame('collapsed-again', {again, focusAfterCollapse});
     },
   });
 
@@ -528,8 +550,11 @@ for (const mode of ['light', 'dark'] as const) {
     run: async (page, check, frame) => {
       const shape = await listShape(page);
       check(shape.titleAboveList, 'title is not above the list');
-      check(!shape.titleIsHeading, 'the component made the title a heading');
-      check(shape.dlLabelledBy == null, 'the title names the list');
+      check(!shape.headingInside, 'the component made the title a heading');
+      check(
+        shape.dlLabelledBy == null && shape.dlLabel == null,
+        'the title names the list',
+      );
       await frame('rest', {shape});
     },
   });
@@ -639,8 +664,7 @@ async function runCase(page: Page, item: AuditCase) {
   const pageErrors: string[] = [];
   const onError = (error: Error) => pageErrors.push(String(error));
   page.on('pageerror', onError);
-  const args = item.args ? `&args=${item.args}` : '';
-  const url = `${server.origin}/iframe.html?id=${item.story}&viewMode=story${args}&globals=colorMode:${item.mode};astryxTheme:neutral;direction:${item.direction}`;
+  const url = `${server.origin}/iframe.html?id=${item.story}&viewMode=story&globals=colorMode:${item.mode};astryxTheme:neutral;direction:${item.direction}`;
   await page.goto(url, {waitUntil: 'load'});
   await page.locator(item.ready).first().waitFor();
   await settle(page);
@@ -683,7 +707,6 @@ async function runCase(page: Page, item: AuditCase) {
     build: storybookSha,
     checkout: checkoutSha,
     story: item.story,
-    args: item.args ?? null,
     mode: item.mode,
     direction: item.direction,
     viewport: item.viewport,
