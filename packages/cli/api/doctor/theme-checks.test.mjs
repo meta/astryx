@@ -950,6 +950,66 @@ describe('app-theme doctor checks', () => {
     });
   });
 
+  it('check 5 names a package a local theme imports and the app lacks, with the install command', async () => {
+    const {dir} = await fixture();
+    await themeEject('ocean', {cwd: dir, package: '@acme/themes'});
+    const localDir = path.join(dir, 'src/themes/ocean');
+    const sourceFile = path.join(localDir, 'oceanTheme.ts');
+    fs.writeFileSync(
+      sourceFile,
+      "const oceanTheme = {name: 'ocean', tokens: {'--color-bg': '#000'}};\nexport {oceanTheme};\nexport default oceanTheme;\n",
+    );
+    await themeBuild(sourceFile, {}, {cwd: dir});
+    await themeAdd('ocean', {cwd: dir, import: true});
+    fs.writeFileSync(
+      sourceFile,
+      "import 'not-installed-icons';\nconst oceanTheme = {name: 'ocean', tokens: {'--color-bg': '#000'}};\nexport {oceanTheme};\nexport default oceanTheme;\n",
+    );
+
+    expect(
+      check(await checkAppThemes(dir), 'theme-local-builds'),
+    ).toMatchObject({
+      status: 'fail',
+      message: expect.stringContaining('not-installed-icons (ocean)'),
+      fix: expect.stringMatching(
+        /^(npm install|pnpm add|yarn add|bun add) not-installed-icons$/,
+      ),
+    });
+  });
+
+  it('check 5 names the install command and then the rebuild of another stale local theme', async () => {
+    const {dir} = await fixture([{slug: 'ocean'}, {slug: 'reef'}]);
+    for (const slug of ['ocean', 'reef']) {
+      await themeEject(slug, {cwd: dir, package: '@acme/themes'});
+      const sourceFile = path.join(dir, `src/themes/${slug}/${slug}Theme.ts`);
+      fs.writeFileSync(
+        sourceFile,
+        `const ${slug}Theme = {name: '${slug}', tokens: {'--color-bg': '#000'}};\nexport {${slug}Theme};\nexport default ${slug}Theme;\n`,
+      );
+      await themeBuild(sourceFile, {}, {cwd: dir});
+      await themeAdd(slug, {cwd: dir, import: true});
+    }
+    fs.writeFileSync(
+      path.join(dir, 'src/themes/ocean/oceanTheme.ts'),
+      "import 'not-installed-icons';\nconst oceanTheme = {name: 'ocean', tokens: {'--color-bg': '#000'}};\nexport {oceanTheme};\nexport default oceanTheme;\n",
+    );
+    fs.appendFileSync(
+      path.join(dir, 'src/themes/reef/reef.css'),
+      '\n.injected {}\n',
+    );
+
+    const result = check(await checkAppThemes(dir), 'theme-local-builds');
+    expect(result).toMatchObject({
+      status: 'fail',
+      message: expect.stringContaining(
+        'Local theme outputs are also missing or stale: reef.',
+      ),
+    });
+    expect(result.fix).toMatch(
+      /^(npm install|pnpm add|yarn add|bun add) not-installed-icons .*theme build .*reef/,
+    );
+  });
+
   it("check 5 is info, and builds nothing, when the project's Core is not installed (spec AST-081 FR3)", async () => {
     // Outside this repository, whose own installed Core would be found above.
     const {dir} = await fixture(undefined, {root: os.tmpdir()});

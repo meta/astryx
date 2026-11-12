@@ -27,6 +27,7 @@ import {
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
 import {isRenderable} from '../utils/isRenderable';
+import {textDirectionProps} from '../utils/textDirection';
 import type {BadgeVariantMap} from './index';
 
 /**
@@ -75,6 +76,7 @@ const styles = stylex.create({
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     minWidth: 0,
+    unicodeBidi: 'isolate',
   },
 });
 
@@ -269,7 +271,9 @@ export function Badge({
       title={labelTitle}
       {...props}>
       {icon}
-      <span {...stylex.props(styles.label)}>{label}</span>
+      <span {...textDirectionProps(label)} {...stylex.props(styles.label)}>
+        {label}
+      </span>
     </span>
   );
 }
