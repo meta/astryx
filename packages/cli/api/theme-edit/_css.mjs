@@ -718,12 +718,14 @@ export function fontShorthandParts(value) {
         each['line-height'] = slash[2];
         continue;
       }
-      const keyword = LONGHANDS.find(p => keywordsOf(p).includes(lower));
-      // The same part twice (bold bold) is no font value.
-      if (keyword && keyword in each && each[keyword] === lower)
+      // A keyword several longhands take (normal) is the next of them not
+      // given yet; the same part twice (bold bold) is no font value.
+      const takers = LONGHANDS.filter(p => keywordsOf(p).includes(lower));
+      const keyword = takers.find(p => !(p in each));
+      if (takers.length && !keyword && takers.some(p => each[p] === lower))
         return {repeat: lower};
       const prop =
-        (keyword && !(keyword in each) ? keyword : undefined) ??
+        keyword ??
         ['font-size', 'font-weight'].find(
           p => !(p in each) && !/^[a-z-]+$/i.test(w) && matchValue(p, w),
         );

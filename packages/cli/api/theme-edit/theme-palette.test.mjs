@@ -2490,5 +2490,21 @@ describe('colors16', () => {
     );
     expect(twice.message).toContain('twice');
     expect(twice.run.join(' ')).not.toContain("font-family 'bold bold'");
+    // normal is a keyword of several parts: each is the next of them, never
+    // the same part twice.
+    const normal = await refusal(() =>
+      themeEditSet('p', 'font', 'normal normal 16px serif', {cwd, on: 'card'}),
+    );
+    expect(normal.message).not.toContain('twice');
+    expect(
+      normal.run.some((/** @type {string} */ x) =>
+        / font-size 16px --on card$/.test(x),
+      ),
+    ).toBe(true);
+    expect(
+      normal.run.some((/** @type {string} */ x) =>
+        / font-family serif --on card$/.test(x),
+      ),
+    ).toBe(true);
   });
 });

@@ -46,6 +46,7 @@ import {
 import {
   builtInThemes,
   dialValueFits,
+  newFlagList,
   editorCompileProblem,
   editorThemeHold,
   editorThemeRefusal,
@@ -412,18 +413,19 @@ function newSettings(o, themeName = '<theme>') {
  * @returns {string}
  */
 function newFlagLine(o) {
-  /** @type {string[]} */
-  const parts = [];
-  if (o.like) parts.push(`--like ${quoteCommandArgument(String(o.like))}`);
+  /** @type {Record<string, string | string[]>} */
+  const settings = {};
   for (const opt of newDoc.options ?? []) {
     if (opt.param !== 'options.settings') continue;
     const flag = opt.flag.split(' ')[0].slice(2);
     const value = o[flag.replace(/-([a-z])/g, (_, c) => c.toUpperCase())];
-    if (value == null) continue;
-    for (const v of [value].flat())
-      parts.push(`--${flag} ${quoteCommandArgument(String(v))}`);
+    if (value != null) settings[flag] = value;
   }
-  if (o.png) parts.push('--png');
+  const parts = newFlagList(
+    o.like == null ? undefined : String(o.like),
+    settings,
+    Boolean(o.png),
+  );
   return parts.length ? ` ${parts.join(' ')}` : '';
 }
 

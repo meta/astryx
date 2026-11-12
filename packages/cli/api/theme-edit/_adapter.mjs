@@ -56,6 +56,7 @@ import {camel} from './_settings.mjs';
 import {LOCAL_THEME_ROOT} from '../../foundation/config/theme-state.mjs';
 
 export {parsePoints} from './_how.mjs';
+export {newFlagList} from './_edit.mjs';
 import {themeEditHow as howAt} from './_how.mjs';
 
 /**

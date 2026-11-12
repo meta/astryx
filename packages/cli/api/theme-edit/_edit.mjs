@@ -497,13 +497,15 @@ function applyNewSettings(ctx, slug, data, settings) {
 }
 
 /**
- * The options of a `new` as flags, in the order `new --help` lists them.
+ * The options of a `new` as flags, in the order given (`new --help`'s order
+ * for the command): `--like`, each dial setting, then `--png`.
  * @param {string | undefined} like
  * @param {Record<string, string | string[] | undefined>} settings
- * @param {boolean} png
+ * @param {boolean} [png]
+ * @returns {string[]}
  */
-function newFlags(like, settings, png) {
-  const parts = [
+export function newFlagList(like, settings, png = false) {
+  return [
     ...(like ? [`--like ${quoteCommandArgument(like)}`] : []),
     ...Object.entries(settings)
       .filter(([, v]) => v != null)
@@ -511,6 +513,16 @@ function newFlags(like, settings, png) {
       .map(([k, v]) => `--${k} ${quoteCommandArgument(String(v))}`),
     ...(png ? ['--png'] : []),
   ];
+}
+
+/**
+ * The options of a `new` as one flag line, with its leading space.
+ * @param {string | undefined} like
+ * @param {Record<string, string | string[] | undefined>} settings
+ * @param {boolean} png
+ */
+function newFlags(like, settings, png) {
+  const parts = newFlagList(like, settings, png);
   return parts.length ? ` ${parts.join(' ')}` : '';
 }
 
@@ -524,13 +536,7 @@ function newFlags(like, settings, png) {
  */
 function asNewRefusal(e, slug, settings, like) {
   if (!(e instanceof AstryxError)) return e;
-  const flags = [
-    ...(like ? [`--like ${quoteCommandArgument(like)}`] : []),
-    ...Object.entries(settings)
-      .filter(([, v]) => v != null)
-      .flatMap(([k, v]) => (Array.isArray(v) ? v : [v]).map(x => [k, x]))
-      .map(([k, v]) => `--${k} ${quoteCommandArgument(String(v))}`),
-  ];
+  const flags = newFlagList(like, settings);
   const setPrefix = `${P} set ${slug} `;
   e.suggestions = (e.suggestions ?? []).map(s => {
     if (s.name === `${P} set --help`) return {...s, name: `${P} new --help`};
