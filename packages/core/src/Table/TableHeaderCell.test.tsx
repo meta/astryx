@@ -166,16 +166,17 @@ describe('TableHeaderCell', () => {
     expect(declarations).toContain('color: var(--color-text-secondary)');
   });
 
-  it('pins header cells when stickyHeader is enabled', () => {
+  it('pins header cells when hasStickyHeader is enabled', () => {
     const {container} = render(
-      <Table stickyHeader data={users} columns={columns} />,
+      <Table hasStickyHeader data={users} columns={columns} />,
     );
     const declarations = headerCellDeclarations(container);
     expect(declarations).toContain('position: sticky');
     expect(declarations).toContain('top: 0px');
     expect(declarations).toContain('z-index: 2');
-    expect(declarations).toContain(
-      'background-color: var(--color-background-surface)',
+    expect(declarations.join('\n')).toContain('table-sticky-background');
+    expect(declarations.join('\n')).toContain(
+      'background-color: var(--color-border)',
     );
   });
 
@@ -189,7 +190,7 @@ describe('TableHeaderCell', () => {
       ...columns.slice(1),
     ];
     const {container} = render(
-      <Table stickyHeader data={users} columns={customColumns} />,
+      <Table hasStickyHeader data={users} columns={customColumns} />,
     );
     expect(container.querySelector('tbody strong')).toHaveTextContent('Alice');
     expect(headerCellDeclarations(container)).toContain('position: sticky');

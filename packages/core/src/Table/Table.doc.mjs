@@ -226,10 +226,10 @@ export const docs = {
       default: 'false',
     },
     {
-      name: 'stickyHeader',
+      name: 'hasStickyHeader',
       type: 'boolean',
       description:
-        'Keeps generated and caller-supplied header cells pinned to the logical block start of the nearest scrolling ancestor. Constrain the surrounding scroll region and give it block overflow for the header to move with the table.',
+        'Keeps generated and caller-supplied header cells pinned to the logical block start of the surrounding scrolling ancestor. Constrain that region and give it block overflow; Table keeps its own inline overflow from becoming the header’s block sticky container.',
       default: 'false',
     },
     {
@@ -314,7 +314,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Use stickyHeader for long tables whose column labels should stay visible while the surrounding scroll region moves. Give that region a constrained block size and block overflow.',
+          'Use hasStickyHeader for long tables whose column labels should stay visible while the surrounding scroll region moves. Give that region a constrained block size and block overflow.',
       },
       {
         guidance: true,

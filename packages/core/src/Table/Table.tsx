@@ -74,9 +74,7 @@ interface TableAppearanceProps<T extends Record<string, unknown>> extends Omit<
   /** Hover highlight on rows. @default false */
   hasHover?: boolean;
   /** Keep header cells pinned while the surrounding scroll region moves. @default false */
-  // The public name follows the issue's proposed API and common table terminology.
-  // eslint-disable-next-line @astryx/boolean-prop-naming
-  stickyHeader?: boolean;
+  hasStickyHeader?: boolean;
   /**
    * Vertical alignment for body row cells.
    * Controls `vertical-align` on `<td>` elements.
@@ -160,6 +158,11 @@ const scrollWrapperStyles = stylex.create({
     overflowX: 'auto',
     WebkitOverflowScrolling: 'touch',
   },
+  stickyHeaderIsolation: {
+    // Keep a pinned header's z-index inside the table's own stacking context;
+    // it must not rise above an AppShell navigation surface.
+    isolation: 'isolate',
+  },
   containerBleed: {
     marginInlineStart: 'calc(-1 * var(--container-padding-inline-start, 0px))',
     marginInlineEnd: 'calc(-1 * var(--container-padding-inline-end, 0px))',
@@ -212,6 +215,7 @@ const scrollWrapperStyles = stylex.create({
 const TableNameContext = createSharedContext<{
   label?: string;
   labelledBy?: string;
+  hasStickyHeader?: boolean;
 } | null>('TableNameContext', 1, null);
 TableNameContext.displayName = 'TableNameContext';
 
@@ -293,6 +297,23 @@ function TableScrollWrapper({
   if (hasBlockViewport) {
     viewportProps.style = {...viewportProps.style, overscrollBehaviorY: 'auto'};
   }
+  if (tableName?.hasStickyHeader) {
+    // The table owns inline overflow, but the caller owns block scrolling for
+    // sticky headers. `clip` keeps a horizontally overflowing table from
+    // becoming the header's vertical sticky containing block.
+    viewportProps.style = {
+      ...viewportProps.style,
+      overflowBlock: 'clip',
+    };
+  }
+  if (tableName?.hasStickyHeader) {
+    viewportProps.className = [
+      viewportProps.className,
+      stylex.props(scrollWrapperStyles.stickyHeaderIsolation).className,
+    ]
+      .filter(Boolean)
+      .join(' ');
+  }
   return (
     <div {...viewportProps}>
       <div {...getContentProps<HTMLDivElement>()}>
@@ -335,7 +356,7 @@ function TableInner<T extends Record<string, unknown>>({
   dividers = 'rows',
   isStriped = false,
   hasHover = false,
-  stickyHeader = false,
+  hasStickyHeader = false,
   verticalAlign = 'middle',
   textOverflow: textOverflowProp,
   virtualization,
@@ -360,7 +381,7 @@ function TableInner<T extends Record<string, unknown>>({
       dividers,
       isStriped,
       hasHover,
-      stickyHeader,
+      hasStickyHeader,
       verticalAlign,
       textOverflow,
     }),
@@ -369,7 +390,7 @@ function TableInner<T extends Record<string, unknown>>({
       dividers,
       isStriped,
       hasHover,
-      stickyHeader,
+      hasStickyHeader,
       verticalAlign,
       textOverflow,
     ],
@@ -377,8 +398,12 @@ function TableInner<T extends Record<string, unknown>>({
   const tableLabel = rest['aria-label'];
   const tableLabelledBy = rest['aria-labelledby'];
   const tableName = useMemo(
-    () => ({label: tableLabel, labelledBy: tableLabelledBy}),
-    [tableLabel, tableLabelledBy],
+    () => ({
+      label: tableLabel,
+      labelledBy: tableLabelledBy,
+      hasStickyHeader,
+    }),
+    [hasStickyHeader, tableLabel, tableLabelledBy],
   );
 
   return (
