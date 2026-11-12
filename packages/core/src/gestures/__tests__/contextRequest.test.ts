@@ -8,7 +8,8 @@
  *   gesture, from a long press, a right click, or Shift+F10 and the
  *   context-menu key, naming its input. The hold loses to a claim already
  *   made, a hold-repeat control keeps its own, and a right click or a
- *   ctrl-click starts no press.
+ *   ctrl-click starts no press. Nested requests in two copies of Core
+ *   answer once.
  * @position Unit tests of packages/core/src/gestures/contextRequest.ts
  */
 
@@ -518,6 +519,27 @@ describe('attachContextRequest (spec:AST-094 FR43)', () => {
     host.arena.advanceTime(1000);
     contextmenu(card, {x: 1, y: 1, pointerType: 'mouse'});
     expect(outer.map(request => request.kind)).toEqual(['pointer']);
+  });
+
+  it('answers a right click inside nested requests from two copies of Core once, at the innermost', async () => {
+    vi.resetModules();
+    const copy = await import('../contextRequest');
+    expect(copy.attachContextRequest).not.toBe(attachContextRequest);
+    const {card, row} = mount(
+      '<div id="card">Card <div id="row">Row</div></div>',
+    );
+    const outer: ContextRequest[] = [];
+    detachers.push(
+      copy.attachContextRequest(
+        card,
+        {onRequest: request => outer.push(request)},
+        host,
+      ),
+    );
+    const inner = requests(row);
+    contextmenu(row, {x: 5, y: 5, pointerType: 'mouse'});
+    expect(inner.map(request => request.kind)).toEqual(['pointer']);
+    expect(outer).toEqual([]);
   });
 
   it("refuses a menu event as a finger's only for a finger down inside its element: a right click while a finger rests on another gesture still requests", () => {

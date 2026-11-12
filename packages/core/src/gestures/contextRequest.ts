@@ -11,6 +11,7 @@
  */
 
 import {lockSelection} from '../utils/selectionLock';
+import {sharedWeakSet} from '../utils/sharedRealm';
 import {getGestureHost, type GestureHost} from './GestureHost';
 import {LongPressGestureRecognizer} from './LongPressGestureRecognizer';
 import type {PointerKind} from './types';
@@ -58,8 +59,10 @@ const MENU_ECHO_MS = 500;
 /**
  * Menu events and keys a request already answered: one inside nested
  * requests reaches only the innermost, as a hold resolves to one winner.
+ * Every copy of Core shares the set, so nested requests from two copies
+ * still answer once.
  */
-const answered = new WeakSet<Event>();
+const answered = sharedWeakSet<Event>('gestures/context-request/answered', 1);
 
 const POINTER_KINDS: ReadonlySet<string> = new Set(['touch', 'mouse', 'pen']);
 
