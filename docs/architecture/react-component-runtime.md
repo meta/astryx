@@ -129,15 +129,15 @@ those contracts.
   starts a resource, cleanup MUST release that resource. Synchronization that
   acquires no resource MUST instead be idempotent and safe under dependency
   changes, node replacement, unmount, and StrictMode replay. Ordinary rerender
-  synchronization MUST NOT duplicate consumer-visible callbacks or other one-time
-  work. A latest-value ref, which event or gesture callbacks read for the
-  latest committed prop or callback, goes only through Core's internal
-  `useCommittedRef` (DEC-3): no per-site Effect copy and no render-time
-  `ref.current =` write. Such a ref is read only in event and gesture
-  callbacks, never during render or in `useMemo`; render reads the value
-  directly. One hook decides the timing once, and React has no built-in for it
-  at Core's React floor; `useEffectEvent` replaces it once that floor reaches
-  19.2.
+  synchronization MUST NOT duplicate consumer-visible callbacks or other
+  one-time work. A latest-value ref, which event or gesture callbacks read for
+  the latest committed prop or callback, goes only through Core's internal
+  `useCommittedRef` (DEC-3), which writes it in a commit-phase insertion Effect:
+  no per-site Effect copy and no render-time `ref.current =` write. Such a ref
+  is read only in event and gesture callbacks, never during render or in
+  `useMemo`; render reads the value directly. One hook decides the timing once,
+  and React has no built-in for it at Core's React floor; `useEffectEvent`
+  replaces it once that floor reaches 19.2.
 - **INV4 — Mutable refs do not become hidden rendered state.** Refs MAY hold general
   non-rendering mutable data. A ref mutation MUST NOT be the sole source for a value
   later read to produce React-rendered output. A callback ref MAY synchronously
@@ -393,11 +393,13 @@ those contracts.
 - **INV17 — Render stays pure.** A component never writes `ref.current` during
   render, except a lazy one-time initialization. A render React discards would
   otherwise leave an uncommitted value. A latest-value ref uses
-  `useCommittedRef` (INV3, DEC-3). INV17 gaps, fixed in this order: first, four
+  `useCommittedRef` (INV3, DEC-3). INV17 gaps, fixed in this order: first, three
   sites read a latest-value ref during render or in `useMemo` and move to
-  reading the value directly; Table's sortable plugin reading a stale
-  `onSortChange` is a visible bug among them. Second, about 70 components that
-  write a latest-value ref during render, such as ChatComposerInput, Slider, and
+  reading the value directly. `useTableSortable`'s header read stays a known
+  gap: its plugin is documented and tested as referentially stable, so header
+  rendering reads the current sort from a ref, and fixing it needs a Table API
+  choice queued for the owner. Second, about 70 components that write a
+  latest-value ref during render, such as ChatComposerInput, Slider, and
   `useTooltip`, move onto `useCommittedRef`. About 18 render-time reads of a
   previous value are a separate INV17 gap and are not latest-value refs.
 - **INV18 — Layout is read as little as possible.** Placement uses CSS
@@ -534,9 +536,10 @@ contracts.
   observation mechanism; tooling and utility tests own its concrete API.
 - `packages/core/src/hooks/useCommittedRef.ts` — `useCommittedRef<T>(value: T):
 { readonly current: T }`, a read-only ref whose `current` is written only in a
-  commit-phase isomorphic layout Effect (INV3, INV17, DEC-3), beside the
-  internal `useIsomorphicLayoutEffect`. Internal: never in `hooks/index.ts` or
-  the package entry. Implementation gap: not built yet.
+  commit-phase insertion Effect (INV3, INV17, DEC-3), beside the internal
+  `useIsomorphicLayoutEffect`. Its comment reads: "Stores values only. Refs to
+  DOM nodes are not attached yet when this runs." Internal: never in
+  `hooks/index.ts` or the package entry. Implementation gap: not built yet.
 
 ## Deciding specs
 
@@ -561,16 +564,18 @@ contracts.
 The owner answered "10161 A": latest-value refs use one shared internal hook,
 `useCommittedRef<T>(value: T): { readonly current: T }`, in
 `packages/core/src/hooks/`. It returns a read-only ref updated to the committed
-value whose `current` is written only in a commit-phase isomorphic layout
-Effect, never during render. One hook gives every component the same commit-safe
-timing and one place to swap in `useEffectEvent` at React 19.2. No existing
-module does this: `useIsomorphicLayoutEffect` only picks the Effect, and the
-per-component copies it replaces each write the ref in their own Effect or
-during render.
+value whose `current` is written only in a commit-phase insertion Effect, never
+during render. One hook gives every component the same commit-safe timing and
+one place to swap in `useEffectEvent` at React 19.2. No existing module does
+this: `useIsomorphicLayoutEffect` only picks the Effect, and the per-component
+copies it replaces each write the ref in their own Effect or during render.
 
 The owner asked whether it is safe under concurrent rendering. It is: a
-commit-phase write survives a render React drops, a render-phase write does
-not, and `useEffectEvent` needs React 19.2 or later.
+commit-phase write survives a render React drops, a render-phase write does not,
+and `useEffectEvent` needs React 19.2 or later. The insertion Effect runs before
+every layout Effect in the same commit, so each of those reads the new value;
+server rendering keeps the initial value; and it works on React 18 and later. It
+runs before refs attach, so it stores values only, never DOM nodes.
 
 Rejected: a one-line Effect per component, which repeats the same code in every
 component and keeps the render-time writes INV17 forbids easy to reintroduce.
