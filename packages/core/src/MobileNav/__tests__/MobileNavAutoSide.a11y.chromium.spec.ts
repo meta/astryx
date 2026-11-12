@@ -3,10 +3,12 @@
 
 /**
  * @file MobileNavAutoSide.a11y.chromium.spec.ts
- * @input The built MobileNav Default story and real Chromium transitions in
- *   LTR and RTL documents
+ * @input The built MobileNav Default story and real Chromium transitions,
+ *   with the page direction set to LTR and RTL through the Storybook
+ *   direction global
  * @output Browser evidence that side="auto" chooses the logical edge from
- *   the focused opener and begins its entrance from that physical edge
+ *   the focused opener, begins its entrance from that physical edge, and
+ *   settles in the opener's half of the viewport
  * @position Chromium proof for MobileNav's auto-side resolution; the jsdom
  *   cases are in MobileNavAutoSideRtl.test.tsx
  */
@@ -46,23 +48,19 @@ test.describe('MobileNav side="auto" entrance origin (Chromium)', () => {
       page,
     }) => {
       await page.goto(
-        `${storybook.origin}/iframe.html?id=core-mobilenav--default&viewMode=story`,
+        `${storybook.origin}/iframe.html?id=core-mobilenav--default&viewMode=story&globals=direction:${direction}`,
       );
 
       const opener = page.getByRole('button', {name: 'Open Navigation'});
-      await opener.evaluate(
-        (element, {direction: nextDirection, left: nextLeft}) => {
-          const root = document.getElementById('storybook-root');
-          root?.setAttribute('dir', nextDirection);
-          Object.assign(element.style, {
-            direction: nextDirection,
-            position: 'fixed',
-            left: `${nextLeft}px`,
-            top: '20px',
-          });
-        },
-        {direction, left},
-      );
+      // The page direction comes from the Storybook global, so the opener and
+      // the drawer share it. Only the opener's position changes.
+      await opener.evaluate((element, nextLeft) => {
+        Object.assign(element.style, {
+          position: 'fixed',
+          left: `${nextLeft}px`,
+          top: '20px',
+        });
+      }, left);
       await page.addStyleTag({
         content:
           'dialog [tabindex="-1"] { transition-duration: 5s !important; }',
@@ -78,14 +76,20 @@ test.describe('MobileNav side="auto" entrance origin (Chromium)', () => {
         const transform = getComputedStyle(element).transform;
         const translateX =
           transform === 'none' ? 0 : new DOMMatrix(transform).e;
+        const box = element.getBoundingClientRect();
         return {
           side: element.closest('dialog')?.getAttribute('data-side'),
           translateX,
+          // Where the drawer settles: its box without the slide transform.
+          settledCenter: box.left - translateX + box.width / 2,
         };
       });
 
       expect(result.side).toBe(expectedSide);
       expect(Math.sign(result.translateX)).toBe(expectedSign);
+      // The settled drawer sits in the same half of the viewport as its
+      // opener.
+      expect(result.settledCenter < 500).toBe(left < 500);
     });
   }
 });
