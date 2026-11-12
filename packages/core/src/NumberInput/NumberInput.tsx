@@ -772,6 +772,7 @@ export function NumberInput({
   // as when a caller restores its own value at that commit, keeps the draft:
   // a commit keeps rejected text.
   const [rendered, setRendered] = useState({value, rejection: shownRejection});
+  let isDraftReplaced = false;
   if (
     !Object.is(rendered.value, value) ||
     rendered.rejection !== shownRejection
@@ -785,13 +786,15 @@ export function NumberInput({
       setPendingInput(null);
       setShownRejection(null);
       setIsDraftKeptAtBlur(false);
+      isDraftReplaced = true;
     }
   }
-  // New rules judge a rejected draft again.
+  // New rules judge a rejected draft again, unless a new value replaced it in
+  // the same update.
   const [judgedRules, setJudgedRules] = useState(rejectionRules);
   if (judgedRules !== rejectionRules) {
     setJudgedRules(rejectionRules);
-    if (shownRejection !== null && pendingInput !== null) {
+    if (!isDraftReplaced && shownRejection !== null && pendingInput !== null) {
       const rejection = toEntryError(
         pendingInput,
         getNumberInputRejection(pendingInput, rejectionRules),

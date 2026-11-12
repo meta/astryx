@@ -640,6 +640,31 @@ describe('NumberInput onEntryErrorChange', () => {
     expect(input).not.toHaveAttribute('aria-invalid');
   });
 
+  it('reports null when a new value replaces the draft in the same update as new rules', () => {
+    const onEntryErrorChange = vi.fn();
+    const {rerender} = render(field({min: 10, max: 1, onEntryErrorChange}));
+    const input = getInput();
+    fireEvent.focus(input);
+    fireEvent.change(input, {target: {value: '1.5'}});
+    fireEvent.blur(input);
+    rerender(
+      field({
+        value: 9,
+        min: 10,
+        max: 1,
+        isIntegerOnly: true,
+        onEntryErrorChange,
+      }),
+    );
+    expect(input).toHaveValue('9');
+    expect(input).not.toHaveAttribute('aria-invalid');
+    expect(screen.queryByText(MESSAGE)).not.toBeInTheDocument();
+    expect(onEntryErrorChange.mock.calls).toEqual([
+      [{kind: 'outOfRange', text: '1.5', value: 1.5}],
+      [null],
+    ]);
+  });
+
   it('reports null when disabling drops the draft, and nothing once editable', () => {
     const onEntryErrorChange = vi.fn();
     const {rerender} = render(field({onEntryErrorChange}));
