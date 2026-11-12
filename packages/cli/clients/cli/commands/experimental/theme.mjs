@@ -46,6 +46,7 @@ import {
 import {
   builtInThemes,
   editorCompileProblem,
+  editorThemeHold,
   editorThemeRefusal,
 } from '../../../../api/theme-edit/_adapter.mjs';
 import {registerThemeSubcommands} from '../theme.mjs';
@@ -1104,6 +1105,7 @@ export function registerExperimentalTheme(group, program) {
       build: 'compile',
       explain: editorThemeRefusal,
       preflight: editorCompileProblem,
+      hold: editorThemeHold,
     },
   );
 }

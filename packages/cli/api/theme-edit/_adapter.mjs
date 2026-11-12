@@ -35,16 +35,16 @@ import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as edit from './_edit.mjs';
+import {themeCacheRoot} from './_project.mjs';
 import * as preview from './_preview-app.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
   findAstryxProject,
   findPackageRoot,
-  findProjectCoreDir,
 } from '../../foundation/fs/paths.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
-import {tryLock} from '../../foundation/release/cache.mjs';
+import {withFolderLock} from '../../foundation/release/folder-lock.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 import {LIKE} from './_tables.mjs';
 
@@ -62,13 +62,24 @@ import {themeEditHow as howAt} from './_how.mjs';
 export async function themeEditHow(subject, options = {}) {
   const from = options.cwd ?? process.cwd();
   const o = atRoot(options);
-  const picture =
-    typeof subject === 'string' &&
-    !path.isAbsolute(subject) &&
+  /** A file named from the subfolder, as a path from anywhere. @param {unknown} name */
+  const here = name =>
+    typeof name === 'string' &&
+    name !== '' &&
+    !path.isAbsolute(name) &&
     path.resolve(from) !== o.cwd &&
-    fs.existsSync(path.resolve(from, subject)) &&
-    fs.statSync(path.resolve(from, subject)).isFile();
-  return howAt(picture ? path.resolve(from, subject) : subject, o);
+    fs.existsSync(path.resolve(from, name)) &&
+    fs.statSync(path.resolve(from, name)).isFile()
+      ? path.resolve(from, name)
+      : name;
+  // The CLI passes the words as typed: the first may be that picture too.
+  const words = o.words?.length
+    ? [String(here(o.words[0])), ...o.words.slice(1)]
+    : o.words;
+  return howAt(/** @type {string} */ (here(subject)), {
+    ...o,
+    ...(words ? {words} : {}),
+  });
 }
 
 /** The built-in themes a theme can build on (`--like`). */
@@ -125,12 +136,6 @@ export function projectRoot(cwd) {
   return project ?? start;
 }
 
-/** The locks this process holds now. */
-const HELD = new Set();
-
-/** @param {number} ms */
-const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-
 /**
  * Where a project's locks are: the `.cache` of the node_modules holding
  * the Core the command reads (the project's own, or a workspace root's), shared by
@@ -145,10 +150,9 @@ function lockDir(root) {
   // The Core the command reads decides where; outside a project there is
   // none, and no lock.
   if (isOutsideProject(root)) return null;
-  const core = findProjectCoreDir(root);
-  if (!core) return null;
-  const modules = path.dirname(path.dirname(core));
-  const dir = path.join(modules, '.cache', 'astryx-theme', 'locks');
+  const cache = themeCacheRoot(root);
+  if (!cache) return null;
+  const dir = path.join(cache, 'locks');
   try {
     fs.mkdirSync(dir, {recursive: true});
     fs.accessSync(dir, fs.constants.W_OK);
@@ -205,86 +209,41 @@ async function withLock(root, name, fn, bestEffort = false) {
     .digest('hex')
     .slice(0, 16);
   const lock = path.join(dir, `${key}-${name}.lock`);
-  const ownerFile = path.join(lock, 'owner.json');
-  /** @returns {any} */
-  const owner = () => {
-    try {
-      return JSON.parse(fs.readFileSync(ownerFile, 'utf8'));
-    } catch {
-      return null;
-    }
-  };
-  // A lock naming this pid is never taken over on that ground alone: two
-  // containers on one checkout can both be pid 1. The release cache's
-  // rules decide when a holder has stopped.
-  /** @returns {number | null} seconds since the lock was taken or renewed */
-  const age = () => {
-    try {
-      return Math.round((Date.now() - fs.statSync(lock).mtimeMs) / 1000);
-    } catch {
-      return null;
-    }
-  };
+  // The release cache's lock, held with its lease while the command runs
+  // (foundation/release/folder-lock.mjs). A lock naming this pid is never
+  // taken over on that ground alone: two containers on one checkout can
+  // both be pid 1.
+  let started = false;
   try {
-    // The release cache's lock: made with mkdir (one taker wins), and a
-    // holder that stopped is taken over by a rename (one taker wins). The
-    // wait is per holder: it starts again each time the lock changes hands.
-    let holder = JSON.stringify(owner());
-    for (let waited = 0; !tryLock(lock); waited += 50) {
-      const now = JSON.stringify(owner());
-      if (now !== holder) {
-        holder = now;
-        waited = 0;
-      }
-      if (waited > 30_000) {
-        const o = owner();
-        const held = age();
-        throw new AstryxError(
-          `Another command has been changing ${name.replace(/^theme-/, '')} for 30 seconds${o ? ` (process ${o.pid} on ${o.host}${held != null ? `, holding it ${held} s` : ''})` : ''}. Nothing was changed; run this command again. If no astryx command is running, the lock is left from one that stopped: remove the folder ${lock}.`,
-          [],
-          ERROR_CODES.ERR_THEME_BUSY,
-        );
-      }
-      await sleep(50);
-    }
+    return await withFolderLock(
+      lock,
+      async () => {
+        started = true;
+        return fn(true);
+      },
+      {
+        onBusy: (o, held) => {
+          throw new AstryxError(
+            `Another command has been changing ${name.replace(/^theme-/, '')} for 30 seconds${o ? ` (process ${o.pid} on ${o.host}${held != null ? `, holding it ${held} s` : ''})` : ''}. Nothing was changed; run this command again. If no astryx command is running, the lock is left from one that stopped: remove the folder ${lock}.`,
+            [],
+            ERROR_CODES.ERR_THEME_BUSY,
+          );
+        },
+      },
+    );
   } catch (e) {
     if (e instanceof AstryxError) throw e;
-    if (bestEffort) return fn(false);
-    throw new AstryxError(
-      `Could not take the lock ${lock} (${/** @type {any} */ (e).code ?? String(e)}). Nothing was changed; fix the folder, then run the command again.`,
-      [],
-      ERROR_CODES.ERR_WRITE_FAILED,
-    );
-  }
-  HELD.add(lock);
-  const mine = fs.existsSync(ownerFile)
-    ? fs.readFileSync(ownerFile, 'utf8')
-    : null;
-  // Only this command's own lock is removed, never one another took over.
-  const release = () => {
-    try {
-      const now = fs.existsSync(ownerFile)
-        ? fs.readFileSync(ownerFile, 'utf8')
-        : null;
-      if (now === mine) fs.rmSync(lock, {recursive: true, force: true});
-    } catch {
-      // Gone already.
+    const code = /** @type {any} */ (e)?.code;
+    if (!started) {
+      if (bestEffort) return fn(false);
+      throw new AstryxError(
+        `Could not take the lock ${lock} (${code ?? String(e)}). Nothing was changed; fix the folder, then run the command again.`,
+        [],
+        ERROR_CODES.ERR_WRITE_FAILED,
+      );
     }
-  };
-  // Stopped by a signal, the lock still goes.
-  const onSignal = (/** @type {NodeJS.Signals} */ sig) => {
-    release();
-    process.kill(process.pid, sig);
-  };
-  process.once('exit', release);
-  process.once('SIGINT', onSignal);
-  process.once('SIGTERM', onSignal);
-  try {
-    return await fn(true);
-  } catch (e) {
     // A folder that cannot be written (no permission, a full or read-only
     // disk) is a documented refusal, not a crash.
-    const code = /** @type {any} */ (e)?.code;
     if (['EACCES', 'EPERM', 'ENOSPC', 'EROFS', 'EIO'].includes(code))
       throw new AstryxError(
         `Could not write ${path.relative(root, /** @type {any} */ (e).path ?? '') || 'the theme files'}: ${code === 'ENOSPC' ? 'the disk is full' : code === 'EROFS' ? 'the disk is read-only' : code === 'EIO' ? 'the disk could not be read or written' : 'no permission'}. ${code === 'EROFS' ? 'Make the folder writable' : code === 'EIO' ? 'Check the disk' : 'Free the space or fix the permission'}, then run the command again; a refused change is undone.`,
@@ -292,12 +251,6 @@ async function withLock(root, name, fn, bestEffort = false) {
         ERROR_CODES.ERR_WRITE_FAILED,
       );
     throw e;
-  } finally {
-    release();
-    HELD.delete(lock);
-    process.removeListener('exit', release);
-    process.removeListener('SIGINT', onSignal);
-    process.removeListener('SIGTERM', onSignal);
   }
 }
 
@@ -521,6 +474,8 @@ function editorThemeOf(root, word) {
  * @returns {AstryxError | null}
  */
 export function editorThemeRefusal(err, cwd) {
+  // A refused compile ends here: its theme locks go now, not at exit.
+  void releaseCompileHold?.();
   if (
     err.code !== ERROR_CODES.ERR_UNKNOWN_THEME &&
     !/unknown theme|is not added|not a theme package/i.test(err.message)
@@ -584,9 +539,12 @@ export async function editorCompileProblem(files, {cwd, check, family}) {
       // written. A plain compile builds the theme source, which reads the
       // generated settings: when those no longer match the settings, it
       // would report ok without them.
-      const why = await withLock(root, lockName(slug), () =>
-        edit.editorStale(root, slug),
-      );
+      // `compile` holds the lock already while it runs (editorThemeHold).
+      const why = COMPILE_HELD.has(`${root}\0${slug}`)
+        ? await edit.editorStale(root, slug)
+        : await withLock(root, lockName(slug), () =>
+            edit.editorStale(root, slug),
+          );
       if (why && !check)
         return new AstryxError(
           `${slug}'s generated settings do not match its settings (${why}), so compile would build the old ones. The editor builds it from its settings.`,
@@ -612,4 +570,68 @@ export async function editorCompileProblem(files, {cwd, check, family}) {
     }
   }
   return null;
+}
+
+/** The editor themes a running `compile` holds the lock of, by project and name. */
+const COMPILE_HELD = new Set();
+
+/** @type {(() => Promise<void>) | null} The release of the running compile's hold. */
+let releaseCompileHold = null;
+
+/**
+ * Hold the theme lock of every editor theme among the files while
+ * `compile` builds or checks them, so it never reads a change half
+ * written. Resolves to the release.
+ * @param {string[]} files
+ * @param {{cwd: string}} options
+ * @returns {Promise<() => Promise<void>>}
+ */
+export async function editorThemeHold(files, {cwd}) {
+  // Two compiles of one theme in one process: the second waits for the
+  // lock like any other command.
+  const root = projectRoot(cwd);
+  const slugs = [
+    ...new Set(
+      files.map(f => editorThemeOf(root, path.resolve(cwd, f))).filter(Boolean),
+    ),
+  ].sort();
+  /** @type {Array<() => Promise<void>>} */
+  const releases = [];
+  const releaseAll = async () => {
+    if (releaseCompileHold === releaseAll) releaseCompileHold = null;
+    for (const r of releases.splice(0).reverse()) await r();
+  };
+  releaseCompileHold = releaseAll;
+  for (const slug of /** @type {string[]} */ (slugs)) {
+    /** @type {() => void} */
+    let release = () => {};
+    const held = new Promise(r => {
+      release = () => r(undefined);
+    });
+    /** @type {(e?: unknown) => void} */
+    let ready = () => {};
+    const got = new Promise(r => {
+      ready = r;
+    });
+    const key = `${root}\0${slug}`;
+    const done = withLock(root, lockName(slug), async () => {
+      COMPILE_HELD.add(key);
+      ready();
+      try {
+        await held;
+      } finally {
+        COMPILE_HELD.delete(key);
+      }
+    }).catch(e => ready(e));
+    const err = await got;
+    if (err) {
+      await releaseAll();
+      throw err;
+    }
+    releases.push(async () => {
+      release();
+      await done;
+    });
+  }
+  return releaseAll;
 }
