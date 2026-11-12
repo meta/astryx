@@ -303,6 +303,19 @@ function globalBaselines(fork, headSha, triggers) {
   return {command, claims: [...new Set(claims)].sort()};
 }
 
+/**
+ * Item h advice. Templates may exceed the size guideline, so their lines do
+ * not count.
+ */
+export function reviewSizeAdvice(changedCountByFile, isGenerated) {
+  return sizeAdvice(
+    authoredLineCount(
+      changedCountByFile,
+      file => isGenerated(file) || TEMPLATES.test(file),
+    ),
+  );
+}
+
 /** Each checklist item that has findings, with its count. */
 export function findingChecks(findings) {
   const counts = new Map();
@@ -355,9 +368,8 @@ export function buildReport({base = 'origin/main', head = null} = {}) {
       .map(change => change.filename),
   );
   const generated = generatedPaths(files, head ? headSha : null);
-  const authoredLines = authoredLineCount(changedCountByFile, file =>
-    generated.has(file),
-  );
+  const isGenerated = file => generated.has(file);
+  const authoredLines = authoredLineCount(changedCountByFile, isGenerated);
   const merge = mergeConflicts(base, head ?? 'HEAD');
   const coverage = checkCoverage({
     changes,
@@ -390,6 +402,7 @@ export function buildReport({base = 'origin/main', head = null} = {}) {
     mergeBase: fork,
     scope: classifyChanges(changes).reason,
     authoredLines,
+    sizeAdvice: reviewSizeAdvice(changedCountByFile, isGenerated),
     merge,
     findings,
     files: files.map(file => ({file, class: fileClass(file, classes[file])})),
@@ -405,7 +418,6 @@ export function formatReport(report) {
   if (report.files.length === 0) {
     return `No changes against ${report.base}...${report.head}.`;
   }
-  const advice = sizeAdvice(report.authoredLines);
   const lines = [
     `Pre-review: ${report.base}...${report.head} (merge base ${report.mergeBase.slice(0, 12)})`,
     `Scope: ${report.scope}`,
@@ -436,7 +448,7 @@ export function formatReport(report) {
         ]),
     '',
     `Authored lines: ${report.authoredLines} (guideline ${SIZE_GUIDELINE}; lockfiles, snapshots, and generated files excluded)`,
-    ...(advice ? [`  ${advice}`] : []),
+    ...(report.sizeAdvice ? [`  ${report.sizeAdvice}`] : []),
     report.merge.error
       ? `Merge into ${report.base}: not checked: ${report.merge.error}`
       : `Merge into ${report.base}: ${report.merge.conflicts.length ? `${report.merge.conflicts.length} conflicting files` : 'clean'}`,

@@ -58,6 +58,8 @@ describe('themeTemplate()', () => {
       path: THEME_TEMPLATE_DEFAULT_PATH,
       written: false,
       reason: 'exists',
+      overwritable: true,
+      alternative: null,
     });
     expect(fs.readFileSync(dest, 'utf-8')).toBe('// mine\n');
   });
@@ -208,6 +210,35 @@ describe('themeTemplate()', () => {
         expect.objectContaining({code: 'ERR_INVALID_ARGUMENT'}),
       );
       expect(fs.readdirSync(tmpDir)).toEqual([]);
+    });
+  });
+
+  it('says when overwrite would refuse an existing file, and names a free path', () => {
+    fs.writeFileSync(path.join(tmpDir, 'util.ts'), 'export const x = 1;\n');
+    expect(themeTemplate({cwd: tmpDir, targetPath: 'util.ts'}).data).toEqual({
+      path: 'util.ts',
+      written: false,
+      reason: 'exists',
+      overwritable: false,
+      alternative: THEME_TEMPLATE_DEFAULT_PATH,
+    });
+    fs.writeFileSync(
+      path.join(tmpDir, THEME_TEMPLATE_DEFAULT_PATH),
+      '// mine\n',
+    );
+    expect(
+      themeTemplate({cwd: tmpDir, targetPath: 'util.ts'}).data.alternative,
+    ).toBe('theme.template-2.ts');
+
+    const editor = path.join(tmpDir, 'themes', 't');
+    fs.mkdirSync(editor, {recursive: true});
+    fs.writeFileSync(path.join(editor, 't.settings.json'), '{}\n');
+    fs.writeFileSync(path.join(editor, 't.theme.ts'), '// editor\n');
+    expect(
+      themeTemplate({cwd: tmpDir, targetPath: 'themes/t/t.theme.ts'}).data,
+    ).toMatchObject({
+      overwritable: false,
+      alternative: 'themes/t/theme.template.ts',
     });
   });
 });
