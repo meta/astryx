@@ -58,7 +58,7 @@ export const doc = {
       name: 'options.out',
       type: 'string',
       description:
-        'Override the output CSS path, relative or absolute; a build refuses a path outside cwd, and check mode refuses only a relative path that escapes cwd. The .js, .d.ts and any .variants.d.ts are written in the same directory, named after the theme (<name>.js), not after the CSS file. An existing folder, or a path that ends in a separator, names the folder: the CSS is written there as <name>.css.',
+        'Override the output CSS path, relative or absolute; a build refuses a path outside cwd, and check mode refuses only a relative path that escapes cwd. The .js, .d.ts and any .variants.d.ts are written in the same directory, named after the theme (<name>.js), not after the CSS file. An existing folder, or a path that ends in a separator, names the folder: the CSS is written there as <name>.css. A file path should end in .css; another name still builds, with a warning, and the import line it prints names the file as written.',
     },
     {
       name: 'options.check',
@@ -104,7 +104,7 @@ export const doc = {
     },
     {
       code: 'ERR_THEME_INVALID',
-      when: 'the resolved theme is invalid, for example it has no name, a custom Heading type has no standalone rule with a declaration the compiler can emit, or its icon registry cannot be preserved through an import (also rejected in check mode); or an output would replace the theme source, two outputs share one path, or the file is itself an output of a build, whatever its extension (refused before loading, naming the source it was built from)',
+      when: 'the resolved theme is invalid, for example it has no name, a custom Heading type has no standalone rule with a declaration the compiler can emit, or its icon registry cannot be preserved through an import (also rejected in check mode); or an output would replace the theme source, two outputs share one path, or the file is itself an output of a build, whatever its extension (refused before loading, naming the source it was built from); in a batch, two themes that build the same outputs are refused before either writes',
     },
     {
       code: 'ERR_FILE_EXISTS',

@@ -12,6 +12,7 @@ import {
   findTheme,
   forkNeeds,
   listAvailableThemes,
+  themeCommandsFor,
 } from '../_adapter.mjs';
 
 /**
@@ -34,17 +35,20 @@ export async function themeEject(slug, options = {}) {
     cwd,
     package: packageName,
     includeLocal: false,
+    command: 'theme eject',
   });
   if (!match) {
     const available = await listAvailableThemes(cwd, {includeLocal: false});
     throw new AstryxError(
       `Unknown theme "${slug}"${packageName ? ` in package "${packageName}"` : ''}`,
-      available.map(theme => ({
-        name: `${theme.slug} --package ${theme.package}`,
-        reason: theme.bundled
-          ? 'bundled theme'
-          : `provided by ${theme.package}`,
-      })),
+      themeCommandsFor('theme eject', slug, available, cwd).map(
+        ({theme, name}) => ({
+          name,
+          reason: theme.bundled
+            ? 'bundled theme'
+            : `provided by ${theme.package}`,
+        }),
+      ),
       ERROR_CODES.ERR_UNKNOWN_THEME,
     );
   }
