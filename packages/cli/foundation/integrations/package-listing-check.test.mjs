@@ -100,6 +100,10 @@ describe('isListingImage', () => {
       '<svg xmlns="http://www.w3.org/2000/svg" aria-label="Big data: Inc" viewBox="0 0 8 8"><rect id="surly-mark" class="curly" width="8" height="8" fill="rgb(0, 102, 255)" stroke="hsla(0, 0%, 0%, 0.5)"/></svg>',
     ],
     [
+      'modern CSS color functions in paint',
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><rect width="4" height="8" fill="oklch(0.62 0.19 255)" stroke="color-mix(in oklab, red, blue)"/><rect x="4" width="4" height="8" fill="color(display-p3 0 0.4 1)" stroke="light-dark(lab(50% 40 59), hwb(200 0% 0%))"/></svg>',
+    ],
+    [
       'a mask and clip-path by fragment or none',
       '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><defs><mask id="m"><rect width="8" height="8" fill="#fff"/></mask><clipPath id="c"><circle r="4"/></clipPath></defs><rect width="8" height="8" mask="url(#m)" clip-path="url( #c )"/><rect mask="none"/></svg>',
     ],
@@ -127,6 +131,10 @@ describe('isListingImage', () => {
     [
       'an outside fill',
       '<svg xmlns="http://www.w3.org/2000/svg"><rect fill="url(https://e.x/p)"/></svg>',
+    ],
+    [
+      'an entity in a label',
+      '<svg xmlns="http://www.w3.org/2000/svg" aria-label="Acme &amp; Co"><rect/></svg>',
     ],
     [
       'a style attribute',

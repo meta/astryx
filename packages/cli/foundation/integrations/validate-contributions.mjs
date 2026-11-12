@@ -2487,7 +2487,7 @@ async function allLoadedIntegrationIssues(loaded) {
 /**
  * Where the package declares the logo a catalog shows, and the field that
  * holds it for messages. The integration file's `logo` comes first; a
- * package.json `marketplace.logo` is still read when the integration file
+ * package.json `marketplace.logo` is also read when the integration file
  * has none, so a package that set it there keeps its logo.
  * @param {LoadedIntegration} integration
  * @param {any} pkg parsed package.json
@@ -2637,7 +2637,9 @@ function isLocalSvgValue(name, value) {
     // A local paint server, then colors; the only functions are colors.
     const rest = value.replace(/url\(\s*(["']?)#[\w.-]+\1\s*\)/giu, '');
     return [...rest.matchAll(/([\w-]*)\s*\(/gu)].every(([, fn]) =>
-      /^(?:rgba?|hsla?)$/iu.test(fn),
+      /^(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color|color-mix|light-dark)$/iu.test(
+        fn,
+      ),
     );
   }
   return true;
