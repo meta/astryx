@@ -713,10 +713,11 @@ export function normalizeThemeBuildForCompare(content) {
 
 /**
  * The outputs that are missing or differ from what the build would write. A
- * missing type declaration file (a write marked `declaration`) is not stale:
- * projects that ignore generated declarations in version control run the
- * check in CI, so the check warns about it instead (missingDeclarations).
- * @param {Array<{dest: string, content: string, declaration?: boolean}>} writes @param {string} cwd @returns {Array<{path: string, reason: 'missing' | 'outdated'}>}
+ * missing `.css.d.ts` stylesheet type stub (a write marked `warnWhenMissing`)
+ * is not stale: projects that ignore it in version control run the check in
+ * CI, so the check warns about it instead (missingDeclarations). Every other
+ * missing output, the module's `.d.ts` too, is stale.
+ * @param {Array<{dest: string, content: string, warnWhenMissing?: boolean}>} writes @param {string} cwd @returns {Array<{path: string, reason: 'missing' | 'outdated'}>}
  */
 function staleBuildOutputs(writes, cwd) {
   /** @type {Array<{path: string, reason: 'missing' | 'outdated'}>} */
@@ -724,7 +725,7 @@ function staleBuildOutputs(writes, cwd) {
   for (const write of writes) {
     const rel = path.relative(cwd, write.dest);
     if (!fs.existsSync(write.dest)) {
-      if (!write.declaration) stale.push({path: rel, reason: 'missing'});
+      if (!write.warnWhenMissing) stale.push({path: rel, reason: 'missing'});
       continue;
     }
     const onDisk = fs.readFileSync(write.dest, 'utf8');
@@ -740,8 +741,8 @@ function staleBuildOutputs(writes, cwd) {
 
 /**
  * Every output the build writes, from the same write list the build and the
- * stale comparison use. A missing output makes the check stale, except a
- * type declaration file, which it warns about (missingDeclarations).
+ * stale comparison use. A missing output makes the check stale, except the
+ * `.css.d.ts` stub, which it warns about (missingDeclarations).
  * @param {Array<{dest: string}>} writes @param {string} cwd
  */
 function checkedBuildOutputs(writes, cwd) {
@@ -749,27 +750,28 @@ function checkedBuildOutputs(writes, cwd) {
 }
 
 /**
- * The type declaration files the build writes that are missing, which the
- * check names as checked and warns about in text mode without failing.
- * @param {Array<{dest: string, declaration?: boolean}>} writes @param {string} cwd
+ * The `.css.d.ts` stylesheet type stubs the build writes that are missing,
+ * which the check names as checked and warns about in text mode without
+ * failing.
+ * @param {Array<{dest: string, warnWhenMissing?: boolean}>} writes @param {string} cwd
  * @returns {string[]}
  */
 function missingDeclarations(writes, cwd) {
   return writes
-    .filter(write => write.declaration && !fs.existsSync(write.dest))
+    .filter(write => write.warnWhenMissing && !fs.existsSync(write.dest))
     .map(write => path.relative(cwd, write.dest));
 }
 
 /**
- * The one text-mode warning line for missing type declaration files, or
+ * The one text-mode warning line for missing stylesheet type stubs, or
  * nothing when none is missing. The logger is silent under --json.
- * @param {Array<{dest: string, declaration?: boolean}>} writes @param {string} cwd
+ * @param {Array<{dest: string, warnWhenMissing?: boolean}>} writes @param {string} cwd
  */
 function warnMissingDeclarations(writes, cwd) {
   const missing = missingDeclarations(writes, cwd);
   if (missing.length === 0) return;
   logger.warn(
-    `  Warning: type declaration file${missing.length === 1 ? '' : 's'} not found: ${missing.join(', ')}. The check does not fail on ${missing.length === 1 ? 'it' : 'them'}; a build writes ${missing.length === 1 ? 'it' : 'them'}.`,
+    `  Warning: stylesheet type declaration file${missing.length === 1 ? '' : 's'} not found: ${missing.join(', ')}. The check does not fail on ${missing.length === 1 ? 'it' : 'them'}; a build writes ${missing.length === 1 ? 'it' : 'them'}.`,
   );
 }
 
@@ -4312,16 +4314,12 @@ async function themeBuildInternal(
 
   const writes = [
     {dest: outPath, content: cssContent},
-    {dest: cssDtsPath, content: cssDtsContent, declaration: true},
+    {dest: cssDtsPath, content: cssDtsContent, warnWhenMissing: true},
     {dest: jsPath, content: jsContent},
-    {dest: dtsPath, content: dtsContent, declaration: true},
+    {dest: dtsPath, content: dtsContent},
   ];
   if (variantDtsPath && variantContent) {
-    writes.push({
-      dest: variantDtsPath,
-      content: variantContent,
-      declaration: true,
-    });
+    writes.push({dest: variantDtsPath, content: variantContent});
   }
 
   // Every output a build writes stays inside cwd, including the defaults
@@ -4982,7 +4980,7 @@ export async function themeBuildFamily(
     },
     {
       dest: cssDtsPath,
-      declaration: true,
+      warnWhenMissing: true,
       content:
         generatedHeader(headerSource, 'ts', buildCommand, root.versions) +
         'export {};\n',
@@ -4994,7 +4992,6 @@ export async function themeBuildFamily(
     },
     {
       dest: dtsPath,
-      declaration: true,
       content:
         generatedHeader(headerSource, 'ts', buildCommand, root.versions) +
         declarations +

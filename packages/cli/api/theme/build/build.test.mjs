@@ -497,6 +497,24 @@ describe('themeBuild() — check mode', () => {
     expect(fs.existsSync(path.join(tmpDir, 'nostub.css.d.ts'))).toBe(false);
   });
 
+  it('fails on a missing module declaration file, as before', async () => {
+    const themeFile = path.join(tmpDir, 'nodts.mjs');
+    fs.writeFileSync(
+      themeFile,
+      `export default { name: 'nodts', tokens: { '--color-bg': '#0a0a0a' } };\n`,
+    );
+    await themeBuild('nodts.mjs', {}, {cwd: tmpDir});
+    fs.rmSync(path.join(tmpDir, 'nodts.d.ts'));
+
+    const result = await themeBuild('nodts.mjs', {check: true}, {cwd: tmpDir});
+
+    expect(result?.data.upToDate).toBe(false);
+    expect(result?.data.stale).toEqual([
+      {path: 'nodts.d.ts', reason: 'missing'},
+    ]);
+    expect(/** @type {any} */ (result)?.data?.code).toBe('ERR_THEME_STALE');
+  });
+
   it('still fails on a missing CSS output when the type stub is missing too', async () => {
     const themeFile = path.join(tmpDir, 'nocss.mjs');
     fs.writeFileSync(
