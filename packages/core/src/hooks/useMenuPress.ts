@@ -820,7 +820,7 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
   );
 
   const attach = useCallback(
-    (pointerId: number) => {
+    (pointerId: number, namesTouch = true) => {
       detachRef.current?.();
       const doc = getDocument();
       const view = doc.defaultView;
@@ -830,7 +830,7 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
       // The touchstart after this pointerdown names the touch, so the guard
       // at the lift cancels only that touch's touchend.
       let stopTouchStart: (() => void) | null = null;
-      if (view != null) {
+      if (view != null && namesTouch) {
         stopTouchStart = subscribeInput(view, 'touchstart', event => {
           stopTouchStart?.();
           stopTouchStart = null;
@@ -1077,7 +1077,10 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
       if (!isEnabled || gestureRef.current.phase !== 'idle') {
         return;
       }
-      attach(pointer.pointerId);
+      // This finger's touchstart came before the menu, so the next one is
+      // another finger's. Unnamed, the guard takes the next touchend, which
+      // follows this finger's pointerup.
+      attach(pointer.pointerId, false);
       // The menu opened under this pointer, so it is the opening press.
       isContinuedFingerRef.current = pointer.pointerType !== 'mouse';
       gestureRef.current = {
