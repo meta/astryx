@@ -283,9 +283,12 @@ export async function previewAfter(ctx, slug, data, png) {
     preview = await renderPreview(ctx, slug, data);
   } catch (e) {
     // The change is already saved: any failure here leaves it unchecked.
+    const code = /** @type {any} */ (e)?.code;
     cause ??= isRenderFailure(e)
       ? renderCause(ctx.project, /** @type {Error} */ (e).message)
-      : `checking it failed: ${e instanceof Error ? e.message : String(e)}`;
+      : ['ENOSPC', 'EACCES', 'EPERM', 'EROFS', 'EIO'].includes(code)
+        ? `preview.html could not be written (${code === 'ENOSPC' ? 'the disk is full' : code}), so it still shows the theme as it was`
+        : `checking it failed: ${e instanceof Error ? e.message : String(e)}`;
   }
   const f = themeFiles(ctx.project.cwd, slug);
   const shots =

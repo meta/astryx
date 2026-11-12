@@ -117,10 +117,11 @@
     "typecheck:strict": "tsc --project tsconfig.strict.json",
     "typecheck:authoring": "tsc --project tsconfig.authoring-contract.json",
     "sync:api-types": "node scripts/sync-api-types.mjs",
+    "generate:build-id": "node scripts/generate-build-id.mjs",
     "readme": "node scripts/generate-cli-readme.mjs",
     "readme:check": "node scripts/generate-cli-readme.mjs --check",
-    "postpack": "node scripts/generate-template-components.mjs --clean && node scripts/generate-stored-docs.mjs --clean && node scripts/generate-command-list.mjs --clean && node scripts/generate-self-audit.mjs --clean",
-    "prepack": "pnpm sync:api-types && node scripts/generate-template-components.mjs && node scripts/generate-stored-docs.mjs && node scripts/generate-command-list.mjs && node scripts/generate-self-audit.mjs"
+    "postpack": "node scripts/generate-template-components.mjs --clean && node scripts/generate-stored-docs.mjs --clean && node scripts/generate-command-list.mjs --clean && node scripts/generate-self-audit.mjs --clean && node scripts/generate-manifest.mjs --clean && node scripts/generate-build-id.mjs --clean",
+    "prepack": "pnpm sync:api-types && node scripts/generate-template-components.mjs && node scripts/generate-stored-docs.mjs && node scripts/generate-command-list.mjs && node scripts/generate-self-audit.mjs && node scripts/generate-manifest.mjs && node scripts/generate-build-id.mjs"
   },
   "dependencies": {
     "@babel/core": "7.29.7",

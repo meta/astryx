@@ -22,6 +22,7 @@ deciding_specs:
     spec:AST-099/DEC-5,
     spec:AST-105/DEC-1,
     spec:AST-107/DEC-2,
+    component:Markdown/DEC-7,
   ]
 ---
 
@@ -134,7 +135,10 @@ those contracts.
   update an owned DOM node when that DOM update is itself the observable operation
   and attach, detach, replacement, and consumer override behavior preserve the
   current contract. Ref-backed coordination MUST preserve the current component,
-  family, accessibility, and API contracts.
+  family, accessibility, and API contracts. One exception is the owner's
+  decision of 2026-11-09 (`component:Markdown/DEC-7`): Markdown's streaming
+  fade-in spans MAY start from refs written during render. Text never comes from
+  those refs, so a discarded render only shifts the fade spans.
 - **INV5 — Resource ownership is complete.** Every listener, timer, animation frame,
   observer, request, subscription, and imperative browser resource has one declared
   lifecycle owner. Component- or node-owned resources are removed, aborted, or
@@ -523,6 +527,8 @@ contracts.
   (INV12).
 - `spec:AST-107/DEC-2` — factories under every hook, the class and
   public-name rules, and the known public-API gap list (INV13).
+- `component:Markdown/DEC-7` — Markdown's streaming fade-in spans may start
+  from refs written during render (INV4).
 
 Component, family, API, accessibility, layer, interaction, and style records
 remain authoritative for the other user-facing outcomes delegated above.
