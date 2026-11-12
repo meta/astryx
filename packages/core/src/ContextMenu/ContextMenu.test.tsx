@@ -8,7 +8,7 @@
  * SYNC: When ContextMenu.tsx changes, update tests to match new behavior
  */
 
-import {useRef, useState} from 'react';
+import {Suspense, startTransition, use, useRef, useState} from 'react';
 import {createPortal} from 'react-dom';
 import {
   describe,
@@ -903,6 +903,43 @@ describe.each([
       advance(contextMenu.press.menuDisplayMs - contextMenu.press.commitMs);
       expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
       expect(screen.getByRole('menu', {hidden: true})).toBe(menu);
+      press.up();
+    });
+
+    it('mounts the menu at the commit from the committed render, when React drops a later render', async () => {
+      // A transition whose render suspends never commits. Its render asks for
+      // a bottom sheet, which mounts nothing at the commit.
+      const never = new Promise<never>(() => {});
+      function Suspends({isSuspended}: {isSuspended: boolean}) {
+        if (isSuspended) {
+          use(never);
+        }
+        return null;
+      }
+      let setIsSheet: (isSheet: boolean) => void = () => {};
+      function App() {
+        const [isSheet, set] = useState(false);
+        setIsSheet = set;
+        return (
+          <Suspense fallback={null}>
+            <ContextMenu
+              items={[{label: 'Item 1'}]}
+              data-testid="ctx"
+              presentation={isSheet ? 'bottom-sheet' : undefined}>
+              <div>Long-press me</div>
+            </ContextMenu>
+            <Suspends isSuspended={isSheet} />
+          </Suspense>
+        );
+      }
+      render(<App />);
+      await act(async () => {
+        startTransition(() => setIsSheet(true));
+      });
+      const press = finger(screen.getByTestId('ctx'));
+      press.down();
+      advance(contextMenu.press.commitMs);
+      expect(screen.getByRole('menu', {hidden: true})).toBeTruthy();
       press.up();
     });
 

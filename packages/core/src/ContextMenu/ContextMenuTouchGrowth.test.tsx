@@ -5,12 +5,14 @@
  * @input ContextMenu under a finger in jsdom, with the compositor animator
  *   replaced
  * @output Checks that the trigger's visual grows only while ContextMenu's
- *   recognizer follows a finger, and springs back when the recognizer fails
+ *   recognizer follows a finger or a pen, and springs back when the
+ *   recognizer fails
  * @position Unit tests of the press feedback's start and end in
  *   packages/core/src/ContextMenu/ContextMenuTouchLayer.tsx
  */
 
 import {act, cleanup, render, screen, within} from '@testing-library/react';
+import {Suspense, startTransition, use, useState} from 'react';
 import {createPortal} from 'react-dom';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {PRESSED_ATTRIBUTE} from '../utils/pressFeedback';
@@ -152,6 +154,44 @@ describe('ContextMenu’s growth under a finger', () => {
         element === visualOf(trigger) && (to as {scale?: number}).scale === 1,
     );
 
+  it('grows from the committed render, when React drops a later render that shows no growth', async () => {
+    // A transition whose render suspends never commits. Its render makes the
+    // trigger inline, which shows no growth.
+    const never = new Promise<never>(() => {});
+    function Suspends({isSuspended}: {isSuspended: boolean}) {
+      if (isSuspended) {
+        use(never);
+      }
+      return null;
+    }
+    let setIsInline: (isInline: boolean) => void = () => {};
+    function App() {
+      const [isInline, set] = useState(false);
+      setIsInline = set;
+      return (
+        <Suspense fallback={null}>
+          <ContextMenu
+            items={[{label: 'Item 1'}]}
+            data-testid="ctx"
+            triggerAs={isInline ? 'span' : undefined}>
+            <div>Hold me</div>
+          </ContextMenu>
+          <Suspends isSuspended={isInline} />
+        </Suspense>
+      );
+    }
+    render(<App />);
+    await act(async () => {
+      startTransition(() => setIsInline(true));
+    });
+    const trigger = screen.getByTestId('ctx');
+    const contact = {id: 1, x: 20, y: 20};
+    const landedAt = performance.now();
+    dispatchTouch('touchstart', trigger, [contact], [contact]);
+    advance(150 + FRAME_MS);
+    expectGrowthFromOnsetFrame(trigger, landedAt);
+  });
+
   it('springs a grown trigger back when the finger lifts before the commit', async () => {
     const trigger = renderMenu();
     const contact = {id: 1, x: 20, y: 20};
@@ -262,8 +302,8 @@ describe('ContextMenu’s growth under a finger', () => {
   it('grows the trigger at the onset when the press machine marks the press before the recognizer has the finger', async () => {
     const trigger = renderMenu();
     const contact = {id: 1, x: 20, y: 20};
-    // In a browser the press machine's mark comes first: its listener runs
-    // before the recognizer's, and the mark is read between the two.
+    // In a browser the press machine's mark can come first: its listener
+    // runs before the recognizer's.
     await pressMachineOn(trigger);
     const landedAt = performance.now();
     dispatchTouch('touchstart', trigger, [contact], [contact]);

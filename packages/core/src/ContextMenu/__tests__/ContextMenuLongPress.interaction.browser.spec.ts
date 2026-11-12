@@ -780,6 +780,15 @@ async function untilMenuSettled(page: Page) {
     .toBe(0);
 }
 
+/** The open menu's box on screen, with any transform on its layer. */
+const menuBox = async (page: Page) =>
+  page.evaluate(() => {
+    const list = document
+      .querySelector('[role="menu"]')
+      ?.getBoundingClientRect();
+    return list == null ? null : {x: list.x, y: list.y};
+  });
+
 /**
  * The open menu's box and computed transform. Also every element from the
  * cursor anchor up that carries a transform, and the anchor's inline
@@ -955,9 +964,7 @@ test('the menu’s anchor sits under the finger, on screen and as laid out, whil
   }
   const menu = page.getByRole('menu', {name: 'Photo actions'});
   // The cursor anchor (the trigger's last child), on screen and as laid out
-  // (engines differ on which one anchor positioning reads). The menu as laid
-  // out. Its entrance plays as a transform on its layer, and a slow first frame
-  // (a cold shader cache) can hold it at its start.
+  // (engines differ on which one anchor positioning reads).
   const read = async () =>
     trigger.evaluate(el => {
       const anchor = el.lastElementChild as HTMLElement | null;
@@ -966,8 +973,6 @@ test('the menu’s anchor sits under the finger, on screen and as laid out, whil
       const left = box.left + (box.width - host.offsetWidth) / 2;
       const top = box.top + (box.height - host.offsetHeight) / 2;
       const onScreen = anchor?.getBoundingClientRect();
-      const list = document.querySelector<HTMLElement>('[role="menu"]');
-      const layer = list?.closest<HTMLElement>('[popover]');
       return {
         onScreen: onScreen == null ? null : {x: onScreen.x, y: onScreen.y},
         laidOut:
@@ -976,13 +981,6 @@ test('the menu’s anchor sits under the finger, on screen and as laid out, whil
             : {
                 x: left + host.clientLeft + anchor.offsetLeft,
                 y: top + host.clientTop + anchor.offsetTop,
-              },
-        menu:
-          list == null || layer == null
-            ? null
-            : {
-                x: layer.offsetLeft + list.offsetLeft,
-                y: layer.offsetTop + list.offsetTop,
               },
       };
     });
@@ -998,23 +996,63 @@ test('the menu’s anchor sits under the finger, on screen and as laid out, whil
     };
     await driver.play(hold(p, menuDisplayMs + 100));
     await expect(menu).toBeVisible();
-    const first = await read();
+    // The entrance plays as a transform on the menu's layer, and a slow first
+    // frame (a cold shader cache) can hold it at its start: read once it ends.
     await untilMenuSettled(page);
+    const first = await read();
+    const firstMenu = await menuBox(page);
+    // Later, once the trigger's growth holds at its full size.
+    await expect
+      .poll(async () => presentedScale(trigger))
+      .toBeCloseTo(heldScale, 3);
     const later = await read();
+    const laterMenu = await menuBox(page);
     await page.keyboard.press('Escape');
     await expect(menu).toBeHidden();
     // The trigger returns to its size before the next press.
     await expect
       .poll(async () => presentedScale(trigger), {timeout: 3000})
       .toBe(1);
-    const detail = JSON.stringify({p, first, later});
+    const detail = JSON.stringify({p, first, firstMenu, later, laterMenu});
     expect(first.onScreen?.x, detail).toBeCloseTo(p.x, 0);
     expect(first.onScreen?.y, detail).toBeCloseTo(p.y, 0);
     expect(first.laidOut?.x, detail).toBeCloseTo(p.x, 0);
     expect(first.laidOut?.y, detail).toBeCloseTo(p.y, 0);
-    expect(later.menu?.x, detail).toBeCloseTo(first.menu?.x ?? NaN, 0);
-    expect(later.menu?.y, detail).toBeCloseTo(first.menu?.y ?? NaN, 0);
+    expect(laterMenu?.x, detail).toBeCloseTo(firstMenu?.x ?? NaN, 0);
+    expect(laterMenu?.y, detail).toBeCloseTo(firstMenu?.y ?? NaN, 0);
   }
+});
+
+test('the stays-put check sees a menu that a transform moves after its show', async ({
+  page,
+}) => {
+  const {driver, trigger} = await openTouchStory(page);
+  const box = await trigger.boundingBox();
+  if (box == null) {
+    throw new Error('no trigger');
+  }
+  await driver.play(
+    hold(
+      {
+        x: Math.round(box.x + box.width / 2),
+        y: Math.round(box.y + box.height / 2),
+      },
+      menuDisplayMs + 100,
+    ),
+  );
+  await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
+  await untilMenuSettled(page);
+  const before = await menuBox(page);
+  await page.evaluate(() => {
+    const layer = document
+      .querySelector('[role="menu"]')
+      ?.closest<HTMLElement>('[popover]');
+    if (layer != null) {
+      layer.style.translate = '0 8px';
+    }
+  });
+  const after = await menuBox(page);
+  expect((after?.y ?? NaN) - (before?.y ?? NaN)).toBeCloseTo(8, 0);
 });
 
 test('a drag past the tolerance after the commit opens nothing', async ({
