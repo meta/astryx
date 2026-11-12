@@ -397,11 +397,19 @@ async function answer(subject, options, cwd) {
   // "--focus-outline-width: 3px": a token typed with a value is set exactly,
   // or refused with the nearest names; never another token.
   const typedToken =
-    /(?:^|\s)(--[a-z][a-z0-9-]*)\s*(?::|\s+to\s+|\s+)\s*([^;]+?)\s*;?\s*(?:\bin (light|dark) mode\b.*)?$/i.exec(
+    /^\s*(--[a-z][a-z0-9-]*)\s*(?::|\s+to\s+|\s+)\s*([^;]+?)\s*;?\s*(?:\bin (light|dark) mode\b.*)?$/i.exec(
       t.replace(/^\s*(?:change|set|make|token)\s+/i, ' '),
     );
   if (
     typedToken &&
+    (Object.hasOwn(
+      ctx.project.core.tokenDefaults,
+      typedToken[1].toLowerCase(),
+    ) ||
+      nearest(
+        typedToken[1].toLowerCase(),
+        Object.keys(ctx.project.core.tokenDefaults),
+      ).length > 0) &&
     !/^--(on|when|state|mode|theme|list|at)$/.test(typedToken[1]) &&
     // "what does --color-accent do" is a lookup.
     !/^\s*(what|which|where|how|is|are|does|do|explain|why)\b/i.test(t) &&
@@ -410,11 +418,19 @@ async function answer(subject, options, cwd) {
     const token = typedToken[1].toLowerCase();
     const mode = /\bin (light|dark) mode\b/i.exec(t)?.[1]?.toLowerCase();
     const defaults = ctx.project.core.tokenDefaults;
-    if (!Object.hasOwn(defaults, token))
+    const near = nearest(token, Object.keys(defaults));
+    // A token that does not exist is refused with the nearest real names;
+    // a flag-like word with none near is read as words.
+    if (!Object.hasOwn(defaults, token) && near.length)
       return refuse(E.ERR_INVALID_ARGUMENT, `There is no token ${token}.`, {
-        run: nearest(token, Object.keys(defaults)).map(k => `${HOW} ${k}`),
+        run: near.map(k => `${HOW} ${k}`),
       });
-    const value = typedToken[2].trim().replace(/^["']|["']$/g, '');
+    // Quotes come off only when the whole value is one quoted string: a
+    // font stack keeps its quoted family.
+    const typedValue = typedToken[2].trim();
+    const value = /^(["'])([^"']*)\1$/.test(typedValue)
+      ? typedValue.slice(1, -1)
+      : typedValue;
     const {commands, refused} = checked(env, [
       [
         {

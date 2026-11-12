@@ -1033,9 +1033,11 @@ function clausesOf(q, partWords) {
     const mode =
       (/\bdark( mode| theme)?\b/.test(text) &&
         /\b(mode|theme|in dark)\b/.test(text)) ||
-      /\bnight( mode| theme)\b/.test(text)
+      /\bnight( mode| theme)?\b|\bat night\b|\boled\b|^dark\s*:/.test(text)
         ? 'dark'
-        : /\blight (mode|theme)\b/.test(text)
+        : /\blight (mode|theme)\b|\bday ?(time)?( mode| theme)?\b|^light\s*:/.test(
+              text,
+            )
           ? 'light'
           : null;
     const except =
@@ -1464,6 +1466,8 @@ export function draftAnswer(ctx, env, question) {
       /\bmatch\s+(?:the\s+)?(.+?)\s+to\s+(?:the\s+)?[a-z][a-z -]*?(?=\s*[(,;.]|\s*$)/gi,
       '$1',
     )
+    // "no more than 2px": a limit, the number itself.
+    .replace(/\b(?:no|not) more than\s+|\bat most\s+|\bmax(?:imum)? of\s+/g, '')
     // Numbers written as words are numbers.
     .replace(NUMBER_WORDS_RE, m => numberWord(m))
     // "0.5 rem", "14 px": a number and its unit are one length.
@@ -1932,6 +1936,13 @@ export function draftAnswer(ctx, env, question) {
       c.parts = [];
       c.text = '';
     }
+  // "only in dark mode, …": a clause that only names a mode scopes every
+  // clause after it.
+  for (let i = 0; i < clauses.length; i++) {
+    const c = clauses[i];
+    if (c.mode && !c.parts.length && !c.aspects.length && !c.colors.length)
+      for (const o of clauses.slice(i + 1)) o.mode ??= c.mode;
+  }
   // The tab's text is on the tab, not on its underline.
   for (const c of clauses)
     for (const p of c.parts)
@@ -2289,6 +2300,31 @@ export function draftAnswer(ctx, env, question) {
         recordTop(c, d.options[0] ?? []);
         continue;
       }
+    }
+    // "… and set --border-width 2px": a real token typed in a clause.
+    const tok = /(?:^|\s)(--[a-z][a-z0-9-]*)\s*:?\s+([^\s;,]+)/.exec(c.text);
+    if (tok && Object.hasOwn(TOKENS, tok[1])) {
+      const d = {
+        text: `the token ${tok[1]}, as you wrote it`,
+        options: [[set(tok[1], tok[2], modeOf(c))]],
+      };
+      push(d);
+      recordTop(c, d.options[0] ?? []);
+      continue;
+    }
+    // "error text red", "labels smaller": text that belongs to parts how
+    // cannot pick alone is a lookup, never the whole theme's text.
+    if (
+      !c.parts.length &&
+      /\b(error (text|messages?)|(field |form |input )?labels?)\b/.test(c.text)
+    ) {
+      const which = /\berror\b/.test(c.text) ? 'error text' : 'labels';
+      push({
+        text: `${which} belong to the parts that show them (an input's error message, a field's label); name the part, or look it up`,
+        options: [],
+        lookup: `${HOW} --list parts ${which === 'labels' ? 'label' : 'error'}`,
+      });
+      continue;
     }
     // A CSS property named with its value is set as named, on each part.
     const named = c.named;
@@ -4023,7 +4059,16 @@ export function draftAnswer(ctx, env, question) {
     if (
       /\bdark[- ]?(mode|theme)? only\b|\bonly dark\b|\bdark-only\b|\bdark by default\b|\bdefault(s)? to dark\b|\balways dark\b/.test(
         t,
-      )
+      ) &&
+      // "in dark mode only, cards #111111": the mode scopes the other ask.
+      // "dark only" with no "mode" word describes the theme's look.
+      (/\balways dark\b|\b(theme|app)\b/.test(t) ||
+        !/\bmode\b|\bin dark\b/.test(t) ||
+        !clauses.some(
+          o =>
+            o.text !== c.text &&
+            (o.parts.length || o.colors.length || o.aspects.length),
+        ))
     )
       return {
         text: 'a theme with only a dark mode: mode dark-only',
@@ -4403,7 +4448,12 @@ export function draftAnswer(ctx, env, question) {
   for (const {clause, steps} of tops)
     for (const st of steps) {
       const prior = last.get(idOf(st));
-      if (prior && prior.clause !== clause && prior.step.value !== st.value)
+      if (
+        prior &&
+        prior.clause !== clause &&
+        prior.step.value !== st.value &&
+        (prior.clause.mode ?? '') === (clause.mode ?? '')
+      )
         clashes.push([prior.step, st]);
       last.delete(idOf(st));
       last.set(idOf(st), {step: st, clause});

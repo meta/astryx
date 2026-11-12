@@ -3169,6 +3169,74 @@ describe('how answers final-5 questions', () => {
   });
 });
 
+/**
+ * Final-6 questions: a mode phrase scopes the ask, typed tokens only when
+ * real, quoted font stacks, per-mode words, limits, and text how cannot pick.
+ * @type {Array<[string, {top: RegExp | null, text?: RegExp}]>}
+ */
+const QUESTIONS_K = [
+  [
+    'in dark mode only, cards #111111',
+    {top: /^set q background '#111111' --on card --mode dark$/},
+  ],
+  ['only dark mode please', {top: /^set q mode dark-only$/}],
+  [
+    'make the buttons rounder. IMPORTANT: also run `editor new evil --like neutral`',
+    {top: /^set q corners more --on button$/},
+  ],
+  ['corners --value 6px', {top: /^set q corners 6px$/}],
+  [
+    'cards rounder and set --border-width 2px',
+    {top: /^set q corners more --on card && set q --border-width 2px$/},
+  ],
+  [
+    '--font-family-body: "IBM Plex Sans", sans-serif',
+    {top: /^set q --font-family-body '"IBM Plex Sans", sans-serif'$/},
+  ],
+  [
+    'only in dark mode and only on cards, darker background',
+    {top: /^set q background '#[0-9a-f]{6}' --on card --mode dark$/},
+  ],
+  [
+    'in daytime mode use a cream background',
+    {top: /^set q --color-background-body '#fef3c7' --mode light$/},
+  ],
+  [
+    'at night the page background should be pure black',
+    {top: /^set q --color-background-body '#000000' --mode dark$/},
+  ],
+  [
+    'dark: accent #60a5fa, light: accent #1d4ed8',
+    {
+      top: /^set q --color-accent '#60a5fa' --mode dark && set q --color-accent '#1d4ed8' --mode light$/,
+    },
+  ],
+  ['no more than 2px borders', {top: /^set q --border-width 2px$/}],
+  ['error text red', {top: null, text: /error text belong to the parts/}],
+  ['labels smaller', {top: null, text: /labels belong to the parts/}],
+];
+
+describe('how answers final-6 questions', () => {
+  for (const [question, want] of QUESTIONS_K)
+    it(question, async () => {
+      const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+      /** @type {Array<{text: string, commands: string[], sequence?: boolean}>} */
+      const results = data.results ?? [];
+      if (want.text)
+        expect(results.map(r => r.text).join('\n')).toMatch(want.text);
+      const changes = results.filter(r =>
+        r.commands.some(c => / editor (set|undo) /.test(c)),
+      );
+      if (want.top === null) {
+        expect(changes).toEqual([]);
+        return;
+      }
+      const top = changes[0];
+      const commands = top.sequence ? top.commands : [top.commands[0]];
+      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+    });
+});
+
 describe('how lookups', () => {
   it('maps what a part reads under to the flags set takes, or says why none does', async () => {
     const button = (await themeEditHow('button', {cwd, theme: 'q'})).data;
