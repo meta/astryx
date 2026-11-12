@@ -82,7 +82,7 @@ unreachable days, take no validation behavior.
 ## Public contract
 
 ```tsx
-<FormLayout defaultValidationBehavior="commit">
+<FormLayout defaultValidationBehavior="blur-or-enter">
   <DateInput label="Start" value={start} onChange={setStart} max="2026-12-31" />
   <NumberInput
     label="Seats"
@@ -101,7 +101,7 @@ unreachable days, take no validation behavior.
 ```
 
 ```ts
-type ValidationBehavior = 'complete' | 'commit';
+type ValidationBehavior = 'complete' | 'blur-or-enter';
 ```
 
 ## Requirements
@@ -121,7 +121,7 @@ type ValidationBehavior = 'complete' | 'commit';
 
 - **FR1 — Each member takes `validationBehavior`.** `DateInput`,
   `DateTimeInput`, `TimeInput`, and `NumberInput` accept an optional
-  `validationBehavior` of `'complete'` or `'commit'`. One value governs every
+  `validationBehavior` of `'complete'` or `'blur-or-enter'`. One value governs every
   surface and segment of the field: typed text, the native control, and
   `DateTimeInput`'s date and time segments. The type of the value is exported as
   `ValidationBehavior`. The values name when a member reveals its own
@@ -140,7 +140,7 @@ type ValidationBehavior = 'complete' | 'commit';
   its own record states, and nothing in this record changes that. A field
   with no `validationBehavior` and no `FormLayout` default behaves the same
   way.
-- **FR4 — `'commit'` holds every signal until commit.** Under `'commit'`, while
+- **FR4 — `'blur-or-enter'` holds every signal until commit.** Under `'blur-or-enter'`, while
   a person types or edits, a member shows, marks, styles, and announces no
   rejection of its own. At Enter or blur, it reveals the rejection that the
   entry has at that moment, with every signal its record gives that rejection
@@ -156,7 +156,7 @@ type ValidationBehavior = 'complete' | 'commit';
 - **FR5 — A rejection clears as soon as the entry is valid.** Under both
   values, an edit that makes the entry a value the member accepts, or empties
   it, clears the rejection's signals at once, without a commit. Under
-  `'commit'`, an edit that leaves the entry rejected keeps the revealed
+  `'blur-or-enter'`, an edit that leaves the entry rejected keeps the revealed
   rejection and does not announce it again; the next commit reveals the entry's
   current rejection. A new `value` or a pick that replaces the entry, as the
   member's record states, clears its rejection.
@@ -170,13 +170,13 @@ type ValidationBehavior = 'complete' | 'commit';
 
 ### Accessibility contract
 
-- **AR1 — Nothing before commit under `'commit'`.** Under `'commit'`, no
+- **AR1 — Nothing before commit under `'blur-or-enter'`.** Under `'blur-or-enter'`, no
   rejection is marked or announced before Enter or blur (FR4).
 - **AR2 — One announcement per revealed rejection.** Each rejection that a
   commit reveals is announced once, at the urgency `spec:AST-086` FR5 gives an
   error, and where a message shows, the announced words match the shown words
   (`spec:AST-086` FR7).
-- **AR3 — A dropped entry is still explained.** Under `'commit'`, a member that
+- **AR3 — A dropped entry is still explained.** Under `'blur-or-enter'`, a member that
   drops a rejected entry at commit still announces why (FR4), so a person
   learns that the entry was not accepted (WCAG 2.2 3.3.1).
 
@@ -188,7 +188,7 @@ Classified under `spec:AST-017` against the latest stable release:
   and their default, `'complete'`, is each member's shipped behavior (FR3), so
   usage that sets neither is unchanged: additive (`spec:AST-017` FR5;
   `architecture:public-component-api` INV3).
-- `'commit'` applies only where a caller sets it. It makes Enter a commit for
+- `'blur-or-enter'` applies only where a caller sets it. It makes Enter a commit for
   `TimeInput` and for `DateTimeInput`'s time segment, which have no Enter
   commit by default: additive (`spec:AST-017` FR5).
 
@@ -222,15 +222,15 @@ Requirement gaps:
 
 ## Verification
 
-| Contract | Verification                                                                    | Representative states                                                                                                                  | Mutation or failure expectation                                                                                                    |
-| -------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| FR1, FR2 | Member and `FormLayout` render suites; type tests                               | No prop; field prop; form default; both, disagreeing; nested layout with and without a value; a field in a Dialog opened inside a form | A field ignores its prop, a form default outranks the field, a nested or layered field keeps the outer default, or the type widens |
-| FR3      | Each member's existing rejection suites, run with no prop and with `'complete'` | Every rejection each member's record names                                                                                             | Any signal appears at a different moment, or with a different signal set, than with no prop                                        |
-| FR4      | Keystroke-by-keystroke and commit suites under `'commit'`                       | Each rejection of each member; native edits; Enter and blur; an entry the member drops at blur                                         | A signal appears before Enter or blur, the signals appear apart, the announcement repeats, or a dropped entry is not announced     |
-| FR5      | Edit suites after a revealed rejection                                          | Edit to valid; to empty; to still rejected; caller `value` change; calendar pick                                                       | A fixed entry keeps its rejection, a still-rejected edit clears it or announces it again under `'commit'`, or a pick leaves it     |
-| FR6      | Disabled and busy suites                                                        | Rejection revealed, then disabled; draft kept while busy                                                                               | A locked field reveals a rejection, or its behavior does not apply again once editable                                             |
-| FR7      | `PowerSearch` and Table filter editor suites inside a `FormLayout`              | `defaultValidationBehavior="commit"` around the composition                                                                            | An editor follows the form default                                                                                                 |
-| AR1–AR3  | Screen-reader evidence under `spec:AST-009`                                     | Each member, typed and native, under `'commit'`                                                                                        | A rejection is heard before commit, heard twice, or a dropped entry is not explained                                               |
+| Contract | Verification                                                                    | Representative states                                                                                                                  | Mutation or failure expectation                                                                                                       |
+| -------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1, FR2 | Member and `FormLayout` render suites; type tests                               | No prop; field prop; form default; both, disagreeing; nested layout with and without a value; a field in a Dialog opened inside a form | A field ignores its prop, a form default outranks the field, a nested or layered field keeps the outer default, or the type widens    |
+| FR3      | Each member's existing rejection suites, run with no prop and with `'complete'` | Every rejection each member's record names                                                                                             | Any signal appears at a different moment, or with a different signal set, than with no prop                                           |
+| FR4      | Keystroke-by-keystroke and commit suites under `'blur-or-enter'`                | Each rejection of each member; native edits; Enter and blur; an entry the member drops at blur                                         | A signal appears before Enter or blur, the signals appear apart, the announcement repeats, or a dropped entry is not announced        |
+| FR5      | Edit suites after a revealed rejection                                          | Edit to valid; to empty; to still rejected; caller `value` change; calendar pick                                                       | A fixed entry keeps its rejection, a still-rejected edit clears it or announces it again under `'blur-or-enter'`, or a pick leaves it |
+| FR6      | Disabled and busy suites                                                        | Rejection revealed, then disabled; draft kept while busy                                                                               | A locked field reveals a rejection, or its behavior does not apply again once editable                                                |
+| FR7      | `PowerSearch` and Table filter editor suites inside a `FormLayout`              | `defaultValidationBehavior="blur-or-enter"` around the composition                                                                     | An editor follows the form default                                                                                                    |
+| AR1–AR3  | Screen-reader evidence under `spec:AST-009`                                     | Each member, typed and native, under `'blur-or-enter'`                                                                                 | A rejection is heard before commit, heard twice, or a dropped entry is not explained                                                  |
 
 ## Decision log
 
@@ -243,7 +243,7 @@ Forms that check fields on blur need an input's own rejections to wait for the
 commit, while other forms keep the input's own timing. One option, with the
 same two values on every member that rejects entries, serves both. Its default
 is the shipped behavior, as a new behavior prop's default is
-(`architecture:public-component-api` INV3). Under `'commit'` the option holds
+(`architecture:public-component-api` INV3). Under `'blur-or-enter'` the option holds
 the message, the invalid state, and the announcement together, and under both
 values a rejection clears as soon as the entry is valid.
 
@@ -268,21 +268,31 @@ on the form, and those that also take it per field let the field win.
 A prop that chooses how a component responds to input is named
 `<thing>Behavior` (`architecture:public-component-api` INV2), so the option is
 `validationBehavior`, the form default `defaultValidationBehavior`, and the type
-`ValidationBehavior`. Its values name the moment a rejection appears,
-`'complete'` and `'commit'`, not an event, because a commit is Enter or blur.
-React Aria uses the same prop name for native versus ARIA validation; FR1 and
-the consumer docs state the difference.
+`ValidationBehavior`. Its values name when a rejection appears:
+`'complete'`, as soon as the entry is complete enough to be wrong, and
+`'blur-or-enter'`, when the person leaves the field or presses Enter. The
+second value names both triggers, because Enter commits an entry without
+moving focus. React Aria uses the same prop name for native versus ARIA
+validation; FR1 and the consumer docs state the difference.
 
-Rejected: `validationTiming`, because it breaks the `<thing>Behavior` rule for
-a prop that chooses how a component responds to input.
+Rejected:
 
-### DEC-4 — Under `'commit'`, a dropped entry is announced at its commit
+- `validationTiming`, because it breaks the `<thing>Behavior` rule for a prop
+  that chooses how a component responds to input.
+- Separate `'blur'` and `'enter'` values. With Enter alone, a person who tabs
+  away from a rejected entry is never told, and phone number pads have no
+  Enter key. With blur alone, Enter commits a rejected entry with no sign.
+- `'commit'`, because developers read it as saving or submitting.
+- `'eager'` and `'lazy'`, because neither names its trigger and form libraries
+  already use them with other meanings.
+
+### DEC-4 — Under `'blur-or-enter'`, a dropped entry is announced at its commit
 
 **Reference:** `spec:AST-117/DEC-4`
 **Decider:** pending
 
 Some members drop a rejected entry at blur, and by default they announce the
-rejection while the person types. Under `'commit'` that announcement waits, so
+rejection while the person types. Under `'blur-or-enter'` that announcement waits, so
 the commit that drops the entry announces it; otherwise the entry would vanish
 with no word (FR4).
 
@@ -297,11 +307,11 @@ keep `'complete'` and take no prop (FR7).
 
 ## Open questions
 
-- **OQ1 — Under `'commit'`, what happens to a rejected entry that a member
+- **OQ1 — Under `'blur-or-enter'`, what happens to a rejected entry that a member
   drops at commit?** (`human-api`) FR4 states option (a).
   - (a) The member announces the rejection once at that commit, then drops the
     entry as its record states.
-  - (b) Under `'commit'` the member keeps the entry with its rejection instead
+  - (b) Under `'blur-or-enter'` the member keeps the entry with its rejection instead
     of dropping it.
 - **OQ2 — Do `PowerSearch`'s editors, Table's filter editors, and
   `DateRangeInput` take the option?** (`human-api`) FR7 and Members state
@@ -311,7 +321,7 @@ keep `'complete'` and take no prop (FR7).
   - (b) `PowerSearch` and Table filtering take a validation behavior prop and
     pass it to their editors.
   - (c) The editors follow a `FormLayout` around the composition.
-- **OQ4 — Under `'commit'`, does a revealed rejection stay while an edit leaves
+- **OQ4 — Under `'blur-or-enter'`, does a revealed rejection stay while an edit leaves
   the entry rejected?** (`human-design`) FR5 states option (a).
   - (a) It stays, without a new announcement, until the entry is valid or
     empty, or the next commit reveals the entry's current rejection.
