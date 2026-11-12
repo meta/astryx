@@ -3528,7 +3528,7 @@ jobs:
   # a command that runs it again, for the fix loop.
   webkit-weekly-a11y:
     needs: [webkit-weekly-request, build-storybook]
-    if: ${{ always() && !cancelled() && github.event_name == 'workflow_dispatch' && inputs.operation == 'webkit-weekly' && needs.webkit-weekly-request.result == 'success' && needs.build-storybook.result == 'success' }}
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.operation == 'webkit-weekly' && !cancelled() && needs.webkit-weekly-request.result == 'success' && needs.build-storybook.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # The WebKit interaction legs' image: WebKit and its system libraries are
