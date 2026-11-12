@@ -56,7 +56,9 @@ describe('hunt24', () => {
     await withRealRenders(async () => {
       await themeEditShow('p', {cwd});
       const html = fs.readFileSync(at('p', 'sheet.html'), 'utf8');
-      expect(html).toMatch(/<!-- astryx: render of [0-9a-f]{24} -->/);
+      expect(html).toMatch(
+        /<!-- astryx: render of [0-9a-f]{24} [0-9a-f]{16} -->/,
+      );
       renders.count = 0;
       await themeEditShow('p', {cwd});
       expect(renders.count).toBe(0);

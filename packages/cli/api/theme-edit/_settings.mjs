@@ -3196,8 +3196,9 @@ export function staleBuild(cwd, slug, data) {
   const f = themeFiles(cwd, slug);
   const files = builtFiles(cwd, slug, data);
   // An output that cannot be read (its permissions, or a folder in its
-  // place) is refused by name: the build cannot replace it either.
-  refuseUnreadable(cwd, files);
+  // place) is refused by name: the build cannot replace it either. That
+  // includes the files a build writes only for some themes.
+  refuseUnreadable(cwd, [...files, ...builtFiles(cwd, slug, data, true)]);
   const missing = files.find(p => !fs.existsSync(p));
   if (missing) return `${path.relative(f.dir, missing)} was missing`;
   const ts = fs.readFileSync(f.settingsTs, 'utf8');
@@ -3271,10 +3272,13 @@ export function staleBuild(cwd, slug, data) {
  * @param {string} cwd
  * @param {string} slug
  * @param {ThemeData} data
+ * @param {boolean} [some] the files a build writes only for some themes
+ *   (the variants types, for a theme with component variants) instead
  * @returns {string[]}
  */
-export function builtFiles(cwd, slug, data) {
+export function builtFiles(cwd, slug, data, some = false) {
   const f = themeFiles(cwd, slug);
+  if (some) return [path.join(f.dir, `${slug}.variants.d.ts`)];
   const pal = paletteFiles(slug);
   const colors = data.settings.some(
     s => s.source === 'dial' && PALETTE_DIALS.includes(s.thing),

@@ -264,24 +264,99 @@ export function themeImports(ctx, slug, data, fromDir) {
   };
 }
 
-/** The inputs a page was rendered from, recorded at the end of the page. */
-const RENDER_STAMP = /<!-- astryx: render of ([0-9a-f]{24}) -->/;
+/**
+ * The inputs a page was rendered from and a hash of the page above it,
+ * recorded at the end of the page.
+ */
+const RENDER_STAMP = /<!-- astryx: render of ([0-9a-f]{24}) ([0-9a-f]{16}) -->/;
+
+/** @type {Map<string, string>} */
+const treeKeys = new Map();
+
+/**
+ * A cheap fingerprint of the files a package runs from: each file's path,
+ * size and modification time under its folder (node_modules left out), so a
+ * linked or patched copy with the same version reads as another. Once per
+ * process for each folder.
+ * @param {string | null | undefined} dir
+ * @returns {string}
+ */
+function treeKey(dir) {
+  if (!dir) return 'none';
+  const known = treeKeys.get(dir);
+  if (known) return known;
+  const h = createHash('sha256');
+  /** @param {string} d */
+  const walk = d => {
+    let entries;
+    try {
+      entries = fs.readdirSync(d, {withFileTypes: true});
+    } catch {
+      return;
+    }
+    entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    for (const e of entries) {
+      if (e.name === 'node_modules' || e.name.startsWith('.')) continue;
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.isFile()) {
+        try {
+          const st = fs.statSync(p);
+          h.update(`${path.relative(dir, p)}\0${st.size}\0${st.mtimeMs}\0`);
+        } catch {
+          // Gone meanwhile.
+        }
+      }
+    }
+  };
+  walk(dir);
+  const key = h.digest('hex').slice(0, 16);
+  treeKeys.set(dir, key);
+  return key;
+}
+
+/**
+ * The folder of an installed package, resolved from the project, or null.
+ * @param {string} cwd
+ * @param {string} name
+ */
+function packageDirOf(cwd, name) {
+  try {
+    return findNodeModulesPackage(cwd, name)?.packageDir ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** @param {string} text */
+const bodyHash = text =>
+  createHash('sha256').update(text).digest('hex').slice(0, 16);
 
 /**
  * A key for everything a page render reads: the CLI, Core (its version and
- * stylesheet), the generated page source, and the theme's built stylesheet
- * and module. The same key means the same page.
+ * stylesheet, and the files it runs from), the base theme package's files,
+ * the generated page source, and the theme's built stylesheet and module.
+ * The same key means the same page.
  * @param {import('./_project.mjs').ThemeProject} project
  * @param {string} slug
  * @param {string} source
+ * @param {string | null | undefined} [like] the base theme
  * @returns {string}
  */
-function renderKey(project, slug, source) {
+function renderKey(project, slug, source, like) {
   const f = themeFiles(project.cwd, slug);
   const h = createHash('sha256')
     .update(cliVersion())
     .update('\0')
     .update(String(project.coreKey ?? ''))
+    .update('\0')
+    .update(treeKey(path.join(project.coreDir, 'dist')))
+    .update('\0')
+    .update(
+      like
+        ? treeKey(packageDirOf(project.cwd, `@astryxdesign/theme-${like}`))
+        : 'none',
+    )
     .update('\0')
     .update(source);
   for (const file of [f.css, f.js]) {
@@ -305,15 +380,15 @@ function renderedFrom(out, key) {
   try {
     const st = fs.lstatSync(out);
     if (!st.isFile()) return false;
-    const fd = fs.openSync(out, 'r');
-    try {
-      const size = Math.min(st.size, 4096);
-      const buf = Buffer.alloc(size);
-      fs.readSync(fd, buf, 0, size, st.size - size);
-      return RENDER_STAMP.exec(buf.toString('utf8'))?.[1] === key;
-    } finally {
-      fs.closeSync(fd);
-    }
+    const text = fs.readFileSync(out, 'utf8');
+    const m = RENDER_STAMP.exec(text);
+    // The page above the comment is the one rendered: an edit by hand, or
+    // a comment pasted under another page, is rendered again.
+    return (
+      m != null &&
+      m[1] === key &&
+      m[2] === bodyHash(text.slice(0, m.index).trimEnd())
+    );
   } catch {
     return false;
   }
@@ -325,8 +400,10 @@ function renderedFrom(out, key) {
  * @param {string} html
  * @param {string} key
  */
-const withRenderKey = (html, key) =>
-  `${html.replace(RENDER_STAMP, '').trimEnd()}\n<!-- astryx: render of ${key} -->\n`;
+const withRenderKey = (html, key) => {
+  const body = html.replace(RENDER_STAMP, '').trimEnd();
+  return `${body}\n<!-- astryx: render of ${key} ${bodyHash(body)} -->\n`;
+};
 
 /**
  * Render the sample app page with the theme to themes/<slug>/preview.html.
@@ -351,7 +428,7 @@ export async function renderPreview(ctx, slug, data) {
   });
   const out = themeFiles(project.cwd, slug).preview;
   // Rendered from the same inputs before: the page is as it would be.
-  const key = renderKey(project, slug, source);
+  const key = renderKey(project, slug, source, data.like);
   if (renderedFrom(out, key)) return shown(project.cwd, out);
   const {html} = await renderGenerated(project, `preview-${slug}.mjs`, source);
   // Written whole and renamed in, never through a link.
@@ -384,7 +461,7 @@ export async function renderSheet(ctx, slug, data, options = {}) {
     (options.group
       ? path.join(path.dirname(full), `sheet-${options.group}.html`)
       : full);
-  const key = renderKey(project, slug, source);
+  const key = renderKey(project, slug, source, data.like);
   const result = {
     file: shown(project.cwd, out),
     components: new Set(items.map(i => i.name)).size,
