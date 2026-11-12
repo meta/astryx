@@ -21,12 +21,12 @@ import {
   Fragment,
   useCallback,
   useEffect,
-  useInsertionEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from 'react';
+import {useCommittedRefInto} from '../hooks/useCommittedRef';
 import type {ReactNode} from 'react';
 import {createPortal} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
@@ -375,17 +375,17 @@ function ToastRow({
 ToastRow.displayName = 'ToastRow';
 
 /**
- * The viewport renders it before a fragment holding its children. React runs
- * an earlier sibling's insertion effects before any commit-phase work in a
- * later sibling's subtree, unmounts included. So a toast call from a
- * descendant's effect or cleanup in that commit sees the committed list. A
- * render React discards never runs it.
+ * ToastViewport renders ToastRefSync, which writes through useCommittedRefInto,
+ * before its children, so a child's layout cleanup reads the committed list.
  */
-function ToastRefSync({onCommit}: {onCommit: () => void}): null {
-  // Syncs the viewport's rendered list with the committed render.
-  useInsertionEffect(() => {
-    onCommit();
-  });
+function ToastRefSync<T>({
+  targetRef,
+  value,
+}: {
+  targetRef: {current: T};
+  value: T;
+}): null {
+  useCommittedRefInto(targetRef, value);
   return null;
 }
 
@@ -420,13 +420,8 @@ export function ToastViewport({
   const toastsRef = useRef(toasts);
   toastsRef.current = toasts;
   // The list as last committed, so a handler tells a rendered toast from one
-  // raised since.
+  // raised since. `ToastRefSync` writes it.
   const renderedToastsRef = useRef(toasts);
-  // It runs in `ToastRefSync`, ahead of the commit-phase work of the
-  // viewport's children.
-  const syncRenderedToasts = () => {
-    renderedToastsRef.current = toasts;
-  };
   // Read by removeToast, which keeps one identity across renders. It stays
   // written during render on purpose. A dismissal reads the limit of the
   // latest render. A toast that a pending lower limit hides leaves at once, so
@@ -1026,7 +1021,7 @@ export function ToastViewport({
 
   return (
     <ToastContext value={contextValue}>
-      <ToastRefSync onCommit={syncRenderedToasts} />
+      <ToastRefSync targetRef={renderedToastsRef} value={toasts} />
       {/* Its own fiber, so a child it unmounts is unmounted after the sync. */}
       <Fragment>{children}</Fragment>
       {isTopLayer ? (

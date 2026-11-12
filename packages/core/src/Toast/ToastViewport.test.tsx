@@ -4143,3 +4143,117 @@ describe('toast timer lifecycle (#3589)', () => {
     });
   });
 });
+
+describe('ToastViewport committed list, read by a cleanup in the commit that shows a toast', () => {
+  it('reports onHide for a toast shown in that commit, when an unmounting child replaces and dismisses it', () => {
+    const onHideA = vi.fn();
+    let dismissA: (() => void) | null = null;
+    function Leaving() {
+      const toast = useToast();
+      // Runs as the commit that shows toast A unmounts this child.
+      useLayoutEffect(
+        () => () => {
+          toast({uniqueID: 'u', isAutoHide: false, body: 'Toast B'});
+          dismissA?.();
+        },
+        [toast],
+      );
+      return null;
+    }
+    function Controls({onLeave}: {onLeave: () => void}) {
+      const toast = useToast();
+      return (
+        <button
+          type="button"
+          onClick={() => {
+            dismissA = toast({
+              uniqueID: 'u',
+              isAutoHide: false,
+              body: 'Toast A',
+              onHide: onHideA,
+            });
+            onLeave();
+          }}>
+          Show and leave
+        </button>
+      );
+    }
+    function App() {
+      const [isShown, setIsShown] = useState(true);
+      return (
+        <ToastViewport isTopLayer={false}>
+          {isShown ? <Leaving /> : null}
+          <Controls onLeave={() => setIsShown(false)} />
+        </ToastViewport>
+      );
+    }
+    render(<App />);
+
+    act(() => {
+      fireEvent.click(screen.getByText('Show and leave'));
+    });
+
+    // Toast A is in the list this commit applies, so the cleanup's repeat
+    // keeps it findable, and its dismissal reports it (Toast.spec.md FR3).
+    expect(onHideA).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports onHide for a shown toast, when a child hidden by an Activity replaces and dismisses it', () => {
+    const onHideA = vi.fn();
+    let dismissA: (() => void) | null = null;
+    function Hiding() {
+      const toast = useToast();
+      // Runs as the Activity hides the tree, after toast A has shown.
+      useLayoutEffect(
+        () => () => {
+          if (dismissA != null) {
+            toast({uniqueID: 'u', isAutoHide: false, body: 'Toast B'});
+            dismissA();
+          }
+        },
+        [toast],
+      );
+      return null;
+    }
+    function App({mode}: {mode: 'visible' | 'hidden'}) {
+      return (
+        <React.Activity mode={mode}>
+          <ToastViewport isTopLayer={false}>
+            <Hiding />
+            <Shower />
+          </ToastViewport>
+        </React.Activity>
+      );
+    }
+    function Shower() {
+      const toast = useToast();
+      return (
+        <button
+          type="button"
+          onClick={() => {
+            dismissA = toast({
+              uniqueID: 'u',
+              isAutoHide: false,
+              body: 'Toast A',
+              onHide: onHideA,
+            });
+          }}>
+          Show
+        </button>
+      );
+    }
+    const {rerender} = render(<App mode="visible" />);
+    act(() => {
+      fireEvent.click(screen.getByText('Show'));
+    });
+    expect(
+      [...document.querySelectorAll('[data-toast-id]')].some(row =>
+        row.textContent?.includes('Toast A'),
+      ),
+    ).toBe(true);
+
+    rerender(<App mode="hidden" />);
+
+    expect(onHideA).toHaveBeenCalledTimes(1);
+  });
+});
