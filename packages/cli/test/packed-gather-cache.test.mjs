@@ -1084,6 +1084,16 @@ Module._resolveFilename = function (request, parent, isMain, options) {
     // component replaces a Core one: everyday commands read the Core the CLI
     // carries, doctor only the project's (none), so their lists differ.
     const dir = fs.mkdtempSync(path.join(work, 'projects', 'no-core-'));
+    // The Core the CLI carries: the repository's, beside the installed CLI,
+    // for this case only.
+    const carried = path.join(
+      work,
+      'install',
+      'node_modules',
+      '@astryxdesign',
+      'core',
+    );
+    fs.symlinkSync(path.join(REPO_ROOT, 'packages', 'core'), carried, 'dir');
     try {
       fs.writeFileSync(
         path.join(dir, 'package.json'),
@@ -1131,14 +1141,22 @@ Module._resolveFilename = function (request, parent, isMain, options) {
           (/** @type {{id: string}} */ c) => c.id === 'integration-issues',
         );
       const fresh = check(run(['doctor'], {tmp: freshTmp(), cwd: dir}));
-      expect(fresh).toBeDefined();
-      run(['template', '--list'], {tmp, cwd: dir, json: false});
+      // Doctor, reading no Core, finds the replaced component missing; the
+      // everyday command, reading the carried Core, finds nothing.
+      expect(JSON.stringify(fresh)).toContain('SideNav');
+      const everyday = run(['template', '--list'], {
+        tmp,
+        cwd: dir,
+        json: false,
+      });
+      expect(everyday.stderr).not.toContain('@acme/nav');
       run(['template', '--list'], {tmp, cwd: dir, json: false});
       // The everyday command kept its lists (the integration's and the
       // project's); doctor still answers as a fresh doctor does.
       expect(issuesEntries(tmp).size).toBe(2);
       expect(check(run(['doctor'], {tmp, cwd: dir}))).toEqual(fresh);
     } finally {
+      fs.rmSync(carried, {force: true});
       fs.rmSync(dir, {recursive: true, force: true});
     }
   }, 120_000);
