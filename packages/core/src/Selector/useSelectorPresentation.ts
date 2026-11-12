@@ -91,8 +91,7 @@ export function useSelectorPresentation({
   const {isHeld: isSheetPresented, release: releaseSheet} = usePresentationHold(
     {isOpen: isSheetOpen, presentation: true},
   );
-  // The committed show and hide reports. They are current ahead of any layout
-  // effect that shows or hides the popover in the same commit.
+  // The layer's popover ref callback can show the popover in the same commit.
   const onHideRef = useCommittedRef(onHide);
   const onShowRef = useCommittedRef(onShow);
   const didShowPopoverRef = useRef(false);
