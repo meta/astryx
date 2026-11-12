@@ -75,7 +75,8 @@
  * browser's commit as well. `'presented'` creates the animations of a call
  * from rest two frames later, once its element at rest has been presented.
  * That serves a UI process that applies commits late. It does not change
- * when a retarget starts.
+ * when a retarget starts. `'next-frame'`, for a call in an input event's own
+ * task, starts a call from rest at the first frame after that task.
  * `handle.curve(property)` hands out the curve a call plays, so a
  * companion can follow it on the same clock.
  * `options.additive` retargets as UIKit does: the old curve keeps going and a
@@ -602,7 +603,7 @@ interface StartGroup {
   madeInFrame?: boolean;
   /**
    * Its call asked for `start: 'next-frame'`: the call ran in an input
-   * event's own task. Its task mark carries that to every call of the task.
+   * event's own task. Its task mark carries that to the calls it holds.
    */
   nextFrame?: boolean;
   /** The task it was made in, with every call made in that task. */
@@ -781,7 +782,8 @@ interface TaskMark {
   at?: number;
   /**
    * A call of the task asked for `start: 'next-frame'`. The task is then an
-   * input event's own, so every call of it moves to the first frame after it.
+   * input event's own. Every call the mark holds moves to the first frame
+   * after the task: the calls made before the task's first microtask.
    */
   nextFrame?: boolean;
 }
@@ -2897,8 +2899,9 @@ export function createMotionEngine(
     // call's is its second frame's callback, wherever in its frame the call
     // was made.
     group.task = markTask(now(), now);
-    // The call's `start: 'next-frame'` marks its whole task, so every call
-    // of the task moves together.
+    // The call's `start: 'next-frame'` marks its task, so the calls made
+    // before the task's first microtask move together. A call after it opens
+    // a new mark.
     if (group.nextFrame === true) {
       group.task.nextFrame = true;
     }

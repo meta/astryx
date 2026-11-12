@@ -273,8 +273,8 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   canonicalises symlinks and rejects a NUL byte; an escape is
   `ERR_PATH_TRAVERSAL`. Bounded inputs are capped rather than trusted. The only
   writes outside a project or output folder are the per-user ones
-  `spec:AST-081` FR7 lists: releases, records and kept search catalogs in the
-  per-user cache, the settings and state files, and the computer-level skill
+  `spec:AST-081` FR7 lists: releases, records, kept search catalogs,
+  integration check results and jiti's transpiled code in the per-user cache, the settings and state files, and the computer-level skill
   file with its links or copy in the home folder. None follows a link in its place, and none replaces
   anything the CLI did not create.
 - **INV10a — Refusing a write outside its confined root is a compatible fix.**

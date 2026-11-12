@@ -1381,7 +1381,7 @@ describe('a call from rest starts at the commit, as Core Animation does', () => 
         ['the plain call first', false],
         ['the call with the option first', true],
       ])(
-        'starts every call of its task at the first frame after it, %s',
+        'starts the calls made before its task’s first microtask at the first frame after it, %s',
         async (_order, nextFrameFirst) => {
           const handles = callBoth(nextFrameFirst);
           // A listener later in the same task holds the main thread 800 ms.
@@ -1402,7 +1402,7 @@ describe('a call from rest starts at the commit, as Core Animation does', () => 
         ['the plain call first', false],
         ['the call with the option first', true],
       ])(
-        'moves every call of its task past a later listener’s block (WebKit), %s',
+        'moves the calls made before its task’s first microtask past a later listener’s block (WebKit), %s',
         async (_order, nextFrameFirst) => {
           Object.defineProperty(document, 'timeline', {
             configurable: true,

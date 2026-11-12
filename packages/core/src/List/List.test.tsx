@@ -10,6 +10,7 @@
  */
 
 import {createRef, useRef} from 'react';
+import * as stylex from '@stylexjs/stylex';
 import {describe, it, expect, vi} from 'vitest';
 import {cleanup, render, screen} from '@testing-library/react';
 import {createSwipe} from '../Swipe/createSwipe';
@@ -1212,6 +1213,52 @@ function DelegateSwipeRow() {
     />
   );
 }
+
+describe('ListItem passthrough', () => {
+  const callerStyles = stylex.create({
+    uncounted: {counterIncrement: 'none'},
+  });
+
+  it('forwards ref to its <li>, in a List and outside one', () => {
+    for (const inList of [true, false]) {
+      const ref = createRef<HTMLLIElement>();
+      const row = <ListItem ref={ref} label="Row" onClick={() => {}} />;
+      const {container} = render(inList ? <List>{row}</List> : row);
+      expect(ref.current).toBe(container.querySelector('li'));
+      cleanup();
+    }
+  });
+
+  it('merges className and style onto the row beside its list-item and item targets', () => {
+    const {container} = render(
+      <List>
+        <ListItem label="Row" className="consumer" style={{maxWidth: 320}} />
+      </List>,
+    );
+    const row = container.querySelector('li')!;
+    expect(row).toHaveClass('astryx-list-item', 'astryx-item', 'consumer');
+    expect(row.style.maxWidth).toBe('320px');
+  });
+
+  it("applies xstyle after the row's own styles, so a caller's value for the same property wins", () => {
+    const {container} = render(
+      <List listStyle="disc">
+        <ListItem label="First" xstyle={callerStyles.uncounted} />
+        <ListItem label="Second" />
+      </List>,
+    );
+    const counters = (row: Element) =>
+      rulesDeclaredFor(row)
+        .map(rule => rule.replace(/\s+/g, ''))
+        .filter(rule => rule.includes('counter-increment:'));
+    const [first, second] = [...container.querySelectorAll('li')];
+    expect(counters(first).length).toBeGreaterThan(0);
+    expect(counters(first).every(rule => rule.includes(':none'))).toBe(true);
+    expect(counters(second).some(rule => rule.includes('astryx-list'))).toBe(
+      true,
+    );
+  });
+});
 
 describe('List and swipe actions', () => {
   it('clips the rows in the inline axis with clip, never hidden, so a row dragged aside paints no further than the list', () => {

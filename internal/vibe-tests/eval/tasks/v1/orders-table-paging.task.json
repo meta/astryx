@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "id": "orders-table-paging",
+  "source": "dd-5",
+  "title": "Paged orders table with row selection",
+  "prompt": "Show a table of 30 orders with the columns Order, Customer and Total. Order numbers run from #1001 to #1030. The customer for order #10NN is \"Customer NN\" (for example \"Customer 07\" for #1007), and the total is NN times 10 dollars, written like \"$70.00\". Show 10 rows per page, starting with #1001 to #1010, with \"Previous page\" and \"Next page\" buttons and the text \"Showing 1–10 of 30\", which updates as the page changes. Previous page is disabled on the first page and Next page on the last. Each row has a checkbox whose accessible name is \"Select order\" followed by the order number, for example \"Select order #1007\". Only while at least one row is selected, show \"N selected\" and a \"Delete selected\" button that removes the selected orders; the count and the pages update."
+}

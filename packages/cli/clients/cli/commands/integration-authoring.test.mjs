@@ -194,6 +194,58 @@ describe('integration authoring CLI', () => {
     expect(text).toContain(`fix: ${orphans[0].fix}`);
   });
 
+  it('notes a TypeScript manifest in text only, leaving the result and exit code alone', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      `${JSON.stringify({
+        name: '@acme/widgets',
+        version: '1.0.0',
+        type: 'module',
+        files: ['astryx.integration.ts', 'docs'],
+      })}\n`,
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'astryx.integration.ts'),
+      "const integration: {docs: string} = {docs: './docs'};\nexport default integration;\n",
+    );
+    fs.mkdirSync(path.join(tmpDir, 'docs'));
+    fs.writeFileSync(
+      path.join(tmpDir, 'docs', 'deploying.doc.mjs'),
+      "export const docs = {type: 'generic', name: 'deploying', title: 'Deploying', description: 'How to deploy.', sections: [{title: 'Overview', content: [{type: 'prose', text: 'Ship it.'}]}]};\n",
+    );
+    const json = await runCli(['integration', 'verify', '--json'], tmpDir);
+    const text = await runCli(['integration', 'verify'], tmpDir);
+    expect(text.status).toBe(json.status);
+    expect(text.stdout).toContain('[info] astryx.integration.ts is TypeScript');
+    expect(text.stdout).toContain(
+      'authoring/ship/publishing keep-private-files-out',
+    );
+    expect(json.stdout).not.toContain('is TypeScript');
+  });
+
+  it('prints no note for a packable JavaScript manifest', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      `${JSON.stringify({
+        name: '@acme/widgets',
+        version: '1.0.0',
+        files: ['astryx.integration.mjs', 'docs'],
+      })}\n`,
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'astryx.integration.mjs'),
+      "export default {docs: './docs'};\n",
+    );
+    fs.mkdirSync(path.join(tmpDir, 'docs'));
+    fs.writeFileSync(
+      path.join(tmpDir, 'docs', 'deploying.doc.mjs'),
+      "export const docs = {type: 'generic', name: 'deploying', title: 'Deploying', description: 'How to deploy.', sections: [{title: 'Overview', content: [{type: 'prose', text: 'Ship it.'}]}]};\n",
+    );
+    const text = await runCli(['integration', 'verify'], tmpDir);
+    expect(text.stdout).toContain('packed files');
+    expect(text.stdout).not.toContain('is TypeScript');
+  });
+
   it('keeps `integration pack --check` as a deprecated alias of `integration verify`', async () => {
     // The old spelling runs the same check: the same JSON, the same exit code.
     const verify = await runCli(['integration', 'verify', '--json'], tmpDir);

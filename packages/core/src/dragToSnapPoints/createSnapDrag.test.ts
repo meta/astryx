@@ -22,7 +22,11 @@
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import type {PanEvent, PanInput, PanOptions} from '../gestures/createPanGesture';
+import type {
+  PanEvent,
+  PanInput,
+  PanOptions,
+} from '../gestures/createPanGesture';
 
 let onPan: ((event: PanEvent) => void) | null = null;
 let recognizer: PanOptions['recognizer'];

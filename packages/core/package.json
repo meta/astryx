@@ -893,6 +893,11 @@
       "source": "./src/internal/virtualization.ts",
       "types": "./dist/internal/virtualization.d.ts",
       "default": "./dist/internal/virtualization.js"
+    },
+    "./internal/committed-ref": {
+      "source": "./src/internal/committed-ref.ts",
+      "types": "./dist/internal/committed-ref.d.ts",
+      "default": "./dist/internal/committed-ref.js"
     }
   },
   "files": [
