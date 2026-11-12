@@ -209,6 +209,23 @@ const logicalSide = prop =>
   })[prop] ?? prop;
 
 /**
+ * Put back every recorded file: its bytes, or removed when it was not
+ * there; a palette file the build made new in tokens/ goes too.
+ * @param {Map<string, Buffer | null>} kept
+ * @param {string} tokensDir
+ */
+function putBack(kept, tokensDir) {
+  for (const [file, bytes] of kept)
+    if (bytes) writeWhole(file, bytes);
+    else fs.rmSync(file, {force: true});
+  if (kept.size && fs.existsSync(tokensDir))
+    for (const n of fs.readdirSync(tokensDir)) {
+      const file = path.join(tokensDir, n);
+      if (!kept.has(file)) fs.rmSync(file, {force: true});
+    }
+}
+
+/**
  * Start a theme in themes/<name>/, optionally on a built-in theme, with any
  * dial settings applied in the same build. Each setting is checked as `set`
  * checks it, before anything is written.
@@ -1674,8 +1691,12 @@ export async function themeEditShow(theme, options = {}) {
   // built outputs, the variants types, section sheets, pictures), so a
   // theme source that does not build, or builds a value that is not text,
   // leaves the folder exactly as it was.
-  /** @type {Map<string, Buffer>} */
+  // An output that was not there is recorded as absent (null), so putting
+  // the folder back removes what the build made new; the palette files in
+  // tokens/ are recorded the same way.
+  /** @type {Map<string, Buffer | null>} */
   let kept = new Map();
+  const tokensDir = path.join(f.dir, 'tokens');
   if (stale && !brokenSource && !readOnly) {
     kept = new Map(
       fs
@@ -1689,10 +1710,26 @@ export async function themeEditShow(theme, options = {}) {
         )
         .map(n => [path.join(f.dir, n), fs.readFileSync(path.join(f.dir, n))]),
     );
+    for (const n of [
+      path.basename(f.settingsTs),
+      `${theme}.css`,
+      `${theme}.js`,
+      `${theme}.d.ts`,
+      `${theme}.css.d.ts`,
+      `${theme}.variants.d.ts`,
+    ])
+      if (!kept.has(path.join(f.dir, n))) kept.set(path.join(f.dir, n), null);
+    if (fs.existsSync(tokensDir))
+      for (const n of fs.readdirSync(tokensDir)) {
+        const file = path.join(tokensDir, n);
+        if (fs.statSync(file).isFile()) kept.set(file, fs.readFileSync(file));
+      }
+    const refs = path.join(tokensDir, `${theme}.palette-refs.ts`);
+    if (!kept.has(refs)) kept.set(refs, null);
     try {
       await buildTheme(ctx, theme, data);
     } catch (e) {
-      for (const [file, bytes] of kept) writeWhole(file, bytes);
+      putBack(kept, tokensDir);
       if (e instanceof AstryxError && e.code !== E.ERR_THEME_LOAD) throw e;
       // An own theme source that no longer builds is named, as `set` names
       // it; the old build is never shown as current.
@@ -1722,7 +1759,7 @@ export async function themeEditShow(theme, options = {}) {
       kept.size
     ) {
       // What this show just built goes back with the refusal.
-      for (const [file, bytes] of kept) writeWhole(file, bytes);
+      putBack(kept, tokensDir);
       throw e;
     }
     if (e instanceof AstryxError || readOnly) throw e;
@@ -1760,10 +1797,10 @@ export async function themeEditShow(theme, options = {}) {
     } catch (e) {
       if (!(e instanceof Error)) throw e;
       if (e instanceof AstryxError && e.code !== E.ERR_RENDER_FAILED) throw e;
-      for (const [file, bytes] of kept) writeWhole(file, bytes);
+      putBack(kept, tokensDir);
       return refuse(
         E.ERR_RENDER_FAILED,
-        `${theme} cannot be shown: ${renderCause(ctx.project, e.message)} ${kept.size ? 'The build this show made again was put back as it was. ' : ''}Nothing was written.`,
+        `${theme} cannot be shown: ${renderCause(ctx.project, e.message)} ${[...kept.values()].some(Boolean) ? 'The build this show made again was put back as it was. ' : ''}Nothing was written.`,
         {run: [`${getCliInvocation(cwd)} doctor`]},
       );
     }

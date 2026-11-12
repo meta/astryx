@@ -4455,3 +4455,26 @@ describe('the part data cache', () => {
     expect(JSON.parse(fs.readFileSync(file, 'utf8')).map).toBeTruthy();
   }, 120_000);
 });
+
+describe('r19 (2): not dark enough / not light enough', () => {
+  it('reads "not dark enough" and "not light enough" as darker and lighter, never as one mode', async () => {
+    for (const [question, way] of [
+      ['the text is not dark enough', 'darker'],
+      ['the page is not light enough', 'lighter'],
+    ]) {
+      const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+      const text = data.results.map((/** @type {any} */ r) => r.text).join(' ');
+      // The asked way, or that it goes no further that way.
+      expect(text, question).toMatch(
+        new RegExp(`${way}|as far from the page as it goes`),
+      );
+      // Both modes or neither: never one mode alone.
+      const cmds = data.results
+        .flatMap((/** @type {any} */ r) => r.commands)
+        .join(' ');
+      expect(cmds.includes('--mode light'), question).toBe(
+        cmds.includes('--mode dark'),
+      );
+    }
+  });
+});

@@ -3062,8 +3062,14 @@ describe('parts33', () => {
       on: 'dropdown-menu',
     });
     const box = blockOf('.astryx-dropdown-menu');
-    expect(box).toMatch(/padding-inline-start:\s*5px/);
     expect(box).not.toMatch(/--_dropdown-menu-padding:\s*5px/);
+    // Each direction gets its own side, off the whole-box variable.
+    expect(blockOf('.astryx-dropdown-menu:dir(ltr)')).toMatch(
+      /padding-left:\s*5px/,
+    );
+    expect(blockOf('.astryx-dropdown-menu:dir(rtl)')).toMatch(
+      /padding-right:\s*5px/,
+    );
     await themeEditUndo('p', {
       cwd,
       thing: 'padding-inline-start',
@@ -3115,5 +3121,17 @@ describe('parts34', () => {
         ).code,
         `${prop} ${when ?? ''}`,
       ).toBe('ERR_THEME_BAD_VALUE');
+  });
+});
+
+describe('r19 (1): physical sides stay physical', () => {
+  it('writes a card padding-left as padding-left, not a logical side variable', async () => {
+    await themeEditSet('p', 'padding-left', '20px', {cwd, on: 'card'});
+    const css = read('p.css');
+    const at = css.indexOf('.astryx-card {');
+    const body = css.slice(at, css.indexOf('}', at));
+    expect(body).toMatch(/padding-left:\s*20px/);
+    expect(body).not.toMatch(/--astryx-card-padding-inline-start:\s*20px/);
+    await themeEditUndo('p', {cwd, thing: 'padding-left', on: 'card'});
   });
 });

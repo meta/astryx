@@ -1538,11 +1538,11 @@ export function draftAnswer(ctx, env, question) {
       'in $1 mode',
     )
     .replace(
-      /\b(?:except|but not|not) (?:in |for |on )?dark(?: mode| theme)?\b|\b(?:don'?t|do not) (?:touch|change) (?:the )?dark mode\b|\b(?:leave|keep) (?:the )?dark mode (?:alone|as it is|as is|untouched)\b/gi,
+      /\b(?:except|but not|not) (?:in |for |on )?dark(?: mode| theme)?\b(?! enough\b)|\b(?:don'?t|do not) (?:touch|change) (?:the )?dark mode\b|\b(?:leave|keep) (?:the )?dark mode (?:alone|as it is|as is|untouched)\b/gi,
       'in light mode',
     )
     .replace(
-      /\b(?:except|but not|not) (?:in |for |on )?light(?: mode| theme)?\b|\b(?:don'?t|do not) (?:touch|change) (?:the )?light mode\b|\b(?:leave|keep) (?:the )?light mode (?:alone|as it is|as is|untouched)\b/gi,
+      /\b(?:except|but not|not) (?:in |for |on )?light(?: mode| theme)?\b(?! enough\b)|\b(?:don'?t|do not) (?:touch|change) (?:the )?light mode\b|\b(?:leave|keep) (?:the )?light mode (?:alone|as it is|as is|untouched)\b/gi,
       'in dark mode',
     )
     // Removal words in other languages and 🚫: none of it.
@@ -1949,11 +1949,11 @@ export function draftAnswer(ctx, env, question) {
     // "except in dark mode", "but not in dark mode", "leave dark mode alone":
     // the other mode.
     .replace(
-      /\b(?:except|but not|not) (?:in |for |on )?dark(?: mode| theme)?\b|\b(?:leave|keep) dark mode (?:alone|as it is|as is|untouched)\b|\bdon'?t (?:touch|change) dark mode\b/gi,
+      /\b(?:except|but not|not) (?:in |for |on )?dark(?: mode| theme)?\b(?! enough\b)|\b(?:leave|keep) dark mode (?:alone|as it is|as is|untouched)\b|\bdon'?t (?:touch|change) dark mode\b/gi,
       'in light mode',
     )
     .replace(
-      /\b(?:except|but not|not) (?:in |for |on )?light(?: mode| theme)?\b|\b(?:leave|keep) light mode (?:alone|as it is|as is|untouched)\b|\bdon'?t (?:touch|change) light mode\b/gi,
+      /\b(?:except|but not|not) (?:in |for |on )?light(?: mode| theme)?\b(?! enough\b)|\b(?:leave|keep) light mode (?:alone|as it is|as is|untouched)\b|\bdon'?t (?:touch|change) light mode\b/gi,
       'in dark mode',
     )
     // "not pure black": a near-black; "not pure white": a near-white.

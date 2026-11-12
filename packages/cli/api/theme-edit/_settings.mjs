@@ -1483,17 +1483,16 @@ export function compileTheme(ctx, data, base) {
     const value = /^(initial|unset)$/i.test(String(s.value).trim())
       ? '0'
       : String(s.value).trim();
-    // A physical side is its logical side (left-to-right): Core maps only
-    // top and bottom, so a left or right would sit beside its variables and
-    // beat any later padding.
+    // A physical left or right stays physical, as Core keeps it (it maps
+    // no physical side to a logical one but top and bottom, which it maps
+    // itself): it is written as it is, and a later padding that covers it
+    // takes it out of the block (below).
     const physical = /** @type {Record<string, string>} */ ({
       // One logical side is that side (its keyword resolved too).
       'padding-block-start': 'block-start',
       'padding-block-end': 'block-end',
       'padding-inline-start': 'inline-start',
       'padding-inline-end': 'inline-end',
-      'padding-left': 'inline-start',
-      'padding-right': 'inline-end',
       'padding-top': 'block-start',
       'padding-bottom': 'block-end',
     })[prop];
@@ -1592,11 +1591,12 @@ export function compileTheme(ctx, data, base) {
   /**
    * A one-side logical padding on a part whose whole padding Core copies
    * into a variable of its own (a composer's or a menu's inner padding),
-   * still logical (right-to-left apps get their own side) but under its CSS
-   * name: Core feeds every camelCase padding key into that variable, so one
-   * side would set the whole box. Null for any other property or part.
+   * written for each direction (a left-to-right box's left is a
+   * right-to-left box's right): Core feeds every logical padding into that
+   * variable, so one side would set the whole box. Null for any other
+   * property or part.
    * @param {string} target @param {Setting} s
-   * @returns {Record<string, string> | null}
+   * @returns {Record<string, string | Record<string, string>> | null}
    */
   const boxSides = (target, s) => {
     const prop = kebab(s.thing);
@@ -1618,11 +1618,32 @@ export function compileTheme(ctx, data, base) {
     const sides = SIDES[prop];
     if (!sides) return null;
     const w = splitTop(String(s.value).trim(), ' ').map(x => x.trim());
-    return Object.fromEntries(
-      // Written as CSS names: Core feeds only its camelCase padding keys
-      // into the whole-box variable, and writes any other key as it is.
-      sides.map((side, i) => [`padding-${side}`, w[i] ?? w[0]]),
-    );
+    // Each side for each direction: a block side is the top or bottom; an
+    // inline side is the left in a left-to-right box and the right in a
+    // right-to-left one, written under :dir(), where Core writes the
+    // declarations as they are and feeds none into the whole-box variable.
+    /** @type {Record<string, string>} */
+    const plain = {};
+    /** @type {Record<string, string>} */
+    const ltr = {};
+    /** @type {Record<string, string>} */
+    const rtl = {};
+    sides.forEach((side, i) => {
+      const v = w[i] ?? w[0];
+      if (side === 'block-start') plain.paddingTop = v;
+      else if (side === 'block-end') plain.paddingBottom = v;
+      else if (side === 'inline-start') {
+        ltr.paddingLeft = v;
+        rtl.paddingRight = v;
+      } else {
+        ltr.paddingRight = v;
+        rtl.paddingLeft = v;
+      }
+    });
+    return {
+      ...plain,
+      ...(Object.keys(ltr).length ? {':dir(ltr)': ltr, ':dir(rtl)': rtl} : {}),
+    };
   };
   /**
    * A padding on a part whose visible box sits inside its themed wrapper,
@@ -1898,8 +1919,24 @@ export function compileTheme(ctx, data, base) {
           cornerRadii(t, s) ??
           boxSides(t, s);
         if (sides)
-          for (const [k, v] of Object.entries(sides)) putComp(s, t, k, v);
+          for (const [k, v] of Object.entries(sides)) {
+            // A per-direction block joins what that direction already has.
+            if (k.startsWith(':') && typeof v === 'object') {
+              const b = block(s, t);
+              b[k] = {...(b[k] ?? {}), ...v};
+            } else putComp(s, t, k, /** @type {string} */ (v));
+          }
         else putComp(s, t, camel(s.thing), s.value);
+        // A padding that covers a physical side written as it is takes it
+        // out of the part's block (a group's left under a later part
+        // padding), so the later setting wins as written.
+        if (sides && /^padding(-inline)?$/.test(kebab(s.thing))) {
+          const b = block(s, t);
+          if (b.paddingLeft != null && !('paddingLeft' in sides))
+            delete b.paddingLeft;
+          if (b.paddingRight != null && !('paddingRight' in sides))
+            delete b.paddingRight;
+        }
         // A part's own corner radii replace a single radius a group or an
         // earlier setting left in the same block, which Core would copy into
         // the content's radius after the editor's own.

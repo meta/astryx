@@ -2239,8 +2239,14 @@ describe('final pass 5', () => {
       () => themeEditPreviewList({cwd, path: long}),
     ])
       expect((await refusal(call)).message).toContain(
-        'longer than the system takes',
+        'longer than 3,500 bytes',
       );
+    // One folder name past 255 bytes is refused by name length.
+    const wide = `src/app/${'c'.repeat(256)}`;
+    expect(
+      (await refusal(() => themeEditPreviewAdd(undefined, {cwd, path: wide})))
+        .message,
+    ).toContain('longer than 255 bytes');
     const app = await refusal(() => themeEditPreviewApp('SRC', {cwd}));
     expect(app.message).toContain('differs from it only in case');
     const add = await refusal(() =>

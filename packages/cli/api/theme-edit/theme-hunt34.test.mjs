@@ -84,6 +84,42 @@ describe('N1: a render that fails in show', () => {
   }, 240_000);
 });
 
+describe('r19 (3): a failed render in show leaves no output it made new', () => {
+  it('removes an output that was not there, and puts tokens/ back', async () => {
+    const dir = path.join(cwd, 'themes/t');
+    fs.appendFileSync(path.join(dir, 't.css'), '/* y */\n');
+    const missing = ['t.d.ts', 't.css.d.ts']
+      .map(n => path.join(dir, n))
+      .filter(f => fs.existsSync(f));
+    for (const f of missing) fs.rmSync(f);
+    const tokens = path.join(dir, 'tokens');
+    const before = fs.existsSync(tokens)
+      ? Object.fromEntries(
+          fs
+            .readdirSync(tokens)
+            .map(n => [n, fs.readFileSync(path.join(tokens, n), 'utf8')]),
+        )
+      : null;
+    /** @type {any} */ (globalThis).__failRender = true;
+    try {
+      const err = await refusal(() => themeEditShow('t', {cwd}));
+      expect(err.code).toBe('ERR_RENDER_FAILED');
+      for (const f of missing) expect(fs.existsSync(f), f).toBe(false);
+      const after = fs.existsSync(tokens)
+        ? Object.fromEntries(
+            fs
+              .readdirSync(tokens)
+              .map(n => [n, fs.readFileSync(path.join(tokens, n), 'utf8')]),
+          )
+        : null;
+      expect(after).toEqual(before);
+    } finally {
+      /** @type {any} */ (globalThis).__failRender = false;
+    }
+    await themeEditShow('t', {cwd});
+  }, 240_000);
+});
+
 describe('N3: a workspace root with Core hoisted', () => {
   it('is refused from the root and from a folder without a package.json, naming the app', async () => {
     const root = path.dirname(cwd);

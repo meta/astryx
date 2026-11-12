@@ -1031,10 +1031,23 @@ function previewDir(cwd, where, opts = {}) {
           ],
         },
       );
+    // A folder name is at most 255 bytes on every common file system; the
+    // whole path, with the preview's own files below it, is kept under
+    // 3,500 bytes.
+    const longName = path
+      .relative(cwd, dir)
+      .split(path.sep)
+      .find(seg => Buffer.byteLength(seg) > 255);
+    if (longName)
+      refuse(
+        E.ERR_INVALID_ARGUMENT,
+        `--path ${where} has a folder name longer than 255 bytes, the most a file system takes for one name.`,
+        {run: [retry(null)]},
+      );
     if (Buffer.byteLength(dir) > 3500)
       refuse(
         E.ERR_INVALID_ARGUMENT,
-        `--path ${where} is longer than the system takes for a path with the preview's files in it.`,
+        `--path ${where} is longer than 3,500 bytes, with the preview's files in it.`,
         {run: [retry(null)]},
       );
     if (opts.write) checkPlacement(cwd, dir, `--path ${where}`, retry);
