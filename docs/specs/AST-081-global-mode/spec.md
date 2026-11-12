@@ -391,8 +391,10 @@ works on is `spec:AST-040` FR9's.
     catalogs `search` and `build` keep in `astryx/catalogs`, a folder only the
     user can reach (made `0700`, used only while it is a real folder the user
     owns and others cannot open, never where the system has no user ids), each
-    catalog used only while every input its gather read is unchanged; `doctor`
-    lists that folder and its size in an info row;
+    catalog used only while every input its gather read is unchanged; a run
+    under Yarn Plug'n'Play's loader, such as `yarn astryx`, keeps and uses no
+    catalog; `doctor` lists that folder and its size in an info row, which in
+    such a run also says that it keeps none;
   - the platform's temporary directory, for scratch work such as building or
     verifying a package;
   - the per-user configuration directory of the platform, for the documented
