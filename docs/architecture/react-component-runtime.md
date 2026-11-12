@@ -413,7 +413,8 @@ those contracts.
   about 18 render-time reads of a previous value; these are not latest-value
   refs. ToastViewport renders ToastRefSync, which writes through
   `useCommittedRefInto`, before a fragment that holds its children, so a child's
-  layout cleanup, an unmount's included, reads the committed list.
+  layout cleanup, an unmount's included, reads the committed list. INV17 gap:
+  ToastViewport writes `toastsRef` and `maxVisibleRef` during render.
 - **INV18 — Layout is read as little as possible.** Placement uses CSS
   (anchor positioning, container queries, logical properties) instead of
   measuring in JS, as `architecture:component-style-authoring` INV2 prefers. A
