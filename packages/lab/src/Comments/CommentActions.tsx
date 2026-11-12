@@ -265,15 +265,18 @@ export function CommentActions({
   const linkCopyFailedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
-  // Syncs the failed-copy reset timer with the mount: unmounting stops it.
-  useEffect(
-    () => () => {
+  const isMountedRef = useRef(true);
+  // Syncs the failed-copy reset timer with the mount: unmounting stops it, and
+  // a write still in flight then sets no state.
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
       if (linkCopyFailedTimerRef.current != null) {
         clearTimeout(linkCopyFailedTimerRef.current);
       }
-    },
-    [],
-  );
+    };
+  }, []);
   const [isLinkTooltipOpen, setIsLinkTooltipOpen] = useState(false);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(NO_COLLAPSED_ACTIONS);
@@ -296,15 +299,17 @@ export function CommentActions({
     <CommentIcon name="copyLink" />
   );
 
-  // Lab reads Core's public hooks only (architecture:knowledge-contracts
-  // DEC-19), and the public useClipboard has no failure state, so the failed
-  // state, its reset and its announcement live here. They move to Core's shared
-  // hook if Comments graduates to Core. A failed write shows for as long as a
-  // copied one, and is an error, so it goes to the assertive region.
+  // The public useClipboard reports a failed write but keeps no failed state,
+  // and Core's shared failure state is not exported to Lab. A failed write
+  // shows as long as a copied one. It is an error, so it goes to the assertive
+  // region.
   const copyCommentLink = async () => {
     const isWritten = await copyToClipboard(
       new URL(href, window.location.href).href,
     );
+    if (!isMountedRef.current) {
+      return;
+    }
     if (linkCopyFailedTimerRef.current != null) {
       clearTimeout(linkCopyFailedTimerRef.current);
       linkCopyFailedTimerRef.current = null;
@@ -491,8 +496,9 @@ export function CommentActions({
           <CommentActionSlot key="link" data-comment-action="link">
             <Tooltip
               content={linkLabel}
-              // A press hides a hover tooltip; this one stays open while the
-              // link reads as copied, so the press visibly worked.
+              // A press hides a hover tooltip. This one stays open while the
+              // link reads as copied or failed, so the press visibly did
+              // something.
               isOpen={isLinkCopied || isLinkCopyFailed || isLinkTooltipOpen}
               onOpenChange={setIsLinkTooltipOpen}>
               <IconButton
