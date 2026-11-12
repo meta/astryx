@@ -1061,6 +1061,41 @@ function assertThemeSourceFile(filePath, cwd) {
 }
 
 /**
+ * Who takes the editor-folder warning instead of the logger: the watcher's
+ * child build hands it to its parent, which warns once per session. Set
+ * only by the CLI (not part of the public API), and never by an option of
+ * themeBuild.
+ * @type {((warning: string) => void) | null}
+ */
+let editorFolderListener = null;
+
+/**
+ * Hand the editor-folder warning of the builds in this process to
+ * `listener` instead of the logger. CLI-internal: the watch child's
+ * hand-off to its parent.
+ * @param {((warning: string) => void) | null} listener
+ */
+export function setEditorFolderListener(listener) {
+  editorFolderListener = listener;
+}
+
+/**
+ * Who is told a build found private var errors (the CLI, to exit 1). Set
+ * only by the CLI, never by an option of themeBuild.
+ * @type {(() => void) | null}
+ */
+let privateVarErrorListener = null;
+
+/**
+ * Tell `listener` when a build in this process finds private var errors.
+ * CLI-internal.
+ * @param {(() => void) | null} listener
+ */
+export function setPrivateVarErrorListener(listener) {
+  privateVarErrorListener = listener;
+}
+
+/**
  * Refuse a build that would replace a file it does not own. A build never
  * writes over its input, two of its own outputs at one path, or an output
  * another theme in the same run already wrote. With `refuseUnmarked` (a path
@@ -3574,14 +3609,13 @@ function validateHeadingTypeAugmentationSupport(themeDef) {
  * `logger` (silent by default).
  *
  * @param {string} file - Theme file path, resolved against `cwd`.
- * @param {{out?: string, check?: boolean, iconsSpecifier?: string, __prepareFamily?: boolean, __familyLoader?: any, __familyInterception?: any, __onPrivateVarError?: () => void, __writeRoot?: string, __claimedOutputs?: Map<string, string>, __deferredWrites?: Array<Array<{dest: string, content: string}>>, __commandWords?: {group: string, build: string}, __onEditorFolder?: (warning: string) => void}} [options] -
+ * @param {{out?: string, check?: boolean, iconsSpecifier?: string, __prepareFamily?: boolean, __familyLoader?: any, __familyInterception?: any, __writeRoot?: string, __claimedOutputs?: Map<string, string>, __deferredWrites?: Array<Array<{dest: string, content: string}>>, __commandWords?: {group: string, build: string}}} [options] -
  *   `out` overrides the output CSS path, or names the folder for it; `check` compares against on-disk outputs
  *   instead of writing. `__claimedOutputs` records the outputs earlier builds
  *   in one run wrote, so a later theme cannot replace them; with
  *   `__deferredWrites` the build adds its outputs to that list instead of
  *   writing them, for writeDeferredBuildOutputs. `__writeRoot` replaces `cwd` as the directory every
- *   output must stay inside, for a CLI-internal scratch build. `__onEditorFolder`
- *   takes the editor-folder warning instead of the logger. `iconsSpecifier` overrides the icon registry import
+ *   output must stay inside, for a CLI-internal scratch build. `iconsSpecifier` overrides the icon registry import
  *   specifier in the generated module (e.g. `./icons.mjs`); when omitted, the
  *   direct registry specifiers from the theme source are emitted unchanged.
  * @param {{cwd?: string, projectCore?: boolean}} [ctx] `projectCore`: only the
@@ -3821,7 +3855,7 @@ async function themeBuildInternal(
     logger.error(`  [error] ${source}${e}`);
   }
   if (privateVarErrors.length > 0) {
-    options.__onPrivateVarError?.();
+    privateVarErrorListener?.();
     logger.error(
       `\n  ${source}${privateVarErrors.length} private var error(s). Use standard CSS properties instead.`,
     );
@@ -4302,7 +4336,7 @@ async function themeBuildInternal(
       claimed: options.__claimedOutputs,
       rerun,
       refuseUnmarked: Boolean(options.out),
-      onEditorFolder: options.__onEditorFolder,
+      onEditorFolder: editorFolderListener ?? undefined,
     });
   }
 
@@ -4734,7 +4768,7 @@ async function preloadFamilySource(filePath, loader, interception) {
   finally { patch.undo(); }
 }
 
-/** @param {string[]} files @param {{familyKey: string, check?: boolean, iconsSpecifier?: string, __onPrivateVarError?: () => void, __commandWords?: {group: string, build: string}}} options @param {{cwd?: string}} [ctx] */
+/** @param {string[]} files @param {{familyKey: string, check?: boolean, iconsSpecifier?: string, __commandWords?: {group: string, build: string}}} options @param {{cwd?: string}} [ctx] */
 export async function themeBuildFamily(
   files,
   options,
@@ -4771,7 +4805,7 @@ export async function themeBuildFamily(
     }
     const file = source.file;
     // prettier-ignore
-    const member = await themeBuildInternal(file, {iconsSpecifier: options.iconsSpecifier, __prepareFamily: true, __familyLoader: familyLoader, __familyInterception: familyInterception, __onPrivateVarError: options.__onPrivateVarError}, {cwd});
+    const member = await themeBuildInternal(file, {iconsSpecifier: options.iconsSpecifier, __prepareFamily: true, __familyLoader: familyLoader, __familyInterception: familyInterception}, {cwd});
     if (!member || member.type) {
       throw new AstryxError(
         `Theme family member "${file}" did not produce a complete build plan.`,
