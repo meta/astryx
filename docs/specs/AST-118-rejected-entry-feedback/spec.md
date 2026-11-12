@@ -138,11 +138,14 @@ interface TimeInputEntryError {
   2. A typed time is complete when its hours, both minute digits, and, when the
      field shows seconds, both second digits are present, and, in twelve-hour
      text, its day period, unless the hour reads as 0 or 13 through 23.
-  3. A typed number is complete when nothing typed at its end, more digits or a
-     decimal part, can bring it into the range `NumberInput` commits to
-     (`component:NumberInput` ORD1). `150` with `max={100}` is complete, and so
-     is `4` with `min={20}` and `max={30}`; `2` with `min={20}` and `max={30}`
-     is not. Any other number is complete only at commit.
+  3. A typed number has no fixed length, so it is complete only at commit.
+     While a person types, `NumberInput` marks, shows, and announces nothing,
+     whatever the draft. At commit it reveals the draft's rejection: text that
+     does not parse, a fraction in an integer-only field, or a number outside
+     the range when no number can commit (`min` above `max`); a number outside
+     an ordinary range clamps and commits (`component:NumberInput` FR3) and
+     reveals none. A number's rejection therefore appears at commit whether or
+     not a builder holds rejections until commit.
   4. A value that a native date control reports is complete only at commit:
      while a person types its year, the control reports each partial year as a
      date, such as `0002-05-10`.
@@ -209,7 +212,8 @@ interface TimeInputEntryError {
   `TimeInputEntryError` each time the rejection the field reveals changes, and
   `null` when it ends. `kind` is `unreadable` for text that is not a number or
   a time, `fractional` for a fraction in an integer-only `NumberInput`, and
-  `outOfRange` for a value outside `min` or `max`; `text` is the typed text;
+  `outOfRange` for a time outside `min` or `max`, or a number when `min` is
+  above `max` (FR1); `text` is the typed text;
   `value` is the number or ISO time the text names, for `fractional` and
   `outOfRange`. Typing, Enter, blur, a new `value`, `min`, `max`, or
   `isIntegerOnly`, and disabling, which hides the rejection, each report a
@@ -285,6 +289,8 @@ behavior made for accessibility conformance to FR53.
   kept in the field at commit and never reverted, and a native restore that
   keeps its rejection revealed (FR4); and no invalid state or alert while an
   entry is unfinished, with unreadable text revealed at commit (FR1–FR3).
+  `NumberInput` reveals every rejection at commit and nothing while the person
+  types.
 - Two screens an app chose change, as part of the same fix:
   - A `NumberInput`, `TimeInput`, or time segment with a caller `warning` or
     `success` status shows the rejection's message in place of that status
@@ -355,17 +361,17 @@ says otherwise:
 
 ## Verification
 
-| Contract | Verification                                  | Representative states                                                                                                                                               | Mutation or failure expectation                                                                                                              |
-| -------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1      | Completeness unit cases per kind of entry     | Dates per `spec:AST-111` FR12; `1:3`, `1:30`, `1:30 PM`, `13:30` in 12- and 24-hour fields; `-`, `2` and `4` in a 20–30 field, `150` with `max={100}`; `0002-05-10` | An unfinished entry counts as complete, or a complete one waits                                                                              |
-| FR2, FR3 | Keystroke-by-keystroke suites                 | Each value and text rejection of each member; native date year typing; pasted text                                                                                  | A rejection appears before the entry is complete, a text rejection appears while typing, or a complete value rejection waits                 |
-| FR4      | Enter and blur suites; native form submission | Each rejection kind; empty entry; `NumberInput` past a bound; a native restore; a form posted while rejected `NumberInput` text stays                               | Rejected text reverts or commits, `onChange` fires, a form posts rejected text, a native restore drops its rejection, or a clamp is reported |
-| FR5, FR7 | Accessibility-tree and live-region assertions | Standalone, horizontal-labels; InputGroup (alert only); each status placement; no caller `status`; an `error`, `warning`, and `success` status; callback or none    | The signals appear or clear apart, a `warning` or `success` status hides a rejection, the wrong message wins, or an announcement repeats     |
-| FR6      | Edit suites after a shown rejection           | Edit to valid; to empty; to incomplete; to another rejection; caller `value` change; calendar pick                                                                  | A fixed entry keeps its rejection, an incomplete edit clears it or announces it again, or a pick leaves it                                   |
-| FR8      | `NumberInput` and `TimeInput` callback suites | Each kind; the rejection ending by typing, a new `value`, or a new bound; disabling; unmount; an unchanged rejection; native and sheet surfaces                     | A report is missing, repeats an unchanged rejection, carries the wrong `kind` or `value`, or comes from a surface with no typed text         |
-| FR9      | Enter suites in a form                        | `TimeInput` and the `DateTimeInput` time segment with a rejected draft, a valid draft, and no draft; the preset-time list open                                      | Enter reveals nothing for a rejected draft, a closed time field prevents the form's submission, or Enter in the open list submits            |
-| FR10     | Disabled and busy suites                      | Rejection shown, then disabled; DateInput text kept while busy; a `NumberInput` draft when disabled                                                                 | A locked field reveals or reports a rejection, kept DateInput text loses its rejection once editable, or a dropped draft's rejection returns |
-| AR1–AR4  | Screen-reader evidence under `spec:AST-009`   | Each member, typed and native, standalone and grouped, with and without a caller `status`                                                                           | An unfinished entry is announced, a rejection is heard twice, or a commit discards an entry with no message                                  |
+| Contract | Verification                                  | Representative states                                                                                                                                                 | Mutation or failure expectation                                                                                                              |
+| -------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1      | Completeness unit cases per kind of entry     | Dates per `spec:AST-111` FR12; `1:3`, `1:30`, `1:30 PM`, `13:30` in 12- and 24-hour fields; `-`, `1a`, `150` with `max={100}` while typed and at commit; `0002-05-10` | An unfinished entry counts as complete, or a complete one waits                                                                              |
+| FR2, FR3 | Keystroke-by-keystroke suites                 | Each value and text rejection of each member; native date year typing; pasted text                                                                                    | A rejection appears before the entry is complete, a text rejection appears while typing, or a complete value rejection waits                 |
+| FR4      | Enter and blur suites; native form submission | Each rejection kind; empty entry; `NumberInput` past a bound; a native restore; a form posted while rejected `NumberInput` text stays                                 | Rejected text reverts or commits, `onChange` fires, a form posts rejected text, a native restore drops its rejection, or a clamp is reported |
+| FR5, FR7 | Accessibility-tree and live-region assertions | Standalone, horizontal-labels; InputGroup (alert only); each status placement; no caller `status`; an `error`, `warning`, and `success` status; callback or none      | The signals appear or clear apart, a `warning` or `success` status hides a rejection, the wrong message wins, or an announcement repeats     |
+| FR6      | Edit suites after a shown rejection           | Edit to valid; to empty; to incomplete; to another rejection; caller `value` change; calendar pick                                                                    | A fixed entry keeps its rejection, an incomplete edit clears it or announces it again, or a pick leaves it                                   |
+| FR8      | `NumberInput` and `TimeInput` callback suites | Each kind; the rejection ending by typing, a new `value`, or a new bound; disabling; unmount; an unchanged rejection; native and sheet surfaces                       | A report is missing, repeats an unchanged rejection, carries the wrong `kind` or `value`, or comes from a surface with no typed text         |
+| FR9      | Enter suites in a form                        | `TimeInput` and the `DateTimeInput` time segment with a rejected draft, a valid draft, and no draft; the preset-time list open                                        | Enter reveals nothing for a rejected draft, a closed time field prevents the form's submission, or Enter in the open list submits            |
+| FR10     | Disabled and busy suites                      | Rejection shown, then disabled; DateInput text kept while busy; a `NumberInput` draft when disabled                                                                   | A locked field reveals or reports a rejection, kept DateInput text loses its rejection once editable, or a dropped draft's rejection returns |
+| AR1–AR4  | Screen-reader evidence under `spec:AST-009`   | Each member, typed and native, standalone and grouped, with and without a caller `status`                                                                             | An unfinished entry is announced, a rejection is heard twice, or a commit discards an entry with no message                                  |
 
 ## Decision log
 
@@ -382,16 +388,15 @@ error (FR1–FR3).
 Rejected: a pause in typing as completion, because its timing differs between
 people and assistive technologies.
 
-### DEC-2 — An entry completes when more typing cannot make it acceptable
+### DEC-2 — A date or time completes when every field is present
 
 **Reference:** `spec:AST-118/DEC-2`
-**Decider:** pending
+**Decider:** `nynexman4464`, `2026-11-11`
 
 Typed dates and times have a fixed set of fields, so they are complete when
-every field is present. A number has no fixed length, so it is complete only
-when nothing typed at its end can bring it into range. A native date control
-reports partial years while its year is typed, so its value is complete only at
-commit (FR1).
+every field is present. A native date control reports partial years while its
+year is typed, so its value is complete only at commit (FR1). DEC-12 covers
+numbers.
 
 ### DEC-3 — Text that is not a value waits for commit and then stays
 
@@ -439,7 +444,7 @@ outside its preset-time list.
 ### DEC-7 — A shown rejection stays until the entry is valid
 
 **Reference:** `spec:AST-118/DEC-7`
-**Decider:** pending
+**Decider:** `nynexman4464`, `2026-11-11`
 
 A rejection clears the moment the entry is fixed, so a correction gets
 immediate credit. An edit that leaves the entry wrong does not make the
@@ -462,7 +467,7 @@ place of a caller status, as the field's message already wins there.
 ### DEC-9 — A native control restores its value and keeps the rejection
 
 **Reference:** `spec:AST-118/DEC-9`
-**Decider:** pending
+**Decider:** `nynexman4464`, `2026-11-11`
 
 A native date or time control's own value is what a form posts, so a refused
 date or time cannot stay in it. The control restores the committed value at
@@ -472,7 +477,7 @@ the restore says why (FR4).
 ### DEC-10 — A grouped member announces its rejection
 
 **Reference:** `spec:AST-118/DEC-10`
-**Decider:** pending
+**Decider:** `nynexman4464`, `2026-11-11`
 
 Inside an InputGroup, the group owns the only visible status, and its records
 give a member no message box of its own. A grouped member's rejection is
@@ -482,34 +487,27 @@ InputGroup records (FR5, AR3).
 ### DEC-11 — A warning or success status never hides a rejection
 
 **Reference:** `spec:AST-118/DEC-11`
-**Decider:** pending
+**Decider:** `nynexman4464`, `2026-11-11`
 
 A field marked invalid that reads "Looks good" names no error, against WCAG 2.2
 3.3.1, so a `warning` or `success` caller status never replaces a rejection's
 message on any member, with or without `onEntryErrorChange`, as `DateInput`
 already does (FR7).
 
+### DEC-12 — A typed number is complete only at commit
+
+**Reference:** `spec:AST-118/DEC-12`
+**Decider:** `nynexman4464`, `2026-11-11`
+
+A number has no fixed length, so no point before Enter or blur says it is
+finished. `NumberInput` reveals a typed number's rejection at commit and
+nothing while the person types, as React Aria's NumberField shows validation
+when the person commits the value, typically on blur (FR1).
+
+Rejected: a number that no digit typed at its end can bring into range counting
+as complete, because the test is complex and easy to get wrong with negative
+numbers and decimals.
+
 ## Open questions
 
-- **OQ1 — When is a typed number complete?** (`human-api`) FR1 states option
-  (a).
-  - (a) When nothing typed at its end can bring it into range. `150` with
-    `max={100}` and `4` with `min={20}` and `max={30}` show at once; `2` in the
-    same field waits.
-  - (b) Never before commit. Every number rejection then waits for Enter or
-    blur.
-  - (c) When it has as many integer digits as the wider bound. Fields with
-    bounds of different lengths complete at different points, and fields
-    without bounds never complete.
-- **OQ2 — Does a shown rejection stay while an edit leaves the entry rejected
-  or incomplete?** (`human-design`) FR6 states option (a).
-  - (a) It stays, without a new announcement, until the entry is valid or
-    empty, or a commit or complete entry shows its current rejection.
-  - (b) Any edit hides it, and it appears again when the entry is complete or
-    committed.
-- **OQ3 — What does a native date or time control do with a refused value at
-  commit?** (`human-api`) FR4 states option (a).
-  - (a) It restores the committed value and keeps the rejection revealed until
-    the next edit or a new `value`.
-  - (b) It keeps the refused value with its rejection; the member then posts
-    the committed value from a hidden input, as `NumberInput` does.
+None.

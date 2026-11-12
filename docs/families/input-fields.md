@@ -280,8 +280,10 @@ another implementation helper.
   caller status never hides a rejection. DateInput shows its message over a
   caller `status`, and NumberInput and TimeInput show a caller `error` status
   over theirs; NumberInput and TimeInput report each rejection through
-  `onEntryErrorChange`. `spec:AST-118` owns the rule, including when each kind
-  of entry is complete. FileInput's rejections are of picked files, which it
+  `onEntryErrorChange`. A typed number is complete only at commit, so
+  NumberInput reveals its rejections at Enter or blur and nothing while the
+  person types. `spec:AST-118` owns the rule, including when each kind of entry
+  is complete. FileInput's rejections are of picked files, which it
   drops from its value, and stay outside this rule.
 
 ## Allowed component variation
