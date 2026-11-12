@@ -999,22 +999,24 @@ function RelatedRail() {
     </Section>
   );
 }
-// ─── FAQ ─────────────────────────────────────────────────────────────────────
 function FaqSection() {
   return (
     <Section padding={6}>
       <VStack gap={4}>
         <SectionHeader title="Common questions" />
-        <CollapsibleGroup type="multiple">
-          {FAQS.map(faq => (
+        <CollapsibleGroup type="single">
+          {FAQS.map((faq, index) => (
             <Collapsible
               key={faq.q}
               value={faq.q}
-              defaultIsOpen={false}
+              defaultIsOpen={index === 0}
               trigger={
-                <Text type="large" weight="bold">
-                  {faq.q}
-                </Text>
+                <HStack gap={3} vAlign="center">
+                  <Badge label={String(index + 1)} />
+                  <Text type="large" weight="bold">
+                    {faq.q}
+                  </Text>
+                </HStack>
               }>
               <Text type="body">{faq.a}</Text>
             </Collapsible>
@@ -1042,13 +1044,13 @@ export default function CourseDetailTemplate() {
                 <InstructorSection />
                 <CoversSection />
                 <ReviewsSection />
-                <FaqSection />
               </VStack>
               <VStack gap={4} style={stickyRail}>
                 <EnrollRail />
               </VStack>
             </Grid>
             <RelatedRail />
+            <FaqSection />
           </VStack>
         </LayoutContent>
       }
