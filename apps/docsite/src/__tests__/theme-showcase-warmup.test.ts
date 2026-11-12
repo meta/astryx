@@ -72,12 +72,30 @@ describe('warmThemeShowcasePhotos', () => {
     expect(images).toEqual([]);
   });
 
-  it('waits a moment where the browser has no idle callback', () => {
+  it('waits for idle time for two seconds at most', () => {
+    warmThemeShowcasePhotos();
+    expect(window.requestIdleCallback).toHaveBeenCalledWith(
+      expect.any(Function),
+      {timeout: 2000},
+    );
+  });
+
+  it('waits a second where the browser has no idle callback', () => {
     vi.stubGlobal('requestIdleCallback', undefined);
     vi.useFakeTimers();
     const {images} = warmThemeShowcasePhotos();
+    vi.advanceTimersByTime(999);
     expect(images).toEqual([]);
-    vi.advanceTimersByTime(200);
+    vi.advanceTimersByTime(1);
     expect(requested(images)).toEqual([...THEME_SHOWCASE_PHOTOS]);
+  });
+
+  it('requests nothing when it is cancelled where the browser has no idle callback', () => {
+    vi.stubGlobal('requestIdleCallback', undefined);
+    vi.useFakeTimers();
+    const {images, cancel} = warmThemeShowcasePhotos();
+    cancel();
+    vi.advanceTimersByTime(5000);
+    expect(images).toEqual([]);
   });
 });

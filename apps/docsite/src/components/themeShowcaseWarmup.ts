@@ -2,16 +2,21 @@
 
 /**
  * @file Loads the /themes showcase photos of every theme before a visitor picks one.
- * @input The bespoke showcase photos (themeShowcaseContent.ts), the browser's idle time, and the connection's data-saving hints.
+ * @input The bespoke showcase photos (themeShowcaseContent.ts), the docsite's idle scheduler (lib/searchWarmup.ts), and the connection's data-saving hints.
  * @output Image requests that fill the browser's cache, and a function that cancels a warm-up that has not started.
  * @position Called by ThemePackagePage.tsx.
  *
  * A theme's photos are not requested until the theme renders, so a theme
  * switch shows empty product cards while they load. Through the optimizer the
- * 30 photos are about 0.7 MB in all, so the page can load them in idle time.
+ * 30 photos are about 0.6 MB in all, so the page can load them in idle time.
  */
 
+import {whenIdle} from '../lib/searchWarmup';
 import {THEME_SHOWCASE_PHOTOS} from './themeShowcaseContent';
+
+// A browser with no idle callback waits this long. The others wait for idle
+// time, for at most twice this long.
+const WARMUP_FALLBACK_MS = 1000;
 
 interface ConnectionHints {
   saveData?: boolean;
@@ -51,10 +56,5 @@ export function warmThemeShowcasePhotos(): {
       images.push(image);
     }
   };
-  if (typeof window.requestIdleCallback === 'function') {
-    const handle = window.requestIdleCallback(load);
-    return {images, cancel: () => window.cancelIdleCallback(handle)};
-  }
-  const handle = window.setTimeout(load, 200);
-  return {images, cancel: () => window.clearTimeout(handle)};
+  return {images, cancel: whenIdle(load, WARMUP_FALLBACK_MS)};
 }
