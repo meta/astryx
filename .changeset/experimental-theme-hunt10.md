@@ -9,3 +9,5 @@
 - Undoing an exact property names the dial that applies after it. A `font var(...)` refusal suggests only a command that works. A name Windows reserves (`con`, `nul`, `com1`) is refused, with one that works.
 - `compile` of an editor theme finds the theme from the file, from any folder, and never mistakes a `src/themes/<name>` folder for one. A damaged settings file is refused as a normal error. Its suggestions run as printed in JSON too.
 - The refusal for list, add, use, remove and eject on an editor theme says how to use its module, and not to edit the generated themes module.
+
+@josephfarina

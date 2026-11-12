@@ -3128,7 +3128,10 @@ const QUESTIONS_J = [
   // disabled buttons: no command, and why
   [
     'disabled buttons 50% opacity',
-    {top: null, text: /attribute, not :disabled/},
+    {
+      top: /^set q opacity 0\.5 --on button --state disabled$/,
+      adds: /aria-disabled.*opacity=0\.5/,
+    },
   ],
 ];
 
