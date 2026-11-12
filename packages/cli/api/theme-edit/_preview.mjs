@@ -944,10 +944,14 @@ export function componentsPageSource(project, {theme = null, C} = {}) {
  * boundary, so one part that throws never blanks the page. The preview
  * route is the app shell, so the page has no shell of its own.
  * @param {import('./_project.mjs').ThemeProject} project
- * @param {{theme?: string | null}} [options]
+ * @param {{theme?: string | null, colors?: boolean}} [options] `colors`:
+ *   the preview has a Colors page, so the header points to it
  * @returns {string}
  */
-export function overviewPageSource(project, {theme = null} = {}) {
+export function overviewPageSource(
+  project,
+  {theme = null, colors = false} = {},
+) {
   const sections = OVERVIEW_SECTIONS.map(x => ({
     title: x.title,
     tree: /** @type {import('./_catalog.mjs').Tree | undefined} */ (
@@ -1021,7 +1025,20 @@ export function overviewPageSource(project, {theme = null} = {}) {
     '    const shown = (token: string) => { const f = first(token); return missing(f) ? `${f} (not installed here)` : f; };',
     "    const write = () => setFonts(`Body: ${shown('--font-family-body')}. Headings: ${shown('--font-family-heading')}.`);",
     '    write();',
+    '    // Read again when the theme changes live (a stylesheet or theme',
+    '    // update while the page is open) and when a font finishes loading.',
     '    document.fonts?.ready.then(write);',
+    "    document.fonts?.addEventListener?.('loadingdone', write);",
+    '    let queued = 0;',
+    '    const soon = () => { if (!queued) queued = requestAnimationFrame(() => { queued = 0; write(); }); };',
+    '    const watch = new MutationObserver(soon);',
+    '    watch.observe(document.head, {childList: true, subtree: true, characterData: true});',
+    "    watch.observe(document.documentElement, {attributes: true, subtree: true, attributeFilter: ['style', 'class', 'data-theme']});",
+    '    return () => {',
+    '      watch.disconnect();',
+    '      cancelAnimationFrame(queued);',
+    "      document.fonts?.removeEventListener?.('loadingdone', write);",
+    '    };',
     '  }, []);',
     '  return (',
     "    <div ref={ref} style={{color: 'var(--color-text-secondary)', fontSize: 13}}>",
@@ -1046,7 +1063,12 @@ export function overviewPageSource(project, {theme = null} = {}) {
     '              {s.name}',
     '            </div>',
     '          ))}',
-    '          <div className="tp-swatch" style={{alignSelf: \'center\'}}>Every shade: the Colors page</div>',
+    // The Colors page is there only for a theme with generated colors.
+    ...(colors
+      ? [
+          '          <div className="tp-swatch" style={{alignSelf: \'center\'}}>Every shade: the Colors page</div>',
+        ]
+      : []),
     '        </div>',
     '      </header>',
     body,

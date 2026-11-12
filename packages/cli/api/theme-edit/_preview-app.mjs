@@ -87,7 +87,9 @@ const MAX_WORDS = 40;
 
 /**
  * @typedef {{id: string, label: string, file: string}} PreviewPage
- * @typedef {{version: 1, theme: string | null, pages: PreviewPage[], files: string[], hashes?: Record<string, string>}} PreviewData
+ * @typedef {{version: 1, theme: string | null, pages: PreviewPage[], files: string[], hashes?: Record<string, string>, parents?: number}} PreviewData
+ * `parents`: how many folders over the preview folder its first add made,
+ * which remove takes away again when they are empty.
  *   `hashes`: a short hash of each file as the preview wrote it, so a file
  *   changed by hand is never replaced or deleted
  * @typedef {(path: string | null) => string} Retry the command again, with
@@ -1632,6 +1634,11 @@ function previewProblem(d) {
     return '"theme" is not a theme name or null';
   if (!Array.isArray(d.pages)) return '"pages" is not a list';
   if (!Array.isArray(d.files)) return '"files" is not a list';
+  if (
+    d.parents !== undefined &&
+    !(Number.isInteger(d.parents) && d.parents >= 0 && d.parents <= 20)
+  )
+    return '"parents" is not a small whole number';
   const ids = new Set();
   for (const p of d.pages) {
     if (!p || typeof p !== 'object' || Array.isArray(p))
@@ -2846,6 +2853,19 @@ function paletteStandIn(cwd, slug) {
 }
 
 /**
+ * The --path a preview command needs for a preview folder: none for the
+ * default one.
+ * @param {string} cwd
+ * @param {string} dir
+ */
+function dirFlag(cwd, dir) {
+  const fallback = previewDir(cwd, undefined, {optional: true})?.dir;
+  return fallback === dir
+    ? ''
+    : ` --path ${quoteCommandArgument(shownDir(cwd, dir))}`;
+}
+
+/**
  * Rewrite the in-app preview routes of a theme when their imports changed, so
  * a font package installed after `set` loads on the next change or `show`,
  * and its Colors page, so it names the shades the tokens use now.
@@ -2905,6 +2925,15 @@ export async function refreshPreviewRoute(cwd, slug) {
       }
       return true;
     });
+    // A theme that has generated colors now, under a preview with no
+    // Colors page: the next add adds it.
+    if (
+      !data.pages.some(p => p.id === COLORS_PAGE.id) &&
+      (await colorsPage(cwd, dir, slug)).colors
+    )
+      stale.push(
+        `${shownDir(cwd, dir)}/ (${slug} has generated colors now; ${PREVIEW} add${dirFlag(cwd, dir)} adds its Colors page)`,
+      );
     if (!writes.length) continue;
     commitPreview(cwd, dir, data, writes, [], `${EDITOR} show ${slug}`);
     changed = true;
@@ -3684,6 +3713,18 @@ async function addPreview(description, options, box) {
   const existing = readPreview(cwd, at.dir, pf);
   /** @type {PreviewData} */
   const data = existing ?? {version: 1, theme: null, pages: [], files: []};
+  // The folders over a new preview folder that are not there yet: the first
+  // add makes them, and remove takes them away again when they are empty.
+  if (!existing) {
+    let made = 0;
+    for (
+      let up = path.dirname(at.dir);
+      up.startsWith((at.app ?? cwd) + path.sep) && !fs.existsSync(up);
+      up = path.dirname(up)
+    )
+      made++;
+    if (made) data.parents = made;
+  }
   const wore = data.theme;
   const againWith = (/** @type {string | null} */ t) =>
     `${PREVIEW} add${said ? ` ${quoteCommandArgument(said)}` : ''}${named != null ? ` --template ${quoteCommandArgument(named)}` : ''}${t == null ? '' : ` --theme ${t}`}${pf}`;
@@ -3716,13 +3757,22 @@ async function addPreview(description, options, box) {
       `the preview now wears ${data.theme ?? "the app's own theme"} (was ${wore ?? "the app's own theme"}), so its pages are written again`,
     );
   const project = await openProject(cwd);
+  // Whether the preview has, or gets with a bare add, a Colors page.
+  const hasColors = async () =>
+    data.pages.some(p => p.id === COLORS_PAGE.id) ||
+    (data.theme != null &&
+      fs.existsSync(themeFiles(cwd, data.theme).dir) &&
+      (await colorsPage(cwd, at.dir, data.theme)).colors);
   /** @param {string} id */
   const defaultPage = async id =>
     id === 'overview'
       ? {
           id,
           label: 'Overview',
-          text: overviewPageSource(project, {theme: data.theme}),
+          text: overviewPageSource(project, {
+            theme: data.theme,
+            colors: await hasColors(),
+          }),
         }
       : {
           id,
@@ -4128,7 +4178,14 @@ export async function themeEditPreviewApp(dir, options = {}) {
   const preview = [];
   /** @type {Array<[string, string, string]>} */
   const pages = [
-    ['overview', 'Overview', overviewPageSource(project, {theme: slug})],
+    [
+      'overview',
+      'Overview',
+      overviewPageSource(project, {
+        theme: slug,
+        colors: colorsSource != null,
+      }),
+    ],
     [
       'components',
       'Components',
@@ -4661,11 +4718,16 @@ async function removePreview(page, options, box) {
   }
   try {
     fs.rmdirSync(at.dir);
-    // Route group folders, such as (tools)/, that only held the preview.
+    // The folders the first add made over it, and route group folders,
+    // such as (tools)/, that only held the preview; never one with
+    // anything else in it.
+    let made = data.parents ?? 0;
     for (
       let up = path.dirname(at.dir);
-      /^\(.+\)$/.test(path.basename(up)) && at.app && up.startsWith(at.app);
-      up = path.dirname(up)
+      (made > 0 || /^\(.+\)$/.test(path.basename(up))) &&
+      at.app &&
+      up.startsWith(at.app + path.sep);
+      up = path.dirname(up), made--
     )
       fs.rmdirSync(up);
   } catch {

@@ -863,6 +863,13 @@ describe('preview app', () => {
       expect(pkg.dependencies[name], name).toBe(
         name.startsWith('@astryxdesign/') ? '{{astryxVersion}}' : range,
       );
-    expect(pkg.devDependencies).toEqual(ex.devDependencies);
+    // The starter also names Node's types, which `next dev` would otherwise
+    // install (and stall on with no network); the example gets them from the
+    // workspace.
+    expect(pkg.devDependencies).toEqual({
+      ...ex.devDependencies,
+      '@types/node': pkg.devDependencies['@types/node'],
+    });
+    expect(pkg.devDependencies['@types/node']).toBeTruthy();
   });
 });

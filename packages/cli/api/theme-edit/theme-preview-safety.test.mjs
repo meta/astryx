@@ -2559,4 +2559,58 @@ describe('final pass 5', () => {
       write('src/app/layout.tsx', layout);
     }
   }, 120_000);
+
+  it('shows open overlays without focus, points to Colors only when it is there, and reads fonts again live', async () => {
+    await themeEditNew('nc', {cwd, like: 'neutral'});
+    try {
+      await themeEditPreviewAdd(undefined, {
+        cwd,
+        theme: 'nc',
+        path: 'src/app/w',
+      });
+      const overview = read('src/app/w/_pages/overview.tsx');
+      expect(overview).toContain('hasAutoFocus={false}');
+      expect(read('src/app/w/_pages/components.tsx')).toMatch(
+        /<C\.Popover [\s\S]*?isOpen hasAutoFocus=\{false\}>/,
+      );
+      expect(overview).toContain('MutationObserver');
+      expect(overview).toContain("'loadingdone'");
+      expect(exists('src/app/w/_pages/colors.tsx')).toBe(false);
+      expect(overview).not.toContain('Every shade');
+      const set = await themeEditSet('nc', 'accent', 'teal', {cwd});
+      expect(set.data.previewStale.join(' ')).toContain(
+        'nc has generated colors now; astryx experimental theme preview add --path src/app/w adds its Colors page',
+      );
+      await themeEditPreviewAdd(undefined, {cwd, path: 'src/app/w'});
+      expect(exists('src/app/w/_pages/colors.tsx')).toBe(true);
+      expect(read('src/app/w/_pages/overview.tsx')).toContain('Every shade');
+    } finally {
+      rm('src/app/w');
+      rm('themes/nc');
+    }
+  }, 240_000);
+
+  it('remove takes away the empty folders the first add made, never one that was there', async () => {
+    await themeEditPreviewAdd(undefined, {
+      cwd,
+      path: 'src/app/design/review/tp',
+    });
+    expect(
+      JSON.parse(read('src/app/design/review/tp/theme-preview.json')).parents,
+    ).toBe(2);
+    await themeEditPreviewRemove(undefined, {
+      cwd,
+      path: 'src/app/design/review/tp',
+    });
+    expect(exists('src/app/design')).toBe(false);
+    fs.mkdirSync(path.join(cwd, 'src/app/kept'), {recursive: true});
+    try {
+      await themeEditPreviewAdd(undefined, {cwd, path: 'src/app/kept/x/tp'});
+      await themeEditPreviewRemove(undefined, {cwd, path: 'src/app/kept/x/tp'});
+      expect(exists('src/app/kept/x')).toBe(false);
+      expect(exists('src/app/kept')).toBe(true);
+    } finally {
+      rm('src/app/kept');
+    }
+  }, 240_000);
 });
