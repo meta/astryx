@@ -65,7 +65,7 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
     "cmdk": "^1.0.0",
-    "lucide-react": "^1.66.0",
+    "lucide-react": "^1.69.0",
     "playwright-core": "^1.61.1",
     "postcss": "^8.5.32",
     "tailwind-merge": "^3.6.0",
