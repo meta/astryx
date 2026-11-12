@@ -316,6 +316,13 @@ app to turn on.
   is an amendment to that record that consumes this height.
 - The keyboard module's height includes FR2's zoom term, so a pinch-zoomed
   page does not read as a keyboard.
+- The keyboard module's `getKeyboardViewportHeight` returns the layout
+  viewport's height, in CSS px, that the current keyboard height was measured
+  against. A reader that lays out against the keyboard reads both heights from
+  the module, so one keyboard change reads the visual viewport once.
+  ChatLayout's keyboard hook, the layers' keyboard clearance, the docked ride
+  (`keyboardTarget.ts`) and `useMobileKeyboard` read it. It stays internal
+  (FR3).
 - The hook claims focus under a coarse pointer wherever the keyboard can be
   measured; no user-agent check gates it. Under FR8, a fully expanded Tall
   sheet in Chrome on Android keeps the keyboard accommodation
