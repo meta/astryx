@@ -403,8 +403,9 @@ export default {
  * @param {import('../../foundation/discovery/theme-discovery.mjs').DiscoveredTheme} theme
  * @param {string} dir
  * @param {string} cwd
+ * @param {string} projectDir the project root the default target is in
  */
-function assertEjectTargetFree(theme, dir, cwd) {
+function assertEjectTargetFree(theme, dir, cwd, projectDir) {
   /** @type {string[]} */
   let entries;
   try {
@@ -415,7 +416,8 @@ function assertEjectTargetFree(theme, dir, cwd) {
   }
   const rel = path.relative(cwd, dir) || '.';
   const isDefault =
-    path.resolve(cwd, defaultEjectTarget(theme.slug)) === path.resolve(dir);
+    path.resolve(projectDir, defaultEjectTarget(theme.slug)) ===
+    path.resolve(dir);
   const suggestion = isDefault
     ? undefined
     : [
@@ -472,17 +474,26 @@ function themeDescriptorName(file) {
  * @returns {string} project-relative output directory
  */
 export function ejectThemeFiles(theme, {cwd, targetPath, overwrite = false}) {
+  // The fork lands in the project, as list and add read it: the default root
+  // is the project's, and a relative [path] is read from the working folder
+  // but must stay inside the project.
+  const projectDir = findPackageRoot(cwd) ?? path.resolve(cwd);
+  const target = !targetPath
+    ? defaultEjectTarget(theme.slug)
+    : path.isAbsolute(targetPath)
+      ? targetPath
+      : path.relative(projectDir, path.resolve(cwd, targetPath)) || '.';
   let resolvedDir;
   try {
-    resolvedDir = assertWithin(
-      targetPath || defaultEjectTarget(theme.slug),
-      cwd,
-      {label: 'theme target path'},
-    );
+    resolvedDir = assertWithin(target, projectDir, {
+      label: 'theme target path',
+    });
   } catch (error) {
     if (error instanceof PathSafetyError) {
       throw new AstryxError(
-        error.message,
+        targetPath
+          ? error.message.replace(`"${target}"`, `"${targetPath}"`)
+          : error.message,
         undefined,
         ERROR_CODES.ERR_PATH_TRAVERSAL,
       );
@@ -521,7 +532,7 @@ export function ejectThemeFiles(theme, {cwd, targetPath, overwrite = false}) {
     }
   }
 
-  assertEjectTargetFree(theme, resolvedDir, cwd);
+  assertEjectTargetFree(theme, resolvedDir, cwd, projectDir);
 
   if (!overwrite) {
     const existing = writes.find(write => fs.existsSync(write.dest));
