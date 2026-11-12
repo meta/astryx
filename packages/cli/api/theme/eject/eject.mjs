@@ -26,10 +26,7 @@ import {
  * consumer project as an independent local fork.
  *
  * @param {string} slug
- * @param {{targetPath?: string, overwrite?: boolean, cwd?: string, package?: string, __onEditorFolder?: (warning: string) => void}} [options]
- *   `__onEditorFolder`, CLI-internal, takes the warning for a fork inside a
- *   folder the theme editor made instead of the logger (a `--json` caller
- *   drops it)
+ * @param {{targetPath?: string, overwrite?: boolean, cwd?: string, package?: string}} [options]
  * @returns {Promise<import('../theme.type.mjs').ThemeEjectResponse>}
  */
 export async function themeEject(slug, options = {}) {
@@ -38,7 +35,6 @@ export async function themeEject(slug, options = {}) {
     overwrite = false,
     cwd = process.cwd(),
     package: packageName,
-    __onEditorFolder,
   } = options;
 
   const match = await findTheme(slug, {
@@ -83,8 +79,7 @@ export async function themeEject(slug, options = {}) {
       cwd,
     );
     const warning = `Warning: ${editorFolder} is a folder the theme editor made, and the fork in ${outputDir} is inside it; eject writes there anyway. Fork into the project's local themes folder (${fork}), or pick a path outside ${editorFolder}, to keep the editor's folder to its own theme.`;
-    if (__onEditorFolder) __onEditorFolder(warning);
-    else logger.warn(warning);
+    logger.warn(warning);
   }
   const {missingPackages, installCommand} = forkNeeds(outputDir, files, cwd);
   return {

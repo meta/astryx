@@ -16,6 +16,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import {runCli} from '../../../test-utils/run-cli.mjs';
+import {logger} from '../../../api/logger.mjs';
 
 let tmpDir;
 beforeEach(() => {
@@ -193,6 +194,12 @@ describe('astryx theme template outside a project', () => {
 });
 
 describe('theme eject into a subfolder of a folder the theme editor made', () => {
+  // The logger is shared across in-process runs; start it silent, as a fresh
+  // CLI process does, so only eject's own setup can make the warning print.
+  beforeEach(() => {
+    logger.setSilent(true);
+  });
+
   it('writes there as released CLIs did, warning once in text and silent under --json', async () => {
     const editor = path.join(tmpDir, 'themes', 'g');
     fs.mkdirSync(editor, {recursive: true});
