@@ -7,7 +7,6 @@
  */
 
 import {PRESS_BELIEVED_SELECTOR} from '../privateAttributes/press';
-import {splitTopLevelSpaces} from './generateThemeRules';
 import {describe, it, expect, vi} from 'vitest';
 import {
   defineTheme,
@@ -1192,6 +1191,7 @@ describe('derived var expansion', () => {
       'clamp(8px, 2vw, 16px)',
       ['--astryx-card-padding: clamp(8px, 2vw, 16px);'],
     ],
+    ['padding', 'max(8px, 2vw)', ['--astryx-card-padding: max(8px, 2vw);']],
     [
       'padding',
       'calc(1px + 2px) min(4px, 1vw)',
@@ -1233,23 +1233,17 @@ describe('derived var expansion', () => {
     },
   );
 
-  it('splits a value on top-level spaces only', () => {
-    expect(splitTopLevelSpaces('  clamp(8px, 2vw, 16px)  ')).toEqual([
-      'clamp(8px, 2vw, 16px)',
-    ]);
-    expect(splitTopLevelSpaces('calc(1px + (2px * 3)) 4px')).toEqual([
-      'calc(1px + (2px * 3))',
-      '4px',
-    ]);
-    expect(splitTopLevelSpaces(`var(--a, "x y") 1px`)).toEqual([
-      'var(--a, "x y")',
-      '1px',
-    ]);
-    expect(splitTopLevelSpaces('8px  12px\t16px')).toEqual([
-      '8px',
-      '12px',
-      '16px',
-    ]);
+  it('emits no padding token for an empty padding value', () => {
+    // An empty value has no components, so there is nothing to emit; a
+    // `--astryx-card-padding: ;` declaration would be invalid CSS.
+    const theme = defineTheme({
+      name: 'test-padding-empty',
+      components: {card: {base: {padding: ''}}},
+    });
+    const rule = generateThemeRules(theme).find(r =>
+      r.includes('.astryx-card'),
+    );
+    expect(rule ?? '').not.toContain('--astryx-card-padding');
   });
 
   it('handles variant-specific derived vars', () => {

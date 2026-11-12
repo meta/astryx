@@ -43,6 +43,7 @@ import {
   checkDeclarationValue,
 } from './declarationBoundary';
 import {readerTextSizeEntries} from './dynamicType';
+import {splitTopLevelWhitespace} from './tokenReferences';
 import {PRESS_BELIEVED_SELECTOR} from '../privateAttributes/press';
 
 /**
@@ -257,48 +258,6 @@ const CONTAINER_PADDING_PROPS = new Set([
   ...Object.keys(PHYSICAL_BLOCK_PADDING_PROPS),
 ]);
 
-/**
- * Split a CSS value on the spaces between its components. A space inside
- * parentheses or quotes belongs to one component, so `clamp(8px, 2vw, 16px)`
- * and `var(--gap, 1px 2px)` each stay whole.
- */
-export function splitTopLevelSpaces(value: string): string[] {
-  const parts: string[] = [];
-  let depth = 0;
-  let quote: string | null = null;
-  let current = '';
-  for (const ch of value.trim()) {
-    if (quote) {
-      current += ch;
-      if (ch === quote) {
-        quote = null;
-      }
-      continue;
-    }
-    if (ch === '"' || ch === "'") {
-      quote = ch;
-      current += ch;
-    } else if (ch === '(') {
-      depth += 1;
-      current += ch;
-    } else if (ch === ')') {
-      depth = Math.max(0, depth - 1);
-      current += ch;
-    } else if (/\s/.test(ch) && depth === 0) {
-      if (current) {
-        parts.push(current);
-      }
-      current = '';
-    } else {
-      current += ch;
-    }
-  }
-  if (current) {
-    parts.push(current);
-  }
-  return parts;
-}
-
 interface ParsedPadding {
   blockStart?: string;
   blockEnd?: string;
@@ -319,7 +278,7 @@ function parsePadding(props: [string, string][]): ParsedPadding {
     const prop = PHYSICAL_BLOCK_PADDING_PROPS[rawProp] ?? rawProp;
     switch (prop) {
       case 'padding': {
-        const parts = splitTopLevelSpaces(value);
+        const parts = splitTopLevelWhitespace(value);
         if (parts.length === 1) {
           result.blockStart = parts[0];
           result.blockEnd = parts[0];
@@ -336,13 +295,13 @@ function parsePadding(props: [string, string][]): ParsedPadding {
         break;
       }
       case 'paddingBlock': {
-        const parts = splitTopLevelSpaces(value);
+        const parts = splitTopLevelWhitespace(value);
         result.blockStart = parts[0];
         result.blockEnd = parts[1] ?? parts[0];
         break;
       }
       case 'paddingInline': {
-        const parts = splitTopLevelSpaces(value);
+        const parts = splitTopLevelWhitespace(value);
         if (parts.length === 1) {
           result.inline = parts[0];
         } else {
