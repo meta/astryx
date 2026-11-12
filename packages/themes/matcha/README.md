@@ -1,6 +1,6 @@
 # @astryxdesign/theme-matcha
 
-Earthy green theme with Figtree typography. Uses [Lucide](https://lucide.dev) icons.
+Earthy green theme with Playwrite US Trad for headings and DM Sans for body text. Uses [Lucide](https://lucide.dev) icons.
 
 ## Install
 

@@ -11,7 +11,7 @@ full setup. To create your own theme, install `@astryxdesign/cli` and run
 | [Butter](butter/README.md)       | `@astryxdesign/theme-butter`    | Golden buttery surfaces with blue accents; Sarina for display type, Outfit for headings and body.                          |
 | [Chocolate](chocolate/README.md) | `@astryxdesign/theme-chocolate` | Warm chocolate and cozy beige; Fraunces for headings and Albert Sans for body text.                                        |
 | [Gothic](gothic/README.md)       | `@astryxdesign/theme-gothic`    | Dark-only atmospheric theme with deep blue-gray surfaces and pastel categorical accents; Manufacturing Consent and Fustat. |
-| [Matcha](matcha/README.md)       | `@astryxdesign/theme-matcha`    | Earthy green palette with Figtree typography.                                                                              |
+| [Matcha](matcha/README.md)       | `@astryxdesign/theme-matcha`    | Earthy green palette; Playwrite US Trad for headings and DM Sans for body text.                                            |
 | [Neutral](neutral/README.md)     | `@astryxdesign/theme-neutral`   | Muted, minimal aesthetic with Figtree typography.                                                                          |
 | [Stone](stone/README.md)         | `@astryxdesign/theme-stone`     | Warm stone and slate tones; Montserrat for headings and Figtree for body text.                                             |
 | [Y2K](y2k/README.md)             | `@astryxdesign/theme-y2k`       | Playful Y2K pop with a soft periwinkle body, charcoal accent, holographic categorical colors, Poppins, and Crimson Text.   |

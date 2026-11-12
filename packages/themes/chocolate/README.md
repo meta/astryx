@@ -23,11 +23,11 @@ function App() {
 
 ### Import paths
 
-| Path                             | Use case                                               |
-| -------------------------------- | ------------------------------------------------------ |
-| `@astryxdesign/theme-chocolate`           | Source build (StyleX compilation via `@astryxdesign/build`)     |
-| `@astryxdesign/theme-chocolate/built`     | Pre-built dist (Tailwind, plain CSS, or no build step) |
-| `@astryxdesign/theme-chocolate/theme.css` | Pre-built CSS file (import in your stylesheet)         |
+| Path                                      | Use case                                                    |
+| ----------------------------------------- | ----------------------------------------------------------- |
+| `@astryxdesign/theme-chocolate`           | Source build (StyleX compilation via `@astryxdesign/build`) |
+| `@astryxdesign/theme-chocolate/built`     | Pre-built dist (Tailwind, plain CSS, or no build step)      |
+| `@astryxdesign/theme-chocolate/theme.css` | Pre-built CSS file (import in your stylesheet)              |
 
 If you're using `@astryxdesign/build` for StyleX source compilation, import from the bare path. Otherwise, use `/built`.
 
