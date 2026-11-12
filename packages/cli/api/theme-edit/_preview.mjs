@@ -26,7 +26,7 @@ import {
 } from './_catalog.mjs';
 import {renderDir, renderGenerated} from './_parts.mjs';
 import {OVERVIEW_SECTIONS} from './_overview.mjs';
-import {fontPackages, modesOf, themeFiles, shown} from './_settings.mjs';
+import {camel, fontPackages, modesOf, themeFiles, shown} from './_settings.mjs';
 import {writeWhole} from './_palette.mjs';
 import {importPathOf, installLine} from './_project.mjs';
 import {DIRECT} from './_tables.mjs';
@@ -1081,7 +1081,7 @@ export function previewRouteSource({
 }
 
 /** @param {string} slug */
-const camelName = slug => slug.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+const camelName = camel;
 
 /**
  * A PNG of an HTML file, with a Playwright the project has installed, else

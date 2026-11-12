@@ -12,7 +12,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {
   themeEditNew,
   themeEditSet,
@@ -21,6 +21,7 @@ import {
 } from './theme-edit.mjs';
 import {projectRoot} from './_adapter.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
+import {withRealRenders} from '../../test-utils/theme-render-stub.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -29,6 +30,14 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+
+// The page renders cost seconds and these tests read settings, builds and
+// files: a stand-in renders unless a test asks for the real thing.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
 
 /** @type {string} */
 let cwd;
@@ -112,10 +121,11 @@ describe('names', () => {
       expect(exists(`themes/${name}/${name}.js`), name).toBe(true);
       fs.rmSync(path.join(cwd, 'themes', name), {recursive: true, force: true});
     }
+    // A folder of only system files counts as empty.
     fs.mkdirSync(path.join(cwd, 'themes/zz'));
     fs.writeFileSync(path.join(cwd, 'themes/zz/.DS_Store'), '');
-    const r = await refusal(() => themeEditNew('zz', {cwd}));
-    expect(r.run[0]).toMatch(/new zz-copy$/);
+    await themeEditNew('zz', {cwd});
+    expect(exists('themes/zz/zz.js')).toBe(true);
     fs.rmSync(path.join(cwd, 'themes/zz'), {recursive: true, force: true});
   }, 240_000);
 
@@ -174,7 +184,7 @@ describe('new takes its flags as set does', () => {
       themeEditNew('v1', {cwd, settings: {vibrancy: '60'}}),
     );
     expect(r.code).toBe('ERR_THEME_NO_EFFECT');
-    expect(r.run[0]).toMatch(/new v1 --vibrancy 60 --accent "#7c3aed"$/);
+    expect(r.run[0]).toMatch(/new v1 --vibrancy 60 --accent '#7c3aed'$/);
   });
 
   it('refuses a font or text size that would not build', async () => {
@@ -313,7 +323,17 @@ describe('exact tokens', () => {
       'node_modules/.cache/astryx-theme/locks',
     );
     const {createHash} = await import('node:crypto');
-    const key = createHash('sha256').update(cwd).digest('hex').slice(0, 16);
+    // The lock is named for the project as seen from the lock folder.
+    fs.mkdirSync(dir, {recursive: true});
+    const key = createHash('sha256')
+      .update(
+        path
+          .relative(fs.realpathSync(dir), fs.realpathSync(cwd))
+          .split(path.sep)
+          .join('/'),
+      )
+      .digest('hex')
+      .slice(0, 16);
     fs.mkdirSync(path.join(dir, `${key}-theme-h.lock`), {recursive: true});
     fs.writeFileSync(
       path.join(dir, `${key}-theme-h.lock`, 'owner.json'),
@@ -760,10 +780,12 @@ describe('hunt2: order and scope', () => {
   it('a step on a part starts from the whole-theme setting', async () => {
     await themeEditNew('o3', {cwd});
     await themeEditSet('o3', 'corners', 'large', {cwd});
+    // The card reads the container radius: large on no base makes it 18px,
+    // and the next rung that shows the card rounder is round (24px).
     const r = await themeEditSet('o3', 'corners', 'more', {cwd, on: 'card'});
     expect(r.data.setting.value).toBe('round');
     const pill = await themeEditSet('o3', 'corners', 'pill', {cwd});
-    expect(pill.data.changedTokens.join(' ')).toContain('--radius-inner');
+    expect(pill.data.changedTokens.join(' ')).toContain('--radius-element');
     expect(read('themes/o3/o3.css')).toMatch(/--radius-inner: 6px/);
     fs.rmSync(path.join(cwd, 'themes/o3'), {recursive: true, force: true});
   }, 240_000);
@@ -783,8 +805,10 @@ describe('hunt2: undo', () => {
     expect(
       (await refusal(() => themeEditUndo('u1', {cwd, on: 'card'}))).code,
     ).toBe('ERR_MISSING_ARGUMENT');
-    const base = await themeEditUndo('u1', {cwd, thing: 'base'});
-    expect(base.data.setting.value).toBe('none');
+    // base was never changed: it stays as the theme was made.
+    expect(
+      (await refusal(() => themeEditUndo('u1', {cwd, thing: 'base'}))).code,
+    ).toBe('ERR_THEME_NOT_SET');
     fs.rmSync(path.join(cwd, 'themes/u1'), {recursive: true, force: true});
   }, 240_000);
 
@@ -846,11 +870,15 @@ describe('hunt2: files', () => {
   }, 240_000);
 
   it('a section of the sheet goes to its own file', async () => {
-    const full = read('themes/h/sheet.html');
-    await themeEditShow('h', {cwd, section: 'Inputs'});
-    expect(exists('themes/h/sheet-inputs.html')).toBe(true);
-    expect(read('themes/h/sheet.html')).toBe(full);
-  }, 120_000);
+    // The file names come from the real sheet render, not the stand-in.
+    await withRealRenders(async () => {
+      await themeEditShow('h', {cwd});
+      const full = read('themes/h/sheet.html');
+      await themeEditShow('h', {cwd, section: 'Inputs'});
+      expect(exists('themes/h/sheet-inputs.html')).toBe(true);
+      expect(read('themes/h/sheet.html')).toBe(full);
+    });
+  }, 240_000);
 });
 
 describe('hunt2: words', () => {

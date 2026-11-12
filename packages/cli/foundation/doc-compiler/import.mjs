@@ -28,6 +28,7 @@ import * as fs from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {createRequire} from 'node:module';
 import {importUrl} from '../fs/import-url.mjs';
+import {jitiCacheOptions} from '../fs/jiti-cache.mjs';
 import {
   importUserModule,
   readFreshInTurn,
@@ -195,16 +196,21 @@ export function importTemplateModule(file) {
     'template',
     first => {
       if (first.endsWith('.ts')) {
-        jsxJiti ??= createJiti(import.meta.url, {jsx: true});
+        jsxJiti ??= createJiti(import.meta.url, {
+          ...jitiCacheOptions(),
+          jsx: true,
+        });
         return jsxJiti.import(first);
       }
       return importInTurn(first, `file://${first}`);
     },
     changed =>
       changed.endsWith('.ts')
-        ? createJiti(import.meta.url, {jsx: true, moduleCache: false}).import(
-            changed,
-          )
+        ? createJiti(import.meta.url, {
+            ...jitiCacheOptions(),
+            jsx: true,
+            moduleCache: false,
+          }).import(changed)
         : importFresh(changed),
   );
 }

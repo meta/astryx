@@ -570,12 +570,14 @@ export function Drawer({
   // the same state that drives `isOpen` (`side={selected?.side ?? 'end'}`):
   // that state clears on close, so the live prop flips mid-exit and the panel
   // teleports to the other edge and slides out the wrong way. Children stay
-  // mounted for the exit for the same reason; so does the anchor.
-  const exitSideRef = useRef(side);
-  if (isOpen) {
-    exitSideRef.current = side;
+  // mounted for the exit for the same reason; so does the anchor. It is state,
+  // adjusted while the open drawer renders: a ref written here would keep the
+  // side of a render that React discards.
+  const [exitSide, setExitSide] = useState(side);
+  if (isOpen && side !== exitSide) {
+    setExitSide(side);
   }
-  const anchoredSide = isOpen ? side : exitSideRef.current;
+  const anchoredSide = isOpen ? side : exitSide;
 
   const sideStyle = anchoredSide === 'start' ? styles.start : styles.end;
   const sideOpenStyle =
