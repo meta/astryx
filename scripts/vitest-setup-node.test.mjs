@@ -21,10 +21,20 @@ describe("the node project's setup", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'node-setup-'));
     try {
       const req = createRequire(path.join(dir, 'noop.js'));
-      expect(() =>
-        req.resolve('@astryxdesign/theme-neutral/package.json'),
-      ).toThrow();
-      expect(() => req.resolve('@astryxdesign/core/package.json')).toThrow();
+      // Subpaths both packages export, as files in the checkout: NODE_PATH
+      // would resolve them whether or not a dist is built.
+      for (const spec of [
+        '@astryxdesign/theme-neutral/fonts.css',
+        '@astryxdesign/core/reset.css',
+      ]) {
+        let code = 'resolved';
+        try {
+          req.resolve(spec);
+        } catch (error) {
+          code = /** @type {any} */ (error).code;
+        }
+        expect(code, spec).toBe('MODULE_NOT_FOUND');
+      }
     } finally {
       fs.rmSync(dir, {recursive: true, force: true});
     }
