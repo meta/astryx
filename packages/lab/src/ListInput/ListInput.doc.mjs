@@ -218,7 +218,7 @@ export const docs = {
         name: 'Reorder handle',
         required: false,
         description:
-          "Core List's reorder handle, three lines at the end of the record after Remove, in Remove's cell, with an accessible label naming the record and its position and no hover tooltip. Where the primary pointer is coarse, its target grows to at least 44 by 44 px. It is revealed while the record is hovered or contains keyboard focus and stays visible on touch screens; at rest it is transparent but stays in the tab order. In the stacked layout it sits at the top of the record beside Remove. A finger holds it a moment, then drags; a mouse drags at once; activating it (Space or Enter) turns on reorder mode, where Arrow Up and Arrow Down move the record a place and Escape ends the mode.",
+          "Core List's reorder handle, the drag icon at the end of the record after Remove, in Remove's cell, with an accessible label naming the record and its position and no hover tooltip. Where the primary pointer is coarse, its target grows to at least 44 by 44 px. It is revealed while the record is hovered or contains keyboard focus and stays visible on touch screens; at rest it is transparent but stays in the tab order. In the stacked layout it sits at the top of the record beside Remove. A finger holds it a moment, then drags; a mouse drags at once; activating it (Space or Enter) turns on reorder mode, where Arrow Up and Arrow Down move the record a place and Escape ends the mode.",
       },
       {
         name: 'Reorder-mode hint',
