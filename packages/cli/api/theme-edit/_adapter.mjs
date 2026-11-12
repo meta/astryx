@@ -636,6 +636,20 @@ export async function editorCompileProblem(files, {cwd, check, family}) {
     if (!at || !editorOwnFile(at.slug, file)) continue;
     const {root, slug} = at;
     const source = `themes/${slug}/${slug}.theme.ts`;
+    // An editor theme is built from its project's root, as every editor
+    // command runs there: from a subfolder the build would write outside
+    // its working folder. The run names the root.
+    if (path.resolve(cwd) !== path.resolve(root))
+      return new AstryxError(
+        `${slug} is a theme the editor made; compile it from the app root (${path.relative(cwd, root) || '.'}), where the editor builds it.`,
+        [
+          {
+            name: `cd ${quoteCommandArgument(path.relative(cwd, root) || '.')} && ${runLine(root, `experimental theme compile ${source}${check ? ' --check' : ''}`)}`,
+            reason: 'do this instead',
+          },
+        ],
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
     if (/\.settings\.(ts|json)$/.test(file))
       return new AstryxError(
         `${file} is the editor's own settings for ${slug}, not a theme source; compile the theme source.`,
@@ -686,7 +700,12 @@ export async function editorCompileProblem(files, {cwd, check, family}) {
       }
       // An own change to the theme source is what compile builds (and what
       // --check compares): never a reason to refuse it.
-      if (why && /\.theme\.ts changed since the last build$/.test(why))
+      if (
+        why &&
+        /\.theme\.ts (or a module it imports )?changed since the last build$/.test(
+          why,
+        )
+      )
         why = null;
       if (why && !check)
         return new AstryxError(

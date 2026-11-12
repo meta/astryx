@@ -53,6 +53,7 @@ import {
   staleBuild,
   EDITOR_SUFFIXES,
   madeByEditor,
+  camel,
   NEW_MARKER,
   clearNewMarker,
   refuseThemeSource,
@@ -1321,6 +1322,17 @@ export async function themeEditShow(theme, options = {}) {
   let unreadable = null;
   const res = await resolvedTokens(ctx, theme).catch(async e => {
     if (e instanceof AstryxError || readOnly) throw e;
+    // The source lines the settings need are missing too: the build cannot
+    // be made again until they are back, and show says so (never a run of
+    // show itself).
+    if (brokenSource)
+      refuse(
+        E.ERR_THEME_INVALID,
+        `${theme}.js could not be read, and it cannot be built again: ${brokenSource}. Put back the import of ${camel(theme)}Settings from './${theme}.settings', extends: ${camel(theme)}Settings and name: '${theme}' in ${shown(cwd, f.ts)}, then run show again.`,
+        {
+          run: [`cat ${quoteCommandArgument(shown(cwd, f.ts))}`],
+        },
+      );
     unreadable = `${theme}.js could not be read (${e instanceof Error ? e.message.split('\n')[0] : String(e)}), so it was built again from the settings`;
     await buildTheme(ctx, theme, data);
     return resolvedTokens(ctx, theme);
@@ -1382,7 +1394,7 @@ export async function themeEditShow(theme, options = {}) {
             ]
           : stale
             ? [
-                `the build did not match ${theme}.settings.json (${stale}), so it was built again from the settings`,
+                `the build was not current (${stale}), so it was built again from the settings`,
               ]
             : []),
         ...(unreadable ? [unreadable] : []),

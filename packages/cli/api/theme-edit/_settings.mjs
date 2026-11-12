@@ -15,6 +15,7 @@ import * as fs from 'node:fs';
 import postcss from 'postcss';
 import {createRequire} from 'node:module';
 import * as path from 'node:path';
+import {themeFileImports} from '../../foundation/discovery/theme-discovery.mjs';
 import {pathToFileURL} from 'node:url';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
 import {AstryxError} from '../error.mjs';
@@ -1004,7 +1005,7 @@ export function compileTheme(ctx, data, base) {
       if (tg?.states.includes(s.state) && s.when == null) b = t[s.state] ??= {};
       else if (tg?.states.includes(s.state))
         b = t[`${s.when}+${s.state}`] ??= {};
-      else b = b[stateKey(s.state)] ??= {};
+      else b = b[stateKey(s.state, wrapsOneControl(ctx, target))] ??= {};
     }
     return b;
   };
@@ -1664,11 +1665,58 @@ function settingsSource(slug, data, theme, pal, cwd = '') {
  * @param {string} slug
  */
 function themeSourceHash(cwd, slug) {
-  const file = themeFiles(cwd, slug).ts;
-  const text = fs.existsSync(file)
-    ? fs.readFileSync(file, 'utf8')
-    : themeModuleSource(slug);
-  return createHash('sha256').update(text).digest('hex').slice(0, 16);
+  const f = themeFiles(cwd, slug);
+  const hash = createHash('sha256');
+  if (!fs.existsSync(f.ts)) {
+    // The same as the file the build is about to write would hash.
+    hash.update(`${path.basename(f.ts)}\0`);
+    hash.update(themeModuleSource(slug));
+    return hash.digest('hex').slice(0, 16);
+  }
+  // The theme source and every local module it reaches (an own helper
+  // such as ./my-tokens), read the way theme discovery reads them; the
+  // editor's generated modules change with each build and are judged by
+  // their own stamps.
+  const generated = new Set([f.settingsTs]);
+  const seen = new Set();
+  const queue = [f.ts];
+  while (queue.length) {
+    const file = /** @type {string} */ (queue.shift());
+    if (seen.has(file)) continue;
+    seen.add(file);
+    hash.update(`${path.relative(f.dir, file)}\0`);
+    hash.update(fs.readFileSync(file));
+    /** @type {string[]} */
+    let specifiers = [];
+    try {
+      specifiers = themeFileImports(file);
+    } catch {
+      // A file that does not parse is hashed as it is; the build names it.
+    }
+    for (const spec of specifiers) {
+      if (!spec.startsWith('.')) continue;
+      const base = path.resolve(path.dirname(file), spec);
+      const target = [
+        '',
+        '.ts',
+        '.tsx',
+        '.mts',
+        '.js',
+        '.mjs',
+        '/index.ts',
+        '/index.js',
+      ]
+        .map(x => base + x)
+        .find(p => fs.existsSync(p) && fs.statSync(p).isFile());
+      if (
+        target &&
+        !generated.has(target) &&
+        !path.relative(path.join(f.dir, 'tokens'), target).match(/^[^.]/)
+      )
+        queue.push(target);
+    }
+  }
+  return hash.digest('hex').slice(0, 16);
 }
 
 /**
@@ -2199,7 +2247,9 @@ export function baseComponent(base, ctx, target, prop, s) {
     const states = ctx.project.target.get(target)?.states ?? [];
     b = states.includes(s.state)
       ? t[s.when == null ? s.state : `${s.when}+${s.state}`]
-      : (b?.[stateKey(s.state)] ?? b?.[`:${s.state}`]);
+      : (b?.[stateKey(s.state, wrapsOneControl(ctx, target))] ??
+        b?.[stateKey(s.state)] ??
+        b?.[`:${s.state}`]);
   }
   const v = b?.[prop];
   return typeof v === 'string' ? v : null;
@@ -2265,16 +2315,46 @@ export function clearNewMarker(dir) {
 
 /**
  * The pseudo key a state writes in a part's styles. Core marks a disabled
- * button, link or tab with aria-disabled (it stays focusable), and some
- * parts (a typeahead, a complex selector) style a wrapper whose input or
- * button inside is the one marked: the theme matches all three.
+ * button, link or tab with aria-disabled (it stays focusable). A form
+ * control styled on a wrapper (a typeahead, a complex selector) has its
+ * input or button inside marked, so it also matches a disabled form
+ * control inside it (never a list row); an action part that holds
+ * children (a button group, a segmented control) never does, so one
+ * disabled child never makes the whole part look disabled.
  * @param {string} state
+ * @param {boolean} [wrapsControl]
  * @returns {string}
  */
-export function stateKey(state) {
-  return state === 'disabled'
-    ? ':is(:disabled,[aria-disabled="true"],:has(:disabled,[aria-disabled="true"]))'
-    : `:${state}`;
+export function stateKey(state, wrapsControl = false) {
+  if (state !== 'disabled') return `:${state}`;
+  return wrapsControl
+    ? ':is(:disabled,[aria-disabled="true"],:has(:is(input,button,select,textarea):is(:disabled,[aria-disabled="true"])))'
+    : ':is(:disabled,[aria-disabled="true"])';
+}
+
+/**
+ * Whether a part's styled element wraps one control: its component (or the
+ * one named like the part) is a form control (Core's own category) that
+ * takes a disabled prop. An action part that holds children (a button
+ * group) never does.
+ * @param {Ctx} ctx
+ * @param {string} target
+ */
+export function wrapsOneControl(ctx, target) {
+  const comps = /** @type {Record<string, any>} */ (
+    ctx.project.components ?? {}
+  );
+  const pascal = target.replace(/(^|-)([a-z0-9])/g, (_, __, c) =>
+    c.toUpperCase(),
+  );
+  const docs = [ctx.project.target.get(target)?.component, pascal]
+    .map(n => (n ? comps[n] : null))
+    .filter(Boolean);
+  return docs.some(
+    d =>
+      /form/i.test(String(d.category ?? '')) &&
+      Object.keys(d.props ?? {}).some(p => /disabled/i.test(p)),
+  );
 }
 
 /**
@@ -2596,7 +2676,7 @@ export function staleBuild(cwd, slug, data) {
   // wins over the settings) is built in.
   const source = /\/\/ Built with \S+\.theme\.ts ([0-9a-f]{16})\./.exec(ts);
   if (source && fs.existsSync(f.ts) && source[1] !== themeSourceHash(cwd, slug))
-    return `${slug}.theme.ts changed since the last build`;
+    return `${slug}.theme.ts or a module it imports changed since the last build`;
   // By content, never by file times (an editor's re-save or a checkout
   // changes those): a generated module cut short, or built outputs whose
   // header names another CLI than the settings were written by (a build

@@ -138,7 +138,7 @@ describe('R9-C: disabled on a wrapper part', () => {
       state: 'disabled',
     });
     expect(fs.readFileSync(at('m', 'm.css'), 'utf8')).toMatch(
-      /\.astryx-typeahead:is\([^{]*:has\(:disabled,\[aria-disabled="true"\]\)\)/,
+      /\.astryx-typeahead:is\([^{]*:has\(:is\(input,button,select,textarea\):is\(:disabled,\[aria-disabled="true"\]\)\)\)/,
     );
   }, 240_000);
 });
