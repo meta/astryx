@@ -35,6 +35,7 @@ import {
   parentAcrossShadow,
 } from '../utils/flatTree';
 import {isElement, isNode} from '../utils/nodeType';
+import {sharedWeakMap} from '../utils/sharedRealm';
 import {UIKIT_LONG_PRESS} from '../motion/uikit/gestures';
 
 /** What a transcript drag decides against, read as it starts. */
@@ -46,7 +47,10 @@ interface DismissDrag {
 
 // The drag that each transcript pan follows, until it reaches the line or
 // ends. A pan follows one drag at a time.
-const drags = new WeakMap<PanGestureRecognizer, DismissDrag>();
+const drags = sharedWeakMap<PanGestureRecognizer, DismissDrag>(
+  'chat/transcript-dismiss/drags',
+  1,
+);
 
 /** What a drag that starts on the composer decides against. */
 interface ComposerDrag {
@@ -58,7 +62,10 @@ interface ComposerDrag {
 
 // The drag that each composer pan follows, until it dismisses the keyboard,
 // gives way to a scroller in the composer, or ends.
-const composerDrags = new WeakMap<PanGestureRecognizer, ComposerDrag>();
+const composerDrags = sharedWeakMap<PanGestureRecognizer, ComposerDrag>(
+  'chat/transcript-dismiss/composer-drags',
+  1,
+);
 
 function focusedEditable(doc: Document): HTMLElement | null {
   const active = deepActiveElement(doc);
