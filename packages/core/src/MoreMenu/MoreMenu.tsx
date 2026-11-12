@@ -35,6 +35,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/MoreMenu/MoreMenu.generated';
+import {pickDataAttributes} from '../utils/themeProps';
 
 registerEnglishFallback(english);
 
@@ -151,6 +152,7 @@ export function MoreMenu({
   style,
   'data-testid': testId,
   ref,
+  ...rest
 }: MoreMenuProps) {
   const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.moreMenu.label');
@@ -172,6 +174,7 @@ export function MoreMenu({
       alignment={alignment}
       presentation={presentation}
       button={{
+        ...pickDataAttributes(rest),
         label,
         icon: icon ?? moreIcon,
         variant,

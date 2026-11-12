@@ -711,16 +711,21 @@ export function normalizeThemeBuildForCompare(content) {
     .join('\n');
 }
 
-/** @param {Array<{dest: string, content: string, allowMissingInCheck?: boolean}>} writes @param {string} cwd @returns {Array<{path: string, reason: 'missing' | 'outdated'}>} */
+/**
+ * The outputs that are missing or differ from what the build would write. A
+ * missing `.css.d.ts` stylesheet type stub (a write marked `warnWhenMissing`)
+ * is not stale: projects that ignore it in version control run the check in
+ * CI, so the check warns about it instead (missingDeclarations). Every other
+ * missing output, the module's `.d.ts` too, is stale.
+ * @param {Array<{dest: string, content: string, warnWhenMissing?: boolean}>} writes @param {string} cwd @returns {Array<{path: string, reason: 'missing' | 'outdated'}>}
+ */
 function staleBuildOutputs(writes, cwd) {
   /** @type {Array<{path: string, reason: 'missing' | 'outdated'}>} */
   const stale = [];
   for (const write of writes) {
     const rel = path.relative(cwd, write.dest);
     if (!fs.existsSync(write.dest)) {
-      if (!write.allowMissingInCheck) {
-        stale.push({path: rel, reason: 'missing'});
-      }
+      if (!write.warnWhenMissing) stale.push({path: rel, reason: 'missing'});
       continue;
     }
     const onDisk = fs.readFileSync(write.dest, 'utf8');
@@ -734,11 +739,40 @@ function staleBuildOutputs(writes, cwd) {
   return stale;
 }
 
-/** @param {Array<{dest: string, allowMissingInCheck?: boolean}>} writes @param {string} cwd */
+/**
+ * Every output the build writes, from the same write list the build and the
+ * stale comparison use. A missing output makes the check stale, except the
+ * `.css.d.ts` stub, which it warns about (missingDeclarations).
+ * @param {Array<{dest: string}>} writes @param {string} cwd
+ */
 function checkedBuildOutputs(writes, cwd) {
+  return writes.map(write => path.relative(cwd, write.dest));
+}
+
+/**
+ * The `.css.d.ts` stylesheet type stubs the build writes that are missing,
+ * which the check names as checked and warns about in text mode without
+ * failing.
+ * @param {Array<{dest: string, warnWhenMissing?: boolean}>} writes @param {string} cwd
+ * @returns {string[]}
+ */
+function missingDeclarations(writes, cwd) {
   return writes
-    .filter(write => !write.allowMissingInCheck || fs.existsSync(write.dest))
+    .filter(write => write.warnWhenMissing && !fs.existsSync(write.dest))
     .map(write => path.relative(cwd, write.dest));
+}
+
+/**
+ * The one text-mode warning line for missing stylesheet type stubs, or
+ * nothing when none is missing. The logger is silent under --json.
+ * @param {Array<{dest: string, warnWhenMissing?: boolean}>} writes @param {string} cwd
+ */
+function warnMissingDeclarations(writes, cwd) {
+  const missing = missingDeclarations(writes, cwd);
+  if (missing.length === 0) return;
+  logger.warn(
+    `  Warning: stylesheet type declaration file${missing.length === 1 ? '' : 's'} not found: ${missing.join(', ')}. The check does not fail on ${missing.length === 1 ? 'it' : 'them'}; a build writes ${missing.length === 1 ? 'it' : 'them'}.`,
+  );
 }
 
 /** Remedies that end a confinement error, by where the output path came from. */
@@ -1058,6 +1092,41 @@ function assertThemeSourceFile(filePath, cwd) {
       ERROR_CODES.ERR_THEME_LOAD,
     );
   }
+}
+
+/**
+ * Who takes the editor-folder warning instead of the logger: the watcher's
+ * child build hands it to its parent, which warns once per session. Set
+ * only by the CLI (not part of the public API), and never by an option of
+ * themeBuild.
+ * @type {((warning: string) => void) | null}
+ */
+let editorFolderListener = null;
+
+/**
+ * Hand the editor-folder warning of the builds in this process to
+ * `listener` instead of the logger. CLI-internal: the watch child's
+ * hand-off to its parent.
+ * @param {((warning: string) => void) | null} listener
+ */
+export function setEditorFolderListener(listener) {
+  editorFolderListener = listener;
+}
+
+/**
+ * Who is told a build found private var errors (the CLI, to exit 1). Set
+ * only by the CLI, never by an option of themeBuild.
+ * @type {(() => void) | null}
+ */
+let privateVarErrorListener = null;
+
+/**
+ * Tell `listener` when a build in this process finds private var errors.
+ * CLI-internal.
+ * @param {(() => void) | null} listener
+ */
+export function setPrivateVarErrorListener(listener) {
+  privateVarErrorListener = listener;
 }
 
 /**
@@ -3574,14 +3643,13 @@ function validateHeadingTypeAugmentationSupport(themeDef) {
  * `logger` (silent by default).
  *
  * @param {string} file - Theme file path, resolved against `cwd`.
- * @param {{out?: string, check?: boolean, iconsSpecifier?: string, __prepareFamily?: boolean, __familyLoader?: any, __familyInterception?: any, __onPrivateVarError?: () => void, __writeRoot?: string, __claimedOutputs?: Map<string, string>, __deferredWrites?: Array<Array<{dest: string, content: string}>>, __commandWords?: {group: string, build: string}, __onEditorFolder?: (warning: string) => void}} [options] -
+ * @param {{out?: string, check?: boolean, iconsSpecifier?: string, __prepareFamily?: boolean, __familyLoader?: any, __familyInterception?: any, __writeRoot?: string, __claimedOutputs?: Map<string, string>, __deferredWrites?: Array<Array<{dest: string, content: string}>>, __commandWords?: {group: string, build: string}}} [options] -
  *   `out` overrides the output CSS path, or names the folder for it; `check` compares against on-disk outputs
  *   instead of writing. `__claimedOutputs` records the outputs earlier builds
  *   in one run wrote, so a later theme cannot replace them; with
  *   `__deferredWrites` the build adds its outputs to that list instead of
  *   writing them, for writeDeferredBuildOutputs. `__writeRoot` replaces `cwd` as the directory every
- *   output must stay inside, for a CLI-internal scratch build. `__onEditorFolder`
- *   takes the editor-folder warning instead of the logger. `iconsSpecifier` overrides the icon registry import
+ *   output must stay inside, for a CLI-internal scratch build. `iconsSpecifier` overrides the icon registry import
  *   specifier in the generated module (e.g. `./icons.mjs`); when omitted, the
  *   direct registry specifiers from the theme source are emitted unchanged.
  * @param {{cwd?: string, projectCore?: boolean}} [ctx] `projectCore`: only the
@@ -3821,7 +3889,7 @@ async function themeBuildInternal(
     logger.error(`  [error] ${source}${e}`);
   }
   if (privateVarErrors.length > 0) {
-    options.__onPrivateVarError?.();
+    privateVarErrorListener?.();
     logger.error(
       `\n  ${source}${privateVarErrors.length} private var error(s). Use standard CSS properties instead.`,
     );
@@ -4280,7 +4348,7 @@ async function themeBuildInternal(
 
   const writes = [
     {dest: outPath, content: cssContent},
-    {dest: cssDtsPath, content: cssDtsContent, allowMissingInCheck: true},
+    {dest: cssDtsPath, content: cssDtsContent, warnWhenMissing: true},
     {dest: jsPath, content: jsContent},
     {dest: dtsPath, content: dtsContent},
   ];
@@ -4302,7 +4370,7 @@ async function themeBuildInternal(
       claimed: options.__claimedOutputs,
       rerun,
       refuseUnmarked: Boolean(options.out),
-      onEditorFolder: options.__onEditorFolder,
+      onEditorFolder: editorFolderListener ?? undefined,
     });
   }
 
@@ -4335,6 +4403,7 @@ async function themeBuildInternal(
           `\n  Rebuild with: ${rebuildLine(rebuildCommand, options.__commandWords)}`,
         );
     }
+    warnMissingDeclarations(writes, cwd);
     return /** @type {import('../theme.type.mjs').ThemeBuildCheckResponse} */ ({
       type: 'theme.build.check',
       data: {
@@ -4734,7 +4803,7 @@ async function preloadFamilySource(filePath, loader, interception) {
   finally { patch.undo(); }
 }
 
-/** @param {string[]} files @param {{familyKey: string, check?: boolean, iconsSpecifier?: string, __onPrivateVarError?: () => void, __commandWords?: {group: string, build: string}}} options @param {{cwd?: string}} [ctx] */
+/** @param {string[]} files @param {{familyKey: string, check?: boolean, iconsSpecifier?: string, __commandWords?: {group: string, build: string}}} options @param {{cwd?: string}} [ctx] */
 export async function themeBuildFamily(
   files,
   options,
@@ -4771,7 +4840,7 @@ export async function themeBuildFamily(
     }
     const file = source.file;
     // prettier-ignore
-    const member = await themeBuildInternal(file, {iconsSpecifier: options.iconsSpecifier, __prepareFamily: true, __familyLoader: familyLoader, __familyInterception: familyInterception, __onPrivateVarError: options.__onPrivateVarError}, {cwd});
+    const member = await themeBuildInternal(file, {iconsSpecifier: options.iconsSpecifier, __prepareFamily: true, __familyLoader: familyLoader, __familyInterception: familyInterception}, {cwd});
     if (!member || member.type) {
       throw new AstryxError(
         `Theme family member "${file}" did not produce a complete build plan.`,
@@ -4945,7 +5014,7 @@ export async function themeBuildFamily(
     },
     {
       dest: cssDtsPath,
-      allowMissingInCheck: true,
+      warnWhenMissing: true,
       content:
         generatedHeader(headerSource, 'ts', buildCommand, root.versions) +
         'export {};\n',
@@ -5005,6 +5074,7 @@ export async function themeBuildFamily(
           `\n  Rebuild with: ${rebuildLine(rebuildCommand, options.__commandWords)}`,
         );
     }
+    warnMissingDeclarations(writes, cwd);
     return /** @type {import('../theme.type.mjs').ThemeBuildCheckResponse} */ ({
       type: 'theme.build.check',
       data: {

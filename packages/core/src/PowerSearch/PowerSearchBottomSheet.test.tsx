@@ -839,6 +839,27 @@ describe('PowerSearch sheet trigger (FR11)', () => {
     expect(isSheetOpen()).toBe(true);
   });
 
+  it('passes data-* attributes to the trigger, the primary control', () => {
+    const props = {'data-tag': 'ps', filters: [openFilter]};
+    setup(props);
+    expect(document.querySelectorAll('[data-tag="ps"]')).toHaveLength(1);
+    expect(trigger()).toHaveAttribute('data-tag', 'ps');
+  });
+
+  it('passes data-* attributes to the combobox input in the popover presentation', () => {
+    render(
+      <PowerSearch
+        config={config}
+        filters={[]}
+        onChange={vi.fn()}
+        presentation="popover"
+        data-tag="ps"
+      />,
+    );
+    expect(document.querySelectorAll('[data-tag="ps"]')).toHaveLength(1);
+    expect(screen.getByRole('combobox')).toHaveAttribute('data-tag', 'ps');
+  });
+
   it('keeps data-testid on the combobox input in the popover presentation', () => {
     render(
       <PowerSearch
