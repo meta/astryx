@@ -4,7 +4,11 @@ import {
   Card,
   Table,
   VStack,
+  pixel,
+  useTableColumnsVirtualization,
   useTableRowsVirtualization,
+  useTableStickyColumns,
+  type TableColumn,
 } from '@astryxdesign/core';
 const rows = Array.from({length: 2000}, (_, index) => ({
   id: String(index),
@@ -64,4 +68,45 @@ function InCard() {
 }
 export const InSizedCard: StoryObj = {
   render: () => <InCard />,
+};
+
+type WideRow = Record<string, string> & {id: string};
+const wideColumns: TableColumn<WideRow>[] = [
+  {key: 'name', header: 'Name', width: pixel(160)},
+  ...Array.from({length: 299}, (_, index) => ({
+    key: `metric${index + 1}`,
+    header: `Metric ${index + 1}`,
+    width: pixel(120),
+  })),
+];
+const wideRows: WideRow[] = Array.from({length: 200}, (_, row) => {
+  const item: WideRow = {id: String(row), name: `Account ${row + 1}`};
+  for (let index = 1; index < 300; index++) {
+    item[`metric${index}`] = `${row + 1}.${index}`;
+  }
+  return item;
+});
+
+function ColumnWindowingExample() {
+  const virtualization = useTableColumnsVirtualization({
+    initialViewportWidth: 900,
+  });
+  const sticky = useTableStickyColumns<WideRow>({startKeys: ['name']});
+  // 300 columns and 200 rows: only the columns near the viewport mount.
+  return (
+    <VStack width={900}>
+      <Table
+        aria-label="Account metrics"
+        data={wideRows}
+        columns={wideColumns}
+        idKey="id"
+        plugins={{sticky}}
+        virtualization={virtualization}
+        dividers="grid"
+      />
+    </VStack>
+  );
+}
+export const ColumnWindowing: StoryObj = {
+  render: () => <ColumnWindowingExample />,
 };

@@ -227,7 +227,7 @@
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditPreviewListResponse
  * @property {'themeEdit.previewList'} type
- * @property {{folder: string | null, theme: string | null, themeMissing: boolean, pages: Array<{id: string, label: string}>, notes: string[]}} data - `themeMissing`: the theme the preview wears is gone, so its route does not build; `notes`: what else to know, such as the command that switches it.
+ * @property {{folder: string | null, theme: string | null, themeMissing: boolean, pages: Array<{id: string, label: string, missing?: boolean}>, notes: string[]}} data - `themeMissing`: the theme the preview wears is gone, so its route does not build; a page's `missing`: its file is gone; `notes`: what else to know, such as the command that fixes it.
  */
 
 /**

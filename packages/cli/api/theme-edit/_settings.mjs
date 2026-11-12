@@ -15,6 +15,7 @@ import * as fs from 'node:fs';
 import postcss from 'postcss';
 import {createRequire} from 'node:module';
 import * as path from 'node:path';
+import {themeFileImports} from '../../foundation/discovery/theme-discovery.mjs';
 import {pathToFileURL} from 'node:url';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
 import {AstryxError} from '../error.mjs';
@@ -97,7 +98,7 @@ import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 /** What lifted secondary text sits on: the contrast check measures it there. */
 const LIFT_GROUND_TOKENS = new Set(LIFT_PARTS.map(([, , g]) => g));
 
-/** @typedef {{project: import('./_project.mjs').ThemeProject, C: import('./_compiler.mjs').Compiler, unchecked?: string | null, uncheckedCode?: string | null, wrote?: Map<string, string | null>, base?: {light: Record<string, string>, dark: Record<string, string>, components?: Record<string, any>}, keepStops?: Record<string, Record<'light' | 'dark', {family: string, stop: number, alpha?: string}>> | null, keepRadii?: Record<string, string> | null}} Ctx */
+/** @typedef {{project: import('./_project.mjs').ThemeProject, C: import('./_compiler.mjs').Compiler, unchecked?: string | null, uncheckedCode?: string | null, wrote?: Map<string, string | null>, base?: {light: Record<string, string>, dark: Record<string, string>, components?: Record<string, any>}, keepStops?: Record<string, Record<'light' | 'dark', {family: string, stop: number, alpha?: string}>> | null, keepRadii?: Record<string, string> | null, derived?: Record<string, Array<{property: string, vars?: string[], replaces?: boolean, expand?: string}>>}} Ctx */
 /** @typedef {import('./_parts.mjs').PaintSide} PaintSide */
 /** @typedef {import('./_parts.mjs').TextPair} TextPair */
 
@@ -260,6 +261,25 @@ export function refuse(code, message, extra = {}) {
 }
 
 /**
+ * A theme name as typed, read the way the editor reads it: a path to its
+ * folder or a file in it (t.theme.ts, Brand.settings.json), in any case,
+ * names the theme. The result may still need slugFor.
+ * @param {unknown} s
+ * @returns {string}
+ */
+export function typedThemeName(s) {
+  return String(s ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/^.*themes[\\/]/, '')
+    .replace(/[\\/].*$/, '')
+    .replace(
+      /\.(theme\.ts|settings\.(json|ts)|history\.json|css\.d\.ts|d\.ts|css|js|ts)$/,
+      '',
+    );
+}
+
+/**
  * The settings of a theme, or a refusal naming the command that makes it.
  * @param {string} cwd
  * @param {string} slug
@@ -277,15 +297,7 @@ export function loadTheme(
     // A path or a capital letter typed for a theme that exists names it.
     // A file name typed for the theme (t.theme.ts, Brand.settings.json)
     // names the theme.
-    const plain = String(slug ?? '')
-      .trim()
-      .toLowerCase()
-      .replace(/^.*themes[\\/]/, '')
-      .replace(/[\\/].*$/, '')
-      .replace(
-        /\.(theme\.ts|settings\.(json|ts)|history\.json|css\.d\.ts|d\.ts|css|js|ts)$/,
-        '',
-      );
+    const plain = typedThemeName(slug);
     const fixed = slugFor(plain);
     const same = fs.existsSync(themeFiles(cwd, fixed).settings) ? fixed : null;
     // A list where one theme goes (t,u or "t;u"): one theme at a time,
@@ -348,7 +360,7 @@ export function loadTheme(
         ERROR_CODES.ERR_UNKNOWN_THEME,
         stopped
           ? `themes/${slug} was left by a \`new\` that was stopped part way, so it has no settings yet. Run new again to finish it; files you added there are kept.`
-          : `themes/${slug} has lost its settings (${slug}.settings.json is gone), but the editor made it. Run new to make it again: your own files there are kept${fs.existsSync(f.history) ? `, and \`undo ${slug}\` then steps back to the earlier settings` : ''}.`,
+          : `themes/${slug} has lost its settings (${slug}.settings.json is gone), but the editor made it. Run new to make it again: your own files there are kept${fs.existsSync(f.history) ? `, and \`undo ${slug}\` then steps back to the settings from before the last change (the last change itself is not kept)` : ''}.`,
         {run: [`${P} new ${slug}`]},
       );
     if (!same && (other || LIKE.includes(slug)))
@@ -723,7 +735,11 @@ export {modesOf};
  * @returns {number | null}
  */
 export function lengthPx(v) {
-  const m = /^\s*(-?\d+(?:\.\d+)?|-?\.\d+)\s*(px|rem|em)?\s*$/i.exec(String(v));
+  // A CSS number: a sign, digits with or without a fraction, an exponent.
+  const m =
+    /^\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)\s*(px|rem|em)?\s*$/i.exec(
+      String(v),
+    );
   if (!m) return null;
   const n = Number(m[1]);
   return (m[2] ?? 'px').toLowerCase() === 'px' ? n : n * 16;
@@ -1000,7 +1016,7 @@ export function compileTheme(ctx, data, base) {
       if (tg?.states.includes(s.state) && s.when == null) b = t[s.state] ??= {};
       else if (tg?.states.includes(s.state))
         b = t[`${s.when}+${s.state}`] ??= {};
-      else b = b[stateKey(s.state)] ??= {};
+      else b = b[stateKey(s.state, wrapsOneControl(ctx, target))] ??= {};
     }
     return b;
   };
@@ -1367,9 +1383,10 @@ const SMALL_STEPS = /** @type {Array<[string, number]>} */ ([
  * Settings whose effect a later or stronger setting hides, with why: `type`
  * loses heading weight and tracking to `headings`.
  * @param {ThemeData} data
+ * @param {Ctx | null} [ctx] with it, a later setting that reaches the parts through a spread counts too
  * @returns {Map<Setting, string>}
  */
-export function maskedSettings(data) {
+export function maskedSettings(data, ctx = null) {
   /** @type {Map<Setting, string>} */
   const out = new Map();
   const axes = new Set(
@@ -1409,6 +1426,37 @@ export function maskedSettings(data) {
         `${describe(later)} comes later and covers ${s.on}, so ${s.on} shows ${later.value}; set ${s.on} again to make it win`,
       );
   });
+  // With the parts known: a later setting of the same thing that reaches
+  // every part an earlier one styles (a member that spreads to its group,
+  // the same part without --only), dial or CSS property, covers it too.
+  if (ctx)
+    data.settings.forEach((s, i) => {
+      if (
+        out.has(s) ||
+        !s.on ||
+        (s.source !== 'dial' && s.source !== 'property')
+      )
+        return;
+      const mine = partsOf(ctx, s);
+      if (!mine.length) return;
+      const later = data.settings
+        .slice(i + 1)
+        .find(
+          x =>
+            x.thing === s.thing &&
+            x.source === s.source &&
+            x.on &&
+            (x.when ?? '') === (s.when ?? '') &&
+            (x.state ?? '') === (s.state ?? '') &&
+            (x.mode ?? '') === (s.mode ?? '') &&
+            mine.every(t => partsOf(ctx, x).includes(t)),
+        );
+      if (later)
+        out.set(
+          s,
+          `${describe(later)} comes later and covers ${s.on}, so ${s.on} shows ${later.value}; set ${s.on} again to make it win`,
+        );
+    });
   for (const s of data.settings) {
     if (s.thing !== 'type' || !axes.size) continue;
     const T = TYPE_STYLES[s.value];
@@ -1592,6 +1640,12 @@ function settingsSource(slug, data, theme, pal, cwd = '') {
     [
       `// Generated by \`${P}\` from ${slug}.settings.json on every change: do not edit.`,
       `// Built from settings ${settingsStamp(data)}.`,
+      // The theme source as it is when the build starts (the editor's
+      // own when the build writes it), so an own change to it after the
+      // build is told by content.
+      ...(cwd
+        ? [`// Built with ${slug}.theme.ts ${themeSourceHash(cwd, slug)}.`]
+        : []),
       ...(like && cwd
         ? [
             `// Built on @astryxdesign/theme-${like} ${baseVersionOf(cwd, like) ?? 'unknown'}.`,
@@ -1613,6 +1667,67 @@ function settingsSource(slug, data, theme, pal, cwd = '') {
       '',
     ].join('\n'),
   );
+}
+
+/**
+ * A hash of a theme's source file as the next build reads it: the file, or
+ * the source the editor writes when there is none.
+ * @param {string} cwd
+ * @param {string} slug
+ */
+function themeSourceHash(cwd, slug) {
+  const f = themeFiles(cwd, slug);
+  const hash = createHash('sha256');
+  if (!fs.existsSync(f.ts)) {
+    // The same as the file the build is about to write would hash.
+    hash.update(`${path.basename(f.ts)}\0`);
+    hash.update(themeModuleSource(slug));
+    return hash.digest('hex').slice(0, 16);
+  }
+  // The theme source and every local module it reaches (an own helper
+  // such as ./my-tokens), read the way theme discovery reads them; the
+  // editor's generated modules change with each build and are judged by
+  // their own stamps.
+  const generated = new Set([f.settingsTs]);
+  const seen = new Set();
+  const queue = [f.ts];
+  while (queue.length) {
+    const file = /** @type {string} */ (queue.shift());
+    if (seen.has(file)) continue;
+    seen.add(file);
+    hash.update(`${path.relative(f.dir, file)}\0`);
+    hash.update(fs.readFileSync(file));
+    /** @type {string[]} */
+    let specifiers = [];
+    try {
+      specifiers = themeFileImports(file);
+    } catch {
+      // A file that does not parse is hashed as it is; the build names it.
+    }
+    for (const spec of specifiers) {
+      if (!spec.startsWith('.')) continue;
+      const base = path.resolve(path.dirname(file), spec);
+      const target = [
+        '',
+        '.ts',
+        '.tsx',
+        '.mts',
+        '.js',
+        '.mjs',
+        '/index.ts',
+        '/index.js',
+      ]
+        .map(x => base + x)
+        .find(p => fs.existsSync(p) && fs.statSync(p).isFile());
+      if (
+        target &&
+        !generated.has(target) &&
+        !path.relative(path.join(f.dir, 'tokens'), target).match(/^[^.]/)
+      )
+        queue.push(target);
+    }
+  }
+  return hash.digest('hex').slice(0, 16);
 }
 
 /**
@@ -1855,10 +1970,35 @@ export async function resolvedTokens(ctx, slug) {
     v => v && typeof v === 'object' && typeof v.name === 'string',
   );
   const {core} = ctx.project;
-  const out = {
-    light: core.resolveThemeTokens(t, {mode: 'light'}),
-    dark: core.resolveThemeTokens(t, {mode: 'dark'}),
+  // A token value an own theme source gives as a number (8 for 8px)
+  // reads as its text, never as a crash.
+  const asText = (/** @type {Record<string, unknown>} */ m) =>
+    Object.fromEntries(
+      Object.entries(m ?? {}).map(([k, v]) => [
+        k,
+        typeof v === 'string' ? v : String(v),
+      ]),
+    );
+  // A token value that is not text (a number in an own theme source) is
+  // named, never a crash.
+  const resolve = (/** @type {'light' | 'dark'} */ mode) => {
+    try {
+      return asText(core.resolveThemeTokens(t, {mode}));
+    } catch (e) {
+      const bad = Object.entries(/** @type {any} */ (t)?.tokens ?? {}).find(
+        ([, v]) =>
+          typeof v !== 'string' && (typeof v !== 'object' || v == null),
+      );
+      throw new AstryxError(
+        bad
+          ? `${slug}.theme.ts gives ${bad[0]} the value ${JSON.stringify(bad[1])}, which is not text: a token value is a CSS value in quotes (such as '${bad[1]}px').`
+          : `${slug} could not be read: ${e instanceof Error ? e.message : String(e)}.`,
+        [{name: `${P} how --list tokens`, reason: 'every token and its type'}],
+        ERROR_CODES.ERR_THEME_INVALID,
+      );
+    }
   };
+  const out = {light: resolve('light'), dark: resolve('dark')};
   // The tokens each part sets for itself (the official themes lift
   // secondary text on some parts), for the contrast check; kept out of the
   // modes so nothing that lists the resolved tokens sees it.
@@ -2050,7 +2190,7 @@ export async function contrastProblems(ctx, data, res) {
     })(),
     ...(unchecked.length
       ? [
-          `not checked: text on or in ${unchecked.slice(0, 3).join(', ')}${unchecked.length > 3 ? ` and ${unchecked.length - 3} more` : ''}, which ${unchecked.length === 1 ? 'is' : 'are'} not a fixed color`,
+          `not checked: text on or in ${unchecked.slice(0, 3).join(', ')}${unchecked.length > 3 ? ` and ${unchecked.length - 3} more` : ''}, which the editor cannot read as one fixed color`,
         ]
       : []),
   ];
@@ -2118,7 +2258,9 @@ export function baseComponent(base, ctx, target, prop, s) {
     const states = ctx.project.target.get(target)?.states ?? [];
     b = states.includes(s.state)
       ? t[s.when == null ? s.state : `${s.when}+${s.state}`]
-      : (b?.[stateKey(s.state)] ?? b?.[`:${s.state}`]);
+      : (b?.[stateKey(s.state, wrapsOneControl(ctx, target))] ??
+        b?.[stateKey(s.state)] ??
+        b?.[`:${s.state}`]);
   }
   const v = b?.[prop];
   return typeof v === 'string' ? v : null;
@@ -2184,15 +2326,60 @@ export function clearNewMarker(dir) {
 
 /**
  * The pseudo key a state writes in a part's styles. Core marks a disabled
- * button, link, tab or menu item with aria-disabled (it stays focusable),
- * and its own styles match both forms: so does the theme.
+ * button, link or tab with aria-disabled (it stays focusable). A form
+ * control styled on a wrapper (a typeahead, a complex selector) has its
+ * input or button inside marked, so it also matches a disabled form
+ * control inside it (never a list row); an action part that holds
+ * children (a button group, a segmented control) never does, so one
+ * disabled child never makes the whole part look disabled.
  * @param {string} state
+ * @param {boolean} [wrapsControl]
  * @returns {string}
  */
-export function stateKey(state) {
-  return state === 'disabled'
-    ? ':is(:disabled,[aria-disabled="true"])'
-    : `:${state}`;
+export function stateKey(state, wrapsControl = false) {
+  if (state !== 'disabled') return `:${state}`;
+  return wrapsControl
+    ? ':is(:disabled,[aria-disabled="true"],:has(:is(input,button,select,textarea):is(:disabled,[aria-disabled="true"])))'
+    : ':is(:disabled,[aria-disabled="true"])';
+}
+
+/**
+ * The component docs of a part: its own component's, and the one named like
+ * the part (tab is Tab, under TabList), each with its name, for the ones the
+ * project has.
+ * @param {Ctx} ctx
+ * @param {string} part
+ * @returns {Array<{name: string, doc: any}>}
+ */
+export function partComponentDocs(ctx, part) {
+  const comps = /** @type {Record<string, any>} */ (
+    ctx.project.components ?? {}
+  );
+  const pascal = part.replace(/(^|-)([a-z0-9])/g, (_, __, c) =>
+    c.toUpperCase(),
+  );
+  return [ctx.project.target.get(part)?.component, pascal]
+    .filter(n => n != null && comps[n])
+    .map(n => ({
+      name: /** @type {string} */ (n),
+      doc: comps[/** @type {string} */ (n)],
+    }));
+}
+
+/**
+ * Whether a part's styled element wraps one control: its component (or the
+ * one named like the part) is a form control (Core's own category) that
+ * takes a disabled prop. An action part that holds children (a button
+ * group) never does.
+ * @param {Ctx} ctx
+ * @param {string} target
+ */
+export function wrapsOneControl(ctx, target) {
+  return partComponentDocs(ctx, target).some(
+    ({doc: d}) =>
+      /form/i.test(String(d.category ?? '')) &&
+      Object.keys(d.props ?? {}).some(p => /disabled/i.test(p)),
+  );
 }
 
 /**
@@ -2510,6 +2697,11 @@ export function staleBuild(cwd, slug, data) {
     if (built && now && built !== now)
       return `@astryxdesign/theme-${data.like} is ${now} now, and the build was made on ${built}`;
   }
+  // An own change to <slug>.theme.ts since the build (the file says it
+  // wins over the settings) is built in.
+  const source = /\/\/ Built with \S+\.theme\.ts ([0-9a-f]{16})\./.exec(ts);
+  if (source && fs.existsSync(f.ts) && source[1] !== themeSourceHash(cwd, slug))
+    return `${slug}.theme.ts or a module it imports changed since the last build`;
   // By content, never by file times (an editor's re-save or a checkout
   // changes those): a generated module cut short, or built outputs whose
   // header names another CLI than the settings were written by (a build
