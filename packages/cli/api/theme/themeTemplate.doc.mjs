@@ -51,14 +51,14 @@ export const doc = {
     {
       type: 'theme.template',
       description:
-        'Receipt: the path (relative to cwd), whether it was written, and the reason it was not. `exists` when a file was already there, which is a success, not a failure.',
+        'Receipt: the path (relative to cwd), whether it was written, and the reason it was not. `exists` when a file was already there, which is a success, not a failure; then `overwritable` says whether overwrite would replace that file, and `alternative` is a free path for the template when it would not.',
     },
   ],
   throws: [
     {code: 'ERR_PATH_TRAVERSAL', when: 'the target path escapes cwd'},
     {
       code: 'ERR_INVALID_ARGUMENT',
-      when: 'the target path is blank, names a folder, or is not a .ts file',
+      when: 'the target path is blank, names a folder, or is not a .ts file (with or without overwrite)',
     },
     {
       code: 'ERR_FILE_EXISTS',

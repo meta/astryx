@@ -51,8 +51,12 @@ import {stripCopyrightHeader} from '../../foundation/text/copyright-header.mjs';
 import {loadIntegrations} from '../../foundation/integrations/integrations.mjs';
 import {importThemeArtifact} from '../../foundation/fs/module-loader.mjs';
 import {applyWrites} from '../integration/add-helpers.mjs';
-import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
+import {
+  formatCliCommand,
+  quoteCommandArgument,
+} from '../../foundation/env/package-manager.mjs';
 import {fsErrorMessage} from '../../foundation/fs/fs-error.mjs';
+import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
 import {analyzeTemplateNeeds} from '../../foundation/discovery/template-needs.mjs';
 
 export {BUNDLED_THEME_PACKAGE, THEMES_DIR};
@@ -168,8 +172,57 @@ const skippedLocalThemesOf = new WeakMap();
 function brokenLocalThemeError(broken) {
   return new AstryxError(
     `Local theme "${broken.slug}" in ${broken.path} is broken: ${broken.reason}`,
-    undefined,
+    [
+      {
+        name: formatCliCommand('theme list'),
+        reason: 'the themes that load, and the broken folders it skips',
+      },
+    ],
     ERROR_CODES.ERR_THEME_INVALID,
+  );
+}
+
+/**
+ * A slug that is not in the app's record. When a theme by that name is
+ * available, the refusal names `theme add`; otherwise `theme list`, since
+ * adding it would fail too.
+ * @param {string} slug
+ * @param {{projectDir: string}} state
+ */
+async function notAddedError(slug, state) {
+  let match;
+  try {
+    match = await findTheme(slug, {cwd: state.projectDir});
+  } catch (error) {
+    // More than one package provides the slug: adding it names one.
+    if (
+      error instanceof AstryxError &&
+      error.code === ERROR_CODES.ERR_AMBIGUOUS_THEME
+    ) {
+      return new AstryxError(
+        `Theme "${slug}" is not added, and more than one package provides it. Add it from one of them with --package first.`,
+        error.suggestions,
+        ERROR_CODES.ERR_UNKNOWN_THEME,
+      );
+    }
+    throw error;
+  }
+  const list = {
+    name: formatCliCommand('theme list', state.projectDir),
+    reason: 'the themes you can add',
+  };
+  if (!match) {
+    return new AstryxError(
+      `Theme "${slug}" is not added, and no theme by that name is available. Run \`${list.name}\` for the themes you can add.`,
+      [list],
+      ERROR_CODES.ERR_UNKNOWN_THEME,
+    );
+  }
+  const add = formatCliCommand(`theme add ${match.slug}`, state.projectDir);
+  return new AstryxError(
+    `Theme "${slug}" is not added. Run \`${add}\` first.`,
+    [{name: add, reason: 'add it to the app'}],
+    ERROR_CODES.ERR_UNKNOWN_THEME,
   );
 }
 
@@ -494,7 +547,12 @@ export function ejectThemeFiles(theme, {cwd, targetPath, overwrite = false}) {
         targetPath
           ? error.message.replace(`"${target}"`, `"${targetPath}"`)
           : error.message,
-        undefined,
+        [
+          {
+            name: formatCliCommand(`theme eject ${theme.slug}`, cwd),
+            reason: `fork into ${defaultEjectTarget(theme.slug).split(path.sep).join('/')}`,
+          },
+        ],
         ERROR_CODES.ERR_PATH_TRAVERSAL,
       );
     }
@@ -541,7 +599,23 @@ export function ejectThemeFiles(theme, {cwd, targetPath, overwrite = false}) {
       throw new AstryxError(
         `Refusing to overwrite existing file ${rel}. ` +
           'Re-run with --overwrite (or -f) to replace it.',
-        undefined,
+        [
+          {
+            name: formatCliCommand(
+              [
+                'theme eject',
+                theme.slug,
+                ...(targetPath ? [quoteCommandArgument(targetPath)] : []),
+                ...(theme.source === 'bundled'
+                  ? []
+                  : ['--package', quoteCommandArgument(theme.package)]),
+                '--overwrite',
+              ].join(' '),
+              cwd,
+            ),
+            reason: 'replace the earlier fork of this theme',
+          },
+        ],
         ERROR_CODES.ERR_FILE_EXISTS,
       );
     }
@@ -617,7 +691,9 @@ function asThemeError(error) {
     message.startsWith('Refusing to replace')
       ? ERROR_CODES.ERR_FILE_EXISTS
       : ERROR_CODES.ERR_THEME_INVALID;
-  return new AstryxError(message, undefined, code);
+  const suggestions =
+    error instanceof ThemeStateError ? error.suggestions : undefined;
+  return new AstryxError(message, suggestions, code);
 }
 
 /**
@@ -625,7 +701,9 @@ function asThemeError(error) {
  * Without an explicit package, a local theme shadows package themes that share
  * its slug. Other duplicate slugs fail closed until the caller selects an owner.
  * @param {string} [slug]
- * @param {{cwd?: string, package?: string, includeLocal?: boolean}} [options]
+ * @param {{cwd?: string, package?: string, includeLocal?: boolean, command?: string}} [options]
+ *   `command`: the command a refusal suggests running with `--package`,
+ *   `theme add` by default
  * @returns {Promise<import('../../foundation/discovery/theme-discovery.mjs').DiscoveredTheme | undefined>}
  */
 export async function findTheme(slug, options = {}) {
@@ -668,7 +746,10 @@ export async function findTheme(slug, options = {}) {
     throw new AstryxError(
       `Theme "${slug}" is provided by more than one package. Select one with --package.`,
       matches.map(theme => ({
-        name: `${theme.slug} --package ${theme.package}`,
+        name: formatCliCommand(
+          `${options.command ?? 'theme add'} ${theme.slug} --package ${quoteCommandArgument(theme.package)}`,
+          options.cwd ?? process.cwd(),
+        ),
         reason:
           theme.source === 'bundled'
             ? 'bundled theme'
@@ -680,6 +761,36 @@ export async function findTheme(slug, options = {}) {
     );
   }
   return matches[0];
+}
+
+/**
+ * Runnable `<command> <slug>` suggestions for an unknown slug, closest names
+ * first; `--package` is named only where packages share a slug.
+ * @param {string} command such as `theme add`
+ * @param {string} slug what the person typed
+ * @param {import('../../foundation/discovery/theme-discovery.mjs').DiscoveredTheme[]} available
+ * @param {string} cwd
+ * @returns {Array<{theme: import('../../foundation/discovery/theme-discovery.mjs').DiscoveredTheme, name: string}>}
+ */
+export function themeCommandsFor(command, slug, available, cwd) {
+  const needle = String(slug).toLowerCase();
+  const shared = (/** @type {string} */ other) =>
+    available.filter(theme => theme.slug === other).length > 1;
+  return [...available]
+    .sort(
+      (a, b) =>
+        levenshteinDistance(needle, a.slug.toLowerCase()) -
+          levenshteinDistance(needle, b.slug.toLowerCase()) ||
+        a.slug.localeCompare(b.slug),
+    )
+    .slice(0, 5)
+    .map(theme => ({
+      theme,
+      name: formatCliCommand(
+        `${command} ${theme.slug}${shared(theme.slug) ? ` --package ${quoteCommandArgument(theme.package)}` : ''}`,
+        cwd,
+      ),
+    }));
 }
 
 /**
@@ -741,7 +852,12 @@ export function resolveRecordedThemes(state, available) {
     if (!theme) {
       throw new AstryxError(
         `Added theme "${slug}" from ${owner} is unavailable. Reinstall the package or restore the local theme, or drop it with \`${formatCliCommand(`theme remove ${slug}`, state.projectDir)}\`.`,
-        undefined,
+        [
+          {
+            name: formatCliCommand(`theme remove ${slug}`, state.projectDir),
+            reason: 'drop it from the app',
+          },
+        ],
         ERROR_CODES.ERR_UNKNOWN_THEME,
       );
     }
@@ -996,15 +1112,17 @@ async function addThemeToAppLocked(slug, cwd, options) {
     const available = await listAvailableThemes(cwd);
     throw new AstryxError(
       `Unknown theme "${slug}"${options.package ? ` in package "${options.package}"` : ''}.`,
-      available.map(theme => ({
-        name: `${theme.slug} --package ${theme.package}`,
-        reason:
-          theme.source === 'bundled'
-            ? 'bundled theme'
-            : theme.source === 'local'
-              ? 'local theme'
-              : `provided by ${theme.package}`,
-      })),
+      themeCommandsFor('theme add', slug, available, cwd).map(
+        ({theme, name}) => ({
+          name,
+          reason:
+            theme.source === 'bundled'
+              ? 'bundled theme'
+              : theme.source === 'local'
+                ? 'local theme'
+                : `provided by ${theme.package}`,
+        }),
+      ),
       ERROR_CODES.ERR_UNKNOWN_THEME,
     );
   }
@@ -1077,16 +1195,28 @@ async function removeThemeFromAppLocked(slug, cwd) {
   const state = readAppThemeState(cwd);
   const recordedSlug = recordedThemeSlug(state, slug);
   if (!state.configured || recordedSlug == null) {
-    throw new AstryxError(
-      `Theme "${slug}" is not added. Run \`${formatCliCommand(`theme add ${slug}`, state.projectDir)}\` first.`,
-      undefined,
-      ERROR_CODES.ERR_UNKNOWN_THEME,
-    );
+    throw await notAddedError(slug, state);
   }
   if (state.defaultSlug === recordedSlug) {
+    const others = Object.keys(state.themes).filter(
+      other => other !== recordedSlug,
+    );
+    const uses = others.slice(0, 3).map(other => ({
+      name: formatCliCommand(`theme use ${other}`, state.projectDir),
+      reason: `make ${other} the default`,
+    }));
     throw new AstryxError(
-      `Theme "${recordedSlug}" is the default. Run \`${formatCliCommand('theme use <other-slug>', state.projectDir)}\` before removing it.`,
-      undefined,
+      uses.length > 0
+        ? `Theme "${recordedSlug}" is the default. Run \`${uses[0].name}\` before removing it.`
+        : `Theme "${recordedSlug}" is the default and the only added theme. Add another theme and make it the default before removing it.`,
+      uses.length > 0
+        ? uses
+        : [
+            {
+              name: formatCliCommand('theme list', state.projectDir),
+              reason: 'the themes you can add',
+            },
+          ],
       ERROR_CODES.ERR_THEME_INVALID,
     );
   }
@@ -1094,8 +1224,16 @@ async function removeThemeFromAppLocked(slug, cwd) {
   delete themes[recordedSlug];
   if (state.defaultSlug == null) {
     throw new AstryxError(
-      `The generated theme module has no default theme. Run \`${formatCliCommand('theme use <slug>', state.projectDir)}\` first.`,
-      undefined,
+      `The generated theme module has no default theme. Run \`${formatCliCommand(`theme use ${Object.keys(themes)[0] ?? recordedSlug}`, state.projectDir)}\` first.`,
+      [
+        {
+          name: formatCliCommand(
+            `theme use ${Object.keys(themes)[0] ?? recordedSlug}`,
+            state.projectDir,
+          ),
+          reason: 'choose a default',
+        },
+      ],
       ERROR_CODES.ERR_THEME_INVALID,
     );
   }
@@ -1127,11 +1265,7 @@ async function useThemeInAppLocked(slug, cwd) {
   const state = readAppThemeState(cwd);
   const recordedSlug = recordedThemeSlug(state, slug);
   if (!state.configured || recordedSlug == null) {
-    throw new AstryxError(
-      `Theme "${slug}" is not added. Run \`${formatCliCommand(`theme add ${slug}`, state.projectDir)}\` first.`,
-      undefined,
-      ERROR_CODES.ERR_UNKNOWN_THEME,
-    );
+    throw await notAddedError(slug, state);
   }
   const available = await listAvailableThemes(state.projectDir);
   return writeThemeApp(
