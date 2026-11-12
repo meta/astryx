@@ -1164,6 +1164,14 @@ function builtFromOtherSource(dest, source, cwd) {
   return existing ? path.relative(cwd, existing) || existing : null;
 }
 
+/**
+ * Publish the outputs a batch deferred, one theme at a time, in build order.
+ * @param {Array<Array<{dest: string, content: string}>>} deferred
+ */
+export function writeDeferredBuildOutputs(deferred) {
+  for (const writes of deferred.splice(0)) writeBuildOutputs(writes);
+}
+
 /** @param {Array<{dest: string, content: string}>} writes */
 function writeBuildOutputs(writes) {
   if (writes.length === 0) return;
@@ -3446,11 +3454,12 @@ function validateHeadingTypeAugmentationSupport(themeDef) {
  * `logger` (silent by default).
  *
  * @param {string} file - Theme file path, resolved against `cwd`.
- * @param {{out?: string, check?: boolean, iconsSpecifier?: string, __prepareFamily?: boolean, __familyLoader?: any, __familyInterception?: any, __onPrivateVarError?: () => void, __writeRoot?: string, __claimedOutputs?: Map<string, string>, __planOnly?: boolean, __commandWords?: {group: string, build: string}}} [options] -
+ * @param {{out?: string, check?: boolean, iconsSpecifier?: string, __prepareFamily?: boolean, __familyLoader?: any, __familyInterception?: any, __onPrivateVarError?: () => void, __writeRoot?: string, __claimedOutputs?: Map<string, string>, __deferredWrites?: Array<Array<{dest: string, content: string}>>, __commandWords?: {group: string, build: string}}} [options] -
  *   `out` overrides the output CSS path, or names the folder for it; `check` compares against on-disk outputs
  *   instead of writing. `__claimedOutputs` records the outputs earlier builds
- *   in one run wrote, so a later theme cannot replace them; with `__planOnly`
- *   the build claims its outputs and returns null without writing. `__writeRoot` replaces `cwd` as the directory every
+ *   in one run wrote, so a later theme cannot replace them; with
+ *   `__deferredWrites` the build adds its outputs to that list instead of
+ *   writing them, for writeDeferredBuildOutputs. `__writeRoot` replaces `cwd` as the directory every
  *   output must stay inside, for a CLI-internal scratch build. `iconsSpecifier` overrides the icon registry import
  *   specifier in the generated module (e.g. `./icons.mjs`); when omitted, the
  *   direct registry specifiers from the theme source are emitted unchanged.
@@ -4173,14 +4182,6 @@ async function themeBuildInternal(
       rerun,
       refuseUnmarked: Boolean(options.out),
     });
-    // A planning pass over a batch claims the outputs and writes nothing, so
-    // two themes that build the same files are refused before either writes.
-    if (options.__planOnly) {
-      for (const write of writes) {
-        options.__claimedOutputs?.set(outputKey(write.dest), sourceRelative);
-      }
-      return null;
-    }
   }
 
   // Check mode: compare generated content against what's on disk instead of
@@ -4223,7 +4224,10 @@ async function themeBuildInternal(
     };
   }
 
-  writeBuildOutputs(writes);
+  // A batch publishes every theme's outputs after all of them are built, so
+  // two themes that build the same files are refused before either writes.
+  if (options.__deferredWrites) options.__deferredWrites.push(writes);
+  else writeBuildOutputs(writes);
   for (const write of writes) {
     options.__claimedOutputs?.set(outputKey(write.dest), sourceRelative);
   }

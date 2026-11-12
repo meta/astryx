@@ -68,7 +68,7 @@ function damagedRecordError(label, problem, source) {
           : [
               {
                 name: formatCliCommand('theme list'),
-                reason: 'the themes you can add',
+                reason: `the themes you can add, once ${label} is deleted`,
               },
             ],
     },

@@ -77,6 +77,7 @@ import {
   themeBuildFamily,
   themeBuildForReport,
   themeSourceGuesses,
+  writeDeferredBuildOutputs,
 } from '../../../api/theme/build/build.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
 import {NO_RESULT_SET, resultSet} from '../../../foundation/debug/index.mjs';
@@ -1085,47 +1086,12 @@ function registerThemeCommands(theme, program, docs, words) {
       /** @type {Array<{file: string, receipt: import('../../../api/theme/theme.type.mjs').ThemeBuildResponse | import('../../../api/theme/theme.type.mjs').ThemeBuildCheckResponse | null}>} */
       const results = [];
       let stale = false;
-      // Several themes that would build the same files are refused before any
-      // of them writes. Other failures surface in the build below, which stops
-      // at the first one as a shell loop under `set -e` does.
-      if (!options.check && entries.length > 1) {
-        /** @type {Map<string, string>} */
-        const planned = new Map();
-        const wasSilent = logger.silent;
-        logger.setSilent(true);
-        try {
-          for (const entry of entries) {
-            try {
-              await themeBuild(
-                entry.file,
-                /** @type {any} */ ({
-                  out: options.out,
-                  iconsSpecifier: options.iconsSpecifier,
-                  __claimedOutputs: planned,
-                  __planOnly: true,
-                  __commandWords: words,
-                }),
-                {cwd: process.cwd()},
-              );
-            } catch (e) {
-              const err =
-                /** @type {import('../../../api/error.mjs').AstryxError} */ (e);
-              if (/** @type {any} */ (err).outputCollision) {
-                return themeError(err, words, [
-                  buildWithout([], 'build the first theme on its own', [
-                    entry.file === entries[0].file
-                      ? entries[1].file
-                      : entries[0].file,
-                  ]),
-                ]);
-              }
-            }
-          }
-        } finally {
-          logger.setSilent(wasSilent);
-        }
-      }
-
+      // A batch builds every theme first and then writes them in order, so
+      // two themes that build the same files are refused before either
+      // writes. Any other failure writes the themes built before it, as a
+      // shell loop under `set -e` would have, and stops.
+      /** @type {Array<Array<{dest: string, content: string}>> | undefined} */
+      const deferred = !options.check && entries.length > 1 ? [] : undefined;
       /** @type {Map<string, string>} */
       const claimedOutputs = new Map();
       for (const entry of entries) {
@@ -1136,6 +1102,7 @@ function registerThemeCommands(theme, program, docs, words) {
             iconsSpecifier: options.iconsSpecifier,
             __onPrivateVarError: onPrivateVarError,
             __claimedOutputs: claimedOutputs,
+            __deferredWrites: deferred,
             __commandWords: words,
           };
           let result;
@@ -1177,10 +1144,39 @@ function registerThemeCommands(theme, program, docs, words) {
           // With several themes in flight the message alone rarely says which
           // one broke, so name it. Themes already written keep their install
           // and font guidance.
+          if (/** @type {any} */ (err).outputCollision) {
+            return themeError(err, words, [
+              buildWithout([], 'build the first theme on its own', [
+                entries[0].file,
+              ]),
+            ]);
+          }
+          if (deferred) {
+            try {
+              writeDeferredBuildOutputs(deferred);
+            } catch (writeError) {
+              return themeError(
+                /** @type {import('../../../api/error.mjs').AstryxError} */ (
+                  writeError
+                ),
+                words,
+              );
+            }
+          }
           if (report && compact) printCompactTrailer(trailers);
           else if (report) printBatchTrailer(trailers);
           if (entries.length > 1) err.message = `${entry.file}: ${err.message}`;
           return themeError(err, words, buildFallback);
+        }
+      }
+      if (deferred) {
+        try {
+          writeDeferredBuildOutputs(deferred);
+        } catch (e) {
+          return themeError(
+            /** @type {import('../../../api/error.mjs').AstryxError} */ (e),
+            words,
+          );
         }
       }
 
