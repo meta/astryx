@@ -820,7 +820,8 @@ it on the surface inside the layer and run no layout while it plays.
   its one touch module. `Layer/layerKeyboardClearance.ts` holds the clearance
   and the cap's arithmetic. `Layer/settledBox.ts` reads a layer's box without
   its entrance transform, for the fallback order, the keyboard's cap and the
-  exit copy.
+  exit copy. The touch grow reads its source the same way, without the press
+  transform (INV22).
 - `Layer/preserveAnimations.ts` owns carrying the CSS animations and
   transitions of a layer and its content across the re-placement's display
   reset.

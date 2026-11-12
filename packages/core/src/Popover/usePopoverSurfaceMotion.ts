@@ -5,7 +5,7 @@
 /**
  * @file usePopoverSurfaceMotion.ts
  * @input React, the shared touch resolver, the layer runtime's presentation
- *   hold and popoverSurfaceMotion
+ *   hold and settled box, and popoverSurfaceMotion
  * @output Exports `usePopoverSurfaceMotion`, the calls Popover makes as it
  *   opens and as it starts to close. Under a finger they present and dismiss
  *   the popover the UIKit way; a mouse keeps the layer's own entrance.
@@ -36,6 +36,7 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {holdInput} from '../Layer/inputHold';
 import {createPresentationHold} from '../Layer/presentationHold';
+import {settledBox} from '../Layer/settledBox';
 import {isCoarsePointer} from '../utils/coarsePointer';
 import {
   createPopoverSurfaceMotion,
@@ -45,8 +46,7 @@ import {
 
 // The growth needs where the surface ends and where its source is. Both
 // boxes are read once, in the frame that starts it, before that frame writes.
-function boxOf(element: Element): PopoverSurfaceRect {
-  const rect = element.getBoundingClientRect();
+function boxOf(rect: DOMRect): PopoverSurfaceRect {
   return {
     left: rect.left,
     top: rect.top,
@@ -173,8 +173,10 @@ export function usePopoverSurfaceMotion({
       }
       const surface = entrance ?? layer;
       motionFor(surface, entrance).enter(() => ({
-        surface: boxOf(surface),
-        source: boxOf(source),
+        surface: boxOf(surface.getBoundingClientRect()),
+        // A press scales its trigger. The growth starts from the trigger's
+        // box without that transform.
+        source: boxOf(settledBox(source)),
       }));
       if (holdUntilFirstFrame) {
         tapHoldUntilFirstFrameRef.current = holdUntilNextFrame(surface);

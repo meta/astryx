@@ -2,17 +2,18 @@
 
 /**
  * @file settledBox.ts
- * @input A layer element
+ * @input A layer element, or the trigger a touch grow starts from
  * @output Exports `settledBox`: the layer's box where its position option put
  *   it, without the transform an entrance (or anything else) applies to it
  * @position Layer runtime: the one box read the fallback order, the software
- *   keyboard's cap and the exit copy measure with. Its readers are listed
- *   below.
+ *   keyboard's cap, the exit copy and the touch grow's source measure with.
+ *   Its readers are listed below.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Layer/useLayer.tsx
  * - /packages/core/src/Layer/useLayerKeyboardClearance.ts
  * - /packages/core/src/Layer/layerExitCopy.ts
+ * - /packages/core/src/Popover/usePopoverSurfaceMotion.ts
  */
 
 const TRANSFORM_PROPERTIES = ['transform', 'translate', 'scale', 'rotate'];

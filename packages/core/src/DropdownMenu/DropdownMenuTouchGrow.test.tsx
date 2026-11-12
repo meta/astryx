@@ -73,6 +73,33 @@ vi.mock('../motion/reducedMotion', async importOriginal => {
 
 const ITEMS: DropdownMenuOption[] = [{label: 'Edit'}, {label: 'Duplicate'}];
 
+// The trigger's layout box, which a press scales to 0.98 about its centre, as
+// Button's press does. Its box read carries that scale unless an override
+// takes the transform off.
+const TRIGGER_BOX = {left: 141, top: 160, width: 120, height: 44};
+function pressScale(trigger: HTMLElement) {
+  trigger.style.transform = 'scale(0.98)';
+  trigger.getBoundingClientRect = function (this: HTMLElement) {
+    const scale =
+      this.style.getPropertyValue('transform') === 'none' ? 1 : 0.98;
+    const width = TRIGGER_BOX.width * scale;
+    const height = TRIGGER_BOX.height * scale;
+    const left = TRIGGER_BOX.left + (TRIGGER_BOX.width - width) / 2;
+    const top = TRIGGER_BOX.top + (TRIGGER_BOX.height - height) / 2;
+    return {
+      left,
+      top,
+      width,
+      height,
+      x: left,
+      y: top,
+      right: left + width,
+      bottom: top + height,
+      toJSON: () => ({}),
+    };
+  };
+}
+
 // A scroll view as the press model's scroll probe reads one.
 function ScrollView({children}: {children: React.ReactNode}) {
   return (
@@ -236,6 +263,18 @@ describe('DropdownMenu touch grow', () => {
       .getByRole('menu', {hidden: true})
       .closest<HTMLElement>('[popover] > *');
     expect(surface?.style.getPropertyValue('opacity')).toBe('');
+  });
+
+  it("grows from the trigger's box without its press transform (architecture:layer-runtime INV22)", async () => {
+    render(<DropdownMenu button={{label: 'Actions'}} items={ITEMS} />);
+    const trigger = screen.getByRole('button', {name: 'Actions'});
+    pressScale(trigger);
+    fireEvent.pointerDown(trigger, touch);
+    await settle();
+    const [[measure]] = motion.enter.mock.calls as unknown as [
+      [() => {source: unknown}],
+    ];
+    expect(measure().source).toEqual(TRIGGER_BOX);
   });
 
   it("a pen's press grows it", async () => {

@@ -657,7 +657,7 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   closed. This is its exit under FR7 (`family:overlay-dismissal` AV6); under
   reduced motion FR8 applies. A menu or popover presented as a bottom sheet
   follows the sheet instead. Tap-opened layers (Popover, DropdownMenu,
-  MoreMenu) grow on Popover's surface motion instead (see above).
+  MoreMenu) grow on Popover's surface motion.
 - **FR32 — A pan outside dismisses.** Under a finger, an open anchored menu MUST close as a touch outside it
   begins to pan, and at the lift of a tap or hold outside it. A Popover's
   dismissal is unchanged. A pinch stays available over it: its surface
