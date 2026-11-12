@@ -150,7 +150,8 @@ export interface TooltipOptions {
   /**
    * Controlled open state. When provided, overrides hover/focus triggers:
    * - `true`: force-show the tooltip (hover/focus hide is suppressed)
-   * - `false`: force-hide the tooltip
+   * - `false`: force-hide the tooltip. Focus that would show it calls
+   *   `onShow` and shows nothing.
    * - `undefined`: uncontrolled — hover/focus triggers manage visibility
    *
    * A controlled tooltip still takes Escape when it is the top-most layer, and
@@ -167,7 +168,8 @@ export interface TooltipOptions {
   isDefaultOpen?: boolean;
 
   /**
-   * Callback fired when tooltip is shown.
+   * Callback fired when tooltip is shown. Under `isOpen={false}`, it reports
+   * focus that would show the tooltip.
    * Wrap in useCallback for stable identity.
    */
   onShow?: () => void;
@@ -411,6 +413,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       hide: hideFromTouch,
     },
     handleReleaseInLayer,
+    true,
   );
 
   const isHeldOpen = useCallback(() => {
@@ -573,6 +576,13 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
         return;
       }
       clearTimeouts();
+      // Held closed, the focus reports through onShow and shows nothing. The
+      // caller decides.
+      const latest = latestRef.current;
+      if (latest.isOpen === false) {
+        latest.onShow?.();
+        return;
+      }
       showLayer();
     },
     [

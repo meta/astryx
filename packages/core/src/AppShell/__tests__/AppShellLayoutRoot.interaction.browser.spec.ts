@@ -16,34 +16,73 @@
  */
 
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
-import {
-  DEFAULT_STORYBOOK_DIR,
-  serveStorybook,
-  type StaticServer,
-} from '@astryxdesign/a11y-spec/storybook';
+import {openStory, withStorybook} from '@astryxdesign/interaction-harness';
 
-let storybook: StaticServer | undefined;
-test.beforeAll(async () => {
-  storybook = await serveStorybook(
-    process.env.ASTRYX_STORYBOOK_DIR ?? DEFAULT_STORYBOOK_DIR,
-  );
-});
-test.afterAll(async () => {
-  await storybook?.close();
-});
+const storybook = withStorybook(test);
 
 const STORY = 'core-appshell--inside-layout-hosts';
 
 interface ShellGeometry {
+  host: string;
   overhang: {left: number; top: number; right: number; bottom: number};
   offsets: Record<string, {left: number; top: number} | null>;
 }
 
-/** Offsets from the shell's root of its regions, and its Layout's overhang. */
-async function measure(page: Page, host: string): Promise<ShellGeometry> {
-  await page.goto(
-    `${storybook?.origin}/iframe.html?id=${STORY}&viewMode=story&args=host:${host}`,
+/**
+ * Puts the shell in `host` by changing the story's arg in place. It resolves
+ * once the shell sits in that host and Storybook has finished the render. A
+ * page load per host parses the whole preview again. On a loaded machine, four
+ * of them ran past the test's timeout.
+ */
+async function showIn(page: Page, host: string): Promise<void> {
+  await page.evaluate(
+    ({storyId, updatedArgs}) => {
+      (
+        window as unknown as {
+          __STORYBOOK_ADDONS_CHANNEL__: {
+            emit: (event: string, payload: unknown) => void;
+          };
+        }
+      ).__STORYBOOK_ADDONS_CHANNEL__.emit('updateStoryArgs', {
+        storyId,
+        updatedArgs,
+      });
+    },
+    {storyId: STORY, updatedArgs: {host}},
   );
+  await page.waitForFunction(
+    ({storyId, expected}) => {
+      const shell = document.querySelector('[data-testid="shell"]');
+      const parent = shell?.parentElement;
+      const shown =
+        parent == null
+          ? null
+          : parent.closest('.astryx-card') != null
+            ? 'card'
+            : parent.closest('.astryx-layout') != null
+              ? 'layout'
+              : parent.closest('.astryx-section') != null
+                ? 'section'
+                : 'root';
+      const render = (
+        globalThis as unknown as {
+          __STORYBOOK_PREVIEW__?: {
+            currentRender?: {readonly id?: string; readonly phase?: string};
+          };
+        }
+      ).__STORYBOOK_PREVIEW__?.currentRender;
+      return (
+        shown === expected &&
+        render?.id === storyId &&
+        render.phase === 'finished'
+      );
+    },
+    {storyId: STORY, expected: host},
+  );
+}
+
+/** Offsets from the shell's root of its regions, and its Layout's overhang. */
+async function measure(page: Page): Promise<ShellGeometry> {
   await expect(page.getByTestId('shell')).toBeVisible();
   return page.evaluate(() => {
     const shell = document.querySelector<HTMLElement>('[data-testid="shell"]');
@@ -55,6 +94,7 @@ async function measure(page: Page, host: string): Promise<ShellGeometry> {
     if (layout == null) {
       throw new Error('no layout in the shell');
     }
+    const parent = shell.parentElement;
     const inner = layout.getBoundingClientRect();
     const offset = (element: Element | null) => {
       if (element == null) {
@@ -67,6 +107,14 @@ async function measure(page: Page, host: string): Promise<ShellGeometry> {
       };
     };
     return {
+      host:
+        parent?.closest('.astryx-card') != null
+          ? 'card'
+          : parent?.closest('.astryx-layout') != null
+            ? 'layout'
+            : parent?.closest('.astryx-section') != null
+              ? 'section'
+              : 'root',
       overhang: {
         left: Math.round(root.left - inner.left),
         top: Math.round(root.top - inner.top),
@@ -90,7 +138,9 @@ for (const viewport of [
     page,
   }) => {
     await page.setViewportSize(viewport);
-    const atRoot = await measure(page, 'root');
+    await openStory(page, storybook(), STORY, {host: 'root'});
+    const atRoot = await measure(page);
+    expect(atRoot.host).toBe('root');
     expect(atRoot.overhang, 'page root').toEqual({
       left: 0,
       top: 0,
@@ -98,7 +148,9 @@ for (const viewport of [
       bottom: 0,
     });
     for (const host of ['card', 'layout', 'section']) {
-      const inHost = await measure(page, host);
+      await showIn(page, host);
+      const inHost = await measure(page);
+      expect(inHost.host).toBe(host);
       expect(inHost.overhang, `${host}: Layout overhang`).toEqual(
         atRoot.overhang,
       );

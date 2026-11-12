@@ -94,97 +94,123 @@ describe('component dispatcher — detail levels on list', () => {
 });
 
 describe('component list — components whose docs live in a family folder', () => {
-  it('lists HStack, VStack and Heading at every detail level, each with its own import', async () => {
-    const {docs: stackDoc} = await import(
-      path.join(REPO, 'packages', 'core', 'src', 'Stack', 'Stack.doc.mjs')
-    );
-    const vstackMember = stackDoc.components.find(c => c.name === 'VStack');
+  it(
+    'lists HStack, VStack and Heading at every detail level, each with its own import',
+    async () => {
+      const {docs: stackDoc} = await import(
+        path.join(REPO, 'packages', 'core', 'src', 'Stack', 'Stack.doc.mjs')
+      );
+      const vstackMember = stackDoc.components.find(c => c.name === 'VStack');
 
-    const names = await component(undefined, {cwd, list: true});
-    const listed = Object.values(names.data.components).flat();
-    for (const name of ['HStack', 'VStack', 'Heading']) {
-      expect(listed).toContainEqual({name, package: '@astryxdesign/core'});
-    }
+      const names = await component(undefined, {cwd, list: true});
+      const listed = Object.values(names.data.components).flat();
+      for (const name of ['HStack', 'VStack', 'Heading']) {
+        expect(listed).toContainEqual({name, package: '@astryxdesign/core'});
+      }
 
-    const compact = await component(undefined, {cwd, list: true, detail: 'compact'});
-    const brief = Object.values(compact.data.components).flat();
-    expect(brief.find(e => e.name === 'VStack')).toEqual({
-      name: 'VStack',
-      package: '@astryxdesign/core',
-      description: vstackMember.description,
-      import: '@astryxdesign/core/VStack',
-    });
-
-    const full = await component(undefined, {cwd, list: true, detail: 'full'});
-    const entry = Object.values(full.data.components)
-      .flat()
-      .find(e => e.name === 'VStack');
-    // Shaped like every other full entry (a component doc plus its package):
-    // the member's own name, display name and summary, and no scoping field
-    // the full-entry type does not describe.
-    expect(entry).toEqual({
-      name: 'VStack',
-      package: '@astryxdesign/core',
-      displayName: vstackMember.displayName,
-      group: stackDoc.group,
-      category: stackDoc.category,
-      usage: {description: vstackMember.description},
-      props: vstackMember.props,
-      theming: stackDoc.theming,
-      import: '@astryxdesign/core/VStack',
-    });
-  }, SLOW);
-
-  it('answers a Core-scoped lookup of a member with that member, as the unscoped lookup does', async () => {
-    for (const name of ['HStack', 'VStack']) {
-      const unscoped = await component(name, {cwd});
-      const scoped = await component(name, {
+      const compact = await component(undefined, {
         cwd,
-        package: '@astryxdesign/core',
+        list: true,
+        detail: 'compact',
       });
-      expect(scoped.data.name).toBe(name);
-      expect(scoped.data.parentDoc).toBe('Stack');
-      expect(scoped.data.import).toBe(`@astryxdesign/core/${name}`);
-      expect(scoped.data.props).toEqual(unscoped.data.props);
-      expect(scoped.data.props.length).toBeGreaterThan(0);
-    }
-  }, SLOW);
+      const brief = Object.values(compact.data.components).flat();
+      expect(brief.find(e => e.name === 'VStack')).toEqual({
+        name: 'VStack',
+        package: '@astryxdesign/core',
+        description: vstackMember.description,
+        import: '@astryxdesign/core/VStack',
+      });
 
-  it('prints each one\'s own import path in the list, the detail, and search', async () => {
-    // The path `component <Name>` prints is the one docs and examples teach:
-    // the component's own entry point, never its family's (/Stack, /Text) or
-    // a re-export (/Layout).
-    const compact = Object.values(
-      (await component(undefined, {cwd, list: true, detail: 'compact'})).data.components,
-    ).flat();
-    const full = Object.values(
-      (await component(undefined, {cwd, list: true, detail: 'full'})).data.components,
-    ).flat();
-    const textList = (await runCli(['component', '--list'], cwd)).stdout;
-    const textCompact = (
-      await runCli(['component', '--list', '--detail', 'compact'], cwd)
-    ).stdout;
-    /** The `import:` line of a text record, found by its `name:` line. */
-    const textImport = (text, name) =>
-      new RegExp(`^name:\\s+${name}\\n(?:(?!name:).*\\n)*?import:\\s+(\\S+)`, 'm').exec(
-        text,
-      )?.[1];
-    for (const name of ['VStack', 'HStack', 'Heading']) {
-      const expected = `@astryxdesign/core/${name}`;
-      expect(compact.find(e => e.name === name)?.import).toBe(expected);
-      expect((await component(name, {cwd})).data.import).toBe(expected);
-      const hits = (await search(name, {cwd, type: 'component'})).data.results;
-      expect(hits.find(r => r.name === name)?.import).toBe(expected);
-      expect(textImport(textList, name)).toBe(expected);
-      expect(textImport(textCompact, name)).toBe(expected);
-    }
-    // The full level spreads a component's own doc, which states no import
-    // (Button's entry has none either); a member's entry is scoped to the
-    // member and states its own.
-    for (const name of ['VStack', 'HStack']) {
-      expect(full.find(e => e.name === name)?.import).toBe(`@astryxdesign/core/${name}`);
-    }
-  }, SLOW);
+      const full = await component(undefined, {
+        cwd,
+        list: true,
+        detail: 'full',
+      });
+      const entry = Object.values(full.data.components)
+        .flat()
+        .find(e => e.name === 'VStack');
+      // Shaped like every other full entry (a component doc plus its package):
+      // the member's own name, display name and summary, and no scoping field
+      // the full-entry type does not describe.
+      expect(entry).toEqual({
+        name: 'VStack',
+        package: '@astryxdesign/core',
+        displayName: vstackMember.displayName,
+        group: stackDoc.group,
+        category: stackDoc.category,
+        usage: {description: vstackMember.description},
+        props: vstackMember.props,
+        theming: stackDoc.theming,
+        import: '@astryxdesign/core/VStack',
+      });
+    },
+    SLOW,
+  );
+
+  it(
+    'answers a Core-scoped lookup of a member with that member, as the unscoped lookup does',
+    async () => {
+      for (const name of ['HStack', 'VStack']) {
+        const unscoped = await component(name, {cwd});
+        const scoped = await component(name, {
+          cwd,
+          package: '@astryxdesign/core',
+        });
+        expect(scoped.data.name).toBe(name);
+        expect(scoped.data.parentDoc).toBe('Stack');
+        expect(scoped.data.import).toBe(`@astryxdesign/core/${name}`);
+        expect(scoped.data.props).toEqual(unscoped.data.props);
+        expect(scoped.data.props.length).toBeGreaterThan(0);
+      }
+    },
+    SLOW,
+  );
+
+  it(
+    "prints each one's own import path in the list, the detail, and search",
+    async () => {
+      // The path `component <Name>` prints is the one docs and examples teach:
+      // the component's own entry point, never its family's (/Stack, /Text) or
+      // a re-export (/Layout).
+      const compact = Object.values(
+        (await component(undefined, {cwd, list: true, detail: 'compact'})).data
+          .components,
+      ).flat();
+      const full = Object.values(
+        (await component(undefined, {cwd, list: true, detail: 'full'})).data
+          .components,
+      ).flat();
+      const textList = (await runCli(['component', '--list'], cwd)).stdout;
+      const textCompact = (
+        await runCli(['component', '--list', '--detail', 'compact'], cwd)
+      ).stdout;
+      /** The `import:` line of a text record, found by its `name:` line. */
+      const textImport = (text, name) =>
+        new RegExp(
+          `^name:\\s+${name}\\n(?:(?!name:).*\\n)*?import:\\s+(\\S+)`,
+          'm',
+        ).exec(text)?.[1];
+      for (const name of ['VStack', 'HStack', 'Heading']) {
+        const expected = `@astryxdesign/core/${name}`;
+        expect(compact.find(e => e.name === name)?.import).toBe(expected);
+        expect((await component(name, {cwd})).data.import).toBe(expected);
+        const hits = (await search(name, {cwd, type: 'component'})).data
+          .results;
+        expect(hits.find(r => r.name === name)?.import).toBe(expected);
+        expect(textImport(textList, name)).toBe(expected);
+        expect(textImport(textCompact, name)).toBe(expected);
+      }
+      // The full level spreads a component's own doc, which states no import
+      // (Button's entry has none either); a member's entry is scoped to the
+      // member and states its own.
+      for (const name of ['VStack', 'HStack']) {
+        expect(full.find(e => e.name === name)?.import).toBe(
+          `@astryxdesign/core/${name}`,
+        );
+      }
+    },
+    SLOW,
+  );
 });
 
 describe('component dispatcher — projection precedence (locked)', () => {
@@ -271,6 +297,78 @@ describe('component dispatcher — name resolution', () => {
         err = e;
       }
       expect(err?.code).toBe('ERR_NO_SOURCE');
+    },
+    SLOW,
+  );
+
+  it(
+    'names an example block in the message and keeps the matcher suggestions',
+    async () => {
+      let err;
+      try {
+        await component('TableSortableTable', {cwd});
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeInstanceOf(AstryxError);
+      expect(err.code).toBe('ERR_UNKNOWN_COMPONENT');
+      expect(err.message).toContain(
+        'astryx template TableSortableTable prints its source',
+      );
+      expect(err.message).toContain('astryx component Table --blocks lists it');
+      const names = err.suggestions.map(s => s.name);
+      expect(names).toContain('Table');
+      expect(names.some(name => name.includes(' '))).toBe(false);
+    },
+    SLOW,
+  );
+
+  it(
+    'points --blocks at the component whose listing holds the block',
+    async () => {
+      let err;
+      try {
+        await component('TableLeadingMarkSelection', {cwd});
+      } catch (e) {
+        err = e;
+      }
+      expect(err.code).toBe('ERR_UNKNOWN_COMPONENT');
+      expect(err.message).toContain('astryx component Table --blocks lists it');
+      expect(err.message).not.toContain('useTableSelectionState --blocks');
+    },
+    SLOW,
+  );
+
+  it(
+    'leaves out the --blocks pointer when no listing holds the block',
+    async () => {
+      let err;
+      try {
+        await component('AnimatorPlayingCardsVanilla', {cwd});
+      } catch (e) {
+        err = e;
+      }
+      expect(err.code).toBe('ERR_UNKNOWN_COMPONENT');
+      expect(err.message).toContain(
+        'astryx template AnimatorPlayingCardsVanilla prints its source',
+      );
+      expect(err.message).not.toContain('--blocks');
+    },
+    SLOW,
+  );
+
+  it(
+    'keeps name suggestions, without an example pointer, for a name that is no block',
+    async () => {
+      let err;
+      try {
+        await component('Tabel', {cwd});
+      } catch (e) {
+        err = e;
+      }
+      expect(err.code).toBe('ERR_UNKNOWN_COMPONENT');
+      expect(err.suggestions?.length ?? 0).toBeGreaterThan(0);
+      expect(err.message).not.toContain('example block');
     },
     SLOW,
   );

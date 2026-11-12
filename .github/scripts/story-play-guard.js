@@ -204,6 +204,18 @@ const TARGETS = [
     guards:
       'the caret follows the last token at its inline end, and a too-full row stays one row at rest and while read-only, under RTL as well',
   },
+  {
+    component: 'Tokenizer',
+    story: 'core-inputgroup--with-tokenizer-overflow-end-controls',
+    guards:
+      'in an InputGroup, overflowing tokens scroll beside the clear button and end content, never under them, and the end controls stay put while the row scrolls',
+  },
+  {
+    component: 'Tokenizer',
+    story: 'core-inputgroup--with-tokenizer-overflow-end-controls-rtl',
+    guards:
+      'the grouped token row and its end controls stay separate in RTL as well',
+  },
   // spec:AST-059 — the layer runtime's viewport inset. Each story is one
   // claim of the record; the guard is its rendered evidence, at a desktop
   // viewport and at a phone's, because a cap that holds only where the
@@ -419,6 +431,13 @@ const TARGETS = [
     story: 'core-typeahead--incremental-results-resting-pointer',
     guards:
       'rows appended under a resting pointer do not take the highlight; Enter selects the highlighted row (spec:AST-092 FR6)',
+  },
+  {
+    component: 'Timer',
+    story: 'core-timer--default',
+    guards:
+      'the display ticks live from the runtime clock, so a regression that ' +
+      'freezes it at 0s fails CI (#6483 audit layer 2)',
   },
 ];
 

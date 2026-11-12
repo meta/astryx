@@ -141,15 +141,21 @@ export function NativeTimeSegment({
   const [isFocused, setIsFocused] = useState(false);
   const [isSegmentEditable, setIsSegmentEditable] = useState(false);
   const valueAtFocusRef = useRef<string | null>(null);
-  const lastCommitRef = useRef<string | null>(null);
+  // The text the control last committed, so a repeated native event does not
+  // commit it twice. Each entry belongs to the commit epoch it was made in.
+  const lastCommitRef = useRef<{text: string; epoch: number} | null>(null);
 
-  const prevValueRef = useRef(value);
-  if (value !== prevValueRef.current) {
-    prevValueRef.current = value;
+  // The value as last rendered, and an epoch that a value change while the
+  // control is unfocused moves on, retiring the last commit. Both are state:
+  // refs written here would keep a value from a render React discards.
+  const [prevValue, setPrevValue] = useState(value);
+  const [commitEpoch, setCommitEpoch] = useState(0);
+  if (value !== prevValue) {
+    setPrevValue(value);
     // Preserve the accepted DOM value while the OS wheel is open so an
     // optimistic rollback cannot replay that edit when the field blurs.
     if (!isFocused) {
-      lastCommitRef.current = null;
+      setCommitEpoch(epoch => epoch + 1);
     }
     if (rejectedValue !== null) {
       setRejectedValue(null);
@@ -165,12 +171,16 @@ export function NativeTimeSegment({
 
   const commitValue = useCallback(
     (newValue: string) => {
-      if (isEffectivelyDisabled || lastCommitRef.current === newValue) {
+      const last = lastCommitRef.current;
+      if (
+        isEffectivelyDisabled ||
+        (last !== null && last.epoch === commitEpoch && last.text === newValue)
+      ) {
         return;
       }
 
       if (!newValue) {
-        lastCommitRef.current = newValue;
+        lastCommitRef.current = {text: newValue, epoch: commitEpoch};
         setRejectedValue(null);
         if (value !== undefined) {
           onChange(undefined);
@@ -188,12 +198,12 @@ export function NativeTimeSegment({
       }
 
       setRejectedValue(null);
-      lastCommitRef.current = newValue;
+      lastCommitRef.current = {text: newValue, epoch: commitEpoch};
       if (normalized !== value) {
         onChange(normalized);
       }
     },
-    [isEffectivelyDisabled, max, min, onChange, value],
+    [commitEpoch, isEffectivelyDisabled, max, min, onChange, value],
   );
 
   const handleChange = useCallback(

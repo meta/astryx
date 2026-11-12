@@ -493,6 +493,38 @@ describe('RichTextEditor', () => {
     expect(textbox).not.toHaveAttribute('tabindex', '0');
   });
 
+  it('keeps a link in a disabled editor out of the tab order and inert', () => {
+    render(
+      <RichTextEditor
+        label="Notes"
+        isDisabled
+        defaultValue={markdownToEditorStateJSON(
+          'See [the guide](https://example.com/guide).\n',
+        )}
+      />,
+    );
+    const link = screen.getByText('the guide').closest('a');
+    expect(link).not.toBeNull();
+    // An enabled editor's links are not tab stops; a disabled one adds none
+    // (FR1), and activation never navigates (FR2).
+    expect(link).toHaveAttribute('tabindex', '-1');
+    expect(link).toHaveAttribute('aria-disabled', 'true');
+    expect(fireEvent.click(link as HTMLAnchorElement)).toBe(false);
+  });
+
+  it('gives a link back its default behavior when the editor is enabled again', () => {
+    const document = markdownToEditorStateJSON(
+      'See [the guide](https://example.com/guide).\n',
+    );
+    const {rerender} = render(
+      <RichTextEditor label="Notes" isDisabled defaultValue={document} />,
+    );
+    rerender(<RichTextEditor label="Notes" defaultValue={document} />);
+    const link = screen.getByText('the guide').closest('a');
+    expect(link).not.toHaveAttribute('tabindex');
+    expect(link).not.toHaveAttribute('aria-disabled');
+  });
+
   it('keeps the dimmed treatment on a disabled editor', () => {
     const {container} = render(<RichTextEditor label="Notes" isDisabled />);
     const wrapper = container.querySelector('.astryx-rich-text-editor');
@@ -2000,6 +2032,25 @@ describe('RichTextEditorAutoLinkPlugin', () => {
     expect(emailMatch).not.toBeNull();
     expect(emailMatch?.url).toBe('mailto:a@b.com');
     expect(emailMatch?.attributes).toEqual(NEW_TAB_LINK_ATTRIBUTES);
+  });
+
+  it.each([
+    ['first.last+tag@sub.example.co.uk', 'first.last+tag@sub.example.co.uk'],
+    ['"john doe"@example.com', '"john doe"@example.com'],
+    ['user@[192.168.0.1]', 'user@[192.168.0.1]'],
+    ['(a@b.com)', 'a@b.com'],
+  ])('matches the email in %s', (text, email) => {
+    expect(DEFAULT_LINK_MATCHERS[1](text)?.text).toBe(email);
+  });
+
+  it.each([
+    ['a long word', 'a'.repeat(100_000)],
+    ['a run of quotes', '"'.repeat(100_000)],
+    ['dotted atoms', 'a.'.repeat(50_000)],
+  ])('scans %s without an email in linear time', (_, text) => {
+    const start = performance.now();
+    expect(DEFAULT_LINK_MATCHERS[1](text)).toBeNull();
+    expect(performance.now() - start).toBeLessThan(500);
   });
 
   it('auto-links a typed URL as an AutoLinkNode', async () => {

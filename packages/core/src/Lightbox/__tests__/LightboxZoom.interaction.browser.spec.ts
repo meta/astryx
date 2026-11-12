@@ -27,13 +27,19 @@ import {
   armHold,
   blockMainThread,
   BusyWindowTooLateError,
+  BusyFrameUnjudgedError,
+  BusyPredictionError,
   busyWindowProof,
+  type BusyProof,
+  type UnjudgedFrame,
   castStoryboard,
   compareCurve,
   countBetween,
   curveOf,
   drag,
   flick,
+  FRAME_STARVATION_MS,
+  FrameStarvationError,
   frames,
   freezePageOn,
   freezePageWhen,
@@ -55,6 +61,7 @@ import {
   timeline,
   touchDriver,
   traceRendering,
+  trackControl,
   trackMarker,
   waitForAnimation,
   waitForRest,
@@ -66,6 +73,7 @@ import {
   toTouchEvents,
   type TouchScript,
 } from '@astryxdesign/interaction-harness';
+import {UIKIT_TAP} from '../../motion/uikit/gestures';
 import {recordLiftOffset} from './liftOffset';
 import {slowViewer} from './viewerTempo';
 
@@ -229,6 +237,12 @@ function doubleTap(at: {x: number; y: number}): TouchScript {
   ];
 }
 
+// A double tap whose second touch reaches the page past UIKit's interval
+// between taps is two taps there: the play fails by name.
+const DOUBLE_TAP = {
+  boundaries: {tapIntervalMs: UIKIT_TAP.maximumIntervalBetweenTaps.value},
+};
+
 const pageScale = async (page: Page) =>
   page.evaluate(() => window.visualViewport?.scale ?? 1);
 
@@ -329,6 +343,7 @@ for (const theme of SHIPPED_THEMES) {
     }
     await driver.play(
       doubleTap({x: rect.x + rect.width / 2, y: rect.y + rect.height / 2}),
+      DOUBLE_TAP,
     );
     await expect
       .poll(async () =>
@@ -691,7 +706,7 @@ test('a double tap zooms until the photo fills the screen, about the tapped poin
   const hold = await armHold(page, photo, {
     judges: {target: photo, property: 'scale'},
   });
-  await driver.play(doubleTap(at));
+  await driver.play(doubleTap(at), DOUBLE_TAP);
   const held = await hold.held();
   const duration = Math.max(...held.map(a => a.curveEndMs));
   const samples = curveOf(
@@ -728,7 +743,7 @@ test('a double tap zooms until the photo fills the screen, about the tapped poin
   expect(zoomed.fit.y + zoomed.y).toBeCloseTo(0, 0);
   await expect(stage).toHaveAttribute('aria-pressed', 'true');
   // Again: back to the fitted size.
-  await driver.play(doubleTap({x: 300, y: at.y}));
+  await driver.play(doubleTap({x: 300, y: at.y}), DOUBLE_TAP);
   await waitForAnimation(photo);
   await waitForRest(photo);
   const fitted = await state();
@@ -747,6 +762,7 @@ test("a double tap near the photo's top edge stops at the screen's top edge", as
       x: before.stage.x + before.stage.width / 2,
       y: before.stage.y + before.fit.y + 10,
     }),
+    DOUBLE_TAP,
   );
   await waitForAnimation(photo);
   await waitForRest(photo);
@@ -760,7 +776,7 @@ test('a zoomed pan tracks the finger, rubber-bands past the edge and returns', a
   const {driver, photo, state} = await openViewer(page);
   const before = await state();
   const mid = {x: 201, y: before.stage.y + before.stage.height / 2};
-  await driver.play(doubleTap(mid));
+  await driver.play(doubleTap(mid), DOUBLE_TAP);
   await waitForAnimation(photo);
   await waitForRest(photo);
   const zoomed = await state();
@@ -799,7 +815,7 @@ test("a single zoomed photo's drag outward from the edge it rests at rubber-band
   const {driver, photo, state} = await openViewer(page);
   const before = await state();
   const mid = {x: 201, y: before.stage.y + before.stage.height / 2};
-  await driver.play(doubleTap(mid));
+  await driver.play(doubleTap(mid), DOUBLE_TAP);
   await waitForAnimation(photo);
   await waitForRest(photo);
   const zoomed = await state();
@@ -842,7 +858,7 @@ test('a zoomed flick coasts and stops at the far edge', async ({page}) => {
   const {driver, photo, state} = await openViewer(page);
   const before = await state();
   const mid = {x: 201, y: before.stage.y + before.stage.height / 2};
-  await driver.play(doubleTap(mid));
+  await driver.play(doubleTap(mid), DOUBLE_TAP);
   await waitForAnimation(photo);
   await waitForRest(photo);
   // Bring the photo within 160 px of its far edge with a slow drag, held
@@ -892,11 +908,16 @@ test('a finger landing on a coasting photo stops it where it shows', async ({
   await installTimerGate(page);
   const before = await state();
   const mid = {x: 201, y: before.stage.y + before.stage.height / 2};
-  await driver.play(doubleTap(mid));
+  await driver.play(doubleTap(mid), DOUBLE_TAP);
   await waitForAnimation(photo);
   await waitForRest(photo);
+  // The offset at which the photo's right side meets the stage's: the stop
+  // check below needs the landing 20 px short of it.
+  const zoomed = await state();
+  const edge =
+    zoomed.stage.width - zoomed.fit.width * zoomed.scale - zoomed.fit.x;
   // The photo's offset at the flick's lift, read in the page.
-  await recordLiftOffset(photo);
+  const liftOffset = await recordLiftOffset(photo);
   await photo.evaluate(el => el.setAttribute('data-freeze-photo', ''));
   // The scene stops once the coast has carried the photo 10 px past the
   // lift, however late this process reacts. A poll from here can land the
@@ -904,11 +925,19 @@ test('a finger landing on a coasting photo stops it where it shows', async ({
   const coasting = freezePageWhen(
     page,
     () => {
-      const lift = (globalThis as unknown as {__liftOffset?: number})
-        .__liftOffset;
+      const record = globalThis as unknown as {
+        __liftOffset?: number;
+        __coastFrames?: {t: number}[];
+        __harnessFreeze: {realNow: () => number};
+      };
+      const lift = record.__liftOffset;
       const img = document.querySelector('[data-freeze-photo]') as Element;
       const translate = getComputedStyle(img).translate;
       const x = translate === 'none' ? 0 : parseFloat(translate);
+      // Every frame checked, on the real clock: the longest gap in the coast
+      // tells a late freeze from a fast coast.
+      record.__coastFrames ??= [];
+      record.__coastFrames.push({t: record.__harnessFreeze.realNow()});
       return (
         lift != null &&
         x < lift - 10 &&
@@ -921,6 +950,91 @@ test('a finger landing on a coasting photo stops it where it shows', async ({
     flick(mid, {velocity: {x: -900, y: 0}, durationMs: 80, hz: 120}),
   );
   await coasting;
+  // A starved page draws its first frame past the 10 px late. The
+  // compositor coasts on meanwhile, and the scene freezes where the screen
+  // is, which can be the photo's edge. The landing then catches a photo that
+  // the edge stopped, so the run proves nothing about the finger.
+  const {x: frozenX} = await state();
+  if (frozenX <= edge + 20) {
+    const {coasting, gap, spanMs} = await photo.evaluate(
+      (img, [from, to]) => {
+        const record = globalThis as unknown as {
+          __coastFrames?: {t: number}[];
+          __harnessFreeze: {offset: number};
+        };
+        const coast = img
+          .getAnimations()
+          .find(animation =>
+            (animation.effect as KeyframeEffect | null)
+              ?.getKeyframes()
+              .some(k => k.translate != null),
+          );
+        if (coast == null) {
+          return {coasting: false, gap: 0, spanMs: Number.NaN};
+        }
+        // A gap counts only from the coast's start, on the real clock: a
+        // stall that ends before the coast starts cannot carry it.
+        const start = Number(coast.startTime) + record.__harnessFreeze.offset;
+        const coastFrames = record.__coastFrames ?? [];
+        let longest = 0;
+        for (let i = 1; i < coastFrames.length; i++) {
+          const gapStart = Math.max(coastFrames[i - 1].t, start);
+          longest = Math.max(longest, coastFrames[i].t - gapStart);
+        }
+        // The coast's own time from `from` to `to`. The held coast steps
+        // linearly between its keyframes.
+        const effect = coast.effect as KeyframeEffect;
+        const duration = Number(effect.getComputedTiming().duration);
+        const keys = effect.getKeyframes().map(k => ({
+          offset: k.computedOffset,
+          x: parseFloat(String(k.translate)),
+        }));
+        const timeAt = (bound: number) => {
+          for (let i = 1; i < keys.length; i++) {
+            const [a, b] = [keys[i - 1], keys[i]];
+            if (a.x > bound && b.x <= bound) {
+              const along = (a.x - bound) / (a.x - b.x);
+              return (a.offset + (b.offset - a.offset) * along) * duration;
+            }
+          }
+          return Number.NaN;
+        };
+        return {
+          coasting: true,
+          gap: longest,
+          spanMs: timeAt(to) - timeAt(from),
+        };
+      },
+      [(await liftOffset()) - 10, edge + 20] as const,
+    );
+    const fromEdge = frozenX - edge;
+    // Past the edge, the photo is in its bounce.
+    const place =
+      fromEdge >= 0
+        ? `${fromEdge.toFixed(1)} px from its edge`
+        : `${(-fromEdge).toFixed(1)} px past its edge`;
+    if (!coasting) {
+      throw new Error(
+        `the scene froze with the photo ${place}, with no coast running`,
+      );
+    }
+    // Starvation explains the late freeze only when no frame came for as
+    // long as the coast takes to cross the span.
+    if (gap > FRAME_STARVATION_MS && gap >= spanMs) {
+      throw new FrameStarvationError({
+        by: 'freezePageWhen',
+        during:
+          "the coast ran from 10 px past the lift to 20 px short of the photo's edge",
+        frames: 0,
+        min: 1,
+        longestGapMs: gap,
+        cause: `the coast takes ${spanMs.toFixed(1)} ms over that span, and the scene froze with the photo ${place}. The page was starved of frames (a loaded machine, or a long task on the page), so the run proves nothing about the landing`,
+      });
+    }
+    throw new Error(
+      `the scene froze with the photo ${place}. The longest gap between frames in the coast was ${gap.toFixed(1)} ms, and the coast takes ${spanMs.toFixed(1)} ms from 10 px past the lift to 20 px short of the edge: a frame came in time to stop it there, so starvation does not explain the late freeze`,
+    );
+  }
   // The landing must find the coast still running, or it proves nothing.
   await photo.evaluate(el => {
     // The pointer event comes first, and the photo stops on it.
@@ -974,7 +1088,7 @@ test('a finger left down after a pinch keeps panning without a jump', async ({
   test.skip(!driver.partialLifts, PARTIAL_LIFT_SKIP);
   const before = await state();
   const mid = {x: 201, y: before.stage.y + before.stage.height / 2};
-  await driver.play(doubleTap(mid));
+  await driver.play(doubleTap(mid), DOUBLE_TAP);
   await waitForAnimation(photo);
   await waitForRest(photo);
   // Two fingers spread and drift left together, then the right one lifts
@@ -1043,13 +1157,16 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
   await markElement(photo, {mode: 'outline'});
   // A compositor-only control animation in the same window: what the
   // compositor presented while the main thread spun, on this machine.
-  await startBusyControl(page);
+  const busyControl = await startBusyControl(page);
+  // A second control half a leg ahead reads the frames near the first one's
+  // turns. So every frame has a time of its own, and the proof predicts.
+  const aheadControl = await startBusyControl(page, {ahead: true});
   const at = {x: 201, y: before.stage.y + before.stage.height / 2};
   // The same zoom at the default tempo, to compare the slowed one with.
-  await driver.play(doubleTap(at));
+  await driver.play(doubleTap(at), DOUBLE_TAP);
   const atTempo1 = curvesByProperty(await waitForAnimation(photo));
   await waitForRest(photo);
-  await driver.play(doubleTap(at));
+  await driver.play(doubleTap(at), DOUBLE_TAP);
   await waitForAnimation(photo);
   await waitForRest(photo);
   // With the main thread blocked, a loaded runner's compositor presents a
@@ -1062,7 +1179,7 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
   // spring covers most of its travel early, and a round trip from the test
   // would start the block too late.
   const blocking = blockMainThread(page, ZOOM_BLOCK_MS, {during: photo});
-  await driver.play(doubleTap(at));
+  await driver.play(doubleTap(at), DOUBLE_TAP);
   const block = await blocking;
   // Lightbox's own zoom played at that tempo. Each curve is that many times
   // as long as at tempo 1, and still runs after the block.
@@ -1080,44 +1197,81 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
   const castFrames = await cast.stop();
   const tracked = await trackMarker(page, castFrames);
   const control = await trackMarker(page, castFrames, {rgb: CONTROL_RGB});
-  const proof = busyWindowProof(tracked, block, {
-    axis: ZOOM_AXIS,
-    settledWithin: ZOOM_SETTLED_PX,
-    control,
-  });
-  await writeEvidence(
-    'busy-main-thread/lightbox-double-tap-zoom',
-    {
-      [`${testInfo.project.name}.json`]: JSON.stringify(
-        {
-          block,
-          proof,
-          frames: tracked.map(f => ({
-            t: +(f.t - block.from).toFixed(1),
-            y: f.box?.y ?? null,
-            h: f.box?.height ?? null,
-          })),
-          control: control.map(f => ({
-            t: +(f.t - block.from).toFixed(1),
-            x: f.box?.x ?? null,
-          })),
-        },
-        null,
-        1,
-      ),
-    },
-    testInfo,
-  );
-  const film = await castStoryboard(page, castFrames, {
-    name: 'lightbox-double-tap-zoom-busy-main-thread',
-    zero: block.from,
-    from: block.from - 40,
-    to: proof.judged.to + 40,
-    columns: 8,
-    cellScale: 0.35,
-    data: t => ({h: tracked.find(f => f.t === t)?.box?.height ?? -1}),
-  });
-  await film.write(testInfo, {block, judged: proof.judged});
+  const ahead = await trackControl(page, castFrames, {ahead: true});
+  // The run's frames and storyboard, kept whatever the proof concludes.
+  const record = async (
+    result:
+      | {proof: BusyProof}
+      | {unjudged: ReadonlyArray<UnjudgedFrame>}
+      | {error: string},
+    judged: {from: number; to: number},
+  ) => {
+    await writeEvidence(
+      'busy-main-thread/lightbox-double-tap-zoom',
+      {
+        [`${testInfo.project.name}.json`]: JSON.stringify(
+          {
+            block,
+            controlStarts: [busyControl.start, aheadControl.start],
+            ...result,
+            frames: tracked.map(f => ({
+              t: +(f.t - block.from).toFixed(1),
+              y: f.box?.y ?? null,
+              h: f.box?.height ?? null,
+            })),
+            control: control.map(f => ({
+              t: +(f.t - block.from).toFixed(1),
+              x: f.box?.x ?? null,
+            })),
+            ahead: ahead.map(f => ({
+              t: +(f.t - block.from).toFixed(1),
+              x: f.box?.x ?? null,
+            })),
+          },
+          null,
+          1,
+        ),
+      },
+      testInfo,
+    );
+    const film = await castStoryboard(page, castFrames, {
+      name: 'lightbox-double-tap-zoom-busy-main-thread',
+      zero: block.from,
+      from: block.from - 40,
+      to: judged.to + 40,
+      columns: 8,
+      cellScale: 0.35,
+      data: t => ({h: tracked.find(f => f.t === t)?.box?.height ?? -1}),
+    });
+    await film.write(testInfo, {block, judged});
+  };
+  // Every frame the control moves on is judged by the edge's predicted move.
+  // A frame predicted to move under the cast's step is named in `unjudged`.
+  // Where the proof falls back to the cast's step, as in WebKit, a frame
+  // that step cannot show is too little to judge. It fails by name
+  // (`BusyFrameUnjudgedError`). Each such run keeps its frames and storyboard.
+  let proof: BusyProof;
+  try {
+    proof = busyWindowProof(tracked, block, {
+      axis: ZOOM_AXIS,
+      settledWithin: ZOOM_SETTLED_PX,
+      control,
+      ahead,
+      controlStarts: [busyControl.start, aheadControl.start],
+      judgeEveryFrame: true,
+    });
+  } catch (error) {
+    if (error instanceof BusyFrameUnjudgedError) {
+      await record({unjudged: error.frames}, block);
+    } else if (
+      error instanceof FrameStarvationError ||
+      error instanceof BusyPredictionError
+    ) {
+      await record({error: error.message}, block);
+    }
+    throw error;
+  }
+  await record({proof}, proof.judged);
   // Judged against the control. A two-core runner's software compositor and
   // the screencast share the core the block spins on. So every compositor
   // animation presents fewer frames there, the control's too. The photo keeps
@@ -1125,7 +1279,9 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
   expect(proof.verdict.failures).toEqual([]);
   // The verdict, spelled out. The top edge takes a new position on every
   // frame the control moves, with none excused as under a cast step. The
-  // control moves on at least the verdict's floor of four frames.
+  // control moves on at least the verdict's floor of four frames. With
+  // `judgeEveryFrame`, an excused frame throws first, so `belowStep` stays a
+  // guard on that option.
   expect(proof.control?.movedWith).toBe(proof.control?.moved);
   expect(proof.control?.belowStep).toBe(0);
   expect(proof.control?.moved).toBeGreaterThanOrEqual(4);
@@ -1226,6 +1382,7 @@ for (const pace of ['main-thread', 'frozen'] as const) {
     const cast = await startScreencast(page);
     await driver.play(
       doubleTap({x: 201, y: before.stage.y + before.stage.height / 2}),
+      DOUBLE_TAP,
     );
     // Neither runs on the compositor, so the block starts after the tap.
     await page.waitForTimeout(150);
@@ -1242,6 +1399,11 @@ for (const pace of ['main-thread', 'frozen'] as const) {
         control,
       }).verdict.failures;
     } catch (error) {
+      // A run the machine starved proves nothing, so it fails by name and
+      // never counts as this proof's red.
+      if (error instanceof FrameStarvationError) {
+        throw error;
+      }
       // A zoom that never moved has settled before the window: a red too.
       expect(error).toBeInstanceOf(BusyWindowTooLateError);
       failures = [(error as Error).message];
@@ -1276,6 +1438,7 @@ test('the zoom settles and the pinch do no Layout or Paint per frame', async ({
   const zoomTrace = await traceRendering(page, async () => {
     await driver.play(
       doubleTap({x: 201, y: before.stage.y + before.stage.height / 2}),
+      DOUBLE_TAP,
     );
     [zoom] = await waitForAnimation(photo);
     await waitForRest(photo);
@@ -1329,6 +1492,7 @@ test('the zoomed photo is redrawn sharp', async ({page}, testInfo) => {
   const before = await state();
   await driver.play(
     doubleTap({x: 201, y: before.stage.y + before.stage.height / 2}),
+    DOUBLE_TAP,
   );
   await waitForAnimation(photo);
   await waitForRest(photo);
@@ -1511,7 +1675,10 @@ test(
     const hold = await armHold(page, photo, {
       judges: {target: photo, property: 'scale'},
     });
-    await driver.play(doubleTap({x: 120, y: s.stage.y + s.stage.height / 2}));
+    await driver.play(
+      doubleTap({x: 120, y: s.stage.y + s.stage.height / 2}),
+      DOUBLE_TAP,
+    );
     const held = await hold.held();
     await freezeTimers(page);
     const {storyboard: zoomIn} = await animationStoryboard(page, {

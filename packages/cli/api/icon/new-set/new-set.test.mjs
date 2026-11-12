@@ -7,6 +7,7 @@ import {integrationAdd} from '../../integration/add-contribution.mjs';
 import {iconNewSet} from './new-set.mjs';
 import {discoverIconSetDirectory} from '../../../foundation/discovery/icon-set-discovery.mjs';
 import {cliVersion} from '../../../foundation/release/run-context.mjs';
+import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
 
 /** @type {string} */
 let tmpDir;
@@ -38,7 +39,7 @@ function setup({
 const read = file => fs.readFileSync(path.join(tmpDir, file), 'utf-8');
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-add-icon-set-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-add-icon-set-'));
 });
 
 afterEach(() => {
@@ -190,8 +191,11 @@ describe('iconNewSet (experimental icon new-set)', () => {
           'The set\'s description is a placeholder ("Outline icons."): apps and discover show it. Pass --description when you create a set, or edit icon-sets/outline/outline.doc.mjs.',
           'Run `astryx integration check` to see the icon definitions still to map.',
         ],
+        // A new set maps nothing yet, so every template meaning is listed.
+        templateMeanings: {unmapped: expect.any(Array)},
       },
     });
+    expect(result.data.templateMeanings?.unmapped.length).toBeGreaterThan(0);
     // No entry, peer, or script is written: package policy is the author's.
     expect(fs.existsSync(path.join(tmpDir, 'index.js'))).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, 'index.d.ts'))).toBe(false);

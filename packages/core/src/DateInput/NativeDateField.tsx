@@ -378,13 +378,18 @@ export function NativeDateField({
   // probe touches the DOM, and unfocused the answer changes nothing.
   const [isSegmentEditable, setIsSegmentEditable] = useState(false);
   // The raw value the control last reported and we acted on, so the same edit
-  // arriving through both commit paths only fires one change.
-  const lastCommitRef = useRef<string | null>(null);
+  // arriving through both commit paths only fires one change. Each entry
+  // belongs to the commit epoch it was made in.
+  const lastCommitRef = useRef<{text: string; epoch: number} | null>(null);
 
-  const prevValueRef = useRef(value);
-  if (value !== prevValueRef.current) {
-    prevValueRef.current = value;
-    lastCommitRef.current = null;
+  // The value as last rendered, and an epoch that a value change moves on,
+  // retiring the last commit. Both are state: refs written here would keep a
+  // value from a render React discards.
+  const [prevValue, setPrevValue] = useState(value);
+  const [commitEpoch, setCommitEpoch] = useState(0);
+  if (value !== prevValue) {
+    setPrevValue(value);
+    setCommitEpoch(epoch => epoch + 1);
     if (rejectedValue !== null) {
       setRejectedValue(null);
     }
@@ -437,10 +442,15 @@ export function NativeDateField({
       }
       // The same edit can arrive twice — React's synthetic change and the
       // native listener below both report it — so act on a raw value once.
-      if (lastCommitRef.current === newValue) {
+      const last = lastCommitRef.current;
+      if (
+        last !== null &&
+        last.epoch === commitEpoch &&
+        last.text === newValue
+      ) {
         return;
       }
-      lastCommitRef.current = newValue;
+      lastCommitRef.current = {text: newValue, epoch: commitEpoch};
 
       if (!newValue) {
         setRejectedValue(null);
@@ -469,7 +479,15 @@ export function NativeDateField({
         fireChange(parsedISO);
       }
     },
-    [value, fireChange, isDateDisabled, isEffectivelyDisabled, isBusy, locale],
+    [
+      value,
+      commitEpoch,
+      fireChange,
+      isDateDisabled,
+      isEffectivelyDisabled,
+      isBusy,
+      locale,
+    ],
   );
 
   const handleChange = useCallback(

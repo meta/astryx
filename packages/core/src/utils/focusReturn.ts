@@ -14,6 +14,8 @@
  *   which exports only it, does not reach this module.
  */
 
+import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
+import {sharedWeakMap} from './sharedRealm';
 import {
   getInteractionModality,
   type InteractionModality,
@@ -69,6 +71,7 @@ export function moveFocusLeftBehind(
   note: FocusWithin | null,
   target: HTMLElement | null | undefined,
   hidden: Element | null = null,
+  options?: FocusOptions,
 ): boolean {
   if (
     note == null ||
@@ -77,8 +80,56 @@ export function moveFocusLeftBehind(
   ) {
     return false;
   }
-  focusForLastInput(target);
-  return true;
+  focusForLastInputTemporarily(target, options);
+  return target.ownerDocument.activeElement === target;
+}
+
+const temporaryFocus = sharedWeakMap<HTMLElement, () => void>(
+  'utils/focus-return/temporary-focus',
+  1,
+);
+
+/** Release only a temporary tab stop owned by this module. Internal. */
+export function releaseTemporaryFocus(element: HTMLElement): void {
+  temporaryFocus.get(element)?.();
+}
+
+/** Focuses the element. A nonfocusable element gets a tab stop until blur or disposal. Internal. */
+export function focusForLastInputTemporarily(
+  element: HTMLElement,
+  options?: FocusOptions,
+  modality: InteractionModality = getInteractionModality(element),
+): () => void {
+  releaseTemporaryFocus(element);
+  const needsTabIndex =
+    !element.hasAttribute('tabindex') &&
+    element.tabIndex < 0 &&
+    !element.isContentEditable &&
+    !element.matches(FOCUSABLE_SELECTOR);
+  if (!needsTabIndex) {
+    focusForLastInput(element, options, modality);
+    return () => {};
+  }
+  element.setAttribute('tabindex', '-1');
+  const dispose = () => {
+    if (temporaryFocus.get(element) !== dispose) {
+      return;
+    }
+    temporaryFocus.delete(element);
+    element.removeEventListener('blur', dispose);
+    if (element.getAttribute('tabindex') === '-1') {
+      element.removeAttribute('tabindex');
+    }
+  };
+  temporaryFocus.set(element, dispose);
+  focusForLastInput(element, options, modality);
+  // Pointer-modality refocus can blur first; acquire cleanup after that move.
+  if (element.ownerDocument.activeElement === element) {
+    element.addEventListener('blur', dispose, {once: true});
+  } else {
+    dispose();
+  }
+  return dispose;
 }
 
 /**
@@ -190,7 +241,10 @@ export function prepareFocusRepairOnRemoval(
 // Whether focus rested on the page body when the current commit began
 // removing surfaces, per document. One removal can drop focus before a later
 // surface's cleanup runs, so every cleanup of the commit reads the first value.
-const focusDetachedAtRemovalStart = new WeakMap<Document, boolean>();
+const focusDetachedAtRemovalStart = sharedWeakMap<Document, boolean>(
+  'utils/focus-return/focus-detached-at-removal-start',
+  1,
+);
 function wasFocusDetachedBeforeRemoval(doc: Document): boolean {
   let wasDetached = focusDetachedAtRemovalStart.get(doc);
   if (wasDetached === undefined) {
