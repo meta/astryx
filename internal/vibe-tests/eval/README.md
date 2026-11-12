@@ -187,5 +187,8 @@ what the eval measures, so compare results only within one arm version.
 - This folder writes its own record schema (`schemaVersion: 1` in `meta.json`).
   It does not write the execution-provenance sidecars in
   `../docs/execution-provenance.md`, which describe the older pipeline.
-- The `pilot` task set is small. It shows that the pipeline works and gives
-  wide intervals. A comparison needs a larger fixed set.
+- The `pilot` set (5 tasks) only shows that the pipeline works; fresh agents
+  pass all of it in both arms. The `v1` set is the fixed comparison set:
+  multi-step forms, paged tables with selection, menus, comboboxes, dialogs,
+  switches, accordions and announced notifications. Run it with
+  `--task-set v1`.
