@@ -113,14 +113,12 @@ export function writeThemeTemplate(options, editorFilesOnly) {
   );
   if (String(targetPath).trim() === '') {
     throw new AstryxError(
-      'The theme template path is blank. Give a file path, or leave it out for theme.template.ts.',
+      'The theme template path is blank. Give a file path, or leave it out for theme.template.ts at the project root.',
       [
         {
-          name: formatCliCommand(
-            `theme template ${THEME_TEMPLATE_DEFAULT_PATH}`,
-            cwd,
-          ),
-          reason: 'the default path',
+          // No path: the template at the project root, from any folder.
+          name: formatCliCommand('theme template', cwd),
+          reason: 'write the template at the project root',
         },
       ],
       ERROR_CODES.ERR_INVALID_ARGUMENT,
@@ -148,7 +146,14 @@ export function writeThemeTemplate(options, editorFilesOnly) {
     if (err instanceof PathSafetyError) {
       throw new AstryxError(
         // The path as typed, not as read from the project root.
-        err.message.replace(`"${fromRoot}"`, `"${targetPath}"`),
+        // A typed path is read from the current folder, so the advice says
+        // so (the safety check reads it from the project root).
+        err.message
+          .replace(`"${fromRoot}"`, `"${targetPath}"`)
+          .replace(
+            /relative to the project root/g,
+            'relative to the current folder, inside the project',
+          ),
         [
           {
             // No path: the template at the project root.
