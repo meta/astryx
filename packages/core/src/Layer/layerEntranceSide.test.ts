@@ -42,7 +42,7 @@ describe('layerEntranceSide', () => {
     });
   });
 
-  it('starts a layer to the right one step left, even over a few pixels of its trigger', () => {
+  it('gives a layer to the right over a few pixels of its trigger a side and no room', () => {
     expect(layerEntranceSide(box(396, 400, 160, 200), trigger)).toEqual({
       x: -1,
       y: 0,
@@ -95,6 +95,20 @@ describe('layerEntranceSide', () => {
     });
   });
 
+  it('gives a layer flush against its trigger no room, and a point anchor no gap', () => {
+    expect(layerEntranceSide(box(250, 432, 200, 150), trigger)).toMatchObject({
+      y: -1,
+      gap: 0,
+    });
+    // A menu at the pointer: its cursor anchor is a point.
+    expect(
+      layerEntranceSide(box(316, 416, 160, 200), box(316, 416, 0, 0)),
+    ).toMatchObject({gap: null});
+    expect(
+      layerEntranceSide(box(316, 417, 160, 200), box(316, 416, 1, 1)),
+    ).toMatchObject({gap: null});
+  });
+
   it('gives nothing for a layer without size', () => {
     expect(layerEntranceSide(box(250, 436, 0, 150), trigger)).toBeNull();
   });
@@ -138,14 +152,14 @@ describe('readLayerEntranceSide and writeLayerEntranceSide', () => {
     );
     expect(layer.style.getPropertyValue(LAYER_ENTER_GAP_PROPERTY)).toBe('4px');
 
-    // Against its anchor, as a menu at the pointer, the layer keeps the
-    // whole step.
+    // Flush against a sized anchor, the layer takes no step.
     writeLayerEntranceSide(layer, {...side!, gap: 0});
-    expect(layer.style.getPropertyValue(LAYER_ENTER_GAP_PROPERTY)).toBe(
-      'initial',
-    );
+    expect(layer.style.getPropertyValue(LAYER_ENTER_GAP_PROPERTY)).toBe('0px');
     // Room that floors to 0 px is no room.
     writeLayerEntranceSide(layer, {...side!, gap: 0.0004});
+    expect(layer.style.getPropertyValue(LAYER_ENTER_GAP_PROPERTY)).toBe('0px');
+    // At a point, as a menu at the pointer, the layer takes the whole step.
+    writeLayerEntranceSide(layer, {...side!, gap: null});
     expect(layer.style.getPropertyValue(LAYER_ENTER_GAP_PROPERTY)).toBe(
       'initial',
     );
