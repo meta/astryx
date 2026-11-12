@@ -1696,6 +1696,56 @@ describe('final pass 5', () => {
     rm('src/app/(a)');
   }, 120_000);
 
+  it('reads next.config from its syntax: comments, spreads, nested keys and constants', async () => {
+    /** @param {string} file @param {string} text @param {string} where */
+    const addWith = async (file, text, where) => {
+      write(file, text);
+      try {
+        return await themeEditPreviewAdd(undefined, {cwd, path: where});
+      } finally {
+        rm(file);
+        rm(where);
+      }
+    };
+    // A commented-out list is no setting.
+    const commented = await addWith(
+      'next.config.mjs',
+      "export default {\n  // pageExtensions: ['mdx'],\n};\n",
+      'src/app/c1',
+    );
+    expect(commented.data.notes.join(' ')).not.toContain('pageExtensions');
+    // A spread list is only known by running the config: a note, no refusal.
+    const spread = await addWith(
+      'next.config.mjs',
+      "const base = ['tsx', 'ts', 'jsx', 'js'];\nexport default {pageExtensions: [...base, 'mdx']};\n",
+      'src/app/c2',
+    );
+    expect(spread.data.notes.join(' ')).toContain(
+      'next.config.mjs sets pageExtensions in a way only running it tells',
+    );
+    // A key inside another object is not the app's basePath.
+    const nested = await addWith(
+      'next.config.mjs',
+      "export default {env: {basePath: '/notit'}};\n",
+      'src/app/c3',
+    );
+    expect(nested.data.open).toContain('open /c3 in the running app');
+    // A shorthand key takes its constant.
+    const shorthand = await addWith(
+      'next.config.mjs',
+      "const basePath = '/x';\nexport default {basePath};\n",
+      'src/app/c4',
+    );
+    expect(shorthand.data.open).toContain('open /x/c4 in the running app');
+    // A typed TypeScript config, exported by name.
+    const typed = await addWith(
+      'next.config.ts',
+      "import type {NextConfig} from 'next';\nconst nextConfig: NextConfig = {basePath: '/t/'};\nexport default nextConfig;\n",
+      'src/app/c5',
+    );
+    expect(typed.data.open).toContain('open /t/c5 in the running app');
+  }, 180_000);
+
   it('reads basePath without comments, and says when code sets it', async () => {
     write('next.config.mjs', "export default {\n  // basePath: '/old',\n};\n");
     try {

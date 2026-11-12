@@ -190,57 +190,172 @@ function coreStylesheetMissing(cwd, at) {
 }
 
 /**
- * The `basePath` next.config sets, read as text with comments left out
- * (best effort): '' when it sets none, null when it sets one from code (an
- * env variable). Every URL of the app starts with it.
+ * What next.config sets, read from its syntax tree: `pageExtensions`,
+ * `basePath` and `distDir`, each a literal value, `undefined` when it is
+ * not set, or `null` when it is set in a way only running the config tells
+ * (a spread, a function config, a value from code). Comments say nothing.
+ * @param {string} cwd
+ * @returns {{file: string | null, pageExtensions: string[] | null | undefined, basePath: string | null | undefined, distDir: string | null | undefined}}
+ */
+function readNextConfig(cwd) {
+  const none = {
+    file: null,
+    pageExtensions: undefined,
+    basePath: undefined,
+    distDir: undefined,
+  };
+  for (const name of [
+    'next.config.mjs',
+    'next.config.js',
+    'next.config.ts',
+    'next.config.cjs',
+  ]) {
+    /** @type {string} */
+    let text;
+    try {
+      text = fs.readFileSync(path.join(cwd, name), 'utf8');
+    } catch {
+      continue;
+    }
+    const unknown = {
+      file: name,
+      pageExtensions: null,
+      basePath: null,
+      distDir: null,
+    };
+    /** @type {any} */
+    let file;
+    try {
+      file = parseModule(text, {
+        sourceType: 'unambiguous',
+        plugins: ['typescript'],
+        errorRecovery: true,
+      });
+    } catch {
+      return unknown;
+    }
+    const body = /** @type {any[]} */ (file.program.body);
+    /** Top-level constants, by name. @type {Map<string, any>} */
+    const consts = new Map();
+    for (const st of body)
+      if (st.type === 'VariableDeclaration' && st.kind === 'const')
+        for (const d of st.declarations)
+          if (d.id?.type === 'Identifier' && d.init)
+            consts.set(d.id.name, d.init);
+    /** @param {any} n @param {number} depth @returns {any} */
+    const resolve = (n, depth = 0) => {
+      while (
+        n &&
+        /^TS(As|Satisfies|NonNull)Expression$|^ParenthesizedExpression$/.test(
+          n.type,
+        )
+      )
+        n = n.expression;
+      if (n?.type === 'Identifier' && depth < 4 && consts.has(n.name))
+        return resolve(consts.get(n.name), depth + 1);
+      return n;
+    };
+    /** The config object: exported, or passed to a wrapper such as withX(config). @param {any} n @returns {any} */
+    const configOf = n => {
+      n = resolve(n);
+      if (n?.type === 'ObjectExpression') return n;
+      if (n?.type === 'CallExpression')
+        for (const a of n.arguments) {
+          const o = configOf(a);
+          if (o) return o;
+        }
+      return null;
+    };
+    /** @type {any} */
+    let exported = null;
+    for (const st of body) {
+      if (st.type === 'ExportDefaultDeclaration') exported = st.declaration;
+      if (
+        st.type === 'ExpressionStatement' &&
+        st.expression.type === 'AssignmentExpression' &&
+        st.expression.left.type === 'MemberExpression' &&
+        st.expression.left.object?.name === 'module' &&
+        st.expression.left.property?.name === 'exports'
+      )
+        exported = st.expression.right;
+    }
+    const config = exported && configOf(exported);
+    if (!config) return exported ? unknown : none;
+    const spread = config.properties.some(
+      (/** @type {any} */ x) => x.type === 'SpreadElement',
+    );
+    /** @param {string} key */
+    const prop = key =>
+      config.properties.find(
+        (/** @type {any} */ x) =>
+          x.type === 'ObjectProperty' &&
+          !x.computed &&
+          (x.key.name === key || x.key.value === key),
+      );
+    /** @param {any} n @returns {string | null} */
+    const str = n => {
+      n = resolve(n);
+      if (n?.type === 'StringLiteral') return n.value;
+      if (n?.type === 'TemplateLiteral' && !n.expressions.length)
+        return n.quasis[0].value.cooked;
+      return null;
+    };
+    /** @param {string} key @param {(n: any) => any} read */
+    const value = (key, read) => {
+      const p = prop(key);
+      if (!p) return spread ? null : undefined;
+      return read(p.value);
+    };
+    return {
+      file: name,
+      pageExtensions: value('pageExtensions', n => {
+        n = resolve(n);
+        if (n?.type !== 'ArrayExpression') return null;
+        const out = n.elements.map((/** @type {any} */ e) => str(e));
+        return out.every((/** @type {any} */ e) => e != null) ? out : null;
+      }),
+      basePath: value('basePath', n => {
+        const v = str(n);
+        return v == null ? null : v.replace(/\/+$/, '');
+      }),
+      distDir: value('distDir', n => {
+        const v = str(n);
+        return v == null
+          ? null
+          : (v.replace(/^\.?\//, '').split('/')[0] ?? null);
+      }),
+    };
+  }
+  return none;
+}
+
+/**
+ * The `basePath` next.config sets: '' when it sets none, null when only
+ * running the config tells. Every URL of the app starts with it.
  * @param {string} cwd
  * @returns {string | null}
  */
 function nextBasePath(cwd) {
-  for (const name of [
-    'next.config.mjs',
-    'next.config.js',
-    'next.config.ts',
-    'next.config.cjs',
-  ]) {
-    try {
-      // Comments say nothing about the config.
-      const text = fs
-        .readFileSync(path.join(cwd, name), 'utf8')
-        .replace(/\/\*[\s\S]*?\*\//g, '')
-        .replace(/(^|[^:'"`\w])\/\/.*$/gm, '$1');
-      if (!/\bbasePath\s*:/.test(text)) return '';
-      const m = /\bbasePath\s*:\s*['"](\/[^'"]*)['"]/.exec(text);
-      // A basePath from code (an env variable) is unknown here.
-      return m ? m[1].replace(/\/+$/, '') : null;
-    } catch {
-      continue;
-    }
-  }
-  return '';
+  const v = readNextConfig(cwd).basePath;
+  return v === undefined ? '' : v;
 }
 
 /**
- * The build folder next.config names (`distDir`), read as text (best
- * effort), or null.
+ * Notes on next.config values the preview depends on that only running
+ * the config tells: the page extensions (the route is page.tsx) and the
+ * base path of its URL.
  * @param {string} cwd
+ * @returns {string[]}
  */
-function nextDistDir(cwd) {
-  for (const name of [
-    'next.config.mjs',
-    'next.config.js',
-    'next.config.ts',
-    'next.config.cjs',
-  ]) {
-    try {
-      const text = fs.readFileSync(path.join(cwd, name), 'utf8');
-      const m = /distDir\s*:\s*['"`]\.?\/?([^'"`/]+)/.exec(text);
-      return m ? m[1] : null;
-    } catch {
-      continue;
-    }
-  }
-  return null;
+function nextConfigNotes(cwd) {
+  const c = readNextConfig(cwd);
+  /** @type {string[]} */
+  const notes = [];
+  if (c.pageExtensions === null)
+    notes.push(
+      `${c.file} sets pageExtensions in a way only running it tells; the preview's route is page.tsx, so "tsx" must be in it`,
+    );
+  return notes;
 }
 
 /**
@@ -261,9 +376,9 @@ function reservedFolder(cwd, dir) {
     return 'node_modules/ belongs to the package manager, which replaces it';
   if (segs[0] === 'public')
     return 'Next serves every file in public/ as it is, at the site root, so anyone could download it';
-  const built = [...new Set(['.next', 'out', nextDistDir(cwd)])].find(
-    d => d && segs[0] === d,
-  );
+  const built = [
+    ...new Set(['.next', 'out', readNextConfig(cwd).distDir]),
+  ].find(d => d && segs[0] === d);
   if (built)
     return `${built}/ is where Next writes its build, and the next build empties it`;
   const odd = segs.find(seg => windowsReserved(seg) || /^\.+$/.test(seg));
@@ -302,32 +417,6 @@ const urlSegments = (app, dir) =>
     .relative(app, dir)
     .split(path.sep)
     .filter(seg => seg && !/^\(.*\)$/.test(seg));
-
-/**
- * The `pageExtensions` next.config sets, read as text (best effort), or
- * null when it sets none.
- * @param {string} cwd
- * @returns {string[] | null}
- */
-function pageExtensions(cwd) {
-  for (const name of [
-    'next.config.mjs',
-    'next.config.js',
-    'next.config.ts',
-    'next.config.cjs',
-  ]) {
-    /** @type {string} */
-    let text;
-    try {
-      text = fs.readFileSync(path.join(cwd, name), 'utf8');
-    } catch {
-      continue;
-    }
-    const m = /pageExtensions\s*:\s*\[([^\]]*)\]/.exec(text);
-    return m ? [...m[1].matchAll(/['"`]([^'"`]+)['"`]/g)].map(x => x[1]) : null;
-  }
-  return null;
-}
 
 /** An optional catch-all route folder, `[[...slug]]`: it also serves its parent folder's URL (a required `[...slug]` does not). */
 const CATCH_ALL = /^\[\[\.\.\.[^\]]+\]\]$/;
@@ -521,7 +610,7 @@ function checkPlacement(cwd, dir, where, retry) {
           : [fallback],
       },
     );
-  const exts = pageExtensions(cwd);
+  const exts = readNextConfig(cwd).pageExtensions;
   if (exts && !exts.includes('tsx')) {
     let free = 'theme-app';
     for (let n = 2; fs.existsSync(path.join(cwd, free)); n++)
@@ -2973,6 +3062,7 @@ async function addPreview(description, options, box) {
   if (recovered) notes.push(recovered);
   const unstyled = coreStylesheetMissing(cwd, at);
   if (unstyled) notes.push(unstyled);
+  notes.push(...nextConfigNotes(cwd));
   box.note = recovered;
   const existing = readPreview(cwd, at.dir, pf);
   /** @type {PreviewData} */
