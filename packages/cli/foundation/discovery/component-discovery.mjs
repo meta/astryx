@@ -41,7 +41,7 @@ export const CORE_PACKAGE = CORE_PROVIDER_ID;
 const INTEGRATION_DOC_SUFFIXES = ['.doc.ts', '.doc.mjs', '.doc.js'];
 
 // Component source files are named `XDS{Name}.tsx` today. The XDS-prefix
-// migration (P2380608025, P4) renames them to the bare `{Name}.tsx` form, so
+// migration (phase 4) renames them to the bare `{Name}.tsx` form, so
 // discovery must recognize BOTH. The `XDS` prefix has historically doubled as
 // a "this is a top-level component" marker, so naively matching all PascalCase
 // `.tsx` files would surface internal helpers that happen to be PascalCase

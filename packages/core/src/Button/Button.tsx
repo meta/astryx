@@ -53,6 +53,7 @@ import {iconBoxSizeStyles, type IconSize} from '../Icon/IconSize.stylex';
 import {EDGE_COMP_ATTR} from '../Layout/edgeCompensation.stylex';
 import {useSize} from '../SizeContext/SizeContext';
 import {useButtonGroup} from '../ButtonGroup/ButtonGroupContext';
+import {useIsHydrating} from '../hooks/useIsHydrating';
 import {
   PressGroupBandContext,
   PressGroupContext,
@@ -119,6 +120,7 @@ const styles = stylex.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacingVars['--spacing-2'],
+    paddingBlock: spacingVars['--spacing-2'],
     paddingInline: spacingVars['--spacing-3'],
     borderWidth: 0,
     borderStyle: 'none',
@@ -269,12 +271,13 @@ const dynamicStyles = stylex.create({
   width: (width: SizeValue | null) => ({width}),
 });
 
-// A label can outgrow the element size when the text size grows. The size is
-// a minimum, so the button grows and its label stays inside the tap target.
+// At the default text size one label line is shorter than the element size,
+// so a caller's height still replaces this one. A larger text size makes the
+// line taller, and the button grows with its label.
 const sizeStyles = stylex.create({
-  sm: {minHeight: sizeVars['--size-element-sm']},
-  md: {minHeight: sizeVars['--size-element-md']},
-  lg: {minHeight: sizeVars['--size-element-lg']},
+  sm: {height: `max(${sizeVars['--size-element-sm']}, 1lh)`},
+  md: {height: `max(${sizeVars['--size-element-md']}, 1lh)`},
+  lg: {height: `max(${sizeVars['--size-element-lg']}, 1lh)`},
 });
 
 // An icon-only button holds its glyph, which does not grow with the text, so
@@ -756,6 +759,13 @@ export function Button({
   const isBusyOnlyDisabled =
     !isTrueDisabled && isLoadingState && !isInterruptible;
   const buttonDisabled = isTrueDisabled || isBusyOnlyDisabled;
+  // Server markup has no click guard until it hydrates, and a native submit
+  // or reset button acts on its form without one.
+  const isHydrating = useIsHydrating();
+  const renderedType =
+    buttonDisabled && isHydrating && (type === 'submit' || type === 'reset')
+      ? 'button'
+      : type;
   // The group draws one band for all its members: a ButtonGroup, or a
   // tracking group that says so. A disabled or busy-only button takes no tap.
   const groupDrawsBand = use(PressGroupBandContext);
@@ -1007,7 +1017,7 @@ export function Button({
     element = (
       <button
         ref={mergedButtonRef}
-        type={type}
+        type={renderedType}
         {...(inputGroup != null && buttonGroup == null
           ? inputGroupItemProps
           : undefined)}

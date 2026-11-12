@@ -18,6 +18,7 @@ import {
 } from '../../foundation/env/cli-command.mjs';
 import {getCliInvocation} from '../../foundation/env/package-manager.mjs';
 import {loadProjectForHelp} from './index.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const BIN = path.resolve(import.meta.dirname, 'bin', 'astryx.mjs');
 
@@ -26,7 +27,7 @@ let tmpDir;
 
 beforeEach(() => {
   // Repo-local, so Vite permits importing the integration manifest.
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-cli-command-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-cli-command-'));
 });
 
 afterEach(() => {
@@ -61,7 +62,8 @@ describe("an integration's cliCommand", () => {
     appWithIntegration('acme astryx');
     const {status, stderr} = await runCli(['theme', 'remove', 'nope'], tmpDir);
     expect(status).toBe(1);
-    expect(stderr).toContain('`acme astryx theme add nope`');
+    // No theme is called nope, so the hint names the list, through the integration's command.
+    expect(stderr).toContain('`acme astryx theme list`');
   });
 });
 

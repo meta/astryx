@@ -31,7 +31,7 @@ import type {HeroThemeContent} from './heroThemeContent';
 // One recurring member across every theme slide (the per-theme `member` copy is
 // intentionally not used here).
 const REWARD_MEMBER_NAME = 'Ami Pena';
-const REWARD_MEMBER_AVATAR = '/images/avatars/DATA-Ami-Pena.png';
+const REWARD_MEMBER_AVATAR = '/landing/hero/avatar-ami-pena.webp';
 
 const styles = stylex.create({
   // Desktop overlap stage: fixed, viewport-centered 1200px box (shared with the

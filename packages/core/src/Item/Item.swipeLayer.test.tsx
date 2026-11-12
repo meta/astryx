@@ -74,7 +74,7 @@ describe('Item and the swipe layer', () => {
     // The layer's module is still loading: nothing is drawn yet.
     expect(row.querySelector('[data-swipe-panel]')).toBeNull();
     layerLoad.release();
-    await swipeLayerLoaded();
+    await swipeLayerLoaded(row);
     const panel = row.querySelector('[data-swipe-panel="trailing"]');
     expect(panel).not.toBeNull();
     expect(layerRenders).toHaveBeenCalled();

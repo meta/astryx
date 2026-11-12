@@ -4,7 +4,7 @@
 
 /**
  * @file Table.tsx
- * @input React, StyleX, BaseTable, theme tokens, types, components
+ * @input React, StyleX, BaseTable, the coordinated Table viewport, theme tokens and types
  * @output Exports Table component, TableProps, TableDensity, TableDividers types
  * @position Styled wrapper; the primary table API for consumers
  *
@@ -18,6 +18,8 @@
  */
 
 import {use, useMemo, type ReactElement, type Ref} from 'react';
+import {TableRuntimeContext, registerTableScrollWrapper} from './tableRuntime';
+import {mergeRefs} from '../utils/mergeRefs';
 import * as stylex from '@stylexjs/stylex';
 import {borderVars, colorVars, focusVars} from '../theme/tokens.stylex';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
@@ -59,16 +61,9 @@ export type TableDividers = 'rows' | 'columns' | 'grid' | 'none';
 
 export type TableTextOverflow = 'wrap' | 'truncate';
 
-/**
- * Props for the styled Table component.
- * Supports both data-driven mode and children mode with TableRow/Cell.
- *
- * @template T - The row data type
- */
-
-export interface TableProps<T extends Record<string, unknown>> extends Omit<
+interface TableAppearanceProps<T extends Record<string, unknown>> extends Omit<
   BaseTableProps<T>,
-  'plugins' | 'components'
+  'plugins' | 'components' | 'virtualization'
 > {
   /** Row density. @default 'balanced' */
   density?: TableDensity;
@@ -111,6 +106,19 @@ export interface TableProps<T extends Record<string, unknown>> extends Omit<
   plugins?: Record<string, TablePlugin<T>>;
 }
 
+/**
+ * Props for the styled Table component.
+ * Supports both data-driven mode and children mode with TableRow/Cell.
+ *
+ * @template T - The row data type
+ */
+export interface TableProps<
+  T extends Record<string, unknown>,
+> extends TableAppearanceProps<T> {
+  /** Fixed-height opt-in. Requires data and explicit idKey; invalid combinations fall back with diagnostics. */
+  virtualization?: BaseTableProps<T>['virtualization'];
+}
+
 // =============================================================================
 // StyleX Styles (table-level only; cell/row/header styles owned by components)
 // =============================================================================
@@ -123,6 +131,23 @@ const tableStyles = stylex.create({
 });
 
 const scrollWrapperStyles = stylex.create({
+  // A windowed table scrolls inside the height its parent gives it. As its
+  // container's first or last child, the region bleeds over that block edge's
+  // padding (containerBleed), so its height adds that padding back and it
+  // ends at the same edge.
+  blockViewport: {
+    '--_table-bleed-block-start': {
+      default: '0px',
+      ':first-child': 'var(--container-padding-block-start, 0px)',
+    },
+    '--_table-bleed-block-end': {
+      default: '0px',
+      ':last-child': 'var(--container-padding-block-end, 0px)',
+    },
+    height:
+      'calc(100% + var(--_table-bleed-block-start) + var(--_table-bleed-block-end))',
+    minHeight: 0,
+  },
   base: {
     overflowX: 'auto',
     WebkitOverflowScrolling: 'touch',
@@ -139,6 +164,25 @@ const scrollWrapperStyles = stylex.create({
     marginBottom: {
       default: null,
       ':last-child': 'calc(-1 * var(--container-padding-block-end, 0px))',
+    },
+    // As its container's first or last child, the region reaches that block
+    // edge. There it takes the published corner, so its ring and fills follow
+    // the curve. Every other corner is square.
+    borderStartStartRadius: {
+      default: '0px',
+      ':first-child': 'var(--container-corner-start-start, 0px)',
+    },
+    borderStartEndRadius: {
+      default: '0px',
+      ':first-child': 'var(--container-corner-start-end, 0px)',
+    },
+    borderEndStartRadius: {
+      default: '0px',
+      ':last-child': 'var(--container-corner-end-start, 0px)',
+    },
+    borderEndEndRadius: {
+      default: '0px',
+      ':last-child': 'var(--container-corner-end-end, 0px)',
     },
   },
   // The wrapper bleeds to its container's edges, under a Card's border, and
@@ -190,21 +234,37 @@ function TableScrollWrapper({
     labelledBy != null
       ? undefined
       : (tableName?.label ?? t('@astryx.table.label'));
+  const runtime = use(TableRuntimeContext);
+  const hasBlockViewport = runtime?.viewportHeight != null;
   const {getViewportProps, getContentProps, state} = useScrollableArea({
-    axis: 'inline',
+    axis: hasBlockViewport ? 'both' : 'inline',
     keyboardAccess: {owner: 'content'},
     overscroll: 'contain',
   });
-  const {ref, ...restHtmlProps} = htmlProps ?? {};
+  // The spread below replaces className and style. Merge the plugin's instead.
+  const {
+    ref,
+    className: pluginClassName,
+    style: pluginStyle,
+    ...restHtmlProps
+  } = htmlProps ?? {};
+  const wrapperRef = useMemo(
+    () => mergeRefs(ref, runtime?.setViewport),
+    [ref, runtime?.setViewport],
+  );
   const viewportProps = getViewportProps<HTMLDivElement>({
     role: 'group',
     'aria-label': label,
     // A plugin's explicit name stays authoritative (Table FR1).
     'aria-labelledby':
       restHtmlProps['aria-label'] == null ? labelledBy : undefined,
-    ...(state.inline.isScrollable ? {tabIndex: 0} : {}),
+    ...(state.inline.isScrollable || state.block.isScrollable
+      ? {tabIndex: 0}
+      : {}),
+    // Reads the corner its container publishes (scrollWrapperStyles).
+    'data-container-corner': '',
     ...restHtmlProps,
-    ref,
+    ref: wrapperRef,
     ...mergeProps(
       themeProps('table-scroll-wrapper'),
       stylex.props(
@@ -214,11 +274,17 @@ function TableScrollWrapper({
         // theme restyles through the focus-outline tokens.
         focusOutlineStyles.focusVisible,
         scrollWrapperStyles.focusRingInset,
+        hasBlockViewport && scrollWrapperStyles.blockViewport,
         ...(pluginStyles ?? []),
       ),
+      pluginClassName,
+      pluginStyle,
     ),
   });
 
+  if (hasBlockViewport) {
+    viewportProps.style = {...viewportProps.style, overscrollBehaviorY: 'auto'};
+  }
   return (
     <div {...viewportProps}>
       <div {...getContentProps<HTMLDivElement>()}>
@@ -254,19 +320,24 @@ function buildTableStylePlugin<
 // Table Component
 // =============================================================================
 
+registerTableScrollWrapper(TableScrollWrapper);
+
 function TableInner<T extends Record<string, unknown>>({
   density = 'balanced',
   dividers = 'rows',
   isStriped = false,
   hasHover = false,
   verticalAlign = 'middle',
-  textOverflow = 'wrap',
+  textOverflow: textOverflowProp,
+  virtualization,
   plugins: userPlugins,
   columns,
   data,
   ref,
   ...rest
 }: TableProps<T> & {ref?: Ref<HTMLTableElement>}): ReactElement {
+  const textOverflow =
+    textOverflowProp ?? (virtualization == null ? 'wrap' : 'truncate');
   // Table-level styling plugin (just adds font/color to <table>)
   const tablePlugin = useMemo(() => buildTableStylePlugin<T>(), []);
   const basePlugins = useMemo(() => [tablePlugin], [tablePlugin]);
@@ -300,7 +371,8 @@ function TableInner<T extends Record<string, unknown>>({
           data={data}
           columns={columns}
           plugins={mergedPlugins}
-          textOverflow={textOverflow}
+          textOverflow={textOverflowProp}
+          virtualization={virtualization}
           scrollWrapper={TableScrollWrapper}
           {...rest}
         />
