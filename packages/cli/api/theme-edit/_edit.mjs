@@ -44,6 +44,7 @@ import {
   undoArgs,
   withoutBadValues,
   NAME_RULE,
+  HISTORY_STEPS,
   readHistory,
   refuse,
   settingsProblem,
@@ -875,7 +876,9 @@ async function change(sub, slug, thing, value, options) {
               (x.on ?? null) === (flags.on ?? null) &&
               (x.when ?? null) === (flags.when ?? null) &&
               (x.state ?? null) === (flags.state ?? null) &&
-              (x.mode ?? null) === (flags.mode ?? null),
+              (x.mode ?? null) === (flags.mode ?? null) &&
+              // --only names a setting made with it; it is never dropped.
+              Boolean(x.only) === Boolean(flags.only),
           )
         : null;
     if (!stored) {
@@ -953,6 +956,8 @@ async function change(sub, slug, thing, value, options) {
         .trim()
         .toLowerCase()
         .replace(/\s+/g, ' ')
+        // Spacing around commas and parentheses is not part of a value.
+        .replace(/\s*([,()])\s*/g, '$1')
         .replace(/^["']|["']$/g, '');
     const half =
       s.thing === 'headings' && ['weight', 'tracking'].includes(norm(value));
@@ -1644,15 +1649,19 @@ export async function themeEditShow(theme, options = {}) {
           ? [
               `the theme lock could not be taken, so nothing was written: this is the last build as it is${stale ? ` (it does not match the settings: ${stale})` : ''}, and the pages were not made again`,
             ]
-          : stale
+          : stale && !brokenSource
             ? [
                 `the build was not current (${stale}), so it was built again from the settings`,
               ]
-            : []),
+            : stale
+              ? [
+                  `the build is not current (${stale}), and it was not built again: the theme source cannot carry the settings`,
+                ]
+              : []),
         ...(unreadable ? [unreadable] : []),
         ...(brokenSource
           ? [
-              `${brokenSource}, so settings cannot take effect; put back the import, extends and name lines in ${theme}.theme.ts`,
+              `${brokenSource}, so settings cannot take effect; put back the import, extends and name lines in ${theme}.theme.ts${/no longer names the theme/.test(brokenSource) ? ` (a copy of another theme's source still names that theme: change its name to '${theme}')` : ''}`,
             ]
           : []),
         ...checked.filter(x => x.startsWith('not checked')),
@@ -2023,7 +2032,11 @@ export async function themeEditUndo(theme, options = {}) {
   if (thing === 'base' || thing === 'mode') {
     requireProject(cwd);
     const now = loadTheme(cwd, theme, thing);
-    const [first] = readHistory(themeFiles(cwd, theme).history).steps;
+    const {steps} = readHistory(themeFiles(cwd, theme).history);
+    const [first] = steps;
+    // The history keeps the last steps only: when it is full, or gone, its
+    // oldest step may not be how the theme was made.
+    const reachesStart = steps.length > 0 && steps.length < HISTORY_STEPS;
     /** @type {any} */
     let made = now;
     try {
@@ -2036,7 +2049,9 @@ export async function themeEditUndo(theme, options = {}) {
     if (of(made) === of(now))
       refuse(
         E.ERR_THEME_NOT_SET,
-        `${thing} was never changed: it is ${of(now)}, as ${theme} was made.`,
+        reachesStart
+          ? `${thing} was never changed: it is ${of(now)}, as ${theme} was made.`
+          : `${thing} is ${of(now)}, and ${theme}'s history does not reach back to how it was made, so there is no earlier ${thing} to go back to. Set the ${thing} you want with \`${P} set ${theme} ${thing} …\` instead.`,
         {run: [`${P} show ${theme}`]},
       );
     return change('set', theme, thing, of(made), options);

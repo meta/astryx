@@ -1759,31 +1759,75 @@ function themeSourceHash(cwd, slug) {
     }
     for (const spec of specifiers) {
       if (!spec.startsWith('.')) continue;
-      const base = path.resolve(path.dirname(file), spec);
-      // As TypeScript resolves: `./x.js` names ./x.ts (or .tsx, .mts).
-      const stem = base.replace(/\.m?js$/, '');
-      const target = [
-        ...(stem !== base ? ['.ts', '.tsx', '.mts'].map(x => stem + x) : []),
-        ...[
-          '',
-          '.ts',
-          '.tsx',
-          '.mts',
-          '.js',
-          '.mjs',
-          '/index.ts',
-          '/index.js',
-        ].map(x => base + x),
-      ].find(p => fs.existsSync(p) && fs.statSync(p).isFile());
+      const target = localModuleFile(path.dirname(file), spec);
+      // Only the editor's own generated palette files are judged by their
+      // stamps; any other file the theme reaches, in tokens/ too, is the
+      // person's.
       if (
         target &&
         !generated.has(target) &&
-        !path.relative(path.join(f.dir, 'tokens'), target).match(/^[^.]/)
+        !isGeneratedPaletteFile(f.dir, slug, target)
       )
         queue.push(target);
     }
   }
   return hash.digest('hex').slice(0, 16);
+}
+
+/** The extensions a theme's local module may have, as the build reads them. */
+const MODULE_EXTENSIONS = [
+  '.ts',
+  '.tsx',
+  '.mts',
+  '.cts',
+  '.js',
+  '.jsx',
+  '.mjs',
+  '.cjs',
+];
+
+/**
+ * The file a relative import names, resolved as TypeScript resolves it: a
+ * JavaScript extension names its TypeScript source (`.js` → `.ts`/`.tsx`,
+ * `.jsx` → `.tsx`, `.mjs` → `.mts`, `.cjs` → `.cts`), then the path as
+ * written, with each module extension, and as a folder's index file.
+ * @param {string} dir
+ * @param {string} spec
+ * @returns {string | undefined}
+ */
+function localModuleFile(dir, spec) {
+  const base = path.resolve(dir, spec);
+  const ext = path.extname(base);
+  const stem = base.slice(0, base.length - ext.length);
+  const sourceFor = /** @type {Record<string, string[]>} */ ({
+    '.js': ['.ts', '.tsx'],
+    '.jsx': ['.tsx'],
+    '.mjs': ['.mts'],
+    '.cjs': ['.cts'],
+  })[ext];
+  return [
+    ...(sourceFor ?? []).map(x => stem + x),
+    base,
+    ...MODULE_EXTENSIONS.map(x => base + x),
+    ...MODULE_EXTENSIONS.map(x => path.join(base, `index${x}`)),
+  ].find(p => fs.existsSync(p) && fs.statSync(p).isFile());
+}
+
+/**
+ * Whether a file is one of the palette files the editor generates in a
+ * theme's tokens/ folder (`tokens/<slug>.palette*`).
+ * @param {string} dir the theme folder
+ * @param {string} slug
+ * @param {string} file
+ */
+function isGeneratedPaletteFile(dir, slug, file) {
+  const rel = path.relative(path.join(dir, 'tokens'), file);
+  return (
+    !rel.startsWith('..') &&
+    !path.isAbsolute(rel) &&
+    !rel.includes(path.sep) &&
+    rel.startsWith(`${slug}.palette`)
+  );
 }
 
 /**
@@ -2041,7 +2085,7 @@ export async function resolvedTokens(ctx, slug) {
     try {
       return asText(core.resolveThemeTokens(t, {mode}));
     } catch (e) {
-      const bad = nonTextToken(t);
+      const bad = nonTextToken(t, ctx.C.typeOf);
       throw new AstryxError(
         bad
           ? nonTextMessage(ctx, slug, bad)
@@ -2053,7 +2097,7 @@ export async function resolvedTokens(ctx, slug) {
   };
   // A pair that holds a value that is not text ([8, 8]) resolves, but
   // builds nothing a browser reads: named the same way.
-  const pairBad = nonTextToken(t);
+  const pairBad = nonTextToken(t, ctx.C.typeOf);
   if (pairBad)
     throw new AstryxError(
       nonTextMessage(ctx, slug, pairBad),
@@ -2079,52 +2123,50 @@ export async function resolvedTokens(ctx, slug) {
  * The first token a built theme gives a value that is not text, alone or
  * in a [light, dark] pair, or null.
  * @param {any} t
- * @returns {[string, unknown] | null}
+ * @param {(name: string) => string} [typeOf] a token's type (size, color…)
+ * @returns {[string, unknown, 'object' | 'pair' | 'unit' | 'value'] | null}
  */
-function nonTextToken(t) {
+function nonTextToken(t, typeOf = (/** @type {string} */ _k) => 'other') {
   for (const [k, raw] of Object.entries(t?.tokens ?? {})) {
-    // A pair may come as [light, dark] or as {light, dark}.
-    const v =
-      raw &&
-      typeof raw === 'object' &&
-      !Array.isArray(raw) &&
-      ('light' in raw || 'dark' in raw)
-        ? [/** @type {any} */ (raw).light, /** @type {any} */ (raw).dark]
-        : raw;
-    // A built theme writes a pair as light-dark(); a half that was not
-    // text comes out as a bare number, null or a boolean.
+    // An object ({light, dark}) is not a value Core builds: it would write
+    // [object Object].
+    if (raw && typeof raw === 'object' && !Array.isArray(raw))
+      return [k, raw, 'object'];
+    // A built theme writes a pair as light-dark(). A half that was not text
+    // comes out as nothing, null or a boolean; a bare number is text the
+    // source may have quoted, and is wrong only for a size, which needs a
+    // unit.
     const pair =
-      typeof v === 'string'
-        ? /^light-dark\(\s*([^,]*?)\s*,\s*([^,]*?)\s*\)$/.exec(v)
+      typeof raw === 'string'
+        ? /^light-dark\(\s*([^,]*?)\s*,\s*([^,]*?)\s*\)$/.exec(raw)
         : null;
-    if (
-      pair &&
-      [pair[1], pair[2]].some(x =>
-        /^(|null|undefined|true|false|-?\d+(\.\d+)?)$/.test(x),
-      )
-    ) {
-      const half = (/** @type {string} */ x) =>
-        /^-?\d+(\.\d+)?$/.test(x)
-          ? Number(x)
-          : x === '' || x === 'undefined' || x === 'null'
-            ? null
-            : x === 'true' || x === 'false'
-              ? x === 'true'
-              : x;
-      return [k, [half(pair[1]), half(pair[2])]];
+    if (pair) {
+      const halves = [pair[1], pair[2]];
+      const missing = halves.some(x =>
+        /^(|null|undefined|true|false)$/.test(x),
+      );
+      const unitless =
+        typeOf(k) === 'size' &&
+        halves.some(x => /^-?\d+(\.\d+)?$/.test(x) && Number(x) !== 0);
+      if (missing || unitless) {
+        const half = (/** @type {string} */ x) =>
+          /^-?\d+(\.\d+)?$/.test(x)
+            ? Number(x)
+            : x === '' || x === 'undefined' || x === 'null'
+              ? null
+              : x === 'true' || x === 'false'
+                ? x === 'true'
+                : x;
+        return [k, [half(pair[1]), half(pair[2])], missing ? 'pair' : 'unit'];
+      }
+      continue;
     }
-    const values = Array.isArray(v) ? v : [v];
-    if (
-      Array.isArray(v) &&
-      (v.length !== 2 || values.some(x => typeof x !== 'string'))
-    )
-      return [k, v];
-    if (
-      !Array.isArray(v) &&
-      typeof v !== 'string' &&
-      (typeof v !== 'object' || v == null)
-    )
-      return [k, v];
+    if (Array.isArray(raw)) {
+      if (raw.length !== 2 || raw.some(x => typeof x !== 'string'))
+        return [k, raw, 'pair'];
+      continue;
+    }
+    if (typeof raw !== 'string') return [k, raw, 'value'];
   }
   return null;
 }
@@ -2134,10 +2176,18 @@ function nonTextToken(t) {
  * write instead (a size in px, a weight as a number in quotes), or none.
  * @param {Ctx} ctx
  * @param {string} slug
- * @param {[string, unknown]} bad
+ * @param {[string, unknown, ('object' | 'pair' | 'unit' | 'value')?]} bad
  */
-function nonTextMessage(ctx, slug, [name, value]) {
+function nonTextMessage(ctx, slug, [name, value, kind = 'value']) {
   const type = ctx.C.typeOf(name);
+  if (kind === 'object')
+    return `${slug}.theme.ts gives ${name} an object (${JSON.stringify(value)}); a token value is a CSS value in quotes, or a [light, dark] pair such as ['6px', '8px'].`;
+  if (kind === 'unit') {
+    const n = /** @type {unknown[]} */ (value).find(
+      x => typeof x === 'number' && x !== 0,
+    );
+    return `${slug}.theme.ts gives ${name}, a size, a [light, dark] pair with a number without a unit (${/** @type {unknown[]} */ (value).join(', ')}); a size needs one, such as ['${n}px', '${n}px'].`;
+  }
   const one = Array.isArray(value)
     ? value.find(x => typeof x !== 'string')
     : value;
@@ -3125,7 +3175,7 @@ export async function commitTheme(
     const code = /** @type {any} */ (e)?.code;
     if (['EACCES', 'EPERM', 'ENOSPC', 'EROFS', 'EIO', 'EISDIR'].includes(code))
       throw new AstryxError(
-        `Could not write the theme files (${code}), so the change was undone. Free space or fix the permission, then run the command again.`,
+        `Could not write the theme files (${code}), so the files were put back as they were. Free space or fix the permission, then run the command again. Nothing was changed.`,
         [
           {
             name: `ls -ld ${quoteCommandArgument(themeFiles(ctx.project.cwd, slug).dir)}`,
@@ -3153,7 +3203,7 @@ export async function commitTheme(
       .join(' | ');
     const own = why.includes(path.basename(f.ts));
     throw new AstryxError(
-      `The theme did not build, so the change was undone: ${why}${own ? ` (${shown(cwd, f.ts)} is your own file: fix it, then run the command again)` : ''}`,
+      `The theme did not build, so the files were put back as they were: ${why}${own ? ` (${shown(cwd, f.ts)} is your own file: fix it, then run the command again)` : ''}. Nothing was changed.`,
       [
         own
           ? {

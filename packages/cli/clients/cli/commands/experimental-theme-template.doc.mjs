@@ -28,7 +28,7 @@ export const doc = {
       flag: '-f, --overwrite',
       param: 'options.overwrite',
       description:
-        'Replace an existing copy of the template or theme source file. Any other file, such as package.json, or a file in a folder the theme editor made, fails with ERR_FILE_EXISTS and is left as it was',
+        'Replace an existing copy of the template or theme source file. Any other file, such as package.json, or a file the theme editor owns (named after its folder, beside its settings, such as themes/t/t.theme.ts), fails with ERR_FILE_EXISTS and is left as it was; an earlier template in that folder is replaced',
     },
   ],
   examples: [

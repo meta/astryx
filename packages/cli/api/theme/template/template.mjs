@@ -79,7 +79,9 @@ function isReplaceableThemeFile(file) {
  * Refuses to overwrite without `overwrite`: an edited copy is the consumer's
  * work, and this command is safe to re-run (init calls it on every setup).
  *
- * @param {{targetPath?: string, overwrite?: boolean, cwd?: string}} [options]
+ * @param {{targetPath?: string, overwrite?: boolean, cwd?: string, __editorFilesOnly?: boolean}} [options]
+ *   `__editorFilesOnly` (the experimental command): in a folder the theme
+ *   editor made, only the editor's own files are protected.
  * @returns {import('../theme.type.mjs').ThemeTemplateResponse}
  */
 export function themeTemplate(options = {}) {
@@ -87,6 +89,7 @@ export function themeTemplate(options = {}) {
     targetPath = THEME_TEMPLATE_DEFAULT_PATH,
     overwrite = false,
     cwd = process.cwd(),
+    __editorFilesOnly: editorFilesOnly = false,
   } = options;
 
   const suggested = path.posix.join(
@@ -177,10 +180,19 @@ export function themeTemplate(options = {}) {
     );
   }
 
-  const editorRecord =
-    fs.existsSync(resolved) && overwrite
-      ? editorThemeRecord(path.dirname(resolved))
-      : null;
+  const record = fs.existsSync(resolved)
+    ? editorThemeRecord(path.dirname(resolved))
+    : null;
+  // The editor's own files are `<folder>.*` beside its settings; with
+  // __editorFilesOnly any other file there (an earlier template) is the
+  // person's.
+  const editorFile =
+    record != null &&
+    (!editorFilesOnly ||
+      path
+        .basename(resolved)
+        .startsWith(`${path.basename(path.dirname(resolved))}.`));
+  const editorRecord = overwrite && editorFile ? record : null;
   if (editorRecord) {
     throw new AstryxError(
       `${relative} belongs to a theme the theme editor made (${editorRecord} is beside it). Replacing it would cut the theme off from its settings, so --overwrite does not replace it.`,
@@ -220,9 +232,7 @@ export function themeTemplate(options = {}) {
   if (fs.existsSync(resolved) && !overwrite) {
     // Whether --overwrite would replace this file, and if not, a path that
     // takes the template, so the hint never names a command that refuses.
-    const overwritable =
-      !editorThemeRecord(path.dirname(resolved)) &&
-      isReplaceableThemeFile(resolved);
+    const overwritable = !editorFile && isReplaceableThemeFile(resolved);
     return {
       type: 'theme.template',
       data: {

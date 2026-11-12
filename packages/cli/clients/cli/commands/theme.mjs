@@ -1578,6 +1578,10 @@ function registerThemeCommands(theme, program, docs, words) {
           targetPath,
           overwrite: options.overwrite,
           cwd: process.cwd(),
+          // The experimental command protects only the editor's own files.
+          ...(words.group === THEME_WORDS.group
+            ? {}
+            : {__editorFilesOnly: true}),
         });
       } catch (e) {
         const err =
