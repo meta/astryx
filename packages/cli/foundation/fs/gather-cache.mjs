@@ -94,7 +94,7 @@ const UNSET = null;
  * their values. Files and folders are recorded for the whole run; modules and
  * variables only while the run is armed: from its start to the end of its
  * first gather, and during each later gather. Null outside a recorded run.
- * @type {{reads: Map<string, string>, env: Map<string, string | null>, arm: () => boolean, disarm: () => void} | null}
+ * @type {{reads: Map<string, string>, env: Map<string, string | null>, arm: () => boolean, disarm: () => void, armedThroughout: boolean} | null}
  */
 let run = null;
 
@@ -258,7 +258,10 @@ export async function recordRunFor(argv, fn) {
   // A folder the cache would refuse (not the user's own, open to others, a
   // link) leaves the run exactly as without the cache: no hook is installed.
   if (withoutRecording(gatherCacheDir) == null) return fn();
-  return recordRun(fn);
+  // doctor's kept checks read docs modules that load between its gathers, so
+  // its run records modules and variables to the end, not only during each
+  // gather.
+  return recordRun(fn, {armedThroughout: command === 'doctor'});
 }
 
 /**
@@ -266,9 +269,12 @@ export async function recordRunFor(argv, fn) {
  * tests; `recordRunFor` decides which runs are recorded.
  * @template T
  * @param {() => Promise<T>} fn
+ * @param {{armedThroughout?: boolean}} [options] - `armedThroughout`: record
+ *   modules and variables until the run ends, not only until each gather
+ *   ends, for a run whose later gathers read modules loaded in between.
  * @returns {Promise<T>}
  */
-export async function recordRun(fn) {
+export async function recordRun(fn, {armedThroughout = false} = {}) {
   const registerHooks = /** @type {any} */ (nodeModule).registerHooks;
   if (typeof registerHooks !== 'function' || run != null) return fn();
   /** @type {Map<string, string>} */
@@ -354,7 +360,7 @@ export async function recordRun(fn) {
     }
   };
   if (!arm()) return fn();
-  run = {reads, env, arm, disarm};
+  run = {reads, env, arm, disarm, armedThroughout};
   try {
     return await recordReads(reads, fn, {exact: true});
   } finally {
@@ -517,7 +523,7 @@ export async function persistedGather(key, load, codec, keep = () => true) {
   try {
     return await gatherAt(key, load, codec, keep);
   } finally {
-    if (--gatherDepth === 0) run?.disarm();
+    if (--gatherDepth === 0 && !run?.armedThroughout) run?.disarm();
   }
 }
 

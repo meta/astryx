@@ -2468,17 +2468,17 @@ export async function runChecks(options = {}) {
   checks.push(await checkAuthoringDocs(ctx));
   // The checks that read only files, each kept while every file it read is
   // unchanged; the Core the project loads is part of what they read.
-  const fileCheckKey = [cwd, coreDir ?? null];
+  const where = {cwd, coreDir: coreDir ?? null};
   checks.push(
-    await keptFileCheck(['cli-docs', ...fileCheckKey], () => checkCliDocs(ctx)),
+    await keptFileCheck({name: 'cli-docs', ...where}, () => checkCliDocs(ctx)),
   );
   checks.push(
-    await keptFileCheck(['docs-tree', ...fileCheckKey], () =>
+    await keptFileCheck({name: 'docs-tree', ...where}, () =>
       checkDocsTree(ctx),
     ),
   );
   checks.push(
-    await keptFileCheck(['docs-progressive', ...fileCheckKey], () =>
+    await keptFileCheck({name: 'docs-progressive', ...where}, () =>
       checkDocsProgressiveDisclosure(ctx),
     ),
   );

@@ -45,7 +45,11 @@ export {unlistedIconSets} from '../../foundation/discovery/icon-set-discovery.mj
 import {elementPropOrigins} from '../../foundation/discovery/module-exports.mjs';
 import {cssImports} from '../../foundation/render/embedded-imports.mjs';
 import * as path from 'node:path';
-import {persistedGather} from '../../foundation/fs/gather-cache.mjs';
+import {
+  persistedGather,
+  recordedRun,
+} from '../../foundation/fs/gather-cache.mjs';
+import {getCliInvocation} from '../../foundation/env/package-manager.mjs';
 import {
   Project,
   availableComputerIntegrations,
@@ -97,12 +101,21 @@ const CHECK_CODEC = {
  * back. Only the docs checks go through here; a check that depends on the
  * time, the network or anything else the stamps do not see never does.
  * @template T
- * @param {unknown[]} key
+ * @param {{name: string, cwd: string, coreDir: string | null}} where - The
+ *   check, the project folder, and the Core folder the project loads.
  * @param {() => Promise<T>} check
  * @returns {Promise<T>}
  */
-export function keptFileCheck(key, check) {
-  return persistedGather(['doctor-check', ...key], check, CHECK_CODEC);
+export function keptFileCheck({name, cwd, coreDir}, check) {
+  // Only a recorded run (a plain `doctor` from the bin) reads or keeps one: a
+  // hosted run names its commands its own way, so it always checks.
+  if (!recordedRun()) return check();
+  return persistedGather(
+    // With the command name the checks print commands with.
+    ['doctor-check', name, cwd, coreDir, getCliInvocation(cwd)],
+    check,
+    CHECK_CODEC,
+  );
 }
 
 /**

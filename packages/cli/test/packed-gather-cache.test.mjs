@@ -244,6 +244,30 @@ function issuesEntry(file) {
 }
 
 /**
+ * doctor's kept docs checks in a temp folder's cache folder, by check id.
+ * @param {string} tmp
+ * @returns {Map<string, number>} check id to inode
+ */
+function doctorEntries(tmp) {
+  const dir = path.join(tmp, CACHE_NAME);
+  /** @type {Map<string, number>} */
+  const out = new Map();
+  if (!fs.existsSync(dir)) return out;
+  for (const name of fs.readdirSync(dir)) {
+    const file = path.join(dir, name);
+    try {
+      const {value} = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (value && typeof value.id === 'string' && 'label' in value) {
+        out.set(value.id, fs.statSync(file).ino);
+      }
+    } catch {
+      // Not a kept check.
+    }
+  }
+  return out;
+}
+
+/**
  * The integrations' kept contribution-check results in a temp folder's cache
  * folder.
  * @param {string} tmp
@@ -1046,13 +1070,16 @@ Module._resolveFilename = function (request, parent, isMain, options) {
         `export default { docs: './docs' };\n`,
       );
       fs.mkdirSync(path.join(other.widgets, 'docs'));
-      const topic = path.join(other.widgets, 'docs', 'deploying.doc.mjs');
-      const write = (/** @type {string} */ link) =>
-        fs.writeFileSync(
-          topic,
-          `export const docs = {type: 'generic', name: 'deploying', title: 'Deploying', description: 'How to deploy.', sections: [{title: 'Overview', content: [{type: 'prose', text: 'Ship it, then see {@link generic:${link}}.'}]}]};\n`,
-        );
-      write('quick-start');
+      // The link lives in a module the doc imports, so an edit to that module
+      // alone must show too.
+      const target = path.join(other.widgets, 'docs', 'target.mjs');
+      const link = (/** @type {string} */ to) =>
+        fs.writeFileSync(target, `export const target = '${to}';\n`);
+      link('quick-start');
+      fs.writeFileSync(
+        path.join(other.widgets, 'docs', 'deploying.doc.mjs'),
+        `import {target} from './target.mjs';\nexport const docs = {type: 'generic', name: 'deploying', title: 'Deploying', description: 'How to deploy.', sections: [{title: 'Overview', content: [{type: 'prose', text: 'Ship it, then see {@link generic:' + target + '}.'}]}]};\n`,
+      );
       const tree = (/** @type {{stdout: string}} */ r) =>
         JSON.parse(r.stdout).data.checks.find(
           (/** @type {{id: string}} */ c) => c.id === 'docs-tree',
@@ -1061,16 +1088,25 @@ Module._resolveFilename = function (request, parent, isMain, options) {
         tree(run(['doctor'], {tmp: at, cwd: other.dir}));
       const fresh = doctor(freshTmp());
       expect(doctor(tmp)).toEqual(fresh);
-      const kept = new Set(fs.readdirSync(path.join(tmp, CACHE_NAME)));
+      const kept = doctorEntries(tmp);
+      expect([...kept.keys()].sort()).toEqual([
+        'cli-docs',
+        'docs-progressive-disclosure',
+        'docs-tree',
+      ]);
+      // Read back, not checked again: the same three files.
       expect(doctor(tmp)).toEqual(fresh);
-      expect(new Set(fs.readdirSync(path.join(tmp, CACHE_NAME)))).toEqual(kept);
-      // Broken in place: the very next doctor reports it, as a fresh one does.
-      write('no-such-topic');
+      expect(doctorEntries(tmp)).toEqual(kept);
+      // Broken by an edit to the imported module alone: the very next doctor
+      // reports it, as a fresh one does, and checks the docs tree again.
+      link('no-such-topic');
       const broken = doctor(tmp);
       expect(JSON.stringify(broken)).toContain('no-such-topic');
       expect(broken).toEqual(doctor(freshTmp()));
+      const after = doctorEntries(tmp);
+      expect(after.get('docs-tree')).not.toBe(kept.get('docs-tree'));
       // Fixed: the next doctor no longer reports it.
-      write('quick-start');
+      link('quick-start');
       expect(doctor(tmp)).toEqual(fresh);
     } finally {
       fs.rmSync(other.dir, {recursive: true, force: true});
