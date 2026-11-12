@@ -11,7 +11,7 @@
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/NumberInput/numberParser.ts (locale-aware parsing)
  * - /packages/core/src/NumberInput/numberInputCommit.ts (draft commit policy)
- * - /packages/core/src/NumberInput/useEntryErrorReport.ts (rejection status, alert, and report)
+ * - /packages/core/src/Field/useEntryErrorReport.ts (rejection status, alert, and report)
  * - /packages/core/src/NumberInput/NumberInput.doc.mjs (props table, features, implementation notes)
  * - /packages/core/src/NumberInput/NumberInput.test.tsx (tests for new/changed behavior)
  * - /packages/core/src/NumberInput/index.ts (exports if types change)
@@ -241,17 +241,14 @@ import {useLocale} from '../i18n';
 import {formatEditableNumber} from './numberParser';
 import {
   getNumberInputRejection,
+  type NumberInputRejection,
   parseNumberInput,
   resolveNumberInputCommit,
 } from './numberInputCommit';
 import {
   isSameEntryError,
-  type NumberInputEntryError,
-  toEntryError,
   useEntryErrorReport,
-} from './useEntryErrorReport';
-
-export type {NumberInputEntryError} from './useEntryErrorReport';
+} from '../Field/useEntryErrorReport';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
 import {
   registerEnglishFallback,
@@ -260,6 +257,36 @@ import {
 import english from '../i18n/generated-english/NumberInput/NumberInput.generated';
 
 registerEnglishFallback(english);
+
+/**
+ * Why a NumberInput rejects the text that a person typed. The field reports
+ * it through `onEntryErrorChange`, so the app can word its own message.
+ */
+export interface NumberInputEntryError {
+  /**
+   * The reason, independent of the locale:
+   * - `'unreadable'`: text that is not a number
+   * - `'fractional'`: a number with a fraction in an `isIntegerOnly` field
+   * - `'outOfRange'`: any number while `min` is above `max`, so no number fits
+   */
+  kind: 'unreadable' | 'fractional' | 'outOfRange';
+  /** The typed text. */
+  text: string;
+  /** The number that the text names. It is set for `fractional` and `outOfRange`. */
+  value?: number;
+}
+
+function toEntryError(
+  text: string,
+  rejection: NumberInputRejection | null,
+): NumberInputEntryError | null {
+  if (rejection == null) {
+    return null;
+  }
+  return rejection.kind === 'unreadable'
+    ? {kind: 'unreadable', text}
+    : {kind: rejection.kind, text, value: rejection.value};
+}
 
 interface NumberInputPropsBase extends Omit<
   FieldInputBaseProps,
@@ -776,15 +803,15 @@ export function NumberInput({
   }
   const entryError = isDisabled ? null : shownRejection;
 
-  const rejectionMessage = t('@astryx.numberInput.invalidNumber');
   // A held stepper shows a value on the grid, so it shows no rejection.
   const shownEntryError = holdDraft === null ? entryError : null;
+  const invalidNumberMessage = t('@astryx.numberInput.invalidNumber');
   const {fieldStatus, alertMessage, reportEntryError} = useEntryErrorReport({
     entryError,
-    shownEntryError,
+    rejectionMessage: shownEntryError != null ? invalidNumberMessage : null,
     status,
-    rejectionMessage,
     isStatusAnnounced: !inputGroup,
+    callerErrorPrecedence: 'always',
     onEntryErrorChange,
   });
 

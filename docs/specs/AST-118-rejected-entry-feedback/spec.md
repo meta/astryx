@@ -24,6 +24,7 @@ affects_consumer_docs: [DateInput, DateTimeInput, TimeInput, NumberInput]
 {
   "paths": [
     "packages/core/src/DateInput/useTypedDate.ts",
+    "packages/core/src/Field/useEntryErrorReport.ts",
     "packages/core/src/DateInput/DateInput.tsx",
     "packages/core/src/DateInput/NativeDateField.tsx",
     "packages/core/src/DateTimeInput/**",

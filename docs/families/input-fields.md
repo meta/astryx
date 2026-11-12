@@ -22,6 +22,7 @@ verified_by:
     packages/core/src/MultiSelector/MultiSelector.test.tsx,
     packages/core/src/Field/__tests__/SearchKeyboard.interaction.browser.spec.ts,
     packages/core/src/inputFontFloor.test.ts,
+    packages/core/src/Field/useEntryErrorReport.test.tsx,
   ]
 members:
   [
@@ -123,6 +124,14 @@ another implementation helper.
 - Shared primitives retain their own visual and accessibility ownership. In
   particular, InputClearButton, Spinner, Tooltip, FieldStatus, and Icon do not
   become member-specific APIs when composed into a field.
+- The internal hook `useEntryErrorReport`
+  (`packages/core/src/Field/useEntryErrorReport.ts`) owns the shared part of
+  FR15 for DateInput, DateTimeInput's date segment, and NumberInput: the status
+  a shown rejection takes over a caller `status`, the alert that announces a
+  message no shown status announces, and the `onEntryErrorChange` report
+  (`spec:AST-118` FR5, FR7, FR8). Each member passes its rejection, its
+  message, and whether a caller `error` status wins without the callback; when
+  an entry is rejected and what its message says stay with the member.
 - FieldStatus owns its direct `attached` and `detached` message-box
   presentations. Field owns composition with an input: it consumes `tooltip`
   before rendering FieldStatus and applies the member's supported placement
