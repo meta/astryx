@@ -206,7 +206,7 @@ describe('DateInput', () => {
     expect(input).not.toHaveAttribute('aria-invalid');
   });
 
-  it('announces an alert message when typed input is invalid', () => {
+  it('shows unreadable text as the field status at blur, with an empty alert', () => {
     // Scope to the component's own container: the embedded Calendar uses the
     // shared `useAnnounce` hook, whose global polite/assertive live-region pair
     // (both mounted on document.body by any announce) would otherwise make a

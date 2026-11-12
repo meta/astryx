@@ -483,8 +483,7 @@ for (const item of cases) {
         statePass &&
         semantics?.value === 'not a date' &&
         semantics.ariaInvalid === 'true' &&
-        (semantics.describedText.length > 0 ||
-          (semantics.alertText ?? '').length > 0);
+        semantics.describedText.includes('Invalid date');
     } else if (item.state === 'open') {
       statePass =
         statePass &&
