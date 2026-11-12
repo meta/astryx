@@ -12,7 +12,7 @@ import {
   mergeFindings,
   recordGapFindings,
   sharedOwnerFindings,
-  sizeFindings,
+  sizeAdvice,
 } from './pre-review-findings.mjs';
 import {readDiff} from './review-diff.mjs';
 
@@ -49,11 +49,11 @@ describe('authoredLineCount', () => {
     const diff = [
       diffOf('pnpm-lock.yaml', lines(50)),
       diffOf('packages/core/src/__snapshots__/A.test.tsx.snap', lines(40)),
-      diffOf('packages/core/api-report.md', lines(30)),
+      diffOf('packages/core/src/data.generated.ts', lines(30)),
       diffOf('packages/core/src/A/A.tsx', lines(7)),
     ].join('\n');
     expect(
-      authoredLineCount(counted(diff), file => file.endsWith('api-report.md')),
+      authoredLineCount(counted(diff), file => file.endsWith('.generated.ts')),
     ).toBe(7);
   });
 
@@ -64,44 +64,15 @@ describe('authoredLineCount', () => {
   });
 });
 
-describe('sizeFindings', () => {
-  it('passes at the limit', () => {
-    expect(sizeFindings(2000, null)).toEqual([]);
+describe('sizeAdvice', () => {
+  it('says nothing at the guideline', () => {
+    expect(sizeAdvice(2000)).toBeNull();
   });
 
-  it('warns above the limit and asks for the description when it is not read', () => {
-    const [finding] = sizeFindings(2001, null);
-    expect(finding.item).toBe('h');
-    expect(finding.rule).toBe('2001 authored lines, over 2000');
-    expect(finding.fix).toContain('--body-file');
-  });
-
-  it('accepts a declared behavior module at any size', () => {
-    for (const body of [
-      'Behavior module: the gesture host wheel module',
-      'This behavior-module pull request adds the wheel module.',
-    ]) {
-      expect(sizeFindings(20000, body)).toEqual([]);
-    }
-    for (const body of [
-      "This isn't a behavior-module PR.",
-      'This is not a behavior-module pull request.',
-      'One fix.',
-    ]) {
-      expect(sizeFindings(5000, body)).toHaveLength(1);
-    }
-  });
-
-  it('raises the limit to 8,000 for a Batch row', () => {
-    const body = 'Batch: Slider · finger tracking';
-    expect(sizeFindings(8000, body)).toEqual([]);
-    const [finding] = sizeFindings(8001, body);
-    expect(finding.rule).toBe('8001 authored lines, over 8000 for a batch');
-  });
-
-  it('counts a stacked pull request, and names the base to count against', () => {
-    const [finding] = sizeFindings(5000, '- Stack: 2 of 3, above #123');
-    expect(finding.fix).toContain('pass --base the branch below it');
+  it('advises a split above the guideline, and is never a finding', () => {
+    expect(sizeAdvice(9000)).toBe(
+      'Over 2,000 authored lines: consider splitting if a smaller change would review more easily.',
+    );
   });
 });
 

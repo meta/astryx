@@ -308,11 +308,11 @@ test('a long list scrolls to its end, then the sheet stretches with the rest of 
     if (list == null) {
       throw new Error('no scrolling list');
     }
-    list.dataset.c17List = '';
+    list.dataset.sheetList = '';
     list.scrollTop = list.scrollHeight - list.clientHeight - 40;
     return list.scrollHeight - list.clientHeight;
   });
-  const list = sheet.locator('[data-c17-list]');
+  const list = sheet.locator('[data-sheet-list]');
   const listBox = await list.boundingBox();
   if (listBox == null) {
     throw new Error('no list box');

@@ -94,12 +94,22 @@ export {
   type TransferListSelectorProps,
 } from './TransferList';
 
+// LineClamp — clamp arbitrary content to N lines (facebook/astryx#4180)
+export {LineClamp, type LineClampProps} from './LineClamp';
+
 // Chat — experimental reasoning display
 export {
   ChatReasoning,
   type ChatReasoningProps,
 } from './ChatReasoning/ChatReasoning';
 export * from './Chat';
+
+// DialogHeroHeader — hero-style Dialog header (meta/astryx#4182)
+export {
+  DialogHeroHeader,
+  type DialogHeroHeaderProps,
+  type DialogHeroHeaderMediaMode,
+} from './DialogHeroHeader';
 
 // Tour — guided product-tour / NUX walkthrough (meta/astryx#4239)
 export {
@@ -154,6 +164,36 @@ export {
   mailIcon,
   lockIcon,
   starterIcons,
+  WeightedSVGIcon,
+  WeightedIconSprite,
+  weightedIconSymbolId,
+  type WeightedSVGIconProps,
+  type WeightedIconSpriteProps,
+  buildWeightedIcon,
+  parseSVGPaths,
+  ICON_WEIGHTS,
+  type IconWeight,
+  type WeightedIconDef,
+  type WeightedIconLayer,
+  type WeightedIconPath,
+  type BuildWeightedIconOptions,
+  registerWeightProbe,
+  xWeightedIcon,
+  checkWeightedIcon,
+  bellWeightedIcon,
+  homeWeightedIcon,
+  settingsWeightedIcon,
+  calendarWeightedIcon,
+  menuWeightedIcon,
+  heartWeightedIcon,
+  eyeWeightedIcon,
+  starWeightedIcon,
+  folderWeightedIcon,
+  shieldWeightedIcon,
+  searchWeightedIcon,
+  mailWeightedIcon,
+  lockWeightedIcon,
+  weightedStarterIcons,
 } from './SVGIcon';
 
 // Chart components — composable d3-based data visualization
@@ -327,6 +367,31 @@ export {
   type DiffViewerLineRef,
   type DiffViewerSide,
 } from './DiffViewer';
+
+// NavigationStack: push/pop drill-down navigation with UIKit's transitions
+// and back swipes.
+export {
+  NavigationScreen,
+  NavigationStack,
+  useNavigationStack,
+  type NavigationScreenProps,
+  type NavigationStackApi,
+  type NavigationStackProps,
+} from './NavigationStack';
+
+// PageControl: UIPageControl's row of page indicators.
+export {PageControl, type PageControlProps} from './PageControl';
+
+// TabBar: the floating bottom tab bar of iOS 26's UITabBarController.
+export {
+  TabBar,
+  TabBarItem,
+  type TabBarItemProps,
+  type TabBarProps,
+} from './TabBar';
+
+// TabBarMoreList: the screen of TabBar's More tab (UIMoreListController).
+export {TabBarMoreList, type TabBarMoreListProps} from './TabBarMoreList';
 
 // RichTextEditor (RFC meta/astryx#3899) moved out of @astryxdesign/lab into
 // its own package, @astryxdesign/richtext. Import it from there:

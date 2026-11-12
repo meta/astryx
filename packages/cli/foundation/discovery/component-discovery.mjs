@@ -41,7 +41,7 @@ export const CORE_PACKAGE = CORE_PROVIDER_ID;
 const INTEGRATION_DOC_SUFFIXES = ['.doc.ts', '.doc.mjs', '.doc.js'];
 
 // Component source files are named `XDS{Name}.tsx` today. The XDS-prefix
-// migration (P2380608025, P4) renames them to the bare `{Name}.tsx` form, so
+// migration (phase 4) renames them to the bare `{Name}.tsx` form, so
 // discovery must recognize BOTH. The `XDS` prefix has historically doubled as
 // a "this is a top-level component" marker, so naively matching all PascalCase
 // `.tsx` files would surface internal helpers that happen to be PascalCase
@@ -381,6 +381,22 @@ export function familyMember(docs, name) {
  * @returns {Record<string, string[]>}
  */
 export function discoverComponents(coreDir) {
+  // The component matcher calls this for each name it resolves, so one
+  // operation reads the docs once. Each caller gets its own copy to change.
+  const found = oncePerListing(`components\0${coreDir}`, () =>
+    readComponentGroups(coreDir),
+  );
+  return Object.fromEntries(
+    Object.entries(found).map(([key, names]) => [key, [...names]]),
+  );
+}
+
+/**
+ * The component groups under `coreDir`, read from disk.
+ * @param {string} coreDir
+ * @returns {Record<string, string[]>}
+ */
+function readComponentGroups(coreDir) {
   const srcDir = path.join(coreDir, 'src');
   /** @type {Map<string, string|null>} componentName → group */
   const componentGroups = new Map();

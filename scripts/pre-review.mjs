@@ -4,8 +4,8 @@
 /**
  * @file Pre-review report: what a reviewer checks in a change, before review.
  * @input `--base <ref>` (default `origin/main`), an optional `--head <ref>`
- *   (default: the working tree, with uncommitted and untracked files), `--json`,
- *   and the description through `--body-file <path>` or `--pr <number>`.
+ *   (default: the working tree, with uncommitted and untracked files), and
+ *   `--json`.
  * @output The changed files and their class, the governing records and routed
  *   claims, the findings at a file and line, and the checklist items that
  *   apply to this change.
@@ -20,14 +20,14 @@ import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {
-  SIZE_LIMIT,
+  SIZE_GUIDELINE,
   authoredLineCount,
   changesetFindings,
   effectFindings,
   mergeFindings,
   recordGapFindings,
   sharedOwnerFindings,
-  sizeFindings,
+  sizeAdvice,
 } from './lib/pre-review-findings.mjs';
 import {isShippedSource, readDiff} from './lib/review-diff.mjs';
 import {
@@ -54,21 +54,20 @@ export const CHECKLIST_LINK =
   'docs/contributing/pull-requests.md#pre-review-checklist';
 
 export const CHECKS = {
-  a: 'API delta: a current record decides each added or changed API report row',
+  a: 'API delta: a current record decides each added or changed row of the API delta the review bot posts; a row no record decides goes to an owner, and a new internal module or hook another component can import that no record defines gets REQUEST_CHANGES for an owner API decision',
   b: 'Behavior: each observable behavior change cites a current record and clause, or the description says "No behavior change"',
   c: 'Behavior props: a prop that selects a behavior follows the naming and one-prop rules',
   d: 'Public boundary: no internal or private context in source, tests, fixtures, commits, or pull request text',
   e: 'New public hook: a runnable example in a template block that names the hook in exampleFor or alsoExampleFor',
   f: 'Comments: new or changed source comments explain only non-obvious work, in Simplified Technical English',
   g: 'Records: a changed record needs a spec owner to approve its spec content',
-  h: `Size: at most ${SIZE_LIMIT.toLocaleString('en-US')} authored lines, unless the description declares a behavior-module pull request or a batch row`,
+  h: `Size (guideline): prefer under about ${SIZE_GUIDELINE.toLocaleString('en-US')} authored lines; a reviewer may suggest a split, but size alone is never a finding`,
   i: 'Shared owners: a concern Core owns in a shared module is called through that module',
-  j: "Effects: interaction logic lives in callbacks, and no Effect reacts to interaction state. A new Effect names the system it syncs. The one exception is a one-line layout or insertion Effect that keeps a ref at the latest committed prop or callback for those callbacks, with a note that names what it syncs; it holds no logic (`useEffectEvent` replaces it once Core's React floor reaches 19.2). No Effect only copies props or state into other state, and no DOM node is in state. A ref written during render, except by lazy initialization, is reported as an advisory",
+  j: 'Effects: a new Effect names the system it syncs and does more than copy into a ref; no DOM node in state',
   k: 'Release notes and records: a Changeset names each package that ships a change, its category fits, and no gap row stays for a claim the change builds',
   l: 'Mergeable: the change merges into the base without conflicts',
 };
 
-const API_REPORT = /(?:^|\/)api-report\.md$/;
 const LAB = /^packages\/lab\//;
 const TEMPLATES = /^packages\/cli\/assets\/templates\//;
 const NOT_PACKAGE_CODE =
@@ -102,7 +101,6 @@ function isPublished(file) {
 function isPublishedPackageCode(file) {
   return (
     isPackageReleasePath(file) &&
-    !API_REPORT.test(file) &&
     !NOT_PACKAGE_CODE.test(file) &&
     isPublished(file)
   );
@@ -122,7 +120,6 @@ function isPackageSource(file) {
 export function fileClass(file, classes) {
   if (classes.ownerGatedRecord) return 'record, owner-gated';
   if (classes.specRecord) return 'record';
-  if (API_REPORT.test(file)) return 'API report';
   if (LAB.test(file)) return 'Lab';
   if (isPublishedPackageCode(file)) return 'published package code';
   if (file.startsWith('packages/')) return 'package file';
@@ -141,15 +138,9 @@ export function applicableChecks(files, diff) {
   for (const file of files) {
     const lines = addedByFile[file] ?? [];
     const adds = pattern => lines.some(line => pattern.test(line));
-    if (API_REPORT.test(file) && lines.length > 0) {
-      note('a', `${file} has added or changed rows`);
-      if (adds(/^\s*hook use[A-Z]/)) note('e', `${file} adds a hook row`);
-      if (adds(/^\s*prop (?:\w+Behavior|(?:is|has)[A-Z]\w*)\??:/)) {
-        note('c', `${file} adds a behavior or boolean prop row`);
-      }
-    }
     if (classes[file].ownerGatedRecord) note('g', `${file} is owner-gated`);
     if (isPublishedPackageCode(file)) {
+      note('a', `${file} is published package code, which can change its API`);
       note('b', `${file} is published package code`);
       if (adds(/\b\w+Behavior\??\s*:/))
         note('c', `${file} adds a behavior prop`);
@@ -325,19 +316,7 @@ export function findingChecks(findings) {
     }));
 }
 
-/** Findings apart from advisories, which the report lists on their own. */
-export function splitAdvisories(allFindings) {
-  return {
-    findings: allFindings.filter(finding => !finding.advisory),
-    advisories: allFindings.filter(finding => finding.advisory),
-  };
-}
-
-export function buildReport({
-  base = 'origin/main',
-  head = null,
-  body = null,
-} = {}) {
+export function buildReport({base = 'origin/main', head = null} = {}) {
   const fork = git(['merge-base', base, head ?? 'HEAD']).trim();
   const headSha = git(['rev-parse', head ?? 'HEAD']).trim();
   const changes = changedFiles(fork, head);
@@ -392,8 +371,7 @@ export function buildReport({
       ...files.filter(file => classes[file].specRecord && present.has(file)),
     ]),
   ];
-  const allFindings = [
-    ...sizeFindings(authoredLines, body),
+  const findings = [
     ...sharedOwnerFindings(addedLines),
     ...effectFindings(addedLines, readHead),
     ...changesetFindings({coverage, changesets}),
@@ -406,7 +384,6 @@ export function buildReport({
     }),
     ...mergeFindings(merge.conflicts ?? [], base),
   ];
-  const {findings, advisories} = splitAdvisories(allFindings);
   return {
     base,
     head: head ?? 'working tree',
@@ -415,7 +392,6 @@ export function buildReport({
     authoredLines,
     merge,
     findings,
-    advisories,
     files: files.map(file => ({file, class: fileClass(file, classes[file])})),
     records: [...records].map(([id, recordPath]) => ({id, path: recordPath})),
     claims: [...claims].sort(),
@@ -429,6 +405,7 @@ export function formatReport(report) {
   if (report.files.length === 0) {
     return `No changes against ${report.base}...${report.head}.`;
   }
+  const advice = sizeAdvice(report.authoredLines);
   const lines = [
     `Pre-review: ${report.base}...${report.head} (merge base ${report.mergeBase.slice(0, 12)})`,
     `Scope: ${report.scope}`,
@@ -458,7 +435,8 @@ export function formatReport(report) {
           '  none: no linked component or module record declares review triggers',
         ]),
     '',
-    `Authored lines: ${report.authoredLines} (limit ${SIZE_LIMIT}; lockfiles, snapshots, and generated files excluded)`,
+    `Authored lines: ${report.authoredLines} (guideline ${SIZE_GUIDELINE}; lockfiles, snapshots, and generated files excluded)`,
+    ...(advice ? [`  ${advice}`] : []),
     report.merge.error
       ? `Merge into ${report.base}: not checked: ${report.merge.error}`
       : `Merge into ${report.base}: ${report.merge.conflicts.length ? `${report.merge.conflicts.length} conflicting files` : 'clean'}`,
@@ -467,13 +445,6 @@ export function formatReport(report) {
     ...(report.findings.length
       ? report.findings.map(formatFinding)
       : ['  none']),
-    ...(report.advisories?.length
-      ? [
-          '',
-          `Advisory, not yet a finding (${report.advisories.length}):`,
-          ...report.advisories.map(formatFinding),
-        ]
-      : []),
     '',
     'Checklist items that apply:',
     ...report.checks.map(
@@ -490,30 +461,6 @@ export function formatFinding({item, file, line, rule, fix}) {
   return `  [${item}] ${where}${rule}\n      fix: ${fix}`;
 }
 
-/** The pull request description from `--body-file`, or from `gh` for `--pr`. */
-function readBody(argv) {
-  const file = valueFor(argv, '--body-file');
-  if (file) return fs.readFileSync(file, 'utf8');
-  const pr = valueFor(argv, '--pr');
-  if (!pr) return null;
-  try {
-    return execFileSync(
-      'gh',
-      ['pr', 'view', pr, '--json', 'body', '-q', '.body'],
-      {
-        cwd: ROOT,
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'pipe'],
-      },
-    );
-  } catch {
-    console.error(
-      `Could not read pull request ${pr} with gh; size declarations not checked.`,
-    );
-    return null;
-  }
-}
-
 function valueFor(argv, flag) {
   const index = argv.indexOf(flag);
   if (index === -1) return null;
@@ -528,7 +475,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const report = buildReport({
     base: valueFor(argv, '--base') ?? 'origin/main',
     head: valueFor(argv, '--head'),
-    body: readBody(argv),
   });
   console.log(
     argv.includes('--json')

@@ -15,10 +15,10 @@
  *   surface reads
  */
 
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {parseIconDefinition} from '../../authoring/doctypes/icon-definition/parse.mjs';
 import {CLI_ROOT} from '../fs/paths.mjs';
+import {listDirEntries} from '../fs/listing-cache.mjs';
 import {readStaticDescriptorValue} from './theme-discovery.mjs';
 
 /** @typedef {import('../../authoring/doctypes/icon-definition/type').IconDefinitionDoc} IconDefinitionDoc */
@@ -53,10 +53,10 @@ export function readDefinitionsDir(dir, owner) {
   const definitions = [];
   /** @type {Array<{file: string, message: string}>} */
   const errors = [];
-  /** @type {fs.Dirent[]} */
+  /** @type {import('node:fs').Dirent[]} */
   let entries;
   try {
-    entries = fs.readdirSync(dir, {withFileTypes: true});
+    entries = listDirEntries(dir);
   } catch {
     return {definitions, errors};
   }

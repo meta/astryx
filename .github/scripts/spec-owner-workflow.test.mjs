@@ -93,7 +93,7 @@ describe('spec-only workflow contract', () => {
       );
       expect(result.status, result.stderr).toBe(0);
       expect(fs.readFileSync(output, 'utf8')).toBe(
-        'spec_only=true\ndocsite_only=false\ntooling_only=false\nlab_only=false\nfull_suite=false\n',
+        'spec_only=true\ndocsite_only=false\ntooling_only=false\nlab_only=false\nfull_suite=false\nvitest_full_suite=false\n',
       );
 
       fs.rmSync(path.join(classifierDir, 'knowledge-paths.cjs'));
@@ -194,6 +194,7 @@ describe('spec-only workflow contract', () => {
     for (const name of [
       'Build docsite workspace dependencies',
       'Build the docsite',
+      "Write the docsite's API surface",
       'test-docsite (data tests)',
       'Verify the hidden production registry gate',
     ]) {
