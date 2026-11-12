@@ -367,10 +367,14 @@ export function useClickableContainerProxy({
         (eventTarget === event.currentTarget ||
           !hasInteractiveAncestor(eventTarget, containerEl))
       ) {
-        window.open(href, '_blank', 'noopener');
+        window.open(
+          href,
+          '_blank',
+          target === '_blank' ? 'noopener,noreferrer' : 'noopener',
+        );
       }
     },
-    [containerRef, href, disabled],
+    [containerRef, href, target, disabled],
   );
 
   // The press-state counterpart of onClick's rule: a press that would not

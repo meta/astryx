@@ -137,6 +137,26 @@ describe('ClickableCard', () => {
     expect(link).toHaveAttribute('rel', 'noopener noreferrer');
   });
 
+  it('uses the same referrer policy when the card surface opens a new tab', () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    render(
+      <ClickableCard
+        label="External"
+        href="https://example.com"
+        target="_blank">
+        <span>Card content</span>
+      </ClickableCard>,
+    );
+
+    fireEvent.click(screen.getByText('Card content'));
+
+    expect(open).toHaveBeenCalledWith(
+      'https://example.com',
+      '_blank',
+      'noopener,noreferrer',
+    );
+  });
+
   it('disabled button stays focusable and the surface runs nothing', () => {
     const handleClick = vi.fn();
     render(

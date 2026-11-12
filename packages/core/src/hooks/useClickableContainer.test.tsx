@@ -155,6 +155,17 @@ describe('useClickableContainer navigation — middle-click', () => {
     expect(open).toHaveBeenCalledWith('/docs', '_blank', 'noopener');
   });
 
+  it('keeps noreferrer for a target blank middle-click', () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    render(<Card href="https://example.com/docs" target="_blank" />);
+    fireEvent.mouseUp(screen.getByTestId('card'), {button: 1});
+    expect(open).toHaveBeenCalledWith(
+      'https://example.com/docs',
+      '_blank',
+      'noopener,noreferrer',
+    );
+  });
+
   it('does not open a script-scheme href on middle-click', () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     // eslint-disable-next-line @eslint-react/dom-no-script-url -- the test proves this URL never navigates
