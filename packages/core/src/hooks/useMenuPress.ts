@@ -27,6 +27,7 @@ import {
   type RefObject,
 } from 'react';
 import {currentGesture} from '../Layer/gestureCounter';
+import {useCommittedRef} from './useCommittedRef';
 import {isInputShield} from '../Layer/inputHold';
 import {
   IDLE_MENU_PRESS,
@@ -383,8 +384,7 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
       publicOptions.longPressDelayMs === undefined ? 'uikit' : 'pointer',
     isInScrollView: isInsideScrollView,
   };
-  const optionsRef = useRef(options);
-  optionsRef.current = options;
+  const optionsRef = useCommittedRef(options);
   // The highlight, and the hover focus of the rows in this menu, follow the
   // last input, which this tracks for the menu's own document.
   useInteractionModalityTrackingFor(options.menuRef);
@@ -440,7 +440,7 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
       optionsRef.current.triggerRef?.current?.ownerDocument ??
       document
     );
-  }, []);
+  }, [optionsRef]);
 
   const resolvePoint = useCallback(
     (event: PointerEvent): ResolvedPoint => {
@@ -491,7 +491,7 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
       }
       return {row, isInMenu, isOnTrigger};
     },
-    [getDocument],
+    [getDocument, optionsRef],
   );
 
   const stopAutoscroll = useCallback(() => {
@@ -570,49 +570,47 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
         focusForLastInput(target, {preventScroll: true});
       }
     },
-    [getDocument],
+    [getDocument, optionsRef],
   );
 
-  const activate = useCallback((row: HTMLElement, release: PointerEvent) => {
-    // Every click this dispatches passes the shared click guard.
-    withoutClickGuard(() => {
-      const {onActivate} = optionsRef.current;
-      isModelActivation = true;
-      try {
-        if (onActivate != null) {
-          onActivate(row, release);
-          return;
+  const activate = useCallback(
+    (row: HTMLElement, release: PointerEvent) => {
+      // Every click this dispatches passes the shared click guard.
+      withoutClickGuard(() => {
+        const {onActivate} = optionsRef.current;
+        isModelActivation = true;
+        try {
+          if (onActivate != null) {
+            onActivate(row, release);
+            return;
+          }
+          // The row acts as its own click would. `detail: 0` marks a dispatched
+          // activation, as a keyboard's does, so the click guard lets it pass.
+          // The button and the modifiers are the release's.
+          row.dispatchEvent(
+            new MouseEvent('click', {
+              bubbles: true,
+              cancelable: true,
+              composed: true,
+              detail: 0,
+              button: release.button,
+              clientX: release.clientX,
+              clientY: release.clientY,
+              screenX: release.screenX,
+              screenY: release.screenY,
+              ctrlKey: release.ctrlKey,
+              shiftKey: release.shiftKey,
+              altKey: release.altKey,
+              metaKey: release.metaKey,
+            }),
+          );
+        } finally {
+          isModelActivation = false;
         }
-        // The row acts as its own click would. `detail: 0` marks a dispatched
-        // activation, as a keyboard's does, so the click guard lets it pass.
-        // The button and the modifiers are the release's.
-        row.dispatchEvent(
-          new MouseEvent('click', {
-            bubbles: true,
-            cancelable: true,
-            composed: true,
-            detail: 0,
-            button: release.button,
-            clientX: release.clientX,
-            clientY: release.clientY,
-            screenX: release.screenX,
-            screenY: release.screenY,
-            ctrlKey: release.ctrlKey,
-            shiftKey: release.shiftKey,
-            altKey: release.altKey,
-            metaKey: release.metaKey,
-          }),
-        );
-      } finally {
-        isModelActivation = false;
-      }
-    });
-  }, []);
-
-  // Declared before `step` so the mutual recursion through refs type-checks.
-  const stepRef = useRef<
-    (event: MenuPressInput<HTMLElement>, native?: PointerEvent) => void
-  >(() => {});
+      });
+    },
+    [optionsRef],
+  );
 
   const applyEffect = useCallback(
     (
@@ -654,7 +652,26 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
           }
           return;
         }
+        case 'withdraw': {
+          // The window's blur withdrew a finger's gesture. It stays tracked to
+          // its release, but nothing drives the menu any more (the hold, the
+          // autoscroll, the page lock). A row a finger lit clears.
+          longPressApiRef.current?.cancel();
+          stopAutoscroll();
+          touchMovePreventerRef.current?.();
+          touchMovePreventerRef.current = null;
+          if (effect.clear === true) {
+            highlight(null);
+          }
+          return;
+        }
         case 'settle': {
+          // A finger's lit row clears on a cancel, on every surface. The
+          // machine sets `clear` only for a finger or pen, so a mouse keeps its
+          // highlight.
+          if (effect.clear === true) {
+            highlight(null);
+          }
           endGesture();
           if (effect.stray) {
             armClickGuard(doc, {
@@ -669,7 +686,7 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
         }
       }
     },
-    [activate, endGesture, getDocument, highlight],
+    [activate, endGesture, getDocument, highlight, optionsRef, stopAutoscroll],
   );
 
   const step = useCallback(
@@ -680,7 +697,8 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
     },
     [applyEffect],
   );
-  stepRef.current = step;
+  // The trigger context is built once, so it calls `step` through this ref.
+  const stepRef = useCommittedRef(step);
 
   const getScroller = useCallback((): HTMLElement | null => {
     const {getScroller: custom, menuRef} = optionsRef.current;
@@ -692,7 +710,7 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
       return null;
     }
     return menu.scrollHeight > menu.clientHeight + 1 ? menu : null;
-  }, []);
+  }, [optionsRef]);
 
   const updateAutoscroll = useCallback(
     (event: PointerEvent) => {
@@ -732,7 +750,7 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
           const last = lastPointerEventRef.current;
           if (last != null) {
             const point = resolvePoint(last);
-            stepRef.current(
+            step(
               {
                 type: 'move',
                 row: point.row,
@@ -746,7 +764,7 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
       };
       autoscroll.update();
     },
-    [autoscroll, getScroller, resolvePoint, stopAutoscroll],
+    [autoscroll, getScroller, resolvePoint, step, stopAutoscroll],
   );
 
   const attach = useCallback(
@@ -770,12 +788,12 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
             y: event.clientY,
           });
           if (isPending === false) {
-            stepRef.current({type: 'cancel'});
+            step({type: 'cancel'});
           }
           return;
         }
         const point = resolvePoint(event);
-        stepRef.current(
+        step(
           {
             type: 'move',
             row: point.row,
@@ -795,7 +813,7 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
           return;
         }
         const point = resolvePoint(event);
-        stepRef.current(
+        step(
           {
             type: 'up',
             row: point.row,
@@ -814,18 +832,29 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
         if (event.pointerId !== pointerIdRef.current) {
           return;
         }
-        stepRef.current({type: 'cancel'});
+        step({type: 'cancel'});
       };
       const onOtherPointerDown = (event: PointerEvent) => {
+        // Any press ends a withdrawn gesture: its finger lifted where the
+        // page could not see it, and the new press's click must act.
+        if (gestureRef.current.phase === 'withdrawn') {
+          step({type: 'cancel'});
+          return;
+        }
         // A second pointer ends the gesture: two fingers are a pinch or a
         // scroll, never a pick.
         if (event.pointerId !== pointerIdRef.current) {
           ignoredPointerIdRef.current = event.pointerId;
-          stepRef.current({type: 'cancel'});
+          step({type: 'cancel'});
         }
       };
       const onBlur = () => {
-        stepRef.current({type: 'cancel'});
+        // A finger's or pen's gesture is withdrawn, not ended. The browser can
+        // keep the touch alive past the blur, so the gesture stays tracked on
+        // these listeners until its release. That release acts on nothing, and
+        // its click is swallowed. A mouse press ends as a cancel and keeps its
+        // click.
+        step({type: 'withdraw'});
       };
 
       doc.addEventListener('pointermove', onMove, true);
@@ -841,7 +870,7 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
         view?.removeEventListener('blur', onBlur);
       };
     },
-    [getDocument, resolvePoint, updateAutoscroll],
+    [getDocument, optionsRef, resolvePoint, step, updateAutoscroll],
   );
 
   // `touch-action` was decided when the finger landed; the page must not
@@ -862,10 +891,8 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
   }, [getDocument]);
 
   // The trigger half below drives the model through this stable context.
-  const installRef = useRef(installTouchMovePreventer);
-  installRef.current = installTouchMovePreventer;
-  const attachRef = useRef(attach);
-  attachRef.current = attach;
+  const installRef = useCommittedRef(installTouchMovePreventer);
+  const attachRef = useCommittedRef(attach);
   const holdDetectorsRef = useRef<{
     plain: LongPressDetectorHandlers;
     scroller: LongPressDetectorHandlers;
@@ -959,7 +986,7 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
         native,
       );
     },
-    [attach, resolvePoint, step],
+    [attach, optionsRef, resolvePoint, step],
   );
 
   const isTriggerClickFromPress = useCallback((): boolean => {

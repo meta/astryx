@@ -21,7 +21,7 @@ import {
   armHold,
   blockMainThread,
   BUSY_PROOF_LOOKAROUND_MS,
-  busyWindowProof,
+  type BusyRun,
   CONTROL_RGB,
   drag,
   FRAME_STARVATION_MS,
@@ -30,6 +30,7 @@ import {
   MARKER_RGB,
   releaseAnimations,
   openStory,
+  pooledBusyProof,
   startBusyControl,
   startScreencast,
   touchDriver,
@@ -47,10 +48,14 @@ const PITCH = 17.67;
 /** A full-size dot's scale: the 9.67 px indicator on its 10 px box. */
 const DOT_SCALE = 0.967;
 /**
- * Frames of the slide the busy proof must judge inside its block. The slide
- * is a 190 ms spring that shows about five frames of travel there.
+ * Frames of the slide the busy proof must judge inside each block. The slide
+ * is a 190 ms spring that shows about five frames of travel there, one above
+ * this floor. A loaded runner draws one fewer. So the proof judges
+ * `BUSY_SLIDES` slides as one pool, and each judged slide holds this floor.
  */
 const MIN_JUDGED_FRAMES = 4;
+/** The one-slot slides the busy proof judges as one pool. */
+const BUSY_SLIDES = 3;
 /** UIPageControl's interaction delay, ms. */
 const HOLD_MS = 155;
 /** One frame at 60 Hz, ms. */
@@ -1346,7 +1351,7 @@ test('busy main thread: a window slide finishes on time through a 600 ms block',
   const {slider, driver} = await open(page, 'lab-pagecontrol--many-pages');
   const strip = slider.locator(':scope > *').first();
   // A chip on the strip between two dots, above them: the window shows it
-  // before and after the slide, and no dot's scale reaches it. The strip's
+  // before and after the slides, and no dot's scale reaches it. The strip's
   // translate makes it the chip's containing block, so the chip moves with it.
   await strip.evaluate(
     (el, {left, rgb}) => {
@@ -1357,53 +1362,77 @@ test('busy main thread: a window slide finishes on time through a 600 ms block',
     },
     {left: 23.5 * PITCH - 6, rgb: MARKER_RGB},
   );
-  // Before the slide, so the control is on the compositor first.
+  // Before the slides, so the control is on the compositor first.
   await startBusyControl(page);
-  const cast = await startScreencast(page);
-  // The page blocks once the old dot's fade has run a frame, just before the
-  // slide starts on its own start time. A round trip from here would start
-  // the block later in the slide, or after it.
-  const blocking = blockMainThread(page, 600, {during: strip});
-  const current = await indicatorCenter(slider, 25);
-  await driver.tap({x: current.x + 12, y: current.y});
-  const busy = await blocking;
-  await waitForRest(strip);
-  // Where the slide ends, read from the page once it rests.
-  const settledAt = await strip.evaluate(el => {
-    const chip = el.querySelector('[data-harness-marker-chip]') as Element;
-    return chip.getBoundingClientRect().x;
-  });
-  const frames = await cast.stop();
-  // Only the frames the proof reads are decoded, each once for both colors.
-  const [tracked, control] = await trackMarkers(
-    page,
-    frames.filter(f => f.t <= busy.to + BUSY_PROOF_LOOKAROUND_MS),
-    {colors: [MARKER_RGB, CONTROL_RGB]},
-  );
-  const proof = busyWindowProof(tracked, busy, {
+  const runs: BusyRun[] = [];
+  const restsAt: number[] = [];
+  // Each tap on the current indicator's trailing side moves one page and
+  // slides the window one slot: pages 26 to 29.
+  for (let slide = 0; slide < BUSY_SLIDES; slide++) {
+    const cast = await startScreencast(page);
+    // The page blocks once the old dot's fade has run a frame, just before
+    // the slide starts on its own start time. A round trip from here would
+    // start the block later in the slide, or after it.
+    const blocking = blockMainThread(page, 600, {during: strip});
+    const current = await indicatorCenter(slider, 25 + slide);
+    await driver.tap({x: current.x + 12, y: current.y});
+    const busy = await blocking;
+    await waitForRest(strip);
+    // Where the slide ends, read from the page once it rests.
+    restsAt.push(
+      await strip.evaluate(el => {
+        const chip = el.querySelector('[data-harness-marker-chip]') as Element;
+        return chip.getBoundingClientRect().x;
+      }),
+    );
+    const frames = await cast.stop();
+    // Only the frames the proof reads are decoded, each once for both colors.
+    const [tracked, control] = await trackMarkers(
+      page,
+      frames.filter(f => f.t <= busy.to + BUSY_PROOF_LOOKAROUND_MS),
+      {colors: [MARKER_RGB, CONTROL_RGB]},
+    );
+    // Each slide ends one slot further on. Measured from its own rest,
+    // every slide ends at 0, so the pool's one `settledAt` is where the
+    // page read each slide at rest.
+    const rest = restsAt[slide];
+    runs.push({
+      tracked: tracked.map(f =>
+        f.box == null ? f : {...f, box: {...f.box, x: f.box.x - rest}},
+      ),
+      control,
+      window: busy,
+    });
+  }
+  const proof = pooledBusyProof(runs, {
     axis: 'x',
     settledWithinSteps: 2,
-    settledAt,
+    settledAt: 0,
     minJudgedFrames: MIN_JUDGED_FRAMES,
-    control,
+    minRunFrames: MIN_JUDGED_FRAMES,
   });
-  // The compositor carried the slide to the next slot during the block. It
+  // The compositor carried each slide to the next slot during its block. It
   // moved on every frame, and a frame inside the block shows it at rest.
   expect(proof.verdict.failures, proof.summary).toEqual([]);
-  expect(proof.monotonic, proof.summary).toBe(true);
-  const atRest = tracked.find(
-    f =>
-      f.box != null &&
-      f.t >= busy.from &&
-      f.t <= busy.to &&
-      Math.abs(f.box.x - settledAt) <= 1,
-  );
-  expect(atRest, proof.summary).toBeDefined();
+  for (const [slide, run] of runs.entries()) {
+    if (!proof.judged[slide]) {
+      continue;
+    }
+    expect(proof.runs[slide]?.monotonic, proof.summary).toBe(true);
+    const atRest = run.tracked.find(
+      f =>
+        f.box != null &&
+        f.t >= run.window.from &&
+        f.t <= run.window.to &&
+        Math.abs(f.box.x) <= 1,
+    );
+    expect(atRest, proof.summary).toBeDefined();
+  }
   expect(
     await strip.evaluate(el =>
       Number.parseFloat(getComputedStyle(el).translate),
     ),
-  ).toBeCloseTo(-19 * PITCH, 0);
+  ).toBeCloseTo(-21 * PITCH, 0);
 });
 
 test('on an Android phone (no -webkit-touch-callout) a finger scrubs: one touch model, no platform idiom', async ({

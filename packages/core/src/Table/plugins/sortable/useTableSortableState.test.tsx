@@ -8,7 +8,14 @@
  */
 
 import {describe, it, expect, vi} from 'vitest';
-import {render, renderHook, screen, within} from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {useState} from 'react';
 import {Table} from '../../Table';
@@ -309,6 +316,41 @@ describe('useTableSortableState', () => {
     });
   });
 
+  describe('render cost', () => {
+    it('does not re-sort when its parent re-renders with an inline comparators object', () => {
+      let comparisons = 0;
+      function Parent() {
+        const [count, setCount] = useState(0);
+        return (
+          <>
+            <button type="button" onClick={() => setCount(count + 1)}>
+              Bump {count}
+            </button>
+            <SortableStateTable
+              defaultSort={[{sortKey: 'salary', direction: 'ascending'}]}
+              comparators={{
+                salary: (a, b) => {
+                  comparisons++;
+                  return a.salary - b.salary;
+                },
+              }}
+            />
+          </>
+        );
+      }
+      render(<Parent />);
+      expect(comparisons).toBeGreaterThan(0);
+      comparisons = 0;
+
+      act(() => {
+        fireEvent.click(screen.getByRole('button', {name: 'Bump 0'}));
+      });
+
+      expect(screen.getByRole('button', {name: 'Bump 1'})).toBeInTheDocument();
+      expect(comparisons).toBe(0);
+    });
+  });
+
   describe('controlled mode', () => {
     function ControlledWrapper() {
       const [sort, setSort] = useState<TableSortState>([
@@ -392,6 +434,23 @@ describe('useTableSortableState', () => {
       await userEvent.click(screen.getByRole('button', {name: 'Name'}));
 
       expect(onSortChange).toHaveBeenCalledWith([
+        {sortKey: 'name', direction: 'ascending'},
+      ]);
+    });
+    it('calls the onSortChange from the latest render, not the one from the last sort change', async () => {
+      const first = vi.fn();
+      const second = vi.fn();
+      const sort: TableSortState = [];
+      const {rerender} = render(
+        <SortableStateTable sort={sort} onSortChange={first} />,
+      );
+      // A new handler arrives while the sort state stays the same.
+      rerender(<SortableStateTable sort={sort} onSortChange={second} />);
+
+      await userEvent.click(screen.getByRole('button', {name: 'Name'}));
+
+      expect(first).not.toHaveBeenCalled();
+      expect(second).toHaveBeenCalledWith([
         {sortKey: 'name', direction: 'ascending'},
       ]);
     });

@@ -82,6 +82,12 @@ export const authors = {
   },
 } as const satisfies Record<string, AuthorProfile>;
 
+// Bylines show avatars at 40 px or less. Without a size, GitHub sends the
+// full uploaded image, which can be more than 500 KB.
+function githubAvatar(username: string): string {
+  return `https://github.com/${username}.png?size=128`;
+}
+
 /**
  * Resolve an author key to a complete profile, deriving GitHub avatar/href
  * defaults where applicable. Unknown keys resolve to a graceful fallback so a
@@ -94,14 +100,13 @@ export function resolveAuthor(key: string): ResolvedAuthor {
     return {
       key,
       name: key,
-      avatar: `https://github.com/${key}.png`,
+      avatar: githubAvatar(key),
       href: `https://github.com/${key}`,
     };
   }
 
   const avatar =
-    profile.avatar ??
-    (profile.github ? `https://github.com/${profile.github}.png` : '');
+    profile.avatar ?? (profile.github ? githubAvatar(profile.github) : '');
   const href =
     profile.href ??
     (profile.github ? `https://github.com/${profile.github}` : null);
