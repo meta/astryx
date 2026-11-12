@@ -37,7 +37,6 @@ function ValidationNotice({
   return (
     <div
       {...stylex.props(styles.notice, entryStyle)}
-      role="status"
       data-testid="entry-notice">
       <Card padding={3}>
         <Text type="body">{message}</Text>
@@ -55,8 +54,7 @@ export default function UseEntryAnimationHookUsage() {
       <VStack gap={3}>
         <Heading level={3}>Mount-only entry animation</Heading>
         <Text type="body" color="secondary">
-          Elements rendered on initial paint stay still. Dynamically mounted
-          notices animate using the selected preset.
+          Dynamically mounted notices animate using the selected preset.
         </Text>
 
         <HStack gap={2}>
