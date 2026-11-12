@@ -2063,7 +2063,8 @@ export function Tokenizer<T extends SearchableItem>({
                   // (WCAG 4.1.2; spec:AST-020 FR9). Without one, a caller's own
                   // aria-required / aria-invalid still applies.
                   aria-invalid={
-                    localStatus?.type === 'error' || rest['aria-invalid']
+                    (localStatus?.type ?? inputGroup?.statusType) === 'error' ||
+                    rest['aria-invalid']
                   }
                   __queryEntries={createEntries}
                   debounceMs={debounceMs}

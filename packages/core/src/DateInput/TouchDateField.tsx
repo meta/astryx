@@ -1411,7 +1411,11 @@ export function TouchDateField({
         }
         aria-describedby={ariaDescribedBy}
         aria-required={isEffectivelyRequired ? 'true' : undefined}
-        aria-invalid={status?.type === 'error' ? 'true' : undefined}
+        aria-invalid={
+          (status?.type ?? inputGroup?.statusType) === 'error'
+            ? 'true'
+            : undefined
+        }
         aria-busy={isBusy || undefined}
         aria-expanded={isSheetOpen}
         aria-haspopup="dialog"

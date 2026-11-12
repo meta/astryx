@@ -2511,7 +2511,8 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       undefined,
     'aria-labelledby': triggerLabelledBy,
     'aria-required': isEffectivelyRequired ? 'true' : undefined,
-    'aria-invalid': status?.type === 'error' ? 'true' : undefined,
+    'aria-invalid':
+      (status?.type ?? inputGroup?.statusType) === 'error' ? 'true' : undefined,
     'aria-busy': isBusy || undefined,
     // Newly forwarded handlers compose component first: the built-in toggle
     // and keyboard model always run. `onFocus` keeps its existing caller-first

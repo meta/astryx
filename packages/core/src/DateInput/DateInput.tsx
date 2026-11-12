@@ -1006,7 +1006,9 @@ function PointerDateField({
         aria-describedby={ariaDescribedBy}
         aria-required={isEffectivelyRequired ? 'true' : undefined}
         aria-invalid={
-          fieldStatus?.type === 'error' || isInvalid ? 'true' : undefined
+          (fieldStatus?.type ?? inputGroup?.statusType) === 'error' || isInvalid
+            ? 'true'
+            : undefined
         }
         aria-busy={isBusy || undefined}
         aria-expanded={popover.isOpen}
