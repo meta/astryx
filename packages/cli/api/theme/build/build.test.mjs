@@ -31,6 +31,7 @@ import {
 import {logger} from '../../logger.mjs';
 import {
   themeBuild,
+  themeSourceFiles,
   validateComponentOverridesAgainstRegistry,
   validateThemePrivateInputs,
 } from './build.mjs';
@@ -1539,6 +1540,50 @@ describe('themeBuild() — outputs it may replace', () => {
     ).rejects.toMatchObject({
       message: expect.stringContaining('It was built from themes/ocean.mjs.'),
     });
+  });
+
+  it('lists the local files a theme source imports, through other local files', () => {
+    fs.mkdirSync(path.join(tmpDir, 'parts'));
+    fs.writeFileSync(
+      path.join(tmpDir, 'split.ts'),
+      "import {BG} from './parts/colors.js';\nimport {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'split', tokens: {'--color-bg': BG}});\n",
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'parts', 'colors.ts'),
+      "export {BG} from './base';\n",
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'parts', 'base.ts'),
+      "export const BG = '#fff';\n",
+    );
+    fs.appendFileSync(
+      path.join(tmpDir, 'parts', 'base.ts'),
+      `export {X} from ${JSON.stringify(path.join(tmpDir, 'parts', 'abs.ts'))};\n`,
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'parts', 'abs.ts'),
+      'export const X = 1;\n',
+    );
+    expect(themeSourceFiles(path.join(tmpDir, 'split.ts'))).toEqual([
+      path.join(tmpDir, 'split.ts'),
+      path.join(tmpDir, 'parts', 'colors.ts'),
+      path.join(tmpDir, 'parts', 'base.ts'),
+      path.join(tmpDir, 'parts', 'abs.ts'),
+    ]);
+  });
+
+  it('reads outputs with CRLF line endings as up to date in --check', async () => {
+    const receipt = await themeBuild('ocean.mjs', {}, {cwd: tmpDir});
+    for (const file of Object.values(receipt.data.outputs)) {
+      const full = path.join(tmpDir, file);
+      fs.writeFileSync(
+        full,
+        fs.readFileSync(full, 'utf-8').replace(/\r?\n/g, '\r\n'),
+      );
+    }
+    await expect(
+      themeBuild('ocean.mjs', {check: true}, {cwd: tmpDir}),
+    ).resolves.toMatchObject({data: {upToDate: true, stale: []}});
   });
 
   it('replaces its own earlier outputs', async () => {

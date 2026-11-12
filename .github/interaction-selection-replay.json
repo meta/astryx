@@ -133,7 +133,7 @@
       "commit": "713d9ce6c65a52018eae8b91f7d61c93cd473a80",
       "kind": "merge",
       "selection": "full",
-      "full_reason": "apps/storybook/stories/TabBar.stories.tsx maps to no component",
+      "full_reason": "apps/storybook/stories/TabBar.stories.tsx is a story whose components could not be resolved",
       "full_run_failures": [],
       "verdict": "no failure"
     },
@@ -141,8 +141,7 @@
       "pr": 10944,
       "commit": "00e031a31212e2f8c281f0075d056a1f0840415c",
       "kind": "merge",
-      "selection": "full",
-      "full_reason": "apps/storybook/stories/Avatar.stories.tsx maps to no component",
+      "selection": [],
       "full_run_failures": [],
       "verdict": "no failure"
     },
@@ -151,7 +150,7 @@
       "commit": "1f9217f0cd6fbb37e6a086cc1781a3ff65cd094f",
       "kind": "merge",
       "selection": "full",
-      "full_reason": "apps/storybook/stories/Selector.stories.tsx maps to no component",
+      "full_reason": "packages/core/src/hooks/useResolvedRequired.ts maps to no component",
       "full_run_failures": [],
       "verdict": "no failure"
     },
@@ -275,7 +274,7 @@
       "commit": "d53cec5c7c1229a29417d4c0841e5c5c5b96a74b",
       "kind": "merge",
       "selection": "full",
-      "full_reason": "apps/storybook/stories/PressableSurfaceRecipe.stories.tsx maps to no component",
+      "full_reason": "packages/core/src/hooks/useClickableContainer.a11y.chromium.spec.ts maps to no component",
       "full_run_failures": [],
       "verdict": "no failure"
     },
@@ -283,8 +282,14 @@
       "pr": 10271,
       "commit": "a0a09f9c2f3a60462d9578d8594e85ad78c3a24a",
       "kind": "merge",
-      "selection": "full",
-      "full_reason": "apps/storybook/stories/TableSelection.stories.tsx maps to no component",
+      "selection": [
+        "packages/core/src/Button/__tests__/ButtonHitArea.interaction.browser.spec.ts",
+        "packages/core/src/Button/__tests__/ButtonPress.interaction.browser.spec.ts",
+        "packages/core/src/Button/__tests__/ButtonPressRelease.interaction.browser.spec.ts",
+        "packages/core/src/Button/__tests__/ButtonPressTiming.interaction.browser.spec.ts",
+        "packages/core/src/Button/__tests__/ButtonTextSize.interaction.browser.spec.ts",
+        "packages/core/src/Pagination/__tests__/PaginationTextSize.interaction.browser.spec.ts"
+      ],
       "full_run_failures": [],
       "verdict": "no failure"
     },
@@ -413,7 +418,7 @@
       "commit": "09710569f38755383af89e34f8510badf2abed6d",
       "kind": "merge",
       "selection": "full",
-      "full_reason": "apps/storybook/stories/TabList.stories.tsx maps to no component",
+      "full_reason": "apps/storybook/stories/TabList.stories.tsx is a story whose components could not be resolved",
       "full_run_failures": [],
       "verdict": "no failure"
     },
@@ -756,7 +761,7 @@
       "commit": "fc71bd4a0ee091dd31327eddd5f10605a43b74cd",
       "kind": "merge",
       "selection": "full",
-      "full_reason": "apps/storybook/stories/RichTextEditor.stories.tsx maps to no component",
+      "full_reason": "apps/storybook/stories/RichTextEditor.stories.tsx is a story whose components could not be resolved",
       "full_run_failures": [],
       "verdict": "no failure"
     },
@@ -943,7 +948,7 @@
       "commit": "ff7e096bab6d7011f8d14d73043bc4bc82dda13a",
       "kind": "merge",
       "selection": "full",
-      "full_reason": "apps/storybook/stories/ScrollableArea.stories.tsx maps to no component",
+      "full_reason": "packages/core/src/hooks/useScrollableArea.doc.mjs maps to no component",
       "full_run_failures": [],
       "verdict": "no failure"
     },
@@ -1092,8 +1097,15 @@
       "pr": 9672,
       "commit": "b1a6f16c68dc6f199f779293d6aff50c1364922c",
       "kind": "merge",
-      "selection": "full",
-      "full_reason": "apps/storybook/stories/Drawer.stories.tsx maps to no component",
+      "selection": [
+        "packages/core/src/Button/__tests__/ButtonHitArea.interaction.browser.spec.ts",
+        "packages/core/src/Button/__tests__/ButtonPress.interaction.browser.spec.ts",
+        "packages/core/src/Button/__tests__/ButtonPressRelease.interaction.browser.spec.ts",
+        "packages/core/src/Button/__tests__/ButtonPressTiming.interaction.browser.spec.ts",
+        "packages/core/src/Button/__tests__/ButtonTextSize.interaction.browser.spec.ts",
+        "packages/core/src/Drawer/__tests__/DrawerTouchEntrance.interaction.browser.spec.ts",
+        "packages/core/src/Layout/__tests__/collapsedPanel.interaction.browser.spec.ts"
+      ],
       "full_run_failures": [],
       "verdict": "no failure"
     },
@@ -1309,7 +1321,7 @@
       "commit": "28401fb14943d1474b306c1193e8808d880840f5",
       "kind": "merge",
       "selection": "full",
-      "full_reason": "apps/storybook/stories/Layer.stories.tsx maps to no component",
+      "full_reason": "packages/core/src/Layer/gestureCounter.ts is shared code",
       "full_run_failures": [
         "packages/core/src/Slider/__tests__/SliderFinePointer.interaction.browser.spec.ts"
       ],

@@ -27,27 +27,11 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {projectFiles, refusal} from '../../test-utils/theme-edit-fixture.mjs';
 
 /** @type {string} */
 let cwd;
-
-/** @param {string} rel */
-const read = rel => fs.readFileSync(path.join(cwd, rel), 'utf8');
-
-/** @param {() => Promise<unknown>} fn */
-async function refusal(fn) {
-  try {
-    await fn();
-  } catch (e) {
-    const err = /** @type {any} */ (e);
-    return {
-      code: err.code,
-      message: String(err.message),
-      run: (err.suggestions ?? []).map((/** @type {any} */ s) => s.name),
-    };
-  }
-  throw new Error('expected a refusal');
-}
+const {read} = projectFiles(() => cwd);
 
 beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-hunt4-', FIXTURE_PACKAGES);
@@ -113,9 +97,10 @@ describe('words and values', () => {
       const r = await refusal(() => themeEditSet('z', thing, word, {cwd}));
       expect(r.run[0], word).toMatch(new RegExp(`set z ${thing} ${want}$`));
     }
+    // A word that means none of the values gets no guess at one.
     expect(
       (await refusal(() => themeEditSet('z', 'surfaces', 'zzzz', {cwd}))).run,
-    ).toEqual([]);
+    ).toEqual([expect.stringMatching(/ how surfaces$/)]);
   });
 
   it('how base names only installed bases, with the line for the rest', async () => {
