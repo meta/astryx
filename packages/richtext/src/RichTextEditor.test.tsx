@@ -70,7 +70,7 @@ import {
   DEFAULT_LINK_MATCHERS,
   NEW_TAB_LINK_ATTRIBUTES,
 } from './RichTextEditorAutoLinkPlugin';
-import {sanitizeUrl, validateUrl} from './linkUtils';
+import {isOpenableUrl, sanitizeUrl, validateUrl} from './linkUtils';
 import {docs as richTextEditorDoc} from './RichTextEditor.doc.mjs';
 
 // Closed popover-backed tooltips are intentionally hidden from the default
@@ -1612,6 +1612,20 @@ describe('linkUtils', () => {
     it('rejects empty/whitespace input as about:blank', () => {
       expect(sanitizeUrl('')).toBe('about:blank');
       expect(sanitizeUrl('   ')).toBe('about:blank');
+    });
+  });
+
+  describe('isOpenableUrl', () => {
+    it('accepts a stored address with a safe scheme', () => {
+      expect(isOpenableUrl('https://example.com/a')).toBe(true);
+      expect(isOpenableUrl('mailto:a@b.com')).toBe(true);
+    });
+
+    it('rejects unsafe schemes and addresses without a scheme of their own', () => {
+      expect(isOpenableUrl('javascript:alert(1)')).toBe(false);
+      expect(isOpenableUrl('example.com')).toBe(false);
+      expect(isOpenableUrl('/docs')).toBe(false);
+      expect(isOpenableUrl('#intro')).toBe(false);
     });
   });
 

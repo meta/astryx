@@ -33,6 +33,7 @@ import {
   typeScaleVars,
   typographyVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
+import {registerEditorReposition} from './editorReposition';
 
 /** Where one code block's header goes, in the container's coordinates. */
 interface HeaderPlacement {
@@ -196,10 +197,10 @@ export function CodeBlockHeaderPlugin({
     [],
   );
 
+  // Syncs the placements with the editor's layout through the shared
+  // reposition scheduler.
   useEffect(() => {
-    let frame = 0;
     const measure = () => {
-      frame = 0;
       const root = editor.getRootElement();
       const container = root?.parentElement;
       if (root == null || container == null) {
@@ -234,32 +235,7 @@ export function CodeBlockHeaderPlugin({
         samePlacements(current, next) ? current : next,
       );
     };
-    const schedule = () => {
-      if (frame === 0) {
-        frame = requestAnimationFrame(measure);
-      }
-    };
-    const observer =
-      typeof ResizeObserver === 'undefined'
-        ? null
-        : new ResizeObserver(schedule);
-    const unregisterRoot = editor.registerRootListener(root => {
-      observer?.disconnect();
-      if (root != null) {
-        observer?.observe(root);
-      }
-      schedule();
-    });
-    const unregisterUpdate = editor.registerUpdateListener(schedule);
-    window.addEventListener('resize', schedule);
-    schedule();
-    return () => {
-      cancelAnimationFrame(frame);
-      observer?.disconnect();
-      unregisterRoot();
-      unregisterUpdate();
-      window.removeEventListener('resize', schedule);
-    };
+    return registerEditorReposition(editor, measure);
   }, [editor]);
 
   return (

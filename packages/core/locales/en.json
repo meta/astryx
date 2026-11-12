@@ -933,19 +933,19 @@
   },
   "@astryx.richTextEditor.link.urlPlaceholder": {
     "defaultMessage": "example.com",
-    "description": "Placeholder of the web address field in the RichTextEditor link popover: an example address, shown while the field is empty. An address without a scheme is accepted and becomes an https link, so keep it a bare domain."
+    "description": "Placeholder of the web address field in the RichTextEditor link form (the toolbar's link popover, and the edit form of the link popover plugin): an example address, shown while the field is empty. An address without a scheme is accepted and becomes an https link, so keep it a bare domain."
   },
   "@astryx.richTextEditor.link.invalidUrl": {
     "defaultMessage": "Enter a valid http, https, mailto, or tel URL.",
-    "description": "Error under the link popover address field when the entered address is not allowed. Keep the scheme names http, https, mailto, and tel untranslated."
+    "description": "Error under the address field of the RichTextEditor link form (the toolbar's link popover, or the link popover plugin's edit form) when the entered address is not allowed. Keep the scheme names http, https, mailto, and tel untranslated."
   },
   "@astryx.richTextEditor.link.remove": {
     "defaultMessage": "Remove link",
-    "description": "Label and tooltip of the icon button in the RichTextEditor link popover that removes the link from the selected text and keeps the text."
+    "description": "Label and tooltip of the icon button in the RichTextEditor link form and the link popover plugin that removes the link and keeps its text."
   },
   "@astryx.richTextEditor.link.cancel": {
     "defaultMessage": "Cancel",
-    "description": "Label and tooltip of the icon button that closes the RichTextEditor link popover without changing anything."
+    "description": "Label and tooltip of the icon button that closes the RichTextEditor link form without changing anything."
   },
   "@astryx.richTextEditor.link.add": {
     "defaultMessage": "Add link",
@@ -953,7 +953,19 @@
   },
   "@astryx.richTextEditor.link.update": {
     "defaultMessage": "Update link",
-    "description": "Label and tooltip of the icon button that applies the address in the RichTextEditor link popover when changing an existing link address."
+    "description": "Label and tooltip of the icon button that applies the address to an existing link in the RichTextEditor link form."
+  },
+  "@astryx.richTextEditor.linkPopover.label": {
+    "defaultMessage": "Link",
+    "description": "Screen-reader name of the popover the RichTextEditor link popover plugin shows for the link at the caret, which holds the link's address and its actions. Noun."
+  },
+  "@astryx.richTextEditor.linkPopover.openInNewTab": {
+    "defaultMessage": "Open in new tab",
+    "description": "Label and tooltip of the icon button in the RichTextEditor link popover plugin that opens the link in a new browser tab."
+  },
+  "@astryx.richTextEditor.linkPopover.edit": {
+    "defaultMessage": "Edit link",
+    "description": "Label and tooltip of the icon button in the RichTextEditor link popover plugin that shows the form for the link's address."
   },
   "@astryx.markdown.taskList": {
     "defaultMessage": "Task list",
