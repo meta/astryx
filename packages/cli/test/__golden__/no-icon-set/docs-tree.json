@@ -1240,9 +1240,13 @@
     "type": "docs.detail",
     "sections": [
       "design-tokens",
-      "stylex-setup"
+      "stylex-setup",
+      "nextjs-webpack"
     ],
-    "mentions": []
+    "mentions": [
+      "/** @type {import('next').NextConfig} */\nconst nextConfig = {\n  experimental: {\n    optimizePackageImports: ['@astryxdesign/core'],\n  },\n};\n\nexport default nextConfig;",
+      "If your Next.js app builds with webpack (`next build --webpack`), add `@astryxdesign/core` to `experimental.optimizePackageImports`."
+    ]
   },
   "theme": {
     "type": "docs.detail",
