@@ -45,8 +45,9 @@ afterEach(() => {
 
 describe('useSyntaxTheme example', () => {
   it('paints the keyword with the syntax theme color', () => {
-    const word = container.querySelector('[data-syntax-keyword]');
-    expect(word?.textContent).toBe('const');
+    const word = container.querySelector('svg[role="img"] text');
+    expect(word?.textContent?.trim()).toBe('const');
+    expect(word?.getAttribute('direction')).toBe('ltr');
     expect(word?.getAttribute('fill')).toBe('#cf222e');
   });
 });

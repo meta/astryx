@@ -2,7 +2,11 @@
 
 'use client';
 
-import {SyntaxTheme, githubLight, useSyntaxTheme} from '@astryxdesign/core/theme/syntax';
+import {
+  SyntaxTheme,
+  githubLight,
+  useSyntaxTheme,
+} from '@astryxdesign/core/theme/syntax';
 
 function Keyword() {
   const syntax = useSyntaxTheme();
@@ -14,9 +18,9 @@ function Keyword() {
       <text
         x="0"
         y="28"
+        direction="ltr"
         fill={syntax.token('keyword')}
-        fontSize="24"
-        data-syntax-keyword="">
+        fontSize="24">
         const
       </text>
     </svg>

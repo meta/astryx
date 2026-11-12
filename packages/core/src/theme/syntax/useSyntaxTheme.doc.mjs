@@ -24,7 +24,7 @@ export const docs = {
       name: 'mode',
       type: "'light' | 'dark'",
       description:
-        'The color mode used to resolve tokens. It follows the prefers-color-scheme query.',
+        "The mode used to resolve tokens. The contract is the nearest Theme's effective mode. The hook currently reads prefers-color-scheme instead, so under a Theme with a forced mode these colors can differ from the code around them.",
     },
     {
       name: 'token',
@@ -70,7 +70,7 @@ export const docsDense = {
     'Syntax colors for canvas drawing under a SyntaxTheme. Null when no provider is present.',
   returnDescriptions: {
     name: 'syntax theme name.',
-    mode: 'light or dark from prefers-color-scheme.',
+    mode: 'nearest Theme mode is the contract. The hook reads prefers-color-scheme, so a forced Theme mode can disagree with nearby code.',
     token: 'CSS color for one syntax token in the current mode.',
     tokens: 'every syntax token for the current mode.',
   },
