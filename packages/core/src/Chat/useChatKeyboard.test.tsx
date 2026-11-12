@@ -849,11 +849,17 @@ describe('the ChatLayout stories', () => {
 });
 
 describe('what ChatLayout loads for the keyboard', () => {
-  it('imports no gesture system: the composer tap is the keyboard module\u2019s focus route', () => {
+  it('keeps the keyboard module gesture-free: the composer tap is its focus route', () => {
     const here = path.dirname(fileURLToPath(import.meta.url));
-    for (const file of ['ChatLayout.tsx', 'useChatKeyboard.ts']) {
-      const source = fs.readFileSync(path.join(here, file), 'utf8');
-      expect(source, file).not.toMatch(/from '\.\.\/gestures/);
-    }
+    const keyboard = fs.readFileSync(
+      path.join(here, 'useChatKeyboard.ts'),
+      'utf8',
+    );
+    expect(keyboard).not.toMatch(/from '\.\.\/gestures/);
+    // ChatLayout loads the gesture system only for its drag-to-dismiss pans.
+    const layout = fs.readFileSync(path.join(here, 'ChatLayout.tsx'), 'utf8');
+    expect(layout.match(/from '\.\.\/gestures\/[^']+'/g)).toEqual([
+      "from '../gestures/useGestureRecognizer'",
+    ]);
   });
 });

@@ -144,7 +144,7 @@ export function createKeyboardDismissPan(
  * reaches the line, or lifts there, it blurs the focused field, once, and
  * calls `onDismiss` with the finger's downward speed (px/s). Only where the
  * finger is decides: a flick that lifts above the line keeps the keyboard,
- * however fast. Focus moves nowhere else.
+ * however fast. It moves focus nowhere itself.
  */
 export function dismissKeyboardAtCrossing(
   pan: PanGestureRecognizer,
@@ -232,10 +232,10 @@ export function createComposerDismissPan(
 
 /**
  * The action of a pan from `createComposerDismissPan`: once the drag moves
- * down, more down than across, it blurs the focused field, once. Focus moves
- * nowhere else. A part of the composer that scrolls for the drag keeps it. A
- * contact that held still for a long press keeps the keyboard. On iOS that
- * press opens the text loupe, and its drag moves the caret.
+ * down, more down than across, it blurs the focused field, once. It moves
+ * focus nowhere itself. A part of the composer that scrolls for the drag keeps
+ * it. A contact that held still for a long press keeps the keyboard. On iOS
+ * that press opens the text loupe, and its drag moves the caret.
  */
 export function dismissKeyboardOnComposerDrag(pan: PanGestureRecognizer): void {
   const drag = composerDrags.get(pan);
