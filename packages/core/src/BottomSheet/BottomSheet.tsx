@@ -194,9 +194,7 @@ const styles = stylex.create({
       // the host pins this to 0s inline for the frame the change lands in
       // (see `writeScrimOpacity`). Reduced motion keeps the pin too.
       transitionDuration: `var(--_sheet-scrim-duration, ${durationVars['--duration-medium']})`,
-      // A touch drag's close writes its spring's progress here, so the
-      // fade follows the sheet.
-      transitionTimingFunction: `var(--_sheet-scrim-easing, ${easeVars['--ease-standard']})`,
+      transitionTimingFunction: easeVars['--ease-standard'],
       transitionBehavior: 'allow-discrete',
       '@media (prefers-reduced-motion: reduce)': {
         transitionDuration: 'var(--_sheet-scrim-duration, 0.01s)',
@@ -214,11 +212,12 @@ const styles = stylex.create({
    * The dim leaves with the sheet, on a matching curve. A fade covers no
    * distance, so `--ease-standard` would end it early: 90% faded after 163ms
    * of a 410ms close, under a sheet that is still sliding. `linear` uses the
-   * whole duration.
+   * whole duration. A touch drag's close writes its spring's progress as the
+   * easing instead, so the dim clears as the sheet slides out.
    */
   scrimClosing: {
     '::backdrop': {
-      transitionTimingFunction: 'linear',
+      transitionTimingFunction: 'var(--_sheet-scrim-easing, linear)',
     },
   },
   // A closing sheet that keeps focus takes no pointer input during its exit.
