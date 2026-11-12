@@ -25,6 +25,7 @@ import {
   type MouseEvent,
   type PointerEvent,
 } from 'react';
+import {computeTargetAndRel} from '../Link/computeTargetAndRel';
 import {isLayerSurface} from '../Layer/layerSurfacePress';
 import {isSafeUrl} from '../utils/safeUrl';
 import {cancelPress} from '../utils/pressFeedback';
@@ -215,13 +216,14 @@ function getWindowOpenFeatures(
   interactiveRef: RefObject<HTMLElement | null> | undefined,
 ): string {
   if (target !== '_blank') {
-    return 'noopener';
+    const {rel} = computeTargetAndRel(target, undefined);
+    return rel?.split(/\s+/).join(',') ?? 'noopener';
   }
 
   if (interactiveRef?.current == null) {
-    // A surface without a delegated anchor still owns the target prop, so
-    // retain the hook's safe default for its direct window.open path.
-    return 'noopener,noreferrer';
+    // Keep the imperative path on the same target/rel contract as Link.
+    const {rel} = computeTargetAndRel(target, undefined);
+    return rel?.split(/\s+/).join(',') ?? 'noopener';
   }
 
   // A delegated link is the source of truth for referrer policy. This keeps
@@ -403,7 +405,7 @@ export function useClickableContainerProxy({
         );
       }
     },
-    [containerRef, href, target, disabled],
+    [containerRef, interactiveRef, href, target, disabled],
   );
 
   // The press-state counterpart of onClick's rule: a press that would not
