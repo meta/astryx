@@ -1614,13 +1614,14 @@ describe('useMenuPress — a pointer that went down elsewhere is the opening pre
     expect(onSelect).toHaveBeenCalledWith('B');
   });
 
-  it("cancels a handed finger's own touchend at its lift, though another finger landed while it slid", () => {
+  it("leaves a handed finger's guard on the next touchend after a touchstart the finger did not send", () => {
     const onSelect = vi.fn();
     const press: {current: UseMenuPressReturn | null} = {current: null};
     render(<Harness touchModel="uikit" onSelect={onSelect} pressRef={press} />);
     continueAt(press, 'touch');
-    // A second finger lands while the handed one slides. The handed finger's
-    // touchstart came before the menu, so this one names another touch.
+    // The handed finger's touchstart came before the menu, so a touchstart
+    // after the handoff is not its own. A real second finger's pointerdown
+    // ends the gesture first, so this one comes alone.
     fireTouch(row('C'), 'touchstart', 9);
     fireEvent.pointerMove(row('B'), {...handed, clientX: 0, clientY: 4});
     fireEvent.pointerMove(row('B'), {...handed, clientX: 0, clientY: 20});
