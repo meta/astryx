@@ -78,7 +78,7 @@ const RUNNERS = {
   },
   'api/theme-edit/_project.mjs': {
     runs: "the project's installed Core theme module and a built-in theme it builds on, to check and resolve tokens",
-    sites: ['import(<computed>) ×2', 'require'],
+    sites: ['createRequire', 'import(<computed>) ×2', 'require'],
   },
   'api/theme-edit/_settings.mjs': {
     runs: 'the built theme module, to read its resolved tokens after a build',

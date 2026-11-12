@@ -46,9 +46,7 @@ describe('base resolution', () => {
       themeEditNew('q', {cwd: rel, like: 'neutrl'}),
     );
     expect(r.run[0]).toMatch(/ new q --like neutral$/);
-    expect(/** @type {any} */ (r).didYouMean ?? ['neutral']).toEqual([
-      'neutral',
-    ]);
+    expect(r.run.slice(1)).toEqual(['neutral']);
   });
 
   it('a guessed base for set base is only an installed one', async () => {
