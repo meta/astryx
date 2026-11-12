@@ -7,7 +7,9 @@
  *   renderer, the image and icon rewrites of the template previews, and the
  *   experimental DOCSITE_ICON_SET setting.
  * @output src/generated/landingPreviews.ts: each preview's rendered markup,
- *   with no script. The markup uses the site's own StyleX classes.
+ *   with no script. The markup uses the site's own StyleX classes. The same
+ *   markup as public/landing/landing-previews.json, for a client-side
+ *   navigation to the homepage.
  * @position Part of `pnpm generate`, before the docsite build and dev server.
  *   FrozenPreview puts the markup into the page; CSS scales it and the page's
  *   color mode reaches it through CSS variables.
@@ -34,6 +36,16 @@ const rowsFile = path.join(
   'src/app/(site)/_landing/landingTemplateRows.json',
 );
 const outFile = path.join(docsiteDir, 'src/generated/landingPreviews.ts');
+/**
+ * The URL of the same markup as JSON. A client-side navigation to the
+ * homepage has no server HTML, so FrozenPreview loads this file then.
+ * SYNC: CLIENT_NAVIGATION_URL in src/app/(site)/_landing/FrozenPreview.tsx
+ */
+export const CLIENT_NAVIGATION_URL = '/landing/landing-previews.json';
+export const CLIENT_NAVIGATION_FILE = path.join(
+  docsiteDir,
+  'public/landing/landing-previews.json',
+);
 // The page template the themes card shows.
 const STORE_TEMPLATE = 'theme-showcase';
 const themesStoreModule = path.join(
@@ -256,6 +268,7 @@ async function main() {
       '',
     ].join('\n'),
   );
+  fs.writeFileSync(CLIENT_NAVIGATION_FILE, JSON.stringify(previews));
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
