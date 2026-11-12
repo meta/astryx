@@ -115,11 +115,7 @@ describe('DateInput typed entry with a calendar', () => {
     fireEvent.change(input, {target: {value: 'May 1, 31 Heisei'}});
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(input).toHaveAttribute('aria-invalid', 'true');
-    expectShown(
-      input,
-      container,
-      'This date does not exist in the Japanese Calendar',
-    );
+    expectShown(input, container, 'Enter a real date (Japanese Calendar)');
   });
 
   it('rejects a date the calendar does not have and keeps it on blur', () => {
@@ -129,18 +125,10 @@ describe('DateInput typed entry with a calendar', () => {
       status: {type: 'warning', message: 'Check the date'},
     });
     fireEvent.change(input, {target: {value: '12/30/1404 AP'}});
-    expectShown(
-      input,
-      container,
-      'This date does not exist in the Persian Calendar',
-    );
+    expectShown(input, container, 'Enter a real date (Persian Calendar)');
     fireEvent.blur(input);
     expect(input).toHaveValue('12/30/1404 AP');
-    expectShown(
-      input,
-      container,
-      'This date does not exist in the Persian Calendar',
-    );
+    expectShown(input, container, 'Enter a real date (Persian Calendar)');
     expect(onChange).not.toHaveBeenCalled();
   });
 
@@ -172,7 +160,7 @@ describe('DateInput typed entry with a calendar', () => {
       'Invalid date',
     );
     fireEvent.change(input, {target: {value: '12/30/1404 AP'}});
-    expectShown(input, container, 'does not exist in the Persian Calendar');
+    expectShown(input, container, 'Enter a real date (Persian Calendar)');
     fireEvent.change(input, {target: {value: '1/1/1406 AP'}});
     expectShown(input, container, 'on or before Dey 10, 1405 AP');
   });
@@ -406,14 +394,35 @@ describe('DateInput onChange while typing a Gregorian date', () => {
       fireEvent.change(input, {target: {value: text}});
       fireEvent.blur(input);
       expect(input).toHaveValue(text);
-      expectShown(
-        input,
-        container,
-        'This date does not exist in the Gregorian Calendar',
-      );
+      expectShown(input, container, 'Enter a real date');
+      // The default calendar is not named.
+      expect(input).toHaveAccessibleDescription('Enter a real date');
       expect(onChange).not.toHaveBeenCalled();
     },
   );
+
+  it("leaves the calendar's name out when the field uses the provider's calendar", () => {
+    const onChange = vi.fn();
+    const {container} = render(
+      <InternationalizationProvider locale="en" calendar="persian">
+        <DateInput label="Date" onChange={onChange} />
+      </InternationalizationProvider>,
+    );
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: '12/30/1404 AP'}});
+    expectShown(input, container, 'Enter a real date');
+    expect(input).toHaveAccessibleDescription('Enter a real date');
+  });
+
+  it('asks for an available date when a date constraint rules the day out', () => {
+    const {input, onChange, container} = renderField('en-US', {
+      // 2026-03-15 is a Sunday.
+      dateConstraints: [date => date.getDay() !== 0 && date.getDay() !== 6],
+    });
+    fireEvent.change(input, {target: {value: '03/15/2026'}});
+    expect(onChange).not.toHaveBeenCalled();
+    expectShown(input, container, 'Enter an available date');
+  });
 
   it('never reads a date that does not exist in another calendar with parseDateInput', () => {
     const {input, onChange, container} = renderField('en', {
@@ -422,11 +431,7 @@ describe('DateInput onChange while typing a Gregorian date', () => {
     fireEvent.change(input, {target: {value: '13/5/1405 AP'}});
     fireEvent.blur(input);
     expect(input).toHaveValue('13/5/1405 AP');
-    expectShown(
-      input,
-      container,
-      'This date does not exist in the Persian Calendar',
-    );
+    expectShown(input, container, 'Enter a real date (Persian Calendar)');
     expect(onChange).not.toHaveBeenCalled();
   });
 
