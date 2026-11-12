@@ -74,4 +74,24 @@ describe('theme refusals name a command that works', () => {
     const {suggestions} = JSON.parse(refused.stdout);
     expect(suggestions[0].name).toMatch(/ theme add neutral( --package \S+)?$/);
   }, 120_000);
+
+  it('leaves --out out of the suggestion for several files without --family', async () => {
+    fs.copyFileSync(path.join(dir, 'ocean.mjs'), path.join(dir, 'reef.mjs'));
+    const refused = await runCli(
+      [
+        '--json',
+        'theme',
+        'build',
+        'ocean.mjs',
+        'reef.mjs',
+        '--family-key',
+        'k',
+        '--out',
+        'x.css',
+      ],
+      dir,
+    );
+    const {suggestions} = JSON.parse(refused.stdout);
+    expect(suggestions[0].name).toMatch(/ theme build ocean\.mjs reef\.mjs$/);
+  }, 120_000);
 });

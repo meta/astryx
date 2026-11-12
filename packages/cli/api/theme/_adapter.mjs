@@ -193,8 +193,19 @@ async function notAddedError(slug, state) {
   let match;
   try {
     match = await findTheme(slug, {cwd: state.projectDir});
-  } catch {
-    match = undefined;
+  } catch (error) {
+    // More than one package provides the slug: adding it names one.
+    if (
+      error instanceof AstryxError &&
+      error.code === ERROR_CODES.ERR_AMBIGUOUS_THEME
+    ) {
+      return new AstryxError(
+        `Theme "${slug}" is not added, and more than one package provides it. Add it from one of them with --package first.`,
+        error.suggestions,
+        ERROR_CODES.ERR_UNKNOWN_THEME,
+      );
+    }
+    throw error;
   }
   const list = {
     name: formatCliCommand('theme list', state.projectDir),

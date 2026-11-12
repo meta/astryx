@@ -593,6 +593,25 @@ function rebuildLine(command, words) {
 }
 
 /**
+ * The folder a build header names paths from: the project root (nearest
+ * package.json) of the outputs' folder, or `cwd` outside any project.
+ * @param {string} outDir
+ * @param {string} cwd
+ */
+function headerRoot(outDir, cwd) {
+  return findPackageRoot(outDir) ?? path.resolve(cwd);
+}
+
+/**
+ * A path as a build header names it: relative to `base`, with `/`.
+ * @param {string} base
+ * @param {string} file absolute
+ */
+function headerPath(base, file) {
+  return path.relative(base, file).split(path.sep).join('/');
+}
+
+/**
  * Build a @generated attribution header for generated files.
  * @param {string} sourceFile - Relative path to the source theme file
  * @param {'css'|'js'|'ts'} lang - File language (determines comment syntax)
@@ -1044,10 +1063,10 @@ function assertOutputsReplaceable(
 
 /**
  * The other theme source a build output names in its `Source:` header, when
- * that source still exists and is not `source`. An output names its source
- * relative to the folder its build ran from, so the name is matched against
- * the end of the source's path. A family output names every member, and is
- * this source's when any of them is. Null when the output is this source's,
+ * that source still exists and is not `source`. The name is resolved from the
+ * outputs' project root, and for headers from older CLIs from each folder
+ * between the output and that root; a match is exact. A family output names
+ * every member, and is this source's when any of them is. Null when the output is this source's,
  * names no source, or names one that is gone (an orphan a build may replace).
  * @param {string} dest
  * @param {string} source absolute theme source
@@ -1061,27 +1080,32 @@ function builtFromOtherSource(dest, source, cwd) {
   if (!line) return null;
   const names = line.split(', ').map(name => name.trim());
   const own = path.resolve(source);
-  /** @param {string} name */
-  const tail = name =>
-    path
-      .normalize(name)
-      .split(path.sep)
-      .filter(part => part !== '..' && part !== '.' && part !== '')
-      .join(path.sep);
-  /** @param {string} name */
-  const isOwn = name =>
-    path.resolve(cwd, name) === own ||
-    own.endsWith(path.sep + tail(name)) ||
-    own === tail(name);
-  if (names.some(isOwn)) return null;
-  const existing = names.find(name => {
+  // A header names its source from the outputs' project root. Older CLIs
+  // named it from the folder the build ran in, which is one of the folders
+  // from the output up to that root.
+  const outDir = path.dirname(path.resolve(dest));
+  const root = headerRoot(outDir, cwd);
+  /** @type {string[]} */
+  const bases = [root];
+  for (
+    let dir = outDir;
+    dir !== root && dir.startsWith(root + path.sep);
+    dir = path.dirname(dir)
+  ) {
+    bases.push(dir);
+  }
+  const resolvedNames = names.flatMap(name =>
+    bases.map(base => path.resolve(base, name)),
+  );
+  if (resolvedNames.includes(own)) return null;
+  const existing = resolvedNames.find(file => {
     try {
-      return fs.statSync(path.resolve(cwd, name)).isFile();
+      return fs.statSync(file).isFile();
     } catch {
       return false;
     }
   });
-  return existing ?? null;
+  return existing ? path.relative(cwd, existing) || existing : null;
 }
 
 /** @param {Array<{dest: string, content: string}>} writes */
@@ -2790,7 +2814,7 @@ function importStatement({importPath, importedName, localName}, specifier) {
  * @param {any} themeDef
  * @param {import('./icon-imports.mjs').IconImports | null} iconInfo
  * @param {string} [iconsSpecifier] - Overrides the selected registry specifier.
- * @param {{themeBinding?: string, iconsExpression?: string, indicatorsExpression?: string, artifactBaseName?: string, exportIcons?: boolean, componentIconInfo?: {imports: import('./icon-imports.mjs').IconImports['imports'], expression: string, mergeName?: string} | null}} [moduleOptions]
+ * @param {{themeBinding?: string, iconsExpression?: string, indicatorsExpression?: string, artifactBaseName?: string, cssFileName?: string, exportIcons?: boolean, componentIconInfo?: {imports: import('./icon-imports.mjs').IconImports['imports'], expression: string, mergeName?: string} | null}} [moduleOptions]
  * @returns {string}
  */
 function generateBuiltModule(
@@ -2802,6 +2826,7 @@ function generateBuiltModule(
   const themeBinding =
     moduleOptions.themeBinding ?? `${toIdentifier(themeDef.name)}Theme`;
   const artifactBaseName = moduleOptions.artifactBaseName ?? themeDef.name;
+  const cssFileName = moduleOptions.cssFileName ?? `${artifactBaseName}.css`;
   const exportIcons = moduleOptions.exportIcons ?? true;
   const iconImport = (iconInfo?.imports ?? [])
     .map(binding =>
@@ -2952,7 +2977,7 @@ function generateBuiltModule(
  * Import the CSS file alongside this module:
  *
  *   import { ${themeBinding} } from './${artifactBaseName}';
- *   import './${artifactBaseName}.css';
+ *   import './${cssFileName}';
  */
 export const ${themeBinding} = {
   name: '${themeDef.name}',
@@ -3926,7 +3951,8 @@ async function themeBuildInternal(
 
   // Source path relative to cwd — used in @generated headers
   const sourceRelative = path.relative(cwd, filePath);
-  const buildCommand = `astryx theme build ${sourceRelative}${options.out ? ' --out ' + path.relative(cwd, path.resolve(cwd, options.out)) : ''}`;
+  // What `--check` prints to rebuild, from the working folder.
+  const rebuildCommand = `astryx theme build ${sourceRelative}${options.out ? ' --out ' + path.relative(cwd, path.resolve(cwd, options.out)) : ''}`;
   // Stable provenance recorded in @generated headers — versions, not a
   // timestamp, so identical inputs produce byte-identical output.
   const versions = resolveToolVersions(cwd);
@@ -3945,32 +3971,16 @@ async function themeBuildInternal(
     if (/[\\/]$/.test(options.out) || isDirectorySync(outPath)) {
       outPath = path.join(outPath, `${baseName}.css`);
     }
-    // The module imports `<stem>.css` beside it, so any other extension would
-    // leave that import pointing at a file the build never writes.
-    // An existing file there is the source itself or a file this build does
-    // not own, and the checks before writing name that instead.
-    const leaveToOwnershipCheck =
-      fs.existsSync(outPath) &&
-      (outputKey(outPath) === outputKey(filePath) ||
-        !fileHead(outPath).includes(GENERATED_MARKER));
-    if (
-      path.extname(outPath).toLowerCase() !== '.css' &&
-      !leaveToOwnershipCheck
-    ) {
+    // The stylesheet is CSS whatever its name; a name that does not end in
+    // .css still builds, and the module's import names the file as written.
+    if (path.extname(outPath).toLowerCase() !== '.css') {
       const stem = path.basename(outPath).replace(/(?:\.d)?\.[^.]+$/, '');
-      const fixed = path.join(path.dirname(options.out), `${stem}.css`);
-      throw new AstryxError(
-        `--out names the stylesheet, so it ends in .css; ${options.out} does not.`,
-        [
-          {
-            name: formatCliCommand(
-              `theme build ${shellWord(path.relative(cwd, filePath))} --out ${shellWord(fixed.split(path.sep).join('/'))}`,
-              cwd,
-            ),
-            reason: 'the same build with a .css output',
-          },
-        ],
-        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      const fixed = path
+        .join(path.dirname(options.out), `${stem}.css`)
+        .split(path.sep)
+        .join('/');
+      logger.warn(
+        `Warning: --out names the stylesheet, which is CSS; give it a .css name such as ${fixed}.`,
       );
     }
     // A build keeps the explicit output inside the write root, relative or
@@ -3982,6 +3992,12 @@ async function themeBuildInternal(
   } else {
     outPath = path.join(path.dirname(filePath), `${baseName}.css`);
   }
+  // The header names the source and command from the project root of the
+  // outputs, so a build from any folder writes the same bytes, `--check`
+  // agrees with it, and a later build reads the source back exactly.
+  const headerBase = headerRoot(path.dirname(outPath), cwd);
+  const headerSource = headerPath(headerBase, filePath);
+  const buildCommand = `astryx theme build ${headerSource}${options.out ? ' --out ' + headerPath(headerBase, outPath) : ''}`;
 
   const displayTheme = resolvedTheme || themeDef;
   const tokenCount =
@@ -4013,31 +4029,38 @@ async function themeBuildInternal(
       ? path.join(outDir, variantsFileName)
       : null;
   const variantContent = variantDecl
-    ? generatedHeader(sourceRelative, 'ts', buildCommand, versions) +
-      variantDecl
+    ? generatedHeader(headerSource, 'ts', buildCommand, versions) + variantDecl
     : null;
 
   // Generate all file contents in memory first. The main .d.ts references
   // the variants file (when present) via a triple-slash directive so
   // importing the theme also loads the custom-variant augmentations.
   const cssContent =
-    generatedHeader(sourceRelative, 'css', buildCommand, versions) + css;
+    generatedHeader(headerSource, 'css', buildCommand, versions) + css;
   const cssDtsContent =
-    generatedHeader(sourceRelative, 'ts', buildCommand, versions) +
+    generatedHeader(headerSource, 'ts', buildCommand, versions) +
     'export {};\n';
   // A family member's module is generated by themeBuildFamily, which carries
   // its registries and slot functions through the family's own imports.
   const jsContent = options.__prepareFamily
     ? ''
-    : generatedHeader(sourceRelative, 'js', buildCommand, versions) +
+    : generatedHeader(headerSource, 'js', buildCommand, versions) +
       generateBuiltModule(
         resolvedTheme || themeDef,
         iconInfo,
         options.iconsSpecifier,
-        {componentIconInfo},
+        {
+          componentIconInfo,
+          // A stylesheet named other than `.css` is named as written. A
+          // `.css` name keeps the theme's own name in the module, so the
+          // module is the same whatever `--out` names the stylesheet.
+          ...(path.extname(outPath).toLowerCase() === '.css'
+            ? {}
+            : {cssFileName: path.basename(outPath)}),
+        },
       );
   const dtsContent =
-    generatedHeader(sourceRelative, 'ts', buildCommand, versions) +
+    generatedHeader(headerSource, 'ts', buildCommand, versions) +
     generateBuiltTypes(resolvedTheme || themeDef, iconInfo, variantsFileName);
 
   const unloadedFonts = [
@@ -4130,7 +4153,7 @@ async function themeBuildInternal(
       if (remedy) logger.error(`\n  ${remedy.join('\n  ')}`);
       else
         logger.error(
-          `\n  Rebuild with: ${rebuildLine(buildCommand, options.__commandWords)}`,
+          `\n  Rebuild with: ${rebuildLine(rebuildCommand, options.__commandWords)}`,
         );
     }
     return {
@@ -4167,9 +4190,8 @@ async function themeBuildInternal(
   }
 
   const relOutDir = path.relative(cwd, outDir) || '.';
-  const cssBase = path.basename(outPath, '.css');
   const jsImport = importSpecifier(relOutDir, baseName);
-  const cssImport = importSpecifier(relOutDir, cssBase) + '.css';
+  const cssImport = importSpecifier(relOutDir, path.basename(outPath));
   const exportName = `${toIdentifier(baseName)}Theme`;
 
   // Fonts the theme names but nothing loads (#5015). Resolved tokens and
@@ -4648,9 +4670,15 @@ export async function themeBuildFamily(
   const sourceRelative = members
     .map(member => member.sourceRelative)
     .join(', ');
-  const buildCommand = `${getCliInvocation()} theme build --family ${members
+  const rebuildCommand = `${getCliInvocation()} theme build --family ${members
     .map(member => member.sourceRelative)
     .join(' ')} --family-key ${baseName}`;
+  const headerBase = headerRoot(outDir, cwd);
+  const headerSources = members.map(member =>
+    headerPath(headerBase, member.filePath),
+  );
+  const headerSource = headerSources.join(', ');
+  const buildCommand = `astryx theme build --family ${headerSources.join(' ')} --family-key ${baseName}`;
   const bindings = allocateFamilyBindings(members);
   const css = generateFamilyCSS(members);
   /** @type {Array<{specifier: string, exportName: string}>} */
@@ -4729,25 +4757,24 @@ export async function themeBuildFamily(
     {
       dest: outPath,
       content:
-        generatedHeader(sourceRelative, 'css', buildCommand, root.versions) +
-        css,
+        generatedHeader(headerSource, 'css', buildCommand, root.versions) + css,
     },
     {
       dest: cssDtsPath,
       allowMissingInCheck: true,
       content:
-        generatedHeader(sourceRelative, 'ts', buildCommand, root.versions) +
+        generatedHeader(headerSource, 'ts', buildCommand, root.versions) +
         'export {};\n',
     },
     {
       dest: jsPath,
       content:
-        generatedHeader(sourceRelative, 'js', buildCommand, root.versions) + js,
+        generatedHeader(headerSource, 'js', buildCommand, root.versions) + js,
     },
     {
       dest: dtsPath,
       content:
-        generatedHeader(sourceRelative, 'ts', buildCommand, root.versions) +
+        generatedHeader(headerSource, 'ts', buildCommand, root.versions) +
         declarations +
         (augmentations ? `\n${augmentations}` : ''),
     },
@@ -4791,7 +4818,7 @@ export async function themeBuildFamily(
       if (remedy) logger.error(`\n  ${remedy.join('\n  ')}`);
       else
         logger.error(
-          `\n  Rebuild with: ${rebuildLine(buildCommand, options.__commandWords)}`,
+          `\n  Rebuild with: ${rebuildLine(rebuildCommand, options.__commandWords)}`,
         );
     }
     return {

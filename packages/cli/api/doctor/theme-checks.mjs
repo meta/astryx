@@ -1130,6 +1130,15 @@ export async function checkAppThemes(cwd) {
       packages.length > 0
         ? packageInstallCommand(packages, state.projectDir)
         : null;
+    const refresh = stale.map(slug =>
+      refreshThemeCommand(
+        state.projectDir,
+        run,
+        available,
+        slug,
+        state.themes[slug],
+      ),
+    );
     checks.push(
       packages.length > 0
         ? {
@@ -1143,10 +1152,12 @@ export async function checkAppThemes(cwd) {
               .join(
                 '; ',
               )}.${stale.length > 0 ? ` Local theme outputs are also missing or stale: ${stale.join(', ')}.` : ''}`,
-            fix:
+            fix: [
               install?.installCommand ??
-              install?.noCommandReason ??
-              `Install ${packages.join(', ')}.`,
+                install?.noCommandReason ??
+                `Install ${packages.join(', ')}.`,
+              ...refresh,
+            ].join(' '),
           }
         : stale.length > 0
           ? {
@@ -1154,17 +1165,7 @@ export async function checkAppThemes(cwd) {
               label: 'Local theme build freshness',
               status: 'fail',
               message: `Local theme outputs are missing or stale: ${stale.join(', ')}.`,
-              fix: stale
-                .map(slug =>
-                  refreshThemeCommand(
-                    state.projectDir,
-                    run,
-                    available,
-                    slug,
-                    state.themes[slug],
-                  ),
-                )
-                .join(' '),
+              fix: refresh.join(' '),
             }
           : {
               id: 'theme-local-builds',

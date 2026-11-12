@@ -58,7 +58,7 @@ export const doc = {
       name: 'options.out',
       type: 'string',
       description:
-        'Override the output CSS path, relative or absolute; a build refuses a path outside cwd, and check mode refuses only a relative path that escapes cwd. The .js, .d.ts and any .variants.d.ts are written in the same directory, named after the theme (<name>.js), not after the CSS file. An existing folder, or a path that ends in a separator, names the folder: the CSS is written there as <name>.css. A file path ends in .css (ERR_INVALID_ARGUMENT otherwise), because the module imports `<stem>.css` beside it.',
+        'Override the output CSS path, relative or absolute; a build refuses a path outside cwd, and check mode refuses only a relative path that escapes cwd. The .js, .d.ts and any .variants.d.ts are written in the same directory, named after the theme (<name>.js), not after the CSS file. An existing folder, or a path that ends in a separator, names the folder: the CSS is written there as <name>.css. A file path should end in .css; another name still builds, with a warning, and the import line it prints names the file as written.',
     },
     {
       name: 'options.check',
@@ -112,7 +112,7 @@ export const doc = {
     },
     {
       code: 'ERR_INVALID_ARGUMENT',
-      when: 'the theme file is a folder, or a file out names does not end in .css',
+      when: 'the theme file is a folder',
     },
     {
       code: 'ERR_PATH_TRAVERSAL',

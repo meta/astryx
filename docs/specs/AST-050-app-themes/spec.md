@@ -135,6 +135,10 @@ described.
   folder with a package.json), the default target is the project's local
   themes root, a relative `[path]` is read from the working folder and MUST
   stay inside the project, and `outputDir` is relative to the working folder.
+  `theme template [path]` leaves an existing file as it is without
+  `--overwrite`. Its receipt then says whether `--overwrite` would replace that
+  file (`overwritable`), and when it would not, it names a free path for the
+  template (`alternative`).
 - **FR7 — A package exposes each theme to import.** A package makes a theme
   importable by exporting its built module at `./themes/<slug>` and its
   stylesheet at `./themes/<slug>.css`. A package that owns exactly one theme MAY
@@ -167,10 +171,13 @@ described.
   writes beside its source, and its font stylesheet, when it has one, is
   `<slug>.fonts.css` beside them. `theme build` refuses an input before it
   loads it when the input is one of its own outputs, naming the source that
-  output was built from, or when the input is not a theme module. At a path
-  `--out` names, which is a `.css` file, it replaces an existing output only
-  when that output was built from the same source, or from a source that no
-  longer exists. An import MUST fail and name the build command
+  output was built from, or when the input is not a theme module. Each output's
+  header names its source from the project root of the outputs, so a build
+  from any folder writes the same outputs. At a path `--out` names, it
+  replaces an existing output only when that output was built from the same
+  source, or from a source that no longer exists. It warns when that path does
+  not end in `.css`, and the import it prints names the file as written. An
+  import MUST fail and name the build command
   when the built module or stylesheet is missing. When a local theme and a
   package theme share a slug, an import adds the local theme unless `--package`
   names the package, and `theme list` shows both with their owners. The copying

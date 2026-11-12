@@ -1380,20 +1380,93 @@ describe('themeBuild() — outputs it may replace', () => {
     );
   });
 
-  it.each(['o/x.js', 'o/y', 'o/z.d.ts'])(
-    'refuses an --out of %s, which does not end in .css',
-    async out => {
-      let error;
+  it.each([
+    ['o/x.scss', './o/x.scss', 'o/x.css'],
+    ['o/y', './o/y', 'o/y.css'],
+  ])(
+    'builds an --out of %s with a warning, and imports the stylesheet by its name',
+    async (out, cssImport, suggested) => {
+      const warnings = [];
+      const restore = logger.silent;
+      const warn = logger.warn;
+      const log = logger.log;
+      const lines = [];
+      logger.setSilent(false);
+      logger.warn = (/** @type {string} */ line) => warnings.push(line);
+      logger.log = (/** @type {string} */ line) => lines.push(line);
       try {
         await themeBuild('ocean.mjs', {out}, {cwd: tmpDir});
-      } catch (caught) {
-        error = caught;
+        expect(lines.join('\n')).toContain(`import '${cssImport}';`);
+      } finally {
+        logger.warn = warn;
+        logger.log = log;
+        logger.setSilent(restore);
       }
-      expect(error).toMatchObject({code: 'ERR_INVALID_ARGUMENT'});
-      expect(error.suggestions[0].name).toMatch(/ --out o\/[xyz]\.css$/);
-      expect(fs.existsSync(path.join(tmpDir, 'o'))).toBe(false);
+      expect(warnings).toEqual([
+        `Warning: --out names the stylesheet, which is CSS; give it a .css name such as ${suggested}.`,
+      ]);
+      expect(fs.readFileSync(path.join(tmpDir, out), 'utf-8')).toContain(
+        '[data-astryx-theme="ocean"]',
+      );
+      expect(
+        fs.readFileSync(path.join(tmpDir, 'o/ocean.js'), 'utf-8'),
+      ).toContain(`import './${path.basename(out)}';`);
     },
   );
+
+  it('writes the same outputs from any folder, so --check agrees across folders', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app"}\n');
+    fs.mkdirSync(path.join(tmpDir, 'themes'));
+    fs.copyFileSync(
+      path.join(tmpDir, 'ocean.mjs'),
+      path.join(tmpDir, 'themes', 'ocean.mjs'),
+    );
+    await themeBuild('themes/ocean.mjs', {}, {cwd: tmpDir});
+    const fromRoot = fs.readFileSync(path.join(tmpDir, 'themes/ocean.css'));
+    expect(fromRoot.toString()).toContain('Source: themes/ocean.mjs');
+
+    await themeBuild('ocean.mjs', {}, {cwd: path.join(tmpDir, 'themes')});
+    expect(
+      fs.readFileSync(path.join(tmpDir, 'themes/ocean.css')).equals(fromRoot),
+    ).toBe(true);
+    await expect(
+      themeBuild('themes/ocean.mjs', {check: true}, {cwd: tmpDir}),
+    ).resolves.toMatchObject({data: {upToDate: true}});
+  });
+
+  it('matches the source an --out output names exactly, also from an older header', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app"}\n');
+    for (const dir of ['a', 'b']) {
+      fs.mkdirSync(path.join(tmpDir, dir));
+      fs.copyFileSync(
+        path.join(tmpDir, 'ocean.mjs'),
+        path.join(tmpDir, dir, 'ocean.mjs'),
+      );
+    }
+    const b = path.join(tmpDir, 'b');
+    await themeBuild('ocean.mjs', {out: 'out/ocean.css'}, {cwd: b});
+    // An older CLI named the source from the folder it ran in.
+    const css = path.join(b, 'out/ocean.css');
+    fs.writeFileSync(
+      css,
+      fs
+        .readFileSync(css, 'utf-8')
+        .replace('Source: b/ocean.mjs', 'Source: ocean.mjs'),
+    );
+    // a/ocean.mjs ends in the same name, but it is another source.
+    await expect(
+      themeBuild('../a/ocean.mjs', {out: 'out/ocean.css'}, {cwd: b}),
+    ).rejects.toMatchObject({
+      code: 'ERR_FILE_EXISTS',
+      message: expect.stringMatching(
+        /another theme source, (\.\.\/)?ocean\.mjs,/,
+      ),
+    });
+    // b/ocean.mjs is the source it names, read from the folder b.
+    await expect(
+      themeBuild('ocean.mjs', {out: 'out/ocean.css'}, {cwd: b}),
+    ).resolves.toMatchObject({type: 'theme.build'});
+  });
 
   it('replaces its own earlier outputs', async () => {
     await themeBuild('ocean.mjs', {}, {cwd: tmpDir});
@@ -1407,7 +1480,7 @@ describe('themeBuild() — outputs it may replace', () => {
   it('refuses an --out that collides with the generated module', async () => {
     await expect(
       themeBuild('ocean.mjs', {out: 'dist/ocean.js'}, {cwd: tmpDir}),
-    ).rejects.toMatchObject({code: 'ERR_INVALID_ARGUMENT'});
+    ).rejects.toMatchObject({code: 'ERR_THEME_INVALID'});
     expect(fs.existsSync(path.join(tmpDir, 'dist'))).toBe(false);
   });
 

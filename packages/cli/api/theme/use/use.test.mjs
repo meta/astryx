@@ -5,6 +5,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {themeAdd} from '../add/add.mjs';
 import {themeUse} from './use.mjs';
+import {themeRemove} from '../remove/remove.mjs';
 import {parseThemeModuleRecord} from '../../../foundation/config/theme-state.mjs';
 import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
 
@@ -121,6 +122,44 @@ describe('themeUse', () => {
     await expect(themeUse('missing', {cwd: tmpDir})).rejects.toMatchObject({
       code: 'ERR_UNKNOWN_THEME',
       suggestions: [{name: expect.stringMatching(/ theme list$/)}],
+    });
+  });
+
+  it('names theme add with each --package when more than one package provides the slug', async () => {
+    await themeRemove('reef', {cwd: tmpDir});
+    const other = path.join(tmpDir, 'node_modules', '@other', 'themes');
+    fs.cpSync(path.join(tmpDir, 'node_modules', '@acme', 'themes'), other, {
+      recursive: true,
+    });
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(other, 'package.json'), 'utf-8'),
+    );
+    fs.writeFileSync(
+      path.join(other, 'package.json'),
+      JSON.stringify({...pkg, name: '@other/themes'}),
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      JSON.stringify({
+        name: 'app',
+        dependencies: {'@acme/themes': '^1.0.0', '@other/themes': '^1.0.0'},
+      }),
+    );
+    await expect(themeUse('reef', {cwd: tmpDir})).rejects.toMatchObject({
+      code: 'ERR_UNKNOWN_THEME',
+      message: expect.stringContaining('more than one package provides it'),
+      suggestions: [
+        {
+          name: expect.stringMatching(
+            / theme add reef --package @acme\/themes$/,
+          ),
+        },
+        {
+          name: expect.stringMatching(
+            / theme add reef --package @other\/themes$/,
+          ),
+        },
+      ],
     });
   });
 

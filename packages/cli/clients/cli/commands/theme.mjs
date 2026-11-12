@@ -956,7 +956,10 @@ function registerThemeCommands(theme, program, docs, words) {
                   words.build,
                   [
                     ...files,
-                    ...(options.out ? ['--out', options.out] : []),
+                    // --out names one output, so it goes with one file only.
+                    ...(options.out && files.length === 1
+                      ? ['--out', options.out]
+                      : []),
                     ...(options.check ? ['--check'] : []),
                   ],
                   'build each theme on its own',
