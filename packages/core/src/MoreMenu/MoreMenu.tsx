@@ -30,6 +30,7 @@ import type {LayerAlignment, LayerPlacement} from '../Layer';
 import type {ButtonVariant, ButtonSize} from '../Button';
 import type {BaseProps} from '../BaseProps';
 import {stableClassName} from '../naming';
+import {pickDataAttributes} from '../utils/pickDataAttributes';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -151,6 +152,7 @@ export function MoreMenu({
   style,
   'data-testid': testId,
   ref,
+  ...rest
 }: MoreMenuProps) {
   const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.moreMenu.label');
@@ -172,6 +174,7 @@ export function MoreMenu({
       alignment={alignment}
       presentation={presentation}
       button={{
+        ...pickDataAttributes(rest),
         label,
         icon: icon ?? moreIcon,
         variant,

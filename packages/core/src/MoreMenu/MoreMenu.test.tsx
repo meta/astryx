@@ -364,4 +364,15 @@ describe('MoreMenu', () => {
       );
     });
   });
+
+  it('passes data-* attributes to the trigger button, not the menu', () => {
+    render(
+      <MoreMenu items={[{label: 'Edit', onClick: () => {}}]} data-tag="m" />,
+    );
+    expect(document.querySelectorAll('[data-tag="m"]')).toHaveLength(1);
+    expect(screen.getByRole('button', {name: 'More options'})).toHaveAttribute(
+      'data-tag',
+      'm',
+    );
+  });
 });

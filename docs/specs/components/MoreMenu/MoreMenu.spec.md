@@ -116,7 +116,7 @@ DropdownMenu's; consumer props are documented in `MoreMenu.doc.mjs`.
 | FR1 | Every render contains one icon-only Trigger button. The anchored presentation also renders one DropdownMenu-owned Menu surface; the bottom-sheet presentation renders its Menu surface only while the sheet is open. Anchored presentation uses Pointer action rows; BottomSheet presentation uses Touch action rows. The default trigger icon is the active registry's `moreHorizontal` artwork; `icon` replaces it with any React content. | Current source, docs, and tests |
 | FR2 | The `more-menu` target is applied to the composed DropdownMenu panel as an additional class, before any caller `className`. It is not applied to the Trigger button.                                                                                                                                                                                                                                                                         | Current source, docs, and tests |
 | FR3 | Button owns the Trigger button and the Icon registry owns default semantic trigger artwork resolution. DropdownMenu owns Pointer action rows, including how the keyboard reaches a disabled row (DropdownMenu FR17); List owns Touch action rows rendered through DropdownMenu's BottomSheet path.                                                                                                                                           | Current source and owner docs   |
-| FR4 | MoreMenu forwards open state, placement, alignment, presentation, `xstyle`, `style`, and `data-testid` to DropdownMenu without adding a parallel menu runtime, and shows no chevron. Its default position matches DropdownMenu's.                                                                                                                                                                                                            | Current source and tests        |
+| FR4 | MoreMenu forwards open state, placement, alignment, presentation, `xstyle`, `style`, and `data-testid` to DropdownMenu without adding a parallel menu runtime, and shows no chevron. Its default position matches DropdownMenu's. Host `data-*` attributes reach the trigger button, not the menu; the button's name, `id`, and disclosure attributes stay component-owned.                                                                  | Current source and tests        |
 | FR5 | The trigger is named by `label` (else the translated `@astryx.moreMenu.label`, "More options"), shows that name as its tooltip, uses `variant` (default `ghost`) and `size` (default from the surrounding size context, else `md`), forwards `ref` to the trigger in the anchored presentation, and honors `isDisabled`: a disabled trigger opens from no key or press.                                                                      | Current source and tests        |
 
 ### Allowed variation
@@ -247,8 +247,10 @@ Read from source, with no focused test yet:
 - FR1: the registry's `moreHorizontal` as the default trigger icon.
 - FR2: `more-menu` coming before a caller `className`, and its absence from the
   Trigger button.
-- FR4: forwarding `isMenuOpen`, `onOpenChange`, `xstyle`, and `style`, and the
-  absence of a chevron.
+- FR4: forwarding `isMenuOpen`, `onOpenChange`, `xstyle`, and `style`, the
+  absence of a chevron, and a host `data-*` attribute on the trigger button
+  only (`__tests__/hostDataAttributes.test.tsx` checks every exported
+  component).
 - FR5: the tooltip, the `ghost` default, the size from the surrounding size
   context, the `md` default, and the ref reaching the trigger button.
 - AR1: `aria-haspopup="dialog"` in the bottom-sheet presentation.

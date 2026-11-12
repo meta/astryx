@@ -75,6 +75,7 @@ import {
 import {useSize} from '../SizeContext/SizeContext';
 import {isFocusDetached} from '../utils/isFocusDetached';
 import {isRenderable} from '../utils/isRenderable';
+import {pickDataAttributes} from '../utils/pickDataAttributes';
 import {useInternalConfig} from './useInternalConfig';
 import {usePowerSearchSource} from './usePowerSearchSource';
 import {formatFilterValue} from './formatFilterValue';
@@ -599,7 +600,9 @@ export function PowerSearch({
   style,
   components: componentOverrides,
   presentation = 'adaptive',
+  ...rest
 }: PowerSearchProps) {
+  const dataAttributes = pickDataAttributes(rest);
   const size = useSize(sizeProp, 'md');
   const config = useInternalConfig(configProp);
   const searchSource = usePowerSearchSource(config, maxSearchResults);
@@ -1567,11 +1570,12 @@ export function PowerSearch({
                 </React.Fragment>
               ))}
               <button
+                {...dataAttributes}
                 type="button"
                 id={triggerId}
                 ref={triggerRef}
-                // The field's primary control: `data-testid` lands here, as it
-                // lands on the combobox input in the popover presentation.
+                // The field's primary control: `data-*` attributes land here, as
+                // they land on the combobox input in the popover presentation.
                 data-testid={testId}
                 autoFocus={autoFocusOnMount}
                 onClick={openSheet}
@@ -1673,6 +1677,7 @@ export function PowerSearch({
               containerXstyle={xstyle}
               containerClassName={className}
               containerStyle={style}
+              {...dataAttributes}
               data-testid={testId}
               presentation="popover"
             />

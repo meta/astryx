@@ -225,9 +225,12 @@ Passing either while a field resolves to `bottom-sheet` warns once in
 development and names `presentation="popover"`; neither is silently dropped. `ref` reaches the root element in
 both presentations, the element this record promises
 (`architecture:public-component-api/INV8`); `xstyle`, `className`, and `style`
-reach the field container in both. `data-testid` reaches the field's primary
-control: in the `popover` presentation the combobox input, where it is today,
-and in the sheet presentation the trigger button. `handleRef.focusTypeahead()` and
+reach the field container in both. `data-*` attributes, `data-testid`
+included, reach the field's primary control: in the `popover` presentation the
+combobox input, and in the sheet presentation the trigger button. The
+`components.Token` and `components.Editor` defaults, `PowerSearchToken` and
+`PowerSearchFilterEditor`, pass `data-*` attributes to the token and to the
+editor's root. `handleRef.focusTypeahead()` and
 `blurTypeahead()` act on the trigger. Every other prop keeps its meaning: `label` names the
 trigger and `placeholder` is its empty text and the content-search placeholder;
 `isDisabled`, `disabledMessage`, `startIcon`, `endContent`, `resultCount`,
@@ -511,8 +514,8 @@ no theming target or theme state; the root element keeps the existing
   request reach (`component:BottomSheet` FR7), with `family:overlay-dismissal`
   owning the Escape and platform-close ordering.
 - `architecture:public-component-api/INV8` governs where `ref` lands (the root
-  element this record promises, in both presentations); `data-testid` reaches
-  the primary control of each presentation. PowerSearch is a composition that consumes `family:input-fields`
+  element this record promises, in both presentations); `data-*` attributes,
+  `data-testid` included, reach the primary control of each presentation. PowerSearch is a composition that consumes `family:input-fields`
   members and is not itself a member of that family.
 - `spec:AST-086/FR3`, `FR4`, and `FR14` govern the flow's own polite live
   region: a persistent container inside the open sheet that delivers the
@@ -849,9 +852,9 @@ open would be replaced on Done).
   two places. Item 1: `ref`, `id`, `data-*`, `aria-*`, `hidden`, `inert`,
   `dir`, and DOM event handlers go to the primary semantic control under
   FR10, while this record keeps `ref` on the root in both presentations (the
-  INV8 promise above), routes only `data-testid` to the primary control, and
-  forwards no `id`, `aria-*`, other `data-*`, `hidden`, `inert`, `dir`, or
-  handler at all — the stable component destructures its props with no rest.
+  INV8 promise above), routes `data-*` attributes (`data-testid` included) to
+  the primary control as FR10 does, and forwards no `id`, `aria-*`, `hidden`,
+  `inert`, `dir`, or handler at all.
   Items 2–4: PowerSearch's stable props carry root `xstyle`, `className`, and
   `style`, which both presentations apply to the field box — FR10's
   `container*` target — so the styling lands where FR10 puts it, but the
