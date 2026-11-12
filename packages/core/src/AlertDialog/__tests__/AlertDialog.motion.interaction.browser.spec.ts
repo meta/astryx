@@ -374,6 +374,32 @@ async function closeMidPresentation(page: Page) {
     await new Promise(resolve =>
       setTimeout(resolve, Math.max(0, presentStart + 100 - performance.now())),
     );
+    // The page's clock as each animation on the dialog is made. The leave
+    // reads the value on screen at its call, before it makes its fade.
+    const madeAt = new Map<Animation, number>();
+    const animate = Element.prototype.animate;
+    Element.prototype.animate = function (
+      this: Element,
+      ...args: Parameters<Element['animate']>
+    ) {
+      const time = performance.now();
+      const animation = animate.apply(this, args);
+      if (this === element) {
+        madeAt.set(animation, time);
+      }
+      return animation;
+    };
+    const play = Animation.prototype.play;
+    Animation.prototype.play = function (this: Animation) {
+      const time = performance.now();
+      play.call(this);
+      if (
+        (this.effect as KeyframeEffect | null)?.target === element &&
+        !madeAt.has(this)
+      ) {
+        madeAt.set(this, time);
+      }
+    };
     document.dispatchEvent(
       new KeyboardEvent('keydown', {
         key: 'Escape',
@@ -401,9 +427,13 @@ async function closeMidPresentation(page: Page) {
     const from = Number(
       (fade.effect as KeyframeEffect).getKeyframes()[0].opacity,
     );
-    // A fade that interrupts motion starts at its call: its start time is
-    // the instant it takes the value from.
+    Element.prototype.animate = animate;
+    Animation.prototype.play = play;
+    // The leave reads the value at its call. That instant lies between the
+    // fade's start time and the moment the fade is made: Chromium dates the
+    // start at the call, and WebKit at its last frame before the call's task.
     const presentedAtClose = presentedAt(Number(fade.startTime));
+    const presentedByClose = presentedAt(Number(madeAt.get(fade)));
     const framesSeen: number[] = [];
     let openFrames = 0;
     await new Promise<void>(resolve => {
@@ -419,7 +449,13 @@ async function closeMidPresentation(page: Page) {
       };
       requestAnimationFrame(tick);
     });
-    return {presentedAtClose, from, frames: framesSeen, openFrames};
+    return {
+      presentedAtClose,
+      presentedByClose,
+      from,
+      frames: framesSeen,
+      openFrames,
+    };
   });
 }
 
@@ -790,11 +826,15 @@ test.describe('under a finger', () => {
     // Closed mid-presentation.
     expect(result.presentedAtClose, detail).toBeGreaterThan(0.05);
     expect(result.presentedAtClose, detail).toBeLessThan(0.99);
-    // The fade starts where the presentation was, with no jump.
-    expect(
-      Math.abs(result.from - result.presentedAtClose),
-      detail,
-    ).toBeLessThanOrEqual(OPACITY_TOLERANCE);
+    // The fade starts where the presentation was at the close's call, with
+    // no jump: between what the screen showed at the fade's start time and
+    // when the fade was made.
+    expect(result.from, detail).toBeGreaterThanOrEqual(
+      result.presentedAtClose - OPACITY_TOLERANCE,
+    );
+    expect(result.from, detail).toBeLessThanOrEqual(
+      result.presentedByClose + OPACITY_TOLERANCE,
+    );
     expect(result.openFrames, detail).toBeGreaterThanOrEqual(2);
     // No frame shows more than where the fade started, and none rises again.
     let previous = result.from;
