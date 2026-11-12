@@ -57,6 +57,7 @@ export async function themeEject(slug, options = {}) {
     cwd,
     targetPath,
     overwrite,
+    takenSlugs: await availableSlugs(cwd),
   });
   const {missingPackages, installCommand} = forkNeeds(
     outputDir,
@@ -78,4 +79,18 @@ export async function themeEject(slug, options = {}) {
       installCommand,
     },
   };
+}
+
+/**
+ * The slugs of the themes the project can use, which a fork's new folder name
+ * may not take. A project whose themes cannot be listed names none.
+ * @param {string} cwd
+ * @returns {Promise<Set<string>>}
+ */
+async function availableSlugs(cwd) {
+  try {
+    return new Set((await listAvailableThemes(cwd)).map(theme => theme.slug));
+  } catch {
+    return new Set();
+  }
 }

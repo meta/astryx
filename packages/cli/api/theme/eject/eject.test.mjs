@@ -54,11 +54,7 @@ describe('themeEject (api/theme/eject)', () => {
     }
     expect(
       fs.readFileSync(
-        path.join(
-          tmpDir,
-          result.data.outputDir,
-          'neutralTheme.doc.mjs',
-        ),
+        path.join(tmpDir, result.data.outputDir, 'neutralTheme.doc.mjs'),
         'utf-8',
       ),
     ).toContain('maintained: false');
@@ -309,11 +305,17 @@ describe('themeEject (api/theme/eject)', () => {
       themeEject('neutral', {cwd: tmpDir, targetPath: 'src/themes/stone'}),
     ).rejects.toMatchObject({
       code: 'ERR_INVALID_ARGUMENT',
-      message: expect.stringContaining('neutral forks into src/themes/neutral'),
+      message: expect.stringContaining(
+        'src/themes/stone is named after the theme stone',
+      ),
     });
     expect(fs.existsSync(path.join(tmpDir, 'src'))).toBe(false);
     await expect(
       themeEject('neutral', {cwd: tmpDir, targetPath: 'src/themes/neutral'}),
+    ).resolves.toMatchObject({type: 'theme.eject'});
+    // A fork may take a new name.
+    await expect(
+      themeEject('neutral', {cwd: tmpDir, targetPath: 'src/themes/my-neutral'}),
     ).resolves.toMatchObject({type: 'theme.eject'});
   });
 

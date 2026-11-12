@@ -1563,6 +1563,20 @@ describe('themeBuild() — outputs it may replace', () => {
     ]);
   });
 
+  it('reads outputs with CRLF line endings as up to date in --check', async () => {
+    const receipt = await themeBuild('ocean.mjs', {}, {cwd: tmpDir});
+    for (const file of Object.values(receipt.data.outputs)) {
+      const full = path.join(tmpDir, file);
+      fs.writeFileSync(
+        full,
+        fs.readFileSync(full, 'utf-8').replace(/\r?\n/g, '\r\n'),
+      );
+    }
+    await expect(
+      themeBuild('ocean.mjs', {check: true}, {cwd: tmpDir}),
+    ).resolves.toMatchObject({data: {upToDate: true, stale: []}});
+  });
+
   it('replaces its own earlier outputs', async () => {
     await themeBuild('ocean.mjs', {}, {cwd: tmpDir});
     await expect(

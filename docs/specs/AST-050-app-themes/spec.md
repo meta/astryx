@@ -139,9 +139,10 @@ described.
   themes root, a relative `[path]` is read from the working folder and MUST
   stay inside the project, and `outputDir` is relative to the working folder.
   A backslash in `[path]` separates folders. Eject MUST refuse the local
-  themes root itself and a folder in it named after another theme, because
-  `theme list` and `theme add` read each local theme from a folder named after
-  it, and name the default target.
+  themes root itself and a folder in it named after another theme the project
+  can use, because `theme list` and `theme add` read each local theme from a
+  folder named after it, and name the default target. A folder with a new name
+  is accepted.
   `theme template [path]` leaves an existing file as it is without
   `--overwrite`. Its receipt then says whether `--overwrite` would replace that
   file (`overwritable`), and when it would not, it names a free path for the

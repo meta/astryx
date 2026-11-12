@@ -522,13 +522,14 @@ function assertEjectTargetFree(theme, dir, cwd, projectDir) {
 /**
  * Refuse a fork target that `theme list` and `theme add` would then misread:
  * the local themes folder itself, where every theme has its own folder, or a
- * folder in it named after another theme.
+ * folder in it named after another theme the project can use.
  * @param {string} slug
  * @param {string} dir absolute target
  * @param {string} projectDir
  * @param {string} cwd
+ * @param {Set<string>} takenSlugs the slugs of the themes the project can use
  */
-function assertEjectTargetPlace(slug, dir, projectDir, cwd) {
+function assertEjectTargetPlace(slug, dir, projectDir, cwd, takenSlugs) {
   const themesRoot = path.resolve(projectDir, LOCAL_THEME_ROOT);
   const resolved = path.resolve(dir);
   const own = defaultEjectTarget(slug).split(path.sep).join('/');
@@ -545,12 +546,15 @@ function assertEjectTargetPlace(slug, dir, projectDir, cwd) {
       ERROR_CODES.ERR_INVALID_ARGUMENT,
     );
   }
+  // A fork may take a new name; only another theme's name is refused.
+  const name = path.basename(resolved);
   if (
     path.dirname(resolved) === themesRoot &&
-    path.basename(resolved) !== slug
+    name !== slug &&
+    takenSlugs.has(name)
   ) {
     throw new AstryxError(
-      `A local theme's folder carries its name, so ${slug} forks into ${own}, not ${path.relative(cwd, dir)}.`,
+      `${path.relative(cwd, dir)} is named after the theme ${name}, and a local theme's folder carries its name. Fork ${slug} into ${own}, or into a folder with a new name.`,
       suggestion,
       ERROR_CODES.ERR_INVALID_ARGUMENT,
     );
@@ -575,12 +579,14 @@ function themeDescriptorName(file) {
 /**
  * Publish one theme's complete source inventory as an atomic local fork.
  * @param {import('../../foundation/discovery/theme-discovery.mjs').DiscoveredTheme} theme
- * @param {{cwd: string, targetPath?: string, overwrite?: boolean}} options
+ * @param {{cwd: string, targetPath?: string, overwrite?: boolean, takenSlugs?: Set<string>}} options
+ *   `takenSlugs`: the slugs of the themes the project can use, which a fork's
+ *   new folder name may not take
  * @returns {string} project-relative output directory
  */
 export function ejectThemeFiles(
   theme,
-  {cwd, targetPath: typedPath, overwrite = false},
+  {cwd, targetPath: typedPath, overwrite = false, takenSlugs = new Set()},
 ) {
   // The fork lands in the project, as list and add read it: the default root
   // is the project's, and a relative [path] is read from the working folder
@@ -649,7 +655,7 @@ export function ejectThemeFiles(
   }
 
   assertEjectTargetFree(theme, resolvedDir, cwd, projectDir);
-  assertEjectTargetPlace(theme.slug, resolvedDir, projectDir, cwd);
+  assertEjectTargetPlace(theme.slug, resolvedDir, projectDir, cwd, takenSlugs);
 
   if (!overwrite) {
     const existing = writes.find(write => fs.existsSync(write.dest));

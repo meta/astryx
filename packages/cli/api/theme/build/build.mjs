@@ -693,12 +693,15 @@ function generatedHeader(sourceFile, lang = 'js', command, versions) {
  * the header and all real content — is compared verbatim. Used only by
  * `--check`: a differing command must NOT report a file as stale, but any real
  * content drift must. The `CLI:`/`Core:` provenance lines are deterministic
- * for a given toolchain, so they compare verbatim like real content.
+ * for a given toolchain, so they compare verbatim like real content. CRLF
+ * line endings read as LF.
  * @param {string} content
  * @returns {string}
  */
 export function normalizeThemeBuildForCompare(content) {
+  // A checkout may turn line endings into CRLF; the text is the same.
   return content
+    .replace(/\r\n/g, '\n')
     .split('\n')
     .filter(line => {
       const t = line.replace(/^\s*\*?\s?/, '');
