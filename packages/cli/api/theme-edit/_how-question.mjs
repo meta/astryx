@@ -1741,33 +1741,20 @@ export function draftAnswer(ctx, env, question) {
         ))
     )
       return true;
-    // A noun phrase naming the look wanted ("stronger shadow on dialogs",
-    // "DM Sans font") is an ask; a statement with "is/are/has" ("the page is
-    // white") describes and never writes, unless it complains in a direction
-    // ("the shadows are too strong", "corners are not round enough").
     // "why are my headings not bold", "I hate the purple": asks.
     if (/^why (?:are|is|aren'?t|isn'?t)\b.*\bnot\b/.test(t)) return true;
     if (/^(?:i )?(?:hate|dislike|(?:am )?not a fan of|don'?t like)\b/.test(t))
       return true;
-    const copula = /\b(is|are|was|were|'s|'re)\b/.test(t);
-    const complaint =
-      /\btoo\b|\benough\b|\bnot (?:so|that)?\s*\w+ enough\b|\btoo much\b|\bhard to (?:read|see)\b|\bcan'?t (?:read|see)\b|\bunreadable\b/.test(
-        t,
-      );
+    // A description of the look wanted ("stronger shadow on dialogs",
+    // "headings are 600 weight", "the page is white") names a thing and asks
+    // nothing back: an ask. An info request ("show me …") is a lookup.
     if (
-      !/\?|\b(isn'?t|aren'?t|doesn'?t|don'?t|won'?t|wouldn'?t|did|does|could|might|should)\b/.test(
+      !/\?|\b(isn'?t|aren'?t|doesn'?t|don'?t|won'?t|wouldn'?t|did|does|was|were|could|might|should)\b/.test(
         t,
       ) &&
-      !/^(?:i|we|you|it|this|that|there|they|he|she|someone|somebody|my \w+ (?:said|says|thinks)|(?:show|give|tell|remind|walk) (?:me|us))\b/.test(
+      !/^(?:i|we|you|it|this|that|there|they|(?:show|give|tell|remind|walk) (?:me|us))\b/.test(
         t,
       ) &&
-      // A statement with a typed value ("the error banner is #fef2f2",
-      // "headings are 600 weight") is a spec of the look: an ask.
-      (!copula ||
-        complaint ||
-        /#[0-9a-f]{3,8}\b|\d\s*(?:px|rem|em|%|pixels?)\b|\b[1-9]00\b|\b0(?:\.\d+)?\b|["']|\b(?:rgba?|hsla?|oklch|linear-gradient)\(/.test(
-          t,
-        )) &&
       (aspectsOf(t).length > 0 ||
         lex.parts.some(([re]) => re.test(t)) ||
         /\b(accent|contrast|neutrals?|grays?|greys?|colou?rs?|font|fonts|everywhere|error|danger|success|warning|info|purple|blue|red|green|orange|teal|pink|navy|black|white|yellow|violet)\b/.test(

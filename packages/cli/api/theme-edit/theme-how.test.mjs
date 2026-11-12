@@ -4074,7 +4074,8 @@ describe('how writes only for a clause that reads as an ask', () => {
  * @type {Array<[string, RegExp | null]>}
  */
 const QUESTIONS_Y = [
-  ['the page is white', null],
+  // A description of the look wanted writes.
+  ['the page is white', /^set q --color-background-body '#ffffff'$/],
   ['show me the card shadow', null],
   ['give me the border width on inputs', null],
   ['give buttons 8px corners', /^set q border-radius 8px --on button$/],
