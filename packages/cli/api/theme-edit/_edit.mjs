@@ -1174,6 +1174,8 @@ async function change(sub, slug, thing, value, options) {
   });
   /** @type {import('./_settings.mjs').Setting[]} */
   let exactWins = [];
+  /** Tokens this whole-theme dial changes. */
+  let dialTokens = new Set();
   if (sub === 'set' && s.source === 'dial' && !s.on) {
     const withDial = compileTheme(ctx, dialsOnly(data.settings), base);
     const without = compileTheme(
@@ -1198,6 +1200,7 @@ async function change(sub, slug, thing, value, options) {
     exactWins = data.settings.filter(
       x => x.source === 'token' && !x.on && !x.when && touched.has(x.thing),
     );
+    dialTokens = touched;
   }
   const kept =
     sub === 'set' && s.source === 'dial' && !s.on
@@ -1351,6 +1354,15 @@ async function change(sub, slug, thing, value, options) {
         : null
     : null;
   if (s.note) notes.push(s.note);
+  // A token the theme's own source sets itself wins over what this dial
+  // writes, as an exact setting does.
+  const ownWins = ownSourceTokens(cwd, slug).filter(
+    k => dialTokens.has(k) && !exactWins.some(x => x.thing === k),
+  );
+  if (ownWins.length)
+    notes.push(
+      `${slug}.theme.ts sets ${ownWins.slice(0, 4).join(', ')}${ownWins.length > 4 ? ` and ${ownWins.length - 4} more` : ''} itself, and your own source wins over the settings, so ${ownWins.length > 1 ? 'those do' : 'that does'} not change; take ${ownWins.length > 1 ? 'them' : 'it'} out of ${slug}.theme.ts to let ${s.thing} set ${ownWins.length > 1 ? 'them' : 'it'}`,
+    );
   if (PALETTE_DIALS.includes(s.thing) && sub === 'set')
     notes.push(
       ...paletteNotes(
@@ -2400,4 +2412,28 @@ export async function themeEditUndo(theme, options = {}) {
 export async function editorStale(cwd, slug) {
   const data = loadTheme(cwd, slug);
   return staleBuild(cwd, slug, data) || null;
+}
+
+/**
+ * The tokens a theme's own source names itself (`'--radius-button': …` in
+ * `<slug>.theme.ts`, comments aside): they win over the settings it extends.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {string[]}
+ */
+function ownSourceTokens(cwd, slug) {
+  let code;
+  try {
+    code = fs
+      .readFileSync(themeFiles(cwd, slug).ts, 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/(^|[^:])\/\/.*$/gm, '$1');
+  } catch {
+    return [];
+  }
+  return [
+    ...new Set(
+      [...code.matchAll(/['"`](--[a-z0-9-]+)['"`]\s*:/gi)].map(m => m[1]),
+    ),
+  ];
 }

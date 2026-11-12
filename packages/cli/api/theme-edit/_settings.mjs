@@ -694,6 +694,13 @@ export function settingsProblem(
   if (!field && data.like != null && !LIKE.includes(data.like))
     return `base "${data.like}" is not a built-in theme (${LIKE.join(', ')})`;
   if (!Array.isArray(data.settings)) return 'settings is not a list';
+  // `lifted` is written by the build: a list of text, or absent.
+  if (
+    data.lifted != null &&
+    (!Array.isArray(data.lifted) ||
+      data.lifted.some((/** @type {unknown} */ x) => typeof x !== 'string'))
+  )
+    return `lifted is ${JSON.stringify(data.lifted)}, not a list of text (the build writes it; remove the field and the next build writes it again)`;
   /** @type {Map<string, any>} */
   const keys = new Map();
   for (const s of data.settings) {
@@ -3369,7 +3376,9 @@ export async function commitTheme(
         })
       : null;
   const before = parseSettings(snapBefore);
-  const liftedBefore = new Set(before?.lifted ?? []);
+  const liftedBefore = new Set(
+    Array.isArray(before?.lifted) ? before.lifted : [],
+  );
   // A change that leaves every color setting as it was keeps the shades the
   // theme already shows: a theme an earlier editor built keeps its colors
   // until a color, the mode or the base changes, and undo brings them back.
