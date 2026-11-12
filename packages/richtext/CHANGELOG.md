@@ -1,5 +1,21 @@
 # @astryxdesign/richtext
 
+# 0.7.15
+
+#### Fixes
+
+- useLinkify and RichTextEditorAutoLinkPlugin: email detection now takes linear time. A long word with no email in it, such as a pasted hash or base64 string, no longer freezes the page for seconds. Valid email addresses link as before, with three exceptions. In the rich-text editor, an address directly after a period no longer links, and a quoted local part ends at the next quote. In useLinkify, a fragment glued to the end of an earlier address no longer links on its own. (#11306)
+- RichTextEditor: importing Markdown no longer freezes the page on a block that has a backtick and, below its first line, a line with a `|`, a dash and a long run of spaces. The check for a table delimiter row now takes linear time; which lines count as delimiter rows is unchanged. (#11338)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @ChenyangLi4288
+- @cixzhang
+
+---
+
 # 0.7.14
 
 ---
