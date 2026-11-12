@@ -300,8 +300,8 @@ export function TourStep({
   );
 
   // A non-modal anchored layer with no light dismiss. Without a backdrop, a
-  // press on the page or on the target leaves the tour running; the backdrop
-  // owns the press that ends a dimmed tour.
+  // press on the page or the target leaves the tour running. The backdrop owns
+  // the press that ends a dimmed tour.
   const layer = useLayer({mode: 'context'});
   const {ref: anchorLayerTo, show: showLayer, hide: hideLayer} = layer;
   const layerId = layer.id;
