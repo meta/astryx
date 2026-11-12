@@ -16,6 +16,8 @@ import * as stylex from '@stylexjs/stylex';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {render, screen} from '@testing-library/react';
 import {useTouchHitArea} from './touchHitArea';
+import {getLastPointerType} from './inputStream';
+import {holdInput} from '../Layer/inputHold';
 import {grownHitInputProps} from '../privateAttributes/grownHitInput.stylex';
 import {fieldFrameProps} from '../privateAttributes/fieldFrame.stylex';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
@@ -178,6 +180,45 @@ describe('at a tap', () => {
     target.dispatchEvent(click);
     return click.defaultPrevented;
   }
+
+  it('keeps a finger’s tap a touch for the input stream when WebKit reports its click as a mouse, so a layer the tap opens holds its shield', () => {
+    const {a} = setUp();
+    const layer = document.createElement('div');
+    document.body.append(layer);
+    let release = () => {};
+    a.addEventListener('click', () => {
+      release = holdInput(layer, {
+        until: new Promise(() => {}),
+        scope: 'viewport',
+      });
+    });
+    const press = new Event('pointerdown', {bubbles: true});
+    Object.assign(press, {
+      pointerType: 'touch',
+      pointerId: 7,
+      clientX: 110,
+      clientY: 112,
+    });
+    a.dispatchEvent(press);
+    // WebKit gives the click that follows a finger's tap the pointer type
+    // "mouse".
+    const click = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      detail: 1,
+    });
+    Object.defineProperty(click, 'pointerType', {value: 'mouse'});
+    a.dispatchEvent(click);
+    expect(getLastPointerType(window)).toBe('touch');
+    const shield = layer.lastElementChild as HTMLElement;
+    expect(shield).not.toBeNull();
+    expect(shield.style.pointerEvents).not.toBe('none');
+    const lift = new Event('pointerup', {bubbles: true});
+    Object.assign(lift, {pointerType: 'touch', pointerId: 7});
+    a.dispatchEvent(lift);
+    release();
+    layer.remove();
+  });
 
   it('lets a tap inside the control act, and reads only the control', () => {
     const {a, onA} = setUp();

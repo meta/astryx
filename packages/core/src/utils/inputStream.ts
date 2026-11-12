@@ -208,7 +208,12 @@ function register(view: Window, type: string, channel: Channel): void {
 
 function dispatch(view: Window, channel: Channel, event: Event): void {
   // Recorded before any subscriber runs, so each reads the pointer at hand.
-  const {pointerType, clientX, clientY} = event as Partial<PointerEvent>;
+  // Only the pointer events are recorded. A click also carries a pointer
+  // type, but WebKit gives the click of a finger's tap the type "mouse".
+  const isPointerEvent = event.type.startsWith('pointer');
+  const {pointerType, clientX, clientY} = isPointerEvent
+    ? (event as Partial<PointerEvent>)
+    : {};
   if (typeof pointerType === 'string' && pointerType !== '') {
     lastPointerTypes.set(view, pointerType);
   }
