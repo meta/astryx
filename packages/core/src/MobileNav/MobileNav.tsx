@@ -551,16 +551,18 @@ export function MobileNav({
   // open/close effect below, so it measures the scrollbar gutter before
   // showModal() can hide the scrollbar.
   useScrollLock(isOpen);
-  // For side='auto', the edge is resolved while rendering the closed-to-open
-  // transition. An Effect would commit the default `end` first, so the drawer
-  // would slide in from the wrong edge. An explicit `side` is used directly.
+  // For side='auto', the edge is resolved while rendering the transition to
+  // open (or to `auto` while open). An Effect would commit the default `end`
+  // first, so the drawer would slide in from the wrong edge. An explicit
+  // `side` is used directly.
   const [autoSide, setAutoSide] = useState<'start' | 'end'>('end');
-  const [wasOpen, setWasOpen] = useState(false);
+  const [wasAutoOpen, setWasAutoOpen] = useState(false);
+  const isAutoOpen = isOpen && side === 'auto';
   // Hydration must not read focus or layout; resolve after it.
   const canReadDom = !useIsHydrating();
-  if (canReadDom && isOpen !== wasOpen) {
-    setWasOpen(isOpen);
-    if (isOpen && side === 'auto') {
+  if (canReadDom && isAutoOpen !== wasAutoOpen) {
+    setWasAutoOpen(isAutoOpen);
+    if (isAutoOpen) {
       // The opener is the focused element. If a tap left no focus, or focus is
       // already inside this dialog (a server-open drawer, where showModal()
       // ran before this render), fall back to the element whose

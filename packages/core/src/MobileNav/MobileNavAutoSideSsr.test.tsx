@@ -128,16 +128,20 @@ describe('MobileNav side="auto": open on the server', () => {
     toggle.style.direction = 'rtl';
     toggle.setAttribute('aria-controls', 'nav-drawer');
     document.body.appendChild(toggle);
-    vi.spyOn(toggle, 'getBoundingClientRect').mockReturnValue({
-      left: 340,
-      right: 380,
-      width: 40,
-      top: 0,
-      bottom: 40,
-      height: 40,
-      x: 340,
-      y: 0,
-      toJSON() {},
+    const measured: Element[] = [];
+    vi.spyOn(toggle, 'getBoundingClientRect').mockImplementation(() => {
+      measured.push(toggle);
+      return {
+        left: 340,
+        right: 380,
+        width: 40,
+        top: 0,
+        bottom: 40,
+        height: 40,
+        x: 340,
+        y: 0,
+        toJSON() {},
+      };
     });
     // The toggle is never focused: the mock moves focus into the dialog.
     const serverTree = (
@@ -155,10 +159,20 @@ describe('MobileNav side="auto": open on the server', () => {
     container.innerHTML = renderToString(serverTree);
     document.body.appendChild(container);
 
+    // As in the first case, the drawer's own panel must never be measured.
+    const realRect = Element.prototype.getBoundingClientRect;
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(
+      function (this: Element) {
+        measured.push(this);
+        return realRect.call(this);
+      },
+    );
     let root!: ReturnType<typeof hydrateRoot>;
     await act(async () => {
       root = hydrateRoot(container, serverTree);
     });
+    expect(measured.some(el => container.contains(el))).toBe(false);
+    expect(measured).toContain(toggle);
     expect(container.querySelector('[data-side]')).toHaveAttribute(
       'data-side',
       'start',
