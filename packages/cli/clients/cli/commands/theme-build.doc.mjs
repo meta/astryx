@@ -52,7 +52,7 @@ export const doc = {
     {
       flag: '-w, --watch',
       description:
-        'Rebuild automatically when a theme file changes (Ctrl-C to stop). Refused with --check, --family, or --json (ERR_THEME_INVALID)',
+        'Rebuild automatically when the theme source, or a local file it imports, changes (Ctrl-C to stop). Refused with --check, --family, or --json (ERR_THEME_INVALID)',
     },
     {
       flag: '-c, --check',

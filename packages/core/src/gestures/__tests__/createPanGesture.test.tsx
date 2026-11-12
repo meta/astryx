@@ -6,7 +6,8 @@
  *   document's gesture host
  * @output Tests for spec:AST-107 FR1 and FR6. A drag is reported as values,
  *   on each axis, and as cancelled. A press or a long press reports nothing.
- *   One API works at two layers. Destroy leaves no listener.
+ *   One API works at two layers. Destroy leaves no listener. The internal
+ *   pan under it says which pointer drove each drag.
  * @position Tests of the public pan factory and its hook
  */
 
@@ -25,6 +26,7 @@ import {
   type PanGestureEvent,
   type PanGestureOptions,
 } from '../createPanGesture';
+import {createPan, type PanInput} from '../createPanGesture';
 import {usePanGesture} from '../../hooks/usePanGesture';
 import {armClickGuard, disarmClickGuard} from '../../utils/clickGuard';
 import {coarsePrimaryPointer} from './harness';
@@ -334,6 +336,26 @@ describe('createPanGesture (spec:AST-107 FR1, FR6)', () => {
     // A second destroy does nothing.
     gesture.destroy();
     expect(live()).toBe(before);
+  });
+});
+
+describe('createPan, under createPanGesture (internal)', () => {
+  it('says which pointer drove each drag: a finger, a mouse or a pen', () => {
+    const element = surface();
+    const inputs: PanInput[] = [];
+    const gesture = createPan(element, {
+      axis: 'x',
+      onPan: event => inputs.push(event.input),
+    });
+    destroys.push(() => gesture.destroy());
+    drag(element, 60, 0);
+    expect(new Set(inputs)).toEqual(new Set(['touch']));
+    for (const pointerType of ['mouse', 'pen'] as const) {
+      inputs.length = 0;
+      pointerDrag(element, pointerType, 60);
+      expect(inputs.length).toBeGreaterThan(0);
+      expect(new Set(inputs)).toEqual(new Set([pointerType]));
+    }
   });
 });
 
