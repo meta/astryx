@@ -11,13 +11,12 @@
 
 import {
   useCallback,
-  useInsertionEffect,
   useRef,
   useState,
   type FocusEvent,
   type RefObject,
 } from 'react';
-import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {useCommittedRef, useCommittedRefInto} from '../hooks/useCommittedRef';
 import {
   usePopoverInternal,
   type InternalPopoverOptions,
@@ -92,24 +91,23 @@ export function useSelectorPresentation({
   const {isHeld: isSheetPresented, release: releaseSheet} = usePresentationHold(
     {isOpen: isSheetOpen, presentation: true},
   );
-  const onHideRef = useRef(onHide);
-  const onShowRef = useRef(onShow);
+  // The committed show and hide reports. They are current ahead of any layout
+  // effect that shows or hides the popover in the same commit.
+  const onHideRef = useCommittedRef(onHide);
+  const onShowRef = useCommittedRef(onShow);
   const didShowPopoverRef = useRef(false);
-  // The open list's container, read when the popover hides to tell focus that
-  // is still inside the list from focus that moved to another element.
-  const popoverContentRef = useRef<HTMLDivElement | null>(null);
+  // The popover's own ref to the open list's container. The hide reads it to
+  // tell focus that is still inside the list from focus that moved elsewhere.
+  // The hook writes it below, once the popover exists.
+  const popoverContentRef = useRef<RefObject<HTMLDivElement | null> | null>(
+    null,
+  );
   const {
     isFocusRingSuppressed,
     onFocusReturnTargetFocus,
     prepareFocusReturn,
     resetFocusReturn,
   } = useFocusReturnVisibility(triggerModality);
-  // Syncs the popover's show and hide reports with the committed callbacks,
-  // ahead of any layout effect that shows or hides it in the same commit.
-  useInsertionEffect(() => {
-    onHideRef.current = onHide;
-    onShowRef.current = onShow;
-  });
 
   const handlePopoverHide = useCallback(() => {
     onHideRef.current();
@@ -125,27 +123,24 @@ export function useSelectorPresentation({
       active instanceof HTMLElement &&
       active !== document.body &&
       active !== trigger &&
-      !popoverContentRef.current?.contains(active);
+      !popoverContentRef.current?.current?.contains(active);
     if (focusLandedElsewhere) {
       return;
     }
     prepareFocusReturn();
     trigger?.focus();
-  }, [isFocusReturnAlways, prepareFocusReturn, triggerRef]);
+  }, [isFocusReturnAlways, onHideRef, prepareFocusReturn, triggerRef]);
   const handlePopoverShow = useCallback(() => {
     didShowPopoverRef.current = true;
     resetFocusReturn();
     onShowRef.current();
-  }, [resetFocusReturn]);
+  }, [onShowRef, resetFocusReturn]);
   const popover = usePopoverInternal({
     ...popoverOptions,
     onHide: handlePopoverHide,
     onShow: handlePopoverShow,
   });
-  // Syncs the hide's view of the popover content with the committed element.
-  useIsomorphicLayoutEffect(() => {
-    popoverContentRef.current = popover.contentRef.current;
-  });
+  useCommittedRefInto(popoverContentRef, popover.contentRef);
   const {hide: hidePopover, show: showPopover} = popover;
 
   const show = useCallback((): boolean => {
@@ -163,6 +158,7 @@ export function useSelectorPresentation({
     return didShowPopoverRef.current;
   }, [
     activePresentationHold,
+    onShowRef,
     releaseSheet,
     resetFocusReturn,
     resolvedPresentation,
@@ -178,7 +174,7 @@ export function useSelectorPresentation({
     } else {
       hidePopover();
     }
-  }, [hidePopover, prepareFocusReturn]);
+  }, [hidePopover, onHideRef, prepareFocusReturn]);
 
   const handleTriggerFocus = useCallback(
     (_event: FocusEvent<HTMLElement>) => {
