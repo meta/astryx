@@ -3470,6 +3470,62 @@ describe('how answers final-8 questions', () => {
   }, 120_000);
 });
 
+/**
+ * Chaos-10 R10-C and O11: an amount with a comparative is a change from
+ * the value now, and "all corners like the buttons" copies their radius.
+ * @type {Array<[string, RegExp | null, RegExp?]>}
+ */
+const QUESTIONS_O = [
+  [
+    'make buttons 2px rounder',
+    /^set q border-radius 'max\(0px, calc\(var\(--radius-element\) \+ 2px\)\)' --on button$/,
+  ],
+  [
+    'make buttons 2px sharper',
+    /^set q border-radius 'max\(0px, calc\(var\(--radius-element\) - 2px\)\)' --on button$/,
+  ],
+  ['make buttons 4px wider', null, /not a change by 4px/],
+  [
+    'all corners like the buttons',
+    /^set q --radius-inner 'var\(--radius-element\)' && set q --radius-container 'var\(--radius-element\)'/,
+  ],
+];
+
+describe('how answers amounts with comparatives, and corners copied from a part', () => {
+  it('moves the theme corners from their radius now', async () => {
+    const px = async (/** @type {string} */ q) => {
+      const {data} = await themeEditHow(q, {cwd, theme: 'q'});
+      const m = /^set q corners (\d+(?:\.\d+)?)px$/.exec(
+        bare(data.results[0].commands[0]),
+      );
+      expect(m, q).not.toBeNull();
+      return Number(m?.[1]);
+    };
+    const up = await px('make the corners 2px rounder');
+    const down = await px('corners 2px sharper');
+    expect(up - down).toBe(4);
+    expect(down).toBeGreaterThan(2);
+  });
+
+  for (const [question, want, text] of QUESTIONS_O)
+    it(question, async () => {
+      const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+      /** @type {Array<{text: string, commands: string[], sequence?: boolean}>} */
+      const results = data.results ?? [];
+      if (text) expect(results.map(r => r.text).join('\n')).toMatch(text);
+      const changes = results.filter(r =>
+        r.commands.some(c => / editor (set|undo) /.test(c)),
+      );
+      if (want === null) {
+        expect(changes).toEqual([]);
+        return;
+      }
+      const top = changes[0];
+      const commands = top.sequence ? top.commands : [top.commands[0]];
+      expect(commands.map(bare).join(' && ')).toMatch(want);
+    });
+});
+
 describe('how lookups', () => {
   it('maps what a part reads under to the flags set takes, or says why none does', async () => {
     const button = (await themeEditHow('button', {cwd, theme: 'q'})).data;

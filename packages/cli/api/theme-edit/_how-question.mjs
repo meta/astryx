@@ -2556,22 +2556,49 @@ export function draftAnswer(ctx, env, question) {
     }
     // "decrease the radius by 2px", "add 8px to the padding": a change from
     // the value now, never the new value itself.
-    const delta =
-      /\b(?:by|add(?:ing)?|plus|minus|subtract(?:ing)?)\s+(\d*\.?\d+)px\b|\b(\d*\.?\d+)px (?:more|less|bigger|smaller)\b/.exec(
-        c.text,
-      );
+    // "2px rounder", "8px larger", "4px wider": a change too.
+    const COMPARATIVE =
+      'more|less|bigger|smaller|rounder|sharper|squarer|larger|wider|narrower|taller|shorter|thicker|thinner|higher|lower';
+    const delta = new RegExp(
+      `\\b(?:by|add(?:ing)?|plus|minus|subtract(?:ing)?)\\s+(\\d*\\.?\\d+)px\\b|\\b(\\d*\\.?\\d+)px (?:${COMPARATIVE})\\b`,
+    ).exec(c.text);
     if (
       delta &&
-      /\b(by|add|adding|plus|minus|subtract|subtracting|more|less|bigger|smaller|increase|decrease|reduce)\b/.test(
-        c.text,
-      )
+      new RegExp(
+        `\\b(by|add|adding|plus|minus|subtract|subtracting|increase|decrease|reduce|${COMPARATIVE})\\b`,
+      ).test(c.text)
     ) {
       const n = Number(delta[1] ?? delta[2]);
       const down =
-        /\b(decrease|reduce|less|smaller|minus|subtract|subtracting|lower|shrink)\b/.test(
+        /\b(decrease|reduce|less|smaller|minus|subtract|subtracting|lower|shrink|sharper|squarer|narrower|shorter|thinner)\b/.test(
           c.text,
         );
-      if (c.aspects.includes('corners') && !c.parts.length) {
+      const cornerAsk =
+        c.aspects.includes('corners') ||
+        /\b(rounder|sharper|squarer)\b/.test(c.text);
+      // A part's corners: its radius token, moved by the amount.
+      if (cornerAsk && c.parts.length) {
+        const on = c.parts[0].on;
+        const read = C.partReads(one(on), 'corners')[0];
+        if (read) {
+          const d = {
+            text: `${on}'s corners ${down ? 'down' : 'up'} by ${n}px: ${read.token} ${down ? '-' : '+'} ${n}px`,
+            options: [
+              [
+                set(
+                  'border-radius',
+                  `max(0px, calc(var(${read.token}) ${down ? '-' : '+'} ${n}px))`,
+                  {on},
+                ),
+              ],
+            ],
+          };
+          push(d);
+          recordTop(c, d.options[0] ?? []);
+          continue;
+        }
+      }
+      if (cornerAsk && !c.parts.length) {
         const now = parseFloat(current('--radius-element'));
         const nowPx = /rem$/.test(current('--radius-element')) ? now * 16 : now;
         const next = Math.max(
@@ -2594,6 +2621,33 @@ export function draftAnswer(ctx, env, question) {
           : `${P} show ${env.slug}`,
       });
       continue;
+    }
+    // "all corners like the buttons": every other radius token takes the
+    // one the named part reads.
+    if (
+      c.parts.length === 1 &&
+      c.aspects.includes('corners') &&
+      /\b(all|every|other|everything|everywhere)\b/.test(c.text) &&
+      /\b(like|match(es|ing)?|same as)\b/.test(c.text)
+    ) {
+      const source = c.parts[0].on;
+      const read = C.partReads(one(source), 'corners')[0];
+      if (read) {
+        const others = Object.keys(TOKENS).filter(
+          t =>
+            /^--radius-/.test(t) &&
+            t !== read.token &&
+            !/^--radius-(none|full)$/.test(t),
+        );
+        const d = {
+          text: `every corner like ${source}'s: the other radius tokens take ${read.token}, which ${source} reads`,
+          options: [others.map(t => set(t, `var(${read.token})`))],
+          sequence: others.length > 1,
+        };
+        push(d);
+        recordTop(c, d.options[0] ?? []);
+        continue;
+      }
     }
     // "outline offset 3px on focus": the focus ring's offset, not a border.
     if (
