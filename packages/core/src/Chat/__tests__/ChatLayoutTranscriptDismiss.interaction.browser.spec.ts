@@ -255,7 +255,7 @@ async function recordInput(page: Page, {composer, editable}: Chat) {
 const inputLog = async (page: Page) =>
   page.evaluate(() => (window as unknown as {__input: InputLog}).__input);
 
-test('a drag that reaches the composer blurs its text as it crosses, before the lift, and focus moves nowhere else', async ({
+test('a drag that reaches the composer blurs its text as it crosses, before the lift, and focus rests on the composer region as Done does', async ({
   page,
 }) => {
   const chat = await openChat(page);
@@ -270,10 +270,10 @@ test('a drag that reaches the composer blurs its text as it crosses, before the 
     ),
   );
   await expect(chat.editable).not.toBeFocused();
-  // The dismissal only blurs the composer's text (FR10).
-  expect(await page.evaluate(() => document.activeElement?.tagName)).toBe(
-    'BODY',
-  );
+  // As after Done, focus rests on the composer region (FR10).
+  expect(
+    await chat.composer.evaluate(box => box === document.activeElement),
+  ).toBe(true);
   const {blurs} = await inputLog(page);
   expect(blurs).toHaveLength(1);
   // A move blurred it, at or past the composer's top: not the lift.
