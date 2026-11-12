@@ -2,6 +2,6 @@
 '@astryxdesign/cli': patch
 ---
 
-[feat] `astryx discover` lists the Charts `LineChart` component, so `astryx` can find and describe it.
+[feat] A canary `astryx discover` lists the canary-only Charts `LineChart` component.
 
 @nbozidarevic
