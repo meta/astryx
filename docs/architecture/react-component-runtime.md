@@ -133,14 +133,17 @@ those contracts.
   one-time work. A latest-value ref, which event or gesture callbacks read for
   the latest committed prop or callback, goes only through Core's internal
   `useCommittedRef` (DEC-3), which writes it in a commit-phase insertion Effect:
-  no per-site Effect copy and no render-time `ref.current =` write. Such a ref
-  is read only in event and gesture callbacks, never during render or in
-  `useMemo`; render reads the value directly. One hook decides the timing once,
-  and React has no built-in for it at Core's React floor. Where only an Effect
-  calls the callback, `useEffectEvent` replaces it once that floor reaches 19.2.
-  INV3 gap: about 45 Core and Lab hooks and components keep a latest-value ref
-  in their own Effect, such as `useLayerDismissal`, `useHotkeys`,
-  `useGestureRecognizer`, ComplexSelector, and Lab's NavigationStack.
+  no per-site Effect copy and no render-time `ref.current =` write.
+  `useCommittedRefInto(ref, value)` writes a ref declared earlier, with the same
+  insertion-Effect timing and the same read rule, for callbacks declared above
+  the value they read; it writes the ref its caller hands over. Such a ref is
+  read only in event and gesture callbacks, never during render or in `useMemo`;
+  render reads the value directly. One hook decides the timing once, and React
+  has no built-in for it at Core's React floor. Where only an Effect calls the
+  callback, `useEffectEvent` replaces it once that floor reaches 19.2. INV3 gap:
+  about 45 Core and Lab hooks and components keep a latest-value ref in their
+  own Effect, such as `useLayerDismissal`, `useHotkeys`, `useGestureRecognizer`,
+  ComplexSelector, and Lab's NavigationStack.
 - **INV4 — Mutable refs do not become hidden rendered state.** Refs MAY hold general
   non-rendering mutable data. A ref mutation MUST NOT be the sole source for a value
   later read to produce React-rendered output. A callback ref MAY synchronously
@@ -404,13 +407,10 @@ those contracts.
   fixing it needs a Table API choice. INV17 gap: about 70 components write a
   latest-value ref during render, such as ChatComposerInput, Slider, and
   `useTooltip`. INV17 gap: about 18 render-time reads of a previous value; these
-  are not latest-value refs. Exception: Toast's earlier-sibling `ToastRefSync`
-  keeps the toast list. `toast()` checks whether a namesake is in the committed
-  list so its dismissal still reports `onHide` (`component:Toast` FR3), and a
-  child can call it from a layout-effect cleanup in the commit that shows the
-  toast. React runs that cleanup before the viewport's own insertion Effect, so
-  `useCommittedRef` there would read the previous list. INV17 gap: ToastViewport
-  writes its toast list during render.
+  are not latest-value refs. ToastViewport renders ToastRefSync, which writes
+  through `useCommittedRefInto`, before its children, so a child's layout
+  cleanup reads the committed list. INV17 gap: ToastViewport writes its toast
+  list during render.
 - **INV18 — Layout is read as little as possible.** Placement uses CSS
   (anchor positioning, container queries, logical properties) instead of
   measuring in JS, as `architecture:component-style-authoring` INV2 prefers. A
@@ -543,15 +543,18 @@ contracts.
   correctness boundary without receiving stable public API status.
 - `packages/core/src/utils/sharedResizeObserver.ts` — current shared Core resize
   observation mechanism; tooling and utility tests own its concrete API.
-- `packages/core/src/hooks/useCommittedRef.ts` — `useCommittedRef<T>(value: T):
-{ readonly current: T }`, a read-only ref whose `current` is written only in a
-  commit-phase insertion Effect (INV3, INV17, DEC-3), beside the internal
-  `useIsomorphicLayoutEffect`. Its comment reads: "Stores values only. Refs to
-  DOM nodes are not attached yet when this runs." Internal: never in
-  `hooks/index.ts` or the package entry; Lab imports it from
-  `@astryxdesign/core/internal/committed-ref`, as it reaches other Core
-  internals. Until it exists, sites keep the per-site Effect copies INV3's gap
-  lists.
+- `packages/core/src/hooks/useCommittedRef.ts` — two internal hooks beside the
+  internal `useIsomorphicLayoutEffect` (INV3, INV17, DEC-3).
+  `useCommittedRef<T>(value: T): { readonly current: T }` returns a read-only
+  ref whose `current` is written only in a commit-phase insertion Effect.
+  `useCommittedRefInto(ref, value)` writes a ref declared earlier, with the same
+  insertion-Effect timing and the same read rule, for callbacks declared above
+  the value they read; it writes the ref its caller hands over. Their comment
+  reads: "Stores values only. Refs to DOM nodes are not attached yet when this
+  runs." Internal: never in `hooks/index.ts` or the package entry; Lab imports
+  them from `@astryxdesign/core/internal/committed-ref`, as it reaches other
+  Core internals. Until they exist, sites keep the per-site Effect copies INV3's
+  gap lists.
 
 ## Deciding specs
 
