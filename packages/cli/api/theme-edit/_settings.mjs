@@ -2515,9 +2515,20 @@ export function staleBuild(cwd, slug, data) {
     if (built && now && built !== now)
       return `@astryxdesign/theme-${data.like} is ${now} now, and the build was made on ${built}`;
   }
+  // By content, never by file times (an editor's re-save or a checkout
+  // changes those): a generated module cut short, or built outputs whose
+  // header names another CLI than the settings were written by (a build
+  // stopped after the settings module was written).
+  const builtBy = (/** @type {string} */ file) =>
+    /^ \* CLI: @astryxdesign\/cli@(\S+)$/m.exec(
+      fs.readFileSync(file, 'utf8').slice(0, 600),
+    )?.[1] ?? null;
   if (
     !ts.trimEnd().endsWith('});') ||
-    fs.statSync(f.css).mtimeMs < fs.statSync(f.settingsTs).mtimeMs - 1000
+    [f.css, f.js].some(file => {
+      const by = builtBy(file);
+      return by != null && by !== stamp[2];
+    })
   )
     return 'the last build did not finish (a command stopped while building)';
   // A built stylesheet cut short (a crash, a bad merge) is built again, as

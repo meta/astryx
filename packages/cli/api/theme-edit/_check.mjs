@@ -10,6 +10,7 @@
  */
 
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {baseThemeFile} from './_project.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
@@ -1017,10 +1018,27 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       const pascal = t.replace(/(^|-)([a-z0-9])/g, (_, __, c) =>
         c.toUpperCase(),
       );
-      return [ctx.project.target.get(t)?.component, pascal].some(n =>
-        Object.keys((n && comps[n]?.props) ?? {}).some(p =>
-          /disabled/i.test(p),
-        ),
+      // Or its built module sets aria-disabled (a tab takes it through its
+      // other props): what Core renders, read from Core itself.
+      const marks = (/** @type {string} */ n) => {
+        const at = comps[n]?.importPath?.split('/').pop();
+        const file =
+          at && ctx.project.coreDir
+            ? path.join(ctx.project.coreDir, 'dist', at, `${n}.js`)
+            : null;
+        try {
+          return file
+            ? fs.readFileSync(file, 'utf8').includes('aria-disabled')
+            : false;
+        } catch {
+          return false;
+        }
+      };
+      return [ctx.project.target.get(t)?.component, pascal].some(
+        n =>
+          n != null &&
+          (Object.keys(comps[n]?.props ?? {}).some(p => /disabled/i.test(p)) ||
+            marks(n)),
       );
     };
     // A part Core never styles in focus is not what takes focus (the

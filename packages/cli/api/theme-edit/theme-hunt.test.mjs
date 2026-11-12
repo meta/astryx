@@ -639,9 +639,15 @@ describe('fix3: links, rollback, locks, paths', () => {
 
   it('show finds a build that does not match the settings and builds again', async () => {
     await themeEditNew('k3', {cwd});
+    // A build left by another CLI than wrote the settings module (a build
+    // stopped part way); file times alone never count.
     const css = path.join(cwd, 'themes/k3/k3.css');
-    const old = new Date(Date.now() - 60_000);
-    fs.utimesSync(css, old, old);
+    fs.writeFileSync(
+      css,
+      fs
+        .readFileSync(css, 'utf8')
+        .replace(/(\* CLI: @astryxdesign\/cli@)\S+/, '$10.0.1'),
+    );
     const r = await themeEditShow('k3', {cwd});
     expect(r.data.notes.join(' ')).toContain('built again');
     const again = await themeEditShow('k3', {cwd});
