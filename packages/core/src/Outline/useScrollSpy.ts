@@ -236,8 +236,8 @@ export function useScrollSpy({
   // Latest scroll-position resolver, so a navigation can resume tracking when
   // the user scrolls during the programmatic scroll.
   const syncRef = useRef<(() => void) | null>(null);
-  // The committed callback. The scroll listener reads it through the ref, so
-  // it does not subscribe again on each render.
+  // The scroll listener reads the callback through this ref, so it does not
+  // subscribe again on each render.
   const onActiveIdChangeRef = useCommittedRef(onActiveIdChange);
   // Items is a new array each render. The scroll listener subscribes with
   // their ids, and subscribes again only when the ids change.

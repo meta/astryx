@@ -1171,7 +1171,7 @@ describe('Outline scroll spy, when React discards a render', () => {
       });
     });
     await user.click(screen.getByRole('link', {name: 'Installation'}));
-    act(() => {
+    await act(async () => {
       window.dispatchEvent(new Event('scrollend'));
     });
     expect(discarded).not.toHaveBeenCalled();
