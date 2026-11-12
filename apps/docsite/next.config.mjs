@@ -7,9 +7,10 @@
  *   staged preview-only static exports.
  * @output Docsite routes plus Storybook and Sandbox at /storybook/ and /sandbox/.
  *   Client main-app chunks start with the preview's cookie compatibility guard;
- *   large Webpack builds run with isolated, memory-optimized compilation. The
- *   experimental DOCSITE_ICON_SET setting draws template previews with an
- *   installed icon set, with per-icon imports from the set's library.
+ *   large Webpack builds run with isolated, memory-optimized compilation.
+ *   Template previews load their images through the image optimizer. The
+ *   experimental DOCSITE_ICON_SET setting draws them with an installed icon
+ *   set, with per-icon imports from the set's library.
  * @position Next.js configuration for the existing Vercel docsite deployment.
  */
 
@@ -41,6 +42,10 @@ const docRedirects = existsSync(docRedirectsPath)
 const previewIconSet = process.env.DOCSITE_ICON_SET?.trim() ?? '';
 const templateSources =
   /packages[\\/]cli[\\/]assets[\\/]templates[\\/](?:pages|blocks)[\\/].+\.tsx$/u;
+// The sources a preview renders: page templates, and the copies of blocks
+// that generate-data.mjs writes.
+const previewSources =
+  /(?:packages[\\/]cli[\\/]assets[\\/]templates[\\/]pages|src[\\/]generated[\\/](?:showcases|examples))[\\/].+\.tsx$/u;
 
 const stagesStaticApps =
   process.env.VERCEL_ENV === 'preview' ||
@@ -186,6 +191,20 @@ const nextConfig = {
         'dist/theme.css',
       );
     }
+
+    config.module.rules.push({
+      test: previewSources,
+      enforce: 'pre',
+      use: [
+        {
+          loader: resolve(
+            import.meta.dirname,
+            'scripts/template-image-loader.mjs',
+          ),
+          options: {publicDir: resolve(import.meta.dirname, 'public')},
+        },
+      ],
+    });
 
     if (previewIconSet) {
       // A cached module keeps the icons of the set it was built with, so a

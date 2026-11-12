@@ -201,6 +201,10 @@ export default defineConfig({
           name: 'node',
           globals: true,
           environment: 'node',
+          // A visual gate that a test runs builds no theme into the checkout
+          // the other tests read at the same time; it names the themes that
+          // are not built instead (.github/scripts/visual-gate/lib/sources.mjs).
+          env: {ASTRYX_VISUAL_GATE_READ_ONLY: '1'},
           // Prebuilt and plain-data modules load as Node loads them for the
           // CLI, not through Vite's transform, which would otherwise inline
           // every file: Core's built bundle (the workspace link resolves it

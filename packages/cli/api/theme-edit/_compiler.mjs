@@ -389,12 +389,14 @@ export function makeCompiler(project, parts) {
    * @param {{parseColor: (v: unknown) => [number, number, number] | null, ratio: (a: number[], b: number[]) => number, alphaOf: (v: unknown) => number, compositeOver: (over: [number, number, number], alpha: number, under: [number, number, number]) => [number, number, number], page: (mode: string) => string | null | undefined}} helpers
    *   `page` is the page color in a mode: a see-through background is drawn
    *   over it, and see-through text over that background, before measuring.
+   * @param {TextPair[]} [extra] more pairs to measure (a part's variants)
    */
   function contrast(
     value,
     baseValue,
     modes,
     {parseColor, ratio, alphaOf, compositeOver, page},
+    extra = [],
   ) {
     /**
      * The opaque colors the eye sees for a pair, or null with no fixed color.
@@ -417,7 +419,7 @@ export function makeCompiler(project, parts) {
     const seen = new Set();
     /** @type {Set<string>} */
     const unchecked = new Set();
-    for (const p of parts.pairs) {
+    for (const p of [...parts.pairs, ...extra]) {
       if (
         p.fg.target !== p.bg.target &&
         p.bg.target &&
@@ -455,9 +457,17 @@ export function makeCompiler(project, parts) {
           mode: m,
           ratio: Number(r.toFixed(2)),
           sample: p.sample,
-          fg: p.fg.tokens[0] ?? String(fg),
+          // A side the theme changed is named by the value it set, not the
+          // token the part reads without it.
+          fg:
+            fg !== baseValue(p, 'fg', m)
+              ? String(fg)
+              : (p.fg.tokens[0] ?? String(fg)),
           bgPart: p.bg.target,
-          bg: p.bg.tokens[0] ?? String(bg),
+          bg:
+            bg !== baseValue(p, 'bg', m)
+              ? String(bg)
+              : (p.bg.tokens[0] ?? String(bg)),
         });
       }
     }
