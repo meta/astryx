@@ -27,7 +27,7 @@ import {
   StackItem,
 } from '@astryxdesign/core/Layout';
 import {Grid} from '@astryxdesign/core/Grid';
-import {Text, Heading} from '@astryxdesign/core/Text';
+import {Text, Heading, useTruncation} from '@astryxdesign/core/Text';
 import {Card} from '@astryxdesign/core/Card';
 import {Button} from '@astryxdesign/core/Button';
 import {Icon} from '@astryxdesign/core/Icon';
@@ -297,6 +297,13 @@ const PREVIEW_LESSONS = [
     length: '21 min',
     note: 'Free preview',
   },
+];
+const STAR_COUNTS = [
+  {stars: 5, count: 1042},
+  {stars: 4, count: 186},
+  {stars: 3, count: 38},
+  {stars: 2, count: 12},
+  {stars: 1, count: 6},
 ];
 
 function StarRating({rating, count}: {rating: number; count?: number}) {
@@ -753,13 +760,38 @@ function EnrollRail() {
     </Card>
   );
 }
-// ─── Reviews ─────────────────────────────────────────────────────────────────
+function ReviewBody({body}: {body: string}) {
+  const [open, setOpen] = useState(false);
+  const clamped = !open;
+  const truncation = useTruncation({maxLines: clamped ? 4 : 0});
+
+  return (
+    <VStack gap={2}>
+      <Text type="body" maxLines={clamped ? 4 : undefined} ref={truncation.ref}>
+        {body}
+      </Text>
+      {(truncation.isTruncated || open) && (
+        <Button
+          label={open ? 'Show less' : 'Show more'}
+          variant="ghost"
+          size="sm"
+          onClick={() => setOpen(value => !value)}
+        />
+      )}
+    </VStack>
+  );
+}
 function ReviewCard({review}: {review: (typeof REVIEWS)[number]}) {
   return (
     <Card padding={4}>
       <VStack gap={3}>
         <HStack gap={2} vAlign="center">
-          <Avatar name={review.name} src={review.avatar} size="sm" />
+          <Avatar
+            name={review.name}
+            src={review.avatar}
+            size="sm"
+            tooltip={false}
+          />
           <VStack gap={1}>
             <Text type="body" weight="bold">
               {review.name}
@@ -770,7 +802,7 @@ function ReviewCard({review}: {review: (typeof REVIEWS)[number]}) {
           </VStack>
         </HStack>
         <StarRating rating={review.rating} />
-        <Text type="body">{review.body}</Text>
+        <ReviewBody body={review.body} />
         <HStack gap={2} vAlign="center">
           <Button
             label={`Helpful (${review.helpful})`}
@@ -784,6 +816,19 @@ function ReviewCard({review}: {review: (typeof REVIEWS)[number]}) {
   );
 }
 function ReviewsSection() {
+  const [query, setQuery] = useState('');
+  const [rating, setRating] = useState('all');
+  const [sort, setSort] = useState('recent');
+  const fold = (value: string) => value.toLowerCase();
+  const needle = fold(query.trim());
+  const shown = REVIEWS.filter(review => {
+    const matchesText = !needle || fold(review.body).includes(needle);
+    const matchesRating = rating === 'all' || review.rating === Number(rating);
+    return matchesText && matchesRating;
+  }).sort((a, b) =>
+    sort === 'helpful' ? b.helpful - a.helpful : a.name.localeCompare(b.name),
+  );
+
   return (
     <Section padding={6}>
       <VStack gap={4}>
@@ -795,45 +840,88 @@ function ReviewsSection() {
             </Link>
           }
         />
-        <Card padding={5}>
-          <VStack gap={4}>
-            <HStack gap={5} vAlign="center">
-              <VStack gap={1}>
+        <Grid columns={{minWidth: 280, repeat: 'fit'}} gap={4}>
+          <Card padding={5}>
+            <VStack gap={3}>
+              <HStack gap={2} vAlign="center">
                 <Text type="display-3">{COURSE.rating}</Text>
                 <StarRating rating={COURSE.rating} />
-                <Text type="supporting" color="secondary">
-                  {COURSE.ratingCount.toLocaleString('en-US')} reviews
-                </Text>
-              </VStack>
-              <StackItem size="fill">
-                <VStack gap={3}>
-                  {ASPECTS.map(aspect => (
-                    <VStack key={aspect.label} gap={1}>
-                      <HStack gap={2} vAlign="center" hAlign="between">
-                        <Text type="body" color="secondary">
-                          {aspect.label}
-                        </Text>
-                        <Text type="body" color="secondary">
-                          {aspect.score.toFixed(1)}
-                        </Text>
-                      </HStack>
+              </HStack>
+              <Text type="supporting" color="secondary">
+                {COURSE.ratingCount.toLocaleString('en-US')} reviews
+              </Text>
+              <VStack gap={2}>
+                {STAR_COUNTS.map(row => (
+                  <HStack key={row.stars} gap={2} vAlign="center">
+                    <Text type="supporting" color="secondary">
+                      {row.stars} ★
+                    </Text>
+                    <StackItem size="fill">
                       <ProgressBar
-                        label={aspect.label}
+                        label={`${row.stars} stars`}
                         isLabelHidden
-                        value={(aspect.score / 5) * 100}
+                        value={(row.count / COURSE.ratingCount) * 100}
                       />
-                    </VStack>
-                  ))}
-                </VStack>
-              </StackItem>
-            </HStack>
-          </VStack>
-        </Card>
+                    </StackItem>
+                    <Text type="supporting" color="secondary">
+                      {row.count}
+                    </Text>
+                  </HStack>
+                ))}
+              </VStack>
+            </VStack>
+          </Card>
+          <Card padding={5}>
+            <VStack gap={3}>
+              <Text type="label">What learners rate</Text>
+              <Grid columns={{minWidth: 140, repeat: 'fit'}} gap={3}>
+                {ASPECTS.map(aspect => (
+                  <VStack key={aspect.label} gap={1}>
+                    <Text type="supporting" color="secondary">
+                      {aspect.label}
+                    </Text>
+                    <Text type="large" weight="bold">
+                      {aspect.score.toFixed(1)}
+                    </Text>
+                  </VStack>
+                ))}
+              </Grid>
+            </VStack>
+          </Card>
+        </Grid>
+        <HStack gap={3} vAlign="center" hAlign="between" wrap="wrap">
+          <StackItem size="fill">
+            <TextInput
+              label="Search reviews"
+              isLabelHidden
+              size="md"
+              width="100%"
+              placeholder="Search reviews"
+              value={query}
+              onChange={setQuery}
+              startIcon={<Icon icon={MagnifyingGlassIcon} size="sm" />}
+            />
+          </StackItem>
+          <SegmentedControl value={rating} onChange={setRating} label="Rating">
+            <SegmentedControlItem value="all" label="All" />
+            <SegmentedControlItem value="5" label="5 star" />
+            <SegmentedControlItem value="4" label="4 star" />
+          </SegmentedControl>
+          <SegmentedControl value={sort} onChange={setSort} label="Sort">
+            <SegmentedControlItem value="recent" label="Newest" />
+            <SegmentedControlItem value="helpful" label="Helpful" />
+          </SegmentedControl>
+        </HStack>
         <Grid columns={{minWidth: 280, repeat: 'fit'}} gap={4}>
-          {REVIEWS.map(review => (
+          {shown.map(review => (
             <ReviewCard key={review.name} review={review} />
           ))}
         </Grid>
+        <VisuallyHidden as="p" aria-live="polite">
+          {needle && shown.length > 0
+            ? `${shown.length} ${shown.length === 1 ? 'review' : 'reviews'} match “${query.trim()}”`
+            : ''}
+        </VisuallyHidden>
       </VStack>
     </Section>
   );
