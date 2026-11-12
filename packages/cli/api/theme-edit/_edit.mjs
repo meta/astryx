@@ -17,6 +17,7 @@ import {
   CORNERS,
   DIALS,
   FAMILIES,
+  FONT_ROLES,
   KEY_TOKENS,
   LIKE,
   P,
@@ -29,6 +30,7 @@ import {
   compileTheme,
   cornerPx,
   radiusAt,
+  radiusTokenOf,
   contrastProblems,
   describe,
   keyOf,
@@ -36,7 +38,6 @@ import {
   maskedSettings,
   modesOf,
   nearest,
-  partDefault,
   partsOf,
   undoArgs,
   withoutBadValues,
@@ -51,6 +52,12 @@ import {
   buildTheme,
   staleBuild,
   EDITOR_SUFFIXES,
+  madeByEditor,
+  NEW_MARKER,
+  clearNewMarker,
+  refuseThemeSource,
+  settingsShapeOk,
+  slugFor,
   themeSource,
   themeSourceProblem,
 } from './_settings.mjs';
@@ -63,10 +70,14 @@ import {
   paletteMapping,
   paletteDialOf,
   paletteNotes,
+  lockHeld,
+  refuseIfLockLost,
+  writeWhole,
 } from './_palette.mjs';
 import {renderPreview, renderSheet} from './_preview.mjs';
 import {refreshPreviewRoute} from './_preview-app.mjs';
 import {baseResolved, installLine} from './_project.mjs';
+import {reactMissing} from './_parts.mjs';
 import {
   requireProject,
   context,
@@ -85,25 +96,38 @@ const E = ERROR_CODES;
  * @typedef {import('./theme-edit.type.mjs').ThemeEditChangeOptions} ChangeOptions
  */
 /** The marker a `new` writes first and removes last. */
-const NEW_MARKER = '.astryx-new.json';
 
 /** Files a system or a tool puts in any folder; a folder of only these is empty. */
 const FOLDER_JUNK = new Set(['.DS_Store', '.gitkeep', 'Thumbs.db']);
 
 /**
- * What a stopped `new` left, when the folder holds its marker and only
- * files the editor writes for that name (its generated files, the source
- * exactly as it writes it, its pages, colors and temp files); null when
- * there is no marker or anything else is there. System files (.DS_Store)
- * stay.
+ * A folder the editor made but that has no settings: a stopped `new` left
+ * its marker, or the settings were removed beside the editor's generated
+ * module. `clear` is what `new` makes again (the files the editor writes
+ * for that name, the source only exactly as it writes it); `keep` is every
+ * other file, which is never touched. Null when the editor did not make
+ * the folder. System files (.DS_Store) are in neither.
  * @param {string} dir
  * @param {string} slug
- * @returns {string[] | null}
+ * @param {boolean} [damaged] its settings are there but not valid JSON
+ * @returns {{clear: string[], keep: string[]} | null}
  */
-function editorLeftovers(dir, slug) {
-  if (!fs.existsSync(path.join(dir, NEW_MARKER))) return null;
+function editorLeftovers(dir, slug, damaged = false) {
+  // The editor made this folder: a stopped `new` left its marker, the
+  // generated settings module (which carries the editor's header) is there
+  // without its settings, or its settings are there but damaged (kept
+  // aside by `new`, so neither cleared nor kept here).
+  const marked = fs.existsSync(path.join(dir, NEW_MARKER));
+  if (
+    !marked &&
+    !damaged &&
+    !madeByEditor(path.join(dir, `${slug}.settings.ts`))
+  )
+    return null;
   /** @type {string[]} */
-  const files = [];
+  const clear = [];
+  /** @type {string[]} */
+  const keep = [];
   const named = (/** @type {string} */ n) =>
     n === NEW_MARKER ||
     EDITOR_SUFFIXES.some(x => n === `${slug}.${x}`) ||
@@ -116,22 +140,41 @@ function editorLeftovers(dir, slug) {
   for (const e of fs.readdirSync(dir, {withFileTypes: true})) {
     const p = path.join(dir, e.name);
     if (FOLDER_JUNK.has(e.name)) continue;
+    if (damaged && e.name === `${slug}.settings.json`) continue;
     if (e.isDirectory() && e.name === 'tokens') {
-      for (const t of fs.readdirSync(p, {withFileTypes: true})) {
-        if (!t.isFile() || !t.name.startsWith(`${slug}.palette`)) return null;
-        files.push(path.join(p, t.name));
-      }
+      for (const t of fs.readdirSync(p, {withFileTypes: true}))
+        (t.isFile() && t.name.startsWith(`${slug}.palette`)
+          ? clear
+          : keep
+        ).push(path.join(p, t.name));
       continue;
     }
-    if (!e.isFile()) return null;
-    if (e.name === `${slug}.theme.ts`) {
-      // Only the source exactly as the editor writes it, never one changed
-      // by hand.
-      if (fs.readFileSync(p, 'utf8') !== themeSource(slug)) return null;
-    } else if (!named(e.name)) return null;
-    files.push(p);
+    // The source as the editor writes it is made again; one changed by hand
+    // is the user's, and stays. The history stays too when the settings were
+    // removed, so `undo` can step back to them.
+    const mine =
+      e.isFile() &&
+      (e.name === `${slug}.theme.ts`
+        ? fs.readFileSync(p, 'utf8') === themeSource(slug)
+        : // A `new` writes no history: one here is from later commands,
+          // and always stays.
+          e.name === `${slug}.history.json`
+          ? false
+          : named(e.name));
+    (mine ? clear : keep).push(p);
   }
-  return files;
+  return {clear, keep};
+}
+
+/** Whether a settings file parses, in the shape the editor reads. @param {string} file */
+function readableJson(file) {
+  try {
+    return settingsShapeOk(
+      JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '')),
+    );
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -149,15 +192,7 @@ export async function themeEditNew(name, options = {}) {
   const like = options.like === 'none' ? undefined : options.like;
   requireProject(cwd);
   if (!slugOk(name)) {
-    const fixed =
-      String(name ?? '')
-        .normalize('NFKD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .replace(/[^a-z0-9-]+/g, '-')
-        .replace(/^[^a-z]+/, '')
-        .replace(/-+$/, '')
-        .slice(0, 64) || 'my-theme';
+    const fixed = slugFor(name);
     // The name as typed may be a theme that exists in another case.
     const exists = fs.existsSync(themeFiles(cwd, fixed).settings);
     refuse(
@@ -177,19 +212,26 @@ export async function themeEditNew(name, options = {}) {
   const f = themeFiles(cwd, name);
   // A link or a file where the theme goes is never written through or
   // replaced.
-  for (const [p, what] of /** @type {const} */ ([
-    [f.root, 'themes/'],
-    [f.dir, `themes/${name}`],
-  ])) {
-    const st = fs.lstatSync(p, {throwIfNoEntry: false});
-    if (st && (st.isSymbolicLink() || !st.isDirectory()))
-      refuse(
-        E.ERR_FILE_EXISTS,
-        `${what} is ${st.isSymbolicLink() ? 'a link' : 'a file'}, so a theme is not made there.`,
-        {run: [`${P} new ${name}-copy`]},
-      );
-  }
-  if (fs.existsSync(f.settings))
+  // themes/ itself in the way blocks every name: say so, and how to fix it.
+  const rootSt = fs.lstatSync(f.root, {throwIfNoEntry: false});
+  if (rootSt && (rootSt.isSymbolicLink() || !rootSt.isDirectory()))
+    refuse(
+      E.ERR_FILE_EXISTS,
+      `themes in this app is ${rootSt.isSymbolicLink() ? `a link (to ${fs.readlinkSync(f.root)})` : 'a file'}, not a folder, so no editor theme can be made: every theme goes in themes/<name>/. Rename or move it, then run new again.`,
+      // A look that changes nothing: the themes the app can use now.
+      {run: ['astryx theme list']},
+    );
+  const dirSt = fs.lstatSync(f.dir, {throwIfNoEntry: false});
+  if (dirSt && (dirSt.isSymbolicLink() || !dirSt.isDirectory()))
+    refuse(
+      E.ERR_FILE_EXISTS,
+      `themes/${name} is ${dirSt.isSymbolicLink() ? 'a link' : 'a file'}, so a theme is not made there.`,
+      {run: [`${P} new ${name}-copy`]},
+    );
+  // Settings that are not valid JSON are kept aside, and the theme is
+  // made again beside them.
+  const damaged = fs.existsSync(f.settings) && !readableJson(f.settings);
+  if (fs.existsSync(f.settings) && !damaged)
     refuse(E.ERR_FILE_EXISTS, `Theme "${name}" already exists.`, {
       run: [`${P} show ${name}`, `${P} set ${name} base neutral`],
     });
@@ -197,7 +239,9 @@ export async function themeEditNew(name, options = {}) {
   // beside the files it wrote: only such a folder is cleared, and only
   // after every argument is checked. Anything else in the folder, or a
   // folder without the marker, is never touched.
-  const left = fs.existsSync(f.dir) ? editorLeftovers(f.dir, name) : null;
+  const left = fs.existsSync(f.dir)
+    ? editorLeftovers(f.dir, name, damaged)
+    : null;
   const holdsOther =
     fs.existsSync(f.dir) &&
     !left &&
@@ -224,38 +268,68 @@ export async function themeEditNew(name, options = {}) {
     ctx.project,
     data.like,
   );
+  // Every check comes before the first change to the folder: the settings,
+  // and a source of the user's own kept from before (it must still extend
+  // the settings, or the build fails after the folder was cleared).
   applyNewSettings(ctx, name, data, settings);
+  if (left?.keep.some(p => path.basename(p) === `${name}.theme.ts`))
+    refuseThemeSource(cwd, name);
+  /** @type {string[]} */
+  const keptNotes = [];
   /** @type {string[]} */
   const leftNotes = [];
-  if (left && left.length) {
-    for (const p of left) fs.rmSync(p, {force: true});
-    try {
-      fs.rmdirSync(path.join(f.dir, 'tokens'));
-    } catch {
-      // Not there, or it holds something else.
-    }
-    const shownLeft = left.filter(p => path.basename(p) !== NEW_MARKER);
+  const ownKept = (left?.keep ?? []).filter(
+    p => path.basename(p) !== `${name}.history.json`,
+  );
+  if (ownKept.length)
     leftNotes.push(
-      `cleared ${shownLeft.length} file${shownLeft.length === 1 ? '' : 's'} a stopped \`new\` left in themes/${name}/ (${shownLeft
+      `kept your own files in themes/${name}/: ${ownKept
         .slice(0, 4)
         .map(p => path.relative(f.dir, p))
-        .join(', ')}${shownLeft.length > 4 ? ', …' : ''}), then made the theme`,
+        .join(', ')}${ownKept.length > 4 ? ', …' : ''}`,
     );
-  }
+  if (left?.keep.some(p => path.basename(p) === `${name}.history.json`))
+    leftNotes.push(
+      `the earlier settings are kept in ${name}.history.json: \`${P} undo ${name}\` steps back to them`,
+    );
   // The marker goes first and comes off last: a `new` stopped between
-  // leaves a folder the next `new` can prove it made.
+  // leaves a folder the next `new` can prove it made. The damaged settings
+  // are moved aside after it, and back on a failure.
   const dirMade = !fs.existsSync(f.dir);
   fs.mkdirSync(f.dir, {recursive: true});
   const marker = path.join(f.dir, NEW_MARKER);
-  fs.writeFileSync(
-    marker,
-    JSON.stringify({pid: process.pid, started: Date.now()}),
+  // Fenced like every write under the theme lock.
+  writeWhole(marker, JSON.stringify({pid: process.pid, started: Date.now()}));
+  /** @type {string | null} */
+  let aside = null;
+  if (damaged) {
+    let n = 1;
+    const at = (/** @type {number} */ k) =>
+      path.join(f.dir, `${name}.settings.damaged${k > 1 ? `-${k}` : ''}.json`);
+    while (fs.existsSync(at(n))) n++;
+    aside = at(n);
+    refuseIfLockLost();
+    fs.renameSync(f.settings, aside);
+    keptNotes.push(
+      `${name}.settings.json was damaged: it is kept as ${path.basename(aside)}, and the theme was made again`,
+    );
+  }
+  // A file this build writes again is newer than this moment.
+  const before = new Map(
+    (left?.clear ?? []).map(p => [
+      p,
+      fs.statSync(p, {throwIfNoEntry: false})?.mtimeMs ?? null,
+    ]),
   );
   /** @type {Awaited<ReturnType<typeof commitTheme>>} */
   let r;
   try {
     r = await commitTheme(ctx, name, data, {history: false});
   } catch (e) {
+    // A command that lost its lock owns none of these files now: it puts
+    // nothing back and removes nothing.
+    if (/** @type {any} */ (e)?.lockLost || !lockHeld()) refuseIfLockLost();
+    if (aside && !fs.existsSync(f.settings)) fs.renameSync(aside, f.settings);
     fs.rmSync(marker, {force: true});
     if (dirMade)
       try {
@@ -265,10 +339,49 @@ export async function themeEditNew(name, options = {}) {
       }
     throw e;
   }
+  // Only after the theme is made: the editor's old files this build did not
+  // write again go (old pictures, a stopped run's temp files).
+  if (left && left.clear.length) {
+    // The build's own outputs are its now; the rest (old pictures, a
+    // stopped run's temp files and history) goes when this build did not
+    // write it again.
+    const outputs = [
+      'css',
+      'js',
+      'd.ts',
+      'css.d.ts',
+      'settings.ts',
+      // The source exactly as the editor writes it, which the build keeps.
+      'theme.ts',
+    ].map(x => `${name}.${x}`);
+    const gone = left.clear.filter(p => {
+      if (path.basename(p) === NEW_MARKER) return false;
+      if (outputs.includes(path.basename(p))) return false;
+      const now = fs.statSync(p, {throwIfNoEntry: false})?.mtimeMs;
+      return now != null && now === before.get(p);
+    });
+    refuseIfLockLost();
+    for (const p of gone) fs.rmSync(p, {force: true});
+    try {
+      fs.rmdirSync(path.join(f.dir, 'tokens'));
+    } catch {
+      // Not there, or it holds something else.
+    }
+    const stopped = left.clear.some(p => path.basename(p) === NEW_MARKER);
+    const shownLeft = left.clear.filter(p => path.basename(p) !== NEW_MARKER);
+    leftNotes.unshift(
+      `made the theme again over ${shownLeft.length} file${shownLeft.length === 1 ? '' : 's'} ${stopped ? 'a stopped `new` left' : 'the editor had left'} in themes/${name}/ (${shownLeft
+        .slice(0, 4)
+        .map(p => path.relative(f.dir, p))
+        .join(', ')}${shownLeft.length > 4 ? ', …' : ''})`,
+    );
+  }
+  refuseIfLockLost();
   fs.rmSync(marker, {force: true});
   const p = await previewAndRoute(ctx, name, data, png);
   /** @type {string[]} */
   const notes = [
+    ...keptNotes,
     ...leftNotes,
     ...(data.settings.some(s => s.thing === 'font')
       ? fontNotes(ctx, data)
@@ -569,7 +682,36 @@ async function change(sub, slug, thing, value, options) {
               (x.mode ?? null) === (flags.mode ?? null),
           )
         : null;
-    if (!stored) throw e;
+    if (!stored) {
+      // An undo is told what it can undo, never a `set`: the settings of
+      // what it named (or of the dial its refusal names), else the last
+      // step.
+      if (sub === 'undo' && e instanceof AstryxError) {
+        const named = new Set([
+          thing,
+          ...(e.suggestions ?? [])
+            .map(x => new RegExp(` set ${slug} (\\S+)`).exec(x.name)?.[1])
+            .filter(Boolean),
+        ]);
+        const matches = data.settings.filter(x => named.has(x.thing));
+        const steps = readHistory(themeFiles(cwd, slug).history).steps.length;
+        throw new AstryxError(
+          e.message,
+          matches.length
+            ? matches.slice(0, 5).map(x => ({
+                name: `${P} undo ${slug} ${undoArgs(x)}`,
+                reason: 'do this instead',
+              }))
+            : [
+                steps
+                  ? {name: `${P} undo ${slug}`, reason: 'step back one change'}
+                  : {name: `${P} show ${slug}`, reason: 'see what it sets'},
+              ],
+          e.code,
+        );
+      }
+      throw e;
+    }
     s = stored;
   }
   // undo <thing> <value> removes the setting only when that is its value.
@@ -638,7 +780,11 @@ async function change(sub, slug, thing, value, options) {
             : []),
           ...fieldNotes,
           ...r.notes,
-          `your ${data.settings.length} settings are kept`,
+          ...(data.settings.length
+            ? [
+                `your ${data.settings.length} setting${data.settings.length === 1 ? ' is' : 's are'} kept`,
+              ]
+            : []),
           ...otherModeNotes(data),
           // The colors are made again for the new base or mode: their
           // shade notes follow.
@@ -769,9 +915,46 @@ async function change(sub, slug, thing, value, options) {
   const r = await commitTheme(ctx, slug, data, {history: true});
   const styled = styledChanges(compiledBefore, compileTheme(ctx, data, base));
   const parts = partsOf(ctx, s);
+  // Exact whole-theme tokens that win over what this dial writes: the dial
+  // changes them only in a theme without them.
+  /** @param {import('./_settings.mjs').Setting[]} list */
+  const dialsOnly = list => ({
+    ...data,
+    settings: list.filter(x => x.source === 'dial'),
+  });
+  /** @type {import('./_settings.mjs').Setting[]} */
+  let exactWins = [];
+  if (sub === 'set' && s.source === 'dial' && !s.on) {
+    const withDial = compileTheme(ctx, dialsOnly(data.settings), base);
+    const without = compileTheme(
+      ctx,
+      dialsOnly(data.settings.filter(x => x !== s)),
+      base,
+    );
+    const differs = (/** @type {unknown} */ a, /** @type {unknown} */ b) =>
+      JSON.stringify(a) !== JSON.stringify(b);
+    const touched = new Set(
+      [
+        ...Object.keys(withDial.tokens ?? {}),
+        ...Object.keys(without.tokens ?? {}),
+      ].filter(k => differs(withDial.tokens?.[k], without.tokens?.[k])),
+    );
+    for (const r of FONT_ROLES)
+      if (differs(withDial.typography?.[r], without.typography?.[r]))
+        touched.add(`--font-family-${r}`);
+    if (differs(withDial.typography?.scale, without.typography?.scale))
+      for (const k of Object.keys(ctx.project.core.tokenDefaults ?? {}))
+        if (/^--font-size-/.test(k)) touched.add(k);
+    exactWins = data.settings.filter(
+      x => x.source === 'token' && !x.on && !x.when && touched.has(x.thing),
+    );
+  }
   const kept =
     sub === 'set' && s.source === 'dial' && !s.on
-      ? data.settings.filter(x => x.thing === s.thing && x.on).map(describe)
+      ? [
+          ...data.settings.filter(x => x.thing === s.thing && x.on),
+          ...exactWins,
+        ].map(describe)
       : [];
   // The exact property a dial on a part competes with there.
   const DIAL_PROPERTY = /** @type {Record<string, RegExp>} */ ({
@@ -793,6 +976,11 @@ async function change(sub, slug, thing, value, options) {
   /** @type {string[]} */
   const notes = [
     ...(covered.length ? [`replaces ${covered.map(describe).join(', ')}`] : []),
+    ...(exactWins.length
+      ? [
+          `keeps your exact ${exactWins.map(describe).join(', ')}: an exact setting wins over a dial, so ${exactWins.length > 1 ? 'those do' : 'that does'} not change`,
+        ]
+      : []),
     ...(covers.length
       ? [
           `comes after ${covers.map(describe).join(', ')}, so ${covers.length > 1 ? 'those parts show' : `${covers[0].on} shows`} this value now; set ${covers.length > 1 ? 'one' : 'it'} again to make it win`,
@@ -1025,9 +1213,17 @@ export async function themeEditShow(theme, options = {}) {
   const data = loadTheme(cwd, theme);
   const ctx = await context(cwd);
   refuseStoredTokens(ctx, theme, data);
-  // show renders its pages with the project's React: when that cannot
-  // render, nothing is built or written, and the result says how to fix it.
-  if (ctx.unchecked && !readOnly)
+  // Without React, show still lists the settings and builds the theme, as
+  // set does; only the pages, pictures and the checks that render are
+  // skipped, and the result says how to fix it.
+  const noReact =
+    !readOnly &&
+    (reactMissing(cwd).length > 0 ||
+      ctx.uncheckedCode === 'ERR_RENDER_MISSING_DEPENDENCY');
+  const noPages = readOnly || noReact;
+  // Any other render failure (two copies of React, a component that
+  // throws) is refused, and nothing is written.
+  if (ctx.unchecked && !readOnly && !noReact)
     refuse(
       E.ERR_RENDER_FAILED,
       `${theme} cannot be shown: ${ctx.unchecked} Nothing was written.`,
@@ -1037,7 +1233,9 @@ export async function themeEditShow(theme, options = {}) {
         run:
           ctx.uncheckedCode === 'ERR_RENDER_MISSING_DEPENDENCY'
             ? [installLine(cwd, ['react', 'react-dom'])]
-            : [`${P} show ${theme}`],
+            : // Two copies of React and other install problems are named by
+              // doctor; the same show would fail the same way.
+              ['astryx doctor'],
       },
     );
   const f = themeFiles(cwd, theme);
@@ -1046,6 +1244,8 @@ export async function themeEditShow(theme, options = {}) {
   const stale = staleBuild(cwd, theme, data);
   const brokenSource = themeSourceProblem(cwd, theme);
   if (stale && !brokenSource && !readOnly) await buildTheme(ctx, theme, data);
+  // The settings loaded whole: a `new` marker beside them is stale.
+  if (!readOnly) clearNewMarker(f.dir);
   // A built module that cannot be read (damaged by hand) is built again.
   /** @type {string | null} */
   let unreadable = null;
@@ -1065,16 +1265,16 @@ export async function themeEditShow(theme, options = {}) {
     await baseResolved(ctx.project, data.like),
     ctx.project.core.tokenDefaults,
   );
-  const preview = readOnly
+  const preview = noPages
     ? shown(cwd, f.preview)
     : await renderPreview(ctx, theme, data);
-  const previewStale = readOnly ? [] : await keepPreviewRoute(ctx, theme);
-  const sheet = readOnly
+  const previewStale = noPages ? [] : await keepPreviewRoute(ctx, theme);
+  const sheet = noPages
     ? {file: shown(cwd, f.sheet), components: 0, skipped: []}
     : await renderSheet(ctx, theme, data, {group: section});
   const modes = modesOf(data);
   const shots =
-    png && !readOnly
+    png && !noPages
       ? await pictures(
           ctx.project,
           [
@@ -1101,6 +1301,11 @@ export async function themeEditShow(theme, options = {}) {
         return {...s, parts: partsOf(ctx, s), ...(masked ? {masked} : {})};
       }),
       notes: [
+        ...(noReact
+          ? [
+              `react and react-dom cannot be found from this app, so the pages and pictures were not made again and the checks that render components were skipped; install them (${installLine(cwd, ['react', 'react-dom'])}), then run show again`,
+            ]
+          : []),
         ...(readOnly
           ? [
               `the theme lock could not be taken, so nothing was written: this is the last build as it is${stale ? ` (it does not match the settings: ${stale})` : ''}, and the pages were not made again`,
@@ -1177,6 +1382,56 @@ function nowApplies(ctx, data, removed, base) {
             : describe(d);
       }
   }
+  // What still reaches where the removed setting applied: on a part, the
+  // same thing set plainly on it, on its group, or for the whole theme; an
+  // exact property on the part that this dial would have competed with.
+  if (removed.on) {
+    const fam = familyOf(removed.on);
+    const reaches = [...data.settings]
+      .reverse()
+      .find(
+        x =>
+          x.thing === removed.thing &&
+          x !== removed &&
+          (!x.mode || x.mode === removed.mode) &&
+          ((x.on === removed.on && !x.when && !x.state) ||
+            (fam && x.on === fam && !x.when && !x.state)),
+      );
+    if (reaches) return describe(reaches);
+    const DIAL_PROPERTY = /** @type {Record<string, RegExp>} */ ({
+      corners: /radius$/,
+      spacing: /^(padding|gap)(-|$)/,
+    });
+    const exact =
+      removed.source === 'dial' && DIAL_PROPERTY[removed.thing]
+        ? data.settings.find(
+            x =>
+              x.source === 'property' &&
+              x.on === removed.on &&
+              DIAL_PROPERTY[removed.thing].test(x.thing),
+          )
+        : null;
+    if (exact) return describe(exact);
+    // A removed exact property leaves the dial that writes it: on the part,
+    // its group, or the whole theme.
+    if (removed.source === 'property') {
+      const dial = Object.entries(DIAL_PROPERTY).find(([, re]) =>
+        re.test(removed.thing),
+      )?.[0];
+      const fromDial = dial
+        ? [...data.settings]
+            .reverse()
+            .find(
+              x =>
+                x.thing === dial &&
+                (x.on === removed.on || (fam && x.on === fam) || !x.on) &&
+                (x.when ?? '') === (removed.when ?? '') &&
+                (x.state ?? '') === (removed.state ?? ''),
+            )
+        : undefined;
+      if (fromDial) return describe(fromDial);
+    }
+  }
   const whole =
     removed.on || removed.when || removed.state || removed.mode
       ? [...data.settings]
@@ -1236,6 +1491,20 @@ function partValues(ctx, data, res, mode) {
       // A setting a later group setting covers shows that one's value.
       const hidden = masked.get(s);
       if (hidden) return `${describe(s)} -> not shown: ${hidden}`;
+      // An exact property on the part wins over the dial there.
+      const exact = data.settings.find(
+        x =>
+          x.source === 'property' &&
+          x.on &&
+          (s.thing === 'corners'
+            ? x.thing === 'border-radius'
+            : /^(padding|gap)(-|$)/.test(x.thing)) &&
+          partsOf(ctx, x).some(t => partsOf(ctx, s).includes(t)) &&
+          (x.when ?? '') === (s.when ?? '') &&
+          (x.state ?? '') === (s.state ?? ''),
+      );
+      if (exact)
+        return `${describe(s)} -> not shown: ${describe(exact)} is an exact property and wins there`;
       const parts = partsOf(ctx, s);
       const listed = `${parts.slice(0, 4).join(', ')}${parts.length > 4 ? `, and ${parts.length - 4} more` : ''}`;
       if (s.thing === 'corners') {
@@ -1249,17 +1518,7 @@ function partValues(ctx, data, res, mode) {
         /** @type {Map<string, string[]>} */
         const byToken = new Map();
         for (const t of parts) {
-          const token =
-            /var\((--[\w-]+)\)/.exec(
-              partDefault(ctx, t, 'borderRadius', undefined) ?? '',
-            )?.[1] ??
-            // Every variant reads it (none is the resting one).
-            ctx.C.partReads(t, 'corners').find(x =>
-              x.props.includes('border-radius'),
-            )?.token ??
-            (['containers', 'menus'].includes(familyOf(t) ?? '')
-              ? '--radius-container'
-              : 'unknown');
+          const token = radiusTokenOf(ctx, t);
           byToken.set(token, [...(byToken.get(token) ?? []), t]);
         }
         const whole = [...byToken]
@@ -1464,8 +1723,16 @@ export async function themeEditUndo(theme, options = {}) {
   const same = (/** @type {string} */ a, /** @type {string} */ b) => {
     try {
       return (
-        JSON.stringify({...JSON.parse(a.replace(/^\uFEFF/, '')), lifted: 0}) ===
-        JSON.stringify({...JSON.parse(b.replace(/^\uFEFF/, '')), lifted: 0})
+        JSON.stringify({
+          ...JSON.parse(a.replace(/^\uFEFF/, '')),
+          lifted: 0,
+          built: 0,
+        }) ===
+        JSON.stringify({
+          ...JSON.parse(b.replace(/^\uFEFF/, '')),
+          lifted: 0,
+          built: 0,
+        })
       );
     } catch {
       return false;
@@ -1486,6 +1753,23 @@ export async function themeEditUndo(theme, options = {}) {
   );
   // A step always restores into this theme, whatever name it holds.
   prev.name = theme;
+  // What the step's build showed is restored with it, not saved as a
+  // setting.
+  const built = /** @type {any} */ (prev).built;
+  delete (/** @type {any} */ (prev).built);
+  const radii =
+    built?.radii && typeof built.radii === 'object'
+      ? /** @type {Record<string, string>} */ (
+          Object.fromEntries(
+            Object.entries(built.radii).filter(
+              ([k, v]) =>
+                /^--radius-(element|inner|container|page)$/.test(k) &&
+                typeof v === 'string' &&
+                /^\d+(\.\d+)?px$/.test(v),
+            ),
+          )
+        )
+      : null;
   // The step it goes back to is checked like the settings file itself. A
   // value the editor no longer accepts is left out of that step (with a
   // note); a step whose shape is broken is refused.
@@ -1510,6 +1794,7 @@ export async function themeEditUndo(theme, options = {}) {
   const committed = await commitTheme(ctx, theme, prev, {
     history: false,
     historyAfter: history,
+    radii,
   });
   /** @type {string[]} */
   const undone = current

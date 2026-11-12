@@ -1372,8 +1372,20 @@ export function discoverThemeDirectory(
     entry => entry.isFile() && entry.name.endsWith(THEME_DOC_SUFFIX),
   );
   if (rootDescriptor) {
+    const stem = rootDescriptor.name
+      .slice(0, -THEME_DOC_SUFFIX.length)
+      .replace(/Theme$/, '');
+    // The folder is under the theme root on disk. The owner names that
+    // root only for the project's own local themes; a package's root is
+    // named by its path.
+    const slug =
+      stem.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase() || '<slug>';
+    const folder =
+      owner === LOCAL_THEME_ROOT
+        ? `${owner}/${slug}`
+        : path.join(themeRoot, slug).split(path.sep).join('/');
     throw new Error(
-      `Theme descriptor "${rootDescriptor.name}" for ${owner} must be inside a lower-kebab theme directory.`,
+      `Theme descriptor "${rootDescriptor.name}" for ${owner} must be inside a lower-kebab theme directory. Move that theme's files into their own folder, such as ${folder}/.`,
     );
   }
   const rootSymlink = rootEntries.find(entry => entry.isSymbolicLink());
@@ -1484,7 +1496,7 @@ export function discoverThemeDirectory(
     const doc = readThemeDoc(docPath, owner);
     if (doc.name !== slug) {
       throw new Error(
-        `${label} names "${doc.name}" but its directory is "${slug}".`,
+        `${label} names "${doc.name}" but its directory is "${slug}". A theme's folder carries its name: move its files into a folder named "${doc.name}".`,
       );
     }
     const entry = sources[0];

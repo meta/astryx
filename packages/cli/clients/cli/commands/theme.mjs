@@ -49,7 +49,7 @@ import {
   list,
 } from '../formatters/index.mjs';
 import {logger} from '../../../api/logger.mjs';
-import {cliError} from '../lib/cli-error.mjs';
+import {cliError, themeGroupUnknownSubcommand} from '../lib/cli-error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {Project} from '../../../foundation/config/project.mjs';
 import {warnOnIntegrationIssues} from '../../../foundation/integrations/integration-warnings.mjs';
@@ -76,6 +76,7 @@ import {
   themeBuild,
   themeBuildFamily,
   themeBuildForReport,
+  themeSourceFiles,
   themeSourceGuesses,
   writeDeferredBuildOutputs,
 } from '../../../api/theme/build/build.mjs';
@@ -330,6 +331,8 @@ async function runThemeBuildWatch(entries, options, words = THEME_WORDS) {
     building = false;
     // A stop during this build has already ended the watch.
     if (stopped) return;
+    // The rebuilt source may import other files now.
+    watchSourceFiles(entry);
     emit(text(watchingLine));
     const next = queued.values().next();
     if (!next.done) {
@@ -338,21 +341,56 @@ async function runThemeBuildWatch(entries, options, words = THEME_WORDS) {
     }
   };
 
-  // Some editors replace the file (rename) rather than writing in place, which
-  // can drop the watch. Watch the containing directory and filter to our file
-  // so edits survive atomic-save/rename.
-  const watchers = entries.map(entry => {
-    const baseName = path.basename(entry.filePath);
-    return fs.watch(path.dirname(entry.filePath), (_eventType, changed) => {
-      if (changed && changed !== baseName) return;
-      clearTimeout(debounces.get(entry.filePath));
-      // Debounce: editors often emit several events per save.
-      debounces.set(
-        entry.filePath,
-        setTimeout(() => rebuild(entry), 100),
-      );
-    });
-  });
+  // A theme is its source and the local files it imports (an ejected fork's
+  // palettes, a split theme); a change to any of them rebuilds it. Some
+  // editors replace a file (rename) rather than write in place, which can drop
+  // a file watch, so each containing folder is watched and filtered by name.
+  /** @type {Map<{file: string, filePath: string}, Set<string>>} */
+  const sourceFiles = new Map();
+  /** @type {Map<string, import('node:fs').FSWatcher>} */
+  const folderWatchers = new Map();
+  /** @param {{file: string, filePath: string}} entry */
+  const changed = entry => {
+    clearTimeout(debounces.get(entry.filePath));
+    // Debounce: editors often emit several events per save.
+    debounces.set(
+      entry.filePath,
+      setTimeout(() => rebuild(entry), 100),
+    );
+  };
+  /** @param {string} dir */
+  const watchFolder = dir => {
+    if (folderWatchers.has(dir)) return;
+    folderWatchers.set(
+      dir,
+      fs.watch(dir, (_eventType, name) => {
+        const file = name ? path.join(dir, name.toString()) : null;
+        for (const [entry, files] of sourceFiles) {
+          if (
+            file
+              ? files.has(file)
+              : [...files].some(f => path.dirname(f) === dir)
+          ) {
+            changed(entry);
+          }
+        }
+      }),
+    );
+  };
+  /** @param {{file: string, filePath: string}} entry */
+  function watchSourceFiles(entry) {
+    const files = new Set(themeSourceFiles(entry.filePath));
+    files.add(path.resolve(entry.filePath));
+    sourceFiles.set(entry, files);
+    for (const file of files) {
+      try {
+        watchFolder(path.dirname(file));
+      } catch {
+        // A folder that went away is watched again after the next build.
+      }
+    }
+  }
+  for (const entry of entries) watchSourceFiles(entry);
 
   // Announce readiness only AFTER fs.watch is armed — the log is the "safe to
   // edit" signal (tests and humans rely on it), so printing it before the watch
@@ -370,7 +408,7 @@ async function runThemeBuildWatch(entries, options, words = THEME_WORDS) {
       stopped = true;
       queued.clear();
       for (const d of debounces.values()) clearTimeout(d);
-      for (const w of watchers) w.close();
+      for (const w of folderWatchers.values()) w.close();
       // A rebuild in progress would otherwise keep the process alive after
       // "Stopped watching.". In a terminal, Ctrl-C already reached it.
       rebuildChild?.kill(signal);
@@ -655,13 +693,13 @@ export function registerTheme(program) {
       // us as a positional in cmd.args — exit 1 with a clear error.
       const extras = (cmd && cmd.args) || [];
       if (extras.length > 0) {
-        const unknown = String(extras[0]);
-        const known = (theme.commands || []).map(c => c.name());
-        const suggestions = known.map(name => ({
-          name,
-          reason: 'available subcommand',
-        }));
-        return cliError(`unknown subcommand 'theme ${unknown}'`, {
+        const {message, suggestions} = themeGroupUnknownSubcommand(
+          'theme',
+          String(extras[0]),
+          (theme.commands || []).map(c => c.name()),
+          theme,
+        );
+        return cliError(message, {
           suggestions,
           code: ERROR_CODES.ERR_UNKNOWN_SUBCOMMAND,
         });
@@ -1268,6 +1306,9 @@ function registerThemeCommands(theme, program, docs, words) {
     /** @type {(() => Promise<void>) | undefined} */
     let release;
     buildCli.hook('preAction', async (_, cmd) => {
+      // Under --watch each rebuild runs on its own and takes the locks
+      // itself; holding them for the whole watch would block every one.
+      if (cmd.opts().watch) return;
       release = await words.hold?.(cmd.args, {cwd: process.cwd()});
     });
     buildCli.hook('postAction', async () => {

@@ -160,7 +160,7 @@ jobs:
         timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 125 || 13 }}
         with:
           phase: room
-          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 17 }}
+          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 18 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 12 }}
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
@@ -214,7 +214,7 @@ jobs:
           started: ${{ needs.room.outputs.started }}
           looks: ${{ needs.room.outputs.looks }}
           next: ${{ needs.room.outputs.next }}
-          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 17 }}
+          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 18 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 12 }}
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
@@ -916,7 +916,7 @@ jobs:
       fail-fast: false
       # A pull request or merge-queue entry runs at most two legs at a time,
       # so many open pull requests cannot flood the organization's shared
-      # runner pool; the legs still all run, in two waves.
+      # runner pool; the legs still all run, in waves.
       max-parallel: 2
       matrix:
         shard: [1, 2, 3, 4]
@@ -1089,10 +1089,13 @@ jobs:
       fail-fast: false
       # A pull request or merge-queue entry runs at most two legs at a time,
       # so many open pull requests cannot flood the organization's shared
-      # runner pool; the legs still all run, in two waves.
+      # runner pool; the legs still all run, in waves.
       max-parallel: 2
+      # Five legs keep each leg near nine minutes of the fifteen-minute
+      # limit; at four, a leg reached about thirteen and a half minutes of
+      # tests and hit the limit (scripts/vitest-node-durations.json).
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5]
     # Vitest runs one test file per CPU beyond the first, so the 2-core runner
     # ran this suite one file at a time (~23 min). Four cores give it three.
     runs-on: ubuntu-latest
@@ -1178,19 +1181,20 @@ jobs:
           SCOPED: ${{ github.event_name == 'pull_request' && steps.scope.outputs.vitest_full_suite == 'false' }}
         run: |
           if [ "$SCOPED" = true ]; then
-            .github/scripts/run-named.sh "Tests the change reaches" -- pnpm test:node --changed=HEAD^1 --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }}
-            # Tests no module graph relates to the change run too: guards
-            # that read sources, and tests that load a changed package from
-            # its build (by name or its dist/).
-            # The list goes through a file so a failing lister fails the step.
-            # The guard run leaves out the tests the run above already ran, so
-            # no test runs twice. Every leg splits the same reduced list, so a
-            # leg that cannot list them fails rather than split a different one.
-            .github/scripts/run-named.sh "List the tests the first run ran" -- pnpm exec vitest list --project node --changed=HEAD^1 --filesOnly --passWithNoTests --json="$RUNNER_TEMP/already-run.json"
-            .github/scripts/run-named.sh "List the tests that read source files" --stdout "$RUNNER_TEMP/fs-guards.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --already-run "$RUNNER_TEMP/already-run.json"
-            mapfile -t GUARDS < "$RUNNER_TEMP/fs-guards.txt"
-            if [ "${#GUARDS[@]}" -gt 0 ]; then
-              .github/scripts/run-named.sh "Tests that read source files" -- pnpm test:node --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${GUARDS[@]}"
+            # One run covers the tests the change reaches and the tests no
+            # module graph relates to it: guards that read sources, and tests
+            # that load a changed package from its build (by name or its
+            # dist/). In one run the legs balance both lists by recorded
+            # time, so a slow changed test does not land on top of a full
+            # share of guards.
+            # The lists go through files so a failing lister fails the step.
+            # Every leg splits the same list, so a leg that cannot list the
+            # tests fails rather than split a different one.
+            .github/scripts/run-named.sh "List the tests the change reaches" -- pnpm exec vitest list --project node --changed=HEAD^1 --filesOnly --passWithNoTests --json="$RUNNER_TEMP/reached.json"
+            .github/scripts/run-named.sh "List the tests to run" --stdout "$RUNNER_TEMP/node-tests.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --reached "$RUNNER_TEMP/reached.json"
+            mapfile -t TESTS < "$RUNNER_TEMP/node-tests.txt"
+            if [ "${#TESTS[@]}" -gt 0 ]; then
+              .github/scripts/run-named.sh "Tests the change reaches and tests that read source files" -- pnpm test:node --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${TESTS[@]}"
             fi
           else
             pnpm test:node --shard=${{ matrix.shard }}/${{ strategy.job-total }}
