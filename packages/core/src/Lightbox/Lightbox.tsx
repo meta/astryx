@@ -501,11 +501,12 @@ const styles = stylex.create({
     backgroundColor: CAPTION_BACKING,
   },
   // The open caption's text, up to 60 % of the viewport tall. A finger
-  // scrolls a longer one, and the toggle stays in view beside it.
+  // scrolls a longer one, and the toggle stays in view beside it. A pinch on
+  // it still zooms the page.
   captionTextOpen: {
     maxBlockSize: `calc(60dvh - ${spacingVars['--spacing-3']} - env(safe-area-inset-bottom, 0px))`,
     overflowY: 'auto',
-    touchAction: 'pan-y',
+    touchAction: 'pan-y pinch-zoom',
   },
   // A fitted photo's zoom-in cursor shows only over the photo, where the
   // stage sets OVER_PHOTO_ATTRIBUTE. Beside it, a click closes the viewer.
@@ -999,7 +1000,15 @@ export function Lightbox({
   const cancelCaptionShrinkRef = useRef<(() => void) | null>(null);
   // Whether the open caption scrolls inside its panel.
   const [isCaptionScrolling, setIsCaptionScrolling] = useState(false);
+  // The caption's toggle. Under a coarse pointer it takes taps out toward
+  // 44 px. A finger's tap on it is its own, as UIKit gives a control's tap
+  // precedence over the single tap of the photo around it.
+  const captionToggleRef = useRef<HTMLButtonElement | null>(null);
   const measureCaptionLines = useCallback(() => {
+    // The toggle's committed state, so this measure stays one callback for
+    // the caption's observer.
+    const isCaptionOpen =
+      captionToggleRef.current?.getAttribute('aria-expanded') === 'true';
     // A measure in the same frame cancels a waiting smaller count, so it
     // counts the text's lines again.
     const wasShrinking = cancelCaptionShrinkRef.current != null;
@@ -1065,16 +1074,11 @@ export function Lightbox({
         caption != null &&
         caption.scrollHeight > caption.clientHeight + 1,
     );
-  }, [isCaptionOpen]);
+  }, []);
   // The caption's reads and its toggle's width wait for one microtask after
   // the observer's callback. There the caption is read before any write, and
   // one commit lands before the frame paints. A read after a write in that
   // delivery would force a layout before the browser's own.
-  const measureCaptionRef = useRef(() => {});
-  // Syncs the measurement with this render's lines measure.
-  useIsomorphicLayoutEffect(() => {
-    measureCaptionRef.current = measureCaptionLines;
-  });
   const captionDeliveryRef = useRef<{
     isCaptionDirty: boolean;
     toggleWidth: number | null;
@@ -1094,7 +1098,7 @@ export function Lightbox({
           // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- a delivery comes after layout and before paint; the caption's "more" and the toggle's place commit in that frame
           flushSync(() => {
             if (pending.isCaptionDirty) {
-              measureCaptionRef.current();
+              measureCaptionLines();
             }
             if (pending.toggleWidth != null) {
               setCaptionToggleWidth(pending.toggleWidth);
@@ -1105,7 +1109,7 @@ export function Lightbox({
       due.isCaptionDirty ||= isCaptionDirty;
       due.toggleWidth = toggleWidth ?? due.toggleWidth;
     },
-    [],
+    [measureCaptionLines],
   );
   // Syncs the toggle's place and the open caption's lines and scroll with
   // the caption's laid-out size. A resize, a font load and the caption's own
@@ -1126,17 +1130,13 @@ export function Lightbox({
         noteCaptionDelivery(true, null);
       });
       if (stop == null) {
-        measureCaptionRef.current();
+        measureCaptionLines();
         return () => {};
       }
       return stop;
     },
     isOpen ? currentItem?.caption : null,
   );
-  // The caption's toggle. Under a coarse pointer it takes taps out toward
-  // 44 px. A finger's tap on it is its own, as UIKit gives a control's tap
-  // precedence over the single tap of the photo around it.
-  const captionToggleRef = useRef<HTMLButtonElement | null>(null);
   // Close, where focus goes off a paged-away toggle when the stage takes none.
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   // The current caption's toggle shows while two lines clamp it, or open.
