@@ -149,11 +149,17 @@ const SHORT = /** @type {Record<string, string>} */ ({
   txt: 'text',
   clr: 'color',
   shdw: 'shadow',
+  fnot: 'font',
+  fnt: 'font',
 });
 
 /** Plain words that are never corrected, though one letter off a VOCAB word. */
 const KEEP = new Set([
   'lines',
+  'block',
+  'blocks',
+  'blank',
+  'blur',
   'shadowy',
   'times',
   'remote',
@@ -542,6 +548,7 @@ function scaled(v, f) {
  * @type {Array<[RegExp, PartRef]>}
  */
 const OVERRIDES = [
+  [/\bdividers?\b/, {on: 'divider'}],
   [
     /\baccordions? (headers?|triggers?|titles?|headings?)\b/,
     {on: 'collapsible-trigger'},
@@ -625,7 +632,6 @@ const OVERRIDES = [
  */
 const NOT_PART_WORDS = new Set([
   'center',
-  'divider',
   'grid',
   'item',
   'layout',
@@ -677,6 +683,7 @@ function partLexicon(ctx) {
   const vocab = [
     ...new Set([
       ...DESIGN_WORDS,
+      ...Object.keys(HUES).filter(w => w.length >= 5),
       ...[...project.target.keys()]
         .filter(key => !key.includes('-'))
         .flatMap(key => [key, `${key}s`]),
@@ -701,7 +708,7 @@ const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
     /\b(selected|active (tab|nav|item|link|page))\b|\bactive\b(?=.*\b(nav|tab|item)\b)/,
     'selected',
   ],
-  [/\b(pressed|clicked|tapped|on press|on click)\b/, 'active'],
+  [/\b(press(ed|es)?|clicked|tapped|on press|on click)\b/, 'active'],
   [/\b(invalid|errors? state|has an error|with an error)\b/, 'invalid'],
   // Words for states a part may not have: the answer says so.
   [/\bread-?only\b/, 'readonly'],
@@ -783,7 +790,9 @@ function aspectsOf(text) {
   if (/\bitalics?\b/.test(c)) add('italic');
   if (
     /\b(bold(er)?|unbold\w*|weight|heav(y|ier)|semibold)\b/.test(c) ||
-    /\bthin(ner)? (font|text|type|letters|headings?|labels?)\b/.test(c) ||
+    /\bthin(ner)? (body |button |heading |label )?(font|text|type|letters|headings?|labels?|copy)\b/.test(
+      c,
+    ) ||
     (/\blight(er)?\b/.test(c) &&
       /\b(headings?|titles?|font|weight)\b/.test(c) &&
       !/\b(text|colou?r|mode|background|bg)\b/.test(c))
@@ -837,6 +846,19 @@ function aspectsOf(text) {
   )
     add('family');
   if (!a.length && /\b(thick(er)?|thin(ner)?)\b/.test(c)) add('border');
+  // "faster hover transitions", "fade in slower": motion, not opacity.
+  if (
+    /\b(transitions?|animations?|animate[sd]?|fade[sd]? (in|out)|motion)\b/.test(
+      c,
+    ) &&
+    /\b(fast(er)?|slow(er)?|quick(er)?|snappier|speed|duration|\d+m?s|off|no|none|disable|stop|remove)\b/.test(
+      c,
+    )
+  ) {
+    a.splice(0, a.length);
+    add('motion');
+    return a;
+  }
   if (
     /\b(faded|fade|opacity|see-through|washed out)\b/.test(c) ||
     // A percent is an opacity only beside an opacity word, never inside a
@@ -846,7 +868,8 @@ function aspectsOf(text) {
       !a.includes('corners'))
   )
     add('opacity');
-  if (/\b(scales? (down|up)|shrinks?|grows?)\b/.test(c)) add('scale');
+  if (/\b(scales? (down|up)|shrinks?|grows?|scale\s*:?\s*0?\.\d+)\b/.test(c))
+    add('scale');
   if (
     (/\b(text|writing|words|labels?|font colou?r|readable|links?|body copy)\b/.test(
       c,
@@ -930,7 +953,12 @@ function clausesOf(q, partWords) {
       for (let i = parts.length - 1; i >= 0; i--)
         if (parts[i].on === 'badge' && !/\b(badges?|chips?|tags?)\b/.test(text))
           parts.splice(i, 1);
-    const aspects = aspectsOf(text);
+    // "Space Grotesk headings": a font's name is a font, never its words.
+    const aspects = aspectsOf(
+      text
+        .replace(new RegExp(`\\b(${FONT_NAMES})\\b`, 'g'), ' font ')
+        .replace(/\bspace (mono|grotesk|grotesque)\b/g, ' font '),
+    );
     // "orange not red" negates a color, not the change.
     const hue = Object.keys(HUES).join('|');
     const negText = text.replace(
@@ -950,7 +978,7 @@ function clausesOf(q, partWords) {
       ) && !/\bno (wait|longer)\b/.test(negText);
     // "too X" asks for less X: too sharp is rounder, too heavy is lighter.
     const tooLess =
-      /\btoo (big|large|round|rounded|roundy|bubbly|shadowy|bold|heavy|thick|dark|spacious|airy|bright|loud|strong|harsh|much|wide|tall)\b/;
+      /\btoo (big|large|round|rounded|roundy|bubbly|shadowy|bold|heavy|thick|dark|spacious|airy|bright|loud|strong|harsh|aggressive|intense|garish|saturated|much|wide|tall)\b/;
     const tooMore =
       /\btoo (small|cramped|tight|crowded|faded|light|thin|sharp|square|boxy|pointy|subtle|weak|narrow|dim|low|short)\b/;
     const dir = /\bnot (\w+ ){0,2}enough\b/.test(text)
@@ -1031,20 +1059,42 @@ function clausesOf(q, partWords) {
  * @param {string} text
  * @returns {{prop: string, value: string, bad?: string} | null}
  */
-function namedProperty(text) {
+export function namedProperty(text) {
   const props = cssProperties();
   const flat = text.replace(/\u2e34/g, ',');
   for (const m of flat.matchAll(
-    /\b(border colou?r|(?:min|max) (?:height|width)|line height|letter spacing|font (?:size|weight)|radius|[a-z]+(?:-[a-z]+)+|[a-z]+)(\s*:)?\s*/g,
+    /\b((?:border|outline)(?: (?:top|right|bottom|left))? (?:colou?r|width|style)|(?:min|max) (?:height|width)|line height|letter spacing|font (?:size|weight)|radius|[a-z]+(?:-[a-z]+)+|[a-z]+)(\s*:)?\s*/g,
   )) {
-    const prop = PROPERTY_WORDS[m[1]] ?? m[1];
+    const prop =
+      PROPERTY_WORDS[m[1]] ??
+      (/^(border|outline)( (top|right|bottom|left))? (colou?r|width|style)$/.test(
+        m[1],
+      )
+        ? m[1].replace(/colour/, 'color').replace(/ /g, '-')
+        : m[1]);
+    // A property word right after another one ("border width") is part of
+    // it, never a property of its own.
+    if (
+      /\b(border|outline)\s*$/.test(flat.slice(0, m.index ?? 0)) &&
+      !m[1].startsWith('border') &&
+      m[1] !== 'radius'
+    )
+      continue;
     if (!props.has(prop)) continue;
     // A plain word ("background", "padding") without a colon is a property
     // only before a value that is typed, not described.
-    const plain = !m[2] && !m[1].includes('-');
+    const plain = !m[2] && !/[- ]/.test(m[1]);
     // Without a colon, only these plain words name a property; others
     // ("inset", "fill") are design words.
-    if (!m[2] && !m[1].includes('-') && !PLAIN_PROPERTIES.has(prop)) continue;
+    if (plain && !PLAIN_PROPERTIES.has(prop)) continue;
+    // "shadow opacity", "border opacity": a layer's alpha, not the part's.
+    if (
+      prop === 'opacity' &&
+      /\b(shadows?|backgrounds?|bg|borders?|outlines?)\s*$/.test(
+        flat.slice(0, m.index ?? 0),
+      )
+    )
+      continue;
     const rest = flat
       .slice((m.index ?? 0) + m[0].length)
       .replace(/^(?:to|of|is|=)\s+/, '')
@@ -1070,6 +1120,15 @@ function namedProperty(text) {
         (prop === 'border' && /^#/.test(rest)))
     )
       continue;
+    // "border 0 0 2px": lengths alone on a border are its widths, all kept.
+    const lengths = tokens.filter(t => /^(0|\d*\.?\d+(px|rem|em))$/.test(t));
+    if (
+      /^(border|outline)$/.test(prop) &&
+      lengths.length > 1 &&
+      lengths.length === tokens.length &&
+      matchValue(`${prop}-width`, tokens.join(' '))
+    )
+      return {prop: `${prop}-width`, value: tokens.join(' ')};
     for (let n = tokens.length; n > 0; n--) {
       const value = tokens
         .slice(0, n)
@@ -1078,10 +1137,61 @@ function namedProperty(text) {
       // A font size of 0 hides the text.
       if (prop === 'font-size' && /^0(px|rem|em)?$/.test(value))
         return {prop, value: '', bad: value};
-      if (value && matchValue(prop, value)) return {prop, value};
+      if (!value || !matchValue(prop, value)) continue;
+      // A value that drops typed words is not the one asked for: "border
+      // 0 0 2px" is not "border 0".
+      if (n < tokens.length && /^[-.\d#]/.test(tokens[n] ?? '')) break;
+      return completeShorthand(prop, value);
     }
   }
   return null;
+}
+
+/**
+ * A shorthand value made complete, so it does what was asked: a border or
+ * outline with no line style draws nothing, and a text-decoration with
+ * only a color takes the underline away. Lengths alone are the width, a
+ * color alone is the color, and a width with a color gets a solid line.
+ * @param {string} prop
+ * @param {string} value
+ * @returns {{prop: string, value: string}}
+ */
+function completeShorthand(prop, value) {
+  const words = valueWords(value);
+  const isLength = (/** @type {string} */ w) =>
+    /^(0|-?\d*\.?\d+(px|rem|em|pt)|thin|medium|thick)$/.test(w) ||
+    /^(calc|var)\(/.test(w);
+  const isColor = (/** @type {string} */ w) =>
+    Boolean(parseColor(w)) ||
+    /^(var|color-mix|light-dark)\(/.test(w) ||
+    w === 'transparent' ||
+    w === 'currentcolor';
+  const styled = words.some(w =>
+    /^(none|hidden|solid|dashed|dotted|double|groove|ridge|inset|outset|auto)$/.test(
+      w,
+    ),
+  );
+  // "border 0" takes the border away, as typed.
+  if (/^(border|outline)$/.test(prop) && value === '0') return {prop, value};
+  if (/^(border|outline)(-(top|right|bottom|left))?$/.test(prop) && !styled) {
+    if (words.every(isLength))
+      return {
+        prop:
+          prop === 'outline'
+            ? 'outline-width'
+            : `${prop.replace(/-(top|right|bottom|left)$/, '')}${/-(top|right|bottom|left)$/.test(prop) ? prop.slice(prop.lastIndexOf('-')) : ''}-width`,
+        value,
+      };
+    if (words.every(isColor)) return {prop: `${prop}-color`, value};
+    if (words.length === 2 && words.some(isLength) && words.some(isColor)) {
+      const len = /** @type {string} */ (words.find(isLength));
+      const col = /** @type {string} */ (words.find(isColor));
+      return {prop, value: `${len} solid ${col}`};
+    }
+  }
+  if (prop === 'text-decoration' && words.every(isColor))
+    return {prop: 'text-decoration-color', value};
+  return {prop, value};
 }
 
 /** Plain words that name a property without a colon, before a typed value. */
@@ -1294,6 +1404,37 @@ export function draftAnswer(ctx, env, question) {
     )
     // "0.5 rem", "14 px": a number and its unit are one length.
     .replace(/\b(\d+(?:\.\d+)?)\s+(px|rem|em|pt|vh|vw|ch)\b/gi, '$1$2')
+    // Typography words for the properties they name.
+    .replace(
+      /\btabular (numbers|numerals|figures|nums)\b/g,
+      'font-variant-numeric: tabular-nums',
+    )
+    .replace(
+      /\bbalance (?:the )?(?:(\w+) )?(?:line breaks|lines|wrapping)\b/g,
+      '$1 text-wrap: balance',
+    )
+    // "hover does nothing visible": the effect is too subtle.
+    .replace(
+      /\b(?:does|do) nothing(?: visible)?\b|\bnothing happens\b/g,
+      'is too subtle',
+    )
+    // "I can barely see the borders": too faint.
+    .replace(
+      /\b(?:i )?(?:can )?(?:barely|hardly) see (?:the )?(\w+)/g,
+      '$1 too faint',
+    )
+    // "11pt": points as pixels (a point is 4/3 of a pixel).
+    .replace(
+      /\b(\d+(?:\.\d+)?)pt\b/gi,
+      (_, n) => `${Math.round((Number(n) * 4) / 3)}px`,
+    )
+    // "a 1px border instead of a shadow": no shadow, and the border.
+    .replace(
+      /^(.*?)\binstead of (?:a |an |the )?([a-z]+(?: [a-z]+)?)\b/gim,
+      (m, a, b) => (a.trim() ? `no ${b} ; ${a}` : m),
+    )
+    // "why are my headings not bold": the complaint asks for bold.
+    .replace(/\bwhy (?:is|are|isn'?t|aren'?t)\b(.*?)\bnot\s+/gi, 'make$1 ')
     // "button padding 8", "radius 10": a bare number there is pixels.
     .replace(
       /\b(padding|radius|corners|gap|margin)(\s*:?\s*)(\d+(?:\.\d+)?)(?![\d.%\w])/gi,
@@ -1374,6 +1515,11 @@ export function draftAnswer(ctx, env, question) {
     .replace(/\bborders?\s+rounded\b/g, 'rounded corners')
     .replace(/\bbutton-s\b/g, 'buttons')
     .replace(/[a-z]+/g, w => corrected(w, lex.vocab))
+    // "buttons, but not bold": the "not" is about the buttons.
+    .replace(
+      /,?\s*\bbut not\s+(?=(bold|italic|uppercase|rounded|round|shadowed|underlined|bordered|faded|dark|light|bright|big|small|too \w+)\b)/g,
+      ' not ',
+    )
     .replace(/\b(everything|everywhere|all) but\b/g, '$1 except')
     .replace(
       /\b(apart from|other than|excluding|but not (on|in|for)|but not)\b/g,
@@ -1540,6 +1686,20 @@ export function draftAnswer(ctx, env, question) {
       (systemFamilyIn(c.text, question) || OS_FONT.test(c.text))
     )
       c.aspects.push('family');
+  // "make the divider 2px": a divider's length is its thickness.
+  for (const c of clauses)
+    if (
+      c.parts.some(p => p.on === 'divider') &&
+      !c.aspects.length &&
+      c.lengths.length
+    )
+      c.aspects = ['size'];
+  // "shadow opacity 0.2": the layer's alpha is the ask, not the layer.
+  for (const c of clauses)
+    if (
+      /\b(shadows?|backgrounds?|bg|borders?|outlines?)\s+opacity\b/.test(c.text)
+    )
+      c.aspects = ['opacity'];
   // "the table ... a header" is the table's header row.
   if (/\b(tables?|rows?|zebra)\b/.test(q))
     for (const c of clauses)
@@ -1623,7 +1783,12 @@ export function draftAnswer(ctx, env, question) {
           /\b(darker|lighter|brighter|colou?r(ed)?)\b/.test(c.text) ||
           (!c.neg && toneIn(c.text)))
       )
-        c.aspects.push('background');
+        c.aspects.push(
+          // "headings red": a part that is only text has a text color.
+          c.parts.every(p => ['heading', 'link'].includes(p.on))
+            ? 'text'
+            : 'background',
+        );
   };
   fillAspect();
   for (let i = 0; i < clauses.length; i++) {
@@ -1991,6 +2156,8 @@ export function draftAnswer(ctx, env, question) {
     if (
       named &&
       !named.bad &&
+      // A divider's thickness and color are its border tokens.
+      !c.parts.some(p => p.on === 'divider') &&
       c.parts.length &&
       c.parts.every(p => TARGET.has(one(p.on)) || FAMILIES[p.on])
     ) {
@@ -2094,6 +2261,36 @@ export function draftAnswer(ctx, env, question) {
    * @returns {Draft | null}
    */
   function resetAnswer(c) {
+    // "go back to the neutral theme", "start over": every setting.
+    if (
+      /\b(back to|reset to|revert to|restore) (the )?(neutral|base|original|default|plain) theme\b|\bstart over\b|\breset (the )?(whole )?theme\b/.test(
+        c.text,
+      )
+    ) {
+      const all = env.data.settings;
+      return all.length
+        ? {
+            text: `take back every setting ${env.slug} has, one undo each, to its base theme (${env.data.like})`,
+            options: [
+              all.map(
+                st =>
+                  /** @type {Step} */ ({
+                    verb: 'undo',
+                    thing: st.thing,
+                    ...(st.on ? {on: st.on} : {}),
+                    ...(st.when ? {when: st.when} : {}),
+                    ...(st.state ? {state: st.state} : {}),
+                    ...(st.mode ? {mode: st.mode} : {}),
+                  }),
+              ),
+            ],
+            sequence: all.length > 1,
+          }
+        : {
+            text: `${env.slug} sets nothing, so it is its base theme as it is`,
+            options: [],
+          };
+    }
     if (
       !/\b(reset|revert|restore|back to|default|original|what it was|standard|clear|no custom|remove the override)\b/.test(
         c.text,
@@ -2324,6 +2521,96 @@ export function draftAnswer(ctx, env, question) {
         ],
       };
     }
+    if (a === 'motion') {
+      // "turn off all animations", "no transition on links".
+      if (c.neg || /\b(off|none)\b/.test(c.text)) {
+        if (on)
+          return {
+            text: `no transition${where}`,
+            options: [[set('transition', 'none', f)]],
+          };
+        return {
+          text: 'no motion: every shared duration token at 0ms',
+          options: [
+            Object.keys(TOKENS)
+              .filter(t => /^--duration-/.test(t))
+              .map(t => set(t, '0ms')),
+          ],
+          sequence: true,
+        };
+      }
+      const typedMs = /\b(\d+)ms\b/.exec(c.text)?.[1];
+      if (typedMs && !on)
+        return {
+          text: `every motion at ${typedMs}ms: the shared duration tokens`,
+          options: [
+            ['--duration-fast', '--duration-medium', '--duration-slow']
+              .filter(t => t in TOKENS)
+              .map(t => set(t, `${typedMs}ms`)),
+          ],
+          sequence: true,
+        };
+      const slower = /\b(slow(er)?|longer)\b/.test(c.text);
+      const ms =
+        /\b(\d+)ms\b/.exec(c.text)?.[1] ??
+        (/\b(\d*\.?\d+)s\b/.exec(c.text)?.[1] &&
+          String(Number(/\b(\d*\.?\d+)s\b/.exec(c.text)?.[1]) * 1000));
+      const own = on ? (C.MAP[one(on)]?.own ?? {}) : {};
+      const moves = Object.keys(own).some(k =>
+        /^(transition|animation)-duration$/.test(k),
+      );
+      if (on && !moves)
+        return {
+          text: `${on} has no motion of its own that set can change; the theme's motion speeds are the --duration-* tokens, which every part shares`,
+          options: [],
+          lookup: `${HOW} --duration-medium`,
+        };
+      if (!on) {
+        const scale = slower ? 1.5 : 0.6;
+        return {
+          text: `${slower ? 'slower' : 'faster'} motion everywhere: the shared duration tokens`,
+          options: [
+            ['--duration-fast', '--duration-medium', '--duration-slow']
+              .filter(t => t in TOKENS)
+              .map(t =>
+                set(t, `${Math.round(parseFloat(current(t)) * scale)}ms`),
+              ),
+          ],
+          sequence: true,
+        };
+      }
+      return {
+        text: `${slower ? 'slower' : 'faster'} transitions${where}: transition-duration`,
+        options: [
+          [set('transition-duration', `${ms ?? (slower ? 300 : 100)}ms`, f)],
+        ],
+      };
+    }
+    // A divider draws with the border tokens: its thickness and color.
+    if (
+      on === 'divider' &&
+      ['border', 'size', 'background', 'text'].includes(a)
+    ) {
+      const color = colorFor(c, 'fill');
+      if (color && (a === 'background' || a === 'text' || a === 'border'))
+        return {
+          text: 'the divider color: --color-border, on the divider only',
+          options: [[set('--color-border', color, {on, ...modeOf(c)})]],
+        };
+      const len =
+        c.lengths[0] ??
+        (c.dir === 'less'
+          ? '1px'
+          : c.dir || /\bthick/.test(c.text)
+            ? '2px'
+            : null);
+      return len
+        ? {
+            text: 'the divider thickness: --border-width, on the divider only',
+            options: [[set('--border-width', len, {on})]],
+          }
+        : null;
+    }
     if (on === 'overlay') {
       const typed = colorFor(c, 'fill');
       const steps = typed
@@ -2344,6 +2631,26 @@ export function draftAnswer(ctx, env, question) {
         sequence: steps.length > 1,
       };
     }
+    // A part that reads no fill or text color token ("spinner in the accent
+    // color") gets no fill it never had.
+    if (
+      a === 'background' &&
+      on &&
+      !f.state &&
+      !/\b(stripe[sd]?|striped|zebra)\b/.test(c.text) &&
+      C.MAP[one(on)] &&
+      !Object.keys(C.MAP[one(on)].own ?? {}).some(k =>
+        /^(background|background-color|background-image|color|fill|stroke|border-color|border|outline-color)$/.test(
+          k,
+        ),
+      ) &&
+      !/\b(background|bg|fill(ed)?|gradient)\b/.test(c.text)
+    )
+      return {
+        text: `${on} reads no fill or text color token that set can change; its color comes from its own props`,
+        options: [],
+        lookup: `${HOW} ${on}`,
+      };
     if (p?.role === 'body' && a === 'weight') {
       const v =
         weightIn(c) ??
@@ -2866,7 +3173,11 @@ export function draftAnswer(ctx, env, question) {
                 set(
                   'text-size',
                   px
-                    ? String(parseFloat(px))
+                    ? String(
+                        /r?em$/.test(px)
+                          ? Math.round(parseFloat(px) * 16 * 100) / 100
+                          : parseFloat(px),
+                      )
                     : c.dir === 'less'
                       ? 'less'
                       : 'more',
@@ -2916,6 +3227,13 @@ export function draftAnswer(ctx, env, question) {
         };
       }
       case 'case': {
+        if (/\bsmall caps\b/.test(c.text) && on)
+          return {
+            text: `small caps${where}: font-variant-caps`,
+            options: [
+              [set('font-variant-caps', c.neg ? 'normal' : 'small-caps', f)],
+            ],
+          };
         const value = c.neg
           ? 'none'
           : /\blower/.test(c.text)
@@ -2942,7 +3260,63 @@ export function draftAnswer(ctx, env, question) {
             }
           : null;
       case 'opacity': {
-        const typedOpacity = /\bopacity\s*:?\s*(0|1|0?\.\d+)\b(?!%)/.exec(
+        const layer =
+          /\b(shadows?|backgrounds?|bg|borders?|outlines?)\s+opacity\b/.exec(
+            c.text,
+          )?.[1];
+        const alpha =
+          /\bopacity\s*:?\s*(0?\.\d+|0|1)\b(?!%)/.exec(c.text)?.[1] ??
+          (Number(/\b(\d{1,3})%/.exec(withoutFunctions(c.text))?.[1] ?? NaN) /
+            100 ||
+            null);
+        // "shadow opacity 0.2": the layer's own alpha, never the part's.
+        if (layer && on) {
+          const a =
+            alpha == null ? (c.dir === 'less' ? 0.08 : 0.2) : Number(alpha);
+          if (/^shadow/.test(layer))
+            return {
+              text: `a shadow at ${a} alpha${where}`,
+              options: [[set('box-shadow', `0 1px 3px rgb(0 0 0 / ${a})`, f)]],
+            };
+          if (/^(background|bg)/.test(layer)) {
+            const tok =
+              C.partReads(one(on), 'background').find(r => r.when.includes(''))
+                ?.token ??
+              (FAMILIES.containers.includes(one(on))
+                ? '--color-background-card'
+                : null);
+            return tok
+              ? {
+                  text: `the background at ${Math.round(a * 100)}%${where}, see-through to what is behind it`,
+                  options: [
+                    [
+                      set(
+                        'background-color',
+                        `color-mix(in srgb, var(${tok}) ${Math.round(a * 100)}%, transparent)`,
+                        f,
+                      ),
+                    ],
+                  ],
+                }
+              : {
+                  text: `${on} has no background color of its own to make see-through`,
+                  options: [],
+                };
+          }
+          return {
+            text: `the border at ${Math.round(a * 100)}%${where}`,
+            options: [
+              [
+                set(
+                  'border-color',
+                  `color-mix(in srgb, var(--color-border) ${Math.round(a * 100)}%, transparent)`,
+                  f,
+                ),
+              ],
+            ],
+          };
+        }
+        const typedOpacity = /\bopacity\s*:?\s*(0?\.\d+|0|1)\b(?!%)/.exec(
           c.text,
         )?.[1];
         if (typedOpacity && on)
@@ -2978,6 +3352,12 @@ export function draftAnswer(ctx, env, question) {
           : null;
       }
       case 'scale':
+        // "should not shrink when pressed": no scale.
+        if (on && c.neg)
+          return {
+            text: `${on} keeps its size${where}: transform none`,
+            options: [[set('transform', 'none', f)]],
+          };
         return on
           ? {
               text: `${on} scales${where}: transform`,
@@ -2985,9 +3365,11 @@ export function draftAnswer(ctx, env, question) {
                 [
                   set(
                     'transform',
-                    /\b(up|grows?)\b/.test(c.text)
-                      ? 'scale(1.03)'
-                      : 'scale(0.97)',
+                    /\bscale\s*:?\s*(0?\.\d+|1(\.\d+)?)\b/.test(c.text)
+                      ? `scale(${/\bscale\s*:?\s*(0?\.\d+|1(?:\.\d+)?)\b/.exec(c.text)?.[1]})`
+                      : /\b(up|grows?)\b/.test(c.text)
+                        ? 'scale(1.03)'
+                        : 'scale(0.97)',
                     f,
                   ),
                 ],
@@ -3057,7 +3439,13 @@ export function draftAnswer(ctx, env, question) {
         };
       }
       case 'text': {
-        const color = colorFor(c, 'text');
+        // "dim the white text": the color word names the text to change,
+        // not the color to give it.
+        const recolor =
+          /\b(dim|dimmer|soften|darken|lighten|brighten|tone down)\b/.test(
+            c.text,
+          ) && !/#[0-9a-f]{3,8}\b|\(/.test(c.text);
+        const color = recolor ? null : colorFor(c, 'text');
         const tok = /\bsecondary\b/.test(c.text)
           ? '--color-text-secondary'
           : '--color-text-primary';
@@ -3138,7 +3526,7 @@ export function draftAnswer(ctx, env, question) {
             !/\bless contrast\b/.test(c.text);
           const less =
             down ||
-            /\b(less bright|dimmer|softer|lighter|less contrast|too dark)\b/.test(
+            /\b(less bright|dim|dimmer|soften|softer|lighter|less contrast|too dark)\b/.test(
               c.text,
             );
           if (!more && !less) return null;
@@ -3177,6 +3565,13 @@ export function draftAnswer(ctx, env, question) {
             options: [[set('--color-text-accent', color, modeOf(c))]],
           };
         if (!color) return null;
+        // A part that takes its color from a prop (a heading): the text
+        // token, on that part only.
+        if (!env.check([set('color', color, f)]).ok)
+          return {
+            text: `the text color${where}: --color-text-primary on ${on} only (${on} takes its color from a prop, so a color property never shows)`,
+            options: [[set('--color-text-primary', color, {on, ...modeOf(c)})]],
+          };
         return {
           text: `text color${where}: color`,
           options: [[set('color', color, {...f, ...modeOf(c)})]],
@@ -3986,14 +4381,14 @@ function fontIn(cl, question) {
   // A name as typed, up to four words ("Source Sans 3", "Roboto Slab"):
   // after "use" or "font", or before "font"; one this clause names.
   const GENERIC =
-    /^(a|an|the|my|our|this|that|any|some|same|another|different|new|nice|modern|bold|light|thin|heavy|big|small|serif|sans|sans-serif|mono|monospace|system|default|body|heading|headings|code|for|on|in)$/i;
+    /^(a|an|the|my|our|this|that|any|some|same|another|different|new|nice|modern|bold|light|thin|heavy|big|small|serif|sans|sans-serif|mono|monospace|system|default|body|heading|headings|code|for|on|in|dark|light|night)$/i;
   const NAME =
     "([A-Z][\\w-]*(?:'[\\w-]+)*(?: (?:[A-Z][\\w-]*(?:'[\\w-]+)*|\\d+)){0,3})";
   /** @type {string | undefined} */
   let typed;
   for (const re of [
     new RegExp(
-      `\\b(?:[Uu]se|[Ff]ont|[Tt]ypeface|[Tt]o)s?:?\\s+["']?${NAME}`,
+      `\\b(?:[Uu]se|[Ff]ont|[Tt]ypeface|[Tt]o|in)s?:?\\s+["']?${NAME}`,
       'g',
     ),
     new RegExp(`\\b${NAME}\\s+(?:font|typeface)\\b`, 'g'),

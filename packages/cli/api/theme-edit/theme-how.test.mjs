@@ -2233,7 +2233,10 @@ const QUESTIONS_G = [
   ],
   ['modal rounder', {top: /^set q corners more --on dialog$/}],
   ['carrd rounder', {top: /^set q corners more --on card$/}],
-  ['divider lines #e5e7eb', {top: null}],
+  [
+    'divider lines #e5e7eb',
+    {top: /^set q --color-border '#e5e7eb' --on divider$/},
+  ],
   // a CSS property named in the question is set as named
   [
     'inputs caret-color #2563eb',
@@ -2669,7 +2672,10 @@ const QUESTIONS_H = [
     'unchecked checkboxes: thicker border',
     {top: null, text: /checks has no unchecked state/},
   ],
-  ['heading color red', {top: null, text: /color prop|text color/}],
+  [
+    'heading color red',
+    {top: /^set q --color-text-primary '#dc2626' --on heading$/},
+  ],
   // CSS named colors
   ['accent tomato', {top: /^set q accent '#ff6347'$/}],
   // a font size of 0
@@ -2755,6 +2761,254 @@ describe('how answers final-3 questions', () => {
       fs.rmSync(dir, {recursive: true, force: true});
       fs.cpSync(keep, dir, {recursive: true});
       const {data} = await themeEditHow(question, {cwd, theme: 'ph'});
+      const top = data.results.find((/** @type {any} */ r) =>
+        r.commands.some((/** @type {string} */ c) => / editor set /.test(c)),
+      );
+      const commands = top.sequence ? top.commands : [top.commands[0]];
+      const before = css();
+      for (const c of commands) {
+        const [, theme, thing, ...rest] = words(bare(c));
+        const fi = rest.findIndex(w => /^--(on|when|state|mode)$/.test(w));
+        /** @type {Record<string, string>} */
+        const flags = {};
+        for (let i = fi < 0 ? rest.length : fi; i < rest.length; i += 2)
+          flags[rest[i].slice(2)] = rest[i + 1];
+        await themeEditSet(
+          theme,
+          thing,
+          (fi < 0 ? rest : rest.slice(0, fi)).join(' '),
+          {cwd, ...flags},
+        );
+      }
+      for (const w of want) {
+        expect(before, question).not.toMatch(w);
+        expect(css(), question).toMatch(w);
+      }
+    }
+    fs.rmSync(keep, {recursive: true, force: true});
+  }, 300_000);
+});
+
+/**
+ * Final-4 questions: complete shorthands, layer opacity, font names before
+ * dial words, negation, motion, points, text-only parts, the divider,
+ * resets to the base theme, and questions about the tool.
+ * @type {Array<[string, {top: RegExp | null, adds?: RegExp, text?: RegExp}]>}
+ */
+const QUESTIONS_I = [
+  // a shorthand value is complete, or the right longhand
+  [
+    'card border 2px',
+    {
+      top: /^set q border-width 2px --on card$/,
+      adds: /card\.base\.borderWidth=2px/,
+    },
+  ],
+  [
+    'card border 2px #e5e7eb',
+    {top: /^set q border '2px solid #e5e7eb' --on card$/},
+  ],
+  ['card border width 2px', {top: /^set q border-width 2px --on card$/}],
+  ['card outline width 2px', {top: /^set q outline-width 2px --on card$/}],
+  [
+    'card border bottom width 2px',
+    {top: /^set q border-bottom-width 2px --on card$/},
+  ],
+  ['card border 0 0 2px', {top: /^set q border-width '0 0 2px' --on card$/}],
+  ['card outline 2px', {top: /^set q outline-width 2px --on card$/}],
+  [
+    'links text-decoration #2563eb',
+    {top: /^set q text-decoration-color '#2563eb' --on link$/},
+  ],
+  ['brdr radius 8px on inputs', {top: /^set q border-radius 8px --on inputs$/}],
+  // a layer's opacity
+  [
+    'shadow opacity 0.2 on cards',
+    {top: /^set q box-shadow '0 1px 3px rgb\(0 0 0 \/ 0\.2\)' --on card$/},
+  ],
+  [
+    'card background opacity 0.5',
+    {
+      top: /^set q background-color 'color-mix\(in srgb, var\(--color-background-card\) 50%, transparent\)' --on card$/,
+    },
+  ],
+  // font names win over dial words
+  ['Space Grotesk headings', {top: /^set q font space-grotesk --on heading$/}],
+  ['headings in Space Mono', {top: /^set q font 'Space Mono' --on heading$/}],
+  // negation
+  [
+    'buttons should not shrink when pressed',
+    {top: /^set q transform none --on button --state active$/},
+  ],
+  ['buttons, but not bold', {top: /^set q font-weight 400 --on button$/}],
+  ['why are my headings not bold', {top: /^set q headings bold$/}],
+  // the right kind
+  ['thinner body text', {top: /^set q --text-body-weight 300$/}],
+  [
+    'dialogs should fade in slower',
+    {top: null, text: /dialog has no motion of its own/},
+  ],
+  [
+    'dim the white text in dark mode',
+    {top: /^set q --color-text-primary '#[0-9a-c][0-9a-f]{5}' --mode dark$/},
+  ],
+  [
+    'faster hover transitions on buttons',
+    {top: /^set q transition-duration 100ms --on button --state hover$/},
+  ],
+  ['spinner in the accent color', {top: null, text: /spinner reads no fill/}],
+  [
+    'cards get a 1px border instead of a shadow',
+    {
+      top: /^set q --shadow-low none && set q --shadow-med none && set q --shadow-high none && set q border-width 1px --on card$/,
+    },
+  ],
+  ['turn off all animations', {top: /^set q --duration-[a-z-]+ 0ms/}],
+  [
+    'transition duration 300ms everywhere',
+    {top: /^set q --duration-fast 300ms && set q --duration-medium 300ms/},
+  ],
+  [
+    'button press scale 0.98',
+    {top: /^set q transform 'scale\(0\.98\)' --on button --state active$/},
+  ],
+  // points
+  ['button text 11pt', {top: /^set q font-size 15px --on button$/}],
+  ['text size 0.9375rem', {top: /^set q text-size 15$/}],
+  // text-only parts
+  [
+    'heading color red',
+    {
+      top: /^set q --color-text-primary '#dc2626' --on heading$/,
+      adds: /heading\.base\.--color-text-primary=#dc2626/,
+    },
+  ],
+  [
+    'headings red',
+    {top: /^set q --color-text-primary '#dc2626' --on heading$/},
+  ],
+  // the divider
+  ['divider thicker', {top: /^set q --border-width 2px --on divider$/}],
+  ['divider color red', {top: /^set q --color-border '#dc2626' --on divider$/}],
+  ['make the divider 2px', {top: /^set q --border-width 2px --on divider$/}],
+  // typography and complaints
+  [
+    'small caps headings',
+    {top: /^set q font-variant-caps small-caps --on heading$/},
+  ],
+  [
+    'balance the heading line breaks',
+    {top: /^set q text-wrap balance --on heading$/},
+  ],
+  [
+    'I can barely see the borders',
+    {top: /^set q --color-border '#[0-9a-f]+' --mode light/},
+  ],
+  [
+    'hover on buttons does nothing visible',
+    {top: /--on button --state hover$/},
+  ],
+  // tool questions
+  ['how do I rename my theme', {top: null, text: /no command renames a theme/}],
+  ['which version of the CLI is this', {top: null, text: /version/}],
+  ['can I edit the css file by hand', {top: null, text: /hand edit is lost/}],
+];
+
+describe('how answers final-4 questions', () => {
+  for (const [question, want] of QUESTIONS_I)
+    it(question, async () => {
+      const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+      /** @type {Array<{text: string, commands: string[], sequence?: boolean}>} */
+      const results = data.results ?? [];
+      const all = results.map(r => r.text).join('\n') + (data.hint ?? '');
+      if (want.text) expect(all).toMatch(want.text);
+      for (const r of results)
+        for (const c of r.commands) expect(c).not.toMatch(/[<>]/);
+      const changes = results.filter(r =>
+        r.commands.some(c => / editor (set|undo) /.test(c)),
+      );
+      if (want.top === null) {
+        expect(changes).toEqual([]);
+        return;
+      }
+      const top = changes[0];
+      const commands = top.sequence ? top.commands : [top.commands[0]];
+      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      if (want.adds) expect(await effect(commands)).toMatch(want.adds);
+    });
+
+  it('"go back to the neutral theme" takes back every setting', async () => {
+    await themeEditNew('nb', {cwd, like: 'neutral'});
+    await themeEditSet('nb', 'accent', '#e11d48', {cwd});
+    await themeEditSet('nb', 'corners', 'pill', {cwd});
+    const {data} = await themeEditHow('go back to the neutral theme', {
+      cwd,
+      theme: 'nb',
+    });
+    expect(data.results[0].commands.map(bare)).toEqual([
+      'undo nb accent',
+      'undo nb corners',
+    ]);
+  }, 120_000);
+
+  it('a fully see-through picture is refused, like a 0-pixel one', async () => {
+    const chunk = (/** @type {string} */ t, /** @type {Buffer} */ body) => {
+      const len = Buffer.alloc(4);
+      len.writeUInt32BE(body.length);
+      return Buffer.concat([
+        len,
+        Buffer.from(t, 'latin1'),
+        body,
+        Buffer.alloc(4),
+      ]);
+    };
+    const header = Buffer.alloc(13);
+    header.writeUInt32BE(1, 0);
+    header.writeUInt32BE(1, 4);
+    header[8] = 8;
+    header[9] = 6;
+    fs.writeFileSync(
+      path.join(cwd, 'clear.png'),
+      Buffer.concat([
+        Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+        chunk('IHDR', header),
+        chunk('IDAT', zlib.deflateSync(Buffer.from([0, 255, 255, 255, 0]))),
+        chunk('IEND', Buffer.alloc(0)),
+      ]),
+    );
+    try {
+      const r = await refusal(() =>
+        themeEditHow('clear.png', {cwd, theme: 'q'}),
+      );
+      expect(r.code).toBe('ERR_INVALID_ARGUMENT');
+      expect(r.message).toMatch(/no visible colors/);
+    } finally {
+      fs.rmSync(path.join(cwd, 'clear.png'), {force: true});
+    }
+  });
+
+  it('runs final-4 answers through set and checks the built CSS', async () => {
+    await themeEditNew('pi', {cwd, like: 'neutral'});
+    const dir = path.join(cwd, 'themes', 'pi');
+    const keep = path.join(cwd, 'pi-pristine');
+    fs.cpSync(dir, keep, {recursive: true});
+    const css = () => fs.readFileSync(path.join(dir, 'pi.css'), 'utf8');
+    for (const [question, want] of /** @type {Array<[string, RegExp[]]>} */ ([
+      ['card border 2px', [/card[^{]*\{[^}]*border-width:\s*2px/]],
+      ['card border 0 0 2px', [/card[^{]*\{[^}]*border-width:\s*0 0 2px/]],
+      [
+        'shadow opacity 0.2 on cards',
+        [/card[^{]*\{[^}]*box-shadow:\s*0 1px 3px rgb\(0 0 0 \/ 0\.2\)/],
+      ],
+      [
+        'heading color red',
+        [/heading[^{]*\{[^}]*--color-text-primary:\s*#dc2626/],
+      ],
+      ['divider thicker', [/divider[^{]*\{[^}]*--border-width:\s*2px/]],
+    ])) {
+      fs.rmSync(dir, {recursive: true, force: true});
+      fs.cpSync(keep, dir, {recursive: true});
+      const {data} = await themeEditHow(question, {cwd, theme: 'pi'});
       const top = data.results.find((/** @type {any} */ r) =>
         r.commands.some((/** @type {string} */ c) => / editor set /.test(c)),
       );

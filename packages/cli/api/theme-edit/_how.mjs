@@ -890,6 +890,66 @@ function toolAnswer(t, env) {
         ],
       },
     ];
+  // Questions about the theme's files and life.
+  if (
+    /\b(use|import|apply|add|load) (this|the|my) theme (in|to|into) (my|the) app\b/.test(
+      q,
+    )
+  )
+    return [
+      {
+        text: `the theme is a module in themes/${env.slug}/; show names it and its files, and the theme docs say how an app loads a theme`,
+        commands: [`${P} show ${env.slug}`, 'astryx docs theme'],
+      },
+    ];
+  if (/\brename\b/.test(q))
+    return [
+      {
+        text: 'no command renames a theme: make a new one, set what you need on it, and remove the old folder',
+        commands: [
+          `${P} new ${env.slug}-2 --like ${env.data.like}`,
+          `${P} show ${env.slug}`,
+        ],
+      },
+    ];
+  if (
+    /\b(what|which) (changed|did i change|have i changed)\b|\bwhat (is|does) (my|this|the) theme set\b/.test(
+      q,
+    )
+  )
+    return [
+      {
+        text: `show lists every setting ${env.slug} has, in the order they were made`,
+        commands: [`${P} show ${env.slug}`],
+      },
+    ];
+  if (/\b(second|another|new|other) theme\b/.test(q))
+    return [
+      {
+        text: 'new makes a theme beside the ones you have; how and set take --theme to pick one',
+        commands: [`${P} new ${env.slug}-2 --like ${env.data.like}`],
+      },
+    ];
+  if (/\b(version|which cli|what cli)\b/.test(q))
+    return [{text: 'the CLI says its version', commands: ['astryx --version']}];
+  if (/\bwhere (are|is|do) .*\b(stored|saved|kept|live|files?)\b/.test(q))
+    return [
+      {
+        text: `everything is in themes/${env.slug}/: the settings file is the source, and the CSS and module are built from it`,
+        commands: [`${P} show ${env.slug}`],
+      },
+    ];
+  if (
+    /\b(edit|change) (the )?(css|module|theme)?( files?)? by hand\b|\bhand[- ]edit/.test(
+      q,
+    )
+  )
+    return [
+      {
+        text: `the CSS and module in themes/${env.slug}/ are built from the settings file, so a hand edit is lost at the next set; make the change with set`,
+        commands: [`${HOW} --help`],
+      },
+    ];
   const diff = /\bdifference between (.+?) and (.+)$/.exec(q);
   if (diff) {
     const props = cssProperties();
@@ -1203,11 +1263,19 @@ function pictureColors(file, cwd, at, count) {
       points: colorsAt(pic, points),
     };
   }
+  const colors = mainColors(pic, count ?? 14);
+  // Every pixel see-through: no color shows, as with a 0-pixel picture.
+  if (!colors.length)
+    throw new AstryxError(
+      `Could not read ${file} as a PNG picture: every pixel is fully see-through, so it has no visible colors.`,
+      [{name: `${HOW} --list`, reason: 'what how reads'}],
+      E.ERR_INVALID_ARGUMENT,
+    );
   return {
     file,
     width: pic.width,
     height: pic.height,
-    colors: mainColors(pic, count ?? 14),
+    colors,
     points: null,
   };
 }
