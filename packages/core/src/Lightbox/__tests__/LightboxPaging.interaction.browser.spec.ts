@@ -510,7 +510,7 @@ test('"more" opens a long caption in full over the photo, on a scrim, and "less"
     throw new Error('no more button');
   }
   // A finger's tap just below the label still lands on the toggle, which
-  // takes taps out toward 44 px, short of the line above.
+  // takes taps across 44 × 44 px.
   await g.driver.tap({x: m.x + m.width / 2, y: m.y + m.height + 6});
   const less = g.dialog.getByRole('button', {name: 'less'});
   await expect(less).toHaveAttribute('aria-expanded', 'true');
