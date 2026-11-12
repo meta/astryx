@@ -1050,7 +1050,7 @@ function clausesOf(q, partWords) {
         ? 'less'
         : tooMore.test(text)
           ? 'more'
-          : /\b(less|fewer|smaller|lower|reduce|softer|lighter|lighten|thinner|narrower|shorter|tight(en|er)?|dense(r)?|denser|compact|sharper|squarer|subtler|tone down|dimmer|halve|half|halved|least|minimum|min|minimal|barely|as little)\b|\bcut\b.*\bin half\b|\bx ?0?\.\d+\b|\b(knock|turn|dial|bring|tone)\b.*\bdown\b/.test(
+          : /\b(less|fewer|smaller|lower|reduce|decrease|shrink|minimi[sz]e|scale down|trim|softer|lighter|lighten|thinner|narrower|shorter|tight(en|er)?|dense(r)?|denser|compact|sharper|squarer|subtler|tone down|dimmer|halve|half|halved|least|minimum|min|minimal|barely|as little)\b|\bcut\b.*\bin half\b|\bx ?0?\.\d+\b|\b(knock|turn|dial|bring|tone)\b.*\bdown\b/.test(
                 text,
               )
             ? 'less'
@@ -1512,6 +1512,41 @@ export function draftAnswer(ctx, env, question) {
       '$2 $4 in $1 mode',
     )
     .replace(/^\s*(dark|light) mode only\s*:\s*/i, 'in $1 mode: ')
+    // "I need: 1. accent red 2. pill badges": inline list numbers are breaks,
+    // not values.
+    .replace(/(?:^|\s)\d{1,2}[.)]\s+(?=[a-z#])/gi, m =>
+      (question.match(/(?:^|\s)\d{1,2}[.)]\s+[a-z#]/gi) ?? []).length >= 2
+        ? '; '
+        : m,
+    )
+    // "only when dark mode is on", "except in dark mode": the mode itself.
+    .replace(
+      /\b(?:only )?(?:when|while|whenever) (?:the )?(dark|light) mode is (?:on|active|enabled|used)\b/gi,
+      'in $1 mode',
+    )
+    .replace(
+      /\b(?:except|but not|not) (?:in |for |on )?dark(?: mode| theme)?\b|\b(?:don'?t|do not) (?:touch|change) (?:the )?dark mode\b|\b(?:leave|keep) (?:the )?dark mode (?:alone|as it is|as is|untouched)\b/gi,
+      'in light mode',
+    )
+    .replace(
+      /\b(?:except|but not|not) (?:in |for |on )?light(?: mode| theme)?\b|\b(?:don'?t|do not) (?:touch|change) (?:the )?light mode\b|\b(?:leave|keep) (?:the )?light mode (?:alone|as it is|as is|untouched)\b/gi,
+      'in dark mode',
+    )
+    // Removal words in other languages and 🚫: none of it.
+    .replace(/(?:🚫|⛔)\s*/gu, 'no ')
+    .replace(
+      /\b(?:rimuovi|togli|elimina|entferne|quita|retire)\b\s*(?:l'|la |le |il |lo |el |los |las |o |a |os |as |die |der |das |den )?/gi,
+      'no ',
+    )
+    .replace(
+      /\b(?:sans|sin|sem|ohne)\s+(?=(?:l'|la |le |el |o |a |den )?(?:ombres?|bordures?|sombras?|bordes?|bordas?|schatten|rand)\b)/gi,
+      'no ',
+    )
+    // "those dialog shadows are heavy": too heavy, so lighter.
+    .replace(
+      /\b(?:are|is|look|looks|seem|seems) (?:so |very |way |kinda |pretty |quite )?(heavy|strong|harsh|loud|thick|dark|bright)\b/gi,
+      'too $1',
+    )
     .replace(/\b(dark|light)mode\b/gi, '$1 mode')
     .replace(/\b(?:nuke|kill|zap|axe)\b/gi, 'remove')
     .replace(
@@ -1557,7 +1592,7 @@ export function draftAnswer(ctx, env, question) {
   const POLITE =
     /^\s*(?:(?:please|pls|kindly|ok(?:ay)?|also|and|now|so|anyway|alright|hey|hi|then)[,\s]+|(?:can|could|would|will) (?:you|we|i) (?:please )?|i'?d like (?:you )?to |i'?d like |i (?:want|need|prefer) (?:you )?(?:to )?|we'?d (?:like|prefer) |we (?:want|need|prefer) |hoping for |my request is |let'?s (?:go with )?|lets (?:go with )?|how (?:about|'bout) |what about |why not |why don'?t we (?:go with )?|go ahead and |mind making |you'?d better |you can |you forgot to |only |just |everything |lol |umm+ |ugh,? |quick one:? |(?:way|much|much much|slightly|a bit|a little|a smidge|just slightly|even|super|really|very) |when (?:hovering|hovered|pressed|clicked|focused|i hover|i click|i tab to)(?: (?:on|over|a|an|the) [a-z]+)? |(?:the |our |my )?(?:designer|pm|client|boss|users?|marketing|legal|design spec|style guide|mockup|brand) (?:wants?|needs?|requires?|prefers?|asked for|said:?|says:?) |please and thank you:? |thank you:? |thanks:? |in (?:dark|light) mode[:,]?\s*|(?:dark|light) mode[:,]\s*)+/i;
   const VERB =
-    /^(?:crank up|fix|make|set|change|use|give|turn|add|remove|drop|kill|increase|decrease|raise|lower|lighten|darken|round|sharpen|square|flatten|soften|tighten|loosen|beef up|bump|boost|tone down|thicken|thin|bold|unbold|underline|hide|show|put|switch|swap|replace|ditch|reduce|shrink|grow|enlarge|widen|narrow|paint|colou?r|fill|undo|revert|reset|restore|bring|go back|keep|apply|try|get rid|take|knock|cut|stop|don'?t|do not|never|avoid|no|without|scale|move|space|pad|center|align|uppercase|lowercase|italicize|enable|disable|switch)\b/i;
+    /^(?:crank up|fix|make|set|change|use|turn|add|remove|drop|kill|increase|decrease|raise|lower|lighten|darken|round|sharpen|square|flatten|soften|tighten|loosen|beef up|bump|boost|tone down|thicken|thin|bold|unbold|underline|hide|put|switch|swap|replace|ditch|reduce|shrink|trim|minimi[sz]e|scale down|grow|enlarge|widen|narrow|paint|colou?r|fill|undo|revert|reset|restore|bring|go back|keep|apply|try|get rid|take|knock|cut|stop|don'?t|do not|never|avoid|no|without|scale|move|space|pad|center|align|uppercase|lowercase|italicize|enable|disable|switch)\b/i;
   const THING =
     /^(?:the |my |our |all |every |all the )?(?:--[a-z][\w-]*|accent|brand|primary|secondary|danger|success|warning|info|corners?|radius|border-radius|spacing|padding|gap|margin|density|headings?|titles?|text(?:-size)?|font(?:s|-size|-family|-weight)?|body|page|background|bg|vibrancy|shadows?|borders?|outlines?|underlines?|links?|mode|leading|line[- ]height|letter[- ]spacing|tracking|weight|focus(?: ring| outline)?|colou?rs?)\b/i;
   const STYLE =
@@ -1610,7 +1645,7 @@ export function draftAnswer(ctx, env, question) {
     )
       return true;
     if (
-      /\b(schatten|karten|ecken|knöpfe|entfernen|pulsanti|arrotondat\w*|ombra|ombre|bordure|cartes|esquinas|redond\w*|botones|sombra|couleur|tarjetas|espacio|angoli|cantos|botões)\b/.test(
+      /\b(schatten|karten|ecken|knöpfe|entfernen|pulsanti|arrotondat\w*|ombra|ombre|bordure|cartes|esquinas|redond\w*|botones|boutons|arrondi\w*|rouges?|bleus?|verts?|sombra|couleur|tarjetas|espacio|angoli|cantos|botões)\b/.test(
         low,
       )
     )
@@ -1638,7 +1673,7 @@ export function draftAnswer(ctx, env, question) {
     // "our brand color is #0055ff": a value given for the brand; pasted CSS
     // ("html.dark .card { … }"); "X should be/look Y".
     if (
-      /^(?:our|my|the) brand colou?r is #[0-9a-f]{3,8}\b|\{[^}]*:|\bshould (?:be|look|have|get)\b(?![^?]*\?)/.test(
+      /^(?:our|my|the) brand colou?r is #[0-9a-f]{3,8}\b|\{[^}]*:|\bshould (?:be|look|have|get|use|match|feel)\b(?![^?]*\?)/.test(
         t0,
       ) &&
       !CONDITION.test(t0) &&
@@ -1664,7 +1699,10 @@ export function draftAnswer(ctx, env, question) {
       return true;
     const t = t0
       .replace(POLITE, '')
-      .replace(/^(?:the|my|our|all|every|all the|a|an)\s+/, '')
+      .replace(
+        /^(?:the|my|our|all|every|all the|a|an|those|these|this|that)\s+/,
+        '',
+      )
       .trim();
     // "could the buttons be rounder", "can I get a serif font".
     if (
@@ -1674,6 +1712,8 @@ export function draftAnswer(ctx, env, question) {
     )
       return true;
     if (VERB.test(t)) return true;
+    // "give buttons 8px corners": give a thing a value; "give me …" asks.
+    if (/^give (?!me\b|us\b)/.test(t)) return true;
     const short = t.split(/\s+/).length <= 7;
     const part = lex.parts.some(([re]) => re.exec(t)?.index === 0);
     if ((THING.test(t) || part) && short && !COPULA.test(t)) return true;
@@ -1688,29 +1728,54 @@ export function draftAnswer(ctx, env, question) {
         ))
     )
       return true;
-    // A description of the look wanted ("stronger shadow on dialogs",
-    // "headings are 600 weight") names a thing and asks nothing back.
+    // A noun phrase naming the look wanted ("stronger shadow on dialogs",
+    // "DM Sans font") is an ask; a statement with "is/are/has" ("the page is
+    // white") describes and never writes, unless it complains in a direction
+    // ("the shadows are too strong", "corners are not round enough").
+    // "why are my headings not bold", "I hate the purple": asks.
+    if (/^why (?:are|is|aren'?t|isn'?t)\b.*\bnot\b/.test(t)) return true;
+    if (/^(?:i )?(?:hate|dislike|(?:am )?not a fan of|don'?t like)\b/.test(t))
+      return true;
+    const copula = /\b(is|are|was|were|'s|'re)\b/.test(t);
+    const complaint =
+      /\btoo\b|\benough\b|\bnot (?:so|that)?\s*\w+ enough\b|\btoo much\b|\bhard to (?:read|see)\b|\bcan'?t (?:read|see)\b|\bunreadable\b/.test(
+        t,
+      );
     if (
-      !/\?|\b(isn'?t|aren'?t|doesn'?t|don'?t|won'?t|wouldn'?t|did|does|was|were|could|might|should)\b/.test(
+      !/\?|\b(isn'?t|aren'?t|doesn'?t|don'?t|won'?t|wouldn'?t|did|does|could|might|should)\b/.test(
         t,
       ) &&
-      !/^(?:i|we|you|it|this|that|there|they)\b/.test(t) &&
+      !/^(?:i|we|you|it|this|that|there|they|he|she|someone|somebody|my \w+ (?:said|says|thinks)|(?:show|give|tell|remind|walk) (?:me|us))\b/.test(
+        t,
+      ) &&
+      // A statement with a typed value ("the error banner is #fef2f2",
+      // "headings are 600 weight") is a spec of the look: an ask.
+      (!copula ||
+        complaint ||
+        /#[0-9a-f]{3,8}\b|\d\s*(?:px|rem|em|%|pixels?)\b|\b[1-9]00\b|\b0(?:\.\d+)?\b|["']|\b(?:rgba?|hsla?|oklch|linear-gradient)\(/.test(
+          t,
+        )) &&
       (aspectsOf(t).length > 0 ||
         lex.parts.some(([re]) => re.test(t)) ||
-        /\b(accent|contrast|neutrals?|grays?|greys?|colou?rs?|font|fonts|everywhere|purple|blue|red|green|orange|teal|pink|navy|black|white)\b/.test(
+        /\b(accent|contrast|neutrals?|grays?|greys?|colou?rs?|font|fonts|everywhere|error|danger|success|warning|info|purple|blue|red|green|orange|teal|pink|navy|black|white|yellow|violet)\b/.test(
           t,
         ))
     )
       return true;
     return false;
   };
+  // "don't touch the buttons", "leave the corners": an exclusion. It writes
+  // nothing, and it gives nothing to the clause after it.
+  const EXCLUDE =
+    /^\s*(?:don'?t (?:touch|change)|do not (?:touch|change)|leave(?! (?:the )?(?:dark|light) mode\b)|keep (?:the )?[\w -]+ (?:alone|as is|as it is|unchanged|untouched|the same))\b/i;
   const blocked = (/** @type {string} */ x) =>
-    !/^\s*(?:please )?(?:can|could) (?:the|my|our|all) [\w -]+ be\b|^\s*(?:can|could) i (?:get|have)\b/i.test(
+    EXCLUDE.test(x) ||
+    (!/^\s*(?:please )?(?:can|could) (?:the|my|our|all) [\w -]+ be\b|^\s*(?:can|could) i (?:get|have)\b/i.test(
       x,
     ) &&
-    (GATE.test(x) ||
-      (QUESTION_CLAUSE.test(x) && !ASK_START.test(x.toLowerCase())) ||
-      !isAsk(x));
+      (GATE.test(x) ||
+        (QUESTION_CLAUSE.test(x) && !ASK_START.test(x.toLowerCase())) ||
+        !isAsk(x)));
   const gated = segments.filter(blocked);
   // A condition holds back the whole question: the ask depends on it.
   // Sarcasm makes every clause unsure, not only the one with the marker.
@@ -1737,6 +1802,11 @@ export function draftAnswer(ctx, env, question) {
     let carry = '';
     let carryPart = '';
     for (const x of segments) {
+      if (gated.includes(x) && EXCLUDE.test(x)) {
+        carry = '';
+        carryPart = '';
+        continue;
+      }
       if (gated.includes(x)) {
         const part = [
           ...lex.parts.map(([re]) => re.exec(x.toLowerCase())?.[0]),
@@ -2311,6 +2381,8 @@ export function draftAnswer(ctx, env, question) {
       c.dir &&
       !c.aspects.length &&
       !c.colors.length &&
+      // "tooltips darker" is a color, never the border of the clause before.
+      !/\b(dark|light|bright|dim)(er)?\b/.test(c.text) &&
       prev.aspects.length
     )
       c.aspects = [...prev.aspects];

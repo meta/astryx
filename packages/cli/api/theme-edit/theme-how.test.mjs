@@ -4068,6 +4068,72 @@ describe('how writes only for a clause that reads as an ask', () => {
     });
 });
 
+/**
+ * Final-14 fixes: a plain statement never writes; removal and exclusion
+ * words; one-mode phrases; shrink and decrease; long notes keep each value.
+ * @type {Array<[string, RegExp | null]>}
+ */
+const QUESTIONS_Y = [
+  ['the page is white', null],
+  ['show me the card shadow', null],
+  ['give me the border width on inputs', null],
+  ['give buttons 8px corners', /^set q border-radius 8px --on button$/],
+  ['decrease the spacing', /^set q spacing less$/],
+  ['shrink the corner radius', /^set q corners less$/],
+  ['trim the padding on cards', /^set q spacing less --on card$/],
+  ["you're making spacing too big, shrink it", /^set q spacing less$/],
+  [
+    'only when dark mode is on, page #000000',
+    /^set q --color-background-body '#000000' --mode dark$/,
+  ],
+  [
+    'except in dark mode, make the background cream',
+    /^set q --color-background-body '#fef3c7' --mode light$/,
+  ],
+  ["rimuovi l'ombra dalle card", /^set q box-shadow none --on card$/],
+  ['🚫 shadows on cards', /^set q box-shadow none --on card$/],
+  [
+    'those dialog shadows are heavy',
+    /^set q box-shadow 'var\(--shadow-low\)' --on dialog$/,
+  ],
+  [
+    "don't touch the buttons, only square the cards",
+    /^set q corners square --on card$/,
+  ],
+  ['leave the corners; spacing compact', /^set q spacing less$/],
+  [
+    'boutons arrondis, sans ombre',
+    /^set q corners round --on button && set q box-shadow none --on button$/,
+  ],
+  [
+    'I need: 1. accent #7c3aed 2. pill badges 3. no borders on tables 4. tooltips darker 5. links green',
+    /--on table-row && set q filter 'brightness\(0\.85\)' --on tooltip/,
+  ],
+  [
+    'Specifically she wants the cards to have softer corners (maybe around 12px), the primary buttons should use our brand blue which is #0057ff, and the page background should be a very light gray',
+    /set q background '#0057ff' --on button --when variant:primary/,
+  ],
+];
+
+describe('how answers final-14 fixes', () => {
+  for (const [question, want] of QUESTIONS_Y)
+    it(question, async () => {
+      const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+      /** @type {Array<{text: string, commands: string[], sequence?: boolean}>} */
+      const results = data.results ?? [];
+      const changes = results.filter(r =>
+        r.commands.some(c => / editor (set|undo) /.test(c)),
+      );
+      if (want === null) {
+        expect(changes).toEqual([]);
+        return;
+      }
+      const top = changes[0];
+      const commands = top.sequence ? top.commands : [top.commands[0]];
+      expect(commands.map(bare).join(' && ')).toMatch(want);
+    });
+});
+
 describe('how lookups', () => {
   it('maps what a part reads under to the flags set takes, or says why none does', async () => {
     const button = (await themeEditHow('button', {cwd, theme: 'q'})).data;
