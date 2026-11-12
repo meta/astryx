@@ -256,10 +256,12 @@ describe('themeBuildFamily()', () => {
     const checked = await build(dir, files, {check: true});
     expect(checked?.type).toBe('theme.build.check');
     expect(checked?.data.upToDate).toBe(false);
+    // The outdated module fails the check; the missing declaration file
+    // only warns, and stays listed as checked.
     expect(checked?.data.stale).toEqual([
       {path: `themes/${FAMILY_KEY}.js`, reason: 'outdated'},
-      {path: `themes/${FAMILY_KEY}.d.ts`, reason: 'missing'},
     ]);
+    expect(checked?.data.checked).toContain(`themes/${FAMILY_KEY}.d.ts`);
     expect(fs.readFileSync(cssPath, 'utf8')).toBe(cssBefore);
     expect(fs.readFileSync(jsPath, 'utf8')).toBe('/* stale */\n');
     expect(fs.existsSync(dtsPath)).toBe(false);
@@ -292,9 +294,13 @@ describe('themeBuildFamily()', () => {
     );
     expect(checked?.type).toBe('theme.build.check');
     expect(checked?.data.upToDate).toBe(false);
-    // Every output is checked, the `.css.d.ts` import stub too.
+    // Every output is checked; a missing type declaration file warns
+    // instead of making the check stale.
+    expect(checked?.data.checked).toEqual(
+      OUTPUTS.map(file => `../themes/${file}`),
+    );
     expect(checked?.data.stale).toEqual(
-      OUTPUTS.map(file => ({
+      OUTPUTS.filter(file => !file.endsWith('.d.ts')).map(file => ({
         path: `../themes/${file}`,
         reason: 'missing',
       })),
