@@ -27,7 +27,7 @@ import {
 import type {LayerPlacement} from '../Layer';
 import {createModuleLoader} from '../utils/moduleLoader';
 import type {Tooltip as TooltipType} from '../Tooltip/Tooltip';
-import {useTapRecognizer} from '../Layer/useTouchTrigger';
+import {useTapRecognizer} from '../Layer/tapRecognizer';
 import {
   TooltipPresentInterestContext,
   type TooltipPresentInterestState,
@@ -103,6 +103,12 @@ export function useTruncationTooltipInterest(
       state.interest = interest;
       state.tapEvent = tapEvent;
       setIsWanted(true);
+      // After a failed load, this interaction asks the module loader again.
+      // The loader returns its cached module when another element loaded it.
+      tooltipModule.load().then(
+        loaded => setTooltip(() => loaded.Tooltip),
+        () => {},
+      );
     },
     [isEnabled],
   );
