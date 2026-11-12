@@ -388,17 +388,20 @@ test('a second tap mid-fade turns the fade around from where it is', async ({
     content:
       '[data-panel], button[aria-label$="Choose month and year"] .astryx-icon { transition-duration: 2000ms !important; }',
   });
-  // Every frame's opacity, with the page's clock, from before the first tap
-  // until the wheels rest: the turnaround is read from the fade itself. A log
-  // started after the wait below could begin once the turnaround had begun,
-  // reading its first value as the peak.
+  // Every frame's opacity, from before the first tap until the wheels rest:
+  // the turnaround is read from the fade itself. A log started after the wait
+  // below could begin once the turnaround had begun, reading its first value
+  // as the peak. The fade is sampled at the frame's time, so the log uses it
+  // too. A busy main thread runs a frame's callback late, and
+  // `performance.now()` would then shorten the next step.
   await wheels.evaluate(element => {
     const state = {log: [] as [number, number][], stop: false};
     (window as unknown as {fade: typeof state}).fade = state;
-    const t0 = performance.now();
-    const tick = () => {
+    let start: number | null = null;
+    const tick = (frameTime: number) => {
+      start ??= frameTime;
       state.log.push([
-        performance.now() - t0,
+        frameTime - start,
         Number(getComputedStyle(element).opacity),
       ]);
       if (!state.stop) {
