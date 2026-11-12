@@ -769,6 +769,31 @@ describe('NumberInput form value while a rejected draft stays', () => {
     expect(formData(container)).toEqual([['seats', '9']]);
   });
 
+  it('gives the name back to the visible input when a new value replaces a draft that new rules accepted', () => {
+    const onChange = vi.fn();
+    const {container, rerender} = render(inForm({min: 10, max: 1, onChange}));
+    const input = getInput();
+    fireEvent.focus(input);
+    fireEvent.change(input, {target: {value: '1.5'}});
+    fireEvent.blur(input);
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+
+    rerender(inForm({min: 1, max: 10, onChange}));
+    expect(input).toHaveValue('1.5');
+    expect(input).not.toHaveAttribute('aria-invalid');
+    expect(formData(container)).toEqual([['seats', '7']]);
+
+    rerender(inForm({min: 1, max: 10, onChange, value: 9}));
+    expect(input).toHaveValue('9');
+    expect(input).toHaveAttribute('aria-valuenow', '9');
+    expect(input).toHaveAttribute('name', 'seats');
+    expect(formData(container)).toEqual([['seats', '9']]);
+
+    fireEvent.focus(input);
+    fireEvent.blur(input);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it('posts the typed text of a draft that Enter keeps, as before', () => {
     const {container} = render(inForm());
     const input = getInput();

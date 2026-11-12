@@ -740,10 +740,10 @@ export function NumberInput({
     setShownRejection(null);
     setIsDraftKeptAtBlur(false);
   }
-  // A new value replaces a rejected draft. A value that changes in the same
-  // update as the commit that shows the rejection, as when a caller restores
-  // its own value at that commit, keeps the draft: a commit keeps rejected
-  // text.
+  // A new value replaces a rejected draft or a draft that blur kept. A value
+  // that changes in the same update as the commit that shows the rejection,
+  // as when a caller restores its own value at that commit, keeps the draft:
+  // a commit keeps rejected text.
   const [rendered, setRendered] = useState({value, rejection: shownRejection});
   if (
     !Object.is(rendered.value, value) ||
@@ -752,7 +752,7 @@ export function NumberInput({
     setRendered({value, rejection: shownRejection});
     if (
       !Object.is(rendered.value, value) &&
-      shownRejection !== null &&
+      (shownRejection !== null || isDraftKeptAtBlur) &&
       rendered.rejection === shownRejection
     ) {
       setPendingInput(null);
@@ -788,7 +788,6 @@ export function NumberInput({
     onEntryErrorChange,
   });
 
-  // Ends the draft and any rejection it shows.
   const endDraft = useCallback(() => {
     setPendingInput(null);
     setShownRejection(null);
