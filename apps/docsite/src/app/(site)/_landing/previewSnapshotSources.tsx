@@ -38,13 +38,31 @@ const FORCE_DESKTOP_MOBILE_CONTEXT: AppShellMobileContextValue = {
   hasAutoToggle: false,
 };
 
+// Butter's bespoke showcase content (breakfast products + inventory), the
+// same source of truth the /themes page feeds ThemeShowcaseStore.
+// The card shows the store at about a third of its size, so its photos are
+// about 100 px wide. These 320 px WebP copies are sharp at 3x pixel density
+// and replace the 704 px PNGs.
+const butterContent = {
+  ...getThemeShowcaseContent('butter'),
+  images: {
+    watch: '/landing/themes/butter-watch.webp',
+    headphones: '/landing/themes/butter-headphones.webp',
+    backpack: '/landing/themes/butter-backpack.webp',
+    wallet: '/landing/themes/butter-wallet.webp',
+    tumbler: '/landing/themes/butter-tumbler.webp',
+    throw_: '/landing/themes/butter-throw.webp',
+  },
+};
+
 function templatePreview(slug: string): ReactElement {
   if (!Object.hasOwn(TEMPLATE_COMPONENTS, slug)) {
     throw new Error(`No page template "${slug}" in TEMPLATE_COMPONENTS.`);
   }
   const Page = TEMPLATE_COMPONENTS[slug];
   // The preview-viewport wrapper matches the live preview surface's own
-  // wrapper; FrozenPreview.module.css gives it the preview box's height.
+  // wrapper; TemplatePreviewSurface.module.css gives it the preview box's
+  // height.
   return (
     <Theme theme={neutralTheme}>
       <div className="preview-viewport">
@@ -62,7 +80,7 @@ export const PREVIEW_SNAPSHOT_SOURCES: Readonly<Record<string, ReactElement>> =
     'themes-store': (
       <Theme theme={themeObjects['@astryxdesign/theme-butter']}>
         <AppShellMobileContext.Provider value={FORCE_DESKTOP_MOBILE_CONTEXT}>
-          <ThemeShowcaseStore {...getThemeShowcaseContent('butter')} />
+          <ThemeShowcaseStore {...butterContent} />
         </AppShellMobileContext.Provider>
       </Theme>
     ),
