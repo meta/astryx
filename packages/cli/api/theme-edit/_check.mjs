@@ -127,6 +127,93 @@ const cornerPxOf = v =>
 const E = ERROR_CODES;
 
 /**
+ * The fallbacks of the var() calls inside a value that is not one var()
+ * alone (`calc(var(--x, 4px) * 2)`), in order. A var() with an empty
+ * fallback (`var(--x,)`) gives ''.
+ * @param {string} value
+ * @returns {Array<{fallback: string, within: string[]}>} each fallback, with
+ *   the names of the functions around its var(), innermost first
+ */
+function innerVarFallbacks(value) {
+  const text = value.trim();
+  if (/^var\(/i.test(text) && matchingParen(text, 3) === text.length - 1)
+    return [];
+  /** @type {Array<{fallback: string, within: string[]}>} */
+  const out = [];
+  const re = /\bvar\(/gi;
+  let m;
+  while ((m = re.exec(text))) {
+    const open = m.index + m[0].length - 1;
+    const close = matchingParen(text, open);
+    if (close < 0) break;
+    const inner = text.slice(open + 1, close);
+    let depth = 0;
+    for (let i = 0; i < inner.length; i += 1) {
+      const c = inner[i];
+      if (c === '(') depth += 1;
+      else if (c === ')') depth -= 1;
+      else if (c === ',' && depth === 0) {
+        out.push({
+          fallback: inner.slice(i + 1).trim(),
+          within: enclosingFunctions(text, m.index),
+        });
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * The names of the functions whose parentheses are open at `at`, innermost
+ * first.
+ * @param {string} text
+ * @param {number} at
+ * @returns {string[]}
+ */
+function enclosingFunctions(text, at) {
+  /** @type {string[]} */
+  const open = [];
+  for (let i = 0; i < at; i += 1) {
+    if (text[i] === '(')
+      open.push(/([a-z-]*)$/i.exec(text.slice(0, i))?.[1] ?? '');
+    else if (text[i] === ')') open.pop();
+  }
+  return open.reverse();
+}
+
+/**
+ * The index of the parenthesis that closes the one at `open`, or -1.
+ * @param {string} text
+ * @param {number} open
+ */
+function matchingParen(text, open) {
+  let depth = 0;
+  for (let i = open; i < text.length; i += 1) {
+    if (text[i] === '(') depth += 1;
+    else if (text[i] === ')') {
+      depth -= 1;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+/**
+ * A text size written another way (20px, 2e1, +20, 1.25rem) as the body size
+ * in pixels text-size takes, when it is 10 to 32; else null.
+ * @param {string} v
+ * @returns {number | null}
+ */
+function textSizePx(v) {
+  const m = /^\+?(\d*\.?\d+(?:e[+-]?\d+)?)(px|rem|em)?$/i.exec(v.trim());
+  if (!m) return null;
+  const n = Number(m[1]) * (/r?em/i.test(m[2] ?? '') ? 16 : 1);
+  const px = Math.round(n * 100) / 100;
+  return px >= 10 && px <= 32 ? px : null;
+}
+
+/**
  * The value to carry into a suggestion for another dial: the one given when
  * that dial takes it, else the dial's example.
  * @param {string} dial @param {string} v
@@ -374,6 +461,41 @@ function checkTypedValue(
         ],
       },
     );
+  // A var() inside a larger value (calc, max, color-mix) has a fallback of
+  // the token's kind too, checked like a whole-value var().
+  if (type !== 'other')
+    for (const {fallback, within} of innerVarFallbacks(value)) {
+      // Inside a color's channels (rgb(var(--r, 0) 0 0)) a fallback is a
+      // channel, not a color.
+      if (
+        type === 'color' &&
+        within.some(f =>
+          /^(rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)$/i.test(f),
+        )
+      )
+        continue;
+      if (fallback === '')
+        refuse(
+          E.ERR_THEME_BAD_VALUE,
+          `${name} is a ${type}; the var() in "${value}" has an empty fallback, which leaves it with no value when the variable is unset.`,
+          {
+            run: [
+              `${P} set ${slug} ${name} ${quoteCommandArgument(exampleOf(type, name))}`,
+            ],
+          },
+        );
+      if (!/\bvar\(/i.test(fallback) && !/^[a-z-]+\(/i.test(fallback))
+        checkTypedValue(
+          type,
+          fallback,
+          name,
+          TOKENS,
+          typeOf,
+          slug,
+          readers,
+          multiplied,
+        );
+    }
   // A var() naming a design token must name one of the same kind; the
   // app's own variables are its business.
   const ref = /^var\(\s*(--[a-z0-9-]+)\s*(,.*)?\)$/i.exec(value.trim());
@@ -391,6 +513,16 @@ function checkTypedValue(
     // The fallback is what shows when the variable is unset: it must be a
     // value of the token's kind too.
     const fallback = ref[2]?.slice(1).trim();
+    if (fallback === '' && type !== 'other')
+      refuse(
+        E.ERR_THEME_BAD_VALUE,
+        `${name} is a ${type}; "${value}" has an empty fallback, which leaves it with no value when the variable is unset.`,
+        {
+          run: [
+            `${P} set ${slug} ${name} ${quoteCommandArgument(exampleOf(type, name))}`,
+          ],
+        },
+      );
     if (fallback)
       checkTypedValue(
         type,
@@ -408,9 +540,21 @@ function checkTypedValue(
   if (type === 'size' && !isSize(value, name)) {
     // The size meant, when one dot or sign is all that is wrong (1.px).
     const meant = value.trim().replace(/(\d)\.(?=[a-z%]|$)/gi, '$1');
+    // A bare number is the size in px.
+    // A bare number is the size in px; a minus sign is dropped.
+    const plain = value.trim().replace(/^-(?=\d|\.\d)/, '');
+    const px = /^[+]?\d*\.?\d+(e[+-]?\d+)?$/i.test(plain)
+      ? `${Number(plain)}px`
+      : /^\d*\.?\d+[a-z%]+$/i.test(plain) && plain !== value.trim()
+        ? plain
+        : null;
     bad(
       'a size',
-      meant !== value.trim() && isSize(meant, name) ? meant : '6px',
+      meant !== value.trim() && isSize(meant, name)
+        ? meant
+        : px && isSize(px, name)
+          ? px
+          : '6px',
     );
   }
   // A percentage reaches every property that reads the token; one that
@@ -1865,7 +2009,9 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
                   didYouMean: [near],
                   run: [`${P} set ${slug} text-size ${near}`],
                 }
-              : {run: [`${P} set ${slug} text-size 16`]};
+              : {
+                  run: [`${P} set ${slug} text-size ${textSizePx(v) ?? 16}`],
+                };
           })(),
         );
       else if (!TEXT_SIZE.some(([n]) => n === v))
