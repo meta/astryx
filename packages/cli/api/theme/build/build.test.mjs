@@ -28,8 +28,10 @@ import {
   generateThemeRulesSplit as mockGenerateThemeRulesSplit,
   generateOnMediaCSS as mockGenerateOnMediaCSS,
 } from '@astryxdesign/core/theme';
+import {logger} from '../../logger.mjs';
 import {
   themeBuild,
+  themeSourceFiles,
   validateComponentOverridesAgainstRegistry,
   validateThemePrivateInputs,
 } from './build.mjs';
@@ -60,6 +62,28 @@ afterEach(() => {
   // call-through implementations set up in the factory above.
   vi.clearAllMocks();
 });
+
+/**
+ * Run `run` with logger warnings captured.
+ * @param {() => Promise<unknown>} run
+ */
+async function withWarnings(run) {
+  /** @type {string[]} */
+  const warnings = [];
+  const silent = logger.silent;
+  const warn = logger.warn;
+  const log = logger.log;
+  logger.setSilent(false);
+  logger.warn = (/** @type {string} */ line) => warnings.push(line);
+  logger.log = () => {};
+  try {
+    return {result: await run(), warnings};
+  } finally {
+    logger.warn = warn;
+    logger.log = log;
+    logger.setSilent(silent);
+  }
+}
 
 describe('themeBuild() — receipt', () => {
   it('compiles a minimal theme and returns a theme.build receipt with files on disk', async () => {
@@ -1327,6 +1351,241 @@ describe('themeBuild() — outputs it may replace', () => {
     expect(fs.existsSync(path.join(tmpDir, 'dist', 'ocean.js'))).toBe(false);
   });
 
+  it('replaces an --out output of another existing theme source, warning with both names', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'reef.mjs'),
+      "export default { name: 'reef', tokens: { '--color-bg': '#111111' } };\n",
+    );
+    await themeBuild('reef.mjs', {out: 'out/a.css'}, {cwd: tmpDir});
+    const {warnings} = await withWarnings(() =>
+      themeBuild('ocean.mjs', {out: 'out/a.css'}, {cwd: tmpDir}),
+    );
+    expect(warnings).toEqual([
+      'Warning: out/a.css was built from reef.mjs; this build of ocean.mjs replaces it.',
+    ]);
+    expect(fs.readFileSync(path.join(tmpDir, 'out/a.css'), 'utf-8')).toContain(
+      'Source: ocean.mjs',
+    );
+  });
+
+  it('replaces an output whose source is gone, and its own output built from another folder', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'old.mjs'), theme);
+    await themeBuild('old.mjs', {out: 'out/o.css'}, {cwd: tmpDir});
+    fs.rmSync(path.join(tmpDir, 'old.mjs'));
+    await expect(
+      themeBuild('ocean.mjs', {out: 'out/o.css'}, {cwd: tmpDir}),
+    ).resolves.toMatchObject({type: 'theme.build'});
+
+    await themeBuild('ocean.mjs', {out: 'sub/o.css'}, {cwd: tmpDir});
+    await expect(
+      themeBuild(
+        '../ocean.mjs',
+        {out: 'o.css'},
+        {cwd: path.join(tmpDir, 'sub')},
+      ),
+    ).resolves.toMatchObject({type: 'theme.build'});
+  });
+
+  it('still replaces the default outputs beside the source, whichever source built them', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'ocean2.mjs'), theme);
+    await themeBuild('ocean.mjs', {}, {cwd: tmpDir});
+    await expect(
+      themeBuild('ocean2.mjs', {}, {cwd: tmpDir}),
+    ).resolves.toMatchObject({
+      type: 'theme.build',
+    });
+    expect(fs.readFileSync(path.join(tmpDir, 'ocean.css'), 'utf-8')).toContain(
+      'Source: ocean2.mjs',
+    );
+  });
+
+  it.each([
+    ['o/x.scss', './o/x.scss', 'o/x.css'],
+    ['o/y', './o/y', 'o/y.css'],
+  ])(
+    'builds an --out of %s with a warning, and imports the stylesheet by its name',
+    async (out, cssImport, suggested) => {
+      const warnings = [];
+      const restore = logger.silent;
+      const warn = logger.warn;
+      const log = logger.log;
+      const lines = [];
+      logger.setSilent(false);
+      logger.warn = (/** @type {string} */ line) => warnings.push(line);
+      logger.log = (/** @type {string} */ line) => lines.push(line);
+      try {
+        await themeBuild('ocean.mjs', {out}, {cwd: tmpDir});
+        expect(lines.join('\n')).toContain(`import '${cssImport}';`);
+      } finally {
+        logger.warn = warn;
+        logger.log = log;
+        logger.setSilent(restore);
+      }
+      expect(warnings).toEqual([
+        `Warning: --out names the stylesheet, which is CSS; give it a .css name such as ${suggested}.`,
+      ]);
+      expect(fs.readFileSync(path.join(tmpDir, out), 'utf-8')).toContain(
+        '[data-astryx-theme="ocean"]',
+      );
+      expect(
+        fs.readFileSync(path.join(tmpDir, 'o/ocean.js'), 'utf-8'),
+      ).toContain(`import './${path.basename(out)}';`);
+    },
+  );
+
+  it('writes the same outputs from any folder, so --check agrees across folders', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app"}\n');
+    fs.mkdirSync(path.join(tmpDir, 'themes'));
+    fs.copyFileSync(
+      path.join(tmpDir, 'ocean.mjs'),
+      path.join(tmpDir, 'themes', 'ocean.mjs'),
+    );
+    await themeBuild('themes/ocean.mjs', {}, {cwd: tmpDir});
+    const fromRoot = fs.readFileSync(path.join(tmpDir, 'themes/ocean.css'));
+    expect(fromRoot.toString()).toContain('Source: themes/ocean.mjs');
+
+    await themeBuild('ocean.mjs', {}, {cwd: path.join(tmpDir, 'themes')});
+    expect(
+      fs.readFileSync(path.join(tmpDir, 'themes/ocean.css')).equals(fromRoot),
+    ).toBe(true);
+    await expect(
+      themeBuild('themes/ocean.mjs', {check: true}, {cwd: tmpDir}),
+    ).resolves.toMatchObject({data: {upToDate: true}});
+  });
+
+  it('matches the source an --out output names exactly, also from an older header, and warns for another', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app"}\n');
+    for (const dir of ['a', 'b']) {
+      fs.mkdirSync(path.join(tmpDir, dir));
+      fs.copyFileSync(
+        path.join(tmpDir, 'ocean.mjs'),
+        path.join(tmpDir, dir, 'ocean.mjs'),
+      );
+    }
+    const b = path.join(tmpDir, 'b');
+    await themeBuild('ocean.mjs', {out: 'out/ocean.css'}, {cwd: b});
+    // An older CLI named the source from the folder it ran in.
+    const css = path.join(b, 'out/ocean.css');
+    fs.writeFileSync(
+      css,
+      fs
+        .readFileSync(css, 'utf-8')
+        .replace('Source: b/ocean.mjs', 'Source: ocean.mjs'),
+    );
+    // a/ocean.mjs ends in the same name, but it is another source.
+    const {warnings} = await withWarnings(() =>
+      themeBuild('../a/ocean.mjs', {out: 'out/ocean.css'}, {cwd: b}),
+    );
+    expect(warnings).toEqual([
+      expect.stringMatching(
+        /^Warning: out\/ocean\.css was built from (\.\.\/)?ocean\.mjs; this build of \.\.\/a\/ocean\.mjs replaces it\.$/,
+      ),
+    ]);
+    // Put b's output back as an older CLI wrote it.
+    await themeBuild('ocean.mjs', {out: 'out/ocean.css'}, {cwd: b});
+    fs.writeFileSync(
+      css,
+      fs
+        .readFileSync(css, 'utf-8')
+        .replace('Source: b/ocean.mjs', 'Source: ocean.mjs'),
+    );
+    // b/ocean.mjs is the source it names, read from the folder b.
+    const own = await withWarnings(() =>
+      themeBuild('ocean.mjs', {out: 'out/ocean.css'}, {cwd: b}),
+    );
+    expect(own.warnings).toEqual([]);
+  });
+
+  it('names the source of a build output from the folder the command runs in', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app"}\n');
+    fs.mkdirSync(path.join(tmpDir, 'themes'));
+    fs.copyFileSync(
+      path.join(tmpDir, 'ocean.mjs'),
+      path.join(tmpDir, 'themes', 'ocean.mjs'),
+    );
+    await themeBuild('themes/ocean.mjs', {}, {cwd: tmpDir});
+    const themes = path.join(tmpDir, 'themes');
+    await expect(
+      themeBuild('ocean.js', {}, {cwd: themes}),
+    ).rejects.toMatchObject({
+      code: 'ERR_THEME_INVALID',
+      message:
+        'ocean.js is an output of `theme build`, not a theme source. It was built from ocean.mjs.',
+      suggestions: [{name: expect.stringMatching(/ theme build ocean\.mjs$/)}],
+    });
+  });
+
+  it('reads an older header written from above the project, as in a monorepo', async () => {
+    const pkg = path.join(tmpDir, 'packages', 'app');
+    fs.mkdirSync(path.join(pkg, 'themes'), {recursive: true});
+    fs.writeFileSync(path.join(pkg, 'package.json'), '{"name":"app"}\n');
+    fs.copyFileSync(
+      path.join(tmpDir, 'ocean.mjs'),
+      path.join(pkg, 'themes', 'ocean.mjs'),
+    );
+    await themeBuild('themes/ocean.mjs', {}, {cwd: pkg});
+    const js = path.join(pkg, 'themes', 'ocean.js');
+    // A build from the monorepo root named the source from there.
+    fs.writeFileSync(
+      js,
+      fs
+        .readFileSync(js, 'utf-8')
+        .replace(
+          'Source: themes/ocean.mjs',
+          'Source: packages/app/themes/ocean.mjs',
+        ),
+    );
+    await expect(
+      themeBuild('themes/ocean.js', {}, {cwd: pkg}),
+    ).rejects.toMatchObject({
+      message: expect.stringContaining('It was built from themes/ocean.mjs.'),
+    });
+  });
+
+  it('lists the local files a theme source imports, through other local files', () => {
+    fs.mkdirSync(path.join(tmpDir, 'parts'));
+    fs.writeFileSync(
+      path.join(tmpDir, 'split.ts'),
+      "import {BG} from './parts/colors.js';\nimport {defineTheme} from '@astryxdesign/core/theme';\nexport default defineTheme({name: 'split', tokens: {'--color-bg': BG}});\n",
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'parts', 'colors.ts'),
+      "export {BG} from './base';\n",
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'parts', 'base.ts'),
+      "export const BG = '#fff';\n",
+    );
+    fs.appendFileSync(
+      path.join(tmpDir, 'parts', 'base.ts'),
+      `export {X} from ${JSON.stringify(path.join(tmpDir, 'parts', 'abs.ts'))};\n`,
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'parts', 'abs.ts'),
+      'export const X = 1;\n',
+    );
+    expect(themeSourceFiles(path.join(tmpDir, 'split.ts'))).toEqual([
+      path.join(tmpDir, 'split.ts'),
+      path.join(tmpDir, 'parts', 'colors.ts'),
+      path.join(tmpDir, 'parts', 'base.ts'),
+      path.join(tmpDir, 'parts', 'abs.ts'),
+    ]);
+  });
+
+  it('reads outputs with CRLF line endings as up to date in --check', async () => {
+    const receipt = await themeBuild('ocean.mjs', {}, {cwd: tmpDir});
+    for (const file of Object.values(receipt.data.outputs)) {
+      const full = path.join(tmpDir, file);
+      fs.writeFileSync(
+        full,
+        fs.readFileSync(full, 'utf-8').replace(/\r?\n/g, '\r\n'),
+      );
+    }
+    await expect(
+      themeBuild('ocean.mjs', {check: true}, {cwd: tmpDir}),
+    ).resolves.toMatchObject({data: {upToDate: true, stale: []}});
+  });
+
   it('replaces its own earlier outputs', async () => {
     await themeBuild('ocean.mjs', {}, {cwd: tmpDir});
     await expect(
@@ -1447,6 +1706,50 @@ describe('themeBuild() — outputs it may replace', () => {
     expect(error.suggestions.map(x => x.name)).toEqual([
       expect.stringMatching(/ theme build ocean\.mjs$/),
     ]);
+  });
+
+  it('names a package the theme imports and the app lacks, with an install command and no absolute path', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'iconic.mjs'),
+      "import 'not-installed-icons';\nexport default {name: 'iconic', tokens: {'--color-bg': '#000'}};\n",
+    );
+    let error;
+    try {
+      await themeBuild('iconic.mjs', {}, {cwd: tmpDir});
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toMatchObject({code: 'ERR_THEME_LOAD'});
+    expect(error.message).toContain(
+      "Cannot find module 'not-installed-icons'.",
+    );
+    expect(error.message).not.toContain(tmpDir);
+    expect(error.suggestions).toEqual([
+      {
+        name: expect.stringMatching(/ not-installed-icons$/),
+        reason: 'install not-installed-icons, which the theme imports',
+      },
+    ]);
+  });
+
+  it('lists the checked outputs in the text of a check, as the JSON does', async () => {
+    await themeBuild('ocean.mjs', {}, {cwd: tmpDir});
+    const lines = [];
+    const restore = logger.silent;
+    const log = logger.log;
+    logger.setSilent(false);
+    logger.log = (/** @type {string} */ line) => lines.push(line);
+    try {
+      const receipt = await themeBuild(
+        'ocean.mjs',
+        {check: true},
+        {cwd: tmpDir},
+      );
+      expect(lines).toContain(`  checked: ${receipt.data.checked.join(', ')}`);
+    } finally {
+      logger.log = log;
+      logger.setSilent(restore);
+    }
   });
 
   it('refuses a folder as its input', async () => {

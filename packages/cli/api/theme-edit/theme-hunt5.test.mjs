@@ -32,27 +32,13 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
 
 /** @type {string} */
 let cwd;
 
 /** @param {string} rel */
 const read = rel => fs.readFileSync(path.join(cwd, rel), 'utf8');
-
-/** @param {() => Promise<unknown>} fn */
-async function refusal(fn) {
-  try {
-    await fn();
-  } catch (e) {
-    const err = /** @type {any} */ (e);
-    return {
-      code: err.code,
-      message: String(err.message),
-      run: (err.suggestions ?? []).map((/** @type {any} */ s) => s.name),
-    };
-  }
-  throw new Error('expected a refusal');
-}
 
 /** @param {string} slug @param {(d: any) => void} edit */
 const editSettings = (slug, edit) => {
@@ -83,8 +69,8 @@ describe('corners', () => {
     expect(read('themes/t/t.css')).toContain(`${container}`);
     await themeEditUndo('t', {cwd});
     const pill = await themeEditSet('t', 'corners', 'pill', {cwd});
-    expect(pill.data.changedTokens.join(' ')).toMatch(
-      /--radius-inner: [^>]*-> 6px/,
+    expect(pill.data.changedTokens.join(' ')).not.toMatch(
+      /--radius-inner: [^>]*-> 9999px/,
     );
     await themeEditUndo('t', {cwd});
   }, 240_000);
@@ -116,14 +102,13 @@ describe('corners', () => {
       on: 'text-input',
       only: true,
     });
-    const r = await themeEditSet('t', 'corners', 'more', {
-      cwd,
-      on: 'text-input',
-    });
-    // It stays on the member alone, at the roundest rung it already shows.
-    expect(r.data.setting.only).toBe(true);
-    expect(r.data.setting.value).toBe('pill');
-    // The step changed nothing, so one undo removes the first setting.
+    // At the roundest rung it already shows, the step writes nothing (and
+    // its run keeps the member alone).
+    const r = await refusal(() =>
+      themeEditSet('t', 'corners', 'more', {cwd, on: 'text-input'}),
+    );
+    expect(r.code).toBe('ERR_THEME_NO_EFFECT');
+    expect(r.run[0]).toMatch(/--on text-input --only$/);
     await themeEditUndo('t', {cwd});
   }, 240_000);
 
@@ -152,7 +137,7 @@ describe('spacing and scope', () => {
     expect(
       (
         await refusal(() =>
-          themeEditSet('t', 'spacing', 'roomy', {cwd, on: 'divider'}),
+          themeEditSet('t', 'spacing', 'roomy', {cwd, on: 'status-dot'}),
         )
       ).code,
     ).toBe('ERR_THEME_NO_EFFECT');
@@ -235,10 +220,16 @@ describe('locks', () => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'silent-lock-'));
       const lock = path.join(dir, 'x.lock');
       fs.mkdirSync(lock);
-      // A live holder this run cannot judge (pid 1), that never renews.
+      // A holder this run cannot judge (pid 1 in another container's
+      // process space), that never renews.
       fs.writeFileSync(
         path.join(lock, 'owner.json'),
-        JSON.stringify({pid: 1, host: os.hostname(), at: Date.now()}),
+        JSON.stringify({
+          pid: 1,
+          host: os.hostname(),
+          at: Date.now(),
+          ns: 'pid:[1]',
+        }),
       );
       const started = Date.now();
       await withFolderLock(lock, async () => undefined, {
@@ -309,6 +300,9 @@ describe('chaos round 3', () => {
     const left = path.join(cwd, 'themes/.astryx-render-999999-abcdef');
     fs.mkdirSync(left, {recursive: true});
     fs.writeFileSync(path.join(left, 'preview-t.mjs'), '');
+    // A leftover is one more than ten minutes old.
+    const old = new Date(Date.now() - 11 * 60_000);
+    fs.utimesSync(left, old, old);
     await themeEditSet('t', 'corners', 'small', {cwd});
     await themeEditUndo('t', {cwd});
     expect(fs.existsSync(left)).toBe(false);

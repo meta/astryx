@@ -12,9 +12,11 @@
  *   and every environment variable it read are as they were; otherwise it
  *   gathers fresh and stores that.
  * @position Used by search's adapter (api/search/_adapter.mjs) for the
- *   catalog `search` and `build` rank. Catalogs are kept only once the folder
- *   exists: the first search or build on a machine just makes it, so a one-off
- *   run pays nothing to store one. Only a published CLI stores anything:
+ *   catalog `search` and `build` rank, and by the project
+ *   (foundation/config/project.mjs) for each integration's contribution-check
+ *   results, which `component`, `template`, `theme`, `discover` and `search`
+ *   report. Gathers are kept only once the folder exists: the first such run
+ *   on a machine just makes it, so a one-off run pays nothing to store one. Only a published CLI stores anything:
  *   its build id (clients/cli/build-id.generated.json, written at `prepack`)
  *   names its exact code, so a checkout, whose code may change between runs
  *   under the same version, always gathers.
@@ -34,8 +36,10 @@ import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {isDeepStrictEqual} from 'node:util';
 import {CLI_ROOT} from './paths.mjs';
+import {mayHaveIntegrations} from '../integrations/may-have-integrations.mjs';
 import {currentUid, isPrivateDir} from '../env/private-dir.mjs';
 import {userCacheDir} from '../env/user-dirs.mjs';
+import {jitiCacheDir} from './jiti-cache.mjs';
 import {
   fileStamp,
   recordReads,
@@ -44,8 +48,26 @@ import {
   withoutRecording,
 } from './read-record.mjs';
 
+/**
+ * The kept commands whose only kept gather is their integrations' check
+ * results: a project with no integration records none of them.
+ */
+const INTEGRATION_COMMANDS = new Set([
+  'component',
+  'template',
+  'theme',
+  'discover',
+]);
+
 /** The run's commands whose gathers are kept. */
-const KEPT_COMMANDS = new Set(['search', 'build']);
+const KEPT_COMMANDS = new Set([
+  'search',
+  'build',
+  'component',
+  'template',
+  'theme',
+  'discover',
+]);
 
 /** Where `prepack` writes the id of the package's exact contents. */
 export const BUILD_ID_FILE = path.join(
@@ -96,6 +118,9 @@ let lastOutcome = null;
  */
 let gatherCode = null;
 
+/** How many persistedGather calls are running, nested inside one another. */
+let gatherDepth = 0;
+
 /**
  * The outcome of the last kept gather in this process: whether it was a hit,
  * and why it missed. Null when no kept gather ran.
@@ -114,12 +139,28 @@ export function gatherCacheOutcome() {
  * @returns {boolean}
  */
 function inJitiCache(file) {
+  jitiRoots ??= jitiCacheRoots();
+  return jitiRoots.some(
+    root => file === root || file.startsWith(root + path.sep),
+  );
+}
+
+/** jiti's cache folders, worked out once per process (inJitiCache). */
+/** @type {string[] | undefined} */
+let jitiRoots;
+
+/**
+ * Where jiti may keep transpiled code: the system temp folder's `jiti`, the
+ * per-user folder (jiti-cache.mjs), and a set JITI_FS_CACHE.
+ * @returns {string[]}
+ */
+function jitiCacheRoots() {
   const env = process.env.JITI_FS_CACHE;
-  const roots = [path.join(os.tmpdir(), 'jiti')];
+  const roots = [path.join(os.tmpdir(), 'jiti'), jitiCacheDir()];
   if (env && env !== 'false' && env !== 'true' && env !== '0' && env !== '1') {
     roots.push(path.resolve(env));
   }
-  return roots.some(root => file === root || file.startsWith(root + path.sep));
+  return roots;
 }
 
 /**
@@ -186,12 +227,17 @@ export async function recordRunFor(argv, fn) {
     !KEPT_COMMANDS.has(command) ||
     runsUnderPnp() ||
     currentUid() == null ||
-    withoutRecording(buildId) == null
+    withoutRecording(buildId) == null ||
+    // Last, being a few file checks: those commands keep only their
+    // integrations' check results, so a project with none records nothing.
+    (INTEGRATION_COMMANDS.has(command) &&
+      !withoutRecording(() => mayHaveIntegrations(process.cwd())))
   ) {
     return fn();
   }
-  // Catalogs are kept only once the folder exists: the first search or build
-  // on a machine just makes it, so a one-off run never pays to store one.
+  // Gathers are kept only once the folder exists: the first recorded run on a
+  // machine (search, build, component, template, theme or discover) just makes
+  // it, so a one-off run never pays to store one.
   const dir = cacheDirPath();
   if (!withoutRecording(() => fs.existsSync(dir))) {
     try {
@@ -456,6 +502,28 @@ function staleReason(stamps, env) {
  * @returns {Promise<T>}
  */
 export async function persistedGather(key, load, codec, keep = () => true) {
+  // A gather inside another (an integration's checks inside search's catalog
+  // gather) leaves the run's recording to the outermost: only it disarms, so
+  // what the outer gather reads after the inner one is still stamped.
+  gatherDepth++;
+  try {
+    return await gatherAt(key, load, codec, keep);
+  } finally {
+    if (--gatherDepth === 0) run?.disarm();
+  }
+}
+
+/**
+ * persistedGather's body; the caller disarms the run's recording once the
+ * outermost gather is done.
+ * @template T, E
+ * @param {unknown[]} key
+ * @param {() => Promise<T>} load
+ * @param {{encode: (value: T) => E, decode: (stored: E) => T}} codec
+ * @param {(value: T) => boolean} keep
+ * @returns {Promise<T>}
+ */
+async function gatherAt(key, load, codec, keep) {
   const id = withoutRecording(buildId);
   // A run under Yarn Plug'n'Play's loader neither keeps nor reads catalogs:
   // its modules resolve through PnP, which a catalog's stamps do not follow.
@@ -471,11 +539,7 @@ export async function persistedGather(key, load, codec, keep = () => true) {
             ? "a run under Yarn Plug'n'Play's loader"
             : 'no usable cache folder',
     };
-    try {
-      return await load();
-    } finally {
-      run?.disarm();
-    }
+    return await load();
   }
   const file = entryFile(dir, key, id);
   let reason = 'no entry';
@@ -493,7 +557,6 @@ export async function persistedGather(key, load, codec, keep = () => true) {
         const value = codec.decode(stored.value);
         recordStates(stored.stamps);
         gatherCode = cliStates(stored.stamps);
-        run?.disarm();
         lastOutcome = {hit: true, reason: 'unchanged'};
         try {
           const now = new Date();
@@ -512,15 +575,11 @@ export async function persistedGather(key, load, codec, keep = () => true) {
   lastOutcome = {hit: false, reason};
   // A later gather in the run records its modules and variables again.
   const armed = run?.arm() ?? false;
-  try {
-    const value = await load();
-    if (run && armed && keep(value)) {
-      withoutRecording(() => store(dir, file, entryKey(key, id), value, codec));
-    }
-    return value;
-  } finally {
-    run?.disarm();
+  const value = await load();
+  if (run && armed && keep(value)) {
+    withoutRecording(() => store(dir, file, entryKey(key, id), value, codec));
   }
+  return value;
 }
 
 /**

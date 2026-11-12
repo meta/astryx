@@ -512,9 +512,34 @@ export function makeCompiler(project, parts) {
     return false;
   }
 
+  /** @type {Map<string, string[]>} */
+  const propsCache = new Map();
+  /**
+   * The CSS properties anything in the catalog reads a token in.
+   * @param {string} tok
+   */
+  const propsReading = tok => {
+    let r = propsCache.get(tok);
+    if (!r) {
+      /** @type {Set<string>} */
+      const out = new Set();
+      for (const t of Object.values(MAP)) {
+        for (const [prop, v] of Object.entries(t.own ?? {}))
+          if (tok in v.tokens) out.add(prop);
+        for (const [k, v] of Object.entries(t.inside ?? {}))
+          if (k === tok)
+            for (const p of /** @type {string[]} */ (v)) out.add(p);
+      }
+      r = [...out];
+      propsCache.set(tok, r);
+    }
+    return r;
+  };
+
   return {
     MAP,
     typeOf,
+    propsReading,
     feeds,
     fmtFeeds,
     showsCorners,
