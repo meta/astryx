@@ -30,6 +30,11 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {
+  appPackages,
+  projectFiles,
+  refusal,
+} from '../../test-utils/theme-edit-fixture.mjs';
 
 // The page renders cost seconds and these tests read settings, builds and
 // files: a stand-in renders unless a test asks for the real thing.
@@ -41,40 +46,12 @@ vi.mock('./_preview.mjs', async importOriginal =>
 
 const CLI = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const ts = createRequire(path.join(CLI, 'package.json'))('typescript');
-/** The packages the template pages import, so the ranked pages can be added. */
-const APP_PACKAGES = {
-  name: 'app',
-  private: true,
-  type: 'module',
-  dependencies: {
-    '@heroicons/react': '*',
-    '@stylexjs/stylex': '*',
-    'lucide-react': '*',
-    recharts: '*',
-  },
-};
+const APP_PACKAGES = appPackages({stylex: true});
 const REPO = path.resolve(CLI, '../..');
 
 /** @type {string} */
 let cwd;
-
-/** @param {() => Promise<unknown>} fn */
-async function refusal(fn) {
-  try {
-    await fn();
-  } catch (e) {
-    const err = /** @type {any} */ (e);
-    return {
-      code: err.code,
-      message: String(err.message),
-      run: (err.suggestions ?? []).map((/** @type {any} */ s) => s.name),
-    };
-  }
-  throw new Error('expected a refusal');
-}
-
-/** @param {string} rel */
-const read = rel => fs.readFileSync(path.join(cwd, rel), 'utf8');
+const {read} = projectFiles(() => cwd);
 
 /** Files under `dir`, relative, or [] when it does not exist. @param {string} dir */
 const filesUnder = dir =>
@@ -150,6 +127,12 @@ describe('preview add', () => {
 
   it('writes the route, the default pages and the data file in the app routes folder', async () => {
     fs.mkdirSync(path.join(cwd, 'src', 'app'), {recursive: true});
+    // A routes folder has a root layout, which loads Core's stylesheet.
+    if (!fs.existsSync(path.join(cwd, 'src/app/layout.tsx')))
+      fs.writeFileSync(
+        path.join(cwd, 'src/app/layout.tsx'),
+        "import '@astryxdesign/core/astryx.css';\nexport default function RootLayout({children}) { return children; }\n",
+      );
     const r = await themeEditPreviewAdd(undefined, {cwd});
     expect(r.type).toBe('themeEdit.previewAdd');
     expect(r.data.folder).toBe('src/app/theme-preview');
@@ -216,6 +199,10 @@ describe('preview add', () => {
 
   it('writes a components page whose parts work on their own and survive leaving the page', () => {
     const page = read('src/app/theme-preview/_pages/components.tsx');
+    // A part its parent does not list as an item renders on its own, and
+    // an overlay shows open once.
+    expect(page).toContain('<Cell name="Heading">');
+    expect(page).not.toContain('variant="fullscreen"');
     // A typeahead with no search source throws as it unmounts, past every
     // boundary, so leaving the page would crash the production route.
     for (const tag of page.match(
@@ -316,6 +303,46 @@ describe('preview add', () => {
     );
     expect(r.code).toBe('ERR_PATH_TRAVERSAL');
   });
+});
+
+describe('the components page', () => {
+  it('shows what each doc sets up, and every cell suggests a command that runs', async () => {
+    const page = read('src/app/theme-preview/_pages/components.tsx');
+    // A doc for several components gives each its own playground.
+    expect(page).toMatch(/<C\.Stack\b[^>]*>\s*<C\.Card/);
+    // A nav that opens over the whole page is left out, as a drawer is.
+    expect(page).not.toContain('<C.MobileNav');
+    // A part as tall as the window scrolls in a frame, and a cell is only
+    // as tall as its content.
+    expect(page).toContain(
+      '.tp-fill{flex:1 1 100%;max-height:300px;overflow:auto}',
+    );
+    expect(page).toContain('align-items:start}');
+    // A part that only draws a line fills its row.
+    expect(page).toMatch(
+      /<div className="tp-item tp-fill">\s*<Safe name="Divider">/,
+    );
+    const cmds = [
+      ...page.matchAll(/<code className="tp-cmd">\{("[^\n]*")\}<\/code>/g),
+    ].map(m => /** @type {string} */ (JSON.parse(m[1])));
+    expect(cmds.length).toBeGreaterThan(40);
+    expect(cmds).toContain(
+      'astryx experimental theme editor set brand --color-text-primary "<color>"',
+    );
+    for (const c of cmds) {
+      const args = [...c.matchAll(/"([^"]*)"|(\S+)/g)]
+        .map(m => m[1] ?? m[2])
+        .map(w => w.replace('<color>', '#336699'))
+        .slice(1);
+      const r = await runCli(['--json', ...args], {cwd});
+      expect(r.status, `${c}\n${r.stdout.slice(0, 300)}`).toBe(0);
+      if (args[3] === 'set')
+        await runCli(
+          ['--json', 'experimental', 'theme', 'editor', 'undo', args[4]],
+          {cwd},
+        );
+    }
+  }, 600_000);
 });
 
 describe('preview options and errors', () => {
@@ -465,6 +492,7 @@ describe('preview options and errors', () => {
       expect(r.data).toEqual({
         folder: null,
         theme: null,
+        themeMissing: false,
         pages: [],
         notes: [],
       });
@@ -545,6 +573,12 @@ describe('the preview commands succeed from the command line', () => {
 });
 
 describe('preview app', () => {
+  it('names a cd that works for a folder named like a flag', async () => {
+    const r = await themeEditPreviewApp('-k', {cwd});
+    expect(r.data.open.startsWith('cd ./-k && npm install')).toBe(true);
+    fs.rmSync(path.join(cwd, '-k'), {recursive: true, force: true});
+  }, 120_000);
+
   it('writes a starter app with Astryx pinned to this release and the preview route in it', async () => {
     const version = JSON.parse(
       fs.readFileSync(path.join(CLI, 'package.json'), 'utf8'),
@@ -661,6 +695,12 @@ describe('preview app', () => {
   it('refuses a folder that is not empty, the project included, and names a free one', async () => {
     const app = path.join(cwd, 'mine');
     fs.mkdirSync(path.join(app, 'src/app'), {recursive: true});
+    // A routes folder has a root layout, which loads Core's stylesheet.
+    if (!fs.existsSync(path.join(app, 'src/app/layout.tsx')))
+      fs.writeFileSync(
+        path.join(app, 'src/app/layout.tsx'),
+        "import '@astryxdesign/core/astryx.css';\nexport default function RootLayout({children}) { return children; }\n",
+      );
     fs.writeFileSync(path.join(app, 'src/app/layout.tsx'), 'MY LAYOUT\n');
     try {
       const r = await refusal(() => themeEditPreviewApp('mine', {cwd}));
