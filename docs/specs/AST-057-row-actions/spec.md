@@ -328,6 +328,12 @@ constants.
   and `swipeBehavior`, deprecated by DEP-0017, through the same passthrough.
 - The drag uses FR2's single travel property, and the release settles on the
   compositor.
+- `Swipe/SwipeActionsLayer.tsx` renders a row's two panels into the row's
+  root and runs the row's gesture. `createSwipe` imports it, and `Item` loads
+  it with `import()` only for the deprecated props (FR10). No existing module
+  can hold it: `Item` statically imports only `swipeHost.ts` and its styles,
+  which hold no gesture, animation or rendering code, and `useSwipeAction.ts`
+  is the gesture alone.
 - Implementation gap (FR10): `Item` loads the deprecated swipe layer through
   `import()` for the deprecated `swipeActions` and `swipeBehavior` props; the
   gap closes when those props are removed.
