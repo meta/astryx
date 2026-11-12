@@ -429,7 +429,7 @@ describe('themeBuildFamily()', () => {
       {files: [files[0]], key: FAMILY_KEY, message: /at least two/i}, {files: [files[0], files[0]], key: FAMILY_KEY, message: /duplicate/i},
       {files: [files[0], duplicate], key: FAMILY_KEY, message: /duplicate.*ocean/i}, {files: [files[1], unrelated], key: FAMILY_KEY, message: /ancestor|parent/i},
       {files: [files[0], unrelated], key: FAMILY_KEY, message: /one selected root/i}, {files: [files[0], impostorChild], key: FAMILY_KEY, message: /does not extend the selected/i},
-      {files: [files[0], bypass], key: FAMILY_KEY, message: /exact family ancestry could not be observed/i},
+      {files: [files[0], bypass], key: FAMILY_KEY, message: /is a plain object, so a family build cannot see which theme it extends/i},
       {files: [cycleA, cycleB], key: FAMILY_KEY, message: /cycle/i},
       {files: [graphRoot, graphChild], key: 'graph-family', message: /registry graph imports CSS/i},
       {files: [emptyParent, unrelated], key: FAMILY_KEY, message: /invalid normalized parent/i},

@@ -26,7 +26,11 @@ import {fileURLToPath} from 'node:url';
 import yaml from 'yaml';
 
 import {importerGraph, proofImporters} from './a11y-pr-contracts.mjs';
-import {chromiumSelection, isInteractionSpec} from './playwright-legs.mjs';
+import {
+  chromiumSelection,
+  isInteractionSpec,
+  storyScopeFor,
+} from './playwright-legs.mjs';
 
 const COMMENT =
   'Replay of the Chromium interaction selection (spec:AST-030 FR31). Regenerate with node .github/scripts/interaction-selection-replay.mjs (the same pull requests), --prs <numbers>, or --resume to continue an interrupted run. `reviewed`: for one pull request (`#<number> <spec>`), a failing spec outside its selection that a review found not to be an escape, and why.';
@@ -188,7 +192,7 @@ function replay(pr, {scope, selection, primitives}) {
   try {
     execFileSync('bash', [
       '-c',
-      `git -C "${ROOT}" archive ${pr.commit} ':(glob)packages/*/src/**' internal .github/scripts scripts | tar -x -C "${tree}"`,
+      `git -C "${ROOT}" archive ${pr.commit} ':(glob)packages/*/src/**' internal .github/scripts scripts apps/storybook/stories | tar -x -C "${tree}"`,
     ]);
     const listed = git('ls-tree', '-r', '--name-only', pr.commit)
       .split('\n')
@@ -227,6 +231,14 @@ function replay(pr, {scope, selection, primitives}) {
     try {
       proofs = proofImporters({root: tree, listed, isProof: isInteractionSpec});
     } catch {}
+    // The lane's own story rule: a changed story runs what it reaches.
+    const read = file => {
+      try {
+        return fs.readFileSync(path.join(tree, file), 'utf8');
+      } catch {
+        return git('show', `${pr.commit}:${file}`);
+      }
+    };
     return chromiumSelection({
       listed,
       changed: pr.files,
@@ -236,6 +248,7 @@ function replay(pr, {scope, selection, primitives}) {
       proofs,
       selection,
       primitives,
+      storyScope: storyScopeFor({listed, read}),
     });
   } finally {
     fs.rmSync(tree, {recursive: true, force: true});

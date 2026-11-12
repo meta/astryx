@@ -14,7 +14,7 @@ import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {
   themeEditHow,
   themeEditNew,
@@ -24,12 +24,11 @@ import {
 } from './theme-edit.mjs';
 import {
   PALETTE_TOKENS,
-  officialCitation,
   paletteConfig,
   paletteMapping,
   paletteNotes,
 } from './_palette.mjs';
-import {parseColor, ratio} from './_color.mjs';
+import {compositeOver, hex as hexOf, parseColor, ratio} from './_color.mjs';
 import {
   generateTonalPalette,
   normalizeGenerationRequest,
@@ -39,6 +38,14 @@ import {
   makeLinkedFixture,
   removeLinkedFixture,
 } from '../../test-utils/linked-fixture.mjs';
+
+// The page renders cost seconds and these tests read settings, builds and
+// files: a stand-in renders unless a test asks for the real thing.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
 
 /** @type {string} */
 let cwd;
@@ -335,14 +342,14 @@ describe('color dials through the palette generator', () => {
       themeEditSet('p', 'accent', '#7c3aed', {cwd, mode: 'dark'}),
     );
     expect(mode.run[0]).toBe(
-      'astryx experimental theme editor set p --color-accent "#7c3aed" --mode dark',
+      "astryx experimental theme editor set p --color-accent '#7c3aed' --mode dark",
     );
     const on = await refusal(() =>
       themeEditSet('p', 'info', '#0284c7', {cwd, on: 'button'}),
     );
     // The button reads no --color-info, so the part's own route leads.
     expect(on.run[0]).toBe(
-      'astryx experimental theme editor set p background-color "#0284c7" --on button',
+      "astryx experimental theme editor set p background-color '#0284c7' --on button",
     );
     expect(read('p.settings.json')).toBe(before);
     expect(fs.existsSync(file('palette.config.json'))).toBe(false);
@@ -455,7 +462,7 @@ describe('color dials through the palette generator', () => {
     expect(brand.commands).toContain('how accent');
     expect(brand.commands).not.toMatch(/ set |<theme>|set my /);
     expect((await ask('brand color #7c3aed')).commands).toContain(
-      `set ${theme} accent "#7c3aed"`,
+      `set ${theme} accent '#7c3aed'`,
     );
     const more = await ask('make it more colorful');
     expect(more.commands).toContain(`set ${theme} vibrancy more`);
@@ -902,7 +909,7 @@ describe('every color decision is generator config', () => {
     expect(notes).not.toContain('shade 50 (');
   });
 
-  it('finds the passing shade on either side, and steps the accent tint until citation text reads', () => {
+  it('finds the passing shade on either side, keeps the tint at its official stop, and lifts secondary text on it', () => {
     const dark = {
       '--color-background-surface': '#101314',
       '--color-background-body': '#101314',
@@ -924,54 +931,141 @@ describe('every color decision is generator config', () => {
     const pal = /** @type {import('./_palette.mjs').PaletteMapping} */ (
       paletteMapping(dir, 'x', data, gothic, tokenDefaults)
     );
-    for (const bg of Object.values(dark))
-      expect(
-        contrast(pal.tokens['--color-text-accent'].light.color, bg),
-      ).toBeGreaterThanOrEqual(4.5);
+    // On a dark light-mode page the light side takes the dark-page shades
+    // (the tint at 30, not 85), so accent text reads on the page and the
+    // tint; it is found on either side of its start.
+    const ramp = /** @type {any} */ (
+      generateTonalPalette(paletteConfig(dir, 'x', data, gothic)).palette.accent
+    ).light;
+    const onAll = (/** @type {string} */ c) =>
+      Math.min(
+        ...[
+          ...Object.values(dark),
+          pal.tokens['--color-accent-muted'].light.color,
+        ].map(bg => contrast(c, bg)),
+      );
+    const best = Math.max(...Object.values(ramp).map(c => onAll(String(c))));
+    const chosen = onAll(pal.tokens['--color-text-accent'].light.color);
+    expect(pal.tokens['--color-accent-muted'].light.stop).toBe(30);
+    expect(best).toBeGreaterThanOrEqual(4.5);
+    expect(chosen).toBeGreaterThanOrEqual(4.5);
     expect(paletteNotes(pal, 'accent', 'x').join(' ')).not.toContain(
       'the most contrasting one',
     );
-    // The official neutral pair: dark text-secondary on the dark accent tint.
+    // The tint stays at the official stop for every accent.
     const withText = {
       light: {...base.light, '--color-text-secondary': '#474747'},
       dark: {...base.dark, '--color-text-secondary': '#9e9e9e'},
     };
-    /** @param {string} seed */
-    const tint = seed => {
+    /** @param {Array<Record<string, string>>} settings */
+    const map = settings => {
       const d = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-palette-cite-'));
       dirs.push(d);
       return /** @type {import('./_palette.mjs').PaletteMapping} */ (
         paletteMapping(
           d,
           'x',
-          {...data, settings: [{thing: 'accent', value: seed, source: 'dial'}]},
+          {...data, settings: settings.map(x => ({source: 'dial', ...x}))},
           withText,
           tokenDefaults,
         )
-      ).tokens['--color-accent-muted'];
+      );
     };
-    // The official stop stays wherever citation text reads as well as in
-    // the official theme.
-    for (const seed of ['#7c3aed', '#2563eb']) {
-      expect(tint(seed).dark.stop, seed).toBe(30);
-      expect(tint(seed).light.stop, seed).toBe(85);
+    for (const seed of ['#7c3aed', '#2563eb', '#00704a', '#1db954']) {
+      const t = map([{thing: 'accent', value: seed}]).tokens;
+      expect(t['--color-accent-muted'].dark.stop, seed).toBe(30);
+      expect(t['--color-accent-muted'].light.stop, seed).toBe(85);
     }
-    // Where it would read worse, the tint steps until it reads as well.
-    for (const seed of ['#00704a', '#1db954', '#aec6cf', '#ccff00'])
+    // A fill at 85 moves the light tint off it, to the lighter neighbor.
+    const lime = map([{thing: 'accent', value: '#ccff00'}]).tokens;
+    expect(lime['--color-accent'].light.stop).toBe(85);
+    expect(lime['--color-accent-muted'].light.stop).toBe(90);
+    // Without a neutral color the lift comes from grays grown from the
+    // base theme's own secondary text, so every accent gets one.
+    for (const seed of ['#00704a', '#7c3aed']) {
+      const pal = map([{thing: 'accent', value: seed}]);
+      const tint = /** @type {any} */ (pal.lift)['--color-accent-muted'];
+      for (const mode of /** @type {const} */ (['light', 'dark'])) {
+        expect(tint[mode].family, seed).toBe('literal');
+        expect(
+          contrast(
+            tint[mode].color,
+            pal.tokens['--color-accent-muted'][mode].color,
+          ),
+          `${seed} ${mode}`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+    // With one, secondary text on the tinted parts is lifted until it reads
+    // at 4.5:1 on the tint and under a hover, as the official theme lifts
+    // it: Neutral's own gray lands on its dark 80.
+    for (const seed of ['#2563eb', '#00704a', '#1db954', '#aec6cf']) {
+      const pal = map([
+        {thing: 'neutral', value: '#808080'},
+        {thing: 'accent', value: seed},
+      ]);
+      const lift = /** @type {any} */ (pal.lift)['--color-accent-muted'];
       for (const mode of /** @type {const} */ (['light', 'dark']))
         expect(
           contrast(
-            withText[mode]['--color-text-secondary'],
-            tint(seed)[mode].color,
+            lift[mode].color,
+            pal.tokens['--color-accent-muted'][mode].color,
           ),
           `${seed} ${mode}`,
-        ).toBeGreaterThanOrEqual(
-          Math.min(4.5, /** @type {number} */ (officialCitation(mode))) - 0.005,
-        );
-    expect(officialCitation('dark')).toBeCloseTo(
-      contrast('#9e9e9e', '#474747'),
-      2,
+        ).toBeGreaterThanOrEqual(4.5);
+      expect(lift.light.stop, seed).toBe(
+        pal.tokens['--color-text-secondary'].light.stop,
+      );
+    }
+    const gray = /** @type {any} */ (
+      map([
+        {thing: 'neutral', value: '#808080'},
+        {thing: 'accent', value: '#808080'},
+      ]).lift
     );
+    expect(gray['--color-accent-muted'].dark.stop).toBe(80);
+    // Segmented-control labels sit on the neutral track, not the tint:
+    // their lift is picked against the track (here the base has no track
+    // color, so only the tint is lifted).
+    expect(Object.keys(gray)).toEqual(['--color-accent-muted']);
+    const track = {
+      light: {...withText.light, '--color-neutral': '#0000000f'},
+      dark: {...withText.dark, '--color-neutral': '#ffffff1a'},
+    };
+    const d2 = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-palette-track-'));
+    dirs.push(d2);
+    const onTrack = /** @type {any} */ (
+      paletteMapping(
+        d2,
+        'x',
+        {
+          ...data,
+          settings: [
+            {thing: 'neutral', value: '#64748b', source: 'dial'},
+            {thing: 'accent', value: '#2563eb', source: 'dial'},
+          ],
+        },
+        track,
+        tokenDefaults,
+      )
+    );
+    for (const mode of /** @type {const} */ (['light', 'dark'])) {
+      const seen = hexOf(
+        compositeOver(
+          /** @type {[number, number, number]} */ (
+            parseColor(track[mode]['--color-neutral'].slice(0, 7))
+          ),
+          mode === 'light' ? 0x0f / 255 : 0x1a / 255,
+          /** @type {[number, number, number]} */ (
+            parseColor(onTrack.tokens['--color-background-surface'][mode].color)
+          ),
+        ),
+      );
+      expect(
+        contrast(onTrack.lift['--color-neutral'][mode].color, seen),
+        mode,
+      ).toBeGreaterThanOrEqual(4.5);
+    }
   });
 
   it('refuses a layout without black and white, with non-numbers, or with a wide gap', () => {
@@ -1100,13 +1194,13 @@ describe('color settings, refused well', () => {
     /** @param {string} v */
     const why = v => refusal(() => themeEditSet('p', 'accent', v, {cwd}));
     expect((await why('7c3aed')).run[0]).toBe(
-      'astryx experimental theme editor set p accent "#7c3aed"',
+      "astryx experimental theme editor set p accent '#7c3aed'",
     );
     expect((await why('"#16a34a"')).run[0]).toBe(
-      'astryx experimental theme editor set p accent "#16a34a"',
+      "astryx experimental theme editor set p accent '#16a34a'",
     );
     expect((await why('#16a34a;')).run[0]).toBe(
-      'astryx experimental theme editor set p accent "#16a34a"',
+      "astryx experimental theme editor set p accent '#16a34a'",
     );
     expect((await why('purpel')).run[0]).toBe(
       'astryx experimental theme editor set p accent purple',
@@ -1121,7 +1215,7 @@ describe('color settings, refused well', () => {
     const clear = await why('rgba(255, 0, 0, 0.5)');
     expect(clear.message).toContain('see-through');
     expect(clear.run[0]).toBe(
-      'astryx experimental theme editor set p accent "#ff0000"',
+      "astryx experimental theme editor set p accent '#ff0000'",
     );
     expect((await why('#0000')).message).toContain('see-through');
     expect(read('p.settings.json')).toBe(before);
@@ -1130,11 +1224,11 @@ describe('color settings, refused well', () => {
   it('suggests the dial for another name, a part route for a part, and the nearest vibrancy', async () => {
     // The value carries over only to a dial that takes it.
     for (const [thing, rest] of [
-      ['Accent', 'accent "#64748b"'],
-      ['gray', 'neutral "#64748b"'],
+      ['Accent', "accent '#64748b'"],
+      ['gray', "neutral '#64748b'"],
       ['saturation', 'vibrancy 60'],
-      ['destructive', 'danger "#64748b"'],
-      ['brand', 'accent "#64748b"'],
+      ['destructive', "danger '#64748b'"],
+      ['brand', "accent '#64748b'"],
     ]) {
       const r = await refusal(() => themeEditSet('p', thing, '#64748b', {cwd}));
       expect(r.code, thing).toBe('ERR_THEME_UNKNOWN_THING');
@@ -1145,7 +1239,7 @@ describe('color settings, refused well', () => {
     expect(
       (await refusal(() => themeEditSet('p', 'accent', '#ff000', {cwd})))
         .run[0],
-    ).toBe('astryx experimental theme editor set p accent "#ff0000"');
+    ).toBe("astryx experimental theme editor set p accent '#ff0000'");
     const inputs = await refusal(() =>
       themeEditSet('p', 'info', 'blue', {cwd, on: 'inputs'}),
     );
@@ -1356,6 +1450,10 @@ describe('color settings, refused well', () => {
       'tokens/p.palette.ts was edited by hand, so it stays',
     );
     expect(fs.existsSync(file('palette.config.json'))).toBe(false);
+    // The selected-stops file is generated, so it always goes, even when
+    // the palette was edited at a shade the theme ships.
+    expect(fs.existsSync(file('tokens/p.palette-refs.ts'))).toBe(false);
+    expect(r.data.notes.join(' ')).not.toContain('palette-refs');
     // The next color change asks again, until the file is moved out.
     expect(
       (await refusal(() => themeEditSet('p', 'accent', '#16a34a', {cwd}))).code,
@@ -1413,6 +1511,64 @@ describe('color settings, refused well', () => {
     );
     await themeEditUndo('p', {cwd, thing: '--color-accent'});
     await themeEditUndo('p', {cwd, thing: 'accent'});
+  });
+});
+
+describe('lifted text and see-through colors', () => {
+  it('lifts every accent, lets an exact secondary text win per mode and on a part, and measures see-through colors as they show', async () => {
+    await themeEditSet('p', 'accent', '#7c3aed', {cwd});
+    // Without a neutral color the five parts still get a lift, written as
+    // colors into the blocks the base lifts them in.
+    expect(read('p.settings.ts')).toMatch(
+      /"variant:number": \{\s*"--color-text-secondary": "light-dark\(#[0-9a-f]{6}, #[0-9a-f]{6}\)"/,
+    );
+    await themeEditSet('p', 'neutral', '#64748b', {cwd});
+    // An exact secondary text for light only replaces the lift in light,
+    // and keeps it in dark.
+    await themeEditSet('p', '--color-text-secondary', '#5a5a5a', {
+      cwd,
+      mode: 'light',
+    });
+    expect(read('p.settings.ts')).toMatch(
+      /"variant:number": \{\s*"--color-text-secondary": `light-dark\(#5a5a5a, \$\{palette\.neutral\.dark\[\d+\]\}\)`/,
+    );
+    // On the part, it covers numbered citations too.
+    await themeEditSet('p', '--color-text-secondary', '#123456', {
+      cwd,
+      on: 'citation',
+    });
+    expect(read('p.settings.ts')).toMatch(
+      /"variant:number": \{\s*"--color-text-secondary": "light-dark\(#123456, #123456\)"/,
+    );
+    // A see-through hover is measured as it shows.
+    const r = await themeEditSet('p', '--color-overlay-hover', '#ffffff33', {
+      cwd,
+    });
+    expect(r.data.notes.join(' ')).toMatch(/under a hover/);
+    // A see-through exact fill is described as it is, and measured as it
+    // shows over the surface.
+    const fill = await themeEditSet('p', '--color-accent', '#2563eb80', {cwd});
+    expect(fill.data.notes.join(' ')).toContain(
+      'your exact setting (#2563eb80',
+    );
+    expect(fill.data.notes.join(' ')).toContain('as it shows: #');
+    for (const [thing, opts] of /** @type {const} */ ([
+      ['--color-accent', {}],
+      ['--color-overlay-hover', {}],
+      ['--color-text-secondary', {on: 'citation'}],
+      ['--color-text-secondary', {mode: 'light'}],
+      ['neutral', {}],
+      ['accent', {}],
+    ]))
+      await themeEditUndo('p', {cwd, thing, ...opts});
+  });
+
+  it('quotes a family that is not a plain CSS name, and reads a font package as its preset', async () => {
+    await themeEditSet('p', 'font', '3Dumb', {cwd});
+    expect(read('p.settings.ts')).toContain('"family": "\\"3Dumb\\""');
+    const pkg = await themeEditSet('p', 'font', '@fontsource/inter', {cwd});
+    expect(pkg.data.setting.value).toBe('inter');
+    await themeEditUndo('p', {cwd, thing: 'font'});
   });
 });
 
