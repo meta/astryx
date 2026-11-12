@@ -728,6 +728,81 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
       fs.writeFileSync(cardsFile, cardsText);
     }
   }, 180_000);
+  it("keeps build's block catalog beside the search catalog, and reads it back the same", () => {
+    const tmp = keptTmp('blocks');
+    // A request that picks blocks.
+    const ask = ['build', 'a dashboard with a chart and a table'];
+    const fresh = run(ask, {tmp: freshTmp()});
+    expect(run(ask, {tmp})).toEqual(fresh);
+    const dir = path.join(tmp, CACHE_NAME);
+    const blocks = derivedEntries(tmp).filter(
+      name =>
+        'blocks' in
+        JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8')).value,
+    );
+    expect(blocks).toHaveLength(1);
+    const {ino} = fs.statSync(path.join(dir, blocks[0]));
+    // Read back, not worked out again: the same file, and the same answer.
+    expect(run(ask, {tmp})).toEqual(fresh);
+    expect(fs.statSync(path.join(dir, blocks[0])).ino).toBe(ino);
+  }, 120_000);
+
+  it("is not used after an edit to the installed CLI's block weights or stopwords", async () => {
+    const tmp = keptTmp('weights-edit');
+    const asks = [
+      ['build', 'a dashboard with a chart and a table'],
+      ['build', 'a settings page with a form'],
+      ['build', 'a kanban board with cards'],
+    ];
+    for (const ask of asks) run(ask, {tmp});
+    const before = asks.map(ask => run(ask, {tmp}).stdout);
+    const file = path.join(
+      packed,
+      'api',
+      'build',
+      'blocks',
+      'blocks.weights.json',
+    );
+    const source = fs.readFileSync(file, 'utf8');
+    const weights = JSON.parse(source);
+    // Every term weighs nothing in the picker's word vectors.
+    weights.idf = weights.idf.map(() => 0);
+    try {
+      fs.writeFileSync(file, JSON.stringify(weights));
+      let changed = 0;
+      for (const [i, ask] of asks.entries()) {
+        const [kept, fresh] = await Promise.all([
+          runAsync(ask, {tmp}),
+          runAsync(ask, {tmp: freshTmp()}),
+        ]);
+        expect(kept, ask.join(' ')).toEqual(fresh);
+        if (fresh.stdout !== before[i]) changed++;
+      }
+      expect(changed).toBeGreaterThan(0);
+    } finally {
+      fs.writeFileSync(file, source);
+    }
+    // The stopwords the picker drops, from search's word rules.
+    const query = path.join(packed, 'api', 'search', '_query.mjs');
+    const querySource = fs.readFileSync(query, 'utf8');
+    const editedQuery = querySource.replace(
+      'export const STOPWORDS = new Set([',
+      "export const STOPWORDS = new Set([\n  'dashboard',\n  'chart',\n  'table',\n  'settings',\n  'form',\n  'kanban',\n  'board',\n  'cards',",
+    );
+    expect(editedQuery).not.toBe(querySource);
+    try {
+      fs.writeFileSync(query, editedQuery);
+      for (const ask of asks) {
+        const [kept, fresh] = await Promise.all([
+          runAsync(ask, {tmp}),
+          runAsync(ask, {tmp: freshTmp()}),
+        ]);
+        expect(kept, ask.join(' ')).toEqual(fresh);
+      }
+    } finally {
+      fs.writeFileSync(query, querySource);
+    }
+  }, 240_000);
 
   it('is skipped silently when its folder cannot be used', () => {
     fs.mkdirSync(path.join(work, 'tmp'), {recursive: true});

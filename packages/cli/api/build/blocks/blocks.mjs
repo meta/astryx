@@ -38,6 +38,21 @@
  * slot build gave them; the best of the others fill the remaining slots.
  */
 
+import {createHash} from 'node:crypto';
+import {fileURLToPath} from 'node:url';
+import {persistedDerived} from '../../../foundation/fs/gather-cache.mjs';
+
+/**
+ * This module, the picker weights beside it (read by the adapter), and the
+ * search module whose stopwords it drops.
+ */
+const BLOCKS_FILE = fileURLToPath(import.meta.url);
+const WEIGHTS_FILE = fileURLToPath(
+  new URL('./blocks.weights.json', import.meta.url),
+);
+const QUERY_FILE = fileURLToPath(
+  new URL('../../search/_query.mjs', import.meta.url),
+);
 import {STOPWORDS} from '../../search/_query.mjs';
 
 /**
@@ -333,6 +348,29 @@ function readCatalog(catalog, components, weights) {
   ]);
   const cached = catalogs.get(weights);
   if (cached && cached.key === key) return cached;
+  // A function of the catalog text and the shipped weights: kept beside the
+  // search catalog, a later run with the same text reads it back.
+  const read = persistedDerived(
+    ['block-catalog', createHash('sha256').update(key).digest('hex')],
+    () => computeCatalog(key, catalog, components, weights),
+    CATALOG_CODEC,
+    // The code that works it out, the weights it reads, and the shared word
+    // rules it imports (the stopwords).
+    [BLOCKS_FILE, WEIGHTS_FILE, QUERY_FILE],
+  );
+  catalogs.set(weights, read);
+  return read;
+}
+
+/**
+ * readCatalog's value, worked out.
+ * @param {string} key
+ * @param {CatalogBlock[]} catalog
+ * @param {CatalogComponent[]} components
+ * @param {BlockPickerWeights} weights
+ * @returns {{key: string, blocks: Map<string, {component: string, vector: Map<number, number>, projected: Float64Array}>, phrases: Map<string, [string[], number][]>}}
+ */
+function computeCatalog(key, catalog, components, weights) {
   const names = components.map(c => c.name).sort((a, b) => b.length - a.length);
   const keywords = new Map(components.map(c => [c.name, c.keywords ?? []]));
   /** @type {Map<string, {component: string, vector: Map<number, number>, projected: Float64Array}>} */
@@ -369,10 +407,53 @@ function readCatalog(catalog, components, weights) {
         list.push([phrase(k), 1 / (shared.get(k) ?? 1)]);
     phrases.set(c, list);
   }
-  const read = {key, blocks, phrases};
-  catalogs.set(weights, read);
-  return read;
+  return {key, blocks, phrases};
 }
+
+/**
+ * readCatalog's value as plain data and back: maps as entry lists, each
+ * projection as its numbers.
+ */
+const CATALOG_CODEC = {
+  /** @param {ReturnType<typeof computeCatalog>} read */
+  encode: read => ({
+    key: read.key,
+    blocks: [...read.blocks].map(([name, b]) => [
+      name,
+      b.component,
+      [...b.vector],
+      [...b.projected],
+    ]),
+    phrases: [...read.phrases],
+  }),
+  /**
+   * @param {any} stored
+   * @returns {ReturnType<typeof computeCatalog>}
+   */
+  decode: stored => ({
+    key: stored.key,
+    blocks: new Map(
+      stored.blocks.map(
+        (
+          /** @type {[string, string, [number, number][], number[]]} */ [
+            name,
+            component,
+            vector,
+            projected,
+          ],
+        ) => [
+          name,
+          {
+            component,
+            vector: new Map(vector),
+            projected: Float64Array.from(projected),
+          },
+        ],
+      ),
+    ),
+    phrases: new Map(stored.phrases),
+  }),
+};
 
 /**
  * How strongly the request names each component: its best phrase, longer
