@@ -1,8 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file The page templates the theme preview copies into an app verbatim
- * (`experimental preview add --template`) typecheck in an app with the
+ * @file The three page templates the default theme preview copies into an
+ * app (`experimental theme preview add`) typecheck in an app with the
  * strictest common settings, `noUncheckedIndexedAccess` included.
  */
 
