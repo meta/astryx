@@ -102,9 +102,19 @@ describe('ChatVirtualizer on the page scroller: rotation', () => {
       configurable: true,
       get: () => top,
       set: (value: number) => {
+        const moved = value !== top;
         top = value;
-        if (!isBrowserWrite) {
-          listWrites++;
+        if (isBrowserWrite) {
+          return;
+        }
+        listWrites++;
+        // As in a browser, the list's own write that moves the position
+        // fires a scroll event on the next frame.
+        if (moved) {
+          requestAnimationFrame(() => {
+            const target = document.scrollingElement === el ? document : el;
+            target.dispatchEvent(new Event('scroll'));
+          });
         }
       },
     });
@@ -427,10 +437,17 @@ describe('ChatVirtualizer on the page scroller: rotation', () => {
     await nextFrame();
     await rotate({viewHeight: 700, rowHeight: PORTRAIT_ROW});
     const before = topRow();
-    // PageDown: the key goes to the page, and the browser scrolls.
+    // PageDown on a control whose handler stops the key's propagation: the
+    // browser still scrolls the page.
+    const control = document.createElement('button');
+    control.addEventListener('keydown', event => event.stopPropagation());
+    document.body.append(control);
     act(() => {
-      document.dispatchEvent(new KeyboardEvent('keydown', {key: 'PageDown'}));
+      control.dispatchEvent(
+        new KeyboardEvent('keydown', {key: 'PageDown', bubbles: true}),
+      );
     });
+    control.remove();
     pageScroll(el.scrollTop + 10 * PORTRAIT_ROW);
     await nextFrame();
     await nextFrame();
