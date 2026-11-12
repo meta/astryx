@@ -392,8 +392,7 @@ export interface TreeListItemInternalProps {
   onToggle?: (id: string) => void;
   /**
    * Custom expand/collapse indicator (see TreeListProps.renderExpandIcon).
-   * Non-renderable returns fall back to the default chevron for parents and
-   * to no indicator (with the leaf alignment offset) for leaves.
+   * `undefined` keeps the default; any other result fills the indicator box.
    */
   renderExpandIcon?: (state: TreeListExpandIconState) => ReactNode;
   density: TreeListDensity;
@@ -693,8 +692,6 @@ export function TreeListItem({
       </span>
     )
   ) : hasCustomIcon ? (
-    // A leaf's indicator slot (a file icon in a folder tree): the toggle's
-    // box so leaves align, never a toggle, since a leaf has nothing to expand.
     <span aria-hidden="true" inert {...stylex.props(styles.leafIndicator)}>
       {customIcon}
     </span>
