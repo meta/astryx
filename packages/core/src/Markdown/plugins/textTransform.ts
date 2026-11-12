@@ -331,7 +331,6 @@ function transformPhrasing<Node extends MarkdownExtensionNode>(
   return next ?? children;
 }
 
-/** The source text and, for each required substring, its last search. */
 interface RequiredSource {
   readonly text: string;
   readonly searches: RequiredSearch[];

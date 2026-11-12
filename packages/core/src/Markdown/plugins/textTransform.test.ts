@@ -220,6 +220,7 @@ describe('createMarkdownTextTransform', () => {
       spy.mockRestore();
     }
 
+    expect(scanned).toBeGreaterThan(0);
     expect(scanned).toBeLessThanOrEqual(2 * source.length);
   });
 
