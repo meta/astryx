@@ -171,6 +171,12 @@ interface Frame {
   t: number;
   /** When it was written (ms, `performance.now()`). */
   at: number;
+  /**
+   * How many touch moves the page had handled when it read the travel. A
+   * count orders the frame against the moves exactly; WebKit's clock has
+   * whole milliseconds, so a move just after the read can share its time.
+   */
+  moves: number;
   /** The travel (physical px). */
   x: number;
   /** The row's opacity then (Reduce Motion's dip). */
@@ -243,6 +249,9 @@ async function recordFrames(row: Locator): Promise<void> {
         frames.push({
           t: Number(document.timeline.currentTime),
           at,
+          moves:
+            (window as unknown as {__swipeMoves?: unknown[]}).__swipeMoves
+              ?.length ?? 0,
           x: travel,
           opacity: Number(style.opacity),
           parts: {
@@ -691,16 +700,15 @@ test("a held row stays under the finger: at every frame from the claim to the li
   expect(moves.length).toBeGreaterThan(2);
   // The row's travel is toward the trailing side (negative x). From the row's
   // claim on the touch, each frame the page drew up to the lift is read against
-  // the finger's latest move. The row handles a move before this listener sees
-  // it. So it catches up within the claiming move's frame.
+  // the latest move the page had handled when the frame read the travel. The
+  // row handles a move before this listener sees it. So it catches up within
+  // the claiming move's frame.
   const travel = (x: number) => Math.max(0, start.x - x);
   const frames = await framesOf(page);
   const held = frames
     .filter(frame => frame.at < lift)
     .map(frame => ({
-      finger: travel(
-        moves.filter(move => move.at <= frame.at).at(-1)?.x ?? start.x,
-      ),
+      finger: travel(moves[frame.moves - 1]?.x ?? start.x),
       row: -frame.x,
     }))
     .filter(sample => sample.finger >= swipeActions.claim);
@@ -761,12 +769,13 @@ test("past the confirm point a lead grows to the confirmation offset on UIKit's 
         .__swipeMoves,
   );
   // At each frame before the lift, the base is the open width plus the finger's
-  // travel since touch-down. The swipe is the same on UIKit's measure. The lead
+  // travel since touch-down, as of the last move the page had handled when the
+  // frame read the travel. The swipe is the same on UIKit's measure. The lead
   // is how far past its base the row is drawn.
   const samples = (await framesOf(page))
     .filter(frame => frame.at < lift)
     .map(frame => {
-      const x = moves.filter(move => move.at <= frame.at).at(-1)?.x;
+      const x = moves[frame.moves - 1]?.x;
       const travel = x == null ? 0 : start.x - x;
       return {
         at: frame.at,
