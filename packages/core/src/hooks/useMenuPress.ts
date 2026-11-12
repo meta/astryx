@@ -27,7 +27,7 @@ import {
   type RefObject,
 } from 'react';
 import {currentGesture} from '../Layer/gestureCounter';
-import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
+import {useCommittedRef} from './useCommittedRef';
 import {isInputShield} from '../Layer/inputHold';
 import {
   IDLE_MENU_PRESS,
@@ -384,11 +384,7 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
       publicOptions.longPressDelayMs === undefined ? 'uikit' : 'pointer',
     isInScrollView: isInsideScrollView,
   };
-  const optionsRef = useRef(options);
-  // Syncs the gesture callbacks' options with the committed ones.
-  useIsomorphicLayoutEffect(() => {
-    optionsRef.current = options;
-  });
+  const optionsRef = useCommittedRef(options);
   // The highlight, and the hover focus of the rows in this menu, follow the
   // last input, which this tracks for the menu's own document.
   useInteractionModalityTrackingFor(options.menuRef);
@@ -444,7 +440,7 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
       optionsRef.current.triggerRef?.current?.ownerDocument ??
       document
     );
-  }, []);
+  }, [optionsRef]);
 
   const resolvePoint = useCallback(
     (event: PointerEvent): ResolvedPoint => {
@@ -495,7 +491,7 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
       }
       return {row, isInMenu, isOnTrigger};
     },
-    [getDocument],
+    [getDocument, optionsRef],
   );
 
   const stopAutoscroll = useCallback(() => {
@@ -574,44 +570,47 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
         focusForLastInput(target, {preventScroll: true});
       }
     },
-    [getDocument],
+    [getDocument, optionsRef],
   );
 
-  const activate = useCallback((row: HTMLElement, release: PointerEvent) => {
-    // Every click this dispatches passes the shared click guard.
-    withoutClickGuard(() => {
-      const {onActivate} = optionsRef.current;
-      isModelActivation = true;
-      try {
-        if (onActivate != null) {
-          onActivate(row, release);
-          return;
+  const activate = useCallback(
+    (row: HTMLElement, release: PointerEvent) => {
+      // Every click this dispatches passes the shared click guard.
+      withoutClickGuard(() => {
+        const {onActivate} = optionsRef.current;
+        isModelActivation = true;
+        try {
+          if (onActivate != null) {
+            onActivate(row, release);
+            return;
+          }
+          // The row acts as its own click would. `detail: 0` marks a dispatched
+          // activation, as a keyboard's does, so the click guard lets it pass.
+          // The button and the modifiers are the release's.
+          row.dispatchEvent(
+            new MouseEvent('click', {
+              bubbles: true,
+              cancelable: true,
+              composed: true,
+              detail: 0,
+              button: release.button,
+              clientX: release.clientX,
+              clientY: release.clientY,
+              screenX: release.screenX,
+              screenY: release.screenY,
+              ctrlKey: release.ctrlKey,
+              shiftKey: release.shiftKey,
+              altKey: release.altKey,
+              metaKey: release.metaKey,
+            }),
+          );
+        } finally {
+          isModelActivation = false;
         }
-        // The row acts as its own click would. `detail: 0` marks a dispatched
-        // activation, as a keyboard's does, so the click guard lets it pass.
-        // The button and the modifiers are the release's.
-        row.dispatchEvent(
-          new MouseEvent('click', {
-            bubbles: true,
-            cancelable: true,
-            composed: true,
-            detail: 0,
-            button: release.button,
-            clientX: release.clientX,
-            clientY: release.clientY,
-            screenX: release.screenX,
-            screenY: release.screenY,
-            ctrlKey: release.ctrlKey,
-            shiftKey: release.shiftKey,
-            altKey: release.altKey,
-            metaKey: release.metaKey,
-          }),
-        );
-      } finally {
-        isModelActivation = false;
-      }
-    });
-  }, []);
+      });
+    },
+    [optionsRef],
+  );
 
   const applyEffect = useCallback(
     (
@@ -687,7 +686,7 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
         }
       }
     },
-    [activate, endGesture, getDocument, highlight, stopAutoscroll],
+    [activate, endGesture, getDocument, highlight, optionsRef, stopAutoscroll],
   );
 
   const step = useCallback(
@@ -698,11 +697,8 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
     },
     [applyEffect],
   );
-  const stepRef = useRef(step);
-  // Syncs the trigger context's step with the committed one.
-  useIsomorphicLayoutEffect(() => {
-    stepRef.current = step;
-  });
+  // The trigger context is built once, so it calls `step` through this ref.
+  const stepRef = useCommittedRef(step);
 
   const getScroller = useCallback((): HTMLElement | null => {
     const {getScroller: custom, menuRef} = optionsRef.current;
@@ -714,7 +710,7 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
       return null;
     }
     return menu.scrollHeight > menu.clientHeight + 1 ? menu : null;
-  }, []);
+  }, [optionsRef]);
 
   const updateAutoscroll = useCallback(
     (event: PointerEvent) => {
@@ -874,7 +870,7 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
         view?.removeEventListener('blur', onBlur);
       };
     },
-    [getDocument, resolvePoint, step, updateAutoscroll],
+    [getDocument, optionsRef, resolvePoint, step, updateAutoscroll],
   );
 
   // `touch-action` was decided when the finger landed; the page must not
@@ -895,10 +891,8 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
   }, [getDocument]);
 
   // The trigger half below drives the model through this stable context.
-  const installRef = useRef(installTouchMovePreventer);
-  installRef.current = installTouchMovePreventer;
-  const attachRef = useRef(attach);
-  attachRef.current = attach;
+  const installRef = useCommittedRef(installTouchMovePreventer);
+  const attachRef = useCommittedRef(attach);
   const holdDetectorsRef = useRef<{
     plain: LongPressDetectorHandlers;
     scroller: LongPressDetectorHandlers;
@@ -992,7 +986,7 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
         native,
       );
     },
-    [attach, resolvePoint, step],
+    [attach, optionsRef, resolvePoint, step],
   );
 
   const isTriggerClickFromPress = useCallback((): boolean => {
