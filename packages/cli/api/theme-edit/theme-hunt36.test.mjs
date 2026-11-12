@@ -306,4 +306,45 @@ describe('hunt36 E1: a deleted working folder', () => {
     expect(run(['--help']).status).toBe(0);
     fs.rmSync(gone, {recursive: true, force: true});
   });
+
+  it('help, the version and docs leave the nearest existing folder as it was', () => {
+    // A parent of its own (nothing else writes there), holding one file.
+    const parent = fs.realpathSync(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-h36p-')),
+    );
+    fs.writeFileSync(path.join(parent, 'keep.txt'), 'x');
+    const gone = path.join(parent, 'gone');
+    const sub = path.join(gone, 'a');
+    // Its entries and their times, the deleted folder aside.
+    const snapshot = () =>
+      fs
+        .readdirSync(parent, {recursive: true})
+        .map(String)
+        .filter(f => f !== 'gone' && !f.startsWith(`gone${path.sep}`))
+        .sort()
+        .map(f => {
+          const st = fs.statSync(path.join(parent, f));
+          return `${f} ${st.mtimeMs} ${st.size}`;
+        });
+    const before = snapshot();
+    try {
+      for (const args of [['--help'], ['--version'], ['docs']]) {
+        fs.mkdirSync(sub, {recursive: true});
+        const r = spawnSync(
+          'sh',
+          [
+            '-c',
+            `cd "${sub}" && rm -rf "${gone}" && exec "${process.execPath}" "${BIN}" "$@"`,
+            'sh',
+            ...args,
+          ],
+          {encoding: 'utf8'},
+        );
+        expect(r.status, args.join(' ')).toBe(0);
+        expect(snapshot(), args.join(' ')).toEqual(before);
+      }
+    } finally {
+      fs.rmSync(parent, {recursive: true, force: true});
+    }
+  }, 120_000);
 });
