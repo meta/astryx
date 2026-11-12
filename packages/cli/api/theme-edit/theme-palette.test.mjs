@@ -2427,3 +2427,68 @@ describe('colors15', () => {
     expect(sized.run.some(x => /font-size 1rem --on card$/.test(x))).toBe(true);
   });
 });
+
+describe('colors16', () => {
+  it('keeps weight keywords on weight tokens, and a theme saved with one editable', async () => {
+    await themeEditSet('p', '--font-weight-bold', 'bold', {cwd});
+    await themeEditSet('p', 'corners', 'pill', {cwd});
+    await themeEditUndo('p', {cwd, thing: 'corners'});
+    for (const v of ['normal', 'bolder', 'lighter', '7e2', '+700'])
+      await themeEditSet('p', '--font-weight-bold', v, {cwd});
+    await themeEditUndo('p', {cwd, thing: '--font-weight-bold'});
+  });
+
+  it('reads CSS numbers as the browser does, and only multiplied tokens refuse units', async () => {
+    for (const v of ['1.5e0', '+1.5', '15E-1']) {
+      await themeEditSet('p', '--text-body-leading', v, {cwd});
+      await themeEditUndo('p', {cwd, thing: '--text-body-leading'});
+    }
+    const em = await refusal(() =>
+      themeEditSet('p', '--text-body-leading', '1.5EM', {cwd}),
+    );
+    expect(em.run[0]).toMatch(/--text-body-leading 1\.5$/);
+    for (const share of ['50.%', '5.e1%'])
+      expect(
+        (
+          await refusal(() =>
+            themeEditSet(
+              'p',
+              '--color-accent',
+              `color-mix(in srgb, red ${share}, blue)`,
+              {cwd},
+            ),
+          )
+        ).code,
+        share,
+      ).toBe('ERR_THEME_BAD_VALUE');
+  });
+
+  it('splits size with line height and math, and refuses a part named twice', async () => {
+    for (const [value, want] of [
+      [
+        '1rem/1.5',
+        [/font-size 1rem --on card$/, /line-height 1\.5 --on card$/],
+      ],
+      [
+        'italic 1rem/1.5',
+        [/font-style italic --on card$/, /line-height 1\.5 --on card$/],
+      ],
+      ['calc(1rem + 2px)', [/font-size 'calc\(1rem \+ 2px\)' --on card$/]],
+    ]) {
+      const r = await refusal(() =>
+        themeEditSet('p', 'font', value, {cwd, on: 'card'}),
+      );
+      for (const w of want)
+        expect(
+          r.run.some(x => w.test(x)),
+          `${value} ${w}`,
+        ).toBe(true);
+      expect(r.run.join(' '), value).not.toContain('font-family');
+    }
+    const twice = await refusal(() =>
+      themeEditSet('p', 'font', 'bold bold', {cwd, on: 'card'}),
+    );
+    expect(twice.message).toContain('twice');
+    expect(twice.run.join(' ')).not.toContain("font-family 'bold bold'");
+  });
+});

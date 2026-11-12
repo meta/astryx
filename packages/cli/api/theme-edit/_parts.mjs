@@ -495,6 +495,38 @@ async function buildPartData(project) {
   };
 }
 
+/** @type {Map<string, Set<string>>} */
+const multipliedCache = new Map();
+
+/**
+ * The tokens Core's stylesheet multiplies by another value inside calc()
+ * (`var(--text-body-size) * var(--text-body-leading)`): a unit there makes
+ * the declaration invalid. Empty with no stylesheet.
+ * @param {any} project
+ * @returns {Set<string>}
+ */
+export function multipliedTokens(project) {
+  /** @type {string} */
+  let file;
+  try {
+    file = project.req.resolve('@astryxdesign/core/astryx.css');
+  } catch {
+    return new Set();
+  }
+  const cached = multipliedCache.get(file);
+  if (cached) return cached;
+  const css = fs.readFileSync(file, 'utf8');
+  /** @type {Set<string>} */
+  const out = new Set();
+  // Each side of a `*` on its own, so `a * b * c` names all three.
+  for (const m of css.matchAll(/var\((--[a-z0-9-]+)\)(?=\s*\*)/gi))
+    out.add(m[1].toLowerCase());
+  for (const m of css.matchAll(/\*\s*var\((--[a-z0-9-]+)\)/gi))
+    out.add(m[1].toLowerCase());
+  multipliedCache.set(file, out);
+  return out;
+}
+
 /**
  * Atomic class -> its declarations, with the condition (pseudo-class,
  * attribute) each one applies under.

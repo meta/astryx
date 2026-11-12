@@ -9,7 +9,7 @@
  */
 
 import {CSS_WIDE} from './_tables.mjs';
-import {MATH_FUNCTION, matchType} from './_css.mjs';
+import {MATH_FUNCTION, cssNumber, keywordsOf, matchType} from './_css.mjs';
 import {luminance, oklabToLinearRgb} from '../theme/palette/generate/color.mjs';
 
 /** @typedef {[number, number, number]} Rgb */
@@ -527,9 +527,8 @@ export function mixSide(side) {
   const share = (/** @type {string | undefined} */ w) => {
     if (w == null) return null;
     const plain = /^calc\(\s*(.*?)\s*\)$/i.exec(w)?.[1] ?? w;
-    if (/^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?%$/i.test(plain))
-      return Number.parseFloat(plain);
-    return null;
+    const n = cssNumber(plain);
+    return n?.unit === '%' ? n.value : null;
   };
   if (words.length < 2) return {color: side.trim(), pct: null};
   const last = share(words.at(-1));
@@ -984,20 +983,24 @@ export const isSize = (v, name = '') => {
 export const isNumber = (v, name = '') => {
   const s = String(v).trim();
   if (/^var\(--[a-z0-9-]+\)$/i.test(s)) return true;
+  const n = cssNumber(s);
+  // A weight: a font-weight keyword, or a number from 1 to 1000.
   if (/weight/.test(name))
     return (
-      /^(normal|bold|bolder|lighter)$/.test(s) ||
-      (/^\d+(\.\d+)?$/.test(s) && Number(s) >= 1 && Number(s) <= 1000) ||
+      keywordsOf('font-weight').includes(s.toLowerCase()) ||
+      (n?.unit === '' && n.value >= 1 && n.value <= 1000) ||
       (MATH_FUNCTION.test(s) && matchType('number', s) != null)
     );
   if (/leading|line-height/.test(name))
     return (
       s === 'normal' ||
-      (/^\d*\.?\d+(px|rem|em|%)?$/.test(s) && Number.parseFloat(s) >= 0) ||
+      (n != null &&
+        ['', 'px', 'rem', 'em', '%'].includes(n.unit) &&
+        n.value >= 0) ||
       (MATH_FUNCTION.test(s) && matchType('length-percentage', s) != null) ||
       (MATH_FUNCTION.test(s) && matchType('number', s) != null)
     );
-  return /^-?\d*\.?\d+$/.test(s);
+  return n?.unit === '';
 };
 
 /**

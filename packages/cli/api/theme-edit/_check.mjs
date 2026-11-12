@@ -16,6 +16,7 @@ import {baseThemeFile} from './_project.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {
   MATH_FUNCTION,
+  cssNumber,
   belowRange,
   fontShorthandParts,
   cssProperties,
@@ -28,6 +29,7 @@ import {
   propertyGrammar,
   takesPercentage,
 } from './_css.mjs';
+import {multipliedTokens} from './_parts.mjs';
 import {
   AUTO_SPREAD,
   COLOR_PROP_PARTS,
@@ -268,6 +270,7 @@ export function storedProblems(ctx, slug, data, skip = '') {
         ctx.C.typeOf,
         slug,
         ctx.C.propsReading(s.thing),
+        multipliedTokens(ctx.project).has(s.thing),
       );
       checkCycle(s.thing, s.value, TOKENS, data);
     } catch (e) {
@@ -321,6 +324,7 @@ function groupOfPropType(prop) {
  * @param {(token: string) => string} typeOf
  * @param {string} slug
  * @param {string[]} [readers] the CSS properties that read the token
+ * @param {boolean} [multiplied] whether Core multiplies the token by a size
  */
 function checkTypedValue(
   type,
@@ -330,6 +334,7 @@ function checkTypedValue(
   typeOf,
   slug,
   readers = [],
+  multiplied = false,
 ) {
   /** @param {string} what @param {string} example */
   const bad = (what, example) =>
@@ -396,24 +401,25 @@ function checkTypedValue(
   }
   if (type === 'number' && !isNumber(value, name))
     bad('a number', /weight/.test(name) ? '600' : '1.4');
-  // A token Core gives as a plain number (line heights) is one Core also
-  // multiplies by a size inside calc(), where a length, a percentage or
-  // normal is invalid: it takes a number with no unit.
+  // A token Core's stylesheet multiplies by a size inside calc() (the line
+  // heights) takes a number with no unit: there a length, a percentage or
+  // normal is invalid.
   const coreDefault = String(TOKENS[name] ?? '').trim();
   const v0 = value.trim();
+  const read = cssNumber(v0);
   if (
     type === 'number' &&
-    /^\d*\.?\d+$/.test(coreDefault) &&
+    multiplied &&
     !/^var\(--[a-z0-9-]+\)$/i.test(v0) &&
-    !/^\d*\.?\d+$/.test(v0) &&
+    read?.unit !== '' &&
     !(MATH_FUNCTION.test(v0) && matchType('number', v0) != null)
   ) {
-    const n = Number.parseFloat(v0);
-    const unitless = /^\d*\.?\d+em$/i.test(v0)
-      ? String(n)
-      : /^\d*\.?\d+%$/.test(v0)
-        ? String(n / 100)
-        : coreDefault;
+    const unitless =
+      read?.unit === 'em'
+        ? String(read.value)
+        : read?.unit === '%'
+          ? String(read.value / 100)
+          : coreDefault;
     refuse(
       E.ERR_THEME_BAD_VALUE,
       `${name} takes a number with no unit: Core multiplies it by a text size inside calc() (field heights, dialog headers, code blocks), where "${value}" is invalid. ${unitless === coreDefault ? `Core's own value is ${coreDefault}.` : `${unitless} is the same line height as a number.`}`,
@@ -1855,7 +1861,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         const family = !parts && matchValue('font-family', v);
         const example = `${P} set ${slug} font-family ${quoteCommandArgument(exampleOf('font', 'font-family'))} --on ${s.on}`;
         const runs = parts
-          ? parts.system
+          ? parts.system || parts.repeat
             ? [example]
             : Object.entries(parts).map(
                 ([k, x]) =>
@@ -1868,9 +1874,11 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
             : [example];
         refuse(
           E.ERR_THEME_BAD_VALUE,
-          parts?.system
-            ? `font --on takes body, heading, or code, and "${v}" is a system font keyword of the CSS font shorthand, which sets every part of the font at once. For one part's font use font-family with a family.`
-            : `font --on takes body, heading, or code. For one part's font use font-family${parts ? ', and the other parts of the font shorthand one by one' : ''}.`,
+          parts?.repeat
+            ? `font --on takes body, heading, or code, and "${v}" names ${parts.repeat} twice, which no CSS font value does. For one part's font use font-family with a family, and set each other part of the font once.`
+            : parts?.system
+              ? `font --on takes body, heading, or code, and "${v}" is a system font keyword of the CSS font shorthand, which sets every part of the font at once. For one part's font use font-family with a family.`
+              : `font --on takes body, heading, or code. For one part's font use font-family${parts ? ', and the other parts of the font shorthand one by one' : ''}.`,
           {run: runs},
         );
       }
@@ -2079,6 +2087,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       C.typeOf,
       slug,
       C.propsReading(thing),
+      multipliedTokens(ctx.project).has(thing),
     );
     checkCycle(thing, v, TOKENS, data);
     // With no part data, what reads the token is unknown: save, unchecked.

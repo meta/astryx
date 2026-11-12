@@ -622,6 +622,49 @@ export function initialOf(prop) {
     : null;
 }
 
+/**
+ * One CSS number, percentage or dimension, read by css-tree's tokenizer as
+ * the browser reads it (`1.5e0`, `+1.5`, `15E-1`, `1.5EM`; never `50.%`),
+ * or null for anything else.
+ * @param {string} value
+ * @returns {{value: number, unit: string} | null}
+ */
+export function cssNumber(value) {
+  /** @type {any} */
+  let ast;
+  try {
+    ast = csstree().parse(value.trim(), {context: 'value'});
+  } catch {
+    return null;
+  }
+  const nodes = ast.children?.toArray?.() ?? [];
+  if (nodes.length !== 1) return null;
+  const [n] = nodes;
+  if (n.type === 'Number') return {value: Number(n.value), unit: ''};
+  if (n.type === 'Percentage') return {value: Number(n.value), unit: '%'};
+  if (n.type === 'Dimension')
+    return {value: Number(n.value), unit: String(n.unit).toLowerCase()};
+  return null;
+}
+
+/** Words split at top-level spaces. @param {string} v */
+const topWords = v => {
+  /** @type {string[]} */
+  const out = [];
+  let depth = 0;
+  let cur = '';
+  for (const c of v.trim()) {
+    if (c === '(') depth++;
+    if (c === ')') depth--;
+    if (/\s/.test(c) && depth === 0) {
+      if (cur) out.push(cur);
+      cur = '';
+    } else cur += c;
+  }
+  if (cur) out.push(cur);
+  return out;
+};
+
 /** The longhand each type of the `font` grammar sets, where css-tree names a type, not a property. */
 const FONT_TYPE_LONGHAND = /** @type {Record<string, string>} */ ({
   'font-variant-css2': 'font-variant-caps',
@@ -653,18 +696,38 @@ export function fontShorthandParts(value) {
   if (!value.includes(',')) {
     /** @type {Record<string, string>} */
     const each = {};
-    const words = value.trim().split(/\s+/);
+    const words = topWords(value);
+    let all = true;
     for (const w of words) {
       const lower = w.toLowerCase();
+      // A size with its line height (1rem/1.5).
+      const slash = /^([^/]+)\/([^/]+)$/.exec(w);
+      if (
+        slash &&
+        !('font-size' in each) &&
+        matchValue('font-size', slash[1]) &&
+        matchValue('line-height', slash[2])
+      ) {
+        each['font-size'] = slash[1];
+        each['line-height'] = slash[2];
+        continue;
+      }
+      const keyword = LONGHANDS.find(p => keywordsOf(p).includes(lower));
+      // The same part twice (bold bold) is no font value.
+      if (keyword && keyword in each && each[keyword] === lower)
+        return {repeat: lower};
       const prop =
-        LONGHANDS.find(p => !(p in each) && keywordsOf(p).includes(lower)) ??
+        (keyword && !(keyword in each) ? keyword : undefined) ??
         ['font-size', 'font-weight'].find(
           p => !(p in each) && !/^[a-z-]+$/i.test(w) && matchValue(p, w),
         );
-      if (!prop) break;
+      if (!prop) {
+        all = false;
+        break;
+      }
       each[prop] = /^[a-z-]+$/i.test(w) ? lower : w;
     }
-    if (Object.keys(each).length === words.length) return each;
+    if (all && words.length) return each;
   }
   /** @type {any} */
   let ast;
