@@ -65,6 +65,7 @@ import {
   HeartIcon,
   ShareIcon,
   MagnifyingGlassIcon,
+  ChevronRightIcon,
 } from '@heroicons/react/24/outline';
 import {StarIcon as StarIconSolid} from '@heroicons/react/24/solid';
 
@@ -1026,6 +1027,52 @@ function FaqSection() {
     </Section>
   );
 }
+function ClosingBand() {
+  return (
+    <Section padding={6}>
+      <Card padding={6}>
+        <Grid columns={{minWidth: 280, repeat: 'fit'}} gap={6}>
+          <VStack gap={4}>
+            <Badge label="Start tonight" />
+            <Heading level={2}>
+              Watch lesson one tonight. Decide in the morning.
+            </Heading>
+            <Text type="body" color="secondary">
+              Three preview lessons are free, the project ships with your
+              enrolment, and the first cohort starts in March.
+            </Text>
+            <HStack gap={2} wrap="wrap">
+              <Button
+                label="Start lesson one free"
+                variant="primary"
+                size="lg"
+                icon={<Icon icon={PlayIcon} size="sm" />}
+              />
+              <Button
+                label="Apply to teach"
+                variant="secondary"
+                size="lg"
+                icon={
+                  <Icon
+                    icon={ChevronRightIcon}
+                    size="sm"
+                    xstyle={rtlStyles.mirror}
+                  />
+                }
+              />
+            </HStack>
+          </VStack>
+          <AspectRatio ratio={4 / 3} fit="cover">
+            <img
+              src="/template-assets/colorful-working-horizontal-1.png"
+              alt="A desk with the course workbook open next to a laptop"
+            />
+          </AspectRatio>
+        </Grid>
+      </Card>
+    </Section>
+  );
+}
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 export default function CourseDetailTemplate() {
@@ -1051,6 +1098,7 @@ export default function CourseDetailTemplate() {
             </Grid>
             <RelatedRail />
             <FaqSection />
+            <ClosingBand />
           </VStack>
         </LayoutContent>
       }

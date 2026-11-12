@@ -28,6 +28,7 @@ export const doc = {
     BoltIcon: 'bolt',
     BookOpenIcon: 'book',
     CheckIcon: 'check',
+    ChevronRightIcon: 'chevronRight',
     ClockIcon: 'clock',
     GlobeAltIcon: 'globe',
     HeartIcon: 'heart',
