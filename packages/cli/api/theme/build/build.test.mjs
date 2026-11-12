@@ -31,6 +31,7 @@ import {
 import {logger} from '../../logger.mjs';
 import {
   themeBuild,
+  themeBuildWithHandOff,
   themeSourceFiles,
   validateComponentOverridesAgainstRegistry,
   validateThemePrivateInputs,
@@ -1819,14 +1820,38 @@ describe('themeBuild() — outputs it may replace', () => {
   it('refuses a second theme that would replace outputs written earlier in the run', async () => {
     fs.writeFileSync(path.join(tmpDir, 'ocean2.mjs'), theme);
     const claimed = new Map();
-    await themeBuild('ocean.mjs', {__claimedOutputs: claimed}, {cwd: tmpDir});
+    await themeBuildWithHandOff(
+      'ocean.mjs',
+      {},
+      {cwd: tmpDir},
+      {claimedOutputs: claimed},
+    );
     const first = fs.readFileSync(path.join(tmpDir, 'ocean.css'), 'utf-8');
     await expect(
-      themeBuild('ocean2.mjs', {__claimedOutputs: claimed}, {cwd: tmpDir}),
+      themeBuildWithHandOff(
+        'ocean2.mjs',
+        {},
+        {cwd: tmpDir},
+        {claimedOutputs: claimed},
+      ),
     ).rejects.toMatchObject({code: 'ERR_THEME_INVALID'});
     expect(fs.readFileSync(path.join(tmpDir, 'ocean.css'), 'utf-8')).toBe(
       first,
     );
+  });
+
+  it('takes no hand-off through the public options', async () => {
+    const deferred = /** @type {any[]} */ ([]);
+    await themeBuild(
+      'ocean.mjs',
+      /** @type {any} */ ({
+        __deferredWrites: deferred,
+        deferredWrites: deferred,
+      }),
+      {cwd: tmpDir},
+    );
+    expect(deferred).toEqual([]);
+    expect(fs.existsSync(path.join(tmpDir, 'ocean.css'))).toBe(true);
   });
 });
 
