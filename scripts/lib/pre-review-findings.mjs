@@ -137,8 +137,9 @@ export function sharedOwnerFindings(addedLines) {
 const EFFECT =
   /\b(?:React\.)?use(?:Isomorphic)?(?:Layout|Insertion)?Effect\s*\(/;
 const COMMITTED_REF_MODULE = 'packages/core/src/hooks/useCommittedRef.ts';
-// Render-time ref writes that a current record allows, by file and ref name.
-// `record` names the clause; a test checks that the clause names the site.
+// Render-time ref writes that a current record allows, or names as an open gap
+// until its owner decides, by file and ref name. `record` names the clause; a
+// test checks that the clause names the site.
 export const RENDER_WRITE_EXCEPTIONS = [
   {
     file: 'packages/core/src/Markdown/Markdown.tsx',
