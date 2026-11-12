@@ -739,8 +739,9 @@ function BaseTableInner<T extends Record<string, unknown>>({
     loadingSource.getSnapshot,
     loadingSource.getServerSnapshot,
   );
-  // Only the Table-owned wrapper renders `afterTable`, where the loading
-  // surface lives.
+  // Table admits loading only with its own scroll wrapper. The loading plugin
+  // reads this admission from the runtime context, so a caller's wrapper gets
+  // the whole loading behavior or none of it.
   const isLoadingAdmitted =
     mode === 'data' &&
     admission.rowModel === 'flat' &&
@@ -1116,8 +1117,14 @@ function BaseTableInner<T extends Record<string, unknown>>({
       viewportHeight: windowPlan.isWindowed
         ? config?.initialViewportHeight
         : undefined,
+      isLoadingAdmitted,
     }),
-    [runtime, windowPlan.isWindowed, config?.initialViewportHeight],
+    [
+      runtime,
+      windowPlan.isWindowed,
+      config?.initialViewportHeight,
+      isLoadingAdmitted,
+    ],
   );
   return (
     <TableRuntimeContext value={runtimeValue}>

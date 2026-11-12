@@ -102,6 +102,7 @@ function createRuntime(
     stopObservation: undefined as (() => void) | undefined,
     request: null as Request | null,
     isActive: true,
+    isTableAdmitted: false,
     isAutoPaused: false,
     generation: 0,
     commitCount: 0,
@@ -125,9 +126,14 @@ function createRuntime(
       runtime.request = null;
       runtime.version++;
     },
-    attach(context: TableRenderContext, stopObservation: () => void) {
+    attach(
+      context: TableRenderContext,
+      stopObservation: () => void,
+      isTableAdmitted: boolean,
+    ) {
       runtime.context = context;
       runtime.stopObservation = stopObservation;
+      runtime.isTableAdmitted = isTableAdmitted;
     },
     detach(
       context: TableRenderContext | undefined,
@@ -184,6 +190,7 @@ function createRuntime(
       const {config} = runtime;
       if (
         !runtime.isActive ||
+        !runtime.isTableAdmitted ||
         !isAdmitted(runtime.context) ||
         !config.hasMore ||
         config.isLoading ||
@@ -274,8 +281,12 @@ function InfiniteScrollSurface({
     runtime.getSurface,
   );
   const t = useComponentTranslator();
+  const tableRuntime = use(TableRuntimeContext);
   // Table bounds its block viewport only while it windows its rows.
-  const hasBlockViewport = use(TableRuntimeContext)?.viewportHeight != null;
+  const hasBlockViewport = tableRuntime?.viewportHeight != null;
+  // Table denies loading under a caller's scroll wrapper. A surface rendered
+  // outside any Table has no runtime to deny it.
+  const isTableAdmitted = tableRuntime?.isLoadingAdmitted !== false;
   useInteractionModalityTracking();
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
@@ -326,7 +337,12 @@ function InfiniteScrollSurface({
   useEffect(() => {
     // Sync the sentinel's IntersectionObserver with the committed loading
     // state. Parent refs are attached by now.
-    runtime.attach(context, disconnect);
+    runtime.attach(context, disconnect, isTableAdmitted);
+    if (isAdmitted(context) && !isTableAdmitted) {
+      runtime.diagnose(
+        "Loading requires the Table's own scroll wrapper; a caller scrollWrapper gets no loading surface.",
+      );
+    }
     const state = resourcesRef.current;
     state.context = context;
     state.viewport = context.viewport.current;
@@ -339,6 +355,7 @@ function InfiniteScrollSurface({
       state.node = node;
     }
     const canObserve =
+      isTableAdmitted &&
       isAdmitted(context) &&
       view.hasMore &&
       !view.isLoading &&
@@ -420,7 +437,7 @@ function InfiniteScrollSurface({
       onBeforeChange={noteExhaustion}
     />
   );
-  if (!view.hasMore || !isAdmitted(context)) {
+  if (!view.hasMore || !isTableAdmitted || !isAdmitted(context)) {
     return snapshot;
   }
   return (

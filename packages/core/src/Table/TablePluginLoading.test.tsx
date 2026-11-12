@@ -97,6 +97,53 @@ describe('Table plugin loading source', () => {
     act(() => screen.getByRole('button', {name: 'Settle'}).click());
     expect(screen.getByText('No data')).toBeInTheDocument();
   });
+  it('gives a caller scroll wrapper that renders afterTable no loading behavior', () => {
+    vi.stubGlobal('IntersectionObserver', undefined);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const onLoadMore = vi.fn(async () => {});
+    const CallerWrapper = ({
+      children,
+      htmlProps,
+      afterTable,
+    }: {
+      children: ReactNode;
+      htmlProps?: HTMLAttributes<HTMLDivElement>;
+      afterTable?: ReactNode;
+    }) => (
+      <div {...htmlProps} data-caller-wrapper>
+        {children}
+        {afterTable}
+      </div>
+    );
+    function Fixture() {
+      const loading = useTableInfiniteScroll<{id: string}>({
+        hasMore: true,
+        isLoading: true,
+        onLoadMore,
+      });
+      return (
+        <Table
+          data={[]}
+          columns={columns}
+          plugins={{loading}}
+          scrollWrapper={CallerWrapper}
+        />
+      );
+    }
+    render(<Fixture />);
+    // Neither half of the loading behavior: the default empty state stays,
+    // and no Load more surface or request appears.
+    expect(screen.getByText('No data')).toBeInTheDocument();
+    expect(screen.queryByRole('button', {name: /load more/i})).toBeNull();
+    expect(onLoadMore).not.toHaveBeenCalled();
+    expect(
+      warn.mock.calls.filter(call =>
+        String(call[0]).includes("Table's own scroll wrapper"),
+      ),
+    ).toHaveLength(1);
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
   it('admits no loading state with a caller scroll wrapper', () => {
     const source = {
       subscribe: () => () => {},
