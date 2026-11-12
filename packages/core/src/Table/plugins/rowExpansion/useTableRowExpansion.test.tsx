@@ -610,7 +610,10 @@ describe('useTableRowExpansion (detail panel)', () => {
       const rules = stripeRules();
       expect(rules.length).toBeGreaterThan(0);
       for (const rule of rules) {
-        expect(rule).toContain('of :not([data-expansion-panel])');
+        // Active rows (`data-active`) also skip the stripe; the panel must
+        // stay excluded whatever else joins the selector.
+        expect(rule).toContain(':not([data-expansion-panel])');
+        expect(rule).toContain(':not([data-active');
       }
     });
 

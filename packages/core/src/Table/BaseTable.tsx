@@ -39,6 +39,7 @@ import {
   withLogicalPositionWidths,
 } from './tableColumnAdmission';
 import {isRenderable} from '../utils/isRenderable';
+import {warnOnce} from '../utils/devWarning';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import type {
@@ -180,6 +181,36 @@ function applyRowPlugins<
   );
 }
 
+/**
+ * Whether competing whole-row ownership claims neutralize activation.
+ * At most one plugin may own the row's primary interaction: two claims —
+ * including the same owner twice — leave activation inert in either plugin
+ * order, with one development diagnostic. Every other transform still runs,
+ * so the surviving owners and all non-owning handlers are preserved.
+ */
+function isActivationNeutralized<T extends Record<string, unknown>>(
+  plugins: ReadonlyArray<TablePlugin<T>>,
+): boolean {
+  const claims = plugins.filter(
+    plugin => plugin.transformBodyRow != null && plugin.wholeRowOwner != null,
+  );
+  if (claims.length > 1) {
+    // The diagnostic names activation: two non-activation owners leave the
+    // pipeline unchanged for activation, so they stay silent here.
+    if (claims.some(plugin => plugin.wholeRowOwner === 'activation')) {
+      warnOnce(
+        'table-whole-row-owner',
+        'Table',
+        'More than one plugin claims whole-row ownership (' +
+          claims.map(plugin => plugin.wholeRowOwner).join(', ') +
+          '), so row activation stays inert. Declare a single whole-row owner.',
+      );
+    }
+    return true;
+  }
+  return false;
+}
+
 // =============================================================================
 // Memoized Table Row Component
 // =============================================================================
@@ -319,9 +350,19 @@ function TableRowInner<T extends Record<string, unknown>>({
   // Apply plugin transforms for row (with pre-rendered children).
   // Seed `aria-rowindex` (when the table opts into ARIA row indexing) as a
   // base htmlProp so plugins compose over it and can still override.
+  // A contested whole-row owner neutralizes the activation transform here,
+  // so the surviving owners and every non-owning handler keep working
+  // whatever the plugin order.
+  const activationNeutralized = useMemo(
+    () => isActivationNeutralized(plugins),
+    [plugins],
+  );
   const rowRenderProps = applyRowPlugins(
     plugins,
-    p => p.transformBodyRow,
+    plugin =>
+      activationNeutralized && plugin.wholeRowOwner === 'activation'
+        ? undefined
+        : plugin.transformBodyRow,
     {
       htmlProps: ariaRowIndex == null ? {} : {'aria-rowindex': ariaRowIndex},
       xstyle: [],
@@ -538,7 +579,15 @@ function BaseTableInner<T extends Record<string, unknown>>({
   const runtime = useMemo(() => createTableRuntime(), []);
   const admission = useMemo(() => resolveTableAdmission(plugins), [plugins]);
   const mode = children ? 'children' : 'data';
-  const usesCanonicalIdentity = virtualization != null;
+  // Canonical identity for the row context. Virtualized tables always need
+  // it; otherwise the whole-row activation claim publishes the resolved key
+  // and its status on the row context (see `wholeRowOwner`). Tables without
+  // such a claim keep released key behavior exactly, with no diagnostics.
+  const canonicalIdentityOptIn = plugins.some(
+    p => p.transformBodyRow != null && p.wholeRowOwner === 'activation',
+  );
+  const usesCanonicalIdentity =
+    virtualization != null || canonicalIdentityOptIn;
   const identityLength = data?.length ?? 0;
   const cachedIdentity = useMemo(
     () =>
@@ -860,6 +909,52 @@ function BaseTableInner<T extends Record<string, unknown>>({
       : mergedStyle),
     ...logicalExtraStyle,
   };
+
+  // Parent-owned identity diagnostics. The resolved identity array carries
+  // every row's status, so these read it instead of recomputing keys.
+  if (
+    canonicalIdentityOptIn &&
+    idKey != null &&
+    hasData &&
+    identity.some(row => row.identityStatus === 'duplicate')
+  ) {
+    warnOnce(
+      'table-duplicate-row-key',
+      'Table',
+      'Table rows share an idKey value, so those rows carry no stable identity. ' +
+        'Give every row a unique id.',
+    );
+  }
+  // An identity-dependent plugin without an explicit idKey stays inert on
+  // every row: the plugin cannot tell a missing idKey from an invalid value,
+  // so the parent owns this diagnostic and the plugin stays silent.
+  if (canonicalIdentityOptIn && idKey == null && hasData) {
+    warnOnce(
+      'table-identity-plugin-without-idkey',
+      'Table',
+      'Table hosts a plugin that reads row identity but has no explicit idKey, ' +
+        'so identity-dependent behavior is inert. Pass a stable unique idKey.',
+    );
+  }
+  // Rows with no usable identity value stay inert with a deterministic
+  // per-record fallback; duplicates warn above, so this covers the missing
+  // and invalid remainder with one development diagnostic.
+  if (
+    canonicalIdentityOptIn &&
+    idKey != null &&
+    hasData &&
+    identity.some(
+      row =>
+        row.identityStatus === 'missing' || row.identityStatus === 'invalid',
+    )
+  ) {
+    warnOnce(
+      'table-missing-row-key',
+      'Table',
+      'Table rows have no usable idKey value, so those rows carry no stable identity. ' +
+        'Give every row a usable id.',
+    );
+  }
 
   let tableElement: ReactNode = (
     <table
