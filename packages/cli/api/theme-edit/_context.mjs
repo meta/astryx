@@ -11,6 +11,7 @@
 import * as fs from 'node:fs';
 import {createRequire} from 'node:module';
 import * as path from 'node:path';
+import {pathToFileURL} from 'node:url';
 import {AstryxError} from '../error.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {
@@ -114,7 +115,25 @@ export async function context(cwd) {
     parts,
     unchecked,
     uncheckedCode,
+    derived: await derivedVars(project.coreDir),
   };
+}
+
+/**
+ * Core's registry of the variables a part's plain border-radius or padding
+ * also writes (a card's inner corners), or empty on a Core without it.
+ * @param {string} coreDir
+ * @returns {Promise<Record<string, Array<{property: string}>>>}
+ */
+async function derivedVars(coreDir) {
+  const file = path.join(coreDir, 'dist', 'theme', 'derivedVarRegistry.js');
+  if (!fs.existsSync(file)) return {};
+  try {
+    const mod = await import(pathToFileURL(file).href);
+    return mod.derivedVarRegistry ?? {};
+  } catch {
+    return {};
+  }
 }
 
 /** @param {unknown} e */

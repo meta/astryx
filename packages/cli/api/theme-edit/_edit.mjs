@@ -88,7 +88,10 @@ import {
   checkSection,
 } from './_context.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
-import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
+import {
+  getCliInvocation,
+  quoteCommandArgument,
+} from '../../foundation/env/package-manager.mjs';
 
 const E = ERROR_CODES;
 
@@ -218,8 +221,12 @@ export async function themeEditNew(name, options = {}) {
     refuse(
       E.ERR_FILE_EXISTS,
       `themes in this app is ${rootSt.isSymbolicLink() ? `a link (to ${fs.readlinkSync(f.root)})` : 'a file'}, not a folder, so no editor theme can be made: every theme goes in themes/<name>/. Rename or move it, then run new again.`,
-      // A look that changes nothing: the themes the app can use now.
-      {run: ['astryx theme list']},
+      // A look that changes nothing: what is in the way.
+      {
+        run: [
+          `ls -la ${quoteCommandArgument(path.relative(cwd, f.root) || 'themes')}`,
+        ],
+      },
     );
   const dirSt = fs.lstatSync(f.dir, {throwIfNoEntry: false});
   if (dirSt && (dirSt.isSymbolicLink() || !dirSt.isDirectory()))
@@ -1104,8 +1111,13 @@ async function change(sub, slug, thing, value, options) {
   if (s.thing === 'font' && sub === 'set')
     notes.unshift(...fontNotes(ctx, {...data, settings: [s]}));
   if (s.thing === 'type' || s.thing === 'headings')
-    for (const [m, why] of maskedSettings(data))
+    for (const [m, why] of maskedSettings(data, ctx))
       notes.push(`${describe(m)}: ${why}`);
+  // An earlier setting this one now covers (through a spread too) is named.
+  else if (sub === 'set')
+    for (const [m, why] of maskedSettings(data, ctx))
+      if (m !== s && why.startsWith(describe(s)))
+        notes.push(`${describe(m)} no longer shows: ${why}`);
   if (s.thing === 'type' && sub === 'set' && TYPE_STYLES[s.value].ratio > 1.2)
     notes.push(
       'text below the base size keeps its standard sizes, so small text stays readable',
@@ -1235,7 +1247,7 @@ export async function themeEditShow(theme, options = {}) {
             ? [installLine(cwd, ['react', 'react-dom'])]
             : // Two copies of React and other install problems are named by
               // doctor; the same show would fail the same way.
-              ['astryx doctor'],
+              [`${getCliInvocation(cwd)} doctor`],
       },
     );
   const f = themeFiles(cwd, theme);
@@ -1243,7 +1255,33 @@ export async function themeEditShow(theme, options = {}) {
   // a hand edit, another CLI) is made again from the settings, and said.
   const stale = staleBuild(cwd, theme, data);
   const brokenSource = themeSourceProblem(cwd, theme);
-  if (stale && !brokenSource && !readOnly) await buildTheme(ctx, theme, data);
+  if (stale && !brokenSource && !readOnly) {
+    const before = fs.existsSync(f.settingsTs)
+      ? fs.readFileSync(f.settingsTs, 'utf8')
+      : null;
+    try {
+      await buildTheme(ctx, theme, data);
+    } catch (e) {
+      // The settings module goes back, so the theme stays stale until it
+      // builds.
+      if (before != null) writeWhole(f.settingsTs, before);
+      if (e instanceof AstryxError && e.code !== E.ERR_THEME_LOAD) throw e;
+      // An own theme source that no longer builds is named, as `set` names
+      // it; the old build is never shown as current.
+      const why = (e instanceof Error ? e.message : String(e))
+        .split(`${cwd}${path.sep}`)
+        .join('')
+        .replace(/\s*Make sure all imports[^|]*$/s, '')
+        .split('\n')
+        .slice(0, 3)
+        .join(' | ');
+      refuse(
+        E.ERR_THEME_INVALID,
+        `${theme} did not build: ${why}${why.includes(path.basename(f.ts)) ? ` (${shown(cwd, f.ts)} is your own file: fix it, then run show again)` : ''}`,
+        {run: [`${P} how --list dials`]},
+      );
+    }
+  }
   // The settings loaded whole: a `new` marker beside them is stale.
   if (!readOnly) clearNewMarker(f.dir);
   // A built module that cannot be read (damaged by hand) is built again.
@@ -1297,7 +1335,7 @@ export async function themeEditShow(theme, options = {}) {
       like: data.like ?? null,
       mode: data.mode,
       settings: data.settings.map(s => {
-        const masked = maskedSettings(data).get(s);
+        const masked = maskedSettings(data, ctx).get(s);
         return {...s, parts: partsOf(ctx, s), ...(masked ? {masked} : {})};
       }),
       notes: [
@@ -1339,7 +1377,7 @@ export async function themeEditShow(theme, options = {}) {
         res,
         modes[0],
       ),
-      ...colorsReport(pal, data),
+      ...colorsReport(pal, data, res, theme),
       problems,
       preview,
       previewStale,
@@ -1481,7 +1519,7 @@ function otherModeNotes(data) {
  * @returns {string[]}
  */
 function partValues(ctx, data, res, mode) {
-  const masked = maskedSettings(data);
+  const masked = maskedSettings(data, ctx);
   return data.settings
     .filter(
       s =>
@@ -1554,9 +1592,13 @@ function partValues(ctx, data, res, mode) {
  * says so), and the contrast moves behind the shade choices.
  * @param {import('./_palette.mjs').PaletteMapping | null} pal
  * @param {import('./_settings.mjs').ThemeData} data
+ * @param {Record<'light' | 'dark', Record<string, string>>} [built] the
+ *   built theme's resolved values: where one differs from the generated
+ *   shade with no exact setting, the theme's own source changed it
+ * @param {string} [slug]
  * @returns {{vibrancy: number | null, colors: import('./theme-edit.type.mjs').ThemeEditColor[], colorNotes: string[]}}
  */
-function colorsReport(pal, data) {
+function colorsReport(pal, data, built, slug = '') {
   if (!pal) return {vibrancy: null, colors: [], colorNotes: []};
   /** What the user set for each token exactly, in each mode. */
   const exactBy =
@@ -1566,6 +1608,19 @@ function colorsReport(pal, data) {
       for (const m of s.mode ? [s.mode] : ['light', 'dark'])
         (exactBy[s.thing] ??= {})[/** @type {'light' | 'dark'} */ (m)] =
           s.value;
+  /** Tokens the theme's own source sets to another value than generated. */
+  const ownBy =
+    /** @type {Record<string, {light?: string, dark?: string}>} */ ({});
+  for (const [k, v] of Object.entries(pal.tokens))
+    for (const m of /** @type {const} */ (['light', 'dark'])) {
+      const now = built?.[m]?.[k];
+      if (
+        now &&
+        !exactBy[k]?.[m] &&
+        now.trim().toLowerCase() !== String(v[m].color).trim().toLowerCase()
+      )
+        (ownBy[k] ??= {})[m] = now;
+    }
   /** @param {import('./_palette.mjs').StopRef} r */
   const shade = r =>
     r.family === 'black' || r.family === 'white'
@@ -1587,12 +1642,14 @@ function colorsReport(pal, data) {
             k,
             // Each mode says what it shows: the exact setting where one is
             // made for it, else the generated shade.
-            exactBy[k]
+            exactBy[k] || ownBy[k]
               ? modes
                   .map(m =>
-                    exactBy[k][m] != null
+                    exactBy[k]?.[m] != null
                       ? `${m} ${exactBy[k][m]} (your exact setting wins over the generated ${shade(v[m])})`
-                      : `${m} ${shade(v[m])}`,
+                      : ownBy[k]?.[m] != null
+                        ? `${m} ${ownBy[k][m]} (your change in ${slug}.theme.ts wins over the generated ${shade(v[m])})`
+                        : `${m} ${shade(v[m])}`,
                   )
                   .join(', ')
               : shades(v),
@@ -1600,9 +1657,22 @@ function colorsReport(pal, data) {
       ),
     })),
     colorNotes: [
-      ...pal.notes,
+      // A note about a token the theme's own source changed is dropped:
+      // what it says no longer holds.
+      ...pal.notes.filter(
+        n =>
+          !Object.keys(ownBy).some(k =>
+            new RegExp(`${k.replace(/[-]/g, '\\-')}(?![\\w-])`).test(n),
+          ),
+      ),
       ...pal.contrast
         .filter(c => modes.includes(c.mode))
+        // A pairing the theme's own source changed no longer holds.
+        .filter(
+          c =>
+            !ownBy[c.token]?.[/** @type {'light' | 'dark'} */ (c.mode)] &&
+            !ownBy[c.against]?.[/** @type {'light' | 'dark'} */ (c.mode)],
+        )
         .filter(c => c.note || !c.pass || c.stop !== c.preferred)
         .map(c =>
           c.note
@@ -1611,7 +1681,12 @@ function colorsReport(pal, data) {
               ? `${c.token} ${c.mode}: shade ${c.stop}, not ${c.preferred}, so it reads at ${c.ratio}:1 on ${c.against}`
               : `${c.token} ${c.mode}: only ${c.ratio}:1 on ${c.against} at shade ${c.stop} (needs ${c.needs}:1)`,
         ),
-    ],
+    ].filter(
+      n =>
+        !Object.keys(ownBy).some(k =>
+          new RegExp(`${k.replace(/[-]/g, '\\-')}(?![\\w-])`).test(n),
+        ),
+    ),
   };
 }
 
@@ -1789,6 +1864,16 @@ export async function themeEditUndo(theme, options = {}) {
       );
     prev = repaired.data;
     leftOut = repaired.dropped;
+  }
+  // The checks that need this Core too (a token's type, a part, a state,
+  // a name that is no token or property): what they refuse is left out of
+  // the step, with the same note, so the build stays valid.
+  {
+    const bad = new Set(storedProblems(ctx, theme, prev).map(p => p.setting));
+    if (bad.size) {
+      leftOut = [...leftOut, ...prev.settings.filter(s => bad.has(s))];
+      prev = {...prev, settings: prev.settings.filter(s => !bad.has(s))};
+    }
   }
   // The popped history is written with the change, inside its rollback.
   const committed = await commitTheme(ctx, theme, prev, {

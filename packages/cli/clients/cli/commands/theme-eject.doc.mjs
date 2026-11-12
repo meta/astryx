@@ -30,7 +30,10 @@ export const doc = {
     },
   ],
   examples: [
-    {label: 'Fork a theme into the local root', cli: 'astryx theme eject ocean'},
+    {
+      label: 'Fork a theme into the local root',
+      cli: 'astryx theme eject ocean',
+    },
     {
       label: 'Fork one package theme elsewhere',
       cli: 'astryx theme eject ocean src/themes/my-ocean --package @acme/themes',

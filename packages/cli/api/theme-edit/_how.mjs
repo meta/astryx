@@ -650,21 +650,22 @@ function partAnswer(ctx, env, subject, key, unknown, themeFields) {
   const group = familyOf(key);
   // Only the states set takes on this part (it refuses one that never
   // applies there).
+  // Only the states set takes on this part: a state is dropped when the
+  // same change without it passes and with it is refused.
+  const takes = (/** @type {string | undefined} */ st) => {
+    try {
+      checkSetting(ctx, env.slug, env.data, 'opacity', '1', {
+        on: key,
+        ...(st ? {state: st} : {}),
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const plainOk = takes(undefined);
   const states = [...new Set([...target.states, ...COMMON_STATES])].filter(
-    st => {
-      try {
-        checkSetting(ctx, env.slug, env.data, 'opacity', '1', {
-          on: key,
-          state: st,
-        });
-        return true;
-      } catch (e) {
-        return !(
-          /** @type {any} */ (e)?.code === 'ERR_THEME_NO_EFFECT' &&
-          /--state/.test(String(/** @type {any} */ (e)?.message))
-        );
-      }
-    },
+    st => !plainOk || takes(st),
   );
   const reads = Object.fromEntries(
     Object.keys(GROUPS).map(g => [

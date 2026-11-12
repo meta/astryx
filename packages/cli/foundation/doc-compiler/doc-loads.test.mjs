@@ -60,6 +60,10 @@ const RUNNERS = {
     runs: 'recorded built theme modules through the shared app-theme loader',
     sites: ['importThemeArtifact'],
   },
+  'api/theme-edit/_context.mjs': {
+    runs: "the project's installed Core registry of the variables a part's plain corners or padding also write, to refuse a state they would miss",
+    sites: ['import(<computed>)'],
+  },
   'api/theme-edit/_css.mjs': {
     runs: 'css-tree and the MDN property data it ships, on the first CSS name or value check, so other commands do not load them',
     sites: ['require(css-tree)', 'require(mdn-data/css/properties.json)'],

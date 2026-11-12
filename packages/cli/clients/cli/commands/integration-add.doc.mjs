@@ -54,7 +54,7 @@ export const doc = {
       flag: '--parent <namespace>',
       param: 'options.parent',
       description:
-        "Namespace of this package to place the doc in, as a guide in its `guides` slot; writes the namespace doc when it is missing, and declares the CLI that reads it as an optional `@astryxdesign/cli` peer. Only valid for doc, and not with --replaces or --extends",
+        'Namespace of this package to place the doc in, as a guide in its `guides` slot; writes the namespace doc when it is missing, and declares the CLI that reads it as an optional `@astryxdesign/cli` peer. Only valid for doc, and not with --replaces or --extends',
     },
     {
       flag: '--from <theme>',
@@ -96,7 +96,7 @@ export const doc = {
       cli: 'astryx integration add doc acme-theming --extends theme',
     },
     {
-      label: 'Add a guide to the package\'s own docs section',
+      label: "Add a guide to the package's own docs section",
       cli: 'astryx integration add doc releasing --parent acme',
     },
     {
@@ -125,7 +125,7 @@ export const doc = {
   notes: [
     {
       type: 'prose',
-      text: "In global mode: outside a package, integration add writes nothing and stops with `ERR_FILE_NOT_FOUND`: \"No package.json found. Run this command inside an integration package.\" In a project, the project's version of Astryx runs it, whichever astryx command you start. See {@link namespace:global} and {@link generic:global-integrations}.",
+      text: 'In global mode: outside a package, integration add writes nothing and stops with `ERR_FILE_NOT_FOUND`: "No package.json found. Run this command inside an integration package." In a project, the project\'s version of Astryx runs it, whichever astryx command you start. See {@link namespace:global} and {@link generic:global-integrations}.',
     },
   ],
 };

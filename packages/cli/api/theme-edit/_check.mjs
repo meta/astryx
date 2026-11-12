@@ -223,6 +223,22 @@ export function storedProblems(ctx, slug, data, skip = '') {
         !(s.thing === 'font' && FONT_ROLES.includes(s.on))
       )
         return scope(`there is no part or group "${s.on}"`);
+      // A token that is no design token, or a part property that is no
+      // CSS property or names no part, styles nothing: reported, never
+      // built.
+      if (s.source === 'token' && !(s.thing in TOKENS))
+        return {setting: s, why: `${s.thing} is not a design token`};
+      if (s.source === 'property' && !s.on)
+        return {
+          setting: s,
+          why: `${s.thing} is a CSS property, so it needs a part (--on)`,
+        };
+      if (
+        s.source === 'property' &&
+        !s.thing.startsWith('--') &&
+        !cssProperties().has(s.thing)
+      )
+        return {setting: s, why: `${s.thing} is not a CSS property`};
       if (s.source === 'dial' && s.on && WHOLE_ONLY.includes(s.thing))
         return scope(`${s.thing} applies to the whole theme, not to ${s.on}`);
       if (s.mode && s.source === 'dial' && !PALETTE_DIALS.includes(s.thing))
@@ -1069,6 +1085,29 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       );
     }
   }
+  // Core writes a part's inner-corner and padding variables from a plain
+  // border-radius or padding only: in a state they would be left behind
+  // (a card's full-bleed image keeps the old corners), so a state is
+  // refused for those, with the plain run.
+  if (!unset && s.on && s.state && ctx.derived) {
+    const prop =
+      /radius$/.test(thing) || thing === 'corners'
+        ? 'borderRadius'
+        : /^padding/.test(thing) || thing === 'spacing'
+          ? 'padding'
+          : null;
+    const hit = prop
+      ? partsOf(ctx, s).find(t =>
+          (ctx.derived?.[t] ?? []).some(d => d.property === prop),
+        )
+      : undefined;
+    if (hit)
+      refuse(
+        E.ERR_THEME_NO_EFFECT,
+        `Core sets ${hit}'s inner ${prop === 'padding' ? 'padding' : 'corners'} (what sits edge to edge inside it) from a plain ${prop === 'padding' ? 'padding' : 'corner'} setting only, so with --state ${s.state} they would stay behind.`,
+        {run: [setLine(slug, thing, v, {...s, state: undefined})]},
+      );
+  }
   // On a group, a variant or state must belong to at least one member.
   if (s.on && FAMILIES[s.on] && (s.when || s.state)) {
     const members =
@@ -1469,9 +1508,12 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       } else {
         // A rung in any case, a size in px written any way: the plain form.
         const lower = v.toLowerCase();
-        const px = /^(\d+(?:\.\d+)?|\.\d+)px$/.exec(lower);
+        // Any CSS number in px (2e1px, +4px), the shared length parse.
+        const pxLen = /px$/.test(lower) ? lengthPx(lower) : null;
         if (CORNERS.some(([n]) => n === lower)) s.value = lower;
-        else if (px) s.value = `${Number(px[1])}px`;
+        else if (pxLen != null && pxLen >= 0)
+          s.value =
+            pxLen >= 1000 ? 'pill' : `${Math.round(pxLen * 10000) / 10000}px`;
         else if (lower === '0') s.value = 'square';
         else {
           // What it most likely means, as a value corners takes: a simple

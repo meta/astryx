@@ -75,7 +75,8 @@ export const doc = {
   examples: [
     {label: 'List categories', cli: 'astryx gap-report --list-categories'},
     {
-      label: 'Prepare a report (nothing public happens without --confirm-public)',
+      label:
+        'Prepare a report (nothing public happens without --confirm-public)',
       cli: "astryx gap-report Button --category missing_variant --reason 'Need a compact size'",
     },
     {

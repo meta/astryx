@@ -585,8 +585,21 @@ export function editorThemeRefusal(err, cwd) {
   if (fs.existsSync(path.join(root, LOCAL_THEME_ROOT, slug))) return null;
   const id = `${camel(slug)}Theme`;
   const key = /^[a-z][a-z0-9]*$/i.test(slug) ? slug : JSON.stringify(slug);
+  // The paths from the folder of the app's generated themes module (where
+  // a file that merges themes sits), else from the app root.
+  const generated = path.join(root, 'src', 'astryx-themes.ts');
+  const from = fs.existsSync(generated) ? path.dirname(generated) : root;
+  let rel = path
+    .relative(from, path.join(root, 'themes', slug))
+    .split(path.sep)
+    .join('/');
+  if (!rel.startsWith('.')) rel = `./${rel}`;
+  const where =
+    from === root
+      ? 'in a file of your own at the app root'
+      : `in a file of your own beside ${path.relative(root, generated).split(path.sep).join('/')} (from another folder, change the paths to match)`;
   return new AstryxError(
-    `${slug} is a theme the editor made (themes/${slug}/), not a theme package, so list, add, use, remove and eject do not take it. To use it, import its module and its stylesheet in a file of your own (import {${id}} from './themes/${slug}/${slug}.js'; import './themes/${slug}/${slug}.css';) and merge it into the themes there ({...themes, ${key}: ${id}}); do not add it to src/astryx-themes.ts, which add, use and remove write again. Change it with the editor.`,
+    `${slug} is a theme the editor made (themes/${slug}/), not a theme package, so list, add, use, remove and eject do not take it. To use it, import its module and its stylesheet ${where} (import {${id}} from '${rel}/${slug}.js'; import '${rel}/${slug}.css';) and merge it into the themes there ({...themes, ${key}: ${id}}); do not add it to src/astryx-themes.ts, which add, use and remove write again. Change it with the editor.`,
     [
       {
         name: runLine(cwd, `experimental theme editor show ${slug}`),
@@ -661,6 +674,10 @@ export async function editorCompileProblem(files, {cwd, check, family}) {
         if (e instanceof AstryxError) return e;
         throw e;
       }
+      // An own change to the theme source is what compile builds (and what
+      // --check compares): never a reason to refuse it.
+      if (why && /\.theme\.ts changed since the last build$/.test(why))
+        why = null;
       if (why && !check)
         return new AstryxError(
           `${slug}'s generated settings do not match its settings (${why}), so compile would build the old ones. The editor builds it from its settings.`,

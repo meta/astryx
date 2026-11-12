@@ -36,7 +36,7 @@ export const doc = {
     'guidance (no getting-started steps); the theme feature also writes an annotated theme template. ' +
     'Outside a project it writes the same files but prints no step that sets up a project: ' +
     'no getting-started steps, and no step that adds a theme to an app. ' +
-        '--user writes the computer-level agent text instead (see the flag), in any folder, and touches nothing in the folder. ' +
+    '--user writes the computer-level agent text instead (see the flag), in any folder, and touches nothing in the folder. ' +
     'The CLI installed for the computer also keeps that text current in the background, unless --user --remove-agents turned it off; ' +
     'package install scripts, project setup, and upgrade never write it.',
   fn: 'init',
@@ -69,8 +69,8 @@ export const doc = {
       param: 'options.user',
       description:
         'Write or refresh the computer-level agent text instead of setting up the folder: one skill file, ~/.agents/skills/astryx/SKILL.md, which most coding agents read, ' +
-        'linked into the skill folders of agents that read only their own (~/.claude/skills always; Kiro, Windsurf, Letta, Xcode\'s coding assistant, and ~/.config/agents/skills when that folder exists): a folder symlink with a relative target, a junction on Windows, or a copy where neither can be made. Continue, whose scanner skips links, gets a managed copy, refreshed with the file. ' +
-        "It tells agents anywhere on the computer that Astryx is there, when it is relevant, and to start with `astryx search`. " +
+        "linked into the skill folders of agents that read only their own (~/.claude/skills always; Kiro, Windsurf, Letta, Xcode's coding assistant, and ~/.config/agents/skills when that folder exists): a folder symlink with a relative target, a junction on Windows, or a copy where neither can be made. Continue, whose scanner skips links, gets a managed copy, refreshed with the file. " +
+        'It tells agents anywhere on the computer that Astryx is there, when it is relevant, and to start with `astryx search`. ' +
         'Records the links it made in astryx/settings.json in the per-user configuration folder, so removal removes exactly those; the CLI installed for the computer refreshes the file in the background after each upgrade. ' +
         'Works in any folder. A file without the Astryx markers, one edited since Astryx wrote it, or a symlink, is kept as it is, and so is anything at a link target that Astryx did not create. ' +
         'Warns, and still writes, when no `astryx` command on the computer runs the Astryx CLI. ' +
@@ -86,7 +86,7 @@ export const doc = {
         'one-line import of AGENTS.md, else AGENTS.md and .claude/CLAUDE.md). With claude and all, when CLAUDE.md gets the block, .claude/CLAUDE.md gets none and ' +
         'a block already there is removed, unless the project ignores CLAUDE.md: then a .claude/CLAUDE.md the project commits gets a copy too, with claude and all alike. ' +
         'An unknown tool exits 1 with ERR_UNKNOWN_AGENT. ' +
-                'Used only when agent docs are installed (the default, --all, or --features agents); --agent-docs-path takes precedence.',
+        'Used only when agent docs are installed (the default, --all, or --features agents); --agent-docs-path takes precedence.',
     },
     {
       flag: '--agent-docs-path <path...>',
@@ -103,7 +103,10 @@ export const doc = {
     {label: 'All features, no prompts', cli: 'astryx init --all'},
     {label: 'Machine-readable receipt', cli: 'astryx init --json'},
     {label: 'Agent text for the whole computer', cli: 'astryx init --user'},
-    {label: 'Remove the computer-level agent text and turn it off', cli: 'astryx init --user --remove-agents'},
+    {
+      label: 'Remove the computer-level agent text and turn it off',
+      cli: 'astryx init --user --remove-agents',
+    },
   ],
   outsideProject: 'own',
   exitCodes: [

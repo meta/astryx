@@ -34,7 +34,8 @@ export const doc = {
     {
       flag: '--preview <path>',
       param: 'options.preview',
-      description: 'Write a self-contained HTML preview page; the path must end in .html',
+      description:
+        'Write a self-contained HTML preview page; the path must end in .html',
     },
     {
       flag: '-f, --overwrite',
