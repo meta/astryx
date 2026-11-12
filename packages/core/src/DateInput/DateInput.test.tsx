@@ -2105,8 +2105,7 @@ describe('DateInput disabled theme state', () => {
 
 describe('DateInput onEntryErrorChange', () => {
   const OUT_OF_RANGE_MESSAGE = 'Enter a date on or before December 31, 2026';
-  const NONEXISTENT_MESSAGE =
-    'This date does not exist in the Gregorian Calendar';
+  const NONEXISTENT_MESSAGE = 'Enter a real date';
 
   afterEach(() => {
     __resetLiveRegionsForTest();
@@ -2531,13 +2530,13 @@ describe('DateInput onEntryErrorChange', () => {
       <WordedDateInput
         onChange={() => {}}
         status={{type: 'error', message: 'Required'}}
-        wording={() => 'Enter a real date'}
+        wording={() => 'Pick a day that exists'}
       />,
     );
     fireEvent.change(screen.getByRole('combobox'), {
       target: {value: '02/31/2026'},
     });
-    expect(screen.getByText('Enter a real date')).toBeInTheDocument();
+    expect(screen.getByText('Pick a day that exists')).toBeInTheDocument();
     expect(within(container).getByRole('alert')).toHaveTextContent('');
   });
 

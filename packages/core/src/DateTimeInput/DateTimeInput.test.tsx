@@ -3090,8 +3090,7 @@ describe('DateTimeInput disabled theme state', () => {
 
 describe('DateTimeInput onEntryErrorChange', () => {
   const OUT_OF_RANGE_MESSAGE = 'Enter a date on or before December 31, 2026';
-  const NONEXISTENT_MESSAGE =
-    'This date does not exist in the Gregorian Calendar';
+  const NONEXISTENT_MESSAGE = 'Enter a real date';
   const MAX = '2026-12-31T17:00' as ISODateTimeString;
   const cleanups: (() => void)[] = [];
 
