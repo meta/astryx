@@ -433,4 +433,27 @@ describe('a disabled reason is the only tooltip its control shows', () => {
     expect(shownTooltips()).toContain(REASON);
     expect(shownTooltips()).not.toContain(LABEL);
   });
+
+  it('a Tooltip around a ComplexSelector with a tooltip status, disabled with a reason, shows only the reason', async () => {
+    vi.useFakeTimers();
+    const LABEL = 'Pick the columns to show';
+    render(
+      <Tooltip content={LABEL}>
+        <ComplexSelector
+          label="View options"
+          value={[]}
+          status={{type: 'error', message: 'Pick at least one column'}}
+          statusVariant="tooltip"
+          isDisabled
+          disabledMessage={REASON}>
+          {() => <button type="button">Apply</button>}
+        </ComplexSelector>
+      </Tooltip>,
+    );
+    await act(async () => {});
+    const trigger = screen.getByRole('combobox', {name: 'View options'});
+    await hoverAndWait(trigger);
+    expect(shownTooltips()).toContain(REASON);
+    expect(shownTooltips()).not.toContain(LABEL);
+  });
 });

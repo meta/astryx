@@ -7,7 +7,8 @@
  *   reason tooltip and tells every watching tooltip; isCoveredByTooltipReason,
  *   which reads whether an element is inside one or is the wrapper of one
  *   field; watchTooltipReason, which a tooltip calls to be told; and
- *   addOwnControlTrigger, which records a help button's trigger
+ *   addFieldTooltipTrigger, which records the trigger of a help button or
+ *   of the field's own status
  * @position Owner module of the private tooltip-reason attribute: the only
  *   file that writes its name or its selector. useTooltip writes it on a
  *   reason tooltip's trigger and reads it for every other tooltip. No package
@@ -30,20 +31,21 @@ const watchers = sharedState(
 );
 
 /**
- * Triggers of tooltips that have their own control (InfoTip's button). They
- * belong to the field around them, so they do not make a wrapper a region.
+ * Triggers of tooltips that belong to the field around them: a help button
+ * (InfoTip) and the field's own status message. They do not make a wrapper a
+ * region.
  */
-const ownControlTriggers = sharedState(
-  'tooltip/own-control-triggers',
+const fieldTooltipTriggers = sharedState(
+  'tooltip/field-tooltip-triggers',
   1,
   () => new WeakSet<Element>(),
 );
 
-/** Records `element` as the trigger of a tooltip with its own control. */
-export function addOwnControlTrigger(element: Element): () => void {
-  ownControlTriggers.add(element);
+/** Records `element` as the trigger of a tooltip that belongs to its field. */
+export function addFieldTooltipTrigger(element: Element): () => void {
+  fieldTooltipTriggers.add(element);
   return () => {
-    ownControlTriggers.delete(element);
+    fieldTooltipTriggers.delete(element);
   };
 }
 
@@ -93,7 +95,7 @@ export function isCoveredByTooltipReason(element: Element): boolean {
     if (
       !mark.contains(control) &&
       control.closest('[popover]') == null &&
-      !ownControlTriggers.has(control)
+      !fieldTooltipTriggers.has(control)
     ) {
       return false;
     }

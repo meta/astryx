@@ -26,7 +26,7 @@ import {
 import {TooltipPresentInterestContext} from './tooltipPresentInterest';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {
-  addOwnControlTrigger,
+  addFieldTooltipTrigger,
   isCoveredByTooltipReason,
   setTooltipReason,
   watchTooltipReason,
@@ -57,6 +57,7 @@ import {
   typographyVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
+import {useCommittedRefInto} from '../hooks/useCommittedRef';
 
 /**
  * Grace period (ms) before hiding on pointer-leave when no explicit `hideDelay`
@@ -788,9 +789,6 @@ export function useTooltipInternal(
     opensOnFocus,
     presentInterest,
     answerTap,
-    isReason,
-    syncCoverage,
-    hasOwnControl,
   });
   handlersRef.current = {
     handleMouseEnter,
@@ -808,10 +806,17 @@ export function useTooltipInternal(
     opensOnFocus,
     presentInterest,
     answerTap,
-    isReason,
-    syncCoverage,
-    hasOwnControl,
   };
+
+  // What the trigger's attach reads about coverage, from the last committed
+  // render.
+  const coverageRef = useRef({isReason, isStatus, hasOwnControl, syncCoverage});
+  useCommittedRefInto(coverageRef, {
+    isReason,
+    isStatus,
+    hasOwnControl,
+    syncCoverage,
+  });
 
   // Removes the attached trigger's listeners (the trigger ref callback's
   // cleanup).
@@ -864,16 +869,17 @@ export function useTooltipInternal(
     el.addEventListener('focusout', onFocusOut);
     el.addEventListener('focusout', onHeldFocusOut);
     triggerRef.current = el;
-    if (latest().isReason) {
+    if (coverageRef.current.isReason) {
       setTooltipReason(el, isEnabledRef.current);
     }
-    const stopWatchingReasons = latest().isReason
+    const stopWatchingReasons = coverageRef.current.isReason
       ? null
-      : watchTooltipReason(() => latest().syncCoverage());
-    const forgetOwnControl = latest().hasOwnControl
-      ? addOwnControlTrigger(el)
-      : null;
-    latest().syncCoverage();
+      : watchTooltipReason(() => coverageRef.current.syncCoverage());
+    const forgetOwnControl =
+      coverageRef.current.hasOwnControl || coverageRef.current.isStatus
+        ? addFieldTooltipTrigger(el)
+        : null;
+    coverageRef.current.syncCoverage();
 
     // A trigger that attaches again after its wiring was removed
     // (DropdownMenu's Button as its menu closes) missed the focus that
@@ -934,7 +940,7 @@ export function useTooltipInternal(
       el.removeEventListener('focusout', onFocusOut);
       el.removeEventListener('focusout', onHeldFocusOut);
       stopPressTrackingRef.current?.();
-      if (latest().isReason) {
+      if (coverageRef.current.isReason) {
         setTooltipReason(el, false);
       }
       stopWatchingReasons?.();
