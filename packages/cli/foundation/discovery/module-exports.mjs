@@ -19,7 +19,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {parse} from '@babel/parser';
+import {createRequire} from 'node:module';
 import {findInstalledPackage} from '../fs/paths.mjs';
 import {inspectPackageExport} from './package-exports.mjs';
 
@@ -103,12 +103,26 @@ function moduleText(file) {
   return text;
 }
 
+const requireFromHere = createRequire(import.meta.url);
+/** @type {typeof import('@babel/parser') | undefined} */
+let parser;
+
+/**
+ * @babel/parser, loaded on first use: a run that reads no module's exports
+ * never loads it.
+ * @returns {typeof import('@babel/parser')}
+ */
+function babelParser() {
+  parser ??= requireFromHere('@babel/parser');
+  return /** @type {typeof import('@babel/parser')} */ (parser);
+}
+
 /** @param {string} file */
 function parseModule(file) {
   const stamp = fileStamp(file);
   const cached = parsedModules.get(file);
   if (cached?.stamp === stamp) return cached.ast;
-  const ast = parse(moduleText(file), PARSE_OPTIONS);
+  const ast = babelParser().parse(moduleText(file), PARSE_OPTIONS);
   parsedModules.set(file, {stamp, ast});
   return ast;
 }

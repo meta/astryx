@@ -222,13 +222,15 @@ const hx = v => Math.round(v).toString(16).padStart(2, '0');
 
 /**
  * The exact color at each point, with its alpha (0 is fully see-through,
- * 1 fully opaque). Every point must be inside the picture.
+ * 1 fully opaque). A point outside the picture has no color.
  * @param {Picture} pic
  * @param {Array<{x: number, y: number}>} points
- * @returns {Array<{at: string, color: string, alpha: number}>}
+ * @returns {Array<{at: string, color: string | null, alpha: number | null}>}
  */
 export function colorsAt(pic, points) {
   return points.map(({x, y}) => {
+    if (x < 0 || y < 0 || x >= pic.width || y >= pic.height)
+      return {at: `${x},${y}`, color: null, alpha: null};
     const i = (y * pic.width + x) * 4;
     return {
       at: `${x},${y}`,

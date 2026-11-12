@@ -56,6 +56,14 @@ export const doc = {
   ],
   throws: [
     {code: 'ERR_PATH_TRAVERSAL', when: 'the target path escapes cwd'},
+    {
+      code: 'ERR_INVALID_ARGUMENT',
+      when: 'the target path is blank, names a folder, or is not a .ts file',
+    },
+    {
+      code: 'ERR_FILE_EXISTS',
+      when: 'overwrite names a file that is not a copy of the template or a theme source, or a file in a folder the theme editor made (folder <slug>/ holds <slug>.settings.json)',
+    },
     {code: 'ERR_WRITE_FAILED', when: 'the template file cannot be written'},
   ],
   examples: [

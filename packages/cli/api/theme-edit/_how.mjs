@@ -23,18 +23,23 @@ import {
   FAMILIES,
   GROUPS,
   HOW,
+  LIKE,
   P,
   familyOf,
 } from './_tables.mjs';
 import {colorsAt, decodePng, mainColors} from './_png.mjs';
-import {loadTheme, nearest, refuse} from './_settings.mjs';
+import {baseThemeFile, installLine} from './_project.mjs';
+import {loadTheme, nearest, refuse, themeSourceProblem} from './_settings.mjs';
 import {ASPECTS} from './_check.mjs';
 import {MODAL} from './_compiler.mjs';
 import {PALETTE_DIALS, mappingRows, paletteFiles} from './_palette.mjs';
 import {requireProject, context} from './_context.mjs';
 import {checked, exampleStep, howTheme, render} from './_how-commands.mjs';
 import {draftAnswer} from './_how-question.mjs';
-import {getCliInvocation} from '../../foundation/env/package-manager.mjs';
+import {
+  getCliInvocation,
+  quoteCommandArgument,
+} from '../../foundation/env/package-manager.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 
 const E = ERROR_CODES;
@@ -76,6 +81,19 @@ export function isPicture(subject, cwd) {
 }
 
 /**
+ * A dial's help, with what `set` does now where that differs from it: Core
+ * gives headings the body family when the theme names no heading family,
+ * so `font --on body` moves headings too.
+ * @param {string} key
+ * @param {{bodyFontReachesHeadings: boolean}} env
+ */
+function dialHelp(key, env) {
+  return key === 'font' && env.bodyFontReachesHeadings
+    ? `${DIALS.font.help} Note: font --on body also sets the heading font while the theme sets no heading font; for body text alone, set --font-family-body.`
+    : DIALS[key].help;
+}
+
+/**
  * Explain anything a theme change can name, or answer a question about one:
  * a part (what it reads for each aspect, under which `--when` or `--state`,
  * its variants, states and the parts inside it), a group (its members), a
@@ -93,6 +111,34 @@ export async function themeEditHow(subject, options = {}) {
   const {cwd = process.cwd()} = options;
   requireProject(cwd);
   try {
+    if (options.words) {
+      // The words as typed: a picture first takes only a count after it;
+      // anything else is one subject.
+      const words = options.words;
+      const picture = isPicture(words[0] ?? '', cwd);
+      const again = `${HOW} ${quoteCommandArgument(words[0] ?? '')} 5`;
+      if (picture && words.length > 2)
+        throw new AstryxError(
+          `After a picture, give only how many colors to list, not "${words.slice(1).join(' ')}".`,
+          [{name: again, reason: 'do this instead'}],
+          ERROR_CODES.ERR_INVALID_ARGUMENT,
+        );
+      // A missing picture is the first thing to say, before a bad count.
+      if (
+        picture &&
+        words.length === 2 &&
+        !/^[1-9]\d*$/.test(words[1]) &&
+        fs.existsSync(path.resolve(cwd, words[0]))
+      )
+        throw new AstryxError(
+          `The count after a picture must be a positive whole number, not "${words[1]}".`,
+          [{name: again, reason: 'do this instead'}],
+          ERROR_CODES.ERR_INVALID_ARGUMENT,
+        );
+      subject = picture ? words[0] : words.join(' ');
+      if (picture && words.length === 2)
+        options = {...options, count: Number(words[1])};
+    }
     const data = await answer(subject, options, cwd);
     return {type: 'themeEdit.how', data: withPrefix(data, cwd)};
   } catch (e) {
@@ -141,7 +187,17 @@ async function answer(subject, options, cwd) {
     refuse(E.ERR_INVALID_ARGUMENT, '--theme was given no name.', {
       run: [`${HOW} ${t ? JSON.stringify(t) : 'card'}`],
     });
-  if (options.theme != null) loadTheme(cwd, options.theme);
+  if (options.theme != null) {
+    loadTheme(cwd, options.theme);
+    // A theme whose source no longer extends its settings takes no setting:
+    // an answer would suggest commands that cannot run.
+    const broken = themeSourceProblem(cwd, options.theme);
+    if (broken)
+      refuse(
+        E.ERR_THEME_INVALID,
+        `${broken}, so settings cannot take effect and no command here would change the theme. Put back the import, extends and name lines in themes/${options.theme}/${options.theme}.theme.ts, then ask again.`,
+      );
+  }
   if (list != null) {
     if (at.length)
       refuse(
@@ -253,12 +309,15 @@ async function answer(subject, options, cwd) {
     if (key === 'text' || key === 'background')
       results.unshift(
         ...['accent', 'neutral'].map(d => ({
-          text: DIALS[d].help,
+          text: dialHelp(d, env),
           commands: dialCommands(d),
         })),
       );
     if (dial)
-      results.unshift({text: DIALS[dial].help, commands: dialCommands(dial)});
+      results.unshift({
+        text: dialHelp(dial, env),
+        commands: dialCommands(dial),
+      });
     results.push({
       text: `for one part: ${HOW} <part> lists what it reads for ${key}`,
       commands: [`${HOW} button`],
@@ -267,12 +326,33 @@ async function answer(subject, options, cwd) {
   }
   if (Object.hasOwn(DIALS, key)) {
     const d = DIALS[key];
+    // A base is named only when it is installed here; the others are
+    // listed with the line that installs them.
+    const installed = (/** @type {string} */ b) => {
+      try {
+        baseThemeFile(ctx.project, b);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    const missing = key === 'base' ? LIKE.filter(b => !installed(b)) : [];
     return {
       kind: 'setting',
       subject: t,
       source: 'dial',
-      values: d.values,
-      help: d.help,
+      values:
+        key === 'base'
+          ? [...LIKE.filter(installed), 'none'].join('|')
+          : d.values,
+      help:
+        dialHelp(key, env) +
+        (missing.length
+          ? ` Not installed here: ${missing.join(', ')} (${installLine(
+              ctx.project.cwd,
+              missing.map(b => `@astryxdesign/theme-${b}`),
+            )}).`
+          : ''),
       ...(PALETTE_DIALS.includes(key) ? {shades: mappingRows(key)} : {}),
       ...themeFields,
       examples: dialCommands(key),
@@ -320,6 +400,13 @@ async function answer(subject, options, cwd) {
     const tok = /--[a-z0-9-]+/i.exec(t)?.[0]?.toLowerCase();
     if (tok && Object.hasOwn(ctx.project.core.tokenDefaults, tok))
       return tokenAnswer(ctx, env, t, tok, unknown, themeFields);
+    // "what does spacing more do": the dial's own lookup, its values and
+    // what each does.
+    const dial = Object.keys(DIALS).find(d =>
+      new RegExp(`\\b${d}\\b`, 'i').test(t.replace(/--[a-z0-9-]+/gi, ' ')),
+    );
+    if (dial && !/\b(on|for)\s+(the\s+)?[a-z]+s?\b/i.test(t))
+      return {...(await answer(dial, options, cwd)), subject: t};
     const q = draftAnswer(ctx, env, t);
     const groups = q.aspects.filter(a => Object.hasOwn(GROUPS, a));
     const results = q.parts
@@ -385,7 +472,7 @@ function finish(env, drafts) {
     const lookups = d.lookup ? [d.lookup] : [];
     if (!commands.length && d.options.length && !lookups.length) {
       out.push({
-        text: `${d.text}: no command does it on ${env.slug}`,
+        text: `${d.text}: no command does it on ${env.slug}${refused[0] ? `: ${refused[0].why}` : ''}`,
         commands: [],
         refused,
       });
@@ -798,7 +885,7 @@ async function listItems(kind, filter, cwd) {
         .map(([name, d]) => ({
           name,
           values: d.values,
-          help: d.help,
+          help: dialHelp(name, env),
           examples: d.examples
             .map(exampleStep)
             .filter(st => st != null)
