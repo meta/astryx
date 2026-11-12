@@ -235,16 +235,16 @@ Platform-specific details stay inside that compiler.
   one. A derived value is emitted in the scope where its source is set
   (INV16), and runtime and static output derive the same values.
 
-- **INV18 — A built theme exports the custom variants it adds.** Every built
-  theme module exports `themeVariants`: for each component key, each
+- **INV18 — A built theme exports the custom variants it adds.** Every
+  single-theme built module exports `themeVariants` (an empty object when the
+  theme adds no custom component values): for each component key, each
   extensible prop and the values the theme adds
-  (`Readonly<Record<string, Readonly<Record<string, readonly string[]>>>>`),
-  and an empty object when the theme adds no custom component values. These
+  (`Readonly<Record<string, Readonly<Record<string, readonly string[]>>>>`). These
   are the values its `.variants.d.ts` augments: enrolled values across root,
   onDark, and onLight, for props whose core interface can be augmented.
   `themeVariants` is a stable public export, declared in the module's `.d.ts`.
-  It sits beside the theme object, not in `DefinedTheme`. A family module,
-  which holds several themes, does not export it.
+  It sits beside the theme object, not in `DefinedTheme`. A `--family` module
+  exports none, and its type declarations name none.
 
 This record does not own:
 
