@@ -105,7 +105,19 @@ export function themeTemplate(options = {}) {
     resolved = assertWithin(targetPath, cwd, {label: 'theme template path'});
   } catch (err) {
     if (err instanceof PathSafetyError) {
-      throw new AstryxError(err.message, undefined, ERROR_CODES.ERR_PATH_TRAVERSAL);
+      throw new AstryxError(
+        err.message,
+        [
+          {
+            name: formatCliCommand(
+              `theme template ${THEME_TEMPLATE_DEFAULT_PATH}`,
+              cwd,
+            ),
+            reason: 'write the template in this project',
+          },
+        ],
+        ERROR_CODES.ERR_PATH_TRAVERSAL,
+      );
     }
     throw err;
   }

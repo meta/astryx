@@ -37,7 +37,10 @@ export const doc = {
     },
   ],
   throws: [
-    {code: 'ERR_UNKNOWN_THEME', when: 'the theme is not added'},
+    {
+      code: 'ERR_UNKNOWN_THEME',
+      when: 'the theme is not added; the suggestion is `theme add <slug>` when a theme with that slug is available, else `theme list`',
+    },
     {code: 'ERR_THEME_INVALID', when: 'generated state is invalid'},
     {code: 'ERR_WRITE_FAILED', when: 'the generated module cannot be written'},
   ],

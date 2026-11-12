@@ -112,10 +112,15 @@ describe('themeUse', () => {
     expect(fs.readFileSync(moduleFile, 'utf-8')).not.toContain('// edited');
   });
 
-  it('names theme add when the slug is not added', async () => {
+  it('names theme add when an available theme is not added, else theme list', async () => {
+    await expect(themeUse('butter', {cwd: tmpDir})).rejects.toMatchObject({
+      code: 'ERR_UNKNOWN_THEME',
+      message: expect.stringContaining(' theme add butter`'),
+      suggestions: [{name: expect.stringMatching(/ theme add butter$/)}],
+    });
     await expect(themeUse('missing', {cwd: tmpDir})).rejects.toMatchObject({
       code: 'ERR_UNKNOWN_THEME',
-      message: expect.stringContaining(' theme add missing`'),
+      suggestions: [{name: expect.stringMatching(/ theme list$/)}],
     });
   });
 

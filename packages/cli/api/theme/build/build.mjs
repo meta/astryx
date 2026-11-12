@@ -100,6 +100,7 @@ import {
   formatFontLoadingHelp,
 } from './font-warning.mjs';
 import {interceptCore} from './core-interception.mjs';
+import {installCommandFor} from '../../../foundation/discovery/template-needs.mjs';
 import {generateFamilyCSS, resolveThemeFamily} from './family.mjs';
 import {resolveIconImports} from './icon-imports.mjs';
 
@@ -2417,18 +2418,72 @@ function themeLoadReason(error) {
   ) {
     return `its default export is null or not an object.\n${THEME_EXPORT_FIX}`;
   }
-  const missing =
-    /Cannot find (?:module|package) '((?:@[^/']+\/)?[^/'.][^/']*)/.exec(
-      message,
-    )?.[1];
+  const missing = missingThemePackage(error);
   if (missing) {
-    return `${message}\nThe theme imports ${missing}, which is not installed. Install it (for example \`npm install ${missing}\`), then build again.`;
+    // Node's "Require stack" names absolute paths; the package is the fact.
+    return `Cannot find module '${missing}'.\nThe theme imports ${missing}, which is not installed. Install it, then build again.`;
   }
   return `${message}\nMake sure all imports in the theme file are resolvable.`;
 }
 
 /** A theme module that loaded but exports no theme object. */
 class ThemeShapeError extends Error {}
+
+/**
+ * The command that moves a failed theme load forward: the install for a
+ * package the theme imports and the app lacks, the same build for a file that
+ * changed while it loaded, else the annotated template, which shows a theme
+ * source that loads.
+ * @param {Error} error
+ * @param {string} shown the theme file as the message names it
+ * @param {string} cwd
+ * @returns {import('../../../foundation/response/base').Suggestion[]}
+ */
+function themeLoadSuggestions(error, shown, cwd) {
+  const missing = missingThemePackage(error.cause ?? error);
+  if (missing) {
+    const {installCommand} = installCommandFor(
+      [missing],
+      findPackageRoot(cwd) ?? cwd,
+    );
+    if (installCommand) {
+      return [
+        {
+          name: installCommand,
+          reason: `install ${missing}, which the theme imports`,
+        },
+      ];
+    }
+  }
+  if (/changed while it was loading/.test(error.message)) {
+    return [
+      {
+        name: formatCliCommand(`theme build ${shellWord(shown)}`, cwd),
+        reason: 'build again once the file is saved',
+      },
+    ];
+  }
+  return [
+    {
+      name: formatCliCommand('theme template theme.template.ts', cwd),
+      reason: 'an annotated theme source that loads, to compare with',
+    },
+  ];
+}
+
+/**
+ * The package a theme load failed on because it is not installed.
+ * @param {unknown} error
+ * @returns {string | null}
+ */
+export function missingThemePackage(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    /Cannot find (?:module|package) '((?:@[^/']+\/)?[^/'.][^/']*)/.exec(
+      message,
+    )?.[1] ?? null
+  );
+}
 
 /**
  * Load one theme through the build's real module loader and validate the raw
@@ -3352,7 +3407,12 @@ async function themeBuildInternal(
     loadDegradation = loaded.degraded;
   } catch (e) {
     const err = /** @type {Error} */ (e);
-    throw new AstryxError(err.message, undefined, ERROR_CODES.ERR_THEME_LOAD);
+    const shown = path.relative(cwd, filePath) || filePath;
+    throw new AstryxError(
+      err.message.split(filePath).join(shown),
+      themeLoadSuggestions(err, shown, cwd),
+      ERROR_CODES.ERR_THEME_LOAD,
+    );
   }
 
   // The marker is scoped to that isolated load: drop it before the theme
@@ -3943,12 +4003,15 @@ async function themeBuildInternal(
   if (options.check) {
     const stale = staleBuildOutputs(writes, cwd);
     const upToDate = stale.length === 0;
+    const checkedLine = `  checked: ${checkedBuildOutputs(writes, cwd).join(', ')}`;
     if (upToDate) {
       logger.log(`\n[ok] Theme outputs are up to date with ${sourceRelative}.`);
+      logger.log(checkedLine);
     } else {
       logger.error(
         `\n[fail] ${stale.length} theme output(s) are out of date with ${sourceRelative}:`,
       );
+      logger.error(checkedLine);
       for (const s of stale) {
         logger.error(
           `  ${s.reason === 'missing' ? 'missing' : 'stale'}: ${s.path}`,
@@ -4599,14 +4662,17 @@ export async function themeBuildFamily(
   if (options.check) {
     const stale = staleBuildOutputs(writes, cwd);
     const upToDate = stale.length === 0;
+    const checkedLine = `  checked: ${checkedBuildOutputs(writes, cwd).join(', ')}`;
     if (upToDate) {
       logger.log(
         `\n[ok] Theme family outputs are up to date with ${sourceRelative}.`,
       );
+      logger.log(checkedLine);
     } else {
       logger.error(
         `\n[fail] ${stale.length} theme family output(s) are out of date:`,
       );
+      logger.error(checkedLine);
       for (const entry of stale) {
         logger.error(
           `  ${entry.reason === 'missing' ? 'missing' : 'stale'}: ${entry.path}`,

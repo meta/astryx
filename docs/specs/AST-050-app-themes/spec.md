@@ -106,8 +106,10 @@ described.
 - **FR4 — The set and the default are managed by command.**
   `theme remove <slug>` removes a theme from the app, and `theme use <slug>`
   makes an added theme the default. Removing the default theme MUST fail and
-  name `theme use`; `theme use` on a theme that is not added MUST fail and name
-  the import command. Each command regenerates the module (FR2).
+  name `theme use` with another added theme, or `theme list` when it is the
+  only one; `theme use` or `theme remove` on a theme that is not added MUST
+  fail and name the import command when a theme with that slug is available,
+  or `theme list` when none is. Each command regenerates the module (FR2).
 - **FR5 — One receipt describes the app's themes.** The importing `theme add`,
   `theme remove`, and `theme use` MUST return the `theme.app` response: every
   added theme with its slug, owner, and the module and stylesheet it imports;
@@ -187,7 +189,9 @@ described.
   3. project source imports the theme module (a warning when this cannot be
      shown);
   4. no built theme module is imported without its stylesheet;
-  5. every added local theme is built, and its outputs match its source;
+  5. every added local theme is built, and its outputs match its source; a
+     package a local theme imports and the project lacks fails this check,
+     named with the command that installs it;
   6. no added theme sets a private `--_*` variable directly
      (`architecture:theme-compilation` INV6);
   7. every added theme's `@astryxdesign/core` peer range accepts the installed

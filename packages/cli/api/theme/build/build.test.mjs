@@ -28,6 +28,7 @@ import {
   generateThemeRulesSplit as mockGenerateThemeRulesSplit,
   generateOnMediaCSS as mockGenerateOnMediaCSS,
 } from '@astryxdesign/core/theme';
+import {logger} from '../../logger.mjs';
 import {
   themeBuild,
   validateComponentOverridesAgainstRegistry,
@@ -1447,6 +1448,50 @@ describe('themeBuild() — outputs it may replace', () => {
     expect(error.suggestions.map(x => x.name)).toEqual([
       expect.stringMatching(/ theme build ocean\.mjs$/),
     ]);
+  });
+
+  it('names a package the theme imports and the app lacks, with an install command and no absolute path', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'iconic.mjs'),
+      "import 'not-installed-icons';\nexport default {name: 'iconic', tokens: {'--color-bg': '#000'}};\n",
+    );
+    let error;
+    try {
+      await themeBuild('iconic.mjs', {}, {cwd: tmpDir});
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toMatchObject({code: 'ERR_THEME_LOAD'});
+    expect(error.message).toContain(
+      "Cannot find module 'not-installed-icons'.",
+    );
+    expect(error.message).not.toContain(tmpDir);
+    expect(error.suggestions).toEqual([
+      {
+        name: expect.stringMatching(/ not-installed-icons$/),
+        reason: 'install not-installed-icons, which the theme imports',
+      },
+    ]);
+  });
+
+  it('lists the checked outputs in the text of a check, as the JSON does', async () => {
+    await themeBuild('ocean.mjs', {}, {cwd: tmpDir});
+    const lines = [];
+    const restore = logger.silent;
+    const log = logger.log;
+    logger.setSilent(false);
+    logger.log = (/** @type {string} */ line) => lines.push(line);
+    try {
+      const receipt = await themeBuild(
+        'ocean.mjs',
+        {check: true},
+        {cwd: tmpDir},
+      );
+      expect(lines).toContain(`  checked: ${receipt.data.checked.join(', ')}`);
+    } finally {
+      logger.log = log;
+      logger.setSilent(restore);
+    }
   });
 
   it('refuses a folder as its input', async () => {

@@ -950,6 +950,33 @@ describe('app-theme doctor checks', () => {
     });
   });
 
+  it('check 5 names a package a local theme imports and the app lacks, with the install command', async () => {
+    const {dir} = await fixture();
+    await themeEject('ocean', {cwd: dir, package: '@acme/themes'});
+    const localDir = path.join(dir, 'src/themes/ocean');
+    const sourceFile = path.join(localDir, 'oceanTheme.ts');
+    fs.writeFileSync(
+      sourceFile,
+      "const oceanTheme = {name: 'ocean', tokens: {'--color-bg': '#000'}};\nexport {oceanTheme};\nexport default oceanTheme;\n",
+    );
+    await themeBuild(sourceFile, {}, {cwd: dir});
+    await themeAdd('ocean', {cwd: dir, import: true});
+    fs.writeFileSync(
+      sourceFile,
+      "import 'not-installed-icons';\nconst oceanTheme = {name: 'ocean', tokens: {'--color-bg': '#000'}};\nexport {oceanTheme};\nexport default oceanTheme;\n",
+    );
+
+    expect(
+      check(await checkAppThemes(dir), 'theme-local-builds'),
+    ).toMatchObject({
+      status: 'fail',
+      message: expect.stringContaining('not-installed-icons (ocean)'),
+      fix: expect.stringMatching(
+        /^(npm install|pnpm add|yarn add|bun add) not-installed-icons$/,
+      ),
+    });
+  });
+
   it("check 5 is info, and builds nothing, when the project's Core is not installed (spec AST-081 FR3)", async () => {
     // Outside this repository, whose own installed Core would be found above.
     const {dir} = await fixture(undefined, {root: os.tmpdir()});
