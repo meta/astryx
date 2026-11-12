@@ -116,14 +116,13 @@ describe('previewDocument', () => {
 
 describe('previewColorModeFragment', () => {
   it('adds nothing while the site follows the OS', () => {
-    expect(previewColorModeFragment('system', null)).toBe('');
-    expect(previewColorModeFragment('system', true)).toBe('');
     expect(previewColorModeFragment('light', false)).toBe('');
     expect(previewColorModeFragment('dark', true)).toBe('');
   });
 
-  it('adds nothing before the OS scheme is known, so the server and the first client render agree', () => {
-    expect(previewColorModeFragment('dark', null)).toBe('');
+  it('adds nothing on the server and through hydration, whatever the OS scheme reads as', () => {
+    expect(previewColorModeFragment('system', false)).toBe('');
+    expect(previewColorModeFragment('system', true)).toBe('');
   });
 
   it('names the mode that a visitor set against the OS', () => {

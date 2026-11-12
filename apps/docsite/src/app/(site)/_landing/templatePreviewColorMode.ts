@@ -10,14 +10,14 @@
 /**
  * A preview page follows the OS color scheme on its own. It needs the site's
  * mode in its URL only when a visitor set a mode that differs from the OS.
- * The fragment stays empty until the OS scheme is known, so the server HTML
- * and the first client render agree.
+ * The site's mode is `system` on the server and through hydration, so the
+ * fragment is empty there whatever the OS scheme reads as.
  */
 export function previewColorModeFragment(
   themeMode: 'system' | 'light' | 'dark',
-  osPrefersDark: boolean | null,
+  osPrefersDark: boolean,
 ): '' | '#light' | '#dark' {
-  if (themeMode === 'system' || osPrefersDark == null) {
+  if (themeMode === 'system') {
     return '';
   }
   const osMode = osPrefersDark ? 'dark' : 'light';

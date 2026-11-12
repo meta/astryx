@@ -9,8 +9,8 @@
 
 'use client';
 
-import {useSyncExternalStore} from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {useMediaQuery} from '@astryxdesign/core/hooks';
 import {
   spacingVars,
   radiusVars,
@@ -148,14 +148,6 @@ const styles = stylex.create({
   },
 });
 
-const OS_DARK_SCHEME = '(prefers-color-scheme: dark)';
-
-function subscribeToOsColorScheme(onChange: () => void) {
-  const query = window.matchMedia(OS_DARK_SCHEME);
-  query.addEventListener('change', onChange);
-  return () => query.removeEventListener('change', onChange);
-}
-
 export function TemplatesPreview({
   maxRows,
 }: {
@@ -168,11 +160,7 @@ export function TemplatesPreview({
   const {themeMode} = useThemeMode();
   const rows =
     maxRows != null ? TEMPLATE_ROWS.slice(0, maxRows) : TEMPLATE_ROWS;
-  const osPrefersDark = useSyncExternalStore(
-    subscribeToOsColorScheme,
-    () => window.matchMedia(OS_DARK_SCHEME).matches,
-    () => null,
-  );
+  const osPrefersDark = useMediaQuery('(prefers-color-scheme: dark)');
   const colorMode = previewColorModeFragment(themeMode, osPrefersDark);
 
   return (
