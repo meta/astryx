@@ -62,6 +62,28 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+/**
+ * Run `run` with logger warnings captured.
+ * @param {() => Promise<unknown>} run
+ */
+async function withWarnings(run) {
+  /** @type {string[]} */
+  const warnings = [];
+  const silent = logger.silent;
+  const warn = logger.warn;
+  const log = logger.log;
+  logger.setSilent(false);
+  logger.warn = (/** @type {string} */ line) => warnings.push(line);
+  logger.log = () => {};
+  try {
+    return {result: await run(), warnings};
+  } finally {
+    logger.warn = warn;
+    logger.log = log;
+    logger.setSilent(silent);
+  }
+}
+
 describe('themeBuild() — receipt', () => {
   it('compiles a minimal theme and returns a theme.build receipt with files on disk', async () => {
     const themeFile = path.join(tmpDir, 'apitheme.mjs');
@@ -1328,25 +1350,21 @@ describe('themeBuild() — outputs it may replace', () => {
     expect(fs.existsSync(path.join(tmpDir, 'dist', 'ocean.js'))).toBe(false);
   });
 
-  it('refuses an --out that holds the build output of another existing theme source', async () => {
+  it('replaces an --out output of another existing theme source, warning with both names', async () => {
     fs.writeFileSync(
       path.join(tmpDir, 'reef.mjs'),
       "export default { name: 'reef', tokens: { '--color-bg': '#111111' } };\n",
     );
     await themeBuild('reef.mjs', {out: 'out/a.css'}, {cwd: tmpDir});
-    const before = fs.readFileSync(path.join(tmpDir, 'out/a.css'), 'utf-8');
-    await expect(
+    const {warnings} = await withWarnings(() =>
       themeBuild('ocean.mjs', {out: 'out/a.css'}, {cwd: tmpDir}),
-    ).rejects.toMatchObject({
-      code: 'ERR_FILE_EXISTS',
-      message: expect.stringContaining(
-        'is the build output of another theme source, reef.mjs',
-      ),
-    });
-    expect(fs.readFileSync(path.join(tmpDir, 'out/a.css'), 'utf-8')).toBe(
-      before,
     );
-    expect(fs.existsSync(path.join(tmpDir, 'out/ocean.js'))).toBe(false);
+    expect(warnings).toEqual([
+      'Warning: out/a.css was built from reef.mjs; this build of ocean.mjs replaces it.',
+    ]);
+    expect(fs.readFileSync(path.join(tmpDir, 'out/a.css'), 'utf-8')).toContain(
+      'Source: ocean.mjs',
+    );
   });
 
   it('replaces an output whose source is gone, and its own output built from another folder', async () => {
@@ -1434,7 +1452,7 @@ describe('themeBuild() — outputs it may replace', () => {
     ).resolves.toMatchObject({data: {upToDate: true}});
   });
 
-  it('matches the source an --out output names exactly, also from an older header', async () => {
+  it('matches the source an --out output names exactly, also from an older header, and warns for another', async () => {
     fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app"}\n');
     for (const dir of ['a', 'b']) {
       fs.mkdirSync(path.join(tmpDir, dir));
@@ -1454,18 +1472,73 @@ describe('themeBuild() — outputs it may replace', () => {
         .replace('Source: b/ocean.mjs', 'Source: ocean.mjs'),
     );
     // a/ocean.mjs ends in the same name, but it is another source.
-    await expect(
+    const {warnings} = await withWarnings(() =>
       themeBuild('../a/ocean.mjs', {out: 'out/ocean.css'}, {cwd: b}),
-    ).rejects.toMatchObject({
-      code: 'ERR_FILE_EXISTS',
-      message: expect.stringMatching(
-        /another theme source, (\.\.\/)?ocean\.mjs,/,
+    );
+    expect(warnings).toEqual([
+      expect.stringMatching(
+        /^Warning: out\/ocean\.css was built from (\.\.\/)?ocean\.mjs; this build of \.\.\/a\/ocean\.mjs replaces it\.$/,
       ),
-    });
+    ]);
+    // Put b's output back as an older CLI wrote it.
+    await themeBuild('ocean.mjs', {out: 'out/ocean.css'}, {cwd: b});
+    fs.writeFileSync(
+      css,
+      fs
+        .readFileSync(css, 'utf-8')
+        .replace('Source: b/ocean.mjs', 'Source: ocean.mjs'),
+    );
     // b/ocean.mjs is the source it names, read from the folder b.
-    await expect(
+    const own = await withWarnings(() =>
       themeBuild('ocean.mjs', {out: 'out/ocean.css'}, {cwd: b}),
-    ).resolves.toMatchObject({type: 'theme.build'});
+    );
+    expect(own.warnings).toEqual([]);
+  });
+
+  it('names the source of a build output from the folder the command runs in', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app"}\n');
+    fs.mkdirSync(path.join(tmpDir, 'themes'));
+    fs.copyFileSync(
+      path.join(tmpDir, 'ocean.mjs'),
+      path.join(tmpDir, 'themes', 'ocean.mjs'),
+    );
+    await themeBuild('themes/ocean.mjs', {}, {cwd: tmpDir});
+    const themes = path.join(tmpDir, 'themes');
+    await expect(
+      themeBuild('ocean.js', {}, {cwd: themes}),
+    ).rejects.toMatchObject({
+      code: 'ERR_THEME_INVALID',
+      message:
+        'ocean.js is an output of `theme build`, not a theme source. It was built from ocean.mjs.',
+      suggestions: [{name: expect.stringMatching(/ theme build ocean\.mjs$/)}],
+    });
+  });
+
+  it('reads an older header written from above the project, as in a monorepo', async () => {
+    const pkg = path.join(tmpDir, 'packages', 'app');
+    fs.mkdirSync(path.join(pkg, 'themes'), {recursive: true});
+    fs.writeFileSync(path.join(pkg, 'package.json'), '{"name":"app"}\n');
+    fs.copyFileSync(
+      path.join(tmpDir, 'ocean.mjs'),
+      path.join(pkg, 'themes', 'ocean.mjs'),
+    );
+    await themeBuild('themes/ocean.mjs', {}, {cwd: pkg});
+    const js = path.join(pkg, 'themes', 'ocean.js');
+    // A build from the monorepo root named the source from there.
+    fs.writeFileSync(
+      js,
+      fs
+        .readFileSync(js, 'utf-8')
+        .replace(
+          'Source: themes/ocean.mjs',
+          'Source: packages/app/themes/ocean.mjs',
+        ),
+    );
+    await expect(
+      themeBuild('themes/ocean.js', {}, {cwd: pkg}),
+    ).rejects.toMatchObject({
+      message: expect.stringContaining('It was built from themes/ocean.mjs.'),
+    });
   });
 
   it('replaces its own earlier outputs', async () => {

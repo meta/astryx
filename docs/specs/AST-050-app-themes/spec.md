@@ -174,9 +174,10 @@ described.
   output was built from, or when the input is not a theme module. Each output's
   header names its source from the project root of the outputs, so a build
   from any folder writes the same outputs. At a path `--out` names, it
-  replaces an existing output only when that output was built from the same
-  source, or from a source that no longer exists. It warns when that path does
-  not end in `.css`, and the import it prints names the file as written. An
+  replaces its own earlier outputs. It replaces the output of another theme
+  source that still exists and warns, naming both sources. It warns when that
+  path does not end in `.css`, and the import it prints names the file as
+  written. An
   import MUST fail and name the build command
   when the built module or stylesheet is missing. When a local theme and a
   package theme share a slug, an import adds the local theme unless `--package`

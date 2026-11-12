@@ -603,6 +603,53 @@ function headerRoot(outDir, cwd) {
 }
 
 /**
+ * Whether a build refuses to replace, at a path `--out` names, the output of
+ * another theme source that still exists. False makes it warn and replace.
+ */
+const OUT_REFUSES_OTHER_SOURCE = false;
+
+/**
+ * Where a source name in a build header may point. A header names its source
+ * from the outputs' project root; older CLIs named it from the folder the
+ * build ran in, which is the output's folder or one above it, up to a
+ * monorepo root above the project. The project root comes first, then the
+ * output's folder and each folder above it.
+ * @param {string} outputFile absolute file the header is in
+ * @param {string} name the name the header gives
+ * @param {string} cwd
+ * @returns {string[]} absolute candidates, without repeats
+ */
+function headerSourceCandidates(outputFile, name, cwd) {
+  const outDir = path.dirname(path.resolve(outputFile));
+  const candidates = [path.resolve(headerRoot(outDir, cwd), name)];
+  for (let dir = outDir; ; dir = path.dirname(dir)) {
+    candidates.push(path.resolve(dir, name));
+    if (path.dirname(dir) === dir) break;
+  }
+  return [...new Set(candidates)];
+}
+
+/**
+ * The file a build header's source name points at: the first candidate that
+ * exists, or the one from the project root when none does.
+ * @param {string} outputFile
+ * @param {string} name
+ * @param {string} cwd
+ */
+function headerSourceFile(outputFile, name, cwd) {
+  const candidates = headerSourceCandidates(outputFile, name, cwd);
+  return (
+    candidates.find(file => {
+      try {
+        return fs.statSync(file).isFile();
+      } catch {
+        return false;
+      }
+    }) ?? candidates[0]
+  );
+}
+
+/**
  * A path as a build header names it: relative to `base`, with `/`.
  * @param {string} base
  * @param {string} file absolute
@@ -913,13 +960,29 @@ function assertThemeSourceFile(filePath, cwd) {
   const rel = (/** @type {string} */ file) => path.relative(cwd, file);
   const sourceHead = fileHead(filePath);
   if (sourceHead.includes(GENERATED_MARKER)) {
-    const from = /Source: (.+)/.exec(sourceHead)?.[1]?.trim();
+    const line = /Source: (.+)/.exec(sourceHead)?.[1]?.trim();
+    // The header names its sources from the outputs' project root; the
+    // command to build them names them from the working folder.
+    const sources = line
+      ? line.split(', ').map(name =>
+          rel(headerSourceFile(filePath, name.trim(), cwd))
+            .split(path.sep)
+            .join('/'),
+        )
+      : [];
+    const familyKey = /Command: .*--family-key (\S+)/.exec(sourceHead)?.[1];
+    const build =
+      sources.length > 1 && familyKey
+        ? `theme build --family ${sources.map(shellWord).join(' ')} --family-key ${shellWord(familyKey)}`
+        : sources.length > 0
+          ? `theme build ${shellWord(sources[0])}`
+          : null;
     throw new AstryxError(
-      `${rel(filePath)} is an output of \`theme build\`, not a theme source.${from ? ` It was built from ${from}.` : ''}`,
-      from
+      `${rel(filePath)} is an output of \`theme build\`, not a theme source.${sources.length > 0 ? ` It was built from ${sources.join(', ')}.` : ''}`,
+      build
         ? [
             {
-              name: formatCliCommand(`theme build ${shellWord(from)}`, cwd),
+              name: formatCliCommand(build, cwd),
               reason: 'build the theme source',
             },
           ]
@@ -970,6 +1033,7 @@ function assertOutputsReplaceable(
   const rel = (/** @type {string} */ file) => path.relative(cwd, file);
   const sourceKey = outputKey(filePath);
   const seen = new Set();
+  let warnedOtherSource = false;
   for (const write of writes) {
     const key = outputKey(write.dest);
     if (key === sourceKey) {
@@ -1023,7 +1087,14 @@ function assertOutputsReplaceable(
     const otherSource = refuseUnmarked
       ? builtFromOtherSource(write.dest, filePath, cwd)
       : null;
-    if (otherSource) {
+    if (otherSource && !OUT_REFUSES_OTHER_SOURCE) {
+      // One warning per build: every output of that source goes together.
+      if (warnedOtherSource) continue;
+      warnedOtherSource = true;
+      logger.warn(
+        `Warning: ${rel(write.dest)} was built from ${otherSource}; this build of ${rel(filePath)} replaces it.`,
+      );
+    } else if (otherSource) {
       throw new AstryxError(
         `${rel(write.dest)} is the build output of another theme source, ${otherSource}, so this build does not replace it. Pick another ${elsewhere}.`,
         [
@@ -1063,9 +1134,8 @@ function assertOutputsReplaceable(
 
 /**
  * The other theme source a build output names in its `Source:` header, when
- * that source still exists and is not `source`. The name is resolved from the
- * outputs' project root, and for headers from older CLIs from each folder
- * between the output and that root; a match is exact. A family output names
+ * that source still exists and is not `source`. The name is resolved as
+ * headerSourceCandidates says; a match is exact. A family output names
  * every member, and is this source's when any of them is. Null when the output is this source's,
  * names no source, or names one that is gone (an orphan a build may replace).
  * @param {string} dest
@@ -1080,25 +1150,11 @@ function builtFromOtherSource(dest, source, cwd) {
   if (!line) return null;
   const names = line.split(', ').map(name => name.trim());
   const own = path.resolve(source);
-  // A header names its source from the outputs' project root. Older CLIs
-  // named it from the folder the build ran in, which is one of the folders
-  // from the output up to that root.
-  const outDir = path.dirname(path.resolve(dest));
-  const root = headerRoot(outDir, cwd);
-  /** @type {string[]} */
-  const bases = [root];
-  for (
-    let dir = outDir;
-    dir !== root && dir.startsWith(root + path.sep);
-    dir = path.dirname(dir)
-  ) {
-    bases.push(dir);
-  }
-  const resolvedNames = names.flatMap(name =>
-    bases.map(base => path.resolve(base, name)),
+  const candidates = names.flatMap(name =>
+    headerSourceCandidates(dest, name, cwd),
   );
-  if (resolvedNames.includes(own)) return null;
-  const existing = resolvedNames.find(file => {
+  if (candidates.includes(own)) return null;
+  const existing = candidates.find(file => {
     try {
       return fs.statSync(file).isFile();
     } catch {
