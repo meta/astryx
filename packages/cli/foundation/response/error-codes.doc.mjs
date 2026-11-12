@@ -220,6 +220,11 @@ export const doc = {
         'A theme file could not be loaded / parsed into a defineTheme result.',
     },
     {
+      value: 'ERR_THEME_STALE',
+      description:
+        '`theme build --check` found stale or missing outputs: exit 1, in the check result (`code`), not an error.',
+    },
+    {
       value: 'ERR_PALETTE_GENERATION',
       description:
         'A palette generation request or one of its constraints was invalid.',

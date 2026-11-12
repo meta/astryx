@@ -292,7 +292,11 @@ describe('themeBuildFamily()', () => {
     );
     expect(checked?.type).toBe('theme.build.check');
     expect(checked?.data.upToDate).toBe(false);
-    // The `.css.d.ts` import stub may be absent in check mode.
+    // Every output is checked; a missing `.css.d.ts` stub warns instead of
+    // making the check stale.
+    expect(checked?.data.checked).toEqual(
+      OUTPUTS.map(file => `../themes/${file}`),
+    );
     expect(checked?.data.stale).toEqual(
       OUTPUTS.filter(file => !file.endsWith('.css.d.ts')).map(file => ({
         path: `../themes/${file}`,

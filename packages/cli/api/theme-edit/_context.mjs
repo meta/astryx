@@ -11,11 +11,13 @@
 import * as fs from 'node:fs';
 import {createRequire} from 'node:module';
 import * as path from 'node:path';
+import {pathToFileURL} from 'node:url';
 import {AstryxError} from '../error.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {
   CLOSEST_OPEN_FONT,
   FONT_ROLES,
+  FONTS,
   OPEN_FONTS,
   isDesktopFamily,
   oneSystemOf,
@@ -114,7 +116,25 @@ export async function context(cwd) {
     parts,
     unchecked,
     uncheckedCode,
+    derived: await derivedVars(project.coreDir),
   };
+}
+
+/**
+ * Core's registry of the variables a part's plain border-radius or padding
+ * also writes (a card's inner corners), or empty on a Core without it.
+ * @param {string} coreDir
+ * @returns {Promise<Record<string, Array<{property: string, vars?: string[], replaces?: boolean, expand?: string}>>>}
+ */
+async function derivedVars(coreDir) {
+  const file = path.join(coreDir, 'dist', 'theme', 'derivedVarRegistry.js');
+  if (!fs.existsSync(file)) return {};
+  try {
+    const mod = await import(pathToFileURL(file).href);
+    return mod.derivedVarRegistry ?? {};
+  } catch {
+    return {};
+  }
 }
 
 /** @param {unknown} e */
@@ -219,6 +239,18 @@ export function fontNotes(ctx, data) {
         : `${family} is not installed, so it does not load: the previews and the app show the next font in the stack. Install it: ${installLine(ctx.project.cwd, [pkg])}. Then the preview imports it on the next set or show, and the app imports it once: import '${pkg}'; Until then, the closest font that needs no install is ${near}: ${P} set ${data.name} font ${near}`,
     );
   }
+  // A family the editor's own presets lead with, where the preset gets no
+  // note (Comic Sans MS, of comic), is no more a font to load typed by name.
+  const presetFamily = (/** @type {string} */ family) => {
+    const f = family.replace(/["']/g, '').trim().toLowerCase();
+    // A one-system font keeps its note, preset or not.
+    if (oneSystemOf(family.replace(/["']/g, '').trim())) return false;
+    return Object.entries(FONTS).some(
+      ([k, [first]]) =>
+        (SYSTEM_FONTS.includes(k) || k === 'comic' || k === 'rounded') &&
+        first.replace(/["']/g, '').trim().toLowerCase() === f,
+    );
+  };
   for (const s of data.settings) {
     if (
       s.thing !== 'font' ||
@@ -228,7 +260,8 @@ export function fontNotes(ctx, data) {
       fontOf(s.value).pkg ||
       packages.some(x => x.of === s) ||
       s.value === 'rounded' ||
-      s.value === 'comic'
+      s.value === 'comic' ||
+      presetFamily(fontOf(s.value).family)
     )
       continue;
     const family = fontOf(s.value).family.replace(/["']/g, '').toLowerCase();

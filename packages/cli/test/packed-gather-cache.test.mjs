@@ -8,6 +8,7 @@
  * upgrade, another project or another environment, and after random changes.
  */
 
+import {COMPONENT_REPLACES_CLI} from '../foundation/integrations/cli-requirement.mjs';
 import {spawn, spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -241,6 +242,30 @@ function issuesEntry(file) {
   } catch {
     return false;
   }
+}
+
+/**
+ * doctor's kept docs checks in a temp folder's cache folder, by check id.
+ * @param {string} tmp
+ * @returns {Map<string, number>} check id to inode
+ */
+function doctorEntries(tmp) {
+  const dir = path.join(tmp, CACHE_NAME);
+  /** @type {Map<string, number>} */
+  const out = new Map();
+  if (!fs.existsSync(dir)) return out;
+  for (const name of fs.readdirSync(dir)) {
+    const file = path.join(dir, name);
+    try {
+      const {value} = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (value && typeof value.id === 'string' && 'label' in value) {
+        out.set(value.id, fs.statSync(file).ino);
+      }
+    } catch {
+      // Not a kept check.
+    }
+  }
+  return out;
 }
 
 /**
@@ -906,7 +931,8 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
       const fresh = run(ask, {tmp: freshTmp(), cwd: other.dir, json: false});
       expect(run(ask, {tmp, cwd: other.dir, json: false})).toEqual(fresh);
       const kept = issuesEntries(tmp);
-      expect(kept.size).toBe(1);
+      // The integration's own checks, and the project's whole issue list.
+      expect(kept.size).toBe(2);
       // Read back, not checked again: the same file, and the same answer.
       expect(run(ask, {tmp, cwd: other.dir, json: false})).toEqual(fresh);
       expect(issuesEntries(tmp)).toEqual(kept);
@@ -1028,7 +1054,8 @@ Module._resolveFilename = function (request, parent, isMain, options) {
       );
       expect(answer(run(ask, {tmp, cwd: outside, json: false}))).toEqual(fresh);
       const kept = issuesEntries(tmp);
-      expect(kept.size).toBe(1);
+      // The integration's own checks, and the project's whole issue list.
+      expect(kept.size).toBe(2);
       expect(answer(run(ask, {tmp, cwd: outside, json: false}))).toEqual(fresh);
       expect(issuesEntries(tmp)).toEqual(kept);
     } finally {
@@ -1036,6 +1063,230 @@ Module._resolveFilename = function (request, parent, isMain, options) {
       fs.rmSync(outside, {recursive: true, force: true});
     }
   }, 120_000);
+
+  it("keeps doctor's docs checks, and a broken link shows on the very next run", () => {
+    const tmp = keptTmp('doctor-docs');
+    const other = makeProject();
+    try {
+      fs.writeFileSync(
+        path.join(other.widgets, 'astryx.integration.mjs'),
+        `export default { docs: './docs' };\n`,
+      );
+      fs.mkdirSync(path.join(other.widgets, 'docs'));
+      // The link lives in a module the doc imports, so an edit to that module
+      // alone must show too.
+      const target = path.join(other.widgets, 'docs', 'target.mjs');
+      const link = (/** @type {string} */ to) =>
+        fs.writeFileSync(target, `export const target = '${to}';\n`);
+      link('quick-start');
+      fs.writeFileSync(
+        path.join(other.widgets, 'docs', 'deploying.doc.mjs'),
+        `import {target} from './target.mjs';\nexport const docs = {type: 'generic', name: 'deploying', title: 'Deploying', description: 'How to deploy.', sections: [{title: 'Overview', content: [{type: 'prose', text: 'Ship it, then see {@link generic:' + target + '}.'}]}]};\n`,
+      );
+      const tree = (/** @type {{stdout: string}} */ r) =>
+        JSON.parse(r.stdout).data.checks.find(
+          (/** @type {{id: string}} */ c) => c.id === 'docs-tree',
+        );
+      const doctor = (/** @type {string} */ at) =>
+        tree(run(['doctor'], {tmp: at, cwd: other.dir}));
+      const fresh = doctor(freshTmp());
+      expect(doctor(tmp)).toEqual(fresh);
+      const kept = doctorEntries(tmp);
+      expect([...kept.keys()].sort()).toEqual([
+        'cli-docs',
+        'docs-progressive-disclosure',
+        'docs-tree',
+      ]);
+      // Read back, not checked again: the same three files.
+      expect(doctor(tmp)).toEqual(fresh);
+      expect(doctorEntries(tmp)).toEqual(kept);
+      // Broken by an edit to the imported module alone: the very next doctor
+      // reports it, as a fresh one does, and checks the docs tree again.
+      link('no-such-topic');
+      const broken = doctor(tmp);
+      expect(JSON.stringify(broken)).toContain('no-such-topic');
+      expect(broken).toEqual(doctor(freshTmp()));
+      const after = doctorEntries(tmp);
+      expect(after.get('docs-tree')).not.toBe(kept.get('docs-tree'));
+      // Fixed: the next doctor no longer reports it.
+      link('quick-start');
+      expect(doctor(tmp)).toEqual(fresh);
+    } finally {
+      fs.rmSync(other.dir, {recursive: true, force: true});
+    }
+  }, 180_000);
+
+  it('leaves a missing cache folder missing when doctor runs', () => {
+    const tmp = freshTmp();
+    run(['doctor'], {tmp});
+    run(['doctor'], {tmp});
+    expect(fs.existsSync(path.join(tmp, CACHE_NAME))).toBe(false);
+  }, 60_000);
+
+  it('keeps the whole issue list, and finds a replacement problem after an edit', async () => {
+    const tmp = keptTmp('replacement');
+    const other = makeProject();
+    try {
+      const templates = path.join(other.widgets, 'templates');
+      fs.mkdirSync(templates, {recursive: true});
+      const doc = path.join(templates, 'tally.doc.mjs');
+      const page = `{type: 'page', name: 'tally', description: 'Running totals, tallied by team.', category: 'Widget - Tally'`;
+      fs.writeFileSync(doc, `export default ${page}};\n`);
+      fs.writeFileSync(
+        path.join(templates, 'tally.tsx'),
+        `export default function Page() { return null; }\n`,
+      );
+      const ask = ['component', 'Button'];
+      const fresh = run(ask, {tmp: freshTmp(), cwd: other.dir, json: false});
+      expect(run(ask, {tmp, cwd: other.dir, json: false})).toEqual(fresh);
+      const kept = issuesEntries(tmp);
+      expect(kept.size).toBe(2);
+      expect(run(ask, {tmp, cwd: other.dir, json: false})).toEqual(fresh);
+      expect(issuesEntries(tmp)).toEqual(kept);
+      // The template now claims to replace a Core page that does not exist:
+      // only the replacement pass, which reads every template, finds it.
+      fs.writeFileSync(
+        doc,
+        `export default ${page}, replaces: 'no-such-page'};\n`,
+      );
+      const [again, edited] = await Promise.all([
+        runAsync(ask, {tmp, cwd: other.dir, json: false}),
+        runAsync(ask, {tmp: freshTmp(), cwd: other.dir, json: false}),
+      ]);
+      expect(edited.stderr).toContain('@acme/widgets');
+      expect(fresh.stderr).not.toContain('@acme/widgets');
+      expect(again).toEqual(edited);
+    } finally {
+      fs.rmSync(other.dir, {recursive: true, force: true});
+    }
+  }, 120_000);
+
+  it('gives doctor its own answer after an everyday command kept the issue list', () => {
+    const tmp = keptTmp('doctor-core');
+    // A project with no installed Core, and an opted-in integration whose
+    // component replaces a Core one: everyday commands read the Core the CLI
+    // carries, doctor only the project's (none), so their lists differ.
+    const dir = fs.mkdtempSync(path.join(work, 'projects', 'no-core-'));
+    // The Core the CLI carries: the repository's, beside the installed CLI,
+    // for this case only.
+    const carried = path.join(
+      work,
+      'install',
+      'node_modules',
+      '@astryxdesign',
+      'core',
+    );
+    fs.symlinkSync(path.join(REPO_ROOT, 'packages', 'core'), carried, 'dir');
+    try {
+      fs.writeFileSync(
+        path.join(dir, 'package.json'),
+        JSON.stringify({
+          name: 'no-core',
+          dependencies: {'@astryxdesign/cli': '*', '@acme/nav': '1.0.0'},
+        }),
+      );
+      const nav = path.join(dir, 'node_modules', '@acme', 'nav');
+      fs.mkdirSync(path.join(nav, 'components'), {recursive: true});
+      fs.writeFileSync(
+        path.join(nav, 'package.json'),
+        JSON.stringify({
+          name: '@acme/nav',
+          version: '1.0.0',
+          exports: {'./components/*': './components/*.tsx'},
+          peerDependencies: {
+            '@astryxdesign/cli': `>=${COMPONENT_REPLACES_CLI}`,
+          },
+        }),
+      );
+      fs.writeFileSync(
+        path.join(nav, 'astryx.integration.mjs'),
+        "export default {components: './components'};\n",
+      );
+      fs.writeFileSync(
+        path.join(nav, 'components', 'AcmeSideNav.doc.mjs'),
+        `export default ${JSON.stringify({
+          type: 'component',
+          name: 'AcmeSideNav',
+          displayName: 'AcmeSideNav',
+          import: '@acme/nav/components/AcmeSideNav',
+          replaces: 'SideNav',
+          keywords: ['acme'],
+          usage: {description: 'AcmeSideNav for Acme apps.'},
+          props: [],
+        })};\n`,
+      );
+      fs.writeFileSync(
+        path.join(nav, 'components', 'AcmeSideNav.tsx'),
+        'export function AcmeSideNav() { return null; }\n',
+      );
+      const check = (/** @type {{stdout: string}} */ r) =>
+        JSON.parse(r.stdout).data.checks.find(
+          (/** @type {{id: string}} */ c) => c.id === 'integration-issues',
+        );
+      const fresh = check(run(['doctor'], {tmp: freshTmp(), cwd: dir}));
+      // Doctor, reading no Core, finds the replaced component missing; the
+      // everyday command, reading the carried Core, finds nothing.
+      expect(JSON.stringify(fresh)).toContain('SideNav');
+      const everyday = run(['template', '--list'], {
+        tmp,
+        cwd: dir,
+        json: false,
+      });
+      expect(everyday.stderr).not.toContain('@acme/nav');
+      run(['template', '--list'], {tmp, cwd: dir, json: false});
+      // The everyday command kept its lists (the integration's and the
+      // project's); doctor still answers as a fresh doctor does.
+      expect(issuesEntries(tmp).size).toBe(2);
+      expect(check(run(['doctor'], {tmp, cwd: dir}))).toEqual(fresh);
+    } finally {
+      fs.rmSync(carried, {force: true});
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  }, 120_000);
+
+  it.skipIf(process.getuid?.() === 0)(
+    'lets doctor answer the same, silently, when its cache cannot be written',
+    () => {
+      const other = makeProject();
+      /** @param {string} tmp @param {string} [mode] */
+      const doctor = (tmp, mode) => {
+        const catalogs = path.join(tmp, CACHE_NAME);
+        fs.mkdirSync(catalogs, {recursive: true, mode: 0o700});
+        if (mode === 'folder') fs.chmodSync(catalogs, 0o500);
+        if (mode === 'tree') {
+          fs.chmodSync(catalogs, 0o500);
+          fs.chmodSync(path.dirname(catalogs), 0o500);
+        }
+        try {
+          const r = run(['doctor'], {tmp, cwd: other.dir});
+          return {
+            status: r.status,
+            stderr: r.stderr,
+            // The cache row counts what the folder holds, which a write
+            // earlier in the run adds to: the rest must match exactly.
+            stdout: r.stdout
+              .split(tmp)
+              .join('<tmp>')
+              .replace(/\(\d+ entr(?:y|ies), [\d.]+ MB\)/g, '(<count>)'),
+          };
+        } finally {
+          fs.chmodSync(path.dirname(catalogs), 0o700);
+          fs.chmodSync(catalogs, 0o700);
+        }
+      };
+      try {
+        const writable = doctor(freshTmp());
+        expect(writable.status).toBe(0);
+        // An unwritable cache folder, and a cache whose whole tree is read
+        // only: doctor neither fails nor warns, and says the same.
+        expect(doctor(freshTmp(), 'folder')).toEqual(writable);
+        expect(doctor(freshTmp(), 'tree')).toEqual(writable);
+      } finally {
+        fs.rmSync(other.dir, {recursive: true, force: true});
+      }
+    },
+    120_000,
+  );
 
   it('is skipped silently when its folder cannot be used', () => {
     fs.mkdirSync(path.join(work, 'tmp'), {recursive: true});

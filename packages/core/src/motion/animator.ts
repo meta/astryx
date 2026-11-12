@@ -75,7 +75,8 @@
  * browser's commit as well. `'presented'` creates the animations of a call
  * from rest two frames later, once its element at rest has been presented.
  * That serves a UI process that applies commits late. It does not change
- * when a retarget starts.
+ * when a retarget starts. `'next-frame'`, for a call in an input event's own
+ * task, starts a call from rest at the first frame after that task.
  * `handle.curve(property)` hands out the curve a call plays, so a
  * companion can follow it on the same clock.
  * `options.additive` retargets as UIKit does: the old curve keeps going and a
@@ -291,8 +292,15 @@ export interface AnimateOptions {
    *   Any other change to the animator before then creates the animations
    *   first, in call order. A call that continues motion on screen starts
    *   now, as by default.
+   * - `'next-frame'`: the caller makes the call in an input event's own
+   *   task, never in a frame callback. The first frame whose callbacks run
+   *   after the call commits it. A call from rest starts at that frame,
+   *   however long the task ran, so a later listener's block delays the
+   *   motion. Without it, the browser dates the start inside that block, and
+   *   the motion skips ahead. A call that continues motion starts now, as by
+   *   default.
    */
-  start?: 'commit' | 'presented';
+  start?: 'commit' | 'presented' | 'next-frame';
   /**
    * A call that retargets a curve on screen adds to it instead of replacing
    * it, as UIKit's animations do: the old curve keeps going (past its end, at
@@ -593,6 +601,11 @@ interface StartGroup {
    * so the frame after it is not the one that starts them.
    */
   madeInFrame?: boolean;
+  /**
+   * Its call asked for `start: 'next-frame'`: the call ran in an input
+   * event's own task. Its task mark carries that to the calls it holds.
+   */
+  nextFrame?: boolean;
   /** The task it was made in, with every call made in that task. */
   task?: TaskMark;
   /**
@@ -767,6 +780,12 @@ interface TaskMark {
   ended?: number;
   /** The start every call of a blocked task moves to, set by its first read. */
   at?: number;
+  /**
+   * A call of the task asked for `start: 'next-frame'`. The task is then an
+   * input event's own. Every call the mark holds moves to the first frame
+   * after the task: the calls made before the task's first microtask.
+   */
+  nextFrame?: boolean;
 }
 
 /** The task the current calls from rest are made in, until it ends. */
@@ -2880,6 +2899,12 @@ export function createMotionEngine(
     // call's is its second frame's callback, wherever in its frame the call
     // was made.
     group.task = markTask(now(), now);
+    // The call's `start: 'next-frame'` marks its task, so the calls made
+    // before the task's first microtask move together. A call after it opens
+    // a new mark.
+    if (group.nextFrame === true) {
+      group.task.nextFrame = true;
+    }
     group.madeInFrame = frameDepth > 0;
     queueMicrotask(() => {
       group.fresh = false;
@@ -2920,7 +2945,12 @@ export function createMotionEngine(
       const at = frameTime(frame, now);
       if (
         group.madeInFrame !== true &&
-        at - (group.task?.first ?? group.provisional) <= LATE_START_MS &&
+        // A call made in an input event's own task says so with
+        // `start: 'next-frame'`. This frame commits such a call however
+        // late it comes. A later listener's block then holds the motion
+        // back instead of skipping into it.
+        (group.task?.nextFrame === true ||
+          at - (group.task?.first ?? group.provisional) <= LATE_START_MS) &&
         group.animations.some(
           animation =>
             animation.startTime == null && animation.playState === 'running',
@@ -3104,7 +3134,10 @@ export function createMotionEngine(
     }
     const {task} = group;
     // A read in the task's first microtasks comes after its end too.
-    const ended = task?.ended ?? now();
+    // A later listener of an input event may hold the event's task past its
+    // first microtask. So for a call made with `start: 'next-frame'`, the
+    // task ends at this read: the first frame after the task, or its `ready`.
+    const ended = task?.nextFrame === true ? now() : (task?.ended ?? now());
     if (task == null || ended - task.first <= LATE_START_MS) {
       return start;
     }
@@ -4605,6 +4638,14 @@ export function createMotionEngine(
         animateOptions.at,
         animateOptions.start,
       );
+      // Ignored with `at`, which may join an earlier call's start.
+      if (
+        group != null &&
+        animateOptions.at == null &&
+        animateOptions.start === 'next-frame'
+      ) {
+        group.nextFrame = true;
+      }
       const waitsForFrame = noteShown(
         Object.keys(next) as MotionProperty[],
         time,
@@ -4742,6 +4783,14 @@ export function createMotionEngine(
         playOptions.at,
         playOptions.start,
       );
+      // Ignored with `at`, which may join an earlier call's start.
+      if (
+        group != null &&
+        playOptions.at == null &&
+        playOptions.start === 'next-frame'
+      ) {
+        group.nextFrame = true;
+      }
       const waitsForFrame = noteShown(
         Object.keys(next) as MotionProperty[],
         time,
