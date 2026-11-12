@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[docs] Heading, TextInput, TextArea, NumberInput, CheckboxInput, Switch, ProgressBar and StatusDot have playground defaults, and the ButtonGroup, TabList, SegmentedControl and TopNav playgrounds show sample items, so each renders a working example in the docs playground.
+[docs] The docs playgrounds for Heading, TextInput, TextArea, NumberInput, CheckboxInput, Switch, ProgressBar and StatusDot open with realistic values instead of prop-name placeholders, and the ButtonGroup, TabList, SegmentedControl and TopNav playgrounds open with named sample items instead of numbered ones.
 
 @josephfarina

@@ -5,7 +5,7 @@
 export const docs = {
   name: 'CheckboxInput',
   playground: {
-    defaults: {label: 'Checked', value: true},
+    defaults: {label: 'Add to calendar', value: true},
   },
   displayName: 'Checkbox Input',
   group: 'Checkbox',
