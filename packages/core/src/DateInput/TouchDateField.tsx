@@ -79,6 +79,7 @@ import {useInputStatusIcon, useMergedRefs} from '../hooks';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {useToday} from '../hooks/useToday';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import {Icon} from '../Icon';
 import {IconButton} from '../IconButton';
 import {useLocale} from '../i18n';
@@ -1198,8 +1199,7 @@ export function TouchDateField({
   // Read through a ref, so the toggle leaves this callback unchanged. The
   // memoized month grid that takes it does not re-render when the wheels open
   // or close.
-  const isWheelOpenRef = useRef(isWheelOpen);
-  isWheelOpenRef.current = isWheelOpen;
+  const isWheelOpenRef = useCommittedRef(isWheelOpen);
   const handleVisibleMonthChange = useCallback(
     (next: number) => {
       if (isWheelOpenRef.current) {
@@ -1208,7 +1208,7 @@ export function TouchDateField({
       // A swipe to the range end hides an arrow, as a press does.
       moveMonth(next, () => setMonthIndex(next));
     },
-    [moveMonth],
+    [moveMonth, isWheelOpenRef],
   );
 
   /**
