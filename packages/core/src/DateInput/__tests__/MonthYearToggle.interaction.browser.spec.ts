@@ -998,10 +998,11 @@ for (const [name, story, titleSelector, panelSelector, panelKey] of [
   test(`${name}: the toggle's commit flips no inherited property on the panels; they swap inert when the fade ends`, async ({
     page,
   }) => {
-    // `inert` and `pointer-events` are inherited: flipping either restyles a
-    // panel's whole subtree. So the toggle's commit changes only the panels'
-    // classes and `aria-hidden`. A shield takes touches during the fade, and
-    // the panels swap `inert` at its end, when nothing moves.
+    // `inert`, `pointer-events` and `visibility` are inherited: flipping one
+    // restyles a panel's whole subtree. So the toggle's commit changes only
+    // the panels' classes and `aria-hidden`, and each panel's inherited values
+    // stay as they were before the tap. A shield takes touches during the
+    // fade, and the panels swap `inert` at its end, when nothing moves.
     await openStory(page, storybook(), story);
     const driver = await touchDriver(page);
     const tapCenter = async (selector: string) => {
@@ -1024,10 +1025,15 @@ for (const [name, story, titleSelector, panelSelector, panelKey] of [
     const tokens = await toggleTokens(page);
     await page.evaluate(
       ({selector, key}) => {
+        const before: Record<
+          string,
+          {pointerEvents: string; visibility: string}
+        > = {};
         const state = {
           frames: 0,
           log: [] as CommitLog,
           shielded: null as boolean | null,
+          before,
         };
         (window as unknown as {toggleCommit: typeof state}).toggleCommit =
           state;
@@ -1037,6 +1043,13 @@ for (const [name, story, titleSelector, panelSelector, panelKey] of [
         };
         requestAnimationFrame(tick);
         const panels = [...document.querySelectorAll<HTMLElement>(selector)];
+        for (const panel of panels) {
+          const style = getComputedStyle(panel);
+          state.before[panel.dataset[key] ?? ''] = {
+            pointerEvents: style.pointerEvents,
+            visibility: style.visibility,
+          };
+        }
         const observer = new MutationObserver(records => {
           if (state.shielded == null) {
             // One frame into the fade: a touch on the panels' middle meets
@@ -1088,21 +1101,33 @@ for (const [name, story, titleSelector, panelSelector, panelKey] of [
     await tapCenter(titleSelector);
     await waitForRest(wheels);
     await page.waitForTimeout(150);
-    const {log, shielded} = await page.evaluate(
+    const {log, shielded, before} = await page.evaluate(
       () =>
         (
           window as unknown as {
-            toggleCommit: {log: CommitLog; shielded: boolean | null};
+            toggleCommit: {
+              log: CommitLog;
+              shielded: boolean | null;
+              before: Record<
+                string,
+                {pointerEvents: string; visibility: string}
+              >;
+            };
           }
         ).toggleCommit,
     );
     expect(shielded).toBe(true);
     const commitFrame = log.find(entry => entry.attribute === 'class')?.frame;
     expect(commitFrame, JSON.stringify(log)).toBeDefined();
-    for (const change of log.filter(
+    const commitChanges = log.filter(
       entry => entry.attribute === 'class' && entry.frame === commitFrame,
-    )) {
-      expect(change.pointerEvents).toBe('auto');
+    );
+    expect(commitChanges.length, JSON.stringify(log)).toBeGreaterThan(0);
+    for (const change of commitChanges) {
+      expect(
+        {pointerEvents: change.pointerEvents, visibility: change.visibility},
+        `${change.panel}: ${JSON.stringify(before)}`,
+      ).toEqual(before[change.panel]);
     }
     // The outgoing calendar leaves assistive technology with the toggle.
     const hidden = log.find(

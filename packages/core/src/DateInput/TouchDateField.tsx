@@ -659,7 +659,8 @@ const styles = stylex.create({
   panelOverlayHidden: {
     visibility: 'hidden',
     opacity: 0,
-    pointerEvents: 'none',
+    // No `pointerEvents`, for the reason at panelBeneathHidden. `inert`,
+    // `visibility` and the fade's shield keep it untouchable.
     transitionTimingFunction: {
       default: 'linear',
       '@media (pointer: coarse)': TOGGLE_EXIT,
