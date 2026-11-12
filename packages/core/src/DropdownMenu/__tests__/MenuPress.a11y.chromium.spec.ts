@@ -308,9 +308,9 @@ test.describe('DropdownMenu press model (Chromium)', () => {
     const menu = page.getByRole('menu');
     await expect(menu).toBeVisible();
     await page.mouse.up();
-    // The opening release leaves the menu open with focus on the menu, where
-    // Escape is read.
-    await expect(menu).toBeFocused();
+    // The opening release leaves the menu open with focus on its first row,
+    // where Escape is still handled by the menu navigation.
+    await expect(page.getByRole('menuitem', {name: 'Edit'})).toBeFocused();
 
     await page.keyboard.press('Escape');
     await expect(menu).toBeHidden();

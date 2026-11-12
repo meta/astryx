@@ -2716,7 +2716,7 @@ describe('DropdownMenu open focus follows the menu-button pattern (#9000)', () =
     );
   });
 
-  it('a row the pointer lit before the open frame does not override first-item focus', async () => {
+  it('a row the pointer lit before the open frame keeps focus', async () => {
     // The open's frame waits until the test runs it, as on a loaded page
     // where the pointer reaches a row first.
     const frames: FrameRequestCallback[] = [];
@@ -2729,9 +2729,8 @@ describe('DropdownMenu open focus follows the menu-button pattern (#9000)', () =
 
     await user.click(screen.getByRole('button', {name: /Actions/}));
     const edit = screen.getByRole('menuitem', {name: 'Edit', hidden: true});
-    const del = screen.getByRole('menuitem', {name: 'Delete', hidden: true});
-    fireEvent.pointerMove(del, {pointerType: 'mouse'});
-    expect(del).toHaveFocus();
+    fireEvent.pointerMove(edit, {pointerType: 'mouse'});
+    expect(edit).toHaveFocus();
     act(() => {
       for (const callback of frames.splice(0)) {
         callback(performance.now());

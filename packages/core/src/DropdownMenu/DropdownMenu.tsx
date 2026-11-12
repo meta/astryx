@@ -1063,6 +1063,7 @@ function DropdownMenuPopover({
 
   // ArrowUp opens with the LAST enabled row highlighted.
   const focusLastOnOpenRef = useRef(false);
+  const openModalityRef = useRef<'keyboard' | 'pointer'>('pointer');
 
   // Synchronizes the dialog's name from the custom trigger's DOM, an external
   // system React does not own: the rendered control's accessible name is only
@@ -1209,8 +1210,10 @@ function DropdownMenuPopover({
   // open lands on the first enabled item per the APG menu-button pattern;
   // pointer opens use the last-input focus helper so the focus indication
   // follows pointer modality instead of looking like a keyboard selection.
-  // The menu remains the fallback when no item is focusable (e.g. all
-  // disabled), mirroring the submenu flyout fallback.
+  // A row that the pointer reached before this frame keeps focus, so a held
+  // press continues to act on the row under the pointer. The menu remains the
+  // fallback when no item is focusable (e.g. all disabled), mirroring the
+  // submenu flyout fallback.
   useEffect(() => {
     if (!popover.isOpen || !shouldFocusOnOpenRef.current) {
       return;
@@ -1220,10 +1223,17 @@ function DropdownMenuPopover({
       const focusEnd = focusLastOnOpenRef.current ? focusLast : focusFirst;
       focusLastOnOpenRef.current = false;
       const list = listRef.current;
-      const didFocusItem = focusEnd();
-      if (!didFocusItem) {
+      const active = list?.ownerDocument.activeElement;
+      const isPointerOpen = openModalityRef.current === 'pointer';
+      const isRowLit =
+        isPointerOpen &&
+        active != null &&
+        active !== list &&
+        list?.contains(active) === true;
+      if (!isRowLit && !focusEnd()) {
         list?.focus();
       }
+      openModalityRef.current = 'keyboard';
     });
   }, [popover.isOpen, focusFirst, focusLast, listRef]);
 
@@ -1419,6 +1429,7 @@ function DropdownMenuPopover({
         }
         return false;
       }
+      openModalityRef.current = 'pointer';
       // The press opens the menu before the browser's own mousedown has
       // focused the trigger (a held finger never does), so the popover would
       // remember whatever was focused BEFORE the press as the element to hand
@@ -1470,35 +1481,39 @@ function DropdownMenuPopover({
   });
   cancelMenuPressRef.current = menuPress.cancel;
 
-  const handleButtonClick = useCallback(() => {
-    // The press already opened or closed the menu; its click is spent.
-    if (menuPress.isTriggerClickFromPress()) {
-      return;
-    }
-    // Synthesized activation and real clicks use the same open path; the
-    // shared modality tracker owns the focus indication.
-    if (isControlled) {
-      if (controlledIsOpen) {
+  const handleButtonClick = useCallback(
+    (event: React.MouseEvent) => {
+      // The press already opened or closed the menu; its click is spent.
+      if (menuPress.isTriggerClickFromPress()) {
+        return;
+      }
+      openModalityRef.current = event.detail === 0 ? 'keyboard' : 'pointer';
+      // Synthesized activation and real clicks use the same open path; the
+      // shared modality tracker owns the focus indication.
+      if (isControlled) {
+        if (controlledIsOpen) {
+          onClick?.();
+          onOpenChange?.(false);
+        } else {
+          openAndFocus(true);
+        }
+      } else if (popover.isOpen) {
         onClick?.();
-        onOpenChange?.(false);
+        popover.hide();
       } else {
         openAndFocus(true);
       }
-    } else if (popover.isOpen) {
-      onClick?.();
-      popover.hide();
-    } else {
-      openAndFocus(true);
-    }
-  }, [
-    menuPress,
-    onClick,
-    isControlled,
-    onOpenChange,
-    controlledIsOpen,
-    popover,
-    openAndFocus,
-  ]);
+    },
+    [
+      menuPress,
+      onClick,
+      isControlled,
+      onOpenChange,
+      controlledIsOpen,
+      popover,
+      openAndFocus,
+    ],
+  );
 
   const handleTriggerClickCapture = useCallback(
     (e: React.MouseEvent<HTMLElement>) => {
@@ -1526,6 +1541,7 @@ function DropdownMenuPopover({
           if (e.repeat) {
             return;
           }
+          openModalityRef.current = 'keyboard';
           focusLastOnOpenRef.current = e.key === 'ArrowUp';
           if (!openAndFocus()) {
             // A refused open (disabled trigger) must not leave ArrowUp's

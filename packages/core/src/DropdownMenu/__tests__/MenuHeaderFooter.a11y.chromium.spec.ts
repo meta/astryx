@@ -40,8 +40,8 @@ async function openMenu(page: Page) {
   await page.locator(TRIGGER).click();
   const menu = page.getByRole('menu', {name: 'Labels', exact: true});
   await expect(menu).toBeVisible();
-  // A pointer open focuses the menu itself; let that land first.
-  await expect(menu).toBeFocused();
+  // A pointer open focuses the first row; let that land first.
+  await expect(page.getByRole('menuitem', {name: 'Bug'})).toBeFocused();
   return menu;
 }
 
@@ -135,12 +135,11 @@ test('the popover is a modal dialog around the menu, and the trigger points at i
     return target != null && dialogEl != null && target.contains(dialogEl);
   });
   expect(controlsDialog).toBe(true);
-  await expect(menu).toBeFocused();
+  await expect(page.getByRole('menuitem', {name: 'Bug'})).toBeFocused();
 });
 
 test('Shift+Tab from a row goes straight to the header', async ({page}) => {
   const menu = await openMenu(page);
-  await page.keyboard.press('ArrowDown');
   await expect(page.getByRole('menuitem', {name: 'Bug'})).toBeFocused();
   await page.keyboard.press('Shift+Tab');
   await expect(
