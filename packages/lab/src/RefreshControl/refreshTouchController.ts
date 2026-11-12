@@ -127,6 +127,12 @@ function scrollContainersOf(start: HTMLElement): HTMLElement[] {
   return containers;
 }
 
+/**
+ * How near its target the content counts as there, in px. A move this small
+ * shows nothing.
+ */
+const AT_TARGET_PX = 0.05;
+
 function overflows(element: HTMLElement): boolean {
   return element.scrollHeight > element.clientHeight;
 }
@@ -273,12 +279,17 @@ export function useRefreshTouchController({
   /**
    * Cross-fades the content into what `land` writes, when Reduce Motion turns
    * the move into a cross-fade. The animator's own form for a move is a dip,
-   * which blanks the list between the two states. Returns null when motion
+   * which blanks the list between the two states. A move of `travel` px that
+   * shows nothing lands at once, with no copy. Returns null when motion
    * plays, when the change is instant, or when the content is too large to
    * copy: the animator then plays the change.
    */
   const crossFadeContent = useCallback(
-    (land: () => void, touchRelease: boolean): Promise<boolean> | null => {
+    (
+      land: () => void,
+      travel: number,
+      touchRelease: boolean,
+    ): Promise<boolean> | null => {
       const element = contentElement.current;
       const fade =
         element == null ||
@@ -289,6 +300,10 @@ export function useRefreshTouchController({
         return null;
       }
       stopPlacing();
+      if (Math.abs(travel) <= AT_TARGET_PX) {
+        land();
+        return Promise.resolve(true);
+      }
       const played = playReducedMotionCrossFade(
         element,
         fade,
@@ -511,7 +526,11 @@ export function useRefreshTouchController({
       // Reduce Motion it cross-fades instead of moving, as any release does
       // under a coarse primary pointer. A trackpad's release lands at once.
       const touchRelease = pullPointer.current === 'touch';
-      const crossFaded = crossFadeContent(() => place(target), touchRelease);
+      const crossFaded = crossFadeContent(
+        () => place(target),
+        target - from,
+        touchRelease,
+      );
       if (crossFaded != null) {
         if (to === 'top' && !model.current.isRefreshing && from > 0) {
           crossFaded.then(done => {
@@ -639,7 +658,11 @@ export function useRefreshTouchController({
       // Under Reduce Motion, the list cross-fades onto where the slide ends.
       // It takes the scroll back once the cross-fade ends, as the slide does,
       // so the task that lays the copy reads no scroll.
-      const crossFaded = crossFadeContent(() => place(animateTo), false);
+      const crossFaded = crossFadeContent(
+        () => place(animateTo),
+        animateTo - from,
+        false,
+      );
       if (crossFaded != null) {
         crossFaded.then(done => {
           if (done) {
@@ -716,7 +739,7 @@ export function useRefreshTouchController({
       return;
     }
     const target = releaseTarget(model.current.isRefreshing);
-    if (Math.abs(content.animator.get('y') - target) > 0.05) {
+    if (Math.abs(content.animator.get('y') - target) > AT_TARGET_PX) {
       settle(model.current.isRefreshing ? 'inset' : 'top');
     }
   }, [content.animator, model, settle]);

@@ -1352,6 +1352,105 @@ test('under Reduce Motion a refresh that begins during the end’s cross-fade ke
   expect(await shownPull(content)).toBeCloseTo(HEIGHT, 1);
 });
 
+test('under Reduce Motion a pull pushed back past its start lays no copy: the release moves nothing, so nothing fades', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== 'chromium',
+    'native scrolling from injected touches is Chromium-only (WebKit: the iOS simulator rig)',
+  );
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  await primaryPointer(page, 'coarse');
+  const {driver, content, start} = await openRefresh(page);
+  // Notes any copy of the content laid in the page.
+  await page.evaluate(() => {
+    const record = window as unknown as {__copyLaid: boolean};
+    record.__copyLaid = false;
+    new MutationObserver(records => {
+      for (const {addedNodes} of records) {
+        for (const node of addedNodes) {
+          if (
+            node instanceof Element &&
+            node.matches('[data-refresh-content][inert]')
+          ) {
+            record.__copyLaid = true;
+          }
+        }
+      }
+    }).observe(document.body, {childList: true, subtree: true});
+  });
+  // Down 50 px, then up 250 px, in one touch: the list is back at its start
+  // when the finger lifts.
+  const at = (progress: number) =>
+    progress < 0.25
+      ? {x: start.x, y: start.y + 50 * (progress / 0.25)}
+      : {x: start.x, y: start.y + 50 - 250 * ((progress - 0.25) / 0.75)};
+  await driver.play(path(at, {durationMs: 900, hz: 60, restMs: 150}));
+  await waitForContentRest(content);
+  await frames(page, 3);
+  expect(await shownPull(content)).toBeCloseTo(0, 1);
+  expect(await isBusy(content)).toBe(false);
+  expect(
+    await page.evaluate(
+      () => (window as unknown as {__copyLaid: boolean}).__copyLaid,
+    ),
+    'a copy faded over a list that did not move',
+  ).toBe(false);
+});
+
+test('under Reduce Motion a pull during a refresh that returns to the inset lays no copy', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== 'chromium',
+    'native scrolling from injected touches is Chromium-only (WebKit: the iOS simulator rig)',
+  );
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  await primaryPointer(page, 'coarse');
+  const {driver, content, start} = await openRefresh(page, undefined, {
+    refreshMs: '-1',
+  });
+  await driver.play(slowPull(start, 300, 200));
+  await waitForContentRest(content);
+  expect(await shownPull(content)).toBeCloseTo(HEIGHT, 1);
+  // Notes any copy of the content laid from now on.
+  await page.evaluate(() => {
+    const record = window as unknown as {__copyLaid: boolean};
+    record.__copyLaid = false;
+    new MutationObserver(records => {
+      for (const {addedNodes} of records) {
+        for (const node of addedNodes) {
+          if (
+            node instanceof Element &&
+            node.matches('[data-refresh-content][inert]')
+          ) {
+            record.__copyLaid = true;
+          }
+        }
+      }
+    }).observe(document.body, {childList: true, subtree: true});
+  });
+  // During the refresh, down 50 px, then up 250 px, in one touch: the list
+  // is back on the inset when the finger lifts.
+  const at = (progress: number) =>
+    progress < 0.25
+      ? {x: start.x, y: start.y + 50 * (progress / 0.25)}
+      : {x: start.x, y: start.y + 50 - 250 * ((progress - 0.25) / 0.75)};
+  await driver.play(path(at, {durationMs: 900, hz: 60, restMs: 150}));
+  await waitForContentRest(content);
+  await frames(page, 3);
+  expect(await isBusy(content)).toBe(true);
+  expect(await shownPull(content)).toBeCloseTo(HEIGHT, 1);
+  expect(
+    await page.evaluate(
+      () => (window as unknown as {__copyLaid: boolean}).__copyLaid,
+    ),
+    'a copy faded over a list that did not move',
+  ).toBe(false);
+});
+
 test('under Reduce Motion a release cross-fades onto the inset: opacity only, within 200 ms', async ({
   page,
 }) => {
