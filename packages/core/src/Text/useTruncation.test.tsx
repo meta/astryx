@@ -269,6 +269,73 @@ describe('useTruncation', () => {
       }
     });
 
+    it('drops the answer it kept when other text replaces the expanded text', async () => {
+      const restore = stubHeights();
+      // An observer that sends nothing: the second text waits for a first
+      // notification that this case never sends.
+      vi.stubGlobal(
+        'ResizeObserver',
+        class {
+          observe() {}
+          unobserve() {}
+          disconnect() {}
+        },
+      );
+      const {observeResize} = await import('../utils/sharedResizeObserver');
+      function Swapping({
+        isExpanded,
+        textKey,
+        height,
+      }: {
+        isExpanded: boolean;
+        textKey: string;
+        height: number;
+      }) {
+        const truncation = useTruncation({maxLines: 2, isExpanded});
+        const {ref} = truncation;
+        // The first text has another subscriber, so its first measurement
+        // runs in a microtask.
+        const attach = useCallback(
+          (element: HTMLElement | null) => {
+            if (element?.dataset.key === 'a') {
+              observeResize(element, () => {});
+            }
+            ref(element);
+          },
+          [ref],
+        );
+        return (
+          <>
+            <span
+              key={textKey}
+              data-key={textKey}
+              ref={attach}
+              data-height={height}>
+              text
+            </span>
+            <output data-testid="truncated">
+              {String(truncation.isTruncated)}
+            </output>
+          </>
+        );
+      }
+      try {
+        const {rerender} = render(
+          <Swapping isExpanded={false} textKey="a" height={120} />,
+        );
+        await act(async () => {});
+        expect(screen.getByTestId('truncated')).toHaveTextContent('true');
+        rerender(<Swapping isExpanded={true} textKey="a" height={48} />);
+        // Other text, clamped, before anything measures it: the kept answer
+        // was about the text that went, so the new text starts from none.
+        rerender(<Swapping isExpanded={false} textKey="b" height={40} />);
+        expect(screen.getByTestId('truncated')).toHaveTextContent('false');
+      } finally {
+        restore();
+        vi.unstubAllGlobals();
+      }
+    });
+
     it('keeps its clamped answer while the text is shown in full, and measures again after', async () => {
       const restore = stubHeights();
       try {

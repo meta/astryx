@@ -874,6 +874,39 @@ test("a pinch on a zoomable gallery's caption still zooms the page", async ({
   expect((await g.photo()).scale).toBe(1);
 });
 
+test('a short caption after a page with its caption open shows whole, with no "more"', async ({
+  page,
+}) => {
+  await page.setViewportSize({width: 390, height: 844});
+  const g = await openGallery(page, {
+    story: 'core-lightbox--gallery-with-captions',
+    trigger: 'Open gallery with captions',
+  });
+  const more = g.dialog.getByRole('button', {name: 'more'});
+  const m = await more.boundingBox();
+  if (m == null) {
+    throw new Error('no more button');
+  }
+  await g.driver.tap({x: m.x + m.width / 2, y: m.y + m.height / 2});
+  await expect(g.dialog.getByRole('button', {name: 'less'})).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  );
+  const mid = {x: g.box.x + g.box.width * 0.8, y: g.box.y + g.box.height / 3};
+  await g.driver.play(slowDrag(mid, -g.box.width * 0.6));
+  await waitForRest(g.track);
+  expect(await g.counter()).toBe('2 / 4');
+  await frames(page, 4);
+  // The second caption fits its two lines, so it has no toggle and no
+  // ellipsis.
+  await expect(more).toHaveCount(0);
+  const cut = await g.dialog
+    .locator('[data-current] [data-lightbox-caption] .astryx-text')
+    .first()
+    .evaluate(el => el.scrollHeight > el.clientHeight + 1);
+  expect(cut).toBe(false);
+});
+
 test("a pinch on a gallery's open caption still zooms the page", async ({
   page,
   browserName,
