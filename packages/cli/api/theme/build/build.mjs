@@ -100,7 +100,10 @@ import {
   formatFontLoadingHelp,
 } from './font-warning.mjs';
 import {interceptCore} from './core-interception.mjs';
-import {installCommandFor} from '../../../foundation/discovery/template-needs.mjs';
+import {
+  installCommandFor,
+  parsedSpecifiers,
+} from '../../../foundation/discovery/template-needs.mjs';
 import {generateFamilyCSS, resolveThemeFamily} from './family.mjs';
 import {resolveIconImports} from './icon-imports.mjs';
 
@@ -690,12 +693,15 @@ function generatedHeader(sourceFile, lang = 'js', command, versions) {
  * the header and all real content — is compared verbatim. Used only by
  * `--check`: a differing command must NOT report a file as stale, but any real
  * content drift must. The `CLI:`/`Core:` provenance lines are deterministic
- * for a given toolchain, so they compare verbatim like real content.
+ * for a given toolchain, so they compare verbatim like real content. CRLF
+ * line endings read as LF.
  * @param {string} content
  * @returns {string}
  */
 export function normalizeThemeBuildForCompare(content) {
+  // A checkout may turn line endings into CRLF; the text is the same.
   return content
+    .replace(/\r\n/g, '\n')
     .split('\n')
     .filter(line => {
       const t = line.replace(/^\s*\*?\s?/, '');
@@ -911,6 +917,50 @@ function themeFilesIn(dir) {
   } catch {
     return [];
   }
+}
+
+/**
+ * The files a theme source is made of: the source and every local file it
+ * imports, directly or through other local files, read from their import
+ * statements. A watch rebuilds when any of them changes. Package imports and
+ * files that cannot be read are left out.
+ * @param {string} filePath absolute theme source
+ * @returns {string[]} absolute paths, the source first
+ */
+export function themeSourceFiles(filePath) {
+  const seen = new Set([path.resolve(filePath)]);
+  const queue = [path.resolve(filePath)];
+  while (queue.length > 0 && seen.size < 500) {
+    const file = /** @type {string} */ (queue.shift());
+    let source;
+    try {
+      source = fs.readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    for (const spec of parsedSpecifiers(source)) {
+      // Only relative and absolute imports are the theme's own files. A bare
+      // specifier names a package, which a workspace link can resolve to a
+      // real path outside node_modules.
+      if (!spec.startsWith('.') && !path.isAbsolute(spec)) continue;
+      // Resolved as the build resolves it.
+      let target;
+      try {
+        target = path.resolve(resolveThemeModule(spec, file));
+      } catch {
+        continue;
+      }
+      if (
+        target.split(path.sep).includes('node_modules') ||
+        seen.has(target) ||
+        !fs.existsSync(target)
+      )
+        continue;
+      seen.add(target);
+      queue.push(target);
+    }
+  }
+  return [...seen];
 }
 
 /**
