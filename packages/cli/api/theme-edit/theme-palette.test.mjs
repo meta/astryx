@@ -3364,8 +3364,8 @@ describe('parts35: one padding model', () => {
     await themeEditUndo('p', {cwd, thing: 'padding', on: 'clickable-card'});
   });
 
-  it('takes one length with a unit as the chat composer padding', async () => {
-    for (const value of ['4px 8px', '0', 'inherit'])
+  it('takes one length as the chat composer padding, a variable or math too', async () => {
+    for (const value of ['4px 8px', '0', 'inherit', '50%', '12'])
       expect(
         (
           await refusal(() =>
@@ -3374,9 +3374,28 @@ describe('parts35: one padding model', () => {
         ).code,
         value,
       ).toBe('ERR_THEME_BAD_VALUE');
-    const zero = await refusal(() =>
-      themeEditSet('p', 'padding', '0', {cwd, on: 'chat-composer'}),
+    const twelve = await refusal(() =>
+      themeEditSet('p', 'padding', '12', {cwd, on: 'chat-composer'}),
     );
-    expect(zero.run[0]).toMatch(/padding 0px --on chat-composer$/);
+    expect(twelve.run[0]).toMatch(/padding 12px --on chat-composer$/);
+    for (const value of [
+      'var(--spacing-3)',
+      'calc(var(--spacing-2) + 2px)',
+      'max(4px, 1vw)',
+      'clamp(4px, 1vw, 12px)',
+      'min(8px, var(--spacing-3))',
+    ]) {
+      await themeEditSet('p', 'padding', value, {cwd, on: 'chat-composer'});
+      await themeEditUndo('p', {cwd, thing: 'padding', on: 'chat-composer'});
+    }
+    const keeps = await refusal(() =>
+      themeEditSet('p', 'padding', 'var(--spacing-2) var(--spacing-3)', {
+        cwd,
+        on: 'chat-composer',
+      }),
+    );
+    expect(keeps.run[0]).toMatch(
+      /padding 'var\(--spacing-2\)' --on chat-composer$/,
+    );
   });
 });

@@ -324,6 +324,25 @@ function valueMeant(type, value) {
   return [...new Set(out)].filter(x => x && x !== value.trim());
 }
 
+/**
+ * Whether a value is one length that works inside calc(): a length with a
+ * unit, a variable (with a fallback that is one too), or calc(), min(),
+ * max() or clamp() giving a length; never several values, a bare number
+ * (calc() cannot add one to a length, 0 included), a percentage or a
+ * keyword.
+ * @param {string} v
+ * @returns {boolean}
+ */
+function oneLength(v) {
+  const t = v.trim();
+  if (splitTop(t, ' ').length !== 1) return false;
+  const ref = /^var\(\s*--[a-z0-9-]+\s*(?:,(.*))?\)$/i.exec(t);
+  if (ref) return ref[1] == null || oneLength(ref[1]);
+  if (MATH_FUNCTION.test(t)) return matchType('length', t) != null;
+  const n = cssNumber(t);
+  return !!n && !!n.unit && n.unit !== '%';
+}
+
 /** The size units a typo is read against. */
 const SIZE_UNITS = ['px', 'rem', 'em', '%', 'vh', 'vw', 'ch'];
 
@@ -3050,19 +3069,26 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       const side = /^padding-/.test(prop);
       const density = prop === 'padding' && /^density:/.test(s.when ?? '');
       // Core reads the composer's padding inside calc() (the send button's
-      // radius, the status row): one length with a unit is all it takes.
-      if (prop === 'padding' && !density) {
-        const n = cssNumber(v.trim());
-        if (!n || !n.unit || n.unit === '%')
-          refuse(
-            E.ERR_THEME_BAD_VALUE,
-            `${s.on} reads its padding inside calc() (the send button's corners, the status row), where only one length with a unit works, not "${v.trim()}".`,
-            {
-              run: [
-                `${P} set ${slug} padding ${quoteCommandArgument(n && !n.unit ? `${n.value}px` : '12px')} --on ${s.on}`,
-              ],
-            },
-          );
+      // radius, the status row), as its own default var(--spacing-3) is:
+      // one length works there, whether a length, a variable, or calc(),
+      // min(), max() or clamp() giving one.
+      if (prop === 'padding' && !density && !oneLength(v)) {
+        const first = splitTop(v.trim(), ' ')[0] ?? '';
+        const n = cssNumber(first);
+        const fix = oneLength(first)
+          ? first
+          : n && !n.unit
+            ? `${n.value}px`
+            : '12px';
+        refuse(
+          E.ERR_THEME_BAD_VALUE,
+          `${s.on} reads its padding inside calc() (the send button's corners, the status row), where only one length works: a length, a variable, or calc(), min(), max() or clamp() giving one; not "${v.trim()}".`,
+          {
+            run: [
+              `${P} set ${slug} padding ${quoteCommandArgument(fix)} --on ${s.on}`,
+            ],
+          },
+        );
       }
       if (surface || side || density)
         refuse(
