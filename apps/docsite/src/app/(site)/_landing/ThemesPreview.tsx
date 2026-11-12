@@ -29,7 +29,8 @@ const butterTheme = themeObjects['@astryxdesign/theme-butter'];
 // same source of truth the /themes page feeds ThemeShowcaseStore, so this card
 // stays in sync with the themes page.
 // The card shows the store at about a third of its size, so its photos are
-// 90 px or less. These 320 px WebP copies replace the 704 px PNGs.
+// about 100 px wide. These 320 px WebP copies are sharp at 3x pixel density
+// and replace the 704 px PNGs.
 const butterContent = {
   ...getThemeShowcaseContent('butter'),
   images: {

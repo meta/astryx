@@ -96,8 +96,9 @@ const REEL_THEMES: ReadonlyArray<string> = [
 ];
 
 // Per-theme card content, keyed by theme name (or the ASTRYX sentinel).
-// The photos are WebP copies of the theme product PNGs, at most 768 px wide.
-// That width is sharp on the largest card at 3x pixel density.
+// The photos are WebP copies of the theme product PNGs, at most 960 px wide.
+// The largest card draws a photo at about 315 px, so 960 px is sharp at 3x
+// pixel density. A PNG that is narrower than 960 px keeps its own width.
 const CONTENT_BY_THEME: Record<string, HeroThemeContent> = {
   [ASTRYX]: {
     // Product photos reuse the Neutral theme's image set (watch / headphones /
