@@ -378,14 +378,13 @@ Outside interaction is not coordinated by the shared stack. Current paths
 close their own layers independently:
 
 - auto popovers use native light dismiss;
-- BaseTypeahead's list, DateInput's calendar, DateTimeInput's time list and
-  ChatComposerInput's trigger menu, manual popovers, use Layer's outside-press
-  watch,
+- BaseTypeahead's list, DateInput's calendar, DateTimeInput's time list,
+  ChatComposerInput's trigger menu and ContextMenu's menu, manual popovers,
+  use Layer's outside-press watch,
   which closes on a press that starts and ends outside the field and the list
-  and forgets a cancelled press (a scroll);
+  and forgets a cancelled press (a scroll); ContextMenu's menu judges the
+  press types it names at their `mousedown` (`pressTypes`);
 - native dialogs handle backdrop clicks locally;
-- ContextMenu uses a local outside `mousedown` listener, which skips the
-  compatibility mouse events of the finger press that opened the menu;
 - Tooltip and HoverCard use hover/focus loss plus a touch-only outside listener;
 - sheets own scrim and swipe behavior; and
 - dropdown submenus encode their root-close relationship locally through
@@ -393,7 +392,7 @@ close their own layers independently:
 
 One fact joins these paths, for a modal host's backdrop press
 (`family:overlay-dismissal` FR11). The outside-press watch, the touch-only
-outside listener, the text fields' blur closes, ContextMenu's `mousedown` close,
+outside listener, the text fields' blur closes,
 and a held Tooltip's focus-out release each record their close in a
 per-document count. A Dialog or Drawer backdrop press that sees the count
 change, or an auto popover close, between its pointer-down and its click leaves
