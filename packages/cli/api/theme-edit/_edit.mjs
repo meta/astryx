@@ -73,6 +73,8 @@ import {
   refuseThemeParse,
   ownSourceTokens,
   ownSourceTokenValues,
+  freeThemeName,
+  usableNewName,
 } from './_settings.mjs';
 import {checkSetting, exampleOf, storedProblems} from './_check.mjs';
 import {MODAL} from './_compiler.mjs';
@@ -253,14 +255,21 @@ export async function themeEditNew(name, options = {}) {
   // in other letters is the one meant, installed or not (its refusal then
   // offers the install, or the same new on no base).
   const have = LIKE.filter(b => baseInstalled(cwd, b));
+  // `@astryxdesign/theme-butter`, `theme-butter`, `Butter`: butter.
+  const baseName = (/** @type {unknown} */ v) =>
+    String(v)
+      .trim()
+      .toLowerCase()
+      .replace(/^@astryxdesign\/theme-/, '')
+      .replace(/^theme-/, '');
   const likeFixed =
     like == null
       ? options.like === 'none'
         ? 'none'
         : undefined
-      : LIKE.includes(String(like).toLowerCase())
-        ? String(like).toLowerCase()
-        : (nearest(String(like).toLowerCase(), have)[0] ?? null);
+      : LIKE.includes(baseName(like))
+        ? baseName(like)
+        : (nearest(baseName(like), have)[0] ?? null);
   const again = (
     /** @type {string} */ newName,
     /** @type {string | null | undefined} */ likeValue = likeFixed,
@@ -361,7 +370,14 @@ export async function themeEditNew(name, options = {}) {
         // The built-in theme it names in another case, or the nearest
         // installed one, else none: the did-you-mean and the run agree.
         didYouMean: likeFixed ? [likeFixed] : [],
-        run: [again(name, likeFixed ?? null)],
+        // A built-in base that is not installed: install it, then the same
+        // new on it.
+        run: [
+          ...(likeFixed && likeFixed !== 'none' && !have.includes(likeFixed)
+            ? [installLine(cwd, [`@astryxdesign/theme-${likeFixed}`])]
+            : []),
+          again(name, likeFixed ?? null),
+        ],
       },
     );
   const ctx = await context(cwd);
@@ -799,36 +815,6 @@ function refuseStoredTokens(ctx, slug, data, skip) {
       ],
     },
   );
-}
-
-/**
- * A name `new` takes, for a suggestion: `name` itself when it is valid, not a
- * built-in theme and its folder is free; `my-<name>` for a built-in theme's
- * name; else the first free numbered name.
- * @param {string} cwd
- * @param {string} name
- */
-function usableNewName(cwd, name) {
-  const base = LIKE.includes(name) ? `my-${name}` : name;
-  return slugOk(base) && !fs.existsSync(themeFiles(cwd, base).dir)
-    ? base
-    : freeThemeName(cwd, base);
-}
-
-/**
- * A theme name near `name` that is valid and whose folder is free: `name-2`,
- * `name-3`, …, shortened to fit the name's length limit.
- * @param {string} cwd
- * @param {string} name
- */
-function freeThemeName(cwd, name) {
-  for (let n = 2; n < 1000; n += 1) {
-    const suffix = `-${n}`;
-    const candidate = `${name.slice(0, 64 - suffix.length).replace(/-+$/, '')}${suffix}`;
-    if (slugOk(candidate) && !fs.existsSync(themeFiles(cwd, candidate).dir))
-      return candidate;
-  }
-  return '<another name>';
 }
 
 /**

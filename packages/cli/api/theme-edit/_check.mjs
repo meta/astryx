@@ -14,7 +14,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {partForWord} from './_how-question.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
-import {baseInstalled, baseThemeFile} from './_project.mjs';
+import {baseInstalled, baseThemeFile, installLine} from './_project.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {
   withFallbacks,
@@ -2701,7 +2701,9 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         const meant = v
           .toLowerCase()
           .replace(/^base\s*[=:]\s*/, '')
-          .trim();
+          .trim()
+          .replace(/^@astryxdesign\/theme-/, '')
+          .replace(/^theme-/, '');
         // Only a base this project has installed is suggested; a theme
         // made here is never a base.
         const bases = [
@@ -2710,7 +2712,16 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         ];
         // The base named in other letters is the one meant; a guess is
         // only among installed bases.
-        const near = bases.includes(meant) ? [meant] : nearest(meant, bases);
+        const near =
+          bases.includes(meant) || LIKE.includes(meant)
+            ? [meant]
+            : nearest(meant, bases);
+        // A built-in base named that is not installed: install it, then the
+        // same set.
+        const install =
+          LIKE.includes(meant) && !baseInstalled(ctx.project, meant)
+            ? [installLine(ctx.project.cwd, [`@astryxdesign/theme-${meant}`])]
+            : [];
         const madeHere = fs.existsSync(themeFiles(ctx.project.cwd, v).settings);
         refuse(
           E.ERR_THEME_BAD_VALUE,
@@ -2719,7 +2730,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
             didYouMean: near,
             // With nothing near, every base that works here, none first.
             run: near[0]
-              ? [`${P} set ${slug} base ${near[0]}`]
+              ? [...install, `${P} set ${slug} base ${near[0]}`]
               : [
                   'none',
                   ...LIKE.filter(b => baseInstalled(ctx.project, b)),

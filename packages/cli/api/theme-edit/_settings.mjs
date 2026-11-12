@@ -191,6 +191,36 @@ export function themeFiles(cwd, slug) {
 }
 
 /**
+ * A name `new` takes, for a suggestion: `name` itself when it is valid, not a
+ * built-in theme and its folder is free; `my-<name>` for a built-in theme's
+ * name; else the first free numbered name.
+ * @param {string} cwd
+ * @param {string} name
+ */
+export function usableNewName(cwd, name) {
+  const base = LIKE.includes(name) ? `my-${name}` : name;
+  return slugOk(base) && !fs.existsSync(themeFiles(cwd, base).dir)
+    ? base
+    : freeThemeName(cwd, base);
+}
+
+/**
+ * A theme name near `name` that is valid and whose folder is free: `name-2`,
+ * `name-3`, …, shortened to fit the name's length limit.
+ * @param {string} cwd
+ * @param {string} name
+ */
+export function freeThemeName(cwd, name) {
+  for (let n = 2; n < 1000; n += 1) {
+    const suffix = `-${n}`;
+    const candidate = `${name.slice(0, 64 - suffix.length).replace(/-+$/, '')}${suffix}`;
+    if (slugOk(candidate) && !fs.existsSync(themeFiles(cwd, candidate).dir))
+      return candidate;
+  }
+  return '<another name>';
+}
+
+/**
  * Why the editor cannot read one of its files, or null when it can (or the
  * file is not there): a folder in the file's place, or no permission to read
  * it. Bad content is a different problem, judged where the file is parsed.
@@ -524,7 +554,12 @@ export function loadTheme(
         `${other ? `${other[1]} is a theme the editor did not make (written by hand, or ejected)` : `${slug} is a built-in theme`}, so the editor does not change it. Make an editor theme with its own name instead${LIKE.includes(slug) ? `, on top of ${slug}` : ''}.`,
         {
           run: [
-            `${P} new my-${slug}${LIKE.includes(slug) ? ` --like ${slug}` : ''}`,
+            // The user's own theme on that base, when there is one, then a
+            // free valid name for a new one.
+            ...(fs.existsSync(themeFiles(cwd, `my-${slug}`).settings)
+              ? [`${P} show my-${slug}`]
+              : []),
+            `${P} new ${usableNewName(cwd, `my-${slug}`)}${LIKE.includes(slug) ? ` --like ${slug}` : ''}`,
           ],
         },
       );

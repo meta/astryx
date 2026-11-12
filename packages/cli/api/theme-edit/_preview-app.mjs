@@ -34,6 +34,7 @@ import {
   shown,
   staleBuild,
   themeFiles,
+  usableNewName,
   windowsReserved,
 } from './_settings.mjs';
 import {
@@ -3429,7 +3430,7 @@ function wornTheme(cwd, slug, again, without) {
                   `${installLine(cwd, [`@astryxdesign/theme-${name}`])}  # then a theme of your own can start from it`,
                 ]
               : []),
-            `${EDITOR} new my-${name} --like ${name}  # a theme of your own that starts from it`,
+            `${EDITOR} new ${usableNewName(cwd, `my-${name}`)} --like ${name}  # a theme of your own that starts from it`,
           ],
         },
       );

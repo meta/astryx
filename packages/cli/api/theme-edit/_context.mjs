@@ -57,8 +57,8 @@ export function requireProject(cwd) {
   const app = coreApp(cwd);
   if (!app) refuseNoApp(cwd);
   // Yarn Plug'n'Play has no node_modules for the editor to read Core from:
-  // checked at the app folder, from any folder of it.
-  if (fs.existsSync(path.join(app, '.pnp.cjs')))
+  // its .pnp.cjs sits at the app or at the workspace root above it.
+  if (pnpAbove(app))
     throw new AstryxError(
       "This app uses Yarn Plug'n'Play, which astryx experimental theme does not support: it reads the installed Core from node_modules. Set `nodeLinker: node-modules` in .yarnrc.yml and run yarn install. Nothing was written.",
       [
@@ -171,6 +171,22 @@ export function coreApp(cwd) {
 }
 
 /**
+ * Whether a Yarn Plug'n'Play loader (.pnp.cjs) is at the app folder or above
+ * it, up to its workspace root (or, outside a workspace, the repository
+ * root).
+ * @param {string} app
+ */
+function pnpAbove(app) {
+  const root = workspaceRoot(app);
+  for (let dir = app; ; dir = path.dirname(dir)) {
+    if (fs.existsSync(path.join(dir, '.pnp.cjs'))) return true;
+    if (dir === root || (!root && fs.existsSync(path.join(dir, '.git'))))
+      return false;
+    if (path.dirname(dir) === dir) return false;
+  }
+}
+
+/**
  * The installed Core a folder reads: the nearest node_modules at or above
  * it that holds @astryxdesign/core, or null.
  * @param {string} from
@@ -213,6 +229,26 @@ function homeDir() {
  */
 function refuseNoApp(cwd) {
   const start = path.resolve(cwd);
+  // A repository inside a home-folder app (a submodule, a vendored clone) is
+  // its own project: name the app above instead of claiming there is none.
+  const home = homeDir();
+  if (
+    home &&
+    !path.relative(home, start).startsWith('..') &&
+    usesCore(readJson(path.join(home, 'package.json')))
+  ) {
+    const rel = path.relative(start, home) || '.';
+    throw new AstryxError(
+      `This folder is inside its own repository, below the app at ${rel} (your home folder): the theme editor does not reach out of a repository into an app around it. Run the command from the app. Nothing was written.`,
+      [
+        {
+          name: `cd ${quoteCommandArgument(rel)}`,
+          reason: 'run the command from the app',
+        },
+      ],
+      E.ERR_PROJECT_REQUIRED,
+    );
+  }
   // Where Core resolves from: the nearest node_modules above that holds it.
   const resolved = coreDirFrom(start);
   const root = workspaceRoot(start);
