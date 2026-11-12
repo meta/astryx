@@ -7,7 +7,8 @@
  * @input A layer root, what ends its hold (a promise or an animator handle),
  *   and the hold's scope
  * @output holdInput, holdsTouch, isInHeldLayer and isInputShield: input held
- *   away from a layer while it presents or dismisses
+ *   away from a layer while it presents or dismisses, or while it dismisses
+ *   with focus kept inside
  * @position The Layer module's one input hold, for components whose layer
  *   presents under a finger
  *
@@ -28,6 +29,7 @@ import {
   type MousePoint,
 } from '../utils/inputStream';
 import {isDocument, isElement, isHTMLElement, isNode} from '../utils/nodeType';
+import {observeMutations} from '../utils/sharedMutationObserver';
 import {realmValue, sharedKey} from '../utils/sharedRealm';
 
 /**
@@ -50,6 +52,16 @@ export interface InputHoldOptions {
    * while a non-modal layer presents.
    */
   scope: InputHoldScope;
+  /**
+   * What a `'layer'` hold does with focus inside the layer. `'blur'` (the
+   * default) makes the content inert at once and moves focus out.
+   * `'kept-inside'` keeps the page live: no shield and no press hold, and
+   * the layer lets every pointer through. While focus stays inside, the
+   * content stays exposed, and no click and no key but Tab reaches it. When
+   * focus leaves, or when it was not inside, the layer itself becomes
+   * `inert` and `aria-hidden` until the hold ends.
+   */
+  focus?: 'blur' | 'kept-inside';
 }
 
 interface HeldLayer {
@@ -418,8 +430,11 @@ function openToEarlierPresses(state: HeldLayer, doc: Document): void {
  */
 export function holdInput(
   layer: Element,
-  {until, scope}: InputHoldOptions,
+  {until, scope, focus = 'blur'}: InputHoldOptions,
 ): () => void {
+  if (scope === 'layer' && focus === 'kept-inside') {
+    return holdKeptInside(layer, until);
+  }
   let state = held.get(layer);
   if (state == null) {
     state = {
@@ -500,6 +515,123 @@ export function holdInput(
       }
       held.delete(layer);
       stopHolding(layer);
+    }
+  };
+  const end = 'finished' in until ? until.finished : until;
+  void Promise.resolve(end).then(release, release);
+  return release;
+}
+
+/** The keys a dismissing layer that keeps focus lets through. */
+const KEPT_INSIDE_KEYS: ReadonlySet<string> = new Set(['Tab']);
+
+/**
+ * A dismissal hold that keeps the page live and keeps focus where it is. The
+ * layer lets every pointer through, so a tap reaches what is beneath it.
+ * While focus stays inside, the content stays exposed, and the shared input
+ * stream stops every click and every key but Tab that targets the layer.
+ * When focus leaves (moved, or dropped because the focused element was
+ * removed, disabled, hidden or made inert), or when it was not inside, the
+ * layer becomes `inert` and `aria-hidden` until the hold ends.
+ */
+function holdKeptInside(layer: Element, until: InputHoldEnd): () => void {
+  const doc = layer.ownerDocument;
+  const view = doc.defaultView;
+  const style = isHTMLElement(layer) ? layer.style : null;
+  const previousPointerEvents = style?.pointerEvents ?? '';
+  if (style != null) {
+    style.pointerEvents = 'none';
+  }
+  const wasInert = layer.hasAttribute('inert');
+  const previousAriaHidden = layer.getAttribute('aria-hidden');
+  let isInert = false;
+  const stops: (() => void)[] = [];
+
+  const hasFocusInside = () => {
+    const focused = deepActiveElement(doc);
+    return focused != null && containsAlongFlatTree(layer, focused);
+  };
+  const stopWatching = () => {
+    for (const stop of stops.splice(0)) {
+      stop();
+    }
+  };
+  const makeInert = () => {
+    if (isInert) {
+      return;
+    }
+    isInert = true;
+    stopWatching();
+    layer.setAttribute('inert', '');
+    layer.setAttribute('aria-hidden', 'true');
+  };
+
+  if (!hasFocusInside() || view == null) {
+    makeInert();
+  } else {
+    const isInLayer = (event: Event) =>
+      isNode(event.target) && containsAlongFlatTree(layer, event.target);
+    const stopActivation = (event: Event) => {
+      if (isInLayer(event)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+    };
+    const stopKey = (event: KeyboardEvent) => {
+      if (!KEPT_INSIDE_KEYS.has(event.key)) {
+        stopActivation(event);
+      }
+    };
+    stops.push(
+      subscribeInput(view, 'click', stopActivation, {
+        cancels: true,
+        first: true,
+      }),
+      subscribeInput(view, 'keydown', stopKey, {cancels: true, first: true}),
+      subscribeInput(view, 'keyup', stopKey, {cancels: true, first: true}),
+    );
+    const makeInertIfFocusLeft = () => {
+      if (!hasFocusInside()) {
+        makeInert();
+      }
+    };
+    // Read after the event, when focus has landed. A browser sends no
+    // `focusout` for a removed element, so a subtree change is read too.
+    const onFocusOut = () => queueMicrotask(makeInertIfFocusLeft);
+    layer.addEventListener('focusout', onFocusOut);
+    stops.push(() => layer.removeEventListener('focusout', onFocusOut));
+    stops.push(
+      observeMutations(
+        layer,
+        {
+          childList: true,
+          subtree: true,
+          attributeFilter: ['disabled', 'hidden', 'inert'],
+        },
+        makeInertIfFocusLeft,
+      ),
+    );
+  }
+
+  let isReleased = false;
+  const release = () => {
+    if (isReleased) {
+      return;
+    }
+    isReleased = true;
+    stopWatching();
+    if (style != null) {
+      style.pointerEvents = previousPointerEvents;
+    }
+    if (isInert) {
+      if (!wasInert) {
+        layer.removeAttribute('inert');
+      }
+      if (previousAriaHidden == null) {
+        layer.removeAttribute('aria-hidden');
+      } else {
+        layer.setAttribute('aria-hidden', previousAriaHidden);
+      }
     }
   };
   const end = 'finished' in until ? until.finished : until;

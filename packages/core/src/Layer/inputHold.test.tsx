@@ -9,6 +9,7 @@ import {
   onTestFinished,
   vi,
 } from 'vitest';
+import {act} from '@testing-library/react';
 import {GestureHost} from '../gestures/GestureHost';
 import {subscribeInput} from '../utils/inputStream';
 import {
@@ -900,5 +901,133 @@ describe("holdInput decides by each event's pointer (spec:AST-094 FR35)", () => 
     const {button, reached} = recorder();
     tap(button, 'touch');
     expect(reached).toEqual(['pointerdown', 'pointerup', 'click']);
+  });
+});
+
+describe("holdInput's dismissal that keeps focus inside (component:BottomSheet FR9)", () => {
+  it('keeps the page live: no shield, the layer lets pointers through, and a finger press on the page still acts', async () => {
+    const {layer, child} = mountLayer();
+    const page = document.createElement('button');
+    document.body.append(page);
+    onTestFinished(() => {
+      layer.remove();
+      page.remove();
+    });
+    act(() => child.focus());
+    const end = deferred();
+    holdInput(layer, {
+      until: end.promise,
+      scope: 'layer',
+      focus: 'kept-inside',
+    });
+    expect(layer.style.pointerEvents).toBe('none');
+    expect(isInHeldLayer(child)).toBe(false);
+    expect(
+      document.querySelector('[popover="manual"][aria-hidden="true"]'),
+    ).toBeNull();
+    const onPageClick = vi.fn();
+    page.addEventListener('click', onPageClick);
+    page.dispatchEvent(
+      new PointerEvent('pointerdown', {bubbles: true, pointerType: 'touch'}),
+    );
+    page.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+    expect(onPageClick).toHaveBeenCalledTimes(1);
+    end.resolve();
+    await flush();
+    expect(layer.style.pointerEvents).toBe('');
+  });
+
+  it('keeps focused content exposed and takes no click and no key but Tab while focus stays inside', () => {
+    const {layer, child} = mountLayer();
+    onTestFinished(() => layer.remove());
+    act(() => child.focus());
+    const release = holdInput(layer, {
+      until: new Promise<never>(() => {}),
+      scope: 'layer',
+      focus: 'kept-inside',
+    });
+    expect(layer).not.toHaveAttribute('inert');
+    expect(layer).not.toHaveAttribute('aria-hidden');
+    expect(child).not.toHaveAttribute('inert');
+    expect(child).toHaveFocus();
+    const onClick = vi.fn();
+    const onKey = vi.fn();
+    child.addEventListener('click', onClick);
+    child.addEventListener('keydown', onKey);
+    child.dispatchEvent(
+      new MouseEvent('click', {bubbles: true, cancelable: true}),
+    );
+    const enter = new KeyboardEvent('keydown', {
+      key: 'Enter',
+      bubbles: true,
+      cancelable: true,
+    });
+    child.dispatchEvent(enter);
+    expect(onClick).not.toHaveBeenCalled();
+    expect(onKey).not.toHaveBeenCalled();
+    expect(enter.defaultPrevented).toBe(true);
+    const tab = new KeyboardEvent('keydown', {
+      key: 'Tab',
+      bubbles: true,
+      cancelable: true,
+    });
+    child.dispatchEvent(tab);
+    expect(onKey).toHaveBeenCalledTimes(1);
+    expect(tab.defaultPrevented).toBe(false);
+    release();
+  });
+
+  it('makes the layer itself inert and aria-hidden once focus leaves, and gives both back at the end', async () => {
+    const {layer, child} = mountLayer();
+    const outside = document.createElement('button');
+    document.body.append(outside);
+    onTestFinished(() => {
+      layer.remove();
+      outside.remove();
+    });
+    act(() => child.focus());
+    const end = deferred();
+    holdInput(layer, {
+      until: end.promise,
+      scope: 'layer',
+      focus: 'kept-inside',
+    });
+    act(() => outside.focus());
+    await flush();
+    expect(layer).toHaveAttribute('inert');
+    expect(layer).toHaveAttribute('aria-hidden', 'true');
+    end.resolve();
+    await flush();
+    expect(layer).not.toHaveAttribute('inert');
+    expect(layer).not.toHaveAttribute('aria-hidden');
+  });
+
+  it('makes the layer itself inert and aria-hidden at once when focus was not inside', () => {
+    const {layer} = mountLayer();
+    onTestFinished(() => layer.remove());
+    const release = holdInput(layer, {
+      until: new Promise<never>(() => {}),
+      scope: 'layer',
+      focus: 'kept-inside',
+    });
+    expect(layer).toHaveAttribute('inert');
+    expect(layer).toHaveAttribute('aria-hidden', 'true');
+    release();
+    expect(layer).not.toHaveAttribute('inert');
+  });
+
+  it("leaves a 'blur' dismissal as before: its content inert under a shield, focus moved out", () => {
+    const {layer, child} = mountLayer();
+    onTestFinished(() => layer.remove());
+    act(() => child.focus());
+    const release = holdInput(layer, {
+      until: new Promise<never>(() => {}),
+      scope: 'layer',
+    });
+    expect(child).toHaveAttribute('inert');
+    expect(layer).not.toHaveAttribute('inert');
+    expect(child).not.toHaveFocus();
+    expect(isInHeldLayer(child)).toBe(true);
+    release();
   });
 });
