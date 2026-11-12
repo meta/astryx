@@ -264,7 +264,7 @@ on the form, and those that also take it per field let the field win.
 ### DEC-3 — The name follows the behavior-prop rule
 
 **Reference:** `spec:AST-117/DEC-3`
-**Decider:** pending
+**Decider:** `nynexman4464`, `2026-11-11`
 
 A prop that chooses how a component responds to input is named
 `<thing>Behavior` (`architecture:public-component-api` INV2). The thing is the
