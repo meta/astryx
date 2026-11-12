@@ -18,7 +18,6 @@ import React, {
   useCallback,
   useEffect,
   useId,
-  useInsertionEffect,
   useMemo,
   useRef,
   useState,
@@ -26,6 +25,7 @@ import React, {
   type ReactNode,
   type RefCallback,
 } from 'react';
+import {useCommittedRef, useCommittedRefInto} from '../hooks/useCommittedRef';
 import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {createPortal} from 'react-dom';
@@ -1276,12 +1276,7 @@ function useLayerImplementation(
   const writesEntranceSide =
     mode === 'context' ? (options.writesEntranceSide ?? false) : false;
   const onCloseStart = mode === 'context' ? options.onCloseStart : undefined;
-  const onCloseStartRef = useRef(onCloseStart);
-  // Syncs the hide's close-start callback with the committed one. It runs
-  // before any layout effect in the same commit.
-  useInsertionEffect(() => {
-    onCloseStartRef.current = onCloseStart;
-  });
+  const onCloseStartRef = useCommittedRef(onCloseStart);
   const id = useId();
   const anchorId = `--astryx-layer-${id.replace(/:/g, '')}`;
 
@@ -1835,16 +1830,13 @@ function useLayerImplementation(
     releaseAnchor,
     cancelPendingAnchorWait,
     stopOutsidePanWatch,
+    onCloseStartRef,
   ]);
 
   // A deferred show() replays through a ref so the queued closure reaches the
   // current callback rather than the one captured when it was queued.
   const showRef = useRef(show);
-  // Syncs the replayed show with the committed one. It runs before any
-  // layout effect in the same commit.
-  useInsertionEffect(() => {
-    showRef.current = show;
-  });
+  useCommittedRefInto(showRef, show);
 
   // The open-state geometry observers of a layer that keeps its anchor clear
   // (`observeAnchorClearance`), as their teardown. The open-state layout
@@ -2047,7 +2039,7 @@ function useLayerImplementation(
         removeAnchorName(trigger, anchorId);
       }
     },
-    [anchorId],
+    [anchorId, onCloseStartRef],
   );
 
   const handleToggle = useCallback(
