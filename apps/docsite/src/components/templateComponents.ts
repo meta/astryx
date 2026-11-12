@@ -163,6 +163,10 @@ export const TEMPLATE_COMPONENTS: Record<
     () =>
       import('../../../../packages/cli/assets/templates/pages/payment-form/page'),
   ),
+  'printable-estimate': lazy(
+    () =>
+      import('../../../../packages/cli/assets/templates/pages/printable-estimate/page'),
+  ),
   'product-detail': lazy(
     () =>
       import('../../../../packages/cli/assets/templates/pages/product-detail/page'),
