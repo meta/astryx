@@ -2192,7 +2192,7 @@ export function checkGatherCache() {
     id: 'gather-cache',
     label: 'Search catalog cache',
     status: 'info',
-    message: `search and build keep the catalogs they gather in ${summary.dir} (${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; a catalog is used only while nothing it read has changed, and deleting the folder clears it.`,
+    message: `search, build, component, template, theme and discover keep what they gather (search's catalogs and each integration's check results) in ${summary.dir} (${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, and deleting the folder clears it.`,
   };
 }
 

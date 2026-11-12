@@ -12,9 +12,11 @@
  *   and every environment variable it read are as they were; otherwise it
  *   gathers fresh and stores that.
  * @position Used by search's adapter (api/search/_adapter.mjs) for the
- *   catalog `search` and `build` rank. Catalogs are kept only once the folder
- *   exists: the first search or build on a machine just makes it, so a one-off
- *   run pays nothing to store one. Only a published CLI stores anything:
+ *   catalog `search` and `build` rank, and by the project
+ *   (foundation/config/project.mjs) for each integration's contribution-check
+ *   results, which `component`, `template`, `theme`, `discover` and `search`
+ *   report. Gathers are kept only once the folder exists: the first such run
+ *   on a machine just makes it, so a one-off run pays nothing to store one. Only a published CLI stores anything:
  *   its build id (clients/cli/build-id.generated.json, written at `prepack`)
  *   names its exact code, so a checkout, whose code may change between runs
  *   under the same version, always gathers.
@@ -45,7 +47,14 @@ import {
 } from './read-record.mjs';
 
 /** The run's commands whose gathers are kept. */
-const KEPT_COMMANDS = new Set(['search', 'build']);
+const KEPT_COMMANDS = new Set([
+  'search',
+  'build',
+  'component',
+  'template',
+  'theme',
+  'discover',
+]);
 
 /** Where `prepack` writes the id of the package's exact contents. */
 export const BUILD_ID_FILE = path.join(

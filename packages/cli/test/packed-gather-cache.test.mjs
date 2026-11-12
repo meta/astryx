@@ -113,9 +113,9 @@ const userConfig = () => path.join(work, 'config');
 /**
  * Run the packed CLI with `tmp` as the system temp folder.
  * @param {string[]} args
- * @param {{tmp: string, cwd?: string, env?: Record<string, string>}} options
+ * @param {{tmp: string, cwd?: string, env?: Record<string, string>, json?: boolean}} options
  */
-function run(args, {tmp, cwd = project, env = {}}) {
+function run(args, {tmp, cwd = project, env = {}, json = true}) {
   fs.mkdirSync(tmp, {recursive: true});
   const base = {...process.env};
   delete base.CI;
@@ -124,7 +124,7 @@ function run(args, {tmp, cwd = project, env = {}}) {
     [
       path.join(packed, 'clients', 'cli', 'bin', 'astryx.mjs'),
       ...args,
-      '--json',
+      ...(json ? ['--json'] : []),
     ],
     {
       cwd,
@@ -155,10 +155,10 @@ function run(args, {tmp, cwd = project, env = {}}) {
  * run(), without blocking: the kept and the fresh runs of a query go side by
  * side.
  * @param {string[]} args
- * @param {{tmp: string, cwd?: string, env?: Record<string, string>}} options
+ * @param {{tmp: string, cwd?: string, env?: Record<string, string>, json?: boolean}} options
  * @returns {Promise<{status: number | null, stdout: string, stderr: string}>}
  */
-function runAsync(args, {tmp, cwd = project, env = {}}) {
+function runAsync(args, {tmp, cwd = project, env = {}, json = true}) {
   fs.mkdirSync(tmp, {recursive: true});
   const base = {...process.env};
   delete base.CI;
@@ -168,7 +168,7 @@ function runAsync(args, {tmp, cwd = project, env = {}}) {
       [
         path.join(packed, 'clients', 'cli', 'bin', 'astryx.mjs'),
         ...args,
-        '--json',
+        ...(json ? ['--json'] : []),
       ],
       {
         cwd,
@@ -229,6 +229,39 @@ function derivedEntry(file) {
 }
 
 /**
+ * Whether a kept file holds an integration's contribution-check results (a
+ * list), not a catalog.
+ * @param {string} file
+ * @returns {boolean}
+ */
+function issuesEntry(file) {
+  try {
+    const entry = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return entry.derived !== true && Array.isArray(entry.value);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The integrations' kept contribution-check results in a temp folder's cache
+ * folder.
+ * @param {string} tmp
+ * @returns {Map<string, number>} name to inode
+ */
+function issuesEntries(tmp) {
+  const dir = path.join(tmp, CACHE_NAME);
+  /** @type {Map<string, number>} */
+  const out = new Map();
+  if (!fs.existsSync(dir)) return out;
+  for (const name of fs.readdirSync(dir)) {
+    const file = path.join(dir, name);
+    if (issuesEntry(file)) out.set(name, fs.statSync(file).ino);
+  }
+  return out;
+}
+
+/**
  * The derived values kept in a temp folder's cache folder.
  * @param {string} tmp
  * @returns {string[]}
@@ -252,7 +285,7 @@ function entries(tmp) {
   if (!fs.existsSync(dir)) return out;
   for (const name of fs.readdirSync(dir)) {
     const file = path.join(dir, name);
-    if (derivedEntry(file)) continue;
+    if (derivedEntry(file) || issuesEntry(file)) continue;
     const {ino, mtimeMs} = fs.statSync(file);
     out.set(name, {ino, mtimeMs});
   }
@@ -853,6 +886,47 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
       fs.writeFileSync(query, querySource);
     }
   }, 240_000);
+
+  it("keeps each integration's check results, and checks again after an edit", async () => {
+    const tmp = keptTmp('issues');
+    const other = makeProject();
+    try {
+      const templates = path.join(other.widgets, 'templates');
+      fs.mkdirSync(templates, {recursive: true});
+      const doc = path.join(templates, 'tally.doc.mjs');
+      fs.writeFileSync(
+        doc,
+        `export default {type: 'page', name: 'tally', description: 'Running totals, tallied by team.', category: 'Widget - Tally'};\n`,
+      );
+      fs.writeFileSync(
+        path.join(templates, 'tally.tsx'),
+        `export default function Page() { return null; }\n`,
+      );
+      const ask = ['template', '--list'];
+      const fresh = run(ask, {tmp: freshTmp(), cwd: other.dir, json: false});
+      expect(run(ask, {tmp, cwd: other.dir, json: false})).toEqual(fresh);
+      const kept = issuesEntries(tmp);
+      expect(kept.size).toBe(1);
+      // Read back, not checked again: the same file, and the same answer.
+      expect(run(ask, {tmp, cwd: other.dir, json: false})).toEqual(fresh);
+      expect(issuesEntries(tmp)).toEqual(kept);
+      // A template doc edited in place so that the checks find a problem.
+      fs.writeFileSync(
+        doc,
+        `export default {type: 'page', name: 'tally', description: 42, category: 'Widget - Tally'};\n`,
+      );
+      const [again, edited] = await Promise.all([
+        runAsync(ask, {tmp, cwd: other.dir, json: false}),
+        runAsync(ask, {tmp: freshTmp(), cwd: other.dir, json: false}),
+      ]);
+      // The checks find the problem: a warning names the integration.
+      expect(edited.stderr).toContain('@acme/widgets');
+      expect(fresh.stderr).not.toContain('@acme/widgets');
+      expect(again).toEqual(edited);
+    } finally {
+      fs.rmSync(other.dir, {recursive: true, force: true});
+    }
+  }, 120_000);
 
   it('is skipped silently when its folder cannot be used', () => {
     fs.mkdirSync(path.join(work, 'tmp'), {recursive: true});
