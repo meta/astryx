@@ -16,6 +16,7 @@ import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {baseInstalled, baseThemeFile} from './_project.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {
+  withFallbacks,
   MATH_FUNCTION,
   cssNumber,
   belowRange,
@@ -200,17 +201,55 @@ function matchingParen(text, open) {
 }
 
 /**
- * A text size written another way (20px, 2e1, +20, 1.25rem) as the body size
- * in pixels text-size takes, when it is 10 to 32; else null.
+ * A text size written another way (20px, 2e1, +20, 1.25rem, 125%, `20 px`,
+ * `1,25rem`) as the body size in pixels text-size takes, kept to its 10 to
+ * 32 (a size past an end is that end); null when it reads as no size.
  * @param {string} v
  * @returns {number | null}
  */
 function textSizePx(v) {
-  const m = /^\+?(\d*\.?\d+(?:e[+-]?\d+)?)(px|rem|em)?$/i.exec(v.trim());
+  const m = /^\+?(\d*\.?\d+(?:e[+-]?\d+)?)(px|rem|em|%)?$/i.exec(
+    v
+      .trim()
+      .replace(/\s+/g, '')
+      .replace(/^(\d+),(\d+)/, '$1.$2'),
+  );
   if (!m) return null;
-  const n = Number(m[1]) * (/r?em/i.test(m[2] ?? '') ? 16 : 1);
+  const unit = (m[2] ?? '').toLowerCase();
+  const n =
+    Number(m[1]) * (/r?em/.test(unit) ? 16 : unit === '%' ? 16 / 100 : 1);
   const px = Math.round(n * 100) / 100;
-  return px >= 10 && px <= 32 ? px : null;
+  return Math.max(10, Math.min(32, px));
+}
+
+/** The size units a typo is read against. */
+const SIZE_UNITS = ['px', 'rem', 'em', '%', 'vh', 'vw', 'ch'];
+
+/**
+ * The size meant by a value one slip away from one: a space inside
+ * (`16 px`), a decimal comma (`1,5rem`), a doubled or mistyped unit
+ * (`16pxx`), a dot with no digit after it (`1.px`); null when none reads.
+ * @param {string} v
+ * @param {(x: string) => boolean} ok
+ */
+function sizeMeant(v, ok) {
+  const t = v.trim();
+  const tries = [
+    t.replace(/(\d)\.(?=[a-z%]|$)/gi, '$1'),
+    t.replace(/\s+/g, ''),
+    t.replace(/^([+-]?\d+),(\d+)/, '$1.$2').replace(/\s+/g, ''),
+  ];
+  const m = /^([+-]?\d*\.?\d+)\s*([a-z%]+)$/i.exec(
+    t.replace(/^([+-]?\d+),(\d+)/, '$1.$2'),
+  );
+  if (m) {
+    // A unit typed with a letter too many (pxx, remm, pxs).
+    const unit = [...SIZE_UNITS]
+      .sort((a, b) => b.length - a.length)
+      .find(u => m[2].toLowerCase().startsWith(u));
+    if (unit) tries.push(`${m[1]}${unit}`);
+  }
+  return tries.find(x => x !== t && ok(x)) ?? null;
 }
 
 /**
@@ -357,6 +396,22 @@ export function storedProblems(ctx, slug, data, skip = '') {
       return null;
     })();
     if (problem) found.push(problem);
+  }
+  // A font dial is checked as set checks it (a CSS keyword, a size or a
+  // whole CSS font value is no family).
+  for (const s of data.settings) {
+    if (s.source !== 'dial' || s.thing !== 'font' || s.thing === skip) continue;
+    try {
+      checkSetting(ctx, slug, data, 'font', s.value, {on: s.on});
+    } catch (e) {
+      found.push({
+        setting: s,
+        why:
+          e instanceof Error
+            ? e.message.replace(/ Nothing was changed\.$/, '')
+            : String(e),
+      });
+    }
   }
   for (const s of data.settings) {
     if (s.source !== 'token' || s.thing === skip || !(s.thing in TOKENS))
@@ -558,13 +613,14 @@ function checkTypedValue(
       : /^\d*\.?\d+[a-z%]+$/i.test(plain) && plain !== value.trim()
         ? plain
         : null;
+    const slip = sizeMeant(value, x => isSize(x, name));
     bad(
       'a size',
       meant !== value.trim() && isSize(meant, name)
         ? meant
         : px && isSize(px, name)
           ? px
-          : '6px',
+          : (slip ?? '6px'),
     );
   }
   // A percentage reaches every property that reads the token; one that
@@ -812,6 +868,14 @@ function propertyProblem(prop, value) {
   const v = value.trim();
   const known = propertyGrammar(prop);
   if (!known || COLOR_PROPS.test(prop)) return null;
+  // Each var() fallback is what shows when its variable is unset: the
+  // value with the fallbacks in place must be one the property takes too.
+  const unset = withFallbacks(v);
+  if (unset != null && matchValue(prop, v) && !matchValue(prop, unset))
+    return {
+      takes: `a value its CSS grammar takes in each var() fallback too (${grammarText(known)})`,
+      near: initialOf(prop),
+    };
   if (matchValue(prop, v))
     return belowRange(prop, v)
       ? {

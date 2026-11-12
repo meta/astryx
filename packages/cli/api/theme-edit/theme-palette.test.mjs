@@ -2665,3 +2665,57 @@ describe('hunt22', () => {
     fs.rmSync(path.join(cwd, 'themes', 'h22'), {recursive: true, force: true});
   });
 });
+
+describe('colors19', () => {
+  it('checks each var() fallback in a part value against the property', async () => {
+    for (const [prop, value, on] of [
+      ['padding', 'var(--nope, red)', 'card'],
+      ['font-weight', 'calc(var(--nope, 1px))', 'text'],
+    ])
+      expect(
+        (await refusal(() => themeEditSet('p', prop, value, {cwd, on}))).code,
+        `${prop} ${value}`,
+      ).toBe('ERR_THEME_BAD_VALUE');
+    await themeEditSet('p', 'padding', 'var(--nope, 4px)', {cwd, on: 'card'});
+    await themeEditUndo('p', {cwd, thing: 'padding', on: 'card'});
+  });
+
+  it('suggests the size meant, and the nearest text size', async () => {
+    for (const [value, want] of [
+      ['16 px', '16px'],
+      ['1,5rem', '1.5rem'],
+      ['16pxx', '16px'],
+    ]) {
+      const r = await refusal(() =>
+        themeEditSet('p', '--font-size-base', value, {cwd}),
+      );
+      expect(r.run[0], value).toMatch(
+        new RegExp(`--font-size-base ${want.replace('.', '\\.')}$`),
+      );
+    }
+    for (const [value, want] of [
+      ['20 px', '20'],
+      ['125%', '20'],
+      ['40', '32'],
+      ['3px', '10'],
+    ]) {
+      const r = await refusal(() =>
+        themeEditSet('p', 'text-size', value, {cwd}),
+      );
+      expect(r.run[0], value).toMatch(new RegExp(` text-size ${want}$`));
+    }
+  });
+
+  it('reports a hand-edited font dial set would refuse, and never builds it', async () => {
+    await themeEditNew('f19', {cwd});
+    await themeEditSet('f19', 'font', 'georgia', {cwd});
+    const file = path.join(cwd, 'themes', 'f19', 'f19.settings.json');
+    const saved = fs.readFileSync(file, 'utf8');
+    fs.writeFileSync(file, saved.replace('"georgia"', '"inherit"'));
+    const r = await refusal(() =>
+      themeEditSet('f19', 'corners', 'pill', {cwd}),
+    );
+    expect(r.message).toContain('inherit');
+    fs.rmSync(path.join(cwd, 'themes', 'f19'), {recursive: true, force: true});
+  });
+});

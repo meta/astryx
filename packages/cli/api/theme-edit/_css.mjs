@@ -91,6 +91,45 @@ const currentLexer = () => (patched ??= csstree().fork(syntaxPatches()).lexer);
 const VAR_STANDS_FOR = ['0', '1px', '1ms', 'red', 'ease', 'serif', '0 0 red'];
 
 /**
+ * The value as it reads when each variable is unset: every `var(--x, f)`
+ * replaced by its fallback `f`; null when no var() has one.
+ * @param {string} value
+ * @returns {string | null}
+ */
+export function withFallbacks(value) {
+  let any = false;
+  /** @param {string} v @returns {string} */
+  const pass = v => {
+    const at = v.search(/var\(/i);
+    if (at < 0) return v;
+    let depth = 0;
+    let comma = -1;
+    let end = -1;
+    for (let i = at + 4; i < v.length; i++) {
+      const c = v[i];
+      if (c === '(') depth++;
+      else if (c === ')') {
+        if (depth === 0) {
+          end = i;
+          break;
+        }
+        depth--;
+      } else if (c === ',' && depth === 0 && comma < 0) comma = i;
+    }
+    if (end < 0) return v;
+    if (comma < 0) return v.slice(0, end + 1) + pass(v.slice(end + 1));
+    any = true;
+    return (
+      v.slice(0, at) +
+      pass(v.slice(comma + 1, end).trim()) +
+      pass(v.slice(end + 1))
+    );
+  };
+  const out = pass(value);
+  return any ? out : null;
+}
+
+/**
  * Whether a value matches a property's grammar, as css-tree reads it. A
  * var() or env() can hold anything, so the value matches when some
  * ordinary value in its place does. Returns the parsed value on a match, for range checks the
