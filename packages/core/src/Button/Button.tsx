@@ -658,10 +658,8 @@ const forcedColorsEdge = stylex.create({
   groupHorizontal: {
     borderBlockStartWidth: {default: null, [FORCED_COLORS]: '1px'},
     borderBlockStartStyle: {default: null, [FORCED_COLORS]: 'solid'},
-    borderBlockStartColor: {default: null, [FORCED_COLORS]: 'ButtonText'},
     borderBlockEndWidth: {default: null, [FORCED_COLORS]: '1px'},
     borderBlockEndStyle: {default: null, [FORCED_COLORS]: 'solid'},
-    borderBlockEndColor: {default: null, [FORCED_COLORS]: 'ButtonText'},
     // Repeats the group's divider and gives the first button a leading edge.
     borderInlineStartWidth: {
       default: borderVars['--border-width'],
@@ -679,18 +677,12 @@ const forcedColorsEdge = stylex.create({
       default: null,
       [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: 'solid'},
     },
-    borderInlineEndColor: {
-      default: null,
-      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: 'ButtonText'},
-    },
   },
   groupVertical: {
     borderInlineStartWidth: {default: null, [FORCED_COLORS]: '1px'},
     borderInlineStartStyle: {default: null, [FORCED_COLORS]: 'solid'},
-    borderInlineStartColor: {default: null, [FORCED_COLORS]: 'ButtonText'},
     borderInlineEndWidth: {default: null, [FORCED_COLORS]: '1px'},
     borderInlineEndStyle: {default: null, [FORCED_COLORS]: 'solid'},
-    borderInlineEndColor: {default: null, [FORCED_COLORS]: 'ButtonText'},
     // Repeats the group's divider and gives the first button a leading edge.
     borderBlockStartWidth: {
       default: borderVars['--border-width'],
@@ -708,9 +700,44 @@ const forcedColorsEdge = stylex.create({
       default: null,
       [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: 'solid'},
     },
+  },
+});
+
+// The color of a grouped button's forced-colors edge. `destructive` takes
+// `CanvasText` (architecture:theme-tokens INV11), the others `ButtonText`.
+// These are the same longhands the edge sets, so the color holds whichever
+// order a build puts shorthands and longhands in.
+const forcedColorsEdgeColor = stylex.create({
+  horizontal: {
+    borderBlockStartColor: {default: null, [FORCED_COLORS]: 'ButtonText'},
+    borderBlockEndColor: {default: null, [FORCED_COLORS]: 'ButtonText'},
+    borderInlineEndColor: {
+      default: null,
+      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: 'ButtonText'},
+    },
+  },
+  horizontalOnError: {
+    borderBlockStartColor: {default: null, [FORCED_COLORS]: 'CanvasText'},
+    borderBlockEndColor: {default: null, [FORCED_COLORS]: 'CanvasText'},
+    borderInlineEndColor: {
+      default: null,
+      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: 'CanvasText'},
+    },
+  },
+  vertical: {
+    borderInlineStartColor: {default: null, [FORCED_COLORS]: 'ButtonText'},
+    borderInlineEndColor: {default: null, [FORCED_COLORS]: 'ButtonText'},
     borderBlockEndColor: {
       default: null,
       [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: 'ButtonText'},
+    },
+  },
+  verticalOnError: {
+    borderInlineStartColor: {default: null, [FORCED_COLORS]: 'CanvasText'},
+    borderInlineEndColor: {default: null, [FORCED_COLORS]: 'CanvasText'},
+    borderBlockEndColor: {
+      default: null,
+      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: 'CanvasText'},
     },
   },
 });
@@ -957,6 +984,15 @@ export function Button({
         : buttonGroup.orientation === 'horizontal'
           ? forcedColorsEdge.groupHorizontal
           : forcedColorsEdge.groupVertical),
+    isSolidVariant &&
+      buttonGroup != null &&
+      (buttonGroup.orientation === 'horizontal'
+        ? variant === 'destructive'
+          ? forcedColorsEdgeColor.horizontalOnError
+          : forcedColorsEdgeColor.horizontal
+        : variant === 'destructive'
+          ? forcedColorsEdgeColor.verticalOnError
+          : forcedColorsEdgeColor.vertical),
     // AFTER the shared focus outline: the outline supplies width/style/offset
     // for every variant, and `destructive` re-colors just the ring to match
     // its own surface. Ordering is the mechanism — StyleX is last-wins.
