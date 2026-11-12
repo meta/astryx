@@ -49,7 +49,66 @@ export const PREPACK_FILES = [
     file: 'clients/cli/manifest.generated.json',
     script: 'scripts/generate-manifest.mjs',
   },
+  {
+    file: 'clients/cli/build-id.generated.json',
+    script: 'scripts/generate-build-id.mjs',
+  },
 ];
+
+/**
+ * PREPACK_FILES' scripts in the order `prepack` needs: a later stage reads
+ * what an earlier one wrote, and the scripts within a stage are independent.
+ */
+const PREPACK_STAGES = [
+  [
+    'scripts/generate-template-components.mjs',
+    'scripts/generate-stored-docs.mjs',
+    'scripts/generate-command-list.mjs',
+  ],
+  ['scripts/generate-self-audit.mjs', 'scripts/generate-manifest.mjs'],
+  ['scripts/generate-build-id.mjs'],
+];
+
+/** Runs scripts side by side in the current folder; exits 1 if any fails. */
+const SIDE_BY_SIDE = `
+const {spawn} = require('node:child_process');
+const scripts = JSON.parse(process.argv[1]);
+let failed = 0;
+Promise.all(scripts.map(script => new Promise(done => {
+  const child = spawn(process.execPath, [script], {stdio: ['ignore', 'ignore', 'pipe']});
+  let stderr = '';
+  child.stderr.on('data', d => (stderr += d));
+  child.on('close', status => {
+    if (status !== 0) {
+      failed = 1;
+      process.stderr.write(script + ' failed: ' + stderr);
+    }
+    done();
+  });
+}))).then(() => process.exit(failed));
+`;
+
+/**
+ * Run each generator in `copy` at once, and wait for all of them; throw if one
+ * fails or writes no file.
+ * @param {{file: string, script: string}[]} entries
+ * @param {string} copy
+ */
+function runSideBySide(entries, copy) {
+  const result = spawnSync(
+    process.execPath,
+    ['-e', SIDE_BY_SIDE, JSON.stringify(entries.map(({script}) => script))],
+    {cwd: copy, encoding: 'utf8'},
+  );
+  if (result.status !== 0) throw new Error(result.stderr);
+  for (const {file, script} of entries) {
+    // A generator that exits 0 without writing would ship a package
+    // without its file: fail here instead.
+    if (!fs.existsSync(path.join(copy, file))) {
+      throw new Error(`${script} wrote no ${file}`);
+    }
+  }
+}
 
 /**
  * Pack this CLI into `dir` with `npm pack`, as a release is packed.
@@ -91,19 +150,25 @@ export function packCli(dir) {
       path.join(REPO_DIR, 'packages', 'core'),
       path.join(stage, 'packages', 'core'),
     );
-    for (const {file, script} of PREPACK_FILES) {
-      const result = spawnSync(process.execPath, [script], {
-        cwd: copy,
-        encoding: 'utf8',
-      });
-      if (result.status !== 0) {
-        throw new Error(`${script} failed: ${result.stderr}`);
+    // The generators run in their prepack order's stages, each stage's
+    // scripts side by side: the stores, then the two that read them, then
+    // the build id, which hashes everything before it.
+    // Every generator runs in exactly one stage: a new one left out of the
+    // stages would be skipped without a word.
+    const staged = PREPACK_STAGES.flat();
+    for (const {script} of PREPACK_FILES) {
+      if (staged.filter(s => s === script).length !== 1) {
+        throw new Error(`${script} is not in exactly one PREPACK_STAGES stage`);
       }
-      // A generator that exits 0 without writing would ship a package
-      // without its file: fail here instead.
-      if (!fs.existsSync(path.join(copy, file))) {
-        throw new Error(`${script} wrote no ${file}`);
-      }
+    }
+    if (staged.length !== PREPACK_FILES.length) {
+      throw new Error('PREPACK_STAGES names a script PREPACK_FILES does not');
+    }
+    for (const stage of PREPACK_STAGES) {
+      runSideBySide(
+        PREPACK_FILES.filter(({script}) => stage.includes(script)),
+        copy,
+      );
     }
     return npmPack(copy, dir);
   } finally {

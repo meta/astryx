@@ -5,7 +5,8 @@
  * @input Uses Babel, the StyleX plugin as the package stylesheet compiles it,
  *   and the RadioListItem source
  * @output Verifies the shipped mouse press reaches the radio circle through an
- *   inherited custom property, with no `:has()` ancestor scan
+ *   inherited custom property, with no `:has()` ancestor scan. Its press
+ *   exempts the nested controls the row's container rule names
  * @position Regression test for the compiled CSS of the RadioListItem module
  *
  * The circle's pressed layer once read the row through
@@ -65,6 +66,25 @@ function selectorsOf(css) {
   return [...css.matchAll(/([^{}]+)\{[^{}]*\}/g)].map(match => match[1].trim());
 }
 
+/** The parts of a selector list, split at the commas outside any brackets. */
+function listParts(list) {
+  const parts = [''];
+  let depth = 0;
+  for (const char of list) {
+    if (char === ',' && depth === 0) {
+      parts.push('');
+      continue;
+    }
+    if (char === '(' || char === '[') {
+      depth += 1;
+    } else if (char === ')' || char === ']') {
+      depth -= 1;
+    }
+    parts[parts.length - 1] += char;
+  }
+  return parts.map(part => part.replace(/\s+/g, ''));
+}
+
 describe('the shipped RadioListItem mouse press', () => {
   it('ships no :has() followed by a descendant *', async () => {
     const selectors = selectorsOf(await compiledCss('RadioListItem.tsx'));
@@ -73,15 +93,36 @@ describe('the shipped RadioListItem mouse press', () => {
     ).toEqual([]);
   });
 
-  it('keeps the nested-control exclusion on the row itself', async () => {
+  it('keeps the nested-control exclusion on the row itself, and leaves a press the controller paints to its image', async () => {
     const css = await compiledCss('RadioListItem.tsx');
     const press = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(match =>
       match[2].includes('--_radio-row-press:'),
     );
     expect(press.length).toBeGreaterThan(0);
     for (const [, selector] of press) {
-      expect(selector).toMatch(/:active:not\(:has\(a:active/);
+      expect(selector).toMatch(
+        /:active:not\(\[data-astryx-press="on"\],\s*\[data-astryx-press="fading"\]\):not\(:has\(button:/,
+      );
       expect(selector).not.toMatch(/ \*/);
+    }
+  });
+
+  it('exempts the nested controls the row’s container rule names, less read-only ones and the row’s own radio', async () => {
+    const {INTERACTIVE_SELECTORS} =
+      await import('../hooks/useClickableContainer.ts');
+    const expected = INTERACTIVE_SELECTORS.split(',').map(control =>
+      control === 'input'
+        ? 'input:not([type="radio"],[aria-readonly="true"]):active'
+        : `${control}:not([aria-readonly="true"]):active`,
+    );
+    const css = await compiledCss('RadioListItem.tsx');
+    const press = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(match =>
+      match[2].includes('--_radio-row-press:'),
+    );
+    expect(press.length).toBeGreaterThan(0);
+    for (const [, selector] of press) {
+      const exempt = /:not\(:has\((.*)\)\)/.exec(selector)?.[1] ?? '';
+      expect(listParts(exempt)).toEqual(listParts(expected.join(',')));
     }
   });
 });
