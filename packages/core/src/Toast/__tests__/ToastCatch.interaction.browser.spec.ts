@@ -4,12 +4,11 @@
  * @file ToastCatch.interaction.browser.spec.ts
  * @input The error Toast story (no auto-hide) on a phone, under a finger
  * @output Proves that a finger catches the card while it springs back and
- *   while it leaves. The card stays where the finger caught it, then follows
- *   the finger. A card caught on its way out, or dismissed while a finger
- *   drags it, leaves once the finger lifts. Under reduced motion a spring-back
- *   fades the card once. A finger that drags or catches the card starts no
- *   text selection, while a still hold on a resting card can. A catch whose
- *   lift the page never hears ends at the next touch
+ *   while it leaves, holds it there, then moves it. A card caught on its way
+ *   out, or dismissed during a drag, leaves at the lift. Under reduced motion
+ *   a spring-back fades once. A dragging or catching finger starts no text
+ *   selection; a still hold on a resting card can. A tap during the entrance
+ *   leaves it running. A catch whose lift is lost ends at the next touch
  * @position Toast's interaction proofs that its motion is interruptible
  */
 
@@ -663,4 +662,39 @@ test('a card caught by a finger whose lift the page never hears leaves after a t
     {t: 60, fingers: []},
   ]);
   await expect(page.locator('.astryx-toast')).toHaveCount(0, {timeout: 3000});
+});
+
+test('a tap on the card during its entrance leaves the entrance running', async ({
+  page,
+}) => {
+  await openStory(page, storybook(), 'core-toast--error-persists');
+  // A slow entrance, so that the tap lands while the card still fades in.
+  await page.addStyleTag({
+    content: '.astryx-toast { transition-duration: 2s !important; }',
+  });
+  await page
+    .getByRole('button', {name: 'Trigger error'})
+    .evaluate(element => (element as HTMLElement).click());
+  const card = page.locator('.astryx-toast').first();
+  await expect(card).toBeVisible();
+  await page.waitForTimeout(200);
+  const box = await card.boundingBox();
+  if (box == null) {
+    throw new Error('no toast');
+  }
+  const driver = await touchDriver(page);
+  const at = {
+    x: Math.round(box.x + box.width * 0.3),
+    y: Math.round(box.y + box.height / 2),
+  };
+  await driver.play([
+    {t: 0, fingers: [{id: 0, ...at}]},
+    {t: 60, fingers: []},
+  ]);
+  // The tap moved nothing, so the card keeps fading in.
+  const opacity = await card.evaluate(element =>
+    Number.parseFloat(getComputedStyle(element).opacity),
+  );
+  expect(opacity, 'the card still fades in').toBeLessThan(0.9);
+  await expect(card).toHaveCSS('opacity', '1', {timeout: 5000});
 });

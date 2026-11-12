@@ -258,7 +258,6 @@ export function useToastBannerSwipe(
             return false;
           }
           if (sessionRef.current == null) {
-            stillTransitions(root);
             const isLeaving = exitRef.current != null;
             const animator = cardAnimator();
             let caughtAt = 0;
@@ -268,6 +267,7 @@ export function useToastBannerSwipe(
               (isLeaving || settlingRef.current != null)
             ) {
               // The finger catches a moving card where it shows.
+              stillTransitions(root);
               caughtAt = animator.get('y') * current.direction;
               animator.stop();
               settlingRef.current = null;
@@ -361,6 +361,9 @@ export function useToastBannerSwipe(
         const fingerTravel = recognizer.totalTranslation().y * direction;
         if (to === 'began' || to === 'changed') {
           const root = rootRef.current;
+          if (to === 'began' && root != null) {
+            stillTransitions(root);
+          }
           if (session.releaseSelection == null && root != null) {
             session.releaseSelection = lockSelection([root], null);
           }
