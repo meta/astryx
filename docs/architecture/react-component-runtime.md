@@ -341,6 +341,10 @@ those contracts.
   FR21). The finger-scroll watch's hook, `useFingerScroll`, is on that
   subpath: it reports whether a scroller's scroll is a finger's, now or at a
   past time, and, through `onEnd`, when that scroll ends.
+  `playReducedMotionCrossFade` is on that subpath too: under Reduce Motion, it
+  cross-fades an element through an inert copy, so the element's area never
+  goes blank. The animator and `motion/reducedMotion.ts` give only a dip,
+  which blanks the area between the old state and the new one.
 - **INV15 — The animator animates a number.** The animator has a value mode:
   it plays a number, such as a count or a chart value, on the same timing as its property channels: theme motion tokens for a program-started change, and measured springs only where `spec:AST-094` FR45 keeps them, and hands the value to an `onUpdate`
   callback each frame for the component to format and write. The component owns
