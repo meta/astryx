@@ -30,12 +30,12 @@ import type {LayerAlignment, LayerPlacement} from '../Layer';
 import type {ButtonVariant, ButtonSize} from '../Button';
 import type {BaseProps} from '../BaseProps';
 import {stableClassName} from '../naming';
-import {pickDataAttributes} from '../utils/pickDataAttributes';
 import {
   registerEnglishFallback,
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/MoreMenu/MoreMenu.generated';
+import {pickDataAttributes} from '../utils/themeProps';
 
 registerEnglishFallback(english);
 

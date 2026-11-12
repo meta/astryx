@@ -23,8 +23,7 @@ import {BUTTON_HIT_AREA, ButtonHitAreaContext} from '../Button/buttonHitArea';
 import {clampedHitInsets, type HitInsets, type HitRect} from '../utils/hitArea';
 import type {TouchHitAreaOptions} from '../utils/touchHitArea';
 import {Icon} from '../Icon/Icon';
-import {pickDataAttributes} from '../utils/pickDataAttributes';
-import {themeProps} from '../utils/themeProps';
+import {pickDataAttributes, themeProps} from '../utils/themeProps';
 import {
   registerEnglishFallback,
   useComponentTranslator,

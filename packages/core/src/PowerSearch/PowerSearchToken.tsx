@@ -21,7 +21,7 @@ import {useInternalConfig} from './useInternalConfig';
 import type {PowerSearchTokenProps} from './types';
 import {useComponentTranslator} from '../i18n/useComponentTranslator';
 import {formatTokenLabel} from './formatTokenValue';
-import {pickDataAttributes} from '../utils/pickDataAttributes';
+import {pickDataAttributes} from '../utils/themeProps';
 
 const tokenValueStyles = stylex.create({
   value: {

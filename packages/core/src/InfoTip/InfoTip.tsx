@@ -47,9 +47,9 @@ import {
 } from '../theme/tokens.stylex';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {mergeProps} from '../utils/mergeProps';
-import {pickDataAttributes} from '../utils/pickDataAttributes';
 import {useTouchHitArea} from '../utils/touchHitArea';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
+import {pickDataAttributes} from '../utils/themeProps';
 
 registerEnglishFallback(english);
 

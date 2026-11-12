@@ -75,7 +75,6 @@ import {
 import {useSize} from '../SizeContext/SizeContext';
 import {isFocusDetached} from '../utils/isFocusDetached';
 import {isRenderable} from '../utils/isRenderable';
-import {pickDataAttributes} from '../utils/pickDataAttributes';
 import {useInternalConfig} from './useInternalConfig';
 import {usePowerSearchSource} from './usePowerSearchSource';
 import {formatFilterValue} from './formatFilterValue';
@@ -85,7 +84,7 @@ import {
   PowerSearchValueEditor,
 } from './PowerSearchValueEditor';
 import {resolveOperatorLabel} from './resolveOperatorLabel';
-import {themeProps} from '../utils/themeProps';
+import {pickDataAttributes, themeProps} from '../utils/themeProps';
 import {useLocale} from '../i18n/useLocale';
 import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import type {Locale} from '../i18n/types';

@@ -40,7 +40,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/PowerSearch/PowerSearchEditPopover.generated';
-import type {DataAttributes} from '../utils/pickDataAttributes';
+import type {ThemeDataAttributes} from '../utils/themeProps';
 
 registerEnglishFallback(english);
 
@@ -132,7 +132,7 @@ export interface PowerSearchEditPopoverProps {
   /** Whether the filter is read-only. */
   isReadOnly?: boolean;
   /** Caller `data-*` attributes for the editor's root element. */
-  dataAttributes?: DataAttributes;
+  dataAttributes?: ThemeDataAttributes;
 }
 
 // =============================================================================

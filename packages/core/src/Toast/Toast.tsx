@@ -41,8 +41,7 @@ import type {
   ToastDismissReason,
   ToastContentRenderFn,
 } from './types';
-import {pickDataAttributes} from '../utils/pickDataAttributes';
-import {themeProps} from '../utils/themeProps';
+import {pickDataAttributes, themeProps} from '../utils/themeProps';
 import {useToastGesture, type ToastGestureDirection} from './useToastGesture';
 import {
   registerEnglishFallback,
