@@ -500,6 +500,43 @@ async function buildPartData(project) {
 }
 
 /** @type {Map<string, Set<string>>} */
+const calcCache = new Map();
+
+/**
+ * The variables Core's stylesheet reads inside a calc() (a composer's
+ * padding in its send button's radius): only one length works there.
+ * Empty with no stylesheet.
+ * @param {any} project
+ * @returns {Set<string>}
+ */
+export function calcVars(project) {
+  /** @type {string} */
+  let file;
+  try {
+    file = project.req.resolve('@astryxdesign/core/astryx.css');
+  } catch {
+    return new Set();
+  }
+  const cached = calcCache.get(file);
+  if (cached) return cached;
+  const css = fs.readFileSync(file, 'utf8');
+  /** @type {Set<string>} */
+  const out = new Set();
+  for (let i = css.indexOf('calc('); i >= 0; i = css.indexOf('calc(', i + 5)) {
+    let depth = 0;
+    let j = i + 4;
+    for (; j < css.length; j++) {
+      if (css[j] === '(') depth++;
+      else if (css[j] === ')' && --depth === 0) break;
+    }
+    for (const m of css.slice(i, j).matchAll(/var\((--[a-z0-9_-]+)/gi))
+      out.add(m[1].toLowerCase());
+  }
+  calcCache.set(file, out);
+  return out;
+}
+
+/** @type {Map<string, Set<string>>} */
 const multipliedCache = new Map();
 
 /**

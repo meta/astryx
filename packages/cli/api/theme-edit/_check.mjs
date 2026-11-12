@@ -33,7 +33,7 @@ import {
   propertyGrammar,
   takesPercentage,
 } from './_css.mjs';
-import {multipliedTokens} from './_parts.mjs';
+import {calcVars, multipliedTokens} from './_parts.mjs';
 import {
   AUTO_SPREAD,
   COLOR_PROP_PARTS,
@@ -1800,8 +1800,9 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
   // spreads; when only another member is the reason, --only keeps it to
   // the part named).
   if (!unset && s.on && s.state && ctx.derived) {
-    const prop =
-      /^padding/.test(thing) || thing === 'spacing' ? 'padding' : null;
+    // A padding property goes through the padding model, which writes a
+    // state's own side variables; the spacing dial does not.
+    const prop = thing === 'spacing' ? 'padding' : null;
     const expands = (/** @type {string} */ t) =>
       (ctx.derived?.[t] ?? []).some(
         d => d.property === prop && d.expand === 'container',
@@ -3059,20 +3060,20 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
     s.source = 'property';
     s.thing = prop;
     if (unset) return s;
-    // A part whose visible box is drawn inside its themed wrapper: only
-    // what reaches that box is taken.
-    const wrapped = s.on ? WRAPPED_PARTS[s.on] : undefined;
-    if (wrapped) {
-      const surface =
-        /^(background|border|box-shadow|outline)(-|$)/.test(prop) &&
-        !/radius/.test(prop);
-      const side = /^padding-/.test(prop);
-      const density = prop === 'padding' && /^density:/.test(s.when ?? '');
-      // Core reads the composer's padding inside calc() (the send button's
-      // radius, the status row), as its own default var(--spacing-3) is:
-      // one length works there, whether a length, a variable, or calc(),
-      // min(), max() or clamp() giving one.
-      if (prop === 'padding' && !density && !oneLength(v)) {
+    // A part whose Core box reads this property's variable inside calc()
+    // (a composer's or a menu's padding in its corners): one length is all
+    // that works there, whether a length, a variable, or calc(), min(),
+    // max() or clamp() giving one.
+    if (s.on && ctx.derived) {
+      const inCalc = calcVars(ctx.project);
+      const hit = partsOf(ctx, s).find(t =>
+        (ctx.derived?.[t] ?? []).some(
+          d =>
+            d.property === camel(prop) &&
+            (d.vars ?? []).some(x => inCalc.has(x.toLowerCase())),
+        ),
+      );
+      if (hit && !oneLength(v)) {
         const first = splitTop(v.trim(), ' ')[0] ?? '';
         const n = cssNumber(first);
         const fix = oneLength(first)
@@ -3082,14 +3083,20 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
             : '12px';
         refuse(
           E.ERR_THEME_BAD_VALUE,
-          `${s.on} reads its padding inside calc() (the send button's corners, the status row), where only one length works: a length, a variable, or calc(), min(), max() or clamp() giving one; not "${v.trim()}".`,
-          {
-            run: [
-              `${P} set ${slug} padding ${quoteCommandArgument(fix)} --on ${s.on}`,
-            ],
-          },
+          `${hit} reads ${prop} inside calc() (its corners and inner rows follow it), where only one length works: a length, a variable, or calc(), min(), max() or clamp() giving one; not "${v.trim()}".`,
+          {run: [setLine(slug, prop, fix, s)]},
         );
       }
+    }
+    // A part whose visible box is drawn inside its themed wrapper: only
+    // what reaches that box is taken.
+    const wrapped = s.on ? WRAPPED_PARTS[s.on] : undefined;
+    if (wrapped) {
+      const surface =
+        /^(background|border|box-shadow|outline)(-|$)/.test(prop) &&
+        !/radius/.test(prop);
+      const side = /^padding-/.test(prop);
+      const density = prop === 'padding' && /^density:/.test(s.when ?? '');
       if (surface || side || density)
         refuse(
           E.ERR_THEME_BAD_VALUE,

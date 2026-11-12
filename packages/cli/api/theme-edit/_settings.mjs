@@ -2162,8 +2162,15 @@ export function compileTheme(ctx, data, base) {
    * as Core's own rules do.
    */
   const emitPadding = () => {
+    // The side variables written on a narrower selector (a variant, a
+    // state, a clickable card), by the part whose variables they are: they
+    // inherit, so a plain one of those parts inside takes its own again.
+    /** @type {Map<string, Set<string>>} */
+    const narrow = new Map();
     for (const {target, s, list} of padQueue.values()) {
       const prefix = /** @type {string} */ (padVars(target));
+      const owner = prefix.slice('--astryx-'.length, -'-padding'.length);
+      const scoped = target !== owner || s.when != null || s.state != null;
       /** @type {Record<'ltr' | 'rtl', Record<string, string>>} */
       const side = {ltr: {}, rtl: {}};
       for (const x of list) {
@@ -2218,10 +2225,21 @@ export function compileTheme(ctx, data, base) {
           if (b != null) rtl[`${prefix}-${k}`] = b;
         }
       }
-      // Four equal sides are the whole padding too, as Core writes it.
+      // Four equal sides are the whole padding too, as Core writes it (on
+      // the part's own base only: a narrower selector writes the sides).
       const vals = Object.values(plain);
-      if (vals.length === 4 && vals.every(v => v === vals[0]))
+      if (!scoped && vals.length === 4 && vals.every(v => v === vals[0]))
         plain[prefix] = vals[0];
+      if (scoped) {
+        const names = narrow.get(owner) ?? new Set();
+        for (const k of [
+          ...Object.keys(plain),
+          ...Object.keys(ltr),
+          ...Object.keys(rtl),
+        ])
+          names.add(k);
+        narrow.set(owner, names);
+      }
       for (const [k, v] of Object.entries(plain)) putComp(s, target, k, v);
       for (const [dir, rule] of /** @type {const} */ ([
         [':dir(ltr)', ltr],
@@ -2231,6 +2249,42 @@ export function compileTheme(ctx, data, base) {
           const [b, key] = dirBlock(s, target, dir);
           b[key] = {...(b[key] ?? {}), ...rule};
         }
+    }
+    // Each side the narrower selectors write, on the part's own base: the
+    // base theme's value for it, else none (so Core's own fallback holds).
+    for (const [owner, names] of narrow) {
+      const own = /** @type {any} */ (base).components?.[owner]?.base ?? {};
+      /** @type {Record<string, string>} */
+      const from = {};
+      const w = splitTop(String(own.padding ?? '').trim(), ' ').filter(Boolean);
+      if (w.length) {
+        const [top, r = top, bottom = top, l = r] = w;
+        Object.assign(from, {
+          'block-start': top,
+          'inline-end': r,
+          'block-end': bottom,
+          'inline-start': l,
+        });
+      }
+      for (const [k, a] of /** @type {const} */ ([
+        ['paddingBlock', 'block'],
+        ['paddingInline', 'inline'],
+      ])) {
+        const x = splitTop(String(own[k] ?? '').trim(), ' ').filter(Boolean);
+        if (x.length) {
+          from[`${a}-start`] = x[0];
+          from[`${a}-end`] = x[1] ?? x[0];
+        }
+      }
+      for (const k of ['BlockStart', 'BlockEnd', 'InlineStart', 'InlineEnd'])
+        if (typeof own[`padding${k}`] === 'string')
+          from[kebab(k)] = own[`padding${k}`];
+      const b = ((theme.components[owner] ??= {}).base ??= {});
+      const prefix = `--astryx-${owner}-padding`;
+      for (const name of names) {
+        if (name in b || name === prefix) continue;
+        b[name] = from[name.slice(prefix.length + 1)] ?? 'initial';
+      }
     }
   };
   /**
@@ -2255,6 +2309,16 @@ export function compileTheme(ctx, data, base) {
         ]),
       );
     };
+    // A part drawn by another (a clickable card) after the part drawing it,
+    // so its own padding wins over the base's reset at the same weight.
+    theme.components = Object.fromEntries([
+      ...Object.entries(theme.components ?? {}).filter(
+        ([t]) => !CARD_LIKE.includes(t),
+      ),
+      ...Object.entries(theme.components ?? {}).filter(([t]) =>
+        CARD_LIKE.includes(t),
+      ),
+    ]);
     for (const [target, blocks] of Object.entries(theme.components ?? {})) {
       const keys = Object.keys(blocks);
       const ordered = keys.includes('base')
