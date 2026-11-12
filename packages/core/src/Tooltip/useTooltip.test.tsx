@@ -216,6 +216,27 @@ describe('useTooltip — a trigger that detaches and attaches again', () => {
     expect(tooltipElement().matches(':popover-open')).toBe(true);
   });
 
+  it('stays closed after a commit that swaps its wiring as it disables it and holds it closed', async () => {
+    // As SideNavItem's rail leaf on an app-driven expand: one render disables
+    // the tooltip and holds it closed, and its inline ref swaps the wiring.
+    const {rerender} = render(<InlineRefHarness label="Trigger" />);
+    const matches = trigger().matches.bind(trigger());
+    vi.spyOn(trigger(), 'matches').mockImplementation(
+      selector => selector === ':focus-visible' || matches(selector),
+    );
+    act(() => trigger().focus());
+    rerender(
+      <InlineRefHarness label="Trigger" isEnabled={false} isOpen={false} />,
+    );
+    await act(async () => {});
+
+    // The collapse enables it again with keyboard focus still on the trigger.
+    rerender(<InlineRefHarness label="Trigger" />);
+    await act(async () => {});
+
+    expect(tooltipElement().matches(':popover-open')).toBe(false);
+  });
+
   it('stays closed on attach for pointer focus that arrived while detached', async () => {
     const {rerender} = render(<DetachableHarness isAttached />);
     rerender(<DetachableHarness isAttached={false} />);

@@ -318,10 +318,12 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   const triggerRef = useRef<HTMLElement | null>(null);
   // Set only by a Core component that mounts the tooltip on interaction.
   const presentInterest = use(TooltipPresentInterestContext);
-  // Whether the tooltip is enabled now, for a show that runs after a render
-  // (a pending hover show) and for the trigger ref callback.
-  const isEnabledRef = useRef(isEnabled);
-  isEnabledRef.current = isEnabled;
+  // The tooltip's enabled and controlled state now. A show that runs after a
+  // render (a pending hover show) and the trigger ref callback read it. A
+  // render-purity gap: render-written until the detach check can read this
+  // commit's isOpen.
+  const renderFlagsRef = useRef({isEnabled, isOpen});
+  renderFlagsRef.current = {isEnabled, isOpen};
   // Counts the renders in which the tooltip is disabled. A pending show
   // records it, so a show scheduled before a disable is dropped even when
   // the tooltip is enabled again before the timer fires.
@@ -765,12 +767,12 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       // dismissed with Escape stays closed.
       const focused = el.ownerDocument.activeElement;
       const wasSuppressed = wasSuppressedRef.current;
-      if (isEnabledRef.current) {
+      if (renderFlagsRef.current.isEnabled) {
         wasSuppressedRef.current = false;
       }
       if (
         wasSuppressed &&
-        isEnabledRef.current &&
+        renderFlagsRef.current.isEnabled &&
         latest().isOpen === undefined &&
         latest().focusTrigger !== 'never' &&
         focused instanceof HTMLElement &&
@@ -788,7 +790,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       if (state != null) {
         state.isRead = true;
       }
-      if (isEnabledRef.current && latest().isOpen === undefined) {
+      if (renderFlagsRef.current.isEnabled && latest().isOpen === undefined) {
         if (interest === 'hover') {
           latest().handleMouseEnter();
         } else if (interest === 'tap') {
@@ -823,7 +825,10 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
         // uncontrolled tooltip then, or the next attach shows a stale tooltip.
         // A detach while enabled, such as a merged ref that changes identity
         // on a re-render, keeps a hovered or held tooltip open.
-        if (!isEnabledRef.current && latest().isOpen === undefined) {
+        if (
+          !renderFlagsRef.current.isEnabled &&
+          renderFlagsRef.current.isOpen === undefined
+        ) {
           wasSuppressedRef.current = true;
           latest().dropHold();
           latest().hideNow();
