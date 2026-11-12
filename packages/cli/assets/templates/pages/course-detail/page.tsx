@@ -45,6 +45,7 @@ import {
 } from '@astryxdesign/core/SegmentedControl';
 import {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';
 import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
+import {TextInput} from '@astryxdesign/core/TextInput';
 import {Dialog, DialogHeader} from '@astryxdesign/core/Dialog';
 import {useClipboard} from '@astryxdesign/core/hooks';
 import {rtlStyles} from '@astryxdesign/core/utils';
@@ -62,6 +63,7 @@ import {
   BookOpenIcon,
   HeartIcon,
   ShareIcon,
+  MagnifyingGlassIcon,
 } from '@heroicons/react/24/outline';
 import {StarIcon as StarIconSolid} from '@heroicons/react/24/solid';
 
@@ -492,8 +494,22 @@ function CourseHead() {
     </VStack>
   );
 }
-// ─── Syllabus ────────────────────────────────────────────────────────────────
 function SyllabusSection() {
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState<string[]>([MODULES[0].id]);
+  const fold = (value: string) => value.toLowerCase();
+  const needle = fold(query.trim());
+  const modules = MODULES.filter(module =>
+    module.lessons.some(lesson => fold(lesson.title).includes(needle)),
+  );
+  const matches = modules.reduce(
+    (total, module) =>
+      total +
+      module.lessons.filter(lesson => fold(lesson.title).includes(needle))
+        .length,
+    0,
+  );
+
   return (
     <Section padding={6}>
       <VStack gap={4}>
@@ -505,8 +521,33 @@ function SyllabusSection() {
             </Text>
           }
         />
-        <CollapsibleGroup type="multiple" defaultValue={[MODULES[0].id]}>
-          {MODULES.map(module => (
+        <HStack gap={3} vAlign="center" hAlign="between" wrap="wrap">
+          <StackItem size="fill">
+            <TextInput
+              label="Search lessons"
+              isLabelHidden
+              size="md"
+              width="100%"
+              placeholder="Search lessons"
+              value={query}
+              onChange={setQuery}
+              startIcon={<Icon icon={MagnifyingGlassIcon} size="sm" />}
+            />
+          </StackItem>
+          <Button
+            label="Open every module"
+            variant="ghost"
+            size="sm"
+            onClick={() => setOpen(MODULES.map(module => module.id))}
+          />
+        </HStack>
+        <CollapsibleGroup
+          type="multiple"
+          value={open}
+          onChange={value =>
+            setOpen(Array.isArray(value) ? value : value ? [value] : [])
+          }>
+          {modules.map(module => (
             <Collapsible
               key={module.id}
               value={module.id}
@@ -530,6 +571,14 @@ function SyllabusSection() {
                     <HStack gap={2} vAlign="center">
                       <Icon icon={PlayIcon} size="sm" />
                       <Text type="body">{lesson.title}</Text>
+                      {lesson.badge && (
+                        <Badge
+                          label={lesson.badge}
+                          variant={
+                            lesson.badge === 'Project' ? 'warning' : 'info'
+                          }
+                        />
+                      )}
                     </HStack>
                     <Text type="supporting" color="secondary">
                       {lesson.duration}
@@ -540,6 +589,11 @@ function SyllabusSection() {
             </Collapsible>
           ))}
         </CollapsibleGroup>
+        <VisuallyHidden as="p" aria-live="polite">
+          {needle && matches > 0
+            ? `${matches} ${matches === 1 ? 'lesson' : 'lessons'} match “${query.trim()}”`
+            : ''}
+        </VisuallyHidden>
       </VStack>
     </Section>
   );

@@ -31,6 +31,7 @@ export const doc = {
     ClockIcon: 'clock',
     GlobeAltIcon: 'globe',
     HeartIcon: 'heart',
+    MagnifyingGlassIcon: 'search',
     PlayIcon: 'play',
     ShareIcon: 'share',
     StarIcon: 'star',
