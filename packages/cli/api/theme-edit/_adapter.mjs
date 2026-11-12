@@ -541,7 +541,10 @@ export const themeEditShow = (theme, options = {}) =>
     lockName(theme),
     o => edit.themeEditShow(theme, o),
     true,
-    words(`${P} show ${theme}`, options),
+    words(
+      `${P} show ${theme}${options.section ? ` --section ${quoteCommandArgument(String(options.section))}` : ''}`,
+      options,
+    ),
   );
 /** @type {typeof preview.themeEditPreviewAdd} */
 export const themeEditPreviewAdd = (description, options = {}) =>

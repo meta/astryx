@@ -13,6 +13,7 @@ import {
   themeEditNew,
   themeEditPreviewAdd,
   themeEditSet,
+  themeEditShow,
   themeEditUndo,
 } from './theme-edit.mjs';
 import {
@@ -176,6 +177,9 @@ describe('a busy lock through the API', () => {
       ).toMatch(
         /experimental theme editor new t --like neutral --corners round$/m,
       );
+      expect(
+        await busy(() => themeEditShow('t', {cwd, section: 'cards'})),
+      ).toMatch(/experimental theme editor show t --section cards$/m);
       expect(
         await busy(() => themeEditSet('t', 'corners', 'pill', {cwd})),
       ).not.toContain(process.argv.slice(2).join(' ') || 'never');

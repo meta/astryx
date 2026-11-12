@@ -3224,4 +3224,24 @@ describe('r19d: per-direction sides under a state, and later paddings that cover
     await themeEditUndo('p', {cwd, thing: 'padding-left', on: 'card'});
     await themeEditUndo('p', {cwd, thing: 'padding-inline-start', on: 'card'});
   });
+
+  it('keeps an earlier physical side on a menu under a later per-direction side', async () => {
+    await themeEditSet('p', 'padding-left', '20px', {cwd, on: 'context-menu'});
+    await themeEditSet('p', 'padding-inline-start', '6px', {
+      cwd,
+      on: 'context-menu',
+    });
+    expect(blockOf('.astryx-context-menu')).toMatch(
+      /(^|[;{\s])padding-left:\s*20px/,
+    );
+    expect(blockOf('.astryx-context-menu:dir(ltr)')).toMatch(
+      /padding-left:\s*6px/,
+    );
+    await themeEditUndo('p', {
+      cwd,
+      thing: 'padding-inline-start',
+      on: 'context-menu',
+    });
+    await themeEditUndo('p', {cwd, thing: 'padding-left', on: 'context-menu'});
+  });
 });

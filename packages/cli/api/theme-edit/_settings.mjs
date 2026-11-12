@@ -1966,8 +1966,14 @@ export function compileTheme(ctx, data, base) {
           const plain = COVERS[prop];
           if (plain) {
             const b = block(s, t);
-            for (const k of plain)
-              if (b[k] != null && !(sides && k in sides)) delete b[k];
+            // A side written per direction leaves a physical side as it is:
+            // its :dir(ltr) rule already wins in a left-to-right box, and in
+            // a right-to-left one the physical left is still the left.
+            const perDirection =
+              !!sides && Object.keys(sides).some(x => x.startsWith(':'));
+            if (!perDirection)
+              for (const k of plain)
+                if (b[k] != null && !(sides && k in sides)) delete b[k];
             // Per direction: a whole padding or inline padding covers both
             // sides in both directions; a physical side, that side in both.
             const dirSides =
