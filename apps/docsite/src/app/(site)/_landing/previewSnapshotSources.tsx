@@ -2,12 +2,13 @@
 
 /**
  * @file The decorative previews the docsite renders once, at build time.
- * @input Page templates from the CLI and the Butter theme showcase content.
+ * @input The templates card's slugs (templatePreviewRows), their components
+ *   from TEMPLATE_COMPONENTS, and the Butter theme showcase content.
  * @output PREVIEW_SNAPSHOT_SOURCES: one React element per preview id.
  * @position Read only by scripts/generate-preview-snapshots.mjs. Never import
  *   it from page code: that ships every template to the browser.
- *   SYNC: TemplatesPreview and the pages that pass the themes store to
- *   ThemesPreview read these ids.
+ *   SYNC: the pages that pass the themes store to ThemesPreview read the
+ *   'themes-store' id.
  */
 
 import type {ReactElement} from 'react';
@@ -17,16 +18,11 @@ import {
 } from '@astryxdesign/core/AppShell';
 import {Theme} from '@astryxdesign/core/theme';
 import {neutralTheme} from '@astryxdesign/theme-neutral/built';
-import AiChatLanding from '../../../../../../packages/cli/assets/templates/pages/ai-chat-landing/page';
-import Ide from '../../../../../../packages/cli/assets/templates/pages/ide/page';
-import LoginSplit from '../../../../../../packages/cli/assets/templates/pages/login-split/page';
-import PaymentForm from '../../../../../../packages/cli/assets/templates/pages/payment-form/page';
-import ProductDetail from '../../../../../../packages/cli/assets/templates/pages/product-detail/page';
-import ProductGallery from '../../../../../../packages/cli/assets/templates/pages/product-gallery/page';
-import SettingsSidebar from '../../../../../../packages/cli/assets/templates/pages/settings-sidebar/page';
 import {ThemeShowcaseStore} from '../../../../../../packages/cli/assets/templates/pages/theme-showcase/page';
+import {TEMPLATE_COMPONENTS} from '../../../components/templateComponents';
 import {getThemeShowcaseContent} from '../../../components/themeShowcaseContent';
 import {themeObjects} from '../../../generated/themeRegistry';
+import {TEMPLATE_PREVIEW_ROWS} from './templatePreviewRows';
 
 // The store template's internal responsive grids read useAppShellMobile().
 // The store is rendered at a fixed 1000px desktop width and scaled down to a
@@ -42,7 +38,11 @@ const FORCE_DESKTOP_MOBILE_CONTEXT: AppShellMobileContextValue = {
   hasAutoToggle: false,
 };
 
-function templatePreview(Page: () => ReactElement): ReactElement {
+function templatePreview(slug: string): ReactElement {
+  if (!Object.hasOwn(TEMPLATE_COMPONENTS, slug)) {
+    throw new Error(`No page template "${slug}" in TEMPLATE_COMPONENTS.`);
+  }
+  const Page = TEMPLATE_COMPONENTS[slug];
   return (
     <Theme theme={neutralTheme}>
       <Page />
@@ -52,13 +52,9 @@ function templatePreview(Page: () => ReactElement): ReactElement {
 
 export const PREVIEW_SNAPSHOT_SOURCES: Readonly<Record<string, ReactElement>> =
   {
-    'product-gallery': templatePreview(ProductGallery),
-    ide: templatePreview(Ide),
-    'payment-form': templatePreview(PaymentForm),
-    'login-split': templatePreview(LoginSplit),
-    'settings-sidebar': templatePreview(SettingsSidebar),
-    'ai-chat-landing': templatePreview(AiChatLanding),
-    'product-detail': templatePreview(ProductDetail),
+    ...Object.fromEntries(
+      TEMPLATE_PREVIEW_ROWS.flat().map(slug => [slug, templatePreview(slug)]),
+    ),
     'themes-store': (
       <Theme theme={themeObjects['@astryxdesign/theme-butter']}>
         <AppShellMobileContext.Provider value={FORCE_DESKTOP_MOBILE_CONTEXT}>

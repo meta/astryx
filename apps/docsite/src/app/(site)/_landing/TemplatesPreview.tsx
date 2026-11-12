@@ -15,17 +15,10 @@ import {
   shadowVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
 import {FrozenPreview} from './FrozenPreview';
+import {TEMPLATE_PREVIEW_ROWS} from './templatePreviewRows';
 
-// A representative set of the real page templates (storefront, IDE, payment,
-// login, settings, AI chat, product detail). The build renders each one once
-// (previewSnapshotSources.tsx); CSS scales it, and CSS variables re-theme it
-// for dark mode. Grouped into rows; the middle row holds three so the centered
-// (login) template sits in the middle.
-const TEMPLATE_ROWS: string[][] = [
-  ['product-gallery', 'ide'],
-  ['payment-form', 'login-split', 'settings-sidebar'],
-  ['ai-chat-landing', 'product-detail'],
-];
+// The build renders each template once (previewSnapshotSources.tsx); CSS
+// scales it, and CSS variables re-theme it for dark mode.
 
 // On small screens the rows flow into a single 3-column grid; 7 templates would
 // leave a lone 7th tile, so this one is dropped there to keep a clean 3 + 3.
@@ -113,9 +106,6 @@ const styles = stylex.create({
     backgroundColor: 'var(--color-background-surface)',
     boxShadow: shadowVars['--shadow-med'],
   },
-  // Hidden on a wide card (small screens): with 7 templates the dissolved
-  // 3-column grid would leave a lone 7th tile (3 + 3 + 1), so one tile drops out
-  // to keep a clean 3 + 3. It still shows in the narrow-card desktop layout.
   // Crop window of one tile. It is a size container, so the scale below can
   // use its width (100cqw).
   frame: {
@@ -141,6 +131,9 @@ const styles = stylex.create({
     transformOrigin: 'top left',
     transform: `scale(calc(100cqw / ${RENDER_WIDTH}px))`,
   },
+  // Hidden on a wide card (small screens): with 7 templates the dissolved
+  // 3-column grid would leave a lone 7th tile (3 + 3 + 1), so one tile drops out
+  // to keep a clean 3 + 3. It still shows in the narrow-card desktop layout.
   hideOnWide: {
     display: {
       default: 'block',
@@ -159,7 +152,9 @@ export function TemplatesPreview({
   maxRows?: number;
 }) {
   const rows =
-    maxRows != null ? TEMPLATE_ROWS.slice(0, maxRows) : TEMPLATE_ROWS;
+    maxRows != null
+      ? TEMPLATE_PREVIEW_ROWS.slice(0, maxRows)
+      : TEMPLATE_PREVIEW_ROWS;
   return (
     <div {...stylex.props(styles.container)} inert>
       <div {...stylex.props(styles.root)}>

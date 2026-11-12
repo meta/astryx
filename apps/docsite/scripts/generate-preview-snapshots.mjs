@@ -13,7 +13,6 @@
  */
 
 import {
-  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -26,12 +25,9 @@ import {dirname, join, resolve} from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {build} from 'esbuild';
 import {transformAsync} from '@babel/core';
-import {
-  ICON_SET_SETTING,
-  rewriteTemplatePreview,
-} from './template-icon-loader.mjs';
-import {optimizeTemplateImages} from './template-image-loader.mjs';
+import {ICON_SET_SETTING} from './template-icon-loader.mjs';
 import {finishSnapshotHtml} from './lib/preview-snapshot-html.mjs';
+import {transformPreviewSource} from './lib/preview-source-transform.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
@@ -40,11 +36,6 @@ const OUT = resolve(ROOT, 'src/generated/previewSnapshots.ts');
 const require = createRequire(import.meta.url);
 const {plugins: babelPlugins} = require('../babel.config.js');
 const PUBLIC_DIR = resolve(ROOT, 'public');
-// The same source sets that next.config.mjs gives to the icon and image loaders.
-const TEMPLATE_SOURCE =
-  /packages[\\/]cli[\\/]assets[\\/]templates[\\/](?:pages|blocks)[\\/].+\.tsx$/u;
-const PAGE_TEMPLATE_SOURCE =
-  /packages[\\/]cli[\\/]assets[\\/]templates[\\/]pages[\\/].+\.tsx$/u;
 const previewIconSet = process.env[ICON_SET_SETTING]?.trim() ?? '';
 
 // Compile StyleX the same way the Next build does, so the class names in the
@@ -56,18 +47,11 @@ const stylexPlugin = {
       if (/[\\/]node_modules[\\/]/u.test(args.path)) {
         return undefined;
       }
-      let source = readFileSync(args.path, 'utf8');
-      if (PAGE_TEMPLATE_SOURCE.test(args.path)) {
-        source = optimizeTemplateImages(source, path =>
-          existsSync(join(PUBLIC_DIR, path)),
-        );
-      }
-      if (previewIconSet && TEMPLATE_SOURCE.test(args.path)) {
-        source = await rewriteTemplatePreview(source, args.path, {
-          iconSet: previewIconSet,
-          projectDir: ROOT,
-        });
-      }
+      const source = await transformPreviewSource(
+        readFileSync(args.path, 'utf8'),
+        args.path,
+        {publicDir: PUBLIC_DIR, projectDir: ROOT, iconSet: previewIconSet},
+      );
       const loader = /** @type {'js' | 'jsx' | 'ts' | 'tsx'} */ (
         args.path.split('.').pop().replace(/^[cm]/u, '')
       );
@@ -111,6 +95,9 @@ async function main() {
     write: false,
     jsx: 'automatic',
     tsconfig: resolve(ROOT, 'tsconfig.json'),
+    // The icon sets are installed in the docsite, but template sources live
+    // outside it, so rewritten icon imports also resolve from here.
+    nodePaths: [resolve(ROOT, 'node_modules')],
     define: {'process.env.NODE_ENV': '"production"'},
     loader: {'.css': 'empty'},
     logLevel: 'error',
