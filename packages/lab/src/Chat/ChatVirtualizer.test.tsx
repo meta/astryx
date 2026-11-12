@@ -232,10 +232,17 @@ describe('ChatVirtualizer', () => {
   );
   // The mount landing is a declared target in flight; its release (and the
   // end of convergence, during which scroll events may not flip the mode)
-  // is a rAF away.
+  // is a rAF away. So the wait is two of the page's frames, not a fixed time.
+  // Each wait queues behind the list's own callbacks for that frame. So a
+  // chain the list queued, up to two frames deep, has run however late the
+  // frames come.
   const settled = async (): Promise<void> => {
     await act(async () => {
-      await new Promise(r => setTimeout(r, 40));
+      for (let frame = 0; frame < 2; frame++) {
+        await new Promise<void>(resolve => {
+          requestAnimationFrame(() => resolve());
+        });
+      }
     });
   };
   // A busy mark lasts for the commit that mounts history and the frame after
