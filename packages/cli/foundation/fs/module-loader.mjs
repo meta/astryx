@@ -24,7 +24,6 @@ import {AsyncLocalStorage} from 'node:async_hooks';
 import {createRequire} from 'node:module';
 import {pathToFileURL} from 'node:url';
 import * as fs from 'node:fs';
-import {createJiti} from 'jiti';
 import {findPresentFiles} from './present-files.mjs';
 import {importUrl} from './import-url.mjs';
 
@@ -34,6 +33,13 @@ export {findPresentFiles};
 let jitiInstance;
 let freshImportNonce = 0;
 const requireFromHere = createRequire(import.meta.url);
+
+/**
+ * jiti, loaded on first use: only TypeScript files and built theme modules
+ * need it, so a run that reads neither never loads it.
+ * @type {typeof import('jiti').createJiti}
+ */
+const createJiti = (...args) => requireFromHere('jiti').createJiti(...args);
 function getJiti() {
   if (!jitiInstance) {
     jitiInstance = createJiti(import.meta.url);

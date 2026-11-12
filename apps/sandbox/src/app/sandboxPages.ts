@@ -118,6 +118,12 @@ export const categories: SandboxCategory[] = [
           'A BottomSheet of rows over a page that scrolls with the document, to check a slow pull and a tap on a phone',
       },
       {
+        name: 'Scroll Edge Taps',
+        href: '/pages/scroll-edge-taps/',
+        description:
+          'A pushed NavigationStack screen with a Done row or a strip at its edge, and a RefreshControl list, on a page that scrolls with the document, to check taps and pulls on a phone',
+      },
+      {
         name: 'Menu Grow Cases',
         href: '/pages/menu-grow-cases/',
         description:

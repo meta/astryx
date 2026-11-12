@@ -94,6 +94,11 @@ Consumer migration instructions belong in consumer docs and release notes.
   surface-click delegation in the clickable and link-and-remove structures.
 - The Remove button's name, target size, and isolation from the token's own
   action.
+- Marking its own Remove button for a field that holds tokens. Token writes the
+  private attribute `data-astryx-token-remove` only through its owner module,
+  `privateAttributes/tokenRemove.stylex.ts` (`architecture:public-component-api`
+  INV23). Tokenizer reads the mark to tell Token's own Remove from a control a
+  custom `renderToken` draws.
 
 **Does not own / non-goals**
 

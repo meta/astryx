@@ -112,6 +112,8 @@ async function open(page: Page, story = STORY) {
 /** What one frame of an expand or a collapse shows, in px. */
 interface Frame {
   readonly t: number;
+  /** When the page's frame callback for this frame began, ms. */
+  readonly callbackAt: number;
   /** The bottom of the folder's own row. */
   readonly parentBottom: number;
   /**
@@ -182,6 +184,7 @@ async function recordFrames(
         : Number.parseFloat(value.split(' ')[1] ?? '0');
     };
     const tick = () => {
+      const callbackAt = performance.now();
       const parent = item('components');
       const below = item('app');
       const last = item('index');
@@ -258,6 +261,7 @@ async function recordFrames(
         ring = {top: box.top - reach, bottom: box.bottom + reach};
       }
       w.__frames.push({
+        callbackAt,
         t: performance.now(),
         parentBottom: rowBox(parent).getBoundingClientRect().bottom,
         group: shownGroup,
@@ -303,6 +307,92 @@ const blankBands = (frames: ReadonlyArray<Frame>) =>
 
 /** How far a frame may put the rows that glide off the group's shown part. */
 const BAND_ALLOWANCE = 1.5;
+
+const FRAME_MS = 1000 / 60;
+
+/**
+ * The frames whose reads ran late, each with how late, ms. Two kinds of
+ * callback read late. One starts a frame late: it comes 1.5 frame intervals
+ * or more after the one before, and the next comes within half a frame. That
+ * gives one frame. The other starts on time, but its reads span more than a
+ * frame. That gives the span. A frame of both kinds gives both. In WebKit
+ * such a frame reads the group's rows and the rows below up to that far
+ * apart. Under load the late callbacks ran 11 to 17 ms late, after gaps of
+ * 26 to 34 ms. The slow reads spanned 21 to 70 ms. Chromium reads every value
+ * in a callback at its frame's own time, so no frame of its reads late. Every
+ * other frame reads on time.
+ */
+function lateReads(
+  frames: ReadonlyArray<Frame>,
+  browserName: string,
+): Map<Frame, number> {
+  const late = new Map<Frame, number>();
+  if (browserName !== 'webkit') {
+    return late;
+  }
+  for (let i = 1; i + 1 < frames.length; i++) {
+    const gap = frames[i].callbackAt - frames[i - 1].callbackAt;
+    const next = frames[i + 1].callbackAt - frames[i].callbackAt;
+    const span = frames[i].t - frames[i].callbackAt;
+    const lateBy =
+      (gap >= 1.5 * FRAME_MS && next <= 0.5 * FRAME_MS ? FRAME_MS : 0) +
+      (span > FRAME_MS ? span : 0);
+    if (lateBy > 0) {
+      late.set(frames[i], lateBy);
+    }
+  }
+  return late;
+}
+
+/** When a frame's callback ran and how long its reads took. */
+function callbackGaps(frames: ReadonlyArray<Frame>, i: number): string {
+  const before = frames[i - 1];
+  const after = frames[i + 1];
+  return `its callback ${before == null ? '-' : (frames[i].callbackAt - before.callbackAt).toFixed(0)} ms after the one before and ${after == null ? '-' : (after.callbackAt - frames[i].callbackAt).toFixed(0)} ms before the next, its reads spanned ${(frames[i].t - frames[i].callbackAt).toFixed(0)} ms`;
+}
+
+/**
+ * Judges `excess` (how far a frame breaks a bound, px) on every frame. A
+ * frame that read late may break it by the moving row's travel over that
+ * time. The frames before and after it give the pace, and a fault in the
+ * late frame moves neither of them. `travel` is that travel where a late read
+ * widens the excess, and negative where it can only shrink it, which gets
+ * no allowance. The proof names such a frame. A larger excess fails there
+ * too.
+ */
+function judgeFrames(
+  frames: ReadonlyArray<Frame>,
+  late: Map<Frame, number>,
+  {
+    excess,
+    travel,
+    what,
+  }: {
+    excess: (frame: Frame) => number;
+    travel: (before: Frame, after: Frame) => number;
+    what: string;
+  },
+) {
+  for (const [i, frame] of frames.entries()) {
+    const over = excess(frame);
+    const before = frames[i - 1];
+    const after = frames[i + 1];
+    const lateBy = late.get(frame) ?? 0;
+    const allowance =
+      lateBy > 0 && before != null && after != null
+        ? (Math.max(0, travel(before, after)) * lateBy) /
+          (after.callbackAt - before.callbackAt)
+        : 0;
+    const detail = `frame ${i}, ${callbackGaps(frames, i)}: ${JSON.stringify(frame)}`;
+    expect(over, `${what}, ${detail}`).toBeLessThan(allowance);
+    if (over > 0) {
+      test.info().annotations.push({
+        type: 'too little to judge',
+        description: `frame ${i}: ${what} ${over.toFixed(2)} px past the bound, within its travel of ${allowance.toFixed(2)} px over ${lateBy.toFixed(0)} ms; ${callbackGaps(frames, i)}`,
+      });
+    }
+  }
+}
 
 /**
  * Whether a frame shows the row below inside its travel, between a tenth and
@@ -617,6 +707,7 @@ async function watchStartedDurations(
 
 test('expand under a finger: the rows below glide while the group fades in, and no frame shows a blank band', async ({
   page,
+  browserName,
 }) => {
   await open(page);
   await lengthenGlide(page, RECORDED_GLIDE_MS);
@@ -629,20 +720,24 @@ test('expand under a finger: the rows below glide while the group fades in, and 
   const moving = frames.filter(frame => frame.group != null);
   expect(moving.length, 'frames with the group').toBeGreaterThan(4);
   const height = moving[0].group?.height ?? 0;
-  // The checks below judge at least two frames of the glide. A page starved
-  // of frames fails by name.
+  // The checks below judge at least two frames of the glide, on time. A page
+  // starved of frames fails by name.
+  const late = lateReads(frames, browserName);
+  const travel = insideTravel(before, before + height);
   requireFrames(frames, {
     min: 2,
     during: 'the rows below glide down',
-    where: insideTravel(before, before + height),
+    where: frame => travel(frame) && !late.has(frame),
   });
   // Every frame: the row below sits right under the part of the group that
   // shows. A blank band between them is the flicker.
-  for (const [i, band] of blankBands(moving).entries()) {
-    expect(band, `frame ${i}: ${JSON.stringify(moving[i])}`).toBeLessThan(
-      BAND_ALLOWANCE,
-    );
-  }
+  judgeFrames(moving, late, {
+    excess: frame => blankBands([frame])[0] - BAND_ALLOWANCE,
+    // A late read finds the rows below further along: lower in an expand,
+    // which widens a band, higher in a collapse.
+    travel: (before, after) => after.belowTop - before.belowTop,
+    what: 'a blank band',
+  });
   // The group fades in from its first frame: it does not show at rest first.
   expect(moving[0].group?.opacity ?? 1).toBeLessThan(1);
   expect(frames[frames.length - 1].belowTop - before).toBeCloseTo(height, 0);
@@ -676,6 +771,7 @@ test('expand under a finger: the rows below glide while the group fades in, and 
 
 test('collapse under a finger: the group fades out as the rows below glide up, with no jump and no blank band', async ({
   page,
+  browserName,
 }) => {
   await open(page);
   await tapToggle(page);
@@ -691,10 +787,12 @@ test('collapse under a finger: the group fades out as the rows below glide up, w
   );
   // The checks below judge at least two frames of the glide, three of the
   // fade and five of the leaving group. A page starved of frames fails by name.
+  const late = lateReads(frames, browserName);
+  const travel = insideTravel(expanded, expanded - height);
   requireFrames(frames, {
     min: 2,
     during: 'the rows below glide up',
-    where: insideTravel(expanded, expanded - height),
+    where: frame => travel(frame) && !late.has(frame),
   });
   requireFrames(frames, {
     min: 5,
@@ -710,9 +808,13 @@ test('collapse under a finger: the group fades out as the rows below glide up, w
   for (const frame of fading) {
     expect(frame.group?.isInert, JSON.stringify(frame)).toBe(true);
   }
-  for (const [i, band] of blankBands(frames).entries()) {
-    expect(band, `frame ${i}: ${JSON.stringify(frames[i])}`).toBeLessThan(1.5);
-  }
+  judgeFrames(frames, late, {
+    excess: frame => blankBands([frame])[0] - 1.5,
+    // A late read finds the rows below further along: lower in an expand,
+    // which widens a band, higher in a collapse.
+    travel: (before, after) => after.belowTop - before.belowTop,
+    what: 'a blank band',
+  });
   expect(expanded - frames[frames.length - 1].belowTop).toBeCloseTo(height, 0);
   await expect(parts(page).group).toHaveCount(0);
   // How many frames land inside the collapse depends on the runner, so its
@@ -877,17 +979,42 @@ test('a focus ring on a row at the edge of a moving tree stays whole, while the 
 
 test('the guide lines beside a group show and hide with it: none runs past the last row it joins', async ({
   page,
+  browserName,
 }) => {
   await open(page);
-  const expand = await recordFrames(page, async () => tapToggle(page));
-  const collapse = await recordFrames(page, async () => tapToggle(page));
-  for (const phase of [expand, collapse]) {
-    for (const [i, frame] of phase.entries()) {
-      expect(
-        frame.guideBottom,
-        `frame ${i}: ${JSON.stringify(frame)}`,
-      ).toBeLessThan(frame.lastBottom + BAND_ALLOWANCE);
-    }
+  // Long enough that frames read on time land inside the travel.
+  await lengthenGlide(page, RECORDED_GLIDE_MS);
+  const expand = await recordFrames(
+    page,
+    async () => tapToggle(page),
+    RECORDED_GLIDE_MS + 400,
+  );
+  const collapse = await recordFrames(
+    page,
+    async () => tapToggle(page),
+    RECORDED_GLIDE_MS + 400,
+  );
+  for (const [name, phase] of [
+    ['expands', expand],
+    ['collapses', collapse],
+  ] as const) {
+    const late = lateReads(phase, browserName);
+    const moving = insideTravel(
+      phase[0].belowTop,
+      phase[phase.length - 1].belowTop,
+    );
+    requireFrames(phase, {
+      min: 2,
+      during: `the group ${name}`,
+      where: frame => moving(frame) && !late.has(frame),
+    });
+    judgeFrames(phase, late, {
+      excess: frame => frame.guideBottom - frame.lastBottom - BAND_ALLOWANCE,
+      // A late read finds the last row further along than the guide's clip:
+      // higher in a collapse, which widens an overrun, lower in an expand.
+      travel: (before, after) => before.lastBottom - after.lastBottom,
+      what: 'a guide line past the last row',
+    });
   }
 });
 

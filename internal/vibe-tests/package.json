@@ -9,6 +9,7 @@
   },
   "scripts": {
     "harness": "tsx src/cli.ts",
+    "eval": "node eval/run.mjs",
     "eval:self-test": "node eval/run.mjs --self-test",
     "interactive": "tsx src/interactive.ts",
     "interactive:sample": "tsx src/interactive.ts --sample 5",

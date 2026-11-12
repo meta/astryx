@@ -28,6 +28,7 @@ import {
 import {isLayerSurface} from '../Layer/layerSurfacePress';
 import {isSafeUrl} from '../utils/safeUrl';
 import {cancelPress} from '../utils/pressFeedback';
+import {pressBoxesIn} from '../privateAttributes/pressBox.stylex';
 
 /**
  * The attribute this hook sets on the container it makes clickable. A click
@@ -129,10 +130,12 @@ function belongsToSomethingElse(element: Element): boolean {
 }
 
 /**
- * The touch half of a container's press rule: a finger press that starts on a nested interactive element
- * other than the container's own action does not activate the container, so
- * it ends the press controller's paint on `container`. A mouse or pen press,
- * and a press on the container's surface or on `ownAction`, are left alone.
+ * The press half of a container's press rule. A press that starts on a nested
+ * interactive element other than the container's own action does not activate
+ * the container. So it ends the press controller's paint on `container`. The
+ * rule covers a finger's press on every container. On a container that owns a
+ * control's box (pressBox.stylex.ts), it covers a mouse's and a pen's press
+ * too. A press on the container's surface or on `ownAction` is left alone.
  * Not part of the package's public API.
  */
 export function cancelNestedTouchPress(
@@ -142,8 +145,8 @@ export function cancelNestedTouchPress(
 ): void {
   const target = event.target;
   if (
-    event.pointerType !== 'touch' ||
     container == null ||
+    (event.pointerType !== 'touch' && pressBoxesIn(container).length === 0) ||
     !(target instanceof Element) ||
     target === event.currentTarget ||
     !hasInteractiveAncestor(target, container) ||
@@ -366,9 +369,9 @@ export function useClickableContainerProxy({
     [containerRef, href, disabled],
   );
 
-  // The press-state counterpart of onClick's rule, for touch: a finger press
-  // that would not activate the container shows no press on it. A mouse or
-  // pen press keeps its `:active` paint.
+  // The press-state counterpart of onClick's rule: a press that would not
+  // activate the container shows no press on it. That holds for a finger on
+  // every container, and for a mouse or a pen on one that owns a control's box.
   const onPointerDown = useCallback(
     (event: PointerEvent<HTMLElement>) => {
       if (disabled) {
