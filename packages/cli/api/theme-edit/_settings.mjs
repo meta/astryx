@@ -13,7 +13,7 @@
 import {parse as parseModule} from '@babel/parser';
 import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
-import {coversProperty} from './_css.mjs';
+import {coversProperty, longhandsOf} from './_css.mjs';
 import postcss from 'postcss';
 import {createRequire} from 'node:module';
 import * as path from 'node:path';
@@ -1358,7 +1358,9 @@ export function compileTheme(ctx, data, base) {
     const prop = kebab(s.thing);
     if (
       s.mode ||
-      !/^padding(-block|-inline|-left|-right|-top|-bottom)?$/.test(prop)
+      !/^padding(-block|-inline|-left|-right|-top|-bottom|-block-start|-block-end|-inline-start|-inline-end)?$/.test(
+        prop,
+      )
     )
       return null;
     if (
@@ -1377,6 +1379,11 @@ export function compileTheme(ctx, data, base) {
     // top and bottom, so a left or right would sit beside its variables and
     // beat any later padding.
     const physical = /** @type {Record<string, string>} */ ({
+      // One logical side is that side (its keyword resolved too).
+      'padding-block-start': 'block-start',
+      'padding-block-end': 'block-end',
+      'padding-inline-start': 'inline-start',
+      'padding-inline-end': 'inline-end',
       'padding-left': 'inline-start',
       'padding-right': 'inline-end',
       'padding-top': 'block-start',
@@ -1400,15 +1407,20 @@ export function compileTheme(ctx, data, base) {
       (prop === 'padding' && w.length === 4 && w[1] !== w[3]);
     const partSides = data.settings.some(
       x =>
+        x !== s &&
         x.source === 'property' &&
-        x.on === s.on &&
+        // The part's own, or a group's it is in.
+        (x.on === s.on ||
+          (FAMILIES[/** @type {string} */ (x.on)] ?? []).includes(target)) &&
         x.when == null &&
         x.state == null &&
         (/^padding-/.test(kebab(x.thing)) ||
           (kebab(x.thing) === 'padding' &&
             /\(|\S+\s+\S+\s+\S+\s+\S+/.test(x.value))),
     );
-    if (!coreSplitsWrong && !(scoped && partSides)) return null;
+    // A side set on the part or its group: every side is written, so the
+    // later setting wins as written.
+    if (!coreSplitsWrong && !partSides) return null;
     /** @type {Record<string, string>} */
     const side = {};
     if (prop === 'padding') {
@@ -1468,6 +1480,39 @@ export function compileTheme(ctx, data, base) {
       borderBottomLeftRadius: corner(3),
       ...Object.fromEntries(vars.map(name => [name, h[0]])),
     };
+  };
+  /**
+   * A one-side logical padding on a part whose whole padding Core copies
+   * into a variable of its own (a composer's or a menu's inner padding), as
+   * its physical side (left-to-right): Core feeds every logical padding into
+   * that variable, so one side would set the whole box; a physical side it
+   * leaves alone. Null for any other property or part.
+   * @param {string} target @param {Setting} s
+   * @returns {Record<string, string> | null}
+   */
+  const boxSides = (target, s) => {
+    const prop = kebab(s.thing);
+    if (s.mode) return null;
+    const derived = ctx.derived?.[target] ?? [];
+    if (
+      derived.some(d => d.property === 'padding' && d.expand) ||
+      !derived.some(d => d.property === 'padding' && d.vars?.length)
+    )
+      return null;
+    const PHYSICAL = /** @type {Record<string, string[]>} */ ({
+      'padding-block-start': ['top'],
+      'padding-block-end': ['bottom'],
+      'padding-inline-start': ['left'],
+      'padding-inline-end': ['right'],
+      'padding-block': ['top', 'bottom'],
+      'padding-inline': ['left', 'right'],
+    });
+    const sides = PHYSICAL[prop];
+    if (!sides) return null;
+    const w = splitTop(String(s.value).trim(), ' ').map(x => x.trim());
+    return Object.fromEntries(
+      sides.map((side, i) => [camel(`padding-${side}`), w[i] ?? w[0]]),
+    );
   };
   /** @param {Setting} s @param {string} target @param {string} prop @param {string} v */
   const putComp = (s, target, prop, v) => {
@@ -1722,10 +1767,16 @@ export function compileTheme(ctx, data, base) {
       else putTok(s.thing, s.value, s.mode);
     } else if (s.source === 'property') {
       for (const t of parts) {
-        const sides = containerSides(t, s) ?? cornerRadii(t, s);
+        const sides =
+          containerSides(t, s) ?? cornerRadii(t, s) ?? boxSides(t, s);
         if (sides)
           for (const [k, v] of Object.entries(sides)) putComp(s, t, k, v);
         else putComp(s, t, camel(s.thing), s.value);
+        // A part's own corner radii replace a single radius a group or an
+        // earlier setting left in the same block, which Core would copy into
+        // the content's radius after the editor's own.
+        if (sides && 'borderTopLeftRadius' in sides)
+          delete block(s, t).borderRadius;
       }
     }
   }
@@ -2434,7 +2485,13 @@ export async function buildTheme(ctx, slug, data) {
       // The base value goes before the variant's own declarations, so a
       // longhand or shorthand the variant sets itself (border-color after
       // a base border) still wins over it.
-      t[x.key] = {[x.prop]: x.value, ...(t[x.key] ?? {})};
+      const own = t[x.key] ?? {};
+      // A variant that sets every longhand of the property itself needs
+      // none of the base value (and a lifted radius would feed Core's copy
+      // of it into the content's radius, after the variant's own).
+      const longs = [...longhandsOf(kebab(x.prop))];
+      if (longs.length && longs.every(l => camel(l) in own)) continue;
+      t[x.key] = {[x.prop]: x.value, ...own};
       lifted.push(`${x.target} ${x.key} ${kebab(x.prop)}`);
     }
     await step(() => {

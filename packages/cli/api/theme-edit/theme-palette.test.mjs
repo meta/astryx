@@ -3020,3 +3020,65 @@ describe('colors32', () => {
     await themeEditUndo('p', {cwd, thing: 'text-size'});
   });
 });
+
+describe('parts33', () => {
+  /** @param {string} selector */
+  const blockOf = selector => {
+    const css = read('p.css');
+    const at = css.indexOf(`${selector} {`);
+    return at < 0 ? '' : css.slice(at, css.indexOf('}', at));
+  };
+
+  it('replaces a physical side by a later logical shorthand, and a group side by a later part padding', async () => {
+    await themeEditSet('p', 'padding-left', '20px', {cwd, on: 'card'});
+    await themeEditSet('p', 'padding-inline', '8px', {cwd, on: 'card'});
+    const shown = JSON.stringify((await themeEditShow('p', {cwd})).data);
+    expect(shown).not.toContain('padding-left');
+    await themeEditUndo('p', {cwd, thing: 'padding-inline', on: 'card'});
+    await themeEditSet('p', 'padding-left', '20px', {cwd, on: 'containers'});
+    await themeEditSet('p', 'padding', '8px', {cwd, on: 'card'});
+    const card = blockOf('.astryx-card');
+    expect(card).toMatch(
+      /--astryx-card-padding-inline-start:\s*8px|--astryx-card-padding:\s*8px/,
+    );
+    expect(card).not.toMatch(/padding-inline-start:\s*20px/);
+    await themeEditUndo('p', {cwd, thing: 'padding', on: 'card'});
+    await themeEditUndo('p', {cwd, thing: 'padding-left', on: 'containers'});
+  });
+
+  it("keeps the part's own inner radius over a group radius in the same block", async () => {
+    await themeEditSet('p', 'border-radius', '8px', {cwd, on: 'containers'});
+    await themeEditSet('p', 'border-radius', '1px 20px', {cwd, on: 'card'});
+    const card = blockOf('.astryx-card');
+    expect(card).toContain('--_card-radius: 1px;');
+    expect(card).not.toContain('--_card-radius: 8px;');
+    await themeEditUndo('p', {cwd, thing: 'border-radius', on: 'card'});
+    await themeEditUndo('p', {cwd, thing: 'border-radius', on: 'containers'});
+  });
+
+  it('writes one logical side as its physical side where Core copies the whole padding', async () => {
+    await themeEditSet('p', 'padding-inline-start', '5px', {
+      cwd,
+      on: 'chat-composer',
+    });
+    const box = blockOf('.astryx-chat-composer');
+    expect(box).toMatch(/padding-left:\s*5px/);
+    expect(box).not.toMatch(/--_chat-composer-padding:\s*5px/);
+    await themeEditUndo('p', {
+      cwd,
+      thing: 'padding-inline-start',
+      on: 'chat-composer',
+    });
+  });
+
+  it('resolves a keyword on each logical side of a card', async () => {
+    await themeEditSet('p', 'padding-block-start', 'initial', {
+      cwd,
+      on: 'card',
+    });
+    const card = blockOf('.astryx-card');
+    expect(card).toMatch(/--astryx-card-padding-block-start:\s*0/);
+    expect(card).not.toContain('initial');
+    await themeEditUndo('p', {cwd, thing: 'padding-block-start', on: 'card'});
+  });
+});

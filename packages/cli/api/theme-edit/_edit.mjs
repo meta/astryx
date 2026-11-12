@@ -194,6 +194,20 @@ function readableJson(file) {
 }
 
 /**
+ * A physical padding side as its logical side (left-to-right), so a later
+ * `padding-inline` replaces an earlier `padding-left` as it does
+ * `padding-inline-start`.
+ * @param {string} prop
+ */
+const logicalSide = prop =>
+  /** @type {Record<string, string>} */ ({
+    'padding-left': 'padding-inline-start',
+    'padding-right': 'padding-inline-end',
+    'padding-top': 'padding-block-start',
+    'padding-bottom': 'padding-block-end',
+  })[prop] ?? prop;
+
+/**
  * Start a theme in themes/<name>/, optionally on a built-in theme, with any
  * dial settings applied in the same build. Each setting is checked as `set`
  * checks it, before anything is written.
@@ -202,6 +216,7 @@ function readableJson(file) {
  * @param {import('./theme-edit.type.mjs').ThemeEditNewOptions} [options]
  * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditNewResponse>}
  */
+
 export async function themeEditNew(name, options = {}) {
   const {cwd = process.cwd(), png = false, settings = {}} = options;
   // `--like none` builds on no base, as `set <theme> base none` does.
@@ -1222,7 +1237,8 @@ async function changeOnce(sub, slug, thing, value, options, seen) {
             x.state === s.state &&
             // A longhand the shorthand really sets (MDN's data), never a
             // property that only shares its name (overflow-wrap).
-            coversProperty(s.thing, x.thing),
+            (coversProperty(s.thing, x.thing) ||
+              coversProperty(logicalSide(s.thing), logicalSide(x.thing))),
         )
       : [];
   // They go, as the note says: Core writes each side to its own variable,
