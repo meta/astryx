@@ -326,17 +326,44 @@ export function importPathOf(project, name) {
  * resolves it: from the project (an open project, or its folder, relative
  * or not). Null when it is not installed there. The one base resolution:
  * `new`, `set base`, `how` and every suggestion ask this.
+ *
+ * Only the project's own node_modules folders count, as the app's bundler
+ * reads them. NODE_PATH and Node's global folders do not: a base found only
+ * there would not build.
  * @param {ThemeProject | string} from
  * @param {string} like
  * @returns {string | null}
  */
 export function baseModule(from, like) {
-  const req =
-    typeof from === 'string'
-      ? createRequire(path.join(path.resolve(from), 'noop.js'))
-      : from.req;
+  const name = `@astryxdesign/theme-${like}`;
+  let dir = typeof from === 'string' ? path.resolve(from) : from.cwd;
+  for (;;) {
+    const pkg = path.join(dir, 'node_modules', name);
+    if (
+      path.basename(dir) !== 'node_modules' &&
+      fs.existsSync(path.join(pkg, 'package.json'))
+    )
+      return builtModule(pkg, name);
+    const up = path.dirname(dir);
+    if (up === dir) return null;
+    dir = up;
+  }
+}
+
+/**
+ * The `built` export of the package in `pkg`, or null. A file Node finds
+ * anywhere else (it searches NODE_PATH after a miss) does not count.
+ * @param {string} pkg
+ * @param {string} name
+ * @returns {string | null}
+ */
+function builtModule(pkg, name) {
   try {
-    return req.resolve(`@astryxdesign/theme-${like}/built`);
+    const file = createRequire(path.join(pkg, 'package.json')).resolve(
+      `${name}/built`,
+    );
+    const root = fs.realpathSync(pkg) + path.sep;
+    return fs.realpathSync(file).startsWith(root) ? file : null;
   } catch {
     return null;
   }
