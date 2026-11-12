@@ -176,6 +176,32 @@ describe('theme build with several files', () => {
     expect(fs.existsSync(path.join(dir, 'alpha.css'))).toBe(false);
   }, 120_000);
 
+  it('prints no [ok] line for a theme a refused batch never writes', async () => {
+    const dir = themeDir();
+    fs.writeFileSync(
+      path.join(dir, 'alpha2.mjs'),
+      `export default { name: 'alpha', tokens: { '--color-bg': '#000000' } };\n`,
+    );
+    for (const detail of [[], ['--detail', 'full']]) {
+      const r = await runCli(
+        [...detail, 'theme', 'build', 'alpha.mjs', 'alpha2.mjs'],
+        dir,
+      );
+      expect(r.status).toBe(1);
+      expect(r.stdout + r.stderr).not.toMatch(/\[ok\].*alpha\.css/);
+      expect(r.stderr).toContain('nothing was written');
+      expect(fs.existsSync(path.join(dir, 'alpha.css'))).toBe(false);
+    }
+  }, 120_000);
+
+  it('prints each theme of a batch after it is written', async () => {
+    const dir = themeDir();
+    const r = await runCli(['theme', 'build', 'alpha.mjs', 'beta.mjs'], dir);
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout).toMatch(/\[ok\] alpha\.css/);
+    expect(r.stdout).toMatch(/\[ok\] beta\.css/);
+  }, 120_000);
+
   it('suggests the theme source when given a bare theme name', async () => {
     const dir = themeDir();
     fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"app"}\n');

@@ -43,7 +43,7 @@ export const doc = {
     },
     {
       code: 'ERR_THEME_INVALID',
-      when: 'the theme is the default (the suggestions name `theme use` with up to three other added themes, or `theme list` when it is the only one) or generated state is invalid',
+      when: 'the theme is the default (the suggestions name `theme use` with up to three other added themes, or `theme list` when it is the only one), generated state is invalid, or the slug is not added and names a local theme folder that is broken',
     },
     {code: 'ERR_WRITE_FAILED', when: 'the generated module cannot be written'},
   ],

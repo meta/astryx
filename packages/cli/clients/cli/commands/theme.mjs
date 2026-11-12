@@ -1092,9 +1092,33 @@ function registerThemeCommands(theme, program, docs, words) {
       // shell loop under `set -e` would have, and stops.
       /** @type {Array<Array<{dest: string, content: string}>> | undefined} */
       const deferred = !options.check && entries.length > 1 ? [] : undefined;
+      // What each deferred theme prints waits until its outputs are written,
+      // so no `[ok]` line names a file that is never written.
+      /** @type {Array<Array<() => void>>} */
+      const pending = [];
+      const publish = () => {
+        const queue =
+          /** @type {Array<Array<{dest: string, content: string}>>} */ (
+            deferred
+          ).splice(0);
+        queue.forEach((writes, index) => {
+          writeDeferredBuildOutputs([writes]);
+          for (const show of pending[index] ?? []) show();
+        });
+      };
       /** @type {Map<string, string>} */
       const claimedOutputs = new Map();
       for (const entry of entries) {
+        /** @type {Array<() => void>} */
+        const lines = [];
+        const log = logger.log;
+        const warn = logger.warn;
+        if (deferred) {
+          logger.log = (/** @type {string} */ message) =>
+            lines.push(() => log.call(logger, message));
+          logger.warn = (/** @type {string} */ message) =>
+            lines.push(() => warn.call(logger, message));
+        }
         try {
           const buildOptions = {
             out: options.out,
@@ -1117,18 +1141,24 @@ function registerThemeCommands(theme, program, docs, words) {
             if (built.trailer) trailers.push(built.trailer);
             if (compact && result?.type === 'theme.build') {
               const {outputs, sizeKB, tokenCount, componentCount} = result.data;
-              emit(
-                text(
-                  `[ok] ${outputs.css} (${sizeKB} KB, ${tokenCount} token overrides, ${componentCount} component overrides)`,
-                ),
-              );
+              const show = () =>
+                emit(
+                  text(
+                    `[ok] ${outputs.css} (${sizeKB} KB, ${tokenCount} token overrides, ${componentCount} component overrides)`,
+                  ),
+                );
+              if (deferred) lines.push(show);
+              else show();
             }
           } else {
             result = await themeBuild(entry.file, buildOptions, {
               cwd: process.cwd(),
             });
           }
+          logger.log = log;
+          logger.warn = warn;
           results.push({file: entry.file, receipt: result ?? null});
+          if (deferred) pending.push(lines);
           if (
             options.check &&
             result &&
@@ -1138,6 +1168,8 @@ function registerThemeCommands(theme, program, docs, words) {
             stale = true;
           }
         } catch (e) {
+          logger.log = log;
+          logger.warn = warn;
           const err =
             /** @type {import('../../../api/error.mjs').AstryxError} */ (e);
           // Stop at the first failure, as a shell loop under `set -e` does.
@@ -1153,7 +1185,7 @@ function registerThemeCommands(theme, program, docs, words) {
           }
           if (deferred) {
             try {
-              writeDeferredBuildOutputs(deferred);
+              publish();
             } catch (writeError) {
               return themeError(
                 /** @type {import('../../../api/error.mjs').AstryxError} */ (
@@ -1171,7 +1203,7 @@ function registerThemeCommands(theme, program, docs, words) {
       }
       if (deferred) {
         try {
-          writeDeferredBuildOutputs(deferred);
+          publish();
         } catch (e) {
           return themeError(
             /** @type {import('../../../api/error.mjs').AstryxError} */ (e),
