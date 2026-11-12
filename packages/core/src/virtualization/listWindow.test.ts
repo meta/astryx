@@ -2,13 +2,17 @@
 
 /**
  * @file listWindow.test.ts
- * @input The fixed-pitch range and anchor calculation
+ * @input The fixed-pitch range and anchor calculation, and the range for items of varying size
  * @output Range, gap, guard and anchor assertions
  * @position Colocated tests for the private list-windowing module
  */
 import {describe, it} from 'vitest';
 import assert from 'node:assert/strict';
-import {calculateListWindow, reconcileListAnchor} from './listWindow';
+import {
+  calculateListWindow,
+  calculateVariableListRange,
+  reconcileListAnchor,
+} from './listWindow';
 
 const defaults = {
   rowCount: 100,
@@ -352,5 +356,62 @@ describe('first-visible-key anchoring', () => {
       }),
       75,
     );
+  });
+});
+
+describe('calculateVariableListRange', () => {
+  // Items of 100, 50, 150, then seven of 100: starts 0, 100, 150, 300, ...
+  const sizes = [100, 50, 150, 100, 100, 100, 100, 100, 100, 100];
+  const offsets = sizes.reduce<number[]>(
+    (all, size) => [...all, all[all.length - 1] + size],
+    [0],
+  );
+  const range = (
+    options: Partial<Parameters<typeof calculateVariableListRange>[0]>,
+  ) =>
+    calculateVariableListRange({
+      offsets,
+      viewportSize: 250,
+      scrollOffset: 0,
+      isMeasured: true,
+      overscan: 2,
+      ...options,
+    });
+
+  it('seeds the items that start inside the first viewport, plus overscan after them', () => {
+    // Items 0..2 start before 250.
+    assert.deepEqual(range({isMeasured: false}), {start: 0, end: 5});
+  });
+
+  it('mounts the items that intersect the viewport, plus overscan on each side', () => {
+    // 320..570 shows items 3 (300..400) through 5 (500..600).
+    assert.deepEqual(range({scrollOffset: 320}), {start: 1, end: 8});
+  });
+
+  it('clamps the scroll offset to the full extent', () => {
+    // The last 250px start inside item 7.
+    assert.deepEqual(range({scrollOffset: 99999}), {
+      start: 5,
+      end: sizes.length,
+    });
+  });
+
+  it('mounts every item when the viewport holds the full extent', () => {
+    assert.deepEqual(
+      [range({viewportSize: 2000}).start, range({viewportSize: 2000}).end],
+      [0, sizes.length],
+    );
+  });
+
+  it('keeps one visible item when the viewport has no space', () => {
+    // Item 3 holds the scroll offset.
+    assert.deepEqual(range({viewportSize: 0, scrollOffset: 320}), {
+      start: 1,
+      end: 6,
+    });
+  });
+
+  it('returns an empty range for no items', () => {
+    assert.deepEqual(range({offsets: [0]}), {start: 0, end: 0});
   });
 });
