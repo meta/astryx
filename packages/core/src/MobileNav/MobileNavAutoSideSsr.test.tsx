@@ -15,8 +15,10 @@ import {renderToString} from 'react-dom/server';
 import {MobileNav} from './MobileNav';
 
 beforeEach(() => {
+  // Like the native method, move focus into the dialog.
   HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
     this.setAttribute('open', '');
+    this.querySelector<HTMLElement>('[tabindex]')?.focus();
   };
   HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
     this.removeAttribute('open');
@@ -39,7 +41,12 @@ afterEach(() => {
 });
 
 const tree = (isOpen: boolean) => (
-  <MobileNav isOpen={isOpen} onOpenChange={() => {}} side="auto" label="Nav">
+  <MobileNav
+    id="nav-drawer"
+    isOpen={isOpen}
+    onOpenChange={() => {}}
+    side="auto"
+    label="Nav">
     <div>Content</div>
   </MobileNav>
 );
@@ -51,6 +58,9 @@ describe('MobileNav side="auto": open on the server', () => {
     // An inline-start opener in RTL sits in the physical right half.
     const opener = document.createElement('button');
     opener.style.direction = 'rtl';
+    // showModal() pulls focus into the drawer during hydration, so the opener
+    // is found through `aria-controls`.
+    opener.setAttribute('aria-controls', 'nav-drawer');
     document.body.appendChild(opener);
     vi.spyOn(opener, 'getBoundingClientRect').mockReturnValue({
       left: 340,
@@ -92,6 +102,51 @@ describe('MobileNav side="auto": open on the server', () => {
     // A later close and open resolves from the opener as well.
     await act(async () => root.render(tree(false)));
     await act(async () => root.render(tree(true)));
+    expect(container.querySelector('[data-side]')).toHaveAttribute(
+      'data-side',
+      'start',
+    );
+    await act(async () => root.unmount());
+  });
+
+  it('resolves the edge from the aria-controls toggle when the opener holds no focus', async () => {
+    document.documentElement.setAttribute('dir', 'rtl');
+    vi.stubGlobal('innerWidth', 400);
+    const toggle = document.createElement('button');
+    toggle.style.direction = 'rtl';
+    toggle.setAttribute('aria-controls', 'nav-drawer');
+    document.body.appendChild(toggle);
+    vi.spyOn(toggle, 'getBoundingClientRect').mockReturnValue({
+      left: 340,
+      right: 380,
+      width: 40,
+      top: 0,
+      bottom: 40,
+      height: 40,
+      x: 340,
+      y: 0,
+      toJSON() {},
+    });
+    // The toggle is never focused: the mock moves focus into the dialog.
+    const serverTree = (
+      <MobileNav
+        id="nav-drawer"
+        isOpen
+        onOpenChange={() => {}}
+        side="auto"
+        label="Nav">
+        <div>Content</div>
+      </MobileNav>
+    );
+
+    const container = document.createElement('div');
+    container.innerHTML = renderToString(serverTree);
+    document.body.appendChild(container);
+
+    let root!: ReturnType<typeof hydrateRoot>;
+    await act(async () => {
+      root = hydrateRoot(container, serverTree);
+    });
     expect(container.querySelector('[data-side]')).toHaveAttribute(
       'data-side',
       'start',
