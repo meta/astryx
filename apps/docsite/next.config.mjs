@@ -7,9 +7,10 @@
  *   staged preview-only static exports.
  * @output Docsite routes plus Storybook and Sandbox at /storybook/ and /sandbox/.
  *   Client main-app chunks start with the preview's cookie compatibility guard;
- *   large Webpack builds run with isolated, memory-optimized compilation. The
- *   experimental DOCSITE_ICON_SET setting draws template previews with an
- *   installed icon set.
+ *   large Webpack builds run with isolated, memory-optimized compilation.
+ *   Template previews load their images through the image optimizer. The
+ *   experimental DOCSITE_ICON_SET setting draws them with an installed icon
+ *   set, with per-icon imports from the set's library.
  * @position Next.js configuration for the existing Vercel docsite deployment.
  */
 
@@ -41,6 +42,10 @@ const docRedirects = existsSync(docRedirectsPath)
 const previewIconSet = process.env.DOCSITE_ICON_SET?.trim() ?? '';
 const templateSources =
   /packages[\\/]cli[\\/]assets[\\/]templates[\\/](?:pages|blocks)[\\/].+\.tsx$/u;
+// The sources a preview renders: page templates, and the copies of blocks
+// that generate-data.mjs writes.
+const previewSources =
+  /(?:packages[\\/]cli[\\/]assets[\\/]templates[\\/]pages|src[\\/]generated[\\/](?:showcases|examples))[\\/].+\.tsx$/u;
 
 const stagesStaticApps =
   process.env.VERCEL_ENV === 'preview' ||
@@ -56,31 +61,30 @@ const nextConfig = {
     webpackBuildWorker: true,
     webpackMemoryOptimizations: true,
   },
-  // The search API (app/api/search) runs `astryx search` itself. The CLI stays
-  // an external module (see webpack below), so its code and dependencies are
-  // traced as installed; these are the files it reads from disk at run time:
-  // its docs and templates, and each documented package's docs and sources.
+  // The search API (app/api/search) ranks with the CLI's own search. The CLI
+  // stays an external module (see webpack below), so its code and dependencies
+  // are traced as installed; these are the files it reads from disk at run
+  // time: its version, and the cards and weights its ranker reads. The
+  // candidates it ranks are in the route's own bundle
+  // (generated/searchIndex.ts), so the function carries no docs, templates or
+  // package sources.
   outputFileTracingIncludes: {
     '/api/search': [
-      './astryx.config.mjs',
       '../../packages/cli/package.json',
-      '../../packages/cli/{api,assets,authoring,clients,foundation,host}/**/*',
-      '../../packages/core/package.json',
-      '../../packages/core/src/**/*',
-      // Integrations resolve through the site's node_modules, so they are
-      // traced at that path.
-      './node_modules/@astryxdesign/{lab,charts,richtext,vega}/{package.json,astryx.integration.mjs}',
-      './node_modules/@astryxdesign/{lab,charts,richtext,vega}/{src,blocks,docs,dist}/**/*',
+      '../../packages/cli/api/**/*.json',
     ],
   },
   // Packages the CLI imports for other commands but a search never loads
-  // (bundlers, compilers, browsers, test runners), and built output it never
-  // reads. Leaving them out keeps the search function small; the parity test
-  // and a traced-files-only build hold it to `astryx search`.
+  // (bundlers, compilers, browsers, test runners), and built output and Core's
+  // folder, which it never reads: the tracer adds that whole folder for a path
+  // the CLI builds at run time. Leaving them out keeps the search function
+  // small; the parity test and a traced-files-only build hold it to
+  // `astryx search`.
   outputFileTracingExcludes: {
     '/api/search': [
       '../../node_modules/.pnpm/{esbuild,@esbuild+*,typescript,playwright,playwright-core,vite,rolldown,@rolldown+*,flow-parser,esprima,tsx,vitest,@vitest+*,chai,@testing-library+*}@*/**',
       '../../packages/*/dist/**',
+      '../../packages/core/**',
       './src/**',
     ],
   },
@@ -188,6 +192,20 @@ const nextConfig = {
       );
     }
 
+    config.module.rules.push({
+      test: previewSources,
+      enforce: 'pre',
+      use: [
+        {
+          loader: resolve(
+            import.meta.dirname,
+            'scripts/template-image-loader.mjs',
+          ),
+          options: {publicDir: resolve(import.meta.dirname, 'public')},
+        },
+      ],
+    });
+
     if (previewIconSet) {
       // A cached module keeps the icons of the set it was built with, so a
       // build with another set must not reuse it.
@@ -210,6 +228,24 @@ const nextConfig = {
             loader: resolve(
               import.meta.dirname,
               'scripts/template-icon-loader.mjs',
+            ),
+            options: {iconSet: previewIconSet, projectDir: import.meta.dirname},
+          },
+        ],
+      });
+      // A set's module may import from a library that is one huge barrel.
+      // Babel compiles the docsite, so Next's per-package import
+      // optimizations do not run; this loader points those imports at the
+      // icon files, so the compile does not take every icon in the library.
+      config.module.rules.push({
+        test: /\.[cm]?jsx?$/u,
+        include: /[\\/]node_modules[\\/]/u,
+        enforce: 'pre',
+        use: [
+          {
+            loader: resolve(
+              import.meta.dirname,
+              'scripts/icon-library-import-loader.mjs',
             ),
             options: {iconSet: previewIconSet, projectDir: import.meta.dirname},
           },

@@ -13,7 +13,13 @@ import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {AstryxError} from '../error.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
-import {CLOSEST_OPEN_FONT, OPEN_FONTS, P, SYSTEM_FONTS} from './_tables.mjs';
+import {
+  CLOSEST_OPEN_FONT,
+  OPEN_FONTS,
+  P,
+  SYSTEM_FAMILIES,
+  SYSTEM_FONTS,
+} from './_tables.mjs';
 import {makeCompiler} from './_compiler.mjs';
 import {openProject, installLine} from './_project.mjs';
 import {partData} from './_parts.mjs';
@@ -37,6 +43,21 @@ const E = ERROR_CODES;
  */
 export function requireProject(cwd) {
   if (!isOutsideProject(cwd)) return;
+  const pkg = path.join(cwd, 'package.json');
+  // Yarn Plug'n'Play has no node_modules for the editor to read Core from.
+  if (fs.existsSync(path.join(cwd, '.pnp.cjs')))
+    throw new AstryxError(
+      "This app uses Yarn Plug'n'Play, which astryx experimental theme does not support: it reads the installed Core from node_modules. Set `nodeLinker: node-modules` in .yarnrc.yml and run yarn install. Nothing was written.",
+      [],
+      E.ERR_PROJECT_REQUIRED,
+    );
+  // A package.json with no Core: an app (or a workspace root) that needs it.
+  if (fs.existsSync(pkg))
+    throw new AstryxError(
+      `@astryxdesign/core is not installed in this app (package.json here does not use it). astryx experimental theme checks every change against the installed Core: install it, or run the command from the package that uses it. Nothing was written.`,
+      [{name: 'npm install @astryxdesign/core', reason: 'do this first'}],
+      E.ERR_PROJECT_REQUIRED,
+    );
   throw new AstryxError(
     'No package.json found. astryx experimental theme works inside an app project, which it writes the theme into and whose installed Core it checks every change against. Nothing was written.',
     [],
@@ -57,11 +78,14 @@ export async function context(cwd) {
   let parts;
   /** @type {string | null} */
   let unchecked = null;
+  /** @type {string | null} the render error's code */
+  let uncheckedCode = null;
   try {
     parts = await partData(project);
   } catch (e) {
     if (!isRenderFailure(e)) throw e;
     unchecked = renderCause(project, /** @type {Error} */ (e).message);
+    uncheckedCode = /** @type {any} */ (e).code ?? null;
     parts = {
       version: 0,
       coreKey: project.coreKey,
@@ -71,7 +95,13 @@ export async function context(cwd) {
       items: 0,
     };
   }
-  return {project, C: makeCompiler(project, parts), parts, unchecked};
+  return {
+    project,
+    C: makeCompiler(project, parts),
+    parts,
+    unchecked,
+    uncheckedCode,
+  };
 }
 
 /** @param {unknown} e */
@@ -162,7 +192,7 @@ export function fontNotes(ctx, data) {
         : 'system';
     notes.push(
       installed
-        ? `the app loads this font with one import: import '${pkg}';`
+        ? `${family} is installed (${pkg}), so the previews load it; the app loads it with one import: import '${pkg}';`
         : `${family} is not installed, so it does not load: the previews and the app show the next font in the stack. Install it: ${installLine(ctx.project.cwd, [pkg])}. Then the preview imports it on the next set or show, and the app imports it once: import '${pkg}'; Until then, the closest font that needs no install is ${near}: ${P} set ${data.name} font ${near}`,
     );
   }
@@ -170,6 +200,9 @@ export function fontNotes(ctx, data) {
     if (
       s.thing !== 'font' ||
       SYSTEM_FONTS.includes(s.value) ||
+      SYSTEM_FAMILIES.has(
+        fontOf(s.value).family.replace(/["']/g, '').toLowerCase(),
+      ) ||
       OPEN_FONTS[s.value] ||
       fontOf(s.value).pkg ||
       s.value === 'rounded' ||
@@ -179,7 +212,7 @@ export function fontNotes(ctx, data) {
     const family = fontOf(s.value).family.replace(/["']/g, '').toLowerCase();
     const near = CLOSEST_OPEN_FONT[family];
     notes.push(
-      `"${fontOf(s.value).family.replace(/["']/g, '')}" is not a system font and no package loads it: the app must load it, or it falls back.${near ? ` The closest open font is ${near}: ${P} set ${data.name} font ${near}${s.on ? ` --on ${s.on}` : ''}` : ''}`,
+      `"${fontOf(s.value).family.replace(/^["']|["']$/g, '')}" is not a system font and no package loads it: the app must load it, or it falls back.${near ? ` The closest open font is ${near}: ${P} set ${data.name} font ${near}${s.on ? ` --on ${s.on}` : ''}` : ''}`,
     );
   }
   return notes;
@@ -203,13 +236,31 @@ export function styledChanges(before, after) {
     ])) {
       const x = a[target]?.[key] ?? {};
       const y = b[target]?.[key] ?? {};
+      /** @param {string} p */
+      const cssName = p =>
+        p.startsWith('--')
+          ? p
+          : p.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`);
       for (const prop of new Set([...Object.keys(x), ...Object.keys(y)])) {
         if (JSON.stringify(x[prop]) === JSON.stringify(y[prop])) continue;
-        const name = prop.startsWith('--')
-          ? prop
-          : prop.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`);
+        const where = `${target}${key === 'base' ? '' : ` ${key}`}`;
+        // A state block (`:hover`) lists each property it changes.
+        if (
+          prop.startsWith(':') &&
+          ((y[prop] && typeof y[prop] === 'object') ||
+            (x[prop] && typeof x[prop] === 'object'))
+        ) {
+          const xs = x[prop] ?? {};
+          const ys = y[prop] ?? {};
+          for (const p of new Set([...Object.keys(xs), ...Object.keys(ys)]))
+            if (JSON.stringify(xs[p]) !== JSON.stringify(ys[p]))
+              out.push(
+                `${where} ${prop}: ${cssName(p)} ${ys[p] === undefined ? '(removed)' : String(ys[p])}`,
+              );
+          continue;
+        }
         out.push(
-          `${target}${key === 'base' ? '' : ` ${key}`}: ${name} ${y[prop] === undefined ? '(removed)' : typeof y[prop] === 'string' ? y[prop] : JSON.stringify(y[prop])}`,
+          `${where}: ${cssName(prop)} ${y[prop] === undefined ? '(removed)' : typeof y[prop] === 'string' ? y[prop] : JSON.stringify(y[prop])}`,
         );
       }
     }
@@ -258,8 +309,13 @@ export async function previewAfter(ctx, slug, data, png) {
   try {
     preview = await renderPreview(ctx, slug, data);
   } catch (e) {
-    if (!isRenderFailure(e)) throw e;
-    cause ??= renderCause(ctx.project, /** @type {Error} */ (e).message);
+    // The change is already saved: any failure here leaves it unchecked.
+    const code = /** @type {any} */ (e)?.code;
+    cause ??= isRenderFailure(e)
+      ? renderCause(ctx.project, /** @type {Error} */ (e).message)
+      : ['ENOSPC', 'EACCES', 'EPERM', 'EROFS', 'EIO'].includes(code)
+        ? `preview.html could not be written (${code === 'ENOSPC' ? 'the disk is full' : code}), so it still shows the theme as it was`
+        : `checking it failed: ${e instanceof Error ? e.message : String(e)}`;
   }
   const f = themeFiles(ctx.project.cwd, slug);
   const shots =
@@ -278,12 +334,29 @@ export async function previewAfter(ctx, slug, data, png) {
   };
 }
 
-/** @param {string | undefined} section a section of the sheet */
-export function checkSection(section) {
-  if (section != null && !SHOWCASE_GROUPS.includes(section))
+/**
+ * The section of the sheet, in lower case, or undefined; a refusal for one
+ * that is not a section.
+ * @param {string | undefined} section
+ * @param {string} [theme] the theme the suggestions name
+ * @returns {string | undefined}
+ */
+export function checkSection(section, theme = 'my') {
+  if (section === '')
+    refuse(E.ERR_MISSING_ARGUMENT, '--section was given no value.', {
+      run: [`${P} show ${theme} --section ${SHOWCASE_GROUPS[0]}`],
+    });
+  const s = section?.toLowerCase();
+  if (s != null && !SHOWCASE_GROUPS.includes(s))
     refuse(
       E.ERR_INVALID_ARGUMENT,
       `--section takes ${SHOWCASE_GROUPS.join(', ')}, not "${section}".`,
-      {didYouMean: nearest(section, SHOWCASE_GROUPS)},
+      {
+        didYouMean: nearest(s, SHOWCASE_GROUPS),
+        run: [
+          `${P} show ${theme} --section ${nearest(s, SHOWCASE_GROUPS)[0] ?? SHOWCASE_GROUPS[0]}`,
+        ],
+      },
     );
+  return s;
 }

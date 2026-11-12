@@ -10,34 +10,37 @@
  */
 
 import {DIRECT, GROUPS, HOW} from './_tables.mjs';
-
-/**
- * Whether a color is see-through: its contrast depends on what is under it,
- * so it is not judged alone.
- * @param {unknown} v
- */
-function hasAlpha(v) {
-  const s = String(v ?? '').trim();
-  const h = /^#(?:[0-9a-f]{4}|[0-9a-f]{8})$/i.exec(s);
-  if (h) return s.length === 5 ? !/f$/i.test(s) : !/ff$/i.test(s);
-  const m = /\/\s*([\d.]+%?)\s*\)$|^rgba\([^)]*,\s*([\d.]+)\s*\)$/i.exec(s);
-  if (!m) return /^transparent$/i.test(s);
-  const a = m[1] ?? m[2];
-  return a.endsWith('%') ? parseFloat(a) < 100 : parseFloat(a) < 1;
-}
+import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 
 /** Only these token types may differ between light and dark. */
 export const MODAL = new Set(['color', 'shadow']);
 
+/**
+ * Whether a token is a color by its name, as Core's color groups and the
+ * token table type it: `--color-*`, `--syntax-*` and `--focus-outline-color`.
+ * Settings are checked by it where no installed Core is read.
+ * @param {string} name
+ */
+export const isColorToken = name =>
+  /^--color-|^--syntax-|^--focus-outline-color$/.test(name);
+
 /** Tokens a component may read only in some states: never refused globally. */
-const SOFT = /^--(color-data|syntax|duration|ease|z-|layer|breakpoint)/;
+/**
+ * Tokens no catalog part is recorded reading, though Core reads them: code
+ * highlighting, the display text sizes and the colored icons read them only
+ * under a variant or in a global stylesheet. Never refused as unread.
+ */
+const SOFT =
+  /^--(color-data|color-syntax|syntax|duration|ease|z-|layer|breakpoint|text-display-\d|color-icon-[a-z]+$)/;
 
 /** @typedef {{token: string, props: string[], when: string[]}} Read */
 /** @typedef {{message: string, run: string[], also: string[], soft?: boolean}} CheckFailure */
+/** @typedef {import('./_parts.mjs').PartData} PartData */
+/** @typedef {import('./_parts.mjs').TextPair} TextPair */
 
 /**
  * @param {import('./_project.mjs').ThemeProject} project
- * @param {import('./_parts.mjs').PartData} parts
+ * @param {PartData} parts
  */
 export function makeCompiler(project, parts) {
   const {core} = project;
@@ -67,11 +70,10 @@ export function makeCompiler(project, parts) {
   put(groupVars(core.easeVars), 'easing');
   for (const k of Object.keys(core.tokenDefaults ?? {})) {
     if (TYPE[k]) continue;
-    if (/^--color-|^--syntax-/.test(k)) TYPE[k] = 'color';
+    if (isColorToken(k)) TYPE[k] = 'color';
     else if (/^--font-family/.test(k)) TYPE[k] = 'font';
-    else if (/^--font-weight/.test(k)) TYPE[k] = 'number';
+    else if (/^--font-weight|^--text-.*-weight$/.test(k)) TYPE[k] = 'number';
     else if (/^--shadow/.test(k)) TYPE[k] = 'shadow';
-    else if (/^--focus-outline-color/.test(k)) TYPE[k] = 'color';
     else if (
       /^--(radius|spacing|size|text-.*-size|border-width|focus-outline-(width|offset))/.test(
         k,
@@ -219,21 +221,23 @@ export function makeCompiler(project, parts) {
     return out;
   }
 
-  /** One line for where a token feeds. @param {ReturnType<typeof feeds>} list */
-  const fmtFeeds = list =>
+  /**
+   * One line for where a token feeds. A part inside `target` (a button in a
+   * toast) is named as inside it, so the line never reads as every button.
+   * @param {ReturnType<typeof feeds>} list
+   * @param {string} [target]
+   */
+  const fmtFeeds = (list, target) =>
     [
       ...new Set(
         list.map(
           f =>
-            `${f.prop}${f.part ? ` on ${f.part}` : ''}${f.when ? ` (when ${f.when})` : ''}`,
+            `${f.prop}${f.part ? ` on ${f.part}${target && f.part !== target ? ` inside ${target}` : ''}` : ''}${f.when ? ` (when ${f.when})` : ''}`,
         ),
       ),
     ]
       .slice(0, 4)
       .join(', ');
-
-  /** @param {string} v */
-  const quote = v => (/[\s"#(]/.test(v) ? `"${v.replace(/"/g, '\\"')}"` : v);
 
   /**
    * Whether a token set on a part can take effect there: the part, or a part
@@ -266,20 +270,14 @@ export function makeCompiler(project, parts) {
           : g === 'background'
             ? ['background-color', 'background', 'background-image']
             : null;
-      if (!wanted || !fed.length || fed.some(f => wanted.includes(f.prop)))
-        return null;
-      const direct = g === 'text' ? 'color' : 'background-color';
-      return {
-        message: `${target} reads ${token} only for ${fmtFeeds(fed)}, not for its ${g}, so this would not change what you expect.`,
-        run: [
-          `${P} set ${theme} ${direct} ${quote(value)} --on ${target}   # sets its ${g} directly`,
-          `${HOW} ${target}`,
-        ],
-        also: [],
-      };
+      // The part reads the token the user named: it is set as asked, and
+      // the result names what it feeds.
+      void wanted;
+      void fed;
+      return null;
     }
     const reads = g ? partReads(target, g) : [];
-    const v = quote(value);
+    const v = quoteCommandArgument(value);
     /** @type {string[]} */
     const run = [];
     if (reads.length)
@@ -291,9 +289,23 @@ export function makeCompiler(project, parts) {
               `${P} set ${theme} ${r.token} ${v} --on ${target}${fmtWhen(r.when) ? `   #${fmtWhen(r.when)}` : ''}`,
           ),
       );
-    if (g && DIRECT[g])
+    // The property that takes this kind of value: a size goes to
+    // font-size, never to font-weight.
+    const direct =
+      g === 'font'
+        ? /-(size)$|font-size-/.test(token)
+          ? 'font-size'
+          : /-leading$/.test(token)
+            ? 'line-height'
+            : /-tracking$/.test(token)
+              ? 'letter-spacing'
+              : /family/.test(token)
+                ? 'font-family'
+                : 'font-weight'
+        : g && DIRECT[g];
+    if (direct)
       run.push(
-        `${P} set ${theme} ${DIRECT[g]} ${v} --on ${target}   # sets it directly, whatever token it uses`,
+        `${P} set ${theme} ${direct} ${v} --on ${target}   # sets it directly, whatever token it uses`,
       );
     const kids = g
       ? (MAP[target]?.contains ?? [])
@@ -326,10 +338,10 @@ export function makeCompiler(project, parts) {
   /**
    * Whether a whole-theme token is read by any part.
    * @param {string} token
-   * @param {string} P
+   * @param {string} _P the command prefix (unused: the result is a note)
    * @returns {CheckFailure | null}
    */
-  function checkTokenGlobal(token, P) {
+  function checkTokenGlobal(token, _P) {
     if (anyReader(token).length || SOFT.test(token)) return null;
     const g = groupOfToken(token);
     const near = g
@@ -340,15 +352,8 @@ export function makeCompiler(project, parts) {
       : [];
     return {
       message: `No component reads ${token}, so setting it changes nothing.${near.length ? ` Tokens components do read for ${g}: ${near.join(', ')}.` : ''}`,
-      run: near.length
-        ? near.slice(0, 3).map(t => `${P} set <theme> ${t} <value>`)
-        : [`${HOW} "<what you want>"`],
-      also:
-        g === 'shadow'
-          ? [
-              `shadows are set per part: ${P} set <theme> box-shadow "0 2px 6px rgb(0 0 0 / 0.3)" --on card`,
-            ]
-          : [],
+      run: [`${HOW} ${quoteCommandArgument(token)}`],
+      also: [],
     };
   }
 
@@ -378,18 +383,43 @@ export function makeCompiler(project, parts) {
    * in each mode, below 4.5:1 now but not as low in the base theme. Also
    * the values this theme set that have no fixed color to check (a
    * `color-mix()`, a `var()`), so the result can say what it skipped.
-   * @param {(pair: import('./_parts.mjs').TextPair, side: 'fg' | 'bg', mode: string) => string | null | undefined} value
-   * @param {(pair: import('./_parts.mjs').TextPair, side: 'fg' | 'bg', mode: string) => string | null | undefined} baseValue
+   * @param {(pair: TextPair, side: 'fg' | 'bg', mode: string) => string | null | undefined} value
+   * @param {(pair: TextPair, side: 'fg' | 'bg', mode: string) => string | null | undefined} baseValue
    * @param {string[]} modes
-   * @param {{parseColor: (v: unknown) => number[] | null, ratio: (a: number[], b: number[]) => number}} helpers
+   * @param {{parseColor: (v: unknown) => [number, number, number] | null, ratio: (a: number[], b: number[]) => number, alphaOf: (v: unknown) => number, compositeOver: (over: [number, number, number], alpha: number, under: [number, number, number]) => [number, number, number], page: (mode: string) => string | null | undefined}} helpers
+   *   `page` is the page color in a mode: a see-through background is drawn
+   *   over it, and see-through text over that background, before measuring.
+   * @param {TextPair[]} [extra] more pairs to measure (a part's variants)
    */
-  function contrast(value, baseValue, modes, {parseColor, ratio}) {
+  function contrast(
+    value,
+    baseValue,
+    modes,
+    {parseColor, ratio, alphaOf, compositeOver, page},
+    extra = [],
+  ) {
+    /**
+     * The opaque colors the eye sees for a pair, or null with no fixed color.
+     * @param {unknown} fg @param {unknown} bg @param {string} m
+     */
+    const drawn = (fg, bg, m) => {
+      /** @type {[number, number, number]} */
+      const ground =
+        parseColor(page(m)) ?? (m === 'dark' ? [0, 0, 0] : [255, 255, 255]);
+      const bgAlpha = alphaOf(bg);
+      const back = parseColor(bg);
+      const under =
+        bgAlpha === 0 ? ground : back && compositeOver(back, bgAlpha, ground);
+      const top = parseColor(fg);
+      if (!under || !top) return null;
+      return [compositeOver(top, alphaOf(fg), under), under];
+    };
     /** @type {Array<{part: string, mode: string, ratio: number, sample: string, fg: string, bgPart: string | null, bg: string}>} */
     const out = [];
     const seen = new Set();
     /** @type {Set<string>} */
     const unchecked = new Set();
-    for (const p of parts.pairs) {
+    for (const p of [...parts.pairs, ...extra]) {
       if (
         p.fg.target !== p.bg.target &&
         p.bg.target &&
@@ -400,23 +430,25 @@ export function makeCompiler(project, parts) {
         const fg = value(p, 'fg', m);
         const bg = value(p, 'bg', m);
         if (/gradient|url\(/.test(String(bg))) continue;
-        if (hasAlpha(fg) || hasAlpha(bg)) continue;
-        const a = parseColor(fg);
-        const b = parseColor(bg);
-        if (!a || !b) {
+        const pair = drawn(fg, bg, m);
+        if (!pair) {
           for (const [v, side] of /** @type {const} */ ([
             [fg, 'fg'],
             [bg, 'bg'],
           ]))
-            if (v && !parseColor(v) && v !== baseValue(p, side, m))
+            if (
+              v &&
+              !parseColor(v) &&
+              alphaOf(v) !== 0 &&
+              v !== baseValue(p, side, m)
+            )
               unchecked.add(String(v));
           continue;
         }
-        const r = ratio(a, b);
+        const r = ratio(pair[0], pair[1]);
         if (r >= 4.5) continue;
-        const a0 = parseColor(baseValue(p, 'fg', m));
-        const b0 = parseColor(baseValue(p, 'bg', m));
-        if (a0 && b0 && ratio(a0, b0) <= r + 0.05) continue;
+        const was = drawn(baseValue(p, 'fg', m), baseValue(p, 'bg', m), m);
+        if (was && ratio(was[0], was[1]) <= r + 0.05) continue;
         const key = `${p.text}|${fg}|${bg}|${m}`;
         if (seen.has(key)) continue;
         seen.add(key);
@@ -425,13 +457,25 @@ export function makeCompiler(project, parts) {
           mode: m,
           ratio: Number(r.toFixed(2)),
           sample: p.sample,
-          fg: p.fg.tokens[0] ?? String(fg),
+          // A side the theme changed is named by the value it set, not the
+          // token the part reads without it.
+          fg:
+            fg !== baseValue(p, 'fg', m)
+              ? String(fg)
+              : (p.fg.tokens[0] ?? String(fg)),
           bgPart: p.bg.target,
-          bg: p.bg.tokens[0] ?? String(bg),
+          bg:
+            bg !== baseValue(p, 'bg', m)
+              ? String(bg)
+              : (p.bg.tokens[0] ?? String(bg)),
         });
       }
     }
-    return {problems: out.slice(0, 8), unchecked: [...unchecked]};
+    return {
+      problems: out.slice(0, 8),
+      more: Math.max(0, out.length - 8),
+      unchecked: [...unchecked],
+    };
   }
 
   /**

@@ -17,10 +17,15 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {isAlive} from '../../foundation/release/cache.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
-import {importPathOf} from './_project.mjs';
-import {renderPage, RenderError} from '../../foundation/render/render-page.mjs';
+import {importPathOf, installLine} from './_project.mjs';
+import {
+  RENDER_TIMEOUT_MS,
+  renderPage,
+  RenderError,
+} from '../../foundation/render/render-page.mjs';
 import {
   EXTRA,
   OPEN_OVERLAYS,
@@ -83,14 +88,48 @@ export function catalogItems(project) {
   return {items, imports};
 }
 
+/** How long the editor's own pages may take to render. */
+const EDITOR_RENDER_MS = 3 * RENDER_TIMEOUT_MS;
+
+/** One name per process, so two commands at once never share a folder. */
+const RUN = `${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
+
 /**
  * The folder generated pages render from: inside the project but outside
  * node_modules, so the render compiles them and their stylesheet imports as
- * the project's own. It is removed after each render.
+ * the project's own. Its name is this process's own, and it is removed
+ * after each render.
  * @param {import('./_project.mjs').ThemeProject} project
  */
 export const renderDir = project =>
-  path.join(project.cwd, 'themes', '.astryx-render');
+  path.join(project.cwd, 'themes', `.astryx-render-${RUN}`);
+
+/**
+ * Remove render folders a stopped command left (killed, out of memory):
+ * only `.astryx-render-<pid>-<random>` folders whose process is gone. Links
+ * are never followed.
+ * @param {string} themes
+ */
+function sweepRenders(themes) {
+  let names;
+  try {
+    names = fs.readdirSync(themes);
+  } catch {
+    return;
+  }
+  for (const n of names) {
+    const m = /^\.astryx-render-(\d+)-[a-z0-9]+$/.exec(n);
+    if (!m || Number(m[1]) === process.pid) continue;
+    if (isAlive(Number(m[1]))) continue;
+    const p = path.join(themes, n);
+    try {
+      if (fs.lstatSync(p).isDirectory())
+        fs.rmSync(p, {recursive: true, force: true});
+    } catch {
+      // Gone already.
+    }
+  }
+}
 
 /**
  * Render a generated page module and give its HTML and markup (the body,
@@ -103,7 +142,28 @@ export const renderDir = project =>
  */
 export async function renderGenerated(project, file, source, extra = []) {
   const dir = renderDir(project);
+  // A lookup in an app with no themes must not leave a themes/ folder.
+  const themes = path.dirname(dir);
+  // A themes/ folder that holds only other renders was made by another
+  // lookup running beside this one, so it is ours to remove too.
+  sweepRenders(themes);
+  const madeThemes =
+    !fs.existsSync(themes) ||
+    (() => {
+      const names = fs.readdirSync(themes);
+      return (
+        names.length > 0 && names.every(n => n.startsWith('.astryx-render-'))
+      );
+    })();
   fs.mkdirSync(dir, {recursive: true});
+  // Stopped by a signal, the render folder still goes.
+  const cleanup = () => fs.rmSync(dir, {recursive: true, force: true});
+  const onSignal = (/** @type {NodeJS.Signals} */ sig) => {
+    cleanup();
+    process.kill(process.pid, sig);
+  };
+  process.once('SIGINT', onSignal);
+  process.once('SIGTERM', onSignal);
   const entry = path.join(dir, file);
   fs.writeFileSync(entry, source);
   for (const x of extra) {
@@ -111,16 +171,36 @@ export async function renderGenerated(project, file, source, extra = []) {
     fs.copyFileSync(x.from, path.join(dir, x.name));
   }
   try {
-    const page = await renderPage(entry, {title: file.replace(/\.[^.]+$/, '')});
-    const body = page.html.slice(page.html.indexOf('<body>') + 6);
+    // The editor's pages render every component, and a busy machine slows
+    // them down: they get three times the page limit.
+    const page = await renderPage(entry, {
+      title: file.replace(/\.[^.]+$/, ''),
+      timeoutMs: EDITOR_RENDER_MS,
+    });
+    // The page is the same whichever command rendered it: the folder's
+    // per-process name never reaches the file.
+    const html = page.html.split(path.basename(dir)).join('.astryx-render');
+    const body = html.slice(html.indexOf('<body>') + 6);
     const end = body.indexOf('<script type=');
-    return {html: page.html, markup: end >= 0 ? body.slice(0, end) : body};
+    return {html, markup: end >= 0 ? body.slice(0, end) : body};
   } catch (e) {
     if (e instanceof RenderError) {
       const missing = e.code === 'ERR_RENDER_MISSING_DEPENDENCY';
+      // A render stopped by its time limit on the editor's own page is the
+      // machine being busy, not a loop in the page.
+      const slow = e.code === 'ERR_RENDER_TIMEOUT';
       throw new AstryxError(
-        `Could not render the components with this project's React: ${e.message}${missing ? ' The theme command renders components on the server, so react and react-dom must be installed.' : ''}`,
-        [],
+        slow
+          ? `The components did not finish rendering within ${EDITOR_RENDER_MS / 1000} seconds, so the render was stopped. The machine may be busy: run the command again when it is less loaded.`
+          : `Could not render the components with this project's React: ${e.message}${missing ? ' The theme command renders components on the server, so react and react-dom must be installed.' : ''}`,
+        missing
+          ? [
+              {
+                name: installLine(project.cwd, ['react', 'react-dom']),
+                reason: 'install them',
+              },
+            ]
+          : [],
         missing
           ? ERROR_CODES.ERR_RENDER_MISSING_DEPENDENCY
           : ERROR_CODES.ERR_RENDER_FAILED,
@@ -128,7 +208,31 @@ export async function renderGenerated(project, file, source, extra = []) {
     }
     throw e;
   } finally {
-    fs.rmSync(dir, {recursive: true, force: true});
+    // Only this render's files go; the folder goes when nothing else is in
+    // it, so a render running beside this one keeps its own.
+    for (const f of [entry, ...extra.map(x => path.join(dir, x.name))])
+      fs.rmSync(f, {force: true});
+    removeEmpty(madeThemes ? themes : dir);
+    process.removeListener('SIGINT', onSignal);
+    process.removeListener('SIGTERM', onSignal);
+  }
+}
+
+/** @param {unknown} v @returns {v is Record<string, unknown>} */
+const isRecord = v => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/**
+ * Remove `dir` and the folders under it when no file is left in them.
+ * @param {string} dir
+ */
+function removeEmpty(dir) {
+  if (!fs.existsSync(dir)) return;
+  for (const e of fs.readdirSync(dir, {withFileTypes: true}))
+    if (e.isDirectory()) removeEmpty(path.join(dir, e.name));
+  try {
+    fs.rmdirSync(dir);
+  } catch {
+    // Not empty: another render is using it.
   }
 }
 
@@ -141,9 +245,14 @@ export async function partData(project) {
   const file = path.join(project.cacheDir, 'parts.json');
   try {
     const cached = JSON.parse(fs.readFileSync(file, 'utf8'));
+    // A file that parses but has the wrong shape (a hand edit, a cut-off
+    // write) is built again, as a file that does not parse is.
     if (
       cached.version === PART_DATA_VERSION &&
-      cached.coreKey === project.coreKey
+      cached.coreKey === project.coreKey &&
+      isRecord(cached.map) &&
+      Object.values(cached.map).every(isRecord) &&
+      Array.isArray(cached.pairs)
     )
       return cached;
   } catch {
@@ -152,7 +261,10 @@ export async function partData(project) {
   const data = await buildPartData(project);
   try {
     fs.mkdirSync(project.cacheDir, {recursive: true});
-    fs.writeFileSync(file, JSON.stringify(data));
+    // Write beside it and rename, so a reader never sees half a file.
+    const part = `${file}.${RUN}`;
+    fs.writeFileSync(part, JSON.stringify(data));
+    fs.renameSync(part, file);
   } catch {
     // A read-only node_modules: build it again next time.
   }

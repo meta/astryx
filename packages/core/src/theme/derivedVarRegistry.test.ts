@@ -137,6 +137,11 @@ const STRUCTURAL_VARS = new Set([
   // Also beside it: how far above the viewport's bottom a layer ends while the
   // keyboard is up. Runtime geometry, never authored by a theme.
   '--_layer-keyboard-inset-block-end',
+  // A sheet's scrim opacity and fade time. The sheet writes both on its
+  // dialog for the backdrop, and its panel resets them so the content does
+  // not inherit them. Runtime state, never authored by a theme.
+  '--_sheet-scrim-opacity',
+  '--_sheet-scrim-duration',
 ]);
 
 /**
@@ -389,9 +394,13 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   // by whatever paints it. A theme sets `--color-overlay-pressed`, not this.
   '--_press-paint',
   '--_press-paint-image',
-  // A checkbox row's touch press image, which an indicator that paints its
-  // own press inherits. The row writes it from the press paint above.
+  // A checkbox row's press image, which an indicator that paints its own
+  // press inherits. The row writes it from the press paint above.
   '--_indicator-press-image',
+  // Transparent while the controller paints a checkbox row's press, so that
+  // indicator skips its `:active` fill. The row's own press arms write it. A
+  // theme author never sets it.
+  '--_indicator-active-press',
   // A CheckboxList row's own press paint, handed to its checkbox's box:
   // written by the row's own press arms, never a value a theme author sets.
   '--_checkbox-row-press-paint',
