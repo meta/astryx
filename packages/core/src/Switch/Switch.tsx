@@ -68,7 +68,8 @@ import {
   pressVars,
 } from '../utils/interactionOverlay.stylex';
 import {pressHoldsDragProps} from '../privateAttributes/pressHoldsDrag.stylex';
-import {useSwitchTouch, type SwitchTouchParts} from './useSwitchTouch';
+import type {SwitchTouchParts} from './useSwitchTouch';
+import {useTouchRuntime} from '../utils/touchRuntime';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {watchHitArea, writeHitInsets} from '../utils/hitArea';
 
@@ -979,13 +980,22 @@ export function Switch({
     }
     return watchHitArea(surface, insets => writeHitInsets(surface, insets));
   }, [isDisabled]);
-  useSwitchTouch(touchParts, {
-    isOn,
-    isInteractive: !isDisabled && !isBusy,
-    isDisabled,
-    trackSize: TRACK_SIZE[size],
-    otherTrackProps: trackPropsFor(!isOn),
-  });
+  // The thumb drag and its springs come with the shared touch runtime, which
+  // loads after first paint. Until then a tap or a click toggles.
+  const touchRuntime = useTouchRuntime();
+  const touchPart =
+    touchRuntime != null ? (
+      <touchRuntime.SwitchTouch
+        parts={touchParts}
+        options={{
+          isOn,
+          isInteractive: !isDisabled && !isBusy,
+          isDisabled,
+          trackSize: TRACK_SIZE[size],
+          otherTrackProps: trackPropsFor(!isOn),
+        }}
+      />
+    ) : null;
 
   const switchElement = (
     <div
@@ -1150,6 +1160,7 @@ export function Switch({
       )}
       {showsDisabledMessage &&
         disabledMessageTooltip.renderTooltip(disabledMessage)}
+      {touchPart}
     </div>
   );
 }

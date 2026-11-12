@@ -68,7 +68,8 @@ import {
   resolveSnapPoints,
   type BottomSheetSnapPoint,
 } from './snapOffsets';
-import {animatorFor, SETTLE_THRESHOLD} from '../motion/animator';
+import {SETTLE_THRESHOLD} from '../motion/settleThreshold';
+import {getTouchRuntime} from '../utils/touchRuntime';
 import {resolveSettleMs} from '../motion/resolveMotion';
 import {springs} from '../motion/uikit/springs';
 import {useMobileKeyboard} from '../keyboard/useMobileKeyboard';
@@ -939,7 +940,7 @@ export function BottomSheetPanel({
     const exited = dragExitElementRef.current;
     if (!isPresented && exited != null) {
       dragExitElementRef.current = null;
-      animatorFor(exited).set({y: 0});
+      getTouchRuntime()?.animatorFor(exited).set({y: 0});
     }
   }, [isPresented, sheetRef]);
   const keyboard = useMobileKeyboard(elementRef, {
@@ -1019,7 +1020,15 @@ export function BottomSheetPanel({
       return;
     }
     const element = elementRef.current;
-    if (motion === 'exiting' && playedDragExit != null && element != null) {
+    // The drag's exit spring comes with the shared touch runtime. Before it
+    // has loaded, a drag's exit takes the same transition as any other exit.
+    const animatorFor = getTouchRuntime()?.animatorFor;
+    if (
+      motion === 'exiting' &&
+      playedDragExit != null &&
+      element != null &&
+      animatorFor != null
+    ) {
       dragExitElementRef.current = element;
       const exit = animatorFor(element).animate(
         {y: playedDragExit.distance},

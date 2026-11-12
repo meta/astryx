@@ -10,7 +10,7 @@
  * @position Keyboard module tests
  */
 
-import {afterEach, beforeEach, expect, it, vi} from 'vitest';
+import {afterEach, beforeEach, expect, it, vi, beforeAll} from 'vitest';
 import {act} from '@testing-library/react';
 import {keyboard as androidKeyboard} from '../motion/android';
 import type {KeyboardTransition} from './keyboardModel';
@@ -20,6 +20,13 @@ import {
   installKeyboardTestDouble,
   type KeyboardTestDouble,
 } from './__tests__/keyboardTestDouble';
+import {__loadTouchRuntimeForTest} from '../utils/touchRuntime';
+
+// These cases drive touch motion, which comes with the shared touch runtime
+// once the page has loaded it.
+beforeAll(async () => {
+  await __loadTouchRuntimeForTest();
+});
 
 const guideListeners = new Set<(transition: KeyboardTransition) => void>();
 // The inset the stand-in guide reports: the last published slide's end.

@@ -27,7 +27,8 @@
  * SYNC: When modified, update coast.test.ts.
  */
 
-import {SETTLE_THRESHOLD, type Animator, type MotionCurve} from './animator';
+import type {Animator, MotionCurve} from './animator';
+import {SETTLE_THRESHOLD} from './settleThreshold';
 import {solveDecay} from './decay';
 import {resolveMotion} from './resolveMotion';
 import {solveSpring, toSpring, type SpringDescription} from './spring';

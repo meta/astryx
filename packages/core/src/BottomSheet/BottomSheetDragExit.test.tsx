@@ -15,7 +15,7 @@
 
 import {act, fireEvent, render, screen} from '@testing-library/react';
 import {useState} from 'react';
-import {afterEach, beforeEach, expect, it, vi} from 'vitest';
+import {afterEach, beforeEach, expect, it, vi, beforeAll} from 'vitest';
 import {SETTLE_THRESHOLD} from '../motion/animator';
 import type * as AnimatorModule from '../motion/animator';
 import {solveSpring, toSpring} from '../motion/spring';
@@ -23,6 +23,13 @@ import {springs} from '../motion/uikit/springs';
 import {BottomSheet} from './BottomSheet';
 import {BottomSheetSwitcher} from './BottomSheetSwitcher';
 import {resetBottomSheetStackForTests} from './bottomSheetStack';
+import {__loadTouchRuntimeForTest} from '../utils/touchRuntime';
+
+// These cases drive touch motion, which comes with the shared touch runtime
+// once the page has loaded it.
+beforeAll(async () => {
+  await __loadTouchRuntimeForTest();
+});
 
 interface RecordedExit {
   values: Record<string, number>;

@@ -376,6 +376,10 @@ No covered field meets FR9 on `main`. Each gap below is open.
   Safari on iOS (`packages/core/src/keyboard/useMobileKeyboard.ts`). But
   Firefox reports the keyboard's hide once, at its end. The sheet's content
   moves at that report, in one frame, instead of riding from the blur (FR3).
+- **Gap 13 — A field focused before the touch runtime loads.** Until the shared
+  loader has run (after first paint, at idle within its cap; `spec:AST-080`
+  DEC-5), a focused field keeps the browser's own reveal and does not ride the
+  keyboard.
 
 ### Follow-up
 

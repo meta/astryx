@@ -9,7 +9,15 @@
  * @position Keyboard module tests
  */
 
-import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  beforeAll,
+} from 'vitest';
 import {act} from '@testing-library/react';
 import {animatorFor} from '../motion/animator';
 import {__resetLayoutViewportForTest} from '../utils/layoutViewport';
@@ -23,6 +31,13 @@ import {
   nearestScroller,
   registerKeyboardTarget,
 } from './keyboardTarget';
+import {__loadTouchRuntimeForTest} from '../utils/touchRuntime';
+
+// These cases drive touch motion, which comes with the shared touch runtime
+// once the page has loaded it.
+beforeAll(async () => {
+  await __loadTouchRuntimeForTest();
+});
 
 type FakeViewport = EventTarget & {
   height: number;
