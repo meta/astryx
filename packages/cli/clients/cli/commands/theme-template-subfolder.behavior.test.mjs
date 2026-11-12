@@ -12,6 +12,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import {runCli} from '../../../test-utils/run-cli.mjs';
+import {commandInFolder} from '../../../foundation/env/package-manager.mjs';
 
 /** @type {string} */
 let root;
@@ -34,9 +35,9 @@ describe('theme template from a subfolder', () => {
     const {status, stdout} = await runCli(['theme', 'template'], {cwd: deep});
     expect(status).toBe(0);
     expect(fs.existsSync(path.join(root, 'theme.template.ts'))).toBe(true);
-    expect(stdout).toMatch(
-      /cd \.\.\/\.\. && .* theme build theme\.template\.ts/,
-    );
+    // The shared form of "in that folder" (cd … && on POSIX).
+    expect(stdout).toContain(commandInFolder('../..', '').replace(/\s*$/, ''));
+    expect(stdout).toMatch(/ theme build theme\.template\.ts/);
   });
 
   it('suggests a template with no path, and says a path is read from here', async () => {

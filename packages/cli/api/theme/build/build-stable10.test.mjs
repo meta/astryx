@@ -153,3 +153,37 @@ describe('a theme file that is a link', () => {
     expect(err).toBeUndefined();
   });
 });
+
+describe('a link that fails for another reason', () => {
+  it('keeps the normal remedy for a package that is not installed', async () => {
+    const real = path.join(tmpDir, 'real');
+    fs.mkdirSync(real);
+    fs.writeFileSync(
+      path.join(real, 'p.mjs'),
+      "import x from 'not-installed-pkg-zz';\nexport default { name: 'p', tokens: { '--color-bg': x } };\n",
+    );
+    fs.symlinkSync(path.join(real, 'p.mjs'), path.join(tmpDir, 'p.mjs'));
+    const {err} = await captured(() => themeBuild('p.mjs', {}, {cwd: tmpDir}));
+    expect(err?.code).toBe('ERR_THEME_LOAD');
+    expect(err.message).not.toContain('is a link to');
+    expect(err.message).toContain('not-installed-pkg-zz');
+  });
+
+  it('suggests a build that keeps outputs inside the working folder', async () => {
+    const app = path.join(tmpDir, 'app');
+    const real = path.join(tmpDir, 'real');
+    fs.mkdirSync(app);
+    fs.mkdirSync(real);
+    fs.writeFileSync(path.join(app, 'package.json'), '{"name":"app"}');
+    fs.writeFileSync(
+      path.join(real, 'l.mjs'),
+      "import {c} from './nowhere.mjs';\nexport default { name: 'l', tokens: { '--color-bg': c } };\n",
+    );
+    fs.symlinkSync(path.join(real, 'l.mjs'), path.join(app, 'l.mjs'));
+    const {err} = await captured(() => themeBuild('l.mjs', {}, {cwd: app}));
+    expect(err?.code).toBe('ERR_THEME_LOAD');
+    expect(err.suggestions[0].name).toMatch(
+      / theme build \.\.\/real\/l\.mjs --out l\.css$/,
+    );
+  });
+});

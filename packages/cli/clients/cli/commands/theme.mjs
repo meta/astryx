@@ -35,6 +35,7 @@ import {fileURLToPath} from 'node:url';
 import {spawn} from 'node:child_process';
 import {
   getCliInvocation,
+  commandInFolder,
   quoteCommandArgument,
 } from '../../../foundation/env/package-manager.mjs';
 import {isOutsideProject} from '../../../foundation/env/project-scope.mjs';
@@ -326,14 +327,15 @@ async function runThemeBuildWatch(entries, options, words = THEME_WORDS) {
 
   // A warning a build prints once per invocation is printed at most once
   // per watch session (spec:AST-017 FR29a), not on every rebuild.
-  let warned = false;
+  /** @type {Set<string>} each warning once, whichever build printed it */
+  const warned = new Set();
   // Watch never runs under --json, so the logger prints (cli-surface INV12).
   logger.setSilent(false);
   const onMessage = (/** @type {unknown} */ message) => {
     const m = /** @type {{type?: unknown, text?: unknown}} */ (message);
-    if (warned || m?.type !== WATCH_WARNING || typeof m.text !== 'string')
-      return;
-    warned = true;
+    if (m?.type !== WATCH_WARNING || typeof m.text !== 'string') return;
+    if (warned.has(m.text)) return;
+    warned.add(m.text);
     logger.warn(m.text);
   };
 
@@ -721,7 +723,11 @@ function buildStep(invocation, words, file) {
   if (!rel.startsWith('..'))
     return `${invocation} ${words.group} ${words.build} ${quoteCommandArgument(posix(rel))}`;
   const root = findPackageRoot(path.dirname(abs)) ?? path.dirname(abs);
-  return `cd ${quoteCommandArgument(posix(path.relative(cwd, root)))} && ${invocation} ${words.group} ${words.build} ${quoteCommandArgument(posix(path.relative(root, abs)))}`;
+  // The shell's own form of "in that folder" (PowerShell has no &&).
+  return commandInFolder(
+    posix(path.relative(cwd, root)),
+    `${invocation} ${words.group} ${words.build} ${quoteCommandArgument(posix(path.relative(root, abs)))}`,
+  );
 }
 
 /**
