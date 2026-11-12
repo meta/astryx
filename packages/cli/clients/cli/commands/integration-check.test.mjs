@@ -41,16 +41,32 @@ afterEach(() => {
 });
 
 /**
+ * The fixture's package.json, with a logo so no listing note is drawn.
+ * @param {string} dir
+ */
+function writeListedPackageJson(dir) {
+  fs.writeFileSync(
+    path.join(dir, 'package.json'),
+    JSON.stringify({
+      name: '@acme/widgets',
+      version: '1.2.3',
+      marketplace: {logo: {light: 'logo.svg'}},
+    }),
+  );
+  fs.writeFileSync(
+    path.join(dir, 'logo.svg'),
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><rect width="8" height="8"/></svg>',
+  );
+}
+
+/**
  * A package whose one page template takes a Core template's id: one warning
  * (`templates` conflict). The doc matches TemplateDoc, so no other check
  * warns about it.
  * @param {{id: string, replaces?: string, extraManifest?: string, dir?: string}} options
  */
 function writePackage({id, replaces, extraManifest = '', dir = tmpDir}) {
-  fs.writeFileSync(
-    path.join(dir, 'package.json'),
-    JSON.stringify({name: '@acme/widgets', version: '1.2.3'}),
-  );
+  writeListedPackageJson(dir);
   fs.writeFileSync(
     path.join(dir, 'astryx.integration.mjs'),
     `export default {templates: './templates'${extraManifest}};\n`,
@@ -365,10 +381,7 @@ describe('a copied passage', () => {
     'keeps the default surface color until the next release adds a token for it.';
 
   function writeCopiedDocs() {
-    fs.writeFileSync(
-      path.join(tmpDir, 'package.json'),
-      JSON.stringify({name: '@acme/widgets', version: '1.2.3'}),
-    );
+    writeListedPackageJson(tmpDir);
     fs.writeFileSync(
       path.join(tmpDir, 'astryx.integration.mjs'),
       `export default {docs: './docs'};\n`,
@@ -487,10 +500,7 @@ describe('a stray doc pointer', () => {
 });
 describe('a command written with a runner', () => {
   it('is a note in doctor integration validate, and integration check --strict still passes', async () => {
-    fs.writeFileSync(
-      path.join(tmpDir, 'package.json'),
-      JSON.stringify({name: '@acme/widgets', version: '1.2.3'}),
-    );
+    writeListedPackageJson(tmpDir);
     fs.writeFileSync(
       path.join(tmpDir, 'astryx.integration.mjs'),
       `export default {docs: './docs'};\n`,
@@ -531,6 +541,46 @@ describe('a command written with a runner', () => {
     expect(validate.notes.map((/** @type {any} */ note) => note.code)).toEqual([
       'runner_command',
     ]);
+  });
+});
+
+describe('a package with no logo', () => {
+  it('draws a note that fails nothing, even under --strict --next', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      JSON.stringify({name: '@acme/widgets', version: '1.2.3'}),
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'astryx.integration.mjs'),
+      `export default {docs: './docs'};\n`,
+    );
+    fs.mkdirSync(path.join(tmpDir, 'docs'));
+    const doc = {
+      type: 'generic',
+      name: 'acme-setup',
+      title: 'Fixture',
+      description: 'Fixture topic.',
+      sections: [
+        {title: 'Overview', content: [{type: 'prose', text: 'Set it up.'}]},
+      ],
+    };
+    fs.writeFileSync(
+      path.join(tmpDir, 'docs', 'acme-setup.doc.mjs'),
+      `export default ${JSON.stringify(doc)};\n`,
+    );
+
+    const strict = await runCli(
+      ['--json', 'integration', 'check', '--strict', '--next'],
+      tmpDir,
+    );
+    expect(strict.status).toBe(0);
+    const validate = JSON.parse(strict.stdout).data.checks.find(
+      (/** @type {any} */ each) => each.check === 'validate',
+    ).response.data;
+    expect(validate.notes).toEqual([
+      expect.objectContaining({code: 'package_without_logo'}),
+    ]);
+    expect(validate.notes[0]).not.toHaveProperty('next');
   });
 });
 
