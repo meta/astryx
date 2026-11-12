@@ -144,7 +144,12 @@ function installRecorder() {
  */
 export function fileStamp(file) {
   try {
-    const {size, mtimeMs, ctimeMs, ino} = statSyncRaw(file);
+    // An absent path answers without an error: thousands of paths a kept
+    // catalog checks are absent, and building an error costs more than the
+    // stat.
+    const stat = statSyncRaw(file, {throwIfNoEntry: false});
+    if (!stat) return '-';
+    const {size, mtimeMs, ctimeMs, ino} = stat;
     return `${size}:${mtimeMs}:${ctimeMs}:${ino}`;
   } catch {
     return '-';
@@ -162,7 +167,8 @@ const stateOf = fileStamp;
  */
 function probeStamp(file) {
   try {
-    const stat = statSyncRaw(file);
+    const stat = statSyncRaw(file, {throwIfNoEntry: false});
+    if (!stat) return '-';
     if (stat.isDirectory()) return `dir:${stat.ino}`;
     return `${stat.size}:${stat.mtimeMs}:${stat.ctimeMs}:${stat.ino}`;
   } catch {

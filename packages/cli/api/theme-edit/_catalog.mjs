@@ -20,256 +20,11 @@
  */
 
 /** @param {string} name @param {Record<string, unknown>} [props] @param {...unknown} children @returns {Tree} */
-const h = (name, props = {}, ...children) => ({
+export const h = (name, props = {}, ...children) => ({
   __element: name,
   props,
   ...(children.length ? {children} : {}),
 });
-
-/** Components without playground defaults, set up by hand. @type {Array<[string, Array<[string, Tree]>]>} */
-export const EXTRA = [
-  [
-    'Heading',
-    [1, 2, 3, 4].map(level => [
-      `level ${level}`,
-      h('Heading', {level}, `Heading ${level}`),
-    ]),
-  ],
-  [
-    'TextInput',
-    [
-      ['', h('TextInput', {label: 'Name', value: 'Jordan'})],
-      [
-        'disabled',
-        h('TextInput', {label: 'Disabled', value: '-', isDisabled: true}),
-      ],
-    ],
-  ],
-  [
-    'ButtonGroup',
-    [
-      [
-        '',
-        h(
-          'ButtonGroup',
-          {label: 'Actions'},
-          h('Button', {label: 'Copy', variant: 'secondary'}),
-          h('Button', {label: 'Paste', variant: 'secondary'}),
-          h('Button', {label: 'Delete', variant: 'secondary'}),
-        ),
-      ],
-    ],
-  ],
-  ['TextArea', [['', h('TextArea', {label: 'Notes', value: 'Some notes'})]]],
-  ['NumberInput', [['', h('NumberInput', {label: 'Count', value: 3})]]],
-  [
-    'CheckboxInput',
-    [
-      ['on', h('CheckboxInput', {label: 'Checked', value: true})],
-      ['off', h('CheckboxInput', {label: 'Unchecked', value: false})],
-    ],
-  ],
-  [
-    'Switch',
-    [
-      ['on', h('Switch', {label: 'On', value: true})],
-      ['off', h('Switch', {label: 'Off', value: false})],
-    ],
-  ],
-  [
-    'ProgressBar',
-    ['accent', 'success', 'warning', 'error'].map(v => [
-      v,
-      h('ProgressBar', {label: v, variant: v, value: 60}),
-    ]),
-  ],
-  [
-    'TabList',
-    [
-      [
-        '',
-        h(
-          'TabList',
-          {value: 'a'},
-          h('Tab', {value: 'a', label: 'Selected'}),
-          h('Tab', {value: 'b', label: 'Other'}),
-        ),
-      ],
-    ],
-  ],
-  [
-    'SegmentedControl',
-    [
-      [
-        '',
-        h(
-          'SegmentedControl',
-          {label: 'Range', value: 'a'},
-          h('SegmentedControlItem', {value: 'a', label: 'Day'}),
-          h('SegmentedControlItem', {value: 'b', label: 'Week'}),
-        ),
-      ],
-    ],
-  ],
-  [
-    'TopNav',
-    [
-      [
-        '',
-        h(
-          'TopNav',
-          {label: 'Top', heading: 'App'},
-          h('TopNavItem', {label: 'Selected', href: '#', isSelected: true}),
-          h('TopNavItem', {label: 'Other', href: '#'}),
-        ),
-      ],
-    ],
-  ],
-  [
-    'SideNav',
-    [
-      [
-        '',
-        h(
-          'SideNav',
-          {label: 'Side'},
-          h('SideNavItem', {label: 'Selected', href: '#', isSelected: true}),
-          h('SideNavItem', {label: 'Other', href: '#'}),
-        ),
-      ],
-    ],
-  ],
-  [
-    'StatusDot',
-    ['success', 'warning', 'error', 'accent', 'neutral'].map(v => [
-      v,
-      h('StatusDot', {variant: v, label: v}),
-    ]),
-  ],
-];
-
-/** Overlays rendered open, so their surfaces, borders and shadows show. */
-export const OPEN_OVERLAYS =
-  /** @type {Array<[string, Array<[string, Tree]>]>} */ ([
-    [
-      'Dialog',
-      [
-        [
-          'open',
-          {
-            __element: 'Dialog',
-            props: {isOpen: true, isInline: true, width: 360},
-            children: [
-              {
-                __element: 'VStack',
-                props: {gap: 2},
-                children: [
-                  {
-                    __element: 'Heading',
-                    props: {level: 3},
-                    children: ['Dialog title'],
-                  },
-                  {
-                    __element: 'Text',
-                    props: {type: 'body'},
-                    children: ['Are you sure you want to proceed?'],
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      ],
-    ],
-    [
-      'AlertDialog',
-      [
-        [
-          'open',
-          {
-            __element: 'AlertDialog',
-            props: {
-              isOpen: true,
-              isInline: true,
-              title: 'Delete item?',
-              description: 'This cannot be undone.',
-              actionLabel: 'Delete',
-            },
-          },
-        ],
-      ],
-    ],
-    [
-      'Popover',
-      [
-        [
-          'open',
-          {
-            __element: 'Popover',
-            props: {
-              isOpen: true,
-              label: 'Details',
-              content: {
-                __element: 'Text',
-                props: {type: 'body'},
-                children: ['Popover content'],
-              },
-            },
-            children: [
-              {
-                __element: 'Button',
-                props: {label: 'Anchor', variant: 'secondary'},
-              },
-            ],
-          },
-        ],
-      ],
-    ],
-    [
-      'Tooltip',
-      [
-        [
-          'open',
-          {
-            __element: 'Tooltip',
-            props: {isOpen: true, content: 'Tooltip text'},
-            children: [
-              {
-                __element: 'Button',
-                props: {label: 'Hover me', variant: 'secondary'},
-              },
-            ],
-          },
-        ],
-      ],
-    ],
-    [
-      'HoverCard',
-      [
-        [
-          'open',
-          {
-            __element: 'HoverCard',
-            props: {
-              isOpen: true,
-              content: {
-                __element: 'Text',
-                props: {type: 'body'},
-                children: ['More details'],
-              },
-            },
-            children: [
-              {
-                __element: 'Link',
-                props: {href: '#'},
-                children: ['Hover for details'],
-              },
-            ],
-          },
-        ],
-      ],
-    ],
-  ]);
 
 const ROWS = [
   {id: 1, task: 'Review Q4 roadmap', owner: 'Alex', status: 'In progress'},
@@ -396,27 +151,6 @@ export const SAMPLE_PAGE = h(
   ),
 );
 
-/** Components left off the contact sheet: they cover the page, or only lay out others. */
-export const SHEET_SKIP = new Set([
-  'Lightbox',
-  'CommandPalette',
-  'Drawer',
-  'BottomSheet',
-  'Overlay',
-  'Toast',
-  'Tooltip',
-  'HoverCard',
-  'Popover',
-  'Dialog',
-  'AlertDialog',
-  'AspectRatio',
-  'Center',
-  'Layout',
-  'ScrollableArea',
-  'Grid',
-  'Stack',
-]);
-
 /** Components first on the contact sheet, in this order. */
 export const SHEET_ORDER = [
   'Heading',
@@ -503,10 +237,13 @@ export function pageSource({items, imports, theme, layout, title = ''}) {
     'const HANDLERS = ["onChange", "onClick", "onDismiss", "onOpenChange", "onSelect", "onValueChange"];',
   );
   lines.push(
+    'const isEl = v => Boolean(v && typeof v === "object" && !Array.isArray(v) && v.__element);',
+  );
+  lines.push(
     'function el(v) { if (Array.isArray(v)) return v.map(el); if (v && typeof v === "object" && v.__element) { const T = C[v.__element]; if (!T) return null; return React.createElement(T, fix(v.props ?? {}), ...[].concat(v.children ?? []).map(el)); } return v; }',
   );
   lines.push(
-    'function fix(p) { const o = {}; for (const [k, v] of Object.entries(p)) o[k] = v && typeof v === "object" && !Array.isArray(v) && v.__element ? el(v) : v; for (const k of HANDLERS) if (!(k in o)) o[k] = noop; return o; }',
+    'function fix(p) { const o = {}; for (const [k, v] of Object.entries(p)) o[k] = isEl(v) || (Array.isArray(v) && v.some(isEl)) ? el(v) : v; for (const k of HANDLERS) if (!(k in o)) o[k] = noop; return o; }',
   );
   lines.push(`const ITEMS = ${JSON.stringify(items)};`);
   lines.push(

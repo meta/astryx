@@ -10,7 +10,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as zlib from 'node:zlib';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {
   themeEditHow,
   themeEditNew,
@@ -29,26 +29,18 @@ import {
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
 
+import {withRealRenders} from '../../test-utils/theme-render-stub.mjs';
+import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
+// The page renders cost seconds and these tests read settings, builds and
+// files: a stand-in renders unless a test asks for the real thing.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
+
 /** @type {string} */
 let cwd;
-
-/**
- * The error a call throws: its code, message and suggested commands.
- * @param {() => Promise<unknown>} fn
- */
-async function refusal(fn) {
-  try {
-    await fn();
-  } catch (e) {
-    const err = /** @type {any} */ (e);
-    return {
-      code: err.code,
-      message: String(err.message),
-      run: (err.suggestions ?? []).map((/** @type {any} */ s) => s.name),
-    };
-  }
-  throw new Error('expected a refusal');
-}
 
 /** @param {string} slug */
 const settingsOf = slug =>
@@ -70,7 +62,9 @@ beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-edit-', FIXTURE_PACKAGES);
   // CI builds only Core, so the base theme is a fixture, not a built package.
   writeFixtureBaseTheme(cwd, 'neutral');
-  await themeEditNew('t', {cwd, like: 'neutral'});
+  // The first theme renders for real: its preview and render folder are
+  // checked below.
+  await withRealRenders(() => themeEditNew('t', {cwd, like: 'neutral'}));
 }, 120_000);
 
 afterAll(() => {
@@ -238,12 +232,14 @@ describe('colors', () => {
     const r = await themeEditSet(
       't',
       '--color-text-primary',
-      'var(--brand-ink)',
+      // A variable the app sets (with a fallback, as one that is not a
+      // design token needs) has no fixed color.
+      'var(--brand-ink, currentcolor)',
       {cwd},
     );
     // What cannot be measured is a note, not a problem.
     expect(r.data.notes.join(' ')).toContain('not checked');
-    expect(r.data.notes.join(' ')).toContain('var(--brand-ink)');
+    expect(r.data.notes.join(' ')).toContain('currentcolor');
     await themeEditUndo('t', {cwd, thing: '--color-text-primary'});
   });
 
@@ -535,7 +531,9 @@ describe('settings round trip', () => {
 
   it('show lists the settings and writes both pages', async () => {
     await themeEditSet('t', 'surfaces', 'outlined', {cwd});
-    const r = await themeEditShow('t', {cwd, section: 'actions'});
+    const r = await withRealRenders(() =>
+      themeEditShow('t', {cwd, section: 'actions'}),
+    );
     expect(r.data.settings.map(s => s.thing)).toContain('surfaces');
     expect(fs.readFileSync(path.join(cwd, r.data.sheet), 'utf8')).toContain(
       'astryx-button',

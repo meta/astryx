@@ -14,14 +14,9 @@
  * @position api/theme-edit — imported by _preview.mjs
  */
 
-/** @typedef {import('./_catalog.mjs').Tree} Tree */
+import {h} from './_catalog.mjs';
 
-/** @param {string} name @param {Record<string, unknown>} [props] @param {...unknown} children @returns {Tree} */
-const h = (name, props = {}, ...children) => ({
-  __element: name,
-  props,
-  ...(children.length ? {children} : {}),
-});
+/** @typedef {import('./_catalog.mjs').Tree} Tree */
 
 const noop = {__code: '() => {}'};
 const STATUSES = ['info', 'success', 'warning', 'error'];
