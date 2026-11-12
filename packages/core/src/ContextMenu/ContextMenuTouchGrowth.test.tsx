@@ -5,7 +5,8 @@
  * @input ContextMenu under a finger in jsdom, with the compositor animator
  *   replaced
  * @output Checks that the trigger's visual grows only while ContextMenu's
- *   recognizer follows a finger, and springs back when the recognizer fails
+ *   recognizer follows a finger or a pen, and springs back when the
+ *   recognizer fails
  * @position Unit tests of the press feedback's start and end in
  *   packages/core/src/ContextMenu/ContextMenuTouchLayer.tsx
  */
@@ -301,8 +302,8 @@ describe('ContextMenu’s growth under a finger', () => {
   it('grows the trigger at the onset when the press machine marks the press before the recognizer has the finger', async () => {
     const trigger = renderMenu();
     const contact = {id: 1, x: 20, y: 20};
-    // In a browser the press machine's mark comes first: its listener runs
-    // before the recognizer's, and the mark is read between the two.
+    // In a browser the press machine's mark can come first: its listener
+    // runs before the recognizer's.
     await pressMachineOn(trigger);
     const landedAt = performance.now();
     dispatchTouch('touchstart', trigger, [contact], [contact]);

@@ -3,9 +3,9 @@
 /**
  * @file contextMenuPressFeedback.test.tsx
  * @input useContextMenuPressFeedback on a trigger, with the animator replaced
- * @output Checks that the growth starts at the press machine's "on" and
- *   keeps going when the machine lets the press go. It returns when
- *   ContextMenu's recognizer ends the press with no menu. The growth plays
+ * @output Checks that the growth starts at the onset of the landing the
+ *   recognizer reports, and ignores the press machine's mark. It returns
+ *   when ContextMenu's recognizer ends the press with no menu. The growth plays
  *   `springs.contextMenuLift`, and each return, then or as the menu closes,
  *   `springs.contextMenuDismiss`
  * @position Unit tests of packages/core/src/ContextMenu/contextMenuPressFeedback.ts

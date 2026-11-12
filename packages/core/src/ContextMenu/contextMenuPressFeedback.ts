@@ -14,8 +14,6 @@
  * SYNC: When modified, update /packages/core/src/ContextMenu/ContextMenu.tsx
  */
 
-// Only the recognizer's failure or cancel returns the growth.
-
 import {useCallback, useRef, type RefObject} from 'react';
 import {useAttachment} from '../hooks/useAttachment';
 import {useCommittedRef} from '../hooks/useCommittedRef';
