@@ -15,6 +15,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {createRepository} from './lib/git-fixture.mjs';
 import {TEMPLATE_RUBRIC} from '../packages/cli/assets/docs/tree/template-grading-rubric.doc.mjs';
 
 import {
@@ -464,30 +465,37 @@ function cli(argv, {cwd = REPO_ROOT, input, env} = {}) {
   }
 }
 
-function identify(directory) {
-  git(directory, 'config', 'user.name', 'Template Ledger Test');
-  git(directory, 'config', 'user.email', 'template-ledger-test@example.com');
-}
-
 function makeWiki(seedLedger) {
   const root = fs.mkdtempSync(path.join(TEMP_ROOT, 'template-ledger-wiki-'));
   const bare = path.join(root, 'wiki.git');
-  const seed = path.join(root, 'seed');
   const clone = path.join(root, 'clone');
 
-  git(root, 'init', '--bare', '--initial-branch=master', bare);
-  git(root, 'clone', bare, seed);
-  identify(seed);
-  fs.writeFileSync(
-    path.join(seed, TEMPLATE_LEDGER_FILENAME),
-    `${JSON.stringify(seedLedger, null, 2)}\n`,
+  createRepository(
+    bare,
+    [
+      {
+        ref: `refs/heads/${WIKI_BRANCH}`,
+        message: 'seed',
+        files: {
+          [TEMPLATE_LEDGER_FILENAME]: `${JSON.stringify(seedLedger, null, 2)}\n`,
+        },
+      },
+    ],
+    {bare: true, branch: WIKI_BRANCH},
   );
-  git(seed, 'add', '-A');
-  git(seed, 'commit', '-m', 'seed');
-  git(seed, 'push', 'origin', WIKI_BRANCH);
-
-  git(root, 'clone', '--depth', '1', `file://${bare}`, clone);
-  identify(clone);
+  // The clone's own config names who commits there.
+  git(
+    root,
+    'clone',
+    '-c',
+    'user.name=Template Ledger Test',
+    '-c',
+    'user.email=template-ledger-test@example.com',
+    '--depth',
+    '1',
+    `file://${bare}`,
+    clone,
+  );
   return {
     root,
     bare,

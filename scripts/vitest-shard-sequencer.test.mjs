@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {describe, expect, it} from 'vitest';
+import {configDefaults} from 'vitest/config';
 import DurationShardSequencer, {
   DURATIONS,
   partitionByDuration,
@@ -28,6 +29,33 @@ describe('duration-balanced Node legs', () => {
     // The slowest files still exist, so the split they steer is real.
     for (const file of slowest.slice(0, 6))
       expect(fs.existsSync(path.join(ROOT, file)), file).toBe(true);
+  });
+
+  it("keeps a recorded time for nine in ten of the Node project's test files, so the record cannot go stale unnoticed", () => {
+    // The `node` project's own include and exclude lists, read from
+    // vitest.config.ts so this check never drifts from what the project runs.
+    const config = fs
+      .readFileSync(path.join(ROOT, 'vitest.config.ts'), 'utf8')
+      .replace(/\/\/[^\n]*/g, '');
+    const block =
+      /name:\s*'node'[\s\S]*?include:\s*\[([\s\S]*?)\][\s\S]*?exclude:\s*\[([\s\S]*?)\]/.exec(
+        config,
+      );
+    expect(block, 'vitest.config.ts: no node project include list').not.toBe(
+      null,
+    );
+    const globs = list =>
+      [...list.matchAll(/'([^']+)'/g)].map(([, glob]) => glob);
+    const nodeFiles = fs.globSync(globs(block[1]), {
+      cwd: ROOT,
+      exclude: [...configDefaults.exclude, ...globs(block[2])],
+    });
+    const missing = nodeFiles.filter(file => !(file in recorded));
+    expect(nodeFiles.length).toBeGreaterThan(500);
+    expect(
+      missing.length / nodeFiles.length,
+      `${missing.length} Node test files have no recorded time (${missing.slice(0, 5).join(', ')}, …). Regenerate the record from the Main workflow's Node leg logs: node scripts/vitest-shard-sequencer.mjs record <log>…`,
+    ).toBeLessThanOrEqual(0.1);
   });
 
   it.each([4, 6])(

@@ -1,0 +1,1628 @@
+{
+  "$comment": "Replay of the Chromium interaction selection (spec:AST-030 FR31). Regenerate with node .github/scripts/interaction-selection-replay.mjs (the same pull requests), --prs <numbers>, or --resume to continue an interrupted run. `reviewed`: for one pull request (`#<number> <spec>`), a failing spec outside its selection that a review found not to be an escape, and why.",
+  "reviewed": {
+    "#10816 packages/core/src/Lightbox/__tests__/LightboxZoom.interaction.browser.spec.ts": "A busy proof with too little motion to judge (BusyFrameUnjudgedError), the flake class #10812 fixed. The change (Avatar) does not reach the Lightbox page, and the same spec passed on the pull request's next head (1206dee4).",
+    "#10729 packages/core/src/Layer/__tests__/LayerEntranceLayout.interaction.browser.spec.ts": "An entrance-timing judgment on a DropdownMenu submenu. The change edits only another spec (LightboxDismiss), so it reaches no page, and the same spec passed on the pull request's next heads (079679e4, 9c6ce417).",
+    "#10593 packages/lab/src/NavigationStack/__tests__/NavigationStack.interaction.browser.spec.ts": "A frame-timing judgment (18 of 19 frames moved) on a page the change (Table column resize) does not reach; the same spec passed on the pull request's later heads (5e40e284, 4e59caf9, e7154735).",
+    "#10719 packages/core/src/Lightbox/__tests__/LightboxPaging.interaction.browser.spec.ts": "A busy proof with no judged frames (\"too late to judge\"), the flake class #10812 fixed. The change edits only another spec (LightboxDismiss), and the same spec passed on the pull request's next head (14c81067)."
+  },
+  "rows": [
+    {
+      "pr": 10822,
+      "commit": "0840fcc47a1a92dbaebbe3ab5e0bf725af87400f",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 9966,
+      "commit": "b04c4143e6a4b76df0ad1ca2d05840a4eb0d7ae7",
+      "kind": "merge",
+      "selection": [
+        "packages/lab/src/TabBar/__tests__/TabBar.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10817,
+      "commit": "db705b96122c032d5a2455b56cbd05d47a9c83dc",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10924,
+      "commit": "5b0eb0fb4e054b34619e0e2fb580c016c1115492",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/DateInput/__tests__/DateInputFocusLeave.interaction.browser.spec.ts",
+        "packages/core/src/DateInput/__tests__/MonthScroller.interaction.browser.spec.ts",
+        "packages/core/src/DateInput/__tests__/MonthScrollerSteps.interaction.browser.spec.ts",
+        "packages/core/src/DateInput/__tests__/MonthYearWheels.interaction.browser.spec.ts",
+        "packages/core/src/DateInput/__tests__/Wheel.interaction.browser.spec.ts",
+        "packages/core/src/DateInput/__tests__/WheelActivation.interaction.browser.spec.ts",
+        "packages/core/src/TimeInput/__tests__/TimeWheels.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10932,
+      "commit": "5d0a07467cc60c6f0f27aeda49d701d7887fd67d",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10785,
+      "commit": "f6d2c316878690f34602ab07fbeb0039666e653c",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10894,
+      "commit": "52356e6902527e0542457363eedaa7665936e6f2",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10925,
+      "commit": "9624a0b378cbe5e2360e97df54b1a4a88f3e5c17",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/BottomSheet/__tests__/BottomSheetDetent.interaction.browser.spec.ts",
+        "packages/core/src/BottomSheet/__tests__/BottomSheetKeyboardInset.interaction.browser.spec.ts",
+        "packages/core/src/DateInput/__tests__/DateInputFocusLeave.interaction.browser.spec.ts",
+        "packages/core/src/DateInput/__tests__/MonthScroller.interaction.browser.spec.ts",
+        "packages/core/src/DateInput/__tests__/MonthScrollerSteps.interaction.browser.spec.ts",
+        "packages/core/src/DateInput/__tests__/MonthYearWheels.interaction.browser.spec.ts",
+        "packages/core/src/DateInput/__tests__/Wheel.interaction.browser.spec.ts",
+        "packages/core/src/DateInput/__tests__/WheelActivation.interaction.browser.spec.ts",
+        "packages/core/src/DropdownMenu/__tests__/DropdownMenuDragHighlight.interaction.browser.spec.ts",
+        "packages/core/src/DropdownMenu/__tests__/DropdownMenuEntranceHold.interaction.browser.spec.ts",
+        "packages/core/src/DropdownMenu/__tests__/DropdownMenuOpeningRelease.interaction.browser.spec.ts",
+        "packages/core/src/DropdownMenu/__tests__/DropdownMenuTouchHandoff.interaction.browser.spec.ts",
+        "packages/core/src/Layer/__tests__/LayerCloseLayout.interaction.browser.spec.ts",
+        "packages/core/src/Layer/__tests__/LayerEntranceLayout.interaction.browser.spec.ts",
+        "packages/core/src/Layer/__tests__/inputHold.interaction.browser.spec.ts",
+        "packages/core/src/Layer/__tests__/keyboardCappedLists.interaction.browser.spec.ts",
+        "packages/core/src/Layer/__tests__/layerExitCopy.interaction.browser.spec.ts",
+        "packages/core/src/Layer/__tests__/preserveAnimations.interaction.browser.spec.ts",
+        "packages/core/src/Pagination/__tests__/PaginationTextSize.interaction.browser.spec.ts",
+        "packages/core/src/Popover/__tests__/PopoverKeyboard.interaction.browser.spec.ts",
+        "packages/core/src/Popover/__tests__/PopoverTouchMotion.interaction.browser.spec.ts",
+        "packages/core/src/TimeInput/__tests__/TimeWheels.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10889,
+      "commit": "fe675b64c9a8b1dec8602e1caba375dc05982a5f",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/List/__tests__/ListRowPress.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10639,
+      "commit": "a1fda63c70e7a8042c9e81d1b855f2ce08ddc33d",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10922,
+      "commit": "713d9ce6c65a52018eae8b91f7d61c93cd473a80",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "apps/storybook/stories/TabBar.stories.tsx maps to no component",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10944,
+      "commit": "00e031a31212e2f8c281f0075d056a1f0840415c",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "apps/storybook/stories/Avatar.stories.tsx maps to no component",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10878,
+      "commit": "1f9217f0cd6fbb37e6a086cc1781a3ff65cd094f",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "apps/storybook/stories/Selector.stories.tsx maps to no component",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 8591,
+      "commit": "630ae5efc8e78344394ab2c7df0233422b801ad5",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/Pagination/__tests__/PaginationTextSize.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10782,
+      "commit": "3239571ce5a3b0f30d8a056c78a21d48e1cc855c",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10579,
+      "commit": "e171d97c0e75efa4154d08b5c4289f7717a1fc92",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 6608,
+      "commit": "b6b0c68ad570ca85c8028aa1d4e416ac76453023",
+      "kind": "merge",
+      "selection": "out of scope",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10911,
+      "commit": "6c5c460d7f63ef18893cc295a1de9d0232af395e",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/Resizable/__tests__/grabZone.interaction.browser.spec.ts",
+        "packages/core/src/Resizable/__tests__/paneSlide.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10888,
+      "commit": "8e8bf91baa163106a32c793cd281a1d54d2d85b3",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10844,
+      "commit": "3c828cb09168606d0de614a0cb9a9dd2e990c7f7",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/Lightbox/__tests__/LightboxZoom.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10079,
+      "commit": "2309691dba9533635259113316a2cb14ec832933",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/DropdownMenu/__tests__/DropdownMenuDragHighlight.interaction.browser.spec.ts",
+        "packages/core/src/DropdownMenu/__tests__/DropdownMenuEntranceHold.interaction.browser.spec.ts",
+        "packages/core/src/DropdownMenu/__tests__/DropdownMenuOpeningRelease.interaction.browser.spec.ts",
+        "packages/core/src/DropdownMenu/__tests__/DropdownMenuTouchHandoff.interaction.browser.spec.ts",
+        "packages/core/src/Pagination/__tests__/PaginationTextSize.interaction.browser.spec.ts",
+        "packages/core/src/SideNav/__tests__/SideNavRailMotion.interaction.browser.spec.ts",
+        "packages/core/src/SideNav/__tests__/SideNavTextSize.interaction.browser.spec.ts",
+        "packages/core/src/TabList/__tests__/TabListOverflow.interaction.browser.spec.ts",
+        "packages/core/src/TabList/__tests__/TabListTextSize.interaction.browser.spec.ts",
+        "packages/core/src/TabList/__tests__/TabPressPointer.interaction.browser.spec.ts",
+        "packages/core/src/TopNav/__tests__/TopNavTextSize.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10881,
+      "commit": "0b5663f2b32ab7c4bfd875e00d84204d22890229",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10816,
+      "commit": "bf13b026eaa3aa13953974ec55a0617709f4ed56",
+      "kind": "merge",
+      "selection": [],
+      "full_run_failures": [
+        "packages/core/src/Lightbox/__tests__/LightboxZoom.interaction.browser.spec.ts"
+      ],
+      "verdict": "not an escape (reviewed)"
+    },
+    {
+      "pr": 10853,
+      "commit": "97e46f1511a0e99a429e3ec89f9399c8b1152a8a",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/Button/__tests__/ButtonPressRelease.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10880,
+      "commit": "d53cec5c7c1229a29417d4c0841e5c5c5b96a74b",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "apps/storybook/stories/PressableSurfaceRecipe.stories.tsx maps to no component",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10271,
+      "commit": "a0a09f9c2f3a60462d9578d8594e85ad78c3a24a",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "apps/storybook/stories/TableSelection.stories.tsx maps to no component",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10811,
+      "commit": "cc154981d75b202fc5905918afaf667b0e1b6a9f",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/Chat/__tests__/ChatLayoutKeyboard.interaction.browser.spec.ts",
+        "packages/core/src/Chat/__tests__/ChatLayoutPanelView.interaction.browser.spec.ts",
+        "packages/core/src/Chat/__tests__/ChatMessageAvatar.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10908,
+      "commit": "438a0ff888559025758099a73cac695810eebdbb",
+      "kind": "merge",
+      "selection": "out of scope",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10866,
+      "commit": "a0e0536f34f96fc7ac81aee5b76b541374c21f6c",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/motion/__tests__/animator.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10887,
+      "commit": "eee8f1d8d78b0710af03c76b6100d27708d68c0c",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10854,
+      "commit": "e9ae499349ae85692039bcf05e5217e0dddbfc14",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/DateInput/__tests__/Wheel.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10852,
+      "commit": "971d57533ec7dac7ab2576155b130d2d1ed09222",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10882,
+      "commit": "5f1c1161b0a9658db8e3485c41bf8c05f0cb3b64",
+      "kind": "merge",
+      "selection": "out of scope",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10825,
+      "commit": "35099e811e4328bd09e31b59164bdd181a985fcc",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/List/__tests__/ListReorderTouch.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10850,
+      "commit": "18f7f84f07d7fb90f779e056bfc00622f36d4154",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10860,
+      "commit": "e909dbff0183e2695f238be54f10a00edc2279d2",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/Carousel/__tests__/Carousel.interaction.browser.spec.ts",
+        "packages/core/src/Carousel/__tests__/CarouselSnapPagingButtons.interaction.browser.spec.ts",
+        "packages/core/src/Carousel/__tests__/CarouselSnapPagingEdges.interaction.browser.spec.ts",
+        "packages/core/src/SnapPaging/__tests__/SnapPaging.interaction.browser.spec.ts",
+        "packages/core/src/SnapPaging/__tests__/SnapPagingSettle.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10663,
+      "commit": "9ea776e22bb5270bc6da456be02941787181ec7b",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "packages/core/src/motion/animatedLayout.presented.test.ts maps to no component",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10875,
+      "commit": "00c1b374baceca5b131d6957155924ec2650b19e",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/Toast/__tests__/ToastEmptyViewport.interaction.browser.spec.ts",
+        "packages/core/src/Toast/__tests__/ToastSwipeScroll.interaction.browser.spec.ts",
+        "packages/core/src/Toast/__tests__/ToastViewport.hostMove.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10814,
+      "commit": "09710569f38755383af89e34f8510badf2abed6d",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "apps/storybook/stories/TabList.stories.tsx maps to no component",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10855,
+      "commit": "168d9979b26eb736972b55c8a5ed3092969c9f08",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/Lightbox/__tests__/LightboxPaging.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 9741,
+      "commit": "da85f28eddd4322bf944c42753f2ff6e30792f24",
+      "kind": "merge",
+      "selection": [],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10791,
+      "commit": "d5b0bdaa13268f7a5b23996f3a7dac30414781ea",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10841,
+      "commit": "b3d177f06f0f7ffb0018b224d97d9a03a416800f",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/BottomSheet/__tests__/BottomSheetDetent.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10551,
+      "commit": "f124c2f3dcf9c7ba6ef82f6df929320d93ea1f7b",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10864,
+      "commit": "349d3a8e6f0769ce87bce24674cfd0cce6487c64",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10830,
+      "commit": "f36bd72b81e7dca7bad4cddfbe016789519ce505",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 8579,
+      "commit": "8fa403c98d8ddbbfb9568c9613bd933f8f165793",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "packages/richtext/src/CodeTabPlugin.test.tsx maps to no component",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10812,
+      "commit": "86fcdd3f0a9c46af063cc25c156382a30a2c9b42",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10818,
+      "commit": "aeb654c336dd747806ff94c52e9b295360ba7f07",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/Pagination/__tests__/PaginationTextSize.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10820,
+      "commit": "2e6162c9ac8516aa85003d8c2a6714ad8979fe1e",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "packages/core/src/utils/enabledEdgeIndex.ts maps to no component",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10778,
+      "commit": "c28d2864901161b9c3d23adf87f3d886a874eefb",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/hooks/__tests__/usePager.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10823,
+      "commit": "cb0973b2c2c7bbb131ee9ce6dacdeaecbbb8f513",
+      "kind": "merge",
+      "selection": "out of scope",
+      "full_run_failures": [
+        "packages/core/src/Lightbox/__tests__/LightboxZoom.interaction.browser.spec.ts"
+      ],
+      "verdict": "out of scope at its merge commit: the lane runs no proof for it"
+    },
+    {
+      "pr": 10784,
+      "commit": "6ad0656a34526d1d81aab8ca6a4364eea87d72f0",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/motion/__tests__/animator.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10798,
+      "commit": "da3dbdc8bd8649827f23adce5ac415f9cdda2858",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "packages/core/src/utils/sharedBrands.test.ts maps to no component",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10788,
+      "commit": "bd57e0a91b2e9b631fc32d928c9b89f912929d88",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10756,
+      "commit": "a0f2a2da8838cbff64eefb7abdace2f9d84544a9",
+      "kind": "merge",
+      "selection": "out of scope",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10800,
+      "commit": "49bc221f586c4eb633647c14bfc68759dfe02ab1",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10805,
+      "commit": "b5de1a82f044df6704d3cbd2984dfb241d1d79aa",
+      "kind": "merge",
+      "selection": [],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10775,
+      "commit": "117bc6eadd1e3da20bf4c706bc1aa474a66406f4",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10448,
+      "commit": "6caeec86c722dfc121c6a0280e4ddfdcf61461bb",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "packages/core/src/hooks/useClipboard.test.tsx maps to no component",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 5461,
+      "commit": "daa239e981898df414257d2530732b8e32a4b446",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10786,
+      "commit": "5797bbf9ebb494ece4b1a18a0397a7e0acf2603e",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/Lightbox/__tests__/LightboxDismissCancel.interaction.browser.spec.ts",
+        "packages/lab/src/NavigationStack/__tests__/NavigationStack.interaction.browser.spec.ts",
+        "packages/lab/src/TabBar/__tests__/TabBar.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10781,
+      "commit": "e633aab2b278a0624d00e0a27215e90c2b5f1ce6",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/Chat/__tests__/ChatLayoutKeyboard.interaction.browser.spec.ts",
+        "packages/core/src/Chat/__tests__/ChatLayoutPanelView.interaction.browser.spec.ts",
+        "packages/core/src/Chat/__tests__/ChatMessageAvatar.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10783,
+      "commit": "1d1d9ad960725429c324a9cf467e9f1e036447da",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/Slider/__tests__/SliderTouch.interaction.browser.spec.ts",
+        "packages/core/src/Slider/__tests__/SliderValueTooltip.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10772,
+      "commit": "a1dabb30cdde26d3179966274206a25628ca79da",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10780,
+      "commit": "642cc2de1b8b0d170cbb13579f03ad307ff22081",
+      "kind": "merge",
+      "selection": [
+        "packages/lab/src/RefreshControl/__tests__/RefreshControl.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10777,
+      "commit": "376a4833198add8e995e649e1aba5f1b5d2fb414",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/DateInput/__tests__/Wheel.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10776,
+      "commit": "7f45363bd498283b00919e21beee0b0d0b6a7405",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/BottomSheet/__tests__/BottomSheetDetent.interaction.browser.spec.ts",
+        "packages/core/src/BottomSheet/__tests__/BottomSheetKeyboardInset.interaction.browser.spec.ts",
+        "packages/core/src/DateInput/__tests__/DateInputFocusLeave.interaction.browser.spec.ts",
+        "packages/core/src/DateInput/__tests__/MonthScroller.interaction.browser.spec.ts",
+        "packages/core/src/DateInput/__tests__/MonthScrollerSteps.interaction.browser.spec.ts",
+        "packages/core/src/DateInput/__tests__/MonthYearWheels.interaction.browser.spec.ts",
+        "packages/core/src/DateInput/__tests__/Wheel.interaction.browser.spec.ts",
+        "packages/core/src/DateInput/__tests__/WheelActivation.interaction.browser.spec.ts",
+        "packages/core/src/DropdownMenu/__tests__/DropdownMenuDragHighlight.interaction.browser.spec.ts",
+        "packages/core/src/DropdownMenu/__tests__/DropdownMenuEntranceHold.interaction.browser.spec.ts",
+        "packages/core/src/DropdownMenu/__tests__/DropdownMenuOpeningRelease.interaction.browser.spec.ts",
+        "packages/core/src/DropdownMenu/__tests__/DropdownMenuTouchHandoff.interaction.browser.spec.ts",
+        "packages/core/src/Layer/__tests__/LayerCloseLayout.interaction.browser.spec.ts",
+        "packages/core/src/Layer/__tests__/LayerEntranceLayout.interaction.browser.spec.ts",
+        "packages/core/src/Layer/__tests__/inputHold.interaction.browser.spec.ts",
+        "packages/core/src/Layer/__tests__/keyboardCappedLists.interaction.browser.spec.ts",
+        "packages/core/src/Layer/__tests__/layerExitCopy.interaction.browser.spec.ts",
+        "packages/core/src/Layer/__tests__/preserveAnimations.interaction.browser.spec.ts",
+        "packages/core/src/Pagination/__tests__/PaginationTextSize.interaction.browser.spec.ts",
+        "packages/core/src/Popover/__tests__/PopoverKeyboard.interaction.browser.spec.ts",
+        "packages/core/src/Popover/__tests__/PopoverTouchMotion.interaction.browser.spec.ts",
+        "packages/core/src/TimeInput/__tests__/TimeWheels.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10779,
+      "commit": "d49271d818f433bff79c8491f35a80c9c6ebcb67",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/Chat/__tests__/ChatLayoutKeyboard.interaction.browser.spec.ts",
+        "packages/core/src/Chat/__tests__/ChatLayoutPanelView.interaction.browser.spec.ts",
+        "packages/core/src/Chat/__tests__/ChatMessageAvatar.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10660,
+      "commit": "d84658f7d6ad012f6b437f00fd5771f68b049081",
+      "kind": "merge",
+      "selection": "out of scope",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10774,
+      "commit": "fe174dd12131518dd1d9a7afe663e84aaca94d9a",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10773,
+      "commit": "5661068461c20cb1fd1ef94f153cf26226baefe4",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10426,
+      "commit": "fc71bd4a0ee091dd31327eddd5f10605a43b74cd",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "apps/storybook/stories/RichTextEditor.stories.tsx maps to no component",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10770,
+      "commit": "738919b239b227bfa01a486b9b87a5c25cf13303",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10768,
+      "commit": "b863888c5fff8e93b30cb4b383b927fbd7051d70",
+      "kind": "merge",
+      "selection": [
+        "packages/lab/src/TabBar/__tests__/TabBar.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10633,
+      "commit": "fa30cff134c13d42d06938b97c3b620b5ac6a76a",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10765,
+      "commit": "5c336a54ba48afb09b37d37446b6b38a08baa888",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10767,
+      "commit": "5baebb01d37d0af485b16a7a3c8893e9dfcf247b",
+      "kind": "merge",
+      "selection": "out of scope",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10766,
+      "commit": "3e27971f3a1adf01cc103afed063352b0a2aa000",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10742,
+      "commit": "06ebae229c55e1b7e6f6903de9b71949991b7aaa",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/DropdownMenu/__tests__/DropdownMenuDragHighlight.interaction.browser.spec.ts",
+        "packages/core/src/DropdownMenu/__tests__/DropdownMenuEntranceHold.interaction.browser.spec.ts",
+        "packages/core/src/DropdownMenu/__tests__/DropdownMenuOpeningRelease.interaction.browser.spec.ts",
+        "packages/core/src/DropdownMenu/__tests__/DropdownMenuTouchHandoff.interaction.browser.spec.ts",
+        "packages/core/src/List/__tests__/ListDividers.interaction.browser.spec.ts",
+        "packages/core/src/List/__tests__/ListReorderMode.interaction.browser.spec.ts",
+        "packages/core/src/List/__tests__/ListReorderPointer.interaction.browser.spec.ts",
+        "packages/core/src/List/__tests__/ListReorderTouch.interaction.browser.spec.ts",
+        "packages/core/src/List/__tests__/ListRowPress.interaction.browser.spec.ts",
+        "packages/core/src/List/__tests__/ListRowPressPaths.interaction.browser.spec.ts",
+        "packages/core/src/List/__tests__/ListTouchHitArea.interaction.browser.spec.ts",
+        "packages/core/src/List/__tests__/ListUpdates.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 6423,
+      "commit": "1e95e11ad29c204fd715d25bed9e0055ddd23ab5",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/Chat/__tests__/ChatLayoutKeyboard.interaction.browser.spec.ts",
+        "packages/core/src/Chat/__tests__/ChatLayoutPanelView.interaction.browser.spec.ts",
+        "packages/core/src/Chat/__tests__/ChatMessageAvatar.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10594,
+      "commit": "ed586883ddb1ea6a8106486058386a372a285bb5",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10761,
+      "commit": "b77be44be2225a44cd47930e89f65c617d44940c",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/Lightbox/__tests__/LightboxDismissCancel.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10729,
+      "commit": "553e65e5bb21420f0f1f85d57ae847775cfee719",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/Lightbox/__tests__/LightboxDismiss.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [
+        "packages/core/src/Layer/__tests__/LayerEntranceLayout.interaction.browser.spec.ts"
+      ],
+      "verdict": "not an escape (reviewed)"
+    },
+    {
+      "pr": 10749,
+      "commit": "f26d16d1bdffb13fde7d3abb1129621584f22599",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/Lightbox/__tests__/LightboxPaging.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10762,
+      "commit": "14f038ca3a388c4a2dbe74791381f3a72a301013",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "packages/core/src/internal/dialog-context.test.ts maps to no component",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10593,
+      "commit": "1785da1e797401315180360f64a7c0175dc467b3",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/Resizable/__tests__/grabZone.interaction.browser.spec.ts",
+        "packages/core/src/Resizable/__tests__/paneSlide.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [
+        "packages/lab/src/NavigationStack/__tests__/NavigationStack.interaction.browser.spec.ts"
+      ],
+      "verdict": "not an escape (reviewed)"
+    },
+    {
+      "pr": 10601,
+      "commit": "d7326d9e77dd78adeafaf6e790bc67b6d11371f1",
+      "kind": "merge",
+      "selection": [
+        "packages/lab/src/PageControl/__tests__/PageControl.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10747,
+      "commit": "94c14d6da7b42acdd4e692c571bf6be39434a388",
+      "kind": "merge",
+      "selection": [
+        "packages/lab/src/TabBar/__tests__/TabBar.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10759,
+      "commit": "41e0de2e0e45c5122d795c0b85c0e994dfdd4f44",
+      "kind": "merge",
+      "selection": "out of scope",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 6314,
+      "commit": "ff7e096bab6d7011f8d14d73043bc4bc82dda13a",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "apps/storybook/stories/ScrollableArea.stories.tsx maps to no component",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10758,
+      "commit": "f3c7a0234cb2c1bfc9ef23b697fc733871a9754f",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/Switch/__tests__/Switch.interaction.browser.spec.ts",
+        "packages/core/src/Switch/__tests__/SwitchPointer.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10746,
+      "commit": "9f55320cc88058b878e3d73ff6cf2474072d9011",
+      "kind": "merge",
+      "selection": [
+        "packages/lab/src/NavigationStack/__tests__/NavigationStack.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 5642,
+      "commit": "7fefc8a662237670df8c35030e6df797db506af7",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/AlertDialog/__tests__/AlertDialog.interaction.browser.spec.ts",
+        "packages/core/src/Dialog/__tests__/DialogTouchEntrance.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 9969,
+      "commit": "c5cc8f4c43443641bebdcee9c3efe35a6a5e1f3d",
+      "kind": "merge",
+      "selection": "out of scope",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10757,
+      "commit": "b6509b17937ec6f216f491b9b319ffa58fcd10d7",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "packages/core/src/motion/README.md maps to no component",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10741,
+      "commit": "f2a6332eb6cce47dbba2d8d30b49d683cc3bb02f",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "packages/core/src/utils/sharedBrands.test.ts maps to no component",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 6425,
+      "commit": "bb0786673c001aad3649c3212ecb7ffee4ae0eeb",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "packages/core/src/utils/setInputValue.ts maps to no component",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10748,
+      "commit": "5f1e4dd68a55075e3b8fef9411a48ea2aab6c7ff",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/List/__tests__/ListReorderPointer.interaction.browser.spec.ts",
+        "packages/core/src/List/__tests__/ListReorderTouch.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10750,
+      "commit": "8f365eb73910d0dc0c512cd909e5b17865fd5d16",
+      "kind": "merge",
+      "selection": [],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10610,
+      "commit": "7cc934044b8523261cafa054423fd17469af4a12",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/DateInput/__tests__/DateInputFocusLeave.interaction.browser.spec.ts",
+        "packages/core/src/DateInput/__tests__/MonthScroller.interaction.browser.spec.ts",
+        "packages/core/src/DateInput/__tests__/MonthScrollerSteps.interaction.browser.spec.ts",
+        "packages/core/src/DateInput/__tests__/MonthYearWheels.interaction.browser.spec.ts",
+        "packages/core/src/DateInput/__tests__/Wheel.interaction.browser.spec.ts",
+        "packages/core/src/DateInput/__tests__/WheelActivation.interaction.browser.spec.ts",
+        "packages/core/src/TimeInput/__tests__/TimeWheels.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10719,
+      "commit": "9771949e0aa98527756fbb98b509cce21a7eaeef",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/Lightbox/__tests__/LightboxDismiss.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [
+        "packages/core/src/Lightbox/__tests__/LightboxPaging.interaction.browser.spec.ts"
+      ],
+      "verdict": "not an escape (reviewed)"
+    },
+    {
+      "pr": 10577,
+      "commit": "7f04a6c5a92f090525723d4505b5458da9983ece",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "packages/core/src/utils/windowExtent.test.ts maps to no component",
+      "full_run_failures": [
+        "packages/lab/src/NavigationStack/__tests__/NavigationStack.interaction.browser.spec.ts"
+      ],
+      "verdict": "caught"
+    },
+    {
+      "pr": 10737,
+      "commit": "3e987d69cb7adc7cec0480c56373217c508b6de3",
+      "kind": "merge",
+      "selection": "out of scope",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10618,
+      "commit": "fece34c7d06e40895f4fee4624fc302d1661c747",
+      "kind": "merge",
+      "selection": [],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 9672,
+      "commit": "b1a6f16c68dc6f199f779293d6aff50c1364922c",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "apps/storybook/stories/Drawer.stories.tsx maps to no component",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10702,
+      "commit": "c5ad42fe07a43537dfdfa23e9d682dfeb7b32b0a",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/Resizable/__tests__/grabZone.interaction.browser.spec.ts",
+        "packages/core/src/Resizable/__tests__/paneSlide.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10733,
+      "commit": "aa31eab11c9adc45cee53b3727302a20c1ea9ef9",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10034,
+      "commit": "74cb73c9fb649eae90f96ce4cf2496ace8885493",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "packages/core/src/hooks/useScrollableArea.test.tsx maps to no component",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10727,
+      "commit": "7bd08bbe5c691a009b5057b5c9fb0ee6b2e8335c",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10697,
+      "commit": "27378eb5750c884559ec43cd490d7a2e1cdaefd6",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/Pagination/__tests__/PaginationTextSize.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 8871,
+      "commit": "dd61bd53b099d94ad9720511db1b6d5587210490",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/Pagination/__tests__/PaginationTextSize.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 6298,
+      "commit": "b207e607abcf9b8c4aff3d53ba9e0da082a640b5",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 8868,
+      "commit": "d69b6aa8d90e53ec96815507855b729f7286e281",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/Pagination/__tests__/PaginationTextSize.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10490,
+      "commit": "48c480b60e1ca17073dd84cd1a4603b16ab63113",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/AlertDialog/__tests__/AlertDialog.interaction.browser.spec.ts",
+        "packages/core/src/AppShell/__tests__/AppShellLayoutRoot.interaction.browser.spec.ts",
+        "packages/core/src/Button/__tests__/ButtonHitArea.interaction.browser.spec.ts",
+        "packages/core/src/Button/__tests__/ButtonPress.interaction.browser.spec.ts",
+        "packages/core/src/Button/__tests__/ButtonPressRelease.interaction.browser.spec.ts",
+        "packages/core/src/Button/__tests__/ButtonPressTiming.interaction.browser.spec.ts",
+        "packages/core/src/Button/__tests__/ButtonTextSize.interaction.browser.spec.ts",
+        "packages/core/src/Calendar/__tests__/CalendarTextSize.interaction.browser.spec.ts",
+        "packages/core/src/Calendar/__tests__/CalendarTodayHydration.interaction.browser.spec.ts",
+        "packages/core/src/Carousel/__tests__/Carousel.interaction.browser.spec.ts",
+        "packages/core/src/Carousel/__tests__/CarouselSnapPagingButtons.interaction.browser.spec.ts",
+        "packages/core/src/Carousel/__tests__/CarouselSnapPagingEdges.interaction.browser.spec.ts",
+        "packages/core/src/Chat/__tests__/ChatLayoutKeyboard.interaction.browser.spec.ts",
+        "packages/core/src/Chat/__tests__/ChatLayoutPanelView.interaction.browser.spec.ts",
+        "packages/core/src/Chat/__tests__/ChatMessageAvatar.interaction.browser.spec.ts",
+        "packages/core/src/DateInput/__tests__/DateInputFocusLeave.interaction.browser.spec.ts",
+        "packages/core/src/DateInput/__tests__/MonthScroller.interaction.browser.spec.ts",
+        "packages/core/src/DateInput/__tests__/MonthScrollerSteps.interaction.browser.spec.ts",
+        "packages/core/src/DateInput/__tests__/MonthYearWheels.interaction.browser.spec.ts",
+        "packages/core/src/DateInput/__tests__/Wheel.interaction.browser.spec.ts",
+        "packages/core/src/DateInput/__tests__/WheelActivation.interaction.browser.spec.ts",
+        "packages/core/src/DateRangeInput/__tests__/DateRangeInputReflow.interaction.browser.spec.ts",
+        "packages/core/src/Dialog/__tests__/DialogTouchEntrance.interaction.browser.spec.ts",
+        "packages/core/src/Drawer/__tests__/DrawerTouchEntrance.interaction.browser.spec.ts",
+        "packages/core/src/DropdownMenu/__tests__/DropdownMenuDragHighlight.interaction.browser.spec.ts",
+        "packages/core/src/DropdownMenu/__tests__/DropdownMenuEntranceHold.interaction.browser.spec.ts",
+        "packages/core/src/DropdownMenu/__tests__/DropdownMenuOpeningRelease.interaction.browser.spec.ts",
+        "packages/core/src/DropdownMenu/__tests__/DropdownMenuTouchHandoff.interaction.browser.spec.ts",
+        "packages/core/src/Field/__tests__/SearchKeyboard.interaction.browser.spec.ts",
+        "packages/core/src/Field/__tests__/TextFieldFocusTiming.interaction.browser.spec.ts",
+        "packages/core/src/Layer/__tests__/LayerCloseLayout.interaction.browser.spec.ts",
+        "packages/core/src/Layer/__tests__/LayerEntranceLayout.interaction.browser.spec.ts",
+        "packages/core/src/Layer/__tests__/inputHold.interaction.browser.spec.ts",
+        "packages/core/src/Layer/__tests__/keyboardCappedLists.interaction.browser.spec.ts",
+        "packages/core/src/Layer/__tests__/layerExitCopy.interaction.browser.spec.ts",
+        "packages/core/src/Layer/__tests__/preserveAnimations.interaction.browser.spec.ts",
+        "packages/core/src/Lightbox/__tests__/LightboxDismiss.interaction.browser.spec.ts",
+        "packages/core/src/Lightbox/__tests__/LightboxDismissCancel.interaction.browser.spec.ts",
+        "packages/core/src/Lightbox/__tests__/LightboxEveryPointer.interaction.browser.spec.ts",
+        "packages/core/src/Lightbox/__tests__/LightboxPaging.interaction.browser.spec.ts",
+        "packages/core/src/Lightbox/__tests__/LightboxPagingModes.interaction.browser.spec.ts",
+        "packages/core/src/Lightbox/__tests__/LightboxZoom.interaction.browser.spec.ts",
+        "packages/core/src/Lightbox/__tests__/LightboxZoomModes.interaction.browser.spec.ts",
+        "packages/core/src/List/__tests__/ListDividers.interaction.browser.spec.ts",
+        "packages/core/src/List/__tests__/ListReorderMode.interaction.browser.spec.ts",
+        "packages/core/src/List/__tests__/ListReorderPointer.interaction.browser.spec.ts",
+        "packages/core/src/List/__tests__/ListReorderTouch.interaction.browser.spec.ts",
+        "packages/core/src/List/__tests__/ListRowPress.interaction.browser.spec.ts",
+        "packages/core/src/List/__tests__/ListRowPressPaths.interaction.browser.spec.ts",
+        "packages/core/src/List/__tests__/ListTouchHitArea.interaction.browser.spec.ts",
+        "packages/core/src/List/__tests__/ListUpdates.interaction.browser.spec.ts",
+        "packages/core/src/Pagination/__tests__/PaginationTextSize.interaction.browser.spec.ts",
+        "packages/core/src/Popover/__tests__/PopoverKeyboard.interaction.browser.spec.ts",
+        "packages/core/src/Popover/__tests__/PopoverTouchMotion.interaction.browser.spec.ts",
+        "packages/core/src/SegmentedControl/__tests__/SegmentedControl.interaction.browser.spec.ts",
+        "packages/core/src/SegmentedControl/__tests__/SegmentedControlHitArea.interaction.browser.spec.ts",
+        "packages/core/src/SideNav/__tests__/SideNavRailMotion.interaction.browser.spec.ts",
+        "packages/core/src/SideNav/__tests__/SideNavTextSize.interaction.browser.spec.ts",
+        "packages/core/src/Slider/__tests__/SliderFinePointer.interaction.browser.spec.ts",
+        "packages/core/src/Slider/__tests__/SliderTouch.interaction.browser.spec.ts",
+        "packages/core/src/Slider/__tests__/SliderValueTooltip.interaction.browser.spec.ts",
+        "packages/core/src/Switch/__tests__/Switch.interaction.browser.spec.ts",
+        "packages/core/src/Switch/__tests__/SwitchPointer.interaction.browser.spec.ts",
+        "packages/core/src/TabList/__tests__/TabListOverflow.interaction.browser.spec.ts",
+        "packages/core/src/TabList/__tests__/TabListTextSize.interaction.browser.spec.ts",
+        "packages/core/src/TabList/__tests__/TabPressPointer.interaction.browser.spec.ts",
+        "packages/core/src/TimeInput/__tests__/TimeWheels.interaction.browser.spec.ts",
+        "packages/core/src/Toast/__tests__/ToastEmptyViewport.interaction.browser.spec.ts",
+        "packages/core/src/Toast/__tests__/ToastSwipeScroll.interaction.browser.spec.ts",
+        "packages/core/src/Toast/__tests__/ToastViewport.hostMove.interaction.browser.spec.ts",
+        "packages/core/src/ToggleButton/__tests__/ToggleButtonGroupTracking.interaction.browser.spec.ts",
+        "packages/core/src/Tooltip/__tests__/TooltipClosedTriggerAnchor.interaction.browser.spec.ts",
+        "packages/core/src/TopNav/__tests__/TopNavTextSize.interaction.browser.spec.ts",
+        "packages/lab/src/Chart/__tests__/ChartZoomWheel.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10686,
+      "commit": "44862e54e05d6712d322aaf8b98d21ae84031ff5",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10668,
+      "commit": "8f8b3db656d25e306ddcc5e207e69b4ba43e2cd2",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "packages/core/src/utils/sharedResizeObserver.ts maps to no component",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10416,
+      "commit": "7bdeb06d766c8059f0f22340324a6977e9b3c075",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10658,
+      "commit": "90ebe00a2d6b8360c42e50e3d84842934edc24b4",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/Resizable/__tests__/grabZone.interaction.browser.spec.ts",
+        "packages/core/src/Resizable/__tests__/paneSlide.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10608,
+      "commit": "aefb30d0c5847da822ab114bd3995091df32b330",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10128,
+      "commit": "28401fb14943d1474b306c1193e8808d880840f5",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "apps/storybook/stories/Layer.stories.tsx maps to no component",
+      "full_run_failures": [
+        "packages/core/src/Slider/__tests__/SliderFinePointer.interaction.browser.spec.ts"
+      ],
+      "verdict": "caught"
+    },
+    {
+      "pr": 8280,
+      "commit": "5b3e17bb24d25ac83665b9c51d26f41b846d4acb",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10674,
+      "commit": "9d753c5c2c4dd3523eb6fddbcff0cb8e98a16baf",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10657,
+      "commit": "0d755730457931688c2a51408fb142593aa49306",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "packages/core/src/hooks/scrollGeometrySubscriptions.ts maps to no component",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10656,
+      "commit": "d0ab3cb264758e793ce8ac7d0dfbf51ebd4d0662",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "packages/core/src/utils/listWindow.test.ts maps to no component",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10655,
+      "commit": "db40c6b01d6578ef9835fdcb3893e435477e6140",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "packages/core/src/hooks/useDevWarning.test.tsx maps to no component",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 5398,
+      "commit": "59881c7cc3c2057bf5d22255afb062d4455d887f",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10678,
+      "commit": "544442239d0a9a1661270fc27b1a764cc555018e",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10675,
+      "commit": "824e71ea0123402e44e30f3e989e9052b0c2c709",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/Field/__tests__/SearchKeyboard.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10654,
+      "commit": "1378a95f8347f59a07cd10d198859ecdc0b3b29d",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/Resizable/__tests__/grabZone.interaction.browser.spec.ts",
+        "packages/core/src/Resizable/__tests__/paneSlide.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10677,
+      "commit": "7299aabd7f44a574e201ecb2eeb3de4242c20324",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10429,
+      "commit": "1ff81c7a90b7f95bb00b5391bcc68032151712a0",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "apps/storybook/stories/RichTextEditor.markdownParity.tsx maps to no component",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10567,
+      "commit": "a1b0cd9ad7ecf829fd21823c3ed345e86a08cfcb",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/Pagination/__tests__/PaginationTextSize.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10528,
+      "commit": "8e526d661ae3707d36f7d7723898c250ad020968",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/SegmentedControl/__tests__/SegmentedControl.interaction.browser.spec.ts",
+        "packages/core/src/SegmentedControl/__tests__/SegmentedControlHitArea.interaction.browser.spec.ts",
+        "packages/core/src/TabList/__tests__/TabListOverflow.interaction.browser.spec.ts",
+        "packages/core/src/TabList/__tests__/TabListTextSize.interaction.browser.spec.ts",
+        "packages/core/src/TabList/__tests__/TabPressPointer.interaction.browser.spec.ts",
+        "packages/core/src/Toolbar/__tests__/ToolbarTextSize.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10644,
+      "commit": "b9ad7bf521a057bed914d2d85dc249314d937328",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 4259,
+      "commit": "611382ee1fb1014987840dc5e7af2a879b98b7e2",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [
+        "packages/core/src/SnapPaging/__tests__/SnapPaging.interaction.browser.spec.ts"
+      ],
+      "verdict": "caught"
+    },
+    {
+      "pr": 10667,
+      "commit": "8afc6e63c375bbbd6e0fa90a5af0b46be8ebdede",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 8558,
+      "commit": "1ffc0dac9596edd0b05d1402cee558dfcaf7d383",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10588,
+      "commit": "7bc8230f8b9d0012d7b625aa05839c3c8a77167f",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [
+        "packages/core/src/Lightbox/__tests__/LightboxZoom.interaction.browser.spec.ts"
+      ],
+      "verdict": "caught"
+    },
+    {
+      "pr": 10534,
+      "commit": "3918a54ad0e46a1b8cb93b1e7185a24edcf7a013",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/TabList/__tests__/TabListOverflow.interaction.browser.spec.ts",
+        "packages/core/src/TabList/__tests__/TabListTextSize.interaction.browser.spec.ts",
+        "packages/core/src/TabList/__tests__/TabPressPointer.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10641,
+      "commit": "f092308149a10fc1e0fad2e20c4101b947a4852c",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "packages/core/src/utils/sharedBrands.test.ts maps to no component",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10571,
+      "commit": "19981aa375062085b2ac5f91aa4e00e116c2a401",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/AppShell/__tests__/AppShellLayoutRoot.interaction.browser.spec.ts",
+        "packages/core/src/SideNav/__tests__/SideNavRailMotion.interaction.browser.spec.ts",
+        "packages/core/src/SideNav/__tests__/SideNavTextSize.interaction.browser.spec.ts",
+        "packages/core/src/TopNav/__tests__/TopNavTextSize.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 10129,
+      "commit": "f88d572acb268ca7716d974cc4354609f1aefcc4",
+      "kind": "merge",
+      "selection": [
+        "packages/core/src/DateInput/__tests__/DateInputFocusLeave.interaction.browser.spec.ts",
+        "packages/core/src/DateInput/__tests__/MonthScroller.interaction.browser.spec.ts",
+        "packages/core/src/DateInput/__tests__/MonthScrollerSteps.interaction.browser.spec.ts",
+        "packages/core/src/DateInput/__tests__/Wheel.interaction.browser.spec.ts",
+        "packages/core/src/DateInput/__tests__/WheelActivation.interaction.browser.spec.ts",
+        "packages/core/src/TimeInput/__tests__/TimeWheels.interaction.browser.spec.ts"
+      ],
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 8877,
+      "commit": "14fc5872302834e8387e314f61677bd6ed6b49cf",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 8885,
+      "commit": "13e8c25b55a56fecae791392f94f624104aae78c",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 8881,
+      "commit": "baa30a633eec155cbfe97513f49df6453ab36122",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 8887,
+      "commit": "a23ce4e2ac0e6154a864276528e958bd2ac10b4e",
+      "kind": "merge",
+      "selection": "full",
+      "full_reason": "the change touches shared infrastructure or is undecided",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 8880,
+      "commit": "45b112c9bc98d2fd5cc2286bdb34c02f65259da2",
+      "kind": "merge",
+      "selection": "out of scope",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 8884,
+      "commit": "4045d1614701205c791ab96265970034225272c7",
+      "kind": "merge",
+      "selection": "out of scope",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 8899,
+      "commit": "08c204b31f0c32f76ea2567ceac973f0e6031d44",
+      "kind": "merge",
+      "selection": "out of scope",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 8900,
+      "commit": "4eea4b605e3f086a06bbd2843c5ab076e41f93c8",
+      "kind": "merge",
+      "selection": "out of scope",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 8901,
+      "commit": "cc51e5681f5369db75c17a8b126ac521263f37a4",
+      "kind": "merge",
+      "selection": "out of scope",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    },
+    {
+      "pr": 8886,
+      "commit": "f6d9ce12c0ceb51dc7382c992532379e9345ae0c",
+      "kind": "merge",
+      "selection": "out of scope",
+      "full_run_failures": [],
+      "verdict": "no failure"
+    }
+  ]
+}

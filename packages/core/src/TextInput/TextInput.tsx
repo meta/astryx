@@ -46,6 +46,7 @@ import {
 import type {InputStatus} from '../Field/types';
 import {renderIconSlot, type IconType} from '../Icon/Icon';
 import {isRenderable} from '../utils/isRenderable';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {Spinner} from '../Spinner/Spinner';
 import {useTooltip} from '../Tooltip/useTooltip';
 import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
@@ -128,6 +129,7 @@ import {themeProps} from '../utils/themeProps';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
+import {setInputValue} from '../utils/setInputValue';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
 import {
   registerEnglishFallback,
@@ -374,13 +376,7 @@ export function TextInput({
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   // A disabled field keeps its tab stop but, like a natively disabled one,
   // runs no caller event handler other than focus and blur (`spec:AST-085` FR2).
-  const fieldProps = isDisabled
-    ? Object.fromEntries(
-        Object.entries(rest).filter(
-          ([key]) => !/^on[A-Z]/.test(key) || /^on(Focus|Blur)/.test(key),
-        ),
-      )
-    : rest;
+  const fieldProps = withholdCallerHandlers(rest, isDisabled);
   const size = useSize(sizeProp, 'md');
 
   const generatedID = useId();
@@ -459,23 +455,25 @@ export function TextInput({
     }
   };
 
-  // Handle clear button click
-  const handleClear = useCallback(
-    (e?: React.MouseEvent<HTMLButtonElement>) => {
-      onChange?.('', null as unknown as ChangeEvent<HTMLInputElement>);
-      if (!e || e.detail === 0) {
-        inputRef.current?.focus();
-      } else {
-        // Focus inside the tap: iOS Safari brings up its keyboard only for a
-        // focus made while handling the touch, so a field the tap reaches
-        // unfocused gets its keyboard, as UIKit's clear button makes the
-        // field first responder. `preventScroll` keeps a scrolled page where
-        // it is.
-        inputRef.current?.focus({preventScroll: true});
-      }
-    },
-    [onChange],
-  );
+  // A native value set and an `input` event run the input's own change handler.
+  // So the clear gets a real change event and the same callback order and
+  // cancellation as typing.
+  const handleClear = useCallback((e?: React.MouseEvent<HTMLButtonElement>) => {
+    const input = inputRef.current;
+    if (input != null && input.value !== '') {
+      setInputValue(input, '');
+    }
+    if (!e || e.detail === 0) {
+      inputRef.current?.focus();
+    } else {
+      // Focus inside the tap: iOS Safari brings up its keyboard only for a
+      // focus made while handling the touch, so a field the tap reaches
+      // unfocused gets its keyboard, as UIKit's clear button makes the
+      // field first responder. `preventScroll` keeps a scrolled page where
+      // it is.
+      inputRef.current?.focus({preventScroll: true});
+    }
+  }, []);
 
   // Focus input when clicking anywhere on the wrapper (icons, padding, etc.)
   const {onClick: handleWrapperClick, onMouseUp: handleWrapperMouseUp} =
@@ -506,6 +504,7 @@ export function TextInput({
         }),
         stylex.props(
           inputWrapperStyles.base,
+          inputWrapperStyles.textField,
           sizeStyles[size],
           isDisabled && inputWrapperStyles.disabled,
           isDisabled && inputDisabledFocusStyles.ring,

@@ -34,7 +34,8 @@ import {
 import {routeSegment} from '../foundation/discovery/docs-section-key.mjs';
 import {EXPERIMENTAL_AUTHORING_ROUTE} from '../foundation/discovery/authoring-self-docs.mjs';
 import {generateCompressedIndex} from '../foundation/agent-docs/agent-docs.mjs';
-import {program, JSON_SUPPORTED} from '../clients/cli/index.mjs';
+import {JSON_SUPPORTED} from '../clients/cli/index.mjs';
+import {program} from '../clients/cli/program.mjs';
 import {buildManifest} from '../clients/cli/lib/manifest.mjs';
 import {runCli} from '../test-utils/run-cli.mjs';
 
@@ -298,6 +299,8 @@ function problemWith(shown, {commands, groups, global}) {
   for (; i < rest.length; i++) {
     const token = rest[i];
     if (!/^--?[a-zA-Z]/.test(token)) continue;
+    // `experimental theme` takes a design token's name as an operand.
+    if (name.startsWith('experimental theme') && TOKEN_OPERAND.test(token)) continue;
     if (!known(flags, token)) {
       return `\`astryx ${name}\` has no option ${token.split('=')[0]}`;
     }
@@ -305,6 +308,9 @@ function problemWith(shown, {commands, groups, global}) {
   }
   return null;
 }
+
+/** A design token's name, such as `--color-text-primary`. */
+const TOKEN_OPERAND = /^--(?:color|radius|spacing|size|font|text|shadow|border|focus|duration|ease|syntax)-[a-z0-9-]+$/;
 
 /**
  * Commands a doc shows on purpose as wrong: the error codes they trigger. Each

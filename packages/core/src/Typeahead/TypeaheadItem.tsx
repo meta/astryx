@@ -54,7 +54,8 @@ export interface TypeaheadItemProps<
   isDisabled?: boolean;
 
   /**
-   * Group label for grouping items visually.
+   * This prop has no effect. Set `item.auxiliaryData.group` on search-source
+   * items to group results in Typeahead or BaseTypeahead.
    */
   group?: string;
 }

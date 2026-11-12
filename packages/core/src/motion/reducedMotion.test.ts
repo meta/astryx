@@ -78,6 +78,7 @@ const PENDING_TWINS = new Set<string>([
   'Chat/ChatLayoutScrollButton.tsx',
   'Chat/ChatMessageMetadata.tsx',
   'Chat/ChatToolCalls.tsx',
+  'ClickableCard/ClickableCard.tsx',
   'CodeBlock/CodeBlock.tsx',
   'ComplexSelector/ComplexSelector.tsx',
   'DateInput/TouchDateField.tsx',
@@ -90,27 +91,29 @@ const PENDING_TWINS = new Set<string>([
   'Indicator/CheckboxIndicator.tsx',
   'Indicator/RadioIndicator.tsx',
   'Layer/layerAnimations.stylex.ts',
-  'Lightbox/Lightbox.tsx',
   'Markdown/Markdown.tsx',
   'MobileNav/MobileNav.tsx',
   'Overlay/OverlayScrim.tsx',
   'ProgressBar/ProgressBar.tsx',
+  'SelectableCard/SelectableCard.tsx',
   'Selector/Selector.tsx',
   'SideNav/SideNavCollapseButton.tsx',
   'SideNav/SideNavItem.tsx',
   'Skeleton/Skeleton.tsx',
   'Slider/Slider.tsx',
-  'Spinner/Spinner.tsx',
+  'Spinner/spinnerRotor.ts',
   'StatusDot/StatusDot.tsx',
   'Stepper/Step.tsx',
   'Switch/Switch.tsx',
   'TabList/TabList.tsx',
+  'Thumbnail/Thumbnail.tsx',
   'Toast/Toast.tsx',
   'Toast/ToastViewport.tsx',
   'TopNav/TopNavMegaMenu.tsx',
-  'utils/interactionOverlay.stylex.ts',
   'hooks/containerReveal.stylex.ts',
   'hooks/useEntryAnimation.ts',
+  'privateAttributes/press.stylex.ts',
+  'utils/interactionOverlay.stylex.ts',
 ]);
 
 /**
@@ -136,12 +139,11 @@ const SETTING_READERS_WITH_MARK = new Set<string>([
  * setting raw fails, so the list only shrinks.
  */
 const PENDING_SETTING_READERS = new Set<string>([
-  'AppShell/AppShell.tsx',
   'BottomSheet/BottomSheetPanel.tsx',
   'BottomSheet/useMobileKeyboard.ts',
   'BottomSheet/useSheetGestures.ts',
   'Carousel/Carousel.tsx',
-  'MobileNav/MobileNav.tsx',
+  'keyboard/useMobileKeyboard.ts',
   'utils/pressFeedback.ts',
 ]);
 

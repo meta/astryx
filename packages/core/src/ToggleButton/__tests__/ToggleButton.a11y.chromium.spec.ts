@@ -11,7 +11,12 @@
  *   apps/storybook/stories/ToggleButtonPatternA11y.stories.tsx.
  */
 
-import {expect, test, type CDPSession, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type CDPSession,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   TOGGLE_BUTTON_PATTERN,
   blockingResults,

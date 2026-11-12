@@ -823,15 +823,24 @@ function processFactsOf(pid, procRoot) {
 
 /**
  * Whether a process's arguments are this CLI's install of `version`, as
- * runNpm starts it: the program (`argv[0]`) is npm, or node running npm's
+ * runNpm starts it: the program (`argv[0]`) is npm, or a Node running npm's
  * entry file `npm-cli.js` (`argv[1]`), each exactly by name, and the arguments
- * include `install` and `@astryxdesign/cli@<version>`. A program that only has
- * `npm` somewhere in its name or arguments is not.
+ * include `install` and `@astryxdesign/cli@<version>`. A Node is one named
+ * `node` (with a version, such as `node22`), or one with the same file name
+ * as the Node runNpm starts npm with (`node`, by default this one), however
+ * it is named, such as `nodejs` or `node-linux-x64`. A program that only
+ * has `npm` somewhere in its name or arguments is not.
  * @param {string[]} argv
  * @param {string} version
+ * @param {{node?: string}} [options] `node`: the Node runNpm starts npm with
+ *   (npmCommand's `execPath`; default: this one)
  * @returns {boolean}
  */
-export function isReleaseInstall(argv, version) {
+export function isReleaseInstall(
+  argv,
+  version,
+  {node = process.execPath} = {},
+) {
   const name = (/** @type {string | undefined} */ arg) =>
     (arg ?? '')
       .split(/[\\/]/u)
@@ -839,9 +848,8 @@ export function isReleaseInstall(argv, version) {
       ?.replace(/\.(?:exe|cmd)$/iu, '')
       .toLowerCase() ?? '';
   const program = name(argv[0]);
-  const npm =
-    program === 'npm' ||
-    (/^node(?:[-.\d]*)$/u.test(program) && name(argv[1]) === 'npm-cli.js');
+  const isNode = /^node(?:[-.\d]*)$/u.test(program) || program === name(node);
+  const npm = program === 'npm' || (isNode && name(argv[1]) === 'npm-cli.js');
   return (
     npm &&
     argv.includes('install') &&

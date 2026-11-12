@@ -7,7 +7,7 @@
  * @output `phone` (the touch-phone browser context every interaction proof
  *   runs in), `withStorybook` (serve the built Storybook for a spec file), and
  *   `openStory` (load one story, with Storybook's highlight module off, and
- *   wait until it has rendered).
+ *   wait until Storybook has finished rendering it).
  * @position Stories are the reproduction path, as for every other browser
  *   check in this repository: a scenario used for verification is checked in,
  *   not built in a one-off page.
@@ -26,6 +26,7 @@ import {
   serveStorybook,
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
+import {installTouchStartBeforeLoad} from './touch';
 
 export const phone = {
   viewport: {width: 402, height: 714},
@@ -63,6 +64,9 @@ export function withStorybook(test: TestType<any, any>): () => string {
 /** Pages whose Storybook highlight module `openStory` turned off. */
 const highlightOff = new WeakSet<Page>();
 
+/** Pages that `openStory` gave the touch driver's listener-start mark. */
+const touchStartMarked = new WeakSet<Page>();
+
 export interface OpenStoryOptions {
   /**
    * Keeps Storybook's highlight module on. It is off by default: when on, it
@@ -74,9 +78,19 @@ export interface OpenStoryOptions {
 }
 
 /**
- * Loads a story in the page and waits for its first render, its fonts and two
- * frames. Storybook's highlight module is off (see `OpenStoryOptions`), and
- * that is checked: its root element must be absent once the story renders.
+ * Loads a story in the page and waits for its first render, for Storybook to
+ * finish that render, for its fonts and for two frames. Storybook's highlight
+ * module is off (see `OpenStoryOptions`), and that is checked: its root
+ * element must be absent once the story renders. On WebKit, it adds the touch
+ * driver's listener-start mark before the story loads (see
+ * `installTouchStartBeforeLoad`).
+ *
+ * Storybook finishes a render after the story first paints: it waits out the
+ * story's animations (phase `completing`), runs `afterEach`, and only then
+ * reports the story finished (`STORY_FINISHED`, phase `finished`), about
+ * 150 ms later. Its decorators' effects (a `pointermove` listener on the
+ * document, for one) land in between, so a proof measuring from first paint
+ * would measure Storybook as well.
  */
 export async function openStory(
   page: Page,
@@ -101,6 +115,10 @@ export async function openStory(
       ).__STORYBOOK_HIGHLIGHT_INITIALIZED = true;
     });
   }
+  if (!touchStartMarked.has(page)) {
+    touchStartMarked.add(page);
+    await installTouchStartBeforeLoad(page);
+  }
   const params = new URLSearchParams({id: storyId, viewMode: 'story'});
   if (args != null) {
     params.set(
@@ -115,6 +133,16 @@ export async function openStory(
     .locator('#storybook-root > *')
     .first()
     .waitFor({state: 'attached'});
+  await page.waitForFunction(id => {
+    const render = (
+      globalThis as unknown as {
+        __STORYBOOK_PREVIEW__?: {
+          currentRender?: {readonly id?: string; readonly phase?: string};
+        };
+      }
+    ).__STORYBOOK_PREVIEW__?.currentRender;
+    return render?.id === id && render.phase === 'finished';
+  }, storyId);
   await page.evaluate(async () => {
     await document.fonts.ready;
     await new Promise<void>(resolve =>
@@ -153,11 +181,14 @@ export async function frames(page: Page, count = 2): Promise<void> {
 
 // A held callback is queued under its timer or frame id, so the page's own
 // clearTimeout and cancelAnimationFrame still cancel it while frozen; a held
-// frame callback gets the time it actually runs at. `frame` stays the real
-// requestAnimationFrame, for the harness's own waits, and `now` the real clock
-// for their deadlines, which a page freeze does not stop. The gate's freeze() and
-// thaw() are its one way in: freezeTimers and thawTimers call them, and so
-// does a page freeze (freeze.ts), which stops the page's clock too.
+// frame callback gets the time it actually runs at. `frame` and `timeout`
+// stay the real requestAnimationFrame and setTimeout, for the harness's own
+// waits, and `now` the real clock for their deadlines, which a page freeze
+// does not stop. The gate's freeze() and thaw() are its one way in:
+// freezeTimers and thawTimers call them, and so does a page freeze
+// (freeze.ts), which stops the page's clock too.
+// `clearTimeout` is the real clearTimeout, so a harness wait that ends early
+// cancels its own timer.
 const TIMER_GATE = `(() => {
   if (window.__harnessTimerGate) return;
   const realTimeout = window.setTimeout.bind(window);
@@ -183,6 +214,7 @@ const TIMER_GATE = `(() => {
     frame: realFrame,
     now: realNow,
     timeout: realTimeout,
+    clearTimeout: realClearTimeout,
     // Holds every callback that comes due. With the page's clock stopped as
     // well, the timeouts not yet due stop counting.
     freeze(isClockStopped = false) {

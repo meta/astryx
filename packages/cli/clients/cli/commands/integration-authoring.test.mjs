@@ -4,6 +4,7 @@ import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {runCli} from '../../../test-utils/run-cli.mjs';
+import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
 
 let tmpDir;
 
@@ -13,7 +14,7 @@ function parseEnvelope(stdout) {
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(
-    path.join(process.cwd(), '.astryx-integration-authoring-cli-'),
+    path.join(REPO_ROOT, '.astryx-integration-authoring-cli-'),
   );
   fs.writeFileSync(
     path.join(tmpDir, 'package.json'),

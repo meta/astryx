@@ -21,7 +21,7 @@
  *   jsdom half.
  */
 
-import {expect, test, type CDPSession, type Page} from '@playwright/test';
+import {expect, test, type CDPSession, type Page} from '../playwright';
 import {describeExpectation, requiredLayers} from '../contract';
 import {
   CHROMIUM_OBSERVES,

@@ -8,7 +8,7 @@
  *   EmptyState, AlertDialog, Icon, Spinner, Text, useBusyAnnouncement, and
  *   the i18n translator
  * @output Exports TokenizerBottomSheet — the touch surface of
- *   `Tokenizer experimental.presentation="bottom-sheet"`: one tall modal sheet
+ *   `Tokenizer presentation="bottom-sheet"`: one tall modal sheet
  *   with a search row on top, stable-order checkbox rows, progressive
  *   long-list rendering, an optional create row, and a confirmed Clear all
  * @position Internal presentation surface of Tokenizer. Loaded on demand by
@@ -91,7 +91,9 @@ const styles = stylex.create({
     height: '100%',
     minHeight: 0,
     paddingInline: spacingVars['--spacing-3'],
-    paddingBlockStart: spacingVars['--spacing-8'],
+    // With the sheet's band under its grab bar (--spacing-6), this keeps the
+    // first row --spacing-8 below the sheet's top edge.
+    paddingBlockStart: spacingVars['--spacing-2'],
     paddingBlockEnd: spacingVars['--spacing-3'],
   },
   // The sheet has no dedicated close button; it keeps BottomSheet's gesture,
@@ -354,10 +356,10 @@ function TokenizerSheetContent<T extends SearchableItem>({
   // has an entrance animation and no exit, so a close is its unmount; the
   // close handler commits that unmount at once and then places focus itself,
   // now that the modal is gone and the sheet's content can take focus again
-  // (`architecture:react-component-runtime` INV2): on the search field
-  // after a confirmed clear — the clear is spent, and the search field is
-  // where the next selection starts (FR24, `spec:AST-085` FR4) — and back on
-  // Clear all after a cancel. A confirmed clear is announced there too — a
+  // (`architecture:react-component-runtime` INV2). After a clear, Clear all
+  // is aria-disabled but stays focusable, so it keeps focus (FR24,
+  // `spec:AST-085` FR4). Focus on the search field opens the on-screen
+  // keyboard over the cleared rows. A confirmed clear is announced too — a
   // change the person hears about, as an add or a remove is
   // (`component:Tokenizer` AR6) — after the confirmation's dialog has gone,
   // so the sheet is the modal on top and the words are delivered inside it
@@ -372,11 +374,9 @@ function TokenizerSheetContent<T extends SearchableItem>({
   const closeClearConfirmation = (confirmed: boolean) => {
     // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the confirmation must be gone before focus moves into the sheet and the words are routed into it
     flushSync(() => setIsClearConfirmationOpen(false));
+    clearAllRef.current?.focus();
     if (confirmed) {
-      searchRef.current?.focus();
       announce(t('@astryx.tokenizer.allRemoved'));
-    } else {
-      clearAllRef.current?.focus();
     }
   };
   // Keep editing: the confirmation is gone, and focus returns to the search
@@ -520,13 +520,18 @@ function TokenizerSheetContent<T extends SearchableItem>({
   // it (`component:Tokenizer` FR20). Cleanup clears the debounce timer so a
   // superseded query never fetches, and the sequence guard drops a response
   // that lands after a newer request, so the list never shows stale results
-  // (`architecture:react-component-runtime` INV3).
+  // (`architecture:react-component-runtime` INV3). Cleanup also cancels a
+  // request its source has not answered — on a newer query, on close and on
+  // unmount — on the source that started it, as the inline field does.
   useIsomorphicLayoutEffect(() => {
     if (!isOpen) {
+      // Retire the closed sheet's request, so its answer never lands.
+      seqRef.current++;
       return;
     }
     const trimmed = query.trim();
     const seq = ++seqRef.current;
+    let unanswered: SearchSource<T> | null = null;
     if (trimmed !== '' && trimmed.length < minQueryLength) {
       // Not searched; the derived `results` are already empty, and taking a
       // sequence number retires a still-running search so its rows cannot
@@ -534,6 +539,7 @@ function TokenizerSheetContent<T extends SearchableItem>({
       return;
     }
     const settle = (items: T[]) => {
+      unanswered = null;
       if (seqRef.current === seq) {
         setSourceResults(items.slice(0, maxMenuItems));
         setIsPending(false);
@@ -555,17 +561,26 @@ function TokenizerSheetContent<T extends SearchableItem>({
       }
       // Anything else is awaited as a thenable — a native Promise, one from
       // another realm, or a library's — as the inline field's `await` does.
+      unanswered = source;
       void Promise.resolve(answer).then(settle, () => {
         // A rejecting source settles to no results, as the inline field does:
         // the previous query's rows are not this query's answer.
         settle([]);
       });
     };
-    if (trimmed !== '' && debounceMs > 0) {
-      const timer = setTimeout(run, debounceMs);
-      return () => clearTimeout(timer);
+    const timer =
+      trimmed !== '' && debounceMs > 0 ? setTimeout(run, debounceMs) : null;
+    if (timer == null) {
+      run();
     }
-    run();
+    return () => {
+      if (timer != null) {
+        clearTimeout(timer);
+      }
+      const source: SearchSource<T> | null = unanswered;
+      unanswered = null;
+      source?.cancel?.();
+    };
   }, [isOpen, query, minQueryLength, maxMenuItems, debounceMs]);
 
   const visibleItems = useMemo(() => {
@@ -614,16 +629,14 @@ function TokenizerSheetContent<T extends SearchableItem>({
   // `action` is declared on `SearchableItem` for the grid-adopting hosts; the
   // sheet rows have not adopted it, so a row renders the item without the
   // control and says so (`spec:AST-058` FR9), as the inline panel does.
-  useEffect(() => {
-    if (results.some(item => item.action != null)) {
-      warnOnce(
-        'tokenizer-sheet:item-action',
-        'Tokenizer',
-        'A result carries `action`, which the bottom-sheet rows do not render ' +
-          'yet; the item is shown without it.',
-      );
-    }
-  }, [results]);
+  if (results.some(item => item.action != null)) {
+    warnOnce(
+      'tokenizer-sheet:item-action',
+      'Tokenizer',
+      'A result carries `action`, which the bottom-sheet rows do not render ' +
+        'yet; the item is shown without it.',
+    );
+  }
 
   // The pending Spinner below stays named, as the inline field's does
   // (`family:input-fields` FR7), but is not a live region; the sheet announces
@@ -1002,11 +1015,9 @@ function TokenizerSheetContent<T extends SearchableItem>({
           variant="secondary"
           size="lg"
           isDisabled={draftValue.length === 0}
-          // With a tooltip, Button's disabled mode is `aria-disabled`: the
-          // action keeps its focus order and says why it does nothing
-          // (`spec:AST-085` FR1), instead of leaving the tab order as a
-          // natively disabled button does — a confirmed Clear all returns
-          // focus here before the search field takes it (FR24).
+          // With a tooltip, Button uses aria-disabled, so Clear all stays
+          // focusable after a clear and says why it does nothing
+          // (`spec:AST-085` FR1; FR24).
           tooltip={
             draftValue.length === 0
               ? t('@astryx.tokenizer.nothingToClear')

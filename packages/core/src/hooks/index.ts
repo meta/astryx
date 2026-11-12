@@ -1,7 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-'use client';
-
 /**
  * @file index.ts
  * @input Imports hooks from individual files
@@ -135,6 +133,13 @@ export type {
 
 export {useAnimator} from './useAnimator';
 
+export {useDragToSnapPoints} from './useDragToSnapPoints';
+export type {UseDragToSnapPointsResult} from './useDragToSnapPoints';
+export type {
+  DragToSnapPoints,
+  DragToSnapPointsOptions,
+} from '../dragToSnapPoints/createDragToSnapPoints';
+
 export {useLongPress} from './useLongPress';
 export type {UseLongPressOptions, UseLongPressHandlers} from './useLongPress';
 
@@ -150,3 +155,11 @@ export type {
   ContainerRevealOptions,
   ContentRevealOptions,
 } from './useContainerReveal';
+
+export {usePanGesture} from './usePanGesture';
+export type {
+  PanGesture,
+  PanGestureEvent,
+  PanGestureOptions,
+  PanGestureState,
+} from '../gestures/createPanGesture';

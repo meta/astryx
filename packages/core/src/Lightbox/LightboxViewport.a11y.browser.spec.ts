@@ -10,7 +10,7 @@
  * @position Cross-browser proof for Lightbox's full-screen sizing
  */
 
-import {expect, test} from '@playwright/test';
+import {expect, test} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,

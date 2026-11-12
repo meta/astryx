@@ -18,6 +18,11 @@
  * - `data-astryx-theme` — enables @scope'd theme CSS to reach elements rendered
  *   outside the Theme wrapper (portals, toast fallback viewports).
  *
+ * The root Theme also reads the reader's text size (iOS Dynamic Type) from a
+ * hidden, empty `font: -apple-system-body` probe and keeps the page's scales
+ * in an adopted stylesheet; every theme's font sizes follow them, and no
+ * attribute is written (see dynamicType.ts).
+ *
  * For RSC / SSR, set `data-theme` on `<html>` in your root server layout
  * to avoid a flash of wrong theme before hydration:
  *
@@ -35,7 +40,7 @@
  * ```
  */
 
-import React, {use, useId, useInsertionEffect, useMemo} from 'react';
+import React, {use, useId, useInsertionEffect, useMemo, useState} from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
 import type {ThemeMode} from './types';
@@ -43,6 +48,7 @@ import {colorVars, typographyVars} from './tokens.stylex';
 import {generateThemeCSS, type DefinedTheme} from './defineTheme';
 import {registerTheme} from './themeRegistry';
 import {dataAttr} from '../naming';
+import {syncReaderTextSize} from './dynamicType';
 import {ThemeContext} from './useTheme';
 import {warnOnce} from '../utils/devWarning';
 import {REDUCED_MOTION_PROPERTY, resolveMotionKnobs} from './themeMotion';
@@ -50,6 +56,7 @@ import {
   reducedMotionMarkProps,
   setRootReducedMotionMark,
 } from '../privateAttributes/reducedMotion.stylex';
+import {createSharedContext} from '../utils/sharedContext';
 import {reducedMotionScope} from './reducedMotion.markers.stylex';
 import {ThemeReducesMotionContext} from './reducedMotionContext';
 
@@ -113,16 +120,82 @@ const wrapperStyles = stylex.create({
  * @internal Not exported from the theme barrel; useToast imports it from
  * './theme/Theme' directly.
  */
-export const ThemeNestingContext = React.createContext(false);
+export const ThemeNestingContext = createSharedContext(
+  'ThemeNestingContext',
+  1,
+  false,
+);
 ThemeNestingContext.displayName = 'ThemeNestingContext';
 
 // =============================================================================
 // Style injection for unbuilt themes
 // =============================================================================
 
-/** Track which themes have already been injected */
-const injectedThemes = new Set<string>();
+/**
+ * The CSS is shared by the whole document. Remove it only when the last
+ * `Theme` that uses it unmounts.
+ */
+interface InjectedTheme {
+  /**
+   * Each mounted `Theme` that uses this name, with its theme and id. The key
+   * is one object per `Theme` instance: `useId` values can repeat across
+   * separate React roots.
+   */
+  users: Map<object, {theme: DefinedTheme; id: string}>;
+  /** The `Theme` whose theme is in the document. */
+  owner: object;
+  /**
+   * The owner that last handed the CSS over. When the same `Theme` sets up
+   * again in the same commit (its own theme changed), it takes the CSS back.
+   */
+  formerOwner: object | null;
+  /** The theme whose CSS is in the document. */
+  theme: DefinedTheme;
+  styles: HTMLStyleElement[];
+}
+const injectedThemes = new Map<string, InjectedTheme>();
 const THEME_LAYER_ORDER = '@layer reset, astryx-base, astryx-theme;';
+
+function writeThemeStyles(theme: DefinedTheme, id: string): HTMLStyleElement[] {
+  const {prose, component} = generateThemeCSS(theme);
+  const styles: HTMLStyleElement[] = [];
+
+  // Prose defaults go into @layer reset — lowest priority, scoped to
+  // the theme region. Any class-based style (StyleX, .xds-*) wins.
+  if (prose) {
+    const proseStyle = document.createElement('style');
+    proseStyle.setAttribute(dataAttr('theme-prose'), theme.name);
+    proseStyle.setAttribute(dataAttr('id'), id);
+    proseStyle.textContent = `${THEME_LAYER_ORDER}\n@layer reset {\n${prose}\n}`;
+    document.head.appendChild(proseStyle);
+    styles.push(proseStyle);
+  }
+
+  // Component overrides go into @layer astryx-theme — above StyleX layers
+  // so themes can intentionally restyle components.
+  if (component) {
+    const compStyle = document.createElement('style');
+    compStyle.setAttribute(dataAttr('theme'), theme.name);
+    compStyle.setAttribute(dataAttr('id'), id);
+    compStyle.textContent = `${THEME_LAYER_ORDER}\n@layer astryx-theme {\n${component}\n}`;
+    document.head.appendChild(compStyle);
+    styles.push(compStyle);
+  }
+  return styles;
+}
+
+/** Replace an entry's CSS with `theme`'s. */
+function rewriteThemeStyles(
+  entry: InjectedTheme,
+  theme: DefinedTheme,
+  id: string,
+): void {
+  for (const style of entry.styles) {
+    style.remove();
+  }
+  entry.theme = theme;
+  entry.styles = writeThemeStyles(theme, id);
+}
 
 /**
  * Hook to inject theme CSS into the document.
@@ -131,76 +204,74 @@ const THEME_LAYER_ORDER = '@layer reset, astryx-base, astryx-theme;';
  */
 function useThemeStyleInjection(theme: DefinedTheme): void {
   const id = useId();
+  const [instance] = useState(() => ({}));
 
+  // Syncs the document's stylesheets with the runtime theme CSS.
   useInsertionEffect(() => {
     // Built themes have their CSS in a separate file — skip injection
     if (theme.__built) {
       return;
     }
 
-    // Second and later `Theme`s using this theme do no work at all —
-    // generation included. Its CSS is document-wide and identical for each.
     const themeKey = `astryx-theme-${theme.name}`;
-    if (injectedThemes.has(themeKey)) {
-      return;
+    let entry = injectedThemes.get(themeKey);
+    if (entry == null) {
+      // One-time perf hint per theme
+      warnOnce(
+        `theme-injection:${theme.name}`,
+        'Theme',
+        `"${theme.name}" is using runtime style injection. ` +
+          `For better performance, use the pre-built theme:\n\n` +
+          `  import {${theme.name}Theme} from '@astryxdesign/theme-${theme.name}/built';\n` +
+          `  import '@astryxdesign/theme-${theme.name}/theme.css';\n\n` +
+          `For custom themes, run \`npx @astryxdesign/cli theme build <file>\` to generate ` +
+          `the built artifacts.`,
+      );
+      entry = {
+        users: new Map(),
+        owner: instance,
+        formerOwner: null,
+        theme,
+        styles: writeThemeStyles(theme, id),
+      };
+      injectedThemes.set(themeKey, entry);
     }
-
-    // One-time perf hint per theme
-    warnOnce(
-      `theme-injection:${theme.name}`,
-      'Theme',
-      `"${theme.name}" is using runtime style injection. ` +
-        `For better performance, use the pre-built theme:\n\n` +
-        `  import {${theme.name}Theme} from '@astryxdesign/theme-${theme.name}/built';\n` +
-        `  import '@astryxdesign/theme-${theme.name}/theme.css';\n\n` +
-        `For custom themes, run \`npx @astryxdesign/cli theme build <file>\` to generate ` +
-        `the built artifacts.`,
-    );
-
-    const {prose, component} = generateThemeCSS(theme);
-    injectedThemes.add(themeKey);
-    const cleanups: (() => void)[] = [() => injectedThemes.delete(themeKey)];
-
-    // Prose defaults go into @layer reset — lowest priority, scoped to
-    // the theme region. Any class-based style (StyleX, .xds-*) wins.
-    if (prose) {
-      const proseStyle = document.createElement('style');
-      proseStyle.setAttribute(dataAttr('theme-prose'), theme.name);
-      proseStyle.setAttribute(dataAttr('id'), id);
-      proseStyle.textContent = `${THEME_LAYER_ORDER}\n@layer reset {\n${prose}\n}`;
-      document.head.appendChild(proseStyle);
+    // A later `Theme` does no generation. The CSS of the first `Theme` that
+    // injected the name stays in the document.
+    entry.users.set(instance, {theme, id});
+    if (entry.formerOwner === instance) {
+      // The owner's own theme changed: its new definition paints, as on main.
+      entry.owner = instance;
+      entry.formerOwner = null;
+      if (entry.theme !== theme) {
+        rewriteThemeStyles(entry, theme, id);
+      }
     }
-
-    // Component overrides go into @layer astryx-theme — above StyleX layers
-    // so themes can intentionally restyle components.
-    if (component) {
-      const compStyle = document.createElement('style');
-      compStyle.setAttribute(dataAttr('theme'), theme.name);
-      compStyle.setAttribute(dataAttr('id'), id);
-      compStyle.textContent = `${THEME_LAYER_ORDER}\n@layer astryx-theme {\n${component}\n}`;
-      document.head.appendChild(compStyle);
-    }
-
-    if (prose || component) {
-      cleanups.push(() => {
-        // Matched by the astryx id marker, which is always written above.
-        const proseEl = document.querySelector(
-          `style[${dataAttr('theme-prose')}="${theme.name}"][${dataAttr('id')}="${id}"]`,
-        );
-        const compEl = document.querySelector(
-          `style[${dataAttr('theme')}="${theme.name}"][${dataAttr('id')}="${id}"]`,
-        );
-        proseEl?.remove();
-        compEl?.remove();
-      });
-    }
+    const current = entry;
 
     return () => {
-      for (const cleanup of cleanups) {
-        cleanup();
+      current.users.delete(instance);
+      if (current.users.size === 0) {
+        for (const style of current.styles) {
+          style.remove();
+        }
+        injectedThemes.delete(themeKey);
+        return;
+      }
+      if (current.owner !== instance) {
+        return;
+      }
+      // The earliest-mounted `Theme` that remains takes over the CSS. If its
+      // theme differs, as after a redefinition under the same name, its CSS
+      // replaces the old one.
+      const [nextOwner, next] = [...current.users][0];
+      current.owner = nextOwner;
+      current.formerOwner = instance;
+      if (next.theme !== current.theme) {
+        rewriteThemeStyles(current, next.theme, next.id);
       }
     };
-  }, [theme, id]);
+  }, [theme, id, instance]);
 }
 
 // =============================================================================
@@ -231,6 +302,7 @@ function useRootThemeSync(
   themeName: string,
   reducesMotion: boolean,
 ): void {
+  // Syncs the theme attributes on the root `<html>` element.
   useIsomorphicLayoutEffect(() => {
     if (isNested) {
       return;
@@ -271,6 +343,20 @@ function useRootThemeSync(
   }, [isNested, mode, themeName, reducesMotion]);
 }
 
+/**
+ * Hook to keep the page's text size scales on the reader's text size (iOS
+ * Dynamic Type, or `env(preferred-text-scale)` elsewhere) for the root
+ * provider; see dynamicType.ts. Skipped for nested Theme instances.
+ */
+function useRootTextSizeSync(isNested: boolean): void {
+  useIsomorphicLayoutEffect(() => {
+    if (isNested || typeof document === 'undefined') {
+      return;
+    }
+    return syncReaderTextSize(document);
+  }, [isNested]);
+}
+
 // =============================================================================
 // Component
 // =============================================================================
@@ -308,6 +394,7 @@ export function Theme({
   const reducesMotion = knobs.reducedMotion === 'always';
   const inheritsReducedMotion = use(ThemeReducesMotionContext);
   useRootThemeSync(isNested, mode, theme.name, reducesMotion);
+  useRootTextSizeSync(isNested);
 
   // Get color-scheme style
   const colorSchemeStyle =

@@ -13,7 +13,8 @@
  *   stays continuous, an expand whose old wrap is not copied keeps the edges
  *   together, and Reduce Motion cross-fades under a finger (DR2) and changes at
  *   once under a mouse (DR3), also on a loaded machine: those two cases read
- *   the motion by its own start and end, never at a fixed time
+ *   the motion by its own start and end, never at a fixed time. A second press
+ *   after a long task starts its fades where the glide carries on.
  * @position Testing; the components' unit cases are
  *   SideNav/SideNavRailMotion.test.tsx
  *
@@ -21,12 +22,13 @@
  *   SideNav.spec.md and the FR17 Verification row in AppShell.spec.md.
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
+import {requireFrames} from '@astryxdesign/interaction-harness';
 
 // The frame evidence is Chromium's: CI's interaction proofs run the chromium
 // project, and these cases have not been run in WebKit.
@@ -398,31 +400,91 @@ interface MotionPart {
   readonly holdsPage: boolean;
 }
 
+/**
+ * One press feedback animation `recordMotion` keeps apart: the toggle's own,
+ * or on a copy of it the old state holds (`onCopy`). `name` is a CSS
+ * animation's; `startTime` is read while it runs, since a cancelled animation
+ * drops it. `firstSeen` and `goneAt` are the record's frame times when it
+ * first saw the animation and first missed it.
+ */
+interface PressPart {
+  readonly onCopy: boolean;
+  readonly name: string | null;
+  startTime: number | null;
+  readonly firstSeen: number;
+  goneAt: number | null;
+}
+
 /** The record `recordMotion` keeps on the page, for `settledMotion`. */
 interface MotionRecord {
   readonly seen: Map<Animation, MotionPart>;
-  readonly collect: () => void;
+  /** Press feedback, apart from the motion. */
+  readonly press: Map<Animation, PressPart>;
+  /** The time of each frame the record sampled. */
+  readonly frames: {t: number}[];
+  readonly collect: (at?: number) => void;
   sampling: boolean;
 }
 
 /**
  * Starts recording the motion a press of the toggle causes: every animation
  * running on any frame from now on, described when first seen. Animations on
- * the toggle element itself are its press feedback (its highlight's release
- * fade runs on the button), not the rail's, so they are left out; everything
- * inside it, its chevron included, stays in. `settledMotion` ends the record.
+ * the toggle element itself are its press feedback, not the rail's: its
+ * highlight's release fade runs on the button. So are those on any element
+ * the press model marks (`data-astryx-press`), such as the toggle in the copy
+ * the old state holds. That copy shows the press as the toggle did. They are
+ * kept apart, as press feedback. Everything inside the toggle, its chevron
+ * included, stays in. `settledMotion` ends the record.
  */
 async function recordMotion(page: Page): Promise<void> {
   await toggleButton(page).evaluate(toggle => {
     const seen = new Map<Animation, MotionPart>();
-    const collect = () => {
+    const press = new Map<Animation, PressPart>();
+    const frames: {t: number}[] = [];
+    const collect = (at?: number) => {
+      const now = at ?? performance.now();
+      const present = new Set<Animation>();
       for (const animation of document.getAnimations()) {
         const effect = animation.effect;
+        const known = press.get(animation);
+        if (known != null) {
+          present.add(animation);
+          if (animation.startTime != null) {
+            known.startTime = Number(animation.startTime);
+          }
+          continue;
+        }
+        if (seen.has(animation) || !(effect instanceof KeyframeEffect)) {
+          continue;
+        }
         if (
-          seen.has(animation) ||
-          !(effect instanceof KeyframeEffect) ||
-          effect.target === toggle
+          effect.target === toggle ||
+          effect.target?.hasAttribute('data-astryx-press') === true
         ) {
+          press.set(animation, {
+            onCopy: effect.target !== toggle,
+            name:
+              animation instanceof CSSAnimation
+                ? animation.animationName
+                : null,
+            startTime:
+              animation.startTime == null ? null : Number(animation.startTime),
+            firstSeen: now,
+            goneAt: null,
+          });
+          present.add(animation);
+          // The start resolves on the frame that first draws the animation.
+          // On a busy page, that frame's callbacks can run after the copy
+          // is gone, so the start is also read as the animation turns ready.
+          animation.ready.then(
+            ready => {
+              const part = press.get(ready);
+              if (part != null && ready.startTime != null) {
+                part.startTime = Number(ready.startTime);
+              }
+            },
+            () => undefined,
+          );
           continue;
         }
         const properties = new Set<string>();
@@ -443,12 +505,27 @@ async function recordMotion(page: Page): Promise<void> {
             effect.target.contains(document.querySelector('[role="main"]')),
         });
       }
+      for (const [animation, part] of press) {
+        if (part.goneAt == null && !present.has(animation)) {
+          part.goneAt = now;
+        }
+      }
     };
-    const record: MotionRecord = {seen, collect, sampling: true};
+    const record: MotionRecord = {
+      seen,
+      press,
+      frames,
+      collect,
+      sampling: true,
+    };
     (window as unknown as {railMotion: MotionRecord}).railMotion = record;
     const sample = () => {
       if (record.sampling) {
-        collect();
+        // One time for the frame and what it saw, so the frame that first
+        // misses an animation is not counted as holding it.
+        const t = performance.now();
+        frames.push({t});
+        collect(t);
         requestAnimationFrame(sample);
       }
     };
@@ -498,6 +575,41 @@ async function settledMotion(page: Page): Promise<ReadonlyArray<MotionPart>> {
     record.sampling = false;
     return [...record.seen.values()];
   });
+}
+
+/**
+ * The press feedback the record kept apart from the motion, once it has
+ * settled. For each: where it ran (the toggle, or a copy of it), a CSS
+ * animation's name, and its start time as read while it ran.
+ */
+async function pressFeedback(page: Page): Promise<
+  ReadonlyArray<{
+    onCopy: boolean;
+    name: string | null;
+    startTime: number;
+    firstSeen: number;
+    goneAt: number | null;
+  }>
+> {
+  return page.evaluate(() => {
+    const record = (window as unknown as {railMotion: MotionRecord}).railMotion;
+    return [...record.press.values()].map(
+      ({onCopy, name, startTime, firstSeen, goneAt}) => ({
+        onCopy,
+        name,
+        startTime: startTime ?? Number.NaN,
+        firstSeen,
+        goneAt,
+      }),
+    );
+  });
+}
+
+/** The time of each frame the record sampled. */
+async function recordedFrames(page: Page): Promise<ReadonlyArray<{t: number}>> {
+  return page.evaluate(
+    () => (window as unknown as {railMotion: MotionRecord}).railMotion.frames,
+  );
 }
 
 test.describe('component:SideNav FR6 and component:AppShell FR17 under a finger', () => {
@@ -627,6 +739,75 @@ test.describe('component:SideNav FR6 and component:AppShell FR17 under a finger'
       });
     });
   }
+
+  test(`under Reduce Motion a press held past its onset still only cross-fades, and the old state's copy shows the toggle's press fading in step with the toggle (design:reduced-motion DR2)`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({reducedMotion: 'reduce'});
+    await openStory(page, PHONE_STORY);
+    await recordMotion(page);
+    // Held until the press shows, its release fades the press at once, before
+    // the tap's click collapses the rail. So the copy of the old state holds a
+    // toggle whose press is fading.
+    const box = await toggleButton(page).boundingBox();
+    if (box == null) {
+      throw new Error('the toggle has no box');
+    }
+    const point = {x: box.x + box.width / 2, y: box.y + box.height / 2};
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [point],
+    });
+    await expect(toggleButton(page)).toHaveAttribute('data-astryx-press', 'on');
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchEnd',
+      touchPoints: [],
+    });
+    await expect(toggleButton(page)).toHaveAccessibleName('Expand sidebar');
+    const motion = await settledMotion(page);
+    expect(motion.length).toBeGreaterThan(0);
+    for (const {properties, endTime, holdsPage} of motion) {
+      expect(properties).toEqual(['opacity']);
+      expect(endTime).toBeLessThanOrEqual(200);
+      expect(holdsPage).toBe(false);
+    }
+    // The copy's press fade runs on the toggle's own start, from where the
+    // toggle's had got to, not again from its start.
+    const press = await pressFeedback(page);
+    const onCopy = press.filter(fade => fade.onCopy && fade.name != null);
+    expect(onCopy.length).toBeGreaterThan(0);
+    for (const fade of onCopy) {
+      const own = press.find(
+        other => !other.onCopy && other.name === fade.name,
+      );
+      expect(own, JSON.stringify(press)).toBeDefined();
+      if (Number.isNaN(fade.startTime)) {
+        // The copy's fade never started. A new animation's start reaches
+        // script only after the frame that starts it. So the copy is judged
+        // once the page drew two frames while it held the fade. Fewer is
+        // starvation when the trace shows a long gap.
+        requireFrames(await recordedFrames(page), {
+          min: 2,
+          during: "the old state's copy held the toggle's press fade",
+          where: frame =>
+            frame.t > fade.firstSeen &&
+            (fade.goneAt == null || frame.t < fade.goneAt),
+        });
+        throw new Error(
+          `the copy's press fade never started while the page drew frames: ${JSON.stringify(press)}`,
+        );
+      }
+      expect(
+        Math.abs(fade.startTime - (own?.startTime ?? Number.NaN)),
+        JSON.stringify(press),
+      ).toBeLessThan(1);
+    }
+    expect(await railAtRest(page)).toMatchObject({
+      labelsShown: false,
+      copies: 0,
+    });
+  });
 });
 
 test.describe('component:SideNav FR6 and component:AppShell FR17 under a mouse', () => {
@@ -667,6 +848,135 @@ test.describe('component:SideNav FR6 and component:AppShell FR17 under a mouse',
       labelsShown: true,
       copies: 0,
     });
+  });
+
+  test('a second click after a long task starts the fades where the glide carries on, as the same click without the task does', async ({
+    page,
+  }) => {
+    await openStory(page, DESKTOP_STORY);
+    // A collapse, then a click that reverses it 1150 ms later, its handler
+    // busy for `blockMs` first. Returns the reversal's fades' first keyframes.
+    const reverse = async (blockMs: number) =>
+      page.evaluate(async blockMs => {
+        const toggle = () =>
+          // The leaving copy is inert and sits before the real rail, so its
+          // cloned toggle comes first in document order.
+          [...document.querySelectorAll('button')].find(
+            button =>
+              button.closest('[inert]') == null &&
+              /^(Collapse|Expand) sidebar$/.test(
+                button.getAttribute('aria-label') ?? button.textContent ?? '',
+              ),
+          ) as HTMLElement;
+        const frame = async () =>
+          new Promise<void>(resolve => {
+            requestAnimationFrame(() => resolve());
+          });
+        const beforeCollapse = new Set(document.getAnimations());
+        toggle().click();
+        const collapsed = performance.now();
+        await new Promise<void>(resolve => {
+          setTimeout(resolve, 0);
+        });
+        const collapse = document
+          .getAnimations()
+          .filter(animation => !beforeCollapse.has(animation));
+        if (collapse.length === 0) {
+          throw new Error('the collapse made no animation');
+        }
+        // The block comes after the page draws the collapse running: a frame
+        // later than the one it starts on. A starved page can draw only that
+        // first frame by then. The timeline the block holds would then read
+        // the collapse as not yet moved, though it carries on to its end.
+        // Chromium can read a start back a fraction of a millisecond below
+        // its frame time. A later frame comes 1 ms or more after it.
+        const isDrawnRunning = () =>
+          collapse.some(
+            animation =>
+              animation.startTime != null &&
+              Number(document.timeline.currentTime) -
+                Number(animation.startTime) >=
+                1,
+          );
+        while (
+          performance.now() - collapsed < 1150 - blockMs ||
+          !isDrawnRunning()
+        ) {
+          await frame();
+        }
+        await new Promise<void>(resolve => {
+          setTimeout(resolve, 0);
+        });
+        // A press's own feedback reads the timeline first. That holds its time
+        // for the rest of this task, as on a real page.
+        void document.timeline.currentTime;
+        const busy = performance.now() + blockMs;
+        while (performance.now() < busy) {
+          // the click handler's own work
+        }
+        const before = new Set(document.getAnimations());
+        toggle().click();
+        await new Promise<void>(resolve => {
+          setTimeout(resolve, 0);
+        });
+        const main = document.querySelector('[role="main"]');
+        const first = (match: (target: Element) => boolean) => {
+          const animation = document.getAnimations().find(candidate => {
+            const effect = candidate.effect as KeyframeEffect | null;
+            const target = effect?.target;
+            return (
+              !before.has(candidate) &&
+              target instanceof Element &&
+              match(target) &&
+              effect?.getKeyframes().some(frame => frame.opacity != null)
+            );
+          });
+          const opacity = (
+            animation?.effect as KeyframeEffect | undefined
+          )?.getKeyframes()[0]?.opacity;
+          return opacity == null ? null : Number(opacity);
+        };
+        const copyOf = (target: Element) => target.closest('[inert]');
+        return {
+          // The content's old wrap, held as its copy, and the new wrap.
+          wrapCopy: first(
+            target =>
+              copyOf(target) === target && target.querySelector('nav') == null,
+          ),
+          newWrap: first(
+            target => copyOf(target) == null && target.parentElement === main,
+          ),
+          // The rail's old state, held as its copy.
+          railCopy: first(
+            target =>
+              copyOf(target) === target && target.querySelector('nav') != null,
+          ),
+        };
+      }, blockMs);
+    const settle = async () => {
+      await expect
+        .poll(async () => {
+          const rest = await railAtRest(page);
+          return rest.copies + rest.running;
+        })
+        .toBe(0);
+    };
+    const free = await reverse(0);
+    await settle();
+    const blocked = await reverse(1000);
+    await settle();
+    test.info().annotations.push({
+      type: 'reversal fades (free, blocked)',
+      description: JSON.stringify({free, blocked}),
+    });
+    for (const key of ['wrapCopy', 'newWrap', 'railCopy'] as const) {
+      expect(free[key], key).not.toBeNull();
+      expect(blocked[key], key).not.toBeNull();
+      expect(
+        Math.abs(Number(blocked[key]) - Number(free[key])),
+        key,
+      ).toBeLessThan(0.1);
+    }
   });
 
   for (const load of LOADS) {
