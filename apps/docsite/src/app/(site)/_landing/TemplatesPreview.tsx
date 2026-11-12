@@ -1,6 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-'use client';
+/**
+ * @file Homepage card of scaled-down page templates.
+ * @input The template snapshots that the build renders (FrozenPreview).
+ * @output A decorative tile grid with no client JavaScript.
+ * @position Server component. The homepage and the community page pass it to
+ *   their client cards as a prop.
+ */
 
 import * as stylex from '@stylexjs/stylex';
 import {
@@ -8,12 +14,13 @@ import {
   radiusVars,
   shadowVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
-import {TemplateThumbnail} from '../../../components/TemplateThumbnail';
+import {FrozenPreview} from './FrozenPreview';
 
 // A representative set of the real page templates (storefront, IDE, payment,
-// login, settings, AI chat, product detail). Live scaled-down renders via
-// TemplateThumbnail so they re-theme for dark mode. Grouped into rows; the
-// middle row holds three so the centered (login) template sits in the middle.
+// login, settings, AI chat, product detail). The build renders each one once
+// (previewSnapshotSources.tsx); CSS scales it, and CSS variables re-theme it
+// for dark mode. Grouped into rows; the middle row holds three so the centered
+// (login) template sits in the middle.
 const TEMPLATE_ROWS: string[][] = [
   ['product-gallery', 'ide'],
   ['payment-form', 'login-split', 'settings-sidebar'],
@@ -31,7 +38,8 @@ const RENDER_WIDTH = 1100;
 // Uniform tile aspect ratio so every block is the same height (and, in a 2-col
 // grid, the same width). Slightly taller than 16/10 to show a bit more of each
 // page.
-const TILE_RATIO = '16/11.5';
+const TILE_RATIO_WIDTH = 16;
+const TILE_RATIO_HEIGHT = 11.5;
 
 // The bento column is narrow even on wide screens (3-column desktop grid), so
 // the 50%-wider, staggered, bleeding 2-per-row layout only makes sense there.
@@ -48,7 +56,7 @@ const styles = stylex.create({
     containerType: 'inline-size',
     containerName: 'templatesPreview',
     width: '100%',
-    // Decorative — never interactive (TemplateThumbnail is already inert).
+    // Decorative: never interactive (the container is also inert).
     pointerEvents: 'none',
   },
   // Narrow card: a flex-column stack of 2-per-row groups (each row offset/bled).
@@ -108,6 +116,31 @@ const styles = stylex.create({
   // Hidden on a wide card (small screens): with 7 templates the dissolved
   // 3-column grid would leave a lone 7th tile (3 + 3 + 1), so one tile drops out
   // to keep a clean 3 + 3. It still shows in the narrow-card desktop layout.
+  // Crop window of one tile. It is a size container, so the scale below can
+  // use its width (100cqw).
+  frame: {
+    position: 'relative',
+    width: '100%',
+    aspectRatio: `${TILE_RATIO_WIDTH} / ${TILE_RATIO_HEIGHT}`,
+    overflow: 'hidden',
+    containerType: 'inline-size',
+    // Templates render transparent (content only, no AppShell), so the tile
+    // supplies the page background.
+    backgroundColor: 'var(--color-background-surface)',
+  },
+  // The template at its desktop render width, scaled down to the tile width.
+  // Its height fills the crop window at that scale. A length divided by a
+  // length gives the unitless number that scale() requires.
+  scaler: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: RENDER_WIDTH,
+    height: (RENDER_WIDTH * TILE_RATIO_HEIGHT) / TILE_RATIO_WIDTH,
+    overflow: 'hidden',
+    transformOrigin: 'top left',
+    transform: `scale(calc(100cqw / ${RENDER_WIDTH}px))`,
+  },
   hideOnWide: {
     display: {
       default: 'block',
@@ -144,16 +177,11 @@ export function TemplatesPreview({
                   styles.tile,
                   slug === HIDE_ON_SMALL && styles.hideOnWide,
                 )}>
-                {/* borderRadius="0" so the thumbnail fills the tile's rounded
-                    corners flush — the tile already rounds + clips, so the
-                    thumbnail's own --radius-container would otherwise nest a
-                    second, mismatched radius. */}
-                <TemplateThumbnail
-                  slug={slug}
-                  aspectRatio={TILE_RATIO}
-                  renderWidth={RENDER_WIDTH}
-                  borderRadius="0"
-                />
+                <div {...stylex.props(styles.frame)}>
+                  <div {...stylex.props(styles.scaler)}>
+                    <FrozenPreview id={slug} fillHeight />
+                  </div>
+                </div>
               </div>
             ))}
           </div>

@@ -1,0 +1,46 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+/**
+ * @file Build-time preview snapshots: the generate step renders them, and the
+ * snapshot markup starts no image download before the visitor scrolls to it.
+ *
+ * @input scripts/generate-preview-snapshots.mjs and the docsite package scripts
+ * @output Regression coverage for the snapshot markup and its wiring
+ * @position Build-time docsite tooling verification
+ * Run: pnpm -F @astryxdesign/docsite test
+ */
+
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import {describe, expect, it} from 'vitest';
+import {finishSnapshotHtml} from '../../scripts/generate-preview-snapshots.mjs';
+
+const DOCSITE = path.resolve(__dirname, '../..');
+
+describe('finishSnapshotHtml', () => {
+  it('removes the image preload hints that React adds', () => {
+    const html =
+      '<link rel="preload" as="image" href="/a.png"/><div><img src="/a.png" alt=""/></div>';
+    expect(finishSnapshotHtml(html)).not.toContain('<link');
+  });
+
+  it('makes each image lazy and keeps an image that sets its own loading', () => {
+    const html =
+      '<img src="/a.png" alt=""/><img loading="eager" src="/b.png" alt=""/>';
+    expect(finishSnapshotHtml(html)).toBe(
+      '<img loading="lazy" decoding="async" src="/a.png" alt=""/><img loading="eager" src="/b.png" alt=""/>',
+    );
+  });
+});
+
+describe('generate step', () => {
+  it('renders the snapshots in every build and dev start', () => {
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(DOCSITE, 'package.json'), 'utf8'),
+    );
+    expect(pkg.scripts.generate).toContain(
+      'node scripts/generate-preview-snapshots.mjs',
+    );
+    expect(pkg.scripts.build).toMatch(/^pnpm generate && next build/u);
+  });
+});

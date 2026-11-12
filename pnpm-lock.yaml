@@ -306,6 +306,9 @@ importers:
       autoprefixer:
         specifier: ^10.6.2
         version: 10.6.2(postcss@8.5.25)
+      esbuild:
+        specifier: '>=0.28.1'
+        version: 0.28.2
       shadcn:
         specifier: 4.19.0
         version: 4.19.0(typescript@6.0.3)

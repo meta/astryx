@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "build:theme": "astryx theme build src/themes/astryxTheme.ts --out src/themes/astryx.css",
-    "generate": "node scripts/check-workspace-build.mjs && pnpm build:theme && node scripts/generate-data.mjs && node scripts/generate-scope.mjs && node scripts/generate-playground-types.mjs && node scripts/copy-vendor.mjs",
+    "generate": "node scripts/check-workspace-build.mjs && pnpm build:theme && node scripts/generate-data.mjs && node scripts/generate-scope.mjs && node scripts/generate-playground-types.mjs && node scripts/copy-vendor.mjs && node scripts/generate-preview-snapshots.mjs",
     "dev": "pnpm generate && node ../../scripts/generate-i18n-runtime.mjs --watch -- pnpm --parallel --filter @astryxdesign/core --filter @astryxdesign/docsite dev:i18n",
     "dev:i18n": "next dev --webpack",
     "build": "pnpm generate && next build --webpack && node scripts/check-template-gallery-bundle.mjs && node scripts/check-function-size.mjs",
@@ -56,6 +56,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "autoprefixer": "^10.6.2",
+    "esbuild": "catalog:",
     "shadcn": "4.19.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.11"

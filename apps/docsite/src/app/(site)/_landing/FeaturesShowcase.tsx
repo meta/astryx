@@ -14,7 +14,6 @@ import {layout} from '../../../layout.stylex';
 import {ComponentsPreview} from './ComponentsPreview';
 import {CliPreview} from './CliPreview';
 import {ThemesPreview} from './ThemesPreview';
-import {TemplatesPreview} from './TemplatesPreview';
 
 // Count of public @astryxdesign/core components (excluding hooks and hidden entries).
 // Sourced from the generated registry so the number stays accurate as the
@@ -372,19 +371,19 @@ const features: Record<string, Feature> = {
     description:
       'Fully customizable themes ready for use. Make it yours without starting from scratch.',
     href: '/themes',
-    // Live Butter-themed store preview + swatches/"Aa" instead of the old
+    // Butter-themed store preview + swatches/"Aa" instead of the old
     // /feature-brand.png, so it re-themes for dark mode (the PNG stayed light).
-    preview: <ThemesPreview />,
+    // FeaturesShowcase adds the preview: its store comes from the server page.
   },
   templates: {
     title: 'Ready to ship templates',
     description:
       'Production-ready templates for common pages, just plug in your content.',
     href: '/templates',
-    // Live scaled-down renders of real page templates instead of the baked
+    // Scaled-down renders of real page templates instead of the baked
     // /feature-templates.png, so they re-theme for dark mode and stay in sync
-    // with the actual templates.
-    preview: <TemplatesPreview />,
+    // with the actual templates. The server page renders them and passes them
+    // to FeaturesShowcase.
   },
   cli: {
     title: 'A design system that your agent can use',
@@ -581,7 +580,15 @@ function HeadingBlock() {
   );
 }
 
-export function FeaturesShowcase() {
+export function FeaturesShowcase({
+  templatesPreview,
+  themesStore,
+}: {
+  /** The templates card preview (TemplatesPreview), rendered on the server. */
+  templatesPreview: ReactNode;
+  /** The themes card store snapshot (FrozenPreview), rendered on the server. */
+  themesStore: ReactNode;
+}) {
   // Each grid cell holds a full-height column wrapper (VStack
   // height:100%) rather than a single card, so the grid stretches
   // all three columns to the height of the tallest column. Cards
@@ -617,14 +624,25 @@ export function FeaturesShowcase() {
             owns only the responsive display switch. */}
         <VStack gap={8} width="100%" height="100%" xstyle={styles.column}>
           <HeadingBlock />
-          <FeatureCard feature={features.themes} isFlex bottomPreview />
+          <FeatureCard
+            feature={{
+              ...features.themes,
+              preview: <ThemesPreview store={themesStore} />,
+            }}
+            isFlex
+            bottomPreview
+          />
         </VStack>
         <VStack gap={8} width="100%" height="100%" xstyle={styles.column}>
           <FeatureCard feature={features.components} isFlex insetImage />
           <FeatureCard feature={features.cli} />
         </VStack>
         <VStack gap={8} width="100%" height="100%" xstyle={styles.column}>
-          <FeatureCard feature={features.templates} isTall bottomPreview />
+          <FeatureCard
+            feature={{...features.templates, preview: templatesPreview}}
+            isTall
+            bottomPreview
+          />
         </VStack>
       </div>
     </VStack>

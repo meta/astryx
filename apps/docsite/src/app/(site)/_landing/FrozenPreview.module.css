@@ -1,0 +1,20 @@
+/* Copyright (c) Meta Platforms, Inc. and affiliates. */
+
+/* The snapshot keeps the Theme wrapper of its render, and that wrapper sets
+   its own color scheme. The preview must follow the page's mode, so the
+   wrapper inherits the scheme instead. */
+.snapshot > [data-astryx-theme] {
+  color-scheme: inherit;
+}
+
+/* Templates use 100dvh, which resolves against the browser viewport. The
+   preview box gives the template its height instead, like the live preview
+   surface does. */
+.fill {
+  height: 100%;
+}
+
+.fill > [data-astryx-theme] > :first-child {
+  height: 100% !important;
+  min-height: 100% !important;
+}
