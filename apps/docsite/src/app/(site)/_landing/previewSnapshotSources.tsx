@@ -43,9 +43,13 @@ function templatePreview(slug: string): ReactElement {
     throw new Error(`No page template "${slug}" in TEMPLATE_COMPONENTS.`);
   }
   const Page = TEMPLATE_COMPONENTS[slug];
+  // The preview-viewport wrapper matches the live preview surface's own
+  // wrapper; FrozenPreview.module.css gives it the preview box's height.
   return (
     <Theme theme={neutralTheme}>
-      <Page />
+      <div className="preview-viewport">
+        <Page />
+      </div>
     </Theme>
   );
 }

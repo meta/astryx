@@ -9,16 +9,23 @@
  *   client module that imports it puts every snapshot in its bundle.
  */
 
+import type {CSSProperties} from 'react';
 import {PREVIEW_SNAPSHOTS} from '@/generated/previewSnapshots';
 import styles from './FrozenPreview.module.css';
 
 export function FrozenPreview({
   id,
   fillHeight = false,
+  className,
+  style,
 }: {
   id: string;
   /** Stretch the preview's root to the full height of its box. */
   fillHeight?: boolean;
+  /** Styles for the element that holds the snapshot, so it can be the
+   *  caller's own layout box instead of an extra wrapper. */
+  className?: string;
+  style?: CSSProperties;
 }) {
   const html = PREVIEW_SNAPSHOTS[id];
   if (html == null) {
@@ -28,9 +35,10 @@ export function FrozenPreview({
   }
   return (
     <div
-      className={
-        fillHeight ? `${styles.snapshot} ${styles.fill}` : styles.snapshot
-      }
+      className={[styles.snapshot, fillHeight && styles.fill, className]
+        .filter(Boolean)
+        .join(' ')}
+      style={style}
       dangerouslySetInnerHTML={{__html: html}}
     />
   );

@@ -172,10 +172,12 @@ export function TemplatesPreview({
                   styles.tile,
                   slug === HIDE_ON_SMALL && styles.hideOnWide,
                 )}>
-                <div {...stylex.props(styles.frame)}>
-                  <div {...stylex.props(styles.scaler)}>
-                    <FrozenPreview id={slug} fillHeight />
-                  </div>
+                <div {...stylex.props(styles.frame)} inert>
+                  <FrozenPreview
+                    id={slug}
+                    fillHeight
+                    {...stylex.props(styles.scaler)}
+                  />
                 </div>
               </div>
             ))}
