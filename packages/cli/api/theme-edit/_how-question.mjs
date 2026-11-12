@@ -9,7 +9,7 @@
  * @position api/theme-edit — imported only by _how.mjs
  */
 
-import {hex, parseColor, ratio} from './_color.mjs';
+import {COLOR_NAMES, hex, parseColor, ratio} from './_color.mjs';
 import {
   DESIGN,
   DIALS,
@@ -880,9 +880,10 @@ function aspectsOf(text) {
     /\b(transitions?|animations?|animate[sd]?|fade[sd]? (in|out)|motion)\b/.test(
       c,
     ) &&
-    /\b(fast(er)?|slow(er)?|quick(er)?|snappier|speed|duration|\d+m?s|off|no|none|disable|stop|remove)\b/.test(
+    (/\b(fast(er)?|slow(er)?|quick(er)?|snappier|speed|duration|\d+(\.\d+)?m?s|off|no|none|disable|stop|remove)\b/.test(
       c,
-    )
+    ) ||
+      /\bfade[sd]?[- ](in|out)\b/.test(c))
   ) {
     a.splice(0, a.length);
     add('motion');
@@ -1452,6 +1453,55 @@ export function draftAnswer(ctx, env, question) {
   const quoted = /** @type {string[]} */ ([]);
   let q = question
     .normalize('NFKC')
+    // "except in dark mode", "but not in dark mode", "leave dark mode alone":
+    // the other mode.
+    .replace(
+      /\b(?:except|but not|not) (?:in |for |on )?dark(?: mode| theme)?\b|\b(?:leave|keep) dark mode (?:alone|as it is|as is|untouched)\b|\bdon'?t (?:touch|change) dark mode\b/gi,
+      'in light mode',
+    )
+    .replace(
+      /\b(?:except|but not|not) (?:in |for |on )?light(?: mode| theme)?\b|\b(?:leave|keep) light mode (?:alone|as it is|as is|untouched)\b|\bdon'?t (?:touch|change) light mode\b/gi,
+      'in dark mode',
+    )
+    // "not pure black": a near-black; "not pure white": a near-white.
+    .replace(/\bnot (?:pure |true |full )?black\b/gi, '#111111')
+    .replace(/\bnot (?:pure |true |full )?white\b/gi, '#fafafa')
+    // "dropdown shadow": the dropdown's menu, the part that floats.
+    .replace(/\bdropdowns? (?=shadows?|elevation)/gi, 'dropdown-menu ')
+    // "½rem": a fraction is a number.
+    .replace(/(\d*)(?:½|1\u20442)/g, (_, n) => `${n ? Number(n) + 0.5 : '0.5'}`)
+    .replace(
+      /(\d*)(?:¼|1\u20444)/g,
+      (_, n) => `${n ? Number(n) + 0.25 : '0.25'}`,
+    )
+    .replace(
+      /(\d*)(?:¾|3\u20444)/g,
+      (_, n) => `${n ? Number(n) + 0.75 : '0.75'}`,
+    )
+    // "radius sm", "setRadius(4)": the corner rungs and a number.
+    .replace(/\bset-?radius\s*\(\s*(\d+(?:\.\d+)?)\s*\)/gi, 'corners $1px')
+    .replace(
+      /\b(?:radius|corners|rounded)[- ](xs|sm|md|lg|xl)\b/gi,
+      (_, /** @type {string} */ r) =>
+        `corners ${/** @type {Record<string, string>} */ ({xs: '4px', sm: '8px', md: '10px', lg: '12px', xl: '16px'})[r.toLowerCase()]}`,
+    )
+    // "midnight blue": the CSS named color.
+    .replace(/\b([a-z]+) ([a-z]+)\b/gi, (m, a, b) =>
+      COLOR_NAMES.includes(`${a}${b}`.toLowerCase()) &&
+      !/^(dark|light)$/i.test(a)
+        ? `${a}${b}`.toLowerCase()
+        : m,
+    )
+    // "translateY(-2px) on hover": a transform.
+    .replace(
+      /(?<!transform\s*:?\s*)\b((?:translate[xyz]?|scale[xy]?|rotate)\([^)]*\))/gi,
+      (_, fn) => `transform: ${fn.toLowerCase()}`,
+    )
+    // "#22c55e in light, #4ade80 in dark": the accent, per mode.
+    .replace(
+      /^\s*(#[0-9a-f]{3,8}) in (light|dark)(?: mode)?\s*(,|and|;)\s*(#[0-9a-f]{3,8}) in (light|dark)(?: mode)?\s*$/i,
+      'accent $1 in $2 mode$3 accent $4 in $5 mode',
+    )
     // ".btn-primary { … }": the primary button.
     .replace(
       /\.btn-(primary|secondary|ghost|destructive|danger)\b/g,
@@ -1682,6 +1732,17 @@ export function draftAnswer(ctx, env, question) {
   const media = MEDIA_RE.test(q);
   if (media) q = q.replace(MEDIA_RE, ' ').replace(/\s+/g, ' ').trim();
   const clauses = clausesOf(q, lex.parts);
+  // "checkboxes green": the color a checked box fills with.
+  for (const c of clauses)
+    if (
+      c.parts.length === 1 &&
+      c.parts[0].on === 'checks' &&
+      c.colors.length &&
+      !c.state &&
+      !c.named &&
+      !/\b(border|outline|background|unchecked)\b/.test(c.text)
+    )
+      c.state = 'checked';
   // "labels on form fields": the label, not the field it sits on.
   for (const c of clauses)
     if (c.parts.some(p => p.on === 'field-label')) {
@@ -2559,6 +2620,23 @@ export function draftAnswer(ctx, env, question) {
     }
     // "decrease the radius by 2px", "add 8px to the padding": a change from
     // the value now, never the new value itself.
+    // "shrink headings by 20%": a change by a share, from the value now.
+    const share = /\bby (\d+(?:\.\d+)?)%/.exec(c.text);
+    if (
+      share &&
+      /\b(shrink|grow|increase|decrease|reduce|raise|lower|bigger|smaller|more|less)\b/.test(
+        c.text,
+      )
+    ) {
+      push({
+        text: `set takes the new value, not a change by ${share[1]}%; look up what it is now, then set that value ${/\b(shrink|decrease|reduce|lower|smaller|less)\b/.test(c.text) ? 'minus' : 'plus'} ${share[1]}%`,
+        options: [],
+        lookup: c.parts[0]
+          ? `${HOW} ${c.parts[0].on}`
+          : `${P} show ${env.slug}`,
+      });
+      continue;
+    }
     // "2px rounder", "8px larger", "4px wider": a change too.
     const COMPARATIVE =
       'more|less|bigger|smaller|rounder|sharper|squarer|larger|wider|narrower|taller|shorter|thicker|thinner|higher|lower';
@@ -2651,6 +2729,46 @@ export function draftAnswer(ctx, env, question) {
         recordTop(c, d.options[0] ?? []);
         continue;
       }
+    }
+    // "text on the accent color is hard to read": the on-accent text color,
+    // the one of black or white that reads on the accent in each mode.
+    if (
+      /\btext on (?:the )?accent\b/.test(c.text) &&
+      TOKENS['--color-on-accent'] !== undefined
+    ) {
+      const steps = /** @type {Array<'light' | 'dark'>} */ (['light', 'dark'])
+        .filter(m => env.data.mode === 'both' || m === 'light')
+        .map(m => {
+          const acc = parseColor(current('--color-accent', m));
+          const pick =
+            acc && ratio(acc, [255, 255, 255]) >= ratio(acc, [0, 0, 0])
+              ? '#ffffff'
+              : '#000000';
+          return set(
+            '--color-on-accent',
+            pick,
+            env.data.mode === 'both' ? {mode: m} : {},
+          );
+        });
+      const d = {
+        text: 'the text on the accent: --color-on-accent, black or white, whichever reads better on the accent',
+        options: [steps],
+        sequence: steps.length > 1,
+      };
+      push(d);
+      recordTop(c, d.options[0] ?? []);
+      continue;
+    }
+    // "5 lines tall text box": a text area's height in lines.
+    const lines = /\b(\d+) (?:lines?|rows?) (?:tall|high)\b/.exec(c.text);
+    if (lines && TARGET.has('text-area')) {
+      const d = {
+        text: `a text area ${lines[1]} lines tall: min-height ${lines[1]}lh`,
+        options: [[set('min-height', `${lines[1]}lh`, {on: 'text-area'})]],
+      };
+      push(d);
+      recordTop(c, d.options[0] ?? []);
+      continue;
     }
     // "outline offset 3px on focus": the focus ring's offset, not a border.
     if (
@@ -2869,7 +2987,7 @@ export function draftAnswer(ctx, env, question) {
           };
     }
     if (
-      !/\b(reset|revert|restore|back to|default|original|what it was|standard|clear|no custom|remove the override|(remove|clear|drop|delete) (my |the )?(\w+ )?overrides?|by mistake|by accident|accidentally|put .* back|.* back to normal)\b/.test(
+      !/\b(reset|revert|restore|back to|default|original|what it was|standard|clear|no custom|remove the override|(remove|clear|drop|delete) (my |the )?(\w+ )?overrides?|by mistake|^undo|by accident|accidentally|put .* back|.* back to normal)\b/.test(
         c.text,
       ) ||
       /\bby default\b|\bthe last change\b|\beverything\b/.test(c.text) ||
@@ -3134,7 +3252,14 @@ export function draftAnswer(ctx, env, question) {
           sequence: true,
         };
       }
-      const typedMs = /\b(\d+)ms\b/.exec(c.text)?.[1];
+      const typedTime = /\b(\d+(?:\.\d+)?)(ms|s)\b/.exec(c.text);
+      const typedMs = typedTime
+        ? String(
+            Math.round(
+              Number(typedTime[1]) * (typedTime[2] === 's' ? 1000 : 1),
+            ),
+          )
+        : undefined;
       if (typedMs && !on)
         return {
           text: `every motion at ${typedMs}ms: the shared duration tokens`,

@@ -3526,6 +3526,82 @@ describe('how answers amounts with comparatives, and corners copied from a part'
     });
 });
 
+/**
+ * Final-9 questions: a negated dark mode, undo of what is not set, typed
+ * times and transforms, why-questions, radius shorthands, per-mode pairs,
+ * named colors, and the right targets.
+ * @type {Array<[string, RegExp | null, RegExp?]>}
+ */
+const QUESTIONS_P = [
+  [
+    'dark mode background not pure black',
+    /^set q --color-background-body '#111111' --mode dark$/,
+  ],
+  [
+    'make the accent teal except in dark mode',
+    /^set q --color-accent '#0d9488' --mode light$/,
+  ],
+  [
+    'leave dark mode alone, accent teal',
+    /^set q --color-accent '#0d9488' --mode light$/,
+  ],
+  [
+    'accent teal but not in dark mode',
+    /^set q --color-accent '#0d9488' --mode light$/,
+  ],
+  ['undo the corners', null, /sets nothing for corners/],
+  [
+    'animation-duration 0s',
+    /^set q --duration-fast 0ms && set q --duration-medium 0ms && set q --duration-slow 0ms$/,
+  ],
+  [
+    'translateY(-2px) on hover for buttons',
+    /^set q transform 'translatey\(-2px\)' --on button --state hover$/,
+  ],
+  ['shrink headings by 20%', null, /not a change by 20%/],
+  ['fade in tooltips', null, /no motion of its own/],
+  ['why are my buttons black', null, /how button says/],
+  ['radius lg', /^set q corners 12px$/],
+  ['setRadius(4)', /^set q corners 4px$/],
+  ['card padding 1½rem', /^set q padding 1\.5rem --on card$/],
+  [
+    '#22c55e in light, #4ade80 in dark',
+    /^set q --color-accent '#22c55e' --mode light && set q --color-accent '#4ade80' --mode dark$/,
+  ],
+  ['midnight blue accent', /^set q accent '#191970'$/],
+  [
+    'text on the accent color is hard to read',
+    /^set q --color-on-accent '#(000000|ffffff)'/,
+  ],
+  ['5 lines tall text box', /^set q min-height 5lh --on text-area$/],
+  ['dropdown shadow', /--on dropdown-menu$/],
+  [
+    'checkboxes green',
+    /^set q background '#16a34a' --on checks --state checked$/,
+  ],
+  ['is my theme valid', null, /show builds q/],
+];
+
+describe('how answers final-9 questions', () => {
+  for (const [question, want, text] of QUESTIONS_P)
+    it(question, async () => {
+      const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+      /** @type {Array<{text: string, commands: string[], sequence?: boolean}>} */
+      const results = data.results ?? [];
+      if (text) expect(results.map(r => r.text).join('\n')).toMatch(text);
+      const changes = results.filter(r =>
+        r.commands.some(c => / editor (set|undo) /.test(c)),
+      );
+      if (want === null) {
+        expect(changes).toEqual([]);
+        return;
+      }
+      const top = changes[0];
+      const commands = top.sequence ? top.commands : [top.commands[0]];
+      expect(commands.map(bare).join(' && ')).toMatch(want);
+    });
+});
+
 describe('how lookups', () => {
   it('maps what a part reads under to the flags set takes, or says why none does', async () => {
     const button = (await themeEditHow('button', {cwd, theme: 'q'})).data;

@@ -182,7 +182,18 @@ function withPrefix(value, cwd) {
  */
 async function answer(subject, options, cwd) {
   const {list, at = [], count} = options;
-  const t = (subject ?? '').trim();
+  // "½rem": a fraction is a number before anything reads the question.
+  const t = (subject ?? '')
+    .trim()
+    .replace(/(\d*)(?:½|1\u20442)/g, (_, n) => `${n ? Number(n) + 0.5 : '0.5'}`)
+    .replace(
+      /(\d*)(?:¼|1\u20444)/g,
+      (_, n) => `${n ? Number(n) + 0.25 : '0.25'}`,
+    )
+    .replace(
+      /(\d*)(?:¾|3\u20444)/g,
+      (_, n) => `${n ? Number(n) + 0.75 : '0.75'}`,
+    );
   // --theme names a theme whatever the subject, so a bad one is refused
   // for a picture and a list too.
   if (options.theme === '')
@@ -1025,7 +1036,36 @@ function toolAnswer(t, env, targets) {
     /^(how (round|big|small|large|thick|dark|light|bold|wide|tall) (is|are)|what (is|are) the (current|available)|which \w+ (does|do|is|are)|what (font|color|colour|radius|accent) (does|do|is|are)|what (values|options|choices))\b|\b(right now|currently|at the moment)\??$|\bnow\?$/.exec(
       q,
     );
-  if (asks || /^which parts (are|does|do)\b/.test(q)) {
+  // "is my theme valid", "how many dials", "list every change".
+  if (
+    /^(is|are) (my|the|this) theme (valid|ok|okay|broken|working)\b|^(check|validate) (my|the) theme\b/.test(
+      q,
+    )
+  )
+    return [
+      {
+        text: `show builds ${env.slug} and says what is wrong with it, if anything`,
+        commands: [`${P} show ${env.slug}`],
+      },
+    ];
+  if (
+    /^how many (dials|settings|tokens|parts)\b|^(list|show) (every|all|each) (dial|setting|token|part)s?\b/.test(
+      q,
+    )
+  )
+    return 'list';
+  if (/^(list|show) (every|all|my) (changes?|edits?|settings)\b/.test(q))
+    return [
+      {
+        text: `show lists every setting ${env.slug} has`,
+        commands: [`${P} show ${env.slug}`],
+      },
+    ];
+  if (
+    asks ||
+    /^which parts (are|does|do)\b/.test(q) ||
+    (/^why (is|are|does|do)\b/.test(q) && !/\bnot\b|n'?t\b/.test(q))
+  ) {
     // The part or setting the question names gets its own lookup.
     const named = q
       .split(/[^a-z-]+/)
