@@ -34,7 +34,7 @@ import {camel, fontPackages, modesOf, themeFiles, shown} from './_settings.mjs';
 import {writeWhole} from './_palette.mjs';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
 import {importPathOf, installLine} from './_project.mjs';
-import {COLOR_PROP_PARTS, DIRECT, P} from './_tables.mjs';
+import {COLOR_PROP_PARTS, DIRECT, P, wordTable} from './_tables.mjs';
 import {extractImportedPackages} from '../../foundation/discovery/template-needs.mjs';
 import {findNodeModulesPackage} from '../../foundation/fs/paths.mjs';
 
@@ -782,10 +782,12 @@ const usesSource = v =>
       Object.values(/** @type {object} */ (v)).some(usesSource);
 
 /** The heading of each group on the components page. */
-const GROUP_TITLES = /** @type {Record<string, string>} */ ({
-  data: 'data display',
-  overlays: 'overlays (shown open)',
-});
+const GROUP_TITLES = wordTable(
+  /** @type {Record<string, string>} */ ({
+    data: 'data display',
+    overlays: 'overlays (shown open)',
+  }),
+);
 
 /**
  * A cell with the component's name. A cell whose parts show nothing on

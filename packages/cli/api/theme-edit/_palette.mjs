@@ -45,7 +45,7 @@ import {
   parseColor,
   ratio,
 } from './_color.mjs';
-import {P} from './_tables.mjs';
+import {P, wordTable} from './_tables.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 import {sha256} from '../../foundation/render/source-block.mjs';
 
@@ -280,12 +280,14 @@ function dialVibrancy(settings) {
 }
 
 /** The Core token word of each status family. */
-const STATUS_TOKEN = /** @type {Record<string, string>} */ ({
-  success: 'success',
-  warning: 'warning',
-  danger: 'error',
-  info: 'info',
-});
+const STATUS_TOKEN = wordTable(
+  /** @type {Record<string, string>} */ ({
+    success: 'success',
+    warning: 'warning',
+    danger: 'error',
+    info: 'info',
+  }),
+);
 
 /**
  * The main token a color dial feeds: the exact-token escape hatch for it.
@@ -372,31 +374,35 @@ const officialStops = token =>
  * tinted gray never tints the page. A layout without one of these stops
  * uses the nearest one it has.
  */
-const NEUTRAL_STOPS = Object.fromEntries(
-  [
-    '--color-background-surface',
-    '--color-background-card',
-    '--color-background-popover',
-    '--color-background-muted',
-    '--color-text-primary',
-    '--color-text-secondary',
-    '--color-text-disabled',
-    '--color-icon-primary',
-    '--color-icon-secondary',
-    '--color-icon-disabled',
-    '--color-border-emphasized',
-    '--color-skeleton',
-  ].map(t => [t, officialStops(t)]),
+const NEUTRAL_STOPS = wordTable(
+  Object.fromEntries(
+    [
+      '--color-background-surface',
+      '--color-background-card',
+      '--color-background-popover',
+      '--color-background-muted',
+      '--color-text-primary',
+      '--color-text-secondary',
+      '--color-text-disabled',
+      '--color-icon-primary',
+      '--color-icon-secondary',
+      '--color-icon-disabled',
+      '--color-border-emphasized',
+      '--color-skeleton',
+    ].map(t => [t, officialStops(t)]),
+  ),
 );
 /** Neutral tints: a stop with an opacity, `[[stop, alpha], [stop, alpha]]`. */
-const NEUTRAL_TINTS = Object.fromEntries(
-  ['--color-border', '--color-overlay-hover', '--color-overlay-pressed'].map(
-    t => [
-      t,
-      /** @type {[[number, string], [number, string]]} */ (
-        OFFICIAL.stops[t].map(x => [x.stop, String(x.alpha)])
-      ),
-    ],
+const NEUTRAL_TINTS = wordTable(
+  Object.fromEntries(
+    ['--color-border', '--color-overlay-hover', '--color-overlay-pressed'].map(
+      t => [
+        t,
+        /** @type {[[number, string], [number, string]]} */ (
+          OFFICIAL.stops[t].map(x => [x.stop, String(x.alpha)])
+        ),
+      ],
+    ),
   ),
 );
 /**
@@ -450,20 +456,24 @@ const BORDER = /** @type {[number, number]} */ ([80, 65]);
  * first in both modes on warning. Without a neutral color, black and white.
  */
 const [ON_LIGHT, ON_DARK] = officialStops('--color-on-accent');
-const ON_FILL = /** @type {Record<Mode, [number, number]>} */ ({
-  light: [ON_LIGHT, ON_DARK],
-  dark: [ON_DARK, ON_LIGHT],
-});
+const ON_FILL = wordTable(
+  /** @type {Record<Mode, [number, number]>} */ ({
+    light: [ON_LIGHT, ON_DARK],
+    dark: [ON_DARK, ON_LIGHT],
+  }),
+);
 /** A layout needs this many stops between black and white to map every token. */
 const MIN_INNER_STOPS = 5;
 /** The widest gap between two stops that still maps every token near its stop. */
 const MAX_STOP_GAP = 25;
 
 /** Text on surfaces darkens in light mode and lightens in dark mode. */
-const TOWARD_CONTRAST = /** @type {Record<Mode, 1 | -1>} */ ({
-  light: -1,
-  dark: 1,
-});
+const TOWARD_CONTRAST = wordTable(
+  /** @type {Record<Mode, 1 | -1>} */ ({
+    light: -1,
+    dark: 1,
+  }),
+);
 
 /** @param {string} slug */
 export function paletteFiles(slug) {

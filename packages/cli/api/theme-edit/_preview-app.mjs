@@ -22,7 +22,7 @@ import {
   PathSafetyError,
 } from '../../foundation/fs/path-safety.mjs';
 import {baseResolved, installLine, openProject} from './_project.mjs';
-import {P} from './_tables.mjs';
+import {P, wordTable} from './_tables.mjs';
 import {
   buildTheme,
   editedThemes,
@@ -2536,11 +2536,11 @@ async function buildWorn(cwd, theme, options, notes) {
 }
 
 /** The Colors page: its id and file, relative to the route folder. */
-const COLORS_PAGE = {
+const COLORS_PAGE = wordTable({
   id: 'colors',
   label: 'Colors',
   file: `${PAGES_DIR}/colors`,
-};
+});
 
 /**
  * The Colors page source of a theme, and whether the theme has generated

@@ -23,6 +23,7 @@ import {
   COLOR_PROPS,
   GROUPS,
   isSystemFamily,
+  wordTable,
 } from './_tables.mjs';
 import {PALETTE_DIALS, isGraySeed, seedOf} from './_palette.mjs';
 import {focusStateOf} from './_settings.mjs';
@@ -137,25 +138,27 @@ const DESIGN_WORDS = [
 ];
 
 /** Short forms people type, and the word each means. */
-const SHORT = /** @type {Record<string, string>} */ ({
-  btn: 'button',
-  btns: 'buttons',
-  bttn: 'button',
-  bttns: 'buttons',
-  brdr: 'border',
-  bdr: 'border',
-  hdr: 'header',
-  rad: 'radius',
-  dlg: 'dialog',
-  txt: 'text',
-  clr: 'color',
-  shdw: 'shadow',
-  squre: 'square',
-  sqaure: 'square',
-  suqare: 'square',
-  fnot: 'font',
-  fnt: 'font',
-});
+const SHORT = wordTable(
+  /** @type {Record<string, string>} */ ({
+    btn: 'button',
+    btns: 'buttons',
+    bttn: 'button',
+    bttns: 'buttons',
+    brdr: 'border',
+    bdr: 'border',
+    hdr: 'header',
+    rad: 'radius',
+    dlg: 'dialog',
+    txt: 'text',
+    clr: 'color',
+    shdw: 'shadow',
+    squre: 'square',
+    sqaure: 'square',
+    suqare: 'square',
+    fnot: 'font',
+    fnt: 'font',
+  }),
+);
 
 /** Plain words that are never corrected, though one letter off a VOCAB word. */
 const KEEP = new Set([
@@ -296,56 +299,60 @@ function grayStop(family, stop) {
 }
 
 /** Hues people name, as fills a part can take. */
-const HUES = /** @type {Record<string, string>} */ ({
-  red: '#dc2626',
-  orange: '#f97316',
-  amber: '#f59e0b',
-  yellow: '#eab308',
-  lime: '#65a30d',
-  green: '#16a34a',
-  mint: '#34d399',
-  minty: '#34d399',
-  teal: '#0d9488',
-  cyan: '#0891b2',
-  blue: '#2563eb',
-  navy: '#1e3a8a',
-  indigo: '#4f46e5',
-  purple: '#7c3aed',
-  charcoal: '#333333',
-  violet: '#7c3aed',
-  pink: '#db2777',
-  magenta: '#c026d3',
-  brown: '#92400e',
-  gray: '#9ca3af',
-  grey: '#9ca3af',
-  black: '#000000',
-  white: '#ffffff',
-  cream: '#fef3c7',
-  beige: '#f5f5dc',
-});
+const HUES = wordTable(
+  /** @type {Record<string, string>} */ ({
+    red: '#dc2626',
+    orange: '#f97316',
+    amber: '#f59e0b',
+    yellow: '#eab308',
+    lime: '#65a30d',
+    green: '#16a34a',
+    mint: '#34d399',
+    minty: '#34d399',
+    teal: '#0d9488',
+    cyan: '#0891b2',
+    blue: '#2563eb',
+    navy: '#1e3a8a',
+    indigo: '#4f46e5',
+    purple: '#7c3aed',
+    charcoal: '#333333',
+    violet: '#7c3aed',
+    pink: '#db2777',
+    magenta: '#c026d3',
+    brown: '#92400e',
+    gray: '#9ca3af',
+    grey: '#9ca3af',
+    black: '#000000',
+    white: '#ffffff',
+    cream: '#fef3c7',
+    beige: '#f5f5dc',
+  }),
+);
 /** A hue with light, pale or dark before it. */
-const SHADED = /** @type {Record<string, Record<string, string>>} */ ({
-  light: {
-    gray: '#e5e7eb',
-    grey: '#e5e7eb',
-    blue: '#dbeafe',
-    green: '#dcfce7',
-    red: '#fee2e2',
-    yellow: '#fef9c3',
-    purple: '#ede9fe',
-    pink: '#fce7f3',
-    orange: '#ffedd5',
-  },
-  pale: {gray: '#f3f4f6', grey: '#f3f4f6', blue: '#eff6ff', green: '#f0fdf4'},
-  dark: {
-    gray: '#374151',
-    grey: '#374151',
-    blue: '#1e40af',
-    green: '#166534',
-    red: '#991b1b',
-    purple: '#5b21b6',
-  },
-});
+const SHADED = wordTable(
+  /** @type {Record<string, Record<string, string>>} */ ({
+    light: {
+      gray: '#e5e7eb',
+      grey: '#e5e7eb',
+      blue: '#dbeafe',
+      green: '#dcfce7',
+      red: '#fee2e2',
+      yellow: '#fef9c3',
+      purple: '#ede9fe',
+      pink: '#fce7f3',
+      orange: '#ffedd5',
+    },
+    pale: {gray: '#f3f4f6', grey: '#f3f4f6', blue: '#eff6ff', green: '#f0fdf4'},
+    dark: {
+      gray: '#374151',
+      grey: '#374151',
+      blue: '#1e40af',
+      green: '#166534',
+      red: '#991b1b',
+      purple: '#5b21b6',
+    },
+  }),
+);
 
 /** The color tokens a word for a color the theme uses names. */
 const THEME_COLOR_WORDS = /** @type {Array<[RegExp, string, string]>} */ ([
@@ -1287,19 +1294,21 @@ const PLAIN_PROPERTIES = new Set([
 ]);
 
 /** Words people write for a CSS property. */
-const PROPERTY_WORDS = /** @type {Record<string, string>} */ ({
-  radius: 'border-radius',
-  'min height': 'min-height',
-  'max height': 'max-height',
-  'min width': 'min-width',
-  'max width': 'max-width',
-  'line height': 'line-height',
-  'letter spacing': 'letter-spacing',
-  'font size': 'font-size',
-  'font weight': 'font-weight',
-  'border color': 'border-color',
-  'border colour': 'border-color',
-});
+const PROPERTY_WORDS = wordTable(
+  /** @type {Record<string, string>} */ ({
+    radius: 'border-radius',
+    'min height': 'min-height',
+    'max height': 'max-height',
+    'min width': 'min-width',
+    'max width': 'max-width',
+    'line height': 'line-height',
+    'letter spacing': 'letter-spacing',
+    'font size': 'font-size',
+    'font weight': 'font-weight',
+    'border color': 'border-color',
+    'border colour': 'border-color',
+  }),
+);
 
 /**
  * The words of a value, with each function call kept whole, nested calls
@@ -1343,25 +1352,27 @@ function withoutFunctions(text) {
 }
 
 /** The settings each aspect names, for a reset; `*` matches a prefix. */
-const RESET_THINGS = /** @type {Record<string, string[]>} */ ({
-  corners: ['corners', 'border-radius', '--radius-*'],
-  spacing: ['spacing', 'padding', 'gap', 'margin', '--spacing-*'],
-  family: ['font', 'font-family', '--font-family-*'],
-  background: ['background', 'background-color'],
-  text: ['color', '--color-text-*'],
-  shadow: ['box-shadow', 'surfaces', '--shadow-*'],
-  border: [
-    'border',
-    'border-width',
-    'border-color',
-    '--border-width',
-    '--color-border',
-  ],
-  weight: ['headings', 'font-weight', '--text-body-weight'],
-  fontsize: ['text-size', 'type', 'font-size'],
-  leading: ['line-height', '--text-body-leading'],
-  tracking: ['letter-spacing'],
-});
+const RESET_THINGS = wordTable(
+  /** @type {Record<string, string[]>} */ ({
+    corners: ['corners', 'border-radius', '--radius-*'],
+    spacing: ['spacing', 'padding', 'gap', 'margin', '--spacing-*'],
+    family: ['font', 'font-family', '--font-family-*'],
+    background: ['background', 'background-color'],
+    text: ['color', '--color-text-*'],
+    shadow: ['box-shadow', 'surfaces', '--shadow-*'],
+    border: [
+      'border',
+      'border-width',
+      'border-color',
+      '--border-width',
+      '--color-border',
+    ],
+    weight: ['headings', 'font-weight', '--text-body-weight'],
+    fontsize: ['text-size', 'type', 'font-size'],
+    leading: ['line-height', '--text-body-leading'],
+    tracking: ['letter-spacing'],
+  }),
+);
 
 /** Words for a color the theme generates: the word, its dial, its token. */
 const ROLE_DIALS = /** @type {Array<[RegExp, string, string]>} */ ([
@@ -1374,37 +1385,39 @@ const ROLE_DIALS = /** @type {Array<[RegExp, string, string]>} */ ([
 ]);
 
 /** Number words, longest phrase first. */
-const NUMBER_WORDS = /** @type {Record<string, number>} */ ({
-  zero: 0,
-  one: 1,
-  two: 2,
-  three: 3,
-  four: 4,
-  five: 5,
-  six: 6,
-  seven: 7,
-  eight: 8,
-  nine: 9,
-  ten: 10,
-  eleven: 11,
-  twelve: 12,
-  thirteen: 13,
-  fourteen: 14,
-  fifteen: 15,
-  sixteen: 16,
-  seventeen: 17,
-  eighteen: 18,
-  nineteen: 19,
-  twenty: 20,
-  thirty: 30,
-  forty: 40,
-  fifty: 50,
-  sixty: 60,
-  seventy: 70,
-  eighty: 80,
-  ninety: 90,
-  hundred: 100,
-});
+const NUMBER_WORDS = wordTable(
+  /** @type {Record<string, number>} */ ({
+    zero: 0,
+    one: 1,
+    two: 2,
+    three: 3,
+    four: 4,
+    five: 5,
+    six: 6,
+    seven: 7,
+    eight: 8,
+    nine: 9,
+    ten: 10,
+    eleven: 11,
+    twelve: 12,
+    thirteen: 13,
+    fourteen: 14,
+    fifteen: 15,
+    sixteen: 16,
+    seventeen: 17,
+    eighteen: 18,
+    nineteen: 19,
+    twenty: 20,
+    thirty: 30,
+    forty: 40,
+    fifty: 50,
+    sixty: 60,
+    seventy: 70,
+    eighty: 80,
+    ninety: 90,
+    hundred: 100,
+  }),
+);
 const NUMBER_WORDS_RE = new RegExp(
   `\\b(?:(?:one|a) and a half|half an?|an? quarter(?: of an?)?|an? half|(?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)[- ](?:one|two|three|four|five|six|seven|eight|nine)|${Object.keys(NUMBER_WORDS).join('|')})\\b(?=\\s*(?:-|\\s)?\\s*(?:px|pixels?|rem|em|pt|percent|%|radius|corners?|line height|times|x\\b|\\w+ (?:tall|wide|thick)|tall|wide|thick))`,
   'gi',
@@ -5173,13 +5186,15 @@ export function draftAnswer(ctx, env, question) {
         options: [],
       };
     if (/\bswap\b/.test(t)) {
-      const ROLE_TOKEN = /** @type {Record<string, string>} */ ({
-        accent: '--color-accent',
-        danger: '--color-error',
-        success: '--color-success',
-        warning: '--color-warning',
-        info: '--color-info',
-      });
+      const ROLE_TOKEN = wordTable(
+        /** @type {Record<string, string>} */ ({
+          accent: '--color-accent',
+          danger: '--color-error',
+          success: '--color-success',
+          warning: '--color-warning',
+          info: '--color-info',
+        }),
+      );
       const named = Object.keys(ROLE_TOKEN).filter(r =>
         new RegExp(`\\b${r === 'danger' ? '(danger|error)' : r}\\b`).test(t),
       );
@@ -5537,12 +5552,14 @@ export function draftAnswer(ctx, env, question) {
           ? '#78716c'
           : null;
     // "make the error red darker": the hue names the color; the change is darker.
-    const NATURAL = /** @type {Record<string, string>} */ ({
-      danger: HUES.red,
-      success: HUES.green,
-      warning: HUES.yellow,
-      info: HUES.blue,
-    });
+    const NATURAL = wordTable(
+      /** @type {Record<string, string>} */ ({
+        danger: HUES.red,
+        success: HUES.green,
+        warning: HUES.yellow,
+        info: HUES.blue,
+      }),
+    );
     if (c.dir && color && (color === NATURAL[dial] || color === HUES.amber))
       color = null;
     if (!color && c.dir && !/\btoo (warm|cool)\b/.test(t)) {

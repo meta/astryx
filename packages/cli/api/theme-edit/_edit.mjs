@@ -28,6 +28,7 @@ import {
   SPACING,
   TYPE_STYLES,
   familyOf,
+  wordTable,
 } from './_tables.mjs';
 import {
   commitTheme,
@@ -1288,10 +1289,12 @@ async function changeOnce(sub, slug, thing, value, options, seen) {
         )
       : [];
   // The exact property a dial on a part competes with there.
-  const DIAL_PROPERTY = /** @type {Record<string, RegExp>} */ ({
-    corners: /radius$/,
-    spacing: /^(padding|gap)(-|$)/,
-  });
+  const DIAL_PROPERTY = wordTable(
+    /** @type {Record<string, RegExp>} */ ({
+      corners: /radius$/,
+      spacing: /^(padding|gap)(-|$)/,
+    }),
+  );
   // A whole-theme look dial (buttons, surfaces) writes part properties
   // too: an exact property on one of them wins there, read from the build.
   const looksOver =
@@ -1981,10 +1984,12 @@ function nowApplies(ctx, data, removed, base) {
           )
         : undefined) ?? find(x => !x.when && !x.state);
     if (reaches) return describe(reaches);
-    const DIAL_PROPERTY = /** @type {Record<string, RegExp>} */ ({
-      corners: /radius$/,
-      spacing: /^(padding|gap)(-|$)/,
-    });
+    const DIAL_PROPERTY = wordTable(
+      /** @type {Record<string, RegExp>} */ ({
+        corners: /radius$/,
+        spacing: /^(padding|gap)(-|$)/,
+      }),
+    );
     const exact =
       removed.source === 'dial' && DIAL_PROPERTY[removed.thing]
         ? data.settings.find(

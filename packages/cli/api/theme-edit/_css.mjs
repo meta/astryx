@@ -9,6 +9,7 @@
  */
 
 import {createRequire} from 'node:module';
+import {wordTable} from './_tables.mjs';
 
 const require = createRequire(import.meta.url);
 
@@ -413,15 +414,17 @@ const UNIT_TYPES = /** @type {Record<string, string>} */ (
   )
 );
 /** A value of each type, to match where a math function stands. */
-const TYPE_SAMPLES = /** @type {Record<string, string>} */ ({
-  number: '1',
-  percent: '1%',
-  length: '1px',
-  time: '1s',
-  angle: '1deg',
-  frequency: '1hz',
-  resolution: '1dppx',
-});
+const TYPE_SAMPLES = wordTable(
+  /** @type {Record<string, string>} */ ({
+    number: '1',
+    percent: '1%',
+    length: '1px',
+    time: '1s',
+    angle: '1deg',
+    frequency: '1hz',
+    resolution: '1dppx',
+  }),
+);
 
 /**
  * The type of a sum (or of the arguments of min(), max(), clamp()):
@@ -786,12 +789,14 @@ export function splitTop(v, sep) {
 }
 
 /** The longhand each type of the `font` grammar sets, where css-tree names a type, not a property. */
-const FONT_TYPE_LONGHAND = /** @type {Record<string, string>} */ ({
-  'font-variant-css2': 'font-variant-caps',
-  'font-width-css3': 'font-stretch',
-  'font-stretch-absolute': 'font-stretch',
-  'system-family-name': 'system',
-});
+const FONT_TYPE_LONGHAND = wordTable(
+  /** @type {Record<string, string>} */ ({
+    'font-variant-css2': 'font-variant-caps',
+    'font-width-css3': 'font-stretch',
+    'font-stretch-absolute': 'font-stretch',
+    'system-family-name': 'system',
+  }),
+);
 
 /**
  * The parts of a CSS `font` value, by the longhand each sets, as written:

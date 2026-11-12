@@ -56,6 +56,7 @@ import {
   THING_HINTS,
   TYPE_STYLES,
   familyOf,
+  wordTable,
 } from './_tables.mjs';
 import {
   COLOR_NAMES,
@@ -1086,47 +1087,49 @@ function propertyProblem(prop, value) {
 }
 
 /** Words people use for a dial's values, by dial. */
-const DIAL_WORDS = /** @type {Record<string, Record<string, string>>} */ ({
-  surfaces: {
-    elevated: 'raised',
-    elevation: 'raised',
-    shadow: 'raised',
-    shadows: 'raised',
-    lifted: 'raised',
-    frosted: 'glass',
-    blur: 'glass',
-    blurred: 'glass',
-    translucent: 'glass',
-    bordered: 'outlined',
-    border: 'outlined',
-    borders: 'outlined',
-    lined: 'outlined',
-    outline: 'outlined',
-    plain: 'flat',
-    minimal: 'flat',
-  },
-  buttons: {
-    uppercase: 'caps',
-    upper: 'caps',
-    allcaps: 'caps',
-    capitals: 'caps',
-    tint: 'soft',
-    tinted: 'soft',
-    subtle: 'soft',
-    outlined: 'outline',
-    bordered: 'outline',
-    ghost: 'outline',
-    filled: 'solid',
-    fill: 'solid',
-  },
-  mode: {
-    auto: 'both',
-    system: 'both',
-    default: 'both',
-    light: 'light-only',
-    dark: 'dark-only',
-  },
-});
+const DIAL_WORDS = wordTable(
+  /** @type {Record<string, Record<string, string>>} */ ({
+    surfaces: {
+      elevated: 'raised',
+      elevation: 'raised',
+      shadow: 'raised',
+      shadows: 'raised',
+      lifted: 'raised',
+      frosted: 'glass',
+      blur: 'glass',
+      blurred: 'glass',
+      translucent: 'glass',
+      bordered: 'outlined',
+      border: 'outlined',
+      borders: 'outlined',
+      lined: 'outlined',
+      outline: 'outlined',
+      plain: 'flat',
+      minimal: 'flat',
+    },
+    buttons: {
+      uppercase: 'caps',
+      upper: 'caps',
+      allcaps: 'caps',
+      capitals: 'caps',
+      tint: 'soft',
+      tinted: 'soft',
+      subtle: 'soft',
+      outlined: 'outline',
+      bordered: 'outline',
+      ghost: 'outline',
+      filled: 'solid',
+      fill: 'solid',
+    },
+    mode: {
+      auto: 'both',
+      system: 'both',
+      default: 'both',
+      light: 'light-only',
+      dark: 'dark-only',
+    },
+  }),
+);
 
 /**
 /**
@@ -1437,19 +1440,21 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
     const states = [...t.states, ...COMMON_STATES];
     // Other words for a state, mapped to the one the part has; with none
     // near, the list of its states (never a guess such as hover).
-    const SYNONYMS = /** @type {Record<string, string[]>} */ ({
-      pressed: ['active'],
-      press: ['active'],
-      down: ['active'],
-      clicked: ['active'],
-      hovered: ['hover'],
-      focused: ['focus-visible', 'focus-within', 'focus'],
-      checked: ['checked', 'selected'],
-      selected: ['selected', 'checked'],
-      open: ['open', 'expanded'],
-      expanded: ['expanded', 'open'],
-      inactive: ['disabled'],
-    });
+    const SYNONYMS = wordTable(
+      /** @type {Record<string, string[]>} */ ({
+        pressed: ['active'],
+        press: ['active'],
+        down: ['active'],
+        clicked: ['active'],
+        hovered: ['hover'],
+        focused: ['focus-visible', 'focus-within', 'focus'],
+        checked: ['checked', 'selected'],
+        selected: ['selected', 'checked'],
+        open: ['open', 'expanded'],
+        expanded: ['expanded', 'open'],
+        inactive: ['disabled'],
+      }),
+    );
     const meant =
       (SYNONYMS[String(s.state ?? '').toLowerCase()] ?? []).find(x =>
         states.includes(x),
