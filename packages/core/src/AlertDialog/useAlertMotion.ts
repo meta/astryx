@@ -17,6 +17,7 @@
  */
 
 import {useCallback, useEffect, useRef, useState} from 'react';
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {
   createMotionEngine,
@@ -157,8 +158,9 @@ export function useAlertMotion({
       base: {opacity: 1},
     }),
   }));
-  // Whether the motion drives the dialog, as of the last commit.
-  const isEnabledRef = useRef(isEnabled);
+  // Whether the motion drives the dialog, as of the last commit. The callback
+  // ref reads it when React attaches the dialog.
+  const isEnabledRef = useCommittedRef(isEnabled);
 
   // The animators hold the dialog only while the motion drives it, so a mouse
   // presentation keeps its own styles. The callback is stable, so a caller's
@@ -171,12 +173,11 @@ export function useAlertMotion({
       animators.panel.attach(target);
       animators.backdrop.attach(target);
     },
-    [animators],
+    [animators, isEnabledRef],
   );
   // Effect: syncs the motion animators' element with the pointer that drives
   // the alert. A finger attaches them, and a mouse gets the dialog back at rest.
   useIsomorphicLayoutEffect(() => {
-    isEnabledRef.current = isEnabled;
     const {panel, backdrop} = animators;
     if (isEnabled) {
       panel.attach(elementRef.current);
