@@ -4,7 +4,7 @@
  * @file Build-time preview snapshots: the generate step renders them, and the
  * snapshot markup starts no image download before the visitor scrolls to it.
  *
- * @input scripts/generate-preview-snapshots.mjs and the docsite package scripts
+ * @input scripts/lib/preview-snapshot-html.mjs and the docsite package scripts
  * @output Regression coverage for the snapshot markup and its wiring
  * @position Build-time docsite tooling verification
  * Run: pnpm -F @astryxdesign/docsite test
@@ -13,7 +13,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {describe, expect, it} from 'vitest';
-import {finishSnapshotHtml} from '../../scripts/generate-preview-snapshots.mjs';
+import {finishSnapshotHtml} from '../../scripts/lib/preview-snapshot-html.mjs';
 
 const DOCSITE = path.resolve(__dirname, '../..');
 

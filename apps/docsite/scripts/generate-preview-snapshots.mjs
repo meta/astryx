@@ -31,6 +31,7 @@ import {
   rewriteTemplatePreview,
 } from './template-icon-loader.mjs';
 import {optimizeTemplateImages} from './template-image-loader.mjs';
+import {finishSnapshotHtml} from './lib/preview-snapshot-html.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
@@ -45,19 +46,6 @@ const TEMPLATE_SOURCE =
 const PAGE_TEMPLATE_SOURCE =
   /packages[\\/]cli[\\/]assets[\\/]templates[\\/]pages[\\/].+\.tsx$/u;
 const previewIconSet = process.env[ICON_SET_SETTING]?.trim() ?? '';
-
-/**
- * The page renders the snapshot as plain markup, so it must not start image
- * downloads before the visitor scrolls to it. React adds a preload hint for
- * each eager image; this removes the hints and makes the images lazy.
- * @param {string} html
- * @returns {string}
- */
-export function finishSnapshotHtml(html) {
-  return html
-    .replace(/<link rel="preload" as="image"[^>]*\/>/gu, '')
-    .replace(/<img (?![^>]*\bloading=)/gu, '<img loading="lazy" decoding="async" ');
-}
 
 // Compile StyleX the same way the Next build does, so the class names in the
 // snapshot are the ones in the page's style sheet.
@@ -161,7 +149,4 @@ async function main() {
   console.log(`generate-preview-snapshots: wrote ${Object.keys(finished).length} previews (${kb} KB)`);
 }
 
-// Run only as a script, so tests can import finishSnapshotHtml.
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  await main();
-}
+await main();
