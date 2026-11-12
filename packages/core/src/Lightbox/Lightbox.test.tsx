@@ -140,6 +140,7 @@ function rectAt(left: number, top: number, width: number, height: number) {
 /**
  * Lays out a gallery's current page for a mouse's click: its photo's box,
  * natural width and caption, and the viewer's width. jsdom lays out nothing.
+ * The photo's laid-out width is its shown width without zoom.
  */
 function layOutPage(
   page: Element,
@@ -164,6 +165,7 @@ function layOutPage(
   define(img, {
     getBoundingClientRect: () => photo,
     offsetHeight: photo.height,
+    offsetWidth: photo.width,
     naturalWidth: natural,
   });
   // The photo's own box hugs it without zoom.
@@ -837,7 +839,7 @@ describe('Lightbox', () => {
       });
       mousePress(box, {x: 300, y: 200});
       expect(onOpenChange).not.toHaveBeenCalled();
-      // Beside the photo, past its natural width, the click is the backdrop's.
+      // Beside the photo, the click is the backdrop's.
       mousePress(box, {x: 20, y: 200});
       expect(onOpenChange).toHaveBeenCalledWith(false);
     });
@@ -1070,7 +1072,7 @@ describe('Lightbox', () => {
       );
     });
 
-    it("stays open on a mouse click beside a narrow photo, within its caption's width", () => {
+    it("closes on a mouse click beside a narrow photo, level with it, within its caption's width", () => {
       const onOpenChange = vi.fn();
       render(
         <Lightbox
@@ -1088,15 +1090,13 @@ describe('Lightbox', () => {
         caption: rectAt(100, 410, 400, 30),
         viewer: 1000,
       });
-      // The media is as wide as the caption here, so this point is on it.
+      // The caption's band sits under the photo. Beside the photo, level
+      // with it, the click is the backdrop's, even within the caption's width.
       mousePress(box, {x: 150, y: 250});
-      expect(onOpenChange).not.toHaveBeenCalled();
-      // Past the caption's width, the click is the backdrop's.
-      mousePress(box, {x: 50, y: 250});
       expect(onOpenChange).toHaveBeenCalledWith(false);
     });
 
-    it('stays open on a mouse click beside a large photo, level with it, since its media spans the viewer', () => {
+    it('closes on a mouse click beside a large photo shown smaller, level with it', () => {
       const onOpenChange = vi.fn();
       render(
         <Lightbox
@@ -1107,7 +1107,8 @@ describe('Lightbox', () => {
         />,
       );
       const current = document.querySelector('[data-current]')!;
-      // A photo wider than the viewer, shown at 400 px.
+      // A photo wider than the viewer, shown at 400 px. The media is the
+      // shown photo, not its natural width.
       layOutPage(current, {
         photo: rectAt(300, 100, 400, 200),
         natural: 3000,
@@ -1117,7 +1118,7 @@ describe('Lightbox', () => {
         x: 990,
         y: 200,
       });
-      expect(onOpenChange).not.toHaveBeenCalled();
+      expect(onOpenChange).toHaveBeenCalledWith(false);
     });
 
     it('shows gallery counter', () => {
