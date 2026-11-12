@@ -50,9 +50,8 @@ export function composerBounce(
 }
 
 /**
- * When a curve that starts moving forward first turns back, s. Its velocity
- * changes sign once, so the time doubles until it does, then halves the
- * bracket around it.
+ * The time, in s, at which the curve first turns back. Its velocity changes
+ * sign once.
  */
 function turnTime(velocity: (t: number) => number): number {
   let after = 1 / 1024;
