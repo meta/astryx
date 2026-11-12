@@ -8,8 +8,11 @@ import {describe, expect, it} from 'vitest';
 const require = createRequire(import.meta.url);
 const {
   classifyReviewSignalPaths,
+  composeReviewGate,
   hasWritePermission,
   normalizeReviewApp,
+  readCodeGate,
+  readSpecGate,
   resolveReviewApprovals,
   TRAINER_WAITING_TEXT,
   needsTrainerPass,
@@ -307,6 +310,91 @@ describe('review-app approval for write-access authors', () => {
     expect(normalizeReviewApp(' Review-App[bot] ')).toBe('review-app[bot]');
     expect(normalizeReviewApp('review-app')).toBe('');
     expect(normalizeReviewApp(undefined)).toBe('');
+  });
+});
+
+describe('the review gate text for the spec half', () => {
+  const codeWait = 'Waiting on code review: community contribution';
+  const trusted = (context, description, state = 'pending') => ({
+    context,
+    state,
+    description,
+    target_url: 'https://github.com/meta/astryx/actions/runs/7/attempts/1',
+    creator: {login: 'github-actions[bot]'},
+  });
+  const reconciling = trusted(
+    'spec-owner-approval',
+    'Reconciling exact head abcdef1.',
+  );
+  const approvedMirror = trusted(
+    'spec-owner-approval',
+    'Mirrors review-required · spec ok (@owner)',
+    'success',
+  );
+  const waitingMirror = trusted(
+    'spec-owner-approval',
+    'Mirrors review-required · spec waiting (eng)',
+  );
+  const gateFor = (statuses, codeGated = true) =>
+    composeReviewGate({
+      codeGated,
+      codeDescription: codeGated ? codeWait : 'Review complete.',
+      spec: readSpecGate(statuses),
+    });
+
+  it('asks for nothing before the spec half is decided on a new head', () => {
+    for (const statuses of [[], [reconciling]]) {
+      expect(gateFor(statuses)).toEqual({
+        state: 'pending',
+        description: `${codeWait} (+ spec check)`,
+      });
+    }
+  });
+
+  it('shows an approval of this head as carried while a run checks it again', () => {
+    const statuses = [reconciling, approvedMirror];
+
+    expect(gateFor(statuses)).toEqual({
+      state: 'pending',
+      description: `${codeWait} · spec approval carried (verifying)`,
+    });
+    expect(gateFor(statuses, false)).toMatchObject({
+      state: 'pending',
+      description: '⏳ Spec approval carried (verifying)',
+    });
+  });
+
+  it('asks for nothing while a run checks a head that needed no owner approval', () => {
+    const decidedWithoutApprovers = trusted(
+      'spec-owner-approval',
+      'Mirrors review-required · spec ok',
+      'success',
+    );
+
+    expect(gateFor([reconciling, decidedWithoutApprovers]).description).toBe(
+      `${codeWait} (+ spec check)`,
+    );
+  });
+
+  it('still asks for approval when the last decision on this head waits', () => {
+    expect(gateFor([reconciling, waitingMirror]).description).toBe(
+      `${codeWait} (+ spec approval)`,
+    );
+    expect(gateFor([waitingMirror]).description).toBe(
+      `${codeWait} (+ spec approval)`,
+    );
+  });
+
+  it('reads the code half back from every spec suffix', () => {
+    for (const suffix of [
+      ' (+ spec approval)',
+      ' (+ spec check)',
+      ' · spec approval carried (verifying)',
+    ]) {
+      expect(
+        readCodeGate([trusted('review-required', `${codeWait}${suffix}`)]),
+      ).toEqual({gated: true, description: codeWait});
+    }
   });
 });
 

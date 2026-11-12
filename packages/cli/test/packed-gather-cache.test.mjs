@@ -245,6 +245,30 @@ function issuesEntry(file) {
 }
 
 /**
+ * doctor's kept docs checks in a temp folder's cache folder, by check id.
+ * @param {string} tmp
+ * @returns {Map<string, number>} check id to inode
+ */
+function doctorEntries(tmp) {
+  const dir = path.join(tmp, CACHE_NAME);
+  /** @type {Map<string, number>} */
+  const out = new Map();
+  if (!fs.existsSync(dir)) return out;
+  for (const name of fs.readdirSync(dir)) {
+    const file = path.join(dir, name);
+    try {
+      const {value} = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (value && typeof value.id === 'string' && 'label' in value) {
+        out.set(value.id, fs.statSync(file).ino);
+      }
+    } catch {
+      // Not a kept check.
+    }
+  }
+  return out;
+}
+
+/**
  * The integrations' kept contribution-check results in a temp folder's cache
  * folder.
  * @param {string} tmp
@@ -1040,6 +1064,65 @@ Module._resolveFilename = function (request, parent, isMain, options) {
     }
   }, 120_000);
 
+  it("keeps doctor's docs checks, and a broken link shows on the very next run", () => {
+    const tmp = keptTmp('doctor-docs');
+    const other = makeProject();
+    try {
+      fs.writeFileSync(
+        path.join(other.widgets, 'astryx.integration.mjs'),
+        `export default { docs: './docs' };\n`,
+      );
+      fs.mkdirSync(path.join(other.widgets, 'docs'));
+      // The link lives in a module the doc imports, so an edit to that module
+      // alone must show too.
+      const target = path.join(other.widgets, 'docs', 'target.mjs');
+      const link = (/** @type {string} */ to) =>
+        fs.writeFileSync(target, `export const target = '${to}';\n`);
+      link('quick-start');
+      fs.writeFileSync(
+        path.join(other.widgets, 'docs', 'deploying.doc.mjs'),
+        `import {target} from './target.mjs';\nexport const docs = {type: 'generic', name: 'deploying', title: 'Deploying', description: 'How to deploy.', sections: [{title: 'Overview', content: [{type: 'prose', text: 'Ship it, then see {@link generic:' + target + '}.'}]}]};\n`,
+      );
+      const tree = (/** @type {{stdout: string}} */ r) =>
+        JSON.parse(r.stdout).data.checks.find(
+          (/** @type {{id: string}} */ c) => c.id === 'docs-tree',
+        );
+      const doctor = (/** @type {string} */ at) =>
+        tree(run(['doctor'], {tmp: at, cwd: other.dir}));
+      const fresh = doctor(freshTmp());
+      expect(doctor(tmp)).toEqual(fresh);
+      const kept = doctorEntries(tmp);
+      expect([...kept.keys()].sort()).toEqual([
+        'cli-docs',
+        'docs-progressive-disclosure',
+        'docs-tree',
+      ]);
+      // Read back, not checked again: the same three files.
+      expect(doctor(tmp)).toEqual(fresh);
+      expect(doctorEntries(tmp)).toEqual(kept);
+      // Broken by an edit to the imported module alone: the very next doctor
+      // reports it, as a fresh one does, and checks the docs tree again.
+      link('no-such-topic');
+      const broken = doctor(tmp);
+      expect(JSON.stringify(broken)).toContain('no-such-topic');
+      expect(broken).toEqual(doctor(freshTmp()));
+      const after = doctorEntries(tmp);
+      expect(after.get('docs-tree')).not.toBe(kept.get('docs-tree'));
+      // Fixed: the next doctor no longer reports it.
+      link('quick-start');
+      expect(doctor(tmp)).toEqual(fresh);
+    } finally {
+      fs.rmSync(other.dir, {recursive: true, force: true});
+    }
+  }, 180_000);
+
+  it('leaves a missing cache folder missing when doctor runs', () => {
+    const tmp = freshTmp();
+    run(['doctor'], {tmp});
+    run(['doctor'], {tmp});
+    expect(fs.existsSync(path.join(tmp, CACHE_NAME))).toBe(false);
+  }, 60_000);
+
   it('keeps the whole issue list, and finds a replacement problem after an edit', async () => {
     const tmp = keptTmp('replacement');
     const other = makeProject();
@@ -1160,6 +1243,50 @@ Module._resolveFilename = function (request, parent, isMain, options) {
       fs.rmSync(dir, {recursive: true, force: true});
     }
   }, 120_000);
+
+  it.skipIf(process.getuid?.() === 0)(
+    'lets doctor answer the same, silently, when its cache cannot be written',
+    () => {
+      const other = makeProject();
+      /** @param {string} tmp @param {string} [mode] */
+      const doctor = (tmp, mode) => {
+        const catalogs = path.join(tmp, CACHE_NAME);
+        fs.mkdirSync(catalogs, {recursive: true, mode: 0o700});
+        if (mode === 'folder') fs.chmodSync(catalogs, 0o500);
+        if (mode === 'tree') {
+          fs.chmodSync(catalogs, 0o500);
+          fs.chmodSync(path.dirname(catalogs), 0o500);
+        }
+        try {
+          const r = run(['doctor'], {tmp, cwd: other.dir});
+          return {
+            status: r.status,
+            stderr: r.stderr,
+            // The cache row counts what the folder holds, which a write
+            // earlier in the run adds to: the rest must match exactly.
+            stdout: r.stdout
+              .split(tmp)
+              .join('<tmp>')
+              .replace(/\(\d+ entr(?:y|ies), [\d.]+ MB\)/g, '(<count>)'),
+          };
+        } finally {
+          fs.chmodSync(path.dirname(catalogs), 0o700);
+          fs.chmodSync(catalogs, 0o700);
+        }
+      };
+      try {
+        const writable = doctor(freshTmp());
+        expect(writable.status).toBe(0);
+        // An unwritable cache folder, and a cache whose whole tree is read
+        // only: doctor neither fails nor warns, and says the same.
+        expect(doctor(freshTmp(), 'folder')).toEqual(writable);
+        expect(doctor(freshTmp(), 'tree')).toEqual(writable);
+      } finally {
+        fs.rmSync(other.dir, {recursive: true, force: true});
+      }
+    },
+    120_000,
+  );
 
   it('is skipped silently when its folder cannot be used', () => {
     fs.mkdirSync(path.join(work, 'tmp'), {recursive: true});

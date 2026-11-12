@@ -823,6 +823,9 @@ importers:
       '@babel/types':
         specifier: 7.29.8
         version: 7.29.8
+      '@csstools/css-syntax-patches-for-csstree':
+        specifier: 1.1.6
+        version: 1.1.6(css-tree@3.2.1)
       '@stylexjs/babel-plugin':
         specifier: 'catalog:'
         version: 0.19.1

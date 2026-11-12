@@ -357,33 +357,164 @@ test('a finger still down gets the menu at 735 ms (iOS 26.2), not before', async
   await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
 });
 
-test('a finger that shifts slightly just before 735 ms gets the menu at 735 ms when its move reaches the page on time (AST-094 FR12)', async ({
-  page,
-}) => {
+/** The press counts a move as late when it reaches the page this long after its own time. */
+const LATE_INPUT_MS = 33;
+/** How long the press waits after a late move that reached the page just before the menu's moment. */
+const LATE_MOVE_GAP_MS = 50;
+
+/** A hold that shifts 3 px once, as the page read it, on the page clock. */
+interface ShiftedHold {
+  start: number;
+  /** The shift's own time and when the page got it. */
+  shift: [number, number];
+  frames: number[];
+  shown: number | null;
+  decided: number | null;
+}
+
+/**
+ * A finger held still that shifts 3 px once, then lifts at 1000 ms. In
+ * Chromium the page reads the timestamp the protocol hands over, so the shift
+ * leaves at `sentMs` stamped `stampMs`, and the case sets how late the page
+ * gets it. WebKit stamps a touch as it arrives, so there the shift leaves at
+ * `sentMs`.
+ */
+async function holdWithShift(
+  page: Page,
+  browserName: string,
+  {sentMs, stampMs}: {sentMs: number; stampMs: number},
+): Promise<ShiftedHold> {
+  await page.addInitScript(() => {
+    const w = window as unknown as {__shifts: [number, number][]};
+    w.__shifts = [];
+    window.addEventListener(
+      'pointermove',
+      event => {
+        w.__shifts.push([event.timeStamp, performance.now()]);
+      },
+      {capture: true, passive: true},
+    );
+  });
   const {driver, center} = await openTouchStory(page);
   await startFrameLog(page);
-  // One 3 px move at 700 ms, then still. An idle page gets the move at once.
-  await driver.play(
-    drag(
-      center,
-      {x: center.x + 3, y: center.y},
-      {holdMs: 699, durationMs: 1, restMs: 300},
-    ),
-  );
+  if (browserName === 'chromium') {
+    const cdp = await page.context().newCDPSession(page);
+    const origin = Date.now();
+    const at = async (ms: number) =>
+      new Promise(resolve => {
+        setTimeout(resolve, Math.max(0, origin + ms - Date.now()));
+      });
+    const touch = async (
+      type: 'touchStart' | 'touchMove' | 'touchEnd',
+      ms: number,
+      dx: number | null,
+    ) =>
+      cdp.send('Input.dispatchTouchEvent', {
+        type,
+        touchPoints: dx == null ? [] : [{x: center.x + dx, y: center.y}],
+        timestamp: (origin + ms) / 1000,
+      });
+    await touch('touchStart', 0, 0);
+    await at(sentMs);
+    await touch('touchMove', stampMs, 3);
+    await at(1000);
+    await touch('touchEnd', 1000, null);
+  } else {
+    await driver.play(
+      drag(
+        center,
+        {x: center.x + 3, y: center.y},
+        {holdMs: sentMs - 1, durationMs: 1, restMs: 1000 - sentMs},
+      ),
+    );
+  }
   const frames = await readFrameLog(page);
   const start = await touchStartedAt(page);
-  const shown = await menuShownAt(page);
-  const decided = await menuShownTimerAt(page);
-  expect(shown, 'the menu never showed').not.toBeNull();
+  const shifts = await page.evaluate(
+    () => (window as unknown as {__shifts: [number, number][]}).__shifts,
+  );
+  expect(shifts.length, 'the shift reached the page').toBeGreaterThan(0);
+  return {
+    start,
+    shift: shifts[shifts.length - 1],
+    frames,
+    shown: await menuShownAt(page),
+    decided: await menuShownTimerAt(page),
+  };
+}
+
+/** The shift reached the page before the menu's moment, inside the press's wait. */
+function expectShiftInsideWait(
+  [, receivedAt]: [number, number],
+  moment: number,
+) {
+  expect(
+    receivedAt,
+    'the shift reached the page before the menu’s moment',
+  ).toBeLessThan(moment);
+  expect(
+    moment - receivedAt,
+    'the shift reached the page inside the press’s wait before the moment',
+  ).toBeLessThan(LATE_MOVE_GAP_MS);
+}
+
+test('a finger that shifts slightly just before 735 ms gets the menu at 735 ms when its move reaches the page on time (AST-094 FR12)', async ({
+  page,
+  browserName,
+}) => {
+  // A phone gets a move within a frame. The protocol's own path can take two
+  // frames on a test machine, so the shift leaves 25 ms ahead of its stamp.
+  // A faster path brings it before its stamp: the press counts that negative
+  // lag as on time, as any lag up to 33 ms. Leaving at 688 ms, it reaches the
+  // page less than 50 ms before the moment, and before it on any path under
+  // 47 ms.
+  const run = await holdWithShift(page, browserName, {
+    sentMs: 688,
+    stampMs: 713,
+  });
+  const moment = run.start + menuDisplayMs;
+  expectShiftInsideWait(run.shift, moment);
+  expect(
+    run.shift[1] - run.shift[0],
+    'the shift reached the page on time',
+  ).toBeLessThanOrEqual(LATE_INPUT_MS);
+  expect(run.shown, 'the menu never showed').not.toBeNull();
   // The moment's own timer task shows the menu: nothing waits.
   expect(
-    decided,
+    run.decided,
     'the menu showed after the task that decided it',
   ).not.toBeNull();
-  expectDecidedOnTime(frames, start + menuDisplayMs, decided as number);
-  const after = (shown as number) - start;
+  expectDecidedOnTime(run.frames, moment, run.decided as number);
+  const after = (run.shown as number) - run.start;
   expect(after).toBeGreaterThanOrEqual(menuDisplayMs);
   expect(after).toBeLessThan(menuDisplayMs + 20);
+});
+
+test('a finger that shifts slightly just before 735 ms gets the menu 50 ms later when its move reaches the page late (AST-094 FR12)', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== 'chromium',
+    'a touch stamped before it is sent needs Chromium’s protocol',
+  );
+  // The shift leaves 60 ms after its stamp, so the page gets it late.
+  const run = await holdWithShift(page, browserName, {
+    sentMs: 688,
+    stampMs: 628,
+  });
+  const moment = run.start + menuDisplayMs;
+  expectShiftInsideWait(run.shift, moment);
+  expect(
+    run.shift[1] - run.shift[0],
+    'the shift reached the page late',
+  ).toBeGreaterThan(LATE_INPUT_MS);
+  expect(run.decided, 'the menu never showed').not.toBeNull();
+  expect(
+    (run.decided as number) - moment,
+    'the menu waited for moves still coming late',
+  ).toBeGreaterThanOrEqual(LATE_MOVE_GAP_MS - 1);
+  await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
 });
 
 test('the menu mounts at the commit, closed and out of the accessibility tree, and shows at 735 ms', async ({
