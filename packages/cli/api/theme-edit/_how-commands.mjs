@@ -162,8 +162,10 @@ export async function howTheme(ctx, cwd, name) {
     check(steps) {
       /** @type {import('./_settings.mjs').ThemeData} */
       const d = JSON.parse(JSON.stringify(theme));
+      // The checks set runs read the base theme's values (the corner rungs).
+      const checkCtx = /** @type {any} */ ({...ctx, base});
       try {
-        for (const st of steps) apply(ctx, slug, d, st);
+        for (const st of steps) apply(checkCtx, slug, d, st);
         if (compiled(d) === before)
           return {
             ok: false,

@@ -155,6 +155,12 @@ const SHORT = /** @type {Record<string, string>} */ ({
 
 /** Plain words that are never corrected, though one letter off a VOCAB word. */
 const KEEP = new Set([
+  'selection',
+  'placeholder',
+  'cursor',
+  'tablets',
+  'mobile',
+  'printing',
   'lines',
   'block',
   'blocks',
@@ -796,6 +802,10 @@ function aspectsOf(text) {
   if (/\bitalics?\b/.test(c)) add('italic');
   if (
     /\b(bold(er)?|unbold\w*|weight|heav(y|ier)|semibold)\b/.test(c) ||
+    // "body 16px regular": a weight word after a size.
+    /\b\d+(\.\d+)?(px|rem|em|pt) (regular|normal|medium)\b|\b(body|text|headings?) (regular|normal)$/.test(
+      c,
+    ) ||
     /\bthin(ner)? (body |button |heading |label )?(font|text|type|letters|headings?|labels?|copy)\b/.test(
       c,
     ) ||
@@ -822,7 +832,7 @@ function aspectsOf(text) {
     (/\b(bigger|larger|smaller)\b/.test(c) &&
       /\b(text|font|headings?|titles?|h[1-6]|body)\b/.test(c)) ||
     /\b\d+(px|rem) (text|font|labels?|type)\b/.test(c) ||
-    /\b(text|font|headings?|titles?|labels?|h[1-6])\s+\d+(\.\d+)?(px|rem|em|pt)\b/.test(
+    /\b(text|font|body|headings?|titles?|labels?|h[1-6])\s+\d+(\.\d+)?(px|rem|em|pt)\b/.test(
       c,
     ) ||
     /\b(text|font|type)( is)? (way |far |much )?too (small|tiny|big|large)\b|\btoo (small|tiny) to read\b/.test(
@@ -1471,6 +1481,15 @@ export function draftAnswer(ctx, env, question) {
     .replace(/\b(?:no|not) more than\s+|\bat most\s+|\bmax(?:imum)? of\s+/g, '')
     // Numbers written as words are numbers.
     .replace(NUMBER_WORDS_RE, m => numberWord(m))
+    // "less black", "not so white": a direction away from that color.
+    .replace(
+      /\b(?:slightly |a bit |a little )?(?:less|not so|not as) (black|dark)\b/g,
+      'lighter',
+    )
+    .replace(
+      /\b(?:slightly |a bit |a little )?(?:less|not so|not as) (white|bright)\b/g,
+      'dimmer',
+    )
     // "8 or so px", "about 8 px": the number.
     .replace(/\b(\d+(?:\.\d+)?)\s+or so\s+(?=px|rem|em|pixels?)/g, '$1 ')
     // "0.5 rem", "14 px": a number and its unit are one length.
@@ -1599,6 +1618,19 @@ export function draftAnswer(ctx, env, question) {
     .replace(/\s+/g, ' ')
     .trim();
   const clauses = clausesOf(q, lex.parts);
+  // "captions 12px": a clause led by a plural noun that names no part and
+  // no change takes nothing from its neighbors.
+  const unknownLead = (/** @type {Clause} */ c) => {
+    const lead = /^(?:the |my |our |all )?([a-z]{4,}s)\b/.exec(c.text)?.[1];
+    return Boolean(
+      lead &&
+      !c.parts.length &&
+      !lex.vocab.includes(lead) &&
+      !lex.vocab.includes(singular(lead)) &&
+      !aspectsOf(lead).length &&
+      !KEEP.has(lead),
+    );
+  };
   for (const c of clauses) {
     c.quoted = [...c.text.matchAll(/qq(\d+)qq/g)].map(
       m => quoted[Number(m[1])],
@@ -1974,6 +2006,7 @@ export function draftAnswer(ctx, env, question) {
       !(ROLE_WORDS.test(c.text) && !c.aspects.length) &&
       // "Circular font" after "12px cards" is the theme's font.
       !(c.aspects.length && c.aspects.every(a => a === 'family')) &&
+      !unknownLead(c) &&
       // "serif headings, no shadows": a type part does not take a shadow,
       // corner or border ask.
       !(
@@ -1991,6 +2024,7 @@ export function draftAnswer(ctx, env, question) {
     if (
       !c.aspects.length &&
       !ROLE_WORDS.test(c.text) &&
+      !unknownLead(c) &&
       (c.lengths.length || /\b(stay|keep)\b/.test(c.text))
     ) {
       const from = prev?.aspects.length
@@ -1998,7 +2032,12 @@ export function draftAnswer(ctx, env, question) {
         : next?.aspects.length
           ? next
           : null;
-      if (from) c.aspects = [...from.aspects];
+      // Only the aspects a length can set: "headings 32px bold, captions
+      // 12px" gives captions a size, not the headings' bold.
+      if (from)
+        c.aspects = from.aspects.filter(
+          a => !['weight', 'italic', 'case', 'family'].includes(a),
+        );
     }
     // "in dark mode, cards are #1c1c1e": a clause that only names the mode
     // gives it to the clauses after it.
@@ -2034,6 +2073,13 @@ export function draftAnswer(ctx, env, question) {
       c.parts = [];
       c.text = '';
     }
+  // "the same accent in light and dark": every mode, so no mode.
+  if (
+    /\b(light and dark|dark and light|both modes|every mode|all modes|same in (both|light and dark))\b/.test(
+      q,
+    )
+  )
+    for (const c of clauses) c.mode = null;
   // "only in dark mode, …": a clause that only names a mode scopes every
   // clause after it.
   for (let i = 0; i < clauses.length; i++) {
@@ -2399,6 +2445,89 @@ export function draftAnswer(ctx, env, question) {
         continue;
       }
     }
+    // "decrease the radius by 2px", "add 8px to the padding": a change from
+    // the value now, never the new value itself.
+    const delta =
+      /\b(?:by|add(?:ing)?|plus|minus|subtract(?:ing)?)\s+(\d*\.?\d+)px\b|\b(\d*\.?\d+)px (?:more|less|bigger|smaller)\b/.exec(
+        c.text,
+      );
+    if (
+      delta &&
+      /\b(by|add|adding|plus|minus|subtract|subtracting|more|less|bigger|smaller|increase|decrease|reduce)\b/.test(
+        c.text,
+      )
+    ) {
+      const n = Number(delta[1] ?? delta[2]);
+      const down =
+        /\b(decrease|reduce|less|smaller|minus|subtract|subtracting|lower|shrink)\b/.test(
+          c.text,
+        );
+      if (c.aspects.includes('corners') && !c.parts.length) {
+        const now = parseFloat(current('--radius-element'));
+        const nowPx = /rem$/.test(current('--radius-element')) ? now * 16 : now;
+        const next = Math.max(
+          0,
+          Math.round((nowPx + (down ? -n : n)) * 100) / 100,
+        );
+        const d = {
+          text: `corners ${down ? 'down' : 'up'} by ${n}px: from ${Math.round(nowPx * 100) / 100}px to ${next}px`,
+          options: [[set('corners', `${next}px`)]],
+        };
+        push(d);
+        recordTop(c, d.options[0] ?? []);
+        continue;
+      }
+      push({
+        text: `set takes the new value, not a change by ${n}px; look up what it is now, then set the sum`,
+        options: [],
+        lookup: c.parts[0]
+          ? `${HOW} ${c.parts[0].on}`
+          : `${P} show ${env.slug}`,
+      });
+      continue;
+    }
+    // "outline offset 3px on focus": the focus ring's offset, not a border.
+    if (
+      !c.parts.length &&
+      /\boutline[- ]offset\b/.test(c.text) &&
+      c.lengths[0]
+    ) {
+      const d = {
+        text: "the focus ring's offset: --focus-outline-offset",
+        options: [[set('--focus-outline-offset', c.lengths[0])]],
+      };
+      push(d);
+      recordTop(c, d.options[0] ?? []);
+      continue;
+    }
+    // Placeholder, caret and selection colors.
+    if (
+      /\b(placeholders?|caret|cursor|selection|selected text highlight|text highlight)\b/.test(
+        c.text,
+      ) &&
+      !/\bloading placeholder/.test(c.text)
+    ) {
+      const color = colorFor(c, 'fill');
+      const caret = /\b(caret|cursor)\b/.test(c.text);
+      if (caret && color) {
+        const on = c.parts[0]?.on ?? 'inputs';
+        const d = {
+          text: `the text cursor color on ${on}: caret-color`,
+          options: [[set('caret-color', color, {on})]],
+        };
+        push(d);
+        recordTop(c, d.options[0] ?? []);
+        continue;
+      }
+      push({
+        text: caret
+          ? 'name the cursor color: caret-color takes a color'
+          : `${/\bplaceholder/.test(c.text) ? 'placeholder text' : 'the text selection highlight'} has no setting: the editor themes parts, not ${/\bplaceholder/.test(c.text) ? '::placeholder' : '::selection'}; it takes your own CSS`,
+        options: [],
+        lookup: `${HOW} inputs`,
+      });
+      continue;
+    }
     // "… and set --border-width 2px": a real token typed in a clause.
     // The value runs to the clause end ("--shadow-high 0 4px 12px black").
     const tok = /(?:^|\s)(--[a-z][a-z0-9-]*)\s*:?\s+([^;]+?)\s*$/.exec(c.text);
@@ -2751,6 +2880,21 @@ export function draftAnswer(ctx, env, question) {
           ],
           sequence: true,
         };
+      // "remove the focus outline": a ring keyboard users need; set it to
+      // nothing only on the ask, and say what that costs.
+      if (c.neg || /\b(remove|hide|get rid of)\b/.test(c.text))
+        return {
+          text: 'no focus ring: --focus-outline-width 0px. Keyboard users then cannot see where they are, so keep a visible focus style another way',
+          options: [[set('--focus-outline-width', '0px')]],
+        };
+      // "focus ring offset 2px": the gap between the part and its ring.
+      if (/\boffset\b/.test(c.text))
+        return c.lengths[0]
+          ? {
+              text: "the focus ring's offset: --focus-outline-offset",
+              options: [[set('--focus-outline-offset', c.lengths[0])]],
+            }
+          : null;
       if (
         (a === 'border' && !ringColor) ||
         a === 'size' ||
@@ -4178,6 +4322,9 @@ export function draftAnswer(ctx, env, question) {
       // "dark only" with no "mode" word describes the theme's look.
       (/\balways dark\b|\b(theme|app)\b/.test(t) ||
         !/\bmode\b|\bin dark\b/.test(t) ||
+        // "… accent and dark mode only": the last ask, scoping nothing.
+        (clauses.indexOf(c) === clauses.length - 1 &&
+          !/\b(in|for)\b/.test(c.text)) ||
         !clauses.some(
           o =>
             o.text !== c.text &&

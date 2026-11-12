@@ -1012,7 +1012,36 @@ function toolAnswer(t, env) {
         commands: [`${P} new ${env.slug}-2 --like ${env.data.like ?? 'none'}`],
       },
     ];
-  if (/\b(version|which cli|what cli)\b/.test(q))
+  // Screen-size, print and device conditions: the editor has none.
+  if (
+    /(?<!\bno |\bnot )\b(below|above|under|over|wider than|narrower than)\s+(\d{3,}px|\d+em)\b|\b(screens?|viewports?|windows?) (below|above|under|over|less than|more than|wider than|narrower than)\s+\d+(px|em|rem)\b|\b(on|for) (mobile|phones?|tablets?|desktops?|touch( screens?)?|small screens?|large screens?|wide screens?|landscape|portrait)\b|\b(when )?print(ing)?\b|\bprint version\b|\bmedia quer/.test(
+      q,
+    )
+  )
+    return [
+      {
+        text: 'the theme editor has no screen-size, print or device conditions: every setting applies on every screen; a media query needs your own CSS',
+        commands: [`${HOW} --help`],
+      },
+    ];
+  // Questions about what is set now, or the choices: a lookup, never a
+  // write.
+  const asks =
+    /^(how (round|big|small|large|thick|dark|light|bold|wide|tall) (is|are)|what (is|are) the (current|available)|which \w+ (does|do|is|are)|what (font|color|colour|radius|accent) (does|do|is|are)|what (values|options|choices))\b|\b(right now|currently|at the moment)\??$|\bnow\?$/.exec(
+      q,
+    );
+  if (asks)
+    return [
+      {
+        text: `show lists what ${env.slug} sets now; how <part> or how <setting> says what a part reads and the values a setting takes`,
+        commands: [`${P} show ${env.slug}`],
+      },
+    ];
+  if (
+    /\b((astryx|cli) version|version of (the )?(cli|astryx)|which cli|what cli)\b/.test(
+      q,
+    )
+  )
     return [{text: 'the CLI says its version', commands: ['astryx --version']}];
   if (/\bwhere (are|is|do) .*\b(stored|saved|kept|live|files?)\b/.test(q))
     return [

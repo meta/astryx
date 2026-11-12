@@ -3327,6 +3327,74 @@ describe('how reads a mode only from mode phrases, and a later token whole', () 
   });
 });
 
+/**
+ * Final-7 questions: mode words only as mode phrases, both modes, a
+ * trailing dark-only, state questions, the focus ring, deltas, cursor and
+ * selection, and media conditions.
+ * @type {Array<[string, RegExp | null, RegExp?]>}
+ */
+const QUESTIONS_M = [
+  [
+    'I look at it all day, please make the cards rounder',
+    /^set q corners more --on card$/,
+  ],
+  ['the night shift wants a pink accent', /^set q accent '#db2777'$/],
+  ['same accent in light and dark: #7c3aed', /^set q accent '#7c3aed'$/],
+  [
+    'accent #5865f2 and dark mode only',
+    /^set q accent '#5865f2' && set q mode dark-only$/,
+  ],
+  [
+    'at night the page background should be pure black',
+    /^set q --color-background-body '#000000' --mode dark$/,
+  ],
+  ['badges rounder', null, /already at the roundest rung/],
+  ['how round are the cards now?', null, /show lists what q sets now/],
+  ['remove the focus outline', /^set q --focus-outline-width 0px$/],
+  ['outline offset 3px on focus', /^set q --focus-outline-offset 3px$/],
+  ['decrease corner radius by 2 pixels', /^set q corners \d+(\.\d+)?px$/],
+  ['add 8px to the button padding', null, /not a change by 8px/],
+  [
+    'caret color accent in inputs',
+    /^set q caret-color 'var\(--color-accent\)' --on inputs$/,
+  ],
+  ['text selection highlight color #fde68a', null, /no setting/],
+  [
+    'below 600px, cards have no corners',
+    null,
+    /no screen-size, print or device conditions/,
+  ],
+  [
+    'make the print version black and white',
+    null,
+    /no screen-size, print or device conditions/,
+  ],
+  [
+    'headings 32px bold, body 16px regular, captions 12px',
+    /^set q headings bold && set q font-size 32px --on heading && set q --text-body-weight 400 && set q text-size 16$/,
+  ],
+];
+
+describe('how answers final-7 questions', () => {
+  for (const [question, want, text] of QUESTIONS_M)
+    it(question, async () => {
+      const {data} = await themeEditHow(question, {cwd, theme: 'q'});
+      /** @type {Array<{text: string, commands: string[], sequence?: boolean}>} */
+      const results = data.results ?? [];
+      if (text) expect(results.map(r => r.text).join('\n')).toMatch(text);
+      const changes = results.filter(r =>
+        r.commands.some(c => / editor (set|undo) /.test(c)),
+      );
+      if (want === null) {
+        expect(changes).toEqual([]);
+        return;
+      }
+      const top = changes[0];
+      const commands = top.sequence ? top.commands : [top.commands[0]];
+      expect(commands.map(bare).join(' && ')).toMatch(want);
+    });
+});
+
 describe('how lookups', () => {
   it('maps what a part reads under to the flags set takes, or says why none does', async () => {
     const button = (await themeEditHow('button', {cwd, theme: 'q'})).data;
