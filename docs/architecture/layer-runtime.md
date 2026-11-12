@@ -547,7 +547,7 @@ layers use Layer rendering without joining Escape/platform dismissal.
   keeps its release through `claimPress`; whether that release then
   dismisses it is the opening component's decision. A touch release whose
   `touchend` the menu's press model cancels brings no light dismiss, so its
-  show is not held and runs inside the event: when `utils/clickGuard.ts` arms to cancel a touch's `touchend`, it marks that gesture in the release counter (`markTouchEndCancelled`), so `isReleaseInFlight` does not hold its show.
+  show is not held and runs inside the event: when `utils/clickGuard.ts` arms to cancel a touch's `touchend`, it marks it in `utils/touchEndMark.ts`, which the release counter (`isReleaseInFlight`) reads, so `isReleaseInFlight` does not hold its show. The mark is its own module so that neither the click guard nor the gesture counter imports the other, and neither entry pulls in the other's code.
 - **INV8 — Current Escape delivery follows registered layers.** The shared stack
   uses present `close` and `block` entries in its current depth, containment, and
   stable-registration order.

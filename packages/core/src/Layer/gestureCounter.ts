@@ -26,6 +26,7 @@
 
 import {subscribeInput} from '../utils/inputStream';
 import {sharedState} from '../utils/sharedRealm';
+import {clearTouchEndMark, isTouchEndCancelled} from '../utils/touchEndMark';
 
 const state = sharedState('layer/gesture-counter/state', 1, () => ({
   gesture: 0,
@@ -40,8 +41,6 @@ const state = sharedState('layer/gesture-counter/state', 1, () => ({
   isDispatchingRelease: false,
   // The pointer type of the release in flight.
   releasingPointerType: '',
-  // The gesture whose touchend the click guard will cancel.
-  touchEndCancelledGesture: null as number | null,
   claimedPress: null as {
     layer: HTMLElement;
     pointerId: number;
@@ -65,9 +64,6 @@ function ensureFields(): void {
   if (state.releasingPointerType === undefined) {
     state.releasingPointerType = '';
   }
-  if (state.touchEndCancelledGesture === undefined) {
-    state.touchEndCancelledGesture = null;
-  }
 }
 
 function advance() {
@@ -80,6 +76,8 @@ function advance() {
 function startPress(event: PointerEvent) {
   ensureFields();
   state.isDispatchingRelease = false;
+  // A mark from an earlier press never reaches this one.
+  clearTouchEndMark();
   advance();
   state.pressPointerId = event.pointerId;
   const view = event.view ?? document.defaultView;
@@ -192,20 +190,7 @@ export function isReleaseInFlight(): boolean {
   ) {
     return false;
   }
-  return !(
-    state.releasingPointerType === 'touch' &&
-    state.touchEndCancelledGesture === state.releasingGesture
-  );
-}
-
-/**
- * Notes that the click guard will cancel the touchend of the gesture in
- * flight. A cancelled touchend brings no light dismiss, so that gesture's
- * release is not held.
- */
-export function markTouchEndCancelled(): void {
-  ensureFields();
-  state.touchEndCancelledGesture = state.gesture;
+  return !(state.releasingPointerType === 'touch' && isTouchEndCancelled());
 }
 
 /**

@@ -39,10 +39,10 @@
 // - a click dispatched inside {@link withoutClickGuard};
 // - the hidden haptic switch's click (gestures/haptics.ts).
 
-import {markTouchEndCancelled} from '../Layer/gestureCounter';
 import {isHapticSwitch} from '../privateAttributes/hapticSwitch.stylex';
 import {subscribeInput} from './inputStream';
 import {realmValue, sharedKey} from './sharedRealm';
+import {markTouchEndCancelled} from './touchEndMark';
 
 /**
  * How long after a release the browser's click is still swallowed, in ms.

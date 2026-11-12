@@ -519,6 +519,57 @@ describe('the release in flight and afterRelease', () => {
     disarmClickGuard(document);
   });
 
+  it('holds a touch release after a stale mark from an earlier press', () => {
+    const button = document.createElement('button');
+    document.body.append(button);
+    currentGesture();
+    // An earlier touch armed the guard, and its touchend never came.
+    button.dispatchEvent(touchPointerEvent('pointerdown', 11));
+    button.addEventListener(
+      'pointerup',
+      () => armClickGuard(document, {cancelsTouchEnd: true}),
+      {once: true},
+    );
+    button.dispatchEvent(touchPointerEvent('pointerup', 11));
+    // The next press clears the mark; its release is held.
+    button.dispatchEvent(touchPointerEvent('pointerdown', 12));
+    let inFlight: boolean | null = null;
+    button.addEventListener(
+      'pointerup',
+      () => {
+        inFlight = isReleaseInFlight();
+      },
+      {once: true},
+    );
+    button.dispatchEvent(touchPointerEvent('pointerup', 12));
+    expect(inFlight).toBe(true);
+    disarmClickGuard(document);
+  });
+
+  it('reads a mark that a second copy of Core writes', async () => {
+    vi.resetModules();
+    const secondCopy = await import('../utils/touchEndMark');
+    const button = document.createElement('button');
+    document.body.append(button);
+    currentGesture();
+    button.dispatchEvent(touchPointerEvent('pointerdown', 13));
+    button.addEventListener(
+      'pointerup',
+      () => secondCopy.markTouchEndCancelled(),
+      {once: true},
+    );
+    let inFlight: boolean | null = null;
+    button.addEventListener(
+      'pointerup',
+      () => {
+        inFlight = isReleaseInFlight();
+      },
+      {once: true},
+    );
+    button.dispatchEvent(touchPointerEvent('pointerup', 13));
+    expect(inFlight).toBe(false);
+  });
+
   it('holds a touch release that the click guard does not cancel', () => {
     const button = document.createElement('button');
     document.body.append(button);
