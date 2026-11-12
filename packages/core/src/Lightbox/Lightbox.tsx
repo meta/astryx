@@ -312,8 +312,14 @@ const styles = stylex.create({
   trackZoomTarget: {
     touchAction: 'pinch-zoom',
   },
+  // The photo box is the zoom button. It takes the stage's cursor, not the
+  // reset's button cursor, so the zoom-in cursor shows only over the photo.
   pageMediaZoomTarget: {
     touchAction: 'none',
+    cursor: {
+      default: 'inherit',
+      ':is(:disabled,[aria-disabled="true"])': 'default',
+    },
   },
   // In the touch presentation, a photo without zoom leaves pinch-zoom to the
   // page but takes one-finger drags. A drag down dismisses it.
