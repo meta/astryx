@@ -10,9 +10,19 @@
  */
 
 import {DIRECT, GROUPS, HOW} from './_tables.mjs';
+import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 
 /** Only these token types may differ between light and dark. */
 export const MODAL = new Set(['color', 'shadow']);
+
+/**
+ * Whether a token is a color by its name, as Core's color groups and the
+ * token table type it: `--color-*`, `--syntax-*` and `--focus-outline-color`.
+ * Settings are checked by it where no installed Core is read.
+ * @param {string} name
+ */
+export const isColorToken = name =>
+  /^--color-|^--syntax-|^--focus-outline-color$/.test(name);
 
 /** Tokens a component may read only in some states: never refused globally. */
 /**
@@ -60,11 +70,10 @@ export function makeCompiler(project, parts) {
   put(groupVars(core.easeVars), 'easing');
   for (const k of Object.keys(core.tokenDefaults ?? {})) {
     if (TYPE[k]) continue;
-    if (/^--color-|^--syntax-/.test(k)) TYPE[k] = 'color';
+    if (isColorToken(k)) TYPE[k] = 'color';
     else if (/^--font-family/.test(k)) TYPE[k] = 'font';
     else if (/^--font-weight|^--text-.*-weight$/.test(k)) TYPE[k] = 'number';
     else if (/^--shadow/.test(k)) TYPE[k] = 'shadow';
-    else if (/^--focus-outline-color/.test(k)) TYPE[k] = 'color';
     else if (
       /^--(radius|spacing|size|text-.*-size|border-width|focus-outline-(width|offset))/.test(
         k,
@@ -230,9 +239,6 @@ export function makeCompiler(project, parts) {
       .slice(0, 4)
       .join(', ');
 
-  /** @param {string} v */
-  const quote = v => (/[\s"#(]/.test(v) ? `"${v.replace(/"/g, '\\"')}"` : v);
-
   /**
    * Whether a token set on a part can take effect there: the part, or a part
    * inside it, must read it. A part with no record is checked through the
@@ -271,7 +277,7 @@ export function makeCompiler(project, parts) {
       return null;
     }
     const reads = g ? partReads(target, g) : [];
-    const v = quote(value);
+    const v = quoteCommandArgument(value);
     /** @type {string[]} */
     const run = [];
     if (reads.length)
@@ -346,7 +352,7 @@ export function makeCompiler(project, parts) {
       : [];
     return {
       message: `No component reads ${token}, so setting it changes nothing.${near.length ? ` Tokens components do read for ${g}: ${near.join(', ')}.` : ''}`,
-      run: [`${HOW} ${quote(token)}`],
+      run: [`${HOW} ${quoteCommandArgument(token)}`],
       also: [],
     };
   }
@@ -383,12 +389,14 @@ export function makeCompiler(project, parts) {
    * @param {{parseColor: (v: unknown) => [number, number, number] | null, ratio: (a: number[], b: number[]) => number, alphaOf: (v: unknown) => number, compositeOver: (over: [number, number, number], alpha: number, under: [number, number, number]) => [number, number, number], page: (mode: string) => string | null | undefined}} helpers
    *   `page` is the page color in a mode: a see-through background is drawn
    *   over it, and see-through text over that background, before measuring.
+   * @param {TextPair[]} [extra] more pairs to measure (a part's variants)
    */
   function contrast(
     value,
     baseValue,
     modes,
     {parseColor, ratio, alphaOf, compositeOver, page},
+    extra = [],
   ) {
     /**
      * The opaque colors the eye sees for a pair, or null with no fixed color.
@@ -401,9 +409,7 @@ export function makeCompiler(project, parts) {
       const bgAlpha = alphaOf(bg);
       const back = parseColor(bg);
       const under =
-        bgAlpha === 0
-          ? ground
-          : back && compositeOver(back, bgAlpha, ground);
+        bgAlpha === 0 ? ground : back && compositeOver(back, bgAlpha, ground);
       const top = parseColor(fg);
       if (!under || !top) return null;
       return [compositeOver(top, alphaOf(fg), under), under];
@@ -413,7 +419,7 @@ export function makeCompiler(project, parts) {
     const seen = new Set();
     /** @type {Set<string>} */
     const unchecked = new Set();
-    for (const p of parts.pairs) {
+    for (const p of [...parts.pairs, ...extra]) {
       if (
         p.fg.target !== p.bg.target &&
         p.bg.target &&
@@ -451,9 +457,17 @@ export function makeCompiler(project, parts) {
           mode: m,
           ratio: Number(r.toFixed(2)),
           sample: p.sample,
-          fg: p.fg.tokens[0] ?? String(fg),
+          // A side the theme changed is named by the value it set, not the
+          // token the part reads without it.
+          fg:
+            fg !== baseValue(p, 'fg', m)
+              ? String(fg)
+              : (p.fg.tokens[0] ?? String(fg)),
           bgPart: p.bg.target,
-          bg: p.bg.tokens[0] ?? String(bg),
+          bg:
+            bg !== baseValue(p, 'bg', m)
+              ? String(bg)
+              : (p.bg.tokens[0] ?? String(bg)),
         });
       }
     }

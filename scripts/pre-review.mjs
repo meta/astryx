@@ -4,8 +4,8 @@
 /**
  * @file Pre-review report: what a reviewer checks in a change, before review.
  * @input `--base <ref>` (default `origin/main`), an optional `--head <ref>`
- *   (default: the working tree, with uncommitted and untracked files), `--json`,
- *   and the description through `--body-file <path>` or `--pr <number>`.
+ *   (default: the working tree, with uncommitted and untracked files), and
+ *   `--json`.
  * @output The changed files and their class, the governing records and routed
  *   claims, the findings at a file and line, and the checklist items that
  *   apply to this change.
@@ -20,14 +20,14 @@ import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {
-  SIZE_LIMIT,
+  SIZE_GUIDELINE,
   authoredLineCount,
   changesetFindings,
   effectFindings,
   mergeFindings,
   recordGapFindings,
   sharedOwnerFindings,
-  sizeFindings,
+  sizeAdvice,
 } from './lib/pre-review-findings.mjs';
 import {isShippedSource, readDiff} from './lib/review-diff.mjs';
 import {
@@ -54,14 +54,14 @@ export const CHECKLIST_LINK =
   'docs/contributing/pull-requests.md#pre-review-checklist';
 
 export const CHECKS = {
-  a: 'API delta: a current record decides each added or changed row of the API delta the review bot posts',
+  a: 'API delta: a current record decides each added or changed row of the API delta the review bot posts; a row no record decides goes to an owner, and a new internal module or hook another component can import that no record defines gets REQUEST_CHANGES for an owner API decision',
   b: 'Behavior: each observable behavior change cites a current record and clause, or the description says "No behavior change"',
   c: 'Behavior props: a prop that selects a behavior follows the naming and one-prop rules',
   d: 'Public boundary: no internal or private context in source, tests, fixtures, commits, or pull request text',
   e: 'New public hook: a runnable example in a template block that names the hook in exampleFor or alsoExampleFor',
   f: 'Comments: new or changed source comments explain only non-obvious work, in Simplified Technical English',
   g: 'Records: a changed record needs a spec owner to approve its spec content',
-  h: `Size: at most ${SIZE_LIMIT.toLocaleString('en-US')} authored lines, unless the description declares a behavior-module pull request or a batch row`,
+  h: `Size (guideline): prefer under about ${SIZE_GUIDELINE.toLocaleString('en-US')} authored lines; a reviewer may suggest a split, but size alone is never a finding`,
   i: 'Shared owners: a concern Core owns in a shared module is called through that module',
   j: 'Effects: a new Effect names the system it syncs and does more than copy into a ref; no DOM node in state',
   k: 'Release notes and records: a Changeset names each package that ships a change, its category fits, and no gap row stays for a claim the change builds',
@@ -316,11 +316,7 @@ export function findingChecks(findings) {
     }));
 }
 
-export function buildReport({
-  base = 'origin/main',
-  head = null,
-  body = null,
-} = {}) {
+export function buildReport({base = 'origin/main', head = null} = {}) {
   const fork = git(['merge-base', base, head ?? 'HEAD']).trim();
   const headSha = git(['rev-parse', head ?? 'HEAD']).trim();
   const changes = changedFiles(fork, head);
@@ -376,7 +372,6 @@ export function buildReport({
     ]),
   ];
   const findings = [
-    ...sizeFindings(authoredLines, body),
     ...sharedOwnerFindings(addedLines),
     ...effectFindings(addedLines, readHead),
     ...changesetFindings({coverage, changesets}),
@@ -410,6 +405,7 @@ export function formatReport(report) {
   if (report.files.length === 0) {
     return `No changes against ${report.base}...${report.head}.`;
   }
+  const advice = sizeAdvice(report.authoredLines);
   const lines = [
     `Pre-review: ${report.base}...${report.head} (merge base ${report.mergeBase.slice(0, 12)})`,
     `Scope: ${report.scope}`,
@@ -439,7 +435,8 @@ export function formatReport(report) {
           '  none: no linked component or module record declares review triggers',
         ]),
     '',
-    `Authored lines: ${report.authoredLines} (limit ${SIZE_LIMIT}; lockfiles, snapshots, and generated files excluded)`,
+    `Authored lines: ${report.authoredLines} (guideline ${SIZE_GUIDELINE}; lockfiles, snapshots, and generated files excluded)`,
+    ...(advice ? [`  ${advice}`] : []),
     report.merge.error
       ? `Merge into ${report.base}: not checked: ${report.merge.error}`
       : `Merge into ${report.base}: ${report.merge.conflicts.length ? `${report.merge.conflicts.length} conflicting files` : 'clean'}`,
@@ -464,30 +461,6 @@ export function formatFinding({item, file, line, rule, fix}) {
   return `  [${item}] ${where}${rule}\n      fix: ${fix}`;
 }
 
-/** The pull request description from `--body-file`, or from `gh` for `--pr`. */
-function readBody(argv) {
-  const file = valueFor(argv, '--body-file');
-  if (file) return fs.readFileSync(file, 'utf8');
-  const pr = valueFor(argv, '--pr');
-  if (!pr) return null;
-  try {
-    return execFileSync(
-      'gh',
-      ['pr', 'view', pr, '--json', 'body', '-q', '.body'],
-      {
-        cwd: ROOT,
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'pipe'],
-      },
-    );
-  } catch {
-    console.error(
-      `Could not read pull request ${pr} with gh; size declarations not checked.`,
-    );
-    return null;
-  }
-}
-
 function valueFor(argv, flag) {
   const index = argv.indexOf(flag);
   if (index === -1) return null;
@@ -502,7 +475,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const report = buildReport({
     base: valueFor(argv, '--base') ?? 'origin/main',
     head: valueFor(argv, '--head'),
-    body: readBody(argv),
   });
   console.log(
     argv.includes('--json')

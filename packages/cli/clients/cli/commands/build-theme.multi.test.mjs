@@ -145,4 +145,66 @@ describe('theme build with several files', () => {
     expect(r.status).toBe(1);
     expect(r.stderr).toMatch(/expanded by your shell/);
   }, 120_000);
+
+  it('refuses a file given twice before writing anything', async () => {
+    const dir = themeDir();
+    const r = await runCli(
+      ['--json', 'theme', 'build', 'alpha.mjs', './alpha.mjs'],
+      dir,
+    );
+    expect(r.status).toBe(1);
+    expect(JSON.parse(r.stdout)).toMatchObject({code: 'ERR_THEME_INVALID'});
+    expect(fs.existsSync(path.join(dir, 'alpha.css'))).toBe(false);
+  }, 120_000);
+
+  it('refuses a second theme with the same name instead of replacing the first', async () => {
+    const dir = themeDir();
+    fs.writeFileSync(
+      path.join(dir, 'alpha2.mjs'),
+      `export default { name: 'alpha', tokens: { '--color-bg': '#000000' } };\n`,
+    );
+    const r = await runCli(['theme', 'build', 'alpha.mjs', 'alpha2.mjs'], dir);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(
+      /alpha2\.mjs: alpha\.mjs already wrote alpha\.css in this run/,
+    );
+    expect(fs.readFileSync(path.join(dir, 'alpha.css'), 'utf-8')).toMatch(
+      /#ffffff/,
+    );
+  }, 120_000);
+
+  it('suggests the theme source when given a bare theme name', async () => {
+    const dir = themeDir();
+    fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"app"}\n');
+    fs.mkdirSync(path.join(dir, 'themes', 'brand'), {recursive: true});
+    fs.writeFileSync(
+      path.join(dir, 'themes', 'brand', 'brand.theme.ts'),
+      THEMES['alpha.mjs'],
+    );
+    const r = await runCli(['--json', 'theme', 'build', 'brand'], dir);
+    expect(r.status).toBe(1);
+    const parsed = JSON.parse(r.stdout);
+    expect(parsed.code).toBe('ERR_FILE_NOT_FOUND');
+    expect(parsed.suggestions).toEqual([
+      {
+        name: expect.stringMatching(
+          / theme build themes\/brand\/brand\.theme\.ts$/,
+        ),
+        reason: 'a theme source that exists',
+      },
+    ]);
+  }, 120_000);
+
+  it('suggests the path with / when given one with backslashes', async () => {
+    const dir = themeDir();
+    fs.mkdirSync(path.join(dir, 'hand'));
+    fs.writeFileSync(path.join(dir, 'hand', 'ocean.mjs'), THEMES['alpha.mjs']);
+    const r = await runCli(
+      ['--json', 'theme', 'build', 'hand\\ocean.mjs'],
+      dir,
+    );
+    expect(JSON.parse(r.stdout).suggestions[0].name).toMatch(
+      / theme build hand\/ocean\.mjs$/,
+    );
+  }, 120_000);
 });

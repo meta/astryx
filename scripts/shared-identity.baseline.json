@@ -30,12 +30,12 @@
       "reason": "One audio context per copy for dictation level metering; a second context costs memory and changes no result."
     },
     "packages/core/src/CodeBlock/highlightRanges.ts:dynamicStyleSheet": {
-      "status": "open",
-      "group": "triage"
+      "status": "allowed",
+      "reason": "Each copy inserts the same ::highlight rules; a duplicate identical rule changes nothing."
     },
     "packages/core/src/CodeBlock/highlightRanges.ts:registeredHighlightTypes": {
-      "status": "open",
-      "group": "triage"
+      "status": "allowed",
+      "reason": "Each copy inserts the same ::highlight rules; a duplicate identical rule changes nothing."
     },
     "packages/core/src/CodeBlock/highlightStyles.ts:inserted": {
       "status": "allowed",
@@ -56,14 +56,6 @@
     "packages/core/src/DateInput/nativeDateSegments.ts:cachedEngine": {
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
-    },
-    "packages/core/src/List/listLayoutUpdates.ts:keptStyles": {
-      "status": "open",
-      "group": "triage"
-    },
-    "packages/core/src/List/listLayoutUpdates.ts:reportedRows": {
-      "status": "open",
-      "group": "triage"
     },
     "packages/core/src/List/listReorderEngine.tsx:sessionsByOptions": {
       "status": "open",
@@ -170,20 +162,20 @@
       "reason": "The attach and the scroll calls run in the same copy; the paging value is shared."
     },
     "packages/core/src/Table/glidingDivider.ts:inlineColorOf": {
-      "status": "open",
-      "group": "triage"
+      "status": "allowed",
+      "reason": "Keyed by rows of one table; only that table's row-expansion plugin marks them, so its overlapping glides share one copy's maps."
     },
     "packages/core/src/Table/glidingDivider.ts:inlineTopOf": {
-      "status": "open",
-      "group": "triage"
+      "status": "allowed",
+      "reason": "Keyed by rows of one table; only that table's row-expansion plugin marks them, so its overlapping glides share one copy's maps."
     },
     "packages/core/src/Table/glidingDivider.ts:markedBy": {
-      "status": "open",
-      "group": "triage"
+      "status": "allowed",
+      "reason": "Keyed by rows of one table; only that table's row-expansion plugin marks them, so its overlapping glides share one copy's maps."
     },
     "packages/core/src/Table/glidingDivider.ts:sourcesOf": {
-      "status": "open",
-      "group": "triage"
+      "status": "allowed",
+      "reason": "Keyed by rows of one table; only that table's row-expansion plugin marks them, so its overlapping glides share one copy's maps."
     },
     "packages/core/src/Table/plugins/groupedRows/useTableGroupedRows.tsx:GROUP_HEADER": {
       "status": "open",
@@ -238,8 +230,8 @@
       "group": "F13 Shared id sequences"
     },
     "packages/core/src/gestures/fingerScroll.ts:watches": {
-      "status": "open",
-      "group": "triage"
+      "status": "allowed",
+      "reason": "Keyed by the shared gesture host; each copy's useFingerScroll watches and asks through its own copy, so a second watch adds listeners and changes no answer."
     },
     "packages/core/src/gestures/touchActionRule.ts:markedRoots": {
       "status": "allowed",
@@ -252,10 +244,6 @@
     "packages/core/src/hooks/scrollGeometrySubscriptions.ts:listeners": {
       "status": "allowed",
       "reason": "Each copy observes for its own subscribers; a second observer changes no result."
-    },
-    "packages/core/src/hooks/scrollOwnerRegistry.ts:owners": {
-      "status": "open",
-      "group": "triage"
     },
     "packages/core/src/hooks/useEntryAnimation.ts:initialPaintComplete": {
       "status": "open",
@@ -350,8 +338,8 @@
       "group": "F7 Motion frame"
     },
     "packages/core/src/privateAttributes/travelling.stylex.ts:marks": {
-      "status": "open",
-      "group": "triage"
+      "status": "allowed",
+      "reason": "Set and read inside markTravelling, which only the row's own List calls."
     },
     "packages/core/src/reorderable/createReorderable.ts:reorderableBrand": {
       "status": "open",
@@ -634,20 +622,20 @@
       "group": "F12 RichText extensions"
     },
     "packages/richtext/src/markdownExtensions.ts:withExport": {
-      "status": "open",
-      "group": "triage"
+      "status": "allowed",
+      "reason": "A memo cache keyed by the transformers array; a second cache per copy changes no result."
     },
     "packages/richtext/src/markdownSource.ts:canonicalCache": {
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
     },
     "packages/richtext/src/markdownSource.ts:importCount": {
-      "status": "open",
-      "group": "triage"
+      "status": "allowed",
+      "reason": "Ids carry a random prefix, so two copies' counters do not collide."
     },
     "packages/vega/src/viewInputs.ts:OPAQUE": {
-      "status": "open",
-      "group": "triage"
+      "status": "allowed",
+      "reason": "Made and read inside one VegaChart copy; not exported."
     }
   }
 }

@@ -220,6 +220,7 @@ describe('where runs wait', () => {
       'pr-touched-components',
       'pr-visual',
       'release-specs',
+      'release-specs-changed',
       'release-specs-plan',
       'typecheck',
     ]);

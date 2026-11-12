@@ -22,3 +22,24 @@ foundation/*.d.mts
 # scripts/generate-template-components.mjs so the published package reads them
 # instead of parsing each template's source. Not committed: a checkout parses.
 assets/templates/components.generated.json
+
+# Stored exports of the shipped plain-data doc files, written at `prepack` by
+# scripts/generate-stored-docs.mjs so the published package reads them instead
+# of importing each doc. Not committed: a checkout imports every doc.
+assets/docs.generated.json
+
+# The root help's command list, written at `prepack` by
+# scripts/generate-command-list.mjs so the published package prints its root
+# help without loading every command. Not committed: a checkout loads them.
+clients/cli/commands.generated.json
+
+# Written at prepack (scripts/generate-self-audit.mjs); never committed.
+assets/self-audit.generated.json
+
+# Written at prepack (scripts/generate-manifest.mjs); never committed.
+clients/cli/manifest.generated.json
+
+# The id of the published package's exact contents, written last at `prepack`
+# by scripts/generate-build-id.mjs. A checkout has none, so it keeps no
+# gathered catalogs between runs (foundation/fs/gather-cache.mjs).
+clients/cli/build-id.generated.json

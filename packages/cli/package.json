@@ -1,6 +1,6 @@
 {
   "name": "@astryxdesign/cli",
-  "version": "0.7.14",
+  "version": "0.7.15",
   "displayName": "CLI",
   "description": "Scaffold projects, browse templates, generate themes, and get agent-ready docs from the command line.",
   "author": "Meta Open Source",
@@ -117,10 +117,11 @@
     "typecheck:strict": "tsc --project tsconfig.strict.json",
     "typecheck:authoring": "tsc --project tsconfig.authoring-contract.json",
     "sync:api-types": "node scripts/sync-api-types.mjs",
+    "generate:build-id": "node scripts/generate-build-id.mjs",
     "readme": "node scripts/generate-cli-readme.mjs",
     "readme:check": "node scripts/generate-cli-readme.mjs --check",
-    "postpack": "node scripts/generate-template-components.mjs --clean",
-    "prepack": "pnpm sync:api-types && node scripts/generate-template-components.mjs"
+    "postpack": "node scripts/generate-template-components.mjs --clean && node scripts/generate-stored-docs.mjs --clean && node scripts/generate-command-list.mjs --clean && node scripts/generate-self-audit.mjs --clean && node scripts/generate-manifest.mjs --clean && node scripts/generate-build-id.mjs --clean",
+    "prepack": "pnpm sync:api-types && node scripts/generate-template-components.mjs && node scripts/generate-stored-docs.mjs && node scripts/generate-command-list.mjs && node scripts/generate-self-audit.mjs && node scripts/generate-manifest.mjs && node scripts/generate-build-id.mjs"
   },
   "dependencies": {
     "@babel/core": "7.29.7",
@@ -130,6 +131,7 @@
     "@stylexjs/babel-plugin": "catalog:",
     "ast-types": "0.16.3",
     "commander": "^12.1.0",
+    "css-tree": "3.2.1",
     "ignore": "^7.0.14",
     "jiti": "^2.7.0",
     "jscodeshift": "^17.4.0",
