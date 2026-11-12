@@ -6,6 +6,7 @@ import path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
   PREVIEW_IMAGE_WIDTH,
+  assertCleanRender,
   fontStylesheetOf,
   previewDocument,
   previewPageSource,
@@ -99,6 +100,33 @@ describe('previewDocument', () => {
     );
     expect(html).toContain(
       ':root:has(#light:target),:root:has(#light:target) [data-astryx-theme]{color-scheme:light!important}',
+    );
+  });
+});
+
+describe('assertCleanRender', () => {
+  const logo = {
+    code: 'remote-asset',
+    message: 'https://example.com/logo.svg is loaded from the network.',
+  };
+
+  it('accepts a render with no warning, or with images on other hosts', () => {
+    expect(() => assertCleanRender('ide', [])).not.toThrow();
+    expect(() => assertCleanRender('payment-form', [logo, logo])).not.toThrow();
+  });
+
+  it('fails on a degraded page, and names the tile and each problem', () => {
+    const unstyled = {code: 'no-astryx-styles', message: 'No Astryx styles.'};
+    const photo = {
+      code: 'missing-asset',
+      message: '/template-assets/hero.png was not found next to the page.',
+    };
+    expect(() => assertCleanRender('ide', [logo, unstyled, photo])).toThrow(
+      [
+        'The landing preview of ide did not render cleanly:',
+        '  no-astryx-styles: No Astryx styles.',
+        '  missing-asset: /template-assets/hero.png was not found next to the page.',
+      ].join('\n'),
     );
   });
 });

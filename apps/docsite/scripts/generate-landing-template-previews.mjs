@@ -175,6 +175,27 @@ export async function stagePreviewPage({
   );
 }
 
+/**
+ * Fails when the renderer reports that a preview is not what its template
+ * renders: a page with no Astryx styles, dropped children, or a photo that
+ * the docsite does not serve. The renderer returns these as warnings and
+ * still writes the page. One kind is expected: a template may load an image
+ * from another host.
+ * @param {string} slug
+ * @param {Array<{code: string, message: string}>} warnings
+ */
+export function assertCleanRender(slug, warnings) {
+  const unexpected = warnings.filter(({code}) => code !== 'remote-asset');
+  if (unexpected.length > 0) {
+    throw new Error(
+      [
+        `The landing preview of ${slug} did not render cleanly:`,
+        ...unexpected.map(({code, message}) => `  ${code}: ${message}`),
+      ].join('\n'),
+    );
+  }
+}
+
 async function main() {
   /** @type {string[]} */
   const slugs = JSON.parse(fs.readFileSync(rowsFile, 'utf8')).flat();
@@ -201,7 +222,8 @@ async function main() {
         iconSets,
         projectDir: docsiteDir,
       });
-      await render('page.tsx', {cwd: pageDir, out: 'page.html'});
+      const {data} = await render('page.tsx', {cwd: pageDir, out: 'page.html'});
+      assertCleanRender(slug, data.warnings);
       const html = previewDocument(
         fs.readFileSync(path.join(pageDir, 'page.html'), 'utf8'),
         {fontStylesheet},
