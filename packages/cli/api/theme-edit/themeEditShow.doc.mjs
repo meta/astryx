@@ -61,7 +61,7 @@ export const doc = {
     },
     {
       code: 'ERR_UNKNOWN_THEME',
-      when: 'the theme does not exist; the suggestion is the `new` command',
+      when: 'the theme does not exist (the suggestion is the `new` command), or its base theme package is not installed (the suggestion installs it, such as `npm install @astryxdesign/theme-neutral`)',
     },
     {
       code: 'ERR_PROJECT_REQUIRED',
@@ -73,7 +73,15 @@ export const doc = {
     },
     {
       code: 'ERR_THEME_INVALID',
-      when: 'the theme does not build (the change is undone)',
+      when: 'the theme does not build, its own <theme>.theme.ts does not parse, or a token in it is not text; the folder stays as it was',
+    },
+    {
+      code: 'ERR_FILE_EXISTS',
+      when: 'a folder sits where the build writes a file (such as themes/<theme>/<theme>.d.ts); the suggestion lists it',
+    },
+    {
+      code: 'ERR_WRITE_FAILED',
+      when: 'a built file cannot be read or replaced (its permissions), or a file cannot be written; the suggestion shows its permissions',
     },
     {
       code: 'ERR_RENDER_FAILED',
