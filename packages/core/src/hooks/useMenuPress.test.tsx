@@ -1614,6 +1614,21 @@ describe('useMenuPress — a pointer that went down elsewhere is the opening pre
     expect(onSelect).toHaveBeenCalledWith('B');
   });
 
+  it("cancels a handed finger's own touchend at its lift, though another finger landed while it slid", () => {
+    const onSelect = vi.fn();
+    const press: {current: UseMenuPressReturn | null} = {current: null};
+    render(<Harness touchModel="uikit" onSelect={onSelect} pressRef={press} />);
+    continueAt(press, 'touch');
+    // A second finger lands while the handed one slides. The handed finger's
+    // touchstart came before the menu, so this one names another touch.
+    fireTouch(row('C'), 'touchstart', 9);
+    fireEvent.pointerMove(row('B'), {...handed, clientX: 0, clientY: 4});
+    fireEvent.pointerMove(row('B'), {...handed, clientX: 0, clientY: 20});
+    fireEvent.pointerUp(row('B'), {...handed, clientX: 0, clientY: 20});
+    expect(onSelect).toHaveBeenCalledWith('B');
+    expect(fireTouch(row('B'), 'touchend', 4).defaultPrevented).toBe(true);
+  });
+
   it('counts the distance from the first position the menu sees, not from where the finger was as it opened', () => {
     const press: {current: UseMenuPressReturn | null} = {current: null};
     render(<Harness touchModel="uikit" pressRef={press} />);
