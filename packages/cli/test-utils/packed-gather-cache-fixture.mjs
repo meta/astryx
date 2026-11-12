@@ -332,8 +332,9 @@ export async function expectSameAsFresh(tmp, options = {}) {
 
 // The CLI keeps a catalog through module.registerHooks, which Node has from
 // 22.15 and 23.5. On an older Node the CLI supports (its oldest is 22.13), it
-// keeps none and gathers fresh each run, as the suite after this one shows, so
-// the cases below that need a kept catalog or kept check results skip there.
+// keeps none and gathers fresh each run. The cases that need a kept catalog or
+// kept check results skip there, and packed-gather-cache.records.test.mjs
+// proves the fresh gather.
 export const hasModuleHooks =
   typeof (/** @type {any} */ (nodeModule).registerHooks) === 'function';
 

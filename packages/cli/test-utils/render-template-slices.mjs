@@ -15,55 +15,34 @@ import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {render} from '../api/render/render.mjs';
 import {template} from '../api/template/template.mjs';
+import {ensureBuiltOnce} from '../clients/cli/commands/ensure-core-built.mjs';
 import {makeLinkedFixture, removeLinkedFixture} from './linked-fixture.mjs';
-
-/** A lock older than this is left by a run that stopped mid-build. */
-const STALE_LOCK_MS = 15 * 60_000;
-
-/** @param {number} ms */
-const sleep = ms =>
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
 /**
  * Builds a theme package's dist when it has none. Slices run in parallel
- * workers and can need the same theme, so one builder at a time holds a lock
- * and checks again for the dist before it builds.
+ * workers and can need the same theme, so one builder at a time holds the
+ * lock, and the others wait until the build is current.
  * @param {string} themeDir
  */
 function buildThemeOnce(themeDir) {
-  const lock = path.join(
-    os.tmpdir(),
-    `astryx-theme-build-${path.basename(themeDir)}.lock`,
-  );
-  for (;;) {
-    try {
-      fs.mkdirSync(lock);
-      break;
-    } catch (error) {
-      if (/** @type {any} */ (error).code !== 'EEXIST') throw error;
-      try {
-        if (Date.now() - fs.statSync(lock).mtimeMs > STALE_LOCK_MS)
-          fs.rmSync(lock, {recursive: true, force: true});
-      } catch {
-        // The holder released the lock between the two calls.
-      }
-      sleep(500);
-    }
-  }
-  try {
-    if (fs.existsSync(path.join(themeDir, 'dist'))) return;
-    const built = spawnSync('pnpm', ['run', 'build'], {
-      cwd: themeDir,
-      encoding: 'utf8',
-      shell: process.platform === 'win32',
-    });
-    expect(
-      built.status,
-      `${path.basename(themeDir)} build: ${built.stderr}`,
-    ).toBe(0);
-  } finally {
-    fs.rmSync(lock, {recursive: true, force: true});
-  }
+  ensureBuiltOnce({
+    isBuilt: () => fs.existsSync(path.join(themeDir, 'dist')),
+    build: () => {
+      const built = spawnSync('pnpm', ['run', 'build'], {
+        cwd: themeDir,
+        encoding: 'utf8',
+        shell: process.platform === 'win32',
+      });
+      expect(
+        built.status,
+        `${path.basename(themeDir)} build: ${built.stderr}`,
+      ).toBe(0);
+    },
+    lockDir: path.join(
+      os.tmpdir(),
+      `astryx-theme-build-${path.basename(themeDir)}.lock`,
+    ),
+  });
 }
 
 /**
