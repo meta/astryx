@@ -2489,6 +2489,16 @@ describe('colors16', () => {
       themeEditSet('p', 'font', 'bold bold', {cwd, on: 'card'}),
     );
     expect(twice.message).toContain('twice');
+    // Another word for a part already given is the same part twice.
+    for (const value of ['bold lighter', 'italic oblique']) {
+      const again = await refusal(() =>
+        themeEditSet('p', 'font', value, {cwd, on: 'card'}),
+      );
+      expect(again.message, value).toContain('twice');
+      expect(again.run.join(' '), value).not.toContain(
+        `font-family '${value}'`,
+      );
+    }
     expect(twice.run.join(' ')).not.toContain("font-family 'bold bold'");
     // normal is a keyword of several parts: each is the next of them, never
     // the same part twice.

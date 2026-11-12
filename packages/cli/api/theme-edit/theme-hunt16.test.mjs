@@ -234,3 +234,42 @@ describe('how changes by an amount from the theme it reads', () => {
     expect(JSON.stringify(down.data)).toMatch(/from 20px to 18px/);
   }, 240_000);
 });
+
+describe('corrected new commands keep every option (r78e)', () => {
+  it.each([
+    [
+      ['new', 'neutral', '--accent', 'red', '--png'],
+      / new my-neutral --like neutral --accent red --png$/,
+    ],
+    [
+      [
+        'new',
+        'hh',
+        '--headings',
+        'bold',
+        '--headings',
+        'heavy',
+        '--accent',
+        'red',
+      ],
+      / new hh .*--headings heavy.*--accent red|new hh .*--accent red.*--headings heavy/,
+    ],
+  ])(
+    '%j',
+    async (args, expected) => {
+      const r = await runCli(
+        ['--json', 'experimental', 'theme', 'editor', ...args],
+        cwd,
+      );
+      expect(r.status).toBe(1);
+      const names = JSON.parse(r.stdout).suggestions.map(
+        (/** @type {any} */ x) => x.name,
+      );
+      expect(
+        names.some((/** @type {string} */ n) => expected.test(n)),
+        names.join('\n'),
+      ).toBe(true);
+    },
+    120_000,
+  );
+});

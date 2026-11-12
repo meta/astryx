@@ -219,7 +219,16 @@ export async function themeEditNew(name, options = {}) {
     refuse(
       E.ERR_FILE_EXISTS,
       `${name} is a built-in theme; an editor theme needs a name of its own. To start from ${name}, build on it.`,
-      {run: [`${P} new my-${name} --like ${name}`]},
+      {
+        run: [
+          again(
+            fs.existsSync(themeFiles(cwd, `my-${name}`).dir)
+              ? freeThemeName(cwd, `my-${name}`)
+              : `my-${name}`,
+            likeFixed ?? name,
+          ),
+        ],
+      },
     );
   const f = themeFiles(cwd, name);
   // A link or a file where the theme goes is never written through or
@@ -486,8 +495,14 @@ function applyNewSettings(ctx, slug, data, settings, png = false) {
             E.ERR_INVALID_ARGUMENT,
             `--${thing} was given two values for the same thing (${data.settings[same].value}, ${s.value}); give one.`,
             {
+              // Every other option given stays; this setting keeps its last
+              // value.
               run: [
-                `${P} new ${slug} --${thing} ${quoteCommandArgument(s.value)}`,
+                `${P} new ${slug}${newFlags(
+                  data.like,
+                  {...settings, [thing]: s.value},
+                  png,
+                )}`,
               ],
             },
           );

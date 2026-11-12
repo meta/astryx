@@ -723,9 +723,9 @@ export function fontShorthandParts(value) {
       }
       const takers = LONGHANDS.filter(p => keywordsOf(p).includes(lower));
       const keyword = takers.find(p => !(p in each));
-      // The same part twice (bold bold) is no font value.
-      if (takers.length && !keyword && takers.some(p => each[p] === lower))
-        return {repeat: lower};
+      // A part given twice (bold bold, bold lighter, italic oblique) is no
+      // font value.
+      if (takers.length && !keyword) return {repeat: lower, part: takers[0]};
       const prop =
         keyword ??
         ['font-size', 'font-weight'].find(
@@ -741,7 +741,8 @@ export function fontShorthandParts(value) {
       const free = LONGHANDS.find(
         p => !(p in each) && keywordsOf(p).includes('normal'),
       );
-      if (!free) return {repeat: 'normal'};
+      if (!free)
+        return {repeat: 'normal', part: 'every part that takes normal'};
       each[free] = 'normal';
     }
     if (all && words.length) return each;
