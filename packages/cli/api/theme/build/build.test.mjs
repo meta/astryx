@@ -1344,7 +1344,7 @@ describe('themeBuild() — outputs it may replace', () => {
         name: expect.stringMatching(
           / theme build ocean\.mjs --out dist\/o-2\.css$/,
         ),
-        reason: 'a path no file holds yet',
+        reason: 'a path where no output of this build exists yet',
       },
       {
         name: expect.stringMatching(/ theme build ocean\.mjs$/),
@@ -1828,5 +1828,83 @@ describe('themeBuild() — --out into a folder the theme editor made', () => {
       expect(error.suggestions[0].name).toMatch(/ theme build other\.mjs$/);
     }
     expect(fs.readdirSync(editor)).toEqual(['g.settings.json']);
+  });
+
+  it('builds a source inside the folder into it, over its own earlier outputs', async () => {
+    const editor = path.join(tmpDir, 'themes', 'h');
+    fs.mkdirSync(editor, {recursive: true});
+    fs.writeFileSync(
+      path.join(editor, 'h.settings.json'),
+      JSON.stringify({like: 'neutral', settings: []}),
+    );
+    fs.writeFileSync(
+      path.join(editor, 'h.mjs'),
+      `export default { name: 'h', tokens: { '--color-bg': '#0a0a0a' } };\n`,
+    );
+    await themeBuild(
+      'themes/h/h.mjs',
+      {out: 'themes/h/out.css'},
+      {cwd: tmpDir},
+    );
+    // The folder now holds its own outputs: a second build replaces them.
+    await themeBuild(
+      'themes/h/h.mjs',
+      {out: 'themes/h/out.css'},
+      {cwd: tmpDir},
+    );
+    expect(fs.existsSync(path.join(editor, 'out.css'))).toBe(true);
+  });
+
+  it('keeps --icons-specifier in the build it names beside the source', async () => {
+    const editor = path.join(tmpDir, 'themes', 'i');
+    fs.mkdirSync(editor, {recursive: true});
+    fs.writeFileSync(
+      path.join(editor, 'i.settings.json'),
+      JSON.stringify({like: 'neutral', settings: []}),
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'other.mjs'),
+      `export default { name: 'other', tokens: { '--color-bg': '#0a0a0a' } };\n`,
+    );
+    let error;
+    try {
+      await themeBuild(
+        'other.mjs',
+        {out: 'themes/i/x.css', iconsSpecifier: 'my-icons'},
+        {cwd: tmpDir},
+      );
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error.suggestions[0].name).toMatch(
+      / theme build other\.mjs --icons-specifier my-icons$/,
+    );
+  });
+});
+
+describe('themeBuild() — the --out path it suggests', () => {
+  it('suggests a new folder when the module named after the theme blocks a new name', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'ocean.mjs'),
+      `export default { name: 'ocean', tokens: { '--color-bg': '#0a0a0a' } };\n`,
+    );
+    const dist = path.join(tmpDir, 'dist');
+    fs.mkdirSync(dist, {recursive: true});
+    // The person's own files: the stylesheet path and the theme's module.
+    fs.writeFileSync(path.join(dist, 'o.css'), 'body {}\n');
+    fs.writeFileSync(path.join(dist, 'ocean.js'), 'export const mine = 1;\n');
+    let error;
+    try {
+      await themeBuild('ocean.mjs', {out: 'dist/o.css'}, {cwd: tmpDir});
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toMatchObject({code: 'ERR_FILE_EXISTS'});
+    const names = error.suggestions.map((/** @type {any} */ x) => x.name);
+    expect(names.join('\n')).not.toMatch(/--out dist\/o-2\.css/);
+    expect(names.join('\n')).toMatch(/--out dist\/o-2\/o\.css/);
+    expect(fs.readFileSync(path.join(dist, 'ocean.js'), 'utf8')).toBe(
+      'export const mine = 1;\n',
+    );
   });
 });

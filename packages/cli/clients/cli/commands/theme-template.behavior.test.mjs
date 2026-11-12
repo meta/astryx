@@ -171,7 +171,16 @@ describe('astryx theme template outside a project', () => {
         written: true,
         reason: null,
       });
-      expect(json.stderr).toMatch(/the next minor version refuses/);
+      // A deprecation (DEP-0030): silent on stderr under --json, named in
+      // the envelope's meta with the migration step.
+      expect(json.stderr).not.toMatch(/the next minor version refuses/);
+      expect(JSON.parse(json.stdout).meta.deprecations).toEqual([
+        {id: 'DEP-0030', replacements: ['npm init -y', 'theme template']},
+      ]);
+      expect(text.stderr).toMatch(/run `npm init -y` here first/);
+      // A file left as it is gets no warning.
+      const again = await runCli(['theme', 'template'], {cwd: bare});
+      expect(again.stderr).not.toMatch(/DEP-0030/);
     } finally {
       fs.rmSync(bare, {recursive: true, force: true});
     }

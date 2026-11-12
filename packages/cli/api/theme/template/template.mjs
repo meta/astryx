@@ -15,7 +15,11 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {CLI_ROOT, findPackageRoot} from '../../../foundation/fs/paths.mjs';
+import {
+  CLI_ROOT,
+  findPackageRoot,
+  projectWritePath,
+} from '../../../foundation/fs/paths.mjs';
 import {
   assertWithin,
   PathSafetyError,
@@ -42,8 +46,17 @@ export const THEME_TEMPLATE_SRC = path.join(
 export const TEMPLATE_REFUSES_OUTSIDE_PROJECT = false;
 
 /** The warning the CLI prints when it writes the template outside a project. */
+/**
+ * The deprecation of `theme template` outside a project (DEP-0030): the
+ * stable lifecycle id and the commands that replace it.
+ */
+export const OUTSIDE_PROJECT_DEPRECATION = Object.freeze({
+  id: 'DEP-0030',
+  replacements: Object.freeze(['npm init -y', 'theme template']),
+});
+
 export const OUTSIDE_PROJECT_WARNING =
-  'Warning: no package.json is in this folder or above it, so the template is written here; the next minor version refuses theme template outside a project.';
+  'Warning (DEP-0030): no package.json is in this folder or above it, so the template is written here; the next minor version refuses theme template outside a project. Run it inside a project, or run `npm init -y` here first.';
 
 /** Where it lands when the caller does not say. */
 export const THEME_TEMPLATE_DEFAULT_PATH = 'theme.template.ts';
@@ -132,28 +145,23 @@ export function themeTemplate(options = {}) {
     // Released CLIs wrote here, outside any project; the next minor refuses.
     // The CLI prints OUTSIDE_PROJECT_WARNING.
   }
-  const projectDir = foundRoot ?? path.resolve(cwd);
-  const typed =
-    options.targetPath == null
-      ? path.join(projectDir, THEME_TEMPLATE_DEFAULT_PATH)
-      : path.resolve(cwd, targetPath);
+  // Read as every theme command reads a path it writes; a backslash
+  // separates folders on every platform.
+  const {projectDir, relative: fromRoot} = projectWritePath(
+    cwd,
+    options.targetPath == null ? undefined : String(targetPath),
+    THEME_TEMPLATE_DEFAULT_PATH,
+  );
   let resolved;
   try {
-    resolved = assertWithin(
-      path.relative(projectDir, typed) || '.',
-      projectDir,
-      {
-        label: 'theme template path',
-      },
-    );
+    resolved = assertWithin(fromRoot, projectDir, {
+      label: 'theme template path',
+    });
   } catch (err) {
     if (err instanceof PathSafetyError) {
       throw new AstryxError(
         // The path as typed, not as read from the project root.
-        err.message.replace(
-          `"${path.relative(projectDir, typed) || '.'}"`,
-          `"${targetPath}"`,
-        ),
+        err.message.replace(`"${fromRoot}"`, `"${targetPath}"`),
         [
           {
             // No path: the template at the project root.

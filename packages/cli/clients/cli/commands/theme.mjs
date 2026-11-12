@@ -58,6 +58,7 @@ import {themeRemove} from '../../../api/theme/remove/remove.mjs';
 import {themeUse} from '../../../api/theme/use/use.mjs';
 import {themeEject} from '../../../api/theme/eject/eject.mjs';
 import {
+  OUTSIDE_PROJECT_DEPRECATION,
   OUTSIDE_PROJECT_WARNING,
   themeTemplate,
 } from '../../../api/theme/template/template.mjs';
@@ -1531,12 +1532,31 @@ function registerThemeCommands(theme, program, docs, words) {
       }
 
       // Outside a project the template is written here, as released CLIs
-      // did, with a warning on stderr (text and --json alike).
-      if (!findPackageRoot(process.cwd()))
-        process.stderr.write(`${OUTSIDE_PROJECT_WARNING}\n`);
+      // did: a deprecation, named once on stderr in text and in the
+      // envelope's meta in JSON, only when a file was written.
+      const deprecated = result.data.written && !findPackageRoot(process.cwd());
+      // The logger is silent under --json (cli-surface INV12).
+      logger.setSilent(json);
+      if (deprecated) logger.warn(OUTSIDE_PROJECT_WARNING);
       // Writes a starter theme file, or declines to overwrite one.
       if (json) {
-        jsonOut(result);
+        jsonOut(
+          deprecated
+            ? {
+                ...result,
+                meta: {
+                  deprecations: [
+                    {
+                      id: OUTSIDE_PROJECT_DEPRECATION.id,
+                      replacements: [
+                        ...OUTSIDE_PROJECT_DEPRECATION.replacements,
+                      ],
+                    },
+                  ],
+                },
+              }
+            : result,
+        );
         return NO_RESULT_SET;
       }
 

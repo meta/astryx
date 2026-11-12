@@ -1070,9 +1070,9 @@ function assertThemeSourceFile(filePath, cwd) {
  * @param {Array<{dest: string}>} writes
  * @param {string} filePath the theme source
  * @param {string} cwd
- * @param {{claimed?: Map<string, string>, rerun?: (out: string) => string, refuseUnmarked?: boolean, elsewhere?: string}} [options]
+ * @param {{claimed?: Map<string, string>, rerun?: (out: string | null) => string, refuseUnmarked?: boolean, elsewhere?: string}} [options]
  *   `claimed`: outputs written earlier in this run, by the source that wrote
- *   them; `rerun`: this build's command with another --out;
+ *   them; `rerun`: this build's command with another --out, or without one;
  *   `elsewhere`: the option that moves the outputs
  */
 function assertOutputsReplaceable(
@@ -1085,17 +1085,21 @@ function assertOutputsReplaceable(
   const sourceKey = outputKey(filePath);
   const seen = new Set();
   let warnedOtherSource = false;
+  // The same build without --out, with its other options.
   const beside = {
-    name: formatCliCommand(`theme build ${shellWord(rel(filePath))}`, cwd),
+    name: rerun
+      ? rerun(null)
+      : formatCliCommand(`theme build ${shellWord(rel(filePath))}`, cwd),
     reason: 'write the outputs beside this source',
   };
   // A folder the theme editor made holds that theme's outputs only: another
   // source's outputs there would sit beside its settings as if they were
-  // its own. The editor's own source builds there as always.
+  // its own. A source inside the folder builds there as always.
   if (refuseUnmarked && writes.length) {
-    const dir = path.dirname(writes[0].dest);
+    const dir = path.resolve(path.dirname(writes[0].dest));
     const record = editorThemeRecord(dir);
-    if (record && path.resolve(path.dirname(filePath)) !== path.resolve(dir))
+    const inside = !path.relative(dir, path.resolve(filePath)).startsWith('..');
+    if (record && !inside)
       throw new AstryxError(
         `${rel(dir) || '.'} is a theme the theme editor made (${record} is beside it), so the build does not write another theme's outputs there. Pick another ${elsewhere}.`,
         [beside],
@@ -1165,15 +1169,7 @@ function assertOutputsReplaceable(
     } else if (otherSource) {
       throw new AstryxError(
         `${rel(write.dest)} is the build output of another theme source, ${otherSource}, so this build does not replace it. Pick another ${elsewhere}.`,
-        [
-          {
-            name: formatCliCommand(
-              `theme build ${shellWord(rel(filePath))}`,
-              cwd,
-            ),
-            reason: 'write the outputs beside this source',
-          },
-        ],
+        [beside],
         ERROR_CODES.ERR_FILE_EXISTS,
       );
     }
@@ -1191,7 +1187,12 @@ function assertOutputsReplaceable(
         `${rel(write.dest)} is a file this build did not write (it has no build header: your own file, another tool's, or an output from a CLI before 0.6.7), so the build does not replace it. Pick another ${elsewhere}.`,
         [
           ...(free && rerun
-            ? [{name: rerun(rel(free)), reason: 'a path no file holds yet'}]
+            ? [
+                {
+                  name: rerun(rel(free)),
+                  reason: 'a path where no output of this build exists yet',
+                },
+              ]
             : []),
           beside,
         ],
@@ -1202,8 +1203,10 @@ function assertOutputsReplaceable(
 }
 
 /**
- * A stylesheet path beside the first output where no output of this build
- * exists yet (`brand-2.css` and its `.js` and `.d.ts`), or null.
+ * An --out path where no output of this build exists yet, or null. The
+ * stylesheet and its `.css.d.ts` follow the name --out gives; the module and
+ * its types are named after the theme, so a new name beside them (`brand-2.css`)
+ * helps only when those are free, else a new folder (`brand-2/brand.css`).
  * @param {Array<{dest: string}>} writes the stylesheet first
  * @returns {string | null}
  */
@@ -1212,16 +1215,21 @@ function freeOutPath(writes) {
   if (!css) return null;
   const dir = path.dirname(css);
   const stem = path.basename(css).replace(/\.css$/i, '');
+  /** Whether a write set (each output moved by `move`) touches any file. */
+  const blocked = (/** @type {(dest: string) => string} */ move) =>
+    writes.some(w => fs.existsSync(move(w.dest)));
   for (let n = 2; n < 100; n += 1) {
     const next = `${stem}-${n}`;
-    const taken = writes.some(w => {
-      const base = path.basename(w.dest);
-      return (
-        base.startsWith(stem) &&
-        fs.existsSync(path.join(dir, next + base.slice(stem.length)))
-      );
-    });
-    if (!taken) return path.join(dir, `${next}.css`);
+    // Only the stylesheet and its types follow --out's name.
+    const renamed = (/** @type {string} */ dest) =>
+      dest === css || dest === `${css}.d.ts`
+        ? path.join(dir, next + path.basename(dest).slice(stem.length))
+        : dest;
+    if (!blocked(renamed)) return path.join(dir, `${next}.css`);
+    const folder = (/** @type {string} */ dest) =>
+      path.join(dir, next, path.basename(dest));
+    if (!fs.existsSync(path.join(dir, next)) && !blocked(folder))
+      return path.join(dir, next, path.basename(css));
   }
   return null;
 }
@@ -4267,7 +4275,7 @@ async function themeBuildInternal(
   if (!options.check) {
     confineOutputs(writes, writeRoot, options.out ? OUT_REMEDY : SOURCE_REMEDY);
     // prettier-ignore
-    const rerun = (/** @type {string} */ out) => formatCliCommand(['theme', 'build', path.relative(cwd, filePath), '--out', out, ...(options.iconsSpecifier ? ['--icons-specifier', options.iconsSpecifier] : [])].map(shellWord).join(' '), cwd);
+    const rerun = (/** @type {string | null} */ out) => formatCliCommand(['theme', 'build', path.relative(cwd, filePath), ...(out == null ? [] : ['--out', out]), ...(options.iconsSpecifier ? ['--icons-specifier', options.iconsSpecifier] : [])].map(shellWord).join(' '), cwd);
     // A header-less file at the default paths beside the source is an output
     // of a CLI before 0.6.7, which the build has always replaced. A path that
     // --out names may hold anything, so there only build outputs are replaced.

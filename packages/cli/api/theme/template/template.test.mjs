@@ -276,3 +276,19 @@ describe('themeTemplate() from a folder inside the project', () => {
     ).toThrow(/"\.\.\/\.\.\/\.\.\/out\.ts": resolves outside the project root/);
   });
 });
+
+describe('themeTemplate() paths with a backslash', () => {
+  it('reads a backslash as a folder separator, as eject does', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-template-bs-'));
+    try {
+      fs.writeFileSync(path.join(dir, 'package.json'), '{}');
+      fs.mkdirSync(path.join(dir, 'themes'));
+      const r = themeTemplate({cwd: dir, targetPath: 'themes\\x.theme.ts'});
+      expect(r.data.path).toBe(path.join('themes', 'x.theme.ts'));
+      expect(fs.existsSync(path.join(dir, 'themes', 'x.theme.ts'))).toBe(true);
+      expect(fs.readdirSync(dir)).not.toContain('themes\\x.theme.ts');
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
+});

@@ -608,6 +608,33 @@ the known gaps.
 | rollback  | Restore the `*` peer and the check's exception from the final-patch baseline                                                                                                                                                                                                                                                                                                                               |
 | state     | `pending` — lands in 0.8.0, the next minor, with its `[breaking]` Changeset                                                                                                                                                                                                                                                                                                                                |
 
+### DEP-0030 — `theme template` outside a project
+
+| Field            | Value                                                                                                                                                                                                                      |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| id               | `DEP-0030`                                                                                                                                                                                                                 |
+| cleanup          | `CLN-0030`                                                                                                                                                                                                                 |
+| package          | `@astryxdesign/cli`                                                                                                                                                                                                        |
+| surface          | `astryx theme template` and `themeTemplate()` run in a folder with no package.json at or above it                                                                                                                          |
+| old contract     | The template is written in the working folder, as when that folder is a project root                                                                                                                                       |
+| replacement      | Run `theme template` inside a project, or run `npm init -y` in the folder first                                                                                                                                            |
+| warning          | Human mode: one stderr line per invocation naming DEP-0030 and the migration step, only when the file is written. JSON mode: `meta.deprecations` entry `{id: 'DEP-0030', replacements: ['npm init -y', 'theme template']}` |
+| migration        | `npm init -y` in the folder, or run the command from the project                                                                                                                                                           |
+| codemod          | None: no source changes                                                                                                                                                                                                    |
+| downstream       | None: maintained docs teach `theme template` inside a project                                                                                                                                                              |
+| direct authority | `spec:AST-050` (application themes)                                                                                                                                                                                        |
+| state            | `deprecated`                                                                                                                                                                                                               |
+
+### CLN-0030 — Refuse `theme template` outside a project
+
+| Field     | Value                                                                                                                                                   |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| id        | `CLN-0030`                                                                                                                                              |
+| lifecycle | `DEP-0030`                                                                                                                                              |
+| delta     | `theme template` outside a project fails with `ERR_PROJECT_REQUIRED` and names `npm init -y`; the warning and the `meta.deprecations` entry are removed |
+| rollback  | Write the template in the working folder again, with the warning, from the final-patch baseline                                                         |
+| state     | `pending` — lands in the next minor with its `[breaking]` Changeset                                                                                     |
+
 ## Change coupling
 
 A change to any of the following requires this record to be re-read, and
