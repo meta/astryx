@@ -45,6 +45,7 @@ import {
   parseColor,
   ratio,
 } from './_color.mjs';
+import {splitTop} from './_css.mjs';
 import {P, wordTable} from './_tables.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 import {sha256} from '../../foundation/render/source-block.mjs';
@@ -246,6 +247,7 @@ export function tempFor(file) {
  * @property {ContrastCheck[]} contrast
  * @property {number} vibrancy - The generator's vibrancy, 0 to 100.
  * @property {Record<string, Partial<Record<Mode, string>>>} exact - Main tokens the theme sets exactly, the value per mode: the dial's fill gives way to them.
+ * @property {Record<string, string>} [unread] - Main tokens the theme sets exactly to a value the editor cannot read as one color in some mode, as written: the text on them is not picked for that value.
  * @property {string[]} notes - What the config writer kept or replaced of a hand edit.
  * @property {Record<string, Partial<Record<Mode, StopRef>>> | null} lift - Lifted secondary text per background token of LIFT_PARTS (the accent tint, the neutral track), per mode, from the neutral color; null without one.
  */
@@ -769,44 +771,76 @@ function tools(candidate, data, base) {
   };
   const neutral = Boolean(/** @type {any} */ (candidate.palette).neutral);
   /**
+   * The whole-theme value a token setting gives in a mode, as written, or
+   * undefined.
+   * @param {string} token @param {Mode} m
+   */
+  const settingOf = (token, m) =>
+    [...data.settings]
+      .reverse()
+      .find(
+        s =>
+          s.source === 'token' &&
+          s.thing === token &&
+          !s.on &&
+          !s.when &&
+          !s.state &&
+          (!s.mode || s.mode === m),
+      )?.value;
+  /**
+   * The fixed color a value gives in a mode, as written when it is one
+   * already, or null: `light-dark()` takes its side for the mode, and a
+   * `var()` reads the theme's own setting, else the base theme's value.
+   * @param {unknown} value @param {Mode} m @param {Set<string>} [seen]
+   * @returns {string | null}
+   */
+  const colorIn = (value, m, seen = new Set()) => {
+    const v = String(value ?? '').trim();
+    if (!v) return null;
+    if (parseColor(v)) return v;
+    const fn = /^([a-z-]+)\((.*)\)$/is.exec(v);
+    if (!fn) return null;
+    const name = fn[1].toLowerCase();
+    if (name === 'light-dark') {
+      const halves = splitTop(fn[2], ',');
+      return halves.length === 2
+        ? colorIn(halves[m === 'dark' ? 1 : 0], m, seen)
+        : null;
+    }
+    if (name !== 'var') {
+      // A color function of tokens (a color-mix() of two) reads each one.
+      const put = v.replace(
+        /var\(\s*(--[a-z0-9-]+)\s*\)/gi,
+        (whole, t) => colorIn(`var(${t})`, m, new Set(seen)) ?? whole,
+      );
+      return put !== v && parseColor(put) ? put : null;
+    }
+    const [ref, ...rest] = splitTop(fn[2], ',');
+    const t = ref.trim();
+    if (!/^--[a-z0-9-]+$/i.test(t) || seen.has(t)) return null;
+    seen.add(t);
+    const own = settingOf(t, m);
+    const read =
+      own != null ? colorIn(own, m, seen) : colorIn(base?.[m]?.[t], m, seen);
+    return read ?? (rest.length ? colorIn(rest.join(','), m, seen) : null);
+  };
+  /**
    * The exact whole-theme color a token setting gives in a mode, or null.
    * @param {string} token @param {Mode} m
    */
   const exactOf = (token, m) => {
-    const v = [...data.settings]
-      .reverse()
-      .find(
-        s =>
-          s.source === 'token' &&
-          s.thing === token &&
-          !s.on &&
-          !s.when &&
-          !s.state &&
-          (!s.mode || s.mode === m),
-      )?.value;
+    const v = colorIn(settingOf(token, m), m);
     const rgb = v == null ? null : parseColor(v);
-    return rgb && alphaOf(v) >= 1 ? hex(rgb) : null;
+    return rgb && v != null && alphaOf(v) >= 1 ? hex(rgb) : null;
   };
   /**
    * The exact whole-theme color a token setting gives in a mode, see-through
-   * or not, as written (a hex keeps its alpha digits); null when there is
-   * none or it is not a fixed color.
+   * or not, as written (a hex keeps its alpha digits; a `light-dark()` or a
+   * `var()` gives the color it reads in the mode); null when there is none
+   * or it is not a fixed color.
    * @param {string} token @param {Mode} m
    */
-  const rawOf = (token, m) => {
-    const v = [...data.settings]
-      .reverse()
-      .find(
-        s =>
-          s.source === 'token' &&
-          s.thing === token &&
-          !s.on &&
-          !s.when &&
-          !s.state &&
-          (!s.mode || s.mode === m),
-      )?.value;
-    return v != null && parseColor(v) ? String(v).trim() : null;
-  };
+  const rawOf = (token, m) => colorIn(settingOf(token, m), m);
   /**
    * Which column of a `[light, dark]` mapping a mode takes: the light one
    * on a light page and the dark one on a dark page, by the page the theme
@@ -907,6 +941,7 @@ function tools(candidate, data, base) {
     at,
     ref,
     exactOf,
+    settingOf,
     rawOf,
     side,
     solid,
@@ -1769,7 +1804,7 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
   const {config} = plan;
   const candidate = generate(config, paletteFiles(slug).config);
   const t = tools(candidate, data, base);
-  const {stops, at, ref, exactOf, rawOf, side, solid, surfaces} = t;
+  const {stops, at, ref, exactOf, rawOf, settingOf, side, solid, surfaces} = t;
   const modes = modesOf(data);
   /** @type {PaletteMapping['tokens']} */
   const tokens = {};
@@ -1777,6 +1812,8 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
   const checks = [];
   /** @type {PaletteMapping['exact']} */
   const exact = {};
+  /** @type {Record<string, string>} */
+  const unread = {};
   const has = (/** @type {string} */ k) => k in tokenDefaults;
   /** A token the theme sets exactly in any mode: no check speaks for it. @param {string} k */
   const setExactly = k =>
@@ -1921,8 +1958,22 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
     for (const m of modes) {
       const v = rawOf(names.fill, m);
       if (v) exactFill[m] = v;
+      else if (settingOf(names.fill, m) != null)
+        unread[names.fill] = String(settingOf(names.fill, m)).trim();
     }
-    if (Object.keys(exactFill).length) exact[names.fill] = exactFill;
+    if (Object.keys(exactFill).length)
+      exact[names.fill] = Object.fromEntries(
+        Object.entries(exactFill).map(([m, v]) => {
+          // A var() is named with the color it reads, so the note says
+          // which color the text was picked for.
+          const written = String(
+            settingOf(names.fill, /** @type {Mode} */ (m)) ?? '',
+          ).trim();
+          const rgb = parseColor(v);
+          const color = rgb && alphaOf(v) >= 1 ? hex(rgb) : v;
+          return [m, /var\(/i.test(written) ? `${written} = ${color}` : v];
+        }),
+      );
 
     /** @type {Partial<Record<Mode, StopRef>>} */
     const fill = {};
@@ -2265,6 +2316,7 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
     lift,
     vibrancy: config.vibrancy ?? VIBRANCY_DEFAULT,
     exact,
+    unread,
     notes: [
       ...plan.notes,
       ...(paletteEdited(cwd, slug)
@@ -2394,7 +2446,13 @@ export function paletteNotes(pal, dial, slug, modes = ['light', 'dark']) {
     notes.push(
       `${token} uses your exact setting (${shown}), not the generated ${dial} shade: an exact setting wins${dial === 'neutral' ? '' : '; the text on it is picked to read on your color'}${dial === 'accent' ? ', and the focus ring keeps following it' : ''}`,
     );
-  } else if (main) {
+  }
+  const unread = pal.unread?.[token];
+  if (unread) {
+    notes.push(
+      `${token} keeps your exact setting (${unread}), which the editor cannot read as one color${exact ? ' in every mode' : ''}: an exact setting wins, so the generated ${dial} shade does not show${dial === 'neutral' ? '' : ' there, and the text on it is not checked against your color: set a fixed color, or set the text color on it exactly'}`,
+    );
+  } else if (!exact && main) {
     /** @param {Mode} m */
     const part = m =>
       main[m].exact

@@ -529,7 +529,7 @@ export function storedProblems(ctx, slug, data, skip = '') {
         ctx.C.propsReading(s.thing),
         multipliedTokens(ctx.project).has(s.thing),
       );
-      checkCycle(s.thing, s.value, TOKENS, data, ctx.project.cwd);
+      checkCycle(s.thing, s.value, TOKENS, data, ctx.project.cwd, s);
     } catch (e) {
       found.push({
         setting: s,
@@ -935,22 +935,47 @@ function isShadow(value) {
 
 /**
  * Refuse a value that would read the token itself, through other tokens.
+ * A token set on a part (`--on`) overrides only inside that part: there
+ * it reads the part's own settings first and the whole theme's after, and
+ * a whole-theme value never reads a part's. So a loop counts only when it
+ * closes within one scope: a part token that reads a whole-theme token
+ * reads the inherited value, which is already resolved.
  * @param {string} thing
  * @param {string} value
  * @param {Record<string, unknown>} TOKENS
  * @param {import('./_settings.mjs').ThemeData} data
  * @param {string} [cwd] the project, whose `<slug>.theme.ts` tokens win
  *   over the settings and are read too
+ * @param {{on?: string, state?: string, when?: string}} [scope] where
+ *   the token is set; none for the whole theme
  */
-function checkCycle(thing, value, TOKENS, data, cwd) {
+function checkCycle(thing, value, TOKENS, data, cwd, scope = {}) {
   const own = cwd ? ownSourceTokenValues(cwd, data.name) : {};
+  const on = scope.on ?? null;
+  const settings = [...data.settings].reverse();
+  /**
+   * The token's value set on the part, or undefined: a setting with the
+   * same state and variant wins over the part's plain one.
+   * @param {string} t
+   */
+  const partValue = t => {
+    if (on == null) return undefined;
+    const onPart = settings.filter(
+      s => s.source === 'token' && s.thing === t && s.on === on,
+    );
+    const same = onPart.find(
+      s =>
+        (s.state ?? null) === (scope.state ?? null) &&
+        (s.when ?? null) === (scope.when ?? null),
+    );
+    return (same ?? onPart.find(s => s.state == null && s.when == null))?.value;
+  };
   /** @param {string} t */
-  const valueOf = t =>
+  const globalValue = t =>
     String(
-      (t !== thing && Object.hasOwn(own, t) ? own[t] : null) ??
-        [...data.settings]
-          .reverse()
-          .find(s => s.source === 'token' && s.thing === t && !s.on)?.value ??
+      (Object.hasOwn(own, t) ? own[t] : null) ??
+        settings.find(s => s.source === 'token' && s.thing === t && !s.on)
+          ?.value ??
         TOKENS[t] ??
         '',
     );
@@ -959,25 +984,40 @@ function checkCycle(thing, value, TOKENS, data, cwd) {
   /** @type {string[]} */
   const path = [];
   const seen = new Set();
-  /** @param {string} t @returns {boolean} */
-  const reaches = t => {
-    if (t === thing) return true;
-    if (seen.has(t)) return false;
-    seen.add(t);
+  /**
+   * Whether `t`, read in the part (`inPart`) or the whole theme, reaches
+   * the token being set in its own scope.
+   * @param {string} t @param {boolean} inPart @returns {boolean}
+   */
+  const reaches = (t, inPart) => {
+    // The token being set is reached only in the scope it is set in.
+    if (t === thing && inPart === (on != null)) return true;
+    const part = inPart ? partValue(t) : undefined;
+    const local = part !== undefined;
+    const key = `${local ? 'part' : 'theme'}:${t}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
     path.push(
-      Object.hasOwn(own, t) ? `${t} (set in ${data.name}.theme.ts)` : t,
+      local
+        ? `${t} (on ${on})`
+        : Object.hasOwn(own, t)
+          ? `${t} (set in ${data.name}.theme.ts)`
+          : t,
     );
-    if (refs(valueOf(t)).some(reaches)) return true;
+    if (
+      refs(local ? String(part) : globalValue(t)).some(r => reaches(r, local))
+    )
+      return true;
     path.pop();
     return false;
   };
-  if (refs(value).some(reaches))
+  if (refs(value).some(r => reaches(r, on != null)))
     refuse(
       E.ERR_THEME_BAD_VALUE,
       `${thing} would read itself${path.length ? ` through ${path.join(', ')}` : ''}, so it would have no value at all.`,
       {
         run: [
-          `${P} set ${data.name} ${thing} <a value that does not read ${thing}>`,
+          `${P} set ${data.name} ${thing} <a value that does not read ${thing}>${on != null ? ` --on ${on}` : ''}`,
         ],
       },
     );
@@ -2718,7 +2758,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       C.propsReading(thing),
       multipliedTokens(ctx.project).has(thing),
     );
-    checkCycle(thing, v, TOKENS, data, ctx.project.cwd);
+    checkCycle(thing, v, TOKENS, data, ctx.project.cwd, s);
     // With no part data, what reads the token is unknown: save, unchecked.
     if (ctx.unchecked) return s;
     const parts = partsOf(ctx, s);
