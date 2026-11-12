@@ -45,9 +45,12 @@ import {
 } from '../../../../api/theme-edit/theme-edit.mjs';
 import {
   builtInThemes,
+  dialValueFits,
+  newFlagList,
   editorCompileProblem,
   editorThemeHold,
   editorThemeRefusal,
+  showSections,
 } from '../../../../api/theme-edit/_adapter.mjs';
 import {registerThemeSubcommands} from '../theme.mjs';
 import {doc as groupDoc} from '../experimental-theme.doc.mjs';
@@ -348,27 +351,82 @@ const changeOptions = o => ({
  * @param {any} o
  * @returns {Record<string, string | string[]>}
  */
-function newSettings(o) {
+function newSettings(o, themeName = '<theme>') {
   /** @type {Record<string, string | string[]>} */
   const out = {};
+  // --like given two values is refused like a dial given two.
+  const likes = flagValues('like');
+  if (new Set(likes).size > 1) {
+    // The suggestion keeps the first built-in theme given, or drops --like.
+    const like = likes
+      .map(l => l.toLowerCase())
+      .find(l => builtInThemes().includes(l));
+    throw new AstryxError(
+      `--like was given twice (${likes.join(', ')}); give it once. Nothing was changed.`,
+      [
+        {
+          name: cmd(`${EDITOR} new ${themeName}${newFlagLine({...o, like})}`),
+          reason: like
+            ? 'do this instead: the first built-in theme given'
+            : 'do this instead: none of them is a built-in theme',
+        },
+      ],
+      ERROR_CODES.ERR_INVALID_ARGUMENT,
+    );
+  }
   for (const opt of newDoc.options ?? []) {
     if (opt.param !== 'options.settings') continue;
-    const name = opt.flag.split(' ')[0].slice(2);
-    const value = o[name.replace(/-([a-z])/g, (_, c) => c.toUpperCase())];
+    const flag = opt.flag.split(' ')[0].slice(2);
+    const key = flag.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+    const value = o[key];
     if (value == null) continue;
     // A flag given twice: headings takes one value per axis (a weight and a
     // tracking); any other flag given two different values is refused.
-    const all = flagValues(name);
-    if (name === 'headings' && all.length > 1) out[name] = all;
-    else if (new Set(all).size > 1)
+    const all = flagValues(flag);
+    if (flag === 'headings' && all.length > 1) out[flag] = all;
+    else if (new Set(all).size > 1) {
+      // The suggestion keeps the first value the dial takes, or drops it.
+      const fits = all.find(v => dialValueFits(flag, v));
       throw new AstryxError(
-        `--${name} was given twice (${all.join(', ')}); give it once. Nothing was changed.`,
-        [],
+        `--${flag} was given twice (${all.join(', ')}); give it once. Nothing was changed.`,
+        [
+          {
+            name: cmd(
+              `${EDITOR} new ${themeName}${newFlagLine({...o, [key]: fits})}`,
+            ),
+            reason: fits
+              ? 'do this instead: the first value it takes'
+              : `do this instead: none of them is a value --${flag} takes`,
+          },
+        ],
         ERROR_CODES.ERR_INVALID_ARGUMENT,
       );
-    else out[name] = String(value);
+    } else out[flag] = String(value);
   }
   return out;
+}
+
+/**
+ * The options a `new` was given, as flags for a suggested command, so a
+ * corrected command makes the theme that was asked for.
+ * @param {any} o
+ * @returns {string}
+ */
+function newFlagLine(o) {
+  /** @type {Record<string, string | string[]>} */
+  const settings = {};
+  for (const opt of newDoc.options ?? []) {
+    if (opt.param !== 'options.settings') continue;
+    const flag = opt.flag.split(' ')[0].slice(2);
+    const value = o[flag.replace(/-([a-z])/g, (_, c) => c.toUpperCase())];
+    if (value != null) settings[flag] = value;
+  }
+  const parts = newFlagList(
+    o.like == null ? undefined : String(o.like),
+    settings,
+    Boolean(o.png),
+  );
+  return parts.length ? ` ${parts.join(' ')}` : '';
 }
 
 /**
@@ -720,36 +778,51 @@ export function registerExperimentalTheme(group, program) {
           () => {
             // A word after the name is never dropped without a word.
             const extra = (cmd?.args ?? []).slice(1);
-            if (extra.length)
+            if (extra.length) {
+              // Words after `--` that are `--<option> <value>` pairs new
+              // takes become options; the other words were most likely
+              // part of the name. The options given stay in the suggestion.
+              /** @type {Record<string, unknown>} */
+              const given = {...o};
+              /** @type {string[]} */
+              const words = [];
+              for (let i = 0; i < extra.length; i++) {
+                const w = String(extra[i]);
+                if (w.startsWith('--')) {
+                  const key = w
+                    .slice(2)
+                    .replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+                  if (extra[i + 1] != null && given[key] == null)
+                    given[key] = extra[++i];
+                  continue;
+                }
+                words.push(w);
+              }
+              const builtIn =
+                words.length && builtInThemes().includes(words[0]);
+              if (builtIn && given.like == null) given.like = words[0];
+              const fixed = builtIn
+                ? name
+                : [name, ...words]
+                    .join('-')
+                    .toLowerCase()
+                    .replace(/[^a-z0-9-]+/g, '-');
               throw new AstryxError(
                 `new takes one theme name; "${extra.join(' ')}" is extra. For a base theme, use --like. Nothing was changed.`,
-                // A built-in theme after the name is the base; other words
-                // were most likely part of the name.
-                builtInThemes().includes(extra[0])
-                  ? [
-                      {
-                        name: `${EDITOR} new ${name} --like ${extra[0]}`,
-                        reason: 'do this instead',
-                      },
-                    ]
-                  : [
-                      {
-                        name: `${EDITOR} new ${quoteCommandArgument(
-                          [name, ...extra]
-                            .join('-')
-                            .toLowerCase()
-                            .replace(/[^a-z0-9-]+/g, '-'),
-                        )}`,
-                        reason: 'do this instead',
-                      },
-                    ],
+                [
+                  {
+                    name: `${EDITOR} new ${quoteCommandArgument(fixed)}${newFlagLine(given)}`,
+                    reason: 'do this instead',
+                  },
+                ],
                 ERROR_CODES.ERR_INVALID_ARGUMENT,
               );
+            }
             return themeEditNew(name, {
               cwd: process.cwd(),
               like: o.like,
               png: o.png ?? false,
-              settings: newSettings(o),
+              settings: newSettings(o, name),
             });
           },
           r => [
@@ -799,7 +872,11 @@ export function registerExperimentalTheme(group, program) {
               {
                 suggestions: [
                   {
-                    name: `${EDITOR} show ${name} --section ${flagValues('section')[0]}`,
+                    // The first section given that `show` takes, else the
+                    // whole sheet.
+                    name: cmd(
+                      `${EDITOR} show ${name}${(sec => (sec ? ` --section ${sec}` : ''))(flagValues('section').find(v => showSections().includes(v)))}`,
+                    ),
                     reason: 'do this instead',
                   },
                 ],
@@ -1025,14 +1102,16 @@ export function registerExperimentalTheme(group, program) {
         );
         if (themeFlags.length > 1)
           return cliError('--theme is given twice; give it once.', {
-            suggestions: [{name: `${HOW} --help`, reason: 'give --theme once'}],
+            suggestions: [
+              {name: cmd(`${HOW} --help`), reason: 'give --theme once'},
+            ],
             code: ERROR_CODES.ERR_INVALID_ARGUMENT,
           });
         if (listFlags.length > 1)
           return cliError('--list is given twice; give it once.', {
             suggestions: [
               {
-                name: `${HOW} --list tokens accent`,
+                name: cmd(`${HOW} --list tokens accent`),
                 reason: 'one list, then the filter',
               },
             ],
