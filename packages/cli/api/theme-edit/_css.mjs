@@ -58,14 +58,34 @@ let names = null;
 export function cssProperties() {
   if (names) return names;
   const mdn = mdnProperties();
+  const current = syntaxPatches().properties;
   names = new Set([
     ...Object.keys(csstree().lexer.properties).filter(
-      k => !k.startsWith('-') && mdn[k] && mdn[k].status !== 'obsolete',
+      k =>
+        !k.startsWith('-') &&
+        mdn[k] &&
+        // MDN marks a renamed property obsolete (font-stretch is font-width
+        // now); one the current specifications still define, as browsers
+        // ship it, stays.
+        (mdn[k].status !== 'obsolete' || k in current),
     ),
     ...NOT_IN_MDN_YET,
   ]);
   return names;
 }
+
+/**
+ * The current specifications' grammar, as patches to css-tree's: the
+ * ranges MDN's data leaves out (`line-height` takes `<number [0,∞]>`).
+ * @returns {{properties: Record<string, string>, types: Record<string, string>, atrules: Record<string, unknown>}}
+ */
+const syntaxPatches = () =>
+  require('@csstools/css-syntax-patches-for-csstree').next;
+
+/** @type {any} */
+let patched = null;
+/** css-tree's lexer with the current specifications' grammar. */
+const currentLexer = () => (patched ??= csstree().fork(syntaxPatches()).lexer);
 
 /** What a var() or env() may stand for while the rest of a value is matched. */
 const VAR_STANDS_FOR = ['0', '1px', '1ms', 'red', 'ease', 'serif', '0 0 red'];
@@ -178,7 +198,8 @@ function matchWith(value, match) {
 /**
  * Whether a value that matches a property's grammar is still below a range
  * the specs set and css-tree's data does not carry: a `<line-width>` (a
- * border or outline width) and a duration are never negative.
+ * border or outline width) and a duration are never negative, nor is any
+ * number the current specifications' grammar ranges at 0 or more.
  * @param {string} property
  * @param {string} value
  */
@@ -208,6 +229,19 @@ export function belowRange(property, value) {
     numbersIn(ast).some(n => n.value < 0 && ['s', 'ms'].includes(n.unit))
   )
     below = true;
+  // A negative number the current grammar's range refuses (`line-height
+  // -1`, `gap -2px`).
+  // Only the sign decides: the same value with every number made positive
+  // must match the current grammar.
+  if (!below && numbersIn(ast).some(n => n.value < 0)) {
+    const lexer = currentLexer();
+    const positive = parse(value.replace(/(^|[\s(,/])-(?=\.?\d)/g, '$1'), {
+      context: 'value',
+    });
+    below =
+      Boolean(lexer.matchProperty(property, ast).error) &&
+      !lexer.matchProperty(property, positive).error;
+  }
   return below;
 }
 
@@ -609,8 +643,13 @@ export function fontShorthandParts(value) {
       'font-style',
       'font-variant-caps',
       'font-stretch',
+      'font-size',
     ])
       if (keywordsOf(prop).includes(word)) return {[prop]: word};
+  // One size (1rem, 120%) or one weight (700) is that longhand.
+  if (!/[\s,]/.test(word))
+    for (const prop of ['font-size', 'font-weight'])
+      if (matchValue(prop, value.trim())) return {[prop]: value.trim()};
   /** @type {any} */
   let ast;
   try {

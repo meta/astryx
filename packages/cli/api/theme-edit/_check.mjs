@@ -424,9 +424,13 @@ function isFixedColor(value) {
   if (/^var\(/.test(v)) return true;
   if (SYSTEM_COLORS.includes(v)) return true;
   // Percentages that add up to 0 leave color-mix() no color.
+  // A share is 0% to 100%.
   const zeroMix = (/** @type {string[]} */ colors) => {
     const pcts = colors.map(c => mixSide(c).pct);
-    return pcts.every(p => p != null) && pcts.every(p => p === 0);
+    return (
+      pcts.some(p => p != null && (p < 0 || p > 100)) ||
+      (pcts.every(p => p != null) && pcts.every(p => p === 0))
+    );
   };
   const inner = (/** @type {string} */ fn) =>
     splitTop(v.slice(fn.length + 1, -1), ',').map(x => x.trim());
@@ -600,7 +604,10 @@ function propertyProblem(prop, value) {
   if (!known || COLOR_PROPS.test(prop)) return null;
   if (matchValue(prop, v))
     return belowRange(prop, v)
-      ? {takes: 'a value of 0 or more', near: null}
+      ? {
+          takes: 'a value of 0 or more',
+          near: v.replace(/(^|[\s(,/])-(?=\.?\d)/g, '$1'),
+        }
       : null;
   // Only keywords the property takes on their own are offered; the same
   // word without its dashes or a trailing -ed/-s comes first (no-wrap is

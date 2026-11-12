@@ -2260,3 +2260,75 @@ describe('colors13', () => {
     expect(odd.message).toContain('give the mixed color itself');
   });
 });
+
+describe('colors14', () => {
+  it('suggests longhands set takes, and refuses negatives the current grammar does', async () => {
+    const r = await refusal(() =>
+      themeEditSet('p', 'font', 'condensed', {cwd, on: 'card'}),
+    );
+    const run = r.run.find(x => /font-stretch condensed --on card$/.test(x));
+    expect(run).toBeTruthy();
+    await themeEditSet('p', 'font-stretch', 'condensed', {cwd, on: 'card'});
+    await themeEditUndo('p', {cwd, thing: 'font-stretch', on: 'card'});
+    for (const [prop, value] of [
+      ['line-height', '-1'],
+      ['line-height', '-10px'],
+      ['gap', '-2px'],
+    ]) {
+      const bad = await refusal(() =>
+        themeEditSet('p', prop, value, {cwd, on: 'card'}),
+      );
+      expect(bad.code, `${prop} ${value}`).toBe('ERR_THEME_BAD_VALUE');
+      expect(bad.run[0], prop).toMatch(new RegExp(` set p ${prop} \\d`));
+    }
+    await themeEditSet('p', 'margin', '-4px', {cwd, on: 'card'});
+    await themeEditUndo('p', {cwd, thing: 'margin', on: 'card'});
+    for (const [value, prop] of [
+      ['small', 'font-size'],
+      ['x-large', 'font-size'],
+      ['larger', 'font-size'],
+      ['1rem', 'font-size'],
+      ['700', 'font-weight'],
+    ]) {
+      const runs = (
+        await refusal(() => themeEditSet('p', 'font', value, {cwd, on: 'card'}))
+      ).run;
+      expect(
+        runs.some(x => x.includes(` ${prop} ${value} --on card`)),
+        value,
+      ).toBe(true);
+      expect(runs.join(' '), value).not.toContain(`font-family ${value}`);
+    }
+  });
+
+  it('refuses a color-mix() share past 100%, and reads mixes, relative colors and equal halves', async () => {
+    for (const [thing, on] of [
+      ['--color-accent'],
+      ['background-color', 'card'],
+    ])
+      expect(
+        (
+          await refusal(() =>
+            themeEditSet('p', thing, 'color-mix(in srgb, red 150%, blue)', {
+              cwd,
+              ...(on ? {on} : {}),
+            }),
+          )
+        ).code,
+        thing,
+      ).toBe('ERR_THEME_BAD_VALUE');
+    const dial = await refusal(() =>
+      themeEditSet('p', 'accent', 'color-mix(in srgb, red 150%, blue)', {cwd}),
+    );
+    expect(dial.run[0]).toContain('#ff0000');
+    for (const value of ['rgb(from red r g b)', 'light-dark(red, red)']) {
+      await themeEditSet('p', 'accent', value, {cwd});
+      await themeEditUndo('p', {cwd, thing: 'accent'});
+    }
+    const lab = await refusal(() =>
+      themeEditSet('p', 'accent', 'color-mix(in lab, red, blue)', {cwd}),
+    );
+    expect(lab.run[0]).not.toContain('#7c3aed');
+    expect(lab.message).toContain('give the mixed color itself');
+  });
+});

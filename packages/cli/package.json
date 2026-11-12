@@ -130,6 +130,7 @@
     "@babel/types": "7.29.8",
     "@stylexjs/babel-plugin": "catalog:",
     "ast-types": "0.16.3",
+    "@csstools/css-syntax-patches-for-csstree": "1.1.6",
     "commander": "^12.1.0",
     "css-tree": "3.2.1",
     "ignore": "^7.0.14",

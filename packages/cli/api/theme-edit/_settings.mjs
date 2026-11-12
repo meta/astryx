@@ -2160,7 +2160,7 @@ export async function contrastProblems(ctx, data, res) {
     })(),
     ...(unchecked.length
       ? [
-          `not checked: text on or in ${unchecked.slice(0, 3).join(', ')}${unchecked.length > 3 ? ` and ${unchecked.length - 3} more` : ''}, which ${unchecked.length === 1 ? 'is' : 'are'} not a fixed color`,
+          `not checked: text on or in ${unchecked.slice(0, 3).join(', ')}${unchecked.length > 3 ? ` and ${unchecked.length - 3} more` : ''}, which the editor cannot read as one fixed color`,
         ]
       : []),
   ];

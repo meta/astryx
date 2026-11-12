@@ -66,7 +66,11 @@ const RUNNERS = {
   },
   'api/theme-edit/_css.mjs': {
     runs: 'css-tree and the MDN property data it ships, on the first CSS name or value check, so other commands do not load them',
-    sites: ['require(css-tree)', 'require(mdn-data/css/properties.json)'],
+    sites: [
+      'require(@csstools/css-syntax-patches-for-csstree)',
+      'require(css-tree)',
+      'require(mdn-data/css/properties.json)',
+    ],
   },
   'api/theme-edit/_preview.mjs': {
     runs: 'a Playwright the project has installed, or a Chrome found on the machine, to picture a preview only with --png',
