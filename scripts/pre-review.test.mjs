@@ -206,6 +206,7 @@ describe('formatReport', () => {
       'Checklist: docs/contributing/pull-requests.md#pre-review-checklist',
     );
   });
+
   it('reports a large change as advice, not as a finding', () => {
     const text = formatReport({
       base: 'origin/main',
