@@ -97,13 +97,14 @@ export interface ListItemProps extends BaseProps<HTMLLIElement> {
   description?: ReactNode;
 
   /**
-   * Content rendered before the item (icon, avatar, checkbox).
+   * Content before the label, inside the row (icon, avatar, checkbox).
    * Uses start/end naming for RTL support.
    */
   startContent?: ReactNode;
 
   /**
-   * Content rendered after the item (badge, action button, chevron).
+   * Content after the label and description, inside the row (badge, action
+   * button, chevron).
    */
   endContent?: ReactNode;
 

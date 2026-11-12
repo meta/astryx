@@ -30,6 +30,7 @@ import {
 } from '../../test-utils/base-theme-fixture.mjs';
 
 import {withRealRenders} from '../../test-utils/theme-render-stub.mjs';
+import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
 // The page renders cost seconds and these tests read settings, builds and
 // files: a stand-in renders unless a test asks for the real thing.
 vi.mock('./_preview.mjs', async importOriginal =>
@@ -40,24 +41,6 @@ vi.mock('./_preview.mjs', async importOriginal =>
 
 /** @type {string} */
 let cwd;
-
-/**
- * The error a call throws: its code, message and suggested commands.
- * @param {() => Promise<unknown>} fn
- */
-async function refusal(fn) {
-  try {
-    await fn();
-  } catch (e) {
-    const err = /** @type {any} */ (e);
-    return {
-      code: err.code,
-      message: String(err.message),
-      run: (err.suggestions ?? []).map((/** @type {any} */ s) => s.name),
-    };
-  }
-  throw new Error('expected a refusal');
-}
 
 /** @param {string} slug */
 const settingsOf = slug =>
@@ -249,12 +232,14 @@ describe('colors', () => {
     const r = await themeEditSet(
       't',
       '--color-text-primary',
-      'var(--brand-ink)',
+      // A variable the app sets (with a fallback, as one that is not a
+      // design token needs) has no fixed color.
+      'var(--brand-ink, currentcolor)',
       {cwd},
     );
     // What cannot be measured is a note, not a problem.
     expect(r.data.notes.join(' ')).toContain('not checked');
-    expect(r.data.notes.join(' ')).toContain('var(--brand-ink)');
+    expect(r.data.notes.join(' ')).toContain('currentcolor');
     await themeEditUndo('t', {cwd, thing: '--color-text-primary'});
   });
 

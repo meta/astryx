@@ -21,7 +21,7 @@ import * as stylex from '@stylexjs/stylex';
 import {Button} from '../Button/Button';
 import {Icon} from '../Icon/Icon';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
-import {themeProps} from '../utils/themeProps';
+import {pickDataAttributes, themeProps} from '../utils/themeProps';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -67,11 +67,13 @@ function renderInputClearButton({
   onClickCapture,
   xstyle,
   iconClassName,
+  ...rest
 }: InputClearButtonRenderProps): ReactNode {
   const {className: iconTargetClassName} = themeProps('input-clear-icon');
   const {className: buttonTargetClassName} = themeProps('input-clear-button');
   return (
     <Button
+      {...pickDataAttributes(rest)}
       variant="ghost"
       size="sm"
       label={label}

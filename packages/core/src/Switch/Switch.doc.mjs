@@ -43,6 +43,9 @@ const anatomy = [
 
 export const docs = {
   name: 'Switch',
+  playground: {
+    defaults: {label: 'Notify my team', value: true},
+  },
   displayName: 'Switch',
   category: 'Form Controls',
   keywords: [

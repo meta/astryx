@@ -35,18 +35,19 @@ import {
   blockMainThread,
   busyWindowProof,
   castStep,
+  controlColor,
   drag,
   flick,
   holdThenDrag,
   markElement,
+  MARKER_RGB,
   openStory,
   requireFrames,
   startBusyControl,
   startScreencast,
   toTouchEvents,
   touchDriver,
-  trackControl,
-  trackMarker,
+  trackMarkers,
   withStorybook,
   writeEvidence,
   type TouchEventStep,
@@ -767,11 +768,12 @@ async function busyProof(
   await page.waitForTimeout(300);
   const frames = await cast.stop();
   await unmark();
-  const tracked = await trackMarker(page, frames);
   // The frames on which the compositor presented a new position of the
   // control, searched for in its own strip. The control moves on every frame
   // the machine draws, whatever the row does.
-  const control = await trackControl(page, frames);
+  const [tracked, control] = await trackMarkers(page, frames, {
+    colors: [MARKER_RGB, controlColor()],
+  });
   const presented = control.filter((frame, i) => {
     const before = control[i - 1]?.box;
     return frame.box != null && before != null && frame.box.x !== before.x;
