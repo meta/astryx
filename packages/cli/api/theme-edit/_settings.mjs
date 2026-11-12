@@ -2719,7 +2719,12 @@ export async function commitTheme(
     if (['EACCES', 'EPERM', 'ENOSPC', 'EROFS', 'EIO', 'EISDIR'].includes(code))
       throw new AstryxError(
         `Could not write the theme files (${code}), so the change was undone. Free space or fix the permission, then run the command again.`,
-        [],
+        [
+          {
+            name: `ls -ld ${quoteCommandArgument(themeFiles(ctx.project.cwd, slug).dir)}`,
+            reason: 'see who owns the theme folder',
+          },
+        ],
         ERROR_CODES.ERR_WRITE_FAILED,
       );
     // The color config's own refusals already name the file and the fix.

@@ -70,6 +70,9 @@ import {
   paletteMapping,
   paletteDialOf,
   paletteNotes,
+  lockHeld,
+  refuseIfLockLost,
+  writeWhole,
 } from './_palette.mjs';
 import {renderPreview, renderSheet} from './_preview.mjs';
 import {refreshPreviewRoute} from './_preview-app.mjs';
@@ -295,10 +298,8 @@ export async function themeEditNew(name, options = {}) {
   const dirMade = !fs.existsSync(f.dir);
   fs.mkdirSync(f.dir, {recursive: true});
   const marker = path.join(f.dir, NEW_MARKER);
-  fs.writeFileSync(
-    marker,
-    JSON.stringify({pid: process.pid, started: Date.now()}),
-  );
+  // Fenced like every write under the theme lock.
+  writeWhole(marker, JSON.stringify({pid: process.pid, started: Date.now()}));
   /** @type {string | null} */
   let aside = null;
   if (damaged) {
@@ -307,6 +308,7 @@ export async function themeEditNew(name, options = {}) {
       path.join(f.dir, `${name}.settings.damaged${k > 1 ? `-${k}` : ''}.json`);
     while (fs.existsSync(at(n))) n++;
     aside = at(n);
+    refuseIfLockLost();
     fs.renameSync(f.settings, aside);
     keptNotes.push(
       `${name}.settings.json was damaged: it is kept as ${path.basename(aside)}, and the theme was made again`,
@@ -324,6 +326,9 @@ export async function themeEditNew(name, options = {}) {
   try {
     r = await commitTheme(ctx, name, data, {history: false});
   } catch (e) {
+    // A command that lost its lock owns none of these files now: it puts
+    // nothing back and removes nothing.
+    if (/** @type {any} */ (e)?.lockLost || !lockHeld()) refuseIfLockLost();
     if (aside && !fs.existsSync(f.settings)) fs.renameSync(aside, f.settings);
     fs.rmSync(marker, {force: true});
     if (dirMade)
@@ -1226,7 +1231,9 @@ export async function themeEditShow(theme, options = {}) {
         run:
           ctx.uncheckedCode === 'ERR_RENDER_MISSING_DEPENDENCY'
             ? [installLine(cwd, ['react', 'react-dom'])]
-            : [`${P} show ${theme}`],
+            : // Two copies of React and other install problems are named by
+              // doctor; the same show would fail the same way.
+              ['astryx doctor'],
       },
     );
   const f = themeFiles(cwd, theme);

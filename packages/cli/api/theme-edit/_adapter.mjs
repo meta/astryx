@@ -110,7 +110,12 @@ export function projectRoot(cwd) {
     } catch {
       throw new AstryxError(
         `${path.relative(start, file) || 'package.json'} is not valid JSON, so the app it belongs to is unknown. Fix it, then run the command again. Nothing was written.`,
-        [],
+        [
+          {
+            name: 'astryx doctor',
+            reason: 'names the file and what is wrong in it',
+          },
+        ],
         ERROR_CODES.ERR_PROJECT_REQUIRED,
       );
     }

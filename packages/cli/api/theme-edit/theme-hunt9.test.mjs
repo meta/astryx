@@ -8,9 +8,11 @@
  */
 
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {
+  themeEditHow,
   themeEditNew,
   themeEditSet,
   themeEditShow,
@@ -218,4 +220,22 @@ describe('dials (final 4)', () => {
     if (r) expect(r.data.setting.value).toBe('roomy');
     fs.rmSync(path.join(cwd, 'themes/f34'), {recursive: true, force: true});
   }, 240_000);
+});
+
+describe('astracat on the ninth pass', () => {
+  it('how never prints --like undefined for a theme with no base', async () => {
+    await themeEditNew('nb', {cwd, like: 'none'});
+    const {data} = await themeEditHow('rename my theme', {cwd, theme: 'nb'});
+    const lines = JSON.stringify(data);
+    expect(lines).not.toMatch(/--like undefined/);
+    expect(lines).toMatch(/new nb-2 --like none/);
+    fs.rmSync(path.join(cwd, 'themes/nb'), {recursive: true, force: true});
+  }, 240_000);
+
+  it('a folder with no package.json is refused with a command that makes one', async () => {
+    const bare = fs.mkdtempSync(path.join(os.tmpdir(), 'no-pkg-'));
+    const r = await refusal(() => themeEditNew('x', {cwd: bare}));
+    expect(r.run[0]).toBe('npm init -y');
+    fs.rmSync(bare, {recursive: true, force: true});
+  });
 });

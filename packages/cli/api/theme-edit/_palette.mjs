@@ -46,6 +46,7 @@ import {
   ratio,
 } from './_color.mjs';
 import {P} from './_tables.mjs';
+import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 import {sha256} from '../../foundation/render/source-block.mjs';
 
 /**
@@ -61,7 +62,13 @@ export function writeWhole(file, text) {
   if (fs.lstatSync(file, {throwIfNoEntry: false})?.isDirectory())
     throw new AstryxError(
       `${[path.dirname(path.dirname(file)), path.dirname(file), file].map(p => path.basename(p)).join('/')} is a folder, so the editor cannot write that file there. Rename or move the folder, then run the command again.`,
-      [],
+      [
+        {
+          name: `ls -la ${quoteCommandArgument(file)}`,
+          reason:
+            'see what is in the folder; move or rename it, then run the same command again',
+        },
+      ],
       ERROR_CODES.ERR_WRITE_FAILED,
     );
   sweepTemps(path.dirname(file));

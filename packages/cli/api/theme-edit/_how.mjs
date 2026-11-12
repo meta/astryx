@@ -907,7 +907,7 @@ function toolAnswer(t, env) {
       {
         text: 'no command renames a theme: make a new one, set what you need on it, and remove the old folder',
         commands: [
-          `${P} new ${env.slug}-2 --like ${env.data.like}`,
+          `${P} new ${env.slug}-2 --like ${env.data.like ?? 'none'}`,
           `${P} show ${env.slug}`,
         ],
       },
@@ -927,7 +927,7 @@ function toolAnswer(t, env) {
     return [
       {
         text: 'new makes a theme beside the ones you have; how and set take --theme to pick one',
-        commands: [`${P} new ${env.slug}-2 --like ${env.data.like}`],
+        commands: [`${P} new ${env.slug}-2 --like ${env.data.like ?? 'none'}`],
       },
     ];
   if (/\b(version|which cli|what cli)\b/.test(q))

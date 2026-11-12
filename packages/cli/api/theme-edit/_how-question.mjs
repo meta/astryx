@@ -2270,7 +2270,7 @@ export function draftAnswer(ctx, env, question) {
       const all = env.data.settings;
       return all.length
         ? {
-            text: `take back every setting ${env.slug} has, one undo each, to its base theme (${env.data.like})`,
+            text: `take back every setting ${env.slug} has, one undo each, to its base theme (${env.data.like ?? 'none'})`,
             options: [
               all.map(
                 st =>
