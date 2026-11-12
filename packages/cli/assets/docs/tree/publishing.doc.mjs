@@ -59,26 +59,8 @@ export const docs = {
           items: [
             'List only the roots you ship, and always `astryx.integration.mjs`. npm adds package.json, and a README and LICENSE when you have them.',
             'Each later `integration add` appends its root to the list.',
+            'Ship `astryx.integration.mjs`, not `.ts`: the CLI transpiles each `.ts` file it loads on first read per machine, so `.mjs` starts faster. Ship one manifest only; two fail to load. The same holds for doc files and codemods: ship `.mjs`.',
             '`integration verify` fails when a root is missing from the list, and names the root to add to `files` (the message is in {@link generic:troubleshooting}).',
-          ],
-        },
-      ],
-    },
-    {
-      id: 'ship-javascript',
-      title: 'Ship JavaScript files',
-      content: [
-        {
-          type: 'prose',
-          text: 'The CLI compiles each `.ts` file it loads from your package (`astryx.integration.ts`, `.doc.ts` topics, codemods) through a TypeScript transpiler on first read per machine, loading that transpiler too. A `.mjs` file loads directly, so commands in apps using your package start faster. Publish JavaScript files.',
-        },
-        {
-          type: 'list',
-          style: 'unordered',
-          items: [
-            "A manifest's default export holds only paths and settings, and named exports such as `debug` and `gapReport` are plain JavaScript, so `astryx.integration.mjs` needs no TypeScript. `integration add` writes it; for editor types, add a `@type` comment above its default export ({@link generic:quick-start}).",
-            'Ship exactly one manifest. Packages holding both `astryx.integration.ts` and `astryx.integration.mjs` fail to load.',
-            'Write doc topics, component docs and template docs as `.doc.mjs`, codemods as `.mjs`.',
           ],
         },
       ],
