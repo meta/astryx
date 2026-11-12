@@ -2933,6 +2933,27 @@ describe('MultiSelector statusVariant forwarding', () => {
       screen.getByRole('combobox').getAttribute('aria-describedby'),
     ).toContain(tooltip.id);
   });
+
+  it('keeps the written order of the status tooltip message under right-to-left', () => {
+    render(
+      <div dir="rtl">
+        <MultiSelector
+          label="Fruit"
+          options={['Apple', 'Banana']}
+          value={[]}
+          onChange={() => {}}
+          variant="ghost"
+          status={{type: 'warning', message: '-42 items'}}
+          statusVariant="tooltip"
+        />
+      </div>,
+    );
+    const tooltip = screen.getByRole('tooltip', h);
+    expect(within(tooltip).getByText('-42 items')).toHaveAttribute(
+      'dir',
+      'ltr',
+    );
+  });
 });
 
 describe('MultiSelector empty-state theme target', () => {

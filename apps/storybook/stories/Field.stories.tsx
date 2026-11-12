@@ -484,6 +484,11 @@ export const MixedDirection: Story = {
           />
         </Field>
       ))}
+      <Field
+        label="Open https://example.com/reports/quarterly or +3 shared links to reach this report"
+        inputID="mixed-wrap">
+        <NativeInput id="mixed-wrap" value="" onChange={() => {}} />
+      </Field>
     </div>
   ),
 };

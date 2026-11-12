@@ -3516,6 +3516,25 @@ describe('Selector statusVariant forwarding', () => {
       screen.getByRole('combobox').getAttribute('aria-describedby'),
     ).toContain(tooltip.id);
   });
+
+  it('keeps the written order of the status tooltip message under right-to-left', () => {
+    render(
+      <div dir="rtl">
+        <Selector
+          label="Fruit"
+          options={['Apple', 'Banana']}
+          variant="ghost"
+          status={{type: 'warning', message: '-42 items'}}
+          statusVariant="tooltip"
+        />
+      </div>,
+    );
+    const tooltip = screen.getByRole('tooltip', h);
+    expect(within(tooltip).getByText('-42 items')).toHaveAttribute(
+      'dir',
+      'ltr',
+    );
+  });
 });
 
 describe('Selector empty-state theme target', () => {

@@ -14,6 +14,7 @@
  */
 
 import {createElement, type ReactNode} from 'react';
+import * as stylex from '@stylexjs/stylex';
 import {hasStrongRightToLeft} from '../i18n/firstStrongDirection';
 
 /**
@@ -31,15 +32,23 @@ export function textDirectionProps(content: ReactNode): {dir?: 'ltr'} {
   return hasStrongRightToLeft(String(content)) ? {} : {dir: 'ltr'};
 }
 
+// A flex parent, such as Field's label, makes the span a block. Its own `ltr`
+// direction would then align wrapped lines to the left on a right-to-left
+// page. `match-parent` keeps the alignment of the parent's direction.
+const styles = stylex.create({
+  span: {textAlign: 'match-parent'},
+});
+
 /**
  * The content, inside a `dir="ltr"` span when `textDirectionProps` gives it
  * one. Use it where the direction cannot go on the element that holds the
  * text, because that element's alignment, glyph or corners follow the page.
- * An empty string gets no span, so it keeps no text line.
+ * The span changes the text's order only, not its alignment. An empty string
+ * gets no span, so it keeps no text line.
  */
 export function withTextDirection(content: ReactNode): ReactNode {
   const {dir} = textDirectionProps(content);
   return dir == null || content === ''
     ? content
-    : createElement('span', {dir}, content);
+    : createElement('span', {dir, ...stylex.props(styles.span)}, content);
 }
