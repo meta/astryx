@@ -392,19 +392,28 @@ function namesOf(env) {
  */
 function entryFile(dir, key, id) {
   const hash = createHash('sha256')
-    .update(
-      JSON.stringify([
-        FORMAT,
-        id,
-        process.version,
-        process.platform,
-        process.arch,
-        ...key,
-      ]),
-    )
+    .update(entryKey(key, id))
     .digest('hex')
     .slice(0, 40);
   return path.join(dir, `gather-${hash}.json`);
+}
+
+/**
+ * Everything an entry is for, as text: stored in the entry and compared on
+ * every read, so an entry copied under another entry's name is not used.
+ * @param {unknown[]} key
+ * @param {string} id
+ * @returns {string}
+ */
+function entryKey(key, id) {
+  return JSON.stringify([
+    FORMAT,
+    id,
+    process.version,
+    process.platform,
+    process.arch,
+    ...key,
+  ]);
 }
 
 /**
@@ -468,6 +477,8 @@ export async function persistedGather(key, load, codec, keep = () => true) {
     );
     if (stored?.format !== FORMAT) {
       reason = 'another format';
+    } else if (stored.key !== entryKey(key, id)) {
+      reason = 'an entry for other inputs';
     } else {
       const stale = staleReason(stored.stamps, stored.env);
       if (stale == null) {
@@ -496,7 +507,7 @@ export async function persistedGather(key, load, codec, keep = () => true) {
   try {
     const value = await load();
     if (run && armed && keep(value)) {
-      withoutRecording(() => store(dir, file, value, codec));
+      withoutRecording(() => store(dir, file, entryKey(key, id), value, codec));
     }
     return value;
   } finally {
@@ -555,16 +566,18 @@ export function persistedDerived(key, compute, codec, inputs = []) {
   const id = withoutRecording(buildId);
   const dir = id == null ? null : withoutRecording(gatherCacheDir);
   if (id == null || dir == null) return compute();
-  const file = entryFile(
-    dir,
-    ['derived', ...key, codeStamp(gatherCode, inputs)],
-    id,
-  );
+  const derivedKey = ['derived', ...key, codeStamp(gatherCode, inputs)];
+  const file = entryFile(dir, derivedKey, id);
+  const entry = entryKey(derivedKey, id);
   try {
     const stored = JSON.parse(
       withoutRecording(() => fs.readFileSync(file, 'utf-8')),
     );
-    if (stored?.format === FORMAT && stored.derived === true) {
+    if (
+      stored?.format === FORMAT &&
+      stored.derived === true &&
+      stored.key === entry
+    ) {
       const value = codec.decode(stored.value);
       try {
         const now = new Date();
@@ -584,6 +597,7 @@ export function persistedDerived(key, compute, codec, inputs = []) {
       const text = JSON.stringify({
         format: FORMAT,
         derived: true,
+        key: entry,
         value: encoded,
       });
       if (!isDeepStrictEqual(JSON.parse(text).value, encoded)) return;
@@ -604,10 +618,11 @@ export function persistedDerived(key, compute, codec, inputs = []) {
  * @template T, E
  * @param {string} dir
  * @param {string} file
+ * @param {string} entry - The entry's key (entryKey).
  * @param {T} value
  * @param {{encode: (value: T) => E, decode: (stored: E) => T}} codec
  */
-function store(dir, file, value, codec) {
+function store(dir, file, entry, value, codec) {
   if (!run) return;
   try {
     const encoded = codec.encode(value);
@@ -615,6 +630,7 @@ function store(dir, file, value, codec) {
     gatherCode = cliStates(stamps);
     const text = JSON.stringify({
       format: FORMAT,
+      key: entry,
       stamps,
       env: [...run.env],
       value: encoded,
