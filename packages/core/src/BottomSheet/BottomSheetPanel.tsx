@@ -31,6 +31,7 @@ import {
   type ReactNode,
   type Ref,
 } from 'react';
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import {useDevWarning} from '../hooks/useDevWarning';
@@ -784,16 +785,15 @@ export function BottomSheetPanel({
   const dismissKeyboardRef = useRef<
     ((focusTarget?: HTMLElement) => void) | null
   >(null);
-  const onMotionStartRef = useRef(onMotionStart);
-  const onMotionCompleteRef = useRef(onMotionComplete);
-  const onScrimFadeDurationRef = useRef(onScrimFadeDuration);
+  const onMotionStartRef = useCommittedRef(onMotionStart);
+  const onMotionCompleteRef = useCommittedRef(onMotionComplete);
+  const onScrimFadeDurationRef = useCommittedRef(onScrimFadeDuration);
   const startedMotionRef = useRef<BottomSheetPanelMotion | null>(null);
   const pendingMotionCompleteRef = useRef<BottomSheetPanelMotion | null>(null);
 
   const isEntering = state.kind === 'open' && state.entering;
-  // The last state's kind and entering flag, and whether this entrance brings
-  // back a retained sheet. State adjusted during render, as the state changes:
-  // a ref written here would keep a state from a render React discards.
+  // This is state, not a ref: a ref written during render keeps the values
+  // of a render React discards.
   const [entrance, setEntrance] = useState({
     kind: state.kind,
     isEntering,
@@ -803,20 +803,10 @@ export function BottomSheetPanel({
     setEntrance({
       kind: state.kind,
       isEntering,
-      isReactivated: !isEntering
-        ? false
-        : entrance.isEntering
-          ? entrance.isReactivated
-          : entrance.kind === 'retained',
+      isReactivated: isEntering && entrance.kind === 'retained',
     });
   }
   const isReactivatedEntrance = entrance.isReactivated;
-
-  useLayoutEffect(() => {
-    onMotionStartRef.current = onMotionStart;
-    onMotionCompleteRef.current = onMotionComplete;
-    onScrimFadeDurationRef.current = onScrimFadeDuration;
-  }, [onMotionComplete, onMotionStart, onScrimFadeDuration]);
 
   const isInteractive = state.kind === 'open';
   const isPresented = state.kind !== 'hidden';
@@ -832,11 +822,10 @@ export function BottomSheetPanel({
 
   // Everything derived from the snap points keys off their identity, not the
   // array's. The resolver's identity is the hook's signal that the stops
-  // changed, so it must not churn on a re-render the drag caused. The points
-  // are kept in state with their key, adjusted during render when the key
-  // changes. So a render React discards cannot leave its points behind. The
-  // resolver resolves them at call time — against whatever the viewport is
-  // then, not what it was at memo time.
+  // changed, so it must not churn on a re-render the drag caused. In state, a
+  // render React discards cannot leave its points behind. The resolver
+  // resolves them at call time — against whatever the viewport is then, not
+  // what it was at memo time.
   const snapPointsKey = snapPointsKeyFor(snapPoints);
   const [keyedSnapPoints, setKeyedSnapPoints] = useState({
     key: snapPointsKey,
@@ -1001,14 +990,15 @@ export function BottomSheetPanel({
     if (playedDragExit == null || element == null) {
       return;
     }
-    onScrimFadeDurationRef.current?.(
-      element,
-      dragExitMs(element, playedDragExit),
-    );
-    return () => {
-      onScrimFadeDurationRef.current?.(element, null);
+    // The host's current callback hears the fade end, as it heard its start.
+    const reportFade = (durationMs: number | null) => {
+      onScrimFadeDurationRef.current?.(element, durationMs);
     };
-  }, [playedDragExit]);
+    reportFade(dragExitMs(element, playedDragExit));
+    return () => {
+      reportFade(null);
+    };
+  }, [onScrimFadeDurationRef, playedDragExit]);
   // Syncs the motion with the panel's CSS transition, or a drag's exit with
   // the shared animator. The motion completes when that one ends.
   useLayoutEffect(() => {
@@ -1094,7 +1084,14 @@ export function BottomSheetPanel({
       motion === 'fading' || crossFadeMotion ? 'opacity' : 'transform',
       complete,
     );
-  }, [motion, isCrossFade, playedDragExit, isReactivatedEntrance]);
+  }, [
+    motion,
+    isCrossFade,
+    playedDragExit,
+    isReactivatedEntrance,
+    onMotionCompleteRef,
+    onScrimFadeDurationRef,
+  ]);
   // The snap is transform-only; the layout height reconciles when it lands.
   // waitForTransition — the same helper the motion states use — resolves that
   // even when no `transitionend` is coming: inline or computed
@@ -1127,7 +1124,7 @@ export function BottomSheetPanel({
         pendingMotionCompleteRef.current = null;
       }
     };
-  }, [motion]);
+  }, [motion, onMotionCompleteRef, onMotionStartRef]);
 
   // Same lowering as Dialog: with no padding prop the content box reads the
   // theme's --astryx-bottom-sheet-padding chain (--spacing-4 when unset), else

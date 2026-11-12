@@ -711,8 +711,7 @@ export function useSheetGestures({
   const isOpenRef = useRef(isOpen);
   isOpenRef.current = isOpen;
 
-  // The committed resolver, for the drag's callbacks and the re-anchor. It is
-  // current before any layout effect, so the re-anchor reads the new stops.
+  // It is current before any layout effect, so the re-anchor reads the new stops.
   const snapHeightsRef = useCommittedRef(snapHeights);
   const onTravelStartRef = useRef(onTravelStart);
   onTravelStartRef.current = onTravelStart;
