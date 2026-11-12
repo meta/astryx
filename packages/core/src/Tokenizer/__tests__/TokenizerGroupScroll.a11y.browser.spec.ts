@@ -116,12 +116,15 @@ async function scrollStrip(strip: Locator, place: 'start' | 'middle' | 'end') {
           where === 'start' ? 0 : where === 'end' ? max : Math.round(max / 2);
         const isThere = () =>
           Math.abs(Math.abs(element.scrollLeft) - offset) <= 1;
-        if (!isThere()) {
-          // RTL scroll offsets run negative from the inline start.
-          const sign = getComputedStyle(element).direction === 'rtl' ? -1 : 1;
-          element.scrollTo({left: sign * offset, behavior: 'instant'});
+        if (isThere()) {
+          return true;
         }
-        return isThere();
+        // RTL scroll offsets run negative from the inline start.
+        const sign = getComputedStyle(element).direction === 'rtl' ? -1 : 1;
+        element.scrollTo({left: sign * offset, behavior: 'instant'});
+        // The next poll confirms the position, so a scroll that is accepted
+        // and then undone is not counted.
+        return false;
       }, place),
     )
     .toBe(true);
