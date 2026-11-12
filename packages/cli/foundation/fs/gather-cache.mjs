@@ -13,9 +13,10 @@
  *   gathers fresh and stores that.
  * @position Used by search's adapter (api/search/_adapter.mjs) for the
  *   catalog `search` and `build` rank, and by the project
- *   (foundation/config/project.mjs) for each integration's contribution-check
- *   results, which `component`, `template`, `theme`, `discover` and `search`
- *   report. Gathers are kept only once the folder exists: the first such run
+ *   (foundation/config/project.mjs) for its integration issues: each
+ *   integration's contribution-check results and the whole list (with the
+ *   template and component replacement passes), which `component`,
+ *   `template`, `theme`, `discover` and `search` report. Gathers are kept only once the folder exists: the first such run
  *   on a machine just makes it, so a one-off run pays nothing to store one. Only a published CLI stores anything:
  *   its build id (clients/cli/build-id.generated.json, written at `prepack`)
  *   names its exact code, so a checkout, whose code may change between runs
