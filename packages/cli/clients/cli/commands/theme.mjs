@@ -1542,6 +1542,9 @@ function registerThemeCommands(theme, program, docs, words) {
       const json = program.opts().json || false;
       /** @type {import('../../../api/theme/theme.type.mjs').ThemeEjectResponse} */
       let result;
+      // Eject's warnings go to stderr in text mode; the logger is silent
+      // under --json (cli-surface INV12).
+      logger.setSilent(json);
       try {
         result = await themeEject(slug, {
           targetPath,
