@@ -12,7 +12,7 @@
  * @position Internal parts of a comment row in the Comments family
  */
 
-import {useCallback, useRef, useState, type ReactNode} from 'react';
+import {useCallback, useEffect, useRef, useState, type ReactNode} from 'react';
 import {flushSync} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '@astryxdesign/core/Button';
@@ -264,6 +264,15 @@ export function CommentActions({
   const [isLinkCopyFailed, setIsLinkCopyFailed] = useState(false);
   const linkCopyFailedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
+  );
+  // Syncs the failed-copy reset timer with the mount: unmounting stops it.
+  useEffect(
+    () => () => {
+      if (linkCopyFailedTimerRef.current != null) {
+        clearTimeout(linkCopyFailedTimerRef.current);
+      }
+    },
+    [],
   );
   const [isLinkTooltipOpen, setIsLinkTooltipOpen] = useState(false);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
