@@ -11,7 +11,8 @@
  *   vocabulary of stemmed words and word pairs with their idf (x1024), two
  *   signed byte matrices that map request words and doc words into one space, the
  *   lexical weight, the blocks the matrices were fitted with, and the ranking
- *   coefficients.
+ *   coefficients. Optionally, a keeper from build's adapter (`keep`) that
+ *   reads back the per-block vectors kept for the same catalog.
  * @output `pickBlocks(...)`: block names, best first, as many as build's own
  *   list, and an entry (real score and reason) for each listed block search
  *   did not return.
