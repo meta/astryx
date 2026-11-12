@@ -833,7 +833,7 @@
   },
   "@astryx.markdownHeadingLinks.copyFailed": {
     "defaultMessage": "Failed to copy value to clipboard.",
-    "description": "Accessible name on the Markdown heading copy button and text announced to a polite live region for ~1.5s after the clipboard write fails. Pairs with `markdownHeadingLinks.copy` and `markdownHeadingLinks.copied`."
+    "description": "Accessible name on the Markdown heading copy button and text announced once to the assertive live region after the clipboard write fails; the name shows for ~1.5s. Pairs with `markdownHeadingLinks.copy` and `markdownHeadingLinks.copied`."
   },
   "@astryx.markdownHeadingLinks.copy": {
     "defaultMessage": "Copy link to {heading}",

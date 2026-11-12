@@ -460,6 +460,7 @@ describe('createMarkdownHeadingLinks', () => {
   });
 
   it('shows a failed copy when the Clipboard API is unavailable', async () => {
+    vi.useFakeTimers();
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: undefined,
@@ -479,6 +480,23 @@ describe('createMarkdownHeadingLinks', () => {
     expect(permalink).toHaveAccessibleName(
       'Failed to copy value to clipboard.',
     );
+    expect(permalink).not.toHaveTextContent('#');
+    expect(permalink.querySelector('.astryx-icon')).toBeInTheDocument();
+
+    await act(async () => {
+      vi.advanceTimersByTime(20);
+      await Promise.resolve();
+    });
+    expect(
+      document.querySelector('[data-astryx-live-region="assertive"]'),
+    ).toHaveTextContent('Failed to copy value to clipboard.');
+
+    await act(async () => {
+      vi.advanceTimersByTime(1480);
+      await Promise.resolve();
+    });
+    expect(permalink).toHaveAccessibleName('Copy link to Overview');
+    expect(permalink).toHaveTextContent('#');
   });
 
   it('ignores modified and non-primary pointer activation', () => {
