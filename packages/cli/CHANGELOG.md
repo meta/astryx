@@ -116,9 +116,8 @@
   - A step given twice in one answer runs once. `undo` is suggested only when there is a change to undo.
   - When `font --on body` also changes the heading font (the theme sets no heading font), `how font` says so, and a body font question uses `--font-family-body`.
   - An answer with no command says why. Commands in an error's suggestions start the same way in JSON as in text.
-  - A `--at` point outside the picture reads as no color.
 
-- `astryx experimental theme editor how`: "swap A for B" and "replace A with B" ask for B only when A and B are both colors or both fonts. "Replace the shadow on cards with a border" removes the shadow and adds a border, and "switch off" or "switch the buttons to" no longer names the Switch component. An earlier note said a `--at` point outside the picture reads as no color: `how` still refuses such a point and names the picture's size. (#11262)
+- `astryx experimental theme editor how`: "swap A for B" and "replace A with B" ask for B only when A and B are both colors or both fonts. "Replace the shadow on cards with a border" removes the shadow and adds a border, and "switch off" or "switch the buttons to" no longer names the Switch component. (#11262)
 - `astryx experimental theme editor how`: right way round, whole font names, and the app's themes from any folder. (#11262)
 
   - Polarity: "flat cards" removes the cards' shadow ("too flat" adds one); "not round enough" is rounder; "nothing rounded except avatars" is square with round avatars; "shadows too strong" is softer; "borders too dark" is fainter and "too light" stronger, per mode; "not so much padding" is less.
