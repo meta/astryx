@@ -24,8 +24,9 @@ import {AsyncLocalStorage} from 'node:async_hooks';
 import {createRequire} from 'node:module';
 import {pathToFileURL} from 'node:url';
 import * as fs from 'node:fs';
-import {createJiti} from 'jiti';
 import {findPresentFiles} from './present-files.mjs';
+import {importUrl} from './import-url.mjs';
+import {jitiCacheOptions} from './jiti-cache.mjs';
 
 export {findPresentFiles};
 
@@ -33,9 +34,16 @@ export {findPresentFiles};
 let jitiInstance;
 let freshImportNonce = 0;
 const requireFromHere = createRequire(import.meta.url);
+
+/**
+ * jiti, loaded on first use: only TypeScript files and built theme modules
+ * need it, so a run that reads neither never loads it.
+ * @type {typeof import('jiti').createJiti}
+ */
+const createJiti = (...args) => requireFromHere('jiti').createJiti(...args);
 function getJiti() {
   if (!jitiInstance) {
-    jitiInstance = createJiti(import.meta.url);
+    jitiInstance = createJiti(import.meta.url, jitiCacheOptions());
   }
   return jitiInstance;
 }
@@ -194,6 +202,7 @@ function isMissingPackageExport(error) {
 export async function importThemeArtifact(specifier, cwd) {
   let themeModule = path.join(cwd, 'package.json');
   const loader = createJiti(path.join(cwd, 'package.json'), {
+    ...jitiCacheOptions(),
     moduleCache: false,
     jsx: true,
     interopDefault: true,
@@ -225,21 +234,24 @@ export async function importThemeArtifact(specifier, cwd) {
  */
 async function importModule(file, fresh) {
   if (fresh && file.endsWith('.ts')) {
-    return await createJiti(import.meta.url, {moduleCache: false}).import(file);
+    return await createJiti(import.meta.url, {
+      ...jitiCacheOptions(),
+      moduleCache: false,
+    }).import(file);
   }
   if (file.endsWith('.ts')) {
     return await getJiti().import(file);
   }
   const url = pathToFileURL(file);
-  if (!fresh) return await readInTurn(file, () => import(url.href));
+  // The node test project loads import-url.mjs natively. An import from here
+  // would be a request to the test runner, and a theme build reads every Core
+  // doc through it.
+  if (!fresh) return await readInTurn(file, () => importUrl(url.href));
   // Node chooses the format again, as for the first import: a package's
   // "type", the extension, or the source's syntax. The query names a new ES
   // module. A CommonJS module also needs its cache entry gone.
   url.searchParams.set('astryx-fresh', String(++freshImportNonce));
-  return await readInTurn(file, () => {
-    delete requireFromHere.cache[cacheKey(file)];
-    return import(url.href);
-  });
+  return await readFreshInTurn(file, () => importUrl(url.href));
 }
 
 /**
@@ -287,6 +299,21 @@ export function readInTurn(file, read) {
   return result;
 }
 
+/**
+ * Run `read`, a fresh import of `file`, in the file's turn (`readInTurn`),
+ * once the file is gone from Node's CommonJS cache. A new URL names a new ES
+ * module only, so a CommonJS module also needs its cache entry gone.
+ * @template T
+ * @param {string} file absolute path
+ * @param {() => Promise<T>} read
+ * @returns {Promise<T>}
+ */
+export function readFreshInTurn(file, read) {
+  return readInTurn(file, () => {
+    delete requireFromHere.cache[cacheKey(file)];
+    return read();
+  });
+}
 
 /**
  * Import a user-authored module, take its default export, and validate it

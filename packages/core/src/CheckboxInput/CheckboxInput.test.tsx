@@ -86,7 +86,55 @@ beforeEach(() => {
   };
 });
 
+/** A pointer press on `target`, as the press controller and React read it. */
+function pointerDown(
+  target: Element,
+  init: {pointerType: string; button: number; ctrlKey?: boolean},
+): void {
+  fireEvent.pointerDown(target, {pointerId: 1, ...init});
+  fireEvent.pointerUp(target, {pointerId: 1, ...init});
+}
+
+/** Runs `check` on macOS, where a ctrl-click is the context click. */
+function onApplePlatform(check: () => void): void {
+  Object.defineProperty(navigator, 'platform', {
+    configurable: true,
+    get: () => 'MacIntel',
+  });
+  try {
+    check();
+  } finally {
+    Reflect.deleteProperty(navigator, 'platform');
+  }
+}
+
 describe('CheckboxInput', () => {
+  it("paints a primary mouse press at once, and none for a macOS ctrl-click or a pen's barrel button", () => {
+    render(<CheckboxInput label="Accept" value={false} onChange={() => {}} />);
+    const target = screen.getByRole('checkbox');
+    const row = target.closest('[data-astryx-pressable]');
+    if (row == null) {
+      throw new Error('the control has no press surface');
+    }
+    onApplePlatform(() =>
+      pointerDown(target, {pointerType: 'mouse', button: 0, ctrlKey: true}),
+    );
+    expect(row).not.toHaveAttribute('data-astryx-press');
+    pointerDown(target, {pointerType: 'pen', button: 2});
+    expect(row).not.toHaveAttribute('data-astryx-press');
+    fireEvent.pointerDown(target, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+    });
+    expect(row).toHaveAttribute('data-astryx-press', 'on');
+    fireEvent.pointerUp(target, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+    });
+  });
+
   it('calls onChange with new checked state when clicked', async () => {
     const user = userEvent.setup();
     const handleChange = vi.fn();
@@ -989,10 +1037,16 @@ describe('pressed state', () => {
 });
 
 describe('an indicator that paints its own press', () => {
-  it('keeps its marker internal: no public entry exports it, and the API report has no row', () => {
+  it('keeps its marker internal: no public entry exports it', () => {
     expect(Object.keys(publicMarkers)).not.toContain('indicatorPressScope');
-    const report = readFileSync('packages/core/api-report.md', 'utf8');
-    expect(report).not.toContain('indicatorPressScope');
+    // The marker's module is under src/internal, which the API surface leaves
+    // out, and the package barrel does not name it.
+    expect(
+      readFileSync('packages/core/src/CheckboxInput/CheckboxInput.tsx', 'utf8'),
+    ).toContain("from '../internal/indicatorPress.stylex'");
+    expect(readFileSync('packages/core/src/index.ts', 'utf8')).not.toContain(
+      'indicatorPress',
+    );
   });
 
   const partsOf = (container: HTMLElement) => {

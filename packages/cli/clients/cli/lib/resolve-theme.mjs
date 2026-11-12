@@ -20,7 +20,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {createRequire} from 'node:module';
-import {resolveRecordedTheme} from '../../../api/theme/theme.mjs';
 
 const legacyRequire = createRequire(import.meta.url);
 
@@ -73,11 +72,22 @@ function extractTheme(mod) {
   return null;
 }
 
+/**
+ * Print a theme warning as one inert line. The configured theme value and the
+ * generated record come from the checkout, so a newline, an escape sequence or
+ * a bidi override in them must not rewrite the terminal. Control and format
+ * characters print as U+FFFD.
+ * @param {string} message
+ */
+function warnTheme(message) {
+  console.warn(message.replace(/[\p{Cc}\p{Cf}]/gu, '\uFFFD'));
+}
+
 /** @param {unknown} mod @param {string} specifier */
 function resolvedThemeData(mod, specifier) {
   const theme = extractTheme(mod);
   if (!theme) {
-    console.warn(
+    warnTheme(
       `⚠ theme: loaded "${specifier}" but could not find a theme object`,
     );
     return null;
@@ -97,10 +107,12 @@ function resolvedThemeData(mod, specifier) {
  * @returns {Promise<{variants?: Record<string, string[]>|null, fonts?: Record<string, string>|null, name?: string|null}|null>}
  */
 export async function resolveTheme(cwd = process.cwd()) {
+  // The theme API loads on first use: a command's JSON output never needs it.
+  const {resolveRecordedTheme} = await import('../../../api/theme/theme.mjs');
   const loaded = await resolveRecordedTheme(cwd);
   if (loaded.configured) {
     if (!loaded.module) {
-      console.warn(
+      warnTheme(
         `⚠ theme: ${loaded.problem ?? `could not resolve the generated default theme (${loaded.specifier})`}`,
       );
       return null;
@@ -130,15 +142,13 @@ export async function resolveTheme(cwd = process.cwd()) {
   if (specifier.startsWith('.') || specifier.startsWith('/')) {
     mod = tryLoadLegacyModule(specifier, cwd);
     if (!mod) {
-      console.warn(
-        `⚠ theme: could not resolve file "${specifier}" from ${cwd}`,
-      );
+      warnTheme(`⚠ theme: could not resolve file "${specifier}" from ${cwd}`);
       return null;
     }
   } else if (specifier.startsWith('@')) {
     mod = tryLoadLegacyModule(specifier, cwd);
     if (!mod) {
-      console.warn(`⚠ theme: could not resolve package "${specifier}"`);
+      warnTheme(`⚠ theme: could not resolve package "${specifier}"`);
       return null;
     }
   } else {
@@ -147,7 +157,7 @@ export async function resolveTheme(cwd = process.cwd()) {
       tryLoadLegacyModule(conventional, cwd) ??
       tryLoadLegacyModule(specifier, cwd);
     if (!mod) {
-      console.warn(
+      warnTheme(
         `⚠ theme: could not resolve "${specifier}" (tried ${conventional} and ${specifier})`,
       );
       return null;

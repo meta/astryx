@@ -30,8 +30,8 @@ export const doc = {
       name: 'options.targetPath',
       type: 'string',
       description:
-        'Destination directory for ejected files. Must resolve within cwd.',
-      default: "'src/themes/<slug>'",
+        'Destination directory for ejected files, relative to cwd. Must resolve within the project (the nearest folder above cwd with a package.json).',
+      default: "'src/themes/<slug>' in the project root",
     },
     {
       name: 'options.overwrite',
@@ -43,7 +43,7 @@ export const doc = {
       name: 'options.cwd',
       type: 'string',
       description:
-        'Project directory used for integration discovery and target paths.',
+        'Working directory: integration discovery and the project root start here, a relative targetPath resolves from it, and outputDir is relative to it.',
     },
     {
       name: 'options.package',
@@ -56,7 +56,7 @@ export const doc = {
     {
       type: 'theme.eject',
       description:
-        'Eject receipt with slug, displayName, the source theme maintained flag, source-selector package, outputDir, entry, exportName, and files. The written local descriptor always uses maintained: false.',
+        'Eject receipt with slug, displayName, the source theme maintained flag, source-selector package, outputDir, entry, exportName, files, missingPackages (packages the fork imports that the app does not declare), and installCommand (installs them; null when none are missing or the package manager is undetermined). The written local descriptor always uses maintained: false.',
     },
   ],
   throws: [
@@ -73,7 +73,7 @@ export const doc = {
     {code: 'ERR_NO_SOURCE', when: 'a theme file to eject is missing'},
     {
       code: 'ERR_FILE_EXISTS',
-      when: 'a destination exists and overwrite is not set',
+      when: 'a destination exists and overwrite is not set, or the target folder holds another theme or a theme the theme editor made',
     },
     {code: 'ERR_WRITE_FAILED', when: 'writing files fails'},
   ],

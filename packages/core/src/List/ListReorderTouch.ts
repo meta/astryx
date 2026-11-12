@@ -17,8 +17,8 @@
  *
  * UIKit's reorder control (iOS 26.2, measured): a finger held still on it for
  * the scroll view's content-touch delay (150 ms) claims the drag. A flick that
- * starts on it scrolls the table instead. So the handle lets the browser pan
- * vertically and pinch-zoom until the claim, through its own `touch-action`.
+ * starts on it scrolls the table instead. So until the claim, the handle
+ * leaves the browser its pans and pinch-zoom (`manipulation`).
  * The long press then holds the touch, through the gesture system's blocking
  * listener for a mid-gesture claim. A second finger before the claim makes
  * it the browser's pinch (WCAG 1.4.4). After the claim, extra fingers change

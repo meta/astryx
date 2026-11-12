@@ -210,6 +210,13 @@ export const doc = {
       description: 'Deprecation notice — a DEP-* id and the replacement.',
     },
     {
+      name: 'replaces',
+      type: 'string[]',
+      stability: 'experimental',
+      description:
+        'The commands this command is meant to replace, by command path (`theme build`). Help shows them as one line ("Will replace: astryx theme build"), and a later deprecation of those commands reads this list. It marks nothing as deprecated.',
+    },
+    {
       name: 'related',
       type: 'string[]',
       description: 'Related command names.',

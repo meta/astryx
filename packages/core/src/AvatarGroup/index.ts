@@ -1,6 +1,4 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-'use client';
-
 /**
  * @file index.ts
  * @input Imports from AvatarGroup.tsx, AvatarGroupOverflow.tsx, AvatarGroupContext.ts

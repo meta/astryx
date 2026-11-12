@@ -21,14 +21,16 @@ import {
   armHold,
   blockMainThread,
   BUSY_PROOF_LOOKAROUND_MS,
-  busyWindowProof,
+  type BusyRun,
   CONTROL_RGB,
   drag,
   FRAME_STARVATION_MS,
   FrameStarvationError,
+  frameGaps,
   MARKER_RGB,
   releaseAnimations,
   openStory,
+  pooledBusyProof,
   startBusyControl,
   startScreencast,
   touchDriver,
@@ -37,6 +39,7 @@ import {
   waitForRest,
   withStorybook,
 } from '@astryxdesign/interaction-harness';
+import {jogInterval} from '../pageControlModel';
 
 const storybook = withStorybook(test);
 
@@ -45,10 +48,14 @@ const PITCH = 17.67;
 /** A full-size dot's scale: the 9.67 px indicator on its 10 px box. */
 const DOT_SCALE = 0.967;
 /**
- * Frames of the slide the busy proof must judge inside its block. The slide
- * is a 190 ms spring that shows about five frames of travel there.
+ * Frames of the slide the busy proof must judge inside each block. The slide
+ * is a 190 ms spring that shows about five frames of travel there, one above
+ * this floor. A loaded runner draws one fewer. So the proof judges
+ * `BUSY_SLIDES` slides as one pool, and each judged slide holds this floor.
  */
 const MIN_JUDGED_FRAMES = 4;
+/** The one-slot slides the busy proof judges as one pool. */
+const BUSY_SLIDES = 3;
 /** UIPageControl's interaction delay, ms. */
 const HOLD_MS = 155;
 /** One frame at 60 Hz, ms. */
@@ -131,6 +138,79 @@ function msPerPage(window: ReadonlyArray<{t: number; page: number}>) {
   const first = window[0];
   const last = window[window.length - 1];
   return (last.t - first.t) / Math.abs(last.page - first.page);
+}
+
+/** Logs when the page draws each frame from now on; the reader returns them. */
+async function logFrames(page: Page) {
+  await page.evaluate(() => {
+    const frames: number[] = [];
+    (window as unknown as {frameLog: number[]}).frameLog = frames;
+    const step = (t: number) => {
+      frames.push(t);
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  });
+  return () =>
+    page.evaluate(() => (window as unknown as {frameLog: number[]}).frameLog);
+}
+
+/**
+ * Judges a jog's rate across a held window against its bounds, ms per page.
+ * The jog restarts its count after a timer that runs later than one step, so
+ * a stall longer than `stepMs` slows the steps it overlaps. A rate too slow
+ * fails by name only when the steps clear of such a stall are in bounds, or
+ * when no step is clear. Any other rate out of bounds fails as it is.
+ */
+function expectJogRate(
+  held: ReadonlyArray<{t: number; page: number}>,
+  frames: readonly number[],
+  {
+    above,
+    below,
+    stepMs,
+    during,
+  }: {above: number; below: number; stepMs: number; during: string},
+): void {
+  const rate = msPerPage(held);
+  const gaps = frameGaps(frames, held[0].t, held[held.length - 1].t);
+  const stalls = gaps.filter(gap => gap.to - gap.from > stepMs);
+  if (rate >= below && stalls.length > 0) {
+    const clear = held
+      .slice(1)
+      .map((step, i) => ({
+        ms: step.t - held[i].t,
+        pages: Math.abs(step.page - held[i].page),
+        stalled: stalls.some(
+          stall => stall.from < step.t && stall.to > held[i].t,
+        ),
+      }))
+      .filter(step => !step.stalled);
+    const clearPages = clear.reduce((sum, step) => sum + step.pages, 0);
+    const clearRate =
+      clearPages > 0
+        ? clear.reduce((sum, step) => sum + step.ms, 0) / clearPages
+        : null;
+    if (clearRate == null || (clearRate > above && clearRate < below)) {
+      // The frames the window needs: those drawn, and enough more to keep
+      // every gap within one step.
+      const drawn = gaps.length - 1;
+      const missing = stalls.reduce(
+        (sum, stall) => sum + Math.ceil((stall.to - stall.from) / stepMs) - 1,
+        0,
+      );
+      throw new FrameStarvationError({
+        by: 'the jog',
+        during,
+        frames: drawn,
+        min: drawn + missing,
+        longestGapMs: Math.max(...stalls.map(stall => stall.to - stall.from)),
+        cause: `a stall longer than one ${stepMs.toFixed(0)} ms step restarts the jog's count. The jog ran at ${rate.toFixed(0)} ms per page, ${clearRate == null ? 'with no step clear of a stall' : `and at ${clearRate.toFixed(0)} ms per page clear of a stall`}, so the run proves nothing about its rate`,
+      });
+    }
+  }
+  expect(rate).toBeGreaterThan(above);
+  expect(rate).toBeLessThan(below);
 }
 
 async function logPages(slider: Locator) {
@@ -301,6 +381,7 @@ test('past the edge of a windowed control the page keeps stepping, faster the fu
   }
   const contentEnd = box.x + box.width - 14;
   const current = await indicatorCenter(slider, 25);
+  const frames = await logFrames(page);
   const pages = await logPages(slider);
   // Scrub 40 px past the content's edge and hold there for 1.2 s:
   // 0.173 pages/s per px → about 7 pages a second.
@@ -313,9 +394,12 @@ test('past the edge of a windowed control the page keeps stepping, faster the fu
   );
   const log = await pages();
   const held = log.filter(e => e.t >= log[0].t + 400);
-  const nearStep = msPerPage(held);
-  expect(nearStep).toBeGreaterThan(110);
-  expect(nearStep).toBeLessThan(190);
+  expectJogRate(held, await frames(), {
+    above: 110,
+    below: 190,
+    stepMs: jogInterval(40) * 1000,
+    during: 'the jog stepped 40 px past the edge',
+  });
   expect(log[log.length - 1].page).toBeGreaterThan(30);
   // Far past (100 px): 15 pages a second.
   const far = await logPages(slider);
@@ -328,9 +412,12 @@ test('past the edge of a windowed control the page keeps stepping, faster the fu
     ),
   );
   const fast = (await far()).filter((e, i, all) => e.t >= all[0].t + 300);
-  const farStep = msPerPage(fast);
-  expect(farStep).toBeGreaterThan(50);
-  expect(farStep).toBeLessThan(85);
+  expectJogRate(fast, await frames(), {
+    above: 50,
+    below: 85,
+    stepMs: jogInterval(100) * 1000,
+    during: 'the jog stepped 100 px past the edge',
+  });
 });
 
 test('a held finger shows the platter, the pressed overlay, and dims the other indicators after 155 ms; the touched indicator does not transform', async ({
@@ -1053,6 +1140,19 @@ test('a windowed control slides one slot 50 ms after the change, on a critically
     });
   }
   expect(startedAt - changedAt).toBeLessThan(120);
+  // A critically damped spring reaches the next slot without passing it. The
+  // slide's own keyframes show that, and a loaded runner cannot change them.
+  const keyXs = curve.xs.map(([, x]) => x);
+  for (let i = 1; i < keyXs.length; i++) {
+    expect(
+      keyXs[i],
+      "the slide's keyframes never turn back",
+    ).toBeLessThanOrEqual(keyXs[i - 1] + 0.01);
+  }
+  expect(
+    Math.min(...keyXs),
+    "the slide's keyframes never pass the next slot",
+  ).toBeGreaterThanOrEqual(-19 * PITCH - 0.01);
   // Monotonic to the next slot, settled within ~0.35 s of starting.
   const xs = trace.filter(s => s.t >= startedAt).map(s => s.x);
   for (let i = 1; i < xs.length; i++) {
@@ -1251,7 +1351,7 @@ test('busy main thread: a window slide finishes on time through a 600 ms block',
   const {slider, driver} = await open(page, 'lab-pagecontrol--many-pages');
   const strip = slider.locator(':scope > *').first();
   // A chip on the strip between two dots, above them: the window shows it
-  // before and after the slide, and no dot's scale reaches it. The strip's
+  // before and after the slides, and no dot's scale reaches it. The strip's
   // translate makes it the chip's containing block, so the chip moves with it.
   await strip.evaluate(
     (el, {left, rgb}) => {
@@ -1262,53 +1362,77 @@ test('busy main thread: a window slide finishes on time through a 600 ms block',
     },
     {left: 23.5 * PITCH - 6, rgb: MARKER_RGB},
   );
-  // Before the slide, so the control is on the compositor first.
+  // Before the slides, so the control is on the compositor first.
   await startBusyControl(page);
-  const cast = await startScreencast(page);
-  // The page blocks once the old dot's fade has run a frame, just before the
-  // slide starts on its own start time. A round trip from here would start
-  // the block later in the slide, or after it.
-  const blocking = blockMainThread(page, 600, {during: strip});
-  const current = await indicatorCenter(slider, 25);
-  await driver.tap({x: current.x + 12, y: current.y});
-  const busy = await blocking;
-  await waitForRest(strip);
-  // Where the slide ends, read from the page once it rests.
-  const settledAt = await strip.evaluate(el => {
-    const chip = el.querySelector('[data-harness-marker-chip]') as Element;
-    return chip.getBoundingClientRect().x;
-  });
-  const frames = await cast.stop();
-  // Only the frames the proof reads are decoded, each once for both colors.
-  const [tracked, control] = await trackMarkers(
-    page,
-    frames.filter(f => f.t <= busy.to + BUSY_PROOF_LOOKAROUND_MS),
-    {colors: [MARKER_RGB, CONTROL_RGB]},
-  );
-  const proof = busyWindowProof(tracked, busy, {
+  const runs: BusyRun[] = [];
+  const restsAt: number[] = [];
+  // Each tap on the current indicator's trailing side moves one page and
+  // slides the window one slot: pages 26 to 29.
+  for (let slide = 0; slide < BUSY_SLIDES; slide++) {
+    const cast = await startScreencast(page);
+    // The page blocks once the old dot's fade has run a frame, just before
+    // the slide starts on its own start time. A round trip from here would
+    // start the block later in the slide, or after it.
+    const blocking = blockMainThread(page, 600, {during: strip});
+    const current = await indicatorCenter(slider, 25 + slide);
+    await driver.tap({x: current.x + 12, y: current.y});
+    const busy = await blocking;
+    await waitForRest(strip);
+    // Where the slide ends, read from the page once it rests.
+    restsAt.push(
+      await strip.evaluate(el => {
+        const chip = el.querySelector('[data-harness-marker-chip]') as Element;
+        return chip.getBoundingClientRect().x;
+      }),
+    );
+    const frames = await cast.stop();
+    // Only the frames the proof reads are decoded, each once for both colors.
+    const [tracked, control] = await trackMarkers(
+      page,
+      frames.filter(f => f.t <= busy.to + BUSY_PROOF_LOOKAROUND_MS),
+      {colors: [MARKER_RGB, CONTROL_RGB]},
+    );
+    // Each slide ends one slot further on. Measured from its own rest,
+    // every slide ends at 0, so the pool's one `settledAt` is where the
+    // page read each slide at rest.
+    const rest = restsAt[slide];
+    runs.push({
+      tracked: tracked.map(f =>
+        f.box == null ? f : {...f, box: {...f.box, x: f.box.x - rest}},
+      ),
+      control,
+      window: busy,
+    });
+  }
+  const proof = pooledBusyProof(runs, {
     axis: 'x',
     settledWithinSteps: 2,
-    settledAt,
+    settledAt: 0,
     minJudgedFrames: MIN_JUDGED_FRAMES,
-    control,
+    minRunFrames: MIN_JUDGED_FRAMES,
   });
-  // The compositor carried the slide to the next slot during the block. It
+  // The compositor carried each slide to the next slot during its block. It
   // moved on every frame, and a frame inside the block shows it at rest.
   expect(proof.verdict.failures, proof.summary).toEqual([]);
-  expect(proof.monotonic, proof.summary).toBe(true);
-  const atRest = tracked.find(
-    f =>
-      f.box != null &&
-      f.t >= busy.from &&
-      f.t <= busy.to &&
-      Math.abs(f.box.x - settledAt) <= 1,
-  );
-  expect(atRest, proof.summary).toBeDefined();
+  for (const [slide, run] of runs.entries()) {
+    if (!proof.judged[slide]) {
+      continue;
+    }
+    expect(proof.runs[slide]?.monotonic, proof.summary).toBe(true);
+    const atRest = run.tracked.find(
+      f =>
+        f.box != null &&
+        f.t >= run.window.from &&
+        f.t <= run.window.to &&
+        Math.abs(f.box.x) <= 1,
+    );
+    expect(atRest, proof.summary).toBeDefined();
+  }
   expect(
     await strip.evaluate(el =>
       Number.parseFloat(getComputedStyle(el).translate),
     ),
-  ).toBeCloseTo(-19 * PITCH, 0);
+  ).toBeCloseTo(-21 * PITCH, 0);
 });
 
 test('on an Android phone (no -webkit-touch-callout) a finger scrubs: one touch model, no platform idiom', async ({

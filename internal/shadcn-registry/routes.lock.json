@@ -568,6 +568,11 @@
       "aliases": []
     },
     {
+      "name": "component-lab-chat-virtualizer",
+      "path": "components/lab/chat-virtualizer",
+      "aliases": []
+    },
+    {
       "name": "component-lab-circle-check-indicator",
       "path": "components/lab/circle-check-indicator",
       "aliases": []
@@ -688,6 +693,11 @@
       "aliases": []
     },
     {
+      "name": "component-lab-tab-bar-more-list",
+      "path": "components/lab/tab-bar-more-list",
+      "aliases": []
+    },
+    {
       "name": "component-lab-three-d-bar",
       "path": "components/lab/three-d-bar",
       "aliases": []
@@ -730,6 +740,11 @@
     {
       "name": "component-lab-transfer-list-selector",
       "path": "components/lab/transfer-list-selector",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-weighted-svg-icon",
+      "path": "components/lab/weighted-svg-icon",
       "aliases": []
     },
     {
@@ -1385,6 +1400,11 @@
     {
       "name": "example-base-typeahead-custom-search-bar",
       "path": "examples/base-typeahead/custom-search-bar",
+      "aliases": []
+    },
+    {
+      "name": "example-base-typeahead-menu",
+      "path": "examples/base-typeahead/menu",
       "aliases": []
     },
     {
@@ -2364,6 +2384,11 @@
     {
       "name": "example-input-group-basic",
       "path": "examples/input-group/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-internationalization-provider-calendar",
+      "path": "examples/internationalization-provider/calendar",
       "aliases": []
     },
     {
@@ -3767,6 +3792,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-direction-hook-usage",
+      "path": "examples/use-direction/hook-usage",
+      "aliases": []
+    },
+    {
       "name": "example-use-drag-to-snap-points-playing-card-on-three-places",
       "path": "examples/use-drag-to-snap-points/playing-card-on-three-places",
       "aliases": []
@@ -3892,6 +3922,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-power-search-config-filtered-directory-table",
+      "path": "examples/use-power-search-config/filtered-directory-table",
+      "aliases": []
+    },
+    {
       "name": "example-use-press-feedback-pressable-card",
       "path": "examples/use-press-feedback/pressable-card",
       "aliases": []
@@ -3987,6 +4022,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-theme-name-active-theme",
+      "path": "examples/use-theme-name/active-theme",
+      "aliases": []
+    },
+    {
       "name": "example-use-theme-token-values",
       "path": "examples/use-theme/token-values",
       "aliases": []
@@ -4004,6 +4044,11 @@
     {
       "name": "example-use-tree-focus-keyboard-file-tree",
       "path": "examples/use-tree-focus/keyboard-file-tree",
+      "aliases": []
+    },
+    {
+      "name": "example-use-truncation-tooltip-on-cut-off-text",
+      "path": "examples/use-truncation/tooltip-on-cut-off-text",
       "aliases": []
     },
     {
@@ -4119,6 +4164,11 @@
     {
       "name": "hook-use-dev-warning",
       "path": "hooks/use-dev-warning",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-direction",
+      "path": "hooks/use-direction",
       "aliases": []
     },
     {
@@ -4277,6 +4327,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-power-search-config",
+      "path": "hooks/use-power-search-config",
+      "aliases": []
+    },
+    {
       "name": "hook-use-press-feedback",
       "path": "hooks/use-press-feedback",
       "aliases": []
@@ -4407,6 +4462,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-theme-name",
+      "path": "hooks/use-theme-name",
+      "aliases": []
+    },
+    {
       "name": "hook-use-toast",
       "path": "hooks/use-toast",
       "aliases": []
@@ -4424,6 +4484,11 @@
     {
       "name": "hook-use-tree-focus",
       "path": "hooks/use-tree-focus",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-truncation",
+      "path": "hooks/use-truncation",
       "aliases": []
     },
     {
