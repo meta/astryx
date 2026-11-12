@@ -84,6 +84,17 @@ describe('MobileNav side="auto": open on the server', () => {
       'end',
     );
 
+    // The focus guard must keep the drawer's own panel from being measured as
+    // the opener. jsdom lays nothing out, so an unmeasured panel would resolve
+    // to `start` by accident: assert on the reads instead of the outcome alone.
+    const measured: Element[] = [];
+    const realRect = Element.prototype.getBoundingClientRect;
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(
+      function (this: Element) {
+        measured.push(this);
+        return realRect.call(this);
+      },
+    );
     const logged = vi.spyOn(console, 'error');
     const recoverableErrors: unknown[] = [];
     let root!: ReturnType<typeof hydrateRoot>;
@@ -94,6 +105,7 @@ describe('MobileNav side="auto": open on the server', () => {
     });
     expect(recoverableErrors).toEqual([]);
     expect(logged).not.toHaveBeenCalled();
+    expect(measured.some(el => container.contains(el))).toBe(false);
     expect(container.querySelector('[data-side]')).toHaveAttribute(
       'data-side',
       'start',
