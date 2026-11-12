@@ -215,14 +215,16 @@ export function keepInherited(copy: HTMLElement, host: Element): void {
  * Lay `element` over `rect` (viewport coordinates), absolutely, as a child of
  * `host` (before `beforeNode`, else last), wherever its containing block is:
  * no ancestor's position changes. A copy's scrolled descendants then restore their offsets, and the
- * CSS animations and transitions its element ran carry on in it.
+ * CSS animations and transitions its element ran carry on in it. Returns the
+ * host's scale on each axis, so a caller converts viewport pixels to the
+ * element's own without reading its box again.
  */
 export function placeOver(
   element: HTMLElement,
   host: Element,
   rect: DOMRect,
   beforeNode: Node | null = null,
-): void {
+): {x: number; y: number} {
   Object.assign(element.style, {
     position: 'absolute',
     boxSizing: 'border-box',
@@ -267,6 +269,7 @@ export function placeOver(
       node => carried.copyOf.get(node) ?? null,
     );
   }
+  return {x: scaleX, y: scaleY};
 }
 
 /**

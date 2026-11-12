@@ -16,7 +16,9 @@
  * two. The copy is inert and hidden from assistive technology
  * (transientCopy.ts). It is laid next to the box that clips the element,
  * never inside a scroll container. So a scroll that the change makes does not
- * move it.
+ * move it. It is clipped to that box's visible part, past its own edges, so
+ * what the element draws outside its box, such as an indicator band above a
+ * list, shows in it as it did.
  */
 
 import {ENTRANCE_OPACITY_FLOOR} from './opacityFloor';
@@ -56,6 +58,9 @@ export function playReducedMotionCrossFade(
   if (host == null || rect.width === 0 || rect.height === 0) {
     return null;
   }
+  // Read with the element's box, before any write: laying the copy writes
+  // layout, and a read after it would lay the page out again.
+  const visible = clip == null ? null : visibleBox(clip);
   const copy = isCopyable(element) ? inertCopy(element) : null;
   if (copy == null) {
     return null;
@@ -68,9 +73,9 @@ export function playReducedMotionCrossFade(
     copy.style.setProperty(property, 'none');
   }
   copy.style.setProperty('pointer-events', 'none');
-  placeOver(copy, host, rect, anchor.nextSibling);
-  if (clip != null) {
-    clipTo(copy, clip);
+  const scale = placeOver(copy, host, rect, anchor.nextSibling);
+  if (visible != null) {
+    clipTo(copy, rect, visible, scale);
   }
   land();
   // Both fades start in this task, on the same frame, with the same easing.
@@ -114,25 +119,46 @@ export function playReducedMotionCrossFade(
   };
 }
 
+interface Edges {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
 /**
- * Clips `copy` to `clip`'s visible box: its padding box, inside the borders
- * and scroll bars. Laid outside `clip`, the copy is no longer clipped by it.
+ * `clip`'s visible box in viewport pixels: its padding box, inside the
+ * borders and scroll bars.
  */
-function clipTo(copy: HTMLElement, clip: HTMLElement): void {
-  const clipRect = clip.getBoundingClientRect();
-  const top = clipRect.top + clip.clientTop;
-  const left = clipRect.left + clip.clientLeft;
-  const bottom = top + clip.clientHeight;
-  const right = left + clip.clientWidth;
-  const box = copy.getBoundingClientRect();
+function visibleBox(clip: HTMLElement): Edges {
+  const box = clip.getBoundingClientRect();
+  const top = box.top + clip.clientTop;
+  const left = box.left + clip.clientLeft;
+  return {
+    top,
+    left,
+    bottom: top + clip.clientHeight,
+    right: left + clip.clientWidth,
+  };
+}
+
+/**
+ * Clips `copy`, laid over `rect`, to `visible`: the visible box of the box it
+ * is laid outside of, which no longer clips it. An inset is negative where
+ * that box shows past the copy's own edge.
+ */
+function clipTo(
+  copy: HTMLElement,
+  rect: DOMRect,
+  visible: Edges,
+  scale: {x: number; y: number},
+): void {
   // The inset is in the copy's own pixels: a scaled host draws them larger.
-  const scale =
-    copy.offsetWidth > 0 && box.width > 0 ? box.width / copy.offsetWidth : 1;
   const inset = [
-    top - box.top,
-    box.right - right,
-    box.bottom - bottom,
-    left - box.left,
-  ].map(value => `${Math.max(0, value) / scale}px`);
+    (visible.top - rect.top) / scale.y,
+    (rect.right - visible.right) / scale.x,
+    (rect.bottom - visible.bottom) / scale.y,
+    (visible.left - rect.left) / scale.x,
+  ].map(value => `${value}px`);
   copy.style.setProperty('clip-path', `inset(${inset.join(' ')})`);
 }

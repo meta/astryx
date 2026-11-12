@@ -968,7 +968,160 @@ const stopRowShown = (page: Page) =>
     return record.__rowShown;
   });
 
-test('under Reduce Motion the list shows on every frame: the release and the end cross-fade rather than dip', async ({
+interface IndicatorFrame {
+  t: number;
+  /** How much of the indicator shows, 0 to 1. */
+  shown: number;
+  /** The content's copies on screen: a cross-fade is playing. */
+  copies: number;
+  /** The highest opacity of those copies. */
+  copyOpacity: number;
+}
+
+/**
+ * Records how much of the refresh indicator shows on each frame, and the
+ * content's copies while a cross-fade lays one. Every element that draws the
+ * indicator counts: the content's own and any copy's. Each shows the part of
+ * its box that its clipping ancestors leave (a clip path, or a box that hides
+ * overflow), times its opacity up the tree. The shares combine as
+ * 1 − Π(1 − share).
+ */
+async function recordIndicatorShown(page: Page) {
+  await page.evaluate(() => {
+    type Box = {left: number; top: number; right: number; bottom: number};
+    const record = window as unknown as {
+      __indicatorShown: IndicatorFrame[];
+      __indicatorShownStop: boolean;
+    };
+    record.__indicatorShown = [];
+    record.__indicatorShownStop = false;
+    const meet = (a: Box, b: Box): Box => ({
+      left: Math.max(a.left, b.left),
+      top: Math.max(a.top, b.top),
+      right: Math.min(a.right, b.right),
+      bottom: Math.min(a.bottom, b.bottom),
+    });
+    // The box `element` clips to: its clip path's inset box, and, for a
+    // descendant, its padding box when it hides overflow.
+    const clipOf = (element: Element, isAncestor: boolean): Box | null => {
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      let clip: Box | null = null;
+      if (
+        isAncestor &&
+        (style.overflowX !== 'visible' || style.overflowY !== 'visible')
+      ) {
+        const left = rect.left + element.clientLeft;
+        const top = rect.top + element.clientTop;
+        clip = {
+          left,
+          top,
+          right: left + element.clientWidth,
+          bottom: top + element.clientHeight,
+        };
+      }
+      if (style.clipPath.startsWith('inset(')) {
+        const [top, right = top, bottom = top, left = right] = style.clipPath
+          .slice('inset('.length, -1)
+          .split(' round ')[0]
+          .trim()
+          .split(/\s+/)
+          .map(value => Number.parseFloat(value));
+        const width = (element as HTMLElement).offsetWidth;
+        const scale = width > 0 ? rect.width / width : 1;
+        const inset = {
+          left: rect.left + left * scale,
+          top: rect.top + top * scale,
+          right: rect.right - right * scale,
+          bottom: rect.bottom - bottom * scale,
+        };
+        clip = clip == null ? inset : meet(clip, inset);
+      }
+      return clip;
+    };
+    const shareOf = (element: Element) => {
+      const rect = element.getBoundingClientRect();
+      const area = rect.width * rect.height;
+      if (area === 0) {
+        return 0;
+      }
+      let visible: Box = {
+        left: rect.left,
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom,
+      };
+      let opacity = 1;
+      for (
+        let node: Element | null = element;
+        node != null;
+        node = node.parentElement
+      ) {
+        const clip = clipOf(node, node !== element);
+        if (clip != null) {
+          visible = meet(visible, clip);
+        }
+        opacity *= Number(getComputedStyle(node).opacity);
+      }
+      const width = Math.max(0, visible.right - visible.left);
+      const height = Math.max(0, visible.bottom - visible.top);
+      return ((width * height) / area) * opacity;
+    };
+    const frame = () => {
+      let hidden = 1;
+      for (const element of document.querySelectorAll(
+        '[data-refresh-content] [role="progressbar"]',
+      )) {
+        hidden *= 1 - shareOf(element);
+      }
+      const copies = [
+        ...document.querySelectorAll('[data-refresh-content][inert]'),
+      ];
+      record.__indicatorShown.push({
+        t: performance.now(),
+        shown: 1 - hidden,
+        copies: copies.length,
+        copyOpacity: Math.max(
+          0,
+          ...copies.map(copy => Number(getComputedStyle(copy).opacity)),
+        ),
+      });
+      if (!record.__indicatorShownStop) {
+        requestAnimationFrame(frame);
+      }
+    };
+    requestAnimationFrame(frame);
+  });
+}
+
+const stopIndicatorShown = (page: Page) =>
+  page.evaluate(() => {
+    const record = window as unknown as {
+      __indicatorShown: IndicatorFrame[];
+      __indicatorShownStop: boolean;
+    };
+    record.__indicatorShownStop = true;
+    return record.__indicatorShown;
+  });
+
+/** Each cross-fade: a run of frames with a copy of the content on screen. */
+function crossFades(frames: readonly IndicatorFrame[]): IndicatorFrame[][] {
+  const runs: IndicatorFrame[][] = [];
+  let run: IndicatorFrame[] | null = null;
+  for (const frame of frames) {
+    if (frame.copies === 0) {
+      run = null;
+    } else if (run == null) {
+      run = [frame];
+      runs.push(run);
+    } else {
+      run.push(frame);
+    }
+  }
+  return runs;
+}
+
+test('under Reduce Motion the list and its indicator show on every frame: the release and the end cross-fade rather than dip', async ({
   page,
 }) => {
   // A cross-fade connects the two states: the list where it was fades out as
@@ -980,6 +1133,7 @@ test('under Reduce Motion the list shows on every frame: the release and the end
     refreshMs: '-1',
   });
   await recordRowShown(page, 'Message 2');
+  await recordIndicatorShown(page);
   await driver.play(slowPull(start, 300, 200));
   await waitForContentRest(content);
   expect(await shownPull(content)).toBeCloseTo(HEIGHT, 1);
@@ -1000,6 +1154,34 @@ test('under Reduce Motion the list shows on every frame: the release and the end
   expect(
     least,
     `the row showed at ${least.toFixed(3)} on its emptiest frame; the list blanked (frames under half: ${emptiest})`,
+  ).toBeGreaterThanOrEqual(0.5);
+  // The indicator band sits above the content's box. The copy shows it as
+  // the content did, so it fades with the copy and never ahead of it: at the
+  // end it fades out, and at the release it stays in view as the rows do.
+  const indicator = await stopIndicatorShown(page);
+  const runs = crossFades(indicator);
+  const detail = JSON.stringify(
+    runs.map(run =>
+      run.map(frame => [frame.shown.toFixed(3), frame.copyOpacity.toFixed(3)]),
+    ),
+  );
+  expect(
+    runs.length,
+    `the release's and the end's cross-fades: ${detail}`,
+  ).toBe(2);
+  for (const [index, run] of runs.entries()) {
+    const behind = Math.min(
+      ...run.map(frame => frame.shown - frame.copyOpacity),
+    );
+    expect(
+      behind,
+      `cross-fade ${index + 1}: the indicator showed ${(-behind).toFixed(3)} less than its copy's opacity; the copy hid it (shown, copy opacity per frame: ${detail})`,
+    ).toBeGreaterThanOrEqual(-0.1);
+  }
+  const releaseLeast = Math.min(...runs[0].map(frame => frame.shown));
+  expect(
+    releaseLeast,
+    `the indicator showed at ${releaseLeast.toFixed(3)} during the release's cross-fade: it blinked (${detail})`,
   ).toBeGreaterThanOrEqual(0.5);
 });
 

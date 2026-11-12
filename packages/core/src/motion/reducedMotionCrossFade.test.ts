@@ -5,8 +5,10 @@
  * @input reducedMotionCrossFade.ts, with fakeAnimate for Web Animations
  * @output Proof of the cross-fade through a copy: the copy fades out where
  *   the element showed while the element lands and fades in, on one easing.
- *   The copy sits next to the clipping box and is clipped to it. It goes once
- *   both fades end or on cancel. An element that cannot be copied gets null.
+ *   The copy sits next to the clipping box and is clipped to its visible box,
+ *   past the copy's own edges, with no layout read once the copy is laid. It
+ *   goes once both fades end or on cancel. An element that cannot be copied
+ *   gets null.
  * @position Testing for /packages/core/src/motion/reducedMotionCrossFade.ts
  */
 
@@ -34,6 +36,8 @@ function box(left: number, top: number, width: number, height: number) {
 
 let animations: FakeAnimation[] = [];
 const nativeAnimate = Element.prototype.animate;
+/** The scroller's layout reads and the copy's placement, when a case logs them. */
+let layoutLog: string[] | null = null;
 
 beforeEach(() => {
   const fake = fakeAnimate();
@@ -44,6 +48,7 @@ beforeEach(() => {
 
 afterEach(() => {
   Element.prototype.animate = nativeAnimate;
+  layoutLog = null;
   document.body.replaceChildren();
 });
 
@@ -58,14 +63,22 @@ function list() {
   wrapper.append(scroller);
   document.body.append(wrapper);
   content.getBoundingClientRect = () => box(0, 167, 400, 900);
-  scroller.getBoundingClientRect = () => box(0, 0, 400, 600);
+  scroller.getBoundingClientRect = () => {
+    layoutLog?.push('read the scroller');
+    return box(0, 0, 400, 600);
+  };
   for (const [name, value] of [
     ['clientTop', 0],
     ['clientLeft', 0],
     ['clientWidth', 400],
     ['clientHeight', 600],
   ] as const) {
-    Object.defineProperty(scroller, name, {value});
+    Object.defineProperty(scroller, name, {
+      get: () => {
+        layoutLog?.push('read the scroller');
+        return value;
+      },
+    });
   }
   return {wrapper, scroller, content};
 }
@@ -106,7 +119,7 @@ describe('playReducedMotionCrossFade', () => {
     expect(fadeOut.keyframes[0].easing).toBe(fade.easing);
   });
 
-  it('clips the copy to the scroller it is laid outside of', () => {
+  it("clips the copy to the visible box of the scroller it is laid outside of, past the copy's own edges", () => {
     const {wrapper, scroller, content} = list();
     // The copy's own box once laid: where the list showed, 900 px tall.
     const nativeBox = Element.prototype.getBoundingClientRect;
@@ -120,10 +133,43 @@ describe('playReducedMotionCrossFade', () => {
     } finally {
       Element.prototype.getBoundingClientRect = nativeBox;
     }
-    // The scroller shows 600 px: the copy's last 467 px are cut.
+    // The scroller shows 600 px: the copy's last 467 px are cut. Its top
+    // edge is 167 px below the scroller's: what the copy holds above its own
+    // box, such as an indicator band above a list, shows there as it did.
     expect(copyIn(wrapper)?.style.getPropertyValue('clip-path')).toBe(
-      'inset(0px 0px 467px 0px)',
+      'inset(-167px 0px 467px 0px)',
     );
+  });
+
+  it('reads the scroller before it lays the copy: once the copy is laid, nothing reads layout', () => {
+    const {wrapper, scroller, content} = list();
+    const log: string[] = [];
+    layoutLog = log;
+    const insert = wrapper.insertBefore.bind(wrapper);
+    wrapper.insertBefore = <T extends Node>(node: T, child: Node | null) => {
+      log.push('lay the copy');
+      return insert(node, child);
+    };
+    const nativeBox = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      if (this.hasAttribute('inert')) {
+        log.push('read the copy');
+        return box(0, 167, 400, 900);
+      }
+      return nativeBox.call(this);
+    };
+    try {
+      playReducedMotionCrossFade(content, fade, () => {}, scroller);
+    } finally {
+      Element.prototype.getBoundingClientRect = nativeBox;
+    }
+    expect(log).toContain('read the scroller');
+    // Laying the copy reads its box once, to place it. A read after its last
+    // write would lay the page out a second time.
+    expect(log.slice(log.indexOf('lay the copy'))).toEqual([
+      'lay the copy',
+      'read the copy',
+    ]);
   });
 
   it('removes the copy once both fades end, and reports it finished', async () => {
