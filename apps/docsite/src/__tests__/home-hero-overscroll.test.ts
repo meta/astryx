@@ -530,7 +530,7 @@ body[data-mode='a b'] {
  */
 describe('home hero pinned layers are never position: fixed (#5470)', () => {
   const layers: ReadonlyArray<[string, string, string]> = [
-    ['hero text block', path.join(SITE, 'page.tsx'), 'heroContent'],
+    ['hero text block', path.join(SITE, 'HomePage.tsx'), 'heroContent'],
     ['aurora glow', path.join(HERO, 'HeroThemeReel.tsx'), 'backdropGlow'],
     ['floating cards stage', path.join(HERO, 'HeroFloatingCards.tsx'), 'stage'],
   ];
@@ -557,7 +557,7 @@ describe('home hero pinned layers are never position: fixed (#5470)', () => {
  * or the showcase stops covering them.
  */
 describe('home hero rails are bounded by heroScope and precede the showcase (#5470)', () => {
-  const page = () => stripComments(read(path.join(SITE, 'page.tsx')));
+  const page = () => stripComments(read(path.join(SITE, 'HomePage.tsx')));
   const reel = () => stripComments(read(path.join(HERO, 'HeroThemeReel.tsx')));
 
   it('heroScope is the positioned ancestor and the rails fill it', () => {
@@ -586,9 +586,7 @@ describe('home hero rails are bounded by heroScope and precede the showcase (#54
 
   it('renders the backdrop, cards and hero-text rails inside heroScope, before showcaseOverlay', () => {
     const source = page();
-    const jsx = source.slice(
-      source.indexOf('export default function HomePage'),
-    );
+    const jsx = source.slice(source.indexOf('export function HomePage'));
     expect(jsx.length).toBeGreaterThan(200);
     const at = (needle: string) => {
       const index = jsx.indexOf(needle);

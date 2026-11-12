@@ -16,6 +16,7 @@ import {fileURLToPath} from 'node:url';
 import {
   findEntry,
   listDir,
+  listDirEntries,
   listingCacheActive,
   pathExists,
 } from './listing-cache.mjs';
@@ -336,6 +337,31 @@ export function findPackageRoot(startDir) {
     if (fs.existsSync(path.join(dir, 'package.json'))) return dir;
   }
   return null;
+}
+
+/**
+ * A path a command writes in a project, read the same way by every theme
+ * command: from the working folder when given, from the project root (the
+ * nearest folder with a package.json, else the working folder) when not,
+ * and with a backslash as a folder separator on every platform.
+ * @param {string} cwd
+ * @param {string | undefined} typed the path as given, or undefined
+ * @param {string} fallback the path from the project root when none is given
+ * @returns {{projectDir: string, typed: string | undefined, relative: string}}
+ *   `typed`: the path as given with `/`; `relative`: from the project root
+ */
+export function projectWritePath(cwd, typed, fallback) {
+  const projectDir = findPackageRoot(cwd) ?? path.resolve(cwd);
+  const given = typed == null ? undefined : String(typed).replace(/\\/g, '/');
+  const absolute =
+    given == null ? path.join(projectDir, fallback) : path.resolve(cwd, given);
+  return {
+    projectDir,
+    typed: given,
+    relative: path.isAbsolute(given ?? '')
+      ? /** @type {string} */ (given)
+      : path.relative(projectDir, absolute) || '.',
+  };
 }
 
 /**
@@ -811,7 +837,7 @@ export function discoverExternalPackages(startDir = process.cwd()) {
   /** @param {string} searchDir */
   const scanDir = searchDir => {
     if (!fs.existsSync(searchDir)) return;
-    const entries = fs.readdirSync(searchDir, {withFileTypes: true});
+    const entries = listDirEntries(searchDir);
 
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
@@ -853,7 +879,8 @@ export function discoverExternalPackages(startDir = process.cwd()) {
 
 /**
  * List available component directories in packages/core/src.
- * Returns directory names that contain Astryx*.tsx files.
+ * Component directories are capitalized (`Button`, `Dialog`); lowercase
+ * directories hold shared infrastructure and are never listed.
  * @param {string} coreDir
  */
 export function listComponents(coreDir) {
@@ -864,9 +891,7 @@ export function listComponents(coreDir) {
   return entries
     .filter(e => {
       if (!e.isDirectory()) return false;
-      // Skip non-component dirs
-      if (['hooks', 'theme', 'utils'].includes(e.name)) return false;
-      return true;
+      return /^[A-Z]/.test(e.name);
     })
     .map(e => e.name)
     .sort();

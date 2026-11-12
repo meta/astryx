@@ -29,6 +29,7 @@
 import {subscribeInput} from '../utils/inputStream';
 import {isCoarsePointer, watchCoarsePointer} from '../utils/coarsePointer';
 import {gestureHosts} from './hostRegistry';
+import {sharedWeakMap} from '../utils/sharedRealm';
 
 /**
  * Decides, once per one-finger touch, whether its pan would scroll the page:
@@ -71,7 +72,11 @@ interface PageHolds {
   stopWatchingPointer: (() => void) | null;
 }
 
-const holdsByDocument = new WeakMap<Document, PageHolds>();
+// Every copy of Core holds the page through one entry per document.
+const holdsByDocument = sharedWeakMap<Document, PageHolds>(
+  'gestures/page-hold/holds-by-document',
+  1,
+);
 
 function fingersOf(event: TouchEvent): Touch[] {
   return event.touches == null ? [] : Array.from(event.touches);

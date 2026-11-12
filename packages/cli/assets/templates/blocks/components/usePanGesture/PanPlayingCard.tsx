@@ -3,8 +3,19 @@
 'use client';
 
 import {useRef, useState} from 'react';
-import {flushSync} from 'react-dom';
-import {usePanGesture} from '@astryxdesign/core/hooks';
+import * as stylex from '@stylexjs/stylex';
+import {Button} from '@astryxdesign/core/Button';
+import {Card} from '@astryxdesign/core/Card';
+import {Center} from '@astryxdesign/core/Center';
+import {useAnnounce, usePanGesture} from '@astryxdesign/core/hooks';
+import {Text} from '@astryxdesign/core/Text';
+import {VStack} from '@astryxdesign/core/VStack';
+import {
+  colorVars,
+  durationVars,
+  easeVars,
+  radiusVars,
+} from '@astryxdesign/core/theme/tokens.stylex';
 
 const DECK = [
   {face: 'A\u2660', name: 'Ace of spades'},
@@ -14,32 +25,48 @@ const DECK = [
 ];
 /** A release faster than this (px/s) throws the card away. */
 const THROW_SPEED = 1000;
-/** How far a thrown card travels before the next one is dealt, px. */
-const THROW_DISTANCE = 480;
-const SETTLE = 'translate 300ms cubic-bezier(0.2, 0.9, 0.3, 1.2)';
-const THROW = 'translate 250ms ease-in, opacity 250ms ease-in';
+/** How far a thrown card travels while it fades, px. */
+const THROW_DISTANCE = 160;
+const EXIT = `${durationVars['--duration-exit']} ${easeVars['--ease-exit']}`;
+
+const styles = stylex.create({
+  // A wash under the stage, so the card on top reads in light and dark themes.
+  stage: {
+    backgroundColor: colorVars['--color-neutral'],
+    borderRadius: radiusVars['--radius-container'],
+    overflow: 'hidden',
+  },
+  card: {cursor: 'grab', userSelect: 'none'},
+  // A gentle release settles the card back, unless the person reduces motion.
+  settle: {
+    transition: {
+      default: `translate ${durationVars['--duration-medium']} ${easeVars['--ease-move']}`,
+      '@media (prefers-reduced-motion: reduce)': 'none',
+    },
+  },
+  // A flick throws it off to one side as it fades.
+  thrown: {
+    opacity: 0,
+    transition: {
+      default: `translate ${EXIT}, opacity ${EXIT}`,
+      '@media (prefers-reduced-motion: reduce)': 'none',
+    },
+  },
+  drag: (x: number, y: number) => ({translate: `${x}px ${y}px`}),
+});
+
+type Pose = {x: number; y: number; motion: 'rest' | 'settle' | 'thrown'};
 
 export default function PanPlayingCard() {
   const card = useRef<HTMLDivElement>(null);
   const [top, setTop] = useState(0);
-  const [announcement, setAnnouncement] = useState('');
+  const [pose, setPose] = useState<Pose>({x: 0, y: 0, motion: 'rest'});
+  const announce = useAnnounce();
   /** A throw is in flight: the next card is dealt when it ends. */
   const throwing = useRef(false);
   /** The drag in progress met a throw: the rest of it moves nothing. */
   const ignoringDrag = useRef(false);
-
-  /** Move the card, with a transition unless the person reduces motion. */
-  function moveTo(x: number, y: number, transition: string) {
-    const element = card.current;
-    if (element == null) {
-      return;
-    }
-    const reduced = window.matchMedia(
-      '(prefers-reduced-motion: reduce)',
-    ).matches;
-    element.style.transition = reduced ? 'none' : transition;
-    element.style.translate = `${x}px ${y}px`;
-  }
+  const shown = DECK[top % DECK.length];
 
   function discard(direction: number) {
     const element = card.current;
@@ -48,33 +75,31 @@ export default function PanPlayingCard() {
       return;
     }
     throwing.current = true;
-    // The drag in progress, if any, moves nothing more.
     ignoringDrag.current = true;
-    moveTo(direction * THROW_DISTANCE, 0, THROW);
-    element.style.opacity = '0';
-    const deal = () => {
+    setPose({x: direction * THROW_DISTANCE, y: 0, motion: 'thrown'});
+    // The next card's face and its place at the center commit together.
+    const dealNext = () => {
       throwing.current = false;
-      // Commit the next card's face first. A reset before that paints the
-      // discarded card back at the centre for one frame.
-      flushSync(() => {
-        setAnnouncement(`${DECK[top % DECK.length].name} discarded`);
-        setTop(value => value + 1);
-      });
-      moveTo(0, 0, 'none');
-      element.style.opacity = '1';
+      announce(`${shown.name} discarded`);
+      setTop(value => value + 1);
+      setPose({x: 0, y: 0, motion: 'rest'});
     };
-    if (element.style.transition === 'none') {
-      deal();
-    } else {
-      element.addEventListener('transitionend', deal, {once: true});
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      dealNext();
+      return;
     }
+    // Once the throw's style applies, deal when its transitions settle: at
+    // the theme's duration, or at once when a stylesheet stops them.
+    requestAnimationFrame(() => {
+      const ends = element.getAnimations().map(animation => animation.finished);
+      void Promise.allSettled(ends).then(dealNext);
+    });
   }
 
-  // The drag writes the card's style in onPan: no render per move.
   usePanGesture(card, {
     onPan: ({state, translation, velocity}) => {
-      // A drag that meets a throw is ignored to its end. Its moves would
-      // cancel the throw's transitions, and the next card would jump to it.
+      // A drag that meets a throw is ignored to its end, or the next card
+      // would jump to it.
       if (state === 'began') {
         ignoringDrag.current = throwing.current;
       }
@@ -82,62 +107,41 @@ export default function PanPlayingCard() {
         return;
       }
       if (state === 'began' || state === 'changed') {
-        moveTo(translation.x, translation.y, 'none');
+        setPose({...translation, motion: 'rest'});
       } else if (state === 'ended' && Math.abs(velocity.x) > THROW_SPEED) {
         discard(Math.sign(velocity.x));
       } else {
-        moveTo(0, 0, SETTLE);
+        setPose({x: 0, y: 0, motion: 'settle'});
       }
     },
   });
 
   return (
-    <div style={{display: 'grid', gap: 16, padding: 16, maxWidth: 360}}>
-      <div
-        style={{
-          height: 200,
-          display: 'grid',
-          placeItems: 'center',
-          overflow: 'hidden',
-        }}>
-        <div
+    <VStack gap={4} padding={4} width="min(360px, 80vw)">
+      <Center height={280} xstyle={styles.stage}>
+        <Card
           ref={card}
           // An image's name is all a screen reader announces, so it names the
           // card.
           role="img"
-          aria-label={DECK[top % DECK.length].name}
-          style={{
-            width: 120,
-            height: 170,
-            display: 'grid',
-            placeItems: 'center',
-            font: 'bold 40px system-ui, sans-serif',
-            borderRadius: 12,
-            backgroundColor: 'var(--color-background-surface)',
-            color: 'var(--color-text-primary)',
-            boxShadow: '0 2px 8px rgb(0 0 0 / 0.2)',
-            cursor: 'grab',
-            userSelect: 'none',
-          }}>
-          {DECK[top % DECK.length].face}
-        </div>
-      </div>
+          aria-label={shown.name}
+          width={80}
+          height={112}
+          elevation="med"
+          xstyle={[
+            styles.card,
+            styles.drag(pose.x, pose.y),
+            pose.motion !== 'rest' && styles[pose.motion],
+          ]}>
+          <Center height="100%">
+            <Text size="3xl" weight="bold">
+              {shown.face}
+            </Text>
+          </Center>
+        </Card>
+      </Center>
       {/* The drag's keyboard and assistive-technology path (WCAG 2.5.7). */}
-      <button type="button" onClick={() => discard(1)}>
-        Discard the top card
-      </button>
-      <div
-        aria-live="polite"
-        style={{
-          position: 'absolute',
-          width: 1,
-          height: 1,
-          overflow: 'hidden',
-          clipPath: 'inset(50%)',
-          whiteSpace: 'nowrap',
-        }}>
-        {announcement}
-      </div>
-    </div>
+      <Button label="Discard the top card" onClick={() => discard(1)} />
+    </VStack>
   );
 }

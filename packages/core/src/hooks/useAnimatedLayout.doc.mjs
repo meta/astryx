@@ -61,7 +61,7 @@ export const docs = {
   },
   relatedComponents: ['TreeList', 'Collapsible', 'ScrollableArea'],
   importPath: '@astryxdesign/core/hooks',
-  category: 'animation',
+  category: 'motion & gestures',
 };
 
 /** @type {import('@astryxdesign/cli/authoring').HookTranslationDoc} */

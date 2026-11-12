@@ -123,6 +123,7 @@ export type {
   ComponentTranslationDoc,
   ComponentPropDoc,
   ComponentExampleDoc,
+  ExampleKind,
   ComponentAnatomyElement,
   ComponentAccessibilityRequirement,
   ComponentAccessibilityThemeStatus,
@@ -138,6 +139,8 @@ export type {
   ComponentThemingTarget,
   ComponentThemingVar,
   ComponentThemingDerivedVar,
+  ComponentIconSlotDoc,
+  ComponentIconSlotStateDoc,
   UsageDoc,
   // hook
   HookParamDoc,

@@ -37,6 +37,7 @@ const SRC_DIR = join(__dirname, '..');
 type ComponentDocModule = {
   docs?: {
     theming?: {
+      targets?: {className: string}[];
       vars?: {name: string}[];
       derived?: DerivedDocEntry[];
     };
@@ -125,6 +126,22 @@ const STRUCTURAL_VARS = new Set([
   '--_progress-bar-pulse',
   '--_progress-bar-pulse-curve',
   '--_progress-bar-pulse-floor',
+  // The room a layer has above the software keyboard. The layer runtime
+  // writes it on each open layer from the keyboard's measured height
+  // (Layer/useLayerKeyboardClearance.ts). Runtime geometry, never authored by
+  // a theme.
+  '--_layer-keyboard-max-block-size',
+  // Written beside it: `auto` while the keyboard caps the layer, so the
+  // surface scrolls from that commit. Runtime state, never authored by a theme.
+  '--_layer-keyboard-overflow',
+  // Also beside it: how far above the viewport's bottom a layer ends while the
+  // keyboard is up. Runtime geometry, never authored by a theme.
+  '--_layer-keyboard-inset-block-end',
+  // A sheet's scrim opacity and fade time. The sheet writes both on its
+  // dialog for the backdrop, and its panel resets them so the content does
+  // not inherit them. Runtime state, never authored by a theme.
+  '--_sheet-scrim-opacity',
+  '--_sheet-scrim-duration',
 ]);
 
 /**
@@ -176,6 +193,7 @@ interface ComponentInfo {
   sourceVars: string[];
   docVars: string[];
   docDerived: {property: string; vars?: string[]; expand?: string}[];
+  docTargetKeys: string[];
 }
 
 function discoverComponents(): ComponentInfo[] {
@@ -217,10 +235,14 @@ function discoverComponents(): ComponentInfo[] {
 
     let docVars: string[] = [];
     let docDerived: DerivedDocEntry[] = [];
+    let docTargetKeys: string[] = [];
     try {
       const mod = require(docPath) as ComponentDocModule;
       docVars = (mod.docs?.theming?.vars || []).map(v => v.name);
       docDerived = mod.docs?.theming?.derived || [];
+      docTargetKeys = (mod.docs?.theming?.targets || []).map(t =>
+        t.className.replace(/^astryx-/, ''),
+      );
     } catch {
       /* skip */
     }
@@ -240,6 +262,7 @@ function discoverComponents(): ComponentInfo[] {
       sourceVars: [...allVars],
       docVars,
       docDerived,
+      docTargetKeys,
     });
   }
   return results;
@@ -255,7 +278,7 @@ const DIR_TO_REGISTRY_KEY: Record<string, string> = {
   BottomSheet: 'bottom-sheet',
   Button: 'button',
   Card: 'card',
-  Chat: 'chat',
+  Chat: 'chat-composer',
   ContextMenu: 'context-menu',
   Dialog: 'dialog',
   Drawer: 'drawer',
@@ -291,6 +314,21 @@ const PRIVATE_SYSTEM_VARS = new Set([
   // `break-word` fallback. scripts/text-overflow-wrap-anywhere.test.mjs
   // keeps every such container setting it.
   '--_astryx-text-overflow-wrap',
+  // List FR5 and the container-padding record's corner geometry: a bleeding
+  // List passes its first and last rows the container corner they take.
+  '--_list-corner-start-start',
+  '--_list-corner-start-end',
+  '--_list-corner-end-start',
+  '--_list-corner-end-end',
+  // Table FR19 and the container-padding record's block-edge geometry: a
+  // windowed Table includes the parent padding that it bleeds across.
+  '--_table-bleed-block-start',
+  '--_table-bleed-block-end',
+  // The container-padding record's corner geometry: a rounded Card, Dialog,
+  // or BottomSheet hands its block-edge radius to the shared corner
+  // publication beside container().
+  '--_container-corner-block-start',
+  '--_container-corner-block-end',
 ]);
 
 const CROSS_COMPONENT_VARS: Record<string, string[]> = {
@@ -339,7 +377,6 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   // generated at all — `inset` and `content` on a pseudo-element are not
   // properties a theme author sets on the component.
   '--_thumbnail-hit-inset',
-  '--_input-clear-hit-inset',
   '--_power-search-sheet-hit-inset',
   // The border width a host draws where its touch hit layer reaches past,
   // such as a divided ListItem's divider (0 on the last row).
@@ -357,13 +394,16 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   // by whatever paints it. A theme sets `--color-overlay-pressed`, not this.
   '--_press-paint',
   '--_press-paint-image',
-  // A checkbox row's touch press image, which an indicator that paints its
-  // own press inherits. The row writes it from the press paint above.
+  // A checkbox row's press image, which an indicator that paints its own
+  // press inherits. The row writes it from the press paint above.
   '--_indicator-press-image',
+  // Transparent while the controller paints a checkbox row's press, so that
+  // indicator skips its `:active` fill. The row's own press arms write it. A
+  // theme author never sets it.
+  '--_indicator-active-press',
   // A CheckboxList row's own press paint, handed to its checkbox's box:
   // written by the row's own press arms, never a value a theme author sets.
   '--_checkbox-row-press-paint',
-  '--_input-clear-hit-content',
   '--_power-search-sheet-hit-content',
   // Placement and swipe lifecycle values are private Toast behavior. A theme
   // author controls the surface transform/opacity as a whole, not these values.
@@ -493,7 +533,7 @@ describe('component CSS vars are documented and themeable', () => {
 describe('derivedVarRegistry ↔ doc file consistency', () => {
   const components = discoverComponents();
 
-  for (const {dir, docDerived} of components) {
+  for (const {dir, docDerived, docTargetKeys} of components) {
     const key = DIR_TO_REGISTRY_KEY[dir];
     if (!key || docDerived.length === 0) {
       continue;
@@ -503,6 +543,12 @@ describe('derivedVarRegistry ↔ doc file consistency', () => {
       const registryEntries = derivedVarRegistry[key];
       expect(registryEntries).toBeDefined();
       expect(registryEntries).toEqual(docDerived);
+    });
+
+    // generateThemeRules looks the registry up by the theme's components key,
+    // so a key that is not one of the doc's targets never expands.
+    it(`${dir} (${key}): registry key is a documented theming target`, () => {
+      expect(docTargetKeys).toContain(key);
     });
   }
 

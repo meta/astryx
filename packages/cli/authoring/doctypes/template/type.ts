@@ -55,9 +55,11 @@ export interface BaseTemplateDoc extends AuthoredDocGraphFields {
    *  (`{TrashIcon: 'delete'}`), keyed by the name a named import reads
    *  (`{Trash as TrashIcon}` is `Trash`) or a default import's local name
    *  (`import DeleteIcon from …` is `DeleteIcon`). When the project has an
-   *  icon set, each declared icon is replaced by the set's icon for that
-   *  definition (`astryx docs cli/experimental/icon-definitions`), and every
-   *  key is reported as mapped or kept. A name imported from two modules
+   *  icon set, each declared icon is replaced by the icon for that
+   *  definition (`astryx docs cli/experimental/icon-definitions`) from the
+   *  first set in the project's list that maps it, or by a placeholder the
+   *  copied file declares when no set does, and every key is reported as mapped, a
+   *  placeholder, or kept. A name imported from two modules
    *  (`TrashIcon` from an outline and a solid module) needs one key.
    *  @experimental May change or be removed in a patch release. */
   icons?: Record<string, string>;
@@ -186,6 +188,7 @@ export type TemplateCategory =
   | 'Content - Order Detail'
   | 'Content - Product Detail'
   | 'Content - Work Item Detail'
+  | 'Content - Course Detail'
   | 'Content - Product List'
   | 'Content - Documentation Catalog'
   | 'Content - Documentation Design'

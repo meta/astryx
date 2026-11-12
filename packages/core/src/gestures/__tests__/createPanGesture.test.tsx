@@ -6,18 +6,27 @@
  *   document's gesture host
  * @output Tests for spec:AST-107 FR1 and FR6. A drag is reported as values,
  *   on each axis, and as cancelled. A press or a long press reports nothing.
- *   One API works at two layers. Destroy leaves no listener.
+ *   One API works at two layers. Destroy leaves no listener. The internal
+ *   pan under it says which pointer drove each drag.
  * @position Tests of the public pan factory and its hook
  */
 
 import {act, render} from '@testing-library/react';
-import {StrictMode, useRef, useState} from 'react';
+import {
+  StrictMode,
+  Suspense,
+  startTransition,
+  use,
+  useRef,
+  useState,
+} from 'react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
   createPanGesture,
   type PanGestureEvent,
   type PanGestureOptions,
 } from '../createPanGesture';
+import {createPan, type PanInput} from '../createPanGesture';
 import {usePanGesture} from '../../hooks/usePanGesture';
 import {armClickGuard, disarmClickGuard} from '../../utils/clickGuard';
 import {coarsePrimaryPointer} from './harness';
@@ -330,6 +339,26 @@ describe('createPanGesture (spec:AST-107 FR1, FR6)', () => {
   });
 });
 
+describe('createPan, under createPanGesture (internal)', () => {
+  it('says which pointer drove each drag: a finger, a mouse or a pen', () => {
+    const element = surface();
+    const inputs: PanInput[] = [];
+    const gesture = createPan(element, {
+      axis: 'x',
+      onPan: event => inputs.push(event.input),
+    });
+    destroys.push(() => gesture.destroy());
+    drag(element, 60, 0);
+    expect(new Set(inputs)).toEqual(new Set(['touch']));
+    for (const pointerType of ['mouse', 'pen'] as const) {
+      inputs.length = 0;
+      pointerDrag(element, pointerType, 60);
+      expect(inputs.length).toBeGreaterThan(0);
+      expect(new Set(inputs)).toEqual(new Set([pointerType]));
+    }
+  });
+});
+
 describe('createPanGesture on the server (spec:AST-107 FR6)', () => {
   it('does no DOM work at import', async () => {
     vi.resetModules();
@@ -399,6 +428,43 @@ describe('usePanGesture (spec:AST-107 FR1, FR6)', () => {
     expect(first).not.toHaveBeenCalled();
     expect(phases(events)).toEqual(['began', 'changed', 'ended']);
     expect(events.at(-1)?.translation).toEqual({x: 30, y: 0});
+  });
+
+  it('keeps the committed onPan when React discards a render, as a suspended transition does', async () => {
+    const committed: PanGestureEvent[] = [];
+    const discarded: PanGestureEvent[] = [];
+    const pending = new Promise<never>(() => {});
+    function Pending(): null {
+      use(pending);
+      return null;
+    }
+    function Screen({
+      onPan,
+      isPending,
+    }: {
+      onPan: (event: PanGestureEvent) => void;
+      isPending: boolean;
+    }) {
+      return (
+        <Suspense fallback={null}>
+          <Draggable axis="x" onPan={onPan} />
+          {isPending ? <Pending /> : null}
+        </Suspense>
+      );
+    }
+    const {getByTestId, rerender} = render(
+      <Screen onPan={event => committed.push(event)} isPending={false} />,
+    );
+    // The transition renders the new onPan, then suspends for good, so
+    // React keeps the committed tree and never commits that render.
+    await act(async () => {
+      startTransition(() => {
+        rerender(<Screen onPan={event => discarded.push(event)} isPending />);
+      });
+    });
+    drag(getByTestId('surface'), 40, 0);
+    expect(discarded).toEqual([]);
+    expect(phases(committed)).toEqual(['began', 'changed', 'ended']);
   });
 
   it('calls onPan from no effect: a drag in progress at unmount ends without a cancelled event (architecture:react-component-runtime INV2)', () => {

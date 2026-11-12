@@ -11,6 +11,7 @@
 
 import {describe, it, expect} from 'vitest';
 import {
+  createISOTimeString,
   parseISOTime,
   formatISOTime,
   formatDisplayTime12h,
@@ -52,6 +53,46 @@ describe('parseISOTime', () => {
     expect(parseISOTime('14:60')).toBeNull();
     expect(parseISOTime('14:30:60')).toBeNull();
     expect(parseISOTime('abc')).toBeNull();
+  });
+});
+
+describe('createISOTimeString', () => {
+  it('normalizes a valid time', () => {
+    expect(createISOTimeString('14:30')).toBe('14:30');
+    expect(createISOTimeString('9:05')).toBe('09:05');
+    expect(createISOTimeString('14:30:45')).toBe('14:30:45');
+  });
+
+  it('accepts what main read as the right time', () => {
+    expect(createISOTimeString(' 14:30 ')).toBe('14:30');
+    expect(createISOTimeString('14:30:15.250')).toBe('14:30:15');
+  });
+
+  it('rejects a 12-hour time instead of reading it 12 hours off', () => {
+    expect(createISOTimeString('2:30 PM')).toBeNull();
+    expect(createISOTimeString('2:30pm')).toBeNull();
+  });
+
+  it('rejects a field with anything but digits', () => {
+    expect(createISOTimeString('14:30abc')).toBeNull();
+    expect(createISOTimeString('14.9:30')).toBeNull();
+    expect(createISOTimeString('1e1:30')).toBeNull();
+    expect(createISOTimeString('14:30:00Z')).toBeNull();
+    expect(createISOTimeString('14:30.5')).toBeNull();
+  });
+
+  it('rejects a field with more than two digits', () => {
+    expect(createISOTimeString('014:30')).toBeNull();
+  });
+
+  it('answers null for a value that is not a string', () => {
+    expect(createISOTimeString(undefined as unknown as string)).toBeNull();
+    expect(createISOTimeString(null as unknown as string)).toBeNull();
+  });
+
+  it('rejects an out-of-range time', () => {
+    expect(createISOTimeString('24:00')).toBeNull();
+    expect(createISOTimeString('14:60')).toBeNull();
   });
 });
 
@@ -313,5 +354,22 @@ describe('clampTime', () => {
   it('without seconds, gives the nearest whole minute inside a bound between minutes', () => {
     expect(clampTime(t('08:00'), t('09:00:30'))).toBe('09:01');
     expect(clampTime(t('18:00'), undefined, t('17:00:30'))).toBe('17:00');
+  });
+
+  it('without a whole minute inside the range, keeps the bound itself', () => {
+    // A minimum inside the last minute of the day has no whole minute after it,
+    // and a range narrower than a minute has none at all. Rounding either one
+    // answers below the minimum the caller set, so the bound is the only time
+    // the range holds, seconds and all.
+    expect(clampTime(t('12:00'), t('23:59:30'))).toBe('23:59:30');
+    expect(clampTime(t('12:00'), t('23:59:01'))).toBe('23:59:01');
+    expect(clampTime(t('09:00'), t('10:30:45'), t('10:30:59'))).toBe(
+      '10:30:45',
+    );
+    // The maximum side reaches the same shape when a minimum blocks the whole
+    // minute below it.
+    expect(clampTime(t('23:59:59'), t('23:59:45'), t('23:59:50'))).toBe(
+      '23:59:50',
+    );
   });
 });

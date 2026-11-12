@@ -39,7 +39,17 @@ import {
 } from '../../foundation/agent-docs/computer-agent-text.mjs';
 import {computerAgentTextSettings} from '../../foundation/env/user-settings.mjs';
 import * as fs from 'node:fs';
+import {placeholderUses} from '../../foundation/discovery/template-icons.mjs';
+export {placeholderFixes} from '../../foundation/discovery/template-icons.mjs';
+export {unlistedIconSets} from '../../foundation/discovery/icon-set-discovery.mjs';
+import {elementPropOrigins} from '../../foundation/discovery/module-exports.mjs';
+import {cssImports} from '../../foundation/render/embedded-imports.mjs';
 import * as path from 'node:path';
+import {
+  persistedGather,
+  recordedRun,
+} from '../../foundation/fs/gather-cache.mjs';
+import {getCliInvocation} from '../../foundation/env/package-manager.mjs';
 import {
   Project,
   availableComputerIntegrations,
@@ -61,9 +71,52 @@ export {
   readThemeState,
   resolveThemeModule,
 } from '../../foundation/config/theme-state.mjs';
-export {themeBuild, validateThemePrivateInputs} from '../theme/build/build.mjs';
+export {
+  missingThemePackage,
+  themeBuild,
+  validateThemePrivateInputs,
+} from '../theme/build/build.mjs';
+export {installCommandFor as packageInstallCommand} from '../../foundation/discovery/template-needs.mjs';
 export {resolveRecordedTheme} from '../theme/theme.mjs';
 export {collectUnloadedFonts} from '../theme/build/font-warning.mjs';
+
+// What the authoring-docs check reads (./_authoring-audit.mjs), reached only
+// through this adapter.
+export {
+  AUTHORING_AUDIT,
+  authoringAudit,
+  authoringAuditData,
+} from './_authoring-audit.mjs';
+
+/** A doctor check record, kept as it is. */
+const CHECK_CODEC = {
+  encode: (/** @type {any} */ check) => check,
+  decode: (/** @type {any} */ check) => check,
+};
+
+/**
+ * A doctor check that reads only files, kept between runs through the kept
+ * gather (foundation/fs/gather-cache.mjs): a later `doctor` with every file,
+ * folder, module and environment variable it read unchanged reads the check
+ * back. Only the docs checks go through here; a check that depends on the
+ * time, the network or anything else the stamps do not see never does.
+ * @template T
+ * @param {{name: string, cwd: string, coreDir: string | null}} where - The
+ *   check, the project folder, and the Core folder the project loads.
+ * @param {() => Promise<T>} check
+ * @returns {Promise<T>}
+ */
+export function keptFileCheck({name, cwd, coreDir}, check) {
+  // Only a recorded run (a plain `doctor` from the bin) reads or keeps one: a
+  // hosted run names its commands its own way, so it always checks.
+  if (!recordedRun()) return check();
+  return persistedGather(
+    // With the command name the checks print commands with.
+    ['doctor-check', name, cwd, coreDir, getCliInvocation(cwd)],
+    check,
+    CHECK_CODEC,
+  );
+}
 
 /**
  * Package written to the generated app record for one discovered theme.
@@ -113,8 +166,9 @@ export function readTextFileIfExists(file) {
  * links. The doctor parses the returned bytes without executing app code.
  * @param {string} root
  * @param {string} generatedModule
+ * @param {{stylesheets?: boolean}} [options] - also list `.css` files
  */
-export function listProjectSourceFiles(root, generatedModule) {
+export function listProjectSourceFiles(root, generatedModule, options = {}) {
   /** @type {string[]} */
   const files = [];
   /** @type {string[]} */
@@ -137,13 +191,51 @@ export function listProjectSourceFiles(root, generatedModule) {
       } else if (
         entry.isFile() &&
         file !== generatedModule &&
-        SOURCE_EXTENSIONS.has(path.extname(entry.name))
+        (SOURCE_EXTENSIONS.has(path.extname(entry.name)) ||
+          (options.stylesheets === true && path.extname(entry.name) === '.css'))
       ) {
         files.push(file);
       }
     }
   }
   return files;
+}
+
+/**
+ * Each file in the project's own source that still uses the placeholder
+ * component the CLI writes for a missing icon: the file, the component's
+ * name, the meanings its uses name (null when none names one), and how many
+ * uses it has. A file reads only as a syntax tree, so a commented-out or
+ * quoted copy never counts. Read without executing app code.
+ * @param {string} projectDir
+ * @returns {Array<{file: string, local: string, meanings: string[] | null, uses: number}>}
+ */
+export function findIconPlaceholders(projectDir) {
+  /** @type {Array<{file: string, local: string, meanings: string[] | null, uses: number}>} */
+  const found = [];
+  for (const file of listProjectSourceFiles(projectDir, '')) {
+    let source;
+    try {
+      source = readTextFile(file);
+    } catch {
+      continue;
+    }
+    // Only a file with the placeholder's dash pattern is parsed.
+    if (!source.includes('3 2.33')) continue;
+    const uses = placeholderUses(source);
+    if (!uses || uses.length === 0) continue;
+    const shown = path.relative(projectDir, file).split(path.sep).join('/');
+    const meanings = [
+      ...new Set(uses.flatMap(each => each.meanings ?? [])),
+    ].sort();
+    found.push({
+      file: shown,
+      local: uses[0].local,
+      meanings: meanings.length > 0 ? meanings : null,
+      uses: uses.length,
+    });
+  }
+  return found.sort((a, b) => a.file.localeCompare(b.file));
 }
 
 /** @param {string} projectDir */
@@ -164,6 +256,39 @@ export function resolveDoctorThemeImports(theme, options) {
 /** @param {string} projectDir */
 export function discoverDoctorUnmigratedCopies(projectDir) {
   return discoverUnmigratedThemeCopies(projectDir);
+}
+
+/**
+ * The real path of a file, links resolved; null when it does not exist.
+ * @param {string} file
+ * @returns {string | null}
+ */
+export function realDoctorFile(file) {
+  try {
+    return fs.realpathSync(file);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Where each `<Name prop={value}>` value of a module is declared (see
+ * `elementPropOrigins`).
+ * @param {string} file
+ * @param {Parameters<typeof elementPropOrigins>[1]} element
+ */
+export function doctorElementPropOrigins(file, element) {
+  return elementPropOrigins(file, element);
+}
+
+/**
+ * The `@import` specifiers of a stylesheet, quoted or in `url()`, in any case
+ * (see `cssImports`); empty for CSS that does not parse.
+ * @param {string} css
+ * @returns {Set<string>}
+ */
+export function doctorStylesheetImports(css) {
+  return new Set(cssImports(css));
 }
 
 /** @param {string} projectDir */

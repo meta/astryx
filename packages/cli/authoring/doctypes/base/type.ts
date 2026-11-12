@@ -224,6 +224,14 @@ export interface ComponentAccessibilityThemeCoverage {
 }
 
 /**
+ * What an example is for. A `demo` example runs on its own, so a docs site may
+ * render it as a live preview. A `setup` example is code to read and copy, such
+ * as an app setup file, a server route, or a snippet that uses variables
+ * defined elsewhere; it is always shown as code only.
+ */
+export type ExampleKind = 'demo' | 'setup';
+
+/**
  * Code example for a component or sub-component.
  */
 export interface ComponentExampleDoc {
@@ -231,6 +239,8 @@ export interface ComponentExampleDoc {
   label?: string;
   /** TSX source for the example. */
   code: string;
+  /** `demo` (default) may render as a live preview; `setup` is code only. */
+  kind?: ExampleKind;
 }
 
 /**
@@ -547,6 +557,47 @@ export interface ComponentThemingVar {
    * `astryx theme build` errors if a theme sets a private var directly.
    */
   private?: boolean;
+}
+
+/**
+ * A component icon slot: a themeable icon role the component owns, which a
+ * theme maps to a shared icon name through `defineTheme({componentIcons})`.
+ * Each entry corresponds to a slot in `ComponentIconSlotMap`.
+ *
+ * @example
+ * ```
+ * {
+ *   slot: 'code-block-copy',
+ *   description: 'The copy button icon.',
+ *   fallback: '`copy`; `check` while copied',
+ *   state: [{name: 'copied', type: 'boolean', description: 'True while the copied feedback shows.'}],
+ *   whenNull: 'Hides the glyph. The button keeps its size, name, and tooltip.',
+ * }
+ * ```
+ */
+// SYNC: When adding a field here, add it to the docsite's generated-registry
+// copy too — apps/docsite/scripts/generate-data.mjs (interface ComponentIconSlot).
+export interface ComponentIconSlotDoc {
+  /** The slot name, `<component-kebab>-<semantic-role>`. */
+  slot: string;
+  /** The icon's role in the component. */
+  description: string;
+  /** The icon the component renders when the theme maps nothing, per state. */
+  fallback: string;
+  /** The state a slot function receives. Omit for a stateless slot. */
+  state?: ComponentIconSlotStateDoc[];
+  /** What a slot value of `null` does for this component. */
+  whenNull: string;
+}
+
+/** One field of the state a component passes to a slot function. */
+export interface ComponentIconSlotStateDoc {
+  /** The field name. */
+  name: string;
+  /** The field's TypeScript type. */
+  type: string;
+  /** When the field has each value. */
+  description: string;
 }
 
 /**

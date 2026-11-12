@@ -30,6 +30,24 @@ function targetKey(target) {
   return target.className.replace(/^astryx-/, '');
 }
 
+/**
+ * Render one doc example as an optional heading and a code block. A setup
+ * example says so in its heading, because it does not run on its own.
+ * @param {import('@astryxdesign/cli/authoring').ComponentExampleDoc} ex
+ * @param {string} hashes - heading level, e.g. '###'
+ * @returns {string[]}
+ */
+function formatExample(ex, hashes) {
+  const lines = [];
+  if (ex.kind === 'setup') {
+    lines.push(`${hashes} ${ex.label ?? 'Setup'} (setup, code only)\n`);
+  } else if (ex.label) {
+    lines.push(`${hashes} ${ex.label}\n`);
+  }
+  lines.push('```tsx\n' + ex.code + '\n```\n');
+  return lines;
+}
+
 /** @param {string} name @returns {string} */
 function dataAttrForName(name) {
   return `data-${name.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()}`;
@@ -164,6 +182,34 @@ function getTargetStates(target) {
 }
 
 /**
+ * Format a component's icon slots: the `componentIcons` keys a theme sets,
+ * with each slot's state, fallback, and what `null` does.
+ * @param {any[]} slots - `theming.componentIcons` entries.
+ * @returns {string}
+ */
+function formatComponentIconSlots(slots) {
+  const lines = [
+    '**Component icon slots** - set in `defineTheme({componentIcons})` to a shared icon name, `null`, a partial `{icon, variant, size}` request, or a function of the slot state.\n',
+    '| Slot | State | Fallback | Role | `null` |',
+    '|------|-------|----------|------|--------|',
+  ];
+  for (const slot of slots) {
+    const state = slot.state?.length
+      ? slot.state
+          .map(
+            (/** @type {any} */ field) =>
+              `\`${mdCell(field.name)}: ${mdCell(field.type)}\` ${mdCell(field.description)}`,
+          )
+          .join('<br>')
+      : 'none';
+    lines.push(
+      `| \`${mdCell(slot.slot)}\` | ${state} | ${mdCell(slot.fallback)} | ${mdCell(slot.description)} | ${mdCell(slot.whenNull)} |`,
+    );
+  }
+  return lines.join('\n') + '\n';
+}
+
+/**
  * Format the theming targets table, merging in theme variants if available.
  *
  * @param {any} docs - Component doc object
@@ -278,8 +324,7 @@ export function formatFull(docs, options = {}) {
       sections.push(...formatSubComponent(comp));
       if (comp.examples?.length) {
         for (const ex of comp.examples) {
-          if (ex.label) sections.push(`#### ${ex.label}\n`);
-          sections.push('```tsx\n' + ex.code + '\n```\n');
+          sections.push(...formatExample(ex, '####'));
         }
       }
     }
@@ -288,8 +333,7 @@ export function formatFull(docs, options = {}) {
   if (docs.examples?.length) {
     sections.push('## Examples\n');
     for (const ex of docs.examples) {
-      if (ex.label) sections.push(`### ${ex.label}\n`);
-      sections.push('```tsx\n' + ex.code + '\n```\n');
+      sections.push(...formatExample(ex, '###'));
     }
   }
 
@@ -349,6 +393,10 @@ export function formatFull(docs, options = {}) {
         exampleLines.push('}\n```\n');
         sections.push(exampleLines.join('\n'));
       }
+    }
+
+    if (docs.theming.componentIcons?.length) {
+      sections.push(formatComponentIconSlots(docs.theming.componentIcons));
     }
 
     // Legacy componentKey (for backward compatibility)
@@ -483,8 +531,7 @@ export function formatCompact(docs, componentName, importHint) {
   if (examples.length) {
     sections.push('## Usage\n');
     for (const ex of examples) {
-      if (ex.label) sections.push(`### ${ex.label}\n`);
-      sections.push('```tsx\n' + ex.code + '\n```\n');
+      sections.push(...formatExample(ex, '###'));
     }
   }
 
@@ -505,6 +552,11 @@ export function formatCompact(docs, componentName, importHint) {
       propLines.push(`| \`${mdCell(d.property)}\` | ${target} |`);
     }
     sections.push(propLines.join('\n') + '\n');
+  }
+
+  if (docs.theming?.componentIcons?.length) {
+    sections.push('## Component Icon Slots\n');
+    sections.push(formatComponentIconSlots(docs.theming.componentIcons));
   }
 
   return sections.join('\n');
@@ -626,6 +678,18 @@ export function formatBrief(docs, componentName, importHint, options = {}) {
     output.push(`  Derived: ${derivedNames}`);
   }
 
+  // Component icon slots, with the state each slot function receives
+  if (docs.theming?.componentIcons?.length) {
+    const slots = docs.theming.componentIcons
+      .map((/** @type {any} */ slot) =>
+        slot.state?.length
+          ? `${slot.slot} {${slot.state.map((/** @type {any} */ field) => `${field.name}: ${field.type}`).join(', ')}}`
+          : slot.slot,
+      )
+      .join('; ');
+    output.push(`  Icon slots: ${slots}`);
+  }
+
   // Theme targets (component class, preferred data attrs, props, states) with theme variant merging
   if (docs.theming?.targets?.length) {
     const {themeData = null} = options;
@@ -654,9 +718,12 @@ export function formatBrief(docs, componentName, importHint, options = {}) {
     output.push(`  ${otherProps.join(', ')}`);
   }
 
-  // First code example
-  if (examples.length > 0) {
-    const code = examples[0].code;
+  // First code example; a setup example does not show the component in use.
+  const usageExample =
+    examples.find((/** @type {any} */ ex) => ex.kind !== 'setup') ??
+    examples[0];
+  if (usageExample) {
+    const code = usageExample.code;
     const codeLine =
       code
         .split('\n')

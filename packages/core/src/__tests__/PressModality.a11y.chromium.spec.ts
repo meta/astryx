@@ -1,5 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y scope core/Button ^packages/core/src/(utils/(pressFeedback|pressGesture|interactionOverlay|touchPresentation)|hooks/usePressFeedback)
+// @pr-a11y scope core/Button ^packages/core/src/(utils/(pressFeedback|pressGesture|interactionOverlay|touchPresentation)|hooks/usePressFeedback|privateAttributes/press)
 
 /**
  * @file PressModality.a11y.chromium.spec.ts
@@ -33,6 +33,7 @@ import {
   serveStorybook,
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
+import {waitForRest} from '@astryxdesign/interaction-harness';
 
 let storybook: StaticServer;
 
@@ -330,6 +331,10 @@ test('a mouse press dragged across menu rows lights only the row under the point
     ).toBe(true);
     const rows = page.getByRole('menuitem');
     await rows.first().waitFor();
+    // The menu's box and its paint are read once its entrance has ended.
+    await waitForRest(
+      page.locator('[popover]:has([data-astryx-menu-press])').first(),
+    );
     const menu = await page.locator('[data-astryx-menu-press]').boundingBox();
     const first = await rows.nth(0).boundingBox();
     const second = await rows.nth(1).boundingBox();

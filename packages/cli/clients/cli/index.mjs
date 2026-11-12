@@ -12,7 +12,7 @@
  * the full program in program.mjs.
  */
 
-import {Command, Option} from 'commander';
+import {Command, Help, Option} from 'commander';
 import {fileURLToPath} from 'node:url';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -22,9 +22,10 @@ import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {findConfigPath} from '../../foundation/config/config-path.mjs';
 import {API_VERSION, setJsonMode} from '../../foundation/response/json.mjs';
 import {answeredBy, runChoice} from '../../foundation/release/run-context.mjs';
-import {cliInstallAdvice, installFolder} from '../../foundation/release/notices.mjs';
-import {buildManifest} from './lib/manifest.mjs';
-import {cliError} from './lib/cli-error.mjs';
+import {cliInstallAdvice, installFolder, projectRelease, SETUP_REMINDER_KEY, takeNotice} from '../../foundation/release/notices.mjs';
+import {isCi} from '../../foundation/release/update-notice-env.mjs';
+import {buildManifest, storedManifest} from './lib/manifest.mjs';
+import {cliError, themeGroupUnknownSubcommand} from './lib/cli-error.mjs';
 import {section, text, records} from './formatters/index.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
@@ -105,6 +106,27 @@ export const JSON_SUPPORTED = new Set([
   'experimental icon new-set',
   'experimental icon new-definition',
   'experimental render',
+  // The groups answer --json with their own help, as the root does.
+  'experimental theme',
+  'experimental theme editor',
+  'experimental theme preview',
+  'experimental theme editor new',
+  'experimental theme editor set',
+  'experimental theme editor undo',
+  'experimental theme editor show',
+  'experimental theme editor how',
+  'experimental theme preview add',
+  'experimental theme preview app',
+  'experimental theme preview list',
+  'experimental theme preview remove',
+  'experimental theme compile',
+  'experimental theme list',
+  'experimental theme add',
+  'experimental theme remove',
+  'experimental theme use',
+  'experimental theme eject',
+  'experimental theme template',
+  'experimental theme targets',
   'build',
   'swizzle',
   'gap-report',
@@ -345,8 +367,11 @@ const READS_EVERY_COMMAND = new Set(['manifest']);
  * first operand after the root's own options, so this reads the arguments the
  * same way. It returns that one command, no command for a run that only
  * prints the version, or null for every command. These runs load every
- * command: help, the manifest, `help <command>`, an unknown word, and a flag
- * the root does not declare. They print or read the whole list.
+ * command: the root help when no stored list ships (a checkout; the published
+ * package prints it from the list, see `printsRootHelp`), the manifest
+ * when no stored manifest ships (the published package reads its own),
+ * `help <command>`, an unknown word, and a flag the root does not declare.
+ * They print or read the whole list.
  *
  * @param {import('commander').Command} program the root, with its options
  * @param {string[]} argv the arguments after `astryx`
@@ -358,7 +383,8 @@ export function commandsForArgs(program, argv) {
     const arg = argv[i];
     // Commander reads a lone `-` as an operand, as it reads any word.
     if (arg.length < 2 || arg[0] !== '-') {
-      return commands.some(cmd => cmd.name === arg) && !READS_EVERY_COMMAND.has(arg)
+      return commands.some(cmd => cmd.name === arg) &&
+        (!READS_EVERY_COMMAND.has(arg) || (arg === 'manifest' && storedManifest() != null))
         ? new Set([arg])
         : null;
     }
@@ -378,6 +404,93 @@ export function commandsForArgs(program, argv) {
     if (option.long === '--version') printsVersion = true;
   }
   return printsVersion ? new Set() : null;
+}
+
+/**
+ * Make `help <group> <command> ...` print the help of the deepest command the
+ * words name. Commander's help command reads only the first word, so
+ * `help theme build` printed the help of `theme`. Commander has no public hook
+ * for this; the override wraps its help dispatch and falls back to it.
+ * @param {import('commander').Command} program
+ */
+export function resolveDeepHelp(program) {
+  const root = /** @type {any} */ (program);
+  // A Commander release without this method keeps its own help dispatch.
+  if (typeof root._dispatchHelpCommand !== 'function') return;
+  const dispatch = root._dispatchHelpCommand.bind(root);
+  root._dispatchHelpCommand = (/** @type {string | undefined} */ name) => {
+    const words = (root.args ?? [])
+      .slice(1)
+      .filter((/** @type {string} */ word) => !word.startsWith('-'));
+    /** @type {any} */
+    let target = root;
+    for (const word of words) {
+      const next = target._findCommand(word);
+      if (!next) break;
+      target = next;
+    }
+    if (words.length > 1 && target !== root && !target._executableHandler) {
+      target.help();
+    }
+    return dispatch(name);
+  };
+}
+
+/**
+ * Where the root help's command list is stored: each command's name, and the
+ * term and description the root help prints for it, as the fully loaded
+ * program gives them. `prepack` writes it (scripts/generate-command-list.mjs),
+ * so the published package prints its root help without loading every
+ * command. A checkout has none and loads them.
+ */
+export const COMMAND_LIST_FILE = path.join(__dirname, 'commands.generated.json');
+
+/**
+ * Whether a run only prints the root help: `--help`, `-h` or `help`, alone.
+ * @param {string[]} argv
+ * @returns {boolean}
+ */
+function printsRootHelp(argv) {
+  return argv.length === 1 && ['--help', '-h', 'help'].includes(argv[0]);
+}
+
+/**
+ * The stored command list, or null when there is none or it cannot be read.
+ * @returns {Array<{name: string, term: string, description: string}> | null}
+ */
+function storedCommandList() {
+  try {
+    return JSON.parse(fs.readFileSync(COMMAND_LIST_FILE, 'utf-8'));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Give `program` a command for each stored row, which the root help prints
+ * with the row's term and description. Commander adds its own `help`
+ * command, so a stored `help` row adds none.
+ * @param {import('commander').Command} program
+ * @param {Array<{name: string, term: string, description: string}>} rows
+ */
+function listStoredCommands(program, rows) {
+  /** @type {Map<string, {term: string, description: string}>} */
+  const byName = new Map();
+  for (const row of rows) {
+    if (row.name === 'help') continue;
+    byName.set(row.name, row);
+    program.command(row.name);
+  }
+  const help = program.configureHelp();
+  program.configureHelp({
+    ...help,
+    subcommandTerm: cmd =>
+      byName.get(cmd.name())?.term ??
+      Help.prototype.subcommandTerm.call(program.createHelp(), cmd),
+    subcommandDescription: cmd =>
+      byName.get(cmd.name())?.description ??
+      Help.prototype.subcommandDescription.call(program.createHelp(), cmd),
+  });
 }
 
 const SETUP_NUDGE_EXEMPT = new Set(['init', 'agent-docs']);
@@ -576,6 +689,7 @@ export async function createProgram({argv} = {}) {
       program.help();
     });
   markReportsResult(program);
+  resolveDeepHelp(program);
 
   /**
    * Pre-action hook: gate --json BEFORE any command body runs.
@@ -618,10 +732,25 @@ export async function createProgram({argv} = {}) {
     const extras = actionCommand.commands.length > 0 ? actionCommand.args : [];
     const unknown = extras.find(arg => !String(arg).startsWith('-'));
     if (unknown != null) {
+      const names = actionCommand.commands.map(child => child.name());
+      if (fullName === 'theme' || fullName === 'experimental') {
+        // The theme groups name whole commands, closest first, and point at
+        // `experimental theme <word>` when the word is one of its commands.
+        const {message, suggestions} = themeGroupUnknownSubcommand(
+          fullName,
+          String(unknown),
+          names,
+          actionCommand,
+        );
+        cliError(message, {
+          code: ERROR_CODES.ERR_UNKNOWN_SUBCOMMAND,
+          suggestions,
+        });
+      }
       cliError(`unknown subcommand '${fullName} ${unknown}'`, {
         code: ERROR_CODES.ERR_UNKNOWN_SUBCOMMAND,
-        suggestions: actionCommand.commands.map(child => ({
-          name: child.name(),
+        suggestions: names.map(name => ({
+          name,
           reason: 'available subcommand',
         })),
       });
@@ -683,8 +812,11 @@ export async function createProgram({argv} = {}) {
    * repository root — see isAstryxPromptInReach), remind the user/agent that
    * setup is missing.
    *
-   * Uses `preAction` (not postAction) so it fires for EVERY valid command — even
-   * ones whose action errors or calls process.exit (postAction is skipped then).
+   * `preAction` decides the line; `postAction` prints it after a command that
+   * succeeds, at most once a day per project, recorded in the per-user state
+   * as the daily hint is, and never under CI. An agent that leaves `init` to
+   * its person then sees it once, not before every command. Doctor reports
+   * the missing setup in its own check every time.
    *
    * Suppressed in --json: that is machine output with a strict clean stdout+stderr
    * contract (json-shim.test: "error envelopes have empty stderr"), and --json
@@ -695,8 +827,29 @@ export async function createProgram({argv} = {}) {
    * or one that neither installs nor declares Astryx), and inside the CLI's own
    * source checkout when it runs from there.
    */
+  /** @type {{root: string, line: string} | null} */
+  let setupReminder = null;
+  /**
+   * Keep the reminder for `root` until the command ends.
+   * @param {string} root
+   * @param {string} line
+   */
+  const remindSetup = (root, line) => {
+    setupReminder = {root, line};
+  };
+  program.hook('postAction', () => {
+    try {
+      const reminder = setupReminder;
+      setupReminder = null;
+      if (reminder == null || process.exitCode || isCi(process.env)) return;
+      if (takeNotice(`${SETUP_REMINDER_KEY}${reminder.root}`)) console.error(reminder.line);
+    } catch {
+      // Never let the nudge break a command.
+    }
+  });
   program.hook('preAction', (thisCommand, actionCommand) => {
     try {
+      setupReminder = null;
       if (program.opts().json) return; // machine mode — keep --json output clean
       if (SETUP_NUDGE_EXEMPT.has(actionCommand.name())) return;
       const cwd = process.cwd();
@@ -738,9 +891,12 @@ export async function createProgram({argv} = {}) {
       // before it, so the command is the picker's for that folder, never the
       // bare `astryx` name a package runner would fetch from the registry
       // (spec AST-081 FR5).
+      // The command names the project's release, as run from its folder,
+      // never the Core this folder installs for itself.
       if (target.moved) {
-        console.error(
-          setupNudge(getCliInvocation(target.dir), {before: `cd ${quoteCommandArgument(target.dir)}`}).trimEnd(),
+        remindSetup(
+          target.dir,
+          setupNudge(getCliInvocation(target.dir, {release: projectRelease(target.dir)}), {before: `cd ${quoteCommandArgument(target.dir)}`}).trimEnd(),
         );
         return;
       }
@@ -750,20 +906,23 @@ export async function createProgram({argv} = {}) {
         // version, then run that CLI's init.
         const add = cliInstallAdvice({cwd, core: choice.coreVersion});
         if (add?.command) {
-          console.error(
+          remindSetup(
+            add.root,
             setupNudge(getCliInvocation(add.root, {installed: true}), {before: add.command}).trimEnd(),
           );
           return;
         }
       }
-      console.error(setupNudge(getCliInvocation(cwd)).trimEnd());
+      remindSetup(agentDocsTargetDir(cwd), setupNudge(getCliInvocation(cwd)).trimEnd());
     } catch {
       // Never let the nudge break a command.
     }
   });
 
   const loads = argv == null ? null : commandsForArgs(program, argv);
-  for (const cmd of commands) {
+  const listed = argv != null && printsRootHelp(argv) ? storedCommandList() : null;
+  if (listed) listStoredCommands(program, listed);
+  for (const cmd of listed ? [] : commands) {
     if (loads != null && !loads.has(cmd.name)) continue;
     try {
       const mod = await import(cmd.path);

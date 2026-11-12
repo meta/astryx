@@ -46,8 +46,9 @@ describe('interaction proof routing', () => {
   it('always reports, so the join never reads a missing result', () => {
     // Behind the pull-request gate (spec:AST-030 FR17).
     expect(proofs.if).toMatch(/^\$\{\{ \(github\.event_name != 'pull_request'/);
+    // Main's nightly full run starts them too (spec:AST-030 FR31).
     expect(ungated(proofs.if)).toBe(
-      "github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true'",
+      "(github.event_name != 'workflow_dispatch' || inputs.operation == 'interaction-full' && github.ref == 'refs/heads/main') && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true'",
     );
     // Admission too: the Storybook build starts beside it (spec:AST-030 FR16).
     expect(proofs.needs).toEqual([
@@ -55,6 +56,7 @@ describe('interaction proof routing', () => {
       'admission',
       'heavy-ci',
       'build-storybook',
+      'interaction-legs',
     ]);
   });
 
@@ -68,16 +70,36 @@ describe('interaction proof routing', () => {
     const guards = new Set([
       "Require this pull request's Storybook build",
       'Skip the proofs outside their scope',
+      'Leave the proofs to the other legs',
+      'Require a leg for every share',
     ]);
-    for (const candidate of proofs.steps.slice(2)) {
-      if (guards.has(candidate.name)) continue;
-      // A leg whose plan holds no spec file runs no proofs.
-      expect(candidate.if, candidate.name ?? candidate.uses).toMatch(
-        new RegExp(
-          `^(always\\(\\) && )?${applies.replace(/[.()|]/g, '\\$&')}( && steps\\.plan\\.outputs\\.files != '0')?$`,
-        ),
-      );
+    // Every step after the leg count also waits for this leg to have a share.
+    const counted = proofs.steps.indexOf(step(proofs, "Count this run's legs"));
+    for (const [index, candidate] of proofs.steps.entries()) {
+      if (index < 2 || guards.has(candidate.name)) continue;
+      const gate =
+        index <= counted
+          ? applies
+          : `${applies} && steps.legs.outputs.runs == 'true'`;
+      // Only the hint and the evidence upload run after a failed step, and
+      // only the proofs and the hint wait for a plan with a spec file in it.
+      const planned = "steps.plan.outputs.files != '0'";
+      let expected = gate;
+      if (candidate.name === 'Run interaction proofs')
+        expected = `${gate} && ${planned}`;
+      if (candidate.name === 'Explain a failure on an older head')
+        expected = `failure() && ${gate} && steps.plan.outcome == 'success' && ${planned}`;
+      if (candidate.name === 'Upload interaction evidence')
+        expected = `always() && ${gate}`;
+      expect(candidate.if, candidate.name ?? candidate.uses).toBe(expected);
     }
+    expect(step(proofs, 'Leave the proofs to the other legs').if).toBe(
+      `${applies} && steps.legs.outputs.runs != 'true'`,
+    );
+    // A leg whose own count needs more legs than started fails.
+    expect(step(proofs, 'Require a leg for every share').if).toBe(
+      `${applies} && fromJSON(steps.legs.outputs.count || '0') > strategy.job-total`,
+    );
   });
 
   it('fails closed when Storybook did not build for proofs that apply', () => {
@@ -97,8 +119,10 @@ describe('interaction proof routing', () => {
   });
 
   it('skips merge-group runs and heads cut before the proofs existed', () => {
+    // Outside a pull request only main's nightly full run plans the proofs.
     expect(decide().with).toMatchObject({
-      'outside-pull-request': 'skip',
+      'outside-pull-request':
+        "${{ inputs.operation == 'interaction-full' && 'run' || 'skip' }}",
       'requires-head-file': 'playwright.interaction.config.ts',
     });
   });

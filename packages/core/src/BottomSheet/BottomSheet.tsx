@@ -54,12 +54,14 @@ import {
   use,
   useCallback,
   useEffect,
+  useInsertionEffect,
   useLayoutEffect,
   useRef,
   useState,
   type RefObject,
   type ReactNode,
 } from 'react';
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import {useIsHydrating} from '../hooks/useIsHydrating';
 import {useSettledOpen} from '../hooks/useSettledOpen';
 import * as stylex from '@stylexjs/stylex';
@@ -305,6 +307,37 @@ function scrimOpacityForView(view: BottomSheetStackView): '0' | '1' {
   return view.isStacked && !view.ownsScrim ? '0' : '1';
 }
 
+/**
+ * Writes the fade a touch drag's close paces on `dialog`'s scrim, or clears
+ * it when `ms` is null. `written` keeps the value the host wrote, so a clear
+ * removes only that value.
+ */
+function writeScrimFadeDuration(
+  dialog: HTMLDialogElement | null,
+  ms: number | null,
+  written: {current: string | null},
+): void {
+  if (dialog == null) {
+    return;
+  }
+  const current = dialog.style.getPropertyValue('--_sheet-scrim-duration');
+  if (ms == null) {
+    // Remove only the value this host wrote. A stack's 0s pin written since
+    // then stays.
+    if (written.current != null && current === written.current) {
+      dialog.style.removeProperty('--_sheet-scrim-duration');
+    }
+    written.current = null;
+    return;
+  }
+  // A stack's 0s pin hands the scrim over with no fade; it stays.
+  if (current === '0s') {
+    return;
+  }
+  written.current = `${ms}ms`;
+  dialog.style.setProperty('--_sheet-scrim-duration', written.current);
+}
+
 interface BottomSheetSharedProps extends BaseProps<HTMLDivElement> {
   /** Ref forwarded to the visual sheet panel <div>. */
   ref?: React.Ref<HTMLDivElement>;
@@ -322,7 +355,9 @@ interface BottomSheetSharedProps extends BaseProps<HTMLDivElement> {
    * unless the theme sets `padding` on `bottom-sheet`), matching Dialog. The
    * content box is a container: a Section that is its only child escapes the
    * padding, and bleed children such as Table and Divider compensate against
-   * it. Pass `0` for content that supplies its own inset.
+   * it. Pass `0` for content that supplies its own inset. Whatever the padding,
+   * the block-start inset is never less than the grab bar's height
+   * (`--spacing-6`), so resting content starts below the bar.
    */
   padding?: SpacingStep;
 
@@ -424,8 +459,9 @@ function StandaloneBottomSheet({
   // sheet leaves the page interactive, so it returns focus to its opener
   // only if the person was still in the sheet; a modal sheet always does.
   const hadFocusAtCloseRef = useRef(false);
-  const finalFocusRefRef = useRef(finalFocusRef);
-  finalFocusRefRef.current = finalFocusRef;
+  // The committed `finalFocusRef`. The stack reads it when it closes the
+  // sheet, which can happen in a layout effect.
+  const finalFocusRefRef = useCommittedRef(finalFocusRef);
   // A sheet rendered in another sheet's content is presented only while that
   // sheet is open: it leaves with its host and, if its own state is still
   // open, comes back when the host does (see BottomSheetHostContext). Its
@@ -470,7 +506,13 @@ function StandaloneBottomSheet({
     BOTTOM_SHEET_STACK_DEFAULT_VIEW,
   );
   const isOpenRef = useRef(isOpen);
-  isOpenRef.current = isOpen;
+  // Written at commit: a render React discards, as a suspended transition
+  // does, must not change the scrim. The insertion effect runs before any
+  // layout effect, so a nested sheet's registry call in the same commit sees
+  // the new state too.
+  useInsertionEffect(() => {
+    isOpenRef.current = isOpen;
+  }, [isOpen]);
   // Closed and being replaced by the sheet that opened in the same update:
   // the panel is retained (stays, aligns, fades) instead of sliding out.
   const isReplaced = !isOpen && isPresented && stackView.replacedMotion != null;
@@ -522,8 +564,9 @@ function StandaloneBottomSheet({
     },
     [],
   );
+  // The stack's view for the handlers. The registry's `onView` writes it with
+  // each view it reports, together with the state.
   const stackViewRef = useRef(stackView);
-  stackViewRef.current = stackView;
   const scrimWriteRef = useRef<BottomSheetScrimWrite>({frame: null});
   // Releases the pending scrim write frame on unmount.
   useEffect(() => () => cancelScrimWrite(scrimWriteRef.current), []);
@@ -544,6 +587,18 @@ function StandaloneBottomSheet({
       String(opacity),
     );
   }, []);
+  // The fade duration a touch drag's close wrote, until that close ends.
+  const scrimFadeRef = useRef<string | null>(null);
+  const handleScrimFadeDuration = useCallback(
+    (panel: HTMLElement, ms: number | null) => {
+      const view = stackViewRef.current;
+      if (view.isStacked && !view.ownsScrim) {
+        return;
+      }
+      writeScrimFadeDuration(panel.closest('dialog'), ms, scrimFadeRef);
+    },
+    [],
+  );
 
   // A sheet joins the registry for as long as it is presented. For a modal
   // sheet the registry shows the dialog (in open order, repairing same-commit
@@ -564,6 +619,9 @@ function StandaloneBottomSheet({
       dialog == null
         ? null
         : prepareFocusRepairOnRemoval(dialog, {keepRestingFocus: true});
+    // Where focus returns when the sheet leaves, read when it leaves.
+    const getReturnTarget = () =>
+      finalFocusRefRef.current?.current ?? triggerRef.current;
     const leave = registerBottomSheet(
       {
         key,
@@ -588,8 +646,7 @@ function StandaloneBottomSheet({
         },
         hide: () => closeDialogKeepingFocus(dialogRef.current),
         focus: reason => focusSheetPanel(panelRef.current, reason, hasScrim),
-        getReturnTarget: () =>
-          finalFocusRefRef.current?.current ?? triggerRef.current,
+        getReturnTarget,
         onView: view => {
           stackViewRef.current = view;
           setStackView(view);
@@ -627,8 +684,7 @@ function StandaloneBottomSheet({
       // person had already moved out of the sheet to the page body stays
       // there: the removal did not lose it.
       if (repairOnRemoval != null && isSheetHostPresented(dialog)) {
-        const returnTarget =
-          finalFocusRefRef.current?.current ?? triggerRef.current;
+        const returnTarget = getReturnTarget();
         const revealed = hasScrim ? getBottomSheetBeneath(key) : null;
         repairOnRemoval(() => {
           // The sheet beneath left too. Its own repair returns focus for the
@@ -648,7 +704,7 @@ function StandaloneBottomSheet({
       }
       leave();
     };
-  }, [hasScrim, shouldPresent, writeScrim]);
+  }, [finalFocusRefRef, hasScrim, shouldPresent, writeScrim]);
   useLayoutEffect(() => {
     if (!isOpen) {
       // Where focus was when the person closed the sheet. The closing sheet
@@ -676,7 +732,7 @@ function StandaloneBottomSheet({
   // top one closes. A Dialog opened from a sheet stays above every sheet. A
   // closing sheet stops supplying when it starts to close. Passive: it runs
   // after the layout effects that present.
-  useModalOutlet(
+  const outletRef = useModalOutlet(
     dialogRef,
     isOpen && hasScrim,
     stackView.isTop,
@@ -946,7 +1002,9 @@ function StandaloneBottomSheet({
         xstyle={xstyle}
         onDismiss={dismissOnLightInteraction}
         onScrimOpacity={handleScrimOpacity}
+        onScrimFadeDuration={handleScrimFadeDuration}
         onElementChange={handlePanelElementChange}
+        handleRef={outletRef}
         onMotionStart={handleMotionStart}
         onMotionComplete={handleMotionComplete}>
         <ModalAnnounceProvider
@@ -1094,6 +1152,16 @@ function SwitcherBottomSheetItem({
       }
     },
     [hasValidSheetId, onSheetScrimOpacityChange, sheetId],
+  );
+  // The fade a touch drag's close wrote on this step's dialog, until that
+  // close ends. The step a drag closes becomes the flow's retained step, so
+  // its backdrop is the flow's scrim.
+  const scrimFadeRef = useRef<string | null>(null);
+  const handleScrimFadeDuration = useCallback(
+    (panel: HTMLElement, ms: number | null) => {
+      writeScrimFadeDuration(panel.closest('dialog'), ms, scrimFadeRef);
+    },
+    [],
   );
 
   useLayoutEffect(() => {
@@ -1297,6 +1365,7 @@ function SwitcherBottomSheetItem({
           xstyle={xstyle}
           onDismiss={dismissOnSwipe}
           onScrimOpacity={handleScrimOpacity}
+          onScrimFadeDuration={handleScrimFadeDuration}
           onElementChange={handlePanelElementChange}
           onMotionStart={handleMotionStart}
           onMotionComplete={handleMotionComplete}>

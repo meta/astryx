@@ -244,3 +244,101 @@ describe('formatBrief signature stays terse', () => {
     expect(formatBrief(docs, 'HStack', '')).toContain('gap');
   });
 });
+
+describe('component icon slots', () => {
+  const docs = {
+    name: 'CodeBlock',
+    description: 'Code.',
+    props: [],
+    theming: {
+      targets: [{className: 'astryx-code-block'}],
+      componentIcons: [
+        {
+          slot: 'code-block-copy',
+          description: 'The copy button icon.',
+          fallback: '`copy`; `check` while copied',
+          state: [
+            {
+              name: 'copied',
+              type: 'boolean',
+              description: 'True while copied.',
+            },
+          ],
+          whenNull: 'Hides the glyph.',
+        },
+        {
+          slot: 'code-block-example',
+          description: 'A stateless slot.',
+          fallback: '`info`',
+          whenNull: 'Hides the icon.',
+        },
+      ],
+    },
+  };
+
+  it('lists each slot with its state, fallback, role, and null behavior in full output', () => {
+    const out = formatFull(docs);
+    expect(out).toContain('**Component icon slots**');
+    expect(out).toContain(
+      '| `code-block-copy` | `copied: boolean` True while copied. | `copy`; `check` while copied | The copy button icon. | Hides the glyph. |',
+    );
+    expect(out).toContain(
+      '| `code-block-example` | none | `info` | A stateless slot. | Hides the icon. |',
+    );
+  });
+
+  it('keeps the slots in compact and brief output', () => {
+    expect(formatCompact(docs, 'CodeBlock')).toContain(
+      '## Component Icon Slots',
+    );
+    expect(formatBrief(docs, 'CodeBlock')).toContain(
+      'Icon slots: code-block-copy {copied: boolean}; code-block-example',
+    );
+  });
+
+  it('prints no slot section for a component without slots', () => {
+    const {componentIcons: _omitted, ...theming} = docs.theming;
+    expect(formatFull({...docs, theming})).not.toContain(
+      'Component icon slots',
+    );
+  });
+});
+
+describe('example kind', () => {
+  const docs = {
+    name: 'Widget',
+    description: 'A widget.',
+    props: [],
+    examples: [
+      {label: 'Wrap the app', kind: 'setup', code: 'createWidgetStore(config)'},
+      {label: 'Basic', code: '<Widget label="Hi" />'},
+    ],
+  };
+
+  it('labels a setup example as code only in full output', () => {
+    const out = formatFull(docs);
+    expect(out).toContain('### Wrap the app (setup, code only)');
+    expect(out).toContain('### Basic\n');
+    expect(out).not.toContain('Basic (setup');
+  });
+
+  it('labels a setup example in compact output', () => {
+    expect(formatCompact(docs, 'Widget')).toContain(
+      '### Wrap the app (setup, code only)',
+    );
+  });
+
+  it('names an unlabeled setup example "Setup"', () => {
+    const out = formatFull({
+      ...docs,
+      examples: [{kind: 'setup', code: 'createWidgetStore(config)'}],
+    });
+    expect(out).toContain('### Setup (setup, code only)');
+  });
+
+  it('shows a demo example, not a setup one, as the brief usage line', () => {
+    const out = formatBrief(docs, 'Widget');
+    expect(out).toContain('<Widget label="Hi" />');
+    expect(out).not.toContain('createWidgetStore');
+  });
+});
