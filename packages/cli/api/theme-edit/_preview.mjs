@@ -1342,7 +1342,8 @@ export function previewRouteSource({
     // button or a screenshot reaches any page; the page renders after mount.
     "  const fromUrl = () => new URLSearchParams(window.location.search).get('page');",
     '  React.useEffect(() => {',
-    '    const sync = () => { const id = fromUrl(); if (id && PAGES.some(p => p.id === id)) setPage(id); };',
+    // A URL with no (or an unknown) ?page shows the first page, as a reload does.
+    '    const sync = () => { const id = fromUrl(); setPage(id && PAGES.some(p => p.id === id) ? id : PAGES[0]?.id); };',
     '    sync();',
     "    window.addEventListener('popstate', sync);",
     "    return () => window.removeEventListener('popstate', sync);",

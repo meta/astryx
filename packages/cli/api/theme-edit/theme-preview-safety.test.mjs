@@ -2980,4 +2980,45 @@ describe('final pass 5', () => {
       rm('themes/see');
     }
   }, 240_000);
+
+  it('back to the bare URL shows the first page; undo, a preview with no plain URL, a renamed folder and pasted names each lead the right way', async () => {
+    await themeEditNew('bb', {cwd, like: 'neutral'});
+    try {
+      await themeEditPreviewAdd(undefined, {
+        cwd,
+        theme: 'name: bb',
+        path: 'src/app/bb',
+      });
+      expect(JSON.parse(read('src/app/bb/theme-preview.json')).theme).toBe(
+        'bb',
+      );
+      expect(read('src/app/bb/page.tsx')).toContain('? id : PAGES[0]?.id');
+      await themeEditSet('bb', 'accent', 'teal', {cwd});
+      await themeEditPreviewAdd(undefined, {cwd, path: 'src/app/bb'});
+      await themeEditSet('bb', 'accent', '#7c3aed', {cwd});
+      const undo = await themeEditUndo('bb', {cwd});
+      expect(undo.data.see).toContain('/bb?page=colors');
+      // A folder renamed by hand is still found, by see and by list.
+      fs.renameSync(
+        path.join(cwd, 'src/app/bb'),
+        path.join(cwd, 'src/app/[slug]'),
+      );
+      const dial = await themeEditSet('bb', 'corners', '7px', {cwd});
+      expect(dial.data.see).toContain(
+        "the in-app preview is in src/app/[slug]/, at a URL that depends on the app's routing",
+      );
+      expect(dial.data.see).not.toContain('preview add');
+      const list = await themeEditPreviewList({cwd, path: 'src/app/bb'});
+      expect(list.data.notes.join(' ')).toContain(
+        'no preview here; the preview is in src/app/[slug]/',
+      );
+      const shown = await refusal(() => themeEditShow('theme: bb', {cwd}));
+      expect(shown.run[0]).toContain('show bb');
+      expect(shown.run.join(' ')).not.toContain(' new ');
+    } finally {
+      rm('src/app/[slug]');
+      rm('src/app/bb');
+      rm('themes/bb');
+    }
+  }, 240_000);
 });

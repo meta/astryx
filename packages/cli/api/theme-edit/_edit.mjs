@@ -3262,7 +3262,18 @@ export async function themeEditUndo(theme, options = {}) {
     );
   if (current && current.mode !== prev.mode)
     undone.push(`mode ${current.mode} is back to ${prev.mode}`);
-  const p = await previewAndRoute(ctx, theme, prev, png);
+  // The page most about what the step reverted: Colors for a color,
+  // Components for a part setting, else Overview.
+  const touched = [
+    ...[...was].filter(([k, s]) => now.get(k)?.value !== s.value),
+    ...[...now].filter(([k]) => !was.has(k)),
+  ].map(([, s]) => changeFocus(s));
+  const focus = touched.includes('colors')
+    ? 'colors'
+    : touched.includes('components')
+      ? 'components'
+      : 'overview';
+  const p = await previewAndRoute(ctx, theme, prev, png, focus);
   return {
     type: 'themeEdit.undo',
     data: {

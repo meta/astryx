@@ -534,7 +534,7 @@ export function refuse(code, message, extra = {}) {
 /**
  * A theme name as typed, read the way the editor reads it: a path to its
  * folder or a file in it (t.theme.ts, Brand.settings.json), in any case,
- * names the theme. The result may still need slugFor.
+ * or a pasted label (`theme: t`, `name: t`), names the theme. The result may still need slugFor.
  * @param {unknown} s
  * @returns {string}
  */
@@ -543,6 +543,9 @@ export function typedThemeName(s) {
     String(s ?? '')
       .trim()
       .toLowerCase()
+      // A pasted label (`theme: t`, `name=t`, `slug: "t"`) names the theme t.
+      .replace(/^-*(?:theme|name|slug)\s*[:=]\s*/, '')
+      .replace(/^['"`]+|['"`]+$/g, '')
       // ./t and .\t name the theme t.
       .replace(/^(\.[\\/])+/, '')
       .replace(/^.*themes[\\/]/, '')

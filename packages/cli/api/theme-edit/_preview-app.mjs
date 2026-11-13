@@ -3374,7 +3374,14 @@ function pageUrls(cwd, at, ids) {
 export function seeLine(cwd, slug, focus) {
   /** @type {string[]} */
   const urls = [];
-  for (const dir of recordedPreviews(cwd, slug)) {
+  /** Previews whose URL depends on the app's routing. @type {string[]} */
+  const unplain = [];
+  // The previews recorded for the theme, and any found in the routes
+  // folders that wear it (a folder renamed by hand), as remove finds them.
+  const dirs = [
+    ...new Set([...recordedPreviews(cwd, slug), ...previewsIn(cwd)]),
+  ];
+  for (const dir of dirs) {
     /** @type {any} */
     let data;
     try {
@@ -3382,21 +3389,25 @@ export function seeLine(cwd, slug, focus) {
     } catch {
       continue;
     }
+    if (data?.theme !== slug) continue;
     const ids = Array.isArray(data?.pages)
       ? data.pages.map((/** @type {any} */ x) => String(x?.id))
       : [];
     const id = ids.includes(focus) ? focus : ids[0];
     const url = id ? pageUrls(cwd, {dir, app: null}, [id])[id] : undefined;
     if (url) urls.push(url);
+    else unplain.push(`${shownDir(cwd, dir)}/`);
   }
   // First a look that changes nothing in the app: the editor's own page,
   // current after every change, and --png; the app's preview page only
   // when there is one, and adding one last, as an option.
   const f = themeFiles(cwd, slug);
   const own = `look without changing your app: open or screenshot ${shown(cwd, f.preview)} (one self-contained page, current after this change; ${EDITOR} show ${slug} also writes ${shown(cwd, f.sheet)}, every component), or run it with --png for pictures in ${shownDir(cwd, f.dir)}/ with no dev server (it needs a Playwright or a Chrome)`;
-  return urls.length
-    ? `${own}; in the running app: open ${urls.slice(0, 2).join(' or ')}`
-    : `${own}; to see it inside your app, ${PREVIEW} add puts the preview pages there, each at its own URL`;
+  if (urls.length)
+    return `${own}; in the running app: open ${urls.slice(0, 2).join(' or ')}`;
+  if (unplain.length)
+    return `${own}; the in-app preview is in ${unplain.slice(0, 2).join(', ')}, at a URL that depends on the app's routing (add ?page=${focus} to it)`;
+  return `${own}; to see it inside your app, ${PREVIEW} add puts the preview pages there, each at its own URL`;
 }
 
 /**
@@ -4011,7 +4022,7 @@ async function reportingRecovery(fn) {
 function themeArg(v) {
   if (typeof v !== 'string') return v;
   const {thing, value} = normalizeEntry(v, undefined);
-  return /^-*theme$/i.test(thing) && value?.trim()
+  return /^-*(theme|name|slug)$/i.test(thing) && value?.trim()
     ? value.trim().replace(/^['"]|['"]$/g, '')
     : v;
 }
@@ -4853,9 +4864,27 @@ export async function themeEditPreviewList(options = {}) {
     notes.push(
       `${[...missing].join(', ')} ${missing.size > 1 ? 'are' : 'is'} listed, but ${missing.size > 1 ? 'their files are' : 'its file is'} gone, so the route does not build; ${PREVIEW} add${pf} writes ${missing.size > 1 ? 'them' : 'it'} again`,
     );
+  // No preview here, but one elsewhere in the routes folders (a folder
+  // renamed by hand, as remove finds it): name it, with its list.
+  const elsewhere = !data
+    ? previewsIn(cwd).filter(d => !at || d !== at.dir)
+    : [];
+  if (elsewhere.length)
+    notes.push(
+      `no preview here; ${elsewhere.length > 1 ? 'the previews are in' : 'the preview is in'} ${elsewhere
+        .slice(0, 3)
+        .map(d => `${shownDir(cwd, d)}/`)
+        .join(', ')}: ${elsewhere
+        .slice(0, 3)
+        .map(
+          d =>
+            `${PREVIEW} list --path ${quoteCommandArgument(shownDir(cwd, d))}`,
+        )
+        .join('; ')}`,
+    );
   // No preview yet: say so when `add` would refuse the folder, with its
   // reason and the way on, rather than suggest it.
-  if (!data) {
+  if (!data && !elsewhere.length) {
     try {
       previewDir(cwd, options.path, {
         write: true,
