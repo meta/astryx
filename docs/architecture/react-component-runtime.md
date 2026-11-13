@@ -346,18 +346,20 @@ those contracts.
   an interaction. Until the shared touch runtime has loaded, SegmentedControl
   and Switch work by taps, clicks and keys, with no drag tracking and no slide
   or spring; a bottom sheet still drags, and a drag that closes it takes the
-  stylesheet exit instead of the spring. A gesture in that window does not
-  start the load. The bundler keeps one copy per page however many components
-  use them. `utils/touchRuntimeModules.tsx` is the one module the loader's
-  `import()` targets; it gathers the touch runtime, so the loader names a
-  single chunk. `motion/settleThreshold.ts` holds `SETTLE_THRESHOLD` apart
-  from the animator, so a component that reads the threshold statically does
-  not pull in the deferred runtime. Gap: these modules still import the shared
-  touch modules statically, so a page that renders them carries the touch
-  runtime in its first load: `hooks/useActionGroupTracking`, `hooks/usePager`,
-  Lightbox (`useZoomCore`, `useZoomStage`), Resizable (`resizablePane`),
-  Slider (`sliderTouchController`), SnapPaging, Chat (`useChatKeyboard`), and
-  the date and time fields' wheels (`motion/reducedMotion`). A surface
+  stylesheet exit instead of the spring; a toast does not swipe (its close
+  button and timer still dismiss it), and a popover presents as under a fine
+  pointer. A gesture in that window does not start the load. The bundler keeps
+  one copy per page however many components use them.
+  `utils/touchRuntimeModules.tsx` is the one module the loader's `import()`
+  targets; it gathers the touch runtime, so the loader names a single chunk.
+  `motion/settleThreshold.ts` holds `SETTLE_THRESHOLD` apart from the
+  animator, so a component that reads the threshold statically does not pull
+  in the deferred runtime. Gap: these modules still import the shared touch
+  modules statically, so a page that renders them carries the touch runtime in
+  its first load: `hooks/useActionGroupTracking`, `hooks/usePager`, Lightbox
+  (`useZoomCore`, `useZoomStage`), Resizable (`resizablePane`), Slider
+  (`sliderTouchController`), SnapPaging, Chat (`useChatKeyboard`), and the
+  date and time fields' wheels (`motion/reducedMotion`). A surface
   revealed by interaction that a component loads with `import()` under
   `architecture:component-import-boundaries` INV1 imports these modules
   statically too; the bundler still keeps one copy per page. That `import()`
