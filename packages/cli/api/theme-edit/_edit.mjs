@@ -703,13 +703,21 @@ function applyNewSettings(
           false,
         );
       } catch (e) {
-        throw asNewRefusal(
-          vetSuggestions(e, ctx, slug, data),
+        throw newColorPair(
+          asNewRefusal(
+            vetSuggestions(e, ctx, slug, data),
+            slug,
+            settings,
+            likeFlag,
+            png,
+            {thing, index},
+          ),
           slug,
           settings,
           likeFlag,
           png,
-          {thing, index},
+          thing,
+          String(value),
         );
       }
       if (thing === 'mode')
@@ -814,6 +822,81 @@ function asNewRefusal(e, slug, settings, like, png = false, at = null) {
       reason: `without --${at.thing} ${quoteCommandArgument(String(Array.isArray(given) ? given[at.index] : given))}`,
     });
   }
+  return e;
+}
+
+/**
+ * A color dial on `new` given a light and a dark color ("light #111111 dark
+ * #eeeeee"): the refusal offers the user's own colors, per mode, as set
+ * does, never a stock color they did not type.
+ * @param {unknown} e
+ * @param {string} slug
+ * @param {Record<string, any>} settings
+ * @param {string | undefined} like
+ * @param {boolean} png
+ * @param {string} thing
+ * @param {string} typed
+ */
+function newColorPair(e, slug, settings, like, png, thing, typed) {
+  if (!(e instanceof AstryxError) || !PALETTE_DIALS.includes(thing)) return e;
+  const typedLower = typed.toLowerCase();
+  // A color in a line the user did not type (a stock example) goes.
+  e.suggestions = (e.suggestions ?? []).filter(x => {
+    if (!x.name.startsWith(`${P} new `)) return true;
+    const m = new RegExp(`--${thing} '?(#[0-9a-f]{3,8})'?`, 'i').exec(x.name);
+    return !m || typedLower.includes(m[1].toLowerCase());
+  });
+  // With every color line gone, the same new without that color, every
+  // other option kept.
+  if (!e.suggestions.some(x => x.name.startsWith(`${P} new `)))
+    e.suggestions.push({
+      name: `${P} new ${slug}${newFlags(like, {...settings, [thing]: undefined}, png)}`,
+      reason: `without --${thing} ${quoteCommandArgument(typed)}`,
+    });
+  /** @type {Record<string, string>} */
+  const pair = {};
+  for (const m of typed.matchAll(
+    /\b(light|dark)\b\s*(?:mode\s*)?[:=]?\s*(#[0-9a-f]{3,8}\b|[a-z]+\([^)]*\)|[a-z]+)/gi,
+  ))
+    pair[m[1].toLowerCase()] = m[2];
+  if (!pair.light && !pair.dark) return e;
+  const mode = String(
+    Array.isArray(settings.mode) ? settings.mode[0] : (settings.mode ?? 'both'),
+  );
+  /** @type {Array<{name: string, reason: string}>} */
+  const lines = [];
+  /** @param {string} color @param {string} reason @param {Record<string, any>} [extra] */
+  const line = (color, reason, extra = {}) =>
+    lines.push({
+      name: `${P} new ${slug}${newFlags(like, {...settings, ...extra, [thing]: color}, png)}`,
+      reason,
+    });
+  if (mode === 'dark-only' && pair.dark)
+    line(pair.dark, 'do this instead: the dark color you gave');
+  else if (mode === 'light-only' && pair.light)
+    line(pair.light, 'do this instead: the light color you gave');
+  else if (mode === 'both') {
+    if (pair.light)
+      line(
+        pair.light,
+        `the light color you gave; then set ${slug} --color-${thing} ${pair.dark ?? '…'} --mode dark for the dark one`,
+      );
+    if (pair.dark)
+      line(pair.dark, 'or a dark-only theme with the dark color you gave', {
+        mode: 'dark-only',
+      });
+  }
+  // No color for the mode the theme has: how the dial works, and the
+  // same new without it, never a color made up.
+  if (!lines.length)
+    lines.push({
+      name: `${P} how ${thing}`,
+      reason: `no ${mode === 'light-only' ? 'light' : 'dark'} color was given for this ${mode} theme`,
+    });
+  e.suggestions = [
+    ...lines,
+    ...(e.suggestions ?? []).filter(x => !lines.some(l => l.name === x.name)),
+  ];
   return e;
 }
 
@@ -3727,6 +3810,66 @@ function colorFiles(slug) {
  * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditUndoResponse | import('./theme-edit.type.mjs').ThemeEditChangeResponse>}
  */
 export async function themeEditUndo(theme, options = {}) {
+  try {
+    return await undoTheme(theme, options);
+  } catch (e) {
+    // A theme name typed in another form (tTheme, T, brand_dark, themes/t):
+    // the same undo with the theme's name comes first, never a look at the
+    // theme that drops the undo.
+    if (
+      e instanceof AstryxError &&
+      (e.code === E.ERR_INVALID_ARGUMENT || e.code === E.ERR_UNKNOWN_THEME)
+    ) {
+      const cwd = options.cwd ?? process.cwd();
+      const showOf = (/** @type {{name: string}} */ x) => {
+        const rest = x.name.startsWith(`${P} show `)
+          ? x.name.slice(`${P} show `.length)
+          : null;
+        return rest && !/\s/.test(rest) ? rest : null;
+      };
+      // A list of themes (t,u) stays a look at each: one theme at a time.
+      const shows = (e.suggestions ?? []).filter(x => showOf(x) != null);
+      const near = (shows.length === 1 ? shows : []).find(x => {
+        const n = showOf(x);
+        return (
+          n != null &&
+          n !== theme &&
+          slugOk(n) &&
+          fs.existsSync(themeFiles(cwd, n).settings)
+        );
+      });
+      const name = near ? showOf(near) : null;
+      if (near && name) {
+        const words = [
+          ...(options.thing ? [options.thing] : []),
+          ...(options.value ? [options.value] : []),
+          ...(options.on ? ['--on', options.on] : []),
+          ...(options.when ? ['--when', options.when] : []),
+          ...(options.state ? ['--state', options.state] : []),
+          ...(options.mode ? ['--mode', options.mode] : []),
+        ].map(w =>
+          String(w).startsWith('--') ? w : quoteCommandArgument(String(w)),
+        );
+        e.suggestions = [
+          {
+            name: `${P} undo ${name}${words.length ? ` ${words.join(' ')}` : ''}`,
+            reason: `do this instead: ${name} is a theme here`,
+          },
+          ...(e.suggestions ?? []).filter(x => x !== near),
+        ];
+      }
+    }
+    throw e;
+  }
+}
+
+/**
+ * {@link themeEditUndo}'s work.
+ * @param {string} theme
+ * @param {import('./theme-edit.type.mjs').ThemeEditUndoOptions} options
+ * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditUndoResponse | import('./theme-edit.type.mjs').ThemeEditChangeResponse>}
+ */
+async function undoTheme(theme, options) {
   const {cwd = process.cwd(), png = false, thing} = options;
   // base and mode are not settings in the list: undoing one goes back to
   // what the theme was made with (the oldest step the history keeps).

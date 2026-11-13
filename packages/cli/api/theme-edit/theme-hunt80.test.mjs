@@ -101,7 +101,10 @@ describe('hunt80', () => {
     });
     const r = await refusal(() => themeEditShow('db', {cwd}));
     expect(r.message).toMatch(/base "Neutral"/);
-    expect(r.run[0]).toMatch(/ set db base neutral$/);
+    // Setting the base is refused while the list holds a bad value: the
+    // fix for that value leads, and saves the base too.
+    expect(r.run[0]).toMatch(/ undo db corners$/);
+    expect(r.message).toMatch(/saves the base as neutral/);
     const u = await themeEditUndo('db', {cwd, thing: 'corners'});
     expect(JSON.stringify(u.data)).toMatch(/saved as neutral/);
     expect(saved('db').like).toBe('neutral');
@@ -117,7 +120,8 @@ describe('hunt80', () => {
     });
     const r = await refusal(() => themeEditShow('dm', {cwd}));
     expect(r.message).toMatch(/mode "Dark-Only"/);
-    expect(r.run[0]).toMatch(/ set dm mode dark-only$/);
+    expect(r.run[0]).toMatch(/ undo dm corners$/);
+    expect(r.message).toMatch(/saves the mode as dark-only/);
     await themeEditUndo('dm', {cwd, thing: 'corners'});
     expect(saved('dm').mode).toBe('dark-only');
   }, 240_000);

@@ -889,7 +889,24 @@ export function loadTheme(
       ERROR_CODES.ERR_UNKNOWN_THEME,
       `There is no theme "${slug}" made by this command (no themes/${slug}/${slug}.settings.json).`,
       (() => {
-        const near = same ? [same] : nearest(slug, have);
+        // A doubled or trailing dash (brand--dark, t--): the name as new
+        // cleans it, the theme of that name when there is one, never a new
+        // theme new refuses.
+        const cleaned = String(slug)
+          .replace(/-{2,}/g, '-')
+          .replace(/^-+|-+$/g, '');
+        const cleanedHere =
+          cleaned !== slug &&
+          slugOk(cleaned) &&
+          fs.existsSync(themeFiles(cwd, cleaned).settings)
+            ? cleaned
+            : null;
+        const near = same
+          ? [same]
+          : cleanedHere
+            ? [cleanedHere]
+            : nearest(slug, have);
+        const newName = usableNewName(cwd, cleaned || slug);
         // A theme near the name comes first; a new theme of the name as
         // typed only after.
         return {
@@ -897,8 +914,8 @@ export function loadTheme(
           run: same
             ? [`${P} show ${same}`]
             : near.length
-              ? [`${P} show ${near[0]}`, `${P} new ${slug}`]
-              : [`${P} new ${slug}`],
+              ? [`${P} show ${near[0]}`, `${P} new ${newName}`]
+              : [`${P} new ${newName}`],
         };
       })(),
     );
@@ -1001,9 +1018,18 @@ export function loadTheme(
       DIALS[bad.thing] && typeof bad.value === 'string'
         ? vibrancyMeant(bad.thing, cleanDialValue(bad.thing, bad.value))
         : null;
+    // Vibrancy saturates the colors the color dials make: with none, set
+    // refuses it as having no effect, so it is not offered.
+    const vibrancyActs =
+      bad.thing !== 'vibrancy' ||
+      (Array.isArray(data.settings) ? data.settings : []).some(
+        (/** @type {any} */ x) =>
+          x && x.source === 'dial' && PALETTE_DIALS.includes(x.thing),
+      );
     const meant =
       cleaned &&
       cleaned !== bad.value &&
+      vibrancyActs &&
       !valueProblem({...bad, value: cleaned})
         ? cleaned
         : null;
@@ -1037,6 +1063,47 @@ export function loadTheme(
     : /^base "/.test(problem ?? '')
       ? `${P} set ${slug} base ${LIKE.includes(likeMeant) && baseInstalled(cwd, likeMeant) ? likeMeant : 'none'}`
       : null;
+  // A damaged mode or base and a bad value in the list: setting the field
+  // is refused while the list holds the bad value, but fixing that entry
+  // saves the field as meant too, so its fix comes first. Never a bare
+  // undo, which would throw away the last real change.
+  const alsoBad = fieldFix ? badSetting(data) : null;
+  if (problem && fieldFix && alsoBad) {
+    const cleaned =
+      DIALS[alsoBad.thing] && typeof alsoBad.value === 'string'
+        ? vibrancyMeant(
+            alsoBad.thing,
+            cleanDialValue(alsoBad.thing, alsoBad.value),
+          )
+        : null;
+    const meant =
+      cleaned &&
+      cleaned !== alsoBad.value &&
+      !['mode', 'base'].includes(alsoBad.thing) &&
+      !valueProblem({...alsoBad, value: cleaned})
+        ? cleaned
+        : null;
+    const field = /^base "/.test(problem) ? 'base' : 'mode';
+    const fieldValue = fieldFix.split(' ').pop();
+    throw new AstryxError(
+      `themes/${slug}/${slug}.settings.json: ${problem}, and ${settingsProblem(data, alsoBad.thing) ?? `${alsoBad.thing} "${alsoBad.value}" is not a value it takes`}. Fix that setting first: ${meant ? 'either command below does' : 'the command below does'}, and saves the ${field} as ${fieldValue}. Nothing was changed.`,
+      [
+        ...(meant
+          ? [
+              {
+                name: `${P} set ${slug} ${undoArgs(alsoBad).replace(alsoBad.thing, `${alsoBad.thing} ${quoteCommandArgument(meant)}`)}`,
+                reason: 'do this instead: set the value it holds, cleaned',
+              },
+            ]
+          : []),
+        {
+          name: `${P} undo ${slug} ${undoArgs(alsoBad)}`,
+          reason: meant ? 'or remove that setting' : 'do this instead',
+        },
+      ],
+      ERROR_CODES.ERR_THEME_INVALID,
+    );
+  }
   // A setting listed twice: setting it to one of its values, or undoing
   // it, keeps one entry or none.
   const twice = problem?.includes(' is listed twice (')
@@ -1046,7 +1113,7 @@ export function loadTheme(
     throw new AstryxError(
       `themes/${slug}/${slug}.settings.json: ${problem}. ${fieldFix ? 'Set it again' : twice ? `Set it to one of its values or undo it, or fix it by hand${recover.text}` : `Fix it by hand${recover.text}`}. Nothing was changed.`,
       fieldFix
-        ? [{name: fieldFix, reason: 'do this instead'}, ...recover.run]
+        ? [{name: fieldFix, reason: 'do this instead'}]
         : twice
           ? [
               ...twice.values
@@ -1188,6 +1255,10 @@ export function badSettings(data) {
 export function undoArgs(x) {
   return [
     quoteCommandArgument(String(x.thing)),
+    // The tracking half of headings is named, so the undo reaches it even
+    // when it is listed twice (a bare `undo headings` then reads the weight
+    // half).
+    ...(x.thing === 'headings' && x.axis === 'tracking' ? ['tracking'] : []),
     ...(x.on ? [`--on ${quoteCommandArgument(String(x.on))}`] : []),
     ...(x.when ? [`--when ${quoteCommandArgument(String(x.when))}`] : []),
     ...(x.state ? [`--state ${quoteCommandArgument(String(x.state))}`] : []),

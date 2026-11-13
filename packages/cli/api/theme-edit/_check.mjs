@@ -2123,7 +2123,22 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       },
     );
   // A setting saved for a mode the theme no longer has can still be removed.
-  if (s.mode && data.mode !== 'both' && !unset)
+  // An entry saved for the one mode the theme has ("[dark only]" in a
+  // dark-only theme) can be set again with that --mode, so a doubled one
+  // can be kept: that set replaces both.
+  const sameModeEntry =
+    s.mode &&
+    data.mode === `${s.mode}-only` &&
+    (Array.isArray(data.settings) ? data.settings : []).some(
+      (/** @type {any} */ x) =>
+        x &&
+        x.thing === thing &&
+        x.mode === s.mode &&
+        (x.on ?? null) === (s.on ?? null) &&
+        (x.when ?? null) === (s.when ?? null) &&
+        (x.state ?? null) === (s.state ?? null),
+    );
+  if (s.mode && data.mode !== 'both' && !unset && !sameModeEntry)
     refuse(
       E.ERR_THEME_NO_MODE,
       `This theme is ${data.mode}; --mode is for themes with both modes.`,
@@ -2170,7 +2185,11 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       // Another case of a part or group, its class name copied from the
       // page (`.astryx-card`), or its component (`<Card>`, `Card`): that
       // part, as a working command with every flag kept.
+      // Stray punctuation from a copied list ("text-input,") and the dashes
+      // autocorrect types ("text\u2013input") are not part of the name.
       const lower = s.on
+        .replace(/[\u2010-\u2015\u2212]/g, '-')
+        .replace(/^[\s,;:.'"`]+|[\s,;:.'"`]+$/g, '')
         .trim()
         .replace(/^<\/?\s*|\s*\/?>$/g, '')
         .replace(/^\./, '')
@@ -3314,7 +3333,23 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           E.ERR_THEME_NO_EFFECT,
           colors.length
             ? 'vibrancy sets how saturated the generated colors are, and every color this theme sets is a gray, so it would change nothing. Set a color first.'
-            : 'vibrancy sets how saturated the generated colors are, and this theme sets no color yet. Set one first.',
+            : (() => {
+                // Colors set as tokens or on parts are values of their own:
+                // vibrancy saturates only what the color dials make.
+                const own = data.settings.find(
+                  (/** @type {any} */ x) =>
+                    x &&
+                    typeof x.value === 'string' &&
+                    (/^--color-/.test(String(x.thing)) ||
+                      /(^|-)colou?r$|^background(-color)?$|^fill$/.test(
+                        String(x.thing),
+                      )) &&
+                    parseColor(x.value) != null,
+                );
+                return own
+                  ? `vibrancy sets how saturated the colors made from the color dials (accent, neutral, …) are; this theme's colors are values of their own (${own.thing} ${own.value}), which vibrancy does not change. Set a color dial such as accent first.`
+                  : 'vibrancy sets how saturated the generated colors are, and this theme sets no color yet. Set one first.';
+              })(),
           {run: [`${HOW} accent`]},
         );
     } else if (thing === 'font') {
