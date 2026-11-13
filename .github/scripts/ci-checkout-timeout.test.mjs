@@ -2,7 +2,8 @@
 
 /**
  * Each checkout step in ci.yml has its own time bound: 8 minutes, above the
- * slowest checkout that still succeeded in recent runs (445 s), or the bound
+ * slowest checkout that still succeeded in recent runs (445 s); 3 minutes in a
+ * job capped at 8 minutes or less, so the step bound fires first; or the bound
  * its job names. A checkout that hangs in the git service then fails by name,
  * instead of using up the job's whole time before any code runs. The bound is
  * for the tool alone: it lowers no test budget.
@@ -38,6 +39,12 @@ const checkouts = Object.entries(ci.jobs).flatMap(([job, spec]) =>
 const BOUND = {'release-bump': 10, 'release-merge-back': 10};
 const UNBOUNDED = new Set(['release-authority']);
 
+/** A job whose own time is 8 minutes or less. */
+const shortJob = (/** @type {string} */ job) => {
+  const cap = ci.jobs[job]['timeout-minutes'];
+  return typeof cap === 'number' && cap <= 8;
+};
+
 describe('ci.yml checkout steps', () => {
   it('exist', () => {
     expect(checkouts.length).toBeGreaterThan(0);
@@ -48,9 +55,23 @@ describe('ci.yml checkout steps', () => {
       .filter(({job, step}) =>
         UNBOUNDED.has(job)
           ? step['timeout-minutes'] !== undefined
-          : step['timeout-minutes'] !== (BOUND[job] ?? 8),
+          : step['timeout-minutes'] !== (BOUND[job] ?? (shortJob(job) ? 3 : 8)),
       )
       .map(({where}) => where);
     expect(wrong).toEqual([]);
+  });
+
+  it('each stop before their job does', () => {
+    const late = checkouts
+      .filter(({job, step}) => {
+        const cap = ci.jobs[job]['timeout-minutes'];
+        return (
+          typeof cap === 'number' &&
+          step['timeout-minutes'] !== undefined &&
+          step['timeout-minutes'] >= cap
+        );
+      })
+      .map(({where}) => where);
+    expect(late).toEqual([]);
   });
 });

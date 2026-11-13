@@ -590,7 +590,7 @@ jobs:
     steps:
       - name: Check out the scope action
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 3
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -1263,7 +1263,7 @@ jobs:
     steps:
       - name: Check out the scope action
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 3
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -1515,7 +1515,7 @@ jobs:
     steps:
       - name: Check out the decision script
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 3
         with:
           sparse-checkout: |
             .github/scripts/run-labels.cjs
@@ -2684,7 +2684,7 @@ jobs:
     steps:
       - name: Check out the scope action
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 3
         with:
           sparse-checkout: |
             .github/actions/test-scope
@@ -4517,7 +4517,7 @@ jobs:
       # Outside a pull request every audit applies in full.
       - name: Check out the scope action
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 3
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -4530,7 +4530,7 @@ jobs:
           component-audit: 'true'
 
       - uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 3
 
       - name: Download applicable RTL shard reports
         if: (steps.scope.outputs.has_rtl_components == 'true' || steps.scope.outputs.has_rtl_harness == 'true' || steps.scope.outputs.force_full_component_audits == 'true')
@@ -5033,7 +5033,7 @@ jobs:
     steps:
       - name: Check out the scope action
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 3
         with:
           sparse-checkout: |
             .github/actions/test-scope
@@ -5060,7 +5060,7 @@ jobs:
       - name: Check out the merge commit's sources
         if: steps.scope.outputs.applies == 'true'
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 3
         with:
           sparse-checkout: |
             .github
@@ -5258,7 +5258,7 @@ jobs:
     steps:
       - name: Check out the scope action
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 3
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -5289,7 +5289,7 @@ jobs:
       - name: Check out the planner
         if: steps.scope.outputs.applies == 'true'
         uses: actions/checkout@v7
-        timeout-minutes: 8
+        timeout-minutes: 3
         with:
           persist-credentials: false
 
