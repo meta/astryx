@@ -38,14 +38,16 @@ beforeAll(() => {
 
 let tmpDir;
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-build-theme-import-path-'));
+  tmpDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'astryx-build-theme-import-path-'),
+  );
 });
 afterEach(() => {
   fs.rmSync(tmpDir, {recursive: true, force: true});
 });
 
 describe('theme build install-instructions import path', () => {
-  it('emits bare ./<name> specifiers (no double slash) when out dir equals cwd', async () => {
+  it('emits ../<name> specifiers (no double slash) when out dir equals cwd', async () => {
     // Source theme lives directly in the project root, so the output dir
     // is the cwd and the relative dir is an empty string.
     const project = path.join(tmpDir, 'project');
@@ -59,10 +61,10 @@ describe('theme build install-instructions import path', () => {
     expect(result.code).toBe(0);
     // No double slash anywhere in the install instructions.
     expect(result.stdout).not.toContain('.//');
-    // Import + css + link paths all use the clean ./<name> form.
-    expect(result.stdout).toContain("from './cwd-theme'");
-    expect(result.stdout).toContain("import './cwd-theme.css'");
-    expect(result.stdout).toContain('href="./cwd-theme.css"');
+    // From a file in src/, the project root is one level up.
+    expect(result.stdout).toContain("from '../cwd-theme'");
+    expect(result.stdout).toContain("import '../cwd-theme.css'");
+    expect(result.stdout).toContain('href="../cwd-theme.css"');
   });
 
   it('keeps the subdir in the import path for a non-src subdirectory build', async () => {
@@ -76,9 +78,10 @@ describe('theme build install-instructions import path', () => {
 
     expect(result.code).toBe(0);
     expect(result.stdout).not.toContain('.//');
-    expect(result.stdout).toContain("from './themes/sub-theme'");
-    expect(result.stdout).toContain("import './themes/sub-theme.css'");
-    expect(result.stdout).toContain('href="./themes/sub-theme.css"');
+    // From a file in src/, a folder beside src/ is one level up.
+    expect(result.stdout).toContain("from '../themes/sub-theme'");
+    expect(result.stdout).toContain("import '../themes/sub-theme.css'");
+    expect(result.stdout).toContain('href="../themes/sub-theme.css"');
   });
 
   it('strips a leading src/ from the import path (relative to a file in src/)', async () => {
@@ -99,5 +102,27 @@ describe('theme build install-instructions import path', () => {
     expect(result.stdout).toContain("from './themes/ocean/ocean'");
     expect(result.stdout).toContain("import './themes/ocean/ocean.css'");
     expect(result.stdout).not.toContain('./src/');
+  });
+
+  it('experimental theme compile prints the same path from src/', async () => {
+    const project = path.join(tmpDir, 'project');
+    const themeFile = writeTheme(path.join(project, 'themes', 'd'), 'd');
+
+    const result = await runCli(
+      [
+        '--detail',
+        'full',
+        'experimental',
+        'theme',
+        'compile',
+        path.relative(project, themeFile),
+      ],
+      project,
+    );
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("from '../themes/d/d'");
+    expect(result.stdout).toContain("import '../themes/d/d.css'");
+    expect(result.stdout).not.toContain("'./themes/d/d'");
   });
 });

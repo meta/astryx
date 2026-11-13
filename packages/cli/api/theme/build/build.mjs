@@ -1427,20 +1427,23 @@ function toIdentifier(name) {
 }
 
 /**
- * Import specifier for install/scaffold instructions. Drops a leading `src/`
- * from the cwd-relative dir (most consumers import from a file under src/) but
- * keeps the rest of the path (e.g. `themes/gothic`). Callers note the path is
- * relative to the consumer's file.
- * @param {string} relDir
+ * Import specifier for install/scaffold instructions, from a file directly
+ * in src/ (the file the printed snippet says it is relative to): an output
+ * under src/ is `./themes/gothic/gothic`, one beside src/ is
+ * `../themes/gothic/gothic`.
+ * @param {string} relDir the output folder, relative to the cwd
  * @param {string} base
  * @returns {string}
  */
 export function importSpecifier(relDir, base) {
   // An import specifier always uses `/`. On Windows the cwd-relative dir comes
   // from path.relative with `\`, which would print `./\themes\ocean/ocean`.
-  const normalized = relDir === '.' ? '' : relDir.split(path.sep).join('/');
-  const withinSrc = normalized.replace(/^src\/?/, '').replace(/\/+$/, '');
-  return withinSrc ? `./${withinSrc}/${base}` : `./${base}`;
+  const normalized = relDir === '.' ? '.' : relDir.split(path.sep).join('/');
+  const fromSrc = path.posix.relative('src', normalized.replace(/\/+$/, ''));
+  if (!fromSrc) return `./${base}`;
+  return fromSrc.startsWith('..')
+    ? `${fromSrc}/${base}`
+    : `./${fromSrc}/${base}`;
 }
 
 /**
