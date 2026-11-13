@@ -83,9 +83,11 @@ export interface PaginationProps extends Omit<
   /** Current page number (1-based). Page 1 is the first page. */
   page: number;
   /**
-   * Called when the page changes. Required unless `getPageHref` is set.
-   * When a link was activated, `event` is its click event and the link
-   * navigates by itself. A control that is not a link passes no event.
+   * Called when the page changes. Pass it, or `changeAction`, unless
+   * `getPageHref` makes every control a link: a control with no link and no
+   * callback is disabled. When a link was activated, `event` is its click
+   * event: the link owns the navigation, so do not navigate again. A control
+   * that is not a link passes no event.
    */
   onChange?: (page: number, event?: React.MouseEvent<HTMLElement>) => void;
   /**
@@ -97,9 +99,11 @@ export interface PaginationProps extends Omit<
    * Returns the URL of a page. When set, the page number, previous, next,
    * first and last controls render as links to that URL. `pageSize` is the
    * current page size when `pageSize` or `pageSizeOptions` is set. The dots,
-   * the page box and the page-size selector are not links: navigate for them
-   * in `onChange` and `onPageSizeChange`. In cursor pagination, map the page
-   * before or after the current one to the cursor's URL.
+   * the page box and the page-size selector are not links. The dots and the
+   * page box call `onChange`; the page-size selector calls
+   * `onPageSizeChange(size)` and then `onChange(1)`. Navigate there, once for
+   * each change. In cursor pagination, map the page before or after the
+   * current one to the cursor's URL.
    */
   getPageHref?: (page: number, pageSize?: number) => string;
   /**
@@ -385,14 +389,18 @@ export function generatePageRange(
 }
 
 /**
- * Whether the browser opens this link click in another tab, window or frame.
- * The page of this Pagination does not change then.
+ * Whether a click on a page link navigates this document. A modifier key or a
+ * `target` other than `_self` opens the URL elsewhere. A link with a rejected
+ * URL has no `href` and opens nothing.
  */
-function opensElsewhere(event: React.MouseEvent<HTMLElement>): boolean {
-  const target = event.currentTarget.getAttribute('target');
+function navigatesHere(event: React.MouseEvent<HTMLElement>): boolean {
+  const link = event.currentTarget;
+  const target = link.getAttribute('target');
+  const isInert = link.tagName === 'A' && !link.hasAttribute('href');
   return (
-    isModifiedClick(event) ||
-    (target != null && target !== '' && target !== '_self')
+    !isInert &&
+    !isModifiedClick(event) &&
+    (target == null || target === '' || target.toLowerCase() === '_self')
   );
 }
 
@@ -482,14 +490,15 @@ export function Pagination({
   useDevWarning(
     'Pagination',
     'pass onChange, or getPageHref to render the page controls as links. ' +
-      'Without either, every control is disabled.',
+      'A control with no link and no callback is disabled.',
     getPageHref == null && !hasPageCallback,
   );
   useDevWarning(
     'Pagination',
     'the dots and the page box are not links, so getPageHref does not reach ' +
-      'them. Without onChange they are disabled. Pass onChange and navigate ' +
-      'there, or use a variant whose controls are all links.',
+      'them. Without onChange or changeAction they are disabled. Pass ' +
+      'onChange and navigate there, or use a variant whose controls are all ' +
+      'links.',
     getPageHref != null &&
       !hasPageCallback &&
       (variant === 'dots' || variant === 'input'),
@@ -497,8 +506,8 @@ export function Pagination({
   useDevWarning(
     'Pagination',
     'the page-size selector is not a link, so getPageHref does not reach ' +
-      'it. Without onPageSizeChange or onChange it is disabled. Pass ' +
-      'onPageSizeChange and navigate there.',
+      'it. Without a callback it is disabled. Pass onPageSizeChange, and ' +
+      'onChange for the change to page 1 that follows.',
     getPageHref != null && hasPageSizeOptions && !hasPageSizeCallback,
   );
 
@@ -652,7 +661,7 @@ export function Pagination({
         }
         if (href == null) {
           handlePageChange(target);
-        } else if (!opensElsewhere(event)) {
+        } else if (navigatesHere(event)) {
           handlePageChange(target, event);
         }
       },

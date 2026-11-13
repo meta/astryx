@@ -89,7 +89,7 @@ export const docs = {
       name: 'onChange',
       type: '(page: number, event?: React.MouseEvent<HTMLElement>) => void',
       description:
-        'Called when the page changes. Required unless getPageHref is set. When a link was activated, event is its click event and the link navigates by itself; a control that is not a link passes no event.',
+        'Called when the page changes. Pass it, or changeAction, unless getPageHref makes every control a link: a control with no link and no callback is disabled. When a link was activated, event is its click event: the link owns the navigation, so do not navigate again. A control that is not a link passes no event.',
     },
     {
       name: 'changeAction',
@@ -101,7 +101,7 @@ export const docs = {
       name: 'getPageHref',
       type: '(page: number, pageSize?: number) => string',
       description:
-        "Returns the URL of a page. When set, the page number, previous, next, first and last controls render as links to it, so a page opens in a new tab, its address can be copied, and it works before scripts load. pageSize is the current page size when pageSize or pageSizeOptions is set. The dots, the page box and the page-size selector are not links: navigate for them in onChange and onPageSizeChange. In cursor pagination, map the page before or after the current one to the cursor's URL. The destination follows the shared navigation rule described on the Link `href` prop.",
+        "Returns the URL of a page. When set, the page number, previous, next, first and last controls render as links to it, so a page opens in a new tab, its address can be copied, and it works before scripts load. pageSize is the current page size when pageSize or pageSizeOptions is set. The dots, the page box and the page-size selector are not links: the dots and the page box call onChange, and the page-size selector calls onPageSizeChange(size) and then onChange(1). Navigate there, once for each change. In cursor pagination, map the page before or after the current one to the cursor's URL. The destination follows the shared navigation rule described on the Link `href` prop.",
     },
     {
       name: 'as',
@@ -234,7 +234,7 @@ export const docs = {
       { guidance: false, description: 'Show pagination when all items fit on a single page; there is nothing to paginate.' },
       { guidance: false, description: 'Use the dots variant for more than about 10 pages; the dots become too small to be useful.' },
       { guidance: false, description: 'Place pagination above the content; users expect it at the bottom.' },
-      { guidance: false, description: 'Navigate in onChange for a control that is already a link; with getPageHref, navigate there only when onChange receives no click event, as from the dots and the page box.' },
+      { guidance: false, description: 'Navigate twice for one change with getPageHref: a link navigates by itself and passes its click event to onChange, and a page-size choice calls onPageSizeChange and then onChange(1).' },
     ],
   },
 };
@@ -254,7 +254,7 @@ export const docsZh = {
       name: 'onChange',
       type: '(page: number, event?: React.MouseEvent<HTMLElement>) => void',
       description:
-        '页码变化时调用。未设置 getPageHref 时必填。激活链接时，event 为该链接的点击事件，链接会自行导航；非链接控件不传事件。',
+        '页码变化时调用。除非 getPageHref 使所有控件都成为链接，否则请传入它或 changeAction：既没有链接也没有回调的控件会被禁用。激活链接时，event 为该链接的点击事件：导航由链接负责，请勿重复导航。非链接控件不传事件。',
     },
     {
       name: 'changeAction',
@@ -266,7 +266,7 @@ export const docsZh = {
       name: 'getPageHref',
       type: '(page: number, pageSize?: number) => string',
       description:
-        '返回某一页的 URL。设置后，页码、上一页、下一页、首页和末页控件渲染为指向该 URL 的链接，因此页面可在新标签页中打开、可复制地址，并在脚本加载前可用。设置了 pageSize 或 pageSizeOptions 时，pageSize 为当前每页大小。点指示器、页码输入框和每页大小选择器不是链接：请在 onChange 和 onPageSizeChange 中为它们导航。游标分页时，将当前页的前一页或后一页映射到游标的 URL。目标地址遵循 Link `href` 属性所述的共享导航规则。',
+        '返回某一页的 URL。设置后，页码、上一页、下一页、首页和末页控件渲染为指向该 URL 的链接，因此页面可在新标签页中打开、可复制地址，并在脚本加载前可用。设置了 pageSize 或 pageSizeOptions 时，pageSize 为当前每页大小。点指示器、页码输入框和每页大小选择器不是链接：点指示器和页码输入框调用 onChange，每页大小选择器先调用 onPageSizeChange(size) 再调用 onChange(1)。请在这些回调中导航，每次变化只导航一次。游标分页时，将当前页的前一页或后一页映射到游标的 URL。目标地址遵循 Link `href` 属性所述的共享导航规则。',
     },
     {
       name: 'as',
@@ -391,7 +391,7 @@ export const docsZh = {
       { guidance: false, description: 'Show pagination when all items fit on a single page; there is nothing to paginate.' },
       { guidance: false, description: 'Use the dots variant for more than about 10 pages; the dots become too small to be useful.' },
       { guidance: false, description: 'Place pagination above the content; users expect it at the bottom.' },
-      { guidance: false, description: 'Navigate in onChange for a control that is already a link; with getPageHref, navigate there only when onChange receives no click event, as from the dots and the page box.' },
+      { guidance: false, description: 'Navigate twice for one change with getPageHref: a link navigates by itself and passes its click event to onChange, and a page-size choice calls onPageSizeChange and then onChange(1).' },
     ],
   },
 };
@@ -414,17 +414,17 @@ export const docsDense = {
       { guidance: false, description: 'Show pagination when all items fit on a single page; there is nothing to paginate.' },
       { guidance: false, description: 'Use the dots variant for more than about 10 pages; the dots become too small to be useful.' },
       { guidance: false, description: 'Place pagination above the content; users expect it at the bottom.' },
-      { guidance: false, description: 'Navigate in onChange for a control that is already a link; with getPageHref, navigate there only when onChange receives no click event, as from the dots and the page box.' },
+      { guidance: false, description: 'Navigate twice for one change with getPageHref: a link navigates by itself and passes its click event to onChange, and a page-size choice calls onPageSizeChange and then onChange(1).' },
     ],
   },
   propDescriptions: {
     page: 'Current page number (1-based).',
     onChange:
-      'Called on page change. Required unless getPageHref set. A link passes its click event as 2nd arg + navigates by itself; non-link controls pass none.',
+      'Called on page change. Pass it or changeAction unless getPageHref makes every control a link; a control w/ no link + no callback is disabled. A link passes its click event as 2nd arg + owns the navigation: do not navigate again. Non-link controls pass none.',
     changeAction:
       'Async action on page change. Fires after onChange; uses React transitions for loading.',
     getPageHref:
-      'URL of a page. Page number/prev/next/first/last render as links. pageSize = current size when pageSize or pageSizeOptions set. Dots, page box + page-size selector are not links: navigate in onChange/onPageSizeChange. Cursor pagination: map the page before/after current to the cursor URL.',
+      'URL of a page. Page number/prev/next/first/last render as links. pageSize = current size when pageSize or pageSizeOptions set. Dots, page box + page-size selector are not links: dots + page box call onChange; the selector calls onPageSizeChange(size) then onChange(1). Navigate there, once per change. Cursor pagination: map the page before/after current to the cursor URL.',
     as: 'Custom link component for getPageHref links (e.g. Next.js Link). Overrides LinkProvider.',
     totalItems: 'Total items. Calculates page count. Precedence over totalPages.',
     totalPages: 'Total pages. Use when page count known but not item count.',

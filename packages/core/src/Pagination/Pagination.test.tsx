@@ -40,6 +40,13 @@ function RouterLink({
   return <a data-router-link="" {...props} />;
 }
 
+function SameTabLink({
+  to: _to,
+  ...props
+}: React.ComponentProps<'a'> & {to?: string}) {
+  return <a {...props} target="_SELF" />;
+}
+
 function NewTabLink({
   to: _to,
   ...props
@@ -1844,8 +1851,10 @@ describe('Pagination', () => {
       ).toHaveAttribute('href', '/items/9');
     });
 
-    it('keeps an unavailable end a disabled button and asks for no URL outside the range', () => {
+    it('keeps an unavailable end a disabled button and asks for no URL for it', () => {
       const getPageHref = vi.fn(pagePath);
+      const requestedPages = () =>
+        getPageHref.mock.calls.map(([page]) => page).sort((a, b) => a - b);
       const {rerender} = render(
         <Pagination page={1} totalPages={3} getPageHref={getPageHref} />,
       );
@@ -1858,7 +1867,10 @@ describe('Pagination', () => {
       expect(
         screen.getByRole('link', {name: 'Go to next page'}),
       ).toHaveAttribute('href', '/items/2');
+      // The three page numbers and Next. Previous asks for nothing.
+      expect(requestedPages()).toEqual([1, 2, 2, 3]);
 
+      getPageHref.mockClear();
       rerender(
         <Pagination page={3} totalPages={3} getPageHref={getPageHref} />,
       );
@@ -1866,10 +1878,8 @@ describe('Pagination', () => {
         screen.getByRole('button', {name: 'Go to next page'}),
       ).toHaveAttribute('aria-disabled', 'true');
       expect(screen.queryByRole('link', {name: 'Go to next page'})).toBeNull();
-
-      const pages = getPageHref.mock.calls.map(([page]) => page);
-      expect(Math.min(...pages)).toBe(1);
-      expect(Math.max(...pages)).toBe(3);
+      // The three page numbers and Previous. Next asks for nothing.
+      expect(requestedPages()).toEqual([1, 2, 2, 3]);
     });
 
     it('renders no link and asks for no URL while disabled', () => {
@@ -2025,19 +2035,25 @@ describe('Pagination', () => {
       ).not.toHaveAttribute('data-router-link');
     });
 
-    it('renders a rejected URL as a link with no destination', () => {
+    it('renders a rejected URL as a link with no destination, and its click changes no page', () => {
+      const onChange = vi.fn();
       render(
         <Pagination
           page={1}
           totalPages={2}
+          onChange={onChange}
           getPageHref={page => `javascript:go(${page})`}
         />,
       );
-      for (const anchor of screen
-        .getByRole('navigation')
-        .querySelectorAll('a')) {
+      // Page 1, page 2 and Next. Previous is a disabled button.
+      const anchors = screen.getByRole('navigation').querySelectorAll('a');
+      expect(anchors).toHaveLength(3);
+      for (const anchor of anchors) {
         expect(anchor).not.toHaveAttribute('href');
+        fireEvent.click(anchor);
       }
+      expect(onChange).not.toHaveBeenCalled();
+      expect(politeRegion()).toBeNull();
     });
 
     it('links Previous and Next in cursor pagination to the pages beside the current one', () => {
@@ -2139,6 +2155,22 @@ describe('Pagination', () => {
       fireEvent.click(screen.getByRole('link', {name: 'Go to page 3'}));
       expect(onChange).not.toHaveBeenCalled();
       expect(politeRegion()).toBeNull();
+    });
+
+    it('runs the page change for a link whose component names this tab as its target', () => {
+      const onChange = vi.fn();
+      render(
+        <Pagination
+          page={1}
+          totalPages={5}
+          onChange={onChange}
+          getPageHref={pageHash}
+          as={SameTabLink}
+        />,
+      );
+      fireEvent.click(screen.getByRole('link', {name: 'Go to page 3'}));
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange.mock.calls[0][0]).toBe(3);
     });
 
     it('needs no onChange: a link click still announces the page', async () => {
@@ -2247,7 +2279,7 @@ describe('Pagination', () => {
 
     it('lets changeAction alone drive the dots and the page box', () => {
       const warn = warnSpy();
-      render(
+      const {rerender} = render(
         <Pagination
           page={2}
           totalPages={4}
@@ -2259,7 +2291,46 @@ describe('Pagination', () => {
       expect(
         screen.getByRole('spinbutton', {name: 'Go to page'}),
       ).not.toHaveAttribute('aria-disabled');
+
+      rerender(
+        <Pagination
+          page={2}
+          totalPages={4}
+          variant="dots"
+          changeAction={() => {}}
+          getPageHref={pageHash}
+        />,
+      );
+      for (const dot of screen.getAllByRole('radio')) {
+        expect(dot).not.toHaveAttribute('aria-disabled');
+      }
       expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('reports a page-size choice as the size and then page 1, with no event', async () => {
+      const user = userEvent.setup();
+      const calls: unknown[][] = [];
+      render(
+        <Pagination
+          page={3}
+          totalItems={100}
+          pageSize={10}
+          pageSizeOptions={[10, 20]}
+          onPageSizeChange={size => calls.push(['onPageSizeChange', size])}
+          onChange={(...args) => calls.push(['onChange', ...args])}
+          getPageHref={pagePath}
+        />,
+      );
+      await user.click(screen.getByRole('combobox', {name: 'Items per page'}));
+      // The test DOM does not open the popup, so the option counts as hidden.
+      await user.click(
+        await screen.findByRole('option', {name: '20', hidden: true}),
+      );
+      // One navigation serves both: the size arrives before the page.
+      expect(calls).toEqual([
+        ['onPageSizeChange', 20],
+        ['onChange', 1],
+      ]);
     });
 
     it('disables the page-size selector that has no callback, and says so', () => {
