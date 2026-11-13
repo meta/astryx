@@ -541,8 +541,9 @@ Every response has a `type` discriminant. The full set is below (generated from 
 
 ## Doctor
 
-`astryx doctor` runs read-only health checks against your project and
-environment. Each record uses `[ok]`, `[warn]`, `[fail]`, or `[info]`, and
+`astryx doctor` runs health checks against your project and environment. It
+changes nothing in the project; once the per-user cache folder exists, it
+keeps its docs checks and integration check results there. Each record uses `[ok]`, `[warn]`, `[fail]`, or `[info]`, and
 includes an actionable `fix` when one is available. Field names match the
 `--json` keys. The exact checks and values depend on the project; the output
 shape is stable:

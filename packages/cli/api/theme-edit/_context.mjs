@@ -8,12 +8,21 @@
  * @position api/theme-edit — imported only by the adapter's operation helpers
  */
 
+import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {AstryxError} from '../error.mjs';
-import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
+import {
+  findDeclaredWorkspaceRoot,
+  findNodeModulesPackage,
+  homeFolder,
+} from '../../foundation/fs/paths.mjs';
+import {
+  detectPackageManager,
+  quoteCommandArgument,
+} from '../../foundation/env/package-manager.mjs';
 import {
   CLOSEST_OPEN_FONT,
   FONT_ROLES,
@@ -35,6 +44,7 @@ import {
   nearest,
   refuse,
   themeFiles,
+  refuseThemesNotFolder,
 } from './_settings.mjs';
 import {SHOWCASE_GROUPS, renderPreview, screenshot} from './_preview.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
@@ -47,10 +57,13 @@ const E = ERROR_CODES;
  * @param {string} cwd
  */
 export function requireProject(cwd) {
-  if (!isOutsideProject(cwd)) return;
-  const pkg = path.join(cwd, 'package.json');
-  // Yarn Plug'n'Play has no node_modules for the editor to read Core from.
-  if (fs.existsSync(path.join(cwd, '.pnp.cjs')))
+  // One rule: the app is the nearest folder at or above cwd whose
+  // package.json lists @astryxdesign/core.
+  const app = coreApp(cwd);
+  if (!app) refuseNoApp(cwd);
+  // Yarn Plug'n'Play has no node_modules for the editor to read Core from:
+  // its .pnp.cjs sits at the app or at the workspace root above it.
+  if (pnpAbove(app))
     throw new AstryxError(
       "This app uses Yarn Plug'n'Play, which astryx experimental theme does not support: it reads the installed Core from node_modules. Set `nodeLinker: node-modules` in .yarnrc.yml and run yarn install. Nothing was written.",
       [
@@ -61,21 +74,11 @@ export function requireProject(cwd) {
       ],
       E.ERR_PROJECT_REQUIRED,
     );
-  // A package.json with no Core: an app (or a workspace root) that needs it.
-  if (fs.existsSync(pkg))
-    throw new AstryxError(
-      `@astryxdesign/core is not installed in this app (package.json here does not use it). astryx experimental theme checks every change against the installed Core: install it, or run the command from the package that uses it. Nothing was written.`,
-      [{name: 'npm install @astryxdesign/core', reason: 'do this first'}],
-      E.ERR_PROJECT_REQUIRED,
-    );
+  if (findNodeModulesPackage(app, '@astryxdesign/core')) return;
+  // The app lists Core but it is not installed.
   throw new AstryxError(
-    'No package.json found. astryx experimental theme works inside an app project, which it writes the theme into and whose installed Core it checks every change against. Nothing was written.',
-    [
-      {
-        name: 'npm init -y',
-        reason: 'make a package.json here, then install @astryxdesign/core',
-      },
-    ],
+    `${path.relative(path.resolve(cwd), app) || 'This app'}'s package.json lists @astryxdesign/core, but it is not installed. astryx experimental theme checks every change against the installed Core: install the app's packages, then run the command again. Nothing was written.`,
+    [{name: installAll(app), reason: 'do this first, in the app'}],
     E.ERR_PROJECT_REQUIRED,
   );
 }
@@ -88,6 +91,7 @@ export function requireProject(cwd) {
  */
 export async function context(cwd) {
   requireProject(cwd);
+  refuseThemesNotFolder(cwd);
   const project = await openProject(cwd);
   /** @type {import('./_parts.mjs').PartData} */
   let parts;
@@ -144,12 +148,193 @@ const isRenderFailure = e =>
     e.code === E.ERR_RENDER_MISSING_DEPENDENCY);
 
 /**
+ * The app a folder belongs to: the nearest folder at or above it whose
+ * package.json lists @astryxdesign/core (dependencies, devDependencies or
+ * peerDependencies), never the home folder; null when there is none.
+ * @param {string} cwd
+ * @returns {string | null}
+ */
+export function coreApp(cwd) {
+  const home = homeFolder();
+  let dir = path.resolve(cwd);
+  // An installed package is never the app: resume above the outermost
+  // node_modules.
+  const nm = dir.split(path.sep).indexOf('node_modules');
+  if (nm > 0) dir = dir.split(path.sep).slice(0, nm).join(path.sep) || path.sep;
+  // A repository below the home folder is its own project: the home folder
+  // is the app only when the search did not come up out of another repo.
+  let crossedRepo = false;
+  for (;;) {
+    const listsCore = usesCore(readJson(path.join(dir, 'package.json')));
+    if (home && dir === home) return listsCore && !crossedRepo ? dir : null;
+    if (listsCore) return dir;
+    if (fs.existsSync(path.join(dir, '.git'))) crossedRepo = true;
+    const up = path.dirname(dir);
+    if (up === dir) return null;
+    dir = up;
+  }
+}
+
+/**
+ * Whether a Yarn Plug'n'Play loader (.pnp.cjs) is at the app folder or above
+ * it, up to its workspace root (or, outside a workspace, the repository
+ * root).
+ * @param {string} app
+ */
+function pnpAbove(app) {
+  const root = findDeclaredWorkspaceRoot(app);
+  for (let dir = app; ; dir = path.dirname(dir)) {
+    if (fs.existsSync(path.join(dir, '.pnp.cjs'))) return true;
+    if (dir === root || (!root && fs.existsSync(path.join(dir, '.git'))))
+      return false;
+    if (path.dirname(dir) === dir) return false;
+  }
+}
+
+/**
+ * The command that installs an app's packages, in its package manager.
+ * @param {string} dir
+ */
+function installAll(dir) {
+  const pm = detectPackageManager(dir);
+  return pm === 'npm' || pm === 'npx' ? 'npm install' : `${pm} install`;
+}
+
+/**
+ * Refuse a folder no app above lists Core for: say where Core resolves
+ * from (when it does) and, inside a workspace, name the folders below its
+ * root whose package.json lists Core, each with the `cd` to run from.
+ * @param {string} cwd
+ * @returns {never}
+ */
+function refuseNoApp(cwd) {
+  const start = path.resolve(cwd);
+  // A repository inside a home-folder app (a submodule, a vendored clone) is
+  // its own project: name the app above instead of claiming there is none.
+  const home = homeFolder();
+  if (
+    home &&
+    !path.relative(home, start).startsWith('..') &&
+    usesCore(readJson(path.join(home, 'package.json')))
+  ) {
+    const rel = path.relative(start, home) || '.';
+    throw new AstryxError(
+      `This folder is inside its own repository, below the app at ${rel} (your home folder): the theme editor does not reach out of a repository into an app around it. Run the command from the app. Nothing was written.`,
+      [
+        {
+          name: `cd ${quoteCommandArgument(rel)}`,
+          reason: 'run the command from the app',
+        },
+      ],
+      E.ERR_PROJECT_REQUIRED,
+    );
+  }
+  // Where Core resolves from: the nearest node_modules above that holds it.
+  const resolved =
+    findNodeModulesPackage(start, '@astryxdesign/core')?.packageDir ?? null;
+  const root = findDeclaredWorkspaceRoot(start);
+  const where = resolved
+    ? ` @astryxdesign/core resolves from ${path.relative(start, resolved) || '.'}, but the theme editor needs the app's package.json to list it.`
+    : '';
+  if (root) {
+    const apps = appsBelow(root)
+      .map(a => path.relative(start, a) || '.')
+      .sort();
+    throw new AstryxError(
+      `${path.relative(start, root) || 'This folder'} is a workspace root${root === start ? '' : ` (${path.relative(root, start)} is not an app that uses @astryxdesign/core)`}, not an app: a theme belongs in an app whose package.json lists @astryxdesign/core.${where}${apps.length ? ` The workspace's apps that use it: ${apps.join(', ')}.` : ''} Run the command from the app that uses it. Nothing was written.`,
+      apps.slice(0, 4).map(a => ({
+        name: `cd ${quoteCommandArgument(a.startsWith('-') ? `./${a}` : a)}`,
+        reason: 'run the command from this app',
+      })),
+      E.ERR_PROJECT_REQUIRED,
+    );
+  }
+  if (fs.existsSync(path.join(start, 'package.json')) || resolved)
+    throw new AstryxError(
+      `${fs.existsSync(path.join(start, 'package.json')) ? '@astryxdesign/core is not installed in this app (package.json here does not use it).' : 'No package.json at or above this folder lists @astryxdesign/core.'}${where} astryx experimental theme checks every change against the installed Core: install it, or run the command from the package that uses it. Nothing was written.`,
+      [
+        {
+          name: installLine(start, ['@astryxdesign/core']),
+          reason: 'do this first',
+        },
+      ],
+      E.ERR_PROJECT_REQUIRED,
+    );
+  throw new AstryxError(
+    'No package.json found. astryx experimental theme works inside an app project, which it writes the theme into and whose installed Core it checks every change against. Nothing was written.',
+    [
+      {
+        name: 'npm init -y',
+        reason: 'make a package.json here, then install @astryxdesign/core',
+      },
+    ],
+    E.ERR_PROJECT_REQUIRED,
+  );
+}
+
+/**
+ * The folders below a workspace root, up to three levels deep (node_modules
+ * and dot folders skipped), whose package.json lists Core.
+ * @param {string} root
+ * @returns {string[]}
+ */
+function appsBelow(root) {
+  /** @type {string[]} */
+  const out = [];
+  /** @param {string} dir @param {number} depth */
+  const walk = (dir, depth) => {
+    if (depth > 6) return;
+    /** @type {fs.Dirent[]} */
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, {withFileTypes: true});
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (
+        !e.isDirectory() ||
+        e.name === 'node_modules' ||
+        e.name.startsWith('.')
+      )
+        continue;
+      const sub = path.join(dir, e.name);
+      if (usesCore(readJson(path.join(sub, 'package.json')))) out.push(sub);
+      walk(sub, depth + 1);
+    }
+  };
+  walk(root, 1);
+  return out;
+}
+
+/** @param {string} file */
+function readJson(file) {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
+  } catch {
+    return null;
+  }
+}
+
+/** Whether a package.json lists @astryxdesign/core itself. */
+function usesCore(/** @type {any} */ json) {
+  if (!json || typeof json !== 'object') return false;
+  return ['dependencies', 'devDependencies', 'peerDependencies'].some(
+    k =>
+      json[k] != null &&
+      typeof json[k] === 'object' &&
+      !Array.isArray(json[k]) &&
+      Object.prototype.hasOwnProperty.call(json[k], '@astryxdesign/core'),
+  );
+}
+
+/**
  * Why the components did not render, with the likely cause: two copies of
  * React (the app's and the one Core resolves) break every hook.
  * @param {import('./_project.mjs').ThemeProject} project
  * @param {string} message
  */
-function renderCause(project, message) {
+export function renderCause(project, message) {
   /** @param {(id: string) => string} resolve */
   const reactOf = resolve => {
     try {
@@ -161,10 +346,15 @@ function renderCause(project, message) {
   const app = reactOf(project.req.resolve);
   let core = null;
   try {
-    core = reactOf(
-      createRequire(project.req.resolve('@astryxdesign/core/package.json'))
-        .resolve,
-    );
+    // Core's exports keep its package.json private: its folder is found by
+    // walking up from the entry the app resolves.
+    let dir = path.dirname(project.req.resolve('@astryxdesign/core'));
+    while (!fs.existsSync(path.join(dir, 'package.json'))) {
+      const up = path.dirname(dir);
+      if (up === dir) throw new Error('no package.json');
+      dir = up;
+    }
+    core = reactOf(createRequire(path.join(dir, 'package.json')).resolve);
   } catch {
     // No Core package file: nothing to compare.
   }
@@ -347,8 +537,17 @@ export function styledChanges(before, after) {
           `typography ${role}: ${
             x
               ? Object.entries(x)
-                  .map(([k, v]) => `${k} ${v}`)
-                  .join(', ')
+                  .map(
+                    ([k, v]) =>
+                      `${k} ${
+                        v && typeof v === 'object'
+                          ? Object.entries(v)
+                              .map(([a, b]) => `${a}: ${b}`)
+                              .join(', ')
+                          : v
+                      }`,
+                  )
+                  .join('; ')
               : '(removed)'
           }`,
         );
@@ -389,7 +588,7 @@ export async function previewAfter(ctx, slug, data, png) {
   const f = themeFiles(ctx.project.cwd, slug);
   // The sheet of every component is made by show only: after a change it
   // says, at its top, that it shows the theme as it was.
-  const sheetStale = markSheetStale(f.sheet, slug);
+  const sheetStale = markSheetStale(f.sheet, slug, ctx.project.cwd);
   const shots =
     png && preview
       ? await pictures(
@@ -413,17 +612,84 @@ export async function previewAfter(ctx, slug, data, png) {
 
 const STALE_MARK = '<!-- astryx: sheet older than the theme -->';
 
+/** The build a full sheet was made from, recorded in the sheet. */
+const SHEET_STAMP = /<!-- astryx: sheet of build ([0-9a-f]{16}) -->/;
+
+/** @param {string} s */
+const escapeForRegExp = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 /**
- * Put a notice at the top of a sheet the last change made out of date
- * (once). Returns whether there is such a sheet.
- * @param {string} file
+ * A hash of a theme's built stylesheet and module, or null when either is
+ * missing.
+ * @param {string} cwd
  * @param {string} slug
  */
-function markSheetStale(file, slug) {
+function buildHash(cwd, slug) {
+  const f = themeFiles(cwd, slug);
+  try {
+    return createHash('sha256')
+      .update(fs.readFileSync(f.css))
+      .update('\0')
+      .update(fs.readFileSync(f.js))
+      .digest('hex')
+      .slice(0, 16);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Record in a freshly made full sheet the build it shows.
+ * @param {string} file
+ * @param {string} slug
+ * @param {string} cwd
+ */
+export function stampSheet(file, slug, cwd) {
+  const hash = buildHash(cwd, slug);
+  if (!hash) return;
+  try {
+    const html = fs.readFileSync(file, 'utf8').replace(SHEET_STAMP, '');
+    // At the end: a comment before the doctype would put the page in
+    // quirks mode.
+    writeWhole(
+      file,
+      `${html.trimEnd()}\n<!-- astryx: sheet of build ${hash} -->\n`,
+    );
+  } catch (e) {
+    if (/** @type {any} */ (e)?.lockLost) throw e;
+  }
+}
+
+/**
+ * Put a notice at the top of a sheet the last change made out of date
+ * (once), or take it off a sheet made from the build there is now.
+ * Returns whether the sheet is out of date.
+ * @param {string} file
+ * @param {string} slug
+ * @param {string} cwd
+ */
+function markSheetStale(file, slug, cwd) {
   let html;
   try {
     html = fs.readFileSync(file, 'utf8');
   } catch {
+    return false;
+  }
+  // A sheet made from the build there is now (a change, then its undo)
+  // shows the theme as it is: no banner, and the result says nothing.
+  const made = SHEET_STAMP.exec(html)?.[1];
+  if (made && made === buildHash(cwd, slug)) {
+    if (html.includes(STALE_MARK)) {
+      const clean = html.replace(
+        new RegExp(`${escapeForRegExp(STALE_MARK)}<div[^>]*>[\\s\\S]*?</div>`),
+        '',
+      );
+      try {
+        writeWhole(file, clean);
+      } catch (e) {
+        if (/** @type {any} */ (e)?.lockLost) throw e;
+      }
+    }
     return false;
   }
   if (html.includes(STALE_MARK)) return true;
