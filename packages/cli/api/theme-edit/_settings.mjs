@@ -286,8 +286,11 @@ export function recordWritten(cwd, slug, files) {
 export function editorWrote(cwd, slug, file) {
   const map = readRecord(writtenRecord(cwd, slug));
   const was = map[path.basename(file)];
-  if (was && was === contentHash(file)) return true;
-  // A picture carries the editor's stamp, with the theme it shows.
+  // A recorded picture is the editor's only while it is as it wrote it: a
+  // picture changed after (re-saved by another tool, stamp and all) is the
+  // person's.
+  if (was) return was === contentHash(file);
+  // With no record of it, the picture's stamp names the theme it shows.
   try {
     return pngTexts(fs.readFileSync(file))[EDITOR_STAMP] === slug;
   } catch {

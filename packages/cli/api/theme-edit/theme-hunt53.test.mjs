@@ -14,7 +14,8 @@ import * as path from 'node:path';
 import * as zlib from 'node:zlib';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {themeEditNew, themeEditSet} from './theme-edit.mjs';
-import {adoptOlderPicture, editorWrote} from './_settings.mjs';
+import {adoptOlderPicture, editorWrote, recordWritten} from './_settings.mjs';
+import {pictures} from './_context.mjs';
 import {EDITOR_STAMP, pngTexts, withPngText} from './_png.mjs';
 import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
 import {
@@ -101,6 +102,37 @@ describe('#11453: the editor stamp and older pictures', () => {
     ])
       fs.rmSync(path.join(dir, n), {force: true});
   });
+});
+
+describe('#11453: a recorded picture changed after', () => {
+  it('is the person’s even with the stamp kept: never removed, never written over', async () => {
+    const dir = path.join(cwd, 'themes/t');
+    const file = path.join(dir, 'preview.png');
+    fs.writeFileSync(file, withPngText(png(1280), EDITOR_STAMP, 't'));
+    recordWritten(cwd, 't', [file]);
+    expect(editorWrote(cwd, 't', file)).toBe(true);
+    // Re-saved by another tool: one more text chunk, the stamp kept.
+    fs.writeFileSync(
+      file,
+      withPngText(fs.readFileSync(file), 'Software', 'optipng'),
+    );
+    expect(pngTexts(fs.readFileSync(file))[EDITOR_STAMP]).toBe('t');
+    expect(editorWrote(cwd, 't', file)).toBe(false);
+    const kept = fs.readFileSync(file);
+    await themeEditSet('t', 'corners', 'pill', {cwd});
+    expect(fs.readFileSync(file).equals(kept)).toBe(true);
+    const r = await pictures(
+      /** @type {any} */ ({cwd}),
+      [{html: path.join(dir, 'preview.html'), png: file}],
+      ['light'],
+    );
+    expect(r.problem).toContain(
+      'themes/t/preview.png is a file the editor did not write',
+    );
+    expect(fs.readFileSync(file).equals(kept)).toBe(true);
+    fs.rmSync(file);
+    fs.rmSync(path.join(dir, 't.pictures.json'), {force: true});
+  }, 120_000);
 });
 
 describe('#11453: links in the theme folder', () => {
