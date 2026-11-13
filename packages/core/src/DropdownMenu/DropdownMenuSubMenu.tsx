@@ -97,6 +97,7 @@ import {
   mergeProps,
   rtlStyles,
 } from '../utils';
+import {visibleText} from '../utils/accessibleName';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {menuPressLitRowStyle} from '../privateAttributes/menuPressLit.stylex';
 import {getInteractionModality} from '../utils/interactionModality';
@@ -588,6 +589,15 @@ export function DropdownMenuSubMenu(
   const isOnStack = activeDrillIn?.viewStack.includes(viewId) === true;
   const isTopView = isOnStack && activeDrillIn?.viewStack.at(-1) === viewId;
   const stringLabel = typeof label === 'string' ? label : undefined;
+  // A node label renders in its own element, so a drilled-in view is named by
+  // the label alone, not by the whole row with its description. Its text,
+  // read when this level opens, names a nested view's Back row.
+  const labelId = useId();
+  const hasNodeLabel = stringLabel == null && isRenderable(label);
+  const rowLabel = hasNodeLabel ? <span id={labelId}>{label}</span> : label;
+  const viewLabelledBy =
+    stringLabel != null ? undefined : hasNodeLabel ? labelId : triggerId;
+  const [nodeLabelText, setNodeLabelText] = useState<string | undefined>();
   const parentLabel = menuCtx?.menuLabel;
   const backLabel =
     parentLabel != null
@@ -756,6 +766,13 @@ export function DropdownMenuSubMenu(
         return;
       }
       if (activeDrillIn != null) {
+        if (hasNodeLabel) {
+          const labelElement =
+            triggerRef.current?.ownerDocument.getElementById(labelId);
+          setNodeLabelText(
+            labelElement != null ? visibleText(labelElement) : undefined,
+          );
+        }
         pendingViewFocusRef.current = options?.focusFirst
           ? 'first'
           : 'container';
@@ -773,7 +790,17 @@ export function DropdownMenuSubMenu(
         }
       }
     },
-    [canOpen, activeDrillIn, viewId, onOpenChange, layer, focusFirst, menuRef],
+    [
+      canOpen,
+      activeDrillIn,
+      viewId,
+      onOpenChange,
+      layer,
+      focusFirst,
+      menuRef,
+      hasNodeLabel,
+      labelId,
+    ],
   );
 
   const close = useCallback(
@@ -1066,9 +1093,9 @@ export function DropdownMenuSubMenu(
         menuCtx?.closeMenu();
       },
       drillIn,
-      menuLabel: stringLabel,
+      menuLabel: stringLabel ?? nodeLabelText,
     }),
-    [menuSize, close, menuCtx, drillIn, stringLabel],
+    [menuSize, close, menuCtx, drillIn, stringLabel, nodeLabelText],
   );
 
   // The press model for this flyout: the row under a release acts, the
@@ -1267,7 +1294,7 @@ export function DropdownMenuSubMenu(
             ? renderIconSlot(icon, {size: 'sm', color: 'secondary'})
             : undefined
         }
-        label={label}
+        label={rowLabel}
         description={description}
         endContent={endAffordance}
         onClick={handleRowClick}
@@ -1301,9 +1328,7 @@ export function DropdownMenuSubMenu(
                     role="menu"
                     tabIndex={0}
                     aria-label={stringLabel}
-                    aria-labelledby={
-                      stringLabel == null ? triggerId : undefined
-                    }
+                    aria-labelledby={viewLabelledBy}
                     onKeyDown={handleContentKeyDown}
                     onFocus={handleMenuFocus}
                     onBlur={handleMenuBlur}
@@ -1322,8 +1347,7 @@ export function DropdownMenuSubMenu(
                   </div>,
                   {
                     'aria-label': stringLabel,
-                    'aria-labelledby':
-                      stringLabel == null ? triggerId : undefined,
+                    'aria-labelledby': viewLabelledBy,
                     // A deeper view shows in its place; this one waits, hidden.
                     hidden: !isTopView,
                     inert: !isTopView,
@@ -1340,7 +1364,7 @@ export function DropdownMenuSubMenu(
                   tabIndex={-1}
                   // The drilled-in list is named by its row's label.
                   aria-label={stringLabel}
-                  aria-labelledby={stringLabel == null ? triggerId : undefined}
+                  aria-labelledby={viewLabelledBy}
                   // A deeper view shows in its place; this one waits, hidden.
                   hidden={!isTopView}
                   inert={!isTopView}
