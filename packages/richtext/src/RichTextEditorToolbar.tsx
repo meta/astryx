@@ -7,10 +7,11 @@
  * @input Uses React, @lexical/react (composer context), @lexical/rich-text,
  *   @lexical/selection, @lexical/list, @lexical/utils, and the lexical core
  *   command constants, plus Astryx Toolbar / IconButton / Selector /
- *   ToggleButton / Divider / Dialog / TextInput / Button / Layout primitives.
+ *   ToggleButton / Divider / Popover / TextInput / Layout primitives.
  * @output Exports RichTextEditorToolbar (a compact formatting toolbar with a
- *   RichText-owned 4px control gutter and horizontally scrollable action row)
- *   and RichTextEditorToolbarProps.
+ *   RichText-owned 4px control gutter, a horizontally scrollable action row,
+ *   and a link popover anchored to its Link button) and
+ *   RichTextEditorToolbarProps.
  * @position @astryxdesign/richtext. Drop into RichTextEditor's `toolbar` slot to
  *   add a flush top formatting toolbar. Themed via Astryx Toolbar, Selector,
  *   IconButton, and ToggleButton, so it inherits the active theme. Base props
@@ -42,9 +43,9 @@ import {
   useEffect,
   useRef,
   useState,
-  type FormEvent,
   type ReactNode,
   type Ref,
+  type RefObject,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
@@ -70,19 +71,12 @@ import {IconButton} from '@astryxdesign/core/IconButton';
 import {Selector, type SelectorOptionType} from '@astryxdesign/core/Selector';
 import {ToggleButton} from '@astryxdesign/core/ToggleButton';
 import {Divider} from '@astryxdesign/core/Divider';
-import {Dialog, DialogHeader} from '@astryxdesign/core/Dialog';
+import {Popover} from '@astryxdesign/core/Popover';
 import {TextInput} from '@astryxdesign/core/TextInput';
-import {Button} from '@astryxdesign/core/Button';
-import {Stack} from '@astryxdesign/core/Stack';
-import {
-  HStack,
-  Layout,
-  LayoutContent,
-  LayoutFooter,
-} from '@astryxdesign/core/Layout';
-import {getExtendedIcon} from '@astryxdesign/core/Icon';
+import {HStack, StackItem} from '@astryxdesign/core/Layout';
+import {Icon, getExtendedIcon} from '@astryxdesign/core/Icon';
 import {useThemeName} from '@astryxdesign/core/theme';
-import {isRenderable, rtlStyles} from '@astryxdesign/core/utils';
+import {isImeKeyEvent, isRenderable, rtlStyles} from '@astryxdesign/core/utils';
 import {
   fontWeightVars,
   spacingVars,
@@ -128,6 +122,15 @@ interface LinkContext {
   url: string;
   isLink: boolean;
 }
+
+// The link popover's anchor: a box around the Link button that takes no
+// space of its own.
+const linkAnchorStyles = stylex.create({
+  wrapper: {
+    display: 'inline-flex',
+    flexShrink: 0,
+  },
+});
 
 // A vertical Divider's default 100% height needs a definite parent height.
 // Toolbar slots are sized by their controls instead, so let flexbox stretch
@@ -455,6 +458,145 @@ function DirectionalGlyph({children}: {children: ReactNode}) {
   );
 }
 
+/**
+ * Remove's glyph. No shared icon name means "unlink", so it is fixed
+ * component artwork until component icon slots exist.
+ */
+const REMOVE_LINK_GLYPH = (
+  <svg
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    fill="none"
+    aria-hidden="true">
+    <path
+      d="M18 13l2-2a5 5 0 0 0-7-7l-2 2M6 11l-2 2a5 5 0 0 0 7 7l2-2M8 2v3M2 8h3M16 22v-3M22 16h-3"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+/** Room for a typical address beside the link form's icon buttons. */
+const LINK_POPOVER_WIDTH = 320;
+
+interface ToolbarLinkFormProps {
+  /** The field's value: the address being entered. */
+  url: string;
+  /** The message for an address the toolbar refused, or empty. */
+  error: string;
+  /** Whether the selection is in a link, which Remove then unlinks. */
+  isEditing: boolean;
+  /** The toolbar's size, so the form's controls match its buttons. */
+  size: 'sm' | 'md' | 'lg';
+  onUrlChange: (url: string) => void;
+  /** Applies the field's address; false when it was refused. */
+  onApply: () => boolean;
+  onRemove: () => void;
+  onCancel: () => void;
+}
+
+/**
+ * The link popover's content: one URL field, then Apply, Remove (only when
+ * the selection is in a link), and Cancel as icon buttons. Enter in the field
+ * applies, and Escape anywhere in the form cancels. A refused address shows
+ * the field's error status and keeps focus in the field.
+ */
+function ToolbarLinkForm({
+  url,
+  error,
+  isEditing,
+  size,
+  onUrlChange,
+  onApply,
+  onRemove,
+  onCancel,
+}: ToolbarLinkFormProps) {
+  const t = useTranslator();
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const apply = () => {
+    if (!onApply()) {
+      inputRef.current?.focus();
+    }
+  };
+  const applyLabel = isEditing
+    ? t('@astryx.richTextEditor.link.update')
+    : t('@astryx.richTextEditor.link.add');
+  const removeLabel = t('@astryx.richTextEditor.link.remove');
+  const cancelLabel = t('@astryx.richTextEditor.link.cancel');
+  return (
+    <HStack
+      gap={1}
+      vAlign="start"
+      onKeyDown={event => {
+        // Escape that ends an IME composition is the input method's.
+        if (event.key === 'Escape' && !isImeKeyEvent(event.nativeEvent)) {
+          // Claimed here, so the popover's own Escape handling leaves it to
+          // Cancel, which also gives the editor back its selection.
+          event.preventDefault();
+          onCancel();
+        }
+      }}>
+      <StackItem size="fill">
+        <TextInput
+          ref={inputRef}
+          label={t('@astryx.richTextEditor.link.url')}
+          isLabelHidden
+          value={url}
+          size={size}
+          width="100%"
+          autoComplete="url"
+          // A URL keyboard on touch screens and no spelling marks under an
+          // address. The field stays plain text, so a bare domain reaches
+          // the toolbar's own check, which makes it an https link.
+          inputMode="url"
+          hasSpellCheck={false}
+          placeholder={t('@astryx.richTextEditor.link.urlPlaceholder')}
+          status={error ? {type: 'error', message: error} : undefined}
+          statusVariant="detached"
+          onChange={onUrlChange}
+          onEnter={apply}
+          onKeyDown={event => {
+            // Applying hands focus to the editor, which must not receive the
+            // rest of this Enter as a new line over the linked words.
+            if (event.key === 'Enter' && !isImeKeyEvent(event.nativeEvent)) {
+              event.preventDefault();
+            }
+          }}
+        />
+      </StackItem>
+      <IconButton
+        label={applyLabel}
+        icon={<Icon icon="check" />}
+        variant="ghost"
+        size={size}
+        tooltip={applyLabel}
+        onClick={apply}
+      />
+      {isEditing && (
+        <IconButton
+          label={removeLabel}
+          icon={REMOVE_LINK_GLYPH}
+          variant="ghost"
+          size={size}
+          tooltip={removeLabel}
+          onClick={onRemove}
+        />
+      )}
+      <IconButton
+        label={cancelLabel}
+        icon={<Icon icon="close" />}
+        variant="ghost"
+        size={size}
+        tooltip={cancelLabel}
+        onClick={onCancel}
+      />
+    </HStack>
+  );
+}
+
 export interface RichTextEditorToolbarProps extends BaseProps<HTMLDivElement> {
   /**
    * Ref to the toolbar's root element. Base props pass through to the
@@ -481,11 +623,14 @@ export interface RichTextEditorToolbarProps extends BaseProps<HTMLDivElement> {
    */
   size?: 'sm' | 'md' | 'lg';
   /**
-   * Whether to show the insert/edit-link button. By default, pressing it opens
-   * an Astryx Dialog. The form can add, update, or remove a link without
-   * losing the editor selection. With a collapsed selection, Insert link
-   * inserts the entered URL as link text at the caret; with a non-empty
-   * selection it links the selected text.
+   * Whether to show the insert/edit-link button. By default, pressing it (or
+   * Cmd/Ctrl+K in the editor) opens an Astryx Popover anchored to the button:
+   * one URL field, applied with Enter, with Remove when the selection is in a
+   * link. The popover is not modal. Escape or Cancel closes it and returns
+   * focus and the selection to the editor; a URL that cannot be linked shows
+   * an error under the field, which keeps focus. With a collapsed selection,
+   * applying inserts the entered URL as link text at the caret; with a
+   * non-empty selection it links the selected text.
    *
    * Requires `LinkNode` to be registered (it is, by default) — no extra setup.
    * The entered URL is sanitized (see `sanitizeUrl`) so only
@@ -497,7 +642,7 @@ export interface RichTextEditorToolbarProps extends BaseProps<HTMLDivElement> {
    * Called to obtain a URL when the link button is pressed on a non-link
    * selection. Return the URL string to link, or `null`/`''` to cancel.
    * Receives the currently selected text as a hint. When omitted, the built-in
-   * Astryx Dialog is used. This synchronous override is retained
+   * link popover is used. This synchronous override is retained
    * for consumers that already provide their own URL UI.
    */
   promptForUrl?: (selectedText: string) => string | null | undefined;
@@ -580,7 +725,9 @@ export function RichTextEditorToolbar({
     url: '',
     isLink: false,
   });
-  const [isLinkDialogOpen, setIsLinkDialogOpen] = useState(false);
+  const linkButtonRef = useRef<HTMLButtonElement>(null);
+  const linkAnchorRef = useRef<HTMLSpanElement>(null);
+  const [isLinkPopoverOpen, setIsLinkPopoverOpen] = useState(false);
   const [isEditingLink, setIsEditingLink] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
   const [linkError, setLinkError] = useState('');
@@ -749,15 +896,22 @@ export function RichTextEditorToolbar({
       return;
     }
 
+    // The field starts from the link's address, or from selected text that
+    // already reads as one; otherwise it is empty and shows its placeholder.
     setLinkUrl(
       context.url ||
-        (context.selectedText.startsWith('http')
-          ? context.selectedText
-          : 'https://'),
+        (context.selectedText.startsWith('http') ? context.selectedText : ''),
     );
     setIsEditingLink(context.isLink);
     setLinkError('');
-    setIsLinkDialogOpen(true);
+    // Cmd/Ctrl+K can open the form while the Link button is scrolled out of
+    // view, in the page or in the toolbar's own row. Bring it back so the
+    // popover opens beside it.
+    linkButtonRef.current?.scrollIntoView?.({
+      block: 'nearest',
+      inline: 'nearest',
+    });
+    setIsLinkPopoverOpen(true);
   }, [
     applyLinkValue,
     editor,
@@ -766,34 +920,52 @@ export function RichTextEditorToolbar({
     restoreLinkSelection,
   ]);
 
-  const handleLinkDialogOpenChange = useCallback((open: boolean) => {
-    setIsLinkDialogOpen(open);
+  const closeLinkPopover = useCallback(() => {
+    setIsLinkPopoverOpen(false);
     setLinkError('');
   }, []);
 
-  const closeLinkDialogToEditor = useCallback(() => {
-    setIsLinkDialogOpen(false);
-    setLinkError('');
-    requestAnimationFrame(() => editor.focus());
-  }, [editor]);
-
-  const handleLinkSubmit = useCallback(
-    (event: FormEvent<HTMLElement>) => {
-      event.preventDefault();
-      if (!applyLinkValue(linkUrl)) {
-        setLinkError(t('@astryx.richTextEditor.link.invalidUrl'));
-        return;
+  // The popover reports its own opening (a press on the Link button) and its
+  // closing (a press outside it).
+  const handleLinkPopoverOpenChange = useCallback(
+    (open: boolean) => {
+      if (open) {
+        toggleLink();
+      } else {
+        closeLinkPopover();
       }
-      closeLinkDialogToEditor();
     },
-    [applyLinkValue, closeLinkDialogToEditor, linkUrl, t],
+    [closeLinkPopover, toggleLink],
   );
+
+  // Closes the popover and gives the editor back its focus. The editable root
+  // takes focus first and Lexical then draws its selection into it, so the
+  // selection survives the field having held the page's selection.
+  const closeLinkPopoverToEditor = useCallback(() => {
+    closeLinkPopover();
+    editor.getRootElement()?.focus({preventScroll: true});
+    editor.focus();
+  }, [closeLinkPopover, editor]);
+
+  const cancelLinkPopover = useCallback(() => {
+    restoreLinkSelection();
+    closeLinkPopoverToEditor();
+  }, [closeLinkPopoverToEditor, restoreLinkSelection]);
+
+  const applyLink = useCallback((): boolean => {
+    if (!applyLinkValue(linkUrl)) {
+      setLinkError(t('@astryx.richTextEditor.link.invalidUrl'));
+      return false;
+    }
+    closeLinkPopoverToEditor();
+    return true;
+  }, [applyLinkValue, closeLinkPopoverToEditor, linkUrl, t]);
 
   const removeLink = useCallback(() => {
     restoreLinkSelection();
     editor.dispatchCommand(TOGGLE_LINK_COMMAND, null);
-    closeLinkDialogToEditor();
-  }, [closeLinkDialogToEditor, editor, restoreLinkSelection]);
+    closeLinkPopoverToEditor();
+  }, [closeLinkPopoverToEditor, editor, restoreLinkSelection]);
 
   useEffect(() => {
     return mergeRegister(
@@ -985,19 +1157,26 @@ export function RichTextEditorToolbar({
               />
             ))}
             {hasLink && (
-              <ToggleButton
+              // The popover anchors to this wrapper, which a press never
+              // scales, and finds the button inside it for its handlers.
+              <span
                 key="link"
-                label={t('@astryx.richTextEditor.toolbar.link')}
-                icon={icon('link')}
-                size={size}
-                isIconOnly
-                isPressed={isLink || isLinkDialogOpen}
-                isDisabled={!isEditable}
-                aria-haspopup="dialog"
-                aria-expanded={isLinkDialogOpen}
-                onMouseDown={event => event.preventDefault()}
-                onPressedChange={toggleLink}
-              />
+                ref={linkAnchorRef}
+                {...stylex.props(linkAnchorStyles.wrapper)}>
+                <ToggleButton
+                  ref={linkButtonRef}
+                  label={t('@astryx.richTextEditor.toolbar.link')}
+                  icon={icon('link')}
+                  size={size}
+                  isIconOnly
+                  isPressed={isLink || isLinkPopoverOpen}
+                  isDisabled={!isEditable}
+                  onMouseDown={event => event.preventDefault()}
+                  // The link popover owns a press on the button, and with it
+                  // the button's popup state; `promptForUrl` replaces both.
+                  onPressedChange={promptForUrl ? toggleLink : undefined}
+                />
+              </span>
             )}
             {isRenderable(endContent) && (
               <>
@@ -1008,75 +1187,47 @@ export function RichTextEditorToolbar({
           </HStack>
         }
       />
-      {hasLink && (
-        <Dialog
-          isOpen={isLinkDialogOpen}
-          onOpenChange={handleLinkDialogOpenChange}
-          purpose="form"
-          width={400}>
-          <Stack as="form" onSubmit={handleLinkSubmit}>
-            <Layout
-              height="auto"
-              header={
-                <DialogHeader
-                  title={
-                    isEditingLink
-                      ? t('@astryx.richTextEditor.link.editTitle')
-                      : t('@astryx.richTextEditor.link.insertTitle')
-                  }
-                  onOpenChange={handleLinkDialogOpenChange}
-                />
-              }
-              content={
-                <LayoutContent>
-                  <TextInput
-                    label={t('@astryx.richTextEditor.link.url')}
-                    value={linkUrl}
-                    width="100%"
-                    hasAutoFocus
-                    status={
-                      linkError
-                        ? {type: 'error', message: linkError}
-                        : undefined
-                    }
-                    statusVariant="detached"
-                    onChange={value => {
-                      setLinkUrl(value);
-                      setLinkError('');
-                    }}
-                  />
-                </LayoutContent>
-              }
-              footer={
-                <LayoutFooter>
-                  <HStack gap={2} hAlign="end">
-                    {isEditingLink && (
-                      <Button
-                        label={t('@astryx.richTextEditor.link.remove')}
-                        variant="destructive"
-                        onClick={removeLink}
-                      />
-                    )}
-                    <Button
-                      label={t('@astryx.richTextEditor.link.cancel')}
-                      variant="secondary"
-                      onClick={() => handleLinkDialogOpenChange(false)}
-                    />
-                    <Button
-                      label={
-                        isEditingLink
-                          ? t('@astryx.richTextEditor.link.update')
-                          : t('@astryx.richTextEditor.link.add')
-                      }
-                      variant="primary"
-                      type="submit"
-                    />
-                  </HStack>
-                </LayoutFooter>
-              }
-            />
-          </Stack>
-        </Dialog>
+      {/* A sibling of the toolbar, not inside it: the toolbar is one roving
+          tab stop, which would leave the form's controls out of Tab. */}
+      {hasLink && promptForUrl == null && (
+        <Popover
+          anchorRef={linkAnchorRef as RefObject<HTMLElement>}
+          label={
+            isEditingLink
+              ? t('@astryx.richTextEditor.link.editTitle')
+              : t('@astryx.richTextEditor.link.insertTitle')
+          }
+          isOpen={isLinkPopoverOpen}
+          onOpenChange={handleLinkPopoverOpenChange}
+          isModal={false}
+          // Popover's focus entry focuses the URL field, the form's first
+          // control. Cancel is its close control.
+          hasCloseButton={false}
+          // Above the toolbar, so the popover does not cover the editor's
+          // first lines, where the linked words often are. It flips below
+          // only when there is no room above.
+          placement="above"
+          alignment="start"
+          width={LINK_POPOVER_WIDTH}
+          padding={2}
+          content={
+            isLinkPopoverOpen ? (
+              <ToolbarLinkForm
+                url={linkUrl}
+                error={linkError}
+                isEditing={isEditingLink}
+                size={size}
+                onUrlChange={value => {
+                  setLinkUrl(value);
+                  setLinkError('');
+                }}
+                onApply={applyLink}
+                onRemove={removeLink}
+                onCancel={cancelLinkPopover}
+              />
+            ) : null
+          }
+        />
       )}
     </>
   );

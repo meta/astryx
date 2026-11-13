@@ -917,39 +917,43 @@
   },
   "@astryx.richTextEditor.toolbar.link": {
     "defaultMessage": "Link",
-    "description": "Label of the toolbar toggle that opens the dialog to add or edit a link on selected text."
+    "description": "Label of the toolbar toggle that opens the popover to add or edit a link on selected text."
   },
   "@astryx.richTextEditor.link.insertTitle": {
     "defaultMessage": "Insert link",
-    "description": "Title of the RichTextEditor dialog that adds a new link."
+    "description": "Screen-reader name of the RichTextEditor link popover when it adds a new link."
   },
   "@astryx.richTextEditor.link.editTitle": {
     "defaultMessage": "Edit link",
-    "description": "Title of the RichTextEditor dialog that changes or removes an existing link."
+    "description": "Screen-reader name of the RichTextEditor link popover when it changes or removes an existing link."
   },
   "@astryx.richTextEditor.link.url": {
     "defaultMessage": "URL",
-    "description": "Label of the web address field in the RichTextEditor link dialog."
+    "description": "Visually hidden label of the web address field in the RichTextEditor link popover."
+  },
+  "@astryx.richTextEditor.link.urlPlaceholder": {
+    "defaultMessage": "example.com",
+    "description": "Placeholder of the web address field in the RichTextEditor link popover: an example address, shown while the field is empty. An address without a scheme is accepted and becomes an https link, so keep it a bare domain."
   },
   "@astryx.richTextEditor.link.invalidUrl": {
     "defaultMessage": "Enter a valid http, https, mailto, or tel URL.",
-    "description": "Error under the link dialog address field when the entered address is not allowed. Keep the scheme names http, https, mailto, and tel untranslated."
+    "description": "Error under the link popover address field when the entered address is not allowed. Keep the scheme names http, https, mailto, and tel untranslated."
   },
   "@astryx.richTextEditor.link.remove": {
     "defaultMessage": "Remove link",
-    "description": "Button in the RichTextEditor link dialog that removes the link from the selected text and keeps the text."
+    "description": "Label and tooltip of the icon button in the RichTextEditor link popover that removes the link from the selected text and keeps the text."
   },
   "@astryx.richTextEditor.link.cancel": {
     "defaultMessage": "Cancel",
-    "description": "Button that closes the RichTextEditor link dialog without changing anything."
+    "description": "Label and tooltip of the icon button that closes the RichTextEditor link popover without changing anything."
   },
   "@astryx.richTextEditor.link.add": {
     "defaultMessage": "Add link",
-    "description": "Submit button of the RichTextEditor link dialog when adding a new link."
+    "description": "Label and tooltip of the icon button that applies the address in the RichTextEditor link popover when adding a new link."
   },
   "@astryx.richTextEditor.link.update": {
     "defaultMessage": "Update link",
-    "description": "Submit button of the RichTextEditor link dialog when changing an existing link address."
+    "description": "Label and tooltip of the icon button that applies the address in the RichTextEditor link popover when changing an existing link address."
   },
   "@astryx.markdown.taskList": {
     "defaultMessage": "Task list",
