@@ -38,7 +38,8 @@ const SHELL = /(?:^|[\s|;&(])(?:bash|sh|zsh)(?=[\s<]|$)/;
 
 /**
  * Splits heredoc bodies from the shell text. A body that is file content, such
- * as `cat > App.tsx <<'EOF'`, is dropped. A body that a shell runs stays in
+ * as `cat > App.tsx <<'EOF'`, is dropped, except the command substitutions the
+ * shell runs in an unquoted body. A body that a shell runs stays in
  * the shell text. A body that another interpreter runs is code, so it is
  * returned for a separate scan. The marker line stays, so its redirect is
  * audited.
@@ -48,10 +49,16 @@ export function splitHeredocs(command) {
   const code = [];
   const shell = command.replace(
     /([^\n]*)<<-?\s*(['"]?)(\w+)\2([^\n]*)\n([\s\S]*?)\n\s*\3(?=\n|$)/g,
-    (_whole, before, _quote, _marker, after, body) => {
+    (_whole, before, quote, _marker, after, body) => {
       const runner = `${before} ${after}`;
       if (SHELL.test(runner)) return `${runner}\n${body}`;
       if (INTERPRETER.test(runner)) code.push(body);
+      // The shell runs command substitutions in an unquoted heredoc body.
+      if (!quote) {
+        // An escaped `\$(` or backtick is literal text, so it does not run.
+        const substitutions = [...body.matchAll(/(?<!\\)\$\(([^)]*)\)|(?<!\\)`([^`]*)`/g)].map(match => match[1] ?? match[2]);
+        if (substitutions.length > 0) return `${runner}\n${substitutions.join('\n')}`;
+      }
       return runner;
     },
   );
@@ -91,7 +98,34 @@ const RECURSIVE_READER =
   /(?:^|[\s|;&(])(?:rg|ag|ack|[efz]?grep\s+(?:[^|]*\s)?(?:-[A-Za-z]*[rR][A-Za-z]*|--recursive|--dereference-recursive))(?=\s|$)|(?:\$\(|`)\s*find\s|\bfind\s[^|]*(?:-exec|-execdir|-ok)\b|\bfind\s.*\|\s*xargs\b/;
 
 /** Commands whose quoted arguments are text: a sed script or a search pattern. */
-const TEXT_ARGUMENTS = /^(?:\w+=\S*\s+)*(?:sed|[efz]?grep|rg|ag|ack)(?=\s|$)/;
+const TEXT_COMMAND =
+  /(?:^(?:\w+=\S*\s+)*(?:xargs\s(?:[^|]*?\s)?)?|\s-exec(?:dir)?\s+)(sed|[efz]?grep|rg|ag|ack|git\s+grep)(?=\s|$)/;
+
+/**
+ * How each command takes its options. `short` letters take a value (attached or
+ * the next word), `attached` letters take only an attached value, `long` names
+ * take a value, `script` options give the script or pattern, and `file` options
+ * read it from a file, so no word is the pattern.
+ */
+const OPTION_SPECS = {
+  sed: {short: 'efl', attached: 'i', long: ['expression', 'file', 'line-length'], script: ['e', 'expression'], file: ['f', 'file']},
+  grep: {
+    short: 'efABCmdD',
+    attached: '',
+    long: ['regexp', 'file', 'after-context', 'before-context', 'context', 'max-count', 'include', 'exclude', 'exclude-dir', 'exclude-from', 'label', 'devices', 'directories', 'binary-files', 'group-separator'],
+    script: ['e', 'regexp'],
+    file: ['f', 'file'],
+  },
+  rg: {
+    short: 'efgtTABCdmjMrE',
+    attached: '',
+    long: ['regexp', 'file', 'glob', 'iglob', 'type', 'type-not', 'type-add', 'type-clear', 'after-context', 'before-context', 'context', 'max-count', 'max-depth', 'max-columns', 'threads', 'max-filesize', 'sort', 'sortr', 'replace', 'encoding', 'engine', 'color', 'colors', 'context-separator', 'field-context-separator', 'field-match-separator', 'path-separator', 'ignore-file', 'pre', 'pre-glob', 'dfa-size-limit', 'regex-size-limit', 'hostname-bin', 'hyperlink-format', 'generate'],
+    script: ['e', 'regexp'],
+    file: ['f', 'file', 'files', 'type-list'],
+  },
+  ag: {short: 'GgABCmp', attached: '', long: ['ignore', 'ignore-dir', 'file-search-regex', 'after', 'before', 'context', 'max-count', 'depth', 'path-to-ignore'], script: ['g'], file: []},
+  ack: {short: 'ABCmtT', attached: '', long: ['type', 'type-add', 'type-set', 'type-del', 'ignore-dir', 'ignore-file', 'after-context', 'before-context', 'context', 'max-count', 'match'], script: ['match'], file: ['f', 'g']},
+};
 
 /** Splits a segment at pipes that are outside quotes. */
 function pipelineStages(segment) {
@@ -114,17 +148,92 @@ function pipelineStages(segment) {
 }
 
 /**
- * In a pipeline stage run by sed or a search command, blanks quoted text that
- * holds a space, a `|` or a nested quote: that is the script or the pattern, so
- * `'../lib'` inside it is not a path. Other stages keep their quoted text.
+ * Words of a command line with their positions, keeping quoted text together.
+ * @returns {{text: string, start: number, end: number}[]}
+ */
+function shellWords(text) {
+  return [...text.matchAll(/(?:"[^"]*"|'[^']*'|[^\s"'])+/g)].map(match => ({
+    text: match[0],
+    start: match.index,
+    end: match.index + match[0].length,
+  }));
+}
+
+/**
+ * The words that hold the script or pattern of a sed or search command, from
+ * the words after the command name. A word can hold it whole (`"from '../lib"`)
+ * or after an attached option (`-e"…"`, `--regexp=…`).
+ */
+function scriptWords(words, spec) {
+  const scripts = [];
+  let fromFile = false;
+  let positional = null;
+  for (let index = 0; index < words.length; index++) {
+    const word = words[index].text;
+    if (word === '--') {
+      positional ??= words[index + 1] ?? null;
+      break;
+    }
+    const long = /^--([\w-]+)(=)?/.exec(word);
+    if (long) {
+      const [, name, attached] = long;
+      if (spec.file.includes(name)) fromFile = true;
+      if (spec.script.includes(name)) scripts.push(attached ? words[index] : words[index + 1]);
+      if (!attached && spec.long.includes(name)) index++;
+      continue;
+    }
+    if (/^-[^-]/.test(word)) {
+      for (let at = 1; at < word.length; at++) {
+        const letter = word[at];
+        if (spec.file.includes(letter)) fromFile = true;
+        if (spec.attached.includes(letter)) {
+          // BSD sed takes `-i ''`: an empty suffix as the next word.
+          if (at + 1 === word.length && /^(?:''|"")$/.test(words[index + 1]?.text ?? '')) index++;
+          break;
+        }
+        if (!spec.short.includes(letter)) continue;
+        const attached = at + 1 < word.length;
+        if (spec.script.includes(letter)) scripts.push(attached ? words[index] : words[index + 1]);
+        if (!attached) index++;
+        break;
+      }
+      continue;
+    }
+    // Options can follow operands, so keep reading for a pattern option.
+    positional ??= words[index];
+  }
+  if (scripts.length === 0 && !fromFile && positional) scripts.push(positional);
+  return scripts;
+}
+
+/**
+ * In a pipeline stage that runs sed or a search command (also through `xargs`
+ * or `find -exec`), blanks quoted text in the script or pattern when it holds a
+ * space, a `|` or a nested quote, so `'../lib'` inside it is not a path. Paths,
+ * option values and pattern files stay audited.
  */
 function textAsText(segment) {
   return pipelineStages(segment)
-    .map(stage =>
-      TEXT_ARGUMENTS.test(stage.trim())
-        ? stage.replace(/"[^"]*"|'[^']*'/g, quoted => (/[\s|'"]/.test(quoted.slice(1, -1)) ? '""' : quoted))
-        : stage,
-    )
+    .map(stage => {
+      const lead = /^\s*/.exec(stage)[0];
+      const match = TEXT_COMMAND.exec(stage.slice(lead.length));
+      if (!match) return stage;
+      const command = match[1].startsWith('git') ? 'grep' : match[1].replace(/^[efz](?=grep)/, '');
+      const at = lead.length + match.index + match[0].length;
+      let rest = stage.slice(at);
+      let words = shellWords(rest);
+      // A `find -exec` command ends at its `+` or `;` word; later words are find's own.
+      if (/-exec/.test(match[0])) {
+        const end = words.findIndex(word => /^(?:\+|\\?;|';'|";")$/.test(word.text));
+        if (end >= 0) words = words.slice(0, end);
+      }
+      const scripts = scriptWords(words, OPTION_SPECS[command]).filter(Boolean);
+      for (const word of scripts.sort((a, b) => b.start - a.start)) {
+        const text = word.text.replace(/"[^"]*"|'[^']*'/g, quoted => (/[\s|'"]/.test(quoted.slice(1, -1)) ? '""' : quoted));
+        rest = rest.slice(0, word.start) + text + rest.slice(word.end);
+      }
+      return stage.slice(0, at) + rest;
+    })
     .join('|');
 }
 

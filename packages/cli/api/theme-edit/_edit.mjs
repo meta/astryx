@@ -9,6 +9,7 @@
  * @position api/theme-edit — imported only by _adapter.mjs
  */
 
+import {THEME_SLUG_RE} from '../../foundation/discovery/theme-discovery.mjs';
 import * as fs from 'node:fs';
 import {coversProperty} from './_css.mjs';
 import * as path from 'node:path';
@@ -83,6 +84,7 @@ import {
   refuseLinks,
   usableNewName,
   FOLDER_JUNK,
+  folderIsEmpty,
   dialValueFits,
   holdAfterBuild,
 } from './_settings.mjs';
@@ -109,10 +111,12 @@ import {
 import {
   renderPreview,
   renderSheet,
+  previewIsCurrent,
   takeFirstAppCopy,
+  appCopyStale,
   writeAppCopy,
 } from './_preview.mjs';
-import {appWiring, refreshPreviewRoute} from './_preview-app.mjs';
+import {appWiring, refreshPreviewRoute, seeLine} from './_preview-app.mjs';
 import {baseInstalled, baseResolved, installLine} from './_project.mjs';
 import {reactMissing} from './_parts.mjs';
 import {
@@ -359,6 +363,16 @@ export async function themeEditNew(name, options = {}) {
       },
     );
   }
+  // A name the theme commands' own discovery skips ("a--b", "b-") would
+  // make an app copy no `theme add`, `theme list` or doctor takes.
+  if (!THEME_SLUG_RE.test(name)) {
+    const cleaned = name.replace(/-{2,}/g, '-').replace(/-+$/, '');
+    refuse(
+      E.ERR_INVALID_ARGUMENT,
+      `"${name}" is not a theme name the theme commands take: a dash only between letters or digits (no two in a row, none at the end), so its app copy in src/themes/ would be skipped by theme add, theme list and doctor.${dropped}`,
+      {run: [again(usableNewName(cwd, cleaned))]},
+    );
+  }
   // A built-in theme's name would collide with the theme of that name the
   // app may also use.
   if (LIKE.includes(name))
@@ -425,7 +439,8 @@ export async function themeEditNew(name, options = {}) {
   const holdsOther =
     fs.existsSync(f.dir) &&
     !left &&
-    fs.readdirSync(f.dir).some(n => !FOLDER_JUNK.has(n));
+    // Empty folders (an empty tokens/) hold nothing of anyone's.
+    !folderIsEmpty(f.dir);
   if (holdsOther)
     refuse(
       E.ERR_FILE_EXISTS,
@@ -805,6 +820,23 @@ function unquoteWord(word) {
 }
 
 /**
+ * The preview page most about a change: Colors for a color (a color dial
+ * or a color token), Components for a part setting, else Overview.
+ * @param {{thing: string, on?: string | null}} s
+ * @returns {'colors' | 'components' | 'overview'}
+ */
+function changeFocus(s) {
+  if (s.on) return 'components';
+  if (
+    PALETTE_DIALS.includes(s.thing) ||
+    s.thing === 'vibrancy' ||
+    /^--color-/.test(s.thing)
+  )
+    return 'colors';
+  return 'overview';
+}
+
+/**
  * The preview after a change, with the in-app preview route kept in step:
  * its imports follow the theme, such as the stylesheet of a font package
  * installed since the last change.
@@ -812,15 +844,33 @@ function unquoteWord(word) {
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
  * @param {boolean} png
+ * @param {'colors' | 'components' | 'overview'} [focus] the preview page
+ *   most about the change: Colors for a color, Components for a part
  */
-async function previewAndRoute(ctx, slug, data, png) {
+async function previewAndRoute(ctx, slug, data, png, focus = 'overview') {
   const p = await previewAfter(ctx, slug, data, png);
   const wrote = takeFirstAppCopy(ctx.project.cwd, slug);
   return {
     ...p,
     previewStale: await keepPreviewRoute(ctx, slug),
+    // How to see the change: the page about it, at its own URL.
+    // A page not written this time (preview null) still shows the theme
+    // as it was; checks that failed with the page written do not.
+    see: seeLine(
+      ctx.project.cwd,
+      slug,
+      focus,
+      p.preview == null
+        ? (p.notChecked ?? {
+            code: 'ERR_THEME_NOT_CHECKED',
+            cause: 'no preview was rendered',
+          })
+        : null,
+    ),
     // The first time the theme's app copy is written, its files are named.
     ...(wrote ? {appCopy: {wrote}} : {}),
+    // A copy a file of yours kept from being written: said, never a quiet ok.
+    ...appCopyStale(ctx.project.cwd, slug),
   };
 }
 
@@ -869,6 +919,23 @@ function refuseStoredTokens(ctx, slug, data, skip) {
   const found = bad.length === 1 ? bad[0] : null;
   // A clean value is offered only when set takes it, so the line works.
   const takes = (/** @type {typeof found} */ b) => {
+    if (!b?.fix) return true;
+    // A value whose only fault was curly quotes around it: without them,
+    // when set takes that (`“#e11d48”` is #e11d48).
+    const bare = /^(["'])(.*)\1$/.exec(b.fix)?.[2];
+    if (
+      bare &&
+      b.setting.source === 'token' &&
+      !/font|content/.test(b.setting.thing)
+    ) {
+      const was = b.fix;
+      b.fix = bare;
+      if (takesOne(b)) return true;
+      b.fix = was;
+    }
+    return takesOne(b);
+  };
+  const takesOne = (/** @type {typeof found} */ b) => {
     if (!b?.fix) return true;
     try {
       checkSetting(
@@ -1011,9 +1078,23 @@ async function change(sub, slug, thing, value, options) {
   try {
     return await changeOnce(sub, slug, thing, value, options, seen, typedThing);
   } catch (e) {
-    // A theme name one letter off an existing theme: the same command with
-    // that name comes first, before making a theme of the typo.
-    if (e instanceof AstryxError && e.code === E.ERR_UNKNOWN_THEME) {
+    // A theme name one letter off an existing theme, or typed in other
+    // letters or as a path (T, ./t, themes/t): the same command with that
+    // name comes first, never a bare look at the theme that drops the change.
+    const named =
+      e instanceof AstryxError &&
+      (e.code === E.ERR_UNKNOWN_THEME ||
+        (e.code === E.ERR_INVALID_ARGUMENT &&
+          (e.suggestions ?? []).some(
+            x =>
+              x.reason === 'did you mean' &&
+              slugOk(x.name) &&
+              x.name !== slug &&
+              fs.existsSync(
+                themeFiles(options.cwd ?? process.cwd(), x.name).settings,
+              ),
+          )));
+    if (named) {
       const near = (e.suggestions ?? []).find(x => x.reason === 'did you mean');
       if (near && slugOk(near.name)) {
         const flags = [
@@ -1033,7 +1114,9 @@ async function change(sub, slug, thing, value, options) {
             name: `${P} ${sub} ${near.name}${words.length ? ` ${words.join(' ')}` : ''}`,
             reason: `do this instead: ${near.name} is a theme here`,
           },
-          ...(e.suggestions ?? []).filter(x => x !== near),
+          ...(e.suggestions ?? []).filter(
+            x => x !== near && x.name !== `${P} show ${near.name}`,
+          ),
         ];
       }
       throw e;
@@ -1343,6 +1426,15 @@ async function changeOnce(
               ]
             : []),
           ...otherModeNotes(data),
+          // Back to both modes: a mode the app's <Theme> was given for the
+          // one-mode theme pins it still.
+          ...(s.thing === 'mode' &&
+          data.mode === 'both' &&
+          (before === 'light-only' || before === 'dark-only')
+            ? [
+                `if the app's <Theme> was given mode="${before === 'light-only' ? 'light' : 'dark'}" for ${slug}, take it out: with it the app stays ${before === 'light-only' ? 'light' : 'dark'}, whatever the system asks for`,
+              ]
+            : []),
           // Core has no mode inside a theme: the app's <Theme> is given it.
           ...(s.thing === 'mode' &&
           (data.mode === 'light-only' || data.mode === 'dark-only')
@@ -1681,6 +1773,31 @@ async function changeOnce(
           !ownPartHits.some(h => h.target === target && h.prop === prop)
         )
           ownPartHits.push({target, key: s.when ?? 'base', prop, value});
+  // A padding the own source sets on a rule wins over every padding setting
+  // there (the editor writes none), whichever sides each names.
+  if (
+    sub === 'set' &&
+    s.source === 'property' &&
+    s.on &&
+    /^padding(-|$)/.test(s.thing)
+  )
+    for (const target of partsOf(ctx, s)) {
+      const state = s.state ? `:${s.state}` : null;
+      for (const [prop, value] of ownPartTokens(
+        cwd,
+        slug,
+        target,
+        s.when ?? 'base',
+        state,
+      ))
+        if (
+          /^padding(-|$)/.test(prop) &&
+          !ownPartHits.some(h => h.target === target && h.prop === prop)
+        ) {
+          ownPartHits.push({target, key: s.when ?? 'base', state, prop, value});
+          break;
+        }
+    }
   // A direct setting on exactly the rule the own source sets: its undo
   // takes it back (anything else the file wins over either way).
   const ownHitDirect =
@@ -1714,7 +1831,7 @@ async function changeOnce(
             )
             .join(
               ', ',
-            )}${ownPartHits.length > 3 ? ` and ${ownPartHits.length - 3} more` : ''}, and your own source wins over the settings, so this does not show there; change it in ${slug}.theme.ts${ownHitDirect ? `, or take this back with \`${P} undo ${slug} ${undoArgs(s)}\`` : ''}`,
+            )}${ownPartHits.length > 3 ? ` and ${ownPartHits.length - 3} more` : ''}, and your own source wins over the settings, so this does not show ${/^padding(-|$)/.test(s.thing) && ownPartHits.every(h => /^padding-/.test(h.prop)) ? 'on the sides that sets; its other sides take this setting' : 'there'}; change it in ${slug}.theme.ts${ownHitDirect ? `, or take this back with \`${P} undo ${slug} ${undoArgs(s)}\`` : ''}`,
         ]
       : []),
     ...(ownOverToken
@@ -1955,18 +2072,24 @@ async function changeOnce(
     notes.push(
       'text below the base size keeps its standard sizes, so small text stays readable',
     );
-  // A change that changed nothing writes nothing, the preview included.
+  // A change that changed nothing writes nothing, the preview included,
+  // once preview.html was rendered from the theme as it is now (a retry
+  // after a render that failed renders it).
   const f0 = themeFiles(cwd, slug);
   const p =
-    r.unchanged && !png && fs.existsSync(f0.preview)
+    r.unchanged &&
+    !png &&
+    fs.existsSync(f0.preview) &&
+    previewIsCurrent(ctx, slug, data)
       ? {
           preview: shown(cwd, f0.preview),
           pictures: [],
           pictureProblem: null,
           notChecked: null,
           previewStale: [],
+          see: seeLine(cwd, slug, changeFocus(s)),
         }
-      : await previewAndRoute(ctx, slug, data, png);
+      : await previewAndRoute(ctx, slug, data, png, changeFocus(s));
   return {
     type: sub === 'set' ? 'themeEdit.set' : 'themeEdit.undo',
     data: {
@@ -2378,6 +2501,7 @@ export async function themeEditShow(theme, options = {}) {
         const wrote = takeFirstAppCopy(cwd, theme);
         return wrote ? {appCopy: {wrote}} : {};
       })(),
+      ...appCopyStale(cwd, theme),
       colorFiles: pal ? colorFiles(theme) : null,
     },
   };
@@ -2703,9 +2827,16 @@ function ownOverSettingNotes(cwd, slug, data) {
     if (!parts.has(key))
       parts.set(key, ownPartTokens(cwd, slug, x.on, x.when ?? 'base', state));
     const own = /** @type {Map<string, string | null>} */ (parts.get(key));
-    if (own.has(x.thing))
+    // A padding the own source sets on the rule wins over every padding
+    // setting there, whichever sides each names.
+    const shown = own.has(x.thing)
+      ? x.thing
+      : /^padding(-|$)/.test(x.thing)
+        ? [...own.keys()].find(k => /^padding(-|$)/.test(k))
+        : undefined;
+    if (shown)
       out.push(
-        `${describe(x)}: ${slug}.theme.ts sets ${x.thing} on ${x.on}${state ? ` ${state}` : ''}${x.when ? ` when ${x.when}` : ''} itself${own.get(x.thing) != null ? ` (${own.get(x.thing)})` : ''}, so this setting does not show there`,
+        `${describe(x)}: ${slug}.theme.ts sets ${shown} on ${x.on}${state ? ` ${state}` : ''}${x.when ? ` when ${x.when}` : ''} itself${own.get(shown) != null ? ` (${own.get(shown)})` : ''}, so this setting does not show there`,
       );
   }
   return out;
@@ -3208,7 +3339,18 @@ export async function themeEditUndo(theme, options = {}) {
     );
   if (current && current.mode !== prev.mode)
     undone.push(`mode ${current.mode} is back to ${prev.mode}`);
-  const p = await previewAndRoute(ctx, theme, prev, png);
+  // The page most about what the step reverted: Colors for a color,
+  // Components for a part setting, else Overview.
+  const touched = [
+    ...[...was].filter(([k, s]) => now.get(k)?.value !== s.value),
+    ...[...now].filter(([k]) => !was.has(k)),
+  ].map(([, s]) => changeFocus(s));
+  const focus = touched.includes('colors')
+    ? 'colors'
+    : touched.includes('components')
+      ? 'components'
+      : 'overview';
+  const p = await previewAndRoute(ctx, theme, prev, png, focus);
   return {
     type: 'themeEdit.undo',
     data: {
