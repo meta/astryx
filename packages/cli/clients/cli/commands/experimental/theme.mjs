@@ -50,6 +50,8 @@ import {
   editorCompileProblem,
   editorThemeHold,
   editorThemeRefusal,
+  editorMissingSource,
+  editorThemeTemplate,
   showSections,
 } from '../../../../api/theme-edit/_adapter.mjs';
 import {registerThemeSubcommands} from '../theme.mjs';
@@ -102,6 +104,8 @@ const cmd = line => {
     .map(part => part.split(PREFIX).join(stem))
     .join(stem);
 };
+/** The project's invocation of a command line (cmd, under a name an action's own `cmd` parameter does not hide). */
+const cliLine = (/** @type {string} */ line) => cmd(line);
 
 /**
  * Print blocks, a blank line between them, with this project's run prefix
@@ -427,6 +431,32 @@ function newFlagLine(o) {
     Boolean(o.png),
   );
   return parts.length ? ` ${parts.join(' ')}` : '';
+}
+
+/**
+ * Refuse a preview flag given twice with different values: the command
+ * would keep only the last one without a word. Undefined when each is
+ * given once.
+ * @param {string} command the preview subcommand, for the suggestion
+ * @param {string[]} flags
+ * @returns {undefined}
+ */
+function previewFlagsOnce(command, flags) {
+  for (const flag of flags) {
+    const all = flagValues(flag);
+    if (new Set(all).size > 1)
+      throw new AstryxError(
+        `--${flag} was given twice (${all.join(', ')}); give it once. Nothing was changed.`,
+        [
+          {
+            name: cmd(`${PREFIX} preview ${command} --help`),
+            reason: 'every option it takes',
+          },
+        ],
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
+  }
+  return undefined;
 }
 
 /**
@@ -765,7 +795,7 @@ export function registerExperimentalTheme(group, program) {
   const editor = defineGroup(theme, editorDoc);
   explained(editor, editorDoc);
 
-  explained(
+  const newCli = explained(
     defineCommand(editor, newDoc, {
       fn: newFn,
       action: (
@@ -776,6 +806,33 @@ export function registerExperimentalTheme(group, program) {
         run(
           program,
           () => {
+            // An option new does not take (--force, --dry-run, -t) is refused
+            // with new's help, as every editor command's unknown option is.
+            const takes = new Set(
+              (newDoc.options ?? []).flatMap(opt =>
+                String(opt.flag)
+                  .split(/[\s,]+/)
+                  .filter(w => w.startsWith('-'))
+                  .map(w => w.replace(/[<[].*$/, '')),
+              ),
+            );
+            const stray = (cmd?.args ?? [])
+              .slice(1)
+              .map(String)
+              .find(
+                (/** @type {string} */ w) =>
+                  /^-/.test(w) && !takes.has(w.split('=')[0]),
+              );
+            if (stray)
+              return cliError(`unknown option '${stray}'.`, {
+                suggestions: [
+                  {
+                    name: cliLine(`${EDITOR} new --help`),
+                    reason: 'every option it takes',
+                  },
+                ],
+                code: ERROR_CODES.ERR_INVALID_OPTION,
+              });
             // A word after the name is never dropped without a word.
             const extra = (cmd?.args ?? []).slice(1);
             if (extra.length) {
@@ -834,6 +891,8 @@ export function registerExperimentalTheme(group, program) {
     }),
     newDoc,
   );
+  // new refuses an option it does not take itself, naming its help.
+  newCli.allowUnknownOption();
 
   explained(
     defineCommand(editor, setDoc, {
@@ -947,6 +1006,7 @@ export function registerExperimentalTheme(group, program) {
         run(
           program,
           () =>
+            previewFlagsOnce('add', ['theme', 'template', 'top', 'path']) ??
             themeEditPreviewAdd([words ?? []].flat().join(' ') || undefined, {
               cwd: process.cwd(),
               theme: o.theme,
@@ -993,6 +1053,7 @@ export function registerExperimentalTheme(group, program) {
         run(
           program,
           () =>
+            previewFlagsOnce('app', ['theme']) ??
             themeEditPreviewApp(dir, {
               cwd: process.cwd(),
               theme: o.theme,
@@ -1031,10 +1092,20 @@ export function registerExperimentalTheme(group, program) {
       action: (/** @type {any} */ o) =>
         run(
           program,
-          () => themeEditPreviewList({cwd: process.cwd(), path: o.path}),
+          () =>
+            previewFlagsOnce('list', ['path']) ??
+            themeEditPreviewList({cwd: process.cwd(), path: o.path}),
           r =>
             r.data.folder
-              ? project(/** @type {any} */ (r.data))
+              ? project(
+                  /** @type {any} */ ({
+                    ...r.data,
+                    // A page whose file is gone says so in words.
+                    pages: r.data.pages.map(({missing, ...p}) =>
+                      missing ? {...p, file: 'missing'} : p,
+                    ),
+                  }),
+                )
               : [
                   ...project(/** @type {any} */ (r.data)),
                   `Tip: ${PREFIX} preview add${o.path == null ? '' : ` --path ${quoteCommandArgument(String(o.path))}`}`,
@@ -1057,6 +1128,7 @@ export function registerExperimentalTheme(group, program) {
         run(
           program,
           () =>
+            previewFlagsOnce('remove', ['path']) ??
             themeEditPreviewRemove(page, {cwd: process.cwd(), path: o.path}),
           r => [
             r.data.pages.length
@@ -1203,6 +1275,8 @@ export function registerExperimentalTheme(group, program) {
       build: 'compile',
       explain: editorThemeRefusal,
       preflight: editorCompileProblem,
+      missingSource: editorMissingSource,
+      template: editorThemeTemplate,
       hold: editorThemeHold,
     },
   );

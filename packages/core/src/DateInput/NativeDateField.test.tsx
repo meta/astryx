@@ -20,7 +20,14 @@
  */
 
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
-import {render, screen, fireEvent, act} from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  act,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import {
   Suspense,
   startTransition,
@@ -28,7 +35,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react';
-import {DateInput} from './DateInput';
+import {DateInput, type DateInputProps} from './DateInput';
 import type {ISODateString} from '../utils';
 import type * as NativeDateSegments from './nativeDateSegments';
 import {
@@ -36,6 +43,9 @@ import {
   resetDateSegmentProbe,
 } from './nativeDateSegments';
 import {InternationalizationProvider} from '../i18n';
+import {InputGroup} from '../InputGroup';
+import {InputGroupText} from '../InputGroup/InputGroupText';
+import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 
 /**
  * Lets a test say which kind of `<input type="date">` the engine draws.
@@ -154,6 +164,8 @@ afterEach(() => {
   segmentState.editable = null;
   resetDateSegmentProbe();
 });
+
+const RANGE_MESSAGE = 'Enter a date from March 10, 2026 to March 20, 2026';
 
 describe('DateInput nativePicker', () => {
   // ===========================================================================
@@ -353,12 +365,13 @@ describe('DateInput nativePicker', () => {
       <Discardable>{field('Date', '2026-03-15')}</Discardable>,
     );
     fireEvent.change(getInput(), {target: {value: '2026-03-25'}});
+    fireEvent.keyDown(getInput(), {key: 'Enter'});
     expect(getInput()).toHaveAttribute('aria-invalid', 'true');
 
     await discardRender(rerender, field('Date', '2026-03-16'));
     rerender(<Discardable>{field('Start date', '2026-03-15')}</Discardable>);
 
-    expect(screen.getByRole('alert')).toHaveTextContent('Invalid date');
+    expect(screen.getByText(RANGE_MESSAGE)).toBeInTheDocument();
     expect(getInput()).toHaveAttribute('aria-invalid', 'true');
   });
 
@@ -412,7 +425,7 @@ describe('DateInput nativePicker', () => {
     expect(input).toHaveAttribute('max', '2026-12-31');
   });
 
-  it('refuses an out-of-range date and announces it', () => {
+  it('refuses an out-of-range date and shows its message at blur', () => {
     // iOS does not enforce min/max in its picker — it lets the user land on
     // any date — so the refusal has to happen here.
     stubPointer(true);
@@ -427,10 +440,13 @@ describe('DateInput nativePicker', () => {
       />,
     );
 
+    fireEvent.focus(getInput());
     fireEvent.change(getInput(), {target: {value: '2026-03-25'}});
+    expect(getInput()).not.toHaveAttribute('aria-invalid');
+    fireEvent.blur(getInput());
 
     expect(onChange).not.toHaveBeenCalled();
-    expect(screen.getByRole('alert')).toHaveTextContent('Invalid date');
+    expect(screen.getByText(RANGE_MESSAGE)).toBeInTheDocument();
     expect(getInput()).toHaveAttribute('aria-invalid', 'true');
   });
 
@@ -448,15 +464,13 @@ describe('DateInput nativePicker', () => {
     );
 
     fireEvent.change(getInput(), {target: {value: '2026-03-22'}});
+    fireEvent.keyDown(getInput(), {key: 'Enter'});
 
     expect(onChange).not.toHaveBeenCalled();
-    expect(screen.getByRole('alert')).toHaveTextContent('Invalid date');
+    expect(screen.getByText('Enter an available date')).toBeInTheDocument();
   });
 
-  it('drops the rejection once the field reverts', () => {
-    // The refused date is reverted the moment focus leaves, so the field is
-    // showing a valid date again. Marking that date invalid would be a lie
-    // about data the user never chose.
+  it('keeps the rejection shown after blur restores the committed date', () => {
     stubPointer(true);
     render(
       <DateInput
@@ -470,13 +484,16 @@ describe('DateInput nativePicker', () => {
     const input = getInput();
     fireEvent.focus(input);
     fireEvent.change(input, {target: {value: '2026-03-22'}});
+    fireEvent.keyDown(input, {key: 'Enter'});
+    // Enter shows the rejection; only blur restores the committed date.
+    expect(input).toHaveValue('2026-03-22');
     expect(input).toHaveAttribute('aria-invalid', 'true');
 
     fireEvent.blur(input);
 
     expect(input).toHaveValue('2026-03-23');
-    expect(input).not.toHaveAttribute('aria-invalid');
-    expect(screen.getByRole('alert')).toHaveTextContent('');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByText('Enter an available date')).toBeInTheDocument();
   });
 
   // ===========================================================================
@@ -819,5 +836,197 @@ describe('DateInput nativePicker', () => {
 
     expect(hasEditableDateSegments(true)).toBe(false);
     expect(hasEditableDateSegments(false)).toBe(true);
+  });
+});
+
+describe('DateInput native rejected entries', () => {
+  afterEach(() => {
+    __resetLiveRegionsForTest();
+  });
+
+  function statusText(container: HTMLElement) {
+    return container.querySelector('.astryx-field-status')?.textContent ?? '';
+  }
+
+  /** Records each text that the shared assertive live region shows. */
+  const observers: MutationObserver[] = [];
+  afterEach(() => {
+    observers.splice(0).forEach(observer => observer.disconnect());
+  });
+  function recordAssertive(): string[] {
+    const texts: string[] = [];
+    const observer = new MutationObserver(() => {
+      const text =
+        document.querySelector('[data-astryx-live-region="assertive"]')
+          ?.textContent ?? '';
+      if (text && text !== texts.at(-1)) {
+        texts.push(text);
+      }
+    });
+    observer.observe(document.body, {subtree: true, childList: true});
+    observers.push(observer);
+    return texts;
+  }
+
+  it('flags no partial year the control reports while the year is typed', () => {
+    stubPointer(true);
+    const onChange = vi.fn();
+    const {container} = render(
+      <DateInput
+        label="Date"
+        min="2000-01-01"
+        value="2026-03-15"
+        onChange={onChange}
+      />,
+    );
+    const input = getInput();
+    fireEvent.focus(input);
+    for (const partial of ['0002-03-15', '0020-03-15', '0202-03-15']) {
+      fireEvent.change(input, {target: {value: partial}});
+      expect(input).not.toHaveAttribute('aria-invalid');
+      expect(statusText(container)).toBe('');
+      expect(within(container).getByRole('alert')).toHaveTextContent('');
+    }
+    fireEvent.change(input, {target: {value: '2027-03-15'}});
+    fireEvent.blur(input);
+    expect(onChange).toHaveBeenCalledExactlyOnceWith('2027-03-15');
+    expect(input).not.toHaveAttribute('aria-invalid');
+  });
+
+  it('shows a refused date in place of a caller status and announces it once', async () => {
+    stubPointer(true);
+    const texts = recordAssertive();
+    const {container} = render(
+      <DateInput
+        label="Date"
+        min="2026-03-10"
+        max="2026-03-20"
+        value="2026-03-15"
+        status={{type: 'warning', message: 'Busy week'}}
+        onChange={() => {}}
+      />,
+    );
+    const input = getInput();
+    fireEvent.focus(input);
+    fireEvent.change(input, {target: {value: '2026-03-25'}});
+    expect(statusText(container)).toBe('Busy week');
+    fireEvent.blur(input);
+
+    expect(statusText(container)).toBe(RANGE_MESSAGE);
+    expect(within(container).getByRole('alert')).toHaveTextContent('');
+    await waitFor(() => {
+      expect(texts).toEqual([RANGE_MESSAGE]);
+    });
+    // Picking the same refused date again adds no announcement.
+    fireEvent.focus(input);
+    fireEvent.change(input, {target: {value: '2026-03-25'}});
+    fireEvent.blur(input);
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(texts).toEqual([RANGE_MESSAGE]);
+  });
+
+  it('with onEntryErrorChange, shows a caller error message in place of a refused date, and announces it once', async () => {
+    stubPointer(true);
+    const announced = recordAssertive();
+    const field = (status: DateInputProps['status']) => (
+      <DateInput
+        label="Date"
+        dateConstraints={[date => date.getDay() !== 0]}
+        value="2026-03-23"
+        status={status}
+        onEntryErrorChange={() => {}}
+        onChange={() => {}}
+      />
+    );
+    const {container, rerender} = render(
+      field({type: 'error', message: 'Pick a weekday'}),
+    );
+    await waitFor(() => {
+      expect(announced).toEqual(['Pick a weekday']);
+    });
+    const alert = within(container).getByRole('alert');
+    fireEvent.change(getInput(), {target: {value: '2026-03-22'}});
+    fireEvent.blur(getInput());
+
+    expect(statusText(container)).toBe('Pick a weekday');
+    expect(getInput()).toHaveAttribute('aria-invalid', 'true');
+    // The status does not change, so the field's alert announces it once.
+    expect(alert).toHaveTextContent('Pick a weekday');
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(announced).toEqual(['Pick a weekday']);
+
+    rerender(field({type: 'warning', message: 'Busy week'}));
+    expect(statusText(container)).toBe('Enter an available date');
+    expect(alert).toHaveTextContent('');
+  });
+
+  it.each([
+    ['a date the field accepts', '2026-03-18'],
+    ['an emptied control', ''],
+  ])('ends a shown rejection on %s', (_case, next) => {
+    stubPointer(true);
+    const onChange = vi.fn();
+    const {container} = render(
+      <DateInput
+        label="Date"
+        min="2026-03-10"
+        max="2026-03-20"
+        value="2026-03-15"
+        onChange={onChange}
+      />,
+    );
+    const input = getInput();
+    fireEvent.change(input, {target: {value: '2026-03-25'}});
+    fireEvent.keyDown(input, {key: 'Enter'});
+    fireEvent.change(input, {target: {value: '2026-03-05'}});
+    expect(statusText(container)).toBe(RANGE_MESSAGE);
+
+    fireEvent.change(input, {target: {value: next}});
+    expect(statusText(container)).toBe('');
+    expect(input).not.toHaveAttribute('aria-invalid');
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(next || undefined);
+  });
+
+  it('hides a shown rejection while disabled, and shows it again once editable', () => {
+    stubPointer(true);
+    const field = (isDisabled: boolean) => (
+      <DateInput
+        label="Date"
+        dateConstraints={[date => date.getDay() !== 0]}
+        value="2026-03-23"
+        isDisabled={isDisabled}
+        onChange={() => {}}
+      />
+    );
+    const {container, rerender} = render(field(false));
+    fireEvent.change(getInput(), {target: {value: '2026-03-22'}});
+    fireEvent.blur(getInput());
+    rerender(field(true));
+    expect(statusText(container)).toBe('');
+    expect(getInput()).not.toHaveAttribute('aria-invalid');
+    rerender(field(false));
+    expect(statusText(container)).toBe('Enter an available date');
+  });
+
+  it('announces a refused date through the field alert inside an InputGroup', () => {
+    stubPointer(true);
+    const {container} = render(
+      <InputGroup label="Availability">
+        <InputGroupText>Starts</InputGroupText>
+        <DateInput
+          label="Date"
+          isLabelHidden
+          dateConstraints={[date => date.getDay() !== 0]}
+          value="2026-03-23"
+          onChange={() => {}}
+        />
+      </InputGroup>,
+    );
+    const alert = within(container).getByRole('alert');
+    fireEvent.change(getInput(), {target: {value: '2026-03-22'}});
+    expect(alert).toHaveTextContent('');
+    fireEvent.blur(getInput());
+    expect(alert).toHaveTextContent('Enter an available date');
+    expect(getInput()).toHaveAttribute('aria-invalid', 'true');
   });
 });

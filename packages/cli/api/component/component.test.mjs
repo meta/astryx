@@ -37,6 +37,18 @@ describe('component dispatcher — routing', () => {
   );
 
   it(
+    'gives every example its kind in component.detail (default demo)',
+    async () => {
+      const r = await component('Drawer', {cwd});
+      expect(r.data.examples.length).toBeGreaterThan(0);
+      for (const example of r.data.examples) {
+        expect(['demo', 'setup']).toContain(example.kind);
+      }
+    },
+    SLOW,
+  );
+
+  it(
     'routes no-name to the list leaf (component.list, detail=names)',
     async () => {
       const r = await component(undefined, {cwd});
@@ -651,4 +663,23 @@ describe('component not-found suggestions', () => {
     },
     SLOW,
   );
+});
+
+describe('withOwnership example kinds', () => {
+  it('keeps an authored kind and defaults a missing one to demo', async () => {
+    const {withOwnership} = await import('./_adapter.mjs');
+    const data = withOwnership(
+      /** @type {any} */ ({
+        name: 'Widget',
+        props: [],
+        examples: [{code: 'a'}, {code: 'b', kind: 'setup'}],
+        components: [{name: 'WidgetItem', examples: [{code: 'c'}]}],
+      }),
+      {package: 'acme-widgets', sourcePath: null},
+      'Widget',
+      '',
+    );
+    expect(data.examples.map(e => e.kind)).toEqual(['demo', 'setup']);
+    expect(data.components[0].examples[0].kind).toBe('demo');
+  });
 });

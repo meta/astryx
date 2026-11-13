@@ -98,7 +98,7 @@ const UNSET = null;
  * variables only while the run is armed: from its start to the end of its
  * first gather, and during each later gather, or, in a run armed throughout
  * (`doctor`), to its end. Null outside a recorded run.
- * @type {{reads: Map<string, string>, env: Map<string, string | null>, arm: () => boolean, disarm: () => void, armedThroughout: boolean} | null}
+ * @type {{reads: Map<string, string>, env: Map<string, string | null>, arm: () => boolean, disarm: () => void, armedThroughout: boolean, realEnv: NodeJS.ProcessEnv} | null}
  */
 let run = null;
 
@@ -296,17 +296,31 @@ export async function recordRun(fn, {armedThroughout = false} = {}) {
       env.set(name, envState(realEnv[name]));
     }
   };
+  // Asking whether a variable is set, as `in` does and as `Object.keys` does
+  // for every name it lists, reads no value: only whether it is set counts.
+  // Every read of a value goes through `get` (spread, Object.entries,
+  // Object.assign, JSON.stringify included). Known gap: a descriptor's
+  // `value` (Object.getOwnPropertyDescriptor(s) on process.env) is a value
+  // read with no `get`, so it counts only as set. Nothing the CLI, Core, its
+  // dependencies, jiti's bundled babel or the integrations we test reads the
+  // environment that way.
+  /** @param {string | symbol} name */
+  const notePresence = name => {
+    if (typeof name === 'string' && !env.has(PRESENCE + name)) {
+      env.set(PRESENCE + name, presenceState(realEnv, name));
+    }
+  };
   const proxy = new Proxy(realEnv, {
     get(target, name) {
       noteEnv(name);
       return Reflect.get(target, name);
     },
     has(target, name) {
-      noteEnv(name);
+      notePresence(name);
       return Reflect.has(target, name);
     },
     getOwnPropertyDescriptor(target, name) {
-      noteEnv(name);
+      notePresence(name);
       return Reflect.getOwnPropertyDescriptor(target, name);
     },
     ownKeys(target) {
@@ -366,7 +380,7 @@ export async function recordRun(fn, {armedThroughout = false} = {}) {
     }
   };
   if (!arm()) return fn();
-  run = {reads, env, arm, disarm, armedThroughout};
+  run = {reads, env, arm, disarm, armedThroughout, realEnv};
   try {
     return await recordReads(reads, fn, {exact: true});
   } finally {
@@ -425,6 +439,19 @@ function lookupStamp(folder) {
   } catch {
     return '-';
   }
+}
+
+/** The stamp name prefix for whether a variable is set, not its value. */
+const PRESENCE = '\0set:';
+
+/**
+ * Whether `name` is set in `env`, as stored.
+ * @param {NodeJS.ProcessEnv} env
+ * @param {string} name
+ * @returns {string | null}
+ */
+function presenceState(env, name) {
+  return typeof env[name] === 'string' ? 'set' : UNSET;
 }
 
 /**
@@ -491,10 +518,13 @@ function entryKey(key, id) {
  * @returns {string | null} why not, or null when all hold
  */
 function staleReason(stamps, env) {
+  // The environment as it is, never through the run's recording proxy:
+  // checking an entry is no read the run's own gathers depend on.
+  const real = run?.realEnv ?? process.env;
   for (const [name, value] of env) {
-    const current = envState(
-      name === '\0names' ? namesOf(process.env) : process.env[name],
-    );
+    const current = name.startsWith(PRESENCE)
+      ? presenceState(real, name.slice(PRESENCE.length))
+      : envState(name === '\0names' ? namesOf(real) : real[name]);
     if (current !== value) {
       return name === '\0names'
         ? 'the environment has other variables'
@@ -576,6 +606,14 @@ async function gatherAt(key, load, codec, keep) {
       if (stale == null) {
         const value = codec.decode(stored.value);
         recordStates(stored.stamps);
+        // A gather around this one depends on what this one read, the
+        // environment included: a hit hands its variables on, as a fresh
+        // gather's reads would be.
+        if (run) {
+          for (const [name, value] of stored.env) {
+            if (!run.env.has(name)) run.env.set(name, value);
+          }
+        }
         gatherCode = cliStates(stored.stamps);
         lastOutcome = {hit: true, reason: 'unchanged'};
         try {
