@@ -30,7 +30,7 @@ import {
 import type {BaseProps} from '../BaseProps';
 import type {Elevation, SizeValue} from '../utils/types';
 import * as stylex from '@stylexjs/stylex';
-import {useTooltip} from '../Tooltip/useTooltip';
+import {useDeferredTooltip} from '../hooks/useDeferredTooltip';
 import {
   colorVars,
   sizeVars,
@@ -912,10 +912,8 @@ export function Button({
   // so no extra DOM node is inserted — the button stays a direct child of its
   // container (no layout shift, and edge-compensation markers remain
   // discoverable through the container's direct-child `:has()` selector).
-  const tooltipHook = useTooltip({
-    placement: 'above',
-    isEnabled: tooltip != null,
-  });
+  // The tooltip layer code loads on the first hover, focus or press.
+  const tooltipHook = useDeferredTooltip({placement: 'above'});
 
   const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     // The ref guard dedupes fire-once actions. Interruptible callers skip it so
@@ -1103,7 +1101,7 @@ export function Button({
     tooltip.trim() === accessibleName.trim();
 
   // When a tooltip is attached via the hook, point aria-describedby at the
-  // tooltip content (composing with any consumer-provided value).
+  // hidden tooltip text (composing with any consumer-provided value).
   const describedByProp =
     tooltip != null && !isTooltipName
       ? {
@@ -1113,6 +1111,8 @@ export function Button({
               .join(' ') || undefined,
         }
       : null;
+  const tooltipDescription =
+    describedByProp != null ? tooltipHook.renderDescription(tooltip) : null;
 
   // Merge the consumer ref with the tooltip hook's trigger ref so both point at
   // the same element. useMergedRefs tolerates undefined, so this is a no-op for
@@ -1149,6 +1149,7 @@ export function Button({
         onClick={handleClick}
         {...(handleKeyDown ? {onKeyDown: handleKeyDown} : null)}>
         {buttonContent}
+        {tooltipDescription}
       </LinkComponent>
     );
   } else {
@@ -1174,6 +1175,7 @@ export function Button({
         onClick={handleClick}
         {...(handleKeyDown ? {onKeyDown: handleKeyDown} : null)}>
         {buttonContent}
+        {tooltipDescription}
       </button>
     );
   }

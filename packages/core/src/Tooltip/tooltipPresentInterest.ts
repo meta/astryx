@@ -31,6 +31,12 @@ export interface TooltipPresentInterestState {
   interest: TooltipPresentInterest;
   /** The `click` that completed the tap, for the touch trigger's rules. */
   tapEvent: Event | null;
+  /**
+   * When a held hover began, from `performance.now()`. The show delay then
+   * counts from the pointer's entry. Without it, the delay counts from the
+   * moment the tooltip reads the hover.
+   */
+  hoverStartedAt?: number;
   isRead: boolean;
 }
 

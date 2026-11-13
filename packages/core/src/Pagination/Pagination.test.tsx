@@ -23,6 +23,7 @@ import {Pagination, generatePageRange} from './Pagination';
 import {FormLayout} from '../FormLayout/FormLayout';
 import {InternationalizationProvider} from '../i18n';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
+import {hoverForTooltip} from '../__tests__/deferredTooltip';
 
 afterEach(() => {
   __resetLiveRegionsForTest();
@@ -143,23 +144,15 @@ describe('Pagination', () => {
       ).toBeNull();
     });
 
-    it('gives the prev/next carets a hover tooltip matching their accessible name', () => {
+    it('gives the prev/next carets a hover tooltip matching their accessible name', async () => {
       // The carets are icon-only, so sighted users need a visible label on
       // hover, not just the accessible name. The tooltip reuses the same
       // localized string, so it adds no description (Button FR12).
       render(<Pagination page={3} onChange={() => {}} totalPages={5} />);
       const prev = screen.getByRole('button', {name: 'Go to previous page'});
       const next = screen.getByRole('button', {name: 'Go to next page'});
-      expect(
-        screen
-          .getAllByRole('tooltip', {hidden: true})
-          .some(el => el.textContent === 'Go to previous page'),
-      ).toBe(true);
-      expect(
-        screen
-          .getAllByRole('tooltip', {hidden: true})
-          .some(el => el.textContent === 'Go to next page'),
-      ).toBe(true);
+      await hoverForTooltip(prev, 'Go to previous page');
+      await hoverForTooltip(next, 'Go to next page');
       expect(prev).not.toHaveAttribute('aria-describedby');
       expect(next).not.toHaveAttribute('aria-describedby');
     });

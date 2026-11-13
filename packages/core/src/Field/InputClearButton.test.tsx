@@ -30,6 +30,7 @@ import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
 import {declaredValue} from '../__tests__/stylexDeclarations';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
+import {hoverForTooltip} from '../__tests__/deferredTooltip';
 
 function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {
   const {prose, component} = generateThemeCSS(theme);
@@ -79,16 +80,14 @@ describe('InputClearButton', () => {
     const button = screen.getByRole('button', {
       name: 'Clear Assigned engineering partner',
     });
-    const tooltip = screen.getByRole('tooltip', {hidden: true});
-    expect(tooltip).toHaveTextContent(/^Clear$/);
-    expect(button.getAttribute('aria-describedby')).toBe(tooltip.id);
+    expect(button).toHaveAccessibleDescription('Clear');
 
-    fireEvent.mouseEnter(button);
+    await hoverForTooltip(button, 'Clear');
     await waitFor(() => expect(showPopover).toHaveBeenCalled());
     showPopover.mockRestore();
   });
 
-  it('localizes the tooltip through the catalog', () => {
+  it('localizes the tooltip through the catalog', async () => {
     render(
       <InternationalizationProvider
         locale="en"
@@ -96,10 +95,9 @@ describe('InputClearButton', () => {
         <InputClearButton label="Suche leeren" onClick={() => {}} />
       </InternationalizationProvider>,
     );
-    expect(screen.getByRole('button', {name: 'Suche leeren'})).toBeTruthy();
-    expect(screen.getByRole('tooltip', {hidden: true})).toHaveTextContent(
-      /^Leeren$/,
-    );
+    const button = screen.getByRole('button', {name: 'Suche leeren'});
+    expect(button).toHaveAccessibleDescription('Leeren');
+    await hoverForTooltip(button, 'Leeren');
   });
 
   it('renders a real button with the given accessible label', () => {

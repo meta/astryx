@@ -1068,12 +1068,12 @@ describe('Tooltip in a roving Toolbar (focusTrigger="auto")', () => {
     screen.getByRole('button', {name: 'Copy'}).focus();
     await user.keyboard('{ArrowRight}');
     expect(filter).toHaveFocus();
-    const describedBy = filter.getAttribute('aria-describedby') ?? '';
+    expect(filter).toHaveAccessibleDescription('Filter (F)');
+    // The tooltip's code loads on that first focus.
     await waitFor(() => {
-      const layer = describedBy
-        .split(' ')
-        .map(id => document.getElementById(id))
-        .find(element => element?.textContent === 'Filter (F)');
+      const layer = screen
+        .queryAllByRole('tooltip', {hidden: true})
+        .find(element => element.textContent === 'Filter (F)');
       expect(layer).toBeDefined();
       expect(layer?.matches(':popover-open')).toBe(true);
     });

@@ -8,7 +8,7 @@
  */
 
 import {describe, expect, it} from 'vitest';
-import {act, render, screen, waitFor} from '@testing-library/react';
+import {act, fireEvent, render, screen} from '@testing-library/react';
 import {createRef, StrictMode, type ReactNode} from 'react';
 import {
   DecoratorNode,
@@ -80,16 +80,16 @@ describe('RichTextEditor portal ownership', () => {
       const trigger = await screen.findByRole('button', {
         name: 'Decorator action',
       });
-      const id = trigger.getAttribute('aria-describedby');
-      await waitFor(() => {
-        const tooltip = id ? document.getElementById(id) : null;
-        expect(tooltip).not.toBeNull();
-        expect(
-          screen.getByRole('textbox', {name: 'Editor'}),
-        ).not.toContainElement(tooltip);
-      });
+      // The Button's tooltip layer mounts on the first hover.
+      fireEvent.pointerEnter(trigger, {pointerType: 'mouse'});
+      fireEvent.mouseEnter(trigger);
+      const tooltip = await screen.findByRole('tooltip', {hidden: true});
+      expect(tooltip).toHaveTextContent('Decorator hint');
+      expect(
+        screen.getByRole('textbox', {name: 'Editor'}),
+      ).not.toContainElement(tooltip);
       view.unmount();
-      expect(id && document.getElementById(id)).toBeNull();
+      expect(tooltip.isConnected).toBe(false);
     },
   );
 });

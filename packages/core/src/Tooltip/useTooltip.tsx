@@ -473,21 +473,28 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     registerLayerSurface,
   );
 
-  // Schedule show with delay (suppressed when isOpen is false)
-  const scheduleShow = useCallback(() => {
-    if (!isEnabled || isOpen === false) {
-      return;
-    }
-    clearTimeouts();
-    const disabledRenders = disabledRendersRef.current;
-    showTimeoutRef.current = setTimeout(() => {
-      // A show runs only if the tooltip stayed enabled since it was
-      // scheduled: nothing would close a tooltip that opens after a disable.
-      if (disabledRendersRef.current === disabledRenders) {
-        showLayer();
+  // Schedule show with delay (suppressed when isOpen is false). A hover that
+  // began `elapsed` ms ago waits only the rest of the delay.
+  const scheduleShow = useCallback(
+    (elapsed = 0) => {
+      if (!isEnabled || isOpen === false) {
+        return;
       }
-    }, delay);
-  }, [isEnabled, isOpen, clearTimeouts, showLayer, delay]);
+      clearTimeouts();
+      const disabledRenders = disabledRendersRef.current;
+      showTimeoutRef.current = setTimeout(
+        () => {
+          // A show runs only if the tooltip stayed enabled since it was
+          // scheduled: nothing would close a tooltip that opens after a disable.
+          if (disabledRendersRef.current === disabledRenders) {
+            showLayer();
+          }
+        },
+        Math.max(0, delay - elapsed),
+      );
+    },
+    [isEnabled, isOpen, clearTimeouts, showLayer, delay],
+  );
 
   // Schedule hide with delay (suppressed when isOpen is true).
   // A small hover bridge (when hideDelay is 0) lets the pointer travel from the
@@ -513,15 +520,18 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   }, []);
 
   // Event handlers
-  const handleMouseEnter = useCallback(() => {
-    // A tap synthesizes mouseenter. On touch the tap path owns the decision,
-    // so hover must not also fire — including the tap that just opened the
-    // tooltip, which would otherwise be double-handled.
-    if (isTouchPointerRef.current) {
-      return;
-    }
-    scheduleShow();
-  }, [isTouchPointerRef, scheduleShow]);
+  const handleMouseEnter = useCallback(
+    (elapsed = 0) => {
+      // A tap synthesizes mouseenter. On touch the tap path owns the decision,
+      // so hover must not also fire — including the tap that just opened the
+      // tooltip, which would otherwise be double-handled.
+      if (isTouchPointerRef.current) {
+        return;
+      }
+      scheduleShow(elapsed);
+    },
+    [isTouchPointerRef, scheduleShow],
+  );
 
   const handleMouseLeave = useCallback(
     (event: Event) => {
@@ -811,7 +821,10 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       }
       if (latest().isEnabled && latest().isOpen === undefined) {
         if (interest === 'hover') {
-          latest().handleMouseEnter();
+          const hoverStartedAt = state?.hoverStartedAt;
+          latest().handleMouseEnter(
+            hoverStartedAt == null ? 0 : performance.now() - hoverStartedAt,
+          );
         } else if (interest === 'tap') {
           latest().answerTap(tapEvent);
         } else if (

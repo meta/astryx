@@ -1512,8 +1512,9 @@ describe('Timestamp', () => {
         />,
       );
       const card = await openTimestampHoverCard();
+      // The row's value text, without the copy button's hidden description.
       const [rowValue] = Array.from(card.querySelectorAll('dd')).map(
-        el => el.textContent ?? '',
+        el => el.firstElementChild?.textContent ?? '',
       );
       const copyButton = card.querySelectorAll('button')[0];
 

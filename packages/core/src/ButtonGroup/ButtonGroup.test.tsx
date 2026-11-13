@@ -14,7 +14,7 @@
 
 import {describe, it, expect} from 'vitest';
 import type {ReactNode} from 'react';
-import {render, screen, fireEvent} from '@testing-library/react';
+import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {transformSync} from '@babel/core';
 import stylexBabelPlugin from '@stylexjs/babel-plugin';
@@ -228,6 +228,14 @@ describe('ButtonGroup', () => {
   // (ButtonGroup FR3).
   // ===========================================================================
   describe('trailing radius (#2508)', () => {
+    /** A Button's tooltip layer mounts once its code loads on a first hover. */
+    const mountTooltipLayer = async (member: HTMLElement) => {
+      fireEvent.pointerEnter(member, {pointerType: 'mouse'});
+      fireEvent.mouseEnter(member);
+      await waitFor(() => {
+        expect(member.nextElementSibling?.tagName).toBe('TEMPLATE');
+      });
+    };
     /** The group members, in DOM order (excludes invisible layer siblings). */
     const items = (group: HTMLElement): Element[] =>
       Array.from(
@@ -438,7 +446,7 @@ describe('ButtonGroup', () => {
 
     it.each(['horizontal', 'vertical'] as const)(
       'rounds a tooltip’d trailing Button, whose layer follows it in the DOM (%s)',
-      orientation => {
+      async orientation => {
         render(
           <ButtonGroup label="Actions" orientation={orientation}>
             <Button label="Save" />
@@ -449,6 +457,7 @@ describe('ButtonGroup', () => {
         const group = screen.getByRole('group');
         const save = screen.getByRole('button', {name: 'Save'});
         const more = screen.getByRole('button', {name: 'More'});
+        await mountTooltipLayer(more);
 
         // Precondition: the tooltip layer really is an inline DOM sibling that
         // follows the button — this is exactly what broke `:last-child`.
@@ -488,7 +497,7 @@ describe('ButtonGroup', () => {
       },
     );
 
-    it('rounds a trailing link (<a>) member with a tooltip', () => {
+    it('rounds a trailing link (<a>) member with a tooltip', async () => {
       render(
         <ButtonGroup label="Actions">
           <Button label="Save" />
@@ -498,6 +507,7 @@ describe('ButtonGroup', () => {
 
       const group = screen.getByRole('group');
       const link = screen.getByRole('link', {name: 'Docs'});
+      await mountTooltipLayer(link);
 
       expect(link.tagName).toBe('A');
       expect(link).not.toBe(group.lastElementChild);
@@ -507,7 +517,7 @@ describe('ButtonGroup', () => {
       expect(isLastMember(group, link)).toBe(true);
     });
 
-    it('rounds only the last member (first/middle/last)', () => {
+    it('rounds only the last member (first/middle/last)', async () => {
       render(
         <ButtonGroup label="Actions">
           <Button label="First" />
@@ -520,12 +530,13 @@ describe('ButtonGroup', () => {
       );
 
       const group = screen.getByRole('group');
+      await mountTooltipLayer(screen.getByRole('button', {name: 'Middle'}));
       const [first, middle, last] = items(group);
 
-      expect([first, middle, last].map(el => el.textContent)).toEqual([
-        'First',
-        'Middle',
-        'Last',
+      expect([first, middle, last]).toEqual([
+        screen.getByRole('button', {name: 'First'}),
+        screen.getByRole('button', {name: 'Middle'}),
+        screen.getByRole('button', {name: 'Last'}),
       ]);
 
       // Middle has a tooltip layer after it, but a *marked* sibling follows too,
@@ -535,7 +546,7 @@ describe('ButtonGroup', () => {
       expect(isLastMember(group, last)).toBe(true);
     });
 
-    it('rounds both edges of a lone tooltip’d member', () => {
+    it('rounds both edges of a lone tooltip’d member', async () => {
       render(
         <ButtonGroup label="Actions">
           <Button label="Only" tooltip="The only one" />
@@ -544,6 +555,7 @@ describe('ButtonGroup', () => {
 
       const group = screen.getByRole('group');
       const only = screen.getByRole('button', {name: 'Only'});
+      await mountTooltipLayer(only);
 
       // Leading edge is unaffected: a member's button always precedes its layer.
       expect(only.matches(':first-child')).toBe(true);

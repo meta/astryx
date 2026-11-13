@@ -24,6 +24,7 @@ import {generateThemeCSS} from '../theme/generateThemeRules';
 import {Theme} from '../theme/Theme';
 import {resetThemes} from '../theme/themeRegistry';
 import {__resetDevWarnings} from '../utils/devWarning';
+import {hoverForTooltip} from '../__tests__/deferredTooltip';
 
 function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {
   const {prose, component} = generateThemeCSS(theme);
@@ -214,7 +215,7 @@ describe('CodeBlock', () => {
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('const x = 1;');
   });
 
-  it('renders the copy button as a themeable target with a "Copy code" tooltip', () => {
+  it('renders the copy button as a themeable target with a "Copy code" tooltip', async () => {
     render(<CodeBlock code="const x = 1;" language="javascript" />);
     const copyButton = screen.getByRole('button', {name: 'Copy code'});
     // Theme seam: a design system can restyle the copy control via this class
@@ -222,12 +223,8 @@ describe('CodeBlock', () => {
     expect(copyButton).toHaveClass('astryx-code-block-copy-button');
     // The button carries a visible "Copy code" hover/focus hint (tooltip). It
     // repeats the name, so it adds no description (Button FR12).
-    expect(
-      screen
-        .getAllByRole('tooltip', {hidden: true})
-        .some(el => el.textContent === 'Copy code'),
-    ).toBe(true);
     expect(copyButton).not.toHaveAttribute('aria-describedby');
+    await hoverForTooltip(copyButton, 'Copy code');
   });
 
   it('keeps the copy button tooltip as "Copy code" after copying', async () => {
