@@ -568,10 +568,20 @@ describe('build kit — every page starts from a template', () => {
     expect(r.data.start?.reason).toMatch(/`incident-console` matches but is not ready/);
   });
 
+  it('starts a change to a page the builder has on the app shell', async () => {
+    for (const idea of ['fix the current settings page layout', 'update my current dashboard']) {
+      const r = await build(idea, {cwd: REPO});
+      if (r.type !== 'build.kit') throw new Error(r.type);
+      expect(r.data.start?.name).toBe('shell-top-nav');
+    }
+  });
+
   it('keeps a page start for an idea that opens with a change word but names no page or part the builder has', async () => {
     for (const [idea, name] of [
       ['show the current sprint tasks on a kanban board', 'kanban-board'],
       ['use the existing brand colors for a login page', 'login'],
+      ['use the current theme for a settings page', 'settings'],
+      ['show the current progress of each project on a dashboard', 'dashboard'],
     ]) {
       const r = await build(idea, {cwd: REPO});
       if (r.type !== 'build.kit') throw new Error(r.type);

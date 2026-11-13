@@ -66,6 +66,10 @@ const REFERENCE =
  */
 const CHANGE_HEADS = new Set(loadEditHeads());
 
+/** A placement phrase that names a new place: "for a settings page". */
+const PLACE =
+  /\b(?:for|on|in|into|as|onto)\s+(?:a|an)\s+([a-z-]+(?:\s+[a-z-]+)?)/g;
+
 /** The words that name a page itself rather than what is on it. */
 const PAGE_WORD = /\b(?:page|app|screen|site|view)s?\b/;
 
@@ -154,11 +158,30 @@ function opensAChange(text, familyWords, componentWords) {
   if (!CHANGE_HEADS.has(first)) return false;
   const found = REFERENCE.exec(lower);
   if (!found) return false;
+  if (namesNewPlace(lower, familyWords)) return false;
   const named = lower.slice(found.index + found[0].length).split(PHRASE_END)[0];
   return (
     PAGE_WORD.test(named) ||
     terms(named).some(t => familyWords.has(t) || componentWords.has(t))
   );
+}
+
+/**
+ * Whether an idea names a new page to put the request on: a placement word and
+ * "a" or "an" before a family of page templates or a page word ("for a
+ * settings page", "on a dashboard"). Such an idea asks for that page, whatever
+ * current or existing thing it mentions.
+ * @param {string} lower
+ * @param {Map<string, string>} familyWords
+ * @returns {boolean}
+ */
+function namesNewPlace(lower, familyWords) {
+  for (const m of lower.matchAll(PLACE)) {
+    const named = terms(m[1]);
+    if (PAGE_WORD.test(m[1]) || named.some(t => familyWords.has(t)))
+      return true;
+  }
+  return false;
 }
 
 /**
