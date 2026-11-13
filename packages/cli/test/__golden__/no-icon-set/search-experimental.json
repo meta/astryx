@@ -3,8 +3,22 @@
   "type": "search",
   "data": {
     "query": "experimental",
-    "matchCount": 3,
+    "matchCount": 7,
     "results": [
+      {
+        "domain": "doc",
+        "name": "author-a-theme",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "title": "<text>",
+        "command": "astryx docs author-a-theme --index",
+        "parent": "astryx docs guides",
+        "mentions": [
+          "description mentions \"experimental\""
+        ]
+      },
       {
         "domain": "doc",
         "name": "authoring/field-reference",
@@ -49,6 +63,50 @@
         "parent": "astryx docs authoring/field-reference --index",
         "mentions": [
           "docs mention \"experimental\""
+        ]
+      },
+      {
+        "domain": "doc",
+        "name": "cli/commands/theme",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "title": "<text>",
+        "command": "astryx docs cli/commands/theme",
+        "parent": "astryx docs cli/commands",
+        "mentions": [
+          "description mentions \"experimental\""
+        ]
+      },
+      {
+        "domain": "doc",
+        "name": "styling/tokens-and-setup",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs styling/tokens-and-setup nextjs-webpack",
+        "parent": "astryx docs styling/tokens-and-setup --index",
+        "mentions": [
+          "If your Next.js app builds with webpack (`next build --webpack`), add `@astryxdesign/core` to `experimental.optimizePackageImports`.",
+          "description mentions \"experimental\""
+        ]
+      },
+      {
+        "domain": "doc",
+        "name": "theme",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "title": "<text>",
+        "command": "astryx docs theme --index",
+        "parent": "astryx docs guides",
+        "mentions": [
+          "description mentions \"experimental\""
         ]
       }
     ]

@@ -274,7 +274,7 @@ export const docs = {
   },
   usage: {
     description:
-      'PowerSearch is a structured filter bar where each token represents a field, operator, and value. Use it for complex multi-dimensional filtering when users need to combine multiple search criteria. For simple single-field search, use a text input instead.',
+      'PowerSearch is a structured filter bar where each token represents a field, operator, and value. Use it for complex multi-dimensional filtering when users need to combine multiple search criteria. For simple single-field search, use a text input instead. Host `data-*` attributes, `data-testid` included, reach the primary control: the combobox input in the popover presentation and the trigger button in the sheet presentation. The `components.Token` and `components.Editor` defaults, `PowerSearchToken` and `PowerSearchFilterEditor`, pass them to the token and the editor root.',
     bestPractices: [
       {
         guidance: true,
@@ -522,7 +522,7 @@ export const docsDense = {
     'Structured filter bar where each token represents filter (field+operator+value). Users select fields from typeahead dropdown, configure operators+values in edit popover, manage filters as removable tokens.',
   usage: {
     description:
-      'PowerSearch is a structured filter bar where each token represents a field, operator, and value. Use it for complex multi-dimensional filtering when users need to combine multiple search criteria. For simple single-field search, use a text input instead.',
+      'PowerSearch is a structured filter bar where each token represents a field, operator, and value. Use it for complex multi-dimensional filtering when users need to combine multiple search criteria. For simple single-field search, use a text input instead. Host data-* attrs (data-testid incl.) reach the primary control: combobox input (popover) or trigger button (sheet); PowerSearchToken/PowerSearchFilterEditor pass them to token/editor root.',
     bestPractices: [
       {
         guidance: true,

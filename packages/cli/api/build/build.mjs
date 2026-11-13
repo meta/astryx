@@ -20,6 +20,7 @@ import {buildHelp} from './help/help.mjs';
 import {buildKit} from './kit/kit.mjs';
 import {
   loadBlockPicker,
+  keptBlockCatalog,
   loadTreeWeights,
   withListingCache,
 } from './_adapter.mjs';
@@ -59,7 +60,11 @@ export async function build(query, options = {}) {
         await runTree(
           BUILD_TREE,
           {query, options},
-          {weights: loadTreeWeights(), blocks: loadBlockPicker()},
+          {
+            weights: loadTreeWeights(),
+            blocks: loadBlockPicker(),
+            keepBlocks: keptBlockCatalog,
+          },
         )
       ),
   );

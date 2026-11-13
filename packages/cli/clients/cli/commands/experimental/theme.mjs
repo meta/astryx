@@ -18,6 +18,7 @@
 
 import {getCliInvocation} from '../../../../foundation/env/package-manager.mjs';
 import {jsonOut} from '../../../../foundation/response/json.mjs';
+import {levenshteinDistance} from '../../../../foundation/text/levenshtein.mjs';
 import {NO_RESULT_SET, resultSet} from '../../../../foundation/debug/index.mjs';
 import {ERROR_CODES} from '../../../../foundation/response/error-codes.mjs';
 import {
@@ -29,6 +30,7 @@ import {
   text,
 } from '../../formatters/index.mjs';
 import {cliError} from '../../lib/cli-error.mjs';
+import {editorMissingArgument} from '../../lib/json-shim.mjs';
 import {AstryxError} from '../../../../api/error.mjs';
 import {defineCommand} from '../../lib/define-command.mjs';
 import {
@@ -43,8 +45,15 @@ import {
   themeEditUndo,
 } from '../../../../api/theme-edit/theme-edit.mjs';
 import {
-  fileExists,
-  isHowPicture,
+  builtInThemes,
+  dialValueFits,
+  newFlagList,
+  editorCompileProblem,
+  editorThemeHold,
+  editorThemeRefusal,
+  editorMissingSource,
+  editorThemeTemplate,
+  showSections,
 } from '../../../../api/theme-edit/_adapter.mjs';
 import {registerThemeSubcommands} from '../theme.mjs';
 import {doc as groupDoc} from '../experimental-theme.doc.mjs';
@@ -76,6 +85,7 @@ import {doc as previewAppFn} from '../../../../api/theme-edit/themeEditPreviewAp
 import {doc as previewListFn} from '../../../../api/theme-edit/themeEditPreviewList.doc.mjs';
 import {doc as previewRemoveFn} from '../../../../api/theme-edit/themeEditPreviewRemove.doc.mjs';
 import {doc as howFn} from '../../../../api/theme-edit/themeEditHow.doc.mjs';
+import {quoteCommandArgument} from '../../../../foundation/env/package-manager.mjs';
 
 const PREFIX = 'astryx experimental theme';
 const EDITOR = `${PREFIX} editor`;
@@ -95,6 +105,8 @@ const cmd = line => {
     .map(part => part.split(PREFIX).join(stem))
     .join(stem);
 };
+/** The project's invocation of a command line (cmd, under a name an action's own `cmd` parameter does not hide). */
+const cliLine = (/** @type {string} */ line) => cmd(line);
 
 /**
  * Print blocks, a blank line between them, with this project's run prefix
@@ -251,6 +263,18 @@ function notCheckedLine(result) {
 }
 
 /**
+ * Text with C0 control characters and DEL shown as escapes (\u001b), so
+ * text a person typed cannot move the cursor or recolor the terminal.
+ * @param {string} text
+ */
+const escapeControls = text =>
+  String(text).replace(
+    // eslint-disable-next-line no-control-regex
+    /[\u0000-\u0008\u000b-\u001f\u007f]/g,
+    c => `\\u${`000${c.charCodeAt(0).toString(16)}`.slice(-4)}`,
+  );
+
+/**
  * Run one API call: errors become the CLI error envelope, results go to
  * JSON or to `render`.
  * @template T
@@ -270,9 +294,13 @@ async function run(program, call, render, answer) {
       e
     );
     // Suggested commands start the way this project runs the CLI, in JSON
-    // as in text.
-    return cliError(err.message, {
-      suggestions: err.suggestions?.map(x => ({...x, name: cmd(x.name)})),
+    // as in text. Echoed user text never drives the terminal: control
+    // characters print as escapes.
+    return cliError(escapeControls(err.message), {
+      suggestions: err.suggestions?.map(x => ({
+        ...x,
+        name: escapeControls(cmd(x.name)),
+      })),
       code: err.code ?? ERROR_CODES.ERR_UNKNOWN,
     });
   }
@@ -283,7 +311,20 @@ async function run(program, call, render, answer) {
     jsonOut(/** @type {any} */ (result));
     return answered;
   }
-  print([...notCheckedLine(result), ...render(result)]);
+  // --detail compact|brief (and --dense) print a change's status line
+  // alone; an answer (how, show, list) is the answer, and prints whole.
+  const o = program.opts();
+  const change = ['themeEdit.set', 'themeEdit.undo', 'themeEdit.new'].includes(
+    /** @type {any} */ (result)?.type,
+  );
+  const short =
+    change &&
+    (o.detail === 'compact' ||
+      o.detail === 'brief' ||
+      o.dense ||
+      o.lang === 'dense');
+  const lines = [...notCheckedLine(result), ...render(result)];
+  print(short ? lines.slice(0, notCheckedLine(result).length + 1) : lines);
   return answered;
 }
 
@@ -315,27 +356,108 @@ const changeOptions = o => ({
  * @param {any} o
  * @returns {Record<string, string | string[]>}
  */
-function newSettings(o) {
+function newSettings(o, themeName = '<theme>') {
   /** @type {Record<string, string | string[]>} */
   const out = {};
+  // --like given two values is refused like a dial given two.
+  const likes = flagValues('like');
+  if (new Set(likes).size > 1) {
+    // The suggestion keeps the first built-in theme given, or drops --like.
+    const like = likes
+      .map(l => l.toLowerCase())
+      .find(l => builtInThemes().includes(l));
+    throw new AstryxError(
+      `--like was given twice (${likes.join(', ')}); give it once. Nothing was changed.`,
+      [
+        {
+          name: cmd(`${EDITOR} new ${themeName}${newFlagLine({...o, like})}`),
+          reason: like
+            ? 'do this instead: the first built-in theme given'
+            : 'do this instead: none of them is a built-in theme',
+        },
+      ],
+      ERROR_CODES.ERR_INVALID_ARGUMENT,
+    );
+  }
   for (const opt of newDoc.options ?? []) {
     if (opt.param !== 'options.settings') continue;
-    const name = opt.flag.split(' ')[0].slice(2);
-    const value = o[name.replace(/-([a-z])/g, (_, c) => c.toUpperCase())];
+    const flag = opt.flag.split(' ')[0].slice(2);
+    const key = flag.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+    const value = o[key];
     if (value == null) continue;
     // A flag given twice: headings takes one value per axis (a weight and a
     // tracking); any other flag given two different values is refused.
-    const all = flagValues(name);
-    if (name === 'headings' && all.length > 1) out[name] = all;
-    else if (new Set(all).size > 1)
+    const all = flagValues(flag);
+    if (flag === 'headings' && all.length > 1) out[flag] = all;
+    else if (new Set(all).size > 1) {
+      // The suggestion keeps the first value the dial takes, or drops it.
+      const fits = all.find(v => dialValueFits(flag, v));
       throw new AstryxError(
-        `--${name} was given twice (${all.join(', ')}); give it once. Nothing was changed.`,
-        [],
+        `--${flag} was given twice (${all.join(', ')}); give it once. Nothing was changed.`,
+        [
+          {
+            name: cmd(
+              `${EDITOR} new ${themeName}${newFlagLine({...o, [key]: fits})}`,
+            ),
+            reason: fits
+              ? 'do this instead: the first value it takes'
+              : `do this instead: none of them is a value --${flag} takes`,
+          },
+        ],
         ERROR_CODES.ERR_INVALID_ARGUMENT,
       );
-    else out[name] = String(value);
+    } else out[flag] = String(value);
   }
   return out;
+}
+
+/**
+ * The options a `new` was given, as flags for a suggested command, so a
+ * corrected command makes the theme that was asked for.
+ * @param {any} o
+ * @returns {string}
+ */
+function newFlagLine(o) {
+  /** @type {Record<string, string | string[]>} */
+  const settings = {};
+  for (const opt of newDoc.options ?? []) {
+    if (opt.param !== 'options.settings') continue;
+    const flag = opt.flag.split(' ')[0].slice(2);
+    const value = o[flag.replace(/-([a-z])/g, (_, c) => c.toUpperCase())];
+    if (value != null) settings[flag] = value;
+  }
+  const parts = newFlagList(
+    o.like == null ? undefined : String(o.like),
+    settings,
+    Boolean(o.png),
+  );
+  return parts.length ? ` ${parts.join(' ')}` : '';
+}
+
+/**
+ * Refuse a preview flag given twice with different values: the command
+ * would keep only the last one without a word. Undefined when each is
+ * given once.
+ * @param {string} command the preview subcommand, for the suggestion
+ * @param {string[]} flags
+ * @returns {undefined}
+ */
+function previewFlagsOnce(command, flags) {
+  for (const flag of flags) {
+    const all = flagValues(flag);
+    if (new Set(all).size > 1)
+      throw new AstryxError(
+        `--${flag} was given twice (${all.join(', ')}); give it once. Nothing was changed.`,
+        [
+          {
+            name: cmd(`${PREFIX} preview ${command} --help`),
+            reason: 'every option it takes',
+          },
+        ],
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
+  }
+  return undefined;
 }
 
 /**
@@ -436,53 +558,52 @@ function lookupBlocks(d) {
   /** @param {string[]} cmds @param {boolean} [sequence] */
   const commandLines = (cmds, sequence) =>
     sequence && cmds.length > 1
-      ? [`  ${cmds.join(' && ')}`, '  sequence: run as one line, in this order']
-      : cmds.map(c => `  ${c}`);
-  /** @param {Array<{command: string, why: string}>} list */
-  const refusedLines = list =>
-    list.flatMap(r => [`  x ${r.command}`, `    not run: ${r.why}`]);
+      ? [cmds.join(' && '), 'sequence: run as one line, in this order']
+      : cmds;
+  /** @param {Array<{command: string, why: string}>} refusedList */
+  const refusedLines = refusedList =>
+    refusedList.flatMap(r => [`x ${r.command}`, `  not run: ${r.why}`]);
   /** @type {Array<string | import('../../formatters/index.mjs').Block>} */
   const blocks = [...(hint ? [String(hint)] : []), ...project(rest)];
   if (Array.isArray(results) && results.length)
     blocks.push(
       section('results:'),
-      text(
-        results
-          .flatMap((/** @type {any} */ r) => [
-            String(r.text),
-            ...commandLines(r.commands ?? [], r.sequence),
-            ...refusedLines(r.refused ?? []),
-          ])
-          .join('\n'),
+      list(
+        results.map((/** @type {any} */ r) => [
+          String(r.text),
+          ...commandLines(r.commands ?? [], r.sequence),
+          ...refusedLines(r.refused ?? []),
+        ]),
       ),
     );
   if (Array.isArray(examples) && examples.length)
-    blocks.push(section('examples:'), text(commandLines(examples).join('\n')));
+    blocks.push(section('examples:'), list(commandLines(examples)));
   if (Array.isArray(refused) && refused.length)
-    blocks.push(section('refused:'), text(refusedLines(refused).join('\n')));
+    blocks.push(
+      section('refused:'),
+      list(refused.map((/** @type {any} */ r) => refusedLines([r]))),
+    );
   if (Array.isArray(points) && points.length)
     blocks.push(
       section('points:'),
-      text(
-        points
-          .map(
-            (/** @type {any} */ x) => `  ${x.at}  ${x.color}  alpha ${x.alpha}`,
-          )
-          .join('\n'),
+      records(
+        points.map((/** @type {any} */ x) => ({
+          at: x.at,
+          color: x.color,
+          alpha: x.alpha,
+        })),
       ),
     );
   if (Array.isArray(items) && items.length) {
     if (items.some((/** @type {any} */ x) => Array.isArray(x.examples)))
       blocks.push(
         section('items:'),
-        text(
-          items
-            .flatMap((/** @type {any} */ x) => [
-              `${x.name}  ${x.values}`,
-              `  help: ${x.help}`,
-              ...commandLines(x.examples),
-            ])
-            .join('\n'),
+        list(
+          items.map((/** @type {any} */ x) => [
+            `${x.name}  ${x.values}`,
+            `help: ${x.help}`,
+            ...commandLines(x.examples),
+          ]),
         ),
       );
     else blocks.push(...project({items}).slice(1));
@@ -510,7 +631,7 @@ function strayOption(command, rest) {
         {
           suggestions: [
             {
-              name: `${EDITOR} ${command} --help`,
+              name: cmd(`${EDITOR} ${command} --help`),
               reason: 'every option it takes',
             },
           ],
@@ -524,7 +645,10 @@ function strayOption(command, rest) {
     `unknown option '${word}': only the thing a change names may start with -- (a design token such as --color-accent).`,
     {
       suggestions: [
-        {name: `${EDITOR} ${command} --help`, reason: 'every option it takes'},
+        {
+          name: cmd(`${EDITOR} ${command} --help`),
+          reason: 'every option it takes',
+        },
       ],
       code: ERROR_CODES.ERR_INVALID_OPTION,
     },
@@ -541,7 +665,7 @@ function extraWords(command, extra) {
   if (!extra.length) return null;
   return cliError(`${command} does not take "${extra.join(' ')}".`, {
     suggestions: [
-      {name: `${EDITOR} ${command} --help`, reason: 'what it takes'},
+      {name: cmd(`${EDITOR} ${command} --help`), reason: 'what it takes'},
     ],
     code: ERROR_CODES.ERR_INVALID_ARGUMENT,
   });
@@ -563,9 +687,28 @@ function explained(c, doc, {tokens = false} = {}) {
   return c;
 }
 
+/** Old and sibling names, and where each now is. */
+const MOVED = /** @type {Record<string, Record<string, string>>} */ ({
+  theme: {
+    build: 'compile',
+    set: 'editor set',
+    undo: 'editor undo',
+    show: 'editor show',
+    new: 'editor new',
+    how: 'editor how',
+    explain: 'editor how',
+    reset: 'editor undo',
+    palette: 'editor set',
+    help: '--help',
+  },
+  editor: {explain: 'how', reset: 'undo', help: '--help', palette: 'set'},
+  preview: {help: '--help'},
+});
+
 /**
- * A command group: bare, it prints its help; with an unknown word, the
- * unknown-subcommand error with every subcommand as a suggestion.
+ * A command group: bare, it prints its help (in JSON too, as the root
+ * does); with an unknown word, the unknown-subcommand error, leading with
+ * where a moved name now is, then the nearest subcommands.
  * @param {import('commander').Command} parent
  * @param {import('@astryxdesign/cli/authoring').CommandDoc} doc
  * @returns {import('commander').Command}
@@ -578,17 +721,54 @@ function defineGroup(parent, doc) {
       /** @type {import('commander').Command} */ c,
     ) => {
       const extras = c?.args ?? [];
+      const words = [];
+      for (let x = cmd; x && x.parent; x = x.parent) words.unshift(x.name());
+      const here = `${getCliInvocation()} ${words.join(' ')}`;
       if (extras.length > 0) {
+        const word = String(extras[0]).toLowerCase();
+        const group = doc.name.split(' ').at(-1) ?? '';
+        const moved =
+          MOVED[group]?.[word] ??
+          // `preview <theme>`: the pages for a theme.
+          (group === 'preview' && /^[a-z][a-z0-9-]*$/.test(word)
+            ? `add --theme ${word}`
+            : null);
+        const ranked = (cmd.commands ?? [])
+          .map(command => command.name())
+          .sort(
+            (a, b) =>
+              levenshteinDistance(word, a) - levenshteinDistance(word, b),
+          );
         return cliError(
-          `unknown subcommand '${doc.name} ${String(extras[0])}'`,
+          `unknown subcommand '${doc.name} ${String(extras[0])}'${moved ? `; it is ${here} ${moved}` : ''}`,
           {
-            suggestions: (cmd.commands ?? []).map(command => ({
-              name: command.name(),
-              reason: 'available subcommand',
-            })),
+            suggestions: [
+              ...(moved
+                ? [{name: `${here} ${moved}`, reason: 'do this instead'}]
+                : []),
+              ...ranked.map(name => ({
+                name: `${here} ${name}`,
+                reason: 'available subcommand',
+              })),
+            ],
             code: ERROR_CODES.ERR_UNKNOWN_SUBCOMMAND,
           },
         );
+      }
+      if (c?.optsWithGlobals?.().json) {
+        jsonOut(
+          /** @type {any} */ ({
+            type: 'help',
+            data: {
+              command: words.join(' '),
+              commands: (cmd.commands ?? []).map(command => ({
+                name: command.name(),
+                summary: command.summary() || command.description(),
+              })),
+            },
+          }),
+        );
+        return NO_RESULT_SET;
       }
       cmd.help();
       return NO_RESULT_SET;
@@ -616,7 +796,7 @@ export function registerExperimentalTheme(group, program) {
   const editor = defineGroup(theme, editorDoc);
   explained(editor, editorDoc);
 
-  explained(
+  const newCli = explained(
     defineCommand(editor, newDoc, {
       fn: newFn,
       action: (
@@ -627,37 +807,94 @@ export function registerExperimentalTheme(group, program) {
         run(
           program,
           () => {
+            // An option new does not take (--force, --dry-run, -t) is refused
+            // with new's help, as every editor command's unknown option is.
+            const takes = new Set(
+              (newDoc.options ?? []).flatMap(opt =>
+                String(opt.flag)
+                  .split(/[\s,]+/)
+                  .filter(w => w.startsWith('-'))
+                  .map(w => w.replace(/[<[].*$/, '')),
+              ),
+            );
+            const stray = (cmd?.args ?? [])
+              .slice(1)
+              .map(String)
+              .find(
+                (/** @type {string} */ w) =>
+                  /^-/.test(w) && !takes.has(w.split('=')[0]),
+              );
+            if (stray)
+              return cliError(`unknown option '${stray}'.`, {
+                suggestions: [
+                  {
+                    name: cliLine(`${EDITOR} new --help`),
+                    reason: 'every option it takes',
+                  },
+                ],
+                code: ERROR_CODES.ERR_INVALID_OPTION,
+              });
             // A word after the name is never dropped without a word.
             const extra = (cmd?.args ?? []).slice(1);
-            if (extra.length)
+            if (extra.length) {
+              // Words after `--` that are `--<option> <value>` pairs new
+              // takes become options; the other words were most likely
+              // part of the name. The options given stay in the suggestion.
+              /** @type {Record<string, unknown>} */
+              const given = {...o};
+              /** @type {string[]} */
+              const words = [];
+              for (let i = 0; i < extra.length; i++) {
+                const w = String(extra[i]);
+                if (w.startsWith('--')) {
+                  const key = w
+                    .slice(2)
+                    .replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+                  if (extra[i + 1] != null && given[key] == null)
+                    given[key] = extra[++i];
+                  continue;
+                }
+                words.push(w);
+              }
+              const builtIn =
+                words.length && builtInThemes().includes(words[0]);
+              if (builtIn && given.like == null) given.like = words[0];
+              const fixed = builtIn
+                ? name
+                : [name, ...words]
+                    .join('-')
+                    .toLowerCase()
+                    .replace(/[^a-z0-9-]+/g, '-');
               throw new AstryxError(
                 `new takes one theme name; "${extra.join(' ')}" is extra. For a base theme, use --like. Nothing was changed.`,
-                /^[a-z][a-z0-9-]*$/.test(extra[0])
-                  ? [
-                      {
-                        name: `${EDITOR} new ${name} --like ${extra[0]}`,
-                        reason: 'do this instead',
-                      },
-                    ]
-                  : [],
+                [
+                  {
+                    name: `${EDITOR} new ${quoteCommandArgument(fixed)}${newFlagLine(given)}`,
+                    reason: 'do this instead',
+                  },
+                ],
                 ERROR_CODES.ERR_INVALID_ARGUMENT,
               );
+            }
             return themeEditNew(name, {
               cwd: process.cwd(),
               like: o.like,
               png: o.png ?? false,
-              settings: newSettings(o),
+              settings: newSettings(o, name),
             });
           },
           r => [
             `[ok] made theme "${r.data.theme}"${r.data.like ? ` on top of ${r.data.like}` : ''}`,
             ...project(/** @type {any} */ (r.data)),
             `Tip: ${EDITOR} set ${r.data.theme} <thing> <value>, or ${HOW} "<what you want>"`,
+            `Look at it after each change (this changes nothing in your app): ${EDITOR} show ${r.data.theme} --png writes themes/${r.data.theme}/preview.png and sheet.png from real components; open the PNGs and check them against the request`,
           ],
         ),
     }),
     newDoc,
   );
+  // new refuses an option it does not take itself, naming its help.
+  newCli.allowUnknownOption();
 
   explained(
     defineCommand(editor, setDoc, {
@@ -667,13 +904,30 @@ export function registerExperimentalTheme(group, program) {
         /** @type {string} */ thing,
         /** @type {string[]} */ value,
         /** @type {any} */ o,
-      ) =>
-        strayOption('set', value) ??
-        run(
-          program,
-          () => themeEditSet(name, thing, value.join(' '), changeOptions(o)),
-          changeBlocks,
-        ),
+      ) => {
+        // A declaration pasted as one argument (`--color-accent: #e11d48`,
+        // or `--color-accent:#e11d48`) is the token and its value; with no
+        // value otherwise, the missing-argument error the parser gives.
+        if (!value.length) {
+          // Any thing, a token or a dial, with `:` or `=` (`accent: red`,
+          // `--color-accent=#e11d48`).
+          const pasted = /^(\S+?)\s*[:=]\s*(.+?);?\s*$/.exec(thing);
+          if (!pasted)
+            return missingSetValue(
+              editor.commands.find(c => c.name() === 'set'),
+            );
+          thing = pasted[1];
+          value = [pasted[2]];
+        }
+        return (
+          strayOption('set', value) ??
+          run(
+            program,
+            () => themeEditSet(name, thing, value.join(' '), changeOptions(o)),
+            changeBlocks,
+          )
+        );
+      },
     }),
     setDoc,
     {tokens: true},
@@ -688,6 +942,26 @@ export function registerExperimentalTheme(group, program) {
         /** @type {any} */ c,
       ) =>
         extraWords('show', (c?.args ?? []).slice(1)) ??
+        // The sheet is limited to one section (the docs say so): a second
+        // --section is refused, never kept over the first in silence.
+        (new Set(flagValues('section')).size > 1
+          ? cliError(
+              `--section limits the sheet to one section, and was given ${flagValues('section').length} (${flagValues('section').join(', ')}); give one, or none for the whole sheet.`,
+              {
+                suggestions: [
+                  {
+                    // The first section given that `show` takes, else the
+                    // whole sheet.
+                    name: cmd(
+                      `${EDITOR} show ${name}${(sec => (sec ? ` --section ${sec}` : ''))(flagValues('section').find(v => showSections().includes(v)))}`,
+                    ),
+                    reason: 'do this instead',
+                  },
+                ],
+                code: ERROR_CODES.ERR_INVALID_ARGUMENT,
+              },
+            )
+          : null) ??
         run(
           program,
           () =>
@@ -751,6 +1025,7 @@ export function registerExperimentalTheme(group, program) {
         run(
           program,
           () =>
+            previewFlagsOnce('add', ['theme', 'template', 'top', 'path']) ??
             themeEditPreviewAdd([words ?? []].flat().join(' ') || undefined, {
               cwd: process.cwd(),
               theme: o.theme,
@@ -797,6 +1072,7 @@ export function registerExperimentalTheme(group, program) {
         run(
           program,
           () =>
+            previewFlagsOnce('app', ['theme']) ??
             themeEditPreviewApp(dir, {
               cwd: process.cwd(),
               theme: o.theme,
@@ -809,6 +1085,25 @@ export function registerExperimentalTheme(group, program) {
     }).allowExcessArguments(false),
     previewAppDoc,
   );
+  {
+    // A folder name that starts with "-" reads as an option: say how to
+    // pass it.
+    const app = /** @type {any} */ (
+      preview.commands.find(
+        (/** @type {any} */ x) =>
+          x.name() === previewAppDoc.name.split(' ').pop(),
+      )
+    );
+    const unknown = app?.unknownOption?.bind(app);
+    if (app && unknown)
+      app.unknownOption = (/** @type {string} */ flag) =>
+        /^-[^-]/.test(flag) && flag.length > 2
+          ? app.error(
+              `error: unknown option '${flag}'. A folder name that starts with "-" goes after --: ${PREFIX} preview app -- ${flag}`,
+              {code: 'commander.unknownOption'},
+            )
+          : unknown(flag);
+  }
 
   explained(
     defineCommand(preview, previewListDoc, {
@@ -816,13 +1111,32 @@ export function registerExperimentalTheme(group, program) {
       action: (/** @type {any} */ o) =>
         run(
           program,
-          () => themeEditPreviewList({cwd: process.cwd(), path: o.path}),
+          () =>
+            previewFlagsOnce('list', ['path']) ??
+            themeEditPreviewList({cwd: process.cwd(), path: o.path}),
           r =>
             r.data.folder
-              ? project(/** @type {any} */ (r.data))
+              ? project(
+                  /** @type {any} */ ({
+                    ...r.data,
+                    // A page whose file is gone says so in words.
+                    pages: r.data.pages.map(({missing, ...p}) =>
+                      missing ? {...p, file: 'missing'} : p,
+                    ),
+                  }),
+                )
               : [
                   ...project(/** @type {any} */ (r.data)),
-                  `Tip: ${PREFIX} preview add${o.path == null ? '' : ` --path '${String(o.path).replace(/'/g, `'\\''`)}'`}`,
+                  // A folder add refuses has a note that says why instead.
+                  ...(r.data.notes.some(
+                    n =>
+                      n.includes(' refuses this folder') ||
+                      n.startsWith('no preview here; '),
+                  )
+                    ? []
+                    : [
+                        `Tip: ${PREFIX} preview add${o.path == null ? '' : ` --path ${quoteCommandArgument(String(o.path))}`}`,
+                      ]),
                 ],
           r =>
             resultSet({
@@ -842,6 +1156,7 @@ export function registerExperimentalTheme(group, program) {
         run(
           program,
           () =>
+            previewFlagsOnce('remove', ['path']) ??
             themeEditPreviewRemove(page, {cwd: process.cwd(), path: o.path}),
           r => [
             r.data.pages.length
@@ -887,14 +1202,16 @@ export function registerExperimentalTheme(group, program) {
         );
         if (themeFlags.length > 1)
           return cliError('--theme is given twice; give it once.', {
-            suggestions: [{name: `${HOW} --help`, reason: 'give --theme once'}],
+            suggestions: [
+              {name: cmd(`${HOW} --help`), reason: 'give --theme once'},
+            ],
             code: ERROR_CODES.ERR_INVALID_ARGUMENT,
           });
         if (listFlags.length > 1)
           return cliError('--list is given twice; give it once.', {
             suggestions: [
               {
-                name: `${HOW} --list tokens accent`,
+                name: cmd(`${HOW} --list tokens accent`),
                 reason: 'one list, then the filter',
               },
             ],
@@ -935,46 +1252,19 @@ export function registerExperimentalTheme(group, program) {
             },
           );
         }
-        // A picture first: the only other word is how many colors to list.
-        const picture = isHowPicture(rest[0] ?? '');
-        if (picture && rest.length > 2)
-          return cliError(
-            `After a picture, give only how many colors to list, not "${rest.slice(1).join(' ')}".`,
-            {
-              suggestions: [
-                {name: `${HOW} ${rest[0]} 5`, reason: 'do this instead'},
-              ],
-              code: ERROR_CODES.ERR_INVALID_ARGUMENT,
-            },
-          );
-        // A missing picture is the first thing to say, before a bad count.
-        if (
-          picture &&
-          rest.length === 2 &&
-          !/^[1-9]\d*$/.test(rest[1]) &&
-          fileExists(rest[0])
-        )
-          return cliError(
-            `The count after a picture must be a positive whole number, not "${rest[1]}".`,
-            {
-              suggestions: [
-                {name: `${HOW} ${rest[0]} 5`, reason: 'do this instead'},
-              ],
-              code: ERROR_CODES.ERR_INVALID_ARGUMENT,
-            },
-          );
+        // The API decides what the words are (a picture and a count, or a
+        // question); a picture is told by its extension here only to keep
+        // option words after it for the count.
+        const picture = /\.png$/i.test(rest[0] ?? '');
         const stray = picture ? null : strayOption('how', rest.slice(1));
         if (stray) return stray;
-        const count =
-          picture && rest.length === 2 ? Number(rest[1]) : undefined;
-        const subject = picture ? rest[0] : rest.join(' ');
         return run(
           program,
           () =>
-            themeEditHow(subject, {
+            themeEditHow(rest.join(' '), {
               cwd: process.cwd(),
               at: o.at ?? [],
-              count,
+              words: rest,
               theme: o.theme,
             }),
           r => lookupBlocks(/** @type {any} */ (r.data)),
@@ -1008,6 +1298,32 @@ export function registerExperimentalTheme(group, program) {
       template: templateDoc,
       targets: targetsDoc,
     },
-    {group: 'experimental theme', build: 'compile'},
+    {
+      group: 'experimental theme',
+      build: 'compile',
+      explain: editorThemeRefusal,
+      preflight: editorCompileProblem,
+      missingSource: editorMissingSource,
+      template: editorThemeTemplate,
+      hold: editorThemeHold,
+    },
   );
+}
+
+/**
+ * The error for `set` given a theme and a thing but no value: the parser's
+ * missing-argument report, from the one builder it uses.
+ * @param {any} cmd the set command
+ * @returns {never}
+ */
+function missingSetValue(cmd) {
+  const {message, suggestions} = editorMissingArgument(
+    cmd,
+    ['theme', 'thing', 'value'],
+    'value',
+  );
+  return cliError(message, {
+    code: ERROR_CODES.ERR_MISSING_ARGUMENT,
+    suggestions,
+  });
 }
