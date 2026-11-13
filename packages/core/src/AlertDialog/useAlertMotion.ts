@@ -204,8 +204,8 @@ export function useAlertMotion({
   // exit gives focus back to it.
   const blurredByDismissalRef = useRef<HTMLElement | null>(null);
   // Effect: releases the input hold on the dialog at unmount, so the alert
-  // goes at once. The alert counts as hidden again, because StrictMode runs
-  // every cleanup once and then every effect: the replay must present it
+  // goes at once. The alert then counts as hidden again. StrictMode runs
+  // every cleanup once and then every effect, and the replay must present it
   // again and place its hold.
   useEffect(
     () => () => {
@@ -306,8 +306,8 @@ export function useAlertMotion({
     releaseHoldRef.current = null;
   }, [animators, isEnabled, isOpen, isPresented]);
 
-  // Effect: a timer that hides the dialog once the exit has had its time,
-  // when the exit's end is never reported (animations off, a detached
+  // Effect: a timer that hides the dialog once the exit has had its time. It
+  // covers an exit whose end is never reported (animations off, a detached
   // element). An unmount during the exit removes the dialog at once, and the
   // ref detaches the animators.
   useEffect(() => {

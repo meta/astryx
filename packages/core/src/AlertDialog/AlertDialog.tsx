@@ -65,7 +65,7 @@ const styles = stylex.create({
   },
   // The touch motion drives the dialog, so the theme's entrance keyframes do
   // not play. The animator promotes the dimming through this custom property
-  // on the dialog, because Mobile Safari keeps an unlayered backdrop's
+  // on the dialog. Without it, Mobile Safari keeps an unlayered backdrop's
   // animation on the main thread at its first commit.
   touchMotion: {
     animationName: 'none',
@@ -146,7 +146,7 @@ export interface AlertDialogProps extends BaseProps<HTMLDialogElement> {
    * The width of the dialog.
    * Numbers are treated as pixels, strings are used as-is. On a phone (a
    * compact window under a coarse primary pointer) the default is iOS's alert
-   * width, 320, in every theme; a width set here wins there too.
+   * width, 320, in every theme. A width set here wins there too.
    * @default 400
    */
   width?: number | string;

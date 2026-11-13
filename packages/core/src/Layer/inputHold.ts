@@ -42,7 +42,7 @@ import {notifyTopLayerEntry} from './modalOutlet';
  * What a hold does. `'viewport'` and `'layer'` add one shield over the whole
  * viewport. `'layer'` also makes the layer's content inert and moves focus
  * out of it. Another layer inside it, such as the toast viewport that an open
- * modal holds, stays live under `'layer'`: it takes input, and it goes back
+ * modal hosts, stays live under `'layer'`: it takes input, and it goes back
  * above the shield. `'surface'` shields only the layer's own box, and the
  * page around it stays live.
  */
@@ -151,7 +151,7 @@ export function isInHeldLayer(target: Node | null): boolean {
 
 /**
  * Whether `target` is inside another layer that sits inside `layer`, such as
- * the toast viewport an open modal holds. A dismissal holds only its own
+ * the toast viewport an open modal hosts. A dismissal holds only its own
  * layer's content.
  */
 function isInNestedLayer(target: Node, layer: Node): boolean {
