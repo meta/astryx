@@ -619,7 +619,14 @@ export function storedProblems(ctx, slug, data, skip = '') {
       checkSetting(
         ctx,
         slug,
-        {...data, settings: data.settings.filter(x => x !== s)},
+        {
+          ...data,
+          // A saved setting for one mode stays saved when the theme keeps
+          // one mode (it applies again with both): the rule that refuses
+          // --mode on a one-mode theme is for a value typed in.
+          ...(s.mode ? {mode: 'both'} : {}),
+          settings: data.settings.filter(x => x !== s),
+        },
         s.thing,
         s.value,
         {on: s.on, when: s.when, state: s.state, mode: s.mode, only: s.only},
@@ -1578,6 +1585,11 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       refuse(E.ERR_THEME_UNKNOWN_TOKEN, bad.message, {
         didYouMean: bad.near,
         run: [
+          ...(bad.fixed
+            ? [
+                `${P} set ${slug} ${thing} ${quoteCommandArgument(bad.fixed)}${/** @type {const} */ (['on', 'state', 'when', 'mode']).map(k => (flags[k] ? ` --${k} ${quoteCommandArgument(String(flags[k]))}` : '')).join('')}`,
+              ]
+            : []),
           bad.close
             ? `${HOW} --list tokens ${bad.near[0].replace(/^--/, '').split('-')[0]}`
             : `${HOW} --list tokens`,
@@ -3249,6 +3261,30 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
     s.source = 'property';
     s.thing = prop;
     if (unset) return s;
+    // A length property (padding, a corner radius, a gap) that reads a
+    // design token of another kind (a color, a font, a duration) gets
+    // nothing the browser keeps: refused like the token form.
+    if (matchValue(prop, '1px') && !matchValue(prop, 'red'))
+      for (const m of v.matchAll(/var\(\s*(--[a-z0-9-]+)/gi)) {
+        const kind = ctx.C.isToken(m[1]) ? ctx.C.typeOf(m[1]) : null;
+        if (kind && !['size', 'number', 'other'].includes(kind)) {
+          const like = /radius/.test(prop)
+            ? 'var(--radius-container)'
+            : /^(padding|margin|gap|row-gap|column-gap|inset)/.test(prop)
+              ? 'var(--spacing-4)'
+              : exampleOf('size', prop);
+          refuse(
+            E.ERR_THEME_BAD_VALUE,
+            `${prop} takes a length; ${m[1]} is a ${kind}, so the browser would drop it.`,
+            {
+              run: [
+                `${P} set ${slug} ${prop} ${quoteCommandArgument(v.replace(new RegExp(`var\\(\\s*${m[1]}\\s*(,[^)]*)?\\)`, 'i'), like))} --on ${quoteCommandArgument(String(s.on))}${s.state ? ` --state ${s.state}` : ''}${s.when ? ` --when ${quoteCommandArgument(s.when)}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}`,
+                `${HOW} --list tokens ${/radius/.test(prop) ? 'radius' : 'spacing'}`,
+              ],
+            },
+          );
+        }
+      }
     // initial and unset leave a part's padding variables without a value:
     // the part takes Core's own default, which the result names.
     if (/^padding/.test(prop) && /^(initial|unset)$/i.test(v.trim()) && s.on) {
@@ -3744,9 +3780,26 @@ export {familySpaces};
  * @param {string} v
  * @param {Record<string, unknown>} TOKENS
  * @param {string} thing
- * @returns {{message: string, near: string[], close: boolean} | null}
+ * @returns {{message: string, near: string[], close: boolean, fixed?: string} | null}
  */
 export function unknownVarRef(v, TOKENS, thing) {
+  // A var() whose name is not a custom property (`var(color-x)`, `var(-x)`,
+  // `var()`, `var(--)`) makes the whole value invalid: the browser drops
+  // it. Named with the repaired form when there is one.
+  for (const m of v.matchAll(/var\(\s*([^,)]*?)\s*(?=[,)]|$)/gi)) {
+    const raw = m[1];
+    if (/^--[a-z0-9_][a-z0-9_-]*$/i.test(raw)) continue;
+    const bare = raw.replace(/^-+/, '');
+    const repaired = /^[a-z0-9][a-z0-9_-]*$/i.test(bare) ? `--${bare}` : null;
+    return {
+      message: `var(${raw}) is not a CSS variable reference: a variable's name starts with --${repaired ? `, as in var(${repaired})` : ''}, and the browser drops the whole value otherwise.`,
+      near: repaired ? [repaired] : [],
+      close: Boolean(repaired && repaired in TOKENS),
+      ...(repaired
+        ? {fixed: v.replace(m[0], m[0].replace(raw, repaired))}
+        : {}),
+    };
+  }
   for (const [, name, comma] of v.matchAll(/var\(\s*(--[a-z0-9-]+)\s*(,)?/gi)) {
     if (name in TOKENS || name.startsWith('--_')) continue;
     // A fallback always gives a value: never "reads nothing" (a likely
