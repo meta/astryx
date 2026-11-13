@@ -17,7 +17,6 @@
  */
 
 import * as fs from 'node:fs';
-import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {lowerDoc} from '../doc-compiler/compile.mjs';
 import {packageSource} from '../doc-compiler/source.mjs';
@@ -26,36 +25,12 @@ import {listDirEntries} from '../fs/listing-cache.mjs';
 import {formatCliCommand} from '../env/package-manager.mjs';
 import {LOCAL_THEME_ROOT} from '../config/theme-state.mjs';
 import {assertWithin, PathSafetyError} from '../fs/path-safety.mjs';
+import {THEME_MODULE_EXTENSIONS} from './theme-module-extensions.mjs';
+import {babelParser, jscodeshift} from '../runtime/lazy-dependencies.mjs';
 
 export const BUNDLED_THEME_PACKAGE = '@astryxdesign/cli';
 export const THEMES_DIR = path.join(CLI_ROOT, 'assets', 'templates', 'themes');
 export const THEME_DOC_SUFFIX = '.doc.mjs';
-
-const require = createRequire(import.meta.url);
-
-/** @type {typeof import('@babel/parser') | undefined} */
-let babelParser;
-/** @type {any} */
-let jscodeshiftApi;
-
-/**
- * The descriptor parser, loaded when the first descriptor is read.
- * @returns {typeof import('@babel/parser')}
- */
-function descriptorParser() {
-  babelParser ??= require('@babel/parser');
-  return /** @type {typeof import('@babel/parser')} */ (babelParser);
-}
-
-/**
- * The theme source parser, loaded when the first integration theme source is
- * checked. Bundled themes never need it.
- * @returns {any}
- */
-function sourceParser() {
-  jscodeshiftApi ??= require('jscodeshift');
-  return jscodeshiftApi;
-}
 
 /**
  * @typedef {object} DiscoveredTheme
@@ -114,14 +89,7 @@ function resolveThemePath(value, root, label) {
   }
 }
 
-export const THEME_MODULE_EXTENSIONS = [
-  '.mjs',
-  '.js',
-  '.mts',
-  '.ts',
-  '.tsx',
-  '.jsx',
-];
+export {THEME_MODULE_EXTENSIONS};
 
 /** A theme directory's name: lower-kebab, starting with a letter. */
 export const THEME_SLUG_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
@@ -175,9 +143,11 @@ class ThemeRuntimeExportError extends Error {}
  * Every string specifier a module imports, re-exports, or imports dynamically.
  * @param {string} file
  * @param {any} jscodeshift
+ * @param {{withRequire?: boolean}} [options] `withRequire`: also
+ *   `require('./x')` and TypeScript `import x = require('./x')`
  * @returns {string[]}
  */
-function moduleSpecifiers(file, jscodeshift) {
+function moduleSpecifiers(file, jscodeshift, {withRequire = false} = {}) {
   const parser = /\.(?:ts|tsx|mts|cts)$/u.test(file) ? 'tsx' : 'babel';
   const j = jscodeshift.withParser(parser);
   const root = j(fs.readFileSync(file, 'utf-8'));
@@ -213,6 +183,23 @@ function moduleSpecifiers(file, jscodeshift) {
       specifiers.push(importPath.node.source.value);
     }
   });
+  if (withRequire) {
+    // CommonJS `require('./x')` and TypeScript `import x = require('./x')`.
+    root.find(j.CallExpression).forEach((/** @type {any} */ callPath) => {
+      const {callee, arguments: args} = callPath.node;
+      if (
+        callee?.type === 'Identifier' &&
+        callee.name === 'require' &&
+        typeof args?.[0]?.value === 'string'
+      )
+        specifiers.push(args[0].value);
+    });
+    root.find(j.TSImportEqualsDeclaration).forEach((/** @type {any} */ p) => {
+      const ref = p.node.moduleReference;
+      const value = ref?.expression?.value ?? ref?.argument?.value;
+      if (typeof value === 'string') specifiers.push(value);
+    });
+  }
 
   return specifiers;
 }
@@ -220,10 +207,12 @@ function moduleSpecifiers(file, jscodeshift) {
 /**
  * Every module a theme source file imports or re-exports, as written.
  * @param {string} file
+ * @param {{withRequire?: boolean}} [options] `withRequire`: also
+ *   `require('./x')` and TypeScript `import x = require('./x')`.
  * @returns {string[]}
  */
-export function themeFileImports(file) {
-  return moduleSpecifiers(file, sourceParser());
+export function themeFileImports(file, options = {}) {
+  return moduleSpecifiers(file, jscodeshift(), options);
 }
 
 /**
@@ -715,7 +704,7 @@ function readDescriptorSource(source, label, typeName, data = false) {
   /** @type {any} */
   let ast;
   try {
-    ast = descriptorParser().parse(source, {
+    ast = babelParser().parse(source, {
       sourceType: 'module',
       tokens: true,
       createParenthesizedExpressions: true,
@@ -1378,8 +1367,20 @@ export function discoverThemeDirectory(
     entry => entry.isFile() && entry.name.endsWith(THEME_DOC_SUFFIX),
   );
   if (rootDescriptor) {
+    const stem = rootDescriptor.name
+      .slice(0, -THEME_DOC_SUFFIX.length)
+      .replace(/Theme$/, '');
+    // The folder is under the theme root on disk. The owner names that
+    // root only for the project's own local themes; a package's root is
+    // named by its path.
+    const slug =
+      stem.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase() || '<slug>';
+    const folder =
+      owner === LOCAL_THEME_ROOT
+        ? `${owner}/${slug}`
+        : path.join(themeRoot, slug).split(path.sep).join('/');
     throw new Error(
-      `Theme descriptor "${rootDescriptor.name}" for ${owner} must be inside a lower-kebab theme directory.`,
+      `Theme descriptor "${rootDescriptor.name}" for ${owner} must be inside a lower-kebab theme directory. Move that theme's files into their own folder, such as ${folder}/.`,
     );
   }
   const rootSymlink = rootEntries.find(entry => entry.isSymbolicLink());
@@ -1490,7 +1491,7 @@ export function discoverThemeDirectory(
     const doc = readThemeDoc(docPath, owner);
     if (doc.name !== slug) {
       throw new Error(
-        `${label} names "${doc.name}" but its directory is "${slug}".`,
+        `${label} names "${doc.name}" but its directory is "${slug}". A theme's folder carries its name: move its files into a folder named "${doc.name}".`,
       );
     }
     const entry = sources[0];
@@ -1508,11 +1509,11 @@ export function discoverThemeDirectory(
           )
           .filter(file => file !== docPath),
       );
-      const jscodeshift = sourceParser();
+      const codeshift = jscodeshift();
       try {
         validateThemeModuleGraph(
           entryPath,
-          jscodeshift,
+          codeshift,
           sourceDir,
           allowedFiles,
           owner,
@@ -1523,7 +1524,7 @@ export function discoverThemeDirectory(
           !moduleExportsName(
             entryPath,
             exportName,
-            jscodeshift,
+            codeshift,
             sourceDir,
             allowedFiles,
           )
@@ -1654,7 +1655,7 @@ export function unreadThemeFolders(themeRoot, {packageDir, packageName} = {}) {
   for (const file of modules) {
     let specifiers;
     try {
-      specifiers = moduleSpecifiers(file, sourceParser());
+      specifiers = moduleSpecifiers(file, jscodeshift());
     } catch {
       continue;
     }

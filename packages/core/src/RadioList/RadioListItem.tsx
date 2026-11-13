@@ -25,7 +25,7 @@ import type {BaseProps} from '../BaseProps';
 import {RadioListContext} from './RadioList';
 import {RadioListReasonContext} from './RadioListReasonContext';
 import {joinAriaIDs} from '../utils/inputAria';
-import {colorVars, radiusVars} from '../theme/tokens.stylex';
+import {radiusVars} from '../theme/tokens.stylex';
 import {isRenderable} from '../utils/isRenderable';
 import {mergeProps} from '../utils/mergeProps';
 import {rtlStyles} from '../utils/rtlStyles';
@@ -40,53 +40,19 @@ import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {useIndicator} from '../Indicator/useIndicator';
 import {Item, type ItemAlign} from '../Item/Item';
 import {themeProps} from '../utils/themeProps';
-import {rowPressLayerStyles} from '../privateAttributes/press.stylex';
+import {
+  indicatorPressPaintStyles,
+  rowPressLayerStyles,
+  rowPressPaintStyles,
+} from '../privateAttributes/press.stylex';
 
 // Registered here, not in the press controller, so a page with no box carries
 // none of its code.
 registerBoxHold();
 
-// The touch press's paint, declared by the shared overlay styles on the
-// element the controller writes to (`pressedAlpha`) at the press's strength,
-// 1 while on and 1 → 0 over the release, and inherited resolved by the layer
-// that paints it. See interactionOverlay.stylex.ts.
-const pressedOverlayImage = 'var(--_press-paint-image)';
-
-/** Written by the press controller while the row is pressed. */
-const PRESSED_ON = '[data-astryx-press="on"]';
-/** Written by the press controller for the press's release. */
-const PRESSED_FADING = '[data-astryx-press="fading"]';
-
-/**
- * The nested controls that keep their own press, each at `:active`. It is
- * INTERACTIVE_SELECTORS (hooks/useClickableContainer.ts), which StyleX cannot
- * import, less the read-only ones. The row's own radio is the row's action,
- * so its press is the row's. CSS cannot tell it from a nested radio input, so
- * a nested one presses the circle too. RadioListItem.press.source-build.test.mjs
- * keeps the two lists equal.
- */
-const NESTED_CONTROL_ACTIVE =
-  'button:not([aria-readonly="true"]):active,' +
-  'a:not([aria-readonly="true"]):active,' +
-  'input:not([type="radio"],[aria-readonly="true"]):active,' +
-  'select:not([aria-readonly="true"]):active,' +
-  'textarea:not([aria-readonly="true"]):active,' +
-  '[role="button"]:not([aria-readonly="true"]):active,' +
-  '[role="link"]:not([aria-readonly="true"]):active,' +
-  '[role="checkbox"]:not([aria-readonly="true"]):active,' +
-  '[role="radio"]:not([aria-readonly="true"]):active,' +
-  '[role="switch"]:not([aria-readonly="true"]):active,' +
-  '[role="tab"]:not([aria-readonly="true"]):active,' +
-  '[role="menuitem"]:not([aria-readonly="true"]):active,' +
-  '[role="option"]:not([aria-readonly="true"]):active,' +
-  '[role="combobox"]:not([aria-readonly="true"]):active,' +
-  '[role="listbox"]:not([aria-readonly="true"]):active,' +
-  '[role="slider"]:not([aria-readonly="true"]):active,' +
-  '[role="spinbutton"]:not([aria-readonly="true"]):active,' +
-  '[data-pressable-container]:not([aria-readonly="true"]):active';
-
 // The paint of a press the controller does not paint, declared on the row
-// and inherited by the layer over the circle. Internal: not a theme hook.
+// (`rowPressPaintStyles.radioRow`) and inherited by the layer over the circle.
+// Internal: not a theme hook.
 const ROW_PRESS = '--_radio-row-press';
 
 const styles = stylex.create({
@@ -98,16 +64,17 @@ const styles = stylex.create({
     flexShrink: 0,
     isolation: 'isolate',
   },
-  // The row remains the large press target, but nested controls keep their
-  // independent action and do not make the radio appear pressed: the
-  // row declares the mouse press's paint (`rowStyles.press`) and this layer
-  // reads it. This owner-drawn layer also survives a theme replacing the
-  // indicator component.
+  // The row remains the large press target. Nested controls keep their own
+  // action and do not make the radio look pressed. The row declares the paint
+  // of a press the controller does not paint (`rowPressPaintStyles.radioRow`),
+  // and this layer reads it. This owner-drawn layer also survives a theme
+  // replacing the indicator component.
   // The press controller writes its press attribute on the row for every
-  // pointer: a finger, a mouse and a pen. This layer reads it off the same
-  // scope marker as the hover tint. The controller paints the innermost pressable.
+  // pointer: a finger, a mouse and a pen. Its image layer
+  // (`indicatorPressPaintStyles.image`) reads it off the same scope marker as
+  // the hover tint. The controller paints the innermost pressable.
   // A press on a control nested in the row is that control's. The row's
-  // container rule (cancelNestedTouchPress) ends the row's paint at once.
+  // container rule (cancelNestedPress) ends the row's paint at once.
   // `:active` paints only a press the controller does not paint, and under a
   // coarse pointer it is dropped.
   indicatorPressOverlay: {
@@ -118,17 +85,6 @@ const styles = stylex.create({
       borderRadius: radiusVars['--radius-full'],
       pointerEvents: 'none',
       backgroundColor: `var(${ROW_PRESS}, transparent)`,
-      // The controller's press paints as an image layer over the colour. An
-      // image change is discrete, so no transition can delay the onset. Only
-      // the strength moves: the row's `pressedAlpha` arms set it to 1 while
-      // on, and 1 → 0 over the release. This holds for every pointer, because
-      // the controller writes the attribute only for a press it paints.
-      backgroundImage: {
-        default: null,
-        [stylex.when.ancestor(PRESSED_ON, indicatorScope)]: pressedOverlayImage,
-        [stylex.when.ancestor(PRESSED_FADING, indicatorScope)]:
-          pressedOverlayImage,
-      },
     },
   },
   input: {
@@ -186,23 +142,6 @@ const rowStyles = stylex.create({
     // Suppress Item's interactive hover/press background so the resting and
     // hovered row look identical by default (a theme can restyle either).
     backgroundColor: 'transparent',
-  },
-  // A press the controller does not paint: the controller's own press lives
-  // on its attribute. The row is pressed, but not through a nested control.
-  // Such a control keeps its own press, as the row's container rule decides
-  // for the controller. The `:has()` is on the row itself and reaches no
-  // descendant selector. So a change inside the row re-checks the row alone.
-  // The circle's layer reads the paint through inheritance. A relation would
-  // restyle everything under the row.
-  press: {
-    [ROW_PRESS]: {
-      default: null,
-      [`:active:not(${PRESSED_ON},${PRESSED_FADING}):not(:has(${NESTED_CONTROL_ACTIVE}))`]:
-        {
-          default: colorVars['--color-overlay-pressed'],
-          '@media (pointer: coarse)': 'transparent',
-        },
-    },
   },
 });
 
@@ -361,6 +300,7 @@ export function RadioListItem({
         styles.radioWrapper,
         wrapperSizeStyles[size],
         !isDisabled && styles.indicatorPressOverlay,
+        !isDisabled && indicatorPressPaintStyles.image,
       )}
       {...focusProps}>
       <input
@@ -468,7 +408,7 @@ export function RadioListItem({
           // styles so it wins within the base layer; a `radio-list-item` theme
           // still overrides it from the higher `astryx-theme` layer.
           rowStyles.root,
-          !isDisabled && rowStyles.press,
+          !isDisabled && rowPressPaintStyles.radioRow,
           !isDisabled && touchHitAreaStyles.layer,
           xstyle,
         ] as StyleXStyles

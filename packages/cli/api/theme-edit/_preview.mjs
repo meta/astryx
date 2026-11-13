@@ -12,24 +12,33 @@
  * @position api/theme-edit — previews and pictures
  */
 
+import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {
-  EXTRA,
-  OPEN_OVERLAYS,
   SAMPLE_PAGE,
   SHEET_ORDER,
   elementNames,
   pageSource,
 } from './_catalog.mjs';
-import {renderDir, renderGenerated} from './_parts.mjs';
+import {
+  catalogVariants,
+  demoProps,
+  needsParent,
+  renderDir,
+  renderGenerated,
+} from './_parts.mjs';
 import {OVERVIEW_SECTIONS} from './_overview.mjs';
 import {camel, fontPackages, modesOf, themeFiles, shown} from './_settings.mjs';
 import {writeWhole} from './_palette.mjs';
+import {cliVersion} from '../../foundation/release/run-context.mjs';
 import {importPathOf, installLine} from './_project.mjs';
-import {DIRECT} from './_tables.mjs';
+import {COLOR_PROP_PARTS, DIRECT, P, wordTable} from './_tables.mjs';
+import {extractImportedPackages} from '../../foundation/discovery/template-needs.mjs';
+import {findNodeModulesPackage} from '../../foundation/fs/paths.mjs';
+import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 
 const TEMPLATES_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -48,20 +57,6 @@ export const SHOWCASE_GROUPS = [
   'overlays',
   'pages',
 ];
-
-/** What each section of the sheet holds, for help and `show --section`. */
-export const SHOWCASE_GROUP_HELP = {
-  actions: 'buttons and links',
-  inputs: 'text, number, date and time fields, forms',
-  selection: 'selectors, checkboxes, radios, switches, segmented controls',
-  navigation: 'top and side navigation, tabs, breadcrumbs, pagination',
-  feedback: 'banners, badges, progress, status dots, toasts',
-  data: 'text, headings, tables, lists, code, content',
-  containers: 'cards and layout',
-  overlays: 'dialogs, popovers, menus and tooltips, shown open',
-  pages:
-    'the sample app page and real template pages (dashboard, form, settings)',
-};
 
 /** Real template pages the theme-building page shows in full. */
 const PAGE_TEMPLATES = ['dashboard', 'contact-form', 'settings'];
@@ -90,8 +85,8 @@ function groupOf(name, category) {
 }
 
 /**
- * Items of the theme-building page: each component once per variant, the
- * hand-made extras, overlays open, the sample page, and template pages
+ * Items of the theme-building page: each component once per variant
+ * (overlays open), the sample page, and template pages
  * whose packages the project has.
  * @param {import('./_project.mjs').ThemeProject} project
  * @param {string | undefined} group only this group
@@ -101,39 +96,25 @@ export function showcaseItems(project, group) {
   /** @type {import('./_catalog.mjs').CatalogItem[]} */
   const items = [];
   /** @param {string} name */
-  const groupFor = name =>
-    groupOf(name, project.components[name]?.category ?? '');
-  const extraNames = new Set([...EXTRA, ...OPEN_OVERLAYS].map(([n]) => n));
-  for (const [name, list] of [...EXTRA, ...OPEN_OVERLAYS]) {
+  const groupFor = name => {
+    const info = project.components[name];
+    // A part with no category of its own sits with its parent.
+    const parent = info?.subComponentOf
+      ? project.components[info.subComponentOf]
+      : null;
+    return groupOf(name, info?.category || parent?.category || '');
+  };
+  for (const name of Object.keys(project.components)) {
     const g = groupFor(name);
-    if (g)
-      for (const [label, tree] of list)
-        items.push({group: g, name, label, tree});
-  }
-  for (const [name, info] of Object.entries(project.components)) {
-    const defaults = /** @type {any} */ (info.defaults);
-    const g = groupFor(name);
-    if (!g || !defaults || typeof defaults !== 'object' || extraNames.has(name))
-      continue;
+    if (!g) continue;
     const inParent = inParentOf(project, name);
     if (inParent === null) continue;
-    const values = info.targets[0]?.values ?? {};
-    /** @type {Array<{label: string, props: Record<string, unknown>}>} */
-    const variants = [{label: '', props: {}}];
-    for (const p of ['variant', 'status', 'color'])
-      for (const v of values[p] ?? [])
-        variants.push({
-          label: v,
-          // A status like `{type: 'error', message?: string}` takes the
-          // value as its `type`; the bare string breaks the component.
-          props: {[p]: info.props?.[p]?.type.startsWith('{') ? {type: v} : v},
-        });
-    for (const v of variants.slice(0, 12))
+    for (const v of catalogVariants(project, name, 12, {shown: true}))
       items.push({
         group: g,
         name,
         label: v.label,
-        tree: inParent({__element: name, props: {...defaults, ...v.props}}),
+        tree: inParent({__element: name, props: v.props}),
       });
   }
   items.push({
@@ -150,21 +131,10 @@ export function showcaseItems(project, group) {
     const file = path.join(TEMPLATES_DIR, t, 'page.tsx');
     if (!fs.existsSync(file)) continue;
     const src = fs.readFileSync(file, 'utf8');
-    const missing = [
-      ...src.matchAll(/^\s*(?:import|\})[^'"\n]*from\s+['"]([^'"]+)['"]/gm),
-    ]
-      .map(m => m[1])
-      .filter(spec => !spec.startsWith('.') && !resolves(project, spec));
-    if (missing.length) {
-      const pkgs = [
-        ...new Set(
-          missing.map(s =>
-            s.startsWith('@')
-              ? s.split('/').slice(0, 2).join('/')
-              : s.split('/')[0],
-          ),
-        ),
-      ];
+    const pkgs = [...extractImportedPackages(src)].filter(
+      pkg => !findNodeModulesPackage(project.cwd, pkg),
+    );
+    if (pkgs.length) {
       skipped.push(
         `the ${t} page needs ${pkgs.join(', ')} (${installLine(project.cwd, pkgs)})`,
       );
@@ -219,21 +189,31 @@ function inParentOf(project, name) {
   const info = project.components[name];
   if (!info?.subComponentOf) return tree => tree;
   const wrapper = info.wrapper;
-  if (!wrapper || project.components[wrapper.component]?.wrapper) return null;
+  // A part of a parent that shows inline (a dialog's header) renders inside
+  // that parent shown open and inline, as Core's docs show it: alone, it
+  // acts as in a modal one (a dialog header takes focus as it mounts).
+  const of = info.subComponentOf;
+  const parent = project.components[of];
+  if (!wrapper && parent?.props?.isInline && parent.props.isOpen) {
+    const props = Object.fromEntries(
+      Object.entries(demoProps(project, of) ?? {}).filter(
+        ([k]) => k !== 'children',
+      ),
+    );
+    return tree => ({
+      __element: of,
+      props: {...props, isOpen: true, isInline: true},
+      children: [tree],
+    });
+  }
+  // A part its parent does not list as an item, such as a heading of the
+  // text family, renders on its own.
+  if (!wrapper) return needsParent(project, name) ? null : tree => tree;
+  if (project.components[wrapper.component]?.wrapper) return null;
   const props = Object.fromEntries(
     Object.entries(wrapper.props).filter(([k]) => !OPEN_PROPS.includes(k)),
   );
   return tree => ({__element: wrapper.component, props, children: [tree]});
-}
-
-/** @param {import('./_project.mjs').ThemeProject} project @param {string} spec */
-function resolves(project, spec) {
-  try {
-    project.req.resolve(spec);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 /**
@@ -253,6 +233,59 @@ function templateFiles(imports) {
         ]
       : [];
   });
+}
+
+/**
+ * The fonts stylesheet of the theme a theme is built on, when its package
+ * ships one (`@astryxdesign/theme-neutral/fonts.css` loads Figtree): naming
+ * a family does not load it, and the base theme's families apply until the
+ * theme sets its own. Once the theme's build names none of the families the
+ * sheet loads, it is left out.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {string[]}
+ */
+export function baseFontsCss(ctx, data) {
+  if (!data.like) return [];
+  const pkg = `@astryxdesign/theme-${data.like}`;
+  const sheet = `${pkg}/fonts.css`;
+  // Read off disk: the package must export the sheet for an app to import
+  // it.
+  const found = findNodeModulesPackage(ctx.project.cwd, pkg);
+  /** @type {string} */
+  let text;
+  try {
+    if (!found) return [];
+    const exportsMap = JSON.parse(
+      fs.readFileSync(path.join(found.packageDir, 'package.json'), 'utf8'),
+    ).exports;
+    if (
+      !exportsMap ||
+      typeof exportsMap !== 'object' ||
+      !('./fonts.css' in exportsMap)
+    )
+      return [];
+    text = fs.readFileSync(path.join(found.packageDir, 'fonts.css'), 'utf8');
+  } catch {
+    return [];
+  }
+  // The families the sheet loads; with the theme's build at hand, the sheet
+  // is imported only while the build still names one of them.
+  const families = [...text.matchAll(/family=([^:&'")]+)/g)].map(m =>
+    decodeURIComponent(m[1].replace(/\+/g, ' ')),
+  );
+  /** @type {string | null} */
+  let built = null;
+  try {
+    built = fs.readFileSync(themeFiles(ctx.project.cwd, data.name).css, 'utf8');
+  } catch {
+    // Not built yet: the base families may still apply.
+  }
+  if (built != null && families.length) {
+    const css = built;
+    if (!families.some(f => css.includes(f))) return [];
+  }
+  return [sheet];
 }
 
 /**
@@ -276,12 +309,161 @@ export function themeImports(ctx, slug, data, fromDir) {
     .map(x => `${x.pkg}/index.css`);
   return {
     module: rel(f.js),
-    css: [rel(f.css), ...fonts],
+    css: [rel(f.css), ...baseFontsCss(ctx, data), ...fonts],
     mode: /** @type {'system' | 'light' | 'dark'} */ (
       modes.length > 1 ? 'system' : modes[0]
     ),
   };
 }
+
+/**
+ * The inputs a page was rendered from and a hash of the page above it,
+ * recorded at the end of the page.
+ */
+const RENDER_STAMP = /<!-- astryx: render of ([0-9a-f]{24}) ([0-9a-f]{16}) -->/;
+
+/** @type {Map<string, string>} */
+const treeKeys = new Map();
+
+/**
+ * A cheap fingerprint of the files a package runs from: each file's path,
+ * size and modification time under its folder (node_modules left out), so a
+ * linked or patched copy with the same version reads as another. Once per
+ * process for each folder.
+ * @param {string | null | undefined} dir
+ * @returns {string}
+ */
+function treeKey(dir) {
+  if (!dir) return 'none';
+  const known = treeKeys.get(dir);
+  if (known) return known;
+  const h = createHash('sha256');
+  /** @param {string} d */
+  const walk = d => {
+    let entries;
+    try {
+      entries = fs.readdirSync(d, {withFileTypes: true});
+    } catch {
+      return;
+    }
+    entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    for (const e of entries) {
+      if (e.name === 'node_modules' || e.name.startsWith('.')) continue;
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.isFile()) {
+        try {
+          const st = fs.statSync(p);
+          h.update(`${path.relative(dir, p)}\0${st.size}\0${st.mtimeMs}\0`);
+        } catch {
+          // Gone meanwhile.
+        }
+      }
+    }
+  };
+  walk(dir);
+  const key = h.digest('hex').slice(0, 16);
+  treeKeys.set(dir, key);
+  return key;
+}
+
+/**
+ * The folder of an installed package, resolved from the project, or null.
+ * @param {string} cwd
+ * @param {string} name
+ */
+function packageDirOf(cwd, name) {
+  try {
+    return findNodeModulesPackage(cwd, name)?.packageDir ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** @param {string} text */
+const bodyHash = text =>
+  createHash('sha256').update(text).digest('hex').slice(0, 16);
+
+/**
+ * A key for everything a page render reads: the CLI, Core (its version and
+ * stylesheet, and the files it runs from), the base theme package's files,
+ * the generated page source, and the theme's built stylesheet and module.
+ * The same key means the same page.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string} slug
+ * @param {string} source
+ * @param {string | null | undefined} [like] the base theme
+ * @returns {string}
+ */
+function renderKey(project, slug, source, like) {
+  const f = themeFiles(project.cwd, slug);
+  const h = createHash('sha256')
+    .update(cliVersion())
+    .update('\0')
+    .update(String(project.coreKey ?? ''))
+    .update('\0')
+    .update(treeKey(path.join(project.coreDir, 'dist')))
+    .update('\0')
+    .update(
+      like
+        ? treeKey(packageDirOf(project.cwd, `@astryxdesign/theme-${like}`))
+        : 'none',
+    )
+    .update('\0')
+    .update(source);
+  for (const file of [f.css, f.js]) {
+    h.update('\0');
+    try {
+      h.update(fs.readFileSync(file));
+    } catch {
+      h.update('missing');
+    }
+  }
+  return h.digest('hex').slice(0, 24);
+}
+
+/**
+ * Whether `out` is a page rendered from `key` (a no-op show renders
+ * nothing again).
+ * @param {string} out
+ * @param {string} key
+ */
+function renderedFrom(out, key) {
+  try {
+    const st = fs.lstatSync(out);
+    if (!st.isFile()) return false;
+    const text = fs.readFileSync(out, 'utf8');
+    const m = RENDER_STAMP.exec(text);
+    // The page above the comment is the one rendered: an edit by hand, or
+    // a comment pasted under another page, is rendered again.
+    // Nothing may follow the comment but the sheet's own build stamp
+    // (written after it by show): text added after it is rendered over.
+    const after = m
+      ? text
+          .slice(m.index + m[0].length)
+          .replace(/<!-- astryx: sheet of build [0-9a-f]{16} -->/, '')
+      : '';
+    return (
+      m != null &&
+      m[1] === key &&
+      after.trim() === '' &&
+      m[2] === bodyHash(text.slice(0, m.index).trimEnd())
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The page with its render key recorded at its end (after the closing tag:
+ * a comment before the doctype would put it in quirks mode).
+ * @param {string} html
+ * @param {string} key
+ */
+const withRenderKey = (html, key) => {
+  const body = html.replace(RENDER_STAMP, '').trimEnd();
+  return `${body}\n<!-- astryx: render of ${key} ${bodyHash(body)} -->\n`;
+};
 
 /**
  * Render the sample app page with the theme to themes/<slug>/preview.html.
@@ -304,10 +486,13 @@ export async function renderPreview(ctx, slug, data) {
     layout: 'page',
     title: `${slug}: sample page`,
   });
-  const {html} = await renderGenerated(project, `preview-${slug}.mjs`, source);
   const out = themeFiles(project.cwd, slug).preview;
+  // Rendered from the same inputs before: the page is as it would be.
+  const key = renderKey(project, slug, source, data.like);
+  if (renderedFrom(out, key)) return shown(project.cwd, out);
+  const {html} = await renderGenerated(project, `preview-${slug}.mjs`, source);
   // Written whole and renamed in, never through a link.
-  writeWhole(out, html);
+  writeWhole(out, withRenderKey(html, key));
   return shown(project.cwd, out);
 }
 
@@ -329,12 +514,6 @@ export async function renderSheet(ctx, slug, data, options = {}) {
     layout: 'sheet',
     title: `${slug}: every component${options.group ? ` (${options.group})` : ''}`,
   });
-  const {html} = await renderGenerated(
-    project,
-    `sheet-${slug}.mjs`,
-    source,
-    templateFiles(imports),
-  );
   // One section goes to its own file, so the full sheet stays whole.
   const full = themeFiles(project.cwd, slug).sheet;
   const out =
@@ -342,9 +521,23 @@ export async function renderSheet(ctx, slug, data, options = {}) {
     (options.group
       ? path.join(path.dirname(full), `sheet-${options.group}.html`)
       : full);
+  const key = renderKey(project, slug, source, data.like);
+  const result = {
+    file: shown(project.cwd, out),
+    components: new Set(items.map(i => i.name)).size,
+    skipped,
+  };
+  // Rendered from the same inputs before: the sheet is as it would be.
+  if (renderedFrom(out, key)) return result;
+  const {html} = await renderGenerated(
+    project,
+    `sheet-${slug}.mjs`,
+    source,
+    templateFiles(imports),
+  );
   fs.mkdirSync(path.dirname(out), {recursive: true});
   // Written whole and renamed in, never through a link.
-  writeWhole(out, html);
+  writeWhole(out, withRenderKey(html, key));
   return {
     file: shown(project.cwd, out),
     components: new Set(items.map(i => i.name)).size,
@@ -501,11 +694,11 @@ function componentTable(project, trees) {
 const SAFE = [
   '/** Shows a short note for a component that throws, so the rest of the page renders. */',
   'class Safe extends React.Component<{name: string, children: React.ReactNode}, {failed: boolean}> {',
-  '  state = {failed: false};',
+  '  override state = {failed: false};',
   '  static getDerivedStateFromError() {',
   '    return {failed: true};',
   '  }',
-  '  render() {',
+  '  override render() {',
   '    return this.state.failed ? <div className="tp-note">{this.props.name} could not render here</div> : this.props.children;',
   '  }',
   '}',
@@ -608,10 +801,12 @@ const usesSource = v =>
       Object.values(/** @type {object} */ (v)).some(usesSource);
 
 /** The heading of each group on the components page. */
-const GROUP_TITLES = /** @type {Record<string, string>} */ ({
-  data: 'data display',
-  overlays: 'overlays (shown open)',
-});
+const GROUP_TITLES = wordTable(
+  /** @type {Record<string, string>} */ ({
+    data: 'data display',
+    overlays: 'overlays (shown open)',
+  }),
+);
 
 /**
  * A cell with the component's name. A cell whose parts show nothing on
@@ -626,7 +821,7 @@ const CELL = [
   '    if (!row) return;',
   "    const shown = Array.from(row.querySelectorAll('.tp-item > :not(.tp-label)')).some(el => {",
   '      const box = el.getBoundingClientRect();',
-  "      return (box.width > 2 && box.height > 2) || (el.textContent ?? '').trim() !== '';",
+  "      return (box.width > 0 && box.height > 0 && (box.width > 2 || box.height > 2)) || (el.textContent ?? '').trim() !== '';",
   '    });',
   '    setEmpty(!shown);',
   '  }, []);',
@@ -657,7 +852,6 @@ function changeLine(project, C, name, theme) {
   const kebabName = name.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
   const part = keys.includes(kebabName) ? kebabName : keys[0];
   if (!part) return null;
-  const P = 'astryx experimental theme editor';
   const t = theme ?? '<theme>';
   for (const [aspect, value] of /** @type {const} */ ([
     ['background', '"<color>"'],
@@ -665,7 +859,10 @@ function changeLine(project, C, name, theme) {
     ['text', '"<color>"'],
   ]))
     if (C.partReads(part, aspect).length)
-      return `${P} set ${t} ${DIRECT[aspect]} ${value} --on ${part}`;
+      // A part whose color comes from its color prop takes the text token.
+      return aspect === 'text' && COLOR_PROP_PARTS.includes(part)
+        ? `${P} set ${t} --color-text-primary ${value}`
+        : `${P} set ${t} ${DIRECT[aspect]} ${value} --on ${part}`;
   if (C.showsCorners(part)) return `${P} set ${t} corners round --on ${part}`;
   return `${P} how ${part}`;
 }
@@ -689,9 +886,26 @@ const PAGE_SKIP = new Set([
  * @param {{theme?: string | null, C?: import('./_compiler.mjs').Compiler}} [options]
  * @returns {{source: string, components: number}}
  */
-export function componentsPageSource(project, {theme = null, C} = {}) {
+export function componentsPageSource(project, options = {}) {
+  // A name that Core's docs lack resolves by walking Core's source tree. One
+  // listing cache reads each folder once for the page, not once per name.
+  return withListingCache(() => componentsPage(project, options));
+}
+
+/**
+ * {@link componentsPageSource}'s work, inside its listing cache.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {{theme?: string | null, C?: import('./_compiler.mjs').Compiler}} options
+ * @returns {{source: string, components: number}}
+ */
+function componentsPage(project, {theme = null, C}) {
   const items = showcaseItems(project, undefined)
-    .items.filter(it => it.group !== 'pages' && !PAGE_SKIP.has(it.name))
+    .items.filter(
+      it =>
+        it.group !== 'pages' &&
+        !PAGE_SKIP.has(it.name) &&
+        !project.components[it.name]?.overlay,
+    )
     .map(it => ({
       ...it,
       tree: withHandlers(withSources(project, withCoreNames(project, it.tree))),
@@ -715,7 +929,7 @@ export function componentsPageSource(project, {theme = null, C} = {}) {
           const body = list
             .map(
               it =>
-                `          <div className="tp-item">${it.label ? `\n            <div className="tp-label">${it.label}</div>` : ''}\n            <Safe name=${JSON.stringify(name)}>\n              ${jsx(/** @type {any} */ (it.tree), 7)}\n            </Safe>\n          </div>`,
+                `          <div className="${project.components[name]?.category === 'Layout' ? 'tp-item tp-fill' : 'tp-item'}">${it.label ? `\n            <div className="tp-label">${it.label}</div>` : ''}\n            <Safe name=${JSON.stringify(name)}>\n              ${jsx(/** @type {any} */ (it.tree), 7)}\n            </Safe>\n          </div>`,
             )
             .join('\n');
           const line = C ? changeLine(project, C, name, theme) : null;
@@ -725,7 +939,7 @@ export function componentsPageSource(project, {theme = null, C} = {}) {
       return `      <section>\n        <h2 className="tp-group">${GROUP_TITLES[g] ?? g}</h2>\n        <div className="tp-grid">\n${cells}\n        </div>\n      </section>`;
     })
     .join('\n');
-  const css = `.tp-group{font:600 14px ui-monospace,monospace;margin:16px 14px 0;opacity:.75}.tp-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;padding:14px}.tp-cell{border:1px dashed #8885;padding:10px;overflow:hidden}.tp-name{font:600 12px ui-monospace,monospace;opacity:.6;margin-bottom:8px}.tp-row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start}.tp-label{font:10px ui-monospace,monospace;opacity:.5}.tp-cmd{display:block;margin-top:10px;font:10px ui-monospace,monospace;opacity:.75;overflow-wrap:break-word}.tp-note{font:11px ui-monospace,monospace;opacity:.6;padding:6px 8px;border:1px dashed #8886}`;
+  const css = `.tp-group{font:600 14px ui-monospace,monospace;margin:16px 14px 0;opacity:.75}.tp-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;padding:14px;align-items:start}.tp-cell{border:1px dashed #8885;padding:10px;overflow:hidden}.tp-name{font:600 12px ui-monospace,monospace;opacity:.6;margin-bottom:8px}.tp-row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start}.tp-fill{flex:1 1 100%;max-height:300px;overflow:auto}.tp-label{font:10px ui-monospace,monospace;opacity:.5}.tp-cmd{display:block;margin-top:10px;font:10px ui-monospace,monospace;opacity:.75;overflow-wrap:break-word}.tp-note{font:11px ui-monospace,monospace;opacity:.6;padding:6px 8px;border:1px dashed #8886}`;
   const source = [
     '// Written by `astryx experimental theme preview add`: every component grouped, each variant side by side, overlays open.',
     "'use client';",
@@ -761,10 +975,22 @@ export function componentsPageSource(project, {theme = null, C} = {}) {
  * boundary, so one part that throws never blanks the page. The preview
  * route is the app shell, so the page has no shell of its own.
  * @param {import('./_project.mjs').ThemeProject} project
- * @param {{theme?: string | null}} [options]
+ * @param {{theme?: string | null, colors?: boolean}} [options] `colors`:
+ *   the preview has a Colors page, so the header points to it
  * @returns {string}
  */
-export function overviewPageSource(project, {theme = null} = {}) {
+export function overviewPageSource(project, options = {}) {
+  // One listing cache for the page's names, as componentsPageSource holds.
+  return withListingCache(() => overviewPage(project, options));
+}
+
+/**
+ * {@link overviewPageSource}'s work, inside its listing cache.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {{theme?: string | null, colors?: boolean}} options
+ * @returns {string}
+ */
+function overviewPage(project, {theme = null, colors = false}) {
   const sections = OVERVIEW_SECTIONS.map(x => ({
     title: x.title,
     tree: /** @type {import('./_catalog.mjs').Tree | undefined} */ (
@@ -820,8 +1046,38 @@ export function overviewPageSource(project, {theme = null} = {}) {
     '  React.useEffect(() => {',
     '    if (!ref.current) return;',
     '    const style = getComputedStyle(ref.current);',
-    "    const first = (token: string) => style.getPropertyValue(token).split(',')[0].replace(/[\"']/g, '').trim() || 'default';",
-    "    setFonts(`Body: ${first('--font-family-body')}. Headings: ${first('--font-family-heading')}.`);",
+    "    const first = (token: string) => (style.getPropertyValue(token).split(',')[0] ?? '').replace(/[\"']/g, '').trim() || 'default';",
+    '    // A family the browser does not have measures as its fallback does.',
+    '    const GENERIC = /^(default|serif|sans-serif|monospace|cursive|fantasy|system-ui|ui-[a-z-]+|math|emoji|fangsong)$/i;',
+    '    const missing = (family: string) => {',
+    '      if (GENERIC.test(family)) return false;',
+    "      const ctx = document.createElement('canvas').getContext('2d');",
+    '      if (!ctx) return false;',
+    "      const sample = 'mmmmmmmmmwwwwwww1234567890';",
+    "      return ['monospace', 'serif'].every(fallback => {",
+    '        ctx.font = `48px ${fallback}`;',
+    '        const plain = ctx.measureText(sample).width;',
+    '        ctx.font = `48px "${family}", ${fallback}`;',
+    '        return ctx.measureText(sample).width === plain;',
+    '      });',
+    '    };',
+    '    const shown = (token: string) => { const f = first(token); return missing(f) ? `${f} (not installed here)` : f; };',
+    "    const write = () => setFonts(`Body: ${shown('--font-family-body')}. Headings: ${shown('--font-family-heading')}.`);",
+    '    write();',
+    '    // Read again when the theme changes live (a stylesheet or theme',
+    '    // update while the page is open) and when a font finishes loading.',
+    '    document.fonts?.ready.then(write);',
+    "    document.fonts?.addEventListener?.('loadingdone', write);",
+    '    let queued = 0;',
+    '    const soon = () => { if (!queued) queued = requestAnimationFrame(() => { queued = 0; write(); }); };',
+    '    const watch = new MutationObserver(soon);',
+    '    watch.observe(document.head, {childList: true, subtree: true, characterData: true});',
+    "    watch.observe(document.documentElement, {attributes: true, subtree: true, attributeFilter: ['style', 'class', 'data-theme']});",
+    '    return () => {',
+    '      watch.disconnect();',
+    '      cancelAnimationFrame(queued);',
+    "      document.fonts?.removeEventListener?.('loadingdone', write);",
+    '    };',
     '  }, []);',
     '  return (',
     "    <div ref={ref} style={{color: 'var(--color-text-secondary)', fontSize: 13}}>",
@@ -846,7 +1102,12 @@ export function overviewPageSource(project, {theme = null} = {}) {
     '              {s.name}',
     '            </div>',
     '          ))}',
-    '          <div className="tp-swatch" style={{alignSelf: \'center\'}}>Every shade: the Colors page</div>',
+    // The Colors page is there only for a theme with generated colors.
+    ...(colors
+      ? [
+          '          <div className="tp-swatch" style={{alignSelf: \'center\'}}>Every shade: the Colors page</div>',
+        ]
+      : []),
     '        </div>',
     '      </header>',
     body,
@@ -873,7 +1134,6 @@ export function colorsPageSource({slug, module, seeds, uses}) {
     '// `astryx experimental theme editor set` rewrites it with every change.',
     "'use client';",
     '',
-    "import * as React from 'react';",
   ];
   const text = {color: 'var(--color-text-primary)'};
   const page = {
@@ -925,7 +1185,7 @@ export function colorsPageSource({slug, module, seeds, uses}) {
     "          <h2 style={{margin: 0, fontSize: 20, textTransform: 'capitalize'}}>",
     '            {name}',
     '            {SEEDS[name] ? (',
-    "              <span style={{marginLeft: 8, fontSize: 14, fontWeight: 400, color: 'var(--color-text-secondary)'}}>",
+    "              <span style={{marginLeft: 8, fontSize: 14, fontWeight: 400, textTransform: 'none', color: 'var(--color-text-secondary)'}}>",
     '                from {SEEDS[name]}',
     '              </span>',
     '            ) : null}',
@@ -1018,7 +1278,7 @@ export function previewRouteSource({
     '            ))}',
     '          </SideNav>',
     '        }>',
-    '        <current.Page />',
+    '        {ready ? <current.Page /> : null}',
     '      </AppShell>',
     '      </div>',
   ];
@@ -1033,7 +1293,13 @@ export function previewRouteSource({
     "import {TopNav} from '@astryxdesign/core/TopNav';",
     ...(theme
       ? [
-          "import {SegmentedControl, SegmentedControlItem} from '@astryxdesign/core/SegmentedControl';",
+          // The mode switch only for a theme with both modes: an import the
+          // route does not draw fails an app with noUnusedLocals.
+          ...(mode.length
+            ? [
+                "import {SegmentedControl, SegmentedControlItem} from '@astryxdesign/core/SegmentedControl';",
+              ]
+            : []),
           "import {Theme} from '@astryxdesign/core/theme';",
           `import {${camelName(theme.name)}Theme as theme} from ${JSON.stringify(theme.module.replace(/\.js$/, ''))};`,
           ...theme.css.map(c => `import ${JSON.stringify(c)};`),
@@ -1062,6 +1328,10 @@ export function previewRouteSource({
     '',
     'export default function ThemePreviewPage() {',
     '  const [page, setPage] = React.useState(PAGES[0]?.id);',
+    // Pages render only in the browser: some components crash a server
+    // render, and Next prerenders a client page's first state.
+    '  const [ready, setReady] = React.useState(false);',
+    '  React.useEffect(() => setReady(true), []);',
     ...(theme
       ? [
           oneMode
@@ -1069,7 +1339,8 @@ export function previewRouteSource({
             : "  const [mode, setMode] = React.useState<Mode>('system');",
         ]
       : []),
-    '  const current = PAGES.find(p => p.id === page) ?? PAGES[0];',
+    // The route always has a page; the cast keeps noUncheckedIndexedAccess apps building.
+    '  const current = (PAGES.find(p => p.id === page) ?? PAGES[0]) as (typeof PAGES)[number];',
     '  return (',
     ...(theme
       ? ['    <Theme theme={theme} mode={mode}>', ...shell, '    </Theme>']
@@ -1085,15 +1356,26 @@ const camelName = camel;
 
 /**
  * A PNG of an HTML file, with a Playwright the project has installed, else
- * a Chrome or Chromium found on the machine. Null with a reason when neither
- * is there.
+ * a Chrome or Chromium found on the machine. Not ok with a reason when
+ * neither is there, or when one is there and fails: the reason then names
+ * its error.
  * @param {import('./_project.mjs').ThemeProject} project
  * @param {string} html absolute
  * @param {string} png absolute
  * @param {'light' | 'dark'} mode
- * @returns {Promise<{ok: true, file: string} | {ok: false, reason: string}>}
+ * @returns {Promise<{ok: true, file: string, cut?: boolean} | {ok: false, reason: string}>} `cut` when the picture is of the window, not the whole page
  */
 export async function screenshot(project, html, png, mode) {
+  /** What was found and why it could not take the picture. @type {string[]} */
+  const failed = [];
+  /** The first line of an error, with no path of this machine. @param {unknown} e */
+  const firstLine = e =>
+    String(/** @type {any} */ (e)?.message ?? e ?? '')
+      .split('\n')
+      .map(l => l.trim())
+      .find(Boolean)
+      ?.split(project.cwd)
+      .join('.') ?? 'it stopped with no message';
   for (const pkg of ['playwright', 'playwright-core']) {
     /** @type {string} */
     let entry;
@@ -1119,8 +1401,9 @@ export async function screenshot(project, html, png, mode) {
         await browser.close();
       }
       return {ok: true, file: shown(project.cwd, png)};
-    } catch {
-      // This Playwright has no browser to launch: try Chrome directly.
+    } catch (e) {
+      // This Playwright could not launch its browser: try Chrome directly.
+      failed.push(`${pkg}: ${firstLine(e)}`);
     }
   }
   const chrome = chromeBinary();
@@ -1139,9 +1422,24 @@ export async function screenshot(project, html, png, mode) {
       ],
       {encoding: 'utf8', timeout: 60_000},
     );
+    // Chrome alone takes the window, not the whole page.
     if (r.status === 0 && fs.existsSync(png))
-      return {ok: true, file: shown(project.cwd, png)};
+      return {ok: true, file: shown(project.cwd, png), cut: true};
+    failed.push(
+      `${chrome}: ${firstLine(
+        r.error ??
+          (r.stderr ||
+            (r.signal
+              ? `stopped by ${r.signal}`
+              : `exit ${r.status}, and no picture was written`)),
+      )}`,
+    );
   }
+  if (failed.length)
+    return {
+      ok: false,
+      reason: `A browser was found, but it could not take the picture (${failed.join('; ')}). Give Playwright its browser (npx playwright install chromium), or check that ${chrome ?? 'Google Chrome or Chromium'} starts on this machine. The HTML preview needs neither.`,
+    };
   return {
     ok: false,
     reason: `No browser was found to take the picture. Install Playwright with its browser (${installLine(project.cwd, ['playwright'])}, then npx playwright install chromium), or install Google Chrome or Chromium. The HTML preview needs neither.`,
