@@ -163,6 +163,13 @@ export interface TooltipProps {
    * The tooltip is still dismissible — this just opens it initially.
    */
   isDefaultOpen?: boolean;
+
+  /**
+   * The widest the tooltip grows before its content wraps. A number is in
+   * pixels; a string is any CSS length, such as `'24rem'` or `'none'`.
+   * @default 300
+   */
+  maxWidth?: number | string;
 }
 
 /**
@@ -209,6 +216,7 @@ export function Tooltip({
   hasHoverIndication = 'auto',
   isOpen,
   isDefaultOpen,
+  maxWidth,
 }: TooltipProps): ReactElement {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const textOnly = children != null ? isTextOnly(children) : false;
@@ -236,6 +244,7 @@ export function Tooltip({
     isEnabled,
     isOpen,
     isDefaultOpen,
+    maxWidth,
     onShow: handleShow,
     onHide: handleHide,
   });
