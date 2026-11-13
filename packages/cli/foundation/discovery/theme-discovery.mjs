@@ -29,6 +29,11 @@ import {LOCAL_THEME_ROOT} from '../config/theme-state.mjs';
 import {assertWithin, PathSafetyError} from '../fs/path-safety.mjs';
 import {THEME_MODULE_EXTENSIONS} from './theme-module-extensions.mjs';
 import {babelParser, jscodeshift} from '../runtime/lazy-dependencies.mjs';
+import {
+  readStore,
+  storedKey,
+  STORED_DOCS_FILE,
+} from '../doc-compiler/stored-docs.mjs';
 
 export const BUNDLED_THEME_PACKAGE = '@astryxdesign/cli';
 export const THEMES_DIR = path.join(CLI_ROOT, 'assets', 'templates', 'themes');
@@ -677,13 +682,18 @@ export function readStaticDescriptorValue(
     /** @type {{value: Record<string, any>} | {error: unknown}} */
     let read;
     try {
+      const source = fs.readFileSync(docPath, 'utf-8');
+      // A descriptor Astryx ships was read at publish, by the hash of its
+      // text (scripts/generate-stored-docs.mjs): the same text reads the
+      // same value without parsing. Any other text is parsed.
+      const stored = readStore(STORED_DOCS_FILE).get(
+        descriptorStoreKey(source, typeName, data),
+      );
       read = {
-        value: readDescriptorSource(
-          fs.readFileSync(docPath, 'utf-8'),
-          label,
-          typeName,
-          data,
-        ),
+        value:
+          stored !== undefined
+            ? stored
+            : readDescriptorSource(source, label, typeName, data),
       };
     } catch (error) {
       read = {error};
@@ -696,13 +706,38 @@ export function readStaticDescriptorValue(
 }
 
 /**
+ * The typed descriptors read statically, each with whether plain data is
+ * accepted: what scripts/generate-stored-docs.mjs reads at publish.
+ * @type {ReadonlyArray<[string, boolean]>}
+ */
+export const STATIC_DESCRIPTOR_TYPES = [
+  ['ThemeDoc', false],
+  ['IconSetDoc', false],
+  ['IconDefinitionDoc', true],
+];
+
+/**
+ * Where a descriptor's statically read value is stored at publish: by the
+ * hash of its text, the type it is read as, and whether plain data counts.
+ * @param {string} source
+ * @param {string} typeName
+ * @param {boolean} data
+ * @returns {string}
+ */
+export function descriptorStoreKey(source, typeName, data) {
+  return `descriptor:${typeName}:${data ? 'data' : 'object'}:${storedKey(source)}`;
+}
+
+/**
+ * The static value a descriptor's source default-exports (see
+ * {@link readStaticDescriptorValue}); throws when it is not one.
  * @param {string} source
  * @param {string} label
  * @param {string} typeName
  * @param {boolean} [data]
  * @returns {Record<string, any>}
  */
-function readDescriptorSource(source, label, typeName, data = false) {
+export function readDescriptorSource(source, label, typeName, data = false) {
   /** @type {any} */
   let ast;
   try {
