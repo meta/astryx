@@ -81,7 +81,9 @@ describe('the embedded source', () => {
   it('reports a damaged block', () => {
     const block = sourceBlock('p.tsx', [{path: 'p.tsx', bytes: Buffer.from('a')}]);
     expect(readSourceBlock(block.replace(/"sha256":"[0-9a-f]/, '"sha256":"Z'))).toMatchObject({found: true});
-    expect('damaged' in readSourceBlock(block.replace('"version":1', '"version":2'))).toBe(true);
+    expect(readSourceBlock(block.replace('"version":1', '"version":2'))).toEqual({found: true, newer: {format: 2, cli: null}});
+    expect('damaged' in readSourceBlock(block.replace('"version":1', '"version":"one"'))).toBe(true);
+    expect('damaged' in readSourceBlock(block.replace('"version":1', '"version":0'))).toBe(true);
     expect(readSourceBlock('<p>none</p>')).toEqual({found: false});
   });
 });
@@ -93,6 +95,14 @@ describe('the HTML reader', () => {
     expect(body.tag).toBe('body');
     expect(body.children[0].attrs).toEqual({class: 'astryx-card', 'data-x': '1'});
     expect(body.children[0].children[0].text).toBe('a & b');
+  });
+
+  it('reads a self-closing SVG title as empty, and keeps the text after it', () => {
+    const doc = parseHtml('<div><svg><title/><path d="M0 0"/></svg><p>after</p></div>');
+    const div = /** @type {any} */ (doc.children[0]);
+    const [svg, p] = div.children;
+    expect(svg.children[0]).toEqual({tag: 'title', attrs: {}, children: []});
+    expect(p.children[0].text).toBe('after');
   });
 
   it('tells Astryx markup from other HTML', () => {

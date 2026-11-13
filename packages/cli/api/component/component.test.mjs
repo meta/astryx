@@ -459,7 +459,7 @@ describe('component dispatcher — scoped --package routes all projections', () 
   );
 
   it(
-    '--props --json and the text props table both show the stability marker',
+    '--props --json and the text props list both show the stability marker',
     async () => {
       const json = await runCli(
         ['component', 'Drawer', '--props', '--json'],
@@ -476,9 +476,9 @@ describe('component dispatcher — scoped --package routes all projections', () 
       expect(text.status).toBe(0);
       const rows = text.stdout
         .split('\n')
-        .filter(line => line.startsWith('| `'));
+        .filter(line => line.startsWith('- `'));
       const experimentalRow = rows.find(line =>
-        line.startsWith('| `experimental` |'),
+        line.startsWith('- `experimental`:'),
       );
       expect(experimentalRow).toContain('**(experimental)**');
       expect(

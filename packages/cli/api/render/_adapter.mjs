@@ -17,7 +17,20 @@ import {
   RenderError,
   renderPage,
 } from '../../foundation/render/render-page.mjs';
-import {readSourceBlock} from '../../foundation/render/source-block.mjs';
+import {
+  RENDER_FORMAT,
+  readSourceBlock,
+  recordedText,
+  renderedHeadOf,
+  renderedMarkupOf,
+  sha256,
+} from '../../foundation/render/source-block.mjs';
+import {decode} from '../../foundation/render/html-reader.mjs';
+import {clip, locate, textEdits, textRuns} from '../../foundation/render/markup-edits.mjs';
+import {isPackageName} from '../../foundation/identity/provider-identity.mjs';
+import {cliCommand} from '../../foundation/render/file-header.mjs';
+import {shellArg} from '../../foundation/text/shell-arg.mjs';
+import {isValidSemver} from '../../foundation/env/semver.mjs';
 import {embeddedPathProblem, runnerPicksUp} from '../../foundation/render/embedded-files.mjs';
 import {isAssetBytes, isAssetPath} from '../../foundation/render/assets.mjs';
 import {createFileProtectionResolver} from '../../foundation/fs/file-protection.mjs';
@@ -278,7 +291,7 @@ export async function renderToFile({cwd, input, output, title}) {
   try {
     const set = servedSet(input);
     try {
-      page = await renderPage(input, {title, version: cliVersion(), served: set && 'dir' in set ? set : null});
+      page = await renderPage(input, {title, version: cliVersion(), served: set && 'dir' in set ? set : null, output});
     } catch (e) {
       // A page that needs the Core the CLI could not obtain says why.
       const missing = /** @type {any} */ (e)?.code === 'ERR_RENDER_MISSING_DEPENDENCY' ? /** @type {any} */ (e).detail?.package : null;
@@ -375,6 +388,67 @@ function restoreFolder(input) {
 }
 
 /**
+ * The version of the CLI that rendered a file: the one its embedded source
+ * records, else the one its generator meta names.
+ * @param {import('../../foundation/render/source-block.mjs').EmbeddedSource} source
+ * @param {string} html
+ * @returns {string | null}
+ */
+function renderedByOf(source, html) {
+  const named = source.cli ?? /<meta name="generator" content="Astryx ([^"<>]+)">/.exec(html.slice(0, 4096))?.[1];
+  return isValidSemver(named) ? /** @type {string} */ (named) : null;
+}
+
+/**
+ * The packages a file says its page rendered with, as `name@version`, when
+ * it records them.
+ * @param {import('../../foundation/render/source-block.mjs').EmbeddedSource} source
+ * @returns {string[] | null}
+ */
+function packagesOf(source) {
+  const recorded = source.packages;
+  if (!recorded || typeof recorded !== 'object' || Array.isArray(recorded)) return null;
+  return Object.entries(recorded)
+    .filter(([name, version]) => isPackageName(name) && isValidSemver(version))
+    .map(([name, version]) => `${name}@${version}`);
+}
+
+/**
+ * Whether someone changed the page after the render, for a file that records
+ * the page as rendered: each run of text that changed (the title first), and
+ * whether the styles changed. The restored source never takes these changes:
+ * it is the page as rendered.
+ * @param {import('../../foundation/render/source-block.mjs').EmbeddedSource} source
+ * @param {string} html
+ * @param {{file: string, text: string}[]} modules the restored modules, as shown to the caller
+ * @returns {{edited?: boolean, stylesEdited?: boolean, edits?: import('./render.type.mjs').RenderEdit[], moreEdits?: number}}
+ */
+function pageChanges(source, html, modules) {
+  const recorded = source.markup;
+  if (!recorded || typeof recorded.sha256 !== 'string') return {};
+  const now = renderedMarkupOf(html);
+  const head = renderedHeadOf(html);
+  const text = recordedText(recorded);
+  const titleNow = head.title === null ? null : decode(head.title);
+  const titleEdited = typeof text?.title === 'string' && titleNow !== text.title;
+  const stylesEdited = typeof recorded.style === 'string' ? head.style === null || sha256(head.style) !== recorded.style : undefined;
+  const markupEdited = now === null || sha256(now) !== recorded.sha256;
+  const styles = stylesEdited === undefined ? {} : {stylesEdited};
+  if (!markupEdited && !titleEdited && !stylesEdited) return {edited: false, ...styles};
+  const {edits, more} = markupEdited ? textEdits(text?.runs ?? [], textRuns(now ?? '')) : {edits: [], more: 0};
+  // A title that changed with the heading it comes from is one change, not two.
+  const titleEdit = {was: clip(/** @type {string} */ (text?.title)), now: titleNow === null ? null : clip(titleNow)};
+  const titleAgain = edits.some(edit => edit.was === titleEdit.was && edit.now === titleEdit.now);
+  const all = [...(titleEdited && !titleAgain ? [titleEdit] : []), ...edits];
+  return {
+    edited: true,
+    ...styles,
+    edits: all.map(edit => ({...edit, ...((edit.was && locate(edit.was, modules)) || {})})),
+    ...(more > 0 ? {moreEdits: more} : {}),
+  };
+}
+
+/**
  * Turn a rendered HTML file back into a page module.
  * @param {{cwd: string, input: string, output: string | undefined, overwrite: boolean}} args absolute paths
  * @returns {import('./render.type.mjs').RenderReverseResponse['data']}
@@ -410,6 +484,15 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       );
     }
   };
+  if (block.found && 'newer' in block) {
+    const {format, cli} = block.newer;
+    const command = `${cliCommand(cli ?? 'latest')} experimental render --reverse ${shellArg(shown(cwd, input))}`;
+    throw new AstryxError(
+      `${shown(cwd, input)} is in render format ${format}${cli ? `, written by @astryxdesign/cli ${cli}` : ''}, which is newer than this CLI reads (render format ${RENDER_FORMAT}, @astryxdesign/cli ${cliVersion()}); nothing was written. Give it back with ${cli ? 'the CLI that wrote it' : 'the latest CLI'}: ${command}`,
+      [{name: command, reason: cli ? 'give it back with the CLI version that wrote the file' : 'give it back with the latest CLI'}],
+      ERROR_CODES.ERR_RENDER_NEWER_FORMAT,
+    );
+  }
   if (block.found && 'damaged' in block) {
     throw new AstryxError(
       `${shown(cwd, input)} carries an Astryx page source, but ${block.damaged}, so it cannot be given back exactly.`,
@@ -525,7 +608,7 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       const top = entryDir === '.' ? '' : `${entryDir}/`;
       let fresh = 'restored';
       for (let n = 2; fs.existsSync(path.join(cwd, fresh)); n++) fresh = `restored-${n}`;
-      const suggestion = `--out ${fresh}/${top}${path.basename(requested)}`;
+      const suggestion = `--out ${shellArg(`${fresh}/${top}${path.basename(requested)}`)}`;
       throw new AstryxError(
         `${shown(cwd, input)} would add ${outside.map(file => shown(cwd, file)).join(', ')} outside the folder the restore creates; nothing was written. A received page writes the files it imports only inside one new folder: restore it into one, such as ${suggestion}.`,
         [{name: suggestion, reason: 'restore the page and the files it imports into a new folder, keeping their layout'}],
@@ -537,6 +620,11 @@ export function reverseToFile({cwd, input, output, overwrite}) {
     refuseExisting(writes.map(w => w.file));
     refuseProtected(writes.map(w => w.file), cwd);
     writeAll(writes, cwd);
+    const renderedBy = renderedByOf(source, html);
+    const packages = packagesOf(source);
+    const modules = writes
+      .filter(w => PAGE_EXTENSIONS.includes(path.extname(w.file).toLowerCase()))
+      .map(w => ({file: shown(cwd, w.file), text: w.bytes.toString('utf8')}));
     return {
       input: shown(cwd, input),
       mode: 'embedded',
@@ -546,6 +634,11 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       // the file does not carry (a file a render never embeds) is named.
       exact: missing.length === 0,
       ...(missing.length > 0 ? {missing} : {}),
+      format: source.version,
+      ...(renderedBy ? {renderedBy} : {}),
+      ...(packages ? {packages} : {}),
+      ...(typeof source.title === 'string' ? {title: source.title} : {}),
+      ...pageChanges(source, html, modules),
     };
   }
   // A file a render wrote, whose source block was taken out on the way
