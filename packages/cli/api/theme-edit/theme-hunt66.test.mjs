@@ -77,6 +77,18 @@ describe('hunt66: parts joined by "and"', () => {
           'set t corners more --on card --state hover',
         ],
       ],
+      // A decimal is not a sentence break.
+      [
+        'padding 0.5rem on buttons and cards',
+        ['set t padding 0.5rem --on button', 'set t padding 0.5rem --on card'],
+      ],
+      [
+        'border width 1.5px on buttons and cards',
+        [
+          'set t border-width 1.5px --on button',
+          'set t border-width 1.5px --on card',
+        ],
+      ],
       [
         'half the corner radius on buttons and cards',
         [

@@ -578,29 +578,33 @@ function scaledBox(v, f) {
  * @returns {string}
  */
 function sharedAsk(q, partWords) {
-  return q
-    .split(/([;,.\n])/)
-    .map(seg => {
-      const m = /\s+and\s+/.exec(seg);
-      if (!m || /\band\b/.test(seg.slice(m.index + m[0].length))) return seg;
-      const left = seg.slice(0, m.index);
-      const right = seg.slice(m.index + m[0].length);
-      for (const [re] of partWords) {
-        const l = new RegExp(`(?:${re.source})\\s*$`).exec(left);
-        if (!l) continue;
-        for (const [re2] of partWords) {
-          const r = new RegExp(`^\\s*(?:${re2.source})`).exec(right);
-          if (!r) continue;
-          const lead = left.slice(0, l.index);
-          const tail = right.slice(r[0].length);
-          // Only when something is shared: an ask on one side.
-          if (!lead.trim() && !tail.trim()) return seg;
-          return `${lead}${l[0].trim()}${tail} and ${lead}${r[0].trim()}${tail}`;
+  return (
+    q
+      // The same breaks clausesOf splits at: a full stop only before a space
+      // or the end (never inside 0.5rem), a comma only outside parentheses.
+      .split(/([;\n]|,(?![^(]*\))|\.(?=\s|$))/)
+      .map(seg => {
+        const m = /\s+and\s+/.exec(seg);
+        if (!m || /\band\b/.test(seg.slice(m.index + m[0].length))) return seg;
+        const left = seg.slice(0, m.index);
+        const right = seg.slice(m.index + m[0].length);
+        for (const [re] of partWords) {
+          const l = new RegExp(`(?:${re.source})\\s*$`).exec(left);
+          if (!l) continue;
+          for (const [re2] of partWords) {
+            const r = new RegExp(`^\\s*(?:${re2.source})`).exec(right);
+            if (!r) continue;
+            const lead = left.slice(0, l.index);
+            const tail = right.slice(r[0].length);
+            // Only when something is shared: an ask on one side.
+            if (!lead.trim() && !tail.trim()) return seg;
+            return `${lead}${l[0].trim()}${tail} and ${lead}${r[0].trim()}${tail}`;
+          }
         }
-      }
-      return seg;
-    })
-    .join('');
+        return seg;
+      })
+      .join('')
+  );
 }
 
 /**
@@ -1661,11 +1665,12 @@ export function draftAnswer(ctx, env, question) {
       // The clause the word is in: from the last break before it (a comma,
       // semicolon, full stop or new line) to the next one after it.
       const head = String(all).slice(0, at);
-      const from =
-        Math.max(...[',', ';', '.', '\n'].map(b => head.lastIndexOf(b))) + 1;
+      // A full stop breaks only before a space or the end (never 1.5rem).
+      const breaks = [...head.matchAll(/[,;\n]|\.(?=\s|$)/g)];
+      const from = breaks.length ? (breaks.at(-1)?.index ?? -1) + 1 : 0;
       const clause = String(all)
         .slice(from)
-        .split(/[,;.\n]/)[0];
+        .split(/[,;\n]|\.(?=\s|$)/)[0];
       const text =
         /\b(bold(er)?|bigger|smaller|larger|font|weight|size|serif|sans|italic|heavier|lighter|thinner|uppercase|letter[- ]?spacing|tracking|line[- ]?height)\b/i.test(
           clause,
