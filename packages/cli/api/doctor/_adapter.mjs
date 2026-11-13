@@ -77,9 +77,7 @@ export {
   resolveThemeModule,
 } from '../../foundation/config/theme-state.mjs';
 export {
-  GENERATED_MARKER,
   fileMark,
-  generatedFileCommand,
   generatedSourceCommand,
   isPrivateVarRefusal,
   missingThemePackage,

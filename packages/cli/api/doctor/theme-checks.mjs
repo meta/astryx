@@ -479,7 +479,12 @@ function fontStylesheetEvidence(css, file, seen = new Set()) {
         unread = true;
         return;
       }
-      if (seen.has(target) || seen.size > 20) return;
+      if (seen.has(target)) return;
+      if (seen.size > 20) {
+        // Past the limit doctor follows, the rest is not proven either way.
+        unread = true;
+        return;
+      }
       seen.add(target);
       try {
         const inner = fontStylesheetEvidence(
@@ -1123,9 +1128,17 @@ export async function checkAppThemes(cwd) {
           ).test(discoveryError.message),
         )?.[0];
         // Only a theme the message names: never a guess at another one.
-        return named
-          ? `Fix or move what the message names, then run ${run} theme add ${named}`
-          : 'Fix or move what the message names, then run doctor again.';
+        if (!named)
+          return 'Fix or move what the message names, then run doctor again.';
+        // A theme another command generates: that command writes it again
+        // (its fix is no `theme build`).
+        const owner = String(state.themes[named]);
+        const fix = isLocalThemeOwner(owner)
+          ? refreshThemeCommand(state.projectDir, run, [], named, owner)
+          : null;
+        return fix && !fix.includes(' theme build ')
+          ? fix
+          : `Fix or move what the message names, then run ${run} theme add ${named}`;
       })(),
     });
   } else if (resolutionProblems.length > 0) {
@@ -1133,7 +1146,23 @@ export async function checkAppThemes(cwd) {
       id: 'theme-owners',
       label: 'Theme owners and built imports',
       status: 'fail',
-      message: resolutionProblems.map(problem => problem.message).join(' '),
+      message: resolutionProblems
+        .map(problem =>
+          // A theme another command generates is not rebuilt with `theme
+          // build`: its fix names that command, so its message does not.
+          refreshThemeCommand(
+            state.projectDir,
+            run,
+            available,
+            problem.slug,
+            problem.owner,
+          ).includes(' theme build ')
+            ? problem.message
+            : problem.message
+                .replace(/\s*Run `[^`]*theme build[^`]*` and try again\./, '')
+                .replace(/\s*Rebuild it with `[^`]*theme build[^`]*`\.?/, ''),
+        )
+        .join(' '),
       fix: resolutionProblems
         .map(problem =>
           refreshThemeCommand(

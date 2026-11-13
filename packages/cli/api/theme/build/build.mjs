@@ -931,9 +931,10 @@ function isDirectorySync(file) {
  * build's output, or a file the theme editor writes, with the command it
  * names. The one reader build and doctor share.
  * @param {string} source the start of the file
+ * @param {string} [file] its path, for a mark that names no exact command
  */
-export function fileMark(source) {
-  return generatedMark(source, GENERATED_MARKER);
+export function fileMark(source, file) {
+  return generatedMark(source, GENERATED_MARKER, file);
 }
 
 /**
@@ -945,7 +946,7 @@ export function fileMark(source) {
  * @returns {string | null}
  */
 export function generatedFileCommand(file) {
-  const mark = fileMark(fileHead(file));
+  const mark = fileMark(fileHead(file), file);
   return mark?.kind === 'editor' ? mark.command : null;
 }
 

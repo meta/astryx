@@ -1097,6 +1097,38 @@ describe('app-theme doctor checks', () => {
     expect(broken.fix).not.toMatch(/theme add (?!ocean\b)/);
   });
 
+  it('check 5 names the generating command when a marked source that re-exports its built module has none', async () => {
+    for (const mark of [
+      'Written by `astryx experimental theme editor show ocean`',
+      // A copy written before files named their exact command.
+      'Written by `astryx experimental theme editor`',
+    ]) {
+      const {dir} = await fixture();
+      await themeEject('ocean', {cwd: dir, package: '@acme/themes'});
+      const localDir = path.join(dir, 'src/themes/ocean');
+      const sourceFile = path.join(localDir, 'oceanTheme.ts');
+      fs.writeFileSync(
+        sourceFile,
+        "const oceanTheme = {name: 'ocean', tokens: {'--color-bg': '#000'}};\nexport {oceanTheme};\nexport default oceanTheme;\n",
+      );
+      await themeBuild(sourceFile, {}, {cwd: dir});
+      await themeAdd('ocean', {cwd: dir, import: true});
+      // The source re-exports its built module, as a generated copy does.
+      fs.writeFileSync(
+        sourceFile,
+        `// ${mark} after every build; do not edit it here.\nexport {oceanTheme, default} from './ocean.js';\n`,
+      );
+      fs.rmSync(path.join(localDir, 'ocean.js'));
+      const owners = check(await checkAppThemes(dir), 'theme-owners');
+      expect(owners.status, mark).toBe('fail');
+      expect(owners.fix, mark).toMatch(
+        / experimental theme editor show ocean; .* theme add ocean$/,
+      );
+      expect(owners.fix, mark).not.toMatch(/theme build/);
+      expect(owners.message, mark).not.toMatch(/Run `[^`]*theme build/);
+    }
+  });
+
   it('check 5 leaves a local theme that sets a private var to the private-variables check', async () => {
     const {dir} = await fixture();
     await themeEject('ocean', {cwd: dir, package: '@acme/themes'});
@@ -1438,6 +1470,27 @@ describe('app-theme doctor checks', () => {
         fontCss: '@import "@fontsource/not-installed/index.css";\n',
       },
     ]);
+    expect(check(await checkAppThemes(dir), 'theme-fonts')).toMatchObject({
+      status: 'warn',
+      message: expect.stringContaining('could not follow'),
+    });
+  });
+
+  it('check 9 warns, never fails, when a chain of local imports runs past the files it follows', async () => {
+    const {dir, packageDir} = await fixture([
+      {
+        slug: 'ocean',
+        fontFamily: 'Ocean Sans',
+        fontCss: '@import "./f1.css";\n',
+      },
+    ]);
+    for (let i = 1; i <= 22; i++)
+      write(
+        path.join(packageDir, `dist/f${i}.css`),
+        i < 22
+          ? `@import "./f${i + 1}.css";\n`
+          : '@font-face { font-family: "Ocean Sans"; src: url("./o.woff2"); }\n',
+      );
     expect(check(await checkAppThemes(dir), 'theme-fonts')).toMatchObject({
       status: 'warn',
       message: expect.stringContaining('could not follow'),
