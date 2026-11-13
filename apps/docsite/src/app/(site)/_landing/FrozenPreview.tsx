@@ -20,7 +20,7 @@ import styles from './FrozenPreview.module.css';
 // A client-side navigation to the homepage has no server HTML. The generate
 // step writes the same markup to this file for that case.
 // SYNC: CLIENT_NAVIGATION_URL in scripts/generate-landing-template-previews.mjs
-const CLIENT_NAVIGATION_URL = '/landing/landing-previews.json';
+const CLIENT_NAVIGATION_URL = '/landing-previews.json';
 
 let clientNavigationPreviews: Promise<Record<string, string>> | null = null;
 

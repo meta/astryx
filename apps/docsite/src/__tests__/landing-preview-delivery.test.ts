@@ -84,11 +84,57 @@ describe('landing preview map in the bundles', () => {
   });
 });
 
+type HeaderRule = {
+  source: string;
+  headers: Array<{key: string; value: string}>;
+};
+
+/** A header rule's `source` as a regular expression (named segments only). */
+function sourcePattern(source: string): RegExp {
+  const escaped = source
+    .split(/(\/:\w+[*+]?)/u)
+    .map(part => {
+      const param = /^\/:\w+([*+]?)$/u.exec(part);
+      if (param == null) {
+        return part.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+      }
+      if (param[1] === '*') {
+        return '(?:/.*)?';
+      }
+      return param[1] === '+' ? '/.+' : '/[^/]+';
+    })
+    .join('');
+  return new RegExp(`^${escaped}$`, 'u');
+}
+
 describe('client-side navigation file', () => {
   it('is a static file the docsite serves from its public folder', () => {
     expect(CLIENT_NAVIGATION_FILE).toBe(
       path.join(DOCSITE, 'public', CLIENT_NAVIGATION_URL),
     );
-    expect(CLIENT_NAVIGATION_URL).toMatch(/^\/landing\/[\w-]+\.json$/u);
+    expect(CLIENT_NAVIGATION_URL).toMatch(/^\/[\w/-]+\.json$/u);
+  });
+
+  it('gets no long-cache header, because every deploy rewrites it', async () => {
+    const {default: nextConfig} = await import('../../next.config.mjs');
+    const rules = await (
+      nextConfig as unknown as {headers: () => Promise<HeaderRule[]>}
+    ).headers();
+    const caching = rules.filter(
+      rule =>
+        sourcePattern(rule.source).test(CLIENT_NAVIGATION_URL) &&
+        rule.headers.some(
+          header =>
+            header.key.toLowerCase() === 'cache-control' &&
+            /max-age=[1-9]|stale-while-revalidate|immutable/u.test(
+              header.value,
+            ),
+        ),
+    );
+    expect(caching.map(rule => rule.source)).toEqual([]);
+    // The matcher reads the photo rule as covering what it covers.
+    expect(sourcePattern('/landing/:path*').test('/landing/a/b.json')).toBe(
+      true,
+    );
   });
 });

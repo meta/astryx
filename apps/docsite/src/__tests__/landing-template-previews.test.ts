@@ -114,18 +114,18 @@ describe('previewDocument', () => {
 
 describe('previewColorModeFragment', () => {
   it('adds nothing while the site follows the OS', () => {
-    expect(previewColorModeFragment('light', false)).toBe('');
-    expect(previewColorModeFragment('dark', true)).toBe('');
+    expect(previewColorModeFragment('light', 'light')).toBe('');
+    expect(previewColorModeFragment('dark', 'dark')).toBe('');
   });
 
   it('adds nothing on the server and through hydration, whatever the OS scheme reads as', () => {
-    expect(previewColorModeFragment('system', false)).toBe('');
-    expect(previewColorModeFragment('system', true)).toBe('');
+    expect(previewColorModeFragment('system', 'light')).toBe('');
+    expect(previewColorModeFragment('system', 'dark')).toBe('');
   });
 
   it('names the mode that a visitor set against the OS', () => {
-    expect(previewColorModeFragment('dark', false)).toBe('#dark');
-    expect(previewColorModeFragment('light', true)).toBe('#light');
+    expect(previewColorModeFragment('dark', 'light')).toBe('#dark');
+    expect(previewColorModeFragment('light', 'dark')).toBe('#light');
   });
 });
 

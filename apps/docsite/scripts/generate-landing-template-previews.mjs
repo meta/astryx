@@ -10,7 +10,7 @@
  *   as one self-contained page with no script. `#light` or `#dark` in its URL
  *   sets its color mode. src/generated/landingPreviews.ts: the themes card
  *   store's markup, which uses the site's own StyleX classes. The same
- *   markup as public/landing/landing-previews.json, for a client-side
+ *   markup as public/landing-previews.json, for a client-side
  *   navigation to the homepage.
  * @position Part of `pnpm generate`, before the docsite build and dev server.
  *   TemplatesPreview shows the tile pages in frames. FrozenPreview puts the
@@ -41,13 +41,15 @@ const outDir = path.join(docsiteDir, 'public/landing/template-previews');
 const outFile = path.join(docsiteDir, 'src/generated/landingPreviews.ts');
 /**
  * The URL of the same markup as JSON. A client-side navigation to the
- * homepage has no server HTML, so FrozenPreview loads this file then.
+ * homepage has no server HTML, so FrozenPreview loads this file then. Every
+ * deploy rewrites it, so it stays outside /landing/, whose photo cache rule
+ * (next.config.mjs) would serve an older build's markup.
  * SYNC: CLIENT_NAVIGATION_URL in src/app/(site)/_landing/FrozenPreview.tsx
  */
-export const CLIENT_NAVIGATION_URL = '/landing/landing-previews.json';
+export const CLIENT_NAVIGATION_URL = '/landing-previews.json';
 export const CLIENT_NAVIGATION_FILE = path.join(
   docsiteDir,
-  'public/landing/landing-previews.json',
+  'public/landing-previews.json',
 );
 // The page template the themes card shows.
 const STORE_TEMPLATE = 'theme-showcase';

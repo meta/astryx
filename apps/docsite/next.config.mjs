@@ -25,13 +25,13 @@ const playgroundCookieCompatibility = readFileSync(
   'utf8',
 );
 
-// Slugs that are not pages of their own (generate-data.mjs): a guide under a
-// docs-tree namespace opens at its section on the namespace's full page, and
-// a flat topic merged into another page opens there.
 const landingPreviewsInBrowser = resolve(
   import.meta.dirname,
   'src/app/(site)/_landing/landingPreviewsInBrowser.ts',
 );
+// Slugs that are not pages of their own (generate-data.mjs): a guide under a
+// docs-tree namespace opens at its section on the namespace's full page, and
+// a flat topic merged into another page opens there.
 const docRedirectsPath = resolve(
   import.meta.dirname,
   'src/generated/docRedirects.json',
