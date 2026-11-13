@@ -66,6 +66,9 @@ const REFERENCE =
  */
 const CHANGE_HEADS = new Set(loadEditHeads());
 
+/** The words that name a page itself rather than what is on it. */
+const PAGE_WORD = /\b(?:page|app|screen|site|view)s?\b/;
+
 /**
  * The word that marks an idea asking for a new page ("a new dashboard", "as a
  * new page"), which is never a change to one the builder has.
@@ -121,7 +124,7 @@ function changesExistingPage(text, familyWords, components) {
   const componentWords = new Set(components.flatMap(nameTerms));
   const phrases = text.toLowerCase().split(PHRASE_END);
   if (asksNewPage(phrases, familyWords)) return false;
-  if (opensAChange(text)) return true;
+  if (opensAChange(text, familyWords, componentWords)) return true;
   return phrases.some(phrase => {
     const at = phrase.search(EXISTING);
     return (
@@ -134,16 +137,28 @@ function changesExistingPage(text, familyWords, components) {
 }
 
 /**
- * Whether an idea opens with a change word and names something the builder
- * already has: "update the current dashboard with drilldowns", "add a chart
- * to the existing page". The reference alone does not make a change: "a
- * dashboard of current incidents" asks for a page.
+ * Whether an idea opens with a change word and names a page or part the
+ * builder already has: "update the current dashboard with drilldowns", "add a
+ * chart to the existing page". The words right after "existing" or "current"
+ * must name a family of page templates, one of the system's components, or a
+ * page itself: "show the current sprint tasks on a board" and "a dashboard of
+ * current incidents" ask for pages.
  * @param {string} text
+ * @param {Map<string, string>} familyWords
+ * @param {Set<string>} componentWords
  * @returns {boolean}
  */
-function opensAChange(text) {
-  const first = text.toLowerCase().match(/[a-z0-9']+/)?.[0] ?? '';
-  return CHANGE_HEADS.has(first) && REFERENCE.test(text);
+function opensAChange(text, familyWords, componentWords) {
+  const lower = text.toLowerCase();
+  const first = lower.match(/[a-z0-9']+/)?.[0] ?? '';
+  if (!CHANGE_HEADS.has(first)) return false;
+  const found = REFERENCE.exec(lower);
+  if (!found) return false;
+  const named = lower.slice(found.index + found[0].length).split(PHRASE_END)[0];
+  return (
+    PAGE_WORD.test(named) ||
+    terms(named).some(t => familyWords.has(t) || componentWords.has(t))
+  );
 }
 
 /**

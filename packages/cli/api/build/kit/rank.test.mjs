@@ -273,6 +273,8 @@ describe('ideaKind: a part of a page, told by the components the system ships', 
     page('table', 'Table - Basic', 'Rows of records.'),
     page('table-filter', 'Table - Filtering', 'Rows narrowed by filters.'),
     page('settings', 'Settings', 'Grouped preferences.'),
+    page('kanban-board', 'Kanban Board', 'Cards in status columns.'),
+    page('dashboard', 'Dashboard', 'Charts and key numbers.'),
   ];
   const components = [
     component('DateRangeInput', ['date picker']),
@@ -333,6 +335,8 @@ describe('ideaKind: a part of a page, told by the components the system ships', 
     expect(kind('update the current dashboard with drilldowns')).toBe('edit');
     expect(kind('add a chart to the existing page')).toBe('edit');
     expect(kind('a dashboard of current incidents')).toBe('page');
+    // A change word with "current" data, but no page or part the builder has.
+    expect(kind('show the current sprint tasks on a kanban board')).toBe('page');
   });
 
   it('does not take a request for a new page as an edit', () => {
