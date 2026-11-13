@@ -130,33 +130,13 @@ function mentionPattern(term, t) {
 }
 
 /**
- * Each prose text lowercased once per process: a search reads every
- * candidate's description for every term.
- * @type {Map<string, string>}
- */
-const lowered = new Map();
-
-/** How many texts are kept lowercased before the cache starts over. */
-const CACHE_LIMIT = 100_000;
-
-/**
- * @param {string} text
- * @returns {string}
- */
-function lower(text) {
-  let out = lowered.get(text);
-  if (out === undefined) {
-    if (lowered.size >= CACHE_LIMIT) lowered.clear();
-    out = text.toLowerCase();
-    lowered.set(text, out);
-  }
-  return out;
-}
-
-/**
- * Each candidate's names and keywords lowercased once, and its prose read
- * lowercased on demand: a search scores every candidate for every term and
- * synonym. Keyed by the candidate object, so it goes when the catalog does.
+ * Each candidate's names and keywords lowercased once, and its description,
+ * prose and guidance lowercased on first use: a search scores every candidate
+ * for every term and synonym. Keyed by the candidate object, so it goes when
+ * the catalog does. A candidate's name, aliases, keywords, description, prose
+ * and guidance must not change after its first score, as no catalog changes
+ * them: an edited candidate, including one in a stored index passed to
+ * `rankSearchIndex()` again, would still be scored on its first text.
  * @type {WeakMap<object, {names: {name: string, lower: string, leaf: string}[], keywords: {kw: string, text: string, lower: string}[], description?: string, prose: (string | undefined)[], guidance: (string | undefined)[]}>}
  */
 const prepared = new WeakMap();
@@ -407,7 +387,7 @@ export function scoreCandidate(
   // so "chart" matches "charts" and "filter" matches "filtering".
   if (term.length >= 3) {
     const re = mentionPattern(term, t);
-    if (description && re.test((p.description ??= lower(description)))) {
+    if (description && re.test((p.description ??= description.toLowerCase()))) {
       consider(50, `description mentions "${term}"`);
     } else {
       let matchedProse = false;
