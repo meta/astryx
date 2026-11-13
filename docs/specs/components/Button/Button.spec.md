@@ -224,7 +224,8 @@ Consumer migration instructions belong in consumer docs and release notes.
   `CanvasText` on `destructive` (`architecture:theme-tokens` INV11). In a
   ButtonGroup, the group's dividers stay and its first and last buttons close
   the group's outer edge, with no doubled seam. `ghost` stays borderless.
-  Outside forced colors no border is added.
+  Outside forced colors no border is added. A theme that sets a solid
+  variant's own border width keeps it.
 
 Implementation gap: Button's hover and pressed overlays on the dark accent give
 its label 4.35:1 and 4.02:1, under 4.5:1.
