@@ -201,6 +201,42 @@ const mergeVegaLiteConfig = mergeConfig as unknown as (
   ...configs: VegaLiteConfig[]
 ) => VegaLiteConfig;
 
+/** The theme's per-axis blocks. Vega-Lite applies each one over `axis`. */
+const PER_AXIS_KEYS = [
+  'axisX',
+  'axisY',
+  'axisXQuantitative',
+  'axisYQuantitative',
+] as const;
+
+/**
+ * The theme config without each per-axis value that a later generic `axis`
+ * block sets. Vega-Lite applies `axisX` and the other per-axis blocks over
+ * `axis`, so a themed `axisX.grid` would otherwise outrank a caller's
+ * `axis.grid`.
+ */
+function withoutOverriddenAxisValues(
+  theme: VegaLiteConfig,
+  overrides: ReadonlyArray<VegaLiteConfig | undefined>,
+): VegaLiteConfig {
+  const setKeys = new Set(
+    overrides.flatMap(config => Object.keys(config?.axis ?? {})),
+  );
+  if (setKeys.size === 0) {
+    return theme;
+  }
+  const result: Record<string, unknown> = {...theme};
+  for (const key of PER_AXIS_KEYS) {
+    const block = theme[key];
+    if (block) {
+      result[key] = Object.fromEntries(
+        Object.entries(block).filter(([prop]) => !setKeys.has(prop)),
+      );
+    }
+  }
+  return result as VegaLiteConfig;
+}
+
 /**
  * Layer the Astryx theme underneath a caller's Vega-Lite compile options.
  *
@@ -222,8 +258,12 @@ const mergeVegaLiteConfig = mergeConfig as unknown as (
 export function withAstryxConfig(
   token: TokenResolver,
   compileOptions?: CompileOptions,
+  specConfig?: VegaLiteConfig,
 ): CompileOptions {
-  const theme = buildVegaLiteConfig(token);
+  const theme = withoutOverriddenAxisValues(buildVegaLiteConfig(token), [
+    compileOptions?.config as VegaLiteConfig | undefined,
+    specConfig,
+  ]);
   return {
     ...compileOptions,
     config: compileOptions?.config

@@ -499,6 +499,18 @@ describe('VegaChart', () => {
       expect(container.firstElementChild?.tagName).toBe('DIV');
     });
 
+    it('renders an empty container and reports through onError when spec is missing', () => {
+      const onError = vi.fn();
+      const {container} = render(
+        <VegaChart spec={undefined as unknown as AnySpec} onError={onError} />,
+      );
+
+      expect(onError).toHaveBeenCalledTimes(1);
+      expect(onError.mock.calls[0][0]).toBeInstanceOf(Error);
+      expect(views).toHaveLength(0);
+      expect(container.firstElementChild?.tagName).toBe('DIV');
+    });
+
     it('routes a synchronous compile failure to onError without constructing a View', () => {
       const onError = vi.fn();
       const boom = new Error('compile exploded');

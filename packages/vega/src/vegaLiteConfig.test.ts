@@ -10,6 +10,7 @@
  */
 
 import {describe, it, expect} from 'vitest';
+import {compile, type TopLevelSpec} from 'vega-lite';
 import {
   getChartColorsFromResolver,
   type TokenResolver,
@@ -156,5 +157,56 @@ describe('withAstryxConfig', () => {
       getChartColorsFromResolver(echo).categorical(10),
     );
     expect(options.config?.axis?.labelColor).toBe('--color-text-secondary');
+  });
+});
+
+describe('theme, caller and spec config through Vega-Lite', () => {
+  const spec = {
+    $schema: 'https://vega.github.io/schema/vega-lite/v6.json',
+    data: {
+      values: [
+        {a: 1, b: 1},
+        {a: 2, b: 3},
+      ],
+    },
+    mark: 'point',
+    encoding: {
+      x: {field: 'a', type: 'quantitative'},
+      y: {field: 'b', type: 'quantitative'},
+    },
+  } as TopLevelSpec;
+
+  /** The orients of the grid axes the compiled spec draws. */
+  const gridOrients = (compiled: ReturnType<typeof compile>) =>
+    (compiled.spec.axes ?? [])
+      .filter(axis => axis.grid === true)
+      .map(axis => axis.orient);
+
+  it('draws only the y grid under the theme alone', () => {
+    const orients = gridOrients(compile(spec, withAstryxConfig(echo)));
+    expect(orients).toContain('left');
+    expect(orients).not.toContain('bottom');
+  });
+
+  it("lets the caller's generic axis key outrank the theme's per-axis value", () => {
+    const orients = gridOrients(
+      compile(spec, withAstryxConfig(echo, {config: {axis: {grid: true}}})),
+    );
+    expect(orients).toContain('bottom');
+  });
+
+  it("lets the spec's inline generic axis key outrank the theme's per-axis value", () => {
+    const inline = {...spec, config: {axis: {grid: true}}} as TopLevelSpec;
+    const orients = gridOrients(
+      compile(inline, withAstryxConfig(echo, undefined, {axis: {grid: true}})),
+    );
+    expect(orients).toContain('bottom');
+  });
+
+  it('keeps the theme per-axis value for a key no override sets', () => {
+    const options = withAstryxConfig(echo, {
+      config: {axis: {labelFontSize: 14}},
+    });
+    expect(options.config?.axisX?.grid).toBe(false);
   });
 });

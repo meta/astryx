@@ -19,6 +19,7 @@ import {parseSchema} from './schema';
 import {withAstryxConfig} from './vegaLiteConfig';
 import {latchViewInputs, latchIsCurrent} from './viewInputs';
 import type {ViewInputs} from './viewInputs';
+import type {Config as VegaLiteConfig} from 'vega-lite';
 import type {VegaChartProps, VegaSpec, VegaLiteSpec} from './types';
 
 /**
@@ -118,10 +119,15 @@ export function VegaChart({
   // nothing. The merge is redone every render, not memoized on the caller's
   // object, so an in-place edit to `compileOptions` still reaches the latch.
   const {token} = useTheme();
-  const schema = parseSchema(spec.$schema);
+  // A missing spec renders an empty container and reports through onError.
+  const schema = parseSchema(spec?.$schema);
   const isVegaLite = schema.ok && schema.library === 'vega-lite';
   const effectiveCompileOptions = isVegaLite
-    ? withAstryxConfig(token, compileOptions)
+    ? withAstryxConfig(
+        token,
+        compileOptions,
+        (spec as {config?: VegaLiteConfig}).config,
+      )
     : compileOptions;
 
   // Rebuild only when a value the runtime is built from actually differs.
