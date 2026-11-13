@@ -25,6 +25,7 @@ import {
 } from './_catalog.mjs';
 import {
   catalogVariants,
+  demoProps,
   needsParent,
   renderDir,
   renderGenerated,
@@ -37,6 +38,7 @@ import {importPathOf, installLine} from './_project.mjs';
 import {COLOR_PROP_PARTS, DIRECT, P, wordTable} from './_tables.mjs';
 import {extractImportedPackages} from '../../foundation/discovery/template-needs.mjs';
 import {findNodeModulesPackage} from '../../foundation/fs/paths.mjs';
+import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 
 const TEMPLATES_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -187,6 +189,23 @@ function inParentOf(project, name) {
   const info = project.components[name];
   if (!info?.subComponentOf) return tree => tree;
   const wrapper = info.wrapper;
+  // A part of a parent that shows inline (a dialog's header) renders inside
+  // that parent shown open and inline, as Core's docs show it: alone, it
+  // acts as in a modal one (a dialog header takes focus as it mounts).
+  const of = info.subComponentOf;
+  const parent = project.components[of];
+  if (!wrapper && parent?.props?.isInline && parent.props.isOpen) {
+    const props = Object.fromEntries(
+      Object.entries(demoProps(project, of) ?? {}).filter(
+        ([k]) => k !== 'children',
+      ),
+    );
+    return tree => ({
+      __element: of,
+      props: {...props, isOpen: true, isInline: true},
+      children: [tree],
+    });
+  }
   // A part its parent does not list as an item, such as a heading of the
   // text family, renders on its own.
   if (!wrapper) return needsParent(project, name) ? null : tree => tree;
@@ -867,7 +886,19 @@ const PAGE_SKIP = new Set([
  * @param {{theme?: string | null, C?: import('./_compiler.mjs').Compiler}} [options]
  * @returns {{source: string, components: number}}
  */
-export function componentsPageSource(project, {theme = null, C} = {}) {
+export function componentsPageSource(project, options = {}) {
+  // A name that Core's docs lack resolves by walking Core's source tree. One
+  // listing cache reads each folder once for the page, not once per name.
+  return withListingCache(() => componentsPage(project, options));
+}
+
+/**
+ * {@link componentsPageSource}'s work, inside its listing cache.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {{theme?: string | null, C?: import('./_compiler.mjs').Compiler}} options
+ * @returns {{source: string, components: number}}
+ */
+function componentsPage(project, {theme = null, C}) {
   const items = showcaseItems(project, undefined)
     .items.filter(
       it =>
@@ -948,10 +979,18 @@ export function componentsPageSource(project, {theme = null, C} = {}) {
  *   the preview has a Colors page, so the header points to it
  * @returns {string}
  */
-export function overviewPageSource(
-  project,
-  {theme = null, colors = false} = {},
-) {
+export function overviewPageSource(project, options = {}) {
+  // One listing cache for the page's names, as componentsPageSource holds.
+  return withListingCache(() => overviewPage(project, options));
+}
+
+/**
+ * {@link overviewPageSource}'s work, inside its listing cache.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {{theme?: string | null, colors?: boolean}} options
+ * @returns {string}
+ */
+function overviewPage(project, {theme = null, colors = false}) {
   const sections = OVERVIEW_SECTIONS.map(x => ({
     title: x.title,
     tree: /** @type {import('./_catalog.mjs').Tree | undefined} */ (
@@ -1254,7 +1293,13 @@ export function previewRouteSource({
     "import {TopNav} from '@astryxdesign/core/TopNav';",
     ...(theme
       ? [
-          "import {SegmentedControl, SegmentedControlItem} from '@astryxdesign/core/SegmentedControl';",
+          // The mode switch only for a theme with both modes: an import the
+          // route does not draw fails an app with noUnusedLocals.
+          ...(mode.length
+            ? [
+                "import {SegmentedControl, SegmentedControlItem} from '@astryxdesign/core/SegmentedControl';",
+              ]
+            : []),
           "import {Theme} from '@astryxdesign/core/theme';",
           `import {${camelName(theme.name)}Theme as theme} from ${JSON.stringify(theme.module.replace(/\.js$/, ''))};`,
           ...theme.css.map(c => `import ${JSON.stringify(c)};`),

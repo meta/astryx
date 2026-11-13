@@ -28,7 +28,7 @@ import {createRequire} from 'node:module';
 import {readDocView} from '../doc-compiler/read.mjs';
 import {importDocModule} from '../doc-compiler/import.mjs';
 import {readStore, storedKey} from '../doc-compiler/stored-docs.mjs';
-import {CLI_ROOT, discoverExternalPackages} from '../fs/paths.mjs';
+import {CLI_ROOT, discoverExternalPackages, realDir} from '../fs/paths.mjs';
 import {listDirEntries} from '../fs/listing-cache.mjs';
 import {CORE_PROVIDER_ID} from '../identity/providers.mjs';
 import {Project} from '../config/project.mjs';
@@ -40,6 +40,9 @@ import {
   writtenNames,
   TEMPLATE_COMPONENTS_FILE,
 } from './template-source-tree.mjs';
+import {persistedGather} from '../fs/gather-cache.mjs';
+import {EXACT_CODEC} from '../fs/exact-codec.mjs';
+import {hostedRun} from '../runtime/package-root.mjs';
 
 const require = createRequire(import.meta.url);
 
@@ -1576,6 +1579,31 @@ export async function discoverAllUnresolved(cwd = process.cwd()) {
  * @returns {Promise<{templates: DiscoveredTemplate[], errors: Array<TemplateDiscoveryError | TemplateReplacementError>}>}
  */
 async function resolveAllSources(cwd = process.cwd()) {
+  // A function of the files discovery reads, which the kept gather stamps:
+  // a later run with every one unchanged reads the records back.
+  return /** @type {Awaited<ReturnType<typeof resolveAllSourcesNow>>} */ (
+    await persistedGather(
+      // The folder, and the copy of the CLI that answers with the
+      // integrations a host approves: outside a project the integrations
+      // beside the answering copy load too.
+      [
+        'template-sources',
+        realDir(cwd),
+        CLI_ROOT,
+        hostedRun()?.integrations ?? [],
+      ],
+      () => resolveAllSourcesNow(cwd),
+      EXACT_CODEC,
+    )
+  );
+}
+
+/**
+ * resolveAllSources, worked out now.
+ * @param {string} cwd
+ * @returns {Promise<{templates: DiscoveredTemplate[], errors: Array<TemplateDiscoveryError | TemplateReplacementError>}>}
+ */
+async function resolveAllSourcesNow(cwd) {
   const discovered = await discoverAllSources(cwd);
   const replacementErrors = discovered.errors.filter(
     error => error.replacementTarget != null,

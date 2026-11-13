@@ -16,9 +16,10 @@
  *   (foundation/config/project.mjs) for its integration issues: each
  *   integration's contribution-check results and the whole list (with the
  *   template and component replacement passes), which `component`,
- *   `template`, `theme`, `discover` and `search` report, and by `doctor`
- *   (api/doctor/_adapter.mjs) for its file-only docs checks, in a run that
- *   records modules and variables to its end. Gathers are kept only once the folder exists: the first such run
+ *   `template`, `theme`, `discover` and `search` report, by template
+ *   discovery (foundation/discovery/template-adapter.mjs) for its records,
+ *   and by `doctor` (api/doctor/_adapter.mjs) for its file-only docs checks,
+ *   in a run that records modules and variables to its end. Gathers are kept only once the folder exists: the first such run
  *   on a machine just makes it, so a one-off run pays nothing to store one. Only a published CLI stores anything:
  *   its build id (clients/cli/build-id.generated.json, written at `prepack`)
  *   names its exact code, so a checkout, whose code may change between runs
@@ -52,8 +53,10 @@ import {
 } from './read-record.mjs';
 
 /**
- * The kept commands whose only kept gather is their integrations' check
- * results: a project with no integration records none of them.
+ * The kept commands whose kept gathers are worth recording only where an
+ * integration can load (its check results, and template discovery, whose
+ * records hold Core's templates too but which costs little without one): a
+ * project with no integration records none of them.
  */
 const INTEGRATION_COMMANDS = new Set([
   'component',
@@ -238,8 +241,9 @@ export async function recordRunFor(argv, fn) {
     runsUnderPnp() ||
     currentUid() == null ||
     withoutRecording(buildId) == null ||
-    // Last, being a few file checks: those commands keep only their
-    // integrations' check results, so a project with none records nothing.
+    // Last, being a few file checks: those commands keep what is worth
+    // keeping only where an integration can load, so a project with none
+    // records nothing.
     (INTEGRATION_COMMANDS.has(command) &&
       !withoutRecording(() => mayHaveIntegrations(process.cwd())))
   ) {
