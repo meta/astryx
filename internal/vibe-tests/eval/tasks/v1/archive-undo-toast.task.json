@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "id": "archive-undo-toast",
+  "source": "new",
+  "title": "Archive with an announced undo notification",
+  "prompt": "Show an inbox with three messages: \"Welcome to Orbit\", \"Your invoice is ready\" and \"Weekly summary\". Each row has a button whose accessible name is \"Archive\" followed by the message title, for example \"Archive Weekly summary\". Archiving removes the row and shows a notification with the text \"Message archived\" and an \"Undo\" button. Screen readers must announce the notification, so it is in a live region. Undo puts the message back in its original position and hides the notification."
+}

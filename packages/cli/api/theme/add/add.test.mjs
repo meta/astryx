@@ -3,6 +3,7 @@
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import * as os from 'node:os';
 import {themeAdd} from './add.mjs';
 import {themeEject} from '../eject/eject.mjs';
 import {
@@ -232,6 +233,41 @@ describe('themeAdd', () => {
     expect(result.data.change).toMatchObject({action: 'add', changed: true});
     expect(fs.existsSync(path.join(tmpDir, 'src/astryx-themes.ts'))).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, 'src/themes/ocean'))).toBe(false);
+  });
+
+  it('accepts the import package it records as --package for a bundled theme', async () => {
+    installBuiltThemePackage('neutral');
+    const result = await themeAdd('neutral', {
+      cwd: tmpDir,
+      package: '@astryxdesign/theme-neutral',
+    });
+    expect(result.data.themes).toEqual([
+      expect.objectContaining({
+        slug: 'neutral',
+        owner: '@astryxdesign/theme-neutral',
+      }),
+    ]);
+  });
+
+  it('names the install and then the add for a bundled theme whose package is missing', async () => {
+    const app = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'astryx-theme-add-bare-'),
+    );
+    try {
+      fs.mkdirSync(path.join(app, 'src'));
+      fs.writeFileSync(path.join(app, 'package.json'), '{"name":"app"}\n');
+      await expect(themeAdd('butter', {cwd: app})).rejects.toMatchObject({
+        message: expect.stringContaining(
+          'The app imports butter from it, so install it, then add the theme',
+        ),
+        suggestions: [
+          {name: expect.stringMatching(/@astryxdesign\/theme-butter$/)},
+          {name: expect.stringMatching(/ theme add butter$/)},
+        ],
+      });
+    } finally {
+      fs.rmSync(app, {recursive: true, force: true});
+    }
   });
 
   it('keeps the released CLI selector while recording the import package', async () => {

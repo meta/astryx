@@ -118,7 +118,7 @@ export function demoProps(project, name) {
       // A doc that declares no props of its own name is a family page,
       // not a component the Core exports.
       !Object.keys(info.props ?? {}).length ||
-      (info.subComponentOf && isItemOf(project, name)))
+      needsParent(project, name))
   )
     return null;
   const props = given ?? {};
@@ -142,6 +142,22 @@ export function demoProps(project, name) {
     }
   }
   return props;
+}
+
+/**
+ * Whether a part works only inside its parent: its parent lists it as an
+ * item, or it is a piece of its parent by name (TableBody of Table) and
+ * its doc gives no playground of its own.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string} name
+ */
+export function needsParent(project, name) {
+  const info = project.components[name];
+  const parent = info?.subComponentOf;
+  if (!parent) return false;
+  if (isItemOf(project, name)) return true;
+  const own = info.defaults && typeof info.defaults === 'object';
+  return !own && name.startsWith(parent) && name !== parent;
 }
 
 /**
@@ -172,14 +188,25 @@ export function isItemOf(project, name) {
  */
 export function catalogVariants(project, name, cap, opts = {}) {
   const info = project.components[name];
-  const demo = demoProps(project, name);
-  if (!demo) return [];
-  if (info.opens && opts.shown)
-    return [
-      {label: '', props: 'isOpen' in demo ? demo : {...demo, isOpen: true}},
-    ];
-  const base =
-    info.opens && !('isOpen' in demo) ? {...demo, isOpen: true} : demo;
+  const own = demoProps(project, name);
+  if (!own) return [];
+  // No demo takes focus as it mounts: on a page of many, each would pull
+  // the page to itself.
+  /** @type {Record<string, unknown>} */
+  const demo = {
+    ...own,
+    ...(info.props?.hasAutoFocus ? {hasAutoFocus: false} : {}),
+    ...(info.props?.autoFocus && own.autoFocus ? {autoFocus: false} : {}),
+  };
+  // An overlay shown open, named, as a dialog must be.
+  /** @param {Record<string, unknown>} d @returns {Record<string, unknown>} */
+  const opened = d => ({
+    ...d,
+    ...('isOpen' in d ? {} : {isOpen: true}),
+    ...(info.props?.label && d.label == null ? {label: `${name} example`} : {}),
+  });
+  if (info.opens && opts.shown) return [{label: '', props: opened(demo)}];
+  const base = info.opens ? opened(demo) : demo;
   const values = info.targets[0]?.values ?? {};
   const variants = [{label: '', props: base}];
   for (const p of ['variant', 'status', 'color'])
@@ -477,6 +504,108 @@ async function buildPartData(project) {
     rendered: (markup.match(/<section data-cat=/g) ?? []).length,
     items: all.length,
   };
+}
+
+/**
+ * The value Core falls back to where its stylesheet reads a variable
+ * (`var(--astryx-card-padding, var(--spacing-4))` gives `var(--spacing-4)`),
+ * or null when it gives none.
+ * @param {any} project
+ * @param {string} name
+ * @returns {string | null}
+ */
+export function coreFallback(project, name) {
+  /** @type {string} */
+  let css;
+  try {
+    css = fs.readFileSync(
+      project.req.resolve('@astryxdesign/core/astryx.css'),
+      'utf8',
+    );
+  } catch {
+    return null;
+  }
+  const at = css.indexOf(`var(${name},`);
+  if (at < 0) return null;
+  let depth = 0;
+  const from = at + `var(${name},`.length;
+  for (let j = from; j < css.length; j++) {
+    if (css[j] === '(') depth++;
+    else if (css[j] === ')') {
+      if (depth === 0) return css.slice(from, j).trim();
+      depth--;
+    }
+  }
+  return null;
+}
+
+/** @type {Map<string, Set<string>>} */
+const calcCache = new Map();
+
+/**
+ * The variables Core's stylesheet reads inside a calc() (a composer's
+ * padding in its send button's radius): only one length works there.
+ * Empty with no stylesheet.
+ * @param {any} project
+ * @returns {Set<string>}
+ */
+export function calcVars(project) {
+  /** @type {string} */
+  let file;
+  try {
+    file = project.req.resolve('@astryxdesign/core/astryx.css');
+  } catch {
+    return new Set();
+  }
+  const cached = calcCache.get(file);
+  if (cached) return cached;
+  const css = fs.readFileSync(file, 'utf8');
+  /** @type {Set<string>} */
+  const out = new Set();
+  for (let i = css.indexOf('calc('); i >= 0; i = css.indexOf('calc(', i + 5)) {
+    let depth = 0;
+    let j = i + 4;
+    for (; j < css.length; j++) {
+      if (css[j] === '(') depth++;
+      else if (css[j] === ')' && --depth === 0) break;
+    }
+    for (const m of css.slice(i, j).matchAll(/var\((--[a-z0-9_-]+)/gi))
+      out.add(m[1].toLowerCase());
+  }
+  calcCache.set(file, out);
+  return out;
+}
+
+/** @type {Map<string, Set<string>>} */
+const multipliedCache = new Map();
+
+/**
+ * The tokens Core's stylesheet multiplies by another value inside calc()
+ * (`var(--text-body-size) * var(--text-body-leading)`): a unit there makes
+ * the declaration invalid. Empty with no stylesheet.
+ * @param {any} project
+ * @returns {Set<string>}
+ */
+export function multipliedTokens(project) {
+  /** @type {string} */
+  let file;
+  try {
+    file = project.req.resolve('@astryxdesign/core/astryx.css');
+  } catch {
+    return new Set();
+  }
+  const cached = multipliedCache.get(file);
+  if (cached) return cached;
+  const css = fs.readFileSync(file, 'utf8');
+  /** @type {Set<string>} */
+  const out = new Set();
+  // Each side of a `*` on its own, so `a * b * c` names all three.
+  for (const m of css.matchAll(/var\((--[a-z0-9-]+)\)(?=\s*\*)/gi))
+    out.add(m[1].toLowerCase());
+  for (const m of css.matchAll(/\*\s*var\((--[a-z0-9-]+)\)/gi))
+    out.add(m[1].toLowerCase());
+  multipliedCache.set(file, out);
+  return out;
 }
 
 /**

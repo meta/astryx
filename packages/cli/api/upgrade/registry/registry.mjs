@@ -1120,8 +1120,13 @@ export function logRegistryCompositionSummary(summary) {
         ) {
           continue;
         }
+        // Only an apply writes the conflict file; a dry run names where it
+        // would go, so it does not send the reader to review a file that is
+        // not there.
         const detail = file.conflictFile
-          ? ` Review ${file.conflictFile}.`
+          ? summary.applied
+            ? ` Review ${file.conflictFile}.`
+            : ` Re-run with --apply to write ${file.conflictFile} for review.`
           : file.message
             ? ` ${file.message}.`
             : '';

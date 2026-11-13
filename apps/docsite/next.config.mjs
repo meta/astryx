@@ -167,6 +167,20 @@ const nextConfig = {
           },
         ],
       },
+      // The homepage photos and the template preview photos keep their URL
+      // when a file changes, so they are not immutable. A visitor uses the
+      // cached copy for a day, then for 30 more days while the browser
+      // checks for a new one in the background. The image optimizer takes
+      // the same lifetime from these headers for its converted copies.
+      ...['/landing/:path*', '/template-assets/:path*'].map(source => ({
+        source,
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=86400, stale-while-revalidate=2592000',
+          },
+        ],
+      })),
     ];
   },
   webpack: (config, {isServer, webpack}) => {
