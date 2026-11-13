@@ -740,6 +740,8 @@ export function NumberInput({
   hasClear,
   onEnter,
   onKeyDown,
+  onCompositionStart,
+  onCompositionEnd,
   width,
   containerXstyle,
   containerClassName,
@@ -1037,12 +1039,17 @@ export function NumberInput({
     ],
   );
 
+  // The field owns the input's composition handlers, so it runs the caller's
+  // too, except while disabled, where caller handlers are withheld.
   const handleCompositionStart = useCallback(
     (e: CompositionEvent<HTMLInputElement>) => {
       isComposingRef.current = true;
       compositionStartTextRef.current = e.currentTarget.value;
+      if (!isDisabled) {
+        onCompositionStart?.(e);
+      }
     },
-    [],
+    [isDisabled, onCompositionStart],
   );
 
   const handleCompositionEnd = useCallback(
@@ -1050,6 +1057,9 @@ export function NumberInput({
       isComposingRef.current = false;
       const previousText = compositionStartTextRef.current;
       compositionStartTextRef.current = undefined;
+      if (!isDisabled) {
+        onCompositionEnd?.(e);
+      }
       if (isDisabled || isReadOnly || !isGroupedWhileEditing) {
         return;
       }
@@ -1064,7 +1074,13 @@ export function NumberInput({
           : (toAsciiDigits(input.value.slice(0, caret))?.length ?? caret);
       applyGroupedDraft(input, text, foldedCaret, previousText);
     },
-    [applyGroupedDraft, isDisabled, isGroupedWhileEditing, isReadOnly],
+    [
+      applyGroupedDraft,
+      isDisabled,
+      isGroupedWhileEditing,
+      isReadOnly,
+      onCompositionEnd,
+    ],
   );
 
   // Handle focus
