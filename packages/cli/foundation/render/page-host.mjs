@@ -20,24 +20,17 @@
  * @position foundation/render — started by render-page.mjs
  */
 
+import * as fs from 'node:fs';
 import * as os from 'node:os';
 import {Worker} from 'node:worker_threads';
 import {HOST_EXIT} from './host-exit.mjs';
+import {makeAnswer} from './host-answer.mjs';
 
-/** @type {{entry: string, root: string, served: {dir: string, integrations: string[]} | null, withoutSegmenter: boolean, timeoutMs: number}} */
+/** @type {{entry: string, root: string, served: {dir: string, integrations: string[]} | null, withoutSegmenter: boolean, timeoutMs: number, stateFile?: string}} */
 const input = JSON.parse(process.argv[2] ?? '{}');
 const started = Date.now();
 let stage = 'starting';
 let stderrTail = '';
-let answered = false;
-
-/** @param {unknown} message */
-function answer(message) {
-  if (answered) return;
-  answered = true;
-  if (!process.connected) process.exit(HOST_EXIT.noChannel);
-  process.send?.(message, () => process.exit(0));
-}
 
 /** What the page was doing and what it had left, for an end without an answer. */
 function state() {
@@ -50,6 +43,26 @@ function state() {
   };
 }
 
+/**
+ * The page's state in the CLI's per-run temporary folder, so that the CLI can
+ * say why when the host ends without an answer reaching it.
+ * @param {string} answered
+ */
+function saveState(answered) {
+  if (!input.stateFile) return;
+  try {
+    fs.writeFileSync(input.stateFile, JSON.stringify({...state(), answered}));
+  } catch {}
+}
+
+const answer = makeAnswer({
+  send: (message, done) => process.send?.(message, done),
+  exit: code => process.exit(code),
+  connected: () => process.connected === true,
+  record: saveState,
+});
+
+saveState('no');
 process.once('disconnect', () => process.exit(HOST_EXIT.disconnected));
 // A margin past the CLI's own limit, so the CLI reports the timeout first.
 setTimeout(() => {
@@ -79,6 +92,7 @@ worker.on('message', (/** @type {any} */ message) => {
     Object.keys(message).length === 1
   ) {
     stage = message.stage;
+    saveState('no');
     return;
   }
   answer(message);
