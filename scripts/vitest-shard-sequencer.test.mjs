@@ -7,8 +7,10 @@ import {describe, expect, it} from 'vitest';
 import {configDefaults} from 'vitest/config';
 import DurationShardSequencer, {
   DURATIONS,
+  LEG_PARALLELISM,
   mergeRecord,
   partitionByDuration,
+  recordLegOneSteps,
   readDurations,
   recordDurations,
 } from './vitest-shard-sequencer.mjs';
@@ -286,6 +288,41 @@ describe('duration-balanced Node legs', () => {
       'new.test.mjs': 3,
       [slice]: 300,
       'unreached.test.mjs': 50,
+    });
+  });
+
+  it("leaves the first leg its own steps' time, in file time", () => {
+    const files = Array.from({length: 60}, (_, i) => `f${i}.test.mjs`);
+    const seconds = Object.fromEntries(files.map(f => [f, 20]));
+    const sum = leg => leg.reduce((total, f) => total + seconds[f], 0);
+    const even = partitionByDuration(files, 5, seconds).map(sum);
+    expect(Math.max(...even) - Math.min(...even)).toBeLessThanOrEqual(20);
+    const legs = partitionByDuration(files, 5, seconds, {
+      legOneSeconds: 100,
+    }).map(sum);
+    const others = legs.slice(1).reduce((a, b) => a + b, 0) / 4;
+    // 100 s of steps is 100 x LEG_PARALLELISM s of file time, within a file.
+    expect(others - legs[0]).toBeGreaterThan(100 * LEG_PARALLELISM - 40);
+    expect(others - legs[0]).toBeLessThan(100 * LEG_PARALLELISM + 40);
+  });
+
+  it("records the seconds of the first leg's own steps from a job log", () => {
+    const log = [
+      'test-node (1/5)\tInstall Playwright for theme-family contract\t2026-11-13T18:41:58.0000000Z ##[group]Run npx playwright install chromium',
+      'test-node (1/5)\tInstall Playwright for theme-family contract\t2026-11-13T18:42:07.0000000Z done',
+      'test-node (1/5)\tRun the theme-family contract\t2026-11-13T18:42:24.0000000Z ##[group]Run',
+      'test-node (1/5)\tRun the theme-family contract\t2026-11-13T18:43:06.0000000Z Theme family cascade guard passed.',
+      'test-node (2/5)\tRun the theme-family contract\t2026-11-13T18:00:00.0000000Z another leg',
+    ].join('\n');
+    expect(
+      recordLegOneSteps(log, [
+        'Install Playwright for theme-family contract',
+        'Run the theme-family contract',
+        'Offline-media browser cases',
+      ]),
+    ).toEqual({
+      'Install Playwright for theme-family contract': 9,
+      'Run the theme-family contract': 42,
     });
   });
 

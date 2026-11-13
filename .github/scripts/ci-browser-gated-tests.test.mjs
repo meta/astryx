@@ -188,6 +188,15 @@ describe('browser-gated script tests in the workflows', () => {
     expect(run.step.run).toContain(
       "-t 'in each text direction|names what it waited on'",
     );
+    // The case cannot vanish from both runs: the Node shard skips it by name
+    // (it.runIf on the switch), and this step, with the switch set, runs it.
+    expect(source).toContain(
+      "const BROWSER_STEP = process.env.ASTRYX_THEME_EDITOR_BROWSER === '1';",
+    );
+    expect(source).toMatch(
+      /it\.runIf\(BROWSER_STEP\)\(\s*'keeps physical sides physical next to own sides, in each text direction \(butter\)'/,
+    );
+    expect(source).not.toContain('the render check did not run');
   });
 
   it('runs the CDN page render cases in the CLI smoke test, beside the CDN smoke test', () => {

@@ -66,4 +66,27 @@ describe('the Node legs inside their job limit', () => {
     expect(bound, 'the beforeAll bound').not.toBeNull();
     expect(Number(bound[1])).toBeLessThanOrEqual(limitMinutes - 2);
   });
+
+  it("give the first leg's own steps their recorded time in the split, every one of them", () => {
+    const record = JSON.parse(
+      fs.readFileSync(
+        path.join(root, 'scripts/vitest-node-durations.json'),
+        'utf8',
+      ),
+    );
+    const legOneOnly = job.steps
+      .filter(
+        each =>
+          typeof each.if === 'string' &&
+          each.if.startsWith('matrix.shard == 1'),
+      )
+      .map(each => each.name)
+      .sort();
+    // A step only the first leg runs needs a recorded time, or the split
+    // does not leave the leg room for it.
+    expect(Object.keys(record.legOneSteps).sort()).toEqual(legOneOnly);
+    for (const seconds of Object.values(record.legOneSteps))
+      expect(Number.isFinite(seconds) && seconds >= 0).toBe(true);
+    expect(step.env.VITEST_LEG_ONE_RESERVE).toBe('1');
+  });
 });

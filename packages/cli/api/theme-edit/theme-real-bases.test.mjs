@@ -34,9 +34,11 @@ let unbuilt = '';
 
 // The render check runs in the Chromium the repository pins for Playwright,
 // launched once. Each launch and render has this bound; one that does not
-// finish fails naming what it waited on. ASTRYX_THEME_EDITOR_BROWSER=1 (the CI
-// step after the browser install) makes a missing browser fail the case.
+// finish fails naming what it waited on, and a missing browser fails the case.
 const BROWSER_WAIT_MS = 60_000;
+// The text-direction case runs only in test-node's "Theme editor browser
+// case" step, after the Chromium install; the Node shard lists it as skipped.
+const BROWSER_STEP = process.env.ASTRYX_THEME_EDITOR_BROWSER === '1';
 const {chromium} = createRequire(import.meta.url)('playwright');
 
 /**
@@ -352,95 +354,93 @@ describe('padding on real base themes', () => {
       expect(card).toMatch(/--astryx-card-padding-inline(-start)?:\s*6px/);
     }, 240_000);
 
-    it('keeps physical sides physical next to own sides, in each text direction (butter)', async ctx => {
-      if (unbuilt) return ctx.skip();
-      // Own physical left: the editor's left is never written (in either
-      // direction), its right stays a physical right.
-      await themeEditNew('pr', {cwd, like: 'butter'});
-      ownEdit('pr', "button: {base: {paddingLeft: '30px'}},");
-      await themeEditSet('pr', 'padding', '2px 4px 6px 8px', {
-        cwd,
-        on: 'button',
-      });
-      const button = ruleOf('pr', '.astryx-button');
-      expect(button).toMatch(/padding-left:\s*30px/);
-      expect(button).toMatch(/padding-right:\s*4px/);
-      expect(button).toMatch(/padding-top:\s*2px/);
-      expect(button).toMatch(/padding-bottom:\s*6px/);
-      // (Butter's own padding-inline comes first in the rule; the editor
-      // writes no logical side.)
-      expect(button).not.toMatch(/padding-inline-(start|end)/);
-      expect(button).not.toMatch(/padding-left:\s*8px/);
-      expect(button.indexOf('padding-right')).toBeGreaterThan(
-        button.indexOf('padding-inline'),
-      );
-      // Own logical start: the editor's left shows only right-to-left (where
-      // the start is the right), its right only left-to-right.
-      await themeEditNew('pl', {cwd, like: 'butter'});
-      ownEdit('pl', "button: {base: {paddingInlineStart: '30px'}},");
-      await themeEditSet('pl', 'padding-left', '8px', {cwd, on: 'button'});
-      await themeEditSet('pl', 'padding-right', '4px', {cwd, on: 'button'});
-      expect(ruleOf('pl', '.astryx-button')).not.toMatch(
-        /padding-(left|right):/,
-      );
-      expect(ruleOf('pl', '.astryx-button:where(:dir(rtl))')).toMatch(
-        /padding-left:\s*8px/,
-      );
-      expect(ruleOf('pl', '.astryx-button:where(:dir(ltr))')).toMatch(
-        /padding-right:\s*4px/,
-      );
-      expect(ruleOf('pl', '.astryx-button:where(:dir(ltr))')).not.toMatch(
-        /padding-left/,
-      );
-      expect(ruleOf('pl', '.astryx-button:where(:dir(rtl))')).not.toMatch(
-        /padding-right/,
-      );
-      // In a page under each direction (a dir="rtl" ancestor), the own start
-      // side holds and the editor's sides land on the other side.
-      const executablePath = chromium.executablePath();
-      if (!fs.existsSync(executablePath)) {
-        if (process.env.ASTRYX_THEME_EDITOR_BROWSER === '1')
+    it.runIf(BROWSER_STEP)(
+      'keeps physical sides physical next to own sides, in each text direction (butter)',
+      async ctx => {
+        if (unbuilt) return ctx.skip();
+        // Own physical left: the editor's left is never written (in either
+        // direction), its right stays a physical right.
+        await themeEditNew('pr', {cwd, like: 'butter'});
+        ownEdit('pr', "button: {base: {paddingLeft: '30px'}},");
+        await themeEditSet('pr', 'padding', '2px 4px 6px 8px', {
+          cwd,
+          on: 'button',
+        });
+        const button = ruleOf('pr', '.astryx-button');
+        expect(button).toMatch(/padding-left:\s*30px/);
+        expect(button).toMatch(/padding-right:\s*4px/);
+        expect(button).toMatch(/padding-top:\s*2px/);
+        expect(button).toMatch(/padding-bottom:\s*6px/);
+        // (Butter's own padding-inline comes first in the rule; the editor
+        // writes no logical side.)
+        expect(button).not.toMatch(/padding-inline-(start|end)/);
+        expect(button).not.toMatch(/padding-left:\s*8px/);
+        expect(button.indexOf('padding-right')).toBeGreaterThan(
+          button.indexOf('padding-inline'),
+        );
+        // Own logical start: the editor's left shows only right-to-left (where
+        // the start is the right), its right only left-to-right.
+        await themeEditNew('pl', {cwd, like: 'butter'});
+        ownEdit('pl', "button: {base: {paddingInlineStart: '30px'}},");
+        await themeEditSet('pl', 'padding-left', '8px', {cwd, on: 'button'});
+        await themeEditSet('pl', 'padding-right', '4px', {cwd, on: 'button'});
+        expect(ruleOf('pl', '.astryx-button')).not.toMatch(
+          /padding-(left|right):/,
+        );
+        expect(ruleOf('pl', '.astryx-button:where(:dir(rtl))')).toMatch(
+          /padding-left:\s*8px/,
+        );
+        expect(ruleOf('pl', '.astryx-button:where(:dir(ltr))')).toMatch(
+          /padding-right:\s*4px/,
+        );
+        expect(ruleOf('pl', '.astryx-button:where(:dir(ltr))')).not.toMatch(
+          /padding-left/,
+        );
+        expect(ruleOf('pl', '.astryx-button:where(:dir(rtl))')).not.toMatch(
+          /padding-right/,
+        );
+        // In a page under each direction (a dir="rtl" ancestor), the own start
+        // side holds and the editor's sides land on the other side.
+        const executablePath = chromium.executablePath();
+        if (!fs.existsSync(executablePath))
           throw new Error(
             `Playwright's Chromium is not installed at ${executablePath}: run npx playwright install chromium`,
           );
-        console.warn(
-          "Playwright's Chromium is not installed here: the render check did not run",
+        const css = fs.readFileSync(path.join(cwd, 'themes/pl/pl.css'), 'utf8');
+        const browser = await within(
+          chromium.launch({
+            args: ['--no-sandbox'],
+            timeout: BROWSER_WAIT_MS + 5000,
+          }),
+          "launching Playwright's Chromium",
         );
-        return;
-      }
-      const css = fs.readFileSync(path.join(cwd, 'themes/pl/pl.css'), 'utf8');
-      const browser = await within(
-        chromium.launch({
-          args: ['--no-sandbox'],
-          timeout: BROWSER_WAIT_MS + 5000,
-        }),
-        "launching Playwright's Chromium",
-      );
-      try {
-        const page = await browser.newPage();
-        /** @param {'ltr' | 'rtl'} dir */
-        const padding = async dir => {
-          await within(
-            page.setContent(
-              `<!doctype html><html><head><style>${css}</style></head><body>` +
-                `<div data-astryx-theme="pl" dir="${dir}"><button class="astryx-button" id="b">x</button></div>` +
-                '</body></html>',
-            ),
-            `rendering the ${dir} page`,
-          );
-          return page.evaluate(() => {
-            const c = getComputedStyle(
-              /** @type {Element} */ (document.getElementById('b')),
+        try {
+          const page = await browser.newPage();
+          /** @param {'ltr' | 'rtl'} dir */
+          const padding = async dir => {
+            await within(
+              page.setContent(
+                `<!doctype html><html><head><style>${css}</style></head><body>` +
+                  `<div data-astryx-theme="pl" dir="${dir}"><button class="astryx-button" id="b">x</button></div>` +
+                  '</body></html>',
+              ),
+              `rendering the ${dir} page`,
             );
-            return `${c.paddingLeft} ${c.paddingRight}`;
-          });
-        };
-        expect(await padding('ltr')).toBe('30px 4px');
-        expect(await padding('rtl')).toBe('8px 30px');
-      } finally {
-        await browser.close();
-      }
-    }, 240_000);
+            return page.evaluate(() => {
+              const c = getComputedStyle(
+                /** @type {Element} */ (document.getElementById('b')),
+              );
+              return `${c.paddingLeft} ${c.paddingRight}`;
+            });
+          };
+          expect(await padding('ltr')).toBe('30px 4px');
+          expect(await padding('rtl')).toBe('8px 30px');
+        } finally {
+          await browser.close();
+        }
+      },
+      240_000,
+    );
 
     it('lets an own variant padding win over an unequal editor padding on the plain rule', async ctx => {
       if (unbuilt) return ctx.skip();
