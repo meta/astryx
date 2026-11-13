@@ -92,8 +92,8 @@ const AI_CHAT_CSS = `
 .ai-chat-resize-handle {
   display: flex;
 }
-/* The messages' scrollbar ends where the handle's grab zone begins, so a
-   press on that edge resizes the panel instead of scrolling. */
+/* The scrollbar ends where the handle's grab zone begins, so the zone
+   never covers it. */
 .ai-chat-column-beside-handle {
   padding-inline-end: var(--spacing-2);
 }
