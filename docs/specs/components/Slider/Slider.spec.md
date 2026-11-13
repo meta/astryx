@@ -49,10 +49,12 @@ an additive target for the interactive control surface.
 ## Compatibility and migration
 
 - Released default preserved: `no` — FR5 changes the released `onChangeEnd`
-  payload and FR7 how every pointer drags a thumb and when `onChangeEnd` fires
-  after a drag that coasts; every other released default is unchanged
-- Compatibility class: additive target and state reflection; default styling,
-  DOM semantics, and public props remain unchanged, and the one keyboard change
+  payload, FR7 how every pointer drags a thumb and when `onChangeEnd` fires
+  after a drag that coasts, and FR8 the text value's resting width; every
+  other released default is unchanged
+- Compatibility class: additive target and state reflection; default styling
+  apart from FR8's reserved text-value width, DOM semantics, and public props
+  remain unchanged, and the one keyboard change
   AR1 names — the horizontal arrows follow the track's direction under RTL —
   ships as a behavior fix
 - `onChangeEnd` payload (FR5): a new contract decision (`spec:AST-017/FR33`),
@@ -73,6 +75,10 @@ an additive target for the interactive control surface.
   as the finger's coast. It coasts as a finger's does, so its `onChangeEnd`
   fires about 0.6 s after the release, once the coast settles; a slow drag
   still ends at the release (`spec:AST-094/DEC-26`).
+- Text value width (FR8): ships as a patch `[fix]`. With
+  `valueDisplay="text"`, the text value reserves its longest likely label, so
+  the resting track is shorter by the reserved box, and a short value sits at
+  the end of that box, away from the track.
 - Controlled/uncontrolled behavior: unchanged; Slider remains controlled
 - Migration decision: an owner that moves `value` only from `onChangeEnd`
   moves it from `onChange` instead (FR5); an owner that needs the value at a
