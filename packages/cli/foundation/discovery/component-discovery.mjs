@@ -5,7 +5,6 @@
  */
 
 import * as fs from 'node:fs';
-import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {DOC_EXPORTS} from '../doc-compiler/read.mjs';
 import {
@@ -25,12 +24,8 @@ import {
   moduleExportsName,
   staticExportObject,
 } from './module-exports.mjs';
-import {
-  inspectPackageExport,
-  sourceExportTarget,
-} from './package-exports.mjs';
-
-const require = createRequire(import.meta.url);
+import {inspectPackageExport, sourceExportTarget} from './package-exports.mjs';
+import {babelParser} from '../runtime/lazy-dependencies.mjs';
 
 const SKIP_DIRS = new Set(['hooks', 'utils', '__tests__', 'node_modules']);
 
@@ -176,9 +171,6 @@ function readDocMeta(docPath) {
   }
 }
 
-/** @type {typeof import('@babel/parser') | undefined} */
-let babelParser;
-
 /**
  * A property of an object literal, by its plain key.
  * @param {any} object - an ObjectExpression node
@@ -211,13 +203,9 @@ function docMemberNames(source) {
   /** @type {any} */
   let ast;
   try {
-    babelParser ??= require('@babel/parser');
-    ast = /** @type {typeof import('@babel/parser')} */ (babelParser).parse(
-      source,
-      {
-        sourceType: 'module',
-      },
-    );
+    ast = babelParser().parse(source, {
+      sourceType: 'module',
+    });
   } catch {
     return [];
   }

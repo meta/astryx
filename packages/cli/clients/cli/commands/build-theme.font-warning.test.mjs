@@ -61,7 +61,7 @@ describe('theme build font-loading warning', () => {
 
     expect(result.code).toBe(0);
     // The install instructions still come out intact…
-    expect(result.stdout).toContain("from './fonty'");
+    expect(result.stdout).toContain("from '../fonty'");
     // …followed by the warning naming the theme and every unloaded family…
     expect(result.stdout).toContain('names fonts it does not load');
     expect(result.stdout).toContain('"Space Grotesk"');
@@ -161,7 +161,7 @@ describe('theme build font-loading warning', () => {
     );
 
     expect(result.code).toBe(0);
-    expect(result.stdout).toContain("from './sys'");
+    expect(result.stdout).toContain("from '../sys'");
     expect(result.stdout).not.toContain('names fonts it does not load');
     expect(result.stdout).not.toContain('fonts.googleapis.com');
     expect(result.stdout).not.toContain('@font-face');

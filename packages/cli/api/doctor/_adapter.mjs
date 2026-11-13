@@ -92,6 +92,14 @@ export {
 const CHECK_CODEC = {
   encode: (/** @type {any} */ check) => check,
   decode: (/** @type {any} */ check) => check,
+  /** A check record: its id, label, status and message. */
+  valid: (/** @type {any} */ check) =>
+    check != null &&
+    typeof check === 'object' &&
+    typeof check.id === 'string' &&
+    typeof check.label === 'string' &&
+    typeof check.status === 'string' &&
+    typeof check.message === 'string',
 };
 
 /**
