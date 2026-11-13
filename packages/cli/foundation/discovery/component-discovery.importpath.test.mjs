@@ -65,23 +65,27 @@ describe('resolveImportPath reproduces authored hook importPaths', () => {
 describe('findComponentSource inside an operation', () => {
   const coreDir = findCoreDir();
 
-  it('finds every Core component and hook as outside one', () => {
+  it('finds every Core component and hook file name as outside one', () => {
     /** @type {Set<string>} */
     const names = new Set();
-    // Each component or hook file's name, one or two folders down: the
-    // names `component --list` resolves.
-    const src = path.join(coreDir, 'src');
-    for (const top of fs.readdirSync(src, {withFileTypes: true})) {
-      if (!top.isDirectory()) continue;
-      for (const file of fs.readdirSync(path.join(src, top.name))) {
+    // Each component or hook file's name anywhere in Core's src: the names
+    // `component --list` resolves, nested hooks included.
+    /** @param {string} dir */
+    const visit = dir => {
+      for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
+        if (entry.isDirectory()) {
+          visit(path.join(dir, entry.name));
+          continue;
+        }
         const stem = /^(?:XDS)?((?:use)?[A-Z][A-Za-z0-9]*)\.tsx?$/.exec(
-          file,
+          entry.name,
         )?.[1];
         if (stem) names.add(stem);
       }
-    }
+    };
+    visit(path.join(coreDir, 'src'));
     const sorted = [...names].sort();
-    expect(sorted.length).toBeGreaterThan(150);
+    expect(sorted.length).toBeGreaterThan(400);
     const outside = sorted.map(name => findComponentSource(coreDir, name));
     const inside = withListingCache(() =>
       sorted.map(name => findComponentSource(coreDir, name)),
@@ -89,30 +93,22 @@ describe('findComponentSource inside an operation', () => {
     expect(inside).toEqual(outside);
   });
 
-  it('takes the first parent folder in listing order that holds the name', () => {
+  it('finds a component in the folder named for it under a parent, before the whole-tree search', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'nested-source-'));
     try {
-      for (const parent of ['Alpha', 'Beta']) {
-        fs.mkdirSync(path.join(root, 'src', parent, 'Panel'), {
-          recursive: true,
-        });
-        fs.writeFileSync(
-          path.join(root, 'src', parent, 'Panel', 'Panel.tsx'),
-          'export function Panel() {}\n',
-        );
-      }
-      const outside = findComponentSource(root, 'Panel');
-      expect(withListingCache(() => findComponentSource(root, 'Panel'))).toBe(
-        outside,
+      // The first parent holds a decoy deeper down, which the whole-tree
+      // search would reach first; only the second has a Panel folder.
+      fs.mkdirSync(path.join(root, 'src', 'Alpha', 'Deep'), {recursive: true});
+      fs.writeFileSync(
+        path.join(root, 'src', 'Alpha', 'Deep', 'Panel.tsx'),
+        'export function Panel() {}\n',
       );
-      expect(outside).toBe(
-        path.join(
-          root,
-          'src',
-          fs.readdirSync(path.join(root, 'src'))[0],
-          'Panel',
-          'Panel.tsx',
-        ),
+      fs.mkdirSync(path.join(root, 'src', 'Beta', 'Panel'), {recursive: true});
+      const expected = path.join(root, 'src', 'Beta', 'Panel', 'Panel.tsx');
+      fs.writeFileSync(expected, 'export function Panel() {}\n');
+      expect(findComponentSource(root, 'Panel')).toBe(expected);
+      expect(withListingCache(() => findComponentSource(root, 'Panel'))).toBe(
+        expected,
       );
     } finally {
       fs.rmSync(root, {recursive: true, force: true});
