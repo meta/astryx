@@ -1086,6 +1086,9 @@ export async function checkAppThemes(cwd) {
     });
   } else {
     const stale = [];
+    /** Local themes the build refused for a private var: not checked. */
+    /** @type {string[]} */
+    const refused = [];
     /** @type {Map<string, string[]>} theme slugs by the package they import and the app lacks */
     const missingPackages = new Map();
     const previousSilent = logger.silent;
@@ -1114,7 +1117,10 @@ export async function checkAppThemes(cwd) {
         } catch (error) {
           // A theme that sets a private var is the "Private theme
           // variables" check's to report, not a stale output.
-          if (isPrivateVarRefusal(error)) continue;
+          if (isPrivateVarRefusal(error)) {
+            refused.push(theme.slug);
+            continue;
+          }
           const missing = missingThemePackage(error);
           if (missing) {
             missingPackages.set(missing, [
@@ -1168,15 +1174,25 @@ export async function checkAppThemes(cwd) {
               id: 'theme-local-builds',
               label: 'Local theme build freshness',
               status: 'fail',
-              message: `Local theme outputs are missing or stale: ${stale.join(', ')}.`,
+              message: `Local theme outputs are missing or stale: ${stale.join(', ')}.${refused.length > 0 ? ` Not checked (a private theme variable; see theme-private-variables): ${refused.join(', ')}.` : ''}`,
               fix: refresh.join(' '),
             }
-          : {
-              id: 'theme-local-builds',
-              label: 'Local theme build freshness',
-              status: 'pass',
-              message: 'Every added local theme output matches its source.',
-            },
+          : refused.length > 0
+            ? {
+                // Not a pass: the build refused these, so their outputs
+                // were never compared with their sources.
+                id: 'theme-local-builds',
+                label: 'Local theme build freshness',
+                status: 'info',
+                message: `Not checked: ${refused.join(', ')} ${refused.length === 1 ? 'sets' : 'set'} a private theme variable, so the build refuses ${refused.length === 1 ? 'it' : 'them'} and ${refused.length === 1 ? 'its' : 'their'} outputs were not compared with ${refused.length === 1 ? 'its source' : 'their sources'}.`,
+                fix: 'Follow the fix on the theme-private-variables check, then run doctor again.',
+              }
+            : {
+                id: 'theme-local-builds',
+                label: 'Local theme build freshness',
+                status: 'pass',
+                message: 'Every added local theme output matches its source.',
+              },
     );
   }
 

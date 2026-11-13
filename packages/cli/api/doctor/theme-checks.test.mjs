@@ -968,8 +968,13 @@ describe('app-theme doctor checks', () => {
     );
 
     const checks = await checkAppThemes(dir);
-    // Not a stale output: the build refuses the theme, it does not compare.
-    expect(check(checks, 'theme-local-builds').status).not.toBe('fail');
+    // Not a stale output, and never a pass: the build refuses the theme, so
+    // its outputs were not compared.
+    expect(check(checks, 'theme-local-builds')).toMatchObject({
+      status: 'info',
+      message: expect.stringContaining('Not checked: ocean'),
+      fix: expect.stringContaining('theme-private-variables'),
+    });
     const priv = check(checks, 'theme-private-variables');
     expect(priv).toMatchObject({status: 'fail'});
     expect(priv.message).toContain('--_button-radius');

@@ -52,28 +52,23 @@ describe('a private var fails the build', () => {
         ).toEqual([]);
       });
 
-    it(`${words.join(' ')} text`, async () => {
-      const r = await runCli([...words, 'pv.theme.mjs'], {cwd: app});
-      expect(r.status).toBe(1);
-      expect(`${r.stdout}${r.stderr}`).toContain('private var');
-      expect(`${r.stdout}${r.stderr}`).not.toContain('[ok]');
-    });
+    for (const check of [false, true])
+      it(`${words.join(' ')}${check ? ' --check' : ''} text`, async () => {
+        const r = await runCli(
+          [...words, 'pv.theme.mjs', ...(check ? ['--check'] : [])],
+          {cwd: app},
+        );
+        expect(r.status).toBe(1);
+        // Text names the refusal; the code rides the --json envelope.
+        expect(`${r.stdout}${r.stderr}`).toContain('private var error');
+        expect(`${r.stdout}${r.stderr}`).not.toContain('[ok]');
+        expect(
+          fs
+            .readdirSync(app)
+            .filter(f => f !== 'pv.theme.mjs' && f !== 'package.json'),
+        ).toEqual([]);
+      });
   }
-
-  it('theme build --check text: exit 1, the code, no outputs', async () => {
-    const r = await runCli(['theme', 'build', 'pv.theme.mjs', '--check'], {
-      cwd: app,
-    });
-    expect(r.status).toBe(1);
-    // Text names the refusal (the code rides the --json envelope).
-    expect(`${r.stdout}${r.stderr}`).toContain('private var error');
-    expect(`${r.stdout}${r.stderr}`).not.toContain('[ok]');
-    expect(
-      fs
-        .readdirSync(app)
-        .filter(f => f !== 'pv.theme.mjs' && f !== 'package.json'),
-    ).toEqual([]);
-  });
 
   it('a batch names the file once', async () => {
     fs.writeFileSync(
