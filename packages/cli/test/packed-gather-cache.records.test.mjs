@@ -236,7 +236,7 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     120_000,
   );
 
-  it('records nothing for component, template, theme or discover in a project with no integration', () => {
+  it('records nothing for component, template, theme, discover or docs in a project with no integration', () => {
     const tmp = keptTmp('no-integration');
     // A project with Core and nothing else: no config, no manifest, no
     // dependency that ships one.
@@ -276,6 +276,7 @@ Module._resolveFilename = function (request, parent, isMain, options) {
         ['component', 'Button'],
         ['theme', 'list'],
         ['discover'],
+        ['docs'],
       ]) {
         // Stdout and status: a once-a-day notice may go to stderr.
         const answer = (
@@ -754,6 +755,40 @@ Module._resolveFilename = function (request, parent, isMain, options) {
       const broken = kept();
       expect(broken).toEqual(fresh());
       expect(broken).not.toEqual(edited);
+    } finally {
+      fs.rmSync(other.dir, {recursive: true, force: true});
+    }
+  }, 180_000);
+
+  it('lets docs read the kept checks, and shows a topic edit on the very next call', () => {
+    const tmp = keptTmp('docs');
+    const other = makeProject();
+    try {
+      fs.writeFileSync(
+        path.join(other.widgets, 'astryx.integration.mjs'),
+        `export default { docs: './docs' };\n`,
+      );
+      fs.mkdirSync(path.join(other.widgets, 'docs'));
+      const topic = (/** @type {string} */ text) =>
+        fs.writeFileSync(
+          path.join(other.widgets, 'docs', 'deploying.doc.mjs'),
+          `export const docs = {type: 'generic', name: 'deploying', title: 'Deploying', description: 'How to deploy.', sections: [{title: 'Overview', content: [{type: 'prose', text: '${text}'}]}]};\n`,
+        );
+      topic('Ship it on Tuesdays.');
+      const ask = ['docs', 'deploying'];
+      const first = run(ask, {tmp: freshTmp(), cwd: other.dir});
+      expect(first.stdout).toContain('Ship it on Tuesdays.');
+      expect(run(ask, {tmp, cwd: other.dir})).toEqual(first);
+      // docs keeps the integration's check results like the other commands.
+      const kept = issuesEntries(tmp);
+      expect(kept.size).toBeGreaterThan(0);
+      expect(run(ask, {tmp, cwd: other.dir})).toEqual(first);
+      expect(issuesEntries(tmp)).toEqual(kept);
+      // An in-place edit to the topic shows on the very next call.
+      topic('Ship it on Thursdays.');
+      const edited = run(ask, {tmp, cwd: other.dir});
+      expect(edited.stdout).toContain('Ship it on Thursdays.');
+      expect(edited).toEqual(run(ask, {tmp: freshTmp(), cwd: other.dir}));
     } finally {
       fs.rmSync(other.dir, {recursive: true, force: true});
     }

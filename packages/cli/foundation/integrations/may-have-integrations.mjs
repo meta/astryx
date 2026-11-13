@@ -12,7 +12,7 @@
  *   so no configured, self-resolved, autolinked or computer-level integration
  *   can load.
  * @position Read by foundation/fs/gather-cache.mjs: `component`, `template`,
- *   `theme` and `discover` record a run only for what is worth keeping where
+ *   `theme`, `discover` and `docs` record a run only for what is worth keeping where
  *   an integration can load (its kept check results, and template
  *   discovery's records), so a project with none skips the recorder entirely. A true
  *   answer only means the run records, so a check that says true too often
