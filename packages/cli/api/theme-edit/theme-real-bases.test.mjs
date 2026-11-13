@@ -441,10 +441,12 @@ describe('padding on real base themes', () => {
               `rendering the ${dir} page`,
             );
             return within(
-              page.evaluate(() => {
-                const c = getComputedStyle(
-                  /** @type {Element} */ (document.getElementById('b')),
+              page.$eval('#b', element => {
+                // Through the element's own window: this file lints with Node globals.
+                const view = /** @type {any} */ (
+                  element.ownerDocument.defaultView
                 );
+                const c = view.getComputedStyle(element);
                 return `${c.paddingLeft} ${c.paddingRight}`;
               }),
               `reading the ${dir} page's padding`,
