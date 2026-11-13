@@ -1540,6 +1540,14 @@ the side-by-side shows a major difference. A first check of a behavior still
 goes to her. The owner's words: "Can you just check it yourself after and only
 ahow me if theres major differences".
 
+Amended by the owner (`cixzhang`, 2026-11-13, decision card answer A): a
+merge whose only overlap with the pull request's own files is generated files
+(route manifests, registry lockfiles, CLI fixtures) keeps the evidence when CI
+proves each of those files regenerates identically at the new head. A
+hand-edited or source file the merge changes, a direct import it changes, or a
+shared motion or layer module it changes still requires a new take. The
+owner's words: "Yes, when CI proves they regenerate identically."
+
 ### DEC-28 — Sheet stretch at the tallest detent
 
 **Reference:** `spec:AST-094/DEC-28`
