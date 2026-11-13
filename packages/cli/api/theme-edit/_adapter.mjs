@@ -712,7 +712,7 @@ export function editorThemeRefusal(err, cwd) {
   const typed = named ? (named[1] ?? named[2]) : '';
   if (copyThere && verb && typed !== slug)
     return new AstryxError(
-      `"${typed}" is a path; the theme commands take the theme's name: ${slug}.`,
+      `"${typed}" is ${/[\\/]|\.[a-z]+$/i.test(typed) ? 'a path' : "not the theme's name"}; the theme commands take the theme's name: ${slug}.`,
       [
         {
           name: runLine(cwd, `theme ${verb} ${slug}`),

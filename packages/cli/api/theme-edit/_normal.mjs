@@ -60,7 +60,14 @@ export function normalValueText(v) {
     } else if (QUOTE_PAIRS[c]) j = v.indexOf(QUOTE_PAIRS[c], i + 1);
     if (j > i) {
       flush();
-      const inner = v.slice(i + 1, j);
+      // Spaces just inside the quotes (French « Inter », with a no-break
+      // or narrow no-break space) are not part of the name.
+      const inner = v
+        .slice(i + 1, j)
+        .replace(
+          /^[\s\u00A0\u202F\u2000-\u200A\u3000]+|[\s\u00A0\u202F\u2000-\u200A\u3000]+$/g,
+          '',
+        );
       const single = kind === CURLY_SINGLE || c === '\uFF07';
       const mark = single
         ? inner.includes("'")
@@ -255,15 +262,43 @@ export function familiesOf(v) {
  */
 export function withoutDebris(v) {
   let s = v.replace(/^\s*[=:]\s*/, '').replace(/\s*,+\s*$/, '');
-  for (const mark of ['"', "'"]) {
-    const n = s.split(mark).length - 1;
-    if (n % 2 === 1) {
-      if (s.endsWith(mark)) s = s.slice(0, -1);
+  // Quotes and brackets counted as CSS reads them: an escaped quote (\")
+  // is no quote, and a bracket inside a string is the string's.
+  const scan = (/** @type {string} */ t) => {
+    /** @type {Record<string, number>} */
+    const quotes = {'"': 0, "'": 0};
+    let open = 0;
+    let close = 0;
+    /** @type {string | null} */
+    let q = null;
+    for (let i = 0; i < t.length; i++) {
+      const c = t[i];
+      if (c === '\\') {
+        i++;
+        continue;
+      }
+      if (q) {
+        if (c === q) {
+          q = null;
+          quotes[c]++;
+        }
+        continue;
+      }
+      if (c === '"' || c === "'") {
+        q = c;
+        quotes[c]++;
+      } else if (c === '(') open++;
+      else if (c === ')') close++;
+    }
+    return {quotes, open, close};
+  };
+  for (const mark of /** @type {const} */ (['"', "'"])) {
+    if (scan(s).quotes[mark] % 2 === 1) {
+      if (s.endsWith(mark) && !s.endsWith(`\\${mark}`)) s = s.slice(0, -1);
       else if (s.startsWith(mark)) s = s.slice(1);
     }
   }
-  const open = (s.match(/\(/g) ?? []).length;
-  const close = (s.match(/\)/g) ?? []).length;
+  const {open, close} = scan(s);
   if (close > open && s.endsWith(')')) s = s.slice(0, -1);
   return s === v.trim() ? v : s.trim();
 }

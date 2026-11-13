@@ -74,6 +74,9 @@ describe('N64/N59: quotes only delimit', () => {
     ['`Inter`', '"Inter"'],
     ['\uFF02Inter\uFF02', '"Inter"'],
     ['\u2018Inter\u2019', "'Inter'"],
+    // French spaces inside guillemets are not part of the name.
+    ['\u00AB Inter \u00BB', '"Inter"'],
+    ['\u00AB\u00A0Inter\u202F\u00BB', '"Inter"'],
     // Curly quotes pair by kind, in any shape; one left unpaired is straight.
     ['\u201EInter\u201C', '"Inter"'],
     ['\u201AInter\u2018', "'Inter'"],
@@ -140,6 +143,15 @@ describe('N66/N67/N62/N69: entry repair', () => {
     [
       ['content', "'a; b: c'"],
       ['content', "'a; b: c'"],
+    ],
+    // An escaped quote inside a string is no stray quote.
+    [
+      ['content', '"\\""'],
+      ['content', '"\\""'],
+    ],
+    [
+      ['content', "'\\''"],
+      ['content', "'\\''"],
     ],
     [
       ['--color\u2013accent', 'red'],
