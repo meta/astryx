@@ -25,7 +25,7 @@ import {answeredBy, runChoice} from '../../foundation/release/run-context.mjs';
 import {cliInstallAdvice, installFolder, projectRelease, SETUP_REMINDER_KEY, takeNotice} from '../../foundation/release/notices.mjs';
 import {isCi} from '../../foundation/release/update-notice-env.mjs';
 import {buildManifest, storedManifest} from './lib/manifest.mjs';
-import {cliError} from './lib/cli-error.mjs';
+import {cliError, themeGroupUnknownSubcommand} from './lib/cli-error.mjs';
 import {section, text, records} from './formatters/index.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
@@ -106,6 +106,10 @@ export const JSON_SUPPORTED = new Set([
   'experimental icon new-set',
   'experimental icon new-definition',
   'experimental render',
+  // The groups answer --json with their own help, as the root does.
+  'experimental theme',
+  'experimental theme editor',
+  'experimental theme preview',
   'experimental theme editor new',
   'experimental theme editor set',
   'experimental theme editor undo',
@@ -728,10 +732,25 @@ export async function createProgram({argv} = {}) {
     const extras = actionCommand.commands.length > 0 ? actionCommand.args : [];
     const unknown = extras.find(arg => !String(arg).startsWith('-'));
     if (unknown != null) {
+      const names = actionCommand.commands.map(child => child.name());
+      if (fullName === 'theme' || fullName === 'experimental') {
+        // The theme groups name whole commands, closest first, and point at
+        // `experimental theme <word>` when the word is one of its commands.
+        const {message, suggestions} = themeGroupUnknownSubcommand(
+          fullName,
+          String(unknown),
+          names,
+          actionCommand,
+        );
+        cliError(message, {
+          code: ERROR_CODES.ERR_UNKNOWN_SUBCOMMAND,
+          suggestions,
+        });
+      }
       cliError(`unknown subcommand '${fullName} ${unknown}'`, {
         code: ERROR_CODES.ERR_UNKNOWN_SUBCOMMAND,
-        suggestions: actionCommand.commands.map(child => ({
-          name: child.name(),
+        suggestions: names.map(name => ({
+          name,
           reason: 'available subcommand',
         })),
       });

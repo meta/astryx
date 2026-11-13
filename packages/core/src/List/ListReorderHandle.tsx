@@ -6,13 +6,13 @@
  * @file ListReorderHandle.tsx
  * @input The List's reorder session (List/listReorderEngine.tsx, through
  *   ListContext's `reorder`), the translator and theme tokens
- * @output `ListReorderHandle`, `ListReorderRowName` and `reorderRowStyle`.
- *   The handle ends a reorderable List row. A finger held still on it drags
- *   it, and so does a pen where the primary pointer is coarse. A mouse, or a
- *   pen where it is fine, drags it at once. It is also a toggle
- *   (`aria-pressed`): a click, Space or Enter turns its row's reorder mode on
- *   and off. The row name serves a row without one, and the style a row that
- *   has one
+ * @output `ListReorderHandle`, `ListReorderRowName`, `reorderRowStyle` and
+ *   `UNREAD_HANDLE_NAME`. The handle ends a reorderable List row. A finger
+ *   held still on it drags it, and so does a pen where the primary pointer is
+ *   coarse. A mouse, or a pen where it is fine, drags it at once. It is also a
+ *   toggle (`aria-pressed`): a click, Space or Enter turns its row's reorder
+ *   mode on and off. The row name serves a row without one, and the style a
+ *   row that has one
  * @position Part of the reorder machinery that createReorderable carries.
  *   ListItem renders it, from the List's context, at the end of each row
  *   that can move
@@ -34,9 +34,7 @@
 
 import {
   use,
-  useEffect,
   useRef,
-  useState,
   useSyncExternalStore,
   useId,
   type KeyboardEvent,
@@ -60,7 +58,6 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/List/ListReorderHandle.generated';
-import {createDevWarnings} from '../utils/devWarning';
 import {getNodeText} from '../utils/getNodeText';
 import {ItemLabelContext} from '../Item/ItemLabelContext';
 import {ListContext} from './ListContext';
@@ -68,7 +65,10 @@ import type {
   ListReorderHandleProps,
   ListReorderRowNameProps,
 } from './listReorderContext';
-import type {ListReorderController} from './listReorderEngine';
+import type {
+  ListReorderController,
+  ListReorderHandleName,
+} from './listReorderEngine';
 
 registerEnglishFallback(english);
 
@@ -228,22 +228,6 @@ function labelTextOf(handle: HTMLElement | null, labelID: string | null) {
 }
 
 /**
- * Whether the row's label element names it: it shows text, or holds an icon
- * or image with an accessible name of its own.
- */
-function namesRow(element: HTMLElement | null): boolean {
-  if (element == null) {
-    return false;
-  }
-  return (
-    (element.textContent ?? '').trim() !== '' ||
-    element.querySelector(
-      '[aria-label]:not([aria-label=""]), [aria-labelledby], img[alt]:not([alt=""])',
-    ) != null
-  );
-}
-
-/**
  * The reorder handle of a List row. Renders nothing outside a reorderable
  * List.
  */
@@ -273,7 +257,9 @@ export function ListReorderHandle({
     callerLabel != null ? undefined : (rowLabelledBy ?? labelID ?? undefined);
   const named = callerLabel != null || labelledBy != null || text !== '';
   const verb = t('@astryx.list.reorderHandleVerb');
-  const [warn] = useState(createDevWarnings);
+  // Named by Item's label element only while it shows a name: a label of an
+  // unnamed icon alone falls back to the place.
+  const byLabel = labelID != null && labelledBy === labelID;
   // Syncs the handle into the reorder session, which lives outside React. The
   // session moves the row only with its handle recorded, and reports its
   // moves with the row's key.
@@ -284,12 +270,29 @@ export function ListReorderHandle({
   // Syncs the row's name into the session, which announces the moves with
   // it. A new name keeps the handle recorded, so its row stays in reorder
   // mode. A component label's text is read from its element, rendered by now.
+  // The session also reads, from the DOM, whether the label element names the
+  // row and where the row sits, for the handle's name.
   useIsomorphicLayoutEffect(() => {
+    const handle = ref.current;
     const spoken =
       callerLabel ??
-      (text !== '' ? text : labelTextOf(ref.current, labelID ?? null));
-    return controller?.registerName(ref.current, spoken);
-  }, [controller, callerLabel, text, labelID]);
+      (text !== '' ? text : labelTextOf(handle, labelID ?? null));
+    const unname = controller?.registerName(handle, spoken);
+    const unlabel = controller?.registerHandleLabel(
+      handle,
+      byLabel ? (labelID ?? null) : null,
+      named,
+    );
+    return () => {
+      unname?.();
+      unlabel?.();
+    };
+  }, [controller, callerLabel, text, labelID, byLabel, named]);
+  const shown = useSyncExternalStore(
+    controller?.subscribeHandleNames ?? subscribeNothing,
+    () => controller?.handleNameOf(ref.current) ?? UNREAD_HANDLE_NAME,
+    () => UNREAD_HANDLE_NAME,
+  );
   const isPressed = useSyncExternalStore(
     controller?.subscribeMode ?? subscribeNothing,
     () => controller?.isInMode(ref.current) ?? false,
@@ -310,61 +313,30 @@ export function ListReorderHandle({
     }
     return () => controller.release(handle);
   }, [controller, isEnabled]);
-  // That place is read from the DOM after each commit (the row does not
-  // know its index). A passive effect: the list's own ref is attached after
-  // its rows' layout effects run.
-  useEffect(() => {
-    const handle = ref.current;
-    if (handle == null) {
-      return;
-    }
-    // Named by Item's label element only while it shows a name: a label of
-    // an unnamed icon alone falls back to the place.
-    if (labelID != null && labelledBy === labelID) {
-      if (namesRow(handle.ownerDocument.getElementById(labelID))) {
-        handle.setAttribute('aria-labelledby', `${verbID} ${labelID}`);
-        handle.setAttribute('aria-label', verb);
-        return;
-      }
-      handle.removeAttribute('aria-labelledby');
-    } else if (named) {
-      return;
-    }
-    const position = controller?.positionOf(handle) ?? null;
-    if (position == null) {
-      return;
-    }
-    // Named after its place only: a person hears "Reorder item 3" with
-    // nothing to tell the rows apart. Development says so, once a handle.
-    warn(
-      'ListItem',
-      'A reorderable row has no accessible name, so its reorder handle is ' +
-        'named after its place ("Reorder item N"). Give the row a text ' +
-        'label or an aria-label.',
-    );
-    handle.setAttribute(
-      'aria-label',
-      t('@astryx.list.reorderHandleAt', {position}),
-    );
-  });
   if (controller == null) {
     return null;
   }
+  // A label element that shows no name falls back to the row's place.
+  const labelShowsName = byLabel && !shown.labelShowsNoName;
+  const byPlace = byLabel ? !labelShowsName : !named;
+  const shownLabelledBy = byLabel && !labelShowsName ? undefined : labelledBy;
   // Named through the label element. The handle's own `aria-label` is the
   // verb. It lists itself first in its `aria-labelledby`, which reads its
   // `aria-label` there: "Reorder", then the row's label.
   const name =
-    callerLabel != null
-      ? t('@astryx.list.reorderHandle', {label: callerLabel})
-      : labelledBy != null
-        ? verb
-        : text !== ''
-          ? t('@astryx.list.reorderHandle', {label: text})
-          : undefined;
+    byPlace && shown.position != null
+      ? t('@astryx.list.reorderHandleAt', {position: shown.position})
+      : callerLabel != null
+        ? t('@astryx.list.reorderHandle', {label: callerLabel})
+        : labelledBy != null
+          ? verb
+          : text !== ''
+            ? t('@astryx.list.reorderHandle', {label: text})
+            : undefined;
   return (
     <button
       ref={handleRef}
-      id={labelledBy == null ? undefined : verbID}
+      id={shownLabelledBy == null ? undefined : verbID}
       type="button"
       {...listReorderHandleProps}
       // The handle takes its own press, so the row does not highlight under
@@ -374,7 +346,7 @@ export function ListReorderHandle({
       {...ownRingProps}
       aria-label={name}
       aria-labelledby={
-        labelledBy == null ? undefined : `${verbID} ${labelledBy}`
+        shownLabelledBy == null ? undefined : `${verbID} ${shownLabelledBy}`
       }
       aria-describedby={controller.hintId}
       aria-disabled={isDisabled || undefined}
@@ -422,6 +394,16 @@ export function ListReorderHandle({
 ListReorderHandle.displayName = 'ListReorderHandle';
 
 const subscribeNothing = () => () => {};
+
+/**
+ * A handle's name before the session reads it: its server snapshot, and the
+ * session's answer for a handle it has not read. One object keeps the
+ * snapshot through hydration and the first read.
+ */
+export const UNREAD_HANDLE_NAME: ListReorderHandleName = {
+  position: null,
+  labelShowsNoName: false,
+};
 
 /**
  * Names a reorderable List's row that has no handle, for the announcements

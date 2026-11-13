@@ -118,6 +118,8 @@ import type {
 import {composeEventHandlers, mergeProps} from '../utils';
 import {getInputARIA, joinAriaIDs} from '../utils/inputAria';
 import {isFocusDetached} from '../utils/isFocusDetached';
+import {removeControlOf} from '../privateAttributes/tokenRemove.stylex';
+import {useTapStop} from '../Layer/useTouchTrigger';
 import {themeProps} from '../utils/themeProps';
 import type {SheetDraftChange} from '../internal/sheetDraft';
 import type {TokenizerBottomSheetProps} from './TokenizerBottomSheet';
@@ -1102,6 +1104,66 @@ export function Tokenizer<T extends SearchableItem>({
       : {owner: 'content'},
   });
 
+  // Focus a pointer puts on a token's own control stays there: the
+  // person chose that control. The shared tracker says which input moved it.
+  const {ref: modalityRef, readModality} = useInteractionModalityTracking();
+  // The last press that started inside the field. A touch keyboard rises
+  // whenever the field focuses its input during a tap. So a tap on a token's
+  // remove button moves focus to the input only if the input already had it.
+  // `readModality()` tells whether that press is still the latest interaction
+  // in the field's document; a key press since then restores the keyboard
+  // rules.
+  const lastPressRef = useRef<{
+    inputHadFocus: boolean;
+    isFinger: boolean;
+    pressedTokenRemove: Element | null;
+  } | null>(null);
+  // The touch keyboard is down while the input is unfocused. Only a finger's
+  // press counts: a pen's press keeps the default focus rules, as a mouse's
+  // does.
+  const wasKeyboardDown = useCallback(() => {
+    const press = lastPressRef.current;
+    return (
+      press != null &&
+      press.isFinger &&
+      !press.inputHadFocus &&
+      readModality() === 'pointer'
+    );
+  }, [readModality]);
+  // A finger's tap on a token's remove button with the keyboard down keeps
+  // focus out of the field. Chrome focuses a pressed button on the tap's
+  // compatibility mouse events. That focus would expand an `unfocusedInline`
+  // field and remount the control under the finger. Cancelling it, as
+  // InputClearButton does, leaves the field as it was. The stop sees every
+  // press, so a press that turns into a scroll leaves no arm behind.
+  const {onPointerDown: armTapStop, onMouseDown: stopTap} =
+    useTapStop('mousedown');
+  const handlePointerDownCapture = useCallback(
+    (e: React.PointerEvent) => {
+      armTapStop(e);
+      lastPressRef.current = {
+        inputHadFocus:
+          inputRef.current != null &&
+          inputRef.current.ownerDocument.activeElement === inputRef.current,
+        isFinger: e.pointerType === 'touch',
+        pressedTokenRemove: removeControlOf(e.target),
+      };
+    },
+    [armTapStop],
+  );
+  const handleMouseDownCapture = useCallback(
+    (e: React.MouseEvent) => {
+      if (removeControlOf(e.target) != null && wasKeyboardDown()) {
+        stopTap(e);
+      }
+    },
+    [stopTap, wasKeyboardDown],
+  );
+  // The press record ends with its tap: after the click's task, or when the
+  // browser takes the press over for a scroll.
+  const endPress = useCallback(() => {
+    lastPressRef.current = null;
+  }, []);
   // `adaptive` resolves through the policy the selection controls share. An
   // open sheet keeps its presentation until it closes. A resolution change
   // during a task does not replace the open surface.
@@ -1152,9 +1214,6 @@ export function Tokenizer<T extends SearchableItem>({
   // handing focus from one control to the other — so the receiving control
   // does not report it as focus entering from outside.
   const isHandingOffFocusRef = useRef(false);
-  // Focus a pointer puts on a token's own control stays there: the
-  // person chose that control. The shared tracker says which input moved it.
-  const {ref: modalityRef, readModality} = useInteractionModalityTracking();
   // True while the menu returns focus after it closes. That focus stays on
   // the token the menu returns to.
   const isMenuFocusReturnRef = useRef(false);
@@ -1471,7 +1530,9 @@ export function Tokenizer<T extends SearchableItem>({
         // it: it is the keyboard path to its hidden tokens.
         // In a grouped row, a move to the input also scrolls the strip to its
         // end before the press releases, so a press on a token's remove
-        // button keeps its focus too.
+        // button keeps its focus too. A finger's tap on a remove button with
+        // the keyboard down keeps focus out of the input. Focusing it would
+        // raise the keyboard for a removal.
         if (
           e.target !== inputRef.current &&
           e.target !== trackRef.current &&
@@ -1481,7 +1542,8 @@ export function Tokenizer<T extends SearchableItem>({
               (e.target instanceof Node &&
                 trackRef.current?.contains(e.target) === true))
           ) &&
-          !isMenuFocusReturnRef.current
+          !isMenuFocusReturnRef.current &&
+          !(removeControlOf(e.target) != null && wasKeyboardDown())
         ) {
           inputRef.current?.focus();
         }
@@ -1494,6 +1556,7 @@ export function Tokenizer<T extends SearchableItem>({
       onFocus,
       readModality,
       findTokenControl,
+      wasKeyboardDown,
     ],
   );
 
@@ -1693,10 +1756,31 @@ export function Tokenizer<T extends SearchableItem>({
       if (!options?.silent) {
         announce(t('@astryx.tokenizer.tokenRemoved', {label: item.label}));
       }
-      inputRef.current?.focus();
+      // Focusing the input inside a keyboard-down tap would raise the
+      // keyboard. The sheet's own removals (`silent`) leave focus to the
+      // sheet.
+      const pressed =
+        !options?.silent && wasKeyboardDown()
+          ? (lastPressRef.current?.pressedTokenRemove ?? null)
+          : null;
+      if (pressed == null) {
+        inputRef.current?.focus();
+        return true;
+      }
+      // A token that held focus, on its remove button or on another of its
+      // controls, unmounts with focus inside it. Focus then moves to the
+      // input, as for every other removal. Focus anywhere else stays where it
+      // is. A built-in token's only control is its remove button.
+      const active = pressed.ownerDocument.activeElement;
+      const token =
+        [...tokenSlotsRef.current].find(slot => slot.contains(pressed)) ??
+        pressed;
+      if (active != null && token.contains(active)) {
+        inputRef.current?.focus();
+      }
       return true;
     },
-    [value, onChange, isDisabled, canRemoveItem, announce, t],
+    [value, onChange, isDisabled, canRemoveItem, announce, t, wasKeyboardDown],
   );
 
   // A composing component that words its own Clear all (PowerSearch) provides
@@ -1839,6 +1923,8 @@ export function Tokenizer<T extends SearchableItem>({
       role="group"
       aria-label={label}
       onClick={handleWrapperClick}
+      onPointerDownCapture={handlePointerDownCapture}
+      onMouseDownCapture={handleMouseDownCapture}
       // The control a click activates is recorded while the click passes
       // down through the field, before the token's own handler runs. The
       // record ends with the click's task, also when the token's handler
@@ -1853,7 +1939,16 @@ export function Tokenizer<T extends SearchableItem>({
             }
           }, 0);
         }
+        const press = lastPressRef.current;
+        if (press != null) {
+          setTimeout(() => {
+            if (lastPressRef.current === press) {
+              endPress();
+            }
+          }, 0);
+        }
       }}
+      onPointerCancelCapture={endPress}
       onFocusCapture={handleFocusCapture}
       onBlurCapture={handleBlurCapture}
       // Keys on the field's other controls (clear button, tokens) reach a

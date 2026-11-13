@@ -6,10 +6,11 @@
  * domain, _gather-*.mjs) and loads the tree's static data before it runs.
  */
 
-import {readFileSync} from 'node:fs';
+import {readFileSync, realpathSync} from 'node:fs';
 import * as path from 'node:path';
 import {requireCoreDir} from '../../foundation/fs/paths.mjs';
 import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
+import {persistedGather} from '../../foundation/fs/gather-cache.mjs';
 import {
   reusedWhileUnchanged,
   unchangedSince,
@@ -21,7 +22,12 @@ import {CORELESS_DOMAINS} from './_query.mjs';
 import {gatherComponents} from './_gather-components.mjs';
 import {gatherHooks} from './_gather-hooks.mjs';
 import {gatherDocs} from './_gather-docs.mjs';
-import {gatherTemplates, gatherThemes} from './_gather-templates.mjs';
+import {
+  derivedFromSource,
+  gatherTemplates,
+  gatherThemes,
+} from './_gather-templates.mjs';
+import {componentsInSource} from '../../foundation/discovery/template-adapter.mjs';
 
 export {componentKeywords} from './_gather-components.mjs';
 
@@ -125,6 +131,112 @@ async function gatherDomains(options) {
 }
 
 /**
+ * The folder's real path, so a link and its target share a kept gather.
+ * @param {string} dir
+ * @returns {string}
+ */
+function realFolder(dir) {
+  try {
+    return realpathSync(dir);
+  } catch {
+    return dir;
+  }
+}
+
+/**
+ * A gathered catalog as plain JSON and back, for a gather kept between runs
+ * (persistedGather). A template's derived component names are read once and
+ * stored as their value; `components` is stored by position in `all`, whose
+ * objects it shares.
+ */
+const GATHER_CODEC = {
+  /**
+   * @param {any} gathered
+   * @returns {any}
+   */
+  encode(gathered) {
+    const position = new Map(
+      gathered.all.map((/** @type {any} */ c, /** @type {number} */ i) => [
+        c,
+        i,
+      ]),
+    );
+    return {
+      ...gathered,
+      all: gathered.all.map((/** @type {any} */ c) => {
+        if (!Object.getOwnPropertyDescriptor(c, 'weakKeywords')?.get) return c;
+        // The names come from the source file, read again when first asked
+        // for (its content is one of the stored inputs); a source that could
+        // not be read derives none.
+        const from = derivedFromSource.get(c);
+        const names = from?.derivedSoFar();
+        /** @type {Record<string, unknown>} */
+        const out = {};
+        for (const k of Object.keys(c)) {
+          out[k] =
+            k === 'weakKeywords'
+              ? {[DERIVED]: names ?? from?.file ?? null}
+              : c[k];
+        }
+        return out;
+      }),
+      components: gathered.components.map((/** @type {any} */ c) =>
+        position.get(c),
+      ),
+    };
+  },
+  /**
+   * @param {any} stored
+   * @returns {any}
+   */
+  decode(stored) {
+    const all = stored.all.map((/** @type {any} */ c) => {
+      const stored = c.weakKeywords?.[DERIVED];
+      if (stored === undefined) return c;
+      // Names read by the run that stored them, or the file to read them from.
+      const file = typeof stored === 'string' ? stored : null;
+      /** @type {string[] | undefined} */
+      let derived = Array.isArray(stored) ? stored : undefined;
+      const derive = () => {
+        if (derived === undefined) {
+          try {
+            derived =
+              file == null
+                ? []
+                : componentsInSource(readFileSync(file, 'utf-8'));
+          } catch {
+            derived = [];
+          }
+        }
+        return derived;
+      };
+      /** @type {Record<string, unknown>} */
+      const out = {};
+      for (const k of Object.keys(c)) {
+        if (k === 'weakKeywords') {
+          Object.defineProperty(out, k, {
+            get: derive,
+            enumerable: true,
+            configurable: true,
+          });
+        } else {
+          out[k] = c[k];
+        }
+      }
+      return out;
+    });
+    return {
+      ...stored,
+      all,
+      components: stored.components.map((/** @type {number} */ i) => all[i]),
+    };
+  },
+};
+
+/** The key a stored template's derived component names sit under. */
+const DERIVED = '\0derived';
+
+/**
  * @typedef {Awaited<ReturnType<typeof gatherCandidates>>} Gathered
  * @type {Map<string, (options?: {fresh?: boolean}) => Promise<Gathered>>}
  */
@@ -150,7 +262,16 @@ export function gatherCandidatesReused(options) {
   let gather = gathered.get(key);
   if (!gather) {
     gather = reusedWhileUnchanged(
-      () => gatherCandidates({cwd, type}),
+      () =>
+        persistedGather(
+          [realFolder(cwd), type ?? null],
+          () => gatherCandidates({cwd, type}),
+          GATHER_CODEC,
+          // A gather that skipped Core (a failed install still in its
+          // backoff, spec:AST-081 FR2) is not kept: once the backoff ends,
+          // the next run must try again.
+          value => value.coreSkipped == null,
+        ),
       unchangedSince,
     );
     gathered.set(key, gather);
