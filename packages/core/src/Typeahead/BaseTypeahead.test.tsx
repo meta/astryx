@@ -26,13 +26,13 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
-import {createRef} from 'react';
+import {createRef, useState} from 'react';
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
 import {BaseTypeahead, type BaseTypeaheadHandle} from './BaseTypeahead';
 import {CommittedChoicesKeyContext} from './committedChoicesKey';
 import {Typeahead} from './Typeahead';
-import {Tokenizer} from '../Tokenizer';
+import {Tokenizer} from '../Tokenizer/Tokenizer';
 import {InternationalizationProvider} from '../i18n';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import type {SearchContext, SearchSource, SearchableItem} from './types';
@@ -168,6 +168,282 @@ describe('BaseTypeahead', () => {
       );
 
       expect(onChangeQuery).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('controlled query', () => {
+    const source: SearchSource<SearchableItem> = {
+      search: query =>
+        [
+          {id: 'a', label: 'Apple'},
+          {id: 'b', label: 'Apricot'},
+        ].filter(item =>
+          item.label.toLowerCase().includes(query.toLowerCase()),
+        ),
+      bootstrap: () => [],
+    };
+
+    beforeEach(() => {
+      __resetLiveRegionsForTest();
+    });
+    afterEach(() => {
+      __resetLiveRegionsForTest();
+    });
+
+    function liveRegion() {
+      return document.querySelector('[data-astryx-live-region="polite"]');
+    }
+
+    function announcedResultCount() {
+      return /\d+ results?/.test(liveRegion()?.textContent ?? '');
+    }
+
+    async function flushAnnouncement() {
+      await act(
+        async () =>
+          new Promise<void>(resolve => requestAnimationFrame(() => resolve())),
+      );
+      await act(
+        async () =>
+          new Promise<void>(resolve => requestAnimationFrame(() => resolve())),
+      );
+    }
+
+    it('shows defaultQuery without opening the listbox', async () => {
+      render(
+        <Typeahead
+          label="Fruit"
+          searchSource={source}
+          value={null}
+          onChange={() => {}}
+          defaultQuery="Ap"
+          debounceMs={0}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      expect(input).toHaveValue('Ap');
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+      await flushAnnouncement();
+      expect(announcedResultCount()).toBe(false);
+    });
+
+    it('lets an uncontrolled field type after defaultQuery', async () => {
+      const onChangeQuery = vi.fn();
+      render(
+        <Typeahead
+          label="Fruit"
+          searchSource={source}
+          value={null}
+          onChange={() => {}}
+          defaultQuery="A"
+          onChangeQuery={onChangeQuery}
+          debounceMs={0}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      fireEvent.focus(input);
+      fireEvent.change(input, {target: {value: 'Ap'}});
+      expect(onChangeQuery).toHaveBeenLastCalledWith('Ap');
+      expect(input).toHaveValue('Ap');
+      await waitFor(() =>
+        expect(input).toHaveAttribute('aria-expanded', 'true'),
+      );
+    });
+
+    it.each([
+      [
+        'Typeahead',
+        (props: {query: string; onChangeQuery: (query: string) => void}) => (
+          <Typeahead
+            label="Fruit"
+            searchSource={source}
+            value={null}
+            onChange={() => {}}
+            debounceMs={0}
+            {...props}
+          />
+        ),
+      ],
+      [
+        'Tokenizer',
+        (props: {query: string; onChangeQuery: (query: string) => void}) => (
+          <Tokenizer
+            label="Fruits"
+            searchSource={source}
+            value={[]}
+            onChange={() => {}}
+            debounceMs={0}
+            presentation="popover"
+            {...props}
+          />
+        ),
+      ],
+      [
+        'BaseTypeahead',
+        (props: {query: string; onChangeQuery: (query: string) => void}) => (
+          <BaseTypeahead
+            aria-label="Fruit"
+            searchSource={source}
+            value={null}
+            onChange={() => {}}
+            debounceMs={0}
+            {...props}
+          />
+        ),
+      ],
+    ] as const)(
+      '%s shows a query the app sets and reports typing',
+      async (_name, renderField) => {
+        const onChangeQuery = vi.fn();
+        function Controlled() {
+          const [query, setQuery] = useState('Ap');
+          return renderField({
+            query,
+            onChangeQuery: next => {
+              onChangeQuery(next);
+              setQuery(next);
+            },
+          });
+        }
+        render(<Controlled />);
+        const input = screen.getByRole('combobox');
+        expect(input).toHaveValue('Ap');
+
+        fireEvent.focus(input);
+        fireEvent.change(input, {target: {value: 'Apr'}});
+        expect(onChangeQuery).toHaveBeenLastCalledWith('Apr');
+        expect(input).toHaveValue('Apr');
+      },
+    );
+
+    it('clears the text when the app sets an empty query', () => {
+      const {rerender} = render(
+        <Typeahead
+          label="Fruit"
+          searchSource={source}
+          value={null}
+          onChange={() => {}}
+          query="Ap"
+          debounceMs={0}
+        />,
+      );
+      expect(screen.getByRole('combobox')).toHaveValue('Ap');
+      rerender(
+        <Typeahead
+          label="Fruit"
+          searchSource={source}
+          value={null}
+          onChange={() => {}}
+          query=""
+          debounceMs={0}
+        />,
+      );
+      expect(screen.getByRole('combobox')).toHaveValue('');
+    });
+
+    it('does not move focus or open the listbox when the app sets the query while idle', async () => {
+      function App({query}: {query: string}) {
+        return (
+          <>
+            <button type="button">Outside</button>
+            <Typeahead
+              label="Fruit"
+              searchSource={source}
+              value={null}
+              onChange={() => {}}
+              query={query}
+              debounceMs={0}
+            />
+          </>
+        );
+      }
+      const {rerender} = render(<App query="" />);
+      screen.getByRole('button', {name: 'Outside'}).focus();
+      rerender(<App query="Ap" />);
+      expect(screen.getByRole('button', {name: 'Outside'})).toHaveFocus();
+      const input = screen.getByRole('combobox');
+      expect(input).toHaveValue('Ap');
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+      await flushAnnouncement();
+      expect(announcedResultCount()).toBe(false);
+    });
+
+    it('closes the listbox when the app clears the query while the field is focused', async () => {
+      function App({query}: {query: string}) {
+        return (
+          <Typeahead
+            label="Fruit"
+            searchSource={source}
+            value={null}
+            onChange={() => {}}
+            query={query}
+            debounceMs={0}
+          />
+        );
+      }
+      const {rerender} = render(<App query="" />);
+      const input = screen.getByRole('combobox');
+      fireEvent.focus(input);
+      rerender(<App query="Ap" />);
+      await waitFor(() =>
+        expect(input).toHaveAttribute('aria-expanded', 'true'),
+      );
+      rerender(<App query="" />);
+      expect(input).toHaveValue('');
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('keeps the text after a pick when the app holds the query', async () => {
+      const onChangeQuery = vi.fn();
+      function Controlled() {
+        const [query] = useState('Ap');
+        return (
+          <Typeahead
+            label="Fruit"
+            searchSource={source}
+            value={null}
+            onChange={() => {}}
+            query={query}
+            onChangeQuery={next => {
+              onChangeQuery(next);
+            }}
+            debounceMs={0}
+          />
+        );
+      }
+      render(<Controlled />);
+      const input = screen.getByRole('combobox');
+      fireEvent.focus(input);
+      await waitFor(() =>
+        expect(
+          screen.getByRole('option', {name: 'Apple', hidden: true}),
+        ).toBeInTheDocument(),
+      );
+      fireEvent.click(
+        screen.getByRole('option', {name: 'Apple', hidden: true}),
+      );
+      expect(onChangeQuery).toHaveBeenLastCalledWith('');
+      expect(input).toHaveValue('Ap');
+    });
+
+    it('empties the text after a pick when the field is uncontrolled', async () => {
+      const user = userEvent.setup();
+      render(
+        <Typeahead
+          label="Fruit"
+          searchSource={source}
+          value={null}
+          onChange={() => {}}
+          defaultQuery="Ap"
+          debounceMs={0}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await user.click(input);
+      await user.click(
+        await screen.findByRole('option', {name: 'Apple', hidden: true}),
+      );
+      expect(input).toHaveValue('');
     });
   });
 

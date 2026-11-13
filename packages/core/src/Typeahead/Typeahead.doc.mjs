@@ -251,9 +251,22 @@ export const docs = {
       default: '150',
     },
     {
+      name: 'query',
+      type: 'string',
+      description:
+        'The typed query. When set, the field is controlled: it shows this text and reports every change through onChangeQuery, including a pick, a clear, and entering edit mode. Hold this value after a pick to keep the text. A change from outside does not move focus, and it does not open the listbox or announce a result count unless the field has focus. When the field is focused, clearing this value closes the listbox as emptying the field does.',
+    },
+    {
+      name: 'defaultQuery',
+      type: 'string',
+      description:
+        'Initial typed query when query is not set. Use this to restore a search without owning the text afterward.',
+    },
+    {
       name: 'onChangeQuery',
       type: '(query: string) => void',
-      description: 'Callback fired when the search query text changes.',
+      description:
+        'Callback fired when the search query text changes, including a pick, a clear, and entering edit mode, so a controlled field stays in sync.',
     },
     {
       name: 'onOpenChange',
@@ -358,6 +371,11 @@ export const docs = {
           'Use inside InputGroup when the typeahead needs a single-line prefix or suffix addon.',
       },
       {
+        guidance: true,
+        description:
+          'Pass query and onChangeQuery to restore a search, clear it from another control, or keep the text after a pick. Pass defaultQuery when the field should start with text and then own it.',
+      },
+      {
         guidance: false,
         description:
           'Use for short, static option lists; use Selector for better discoverability.',
@@ -390,6 +408,11 @@ export const docsZh = {
         guidance: true,
         description:
           'Provide descriptive placeholder text that hints at what users can search for.',
+      },
+      {
+        guidance: true,
+        description:
+          'Pass query and onChangeQuery to restore a search, clear it from another control, or keep the text after a pick. Pass defaultQuery when the field should start with text and then own it.',
       },
       {
         guidance: true,
@@ -461,6 +484,11 @@ export const docsDense = {
         guidance: true,
         description:
           'Use inside InputGroup when the typeahead needs a single-line prefix or suffix addon.',
+      },
+      {
+        guidance: true,
+        description:
+          'Pass query and onChangeQuery to restore a search, clear it from another control, or keep the text after a pick. Pass defaultQuery when the field should start with text and then own it.',
       },
       {
         guidance: false,

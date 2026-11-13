@@ -331,7 +331,22 @@ export interface TokenizerProps<T extends SearchableItem> extends Omit<
    * @default false
    */
   hasCreate?: boolean;
-  /** Query change callback. */
+  /**
+   * The typed query. When set, the field is controlled: it shows this text
+   * and reports every change through `onChangeQuery`, including a pick, a
+   * clear, and entering edit mode. Hold this value after a pick to keep the
+   * text. A change from outside does not move focus. It does not open the
+   * listbox or announce a result count unless the field has focus.
+   */
+  query?: string;
+  /**
+   * Initial typed query when `query` is not set.
+   */
+  defaultQuery?: string;
+  /**
+   * Query change callback. Fires for every text change, including a pick, a
+   * clear, and entering edit mode, so a controlled field stays in sync.
+   */
   onChangeQuery?: (query: string) => void;
   /** Fires when focus enters the tokenizer from outside. */
   onFocus?: (e: React.FocusEvent) => void;
@@ -1033,6 +1048,8 @@ export function Tokenizer<T extends SearchableItem>({
   tokenOverflowBehavior = 'none',
   debounceMs,
   hasCreate = false,
+  query: queryProp,
+  defaultQuery,
   onChangeQuery,
   onFocus,
   onBlur,
@@ -1190,7 +1207,10 @@ export function Tokenizer<T extends SearchableItem>({
   // from a press until its exit completes, and a close the field forces
   // keeps the query (FR18). The ref follows every report; the press
   // snapshots it into the state the next presentation starts from.
-  const sheetQueryRef = useRef('');
+  const sheetQueryRef = useRef(queryProp ?? defaultQuery ?? '');
+  if (queryProp !== undefined) {
+    sheetQueryRef.current = queryProp;
+  }
   const [sheetInitialQuery, setSheetInitialQuery] = useState('');
   const handleSheetQueryChange = useCallback(
     (query: string) => {
@@ -2054,6 +2074,8 @@ export function Tokenizer<T extends SearchableItem>({
                       .filter(Boolean)
                       .join(' ') || undefined
                   }
+                  query={queryProp}
+                  defaultQuery={defaultQuery}
                   onChangeQuery={onChangeQuery}
                   // The resolved required state reaches the combobox, also when a
                   // FormLayout default hides the visible marker (component:FormLayout
@@ -2288,7 +2310,7 @@ export function Tokenizer<T extends SearchableItem>({
                   return;
                 }
                 setIsSheetPresented(true);
-                setSheetInitialQuery(sheetQueryRef.current);
+                setSheetInitialQuery(queryProp ?? sheetQueryRef.current);
                 setIsSheetOpen(true);
               },
               // Typed for the input by the base props; here the control is the
@@ -2372,6 +2394,7 @@ export function Tokenizer<T extends SearchableItem>({
               onOpenChange={setIsSheetOpen}
               finalFocusRef={triggerRef}
               initialQuery={sheetInitialQuery}
+              query={queryProp}
               label={label}
               searchSource={searchSource}
               value={value}

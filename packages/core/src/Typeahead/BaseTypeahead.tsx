@@ -252,7 +252,22 @@ export interface BaseTypeaheadProps<T extends SearchableItem> extends Omit<
   hasAutoFocus?: boolean;
 
   /**
-   * Query change callback (for logging/external use).
+   * The typed query. When set, the field is controlled: it shows this text
+   * and reports every change through `onChangeQuery`, including a pick, a
+   * clear, and entering edit mode. Hold this value after a pick to keep the
+   * text. A change from outside does not move focus. It does not open the
+   * listbox or announce a result count unless the field has focus.
+   */
+  query?: string;
+
+  /**
+   * Initial typed query when `query` is not set.
+   */
+  defaultQuery?: string;
+
+  /**
+   * Query change callback. Fires for every text change, including a pick, a
+   * clear, and entering edit mode, so a controlled field stays in sync.
    */
   onChangeQuery?: (query: string) => void;
 
@@ -624,6 +639,8 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   isDisabled = false,
   isFocusableDisabled = false,
   hasAutoFocus = false,
+  query: queryProp,
+  defaultQuery,
   onChangeQuery,
   onOpenChange,
   menu,
@@ -686,7 +703,11 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // live region, so highlight/result changes were previously silent.
   const announce = useAnnounce();
 
-  const [query, setQuery] = useState('');
+  const isQueryControlled = queryProp !== undefined;
+  const [uncontrolledQuery, setUncontrolledQuery] = useState(
+    () => defaultQuery ?? '',
+  );
+  const query = isQueryControlled ? queryProp : uncontrolledQuery;
   const [results, setResults] = useState<T[]>([]);
 
   // `action` is declared on `SearchableItem` for the grid-adopting hosts;
@@ -896,7 +917,19 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // reopening does not search again.
   const dismissedRef = useRef(false);
   // The query as typed, readable from a search's continuation.
-  const queryRef = useRef('');
+  const queryRef = useRef(query);
+  queryRef.current = query;
+  // The query last applied to search and presentation, so a controlled
+  // update the field itself reported does not run that path again.
+  const lastAppliedQueryRef = useRef('');
+  // True while a search the app started with the field idle must not open
+  // the listbox or announce. Settlement then keeps the answer for the next
+  // open, as a dismissed search does.
+  const idleSearchRef = useRef(false);
+  // Whether the input currently has focus. `activeElement` after a rerender
+  // is not a reliable stand-in: an app that sets `query` in the same turn as
+  // focus can miss it, so a focused clear would take the idle path.
+  const isInputFocusedRef = useRef(false);
   // The search still awaiting its answer, if any.
   const searchInFlightRef = useRef<{gen: number; query: string} | null>(null);
   // The result count of an answer kept while the popup was dismissed, for the
@@ -1216,12 +1249,20 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       // instead of overwriting the newer results.
       const gen = ++searchGenRef.current;
       setLastSearchedQuery(searchQuery);
-      dismissedRef.current = false;
+      const isIdleSearch = idleSearchRef.current;
+      idleSearchRef.current = false;
+      if (isIdleSearch) {
+        dismissedRef.current = true;
+      } else {
+        dismissedRef.current = false;
+      }
       keptCountRef.current = null;
       keptAnswerRef.current = false;
       droppedQueryRef.current = null;
       searchInFlightRef.current = {gen, query: searchQuery};
-      setLoading(true);
+      if (!isIdleSearch) {
+        setLoading(true);
+      }
       setHasSearched(true);
       let isSettled = false;
       // The capped source rows last shown for this query, and the array handed
@@ -1575,17 +1616,31 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     });
   }, [committedChoicesKey]);
 
-  // Handle query change
+  // Handle query change. `input` is a change the field made; `external` is
+  // the `query` prop or the initial `defaultQuery`.
   const handleQueryChange = useCallback(
-    (newQuery: string) => {
+    (newQuery: string, origin: 'input' | 'external' = 'input') => {
       isFocusListKeptRef.current = false;
       keptFocusListPicksRef.current = null;
-      setQuery(newQuery);
+      if (origin === 'input' && !isQueryControlled) {
+        // eslint-disable-next-line @eslint-react/set-state-in-effect -- this branch runs from typing, never from the query-prop layout effect
+        setUncontrolledQuery(newQuery);
+      }
       queryRef.current = newQuery;
+      lastAppliedQueryRef.current = newQuery;
       keptCountRef.current = null;
       keptAnswerRef.current = false;
       droppedQueryRef.current = null;
-      onChangeQuery?.(newQuery);
+      if (origin === 'input') {
+        onChangeQuery?.(newQuery);
+      }
+
+      const input = inputRef.current;
+      const isFocused =
+        isInputFocusedRef.current ||
+        (input != null && input.ownerDocument.activeElement === input);
+      const isIdleExternal = origin === 'external' && !isFocused;
+      idleSearchRef.current = isIdleExternal;
 
       if (searchTimeoutRef.current) {
         clearTimeout(searchTimeoutRef.current);
@@ -1595,9 +1650,11 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       // Nothing to search: either the field was emptied, or the query is
       // still shorter than `minQueryLength`. Both drop stale results and
       // close the menu — showing the empty state for a query that was never
-      // searched would report "no results" that nobody looked for.
+      // searched would report "no results" that nobody looked for. An empty
+      // query the app sets while the field is idle also skips the focus
+      // bootstrap, so the listbox stays closed.
       if (
-        (newQuery.length === 0 && !hasEntriesOnFocus) ||
+        (newQuery.length === 0 && (!hasEntriesOnFocus || isIdleExternal)) ||
         isBelowMinQueryLength(newQuery, minQueryLength)
       ) {
         searchGenRef.current++;
@@ -1608,8 +1665,13 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         const derived = __queryEntries?.(newQuery, []) ?? [];
         resultsGenRef.current = searchGenRef.current;
         replaceResults(derived, derived.length);
+        // A query the app sets must close the listbox before paint, as
+        // emptying the field does. The layout effect shares this path.
+        // eslint-disable-next-line @eslint-react/set-state-in-effect -- close and drop results in the same commit as the new query
         setHeldHeight(null);
+        // eslint-disable-next-line @eslint-react/set-state-in-effect -- close and drop results in the same commit as the new query
         setHighlightedIndex(derived.length > 0 ? 0 : -1);
+        // eslint-disable-next-line @eslint-react/set-state-in-effect -- close and drop results in the same commit as the new query
         setHasSearched(false);
         // Bumping the generation abandons any in-flight search, which means
         // its own `finally` will decline to clear this — so clear it here or
@@ -1617,8 +1679,10 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         // source is the everyday way to hit that.
         setLoading(false);
         // Clear any lingering result-count / no-results announcement.
-        announce('');
-        if (derived.length > 0) {
+        if (!isIdleExternal) {
+          announce('');
+        }
+        if (derived.length > 0 && !isIdleExternal) {
           showLayer();
         } else {
           hideList();
@@ -1657,8 +1721,16 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       searchSource,
       announce,
       setLoading,
+      isQueryControlled,
     ],
   );
+
+  useIsomorphicLayoutEffect(() => {
+    if (query === lastAppliedQueryRef.current) {
+      return;
+    }
+    handleQueryChange(query, 'external');
+  }, [query, handleQueryChange]);
 
   // Handle input change
   const handleInputChange = useCallback(
@@ -1727,11 +1799,15 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       onChange(item);
       const keepsMenuOpen = openRequestedRef.current;
       openRequestedRef.current = false;
-      setQuery('');
-      queryRef.current = '';
       // The pick empties the input, which is a change to the query like any
       // typed one. A query that was already empty (a pick from the focus list)
-      // did not change.
+      // did not change. A controlled field reports the empty text and leaves
+      // the shown value to the app: hold `query` to keep the text.
+      if (!isQueryControlled) {
+        setUncontrolledQuery('');
+        queryRef.current = '';
+        lastAppliedQueryRef.current = '';
+      }
       if (query !== '') {
         onChangeQuery?.('');
       }
@@ -1760,6 +1836,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       onChange,
       onChangeQuery,
       query,
+      isQueryControlled,
       popover,
       searchSource,
       setLoading,
@@ -1877,6 +1954,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
 
   // Handle focus
   const handleFocus = useCallback(() => {
+    isInputFocusedRef.current = true;
     if (isDialogFocusReturnRef.current) {
       return;
     }
@@ -1922,6 +2000,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // input, so this only closes on a genuine focus-out of the whole field.
   const handleBlur = useCallback(
     (e: React.FocusEvent<HTMLInputElement>) => {
+      isInputFocusedRef.current = false;
       // A dialog-role menu takes focus from the input, so a blur keeps it.
       if (isDialogMenuRef.current) {
         return;
@@ -1961,7 +2040,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       // An IME candidate window uses Enter to commit the composition and
       // Escape/ArrowUp/ArrowDown/Home/End to navigate its own candidates.
       // Without this guard, a composing Enter both fires handleSelect AND
-      // clears the input via handleSelect's setQuery(''), so the IME's
+      // clears the input, so the IME's
       // subsequent compositionend then writes the still-pending syllable
       // into the freshly-cleared field -- producing a second, spurious
       // selection on the next real Enter.
