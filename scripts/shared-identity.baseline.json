@@ -557,6 +557,18 @@
       "status": "open",
       "group": "triage"
     },
+    "packages/core/src/utils/touchRuntime.ts:isScheduled": {
+      "status": "allowed",
+      "reason": "Each Core copy loads its own touch runtime for its own components after first paint; a second copy's load fetches its own chunk and changes no result."
+    },
+    "packages/core/src/utils/touchRuntime.ts:listeners": {
+      "status": "allowed",
+      "reason": "Each Core copy loads its own touch runtime for its own components after first paint; a second copy's load fetches its own chunk and changes no result."
+    },
+    "packages/core/src/utils/touchRuntime.ts:runtime": {
+      "status": "allowed",
+      "reason": "Each Core copy loads its own touch runtime for its own components after first paint; a second copy's load fetches its own chunk and changes no result."
+    },
     "packages/core/src/utils/windowExtent.ts:stopObserving": {
       "status": "allowed",
       "reason": "Each copy observes for its own subscribers; a second observer changes no result."
