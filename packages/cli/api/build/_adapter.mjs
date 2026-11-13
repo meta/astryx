@@ -28,6 +28,7 @@ import {componentKeywords} from '../search/search.mjs';
 import {findCoreDir, requireCoreDir} from '../../foundation/fs/paths.mjs';
 import {persistedDerived} from '../../foundation/fs/gather-cache.mjs';
 import {analyzeTemplateNeeds} from '../../foundation/discovery/template-needs.mjs';
+import {extractComponents} from '../../foundation/discovery/template-adapter.mjs';
 
 /**
  * Runs one build with a single directory listing per path: the kit resolves
@@ -47,6 +48,7 @@ export {withListingCache} from '../../foundation/fs/listing-cache.mjs';
  * @property {string} category The template's own `Family - Variant` label; empty when it declares none.
  * @property {string[]} keywords The ideas the page serves, as its own descriptor names them; empty when it declares none.
  * @property {string} filePath Absolute path to the template source file on disk.
+ * @property {string[]} components The components its page composes, read from its source on first use; empty when the source cannot be read.
  */
 
 /**
@@ -99,18 +101,23 @@ export async function loadTemplates(cwd) {
   }
   const pages = templates
     .filter(t => t.type === 'page' && t.isReady !== false)
-    .map(t => ({
-      name: t.dirName,
-      displayName: t.displayName || t.name,
-      description: t.description || '',
-      package: t.package ?? '@astryxdesign/core',
-      category: t.category || '',
-      keywords: t.keywords ?? [],
-      filePath: t.filePath,
-      // The id `template()` resolves back to this entry: an active replacement
-      // owns the Core id it names, so that id selects it, not its own.
-      command: `astryx template ${t.replaces ?? t.dirName} --type page`,
-    }));
+    .map(t =>
+      withComponents(
+        {
+          name: t.dirName,
+          displayName: t.displayName || t.name,
+          description: t.description || '',
+          package: t.package ?? '@astryxdesign/core',
+          category: t.category || '',
+          keywords: t.keywords ?? [],
+          filePath: t.filePath,
+          // The id `template()` resolves back to this entry: an active
+          // replacement owns the Core id it names, so that id selects it.
+          command: `astryx template ${t.replaces ?? t.dirName} --type page`,
+        },
+        t.filePath,
+      ),
+    );
   const blocks = templates
     .filter(t => t.type === 'block')
     .map(t => ({
@@ -361,4 +368,32 @@ export function templateSetupNotes(template, cwd) {
  */
 export function requireBuildCoreDir(cwd) {
   return requireCoreDir(cwd);
+}
+
+/**
+ * Adds a lazy, non-enumerable `components` getter to a page entry: the page's
+ * source is read and parsed only when a caller reads it, once, so loading the
+ * catalog stays cheap and the entry's own fields are unchanged.
+ * @template {object} T
+ * @param {T} entry
+ * @param {string | undefined} filePath
+ * @returns {T & {readonly components: string[]}}
+ */
+function withComponents(entry, filePath) {
+  /** @type {string[] | undefined} */
+  let components;
+  return /** @type {T & {readonly components: string[]}} */ (
+    Object.defineProperty(entry, 'components', {
+      get() {
+        if (components === undefined) {
+          try {
+            components = filePath ? extractComponents(filePath) : [];
+          } catch {
+            components = [];
+          }
+        }
+        return components;
+      },
+    })
+  );
 }
