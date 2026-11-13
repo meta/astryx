@@ -999,7 +999,8 @@ export function NumberInput({
       const text = input.value;
       if (
         isGroupedWhileEditing &&
-        (isComposingRef.current || e.nativeEvent.isComposing)
+        (isComposingRef.current ||
+          (e.nativeEvent instanceof InputEvent && e.nativeEvent.isComposing))
       ) {
         commitDraftText(text);
         return;
