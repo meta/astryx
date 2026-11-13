@@ -1,12 +1,13 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-'use client';
-
 /**
  * @file Text.tsx
  * @input Uses React, HTMLAttributes, ReactNode
  * @output Exports Text component, TextProps, TextType, TextSize types
- * @position Core implementation; consumed by index.ts, tested by Text.test.tsx
+ * @position Core implementation; consumed by index.ts, tested by Text.test.tsx.
+ *   A server module: in a Server Component it renders no client component,
+ *   unless the truncation tooltip needs TruncatableText or a clamp needs
+ *   TextClampScope.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Text/Text.doc.mjs (props table, features, implementation notes)
@@ -16,7 +17,7 @@
  * - /packages/cli/assets/templates/blocks/components/Text/ (showcase blocks)
  */
 
-import {use, useRef, type ReactNode} from 'react';
+import type {ElementType, ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {
   TextType,
@@ -44,20 +45,14 @@ import {
   capsizeStyles,
   decorationStyles,
   tabularNumbersStyle,
-  truncationTooltipStyles,
 } from './text.stylex';
-import {useTruncation} from './useTruncation';
-import {
-  TruncationTooltip,
-  useTruncationTooltipInterest,
-} from './TruncationTooltip';
-import {composeEventHandlers} from '../utils/composeEventHandlers';
+import {TruncatableText} from './TruncatableText';
+import {TextClampScope} from './TextClampScope';
 import type {LayerPlacement} from '../Layer';
 import {mergeProps} from '../utils/mergeProps';
-import {useMergedRefs} from '../hooks/useMergedRefs';
+import {isReactServer} from '../utils/isReactServer';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
-import {TextClampContext} from './textClampContext';
 
 export type {TextType, TextSize};
 
@@ -228,7 +223,7 @@ export function Text({
   color,
   weight,
   display = 'inline',
-  maxLines = 0,
+  maxLines: maxLinesProp,
   hasTruncateTooltip = true,
   wordBreak,
   textWrap,
@@ -244,6 +239,8 @@ export function Text({
   ref,
   ...props
 }: TextProps) {
+  const maxLines = maxLinesProp ?? 0;
+
   // Resolve color with type-based default
   const resolvedColor = color ?? defaultColorByType[type] ?? 'primary';
 
@@ -262,101 +259,77 @@ export function Text({
   // Resolve display - force block when maxLines > 0 or hasCapsize
   const resolvedDisplay = maxLines > 0 || hasCapsize ? 'block' : display;
 
-  // Truncation detection. Only the tooltip reads the measured overflow, so
-  // with the tooltip off the text is clipped by CSS alone and nothing is
-  // measured or observed.
-  const truncation = useTruncation({
-    maxLines: hasTruncateTooltip === false ? 0 : maxLines,
-  });
-
-  // Tooltip for truncated text
-  const tooltipPlacement: LayerPlacement =
-    typeof hasTruncateTooltip === 'string' ? hasTruncateTooltip : 'above';
-  const tooltipEnabled =
-    maxLines > 0 && hasTruncateTooltip !== false && truncation.isTruncated;
-  // The tooltip mounts on the first hover, tap or focus, not with the text.
-  const tooltipInterest = useTruncationTooltipInterest(tooltipEnabled);
-
-  // Ref for the text element (used as tooltip anchor)
-  const textRef = useRef<HTMLElement>(null);
-
-  // Keep the merged ref stable across rerenders.
-  const mergedRef = useMergedRefs(ref, truncation.ref, textRef);
-  const isInClampedText = use(TextClampContext);
   // A capsize block removes a multi-line clamp.
   const isClamped = maxLines === 1 || (maxLines > 1 && !hasCapsize);
 
   // Build inline style for -webkit-line-clamp (dynamic value)
   const inlineStyle = maxLines > 1 ? {WebkitLineClamp: maxLines} : undefined;
 
+  const elementProps = {
+    ...mergeProps(
+      themeProps('text', {type, size, color: resolvedColor}),
+      stylex.props(
+        colorStyles[styleColor],
+        sizeByTypeStyles[styleType],
+        size && sizeStyles[size],
+        defaultWeightByTypeStyles[styleType],
+        weight && weightStyles[weight],
+        // Display: use truncation styles when maxLines > 0
+        maxLines === 1
+          ? truncationStyles.singleLine
+          : maxLines > 1
+            ? truncationStyles.multiLine
+            : displayStyles[resolvedDisplay],
+        // Word break when truncating
+        maxLines > 0 && wordBreakStyles[resolvedWordBreak],
+        // Text wrap
+        textWrap && textWrapStyles[textWrap],
+        // Justify (text alignment)
+        justify !== 'start' && justifyStyles[justify],
+        // Capsize
+        hasCapsize && capsizeStyles.enabled,
+        // Decorations
+        hasStrikethrough && decorationStyles.strikethrough,
+        hasTabularNumbers && tabularNumbersStyle.enabled,
+        // User xstyle
+        xstyle,
+      ),
+      className,
+      {...style, ...inlineStyle},
+    ),
+    ...props,
+  };
+
+  // In a Server Component, only the truncation tooltip needs TruncatableText,
+  // and a clamp alone needs TextClampScope. A client render always takes
+  // TruncatableText, so a change of `maxLines` or `hasTruncateTooltip` keeps
+  // the element and its children mounted.
+  if (
+    isReactServer &&
+    (maxLinesProp === undefined || hasTruncateTooltip === false)
+  ) {
+    // The tag union's intersected ref types reject a plain element ref.
+    const Element = Component as ElementType;
+    return (
+      <Element ref={ref} {...elementProps}>
+        {isClamped ? (
+          <TextClampScope isClamped>{children}</TextClampScope>
+        ) : (
+          children
+        )}
+      </Element>
+    );
+  }
   return (
-    <>
-      <Component
-        ref={mergedRef}
-        {...mergeProps(
-          themeProps('text', {type, size, color: resolvedColor}),
-          stylex.props(
-            colorStyles[styleColor],
-            sizeByTypeStyles[styleType],
-            size && sizeStyles[size],
-            defaultWeightByTypeStyles[styleType],
-            weight && weightStyles[weight],
-            // Display: use truncation styles when maxLines > 0
-            maxLines === 1
-              ? truncationStyles.singleLine
-              : maxLines > 1
-                ? truncationStyles.multiLine
-                : displayStyles[resolvedDisplay],
-            // Word break when truncating
-            maxLines > 0 && wordBreakStyles[resolvedWordBreak],
-            // Text wrap
-            textWrap && textWrapStyles[textWrap],
-            // Justify (text alignment)
-            justify !== 'start' && justifyStyles[justify],
-            // Capsize
-            hasCapsize && capsizeStyles.enabled,
-            // Decorations
-            hasStrikethrough && decorationStyles.strikethrough,
-            hasTabularNumbers && tabularNumbersStyle.enabled,
-            // User xstyle
-            xstyle,
-          ),
-          className,
-          {...style, ...inlineStyle},
-        )}
-        {...props}
-        onPointerEnter={composeEventHandlers(
-          tooltipInterest.onPointerEnter,
-          props.onPointerEnter,
-        )}
-        onPointerLeave={composeEventHandlers(
-          tooltipInterest.onPointerLeave,
-          props.onPointerLeave,
-        )}
-        onPointerDown={composeEventHandlers(
-          tooltipInterest.onPointerDown,
-          props.onPointerDown,
-        )}
-        onFocus={composeEventHandlers(tooltipInterest.onFocus, props.onFocus)}
-        onBlur={composeEventHandlers(tooltipInterest.onBlur, props.onBlur)}>
-        {/* Always mounted, so a change of maxLines keeps every child mounted. */}
-        <TextClampContext value={isClamped || isInClampedText}>
-          {children}
-        </TextClampContext>
-      </Component>
-      {tooltipEnabled && tooltipInterest.isWanted && (
-        <TruncationTooltip
-          anchorRef={textRef}
-          content={
-            <span {...stylex.props(truncationTooltipStyles.content)}>
-              {truncation.fullText}
-            </span>
-          }
-          placement={tooltipPlacement}
-          interest={tooltipInterest}
-        />
-      )}
-    </>
+    <TruncatableText
+      as={Component}
+      elementProps={elementProps}
+      maxLines={maxLines}
+      hasTruncateTooltip={hasTruncateTooltip}
+      isClamped={isClamped}
+      ref={ref}>
+      {children}
+    </TruncatableText>
   );
 }
 

@@ -1,12 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-'use client';
-
 /**
  * @file Heading.tsx
  * @input Uses React, HTMLAttributes, ReactNode
  * @output Exports Heading component, HeadingProps, HeadingLevel types
- * @position Core implementation; lives in own Heading/ dir, re-exported by Text/
+ * @position Core implementation; lives in own Heading/ dir, re-exported by Text/.
+ *   A server module: in a Server Component it renders no client component,
+ *   unless the truncation tooltip needs TruncatableText.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Text/Heading.doc.mjs (props table, theming target)
@@ -19,7 +19,7 @@
  * - /packages/cli/assets/templates/blocks/components/Text/ (showcase blocks)
  */
 
-import {useRef, type ReactNode} from 'react';
+import type {ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {
   TextColor,
@@ -42,18 +42,12 @@ import {
   textWrapStyles,
   capsizeStyles,
   decorationStyles,
-  truncationTooltipStyles,
 } from '../Text/text.stylex';
-import {useTruncation} from '../Text/useTruncation';
-import {
-  TruncationTooltip,
-  useTruncationTooltipInterest,
-} from '../Text/TruncationTooltip';
-import {composeEventHandlers} from '../utils/composeEventHandlers';
+import {TruncatableText} from '../Text/TruncatableText';
 import {resolveStyleColor} from '../Text/Text';
 import type {LayerPlacement} from '../Layer';
 import {mergeProps} from '../utils/mergeProps';
-import {useMergedRefs} from '../hooks/useMergedRefs';
+import {isReactServer} from '../utils/isReactServer';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import type {HeadingTypeMap} from './index';
@@ -222,7 +216,7 @@ export function Heading({
   accessibilityLevel,
   color = 'primary',
   display = 'block',
-  maxLines = 0,
+  maxLines: maxLinesProp,
   hasTruncateTooltip = true,
   wordBreak,
   textWrap,
@@ -237,6 +231,7 @@ export function Heading({
   ...props
 }: HeadingProps) {
   const Component = levelToTag[level];
+  const maxLines = maxLinesProp ?? 0;
 
   // If accessibilityLevel differs from visual level, use aria-level
   const ariaProps =
@@ -256,101 +251,70 @@ export function Heading({
   // the closed built-in StyleX maps with an unknown name.
   const builtinType = type && isBuiltinHeadingType(type) ? type : undefined;
 
-  // Truncation detection. Only the tooltip reads the measured overflow, so
-  // with the tooltip off the text is clipped by CSS alone and nothing is
-  // measured or observed.
-  const truncation = useTruncation({
-    maxLines: hasTruncateTooltip === false ? 0 : maxLines,
-  });
-
-  // Tooltip for truncated text
-  const tooltipPlacement: LayerPlacement =
-    typeof hasTruncateTooltip === 'string' ? hasTruncateTooltip : 'above';
-  const tooltipEnabled =
-    maxLines > 0 && hasTruncateTooltip !== false && truncation.isTruncated;
-  // The tooltip mounts on the first hover, tap or focus, not with the text.
-  const tooltipInterest = useTruncationTooltipInterest(tooltipEnabled);
-
-  // Ref for the heading element (used as tooltip anchor)
-  const headingRef = useRef<HTMLHeadingElement>(null);
-
-  // Keep the merged ref stable across rerenders.
-  const mergedRef = useMergedRefs(ref, truncation.ref, headingRef);
-
   // Build inline style for -webkit-line-clamp (dynamic value)
   const inlineStyle = maxLines > 1 ? {WebkitLineClamp: maxLines} : undefined;
 
-  return (
-    <>
-      <Component
-        ref={mergedRef}
-        {...mergeProps(
-          themeProps('heading', {
-            level,
-            color,
-            type,
-            weight,
-          }),
-          stylex.props(
-            colorStyles[resolveStyleColor(color)],
-            builtinType
-              ? sizeByTypeStyles[builtinType]
-              : sizeByLevelStyles[level],
-            builtinType && defaultWeightByTypeStyles[builtinType],
-            weight && weightStyles[weight],
-            // Display: use truncation styles when maxLines > 0
-            maxLines === 1
-              ? truncationStyles.singleLine
-              : maxLines > 1
-                ? truncationStyles.multiLine
-                : displayStyles[resolvedDisplay],
-            // Word break when truncating
-            maxLines > 0 && wordBreakStyles[resolvedWordBreak],
-            // Text wrap
-            textWrap && textWrapStyles[textWrap],
-            // Justify (text alignment)
-            justify !== 'start' && justifyStyles[justify],
-            // Capsize
-            hasCapsize && capsizeStyles.enabled,
-            // Decorations
-            hasStrikethrough && decorationStyles.strikethrough,
-            // User xstyle
-            xstyle,
-          ),
-          className,
-          {...style, ...inlineStyle},
-        )}
-        {...ariaProps}
-        {...props}
-        onPointerEnter={composeEventHandlers(
-          tooltipInterest.onPointerEnter,
-          props.onPointerEnter,
-        )}
-        onPointerLeave={composeEventHandlers(
-          tooltipInterest.onPointerLeave,
-          props.onPointerLeave,
-        )}
-        onPointerDown={composeEventHandlers(
-          tooltipInterest.onPointerDown,
-          props.onPointerDown,
-        )}
-        onFocus={composeEventHandlers(tooltipInterest.onFocus, props.onFocus)}
-        onBlur={composeEventHandlers(tooltipInterest.onBlur, props.onBlur)}>
+  const elementProps = {
+    ...mergeProps(
+      themeProps('heading', {
+        level,
+        color,
+        type,
+        weight,
+      }),
+      stylex.props(
+        colorStyles[resolveStyleColor(color)],
+        builtinType ? sizeByTypeStyles[builtinType] : sizeByLevelStyles[level],
+        builtinType && defaultWeightByTypeStyles[builtinType],
+        weight && weightStyles[weight],
+        // Display: use truncation styles when maxLines > 0
+        maxLines === 1
+          ? truncationStyles.singleLine
+          : maxLines > 1
+            ? truncationStyles.multiLine
+            : displayStyles[resolvedDisplay],
+        // Word break when truncating
+        maxLines > 0 && wordBreakStyles[resolvedWordBreak],
+        // Text wrap
+        textWrap && textWrapStyles[textWrap],
+        // Justify (text alignment)
+        justify !== 'start' && justifyStyles[justify],
+        // Capsize
+        hasCapsize && capsizeStyles.enabled,
+        // Decorations
+        hasStrikethrough && decorationStyles.strikethrough,
+        // User xstyle
+        xstyle,
+      ),
+      className,
+      {...style, ...inlineStyle},
+    ),
+    ...ariaProps,
+    ...props,
+  };
+
+  // In a Server Component, only the truncation tooltip needs the client part.
+  // A client render always takes it, so a change of `maxLines` or
+  // `hasTruncateTooltip` keeps the element and its children mounted.
+  if (
+    isReactServer &&
+    (maxLinesProp === undefined || hasTruncateTooltip === false)
+  ) {
+    return (
+      <Component ref={ref} {...elementProps}>
         {children}
       </Component>
-      {tooltipEnabled && tooltipInterest.isWanted && (
-        <TruncationTooltip
-          anchorRef={headingRef}
-          content={
-            <span {...stylex.props(truncationTooltipStyles.content)}>
-              {truncation.fullText}
-            </span>
-          }
-          placement={tooltipPlacement}
-          interest={tooltipInterest}
-        />
-      )}
-    </>
+    );
+  }
+  return (
+    <TruncatableText
+      as={Component}
+      elementProps={elementProps}
+      maxLines={maxLines}
+      hasTruncateTooltip={hasTruncateTooltip}
+      ref={ref}>
+      {children}
+    </TruncatableText>
   );
 }
 

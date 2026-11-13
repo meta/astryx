@@ -73,12 +73,19 @@ const EXTENSIONS = ['.tsx', '.ts', '.mjs', '.js', '.jsx'];
 
 /**
  * `'use client'` modules a server-safe component may render as a client
- * island: each does nothing on the server, so the component's server output
- * is unchanged. The walk stops at them.
+ * island: on the server each renders nothing, or exactly the markup the
+ * component renders statically, so the component's server output is
+ * unchanged. The walk stops at them.
  */
 const CLIENT_ISLANDS = new Set([
   'hooks/AnnounceRenderedText.tsx',
   'hooks/StackItemScrollRegion.tsx',
+  // Text's and Heading's truncation tooltip: it measures overflow and mounts
+  // the tooltip. Only an explicit `maxLines` with the tooltip on renders it.
+  'Text/TruncatableText.tsx',
+  // Tells a nested Link that it is in clamped text. A clamped Text with the
+  // tooltip off renders it, and it adds no DOM.
+  'Text/TextClampScope.tsx',
 ]);
 
 const isSourceFile = (name: string) =>
@@ -570,6 +577,35 @@ describe('parseSource', () => {
       false,
     );
   });
+
+  it('does not flag a check that a client API exists', () => {
+    // `'useState' in React` calls nothing, so it is safe on the server.
+    expect(
+      parse(
+        `import * as React from 'react';\nexport const isServer = !('useState' in React);`,
+      ).clientAPIs,
+    ).toEqual([]);
+  });
+});
+
+describe('Text and Heading server modules', () => {
+  // Text's folder also holds its client hooks, so the per-component checks
+  // below cannot see whether Text's own module is a server module.
+  it.each(['Text/Text.tsx', 'Heading/Heading.tsx'])(
+    '%s carries no directive and reaches only its client island',
+    rel => {
+      const file = join(SRC_DIR, rel);
+      expect(parseModule(file).hasUseClient).toBe(false);
+      expect(format(findClientSurfaces(file, null))).toBe('');
+    },
+  );
+
+  it.each(['Text/index.ts', 'Heading/index.ts'])(
+    '%s is not a client entry',
+    rel => {
+      expect(parseModule(join(SRC_DIR, rel)).hasUseClient).toBe(false);
+    },
+  );
 });
 
 describe('CLIENT_APIS', () => {
