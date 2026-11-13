@@ -370,15 +370,13 @@ those contracts.
   finds its neighbours without loading gesture code. Gap: these modules still
   import the shared touch modules statically, so a page that renders them
   carries the touch runtime in its first load: Slider
-  (`sliderTouchController`), Chat (`useChatKeyboard`), the date and time
+  (`sliderTouchController`), Chat (`useChatKeyboard`), and the date and time
   fields' wheels (`DateInput/PickerWheel`, `DateInput/wheelStrip`,
-  `motion/reducedMotion`), and Calendar and the date and time fields' own
-  fields (`NativeDateField`, `TouchDateField`, `TouchDateTimeField`), which
-  import the `hooks` barrel. `@astryx/no-static-touch-runtime` reports any
-  other static path from a component into these modules; its allowlist names
-  exactly these imports and shrinks as they move behind the loader. Through
-  them DateRangeInput, PowerSearch and Table carry it too. A surface revealed
-  by interaction that a component loads with `import()` under
+  `motion/reducedMotion`). Through the wheels, PowerSearch and Table carry it
+  too. `@astryx/no-static-touch-runtime` reports any other static path from a
+  component into these modules; its allowlist names exactly these imports and
+  shrinks as they move behind the loader. A surface revealed by interaction
+  that a component loads with `import()` under
   `architecture:component-import-boundaries` INV1 imports these modules
   statically too; the bundler still keeps one copy per page. That `import()`
   targets the surface module, never one of these modules, and it is not a

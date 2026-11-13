@@ -111,6 +111,8 @@ describe('architecture:react-component-runtime INV13 shared touch loader', () =>
     'Lightbox/index.ts',
     'Resizable/index.ts',
     'Layout/index.ts',
+    'Calendar/index.ts',
+    'DateRangeInput/index.ts',
   ])('%s reaches no touch module statically', entry => {
     expect(touchChains(entry)).toEqual([]);
   });
