@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "id": "notification-switches",
+  "source": "sd-5",
+  "title": "Notification preference switches",
+  "prompt": "Show three switches labelled \"Email notifications\", \"Push notifications\" and \"SMS alerts\". Email notifications starts on and the other two start off. Assistive technology must read each one as a switch with its label. Below them, show \"1 of 3 notifications on\", updated as the switches change. The Space key toggles the focused switch."
+}

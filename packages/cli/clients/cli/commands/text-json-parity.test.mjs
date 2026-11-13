@@ -33,6 +33,21 @@ import * as crypto from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {runCli} from '../../../test-utils/run-cli.mjs';
 import {writeIconPackage} from '../../../test-utils/icon-set-fixture.mjs';
+import {
+  makeLinkedFixture,
+  removeLinkedFixture,
+} from '../../../test-utils/linked-fixture.mjs';
+import {
+  FIXTURE_PACKAGES,
+  writeFixtureBaseTheme,
+} from '../../../test-utils/base-theme-fixture.mjs';
+import {
+  themeEditNew,
+  themeEditPreviewAdd,
+  themeEditPreviewRemove,
+  themeEditSet,
+  themeEditUndo,
+} from '../../../api/theme-edit/theme-edit.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '../../../../..');
@@ -113,7 +128,8 @@ function extractListItems(text) {
  * @returns {string[]}
  */
 function extractTextBlocks(text) {
-  const HINT_PREFIXES = /^(Usage|Summary|Read|Example|Tip|Import from|Related blocks|Each key|Props take|One component|No results|Try a|Browse instead|No failures|All checks|Some checks|Pass --\w)[:.]?/i;
+  const HINT_PREFIXES =
+    /^(Usage|Summary|Read|Example|Tip|Import from|Related blocks|Each key|Props take|One component|No results|Try a|Browse instead|No failures|All checks|Some checks|Pass --\w)[:.]?/i;
   const lines = text.split('\n');
   /** @type {string[]} */
   const blocks = [];
@@ -128,9 +144,15 @@ function extractTextBlocks(text) {
     if (HINT_PREFIXES.test(trimmed)) continue;
     // Skip lines that look like code, commands, or status tokens
     if (trimmed.startsWith('`') || trimmed.startsWith('$')) continue;
-    if (trimmed.startsWith('[ok]') || trimmed.startsWith('[skip]') ||
-        trimmed.startsWith('[fail]') || trimmed.startsWith('[warn]') ||
-        trimmed.startsWith('!') || trimmed.startsWith('(')) continue;
+    if (
+      trimmed.startsWith('[ok]') ||
+      trimmed.startsWith('[skip]') ||
+      trimmed.startsWith('[fail]') ||
+      trimmed.startsWith('[warn]') ||
+      trimmed.startsWith('!') ||
+      trimmed.startsWith('(')
+    )
+      continue;
     // Skip continuation lines (indented, part of a wrapped record or list)
     if (/^\s{2,}\S/.test(lines[i])) continue;
     // Skip section headings: a line preceded by blank (or start) that belongs
@@ -153,7 +175,8 @@ function extractTextBlocks(text) {
     if (!prevBlank && nextBlank && i >= 1) {
       const prevLine = lines[i - 1]?.trim() ?? '';
       const prevPrevBlank = i < 2 || !lines[i - 2]?.trim();
-      if (prevPrevBlank && prevLine.length <= 80 && !/[.!?]$/.test(prevLine)) continue;
+      if (prevPrevBlank && prevLine.length <= 80 && !/[.!?]$/.test(prevLine))
+        continue;
     }
     blocks.push(normalize(trimmed));
   }
@@ -170,10 +193,25 @@ function jsonLeafValues(obj) {
   /** @type {Set<string>} */
   const values = new Set();
   if (obj == null) return values;
-  if (typeof obj === 'string') { values.add(normalize(obj)); return values; }
-  if (typeof obj === 'number' || typeof obj === 'boolean') { values.add(String(obj)); return values; }
-  if (Array.isArray(obj)) { for (const item of obj) { for (const v of jsonLeafValues(item)) values.add(v); } return values; }
-  if (typeof obj === 'object') { for (const value of Object.values(obj)) { for (const v of jsonLeafValues(value)) values.add(v); } }
+  if (typeof obj === 'string') {
+    values.add(normalize(obj));
+    return values;
+  }
+  if (typeof obj === 'number' || typeof obj === 'boolean') {
+    values.add(String(obj));
+    return values;
+  }
+  if (Array.isArray(obj)) {
+    for (const item of obj) {
+      for (const v of jsonLeafValues(item)) values.add(v);
+    }
+    return values;
+  }
+  if (typeof obj === 'object') {
+    for (const value of Object.values(obj)) {
+      for (const v of jsonLeafValues(value)) values.add(v);
+    }
+  }
   return values;
 }
 
@@ -204,7 +242,11 @@ function jsonLeafKeys(obj) {
         keys.add(key);
       } else {
         for (const item of value) {
-          if (item != null && typeof item === 'object' && !Array.isArray(item)) {
+          if (
+            item != null &&
+            typeof item === 'object' &&
+            !Array.isArray(item)
+          ) {
             for (const k of jsonLeafKeys(item)) keys.add(k);
           }
         }
@@ -227,7 +269,10 @@ function jsonKeyValues(obj) {
   const map = new Map();
   function walk(/** @type {unknown} */ node) {
     if (node == null || typeof node !== 'object') return;
-    if (Array.isArray(node)) { for (const item of node) walk(item); return; }
+    if (Array.isArray(node)) {
+      for (const item of node) walk(item);
+      return;
+    }
     for (const [key, value] of Object.entries(node)) {
       if (value == null) continue;
       if (typeof value !== 'object') {
@@ -259,7 +304,8 @@ function jsonKeyValues(obj) {
  */
 function jsonContainsKey(obj, target) {
   if (obj == null || typeof obj !== 'object') return false;
-  if (Array.isArray(obj)) return obj.some(item => jsonContainsKey(item, target));
+  if (Array.isArray(obj))
+    return obj.some(item => jsonContainsKey(item, target));
   for (const [key, value] of Object.entries(obj)) {
     if (key === target) return true;
     if (jsonContainsKey(value, target)) return true;
@@ -278,7 +324,34 @@ function jsonContainsKey(obj, target) {
  * @property {string[]} [jsonFieldAllowlist] - JSON keys forgiven from text.
  * @property {boolean} [skipFieldChecks] - Skip both record-key and field checks.
  * @property {boolean} [errorExpected] - The command is expected to error.
+ * @property {() => Promise<string>} [prepare] - Make the working directory (instead of `cwd`).
+ * @property {(cwd: string) => Promise<void>} [beforeEachRun] - Run before the text run and before the JSON run.
  */
+
+/** @type {Promise<string> | null} */
+let themeProjectMade = null;
+/**
+ * One app with Core and a theme `brand` made by the editor, shared by the
+ * editor and preview cases, and a routes folder for the preview.
+ * @returns {Promise<string>}
+ */
+function themeProject() {
+  themeProjectMade ??= (async () => {
+    const dir = makeLinkedFixture('astryx-parity-theme-', FIXTURE_PACKAGES);
+    // CI builds only Core, so the base theme is a fixture, not a built package.
+    writeFixtureBaseTheme(dir, 'neutral');
+    fs.mkdirSync(path.join(dir, 'src', 'app'), {recursive: true});
+    // A routes folder has a root layout, which loads Core's stylesheet.
+    if (!fs.existsSync(path.join(dir, 'src/app/layout.tsx')))
+      fs.writeFileSync(
+        path.join(dir, 'src/app/layout.tsx'),
+        "import '@astryxdesign/core/astryx.css';\nexport default function RootLayout({children}) { return children; }\n",
+      );
+    await themeEditNew('brand', {cwd: dir, like: 'neutral'});
+    return dir;
+  })();
+  return themeProjectMade;
+}
 
 /** @type {ParityCase[]} */
 const CASES = [
@@ -401,6 +474,13 @@ const CASES = [
     args: ['integration', 'pack', '--check'],
     skipFieldChecks: true,
   },
+  // A bare experimental theme group answers --json with its help: the
+  // text is the group's --help.
+  ...[
+    'experimental theme',
+    'experimental theme editor',
+    'experimental theme preview',
+  ].map(name => ({name, args: name.split(' '), skipFieldChecks: true})),
   {
     name: 'experimental icon',
     args: ['experimental', 'icon', 'remove'],
@@ -451,11 +531,21 @@ const CASES = [
   {
     // The --reverse projection (same command, same folder as the case above).
     name: 'experimental render',
-    args: ['experimental', 'render', '--reverse', 'carried.html', '--out', 'back.tsx', '--overwrite'],
+    args: [
+      'experimental',
+      'render',
+      '--reverse',
+      'carried.html',
+      '--out',
+      'back.tsx',
+      '--overwrite',
+    ],
     cwd: '__TMP__',
     // A rendered file that carries its page.
     setup: dir => {
-      const source = Buffer.from('export default function Page() { return <h1>Hello</h1>; }\n');
+      const source = Buffer.from(
+        'export default function Page() { return <h1>Hello</h1>; }\n',
+      );
       const json = JSON.stringify({
         version: 1,
         entry: 'page.jsx',
@@ -592,6 +682,8 @@ const CASES = [
       'written — stated in status token ([ok] / [skip])',
       'path — stated in the "[ok] Wrote ..." line',
       'reason — absent; only in skip envelopes',
+      'overwritable — stated by the hint after [skip]: --overwrite, or a new path',
+      'alternative — the path in the suggested template command; null when --overwrite works',
     ],
   },
   // The experimental copies of the theme commands: the same cases.
@@ -630,12 +722,6 @@ const CASES = [
     skipFieldChecks: true,
   },
   {
-    name: 'experimental theme palette generate',
-    args: ['experimental', 'theme', 'palette', 'generate', 'nonexistent.json'],
-    errorExpected: true,
-    skipFieldChecks: true,
-  },
-  {
     name: 'experimental theme targets',
     args: ['experimental', 'theme', 'targets'],
     jsonFieldAllowlist: [
@@ -651,49 +737,173 @@ const CASES = [
       'written — stated in status token ([ok] / [skip])',
       'path — stated in the "[ok] Wrote ..." line',
       'reason — absent; only in skip envelopes',
+      'overwritable — stated by the hint after [skip]: --overwrite, or a new path',
+      'alternative — the path in the suggested template command; null when --overwrite works',
     ],
   },
   // The theme editor: refusals before any build, and a list.
   {
-    name: 'experimental theme new',
-    args: ['experimental', 'theme', 'new', 'Not-Kebab'],
+    name: 'experimental theme editor new',
+    args: ['experimental', 'theme', 'editor', 'new', 'Not-Kebab'],
     errorExpected: true,
     skipFieldChecks: true,
   },
   {
-    name: 'experimental theme set',
-    args: ['experimental', 'theme', 'set', 'does-not-exist', 'corners', 'pill'],
+    name: 'experimental theme editor new',
+    args: [
+      'experimental',
+      'theme',
+      'editor',
+      'new',
+      'fresh',
+      '--like',
+      'neutral',
+    ],
+    prepare: themeProject,
+    beforeEachRun: async cwd =>
+      fs.rmSync(path.join(cwd, 'themes', 'fresh'), {
+        recursive: true,
+        force: true,
+      }),
+  },
+  {
+    name: 'experimental theme editor new',
+    args: [
+      'experimental',
+      'theme',
+      'editor',
+      'new',
+      'flagged',
+      '--like',
+      'neutral',
+      '--accent',
+      '#7c3aed',
+      '--corners',
+      'round',
+    ],
+    prepare: themeProject,
+    beforeEachRun: async cwd =>
+      fs.rmSync(path.join(cwd, 'themes', 'flagged'), {
+        recursive: true,
+        force: true,
+      }),
+  },
+  {
+    name: 'experimental theme editor set',
+    args: [
+      'experimental',
+      'theme',
+      'editor',
+      'set',
+      'brand',
+      'corners',
+      'pill',
+    ],
+    prepare: themeProject,
+    // Both runs start from the same theme, so both make the same change.
+    beforeEachRun: async cwd => {
+      await themeEditUndo('brand', {cwd, thing: 'corners'}).catch(() => null);
+    },
+  },
+  {
+    name: 'experimental theme editor show',
+    args: ['experimental', 'theme', 'editor', 'show', 'brand'],
+    prepare: themeProject,
+  },
+  {
+    name: 'experimental theme editor undo',
+    args: ['experimental', 'theme', 'editor', 'undo', 'brand'],
+    prepare: themeProject,
+    beforeEachRun: async cwd => {
+      await themeEditSet('brand', 'spacing', 'roomy', {cwd});
+    },
+  },
+  {
+    name: 'experimental theme editor undo',
+    args: ['experimental', 'theme', 'editor', 'undo', 'brand', 'accent'],
+    prepare: themeProject,
+    beforeEachRun: async cwd => {
+      await themeEditSet('brand', 'accent', '#7c3aed', {cwd});
+    },
+  },
+  {
+    name: 'experimental theme editor how',
+    args: ['experimental', 'theme', 'editor', 'how', 'banner'],
+    prepare: themeProject,
+  },
+  {
+    name: 'experimental theme editor how',
+    args: [
+      'experimental',
+      'theme',
+      'editor',
+      'how',
+      'white text in the banner',
+    ],
+    prepare: themeProject,
+  },
+  {
+    name: 'experimental theme editor how',
+    args: ['experimental', 'theme', 'editor', 'how', '--color-accent'],
+    prepare: themeProject,
+  },
+  {
+    name: 'experimental theme editor how',
+    args: ['experimental', 'theme', 'editor', 'how', 'corners'],
+    prepare: themeProject,
+  },
+  {
+    name: 'experimental theme editor how',
+    args: ['experimental', 'theme', 'editor', 'how', '--list', 'dials'],
+    prepare: themeProject,
+  },
+  {
+    name: 'experimental theme editor how',
+    args: ['experimental', 'theme', 'editor', 'how', '--list', 'parts'],
+    prepare: themeProject,
+  },
+  {
+    name: 'experimental theme preview add',
+    args: ['experimental', 'theme', 'preview', 'add'],
+    cwd: '__TMP__',
     errorExpected: true,
     skipFieldChecks: true,
   },
   {
-    name: 'experimental theme reset',
-    args: ['experimental', 'theme', 'reset', 'does-not-exist', 'corners'],
+    name: 'experimental theme preview app',
+    args: [
+      'experimental',
+      'theme',
+      'preview',
+      'app',
+      'theme-app',
+      '--theme',
+      'nope',
+    ],
+    cwd: '__TMP__',
     errorExpected: true,
     skipFieldChecks: true,
   },
   {
-    name: 'experimental theme show',
-    args: ['experimental', 'theme', 'show', 'does-not-exist'],
-    errorExpected: true,
-    skipFieldChecks: true,
+    name: 'experimental theme preview add',
+    args: ['experimental', 'theme', 'preview', 'add'],
+    prepare: themeProject,
+    beforeEachRun: async cwd => {
+      await themeEditPreviewRemove(undefined, {cwd}).catch(() => null);
+    },
   },
   {
-    name: 'experimental theme undo',
-    args: ['experimental', 'theme', 'undo', 'does-not-exist'],
-    errorExpected: true,
-    skipFieldChecks: true,
+    name: 'experimental theme preview list',
+    args: ['experimental', 'theme', 'preview', 'list'],
+    prepare: themeProject,
   },
   {
-    name: 'experimental theme preview',
-    args: ['experimental', 'theme', 'preview', 'does-not-exist'],
-    errorExpected: true,
-    skipFieldChecks: true,
-  },
-  {
-    name: 'experimental theme explain',
-    args: ['experimental', 'theme', 'explain', '--list', 'dials'],
-    skipFieldChecks: true,
+    name: 'experimental theme preview remove',
+    args: ['experimental', 'theme', 'preview', 'remove'],
+    prepare: themeProject,
+    beforeEachRun: async cwd => {
+      await themeEditPreviewAdd(undefined, {cwd});
+    },
   },
   {
     name: 'upgrade',
@@ -717,8 +927,9 @@ describe('text-json-parity', () => {
     manifestCommands = manifest.data.jsonSupported;
   });
 
-  afterAll(() => {
+  afterAll(async () => {
     fs.rmSync(tmpDir, {recursive: true, force: true});
+    if (themeProjectMade) removeLinkedFixture(await themeProjectMade);
   });
 
   // ── Gate: every JSON-capable command has a parity case ──────────────
@@ -743,34 +954,42 @@ describe('text-json-parity', () => {
       /** @type {{text: string, json: any, textStatus: number, jsonStatus: number}} */
       let run;
 
-      beforeAll(async () => {
-        let cwd = tc.cwd === '__TMP__' ? tmpDir : (tc.cwd || REPO_ROOT);
-        if (tc.cwd === '__TMP__') {
-          const sub = path.join(tmpDir, tc.name.replace(/\s+/g, '-'));
-          fs.mkdirSync(sub, {recursive: true});
-          if (tc.setup) tc.setup(sub);
-          cwd = sub;
-        }
+      beforeAll(
+        async () => {
+          let cwd = tc.cwd === '__TMP__' ? tmpDir : tc.cwd || REPO_ROOT;
+          if (tc.cwd === '__TMP__') {
+            const sub = path.join(tmpDir, tc.name.replace(/\s+/g, '-'));
+            fs.mkdirSync(sub, {recursive: true});
+            if (tc.setup) tc.setup(sub);
+            cwd = sub;
+          }
+          if (tc.prepare) cwd = await tc.prepare();
 
-        // Run sequentially: runCli uses process.chdir, which is global
-        // state and races under Promise.all.
-        const textResult = await runCli(tc.args, {cwd});
-        const jsonResult = await runCli([...tc.args, '--json'], {cwd});
+          // Run sequentially: runCli uses process.chdir, which is global
+          // state and races under Promise.all.
+          await tc.beforeEachRun?.(cwd);
+          const textResult = await runCli(tc.args, {cwd});
+          await tc.beforeEachRun?.(cwd);
+          const jsonResult = await runCli([...tc.args, '--json'], {cwd});
 
-        let jsonData;
-        try {
-          jsonData = JSON.parse(jsonResult.stdout);
-        } catch {
-          jsonData = null;
-        }
+          let jsonData;
+          try {
+            jsonData = JSON.parse(jsonResult.stdout);
+          } catch {
+            jsonData = null;
+          }
 
-        run = {
-          text: textResult.stdout,
-          json: jsonData,
-          textStatus: textResult.status,
-          jsonStatus: jsonResult.status,
-        };
-      });
+          run = {
+            text: textResult.stdout,
+            json: jsonData,
+            textStatus: textResult.status,
+            jsonStatus: jsonResult.status,
+          };
+          // The editor commands build and render a theme twice here, which can
+          // pass the default hook budget on a loaded CI runner.
+        },
+        tc.name.startsWith('experimental theme editor') ? 120_000 : undefined,
+      );
 
       it('JSON output is a valid envelope', () => {
         expect(run.json).not.toBeNull();
@@ -827,14 +1046,17 @@ describe('text-json-parity', () => {
           for (const key of jsonKeys) {
             const inRecords = textKeys.has(key);
             // Check for `key:` as a field label at start of line.
-            const asLabel = new RegExp(`(?:^|\\n)\\s*${key}:`, 'm').test(run.text);
+            const asLabel = new RegExp(`(?:^|\\n)\\s*${key}:`, 'm').test(
+              run.text,
+            );
             // For inline records (no labels): check if THIS KEY's values
             // appear in the text.  This catches inline-layout projections
             // where the key name is only in the section subtitle.
             const myVals = keyVals.get(key) ?? new Set();
-            const valuesInText = !inRecords && !asLabel && [...myVals].some(v =>
-              v.length > 2 && run.text.includes(v),
-            );
+            const valuesInText =
+              !inRecords &&
+              !asLabel &&
+              [...myVals].some(v => v.length > 2 && run.text.includes(v));
             const allowed = allowedKeys.has(key);
             if (!inRecords && !asLabel && !valuesInText && !allowed) {
               missing.push(key);
@@ -869,9 +1091,9 @@ describe('text-json-parity', () => {
             // the JSON values.  A block with no JSON overlap is a fact the
             // envelope does not carry.  Numbers (even short) count because
             // they are data.
-            const words = block.split(/\s+/).filter(w =>
-              w.length > 3 || /^\d+$/.test(w),
-            );
+            const words = block
+              .split(/\s+/)
+              .filter(w => w.length > 3 || /^\d+$/.test(w));
             const anyOverlap = words.some(w =>
               [...jsonValues].some(jv => jv.includes(w)),
             );
@@ -894,7 +1116,10 @@ describe('text-json-parity', () => {
           const stale = [];
           for (const entry of tc.jsonFieldAllowlist) {
             const key = entry.split(' — ')[0].trim();
-            if (!jsonContainsKey(searchTarget, key) && !jsonContainsKey(run.json.meta, key)) {
+            if (
+              !jsonContainsKey(searchTarget, key) &&
+              !jsonContainsKey(run.json.meta, key)
+            ) {
               stale.push(entry);
             }
           }
@@ -926,7 +1151,9 @@ describe('text-json-parity', () => {
     it('upgrade --list --registry emits one error envelope in --json mode', async () => {
       const sub = path.join(tmpDir, 'upgrade-list-fail-json');
       fs.mkdirSync(sub, {recursive: true});
-      const r = await runCli(['upgrade', '--list', '--registry', '--json'], {cwd: sub});
+      const r = await runCli(['upgrade', '--list', '--registry', '--json'], {
+        cwd: sub,
+      });
       expect(r.status).toBe(1);
       const parsed = JSON.parse(r.stdout);
       expect(parsed).toHaveProperty('error');
@@ -940,16 +1167,23 @@ describe('text-json-parity', () => {
       expect(r.status).toBe(1);
       // The error should appear exactly once.
       const combined = r.stdout + r.stderr;
-      const lines = combined.split('\n').filter(l => l.includes('notsemver') || l.includes('ERR'));
+      const lines = combined
+        .split('\n')
+        .filter(l => l.includes('notsemver') || l.includes('ERR'));
       // At most one line carries the error; zero is OK if the API formats
       // differently, but more than one means duplication.
-      expect(lines.length, 'error should not be duplicated').toBeLessThanOrEqual(1);
+      expect(
+        lines.length,
+        'error should not be duplicated',
+      ).toBeLessThanOrEqual(1);
     });
 
     it('non-list upgrade failure emits one error envelope in --json mode', async () => {
       const sub = path.join(tmpDir, 'upgrade-nonlist-fail-json');
       fs.mkdirSync(sub, {recursive: true});
-      const r = await runCli(['upgrade', '--from', 'notsemver', '--json'], {cwd: sub});
+      const r = await runCli(['upgrade', '--from', 'notsemver', '--json'], {
+        cwd: sub,
+      });
       expect(r.status).toBe(1);
       const parsed = JSON.parse(r.stdout);
       expect(parsed).toHaveProperty('error');

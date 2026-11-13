@@ -12,6 +12,23 @@ export function themeDataAttributeName(prop: string): `data-${string}` {
 }
 
 /**
+ * Return the caller's `data-*` attributes from a component's remaining props.
+ *
+ * A component spreads them on its own element, before its own attributes, so
+ * tools and tests can tag it. Other unknown props stay off the DOM: the
+ * component keeps its id, role, ARIA attributes, and handlers.
+ */
+export function pickDataAttributes(props: object): ThemeDataAttributes {
+  const attrs: ThemeDataAttributes = {};
+  for (const [key, value] of Object.entries(props)) {
+    if (key.startsWith('data-')) {
+      attrs[key as `data-${string}`] = value as string | undefined;
+    }
+  }
+  return attrs;
+}
+
+/**
  * Build the stable Astryx target class name for a component.
  *
  * Visual props and runtime states are reflected only as explicit `data-*`
