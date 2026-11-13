@@ -42,7 +42,11 @@ import {
   listedFiles,
   proofImporters,
   renderingFolders,
+  isStoryFile,
   specOwners,
+  storyComponentFolders,
+  storyFiles,
+  storyIdsOpened,
 } from './a11y-pr-contracts.mjs';
 
 // CI may run this file from the workflow's own commit, outside the checkout,
@@ -327,6 +331,51 @@ export function selectProofs({listed, changed, shared, filters}) {
   return [...out];
 }
 
+/**
+ * What a changed story reaches: the component folders it imports by value,
+ * and every interaction spec that opens one of its story ids. Null when the
+ * tree lacks the story, its meta names no id, an import does not resolve, a
+ * spec's templated id that could name this story is not filled, or a spec
+ * opens a story id no story file makes (a renamed title strands its openers).
+ * @param {{listed: string[], read: (file: string) => string}} options
+ * @returns {(file: string) => {folders: string[], specs: string[]} | null}
+ */
+export function storyScopeFor({listed, read}) {
+  let stories = null;
+  let opened = null;
+  return file => {
+    if (!listed.includes(file)) return null;
+    const story = storyComponentFolders(file, {listed, read});
+    if (story.unresolved.length > 0) return null;
+    stories ??= storyFiles(listed, read);
+    opened ??= listed
+      .filter(isInteractionSpec)
+      .map(spec => [spec, storyIdsOpened(spec, {listed, read, stories})]);
+    if (opened.some(([, {ids}]) => ids.some(id => !stories.has(id))))
+      return null;
+    const own = [...stories]
+      .filter(([, files]) => files.includes(file))
+      .map(([id]) => id);
+    // A story whose meta names no id cannot be matched to its openers.
+    if (own.length === 0) return null;
+    const specs = [];
+    for (const [spec, {ids, unfilled}] of opened) {
+      if (ids.some(id => own.includes(id))) specs.push(spec);
+      else if (
+        unfilled.some(template => {
+          const prefix = template.slice(0, template.indexOf('-${'));
+          return own.some(id => id.startsWith(`${prefix}-`));
+        })
+      )
+        return null;
+    }
+    return {
+      folders: story.folders.map(componentFolderOf).filter(Boolean),
+      specs: specs.sort(),
+    };
+  };
+}
+
 /** What a proof's page loads: the specs, the stories they open, the preview. */
 export const isProofPage = file =>
   isInteractionSpec(file) ||
@@ -339,8 +388,10 @@ export const isProofPage = file =>
  * touched, dependents}`. It runs every interaction spec the change adds or
  * edits, every spec that loads a changed file through its own imports, and
  * every spec in the component folders the change touches and in the folders
- * that render them through value imports. A story maps to no component, so a
- * changed story runs the whole suite. The lane's scope leaves out a
+ * that render them through value imports. A changed story runs the specs of
+ * the component folders it imports and every spec that opens one of its
+ * story ids (`storyScope`); a story it cannot read runs the whole suite. The
+ * lane's scope leaves out a
  * component folder's unit tests, docs, records and accessibility specs, and
  * `ci-interaction-scope.test.mjs` keeps every proof page from loading one. It
  * fails closed: an unknown change, a
@@ -359,6 +410,9 @@ export const isProofPage = file =>
  *   loads, to the proofs that load it (`proofImporters`)
  * @param {{shared: string[], edges: {from: string, specs: string[]}[]}} options.selection
  * @param {string[]} options.primitives shared primitives, as `<pkg>/<Folder>`
+ * @param {(file: string) => {folders: string[], specs: string[]} | null} [options.storyScope]
+ *   a changed story's imported component folders (`<pkg>/<Folder>`) and the
+ *   interaction specs that open it, or null when it cannot be read
  */
 export function chromiumSelection({
   listed,
@@ -370,6 +424,7 @@ export function chromiumSelection({
   proofs,
   selection,
   primitives,
+  storyScope,
 }) {
   const full = reason => ({full: true, reason});
   if (everySpec) return full('the release interaction check runs every spec');
@@ -381,6 +436,10 @@ export function chromiumSelection({
   const present = new Set(listed);
   const specs = new Set();
   const touched = new Set();
+  // A changed story adds the specs of the folders it imports. Their code is
+  // unchanged, so a primitive among them neither runs the whole suite nor
+  // adds dependents.
+  const storied = new Set();
   const relevant = changed.filter(file => scope.test(file));
   for (const file of relevant) {
     const loaders = [...(proofs.get(file) ?? [])];
@@ -392,6 +451,19 @@ export function chromiumSelection({
     }
     if (selection.shared.some(prefix => file.startsWith(prefix)))
       return full(`${file} is shared code`);
+    if (storyScope && isStoryFile(file)) {
+      const scope = storyScope(file);
+      if (
+        scope == null ||
+        (scope.folders.length === 0 && scope.specs.length === 0)
+      )
+        return full(
+          `${file} is a story whose components could not be resolved`,
+        );
+      for (const each of scope.folders) storied.add(each);
+      for (const spec of scope.specs) if (present.has(spec)) specs.add(spec);
+      continue;
+    }
     const folder = componentFolderOf(file);
     if (folder == null) return full(`${file} maps to no component`);
     if (primitives.includes(folder))
@@ -401,7 +473,7 @@ export function chromiumSelection({
   const dependents = renderingFolders(importers, [...touched]).map(
     ({folder}) => folder,
   );
-  const folders = new Set([...touched, ...dependents]);
+  const folders = new Set([...touched, ...dependents, ...storied]);
   for (const file of listed)
     if (isInteractionSpec(file) && folders.has(componentFolderOf(file)))
       specs.add(file);
@@ -414,6 +486,7 @@ export function chromiumSelection({
     specs: [...specs].sort(),
     touched: [...touched].sort(),
     dependents,
+    ...(storied.size > 0 ? {stories: [...storied].sort()} : {}),
   };
 }
 
@@ -739,13 +812,16 @@ function selectChromium(args) {
     proofs,
     selection: JSON.parse(fs.readFileSync(selectionFile, 'utf8')),
     primitives: JSON.parse(fs.readFileSync(primitivesFile, 'utf8')).primitives,
+    storyScope: root
+      ? storyScopeFor({listed, read: checkoutReader(root)})
+      : undefined,
   });
   fs.writeFileSync(out, `${JSON.stringify(result, null, 2)}\n`);
   if (result.full)
     console.log(`Chromium selection: the full suite (${result.reason}).`);
   else {
     console.log(
-      `Chromium selection: ${result.specs.length} spec file(s) for ${result.touched.length} touched and ${result.dependents.length} dependent component folder(s).`,
+      `Chromium selection: ${result.specs.length} spec file(s) for ${result.touched.length} touched, ${result.dependents.length} dependent and ${result.stories?.length ?? 0} changed-story component folder(s).`,
     );
     for (const spec of result.specs) console.log(`  ${spec}`);
   }

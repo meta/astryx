@@ -77,6 +77,7 @@
  *   | 'ERR_WRITE_FAILED'
  *   | 'ERR_THEME_INVALID'
  *   | 'ERR_THEME_LOAD'
+ *   | 'ERR_THEME_STALE'
  *   | 'ERR_PALETTE_GENERATION'
  *   | 'ERR_VERSION_DETECT'
  *   | 'ERR_INVALID_VERSION'
@@ -108,6 +109,7 @@
  *   | 'ERR_THEME_UNKNOWN_TOKEN'
  *   | 'ERR_THEME_NO_EFFECT'
  *   | 'ERR_THEME_NOT_CHECKED'
+ *   | 'ERR_THEME_BUSY'
  *   | 'ERR_THEME_UNKNOWN_THING'
  *   | 'ERR_THEME_NOT_SET'
  *   | 'ERR_THEME_NOTHING_TO_UNDO'
@@ -218,6 +220,8 @@ export const ERROR_CODES = Object.freeze({
   ERR_THEME_INVALID: 'ERR_THEME_INVALID',
   /** A theme file could not be loaded / parsed into a defineTheme result. */
   ERR_THEME_LOAD: 'ERR_THEME_LOAD',
+  /** `--check` found built outputs stale or missing (a result, exit 1). */
+  ERR_THEME_STALE: 'ERR_THEME_STALE',
 
   // ── Palette generation ──────────────────────────────────────────
   /** A palette generation request or its constraints were invalid. */
@@ -363,6 +367,10 @@ export const ERROR_CODES = Object.freeze({
    * Not an error: the change is saved, but the components could not be rendered, so it was not checked and has no preview. The result's `notChecked` carries this code and the cause, such as two copies of React. Reported only by `experimental theme`.
    */
   ERR_THEME_NOT_CHECKED: 'ERR_THEME_NOT_CHECKED',
+  /**
+   * Another command is changing the same theme (or preview) and did not finish in time. Nothing was changed; run the command again. Raised only by `experimental theme`.
+   */
+  ERR_THEME_BUSY: 'ERR_THEME_BUSY',
   /**
    * The thing to change is not a dial, a design token, or a CSS property. Nothing was changed. Raised only by `experimental theme`.
    */

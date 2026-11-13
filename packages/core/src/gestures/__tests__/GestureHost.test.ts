@@ -16,6 +16,7 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {UIKIT_GESTURES} from '../../motion/uikit/gestures';
 import {isFingerScroll, watchFingerScrolls} from '../fingerScroll';
+import {browserClock} from '../GestureArena';
 import {GestureHost} from '../GestureHost';
 import {LongPressGestureRecognizer} from '../LongPressGestureRecognizer';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
@@ -1633,15 +1634,95 @@ describe('GestureHost', () => {
       return {list, pan, at, lift};
     }
 
-    it('cancels the moves from the first one while every scroller under the finger is at its edge and the finger pulls away from it; the pan still begins at 10 px', () => {
+    it('leaves a tap\u2019s wobble under 5 px to the browser, then cancels the moves from the one that reaches 5 px while every scroller under the finger is at its edge and the finger pulls away from it; the pan still begins at 10 px (spec:AST-094 FR19, DEC-30)', () => {
       const {pan, at, lift} = sheetOverList(0);
-      expect(at(102, 16).defaultPrevented).toBe(true);
+      // WebKit ends a touch's click when one of its moves is cancelled.
+      expect(at(102, 16).defaultPrevented).toBe(false);
+      expect(at(104, 24).defaultPrevented).toBe(false);
       expect(pan.state).toBe('possible');
-      expect(at(107, 32).defaultPrevented).toBe(true);
+      // Mobile Safari commits its native pan on a kept move of 5 px.
+      expect(at(105, 32).defaultPrevented).toBe(true);
       expect(pan.state).toBe('possible');
+      expect(at(107, 40).defaultPrevented).toBe(true);
       expect(at(112, 48).defaultPrevented).toBe(true);
       expect(pan.state).toBe('began');
       lift(112, 64);
+    });
+
+    it('cancels a first move that reaches 5 px at once', () => {
+      const {pan, at, lift} = sheetOverList(0);
+      expect(at(105, 16).defaultPrevented).toBe(true);
+      expect(pan.state).toBe('possible');
+      lift(105, 32);
+    });
+
+    it('leaves every move of a tap that wobbles under 5 px to the browser, so its click runs', () => {
+      const {pan, at, lift} = sheetOverList(0);
+      expect(at(103, 16).defaultPrevented).toBe(false);
+      expect(at(104, 24).defaultPrevented).toBe(false);
+      expect(at(101, 32).defaultPrevented).toBe(false);
+      lift(101, 48);
+      expect(pan.state).not.toBe('began');
+    });
+
+    it('measures the wobble along the pan\u2019s own axis: a sideways move is never held', () => {
+      const {list, row} = mount(
+        '<div id="list" style="overflow-y: auto"><div id="row"></div></div>',
+      );
+      scrollable(list, {scrollTop: 0, scrollHeight: 1000, clientHeight: 400});
+      const pan = new PanGestureRecognizer({
+        name: 'sheet',
+        direction: 'down',
+        scrollEdge: true,
+      });
+      detachers.push(host.attach(row, pan));
+      const finger = {id: 1, x: 50, y: 100};
+      touch('touchstart', row, [finger], [finger], 0);
+      const moved = {...finger, x: 58, y: 101};
+      expect(
+        touch('touchmove', row, [moved], [moved], 16).defaultPrevented,
+      ).toBe(false);
+      touch('touchend', row, [moved], [], 32);
+    });
+
+    it('measures the wobble along the pan\u2019s axis: a pan that claims drags off its axis holds only from 5 px along it', () => {
+      const {list, row} = mount(
+        '<div id="list" style="overflow-y: auto"><div id="row"></div></div>',
+      );
+      scrollable(list, {scrollTop: 0, scrollHeight: 1000, clientHeight: 400});
+      const pan = new PanGestureRecognizer({
+        name: 'sheet',
+        direction: 'down',
+        scrollEdge: true,
+        axisRatio: 0.5,
+      });
+      detachers.push(host.attach(row, pan));
+      const finger = {id: 1, x: 50, y: 100};
+      touch('touchstart', row, [finger], [finger], 0);
+      const at = (x: number, y: number, time: number) =>
+        touch('touchmove', row, [{...finger, x, y}], [{...finger, x, y}], time);
+      // 6 px across but 4 px along: still a tap's wobble.
+      expect(at(56, 104, 16).defaultPrevented).toBe(false);
+      expect(at(56, 105, 32).defaultPrevented).toBe(true);
+      touch('touchend', row, [{...finger, x: 56, y: 105}], [], 48);
+    });
+
+    it('waits out the same wobble for a horizontal scroll-edge pan over content with no scroller (a back swipe from the content)', () => {
+      const {row} = mount('<div id="row"></div>');
+      const pan = new PanGestureRecognizer({
+        name: 'back',
+        direction: 'right',
+        scrollEdge: true,
+      });
+      detachers.push(host.attach(row, pan));
+      const finger = {id: 1, x: 100, y: 100};
+      touch('touchstart', row, [finger], [finger], 0);
+      const at = (x: number, time: number) =>
+        touch('touchmove', row, [{...finger, x}], [{...finger, x}], time);
+      expect(at(103, 16).defaultPrevented).toBe(false);
+      expect(at(104, 24).defaultPrevented).toBe(false);
+      expect(at(105, 32).defaultPrevented).toBe(true);
+      touch('touchend', row, [{...finger, x: 105}], [], 48);
     });
 
     it('leaves the moves to the browser while a scroller under the finger can still scroll that way', () => {
@@ -3295,6 +3376,105 @@ describe('GestureHost', () => {
     touch('touchmove', box, [{...finger, x: 40}], [{...finger, x: 40}], 16);
     box.dispatchEvent(new Event('touchcancel', {bubbles: true}));
     expect(states).toEqual(['began', 'cancelled']);
+  });
+
+  it('times a second document’s touches on that document’s own clock: a short tap starts no long press', () => {
+    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout', 'performance']});
+    vi.advanceTimersByTime(6000);
+    const frame = document.createElement('iframe');
+    document.body.append(frame);
+    const frameDocument = frame.contentDocument as Document;
+    const frameWindow = frameDocument.defaultView as Window & typeof globalThis;
+    // The frame opened after the page, so its clock reads 5 s less. Its
+    // events come stamped on that clock.
+    const frameNow = vi
+      .spyOn(frameWindow.performance, 'now')
+      .mockImplementation(() => performance.now() - 5000);
+    frameDocument.body.innerHTML = '<div id="box"></div>';
+    const box = frameDocument.getElementById('box') as HTMLElement;
+    const frameHost = new GestureHost(frameDocument, {
+      isPrimaryPointerCoarse: () => true,
+    });
+    const press = new LongPressGestureRecognizer({minimumPressDuration: 500});
+    const states: string[] = [];
+    press.addListener(r => states.push(r.state));
+    const detach = frameHost.attach(box, press);
+    const send = (type: 'touchstart' | 'touchend') => {
+      const event = new frameWindow.Event(type, {
+        bubbles: true,
+        cancelable: true,
+      });
+      const contact = {identifier: 1, clientX: 10, clientY: 10, target: box};
+      Object.defineProperty(event, 'changedTouches', {value: [contact]});
+      Object.defineProperty(event, 'touches', {
+        value: type === 'touchstart' ? [contact] : [],
+      });
+      Object.defineProperty(event, 'timeStamp', {
+        value: frameWindow.performance.now(),
+      });
+      box.dispatchEvent(event);
+    };
+    try {
+      send('touchstart');
+      vi.advanceTimersByTime(120);
+      send('touchend');
+      vi.advanceTimersByTime(1000);
+      expect(states).not.toContain('began');
+    } finally {
+      detach();
+      frameNow.mockRestore();
+      frame.remove();
+      vi.useRealTimers();
+    }
+  });
+
+  it('reads the page’s clock as it is at each touch: a hold that starts after fake timers replace it begins at its deadline', () => {
+    const pageHost = new GestureHost(document, {
+      isPrimaryPointerCoarse: () => true,
+    });
+    const {box} = mount('<div id="box"></div>');
+    const press = new LongPressGestureRecognizer({minimumPressDuration: 500});
+    const states: string[] = [];
+    press.addListener(r => states.push(r.state));
+    const detach = pageHost.attach(box, press);
+    // The page replaces its clock after the host exists, as fake timers do.
+    // jsdom stamps the touch with Date.now(), on the new clock's origin.
+    vi.useFakeTimers();
+    try {
+      const event = new Event('touchstart', {bubbles: true, cancelable: true});
+      const contact = {identifier: 1, clientX: 10, clientY: 10, target: box};
+      Object.defineProperty(event, 'changedTouches', {value: [contact]});
+      Object.defineProperty(event, 'touches', {value: [contact]});
+      box.dispatchEvent(event);
+      vi.advanceTimersByTime(499);
+      expect(states).not.toContain('began');
+      vi.advanceTimersByTime(1);
+      expect(states).toContain('began');
+    } finally {
+      detach();
+      vi.useRealTimers();
+    }
+  });
+
+  it('reads the page’s own clock object for the page’s document', () => {
+    const now = vi.spyOn(browserClock, 'now');
+    const pageHost = new GestureHost(document, {
+      isPrimaryPointerCoarse: () => true,
+    });
+    const {box} = mount('<div id="box"></div>');
+    const detach = pageHost.attach(
+      box,
+      new LongPressGestureRecognizer({minimumPressDuration: 500}),
+    );
+    const finger = {id: 1, x: 10, y: 10};
+    try {
+      touch('touchstart', box, [finger], [finger], performance.now());
+      expect(now).toHaveBeenCalled();
+      touch('touchend', box, [finger], [], performance.now());
+    } finally {
+      detach();
+      now.mockRestore();
+    }
   });
 
   it('reads epoch-stamped events on the arena clock', () => {

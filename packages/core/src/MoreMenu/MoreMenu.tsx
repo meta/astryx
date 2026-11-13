@@ -35,6 +35,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/MoreMenu/MoreMenu.generated';
+import {pickDataAttributes} from '../utils/themeProps';
 
 registerEnglishFallback(english);
 
@@ -99,9 +100,9 @@ export interface MoreMenuProps extends Pick<
   /**
    * Menu presentation policy, forwarded to DropdownMenu. `adaptive` uses a
    * BottomSheet on compact coarse-pointer viewports and an anchored popover
-   * elsewhere. Omitted, the menu is the anchored popover, and the finger that
-   * opened it follows UIMenu's handoff on every device. `'popover'` pins the
-   * pointer behavior on every device.
+   * elsewhere. Omitted, the menu is the anchored popover, and a finger follows
+   * UIMenu's press on every device. `'popover'` pins the pointer behavior on
+   * every device.
    */
   presentation?: DropdownMenuPresentation;
 
@@ -151,6 +152,7 @@ export function MoreMenu({
   style,
   'data-testid': testId,
   ref,
+  ...rest
 }: MoreMenuProps) {
   const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.moreMenu.label');
@@ -172,6 +174,7 @@ export function MoreMenu({
       alignment={alignment}
       presentation={presentation}
       button={{
+        ...pickDataAttributes(rest),
         label,
         icon: icon ?? moreIcon,
         variant,

@@ -4,8 +4,8 @@
 
 /**
  * @file ComplexSelector.tsx
- * @input Uses React, StyleX, Field, Icon slots, Layer positioning, and usePopover
- * @output Exports a rich-selector shell with exact token-sized input, secondary, and ghost triggers, plus an imperative open/close handle
+ * @input Uses React, StyleX, Field, Icon slots, Layer positioning, usePopover, and useTooltip
+ * @output Exports a rich-selector shell with exact token-sized input, secondary, and ghost triggers, an imperative open/close handle, and a focusable disabled-reason tooltip
  * @position Core implementation; consumed by index.ts
  *
  * SYNC: When modified, update:
@@ -41,6 +41,7 @@ import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {Field, inputWrapperStyles} from '../Field';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
 import {Spinner} from '../Spinner';
+import {useTooltip} from '../Tooltip/useTooltip';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import type {LayerAlignment, LayerPlacement} from '../Layer/useLayer';
 import {usePopover} from '../Popover/usePopover';
@@ -77,6 +78,12 @@ registerEnglishFallback(english);
 // The popup content's own block-size cap; the viewport cap is the layer
 // runtime's.
 const CONTENT_BLOCK_CAP = '480px';
+
+/**
+ * The trigger's own list is open. A press does not scale the box then, so the
+ * list anchors to the box at rest.
+ */
+const LAYER_OPEN: string = ':has([aria-expanded="true"])';
 
 const styles = stylex.create({
   // The status glyph or info-tip keeps its size when the trigger text is long.
@@ -160,17 +167,20 @@ const styles = stylex.create({
       ':focus-within': 'none',
     },
     fontWeight: fontWeightVars['--font-weight-medium'],
-    transitionProperty:
-      'background-image, background-color, color, opacity, transform',
+    transitionProperty: {
+      default: 'background-image, background-color, color, opacity, transform',
+      // The press scale goes at once as the list opens.
+      [LAYER_OPEN]: 'background-image, background-color, color, opacity',
+    },
     transform: {
       default: 'scale(1)',
       // A mouse press; under a coarse pointer the touch press model writes
       // `data-astryx-press` instead (see interactionOverlay.stylex.ts).
-      ':active': {
+      [`:active:not(${LAYER_OPEN})`]: {
         default: 'scale(0.98)',
         '@media (pointer: coarse)': 'scale(1)',
       },
-      '[data-astryx-press="on"]': 'scale(0.98)',
+      [`[data-astryx-press="on"]:not(${LAYER_OPEN})`]: 'scale(0.98)',
     },
   },
   // Keep the input-family width contract while reusing ghost's borderless paint
@@ -187,15 +197,18 @@ const styles = stylex.create({
       ':focus-within': 'none',
     },
     fontWeight: fontWeightVars['--font-weight-medium'],
-    transitionProperty:
-      'background-image, background-color, color, opacity, transform',
+    transitionProperty: {
+      default: 'background-image, background-color, color, opacity, transform',
+      // The press scale goes at once as the list opens.
+      [LAYER_OPEN]: 'background-image, background-color, color, opacity',
+    },
     transform: {
       default: 'scale(1)',
-      ':active': {
+      [`:active:not(${LAYER_OPEN})`]: {
         default: 'scale(0.98)',
         '@media (pointer: coarse)': 'scale(1)',
       },
-      '[data-astryx-press="on"]': 'scale(0.98)',
+      [`[data-astryx-press="on"]:not(${LAYER_OPEN})`]: 'scale(0.98)',
     },
   },
   triggerGhostDisabled: {
@@ -416,6 +429,30 @@ export interface ComplexSelectorProps<Value> extends Omit<
   isRequired?: boolean;
   /** Blocks opening and value commits, including from an already-open popup. */
   isDisabled?: boolean;
+  /**
+   * Explains why the selector is disabled. With `isDisabled`, a tooltip shows
+   * this text on hover and keyboard focus, and the text describes the trigger
+   * through `aria-describedby`. The disabled trigger keeps its tab stop and
+   * still cannot open. With `renderTrigger`, the tooltip and the description
+   * go to the control you render. Drop that control's own tooltip while the
+   * selector is disabled (for example `tooltip={isDisabled ? undefined :
+   * 'Filter'}`), so it never shows two.
+   *
+   * Use this instead of wrapping a disabled selector in `Tooltip`, whose text
+   * would not describe the trigger.
+   *
+   * @example
+   * ```
+   * <ComplexSelector
+   *   label="Fruit blend"
+   *   value={value}
+   *   isDisabled
+   *   disabledMessage="You need the Editor role to change this">
+   *   {(value, onChange, close) => <FruitGrid ... />}
+   * </ComplexSelector>
+   * ```
+   */
+  disabledMessage?: string;
   /** Shows loading state on the trigger. */
   isLoading?: boolean;
   /** Validation status. */
@@ -538,6 +575,7 @@ export function ComplexSelector<Value>({
   isOptional = false,
   isRequired = false,
   isDisabled = false,
+  disabledMessage,
   isLoading = false,
   status,
   statusVariant = 'attached',
@@ -606,6 +644,14 @@ export function ComplexSelector<Value>({
       statusVariant: effectiveStatusVariant,
       size: 'sm',
     });
+  // The tooltip listens on the trigger button, not the control box. So the
+  // status info-tip in the box opens only its own message.
+  const showsDisabledMessage = isDisabled && !!disabledMessage;
+  const disabledMessageTooltip = useTooltip({
+    placement: 'above',
+    isEnabled: showsDisabledMessage,
+  });
+
   const ariaDescribedBy =
     [
       description ? descriptionId : null,
@@ -614,12 +660,17 @@ export function ComplexSelector<Value>({
         : status?.message
           ? statusMessageId
           : null,
+      showsDisabledMessage ? disabledMessageTooltip.describedBy : null,
     ]
       .filter((id): id is string => id != null)
       .join(' ') || undefined;
 
   const triggerRef = useRef<HTMLElement>(null);
-  const triggerButtonRef = useMergedRefs<HTMLElement>(triggerRef, ref);
+  const triggerButtonRef = useMergedRefs<HTMLElement>(
+    triggerRef,
+    ref,
+    disabledMessageTooltip.interactionRef,
+  );
 
   const [isPending, startTransition] = useTransition();
   const [optimisticValue, setOptimisticValue] = useOptimistic(value);
@@ -812,16 +863,27 @@ export function ComplexSelector<Value>({
   if (renderTrigger != null) {
     // Anchor-only mode: the caller renders the opener and spreads these props
     // on it. No Field, no status, no chevron — the caller owns the control;
-    // the selector owns the popup, its anchor, and focus return.
+    // the selector owns the popup, its anchor, focus return, and the disabled
+    // reason's tooltip.
     const triggerProps: ComplexSelectorRenderTriggerProps = {
       // Base props reach the caller's control, the primary semantic control
       // in this mode; the selector's own wiring below wins over them.
       ...rest,
-      'aria-describedby': ariaDescribedByProp,
-      ref: mergeRefs<HTMLElement>(el => {
-        popover.triggerRef(el);
-        triggerRef.current = el;
-      }, ref),
+      'aria-describedby':
+        [
+          ariaDescribedByProp,
+          showsDisabledMessage ? disabledMessageTooltip.describedBy : null,
+        ]
+          .filter(Boolean)
+          .join(' ') || undefined,
+      ref: mergeRefs<HTMLElement>(
+        el => {
+          popover.triggerRef(el);
+          triggerRef.current = el;
+        },
+        disabledMessageTooltip.ref,
+        ref,
+      ),
       id: triggerId,
       // This path never forwarded caller handlers before, so the newly
       // forwarded ones compose component first and cannot cancel opening.
@@ -853,6 +915,8 @@ export function ComplexSelector<Value>({
       <>
         {renderTrigger(triggerProps)}
         {popup}
+        {showsDisabledMessage &&
+          disabledMessageTooltip.renderTooltip(disabledMessage)}
       </>
     );
   }
@@ -860,7 +924,11 @@ export function ComplexSelector<Value>({
   const selectorContent = (
     <>
       <div
-        ref={popover.triggerRef}
+        ref={el => {
+          popover.triggerRef(el);
+          // Anchor names compose, so the tooltip can anchor here in every state.
+          disabledMessageTooltip.positionRef(el);
+        }}
         {...pressable}
         onClick={handleControlBoxClick}
         {...mergeProps(
@@ -921,8 +989,9 @@ export function ComplexSelector<Value>({
           aria-busy={isBusy || undefined}
           // A disabled trigger keeps its tab stop and says so through
           // aria-disabled (`spec:AST-085` FR1). Its press runs neither the
-          // caller's handler nor the toggle (FR2).
-          aria-disabled={isDisabled ? 'true' : undefined}
+          // caller's handler nor the toggle (FR2). Otherwise a caller's own
+          // aria-disabled reaches the trigger.
+          {...(isDisabled ? {'aria-disabled': 'true' as const} : null)}
           onClick={isDisabled ? swallowDisabledPress : handleTriggerButtonClick}
           onKeyDown={handleTriggerButtonKeyDown}
           {...stylex.props(styles.trigger)}>
@@ -967,6 +1036,9 @@ export function ComplexSelector<Value>({
       </div>
 
       {popup}
+
+      {showsDisabledMessage &&
+        disabledMessageTooltip.renderTooltip(disabledMessage)}
     </>
   );
 

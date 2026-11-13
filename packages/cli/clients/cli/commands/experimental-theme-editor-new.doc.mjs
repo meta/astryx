@@ -11,7 +11,7 @@ export const doc = {
   stability: 'experimental',
   summary: 'Start a theme in themes/<theme>/, optionally on a built-in theme',
   description:
-    'Makes themes/<theme>/ with <theme>.settings.json (the settings this command owns), the generated <theme>.settings.ts, <theme>.theme.ts (which extends it and is yours), and the built <theme>.css and <theme>.js (the same build as `astryx theme build`), then writes preview.html, the sample app page with the theme. --like builds on a built-in theme (neutral, stone, matcha, y2k, gothic, chocolate, butter; its package must be installed); without it the theme starts from Astryx defaults. Any `set` dial can be a flag too (--accent "#7c3aed" --font inter --corners round --vibrancy 60 ...): the same names, values and checks as `set`, all applied in the one build, with one result that lists them. Change the base later with `astryx experimental theme editor set <theme> base <theme|none>`. Afterwards, <theme>.theme.ts is yours: it extends the generated <theme>.settings.ts, and every later change rewrites only the settings files, so your own edits in <theme>.theme.ts survive. A theme name is lowercase letters, digits and dashes. Experimental: it may change or be removed in a patch release.',
+    'Makes themes/<theme>/ with <theme>.settings.json (the settings this command owns), the generated <theme>.settings.ts, <theme>.theme.ts (which extends it and is yours), and the built <theme>.css and <theme>.js (build them again with `astryx experimental theme compile themes/<theme>/<theme>.theme.ts`, which checks the editor settings first), then writes preview.html, the sample app page with the theme. --like builds on a built-in theme (neutral, stone, matcha, y2k, gothic, chocolate, butter; its package must be installed); without it, or with --like none, the theme starts from Astryx defaults. Any `set` dial can be a flag too (--accent "#7c3aed" --font inter --corners round --vibrancy 60 ...): the same names, values and checks as `set`, all applied in the one build, with one result that lists them. Change the base later with `astryx experimental theme editor set <theme> base <theme|none>`. Afterwards, <theme>.theme.ts is yours: it extends the generated <theme>.settings.ts, and every later change rewrites only the settings files, so your own edits in <theme>.theme.ts survive. A theme name is lowercase letters, digits and dashes, starts with a letter, has 64 characters at most, and is not the name of a built-in theme or a name Windows reserves for a device (con, prn, aux, nul, com1-com9, lpt1-lpt9). Experimental: it may change or be removed in a patch release. The result ends with `wiring`: `astryx theme add <theme>` for the app copy of the theme (src/themes/<theme>/, a standard local theme every build writes), the `mode` of a one-mode theme for the `<Theme>`, and what builds it; only when a folder of yours holds src/themes/<theme>/ does it give the imports in the root file and the `<Theme>` by hand.',
   fn: 'themeEditNew',
   args: [
     {
@@ -25,13 +25,13 @@ export const doc = {
       flag: '--like <theme>',
       param: 'options.like',
       description:
-        'A built-in theme to build on: neutral, stone, matcha, y2k, gothic, chocolate, or butter',
+        'A built-in theme to build on: neutral, stone, matcha, y2k, gothic, chocolate, or butter; or none, for Astryx defaults (the same as leaving it out)',
     },
     {
       flag: '--png',
       param: 'options.png',
       description:
-        'Also take PNG pictures of the previews (light and dark), with a Playwright installed in the project or a Chrome or Chromium found on the machine; without one, the result says how to get it. Nothing else changes',
+        'Also take PNG pictures of the previews (light and dark), with no dev server running: it needs a Playwright installed in the project or a Chrome or Chromium found on the machine, and adds a few seconds while the browser starts; without one, the result says how to get it. Each picture carries the editor stamp and is recorded, by name and content, in themes/<theme>/<theme>.pictures.json; a file of yours named like a picture (preview.png, sheet.png) is never written over: no picture is taken, and the result names the file',
     },
     {
       flag: '--corners <rung>',
@@ -158,9 +158,8 @@ export const doc = {
     },
     {
       code: 1,
-      when: 'a name that is not lowercase letters, digits and dashes, a theme that already exists, a --like that is not a built-in theme or is not installed, a setting flag that `set` would refuse, no Core installed in the folder, or a build failure (nothing is left behind)',
+      when: 'a name that is not lowercase letters, digits and dashes starting with a letter (64 at most) or is the name of a built-in theme, a theme that already exists, a --like that is not a built-in theme or is not installed, a setting flag that `set` would refuse, no Core installed in the folder, or a build failure (nothing is left behind)',
     },
   ],
   related: ['experimental theme editor', 'experimental theme compile'],
-  replaces: ['theme template', 'theme eject'],
 };

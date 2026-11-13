@@ -1190,6 +1190,7 @@ export function Step({
             themeProps('step-indicator', {
               progress,
               status: status ?? undefined,
+              disabled: isDisabled ? 'disabled' : null,
             }),
             stylex.props(styles.numberBadge, numberColorStyle),
           )}>
@@ -1264,6 +1265,7 @@ export function Step({
             themeProps('step-indicator', {
               progress,
               status: status ?? undefined,
+              disabled: isDisabled ? 'disabled' : null,
             }),
             stylex.props(styles.icon, iconColorStyle),
           )}>
@@ -1315,14 +1317,11 @@ export function Step({
         : undefined;
 
   // Both text parts carry {progress, status}, the phase vocabulary of
-  // `step-indicator` above. The label additionally owns Stepper's disabled
-  // paint, so it alone carries disabled below.
+  // `step-indicator` above. The indicator and the label each own disabled
+  // paint, so each carries disabled; the description does not.
   const labelThemeProps = themeProps('step-label', {
     progress,
     status: status ?? undefined,
-    // The label owns Stepper's disabled paint (`styles.labelDisabled` above),
-    // so it owns the selector too. The description does not change under
-    // disabled and deliberately keeps the smaller {progress, status} surface.
     disabled: isDisabled ? 'disabled' : null,
   });
   const descriptionThemeProps = themeProps('step-description', {
@@ -1398,7 +1397,8 @@ export function Step({
     </div>
   ) : null;
 
-  // Theme data attributes reflect progress + optional semantic status.
+  // The step paints nothing of its own when disabled, so it carries no
+  // `disabled` selector.
   const stepThemeProps = themeProps('step', {
     progress,
     status: status ?? undefined,
