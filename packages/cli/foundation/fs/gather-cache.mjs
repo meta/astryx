@@ -17,7 +17,8 @@
  *   integration's contribution-check results and the whole list (with the
  *   template and component replacement passes), which `component`,
  *   `template`, `theme`, `discover` and `search` report, by template
- *   discovery (foundation/discovery/template-adapter.mjs) for its records,
+ *   discovery (foundation/discovery/template-adapter.mjs) for its records, by theme discovery
+ *   (foundation/discovery/theme-discovery.mjs) for each integration's themes,
  *   and by `doctor` (api/doctor/_adapter.mjs) for its file-only docs checks,
  *   in a run that records modules and variables to its end. Gathers are kept only once the folder exists: the first such run
  *   on a machine just makes it, so a one-off run pays nothing to store one. Only a published CLI stores anything:

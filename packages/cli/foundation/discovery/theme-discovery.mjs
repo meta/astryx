@@ -20,7 +20,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {lowerDoc} from '../doc-compiler/compile.mjs';
 import {packageSource} from '../doc-compiler/source.mjs';
-import {CLI_ROOT} from '../fs/paths.mjs';
+import {CLI_ROOT, realDir} from '../fs/paths.mjs';
+import {persistedGather} from '../fs/gather-cache.mjs';
+import {EXACT_CODEC} from '../fs/exact-codec.mjs';
 import {listDirEntries} from '../fs/listing-cache.mjs';
 import {formatCliCommand} from '../env/package-manager.mjs';
 import {LOCAL_THEME_ROOT} from '../config/theme-state.mjs';
@@ -1740,18 +1742,39 @@ export function discoverLocalThemes(
   }));
 }
 
+/** An integration's discovered themes, kept exactly, with the shape they need. */
+const THEMES_CODEC = {
+  ...EXACT_CODEC,
+  valid: (/** @type {any} */ themes) =>
+    Array.isArray(themes) &&
+    themes.every(
+      theme =>
+        theme != null &&
+        typeof theme.slug === 'string' &&
+        typeof theme.exportName === 'string',
+    ),
+};
+
 /**
  * @param {import('../integrations/integrations.mjs').LoadedIntegration} integration
  * @returns {Promise<DiscoveredTheme[]>}
  */
 export async function discoverIntegrationThemes(integration) {
   if (!integration.themes) return [];
-  return discoverThemeDirectory(integration.themes, integration.name).map(
-    theme => ({
-      ...theme,
-      packageDir: integration.__packageDir,
-      packageExports: integration.__packageExports,
-      source: /** @type {const} */ ('package'),
-    }),
+  const themesDir = integration.themes;
+  // Kept between runs while every file and module it read is unchanged; the
+  // live fields below are added after, as on a fresh read.
+  const found = /** @type {DiscoveredTheme[]} */ (
+    await persistedGather(
+      ['integration-themes', realDir(themesDir), integration.name ?? null],
+      async () => discoverThemeDirectory(themesDir, integration.name),
+      THEMES_CODEC,
+    )
   );
+  return found.map(theme => ({
+    ...theme,
+    packageDir: integration.__packageDir,
+    packageExports: integration.__packageExports,
+    source: /** @type {const} */ ('package'),
+  }));
 }
