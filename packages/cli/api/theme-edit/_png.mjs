@@ -302,3 +302,79 @@ export function mainColors(pic, count) {
       };
     });
 }
+
+/** The keyword of the text chunk the theme editor stamps its pictures with. */
+export const EDITOR_STAMP = 'astryx-theme-editor';
+
+const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+
+/**
+ * The `tEXt` chunks of a PNG, keyword to text; empty for a file that is not
+ * a PNG or cannot be read whole.
+ * @param {Buffer} bytes
+ * @returns {Record<string, string>}
+ */
+export function pngTexts(bytes) {
+  /** @type {Record<string, string>} */
+  const out = {};
+  if (bytes.length < 8 || !bytes.subarray(0, 8).equals(PNG_SIGNATURE))
+    return out;
+  for (let at = 8; at + 8 <= bytes.length;) {
+    const len = bytes.readUInt32BE(at);
+    const type = bytes.toString('latin1', at + 4, at + 8);
+    const end = at + 12 + len;
+    if (end > bytes.length) break;
+    if (type === 'tEXt') {
+      const data = bytes.subarray(at + 8, at + 8 + len);
+      const nul = data.indexOf(0);
+      if (nul > 0)
+        out[data.toString('latin1', 0, nul)] = data.toString('latin1', nul + 1);
+    }
+    if (type === 'IEND') break;
+    at = end;
+  }
+  return out;
+}
+
+/**
+ * A PNG with a `tEXt` chunk added right after its header (any chunk with the
+ * same keyword replaced), or the bytes as they were when they are not a PNG.
+ * @param {Buffer} bytes
+ * @param {string} keyword
+ * @param {string} text
+ * @returns {Buffer}
+ */
+export function withPngText(bytes, keyword, text) {
+  if (bytes.length < 33 || !bytes.subarray(0, 8).equals(PNG_SIGNATURE))
+    return bytes;
+  /** @type {Buffer[]} */
+  const chunks = [];
+  for (let at = 8; at + 8 <= bytes.length;) {
+    const len = bytes.readUInt32BE(at);
+    const type = bytes.toString('latin1', at + 4, at + 8);
+    const end = at + 12 + len;
+    if (end > bytes.length) return bytes;
+    const data = bytes.subarray(at + 8, at + 8 + len);
+    const same =
+      type === 'tEXt' &&
+      data.indexOf(0) > 0 &&
+      data.toString('latin1', 0, data.indexOf(0)) === keyword;
+    if (!same) chunks.push(bytes.subarray(at, end));
+    if (type === 'IHDR') {
+      const body = Buffer.concat([
+        Buffer.from('tEXt', 'latin1'),
+        Buffer.from(keyword, 'latin1'),
+        Buffer.from([0]),
+        Buffer.from(text, 'latin1'),
+      ]);
+      const head = Buffer.alloc(4);
+      head.writeUInt32BE(body.length - 4);
+      const crc = Buffer.alloc(4);
+      crc.writeUInt32BE(zlib.crc32(body) >>> 0);
+      chunks.push(Buffer.concat([head, body, crc]));
+    }
+    if (type === 'IEND') break;
+    at = end;
+  }
+  return Buffer.concat([PNG_SIGNATURE, ...chunks]);
+}
