@@ -64,6 +64,10 @@ registerEnglishFallback(english);
 const styles = stylex.create({
   base: {
     display: 'inline-flex',
+    // The root stops at its container, and the label below may shrink, so a
+    // label with no break opportunity (a bare URL) wraps inside the line
+    // instead of pushing past it (`component:Text` FR3).
+    maxWidth: '100%',
     alignItems: 'center',
     gap: spacingVars['--spacing-0-5'],
     fontFamily: 'inherit',
@@ -89,7 +93,11 @@ const styles = stylex.create({
   // overflows and draws no ellipsis (`component:Link` FR6, `component:Text`
   // FR4).
   truncating: {
-    maxWidth: '100%',
+    minWidth: 0,
+  },
+  // A flex item's min-width defaults to its longest word; zero lets the label
+  // shrink to the root, so its text wraps.
+  label: {
     minWidth: 0,
   },
   /**
@@ -404,7 +412,8 @@ export function Link({
         weight={weight}
         color={labelColor}
         display={display}
-        maxLines={maxLines}>
+        maxLines={maxLines}
+        xstyle={styles.label}>
         {children}
       </Text>
       {isExternalWithIcon && (
