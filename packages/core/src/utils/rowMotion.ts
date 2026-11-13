@@ -6,37 +6,43 @@
  * @file rowMotion.ts
  * @input The motion foundation's animator
  * @output The moves a reorder makes on list rows, through one animator per
- *   element (`animatorFor`). `animateRow` starts a recorded spring.
+ *   element (`animatorFor`). `animateRow` starts a recorded spring, and
+ *   `playRow` a recorded curve.
  *   `motionOf` and `isMoving` read the running one. `releaseMotion` clears
  *   the identity inline values once it rests. `motionNow` is the motion
  *   clock
  * @position Internal utility for List's reorder (List/listReorderEngine.tsx
- *   and List/ListReorderTouch.ts). Every motion goes through the motion
+ *   and List/listReorderGlide.ts). Every motion goes through the motion
  *   foundation's shared per-element `animatorFor`, so a drop and a slide
  *   never drive one row through two animators.
  *
  * FLIP, compositor only. When a commit moves a row, its old place is put back
- * with an inverse `translate` in the same frame. The animator springs it
- * home. A row moved again mid-motion keeps its velocity.
+ * with an inverse `translate` in the same frame. The animator then plays it
+ * to rest on the theme's move curve. A row moved again mid-motion starts a
+ * new curve from where it is shown.
  *
  * SYNC: When modified, update List/listReorderEngine.tsx and
- * List/ListReorderTouch.ts.
+ * List/listReorderGlide.ts.
  */
 
 import {
   animatorFor,
   isIdentityText,
   motionNow,
+  type MotionCurve,
   type MotionHandle,
 } from '../motion/animator';
 import type {SpringDescription} from '../motion/spring';
 
 type RowProperty = 'y' | 'rotate' | 'opacity';
 
-/** A motion started through this module: its handle and the spring it runs. */
+/**
+ * A motion started through this module: its handle, and the spring it runs
+ * when it runs on one.
+ */
 export interface RowMotion {
   handle: MotionHandle;
-  spring: SpringDescription;
+  spring?: SpringDescription;
 }
 
 /** The running motion of each element, per property, until it rests. */
@@ -65,7 +71,7 @@ function track(
   element: HTMLElement,
   properties: ReadonlyArray<RowProperty>,
   handle: MotionHandle,
-  spring: SpringDescription,
+  spring?: SpringDescription,
 ): MotionHandle {
   let running = motions.get(element);
   if (running == null) {
@@ -111,6 +117,24 @@ export function animateRow(
       {at: options.at},
     ),
     spring,
+  );
+}
+
+/**
+ * Plays curves on the element's shared animator and records them, so a later
+ * move knows the row still moves (`isMoving`). For a glide on the theme's
+ * move curve.
+ */
+export function playRow(
+  element: HTMLElement,
+  curves: Partial<Record<RowProperty, MotionCurve>>,
+  options: {at?: number},
+): MotionHandle {
+  const properties = Object.keys(curves) as RowProperty[];
+  return track(
+    element,
+    properties,
+    animatorFor(element).play(curves, {at: options.at}),
   );
 }
 

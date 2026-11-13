@@ -493,6 +493,9 @@ test.describe('with a finger', () => {
       .toEqual([before[1], before[0], ...before.slice(2)]);
     // The focus stayed on the handle through the taps.
     await expect(handle(page, 'Inbox')).toBeFocused();
+    // The hint rides with its handle's row while the move slides, so Done is
+    // tapped where it rests.
+    await waitForRest(row(page, 'Inbox'));
     await driver.play(
       tap(await centerOf(page.getByRole('button', {name: 'Done'}))),
     );
