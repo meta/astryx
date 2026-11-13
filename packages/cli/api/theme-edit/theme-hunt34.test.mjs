@@ -145,6 +145,11 @@ describe('N3: a workspace root with Core hoisted', () => {
     const root = path.dirname(cwd);
     const rootPkg = path.join(root, 'package.json');
     const kept = fs.readFileSync(rootPkg, 'utf8');
+    // The folder without a package.json of its own: the fixture's app
+    // listing is moved aside for this test.
+    const appPkg = path.join(cwd, 'package.json');
+    const keptApp = fs.readFileSync(appPkg, 'utf8');
+    fs.rmSync(appPkg);
     const web = path.join(cwd, 'web');
     fs.mkdirSync(web, {recursive: true});
     fs.writeFileSync(
@@ -174,6 +179,7 @@ describe('N3: a workspace root with Core hoisted', () => {
       expect(fs.existsSync(path.join(cwd, 'themes/y'))).toBe(false);
     } finally {
       fs.writeFileSync(rootPkg, kept);
+      fs.writeFileSync(appPkg, keptApp);
       fs.rmSync(web, {recursive: true, force: true});
     }
   }, 240_000);

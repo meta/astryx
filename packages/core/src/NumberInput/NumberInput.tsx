@@ -5,12 +5,13 @@
 /**
  * @file NumberInput.tsx
  * @input Uses React, useId, useState, useMemo, useCallback, useEffect, Field, Icon, InputGroupContext
- * @output Exports NumberInput component, NumberInputProps; optional steppers are hidden on coarse pointers, and a held one repeats into the draft
+ * @output Exports NumberInput component, NumberInputProps, NumberInputEntryError; optional steppers are hidden on coarse pointers, and a held one repeats into the draft
  * @position Core implementation; consumed by index.ts, tested by NumberInput.test.tsx
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/NumberInput/numberParser.ts (locale-aware parsing)
  * - /packages/core/src/NumberInput/numberInputCommit.ts (draft commit policy)
+ * - /packages/core/src/Field/useEntryErrorReport.ts (rejection status, alert, and report)
  * - /packages/core/src/NumberInput/NumberInput.doc.mjs (props table, features, implementation notes)
  * - /packages/core/src/NumberInput/NumberInput.test.tsx (tests for new/changed behavior)
  * - /packages/core/src/NumberInput/index.ts (exports if types change)
@@ -238,7 +239,16 @@ import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
 import {useLocale} from '../i18n';
 import {formatEditableNumber} from './numberParser';
-import {parseNumberInput, resolveNumberInputCommit} from './numberInputCommit';
+import {
+  getNumberInputRejection,
+  type NumberInputRejection,
+  parseNumberInput,
+  resolveNumberInputCommit,
+} from './numberInputCommit';
+import {
+  isSameEntryError,
+  useEntryErrorReport,
+} from '../Field/useEntryErrorReport';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
 import {
   registerEnglishFallback,
@@ -247,6 +257,36 @@ import {
 import english from '../i18n/generated-english/NumberInput/NumberInput.generated';
 
 registerEnglishFallback(english);
+
+/**
+ * Why a NumberInput rejects the text that a person typed. The field reports
+ * it through `onEntryErrorChange`, so the app can word its own message.
+ */
+export interface NumberInputEntryError {
+  /**
+   * The reason, independent of the locale:
+   * - `'unreadable'`: text that is not a number
+   * - `'fractional'`: a number with a fraction in an `isIntegerOnly` field
+   * - `'outOfRange'`: any number while `min` is above `max`, so no number fits
+   */
+  kind: 'unreadable' | 'fractional' | 'outOfRange';
+  /** The typed text. */
+  text: string;
+  /** The number that the text names. It is set for `fractional` and `outOfRange`. */
+  value?: number;
+}
+
+function toEntryError(
+  text: string,
+  rejection: NumberInputRejection | null,
+): NumberInputEntryError | null {
+  if (rejection == null) {
+    return null;
+  }
+  return rejection.kind === 'unreadable'
+    ? {kind: 'unreadable', text}
+    : {kind: rejection.kind, text, value: rejection.value};
+}
 
 interface NumberInputPropsBase extends Omit<
   FieldInputBaseProps,
@@ -327,8 +367,47 @@ interface NumberInputPropsBase extends Omit<
    * Status indicator for the input.
    * When set, displays a colored border and status icon.
    * If message is provided, displays a floating message box below the input.
+   *
+   * When Enter or blur keeps typed text that cannot commit, the field shows
+   * its own error message in place of `status`. An `error` status with a
+   * message shows instead of the field's message. A `warning` or `success`
+   * status, or an `error` status without a message, never replaces it.
    */
   status?: InputStatus;
+  /**
+   * Called each time the field's rejection of typed text changes, with `null`
+   * when the rejection ends. A typed number is complete only at commit, so a
+   * rejection starts only at Enter or blur, never while a person types.
+   * `kind` is `'unreadable'` (text that is not a number), `'fractional'` (a
+   * fraction in an `isIntegerOnly` field), or `'outOfRange'` (any number
+   * while `min` is above `max`). `text` is the typed text, and `value` is the
+   * number it names, for `'fractional'` and `'outOfRange'`. A number outside
+   * an ordinary range clamps at commit, so it is not a rejection.
+   *
+   * It also runs when an edit makes the text valid or empty, when a new
+   * `value`, `min`, `max`, or `isIntegerOnly` changes or ends the rejection,
+   * and when disabling the field drops the text, and never twice for the same
+   * rejection. It reports `null` when the field unmounts while a rejection
+   * stands. Passing it lets an `error` `status` word the rejection.
+   *
+   * @example
+   * ```
+   * const [entryError, setEntryError] = useState<NumberInputEntryError | null>(null);
+   * <NumberInput
+   *   label="Seats"
+   *   value={seats}
+   *   onChange={setSeats}
+   *   isIntegerOnly
+   *   onEntryErrorChange={setEntryError}
+   *   status={
+   *     entryError?.kind === 'fractional'
+   *       ? {type: 'error', message: 'Enter a whole number of seats'}
+   *       : undefined
+   *   }
+   * />
+   * ```
+   */
+  onEntryErrorChange?: (error: NumberInputEntryError | null) => void;
   /**
    * How the status message is placed relative to the input.
    * - 'attached': message overlaps directly below the input (bordered treatment)
@@ -597,6 +676,7 @@ export function NumberInput({
   startIcon,
   labelIcon,
   status,
+  onEntryErrorChange,
   statusVariant = 'attached',
   size: sizeProp,
   onChange,
@@ -666,6 +746,83 @@ export function NumberInput({
   }
   const [isFocused, setIsFocused] = useState(false);
 
+  // The rejection that the field shows. A number has no fixed length, so a
+  // draft is complete only at commit, and only Enter or blur shows one.
+  const [shownRejection, setShownRejection] =
+    useState<NumberInputEntryError | null>(null);
+  // While blur keeps a rejected draft, a hidden input posts the committed
+  // number, so the form value does not change.
+  const [isDraftKeptAtBlur, setIsDraftKeptAtBlur] = useState(false);
+  const rejectionRules = useMemo(
+    () => ({min, max, isIntegerOnly, locale}),
+    [isIntegerOnly, locale, max, min],
+  );
+  // A field that turns disabled drops its draft during render, so no
+  // rejection shows or returns once it is editable again.
+  if (
+    isDisabled &&
+    (pendingInput !== null || shownRejection !== null || isDraftKeptAtBlur)
+  ) {
+    setPendingInput(null);
+    setShownRejection(null);
+    setIsDraftKeptAtBlur(false);
+  }
+  // A new value replaces a rejected or blur-kept draft. A value that changes
+  // at the commit that shows the rejection keeps the draft.
+  const [rendered, setRendered] = useState({value, rejection: shownRejection});
+  let isDraftReplaced = false;
+  if (
+    !Object.is(rendered.value, value) ||
+    rendered.rejection !== shownRejection
+  ) {
+    setRendered({value, rejection: shownRejection});
+    if (
+      !Object.is(rendered.value, value) &&
+      (shownRejection !== null || isDraftKeptAtBlur) &&
+      rendered.rejection === shownRejection
+    ) {
+      setPendingInput(null);
+      setShownRejection(null);
+      setIsDraftKeptAtBlur(false);
+      isDraftReplaced = true;
+    }
+  }
+  // New rules judge a rejected draft again, unless a new value replaced it in
+  // the same update.
+  const [judgedRules, setJudgedRules] = useState(rejectionRules);
+  if (judgedRules !== rejectionRules) {
+    setJudgedRules(rejectionRules);
+    if (!isDraftReplaced && shownRejection !== null && pendingInput !== null) {
+      const rejection = toEntryError(
+        pendingInput,
+        getNumberInputRejection(pendingInput, rejectionRules),
+      );
+      if (!isSameEntryError(rejection, shownRejection)) {
+        setShownRejection(rejection);
+      }
+    }
+  }
+  const entryError = isDisabled ? null : shownRejection;
+
+  // A held stepper shows a value on the grid, so it shows no rejection.
+  const shownEntryError = holdDraft === null ? entryError : null;
+  const invalidNumberMessage = t('@astryx.numberInput.invalidNumber');
+  const {fieldStatus, alertMessage, reportEntryError} = useEntryErrorReport({
+    entryError,
+    rejectionMessage: shownEntryError != null ? invalidNumberMessage : null,
+    status,
+    isStatusAnnounced: !inputGroup,
+    callerErrorPrecedence: 'always',
+    onEntryErrorChange,
+  });
+
+  const endDraft = useCallback(() => {
+    setPendingInput(null);
+    setShownRejection(null);
+    setIsDraftKeptAtBlur(false);
+    reportEntryError(null);
+  }, [reportEntryError]);
+
   // Disabled-reason tooltip. The tooltip listeners attach to the input container (which already exists) and
   // the input stays perceivable via aria-disabled instead of the native
   // disabled attribute. The field is made read-only so it can't be typed into,
@@ -684,7 +841,7 @@ export function NumberInput({
 
   const {statusIcon, describedBy: statusTooltipDescribedBy} =
     useInputStatusIcon({
-      status,
+      status: fieldStatus,
       statusVariant,
       isInGroup: !!inputGroup,
     });
@@ -695,7 +852,7 @@ export function NumberInput({
       description ? descriptionID : null,
       // The status message element is rendered by Field, which is skipped
       // inside an InputGroup — only reference it when it actually exists.
-      !inputGroup && statusVariant !== 'tooltip' && status?.message
+      !inputGroup && statusVariant !== 'tooltip' && fieldStatus?.message
         ? statusMessageID
         : null,
       // The tooltip variant renders no message box; describe the input by the
@@ -740,17 +897,15 @@ export function NumberInput({
     return isFocused ? formatEditableNumber(value, locale) : formattedValue;
   }, [formattedValue, holdDraft, isFocused, locale, pendingInput, value]);
 
-  // Check if current pending input is valid (for styling purposes)
-  const isInputValid = useMemo(() => {
-    // A held value is a step on the grid, so it is always valid.
-    if (holdDraft !== null) {
-      return true;
-    }
-    if (pendingInput === null || !pendingInput.trim()) {
-      return true;
-    }
-    return parseInput(pendingInput) !== null;
-  }, [holdDraft, pendingInput, parseInput]);
+  // The form value is the committed number as the field shows it with no
+  // draft: raw with `formatValue`, otherwise the plain number at rest and the
+  // locale-formatted number while focused.
+  const hiddenFormValue =
+    value == null
+      ? ''
+      : !formatValue && isFocused
+        ? formatEditableNumber(value, locale)
+        : String(value);
 
   // Keep the whole text edit as a draft until an explicit commit boundary.
   const handleInputChange = useCallback(
@@ -761,9 +916,20 @@ export function NumberInput({
       if (isDisabled || isReadOnly) {
         return;
       }
-      setPendingInput(e.target.value);
+      const text = e.target.value;
+      setPendingInput(text);
+      setIsDraftKeptAtBlur(false);
+      // A shown rejection stays while the draft stays wrong, and ends once
+      // the draft is valid or empty.
+      if (
+        shownRejection !== null &&
+        getNumberInputRejection(text, rejectionRules) === null
+      ) {
+        setShownRejection(null);
+        reportEntryError(null);
+      }
     },
-    [isDisabled, isReadOnly],
+    [isDisabled, isReadOnly, rejectionRules, reportEntryError, shownRejection],
   );
 
   // Handle focus
@@ -805,15 +971,29 @@ export function NumberInput({
       if (isDisabled) {
         // A field disabled mid-entry commits nothing; its draft is dropped, as
         // a natively disabled field's was (spec:AST-085 FR2).
-        setPendingInput(null);
+        endDraft();
         return;
       }
 
+      // A draft that cannot commit stays in the field with its rejection.
+      const rejection = toEntryError(
+        pendingInput,
+        getNumberInputRejection(pendingInput, rejectionRules),
+      );
+      if (rejection != null) {
+        setShownRejection(rejection);
+        reportEntryError(rejection);
+        if (trigger === 'blur') {
+          setIsDraftKeptAtBlur(true);
+        }
+        return;
+      }
+      setShownRejection(null);
+      setIsDraftKeptAtBlur(false);
+      reportEntryError(null);
+
       const decision = resolveNumberInputCommit(pendingInput, {
-        min,
-        max,
-        isIntegerOnly,
-        locale,
+        ...rejectionRules,
         hasClear: !!hasClear,
       });
       if (
@@ -832,14 +1012,13 @@ export function NumberInput({
       }
     },
     [
+      endDraft,
       hasClear,
       isDisabled,
-      isIntegerOnly,
-      locale,
-      max,
-      min,
       onChange,
       pendingInput,
+      rejectionRules,
+      reportEntryError,
       value,
     ],
   );
@@ -888,12 +1067,12 @@ export function NumberInput({
       if (nextValue == null) {
         return;
       }
-      setPendingInput(null);
+      endDraft();
       if (nextValue !== value) {
         onChange(nextValue);
       }
     },
-    [getNextValue, isDisabled, isReadOnly, onChange, value],
+    [endDraft, getNextValue, isDisabled, isReadOnly, onChange, value],
   );
 
   // A held stepper repeats into its own draft and commits once, when the hold
@@ -1051,7 +1230,7 @@ export function NumberInput({
     if (hold.isFrozen || isDisabled || isReadOnly) {
       return;
     }
-    setPendingInput(null);
+    endDraft();
     if (hold.held !== value) {
       onChange(hold.held);
     }
@@ -1150,7 +1329,7 @@ export function NumberInput({
       if (hasClear) {
         onChange(null);
       }
-      setPendingInput(null);
+      endDraft();
       if (!e || e.detail === 0) {
         inputRef.current?.focus();
       } else {
@@ -1162,7 +1341,7 @@ export function NumberInput({
         inputRef.current?.focus({preventScroll: true});
       }
     },
-    [hasClear, onChange],
+    [endDraft, hasClear, onChange],
   );
 
   // Focus input when clicking anywhere on the wrapper (icons, padding, etc.)
@@ -1188,7 +1367,7 @@ export function NumberInput({
       {...mergeProps(
         themeProps('number-input', {
           size,
-          status: status?.type ?? null,
+          status: fieldStatus?.type ?? null,
           disabled: isDisabled ? 'disabled' : null,
           readonly: isReadOnly ? 'readonly' : null,
         }),
@@ -1200,9 +1379,11 @@ export function NumberInput({
           sizeStyles[size],
           isDisabled && inputWrapperStyles.disabled,
           isDisabled && inputDisabledFocusStyles.ring,
-          status && inputStatusBorderStyles[status.type],
-          status && !isDisabled && inputStatusHoverShadowStyles[status.type],
-          status && inputStatusFocusWithinStyles[status.type],
+          fieldStatus && inputStatusBorderStyles[fieldStatus.type],
+          fieldStatus &&
+            !isDisabled &&
+            inputStatusHoverShadowStyles[fieldStatus.type],
+          fieldStatus && inputStatusFocusWithinStyles[fieldStatus.type],
           inputGroup && groupStyles.inGroup,
           controlXstyle,
         ),
@@ -1215,7 +1396,9 @@ export function NumberInput({
         {...fieldProps}
         ref={mergedInputRef}
         id={id}
-        name={isDisabled || formatValue ? undefined : htmlName}
+        name={
+          isDisabled || formatValue || isDraftKeptAtBlur ? undefined : htmlName
+        }
         type="text"
         inputMode={isIntegerOnly ? 'numeric' : 'decimal'}
         role="spinbutton"
@@ -1247,21 +1430,19 @@ export function NumberInput({
         }
         aria-required={isEffectivelyRequired ? 'true' : undefined}
         aria-invalid={
-          status?.type === 'error' || !isInputValid ? 'true' : undefined
+          fieldStatus?.type === 'error' || shownEntryError != null
+            ? 'true'
+            : undefined
         }
         aria-labelledby={inputLabelledBy}
         {...stylex.props(
           styles.input,
           isDisabled && styles.inputDisabled,
-          !isInputValid && styles.inputInvalid,
+          shownEntryError != null && styles.inputInvalid,
         )}
       />
-      {formatValue && htmlName && !isDisabled && (
-        <input
-          type="hidden"
-          name={htmlName}
-          value={value == null ? '' : String(value)}
-        />
+      {htmlName && !isDisabled && (formatValue || isDraftKeptAtBlur) && (
+        <input type="hidden" name={htmlName} value={hiddenFormValue} />
       )}
       {units && (
         <span id={unitsID} {...stylex.props(styles.units)}>
@@ -1269,12 +1450,11 @@ export function NumberInput({
         </span>
       )}
       {/*
-        Live region announcing invalid typed input to assistive technology.
-        The value silently reverts on blur, so without this a screen-reader
-        user would get no feedback that their entry was rejected (WCAG 3.3.1).
+        Announces the rejection message that the field status does not
+        announce. The field status announces the rest.
       */}
       <VisuallyHidden as="div" role="alert" aria-live="assertive">
-        {!isInputValid ? t('@astryx.numberInput.invalidNumber') : ''}
+        {alertMessage}
       </VisuallyHidden>
       {hasClear && value != null && !isDisabled && !isReadOnly && (
         <InputClearButton
@@ -1406,11 +1586,11 @@ export function NumberInput({
       isDisabled={isDisabled}
       labelIcon={labelIcon}
       status={
-        status
+        fieldStatus
           ? {
-              type: status.type,
-              message: status.message,
-              messageID: status.message ? statusMessageID : undefined,
+              type: fieldStatus.type,
+              message: fieldStatus.message,
+              messageID: fieldStatus.message ? statusMessageID : undefined,
             }
           : undefined
       }

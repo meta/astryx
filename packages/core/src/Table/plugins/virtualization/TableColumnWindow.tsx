@@ -103,14 +103,20 @@ function TableColumnWindow({
     reason != null,
   );
   const pinned = resolvePinnedColumnRuns(input.plugins, columns);
-  const {segments, isWindowed} = useTableColumnWindow({
+  const columnKeys = useMemo(
+    () => columns.map(column => column.key),
+    [columns],
+  );
+  const {segments, isWindowed, focusProps} = useTableColumnWindow({
     initialViewportWidth,
     isAdmitted: reason == null,
     widths: pitches,
     startCount: pinned.startCount,
     endCount: pinned.endCount,
+    columnKeys,
     hasRows: input.hasRows,
     table: input.runtime.table,
+    viewport: input.runtime.viewport,
     geometry: input.runtime.geometry,
   });
   // One layout object per mounted range, so rows that keep their range keep
@@ -141,7 +147,7 @@ function TableColumnWindow({
         : undefined,
     [isWindowed, segments, pitches],
   );
-  return render(layout);
+  return render(layout, focusProps);
 }
 
 /** The column windowing a columns capability carries; one object for every capability. */

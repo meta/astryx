@@ -33,9 +33,11 @@ import {LayerContentBoundary} from './layerScopedContext';
 import {layerClickBoundary} from './layerClickBoundary';
 import {addAnchorName, readAnchorNames, removeAnchorName} from './anchorName';
 import {
+  afterRelease,
   claimContextMenuPress,
   currentGesture,
   currentGestureHasClicked,
+  isReleaseInFlight,
 } from './gestureCounter';
 import {resolveLayerPortalTarget} from './layerHost';
 import {layerTextReset} from './layerTextReset.stylex';
@@ -1348,6 +1350,8 @@ function useLayerImplementation(
   // one that arrives while another popover is mid show/hide runs once that
   // operation has unwound. hide() forgets it either way.
   const pendingShowRef = useRef(false);
+  // Cancels a show that waits for a press's release to be handled.
+  const cancelAfterReleaseRef = useRef<(() => void) | null>(null);
 
   // Ref mirrors isOpen for synchronous reads inside show/hide.
   // State drives re-renders; the ref lets the imperative calls avoid
@@ -1397,6 +1401,18 @@ function useLayerImplementation(
   // The gesture during which the browser last closed this layer on its own.
   // openNow reads it so that the same press cannot reopen the layer.
   const dismissedByGestureRef = useRef<number | null>(null);
+  // The trigger the layer was open for when the browser closed it. Only a
+  // show from that trigger is the dismissing press reopening it.
+  const dismissedTriggerRef = useRef<HTMLElement | null>(null);
+  // A hide the browser has started on its own (light dismiss, popover="auto"
+  // stack eviction, an Escape its close watcher answers), from `beforetoggle`
+  // until its `toggle`, with the trigger the layer was open for. `moved` is
+  // set when a show from another trigger reopens the layer during that hide.
+  const browserHideRef = useRef<{
+    popover: HTMLElement;
+    trigger: HTMLElement | null;
+    moved: boolean;
+  } | null>(null);
   const forgetDismissalRef = useRef<(() => void) | null>(null);
 
   // Stops the watch for pans outside the open layer (`watchesOutsidePans`).
@@ -1590,9 +1606,45 @@ function useLayerImplementation(
 
   const openNow = useCallback(() => {
     // Every caller lands here, so this is where the dismissing press is
-    // absorbed: opening now would reopen the popup that same press closed.
-    if (wasJustDismissed()) {
+    // absorbed: opening now from the same trigger would reopen the popup that
+    // press closed. A show from another trigger of the layer opens it there.
+    if (
+      wasJustDismissed() &&
+      dismissedTriggerRef.current === triggerRef.current
+    ) {
       return;
+    }
+    // A light-dismiss layer asked to show while a press's release is handled
+    // (a menu row acts at the release) would be closed by that release's
+    // light dismiss, which runs after the handlers. It shows once the
+    // release is handled, so it stays a native auto popover.
+    if (lightDismiss && !isOpenRef.current && isReleaseInFlight()) {
+      const doc = popoverRef.current?.ownerDocument ?? document;
+      pendingShowRef.current = true;
+      cancelAfterReleaseRef.current?.();
+      cancelAfterReleaseRef.current = afterRelease(doc, () => {
+        cancelAfterReleaseRef.current = null;
+        if (pendingShowRef.current) {
+          pendingShowRef.current = false;
+          showRef.current();
+        }
+      });
+      return;
+    }
+    // A show from another trigger while the browser closes the layer for its
+    // old trigger: the layer moves to the new trigger. It opens there now, and
+    // the old trigger's close is not reported.
+    const browserHide = browserHideRef.current;
+    if (
+      browserHide != null &&
+      isOpenRef.current &&
+      browserHide.popover === popoverRef.current &&
+      browserHide.trigger !== triggerRef.current
+    ) {
+      browserHide.moved = true;
+      openedPopoverRef.current = null;
+      isOpenRef.current = false;
+      stopOutsidePanWatch();
     }
     isMountPreparedRef.current = false;
     // A context popover left over until React commits a previous hide must not
@@ -1835,6 +1887,8 @@ function useLayerImplementation(
   }, [mode, openNow, cancelPendingAnchorWait, finishAnchorWait]);
 
   const hide = useCallback(() => {
+    cancelAfterReleaseRef.current?.();
+    cancelAfterReleaseRef.current = null;
     cancelPendingAnchorWait();
     pendingShowRef.current = false;
     if (isOpenRef.current) {
@@ -1995,10 +2049,12 @@ function useLayerImplementation(
       return;
     }
     dismissedByGestureRef.current = currentGesture();
+    dismissedTriggerRef.current = triggerRef.current;
     const view = doc.defaultView;
     let forgetTimer: number | null = null;
     const forget = () => {
       dismissedByGestureRef.current = null;
+      dismissedTriggerRef.current = null;
       doc.removeEventListener('click', scheduleForget, true);
       if (forgetTimer !== null) {
         view?.clearTimeout(forgetTimer);
@@ -2028,13 +2084,15 @@ function useLayerImplementation(
 
   // Syncs the document's capture-phase gesture tracking with this mount.
   // Unmount forgets the layer's dismissal, releases a pending anchor wait and
-  // stops the outside-pan watch.
+  // a show waiting for a release, and stops the outside-pan watch.
   useEffect(() => {
     // Install capture-phase gesture tracking before the first interaction.
     currentGesture();
     return () => {
       forgetDismissalRef.current?.();
       pendingAnchorWaitRef.current?.();
+      cancelAfterReleaseRef.current?.();
+      cancelAfterReleaseRef.current = null;
       stopOutsidePanWatch();
     };
   }, [stopOutsidePanWatch]);
@@ -2067,6 +2125,11 @@ function useLayerImplementation(
       if (isOpenRef.current) {
         observeBrowserHide(el);
         onCloseStartRef.current?.();
+        browserHideRef.current = {
+          popover: el,
+          trigger: triggerRef.current,
+          moved: false,
+        };
         // The browser's own close releases the name from its toggle event.
         return;
       }
@@ -2090,6 +2153,15 @@ function useLayerImplementation(
   const handleToggle = useCallback(
     (e: Event) => {
       const toggleEvent = e as ToggleEvent;
+      const browserHide = browserHideRef.current;
+      if (browserHide != null && browserHide.popover === e.currentTarget) {
+        browserHideRef.current = null;
+        // The layer moved to another trigger during the hide: it is open, and
+        // the old trigger's close is not reported.
+        if (browserHide.moved) {
+          return;
+        }
+      }
       if (toggleEvent.newState === 'closed' && isOpenRef.current) {
         openedPopoverRef.current = null;
         isOpenRef.current = false;
