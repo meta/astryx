@@ -950,6 +950,36 @@ describe('app-theme doctor checks', () => {
     });
   });
 
+  it('check 5 leaves a local theme that sets a private var to the private-variables check', async () => {
+    const {dir} = await fixture();
+    await themeEject('ocean', {cwd: dir, package: '@acme/themes'});
+    const localDir = path.join(dir, 'src/themes/ocean');
+    const sourceFile = path.join(localDir, 'oceanTheme.ts');
+    fs.writeFileSync(
+      sourceFile,
+      "const oceanTheme = {name: 'ocean', tokens: {'--color-bg': '#000'}};\nexport {oceanTheme};\nexport default oceanTheme;\n",
+    );
+    await themeBuild(sourceFile, {}, {cwd: dir});
+    await themeAdd('ocean', {cwd: dir, import: true});
+    // A hand edit sets a private var after the theme was built and added.
+    fs.writeFileSync(
+      sourceFile,
+      "const oceanTheme = {name: 'ocean', tokens: {'--color-bg': '#000'}, components: {button: {base: {'--_button-radius': '2px'}}}};\nexport {oceanTheme};\nexport default oceanTheme;\n",
+    );
+
+    const checks = await checkAppThemes(dir);
+    // Not a stale output, and never a pass: the build refuses the theme, so
+    // its outputs were not compared.
+    expect(check(checks, 'theme-local-builds')).toMatchObject({
+      status: 'info',
+      message: expect.stringContaining('Not checked: ocean'),
+      fix: expect.stringContaining('theme-private-variables'),
+    });
+    const priv = check(checks, 'theme-private-variables');
+    expect(priv).toMatchObject({status: 'fail'});
+    expect(priv.message).toContain('--_button-radius');
+  });
+
   it('check 5 names a package a local theme imports and the app lacks, with the install command', async () => {
     const {dir} = await fixture();
     await themeEject('ocean', {cwd: dir, package: '@acme/themes'});

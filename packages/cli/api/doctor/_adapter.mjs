@@ -73,6 +73,7 @@ export {
   resolveThemeModule,
 } from '../../foundation/config/theme-state.mjs';
 export {
+  isPrivateVarRefusal,
   missingThemePackage,
   themeBuild,
   validateThemePrivateInputs,
