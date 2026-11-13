@@ -32,6 +32,9 @@ import {
   resolveRecordedTheme,
   resolveThemeModule,
   SOURCE_EXTENSIONS,
+  doctorStylesheetImportFile,
+  generatedFileCommand,
+  generatedSourceCommand,
   isPrivateVarRefusal,
   missingThemePackage,
   packageInstallCommand,
@@ -118,6 +121,12 @@ function refreshThemeCommand(projectDir, run, available, slug, owner) {
   const source = theme
     ? relative(projectDir, path.join(theme.sourceDir, theme.entry))
     : projectPath(path.join(owner, slug, `${slug}Theme.ts`));
+  // A source another command generates (its leading comment carries that
+  // command's mark), or a missing one in a folder whose files do: `theme
+  // build` refuses or cannot build it; the command that made it writes it.
+  const by = generatedSourceCommand(path.resolve(projectDir, source));
+  if (by)
+    return `Rebuild ${projectPath(path.dirname(source))}/ with the command that made it (${by}), then run ${run} theme add ${slug}`;
   return `${run} theme build ${source}; ${run} theme add ${slug}`;
 }
 
@@ -447,13 +456,46 @@ function namedThemeFonts(files) {
   return new Set(names.values());
 }
 
-/** @param {string} css */
-function fontStylesheetEvidence(css) {
+/**
+ * The families a font stylesheet loads with `@font-face`, following its
+ * local `@import`s (a relative file, or a package's stylesheet such as
+ * `@fontsource/inter/index.css`); `external` when it imports a URL
+ * (http, https, `//`), whose families doctor cannot read.
+ * @param {string} css
+ * @param {string} [file] the stylesheet's path, to resolve local imports
+ * @param {Set<string>} [seen]
+ */
+function fontStylesheetEvidence(css, file, seen = new Set()) {
   const loaded = new Set();
   let external = false;
   const root = postcss.parse(css);
   root.walkAtRules(atRule => {
-    if (atRule.name.toLowerCase() === 'import') external = true;
+    if (atRule.name.toLowerCase() === 'import') {
+      const spec = [...doctorStylesheetImports(`@import ${atRule.params};`)][0];
+      if (!spec || /^(?:https?:)?\/\//i.test(spec)) {
+        external = true;
+        return;
+      }
+      const target = file ? doctorStylesheetImportFile(spec, file) : null;
+      if (!target || seen.has(target) || seen.size > 20) {
+        // A local import that does not resolve loads nothing doctor can
+        // see; it is no font service.
+        return;
+      }
+      seen.add(target);
+      try {
+        const inner = fontStylesheetEvidence(
+          readTextFile(target),
+          target,
+          seen,
+        );
+        for (const name of inner.loaded) loaded.add(name);
+        external ||= inner.external;
+      } catch {
+        // A stylesheet that does not read loads nothing doctor can see.
+      }
+      return;
+    }
     if (atRule.name.toLowerCase() !== 'font-face') return;
     atRule.walkDecls(/^font-family$/iu, declaration => {
       loaded.add(normalizeFontName(declaration.value).toLowerCase());
@@ -1074,7 +1116,16 @@ export async function checkAppThemes(cwd) {
       label: 'Theme owners and built imports',
       status: 'fail',
       message: discoveryError.message,
-      fix: `${run} theme add <slug>`,
+      // The added theme the broken folder holds, by its name.
+      fix: (() => {
+        const named =
+          ownerEntries.find(([slug]) =>
+            new RegExp(
+              `(^|[\\s/"'(])${slug.replace(/[-]/g, '\\-')}([\\s/"').,:]|$)`,
+            ).test(discoveryError.message),
+          )?.[0] ?? ownerEntries[0][0];
+        return `Fix or move what the message names, then run ${run} theme add ${named}`;
+      })(),
     });
   } else if (resolutionProblems.length > 0) {
     checks.push({
@@ -1223,6 +1274,9 @@ export async function checkAppThemes(cwd) {
     });
   } else {
     const stale = [];
+    /** Local themes another command generates: not compared. */
+    /** @type {Array<{slug: string, by: string}>} */
+    const generated = [];
     /** Local themes the build refused for a private var: not checked. */
     /** @type {string[]} */
     const refused = [];
@@ -1239,8 +1293,20 @@ export async function checkAppThemes(cwd) {
         );
         if (!availableTheme) continue;
         try {
+          const sourceFile = path.join(
+            availableTheme.sourceDir,
+            availableTheme.entry,
+          );
+          // A source another command generates is kept up to date by that
+          // command; doctor does not compare it (and `theme build` refuses
+          // it).
+          const by = generatedFileCommand(sourceFile);
+          if (by) {
+            generated.push({slug: theme.slug, by});
+            continue;
+          }
           const receipt = await themeBuild(
-            path.join(availableTheme.sourceDir, availableTheme.entry),
+            sourceFile,
             {check: true},
             {cwd: state.projectDir, projectCore: true},
           );
@@ -1314,22 +1380,32 @@ export async function checkAppThemes(cwd) {
               message: `Local theme outputs are missing or stale: ${stale.join(', ')}.${refused.length > 0 ? ` Not checked (a private theme variable; see theme-private-variables): ${refused.join(', ')}.` : ''}`,
               fix: refresh.join(' '),
             }
-          : refused.length > 0
+          : generated.length > 0 && refused.length === 0
             ? {
-                // Not a pass: the build refused these, so their outputs
-                // were never compared with their sources.
+                // Not a pass: another command keeps these up to date, and
+                // doctor does not compare its files.
                 id: 'theme-local-builds',
                 label: 'Local theme build freshness',
                 status: 'info',
-                message: `Not checked: ${refused.join(', ')} ${refused.length === 1 ? 'sets' : 'set'} a private theme variable, so the build refuses ${refused.length === 1 ? 'it' : 'them'} and ${refused.length === 1 ? 'its' : 'their'} outputs were not compared with ${refused.length === 1 ? 'its source' : 'their sources'}.`,
-                fix: 'Follow the fix on the theme-private-variables check, then run doctor again.',
+                message: `Not compared: ${generated.map(g => `${g.slug} (generated by ${g.by})`).join(', ')}, which ${generated.length === 1 ? 'keeps it' : 'keep them'} up to date; every other added local theme output matches its source.`,
+                fix: `Rebuild ${generated.length === 1 ? 'it' : 'each'} with the command that made it when its theme changes.`,
               }
-            : {
-                id: 'theme-local-builds',
-                label: 'Local theme build freshness',
-                status: 'pass',
-                message: 'Every added local theme output matches its source.',
-              },
+            : refused.length > 0
+              ? {
+                  // Not a pass: the build refused these, so their outputs
+                  // were never compared with their sources.
+                  id: 'theme-local-builds',
+                  label: 'Local theme build freshness',
+                  status: 'info',
+                  message: `Not checked: ${refused.join(', ')} ${refused.length === 1 ? 'sets' : 'set'} a private theme variable, so the build refuses ${refused.length === 1 ? 'it' : 'them'} and ${refused.length === 1 ? 'its' : 'their'} outputs were not compared with ${refused.length === 1 ? 'its source' : 'their sources'}.`,
+                  fix: 'Follow the fix on the theme-private-variables check, then run doctor again.',
+                }
+              : {
+                  id: 'theme-local-builds',
+                  label: 'Local theme build freshness',
+                  status: 'pass',
+                  message: 'Every added local theme output matches its source.',
+                },
     );
   }
 
@@ -1517,6 +1593,7 @@ export async function checkAppThemes(cwd) {
     try {
       const evidence = fontStylesheetEvidence(
         readTextFile(theme.fontStylesheetFile),
+        theme.fontStylesheetFile,
       );
       const missing = [...names].filter(
         name => !evidence.loaded.has(name.toLowerCase()),

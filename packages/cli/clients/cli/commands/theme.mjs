@@ -85,6 +85,7 @@ import {
   themeSourceFiles,
   themeSourceGuesses,
   buildSuggestion,
+  generatedSourceCommand,
   writeDeferredBuildOutputs,
 } from '../../../api/theme/build/build.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
@@ -996,6 +997,28 @@ function registerThemeCommands(theme, program, docs, words) {
         const rewrite = looksGlobby
           ? null
           : (words.missingSource?.(entry.file, process.cwd()) ?? null);
+        // A file another command generates, gone from a folder whose other
+        // files carry that command's mark: that command writes it again; a
+        // blank theme template is no way back.
+        const by =
+          rewrite || looksGlobby
+            ? null
+            : generatedSourceCommand(entry.filePath);
+        if (by)
+          return cliError(
+            `File not found: ${entry.filePath}. It is a generated file: the files beside it are written by ${by}, so rebuild it with the command that made it.`,
+            {
+              code: ERROR_CODES.ERR_FILE_NOT_FOUND,
+              suggestions: /^astryx(\s|$)/.test(by)
+                ? [
+                    {
+                      name: `${getCliInvocation(process.cwd())} ${by.replace(/^astryx\s*/, '')}`.trim(),
+                      reason: 'the command that writes these files',
+                    },
+                  ]
+                : [],
+            },
+          );
         return cliError(`File not found: ${entry.filePath}`, {
           code: ERROR_CODES.ERR_FILE_NOT_FOUND,
           suggestions: rewrite

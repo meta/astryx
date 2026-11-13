@@ -39,6 +39,7 @@ import {
 } from '../../foundation/agent-docs/computer-agent-text.mjs';
 import {computerAgentTextSettings} from '../../foundation/env/user-settings.mjs';
 import * as fs from 'node:fs';
+import {createRequire} from 'node:module';
 import {placeholderUses} from '../../foundation/discovery/template-icons.mjs';
 export {placeholderFixes} from '../../foundation/discovery/template-icons.mjs';
 export {
@@ -77,6 +78,9 @@ export {
 } from '../../foundation/config/theme-state.mjs';
 export {
   GENERATED_MARKER,
+  generatedFileCommand,
+  generatedFolderCommand,
+  generatedSourceCommand,
   isPrivateVarRefusal,
   missingThemePackage,
   themeBuild,
@@ -304,6 +308,27 @@ export function doctorElementPropOrigins(file, element) {
  */
 export function doctorStylesheetImports(css) {
   return new Set(cssImports(css));
+}
+
+/**
+ * The file a local stylesheet `@import` names, from the stylesheet that
+ * imports it: a relative path, or a package's file as Node resolves it
+ * (`@fontsource/inter/index.css`). Null for a URL (http, https, `//`) or an
+ * import that does not resolve.
+ * @param {string} specifier
+ * @param {string} fromFile
+ * @returns {string | null}
+ */
+export function doctorStylesheetImportFile(specifier, fromFile) {
+  if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(specifier)) return null;
+  try {
+    const file = /^\.{1,2}\//.test(specifier)
+      ? path.resolve(path.dirname(fromFile), specifier)
+      : createRequire(fromFile).resolve(specifier);
+    return fs.existsSync(file) && fs.statSync(file).isFile() ? file : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
