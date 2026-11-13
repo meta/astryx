@@ -1480,7 +1480,8 @@ function chromeBinary() {
 }
 
 /** The first line of every file the editor writes into a theme's app copy. */
-export const APP_COPY_MARK = 'Written by `astryx experimental theme editor`';
+export {APP_COPY_MARK} from './_marks.mjs';
+import {APP_COPY_MARK} from './_marks.mjs';
 
 /**
  * The app's copy of an editor theme: a standard local theme in
