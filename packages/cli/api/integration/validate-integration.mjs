@@ -293,7 +293,7 @@ async function findUnreachableContributionIssues(
       issues.push(
         warning(
           'unreachable_contribution',
-          `Found contribution metadata "${path.relative(packageDir, full)}" outside every declared integration root, so it contributes nothing. ${unreachableFix(context, full, stamp)}`,
+          `Found contribution metadata "${path.relative(packageDir, full).split(path.sep).join('/')}" outside every declared integration root, so it contributes nothing. ${unreachableFix(context, full, stamp)}`,
         ),
       );
     }

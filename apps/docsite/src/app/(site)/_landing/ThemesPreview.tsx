@@ -2,11 +2,8 @@
 
 'use client';
 
+import type {ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {
-  AppShellMobileContext,
-  type AppShellMobileContextValue,
-} from '@astryxdesign/core/AppShell';
 import {Card} from '@astryxdesign/core/Card';
 import {HStack} from '@astryxdesign/core/Layout';
 import {Theme} from '@astryxdesign/core/theme';
@@ -15,8 +12,6 @@ import {
   shadowVars,
   spacingVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
-import {ThemeShowcaseStore} from '../../../../../../packages/cli/assets/templates/pages/theme-showcase/page';
-import {getThemeShowcaseContent} from '../../../components/themeShowcaseContent';
 import {themeObjects} from '../../../generated/themeRegistry';
 import {useThemeMode} from '../../providers';
 
@@ -24,24 +19,6 @@ import {useThemeMode} from '../../providers';
 // page pull from, so the left preview renders pre-built CSS with no runtime
 // injection.
 const butterTheme = themeObjects['@astryxdesign/theme-butter'];
-
-// Butter's bespoke showcase content (breakfast products + inventory) — the
-// same source of truth the /themes page feeds ThemeShowcaseStore, so this card
-// stays in sync with the themes page.
-// The card shows the store at about a third of its size, so its photos are
-// about 100 px wide. These 320 px WebP copies are sharp at 3x pixel density
-// and replace the 704 px PNGs.
-const butterContent = {
-  ...getThemeShowcaseContent('butter'),
-  images: {
-    watch: '/landing/themes/butter-watch.webp',
-    headphones: '/landing/themes/butter-headphones.webp',
-    backpack: '/landing/themes/butter-backpack.webp',
-    wallet: '/landing/themes/butter-wallet.webp',
-    tumbler: '/landing/themes/butter-tumbler.webp',
-    throw_: '/landing/themes/butter-throw.webp',
-  },
-};
 
 // Swatch + "Aa" colors as Butter theme tokens (resolved via the Butter <Theme>
 // scope around the rail below) rather than hardcoded hex, so they stay in sync.
@@ -182,25 +159,12 @@ const swatchColors = stylex.create({
   fill: (color: string) => ({backgroundColor: color}),
 });
 
-// The store template's internal responsive grids read useAppShellMobile(), which
-// reflects the DOCSITE's viewport. Since the store is rendered at a fixed 1000px
-// desktop width and scaled down to a miniature, we force isMobile:false so its
-// product grid keeps the 3-column desktop layout on small screens (otherwise it
-// collapses to a single full-width product, ignoring the miniature's scale).
-const FORCE_DESKTOP_MOBILE_CONTEXT: AppShellMobileContextValue = {
-  isMobile: false,
-  isMobileNavOpen: false,
-  toggleMobileNav: () => {},
-  openMobileNav: () => {},
-  closeMobileNav: () => {},
-  isMobileNavEnabled: false,
-  hasAutoToggle: false,
-};
-
-// Live, theme-aware replacement for the old /feature-brand.png: the real /themes
+// Theme-aware replacement for the old /feature-brand.png: the real /themes
 // ThemeShowcaseStore (Butter content) on the left + Butter swatches & script "Aa"
 // on the right, both in a Butter <Theme> scope so they're dark-mode correct.
-export function ThemesPreview() {
+// The page passes the store as a build-time snapshot (FrozenPreview), so the
+// store's code does not ship to the browser.
+export function ThemesPreview({store}: {store: ReactNode}) {
   // Follow the docsite light/dark toggle so the Butter preview switches modes
   // (keeps Butter's palette; 'system' defers to the OS before the toggle).
   const {themeMode} = useThemeMode();
@@ -213,10 +177,7 @@ export function ThemesPreview() {
               {...stylex.props(styles.scaleViewport)}
               data-themes-card-preview>
               <div {...stylex.props(styles.scaleInner)} inert>
-                <AppShellMobileContext.Provider
-                  value={FORCE_DESKTOP_MOBILE_CONTEXT}>
-                  <ThemeShowcaseStore {...butterContent} />
-                </AppShellMobileContext.Provider>
+                {store}
               </div>
             </div>
           </Theme>

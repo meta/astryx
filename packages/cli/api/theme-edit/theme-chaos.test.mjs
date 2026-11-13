@@ -337,9 +337,15 @@ beforeAll(async () => {
   writeFixtureBaseTheme(cwd, 'neutral');
   fs.writeFileSync(
     path.join(cwd, 'package.json'),
-    `${JSON.stringify({name: 'app', private: true, type: 'module'})}\n`,
+    `${JSON.stringify({name: 'app', private: true, type: 'module', dependencies: {'@astryxdesign/core': '*'}})}\n`,
   );
   fs.mkdirSync(path.join(cwd, 'src/app'), {recursive: true});
+  // A routes folder has a root layout, which loads Core's stylesheet.
+  if (!fs.existsSync(path.join(cwd, 'src/app/layout.tsx')))
+    fs.writeFileSync(
+      path.join(cwd, 'src/app/layout.tsx'),
+      "import '@astryxdesign/core/astryx.css';\nexport default function RootLayout({children}) { return children; }\n",
+    );
   for (const t of THEMES) await run(['editor', 'new', t]);
 
   /** Snapshots of each theme folder from before each accepted set, newest last. */

@@ -688,7 +688,7 @@ describe('DateTimeInput', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it('reverts date input on blur when input is invalid', () => {
+  it('keeps unreadable date text on blur without committing it', () => {
     const onChange = vi.fn();
     render(
       <DateTimeInput
@@ -702,7 +702,8 @@ describe('DateTimeInput', () => {
     fireEvent.change(input, {target: {value: 'not a date'}});
     fireEvent.blur(input);
 
-    expect(screen.getByDisplayValue('January 25, 2026')).toBeInTheDocument();
+    expect(input).toHaveValue('not a date');
+    expect(screen.getByText('Invalid date')).toBeInTheDocument();
     expect(onChange).not.toHaveBeenCalled();
   });
 
@@ -1114,12 +1115,14 @@ describe('DateTimeInput', () => {
   });
 
   describe('invalid typed input feedback (WCAG 3.3.1)', () => {
-    it('sets aria-invalid="true" on the date input when typed date is unparseable', () => {
+    it('sets aria-invalid="true" on unparseable date text at blur, not while typing', () => {
       render(<DateTimeInput label="Meeting" onChange={() => {}} />);
 
       const dateInput = screen.getByRole('combobox');
       fireEvent.change(dateInput, {target: {value: '13/45/2024'}});
+      expect(dateInput).not.toHaveAttribute('aria-invalid');
 
+      fireEvent.blur(dateInput);
       expect(dateInput).toHaveAttribute('aria-invalid', 'true');
     });
 
@@ -1132,13 +1135,19 @@ describe('DateTimeInput', () => {
       expect(dateInput).not.toHaveAttribute('aria-invalid');
     });
 
-    it('announces an alert message when the typed date is invalid', () => {
-      render(<DateTimeInput label="Meeting" onChange={() => {}} />);
+    it('shows unreadable date text as the field status at blur', () => {
+      const {container} = render(
+        <DateTimeInput label="Meeting" onChange={() => {}} />,
+      );
 
       const dateInput = screen.getByRole('combobox');
       fireEvent.change(dateInput, {target: {value: '13/45/2024'}});
+      expect(screen.queryByText('Invalid date')).not.toBeInTheDocument();
 
-      expect(screen.getByText('Invalid date')).toBeInTheDocument();
+      fireEvent.blur(dateInput);
+      expect(container.querySelector('.astryx-field-status')).toHaveTextContent(
+        'Invalid date',
+      );
     });
 
     it('sets aria-invalid="true" on the time input when typed time is unparseable', () => {
@@ -1207,6 +1216,7 @@ describe('DateTimeInput', () => {
       fireEvent.change(screen.getByRole('combobox'), {
         target: {value: '13/45/2024'},
       });
+      fireEvent.blur(screen.getByRole('combobox'));
       expect(screen.getByText('Ungültiges Datum')).toBeInTheDocument();
 
       fireEvent.change(screen.getByLabelText('Meeting time'), {
@@ -3136,13 +3146,13 @@ describe('DateTimeInput onEntryErrorChange', () => {
     fireEvent.change(dateInput, {target: {value: '02/31/2026'}});
     fireEvent.change(dateInput, {target: {value: '01/05/2027'}});
     fireEvent.change(dateInput, {target: {value: 'tomorrowish'}});
+    fireEvent.blur(dateInput);
     fireEvent.change(dateInput, {target: {value: '1/5/2'}});
     fireEvent.blur(dateInput);
     expect(onEntryErrorChange.mock.calls).toEqual([
       [{kind: 'nonexistent', text: '02/31/2026'}],
       [{kind: 'outOfRange', text: '01/05/2027', date: '2027-01-05'}],
       [{kind: 'unreadable', text: 'tomorrowish'}],
-      [null],
       [{kind: 'incomplete', text: '1/5/2'}],
     ]);
   });
@@ -3322,5 +3332,180 @@ describe('DateTimeInput onEntryErrorChange', () => {
       'onEntryErrorChange',
     );
     consoleError.mockRestore();
+  });
+});
+
+describe('DateTimeInput date segment rejected entries', () => {
+  afterEach(() => {
+    __resetLiveRegionsForTest();
+  });
+
+  function statusText(container: HTMLElement) {
+    return container.querySelector('.astryx-field-status')?.textContent ?? '';
+  }
+
+  it('shows unreadable date text at blur, in place of a caller status, and announces it once', async () => {
+    const texts: string[] = [];
+    const observer = new MutationObserver(() => {
+      const text =
+        document.querySelector('[data-astryx-live-region="assertive"]')
+          ?.textContent ?? '';
+      if (text && text !== texts.at(-1)) {
+        texts.push(text);
+      }
+    });
+    observer.observe(document.body, {subtree: true, childList: true});
+    const {container} = render(
+      <DateTimeInput
+        label="Starts"
+        status={{type: 'warning', message: 'Busy week'}}
+        onChange={() => {}}
+      />,
+    );
+    const dateInput = screen.getByRole('combobox');
+    fireEvent.change(dateInput, {target: {value: 'tomorrowish'}});
+    expect(dateInput).not.toHaveAttribute('aria-invalid');
+    expect(statusText(container)).toBe('Busy week');
+
+    fireEvent.blur(dateInput);
+    expect(dateInput).toHaveValue('tomorrowish');
+    expect(dateInput).toHaveAttribute('aria-invalid', 'true');
+    expect(statusText(container)).toBe('Invalid date');
+    await waitFor(() => {
+      expect(texts).toEqual(['Invalid date']);
+    });
+
+    // An edit that leaves the text unfinished keeps the shown rejection.
+    fireEvent.change(dateInput, {target: {value: '1/5/20'}});
+    expect(statusText(container)).toBe('Invalid date');
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(texts).toEqual(['Invalid date']);
+    observer.disconnect();
+  });
+
+  it('posts the committed date from a hidden input while Enter keeps unreadable text, and lets the next Enter submit', () => {
+    render(
+      <form aria-label="Form">
+        <DateTimeInput
+          label="Starts"
+          value={'2026-01-25T10:00' as ISODateTimeString}
+          onChange={() => {}}
+          {...({name: 'starts'} as Partial<DateTimeInputProps>)}
+        />
+      </form>,
+    );
+    const form = screen.getByRole<HTMLFormElement>('form');
+    const dateInput = screen.getByRole('combobox');
+    fireEvent.change(dateInput, {target: {value: 'tomorrowish'}});
+    expect(fireEvent.keyDown(dateInput, {key: 'Enter'})).toBe(false);
+    expect(dateInput).not.toHaveAttribute('name');
+    expect(new FormData(form).getAll('starts')).toEqual(['January 25, 2026']);
+    expect(fireEvent.keyDown(dateInput, {key: 'Enter'})).toBe(true);
+
+    fireEvent.change(dateInput, {target: {value: '02/31/2026'}});
+    fireEvent.blur(dateInput);
+    expect(new FormData(form).getAll('starts')).toEqual(['02/31/2026']);
+  });
+
+  it('shows the date message when both segments hold a rejection', () => {
+    const {container} = render(
+      <DateTimeInput
+        label="Starts"
+        value={'2026-03-15T10:00' as ISODateTimeString}
+        onChange={() => {}}
+      />,
+    );
+    const dateInput = screen.getByRole('combobox');
+    fireEvent.change(dateInput, {target: {value: 'tomorrowish'}});
+    fireEvent.blur(dateInput);
+    const timeInput = screen.getByLabelText('Starts time');
+    fireEvent.change(timeInput, {target: {value: '25:00'}});
+    fireEvent.keyDown(timeInput, {key: 'Enter'});
+
+    expect(statusText(container)).toBe('Invalid date');
+    expect(timeInput).toHaveAttribute('aria-invalid', 'true');
+    const timeAlert = within(timeInput.parentElement as HTMLElement).getByRole(
+      'alert',
+    );
+    expect(timeAlert.textContent).not.toBe('');
+  });
+
+  it('keeps a refused native date shown after blur restores the committed date, until an accepted date', () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: /pointer:\s*coarse/.test(query),
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }));
+    const {container} = render(
+      <DateTimeInput
+        label="Starts"
+        presentation="native"
+        value={'2026-03-15T10:00' as ISODateTimeString}
+        max={'2026-03-20T17:00' as ISODateTimeString}
+        status={{type: 'success', message: 'Looks good'}}
+        onChange={() => {}}
+      />,
+    );
+    const dateInput =
+      container.querySelector<HTMLInputElement>('input[type="date"]')!;
+    fireEvent.focus(dateInput);
+    fireEvent.change(dateInput, {target: {value: '0002-03-25'}});
+    fireEvent.change(dateInput, {target: {value: '2026-03-25'}});
+    expect(dateInput).not.toHaveAttribute('aria-invalid');
+    expect(statusText(container)).toBe('Looks good');
+
+    fireEvent.blur(dateInput);
+    expect(dateInput).toHaveValue('2026-03-15');
+    expect(dateInput).toHaveAttribute('aria-invalid', 'true');
+    expect(statusText(container)).toBe(
+      'Enter a date on or before March 20, 2026',
+    );
+
+    fireEvent.change(dateInput, {target: {value: '2026-03-18'}});
+    expect(statusText(container)).toBe('Looks good');
+    vi.unstubAllGlobals();
+  });
+
+  it('with onEntryErrorChange, shows a caller error message in place of a refused native date', () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: /pointer:\s*coarse/.test(query),
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }));
+    const {container} = render(
+      <DateTimeInput
+        label="Starts"
+        presentation="native"
+        value={'2026-03-15T10:00' as ISODateTimeString}
+        max={'2026-03-20T17:00' as ISODateTimeString}
+        status={{type: 'error', message: 'Pick a date this month'}}
+        onEntryErrorChange={() => {}}
+        onChange={() => {}}
+      />,
+    );
+    const dateInput =
+      container.querySelector<HTMLInputElement>('input[type="date"]')!;
+    const alert = within(dateInput.closest('div') as HTMLElement).getByRole(
+      'alert',
+    );
+    expect(alert).toHaveTextContent('');
+    fireEvent.change(dateInput, {target: {value: '2026-03-25'}});
+    fireEvent.keyDown(dateInput, {key: 'Enter'});
+
+    expect(statusText(container)).toBe('Pick a date this month');
+    expect(dateInput).toHaveAttribute('aria-invalid', 'true');
+    // The status does not change, so the date alert announces it once.
+    expect(alert).toHaveTextContent('Pick a date this month');
+    vi.unstubAllGlobals();
   });
 });

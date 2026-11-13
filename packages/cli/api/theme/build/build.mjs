@@ -84,6 +84,7 @@ import {
   PathSafetyError,
 } from '../../../foundation/fs/path-safety.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
+import {editorThemeRecord} from '../../../foundation/config/theme-state.mjs';
 import {validatePrivateVars} from '../../../foundation/config/theme-private-vars.mjs';
 import {AstryxError} from '../../error.mjs';
 import {applyWrites} from '../../integration/add-helpers.mjs';
@@ -100,7 +101,10 @@ import {
   formatFontLoadingHelp,
 } from './font-warning.mjs';
 import {interceptCore} from './core-interception.mjs';
-import {installCommandFor} from '../../../foundation/discovery/template-needs.mjs';
+import {
+  installCommandFor,
+  parsedSpecifiers,
+} from '../../../foundation/discovery/template-needs.mjs';
 import {generateFamilyCSS, resolveThemeFamily} from './family.mjs';
 import {resolveIconImports} from './icon-imports.mjs';
 
@@ -690,12 +694,15 @@ function generatedHeader(sourceFile, lang = 'js', command, versions) {
  * the header and all real content — is compared verbatim. Used only by
  * `--check`: a differing command must NOT report a file as stale, but any real
  * content drift must. The `CLI:`/`Core:` provenance lines are deterministic
- * for a given toolchain, so they compare verbatim like real content.
+ * for a given toolchain, so they compare verbatim like real content. CRLF
+ * line endings read as LF.
  * @param {string} content
  * @returns {string}
  */
 export function normalizeThemeBuildForCompare(content) {
+  // A checkout may turn line endings into CRLF; the text is the same.
   return content
+    .replace(/\r\n/g, '\n')
     .split('\n')
     .filter(line => {
       const t = line.replace(/^\s*\*?\s?/, '');
@@ -704,16 +711,21 @@ export function normalizeThemeBuildForCompare(content) {
     .join('\n');
 }
 
-/** @param {Array<{dest: string, content: string, allowMissingInCheck?: boolean}>} writes @param {string} cwd @returns {Array<{path: string, reason: 'missing' | 'outdated'}>} */
+/**
+ * The outputs that are missing or differ from what the build would write. A
+ * missing `.css.d.ts` stylesheet type stub (a write marked `warnWhenMissing`)
+ * is not stale: projects that ignore it in version control run the check in
+ * CI, so the check warns about it instead (missingDeclarations). Every other
+ * missing output, the module's `.d.ts` too, is stale.
+ * @param {Array<{dest: string, content: string, warnWhenMissing?: boolean}>} writes @param {string} cwd @returns {Array<{path: string, reason: 'missing' | 'outdated'}>}
+ */
 function staleBuildOutputs(writes, cwd) {
   /** @type {Array<{path: string, reason: 'missing' | 'outdated'}>} */
   const stale = [];
   for (const write of writes) {
     const rel = path.relative(cwd, write.dest);
     if (!fs.existsSync(write.dest)) {
-      if (!write.allowMissingInCheck) {
-        stale.push({path: rel, reason: 'missing'});
-      }
+      if (!write.warnWhenMissing) stale.push({path: rel, reason: 'missing'});
       continue;
     }
     const onDisk = fs.readFileSync(write.dest, 'utf8');
@@ -727,11 +739,40 @@ function staleBuildOutputs(writes, cwd) {
   return stale;
 }
 
-/** @param {Array<{dest: string, allowMissingInCheck?: boolean}>} writes @param {string} cwd */
+/**
+ * Every output the build writes, from the same write list the build and the
+ * stale comparison use. A missing output makes the check stale, except the
+ * `.css.d.ts` stub, which it warns about (missingDeclarations).
+ * @param {Array<{dest: string}>} writes @param {string} cwd
+ */
 function checkedBuildOutputs(writes, cwd) {
+  return writes.map(write => path.relative(cwd, write.dest));
+}
+
+/**
+ * The `.css.d.ts` stylesheet type stubs the build writes that are missing,
+ * which the check names as checked and warns about in text mode without
+ * failing.
+ * @param {Array<{dest: string, warnWhenMissing?: boolean}>} writes @param {string} cwd
+ * @returns {string[]}
+ */
+function missingDeclarations(writes, cwd) {
   return writes
-    .filter(write => !write.allowMissingInCheck || fs.existsSync(write.dest))
+    .filter(write => write.warnWhenMissing && !fs.existsSync(write.dest))
     .map(write => path.relative(cwd, write.dest));
+}
+
+/**
+ * The one text-mode warning line for missing stylesheet type stubs, or
+ * nothing when none is missing. The logger is silent under --json.
+ * @param {Array<{dest: string, warnWhenMissing?: boolean}>} writes @param {string} cwd
+ */
+function warnMissingDeclarations(writes, cwd) {
+  const missing = missingDeclarations(writes, cwd);
+  if (missing.length === 0) return;
+  logger.warn(
+    `  Warning: stylesheet type declaration file${missing.length === 1 ? '' : 's'} not found: ${missing.join(', ')}. The check does not fail on ${missing.length === 1 ? 'it' : 'them'}; a build writes ${missing.length === 1 ? 'it' : 'them'}.`,
+  );
 }
 
 /** Remedies that end a confinement error, by where the output path came from. */
@@ -914,6 +955,50 @@ function themeFilesIn(dir) {
 }
 
 /**
+ * The files a theme source is made of: the source and every local file it
+ * imports, directly or through other local files, read from their import
+ * statements. A watch rebuilds when any of them changes. Package imports and
+ * files that cannot be read are left out.
+ * @param {string} filePath absolute theme source
+ * @returns {string[]} absolute paths, the source first
+ */
+export function themeSourceFiles(filePath) {
+  const seen = new Set([path.resolve(filePath)]);
+  const queue = [path.resolve(filePath)];
+  while (queue.length > 0 && seen.size < 500) {
+    const file = /** @type {string} */ (queue.shift());
+    let source;
+    try {
+      source = fs.readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    for (const spec of parsedSpecifiers(source)) {
+      // Only relative and absolute imports are the theme's own files. A bare
+      // specifier names a package, which a workspace link can resolve to a
+      // real path outside node_modules.
+      if (!spec.startsWith('.') && !path.isAbsolute(spec)) continue;
+      // Resolved as the build resolves it.
+      let target;
+      try {
+        target = path.resolve(resolveThemeModule(spec, file));
+      } catch {
+        continue;
+      }
+      if (
+        target.split(path.sep).includes('node_modules') ||
+        seen.has(target) ||
+        !fs.existsSync(target)
+      )
+        continue;
+      seen.add(target);
+      queue.push(target);
+    }
+  }
+  return [...seen];
+}
+
+/**
  * Theme sources a missing build input probably meant, relative to `cwd`: the
  * same path with `/` for `\`; or, for a bare theme name, the theme sources in
  * `themes/<name>/` and `src/themes/<name>/` of the project, and `<name>` with a
@@ -1010,6 +1095,54 @@ function assertThemeSourceFile(filePath, cwd) {
 }
 
 /**
+ * What the CLI hands a build beyond themeBuild's options. CLI-internal, never
+ * a themeBuild option: `claimedOutputs` records the outputs earlier builds in
+ * one run wrote, so a later theme cannot replace them; with `deferredWrites`
+ * the build adds its outputs to that list instead of writing them, for
+ * writeDeferredBuildOutputs; `writeRoot` replaces `cwd` as the directory every
+ * output must stay inside, for a scratch build; `commandWords` names the
+ * command in the rebuild hint; `prepareFamily`, `familyLoader`, and
+ * `familyInterception` make the build a family member's plan.
+ * @typedef {{prepareFamily?: boolean, familyLoader?: any, familyInterception?: any, writeRoot?: string, claimedOutputs?: Map<string, string>, deferredWrites?: Array<Array<{dest: string, content: string}>>, commandWords?: {group: string, build: string}}} ThemeBuildHandOff
+ */
+
+/**
+ * Who takes the theme editor warnings (an editor folder, an editor-made
+ * theme) instead of the logger: the watcher's child build hands each to its
+ * parent, which prints it once per session. Set
+ * only by the CLI (not part of the public API), and never by an option of
+ * themeBuild.
+ * @type {((warning: string) => void) | null}
+ */
+let editorFolderListener = null;
+
+/**
+ * Hand the theme editor warnings of the builds in this process to
+ * `listener` instead of the logger. CLI-internal: the watch child's
+ * hand-off to its parent.
+ * @param {((warning: string) => void) | null} listener
+ */
+export function setEditorFolderListener(listener) {
+  editorFolderListener = listener;
+}
+
+/**
+ * Who is told a build found private var errors (the CLI, to exit 1). Set
+ * only by the CLI, never by an option of themeBuild.
+ * @type {(() => void) | null}
+ */
+let privateVarErrorListener = null;
+
+/**
+ * Tell `listener` when a build in this process finds private var errors.
+ * CLI-internal.
+ * @param {(() => void) | null} listener
+ */
+export function setPrivateVarErrorListener(listener) {
+  privateVarErrorListener = listener;
+}
+
+/**
  * Refuse a build that would replace a file it does not own. A build never
  * writes over its input, two of its own outputs at one path, or an output
  * another theme in the same run already wrote. With `refuseUnmarked` (a path
@@ -1019,21 +1152,49 @@ function assertThemeSourceFile(filePath, cwd) {
  * @param {Array<{dest: string}>} writes
  * @param {string} filePath the theme source
  * @param {string} cwd
- * @param {{claimed?: Map<string, string>, rerun?: string, refuseUnmarked?: boolean, elsewhere?: string}} [options]
+ * @param {{claimed?: Map<string, string>, rerun?: (out: string | null) => string, refuseUnmarked?: boolean, elsewhere?: string, onEditorFolder?: (warning: string) => void}} [options]
  *   `claimed`: outputs written earlier in this run, by the source that wrote
- *   them; `rerun`: this build's command, to run again once the file is gone;
- *   `elsewhere`: the option that moves the outputs
+ *   them; `rerun`: this build's command with another --out, or without one;
+ *   `elsewhere`: the option that moves the outputs; `onEditorFolder`: takes
+ *   the editor-folder warning instead of the logger (a watcher prints it once)
  */
 function assertOutputsReplaceable(
   writes,
   filePath,
   cwd,
-  {claimed, rerun, refuseUnmarked = false, elsewhere = '--out'} = {},
+  {
+    claimed,
+    rerun,
+    refuseUnmarked = false,
+    elsewhere = '--out',
+    onEditorFolder,
+  } = {},
 ) {
   const rel = (/** @type {string} */ file) => path.relative(cwd, file);
   const sourceKey = outputKey(filePath);
   const seen = new Set();
+  /** @type {string | false} */
   let warnedOtherSource = false;
+  // The same build without --out, with its other options.
+  const beside = {
+    name: rerun
+      ? rerun(null)
+      : formatCliCommand(`theme build ${shellWord(rel(filePath))}`, cwd),
+    reason: 'write the outputs beside this source',
+  };
+  // A folder the theme editor made holds that theme's outputs only: another
+  // source's outputs there would sit beside its settings as if they were
+  // its own. A source inside the folder builds there as always; one outside
+  // it writes there too, with a warning.
+  let editorFolder = false;
+  if (refuseUnmarked && writes.length) {
+    const dir = path.resolve(path.dirname(writes[0].dest));
+    const record = editorThemeRecord(dir);
+    const fromDir = path.relative(dir, path.resolve(filePath));
+    // On Windows a source on another drive has an absolute relative path.
+    const inside = !fromDir.startsWith('..') && !path.isAbsolute(fromDir);
+    if (record && !inside) editorFolder = true;
+  }
   for (const write of writes) {
     const key = outputKey(write.dest);
     if (key === sourceKey) {
@@ -1089,23 +1250,14 @@ function assertOutputsReplaceable(
       : null;
     if (otherSource && !OUT_REFUSES_OTHER_SOURCE) {
       // One warning per build: every output of that source goes together.
+      // It is printed after every output passes, so it names a replacement
+      // that happens.
       if (warnedOtherSource) continue;
-      warnedOtherSource = true;
-      logger.warn(
-        `Warning: ${rel(write.dest)} was built from ${otherSource}; this build of ${rel(filePath)} replaces it.`,
-      );
+      warnedOtherSource = `Warning: ${rel(write.dest)} was built from ${otherSource}; this build of ${rel(filePath)} replaces it.`;
     } else if (otherSource) {
       throw new AstryxError(
         `${rel(write.dest)} is the build output of another theme source, ${otherSource}, so this build does not replace it. Pick another ${elsewhere}.`,
-        [
-          {
-            name: formatCliCommand(
-              `theme build ${shellWord(rel(filePath))}`,
-              cwd,
-            ),
-            reason: 'write the outputs beside this source',
-          },
-        ],
+        [beside],
         ERROR_CODES.ERR_FILE_EXISTS,
       );
     }
@@ -1116,20 +1268,71 @@ function assertOutputsReplaceable(
       stat.size > 0 &&
       !fileHead(write.dest).includes(GENERATED_MARKER)
     ) {
+      // Never advice to delete it: it may be the person's file (a settings
+      // file, app source). A path that takes every output instead.
+      const free = freeOutPath(writes);
       throw new AstryxError(
-        `${rel(write.dest)} was written by an older CLI (before 0.6.7) or by hand, so the build does not replace it. Delete that file and run the same build again, or pick another ${elsewhere}.`,
-        rerun
-          ? [
-              {
-                name: rerun,
-                reason: 'run the same build again once the file is deleted',
-              },
-            ]
-          : undefined,
+        `${rel(write.dest)} is a file this build did not write (it has no build header: your own file, another tool's, or an output from a CLI before 0.6.7), so the build does not replace it. Pick another ${elsewhere}.`,
+        [
+          ...(free && rerun
+            ? [
+                {
+                  name: rerun(rel(free)),
+                  reason: 'a path where no output of this build exists yet',
+                },
+              ]
+            : []),
+          beside,
+        ],
         ERROR_CODES.ERR_FILE_EXISTS,
       );
     }
   }
+  // Warned only once nothing refuses the build, so it names a write that
+  // happens.
+  if (warnedOtherSource) logger.warn(warnedOtherSource);
+  if (editorFolder) {
+    const dir = path.dirname(writes[0].dest);
+    const warning = `Warning: ${rel(dir) || '.'} is a folder the theme editor made, and ${rel(filePath)} is outside it; the build writes there anyway. Build beside the source, or pick another ${elsewhere}, to keep the editor's folder to its own theme.`;
+    if (onEditorFolder) onEditorFolder(warning);
+    else logger.warn(warning);
+  }
+}
+
+/**
+ * An --out path where no output of this build exists yet, or null. The
+ * stylesheet and its `.css.d.ts` follow the name --out gives; the module and
+ * its types are named after the theme, so a new name beside them (`brand-2.css`)
+ * helps only when those are free, else a new folder (`brand-2/brand.css`).
+ * @param {Array<{dest: string}>} writes the stylesheet first
+ * @returns {string | null}
+ */
+function freeOutPath(writes) {
+  const css = writes[0]?.dest;
+  if (!css) return null;
+  const dir = path.dirname(css);
+  const stem = path.basename(css).replace(/\.css$/i, '');
+  /** Whether a write set (each output moved by `move`) touches any file. */
+  const blocked = (/** @type {(dest: string) => string} */ move) =>
+    writes.some(w => fs.existsSync(move(w.dest)));
+  for (let n = 2; n < 100; n += 1) {
+    const next = `${stem}-${n}`;
+    // Only the stylesheet and its types follow --out's name.
+    // The exact names a build with `--out <next>.css` writes, also when
+    // --out did not end in .css (`o.txt` suggests `o.txt-2.css`).
+    const renamed = (/** @type {string} */ dest) =>
+      dest === css
+        ? path.join(dir, `${next}.css`)
+        : dest === `${css}.d.ts`
+          ? path.join(dir, `${next}.css.d.ts`)
+          : dest;
+    if (!blocked(renamed)) return path.join(dir, `${next}.css`);
+    const folder = (/** @type {string} */ dest) =>
+      path.join(dir, next, path.basename(dest));
+    if (!fs.existsSync(path.join(dir, next)) && !blocked(folder))
+      return path.join(dir, next, path.basename(css));
+  }
+  return null;
 }
 
 /**
@@ -1233,7 +1436,9 @@ function toIdentifier(name) {
  * @returns {string}
  */
 export function importSpecifier(relDir, base) {
-  const normalized = relDir === '.' ? '' : relDir;
+  // An import specifier always uses `/`. On Windows the cwd-relative dir comes
+  // from path.relative with `\`, which would print `./\themes\ocean/ocean`.
+  const normalized = relDir === '.' ? '' : relDir.split(path.sep).join('/');
   const withinSrc = normalized.replace(/^src\/?/, '').replace(/\/+$/, '');
   return withinSrc ? `./${withinSrc}/${base}` : `./${base}`;
 }
@@ -3454,25 +3659,29 @@ function validateHeadingTypeAugmentationSupport(themeDef) {
  * `logger` (silent by default).
  *
  * @param {string} file - Theme file path, resolved against `cwd`.
- * @param {{out?: string, check?: boolean, iconsSpecifier?: string, __prepareFamily?: boolean, __familyLoader?: any, __familyInterception?: any, __onPrivateVarError?: () => void, __writeRoot?: string, __claimedOutputs?: Map<string, string>, __deferredWrites?: Array<Array<{dest: string, content: string}>>, __commandWords?: {group: string, build: string}}} [options] -
+ * @param {{out?: string, check?: boolean, iconsSpecifier?: string}} [options] -
  *   `out` overrides the output CSS path, or names the folder for it; `check` compares against on-disk outputs
- *   instead of writing. `__claimedOutputs` records the outputs earlier builds
- *   in one run wrote, so a later theme cannot replace them; with
- *   `__deferredWrites` the build adds its outputs to that list instead of
- *   writing them, for writeDeferredBuildOutputs. `__writeRoot` replaces `cwd` as the directory every
- *   output must stay inside, for a CLI-internal scratch build. `iconsSpecifier` overrides the icon registry import
+ *   instead of writing. `iconsSpecifier` overrides the icon registry import
  *   specifier in the generated module (e.g. `./icons.mjs`); when omitted, the
  *   direct registry specifiers from the theme source are emitted unchanged.
  * @param {{cwd?: string, projectCore?: boolean}} [ctx] `projectCore`: only the
  *   project's installed Core (spec AST-081 FR3)
+ * @param {{compact?: boolean, trailers?: ThemeBuildTrailer[]}} [report]
+ * @param {ThemeBuildHandOff} [handOff] - what the CLI's batch, family, and
+ *   scratch builds hand a build; never an option of the public themeBuild.
  * @returns {Promise<any>}
  */
 async function themeBuildInternal(
   file,
   options = {},
   {cwd = process.cwd(), projectCore = false} = {},
-  /** @type {{compact?: boolean, trailers?: ThemeBuildTrailer[]}} */ report = {},
+  report = {},
+  handOff = {},
 ) {
+  // A backslash in --out separates folders on every platform, as it does in
+  // the other theme paths (a Windows path copied into a POSIX shell).
+  if (typeof options.out === 'string' && options.out.includes('\\'))
+    options = {...options, out: options.out.replace(/\\/g, '/')};
   const filePath = path.resolve(cwd, file);
 
   if (!fs.existsSync(filePath)) {
@@ -3484,6 +3693,22 @@ async function themeBuildInternal(
       })),
       ERROR_CODES.ERR_FILE_NOT_FOUND,
     );
+  }
+
+  // A theme the theme editor made is built from its settings by the editor;
+  // a plain build reads its settings module as last written (released CLIs
+  // built it, so it still does, and says so).
+  {
+    const dir = path.dirname(filePath);
+    const slug = path.basename(dir);
+    if (
+      (!handOff.commandWords || handOff.commandWords.group === 'theme') &&
+      path.basename(filePath) === `${slug}.theme.ts` &&
+      editorThemeRecord(dir)
+    )
+      (editorFolderListener ?? (w => logger.warn(w)))(
+        `Warning: ${path.relative(cwd, filePath)} is a theme the theme editor made (${slug}.settings.json is beside it). This build reads ${slug}.settings.ts as last written; to build it from its settings, run ${formatCliCommand(`experimental theme editor show ${shellWord(slug)}`, cwd)}.`,
+      );
   }
 
   if (fs.statSync(filePath).isDirectory()) {
@@ -3524,7 +3749,7 @@ async function themeBuildInternal(
   // shared loader so exact authored parent identity stays CLI-private instead
   // of becoming a public DefinedTheme field.
   const interception =
-    options.__familyInterception ??
+    handOff.familyInterception ??
     (_generateAdaptationCSS && themeFolderResolvesCore(filePath)
       ? undefined
       : interceptCore(_coreThemeModule, _coreRootModule));
@@ -3549,7 +3774,7 @@ async function themeBuildInternal(
     const loaded = await extractThemeDefinition(
       filePath,
       interception,
-      options.__familyLoader,
+      handOff.familyLoader,
     );
     const after = fs.readFileSync(filePath, 'utf8');
     if (before !== after || before === '') {
@@ -3564,9 +3789,64 @@ async function themeBuildInternal(
   } catch (e) {
     const err = /** @type {Error} */ (e);
     const shown = path.relative(cwd, filePath) || filePath;
+    // A theme file that is a link and does not load: named with the file it
+    // points to (some loaders read its relative imports from the link's
+    // folder, others from the file's own), never with Node's require stack.
+    // Only an unresolved relative import is about the link; any other
+    // failure (a package not installed) keeps its own remedy.
+    let link = null;
+    try {
+      if (
+        fs.lstatSync(filePath).isSymbolicLink() &&
+        /Cannot find (?:module|package) '\.\.?\//.test(err.message)
+      )
+        link = fs.realpathSync(filePath);
+    } catch {
+      link = null;
+    }
+    const message = err.message
+      .replace(/\n+Require stack:(?:\n- [^\n]*)*/, '')
+      .split(filePath)
+      .join(shown);
     throw new AstryxError(
-      err.message.split(filePath).join(shown),
-      themeLoadSuggestions(err, shown, cwd),
+      link
+        ? `${shown} is a link to ${path.relative(cwd, link) || link}, and it could not be loaded (a relative import may be read from the link's folder or from the file's own, depending on the loader); build the file itself: ${message}`
+        : message,
+      link
+        ? [
+            {
+              // The file itself, with its outputs kept inside the working
+              // folder (beside the link) when the file is outside it.
+              name: formatCliCommand(
+                [
+                  'theme',
+                  'build',
+                  path.relative(cwd, link) || link,
+                  ...(path.relative(cwd, link).startsWith('..') ||
+                  path.isAbsolute(path.relative(cwd, link))
+                    ? [
+                        '--out',
+                        path
+                          .relative(
+                            cwd,
+                            path.join(
+                              path.dirname(filePath),
+                              `${path.basename(filePath).replace(/\.[^.]+$/, '')}.css`,
+                            ),
+                          )
+                          .split(path.sep)
+                          .join('/'),
+                      ]
+                    : []),
+                ]
+                  .map(shellWord)
+                  .join(' '),
+                cwd,
+              ),
+              reason: 'build the file itself',
+            },
+          ]
+        : themeLoadSuggestions(err, shown, cwd),
       ERROR_CODES.ERR_THEME_LOAD,
     );
   }
@@ -3576,13 +3856,13 @@ async function themeBuildInternal(
   // JSON.stringify and Object.keys, so it could not reach output regardless.)
   // Both reads happen BEFORE the strip, which is what removes the evidence.
   const ancestryObserved =
-    !options.__prepareFamily ||
+    !handOff.prepareFamily ||
     !interception ||
     interception.observed(themeDef) ||
     Object.hasOwn(themeDef, 'extends');
-  if (options.__prepareFamily && interception) interception.retain(themeDef);
+  if (handOff.prepareFamily && interception) interception.retain(themeDef);
   const sourceParent =
-    options.__prepareFamily && interception
+    handOff.prepareFamily && interception
       ? interception.parentOf(themeDef)
       : undefined;
   const adaptationLineage = interception
@@ -3641,7 +3921,7 @@ async function themeBuildInternal(
   // generation so neither the no-CSS return nor --check can bypass the error.
   // Family preparation keeps its own named-import registry contract, which
   // themeBuildFamily checks against the selected members' graph.
-  const standaloneIcons = !options.__prepareFamily;
+  const standaloneIcons = !handOff.prepareFamily;
   // Function icon entries stay functions in the built module, beside a node
   // view bound to `<theme>IconNodes` and computed from `<theme>IconEntries`.
   const functionEntries =
@@ -3700,7 +3980,7 @@ async function themeBuildInternal(
     logger.error(`  [error] ${source}${e}`);
   }
   if (privateVarErrors.length > 0) {
-    options.__onPrivateVarError?.();
+    privateVarErrorListener?.();
     logger.error(
       `\n  ${source}${privateVarErrors.length} private var error(s). Use standard CSS properties instead.`,
     );
@@ -4017,7 +4297,20 @@ async function themeBuildInternal(
   // Source path relative to cwd — used in @generated headers
   const sourceRelative = path.relative(cwd, filePath);
   // What `--check` prints to rebuild, from the working folder.
-  const rebuildCommand = `astryx theme build ${sourceRelative}${options.out ? ' --out ' + path.relative(cwd, path.resolve(cwd, options.out)) : ''}`;
+  // The project's own invocation, each path quoted for the shell.
+  const rebuildCommand = formatCliCommand(
+    [
+      'theme',
+      'build',
+      sourceRelative,
+      ...(options.out
+        ? ['--out', path.relative(cwd, path.resolve(cwd, options.out))]
+        : []),
+    ]
+      .map(shellWord)
+      .join(' '),
+    cwd,
+  );
   // Stable provenance recorded in @generated headers — versions, not a
   // timestamp, so identical inputs produce byte-identical output.
   const versions = resolveToolVersions(cwd);
@@ -4027,7 +4320,7 @@ async function themeBuildInternal(
   const baseName = themeDef.name;
   // Every write stays inside cwd. A CLI-internal caller that renders into a
   // scratch directory it creates and removes names that directory instead.
-  const writeRoot = options.__writeRoot ?? cwd;
+  const writeRoot = handOff.writeRoot ?? cwd;
   let outPath;
   if (options.out) {
     outPath = path.resolve(cwd, options.out);
@@ -4107,7 +4400,7 @@ async function themeBuildInternal(
     'export {};\n';
   // A family member's module is generated by themeBuildFamily, which carries
   // its registries and slot functions through the family's own imports.
-  const jsContent = options.__prepareFamily
+  const jsContent = handOff.prepareFamily
     ? ''
     : generatedHeader(headerSource, 'js', buildCommand, versions) +
       generateBuiltModule(
@@ -4137,7 +4430,7 @@ async function themeBuildInternal(
     ]),
   ];
 
-  if (options.__prepareFamily) {
+  if (handOff.prepareFamily) {
     return {
       filePath,
       sourceRelative: sourceRelative.split(path.sep).join('/'),
@@ -4159,7 +4452,7 @@ async function themeBuildInternal(
 
   const writes = [
     {dest: outPath, content: cssContent},
-    {dest: cssDtsPath, content: cssDtsContent, allowMissingInCheck: true},
+    {dest: cssDtsPath, content: cssDtsContent, warnWhenMissing: true},
     {dest: jsPath, content: jsContent},
     {dest: dtsPath, content: dtsContent},
   ];
@@ -4173,14 +4466,15 @@ async function themeBuildInternal(
   if (!options.check) {
     confineOutputs(writes, writeRoot, options.out ? OUT_REMEDY : SOURCE_REMEDY);
     // prettier-ignore
-    const rerun = formatCliCommand(['theme', 'build', path.relative(cwd, filePath), ...(options.out ? ['--out', options.out] : []), ...(options.iconsSpecifier ? ['--icons-specifier', options.iconsSpecifier] : [])].map(shellWord).join(' '), cwd);
+    const rerun = (/** @type {string | null} */ out) => formatCliCommand(['theme', 'build', path.relative(cwd, filePath), ...(out == null ? [] : ['--out', out]), ...(options.iconsSpecifier ? ['--icons-specifier', options.iconsSpecifier] : [])].map(shellWord).join(' '), cwd);
     // A header-less file at the default paths beside the source is an output
     // of a CLI before 0.6.7, which the build has always replaced. A path that
     // --out names may hold anything, so there only build outputs are replaced.
     assertOutputsReplaceable(writes, filePath, cwd, {
-      claimed: options.__claimedOutputs,
+      claimed: handOff.claimedOutputs,
       rerun,
       refuseUnmarked: Boolean(options.out),
+      onEditorFolder: editorFolderListener ?? undefined,
     });
   }
 
@@ -4210,26 +4504,29 @@ async function themeBuildInternal(
       if (remedy) logger.error(`\n  ${remedy.join('\n  ')}`);
       else
         logger.error(
-          `\n  Rebuild with: ${rebuildLine(rebuildCommand, options.__commandWords)}`,
+          `\n  Rebuild with: ${rebuildLine(rebuildCommand, handOff.commandWords)}`,
         );
     }
-    return {
+    warnMissingDeclarations(writes, cwd);
+    return /** @type {import('../theme.type.mjs').ThemeBuildCheckResponse} */ ({
       type: 'theme.build.check',
       data: {
         name: themeDef.name,
         upToDate,
         stale,
         checked: checkedBuildOutputs(writes, cwd),
+        // The code a stale check exits 1 with, for --json callers.
+        ...(upToDate ? {} : {code: ERROR_CODES.ERR_THEME_STALE}),
       },
-    };
+    });
   }
 
   // A batch publishes every theme's outputs after all of them are built, so
   // two themes that build the same files are refused before either writes.
-  if (options.__deferredWrites) options.__deferredWrites.push(writes);
+  if (handOff.deferredWrites) handOff.deferredWrites.push(writes);
   else writeBuildOutputs(writes);
   for (const write of writes) {
-    options.__claimedOutputs?.set(outputKey(write.dest), sourceRelative);
+    handOff.claimedOutputs?.set(outputKey(write.dest), sourceRelative);
   }
 
   if (!report.compact) {
@@ -4453,6 +4750,7 @@ function groupUnloadedFonts(trailers) {
  * @param {{out?: string, check?: boolean, iconsSpecifier?: string}} [options]
  * @param {{cwd?: string}} [ctx]
  * @param {{compact?: boolean}} [report]
+ * @param {ThemeBuildHandOff} [handOff]
  * @returns {Promise<{receipt: import('../theme.type.mjs').ThemeBuildResponse | import('../theme.type.mjs').ThemeBuildCheckResponse | null, trailer: ThemeBuildTrailer | null}>}
  */
 export async function themeBuildForReport(
@@ -4460,18 +4758,38 @@ export async function themeBuildForReport(
   options = {},
   ctx = {},
   {compact = false} = {},
+  handOff = {},
 ) {
   /** @type {ThemeBuildTrailer[]} */
   const trailers = [];
   const receipt = /** @type {any} */ (
-    await themeBuildInternal(file, options, ctx, {compact, trailers})
+    await themeBuildInternal(file, options, ctx, {compact, trailers}, handOff)
   );
   return {receipt, trailer: trailers[0] ?? null};
 }
 
 /** @param {string} file @param {{out?: string, check?: boolean, iconsSpecifier?: string}} [options] @param {{cwd?: string, projectCore?: boolean}} [ctx] `projectCore`: read only the project's installed Core, never the carried one (doctor; spec AST-081 FR3) @returns {Promise<import('../theme.type.mjs').ThemeBuildResponse | import('../theme.type.mjs').ThemeBuildCheckResponse | null>} */
 export async function themeBuild(file, options = {}, ctx = {}) {
-  return /** @type {any} */ (themeBuildInternal(file, options, ctx));
+  const {out, check, iconsSpecifier} = options;
+  return /** @type {any} */ (
+    themeBuildInternal(file, {out, check, iconsSpecifier}, ctx)
+  );
+}
+
+/**
+ * {@link themeBuild} with the CLI's hand-off: the same build, outputs, and
+ * receipt, plus what only the CLI's batch and scratch builds pass.
+ * CLI-internal: not exported from the API entry.
+ * @param {string} file
+ * @param {{out?: string, check?: boolean, iconsSpecifier?: string}} options
+ * @param {{cwd?: string, projectCore?: boolean}} ctx
+ * @param {ThemeBuildHandOff} handOff
+ * @returns {Promise<import('../theme.type.mjs').ThemeBuildResponse | import('../theme.type.mjs').ThemeBuildCheckResponse | null>}
+ */
+export async function themeBuildWithHandOff(file, options, ctx, handOff) {
+  return /** @type {any} */ (
+    themeBuildInternal(file, options, ctx, {}, handOff)
+  );
 }
 /** @param {string} name */
 // prettier-ignore
@@ -4610,11 +4928,12 @@ async function preloadFamilySource(filePath, loader, interception) {
   finally { patch.undo(); }
 }
 
-/** @param {string[]} files @param {{familyKey: string, check?: boolean, iconsSpecifier?: string, __onPrivateVarError?: () => void, __commandWords?: {group: string, build: string}}} options @param {{cwd?: string}} [ctx] */
+/** @param {string[]} files @param {{familyKey: string, check?: boolean, iconsSpecifier?: string}} options @param {{cwd?: string}} [ctx] @param {{commandWords?: {group: string, build: string}}} [handOff] - the CLI's words for the rebuild hint */
 export async function themeBuildFamily(
   files,
   options,
   {cwd = process.cwd()} = {},
+  handOff = {},
 ) {
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(options?.familyKey ?? '')) {
     throw new AstryxError(
@@ -4647,7 +4966,7 @@ export async function themeBuildFamily(
     }
     const file = source.file;
     // prettier-ignore
-    const member = await themeBuildInternal(file, {iconsSpecifier: options.iconsSpecifier, __prepareFamily: true, __familyLoader: familyLoader, __familyInterception: familyInterception, __onPrivateVarError: options.__onPrivateVarError}, {cwd});
+    const member = await themeBuildInternal(file, {iconsSpecifier: options.iconsSpecifier}, {cwd}, {}, {prepareFamily: true, familyLoader, familyInterception});
     if (!member || member.type) {
       throw new AstryxError(
         `Theme family member "${file}" did not produce a complete build plan.`,
@@ -4821,7 +5140,7 @@ export async function themeBuildFamily(
     },
     {
       dest: cssDtsPath,
-      allowMissingInCheck: true,
+      warnWhenMissing: true,
       content:
         generatedHeader(headerSource, 'ts', buildCommand, root.versions) +
         'export {};\n',
@@ -4878,18 +5197,21 @@ export async function themeBuildFamily(
       if (remedy) logger.error(`\n  ${remedy.join('\n  ')}`);
       else
         logger.error(
-          `\n  Rebuild with: ${rebuildLine(rebuildCommand, options.__commandWords)}`,
+          `\n  Rebuild with: ${rebuildLine(rebuildCommand, handOff.commandWords)}`,
         );
     }
-    return {
+    warnMissingDeclarations(writes, cwd);
+    return /** @type {import('../theme.type.mjs').ThemeBuildCheckResponse} */ ({
       type: 'theme.build.check',
       data: {
         name: root.theme.name,
         upToDate,
         stale,
         checked: checkedBuildOutputs(writes, cwd),
+        // The code a stale check exits 1 with, for --json callers.
+        ...(upToDate ? {} : {code: ERROR_CODES.ERR_THEME_STALE}),
       },
-    };
+    });
   }
   writeBuildOutputs(writes);
   for (const output of Object.values(outputs)) logger.log(`[ok] ${output}`);
