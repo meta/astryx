@@ -188,6 +188,7 @@
  * - /packages/core/src/motion/README.md
  */
 
+import {SETTLE_THRESHOLD} from './settleThreshold';
 import {cubicBezier} from './bezier';
 import {LATE_START_MS} from './frameBlock';
 import {solveSpring, toSpring, type SpringDescription} from './spring';
@@ -710,19 +711,7 @@ const IDENTITY: Record<MotionProperty, number> = {
   opacity: 1,
 };
 
-/**
- * Within this of its target a curve is over (in the property's own unit). A
- * curve built outside the animator (a progress curve) settles where a call
- * would with this as its epsilon.
- */
-export const SETTLE_THRESHOLD: Record<MotionProperty, number> = {
-  x: 0.05,
-  y: 0.05,
-  rotate: 0.01,
-  scaleX: 0.0001,
-  scaleY: 0.0001,
-  opacity: 0.001,
-};
+export {SETTLE_THRESHOLD};
 
 /**
  * Keyframes are added until linear interpolation is within this: a quarter of

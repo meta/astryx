@@ -12,7 +12,8 @@
  * SYNC: When modified, update /packages/core/src/keyboard/README.md
  */
 
-import {animatorFor, type Animator} from '../motion/animator';
+import type {Animator} from '../motion/animator';
+import {getTouchRuntime} from '../utils/touchRuntime';
 import {isCoarsePointer} from '../utils/coarsePointer';
 import {subscribeInput} from '../utils/inputStream';
 import {layoutViewportHeight} from '../utils/layoutViewport';
@@ -492,7 +493,10 @@ export function followKeyboard(
 ): () => void {
   const doc = target.ownerDocument;
   const win = doc.defaultView;
-  if (!followsKeyboard(win)) {
+  // A ride moves the target with the animator, which comes with the shared
+  // touch runtime. Before it has loaded, nothing attaches and the browser's
+  // own reveal stays.
+  if (!followsKeyboard(win) || (move === 'ride' && getTouchRuntime() == null)) {
     return () => {};
   }
   const unregister = registerKeyboardTarget(target);
@@ -645,8 +649,12 @@ function rideWithKeyboard(
   win: Window,
   isHostOwned: boolean,
 ): (isFinal?: boolean) => void {
+  const runtime = getTouchRuntime();
+  if (runtime == null) {
+    return () => {};
+  }
   currentRides.get(target)?.();
-  const animator = animatorFor(target);
+  const animator = runtime.animatorFor(target);
   riddenAnimators.set(target, animator);
   const guide =
     keyboardProfileOf(win) === 'chromium' ? getKeyboardLayoutGuide(win) : null;
@@ -802,9 +810,12 @@ function placementOf(
   // A bar the app positions with its own `translate` does not ride: the ride
   // would replace that translate.
   const view = field.ownerDocument.defaultView;
-  return view != null && hasOwnTranslate(container.docked, view)
-    ? revealWithin(field, container.docked)
-    : {ride: container.docked};
+  if (view != null && hasOwnTranslate(container.docked, view)) {
+    return revealWithin(field, container.docked);
+  }
+  // A ride needs the shared touch runtime. Before it has loaded, the browser's
+  // own reveal stays.
+  return getTouchRuntime() == null ? null : {ride: container.docked};
 }
 
 // A reveal by the scroller between `field` and the fixed `container` the app
