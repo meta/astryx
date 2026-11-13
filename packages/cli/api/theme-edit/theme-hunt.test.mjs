@@ -98,7 +98,9 @@ describe('a refused change writes nothing', () => {
 
 describe('names', () => {
   it('every name the check accepts builds, and the suggested name does too', async () => {
-    for (const name of ['b-2', 'x--y', 'brand-']) {
+    // ("x--y" and "brand-" are refused since hunt62: the theme commands'
+    // own discovery skips them.)
+    for (const name of ['b-2', 'x-y', 'brand']) {
       await themeEditNew(name, {cwd});
       expect(exists(`themes/${name}/${name}.js`), name).toBe(true);
       fs.rmSync(path.join(cwd, 'themes', name), {recursive: true, force: true});

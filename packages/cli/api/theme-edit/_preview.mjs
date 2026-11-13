@@ -32,7 +32,6 @@ import {
 } from './_parts.mjs';
 import {OVERVIEW_SECTIONS} from './_overview.mjs';
 import {
-  FOLDER_JUNK,
   folderIsEmpty,
   camel,
   fontPackages,
@@ -1602,11 +1601,11 @@ export function writeAppCopyAt(cwd, slug, fontsCss) {
     [`${name}.doc.mjs`]: `${head('//', '')}\n/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {\n  type: 'theme',\n  name: ${JSON.stringify(slug)},\n  displayName: ${JSON.stringify(slug)},\n  description: ${JSON.stringify(`The ${slug} theme, made with the theme editor (themes/${slug}/).`)},\n  maintained: false,\n};\n`,
     [`${name}.ts`]: `${head('//', '')}export {${name}} from './${slug}';\n`,
     ...built,
-    ...(fonts.length
-      ? {
-          [`${slug}.fonts.css`]: `${head('/*', '*/')}${fonts.map(c => `@import ${JSON.stringify(c)};`).join('\n')}\n`,
-        }
-      : {}),
+    // Always there, so the app theme module's import of it holds when the
+    // theme's fonts change (none: a comment only).
+    [`${slug}.fonts.css`]: fonts.length
+      ? `${head('/*', '*/')}${fonts.map(c => `@import ${JSON.stringify(c)};`).join('\n')}\n`
+      : `${head('/*', '*/')}/* No font stylesheets: the theme uses fonts the system has. */\n`,
   };
   fs.mkdirSync(dir, {recursive: true});
   for (const [n, text] of Object.entries(files)) {
@@ -1614,10 +1613,10 @@ export function writeAppCopyAt(cwd, slug, fontsCss) {
     if (fs.existsSync(file) && fs.readFileSync(file, 'utf8') === text) continue;
     writeWhole(file, text);
   }
-  // A file an earlier copy had (a font stylesheet no longer needed) goes;
-  // system files stay.
+  // A copy's own file this build no longer writes goes; anything else in
+  // the folder (yours, or the system's) stays as it is.
   for (const n of fs.readdirSync(dir))
-    if (!(n in files) && !FOLDER_JUNK.has(n))
+    if (appCopyNames(slug).has(n) && !(n in files))
       fs.rmSync(path.join(dir, n), {force: true});
   // The first write is named in the command's result; later ones are not.
   if (first)
@@ -1633,13 +1632,45 @@ export function writeAppCopyAt(cwd, slug, fontsCss) {
 }
 
 /**
- * Why the editor will not write a theme's app copy, or null when it will:
- * the folder is not there yet, or its descriptor carries the editor's mark
- * and it holds only the copy's own files (system files such as .DS_Store
- * aside). Otherwise the name of what is in the way (a file of yours), or
- * the folder itself when it is not the editor's copy. Built bytes are not
- * compared, so a stable rebuild of the copy leaves it the editor's. The one
- * test the copy's writer and `wiring` both use.
+ * The note for a copy a file of yours keeps from being written, as a
+ * result field: `{appCopyStale}` when one does, else nothing.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {{appCopyStale?: string}}
+ */
+export function appCopyStale(cwd, slug) {
+  const blocker = appCopyBlocker(cwd, slug);
+  return blocker
+    ? {
+        appCopyStale: `the app copy in src/themes/${slug}/ was not updated: ${blocker}. The app keeps the theme as it was until that is out of the way; then any set or show writes it.`,
+      }
+    : {};
+}
+
+/**
+ * The names of a theme's app copy files.
+ * @param {string} slug
+ * @returns {Set<string>}
+ */
+function appCopyNames(slug) {
+  const name = `${camel(slug)}Theme`;
+  return new Set([
+    `${name}.doc.mjs`,
+    `${name}.ts`,
+    `${slug}.fonts.css`,
+    ...APP_COPY_BUILT.map(ext => `${slug}${ext}`),
+  ]);
+}
+
+/**
+ * Why the editor will not write a theme's app copy, or null when it will.
+ * Only a file of yours AT one of the copy's names stops it: a descriptor,
+ * source or font stylesheet without the editor's mark, or any copy file
+ * while the descriptor is not the editor's. Other files there (a note, a
+ * swap file, desktop.ini) are left as they are and the copy is written
+ * around them. Built bytes are not compared, so a stable rebuild of the
+ * copy leaves it the editor's. The one test the copy's writer, the change
+ * results and `wiring` use. Returns the file in the way.
  * @param {string} cwd
  * @param {string} slug
  * @returns {string | null}
@@ -1648,32 +1679,43 @@ export function appCopyBlocker(cwd, slug) {
   const dir = path.join(cwd, 'src', 'themes', slug);
   const name = `${camel(slug)}Theme`;
   const rel = path.relative(cwd, dir).split(path.sep).join('/');
+  // Nothing is written through a link on the way from the app to the copy
+  // (src/, src/themes/, the copy's folder), as for themes/.
+  for (const part of ['src', 'src/themes', rel]) {
+    try {
+      if (fs.lstatSync(path.join(cwd, part)).isSymbolicLink())
+        return `${part} is a link (to ${fs.readlinkSync(path.join(cwd, part))}), and the editor writes nothing through a link`;
+    } catch {
+      break;
+    }
+  }
   if (folderIsEmpty(dir)) return null;
   /** @type {string[]} */
   let names;
   try {
     names = fs.readdirSync(dir);
   } catch {
-    return rel;
+    return `${rel} cannot be read`;
   }
-  /** @type {boolean} */
-  let marked;
-  try {
-    marked = fs
-      .readFileSync(path.join(dir, `${name}.doc.mjs`), 'utf8')
-      .includes(APP_COPY_MARK);
-  } catch {
-    marked = false;
-  }
-  if (!marked) return rel;
-  const own = new Set([
-    `${name}.doc.mjs`,
-    `${name}.ts`,
-    `${slug}.fonts.css`,
-    ...APP_COPY_BUILT.map(ext => `${slug}${ext}`),
-  ]);
-  const other = names.find(n => !own.has(n) && !FOLDER_JUNK.has(n));
-  return other ? `${rel}/${other}` : null;
+  /** @param {string} n */
+  const marked = n => {
+    try {
+      return fs.readFileSync(path.join(dir, n), 'utf8').includes(APP_COPY_MARK);
+    } catch {
+      return false;
+    }
+  };
+  const own = appCopyNames(slug);
+  const present = names.filter(n => own.has(n));
+  const ours = marked(`${name}.doc.mjs`);
+  const foreign = ours
+    ? present.find(
+        n => (n === `${name}.ts` || n === `${slug}.fonts.css`) && !marked(n),
+      )
+    : present[0];
+  return foreign
+    ? `${rel}/${foreign} is yours, at a name the copy uses, and the editor never writes over your files`
+    : null;
 }
 
 /** The build outputs of a theme, by their ending after `<theme>`. */
