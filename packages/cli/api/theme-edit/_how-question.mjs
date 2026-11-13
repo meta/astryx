@@ -568,6 +568,42 @@ function scaledBox(v, f) {
 }
 
 /**
+ * "half the radius on buttons and cards on hover": two parts joined by
+ * "and" share everything around them (the ask before, the value and state
+ * after), so each piece is the whole ask for its part: "half the radius on
+ * buttons on hover and half the radius on cards on hover". Within one
+ * sentence or comma piece, once.
+ * @param {string} q
+ * @param {Array<[RegExp, PartRef]>} partWords
+ * @returns {string}
+ */
+function sharedAsk(q, partWords) {
+  return q
+    .split(/([;,.\n])/)
+    .map(seg => {
+      const m = /\s+and\s+/.exec(seg);
+      if (!m || /\band\b/.test(seg.slice(m.index + m[0].length))) return seg;
+      const left = seg.slice(0, m.index);
+      const right = seg.slice(m.index + m[0].length);
+      for (const [re] of partWords) {
+        const l = new RegExp(`(?:${re.source})\\s*$`).exec(left);
+        if (!l) continue;
+        for (const [re2] of partWords) {
+          const r = new RegExp(`^\\s*(?:${re2.source})`).exec(right);
+          if (!r) continue;
+          const lead = left.slice(0, l.index);
+          const tail = right.slice(r[0].length);
+          // Only when something is shared: an ask on one side.
+          if (!lead.trim() && !tail.trim()) return seg;
+          return `${lead}${l[0].trim()}${tail} and ${lead}${r[0].trim()}${tail}`;
+        }
+      }
+      return seg;
+    })
+    .join('');
+}
+
+/**
  * The part a clause measures against ("cards twice the padding of
  * buttons": buttons), by clause.
  * @type {WeakMap<object, string>}
@@ -658,7 +694,10 @@ const OVERRIDES = [
     {on: 'dropdown-menu-item'},
   ],
   [/\b(nav(igation)? (links?|items?))\b/, {on: 'top-nav-item'}],
-  [/\b((dropdown |context )?menus?)\b/, {on: 'dropdown-menu'}],
+  // A context menu is its own part in Core (its items are the dropdown
+  // menu's items, which it reuses).
+  [/\b(context ?menus?|right[- ]click menus?)\b/, {on: 'context-menu'}],
+  [/\b((dropdown )?menus?)\b/, {on: 'dropdown-menu'}],
   // A part's own header or footer ("dialog header", "card footer") is that
   // part's, never the app's top bar or footer.
   [
@@ -1042,7 +1081,9 @@ const FONT_NAMES = [...Object.keys(OPEN_FONTS), ...Object.keys(FONTS)]
  */
 function clausesOf(q, partWords) {
   // "swap X and Y" is one ask.
-  const pieces = (/\bswap\b/.test(q) ? q.replace(/\band\b/g, '&') : q)
+  const pieces = (
+    /\bswap\b/.test(q) ? q.replace(/\band\b/g, '&') : sharedAsk(q, partWords)
+  )
     .split(
       /;|\.(?=\s|$)|,(?![^(]*\))|\b(?:and|with|but|then|plus|also|y|et|und|и)\b|\bwhile\b|(?=\bexcept\b)/,
     )
