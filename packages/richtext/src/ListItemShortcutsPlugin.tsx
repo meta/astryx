@@ -149,13 +149,18 @@ function $switchList(
 ): void {
   const items = $itemsOf(list);
   if (marker.kind === 'task' && isCheckList) {
-    for (const each of items) {
-      if ($getTaskState(each) != null) {
-        each.setChecked($getTaskState(each) === 'checked');
+    // A check list already keeps each item's state; only another list is
+    // converted, carrying over RichText's task state.
+    if (list.getListType() !== 'check') {
+      const states = items.map(each => $getTaskState(each));
+      for (const each of items) {
         $setTaskState(each, null);
       }
+      list.setListType('check');
+      items.forEach((each, index) => {
+        each.setChecked(states[index] === 'checked');
+      });
     }
-    list.setListType('check');
     item.setChecked(marker.checked);
     return;
   }

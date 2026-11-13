@@ -181,8 +181,10 @@ describe('Markdown shortcuts typed at the start of a list item', () => {
     },
   );
 
-  it("with Lexical's CHECK_LIST, makes the check list it writes, so the tasks survive a reload", async () => {
-    const transformers = [...TRANSFORMERS, CHECK_LIST];
+  it("with Lexical's CHECK_LIST, makes the check list it writes", async () => {
+    // CHECK_LIST comes before the bullet transformer, so its tasks also read
+    // back as a check list.
+    const transformers = [CHECK_LIST, ...TRANSFORMERS];
     const {editor} = await typeAt(
       '- Plan the launch\n- Ship it\n',
       'Ship',
@@ -199,6 +201,44 @@ describe('Markdown shortcuts typed at the start of a list item', () => {
         return $isListNode(list) ? list.getListType() : null;
       }),
     ).toBe('check');
+  });
+
+  it("with Lexical's CHECK_LIST, a marker in a check list changes only its own item", async () => {
+    const transformers = [CHECK_LIST, ...TRANSFORMERS];
+    const {editor} = await typeAt(
+      '- Plan the launch\n- Ship it\n',
+      'Plan',
+      '[x] ',
+      {transformers},
+    );
+    await act(async () => {
+      editor.update(
+        () => {
+          const node = $getRoot()
+            .getAllTextNodes()
+            .find(textNode => textNode.getTextContent().startsWith('Ship'));
+          node?.select(0, 0);
+        },
+        {discrete: true, tag: SKIP_SCROLL_INTO_VIEW_TAG},
+      );
+    });
+    for (const character of '[x] ') {
+      await act(async () => {
+        editor.update(
+          () => {
+            const selection = $getSelection();
+            if ($isRangeSelection(selection)) {
+              selection.insertText(character);
+            }
+          },
+          {discrete: true, tag: SKIP_SCROLL_INTO_VIEW_TAG},
+        );
+      });
+    }
+    const written = editor
+      .getEditorState()
+      .read(() => $convertToMarkdownString(transformers));
+    expect(written).toBe('- [x] Plan the launch\n- [x] Ship it');
   });
 
   it('renumbers the items after a lifted item that holds a nested numbered list, as one list', async () => {
