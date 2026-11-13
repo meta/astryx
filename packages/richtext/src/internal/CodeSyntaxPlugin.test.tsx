@@ -25,10 +25,10 @@ import {
   type TokenLine,
 } from '@astryxdesign/core/CodeBlock';
 import {thrift} from '@astryxdesign/core/CodeBlock/languages/thrift';
-import {listedLanguage, sameLanguages} from './codeLanguages';
-import {RichTextEditor} from './RichTextEditor';
-import {RichTextView} from './RichTextView';
-import {markdownToEditorStateJSON} from './markdownSerializers';
+import {listedLanguage, sameLanguages} from '../codeLanguages';
+import {RichTextEditor} from '../RichTextEditor';
+import {RichTextView} from '../RichTextView';
+import {markdownToEditorStateJSON} from '../markdownSerializers';
 
 vi.mock('@astryxdesign/core/CodeBlock', async importOriginal => {
   const actual = await importOriginal<typeof codeBlock>();

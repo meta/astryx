@@ -491,7 +491,7 @@
       "commit": "8fa403c98d8ddbbfb9568c9613bd933f8f165793",
       "kind": "merge",
       "selection": "full",
-      "full_reason": "packages/richtext/src/CodeTabPlugin.test.tsx maps to no component",
+      "full_reason": "packages/richtext/src/internal/CodeTabPlugin.test.tsx maps to no component",
       "full_run_failures": [],
       "verdict": "no failure"
     },

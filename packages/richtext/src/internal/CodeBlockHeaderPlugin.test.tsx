@@ -2,9 +2,9 @@
 
 import {afterEach, describe, it, expect, vi} from 'vitest';
 import {fireEvent, render, screen, waitFor} from '@testing-library/react';
-import {RichTextEditor} from './RichTextEditor';
-import {RichTextView} from './RichTextView';
-import {markdownToEditorStateJSON} from './markdownSerializers';
+import {RichTextEditor} from '../RichTextEditor';
+import {RichTextView} from '../RichTextView';
+import {markdownToEditorStateJSON} from '../markdownSerializers';
 
 describe('code block headers (spec:AST-061 FR8)', () => {
   afterEach(() => {
