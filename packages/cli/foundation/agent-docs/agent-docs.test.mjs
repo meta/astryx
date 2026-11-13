@@ -159,8 +159,9 @@ describe('generateCompressedIndex', () => {
 
   it('includes theme nudge rule', () => {
     const result = generateCompressedIndex('1.0.0');
-    expect(result).toMatch(/astryx docs theme/);
-    expect(result).toMatch(/never :root/);
+    // Themes go through the theme editor, never hand-written files or :root.
+    expect(result).toMatch(/astryx experimental theme editor new <name>/);
+    expect(result).toMatch(/never hand-written theme files or :root overrides/);
   });
 
   it('sends frame choice to the layout doc rather than naming a shell', () => {

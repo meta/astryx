@@ -887,6 +887,7 @@ export function registerExperimentalTheme(group, program) {
             `[ok] made theme "${r.data.theme}"${r.data.like ? ` on top of ${r.data.like}` : ''}`,
             ...project(/** @type {any} */ (r.data)),
             `Tip: ${EDITOR} set ${r.data.theme} <thing> <value>, or ${HOW} "<what you want>"`,
+            `Look at it after each change: ${PREFIX} preview add (a page in your app with the theme on real components; screenshot it), or ${EDITOR} show ${r.data.theme} --png`,
           ],
         ),
     }),

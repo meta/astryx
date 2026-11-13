@@ -586,7 +586,7 @@ export async function createProgram({argv} = {}) {
 
   program
     .name('astryx')
-    .description('Design system CLI — components, themes, and tooling')
+    .description('Design system CLI — components, themes, and tooling\n\nMaking or changing a theme? Use the experimental theme editor: astryx experimental theme editor new <name> --like neutral, then editor set / editor how "<what you want>"; see it with astryx experimental theme preview add (no app yet: astryx experimental theme preview app <dir>).')
     .version(pkg.version)
     // These four change only the reads named in their text; every other
     // command ignores them.

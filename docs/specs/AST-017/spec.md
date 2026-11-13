@@ -474,6 +474,11 @@ one removal merged ahead of the decision to allow it.
   experimental routes. An omitted opt-in MUST leave stable defaults, output, routes,
   data, and behavior unchanged. Promotion requires owner approval and a `[feat]`
   Changeset; withdrawal uses `[experimental]` and MUST prove no stable spillover.
+  One named exception: stable theme help and docs, and one theme line of the agent
+  docs block, MAY point at the experimental theme editor (`experimental theme editor`,
+  `experimental theme preview`) as the way to make and change a theme, labeled
+  experimental each time; no other experimental surface may be named, and the
+  exception ends when the theme editor graduates or is removed.
 - **FR28 — A planned minor needs no prior deprecation; a patch does.** A change
   landing in a declared minor needs no deprecation path: its `[breaking]` Changeset
   describing the change, with the replacement and migration where they help the

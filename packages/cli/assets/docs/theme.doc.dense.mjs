@@ -3,7 +3,7 @@
 /** @type {import('@astryxdesign/cli/authoring').ReferenceTranslationDoc} */
 
 export const docsDense = {
-  description: 'use + create themes: see use-a-theme and author-a-theme.',
+  description: 'make/change a theme (experimental theme editor): astryx experimental theme editor new <name> --like neutral; editor set|how; theme add <name>; preview: experimental theme preview add. use + create themes: see use-a-theme and author-a-theme.',
   sections: [
     {
       section: 'Wrap your app in a theme',

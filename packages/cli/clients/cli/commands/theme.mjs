@@ -702,7 +702,7 @@ function printThemeEject(result, words = THEME_WORDS) {
         ]
       : []),
     text(
-      `This is a local fork. Build it with ${buildStep(getCliInvocation(), words, path.join(data.outputDir, data.entry))}.`,
+      `This is a local fork. Build it with ${buildStep(getCliInvocation(), words, path.join(data.outputDir, data.entry))}. To change a theme without hand-editing source, use the experimental theme editor: ${getCliInvocation()} experimental theme editor new <name> --like ${data.slug ?? 'neutral'}.`,
     ),
   );
 }
@@ -922,7 +922,7 @@ function registerPaletteCommands(
           ? [text(`[ok] Wrote ${result.data.preview}`)]
           : []),
         text(
-          'Review and edit the candidate before adopting it as theme-owned palette data.',
+          'Review and edit the candidate before adopting it as theme-owned palette data. The experimental theme editor generates palettes from one color for you: astryx experimental theme editor set <name> accent <color>.',
         ),
       );
       return NO_RESULT_SET;
