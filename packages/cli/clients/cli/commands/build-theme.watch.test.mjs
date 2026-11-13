@@ -24,6 +24,7 @@ import {
   onTestFinished,
 } from 'vitest';
 import {execFileSync, spawn} from 'node:child_process';
+import {EventEmitter} from 'node:events';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -104,18 +105,22 @@ function waitForOutput(
 }
 
 /**
- * Resolves once `file` holds `color`, the edit the test just saved. A rebuild
- * that finishes (a new "Watching" line) without it means the watcher missed
- * that save, so the save is made again; a rebuild still running is not
- * doubled. A count of rebuilds is no signal here: a rebuild that started
- * before the save also prints "Watching".
+ * Saves `content` to `source` once, with the watcher already armed, and
+ * resolves once `file` holds `color`. Rebuilds run one at a time, each one
+ * printing "rebuilding" when it starts and "Watching" when it ends. A rebuild
+ * still running at the save may end without the color; the first rebuild that
+ * starts after the save must not: that is a stale theme, and the wait fails by
+ * name. The save is never repeated, so a stale rebuild is not hidden.
  * @param {import('node:child_process').ChildProcess} child
  * @param {() => string} read
  * @param {{file: string, source: string, content: string, color: string}} edit
  */
-function waitForBuiltColor(child, read, {file, source, content, color}) {
-  const watching = () => (read().match(/Watching /g) ?? []).length;
-  let seen = watching();
+function saveAndWaitForColor(child, read, {file, source, content, color}) {
+  const count = (/** @type {RegExp} */ pattern) =>
+    (read().match(pattern) ?? []).length;
+  // Each started rebuild ends with one more "Watching" line after the first.
+  const startedBefore = count(/rebuilding /g);
+  fs.writeFileSync(source, content);
   const built = () => {
     try {
       return fs.readFileSync(file, 'utf-8').includes(color);
@@ -130,10 +135,16 @@ function waitForBuiltColor(child, read, {file, source, content, color}) {
         resolve(undefined);
         return;
       }
-      const now = watching();
-      if (now > seen) {
-        seen = now;
-        fs.writeFileSync(source, content);
+      const firstAfterSaveEnded =
+        count(/rebuilding /g) > startedBefore &&
+        count(/Watching /g) >= startedBefore + 2;
+      if (firstAfterSaveEnded && !built()) {
+        cleanup();
+        reject(
+          new Error(
+            `a rebuild after the save produced a stale theme: ${file} does not hold ${color}:\n${read()}`,
+          ),
+        );
       }
     };
     const exited = (/** @type {number | null} */ code) => {
@@ -180,6 +191,67 @@ beforeEach(() => {
 });
 afterEach(() => {
   fs.rmSync(tmpDir, {recursive: true, force: true});
+});
+
+describe('the wait for a saved edit', () => {
+  /** A watcher stand-in whose output the case writes. */
+  function fakeWatcher() {
+    const child = /** @type {any} */ (new EventEmitter());
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    let out = '';
+    const print = (/** @type {string} */ line) => {
+      out += `${line}\n`;
+      child.stdout.emit('data', Buffer.from(line));
+    };
+    return {child, print, read: () => out};
+  }
+
+  it('fails by name when the first rebuild after the save ends without the color', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'watch-wait-'));
+    onTestFinished(() => fs.rmSync(dir, {recursive: true, force: true}));
+    const file = path.join(dir, 'a.css');
+    const source = path.join(dir, 'a.mjs');
+    fs.writeFileSync(file, '--color-bg: #010203');
+    const w = fakeWatcher();
+    w.print('Watching a.mjs for changes');
+    const wait = saveAndWaitForColor(w.child, w.read, {
+      file,
+      source,
+      content: 'x',
+      color: '#040506',
+    });
+    w.print('Change detected — rebuilding a.mjs...');
+    w.print('Watching a.mjs for changes');
+    await expect(wait).rejects.toThrow(
+      'a rebuild after the save produced a stale theme',
+    );
+  });
+
+  it('lets a rebuild running at the save end without the color, and takes the next one', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'watch-wait-'));
+    onTestFinished(() => fs.rmSync(dir, {recursive: true, force: true}));
+    const file = path.join(dir, 'a.css');
+    const source = path.join(dir, 'a.mjs');
+    fs.writeFileSync(file, '--color-bg: #010203');
+    const w = fakeWatcher();
+    w.print('Watching a.mjs for changes');
+    w.print('Change detected — rebuilding a.mjs...');
+    const wait = saveAndWaitForColor(w.child, w.read, {
+      file,
+      source,
+      content: 'x',
+      color: '#040506',
+    });
+    // The rebuild that was running ends with the old color.
+    w.print('Watching a.mjs for changes');
+    // The rebuild of the save starts, writes the color, and ends.
+    w.print('Change detected — rebuilding a.mjs...');
+    fs.writeFileSync(file, '--color-bg: #040506');
+    w.print('Watching a.mjs for changes');
+    await expect(wait).resolves.toBeUndefined();
+    expect(fs.readFileSync(source, 'utf-8')).toBe('x');
+  });
 });
 
 describe('theme build --watch', () => {
@@ -508,8 +580,7 @@ describe('theme build --watch', () => {
         await waitForOutput(child, () => out, 'Watching other\\.mjs');
         // Two rebuilds, each writing into the editor folder again.
         for (const color of ['#010203', '#040506']) {
-          fs.writeFileSync(source, version(color));
-          await waitForBuiltColor(child, () => out, {
+          await saveAndWaitForColor(child, () => out, {
             file: path.join(editor, 'a.css'),
             source,
             content: version(color),
@@ -560,8 +631,7 @@ describe('theme build --watch', () => {
     try {
       await waitForOutput(child, () => out, 'Watching');
       for (const color of ['#010203', '#040506']) {
-        fs.writeFileSync(source, version(color));
-        await waitForBuiltColor(child, () => out, {
+        await saveAndWaitForColor(child, () => out, {
           file: path.join(editor, 'g.css'),
           source,
           content: version(color),
