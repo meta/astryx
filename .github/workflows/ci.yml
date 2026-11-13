@@ -308,7 +308,6 @@ jobs:
       # main on top, so 50 commits are plenty there; the full clone took over
       # a minute.
       - uses: actions/checkout@v7
-        timeout-minutes: 5
         with:
           ref: ${{ github.sha }}
           fetch-depth: ${{ inputs['release-branch'] != 'main' && '0' || '50' }}
@@ -402,7 +401,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
-        timeout-minutes: 5
+        timeout-minutes: 10
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
@@ -480,7 +479,7 @@ jobs:
     steps:
       - name: Checkout merge-back candidate
         uses: actions/checkout@v7
-        timeout-minutes: 5
+        timeout-minutes: 10
         with:
           fetch-depth: 0
 

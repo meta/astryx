@@ -19,8 +19,9 @@ const ci = yaml.parse(
 
 /** Every checkout step, named by its job and position. */
 const checkouts = Object.entries(ci.jobs).flatMap(([job, spec]) =>
-  /** @type {any} */ ((spec).steps ?? [])
+  /** @type {any} */ (spec.steps ?? [])
     .map((/** @type {any} */ step, /** @type {number} */ i) => ({
+      job,
       where: `${job} step ${i + 1}${step.name ? ` (${step.name})` : ''}`,
       step,
     }))
@@ -29,15 +30,26 @@ const checkouts = Object.entries(ci.jobs).flatMap(([job, spec]) =>
     ),
 );
 
+// Full-history checkouts take longer: release-bump took up to 143 s in recent
+// runs, and release-merge-back fetches the same history. release-authority
+// keeps no step bound: the release lanes read its failure as a refused
+// authority, while its job time already bounds a stalled checkout.
+const BOUND = {'release-bump': 10, 'release-merge-back': 10};
+const UNBOUNDED = new Set(['release-authority']);
+
 describe('ci.yml checkout steps', () => {
   it('exist', () => {
     expect(checkouts.length).toBeGreaterThan(0);
   });
 
-  it('each stop after 5 minutes', () => {
-    const unbounded = checkouts
-      .filter(({step}) => step['timeout-minutes'] !== 5)
+  it('each stop after 5 minutes, or the bound their job names', () => {
+    const wrong = checkouts
+      .filter(({job, step}) =>
+        UNBOUNDED.has(job)
+          ? step['timeout-minutes'] !== undefined
+          : step['timeout-minutes'] !== (BOUND[job] ?? 5),
+      )
       .map(({where}) => where);
-    expect(unbounded).toEqual([]);
+    expect(wrong).toEqual([]);
   });
 });
