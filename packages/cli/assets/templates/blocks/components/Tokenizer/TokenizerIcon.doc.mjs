@@ -11,4 +11,5 @@ export const doc = {
   aspectRatio: 16 / 9,
   componentsUsed: ['Tokenizer', 'Layout', 'Text'],
   icons: {MagnifyingGlassIcon: 'search'},
+  fits: ['form', 'toolbar'],
 };

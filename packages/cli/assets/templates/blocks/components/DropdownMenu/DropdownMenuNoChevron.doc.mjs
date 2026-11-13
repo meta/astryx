@@ -12,4 +12,5 @@ export const doc = {
   aspectRatio: 16 / 9,
   componentsUsed: ['DropdownMenu', 'Icon', 'Layout', 'Text'],
   icons: {EllipsisHorizontalIcon: 'moreHorizontal'},
+  fits: ['overlay', 'inline'],
 };

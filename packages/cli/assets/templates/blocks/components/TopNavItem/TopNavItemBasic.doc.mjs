@@ -11,4 +11,5 @@ export const doc = {
   isReady: true,
   aspectRatio: 3,
   componentsUsed: ['TopNav', 'TopNavHeading', 'TopNavItem'],
+  fits: ['navigation'],
 };

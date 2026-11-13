@@ -11,4 +11,5 @@ export const doc = {
   aspectRatio: 4 / 1,
   componentsUsed: ['Breadcrumbs', 'Icon'],
   icons: {Cog6ToothIcon: 'settings', HomeIcon: 'home'},
+  fits: ['navigation', 'header'],
 };

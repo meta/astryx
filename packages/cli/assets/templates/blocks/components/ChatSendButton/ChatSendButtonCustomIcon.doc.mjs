@@ -16,4 +16,5 @@ export const doc = {
     SparklesIcon: 'sparkles',
     XCircleIcon: 'error',
   },
+  fits: [],
 };

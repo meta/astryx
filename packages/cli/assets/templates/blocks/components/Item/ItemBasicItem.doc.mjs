@@ -11,4 +11,5 @@ export const doc = {
   isReady: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['Item', 'Text', 'Layout'],
+  fits: ['list'],
 };

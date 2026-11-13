@@ -15,4 +15,5 @@ export const doc = {
     'CommandPaletteItem',
     'CommandPaletteList',
   ],
+  fits: ['overlay'],
 };

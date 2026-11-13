@@ -61,6 +61,8 @@ export function templateShow(match, {iconSets = NO_ICON_SETS} = {}) {
       demoMediaReplaced,
       demoContentReplaced,
       ...(icons ? {icons} : {}),
+      ...(match.slots ? {slots: match.slots} : {}),
+      ...(match.fits ? {fits: match.fits} : {}),
     },
   };
 }

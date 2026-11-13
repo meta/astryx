@@ -12,4 +12,5 @@ export const doc = {
   description:
     'An icon button with a wrench icon.',
   componentsUsed: ['IconButton', 'Icon'],
+  fits: ['inline', 'toolbar'],
 };

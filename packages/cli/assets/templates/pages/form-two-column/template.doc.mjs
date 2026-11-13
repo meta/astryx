@@ -24,4 +24,30 @@ export const doc = {
   ],
   isReady: true,
   category: 'Form - Two-column',
+  slots: [
+    {
+      name: 'header',
+      kind: 'header',
+      description:
+        'Top of the left column: display headline and supporting description introducing the contact form.',
+    },
+    {
+      name: 'illustration',
+      kind: 'content',
+      description:
+        'Left column below the headline: 4:3 cover image that stays beside the form as context.',
+    },
+    {
+      name: 'fields',
+      kind: 'form',
+      description:
+        'Right column card: contact inputs, inquiry reason tokens, budget selector, details textarea and submit button.',
+    },
+    {
+      name: 'contacts',
+      kind: 'footer',
+      description:
+        'Bottom strip below a divider: three centered columns of contact labels and email links.',
+    },
+  ],
 };

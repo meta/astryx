@@ -13,4 +13,5 @@ export const doc = {
   aspectRatio: 16 / 9,
   componentsUsed: ['Selector', 'SelectorOption'],
   icons: {UserIcon: 'user'},
+  fits: ['form'],
 };

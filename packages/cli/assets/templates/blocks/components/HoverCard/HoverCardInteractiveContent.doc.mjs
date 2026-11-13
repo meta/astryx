@@ -12,4 +12,5 @@ export const doc = {
   aspectRatio: 16 / 9,
   componentsUsed: ['HoverCard', 'Icon', 'Layout', 'Link', 'Text'],
   icons: {LinkIcon: 'link'},
+  fits: ['overlay', 'inline'],
 };

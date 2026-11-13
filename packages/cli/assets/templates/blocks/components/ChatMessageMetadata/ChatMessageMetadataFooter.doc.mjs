@@ -24,4 +24,5 @@ export const doc = {
     HandThumbDownIcon: 'thumbsDown',
     HandThumbUpIcon: 'thumbsUp',
   },
+  fits: ['chat'],
 };

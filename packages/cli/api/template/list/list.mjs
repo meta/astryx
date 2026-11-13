@@ -61,6 +61,8 @@ export function templateList(templates, options = {}) {
       alsoExampleFor: t.alsoExampleFor,
       alsoShowcaseFor: t.alsoShowcaseFor,
       isShowcase: t.isShowcase,
+      slots: t.slots,
+      fits: t.fits,
       // Discovery always sets isReady (defaulting to true), so `?? true` never
       // changes the emitted value — it only satisfies the required-boolean
       // field type where the DiscoveredTemplate typedef leaves it optional.

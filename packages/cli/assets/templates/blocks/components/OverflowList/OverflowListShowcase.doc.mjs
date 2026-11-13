@@ -12,4 +12,5 @@ export const doc = {
   description:
     'A list of buttons that collapses overflowing items into a +N indicator.',
   componentsUsed: ['OverflowList', 'Button'],
+  fits: ['toolbar'],
 };

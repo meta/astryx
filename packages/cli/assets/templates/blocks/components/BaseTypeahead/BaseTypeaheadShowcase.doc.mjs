@@ -12,4 +12,5 @@ export const doc = {
   isReady: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['BaseTypeahead', 'Layout', 'Text'],
+  fits: ['form', 'toolbar'],
 };

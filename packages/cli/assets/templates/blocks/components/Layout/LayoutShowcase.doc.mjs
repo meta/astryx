@@ -10,4 +10,5 @@ export const doc = {
   aspectRatio: 4 / 3,
   isShowcase: true,
   componentsUsed: ['Badge', 'Button', 'Layout', 'List', 'Text'],
+  fits: [],
 };

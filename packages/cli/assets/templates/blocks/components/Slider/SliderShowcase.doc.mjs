@@ -12,4 +12,5 @@ export const doc = {
   description:
     'A slider control set to 50%.',
   componentsUsed: ['Slider'],
+  fits: ['form', 'toolbar'],
 };

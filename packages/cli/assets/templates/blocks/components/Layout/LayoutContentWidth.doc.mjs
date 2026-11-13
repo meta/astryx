@@ -11,4 +11,5 @@ export const doc = {
   isReady: true,
   aspectRatio: 4 / 3,
   componentsUsed: ['Layout', 'LayoutHeader', 'LayoutContent', 'LayoutFooter', 'Button', 'HStack', 'VStack', 'Text', 'Heading'],
+  fits: [],
 };

@@ -16,4 +16,5 @@ export const doc = {
     TagIcon: 'tag',
     UserIcon: 'user',
   },
+  fits: ['inline'],
 };

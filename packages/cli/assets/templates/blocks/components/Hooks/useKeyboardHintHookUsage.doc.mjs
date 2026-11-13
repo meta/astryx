@@ -12,4 +12,5 @@ export const doc = {
   aspectRatio: 16 / 9,
   componentsUsed: ['Button', 'Icon', 'Card', 'Layout'],
   icons: {StarIcon: 'star'},
+  fits: ['form', 'inline'],
 };

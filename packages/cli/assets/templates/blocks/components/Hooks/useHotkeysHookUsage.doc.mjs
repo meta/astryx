@@ -20,4 +20,5 @@ export const doc = {
     'Text',
     'Layout',
   ],
+  fits: ['toolbar', 'overlay'],
 };

@@ -15,4 +15,5 @@ export const doc = {
     'SegmentedControl',
     'Layout',
   ],
+  fits: ['chart', 'inline'],
 };

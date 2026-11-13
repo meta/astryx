@@ -14,4 +14,5 @@ export const doc = {
   aspectRatio: 16 / 9,
   isShowcase: true,
   componentsUsed: ['Toast', 'Button'],
+  fits: ['overlay'],
 };

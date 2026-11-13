@@ -11,4 +11,5 @@ export const doc = {
   isShowcase: true,
   componentsUsed: ['Item', 'Avatar', 'Badge', 'Icon', 'Text', 'Layout'],
   icons: {BellIcon: 'notification', DocumentIcon: 'file', UserIcon: 'user'},
+  fits: [],
 };

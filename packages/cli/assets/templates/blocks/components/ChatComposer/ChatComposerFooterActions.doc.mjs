@@ -22,4 +22,5 @@ export const doc = {
     MicrophoneIcon: 'microphone',
     SparklesIcon: 'sparkles',
   },
+  fits: ['chat'],
 };

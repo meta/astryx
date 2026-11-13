@@ -11,4 +11,5 @@ export const doc = {
   aspectRatio: 16 / 9,
   scale: 1,
   componentsUsed: ['StatusDot', 'HStack'],
+  fits: [],
 };

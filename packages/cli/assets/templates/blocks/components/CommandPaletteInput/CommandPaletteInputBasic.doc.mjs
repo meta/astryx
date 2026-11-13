@@ -12,4 +12,5 @@ export const doc = {
   isShowcase: false,
   aspectRatio: 4 / 3,
   componentsUsed: ['CommandPalette', 'CommandPaletteInput', 'Kbd'],
+  fits: ['overlay'],
 };

@@ -22,4 +22,42 @@ export const doc = {
     ClipboardDocumentIcon: 'clipboard',
     SparklesIcon: 'sparkles',
   },
+  slots: [
+    {
+      name: 'header',
+      kind: 'header',
+      description:
+        'Top of the content column: display title, last-updated date, and mobile on-this-page selector.',
+    },
+    {
+      name: 'ai-prompt',
+      kind: 'content',
+      description:
+        'Card below the header with the AI assistance prompt, copy button, and open-in menu.',
+    },
+    {
+      name: 'prerequisites',
+      kind: 'list',
+      description:
+        'Prerequisites section with a heading and a compact bulleted list of required tools.',
+    },
+    {
+      name: 'steps',
+      kind: 'content',
+      description:
+        'Install and theming sections with numbered steps, explanatory text, and code blocks, separated by dividers.',
+    },
+    {
+      name: 'next-steps',
+      kind: 'list',
+      description:
+        'Final section with a heading and a bulleted list of onward links to further documentation.',
+    },
+    {
+      name: 'outline',
+      kind: 'panel',
+      description:
+        'Sticky end-side panel with the on-this-page outline linking to article sections.',
+    },
+  ],
 };

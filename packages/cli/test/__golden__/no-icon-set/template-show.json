@@ -29,7 +29,24 @@
     ],
     "source": "<text>",
     "demoMediaReplaced": 0,
-    "demoContentReplaced": 0
+    "demoContentReplaced": 0,
+    "slots": [
+      {
+        "name": "nav",
+        "kind": "navigation",
+        "description": "<text>"
+      },
+      {
+        "name": "header",
+        "kind": "header",
+        "description": "<text>"
+      },
+      {
+        "name": "settings",
+        "kind": "form",
+        "description": "<text>"
+      }
+    ]
   },
   "meta": {
     "answeredBy": {

@@ -18,4 +18,5 @@ export const doc = {
     'Layout',
     'Text',
   ],
+  fits: ['list'],
 };

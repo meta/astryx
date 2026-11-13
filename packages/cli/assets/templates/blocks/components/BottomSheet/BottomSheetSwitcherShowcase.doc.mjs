@@ -25,4 +25,5 @@ export const doc = {
     'Stack',
     'Text',
   ],
+  fits: ['overlay', 'form'],
 };

@@ -69,8 +69,35 @@ const baseTemplateFields = {
     .optional(),
 };
 
+/**
+ * A slot kind or a fit as it loads: lowercase words joined by hyphens. A kind
+ * this release does not know still loads, so a template written for a newer
+ * vocabulary is not dropped; readers skip a kind they do not know, and
+ * `doctor integration validate` names it.
+ */
+const slotKindSchema = z
+  .string()
+  .regex(/^[a-z]+(?:-[a-z]+)*$/u, 'a slot kind is lowercase words joined by hyphens');
+
+const slotSchema = z
+  .object({
+    name: z
+      .string()
+      .regex(
+        /^[a-z0-9]+(?:-[a-z0-9]+)*$/u,
+        'a slot name is lowercase words joined by hyphens',
+      ),
+    kind: slotKindSchema,
+    description: z.string().min(1).optional(),
+  })
+  .strict();
+
 const pageTemplateSchema = z
-  .object({...baseTemplateFields, type: z.literal('page')})
+  .object({
+    ...baseTemplateFields,
+    type: z.literal('page'),
+    slots: z.array(slotSchema).optional(),
+  })
   .strict();
 const blockTemplateSchema = z
   .object({
@@ -82,6 +109,7 @@ const blockTemplateSchema = z
     aspectRatio: z.number().positive().optional(),
     scale: z.number().positive().optional(),
     isShowcase: z.boolean().optional(),
+    fits: z.array(slotKindSchema).optional(),
   })
   .strict();
 
@@ -93,10 +121,14 @@ const blockTemplateSchema = z
  * three; `IntegrationTemplateDoc`, for an integration package's templates,
  * takes the package's own `category`.
  *
- * @typedef {Omit<PageTemplateDoc, 'displayName' | 'category'>
- *   & {displayName?: string, category?: string}} LoadedPageTemplateDoc
- * @typedef {Omit<BlockTemplateDoc, 'displayName' | 'aspectRatio' | 'category'>
- *   & {displayName?: string, aspectRatio?: number, category?: string}} LoadedBlockTemplateDoc
+ * A slot's kind and a block's fits load as any lowercase kind, so a template
+ * written for a newer vocabulary still loads (see `slotKindSchema`).
+ *
+ * @typedef {Omit<PageTemplateDoc, 'displayName' | 'category' | 'slots'>
+ *   & {displayName?: string, category?: string, slots?: LoadedTemplateSlot[]}} LoadedPageTemplateDoc
+ * @typedef {Omit<BlockTemplateDoc, 'displayName' | 'aspectRatio' | 'category' | 'fits'>
+ *   & {displayName?: string, aspectRatio?: number, category?: string, fits?: string[]}} LoadedBlockTemplateDoc
+ * @typedef {Omit<import('./type.js').TemplateSlot, 'kind'> & {kind: string}} LoadedTemplateSlot
  */
 
 /**

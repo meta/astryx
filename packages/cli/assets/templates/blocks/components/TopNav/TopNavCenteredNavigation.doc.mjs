@@ -12,4 +12,5 @@ export const doc = {
   aspectRatio: 16 / 9,
   componentsUsed: ['TopNav', 'NavIcon', 'Button'],
   icons: {CubeIcon: 'package', UserCircleIcon: 'userCircle'},
+  fits: ['navigation'],
 };

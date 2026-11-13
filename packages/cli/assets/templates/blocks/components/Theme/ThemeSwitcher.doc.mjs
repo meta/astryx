@@ -19,4 +19,5 @@ export const doc = {
     'Selector',
     'Text',
   ],
+  fits: ['form', 'content'],
 };

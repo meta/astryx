@@ -19,4 +19,5 @@ export const doc = {
     'NavIcon',
   ],
   icons: {CubeIcon: 'package'},
+  fits: [],
 };

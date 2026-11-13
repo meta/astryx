@@ -20,4 +20,5 @@ export const doc = {
     'Badge',
     'Icon',
   ],
+  fits: [],
 };

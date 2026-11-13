@@ -10,4 +10,5 @@ export const doc = {
   isReady: true,
   aspectRatio: 1,
   componentsUsed: ['Chat', 'Markdown'],
+  fits: ['chat', 'panel', 'overlay'],
 };

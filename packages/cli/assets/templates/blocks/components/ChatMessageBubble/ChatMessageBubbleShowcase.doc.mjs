@@ -11,4 +11,5 @@ export const doc = {
   isShowcase: true,
   aspectRatio: 4 / 3,
   componentsUsed: ['Chat', 'ChatMessageBubble', 'ChatMessage', 'ChatMessageMetadata', 'Timestamp'],
+  fits: ['chat'],
 };

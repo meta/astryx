@@ -13,4 +13,5 @@ export const doc = {
   aspectRatio: 16 / 9,
   componentsUsed: ['BaseTypeahead', 'Icon', 'Layout', 'Text'],
   icons: {MagnifyingGlassIcon: 'search'},
+  fits: ['toolbar', 'form'],
 };

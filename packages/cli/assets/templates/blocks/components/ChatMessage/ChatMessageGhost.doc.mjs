@@ -10,4 +10,5 @@ export const doc = {
   isReady: true,
   aspectRatio: 4 / 3,
   componentsUsed: ['Chat', 'ChatMessage', 'ChatMessageBubble', 'ChatMessageMetadata', 'Timestamp', 'Text', 'Layout'],
+  fits: ['chat'],
 };

@@ -12,4 +12,5 @@ export const doc = {
   aspectRatio: 16 / 9,
   componentsUsed: ['EmptyState', 'Button', 'Layout', 'Icon'],
   icons: {InboxIcon: 'inbox'},
+  fits: ['feedback', 'panel'],
 };

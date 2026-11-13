@@ -11,4 +11,5 @@ export const doc = {
   isReady: true,
   aspectRatio: 4 / 3,
   componentsUsed: ['VisuallyHidden', 'Card', 'HStack', 'VStack', 'Text', 'Badge'],
+  fits: ['list', 'content'],
 };

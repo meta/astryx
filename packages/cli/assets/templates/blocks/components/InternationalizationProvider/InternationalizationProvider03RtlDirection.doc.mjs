@@ -17,4 +17,5 @@ export const doc = {
     'SegmentedControl',
     'Layout',
   ],
+  fits: ['toolbar', 'footer'],
 };

@@ -12,4 +12,5 @@ export const doc = {
   isShowcase: true,
   aspectRatio: 4 / 3,
   componentsUsed: ['SideNav', 'SideNavHeading', 'NavHeadingMenu', 'NavHeadingMenuItem'],
+  fits: ['navigation', 'overlay'],
 };

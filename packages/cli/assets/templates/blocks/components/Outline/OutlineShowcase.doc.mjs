@@ -12,4 +12,5 @@ export const doc = {
   aspectRatio: 16 / 9,
   isShowcase: true,
   componentsUsed: ['Outline'],
+  fits: ['panel', 'navigation'],
 };

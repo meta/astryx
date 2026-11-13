@@ -12,4 +12,5 @@ export const doc = {
   aspectRatio: 4 / 3,
   componentsUsed: ['Icon', 'InputClearButton'],
   icons: {MagnifyingGlassIcon: 'search'},
+  fits: ['toolbar', 'form'],
 };

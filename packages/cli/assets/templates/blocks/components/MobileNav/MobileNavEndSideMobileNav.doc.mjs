@@ -11,4 +11,5 @@ export const doc = {
   aspectRatio: 4 / 3,
   componentsUsed: ['MobileNav', 'SideNav', 'Button'],
   icons: {Cog6ToothIcon: 'settings', UsersIcon: 'users'},
+  fits: ['overlay', 'navigation'],
 };

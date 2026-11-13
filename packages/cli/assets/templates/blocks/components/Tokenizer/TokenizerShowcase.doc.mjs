@@ -12,4 +12,5 @@ export const doc = {
   description:
     'A tokenizer with preset tags and search source.',
   componentsUsed: ['Tokenizer'],
+  fits: ['form', 'toolbar'],
 };

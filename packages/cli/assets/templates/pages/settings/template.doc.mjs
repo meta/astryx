@@ -11,4 +11,24 @@ export const doc = {
   isReady: true,
   category: 'Settings - Form',
   icons: {MagnifyingGlassIcon: 'search'},
+  slots: [
+    {
+      name: 'header',
+      kind: 'header',
+      description:
+        'Top layout header with the Settings title and a search typeahead for finding settings.',
+    },
+    {
+      name: 'nav',
+      kind: 'navigation',
+      description:
+        'Start side panel list of settings categories; becomes a tab bar above content on narrow screens.',
+    },
+    {
+      name: 'sections',
+      kind: 'form',
+      description:
+        'Main content of stacked form sections, each a heading and description beside fields and a Save button.',
+    },
+  ],
 };

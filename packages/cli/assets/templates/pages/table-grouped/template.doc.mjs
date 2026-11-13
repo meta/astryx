@@ -33,4 +33,30 @@ export const doc = {
     UserIcon: 'user',
     XMarkIcon: 'close',
   },
+  slots: [
+    {
+      name: 'header',
+      kind: 'header',
+      description:
+        'Top of LayoutHeader: the All Issues heading and the Create issue primary button.',
+    },
+    {
+      name: 'filters',
+      kind: 'toolbar',
+      description:
+        'Row under the heading in LayoutHeader: PowerSearch query filter and the View Options grouping popover.',
+    },
+    {
+      name: 'table',
+      kind: 'table',
+      description:
+        'Page body in LayoutContent: the grouped Table of issues with collapsible sections and per-group counts.',
+    },
+    {
+      name: 'details',
+      kind: 'panel',
+      description:
+        'Resizable end LayoutPanel showing the selected task\'s status, priority, assignee, metadata, and labels.',
+    },
+  ],
 };

@@ -69,4 +69,24 @@ export const doc = {
     UserIcon: 'user',
     UsersIcon: 'users',
   },
+  slots: [
+    {
+      name: 'nav',
+      kind: 'navigation',
+      description:
+        'Left SideNav rail with Settings title, search input, and grouped section links; becomes a tab strip when narrow.',
+    },
+    {
+      name: 'header',
+      kind: 'header',
+      description:
+        'Top of the content pane: active panel\'s heading, description, and the pinned close button.',
+    },
+    {
+      name: 'settings',
+      kind: 'form',
+      description:
+        'Scrolling content pane body under the heading: grouped cards of setting rows with switches, selectors and previews.',
+    },
+  ],
 };

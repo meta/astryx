@@ -63,4 +63,36 @@ export const doc = {
     Undo2: 'undo',
     X: 'close',
   },
+  slots: [
+    {
+      name: 'header',
+      kind: 'header',
+      description:
+        'Top bar holding the main menu, document tabs, save note and Export button.',
+    },
+    {
+      name: 'layers',
+      kind: 'panel',
+      description:
+        'Left rail listing the document\'s layers and groups as a tree to select and reorder.',
+    },
+    {
+      name: 'canvas',
+      kind: 'content',
+      description:
+        'Center workspace showing the fixed-size artboard frame, zoomed, on a muted backdrop.',
+    },
+    {
+      name: 'toolbar',
+      kind: 'toolbar',
+      description:
+        'Canvas tool bar under the artboard with undo, redo, zoom and panel toggles.',
+    },
+    {
+      name: 'inspector',
+      kind: 'panel',
+      description:
+        'Right panel of position, style, text, image and filter fields for the selected layer.',
+    },
+  ],
 };

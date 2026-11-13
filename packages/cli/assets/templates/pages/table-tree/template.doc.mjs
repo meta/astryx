@@ -37,4 +37,36 @@ export const doc = {
     Star: 'star',
     Tag: 'tag',
   },
+  slots: [
+    {
+      name: 'header',
+      kind: 'header',
+      description:
+        'Top toolbar with the hidden repo heading, folder breadcrumbs, Public badge, and star/fork/watch stat buttons.',
+    },
+    {
+      name: 'branch-bar',
+      kind: 'toolbar',
+      description:
+        'BranchBar above the file table holding the branch picker, the search box that prunes the tree, and match count.',
+    },
+    {
+      name: 'files',
+      kind: 'table',
+      description:
+        'Card-wrapped tree table of folders and files with rolled-up latest commit message and date columns.',
+    },
+    {
+      name: 'readme',
+      kind: 'content',
+      description:
+        'ReadmePanel below the table rendering the selected folder\'s README as markdown.',
+    },
+    {
+      name: 'about',
+      kind: 'panel',
+      description:
+        'End-side LayoutPanel sidebar with repository about details; stacks under the README on narrow screens.',
+    },
+  ],
 };

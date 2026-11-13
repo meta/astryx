@@ -15,4 +15,5 @@ export const doc = {
     CubeIcon: 'package',
     UserCircleIcon: 'userCircle',
   },
+  fits: ['navigation'],
 };

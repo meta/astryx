@@ -375,6 +375,10 @@ const RUNNERS = {
     runs: "an integration's template docs, to read the icons each declares",
     sites: ['loadTopicModule'],
   },
+  'foundation/discovery/template-slot-notes.mjs': {
+    runs: "an integration's template docs, to read the slots and fits each declares",
+    sites: ['loadTopicModule'],
+  },
   'foundation/discovery/doc-fluff.mjs': {
     runs: "the CLI's own guides, to measure the median share of content words a topic's density is compared with",
     sites: ['builtinGuideFiles'],

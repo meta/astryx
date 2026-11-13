@@ -10,4 +10,24 @@ export const doc = {
   keywords: ['setup', 'invite', 'schedule', 'onboarding'],
   isReady: true,
   category: 'Form - Wizard Dialog',
+  slots: [
+    {
+      name: 'header',
+      kind: 'header',
+      description:
+        'Pinned top of the dialog: DialogHeader title and close button, with the compact Stepper row below.',
+    },
+    {
+      name: 'fields',
+      kind: 'form',
+      description:
+        'Scrolling dialog body in LayoutContent: the current step\'s FormLayout of fields, banner and review summary.',
+    },
+    {
+      name: 'footer',
+      kind: 'footer',
+      description:
+        'Pinned LayoutFooter action row: Back button, blocked-step error message, and Continue or Schedule report button.',
+    },
+  ],
 };

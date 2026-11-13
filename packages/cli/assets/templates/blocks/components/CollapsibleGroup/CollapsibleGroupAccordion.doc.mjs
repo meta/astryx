@@ -12,4 +12,5 @@ export const doc = {
   isReady: true,
   aspectRatio: 3 / 4,
   componentsUsed: ['CollapsibleGroup', 'Collapsible', 'Text', 'Stack'],
+  fits: [],
 };

@@ -12,4 +12,5 @@ export const doc = {
   description:
     'A toggle switch for enabling notifications.',
   componentsUsed: ['Switch'],
+  fits: ['form'],
 };

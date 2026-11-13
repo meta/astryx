@@ -134,6 +134,10 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template BaseTypeaheadCustomSearch --type block",
+        "fits": [
+          "<text>",
+          "<text>"
+        ],
         "mentions": []
       },
       {
@@ -146,6 +150,9 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template BaseTypeaheadMenu --type block",
+        "fits": [
+          "<text>"
+        ],
         "mentions": []
       },
       {
@@ -158,6 +165,10 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template BottomSheetSnapPoints --type block",
+        "fits": [
+          "<text>",
+          "<text>"
+        ],
         "mentions": []
       },
       {
@@ -170,6 +181,10 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template BreadcrumbsDeepHierarchy --type block",
+        "fits": [
+          "<text>",
+          "<text>"
+        ],
         "mentions": []
       },
       {
@@ -182,6 +197,10 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template BreadcrumbsWithIcons --type block",
+        "fits": [
+          "<text>",
+          "<text>"
+        ],
         "mentions": []
       },
       {
@@ -194,6 +213,7 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template ButtonFloating --type block",
+        "fits": [],
         "mentions": []
       },
       {
@@ -206,6 +226,7 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template ButtonGroupShowcase --type block",
+        "fits": [],
         "mentions": []
       },
       {
@@ -218,6 +239,10 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template ButtonWithIcon --type block",
+        "fits": [
+          "<text>",
+          "<text>"
+        ],
         "mentions": []
       },
       {
@@ -230,6 +255,10 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template CenterHorizontal --type block",
+        "fits": [
+          "<text>",
+          "<text>"
+        ],
         "mentions": []
       },
       {
@@ -242,6 +271,9 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template CenterInsideACard --type block",
+        "fits": [
+          "<text>"
+        ],
         "mentions": []
       }
     ]

@@ -32,4 +32,36 @@ export const doc = {
     FlagIcon: 'flag',
     StopIcon: 'stop',
   },
+  slots: [
+    {
+      name: 'header',
+      kind: 'header',
+      description:
+        'Top layout header with program title, overall status badge, release-phase segmented filter and download action.',
+    },
+    {
+      name: 'timeline',
+      kind: 'chart',
+      description:
+        'First content section: milestone Gantt chart of dated bars with a today marker, or phase empty state.',
+    },
+    {
+      name: 'summary',
+      kind: 'chart',
+      description:
+        'Three-up card grid in second section: task progress donut and scope burndown line chart.',
+    },
+    {
+      name: 'risks',
+      kind: 'list',
+      description:
+        'Third card in the summary grid: blockers and risks list with severity badges and hover detail.',
+    },
+    {
+      name: 'workstreams',
+      kind: 'table',
+      description:
+        'Bottom card: per-owner workstream table with progress bars, due dates and status badges.',
+    },
+  ],
 };

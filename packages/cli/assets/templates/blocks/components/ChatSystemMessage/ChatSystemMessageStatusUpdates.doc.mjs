@@ -16,4 +16,5 @@ export const doc = {
     UserMinusIcon: 'userRemove',
     UserPlusIcon: 'userAdd',
   },
+  fits: ['chat'],
 };

@@ -12,4 +12,5 @@ export const doc = {
   description:
     'A vertical form layout with text input fields.',
   componentsUsed: ['FormLayout', 'TextInput'],
+  fits: ['form'],
 };

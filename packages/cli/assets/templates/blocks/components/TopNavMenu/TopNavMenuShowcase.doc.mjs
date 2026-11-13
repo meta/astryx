@@ -17,4 +17,5 @@ export const doc = {
     MagnifyingGlassIcon: 'search',
     UsersIcon: 'users',
   },
+  fits: ['navigation'],
 };

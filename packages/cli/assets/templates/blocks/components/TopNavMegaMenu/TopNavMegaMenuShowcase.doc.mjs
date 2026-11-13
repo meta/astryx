@@ -23,4 +23,5 @@ export const doc = {
     RocketLaunchIcon: 'rocket',
     ShieldCheckIcon: 'shield',
   },
+  fits: ['navigation', 'overlay'],
 };

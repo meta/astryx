@@ -10,4 +10,5 @@ export const doc = {
   isReady: true,
   aspectRatio: 0.85,
   componentsUsed: ['TextInput', 'Layout'],
+  fits: [],
 };

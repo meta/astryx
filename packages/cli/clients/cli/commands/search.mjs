@@ -153,6 +153,8 @@ export function registerSearch(program) {
             'description',
             'command',
             'parent',
+            'slots',
+            'fits',
           ]
         : [
             'name',
@@ -188,6 +190,17 @@ export function registerSearch(program) {
             // component, hook or doc result's command prints the whole doc;
             // --verbose and --json keep the description whole.
             ...(options.verbose ? {} : {description: firstSentence}),
+            // A page's slots: each one's name and kind, then what goes there.
+            slots: slots =>
+              /** @type {{name: string, kind: string, description?: string}[]} */ (
+                slots
+              )
+                .map(slot =>
+                  slot.description
+                    ? `${slot.name} (${slot.kind}): ${slot.description}`
+                    : `${slot.name} (${slot.kind})`,
+                )
+                .join('; '),
           },
         }),
         ...note,

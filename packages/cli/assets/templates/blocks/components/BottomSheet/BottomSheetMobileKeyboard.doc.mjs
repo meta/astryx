@@ -20,4 +20,5 @@ export const doc = {
     'TextArea',
     'TextInput',
   ],
+  fits: ['overlay', 'form'],
 };

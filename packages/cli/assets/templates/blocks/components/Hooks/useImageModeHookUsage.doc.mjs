@@ -11,4 +11,5 @@ export const doc = {
   isReady: true,
   aspectRatio: 3 / 2,
   componentsUsed: ['AspectRatio', 'MediaTheme', 'Switch', 'Text', 'Layout'],
+  fits: ['content'],
 };

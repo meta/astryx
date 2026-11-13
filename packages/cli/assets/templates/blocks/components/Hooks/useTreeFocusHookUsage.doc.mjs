@@ -12,4 +12,5 @@ export const doc = {
   aspectRatio: 4 / 3,
   componentsUsed: ['Icon', 'Text', 'Layout'],
   icons: {ChevronDownIcon: 'chevronDown', ChevronRightIcon: 'chevronRight'},
+  fits: ['list', 'panel', 'navigation'],
 };

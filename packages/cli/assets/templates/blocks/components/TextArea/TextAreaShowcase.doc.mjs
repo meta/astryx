@@ -12,4 +12,5 @@ export const doc = {
   description:
     'A text area with placeholder text.',
   componentsUsed: ['TextArea'],
+  fits: ['form'],
 };

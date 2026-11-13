@@ -150,13 +150,15 @@
 /**
  * A descriptor an older CLI drops: a page or block template, or a namespace
  * doc, that sets `stability`, or a template that declares `icons`, while the
- * package's `@astryxdesign/cli` peer range admits a release before 0.7.4.
+ * package's `@astryxdesign/cli` peer range admits a release before 0.7.4; or
+ * a page template that declares `slots` or a block template that declares
+ * `fits`, while the range admits a release before the one that reads them.
  * Listed beside the issues for the package being authored, and never counted
  * or failing a check.
  * @typedef {object} OlderCliNote
  * @property {string} file The descriptor, relative to the package.
  * @property {'template' | 'namespace'} kind
- * @property {'stability' | 'icons'} field The field an older CLI refuses.
+ * @property {'stability' | 'icons' | 'slots' | 'fits'} field The field an older CLI refuses.
  * @property {string} message What an older CLI does with it, and the fix.
  */
 

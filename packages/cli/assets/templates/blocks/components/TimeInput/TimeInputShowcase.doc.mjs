@@ -12,4 +12,5 @@ export const doc = {
   description:
     'A time input that uses the browser/OS picker on touch by default and Astryx typed entry on fine pointers.',
   componentsUsed: ['TimeInput'],
+  fits: ['form'],
 };

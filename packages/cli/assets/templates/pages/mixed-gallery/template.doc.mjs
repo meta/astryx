@@ -17,4 +17,18 @@ export const doc = {
   type: 'page',
   isReady: true,
   category: 'Gallery - Mixed',
+  slots: [
+    {
+      name: 'header',
+      kind: 'header',
+      description:
+        'Centered heading and intro text at the top of the content column, above the gallery.',
+    },
+    {
+      name: 'gallery',
+      kind: 'list',
+      description:
+        'Masonry grid below the header: a wide hero tile, a side tile, and a row of three image tiles.',
+    },
+  ],
 };

@@ -12,4 +12,5 @@ export const doc = {
   isShowcase: true,
   aspectRatio: 2,
   componentsUsed: ['SelectableCard', 'Layout', 'Text'],
+  fits: ['form'],
 };

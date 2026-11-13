@@ -10,4 +10,5 @@ export const doc = {
   aspectRatio: 16 / 9,
   isShowcase: true,
   componentsUsed: ['ChatComposer', 'ChatComposerInput', 'Layout'],
+  fits: ['chat'],
 };

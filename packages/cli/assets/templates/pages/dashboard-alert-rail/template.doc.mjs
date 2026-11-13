@@ -39,4 +39,36 @@ export const doc = {
     ServerStackIcon: 'server',
     StopIcon: 'stop',
   },
+  slots: [
+    {
+      name: 'header',
+      kind: 'header',
+      description:
+        'Top layout header with page title, live status, updated timestamp, and time-window, environment and region controls.',
+    },
+    {
+      name: 'kpis',
+      kind: 'metrics',
+      description:
+        'First grid in the content column: status-colored KPI tiles with sparklines.',
+    },
+    {
+      name: 'charts',
+      kind: 'chart',
+      description:
+        'Grid below the KPI tiles holding the multi-series latency and request-volume line charts.',
+    },
+    {
+      name: 'uptime',
+      kind: 'list',
+      description:
+        'Below the divider in the content column: the All services card of 90-day uptime strips per service.',
+    },
+    {
+      name: 'alert-rail',
+      kind: 'panel',
+      description:
+        'Right 400px scrolling panel with active alerts over the per-service breakdown; folds into content when narrow.',
+    },
+  ],
 };

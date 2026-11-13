@@ -12,4 +12,5 @@ export const doc = {
   isShowcase: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['MetadataList', 'MetadataListItem'],
+  fits: ['content', 'panel'],
 };

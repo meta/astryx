@@ -13,4 +13,5 @@ export const doc = {
   aspectRatio: 16 / 9,
   componentsUsed: ['Toolbar', 'Button', 'Icon', 'Text', 'Card', 'Section'],
   icons: {ArrowLeftIcon: 'arrowLeft'},
+  fits: ['header', 'toolbar'],
 };

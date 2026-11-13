@@ -136,6 +136,9 @@ export async function gatherTemplates(cwd) {
       _kind: t.type, // 'page' | 'block'
       _resultName: t.dirName,
       _commandName: commandName,
+      // Where blocks go: a page's slots and a block's fits, as declared.
+      ...(t.slots ? {_slots: t.slots} : {}),
+      ...(t.fits ? {_fits: t.fits} : {}),
     };
     if (readSource)
       derivedFromSource.set(candidate, {

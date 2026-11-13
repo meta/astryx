@@ -11,4 +11,5 @@ export const doc = {
   isReady: true,
   aspectRatio: 4 / 3,
   componentsUsed: ['InfoTip', 'HStack', 'VStack', 'Text'],
+  fits: ['metrics'],
 };

@@ -12,4 +12,5 @@ export const doc = {
   aspectRatio: 4 / 3,
   componentsUsed: ['TreeList', 'Icon'],
   icons: {DocumentIcon: 'file', FolderIcon: 'folder'},
+  fits: ['list', 'panel'],
 };

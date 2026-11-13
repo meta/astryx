@@ -168,6 +168,8 @@ export type {
   NamespaceAdoptionRule,
   // template
   TemplateCategory,
+  TemplateSlot,
+  TemplateSlotKind,
   // schema
   SchemaFieldDoc,
   // command

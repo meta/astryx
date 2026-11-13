@@ -12,4 +12,5 @@ export const doc = {
   isReady: true,
   aspectRatio: 3 / 4,
   componentsUsed: ['Dialog', 'Layout', 'Button', 'TextInput', 'TextArea'],
+  fits: ['overlay', 'form'],
 };

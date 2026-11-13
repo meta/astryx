@@ -11,4 +11,5 @@ export const doc = {
   isReady: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['ButtonGroup', 'Button', 'Layout', 'Text'],
+  fits: ['toolbar'],
 };

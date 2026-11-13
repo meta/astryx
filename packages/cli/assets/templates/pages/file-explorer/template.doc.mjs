@@ -25,4 +25,24 @@ export const doc = {
     TagIcon: 'tag',
     ViewColumnsIcon: 'viewColumns',
   },
+  slots: [
+    {
+      name: 'toolbar',
+      kind: 'toolbar',
+      description:
+        'Top toolbar with back/forward buttons, current folder name, view mode switch, and share, tag, search actions.',
+    },
+    {
+      name: 'columns',
+      kind: 'list',
+      description:
+        'Horizontally scrolling row of 240px columns, each a compact list of folders and files at one level.',
+    },
+    {
+      name: 'details',
+      kind: 'panel',
+      description:
+        'Detail column after the folder columns showing the selected file\'s avatar, name, kind, and information metadata.',
+    },
+  ],
 };

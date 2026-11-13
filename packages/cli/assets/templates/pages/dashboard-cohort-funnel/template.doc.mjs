@@ -25,4 +25,36 @@ export const doc = {
     ArrowUpIcon: 'arrowUp',
     StopIcon: 'stop',
   },
+  slots: [
+    {
+      name: 'header',
+      kind: 'header',
+      description:
+        'Top layout header with page title, visitor summary, funnel window control, segment selector and export button.',
+    },
+    {
+      name: 'kpis',
+      kind: 'metrics',
+      description:
+        'Top row of the content: grid of KPI tiles showing stage conversion rates with deltas.',
+    },
+    {
+      name: 'funnel',
+      kind: 'chart',
+      description:
+        'First card below KPIs: conversion funnel stage bars plus a row of step drop-off rates.',
+    },
+    {
+      name: 'trend',
+      kind: 'chart',
+      description:
+        'Second card: conversion-over-time line chart of weekly stage rates with its series legend.',
+    },
+    {
+      name: 'cohorts',
+      kind: 'table',
+      description:
+        'Bottom section after the divider: weekly retention cohort heatmap table with its color legend.',
+    },
+  ],
 };

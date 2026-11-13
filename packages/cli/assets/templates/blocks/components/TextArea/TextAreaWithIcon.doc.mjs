@@ -11,4 +11,5 @@ export const doc = {
   aspectRatio: 16 / 9,
   componentsUsed: ['TextArea'],
   icons: {PencilSquareIcon: 'compose'},
+  fits: ['form'],
 };

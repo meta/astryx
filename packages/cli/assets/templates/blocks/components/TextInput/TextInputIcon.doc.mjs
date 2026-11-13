@@ -11,4 +11,5 @@ export const doc = {
   aspectRatio: 16 / 9,
   componentsUsed: ['TextInput', 'Layout'],
   icons: {EnvelopeIcon: 'mail', LockClosedIcon: 'lock', UserIcon: 'user'},
+  fits: ['form'],
 };

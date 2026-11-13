@@ -19,4 +19,42 @@ export const doc = {
   isReady: true,
   category: 'Dashboard - Portfolio',
   icons: {ArrowDownIcon: 'arrowDown', ArrowUpIcon: 'arrowUp'},
+  slots: [
+    {
+      name: 'header',
+      kind: 'header',
+      description:
+        'Top row with the My Portfolio title and the time-range dropdown menu.',
+    },
+    {
+      name: 'kpis',
+      kind: 'metrics',
+      description:
+        'Grid of metric cards below the header: total value, annual return, dividend yield and holdings.',
+    },
+    {
+      name: 'chart',
+      kind: 'chart',
+      description:
+        'Wide three-column card left of top assets, holding the Portfolio Value area chart over time.',
+    },
+    {
+      name: 'top-assets',
+      kind: 'list',
+      description:
+        'Narrow card right of the chart listing top holdings with avatars, values and change badges.',
+    },
+    {
+      name: 'markets',
+      kind: 'list',
+      description:
+        'Below the divider, the Market Today heading and grid of market index sparkline cards.',
+    },
+    {
+      name: 'trending',
+      kind: 'table',
+      description:
+        'Final card at the page bottom with the Trending Stocks table of prices, changes and sparklines.',
+    },
+  ],
 };

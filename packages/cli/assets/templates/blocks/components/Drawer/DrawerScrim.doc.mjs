@@ -19,4 +19,5 @@ export const doc = {
     'DrawerHeader',
     'Text',
   ],
+  fits: [],
 };

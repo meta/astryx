@@ -362,7 +362,7 @@ describe(
       expect(r.stdout).toContain('description:');
     });
 
-    it('prints every result field under its JSON key (score and reason with --verbose)', async () => {
+    it('prints every result field under its JSON key (score, reason, slots and fits with --verbose)', async () => {
       // Between them these reach every domain, so every per-domain field shows.
       // A theme matches `theme` only through its description, a prose mention
       // ranked below every name and keyword hit, so the theme domain comes from
@@ -383,9 +383,26 @@ describe(
           domains.add(result.domain);
           for (const [key, value] of Object.entries(result)) {
             if (value == null || value === '') continue;
+            if (Array.isArray(value) && value.length === 0) continue;
             const label = `${result.domain} ${result.name}: ${key}`;
+            // A page's slots print on one line as `name (kind): description`.
+            if (key === 'slots') {
+              expect(
+                verbose.some(
+                  line =>
+                    line.startsWith('slots:') &&
+                    value.every(
+                      (/** @type {any} */ slot) =>
+                        line.includes(`${slot.name} (${slot.kind})`),
+                    ),
+                ),
+                label,
+              ).toBe(true);
+              continue;
+            }
             expect(printsField(verbose, key, value), label).toBe(true);
-            if (key !== 'score' && key !== 'reason') {
+            // score, reason and a block's fits print under --verbose only.
+            if (key !== 'score' && key !== 'reason' && key !== 'fits') {
               // The plain view keeps the first sentence of a description.
               const shown =
                 key === 'description' ? firstSentence(value) : value;

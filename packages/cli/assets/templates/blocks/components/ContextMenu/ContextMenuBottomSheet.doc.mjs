@@ -17,4 +17,5 @@ export const doc = {
     ShareIcon: 'share',
     TrashIcon: 'delete',
   },
+  fits: ['overlay'],
 };

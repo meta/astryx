@@ -11,4 +11,5 @@ export const doc = {
   aspectRatio: 4 / 1,
   componentsUsed: ['Breadcrumbs', 'Icon'],
   icons: {HomeIcon: 'home'},
+  fits: ['navigation', 'header'],
 };

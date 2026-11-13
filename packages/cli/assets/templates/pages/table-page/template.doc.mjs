@@ -29,4 +29,36 @@ export const doc = {
   isReady: true,
   category: 'Table - Basic',
   icons: {ArrowDownTrayIcon: 'download', MagnifyingGlassIcon: 'search'},
+  slots: [
+    {
+      name: 'header',
+      kind: 'header',
+      description:
+        'Top masthead with the record title, a Download PDF button, and a MetadataList of record-level facts.',
+    },
+    {
+      name: 'filters',
+      kind: 'toolbar',
+      description:
+        'Control row under the masthead: scope SegmentedControl on the left, search TextInput on the right.',
+    },
+    {
+      name: 'table',
+      kind: 'table',
+      description:
+        'Body band holding the sortable, filterable Table of rows, swapped for an EmptyState when nothing matches.',
+    },
+    {
+      name: 'totals',
+      kind: 'metrics',
+      description:
+        'Right-aligned stack of TotalRow figures between Dividers under the table, computed from the visible rows.',
+    },
+    {
+      name: 'notice',
+      kind: 'feedback',
+      description:
+        'Warning Banner at the bottom saying totals are partial while filters are on, with a clear action.',
+    },
+  ],
 };

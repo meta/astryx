@@ -11,4 +11,5 @@ export const doc = {
   isShowcase: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['TopNav', 'TopNavMegaMenu', 'TopNavMegaMenuFeaturedCard', 'TopNavMegaMenuItem'],
+  fits: ['overlay', 'navigation'],
 };

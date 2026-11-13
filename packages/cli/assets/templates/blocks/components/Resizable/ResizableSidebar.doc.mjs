@@ -22,4 +22,5 @@ export const doc = {
     'Button',
     'Text',
   ],
+  fits: ['panel'],
 };

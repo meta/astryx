@@ -15,4 +15,24 @@ export const doc = {
     CpuChipIcon: 'cpu',
     CubeIcon: 'package',
   },
+  slots: [
+    {
+      name: 'header',
+      kind: 'header',
+      description:
+        'Layout header at the top with the page title and a one-line supporting summary.',
+    },
+    {
+      name: 'steps',
+      kind: 'form',
+      description:
+        'Vertical Stepper in the body; each step expands in place with its fields, checks, or review card.',
+    },
+    {
+      name: 'status',
+      kind: 'feedback',
+      description:
+        'Supporting note below the stepper, shown when a check fails, saying setup is paused at that step.',
+    },
+  ],
 };

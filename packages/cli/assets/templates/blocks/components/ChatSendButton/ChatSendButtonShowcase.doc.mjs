@@ -12,4 +12,5 @@ export const doc = {
   aspectRatio: 16 / 9,
   componentsUsed: ['Chat', 'ChatSendButton', 'Icon', 'Layout'],
   icons: {SparklesIcon: 'sparkles'},
+  fits: [],
 };

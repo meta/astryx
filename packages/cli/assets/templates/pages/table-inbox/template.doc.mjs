@@ -43,4 +43,30 @@ export const doc = {
     UsersIcon: 'users',
     XMarkIcon: 'close',
   },
+  slots: [
+    {
+      name: 'header',
+      kind: 'header',
+      description:
+        'Top row of the LayoutHeader: Inbox heading, unread count, and the Refresh and Compose buttons.',
+    },
+    {
+      name: 'tabs',
+      kind: 'navigation',
+      description:
+        'Category tab strip with unread badges under the title row; a bulk-action bar replaces it while rows are selected.',
+    },
+    {
+      name: 'messages',
+      kind: 'table',
+      description:
+        'Scrollable LayoutContent holding the conversation table, or an empty state when the category has no conversations.',
+    },
+    {
+      name: 'reading-pane',
+      kind: 'panel',
+      description:
+        'Resizable end LayoutPanel after the drag handle, showing the open thread\'s collapsible messages and reply action.',
+    },
+  ],
 };

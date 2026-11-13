@@ -27,4 +27,30 @@ export const doc = {
     PencilSquareIcon: 'compose',
     SparklesIcon: 'sparkles',
   },
+  slots: [
+    {
+      name: 'greeting',
+      kind: 'header',
+      description:
+        'Top of the centered column: sparkles icon, personalized hello, and the \'Where should we start?\' display title.',
+    },
+    {
+      name: 'composer',
+      kind: 'chat',
+      description:
+        'Centered ChatComposer below the greeting with input, attachment drawer, mode and settings menus, and dictation.',
+    },
+    {
+      name: 'categories',
+      kind: 'toolbar',
+      description:
+        'ToggleButtonGroup under the composer for picking a prompt category: Writing, Coding, Research, Creative.',
+    },
+    {
+      name: 'suggestions',
+      kind: 'list',
+      description:
+        'Grid of clickable suggestion cards below the category toggles that insert a starter prompt into the composer.',
+    },
+  ],
 };

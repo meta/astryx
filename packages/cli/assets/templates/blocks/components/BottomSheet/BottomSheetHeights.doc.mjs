@@ -18,4 +18,5 @@ export const doc = {
     'Stack',
     'Text',
   ],
+  fits: [],
 };

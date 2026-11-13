@@ -16,4 +16,5 @@ export const doc = {
     BookmarkIcon: 'bookmark',
     StarIcon: 'star',
   },
+  fits: ['inline', 'toolbar'],
 };

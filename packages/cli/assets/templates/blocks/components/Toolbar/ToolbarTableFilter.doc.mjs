@@ -28,4 +28,5 @@ export const doc = {
     'EmptyState',
   ],
   icons: {Columns3Cog: 'viewColumns', Search: 'search'},
+  fits: ['toolbar', 'table'],
 };

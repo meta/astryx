@@ -31,4 +31,36 @@ export const doc = {
     UserGroupIcon: 'users',
     XMarkIcon: 'close',
   },
+  slots: [
+    {
+      name: 'workspace-rail',
+      kind: 'navigation',
+      description:
+        'Narrow 68px far-left column with workspace avatar, home, DMs, activity, saved, and settings icon buttons.',
+    },
+    {
+      name: 'channel-sidebar',
+      kind: 'navigation',
+      description:
+        '260px second column with workspace heading, jump-to search, and compact channel and direct message lists.',
+    },
+    {
+      name: 'stream-header',
+      kind: 'header',
+      description:
+        'Top of the center column showing channel name, topic, online count, and members button.',
+    },
+    {
+      name: 'messages',
+      kind: 'chat',
+      description:
+        'Center column body with the channel message stream, date dividers, empty state, and message composer.',
+    },
+    {
+      name: 'thread-panel',
+      kind: 'panel',
+      description:
+        'Right 340px column with thread header, root message, replies, and a compact reply composer.',
+    },
+  ],
 };

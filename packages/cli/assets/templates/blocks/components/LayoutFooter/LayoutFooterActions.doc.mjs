@@ -19,4 +19,5 @@ export const doc = {
     'HStack',
     'Button',
   ],
+  fits: ['footer'],
 };

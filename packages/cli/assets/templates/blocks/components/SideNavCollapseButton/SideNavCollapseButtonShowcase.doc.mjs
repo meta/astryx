@@ -11,4 +11,5 @@ export const doc = {
   isShowcase: true,
   aspectRatio: 4 / 3,
   componentsUsed: ['SideNav', 'SideNavCollapseButton', 'SideNavItem', 'SideNavSection'],
+  fits: ['navigation'],
 };

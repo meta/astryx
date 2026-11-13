@@ -16,4 +16,30 @@ export const doc = {
     ShieldCheckIcon: 'shield',
     TruckIcon: 'shipping',
   },
+  slots: [
+    {
+      name: 'header',
+      kind: 'header',
+      description:
+        'Top of the centered section: page title, secure-checkout note, and a divider.',
+    },
+    {
+      name: 'fields',
+      kind: 'form',
+      description:
+        'Left column of form sections: sign-in, contact, shipping, delivery, payment, billing, promo and gift.',
+    },
+    {
+      name: 'footer',
+      kind: 'footer',
+      description:
+        'Bottom of the form column: trust badges, Place Order and Continue Shopping buttons, policy links.',
+    },
+    {
+      name: 'summary',
+      kind: 'panel',
+      description:
+        'Sticky right-column card: collapsible order summary with line items, totals and free-shipping banner.',
+    },
+  ],
 };

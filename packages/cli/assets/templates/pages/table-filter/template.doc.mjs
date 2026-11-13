@@ -47,4 +47,30 @@ export const doc = {
     UserPlus: 'userAdd',
     X: 'close',
   },
+  slots: [
+    {
+      name: 'header',
+      kind: 'header',
+      description:
+        'Top of the layout header: the Service jobs title with the New job primary action.',
+    },
+    {
+      name: 'filters',
+      kind: 'toolbar',
+      description:
+        'Row under the title: filter selectors or power search, saved views, view options, and bulk selection bar.',
+    },
+    {
+      name: 'table',
+      kind: 'table',
+      description:
+        'Main content area: the service jobs table with grouping, sorting, selection, empty state and infinite loading.',
+    },
+    {
+      name: 'details',
+      kind: 'panel',
+      description:
+        'Resizable end panel showing the clicked job\'s metadata, next action and site history.',
+    },
+  ],
 };

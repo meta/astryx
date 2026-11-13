@@ -11,4 +11,5 @@ export const doc = {
   isShowcase: true,
   componentsUsed: ['Icon', 'Layout', 'Token'],
   icons: {TagIcon: 'tag'},
+  fits: [],
 };

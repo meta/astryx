@@ -39,8 +39,18 @@
  * @property {string[]} [alsoExampleFor] - Additional component pages that receive this example.
  * @property {string[]} [alsoShowcaseFor] - Additional component pages that reuse this showcase.
  * @property {boolean} [isShowcase] - Whether a block is the component's primary showcase.
+ * @property {TemplateSlotEntry[]} [slots] - A page's named places where blocks go, in reading order, as its doc declares them.
+ * @property {string[]} [fits] - The kinds of place a block goes in, best first, as its doc declares them; empty for a reference block, which shows a component's options and is not placed in a page as it is.
  * @property {boolean} isReady
  * @property {boolean} [scaffold]
+ */
+
+/**
+ * A named place in a page template where blocks go.
+ * @typedef {object} TemplateSlotEntry
+ * @property {string} name - The slot's name, unique in the page.
+ * @property {string} kind - What kind of place it is: a region (`navigation`, `header`, `toolbar`, `main`, `panel`, `footer`) or a section of the body named by what it holds (`metrics`, `chart`, `table`, `list`, `form`, `content`, `feedback`, `chat`). A template from a newer release can name a kind this list lacks.
+ * @property {string} [description] - Where the slot is in the page and what goes there.
  */
 
 /**
@@ -57,6 +67,8 @@
  * @property {number} data.demoMediaReplaced Astryx demo media references (images, posters, videos) replaced in the returned source: images with a neutral placeholder, videos with an empty source. Swap in your own media at those points; no media is installed. 0 when the template carried none.
  * @property {number} data.demoContentReplaced Astryx docs-only demo content elements (such as a playing card's face in a motion example) replaced in the returned source with a `<Text>Card content</Text>` placeholder. Put your own content there. 0 when the template carried none.
  * @property {TemplateIconsReport} [data.icons] Experimental, present only when the project sets `experimental.iconSet`: how the template's icons follow the project's icon set, each icon `mapped` (source and target), a `placeholder`, or `kept`, the sets used with their licenses, and the icon-set state. It may change or be removed in a patch release.
+ * @property {TemplateSlotEntry[]} [data.slots] A page's named places where blocks go, in reading order; present when its doc declares them.
+ * @property {string[]} [data.fits] The kinds of place a block goes in, best first; present when its doc declares them, and empty for a reference block.
  */
 
 /**
@@ -69,6 +81,8 @@
  * @property {string} data.description
  * @property {string[]} data.components
  * @property {string} data.skeleton
+ * @property {TemplateSlotEntry[]} [data.slots] A page's named places where blocks go, in reading order; present when its doc declares them.
+ * @property {string[]} [data.fits] The kinds of place a block goes in, best first; present when its doc declares them, and empty for a reference block.
  */
 
 /**

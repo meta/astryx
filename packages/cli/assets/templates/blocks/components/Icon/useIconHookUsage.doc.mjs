@@ -16,4 +16,5 @@ export const doc = {
     ExclamationCircleIcon: 'warning',
     NoSymbolIcon: 'error',
   },
+  fits: [],
 };

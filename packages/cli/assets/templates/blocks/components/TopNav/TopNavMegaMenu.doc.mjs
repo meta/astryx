@@ -19,4 +19,5 @@ export const doc = {
     GlobeAltIcon: 'globe',
     ShieldCheckIcon: 'shield',
   },
+  fits: ['navigation'],
 };

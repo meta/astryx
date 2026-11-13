@@ -19,4 +19,24 @@ export const doc = {
   isHiddenFromOverview: true,
   category: 'Login - Basic',
   icons: {CubeIcon: 'package'},
+  slots: [
+    {
+      name: 'brand',
+      kind: 'header',
+      description:
+        'Top of the centered column: product logo icon and product name above the sign-in card.',
+    },
+    {
+      name: 'alerts',
+      kind: 'feedback',
+      description:
+        'Inside the card below the heading: error banner shown when sign-in validation fails.',
+    },
+    {
+      name: 'fields',
+      kind: 'form',
+      description:
+        'Centered card body: Sign in heading, email and password inputs, and the primary submit button.',
+    },
+  ],
 };

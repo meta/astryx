@@ -2,7 +2,8 @@
 
 /**
  * @file `astryx docs authoring/building-blocks/templates/document-the-template/block-template`:
- * the block-only fields: component relationships and the preview shape.
+ * the block-only fields: where the block goes, component relationships and the
+ * preview shape.
  */
 
 /** @type {import('@astryxdesign/cli/authoring').ReferenceDoc} */
@@ -17,7 +18,7 @@ export const docs = {
   title: 'Block template',
   category: 'guide',
   description:
-    'Describe a smaller composition, choose its preview shape, and connect it to component examples only when that relationship is real.',
+    'Describe a smaller composition, say where it goes in a page, choose its preview shape, and connect it to component examples only when that relationship is real.',
   sections: [
     {
       id: 'start-with-a-standalone-block',
@@ -41,6 +42,7 @@ export default {
   isReady: false,
   aspectRatio: 4 / 3,
   componentsUsed: ['Card', 'HStack', 'Text', 'VStack'],
+  fits: ['metrics'],
 };`,
         },
         {
@@ -83,6 +85,26 @@ export default {
         {
           type: 'prose',
           text: 'Then check the package-scoped template list ({@link generic:template-doc-overview}) and confirm the entry carries the relationship you set. `{@command component}` does not show integration blocks, so the list is where to check.',
+        },
+      ],
+    },
+    {
+      id: 'say-where-the-block-goes',
+      title: 'Say where the block goes',
+      content: [
+        {
+          type: 'prose',
+          text: 'Declare `fits` so `{@command build}` can put the block into the right slot of the page it starts from. Page templates name their slots with the same kinds. {@link schema:template-doc} describes each kind and the release that first reads `fits`.',
+        },
+        {
+          type: 'list',
+          style: 'unordered',
+          items: [
+            'Decide from what the block renders and what a builder uses it for, not from the component name alone.',
+            'Give a whole part of a page body its section kind, and a region of the page its region kind. Use `main` only for a block that fills a whole page body.',
+            'A block that opens above the page from a trigger fits `overlay`, even when the block also shows the trigger. A small piece that goes inside another piece fits `inline`; a single control goes with the section it serves.',
+            "Use an empty list (`fits: []`) for a reference that lays out a component's options side by side, and for a block that frames a whole app or page, which a page template starts instead.",
+          ],
         },
       ],
     },

@@ -32,4 +32,30 @@ export const doc = {
     ShareIcon: 'share',
     XMarkIcon: 'close',
   },
+  slots: [
+    {
+      name: 'messages',
+      kind: 'chat',
+      description:
+        'Scrolling message list in the left chat column with user and assistant turns, tool calls, code, and system notes.',
+    },
+    {
+      name: 'composer',
+      kind: 'chat',
+      description:
+        'Chat composer pinned below the message list, with mention, attach, and mode controls.',
+    },
+    {
+      name: 'artifact-toolbar',
+      kind: 'toolbar',
+      description:
+        'Toolbar at the top of the right artifact panel with document title, version menu, copy, share, and close.',
+    },
+    {
+      name: 'artifact',
+      kind: 'panel',
+      description:
+        'Resizable side panel right of the chat holding the scrollable generated markdown document.',
+    },
+  ],
 };

@@ -26,4 +26,36 @@ export const doc = {
     PencilSquareIcon: 'compose',
     ViewColumnsIcon: 'viewColumns',
   },
+  slots: [
+    {
+      name: 'header',
+      kind: 'header',
+      description:
+        'Top page header with back link, order number, status metadata, Restock and Edit actions, and view tabs.',
+    },
+    {
+      name: 'items',
+      kind: 'list',
+      description:
+        'First body section listing the order\'s line items with thumbnails, details, prices, and fulfillment actions.',
+    },
+    {
+      name: 'invoice',
+      kind: 'content',
+      description:
+        'Body section below items showing subtotal, discount, shipping, tax, total, and payment metadata.',
+    },
+    {
+      name: 'timeline',
+      kind: 'list',
+      description:
+        'Last body section with a chronological activity feed of events, comments, and updates.',
+    },
+    {
+      name: 'details',
+      kind: 'panel',
+      description:
+        'Right side panel with collapsible notes, customer info, and fraud analysis; hideable from the header.',
+    },
+  ],
 };

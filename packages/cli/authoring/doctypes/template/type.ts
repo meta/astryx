@@ -105,11 +105,71 @@ export interface BlockTemplateDoc extends BaseTemplateDoc {
   /** When true this block is the canonical hero showcase for `exampleFor`.
    *  Requires `exampleFor`; standalone blocks cannot be component showcases. */
   isShowcase?: boolean;
+  /** The kinds of place this block goes in, best first: the page slots it
+   *  fills (`'toolbar'`, `'metrics'`, …) or the context it works in
+   *  (`'overlay'` opens from a trigger, `'inline'` goes inside another
+   *  piece). An empty list says the block is a reference: it shows a
+   *  component's options side by side and is not put into a page as it is.
+   *  Decide it from what the block renders. `astryx build` uses it to name
+   *  the slot of the start template each block goes in. Integration
+   *  templates need `@astryxdesign/cli` 0.7.16 or later: earlier CLIs reject
+   *  the field and drop that template. */
+  fits?: TemplateSlotKind[];
 }
 
 export interface PageTemplateDoc extends BaseTemplateDoc {
   type: 'page';
+  /** The named places in this page where blocks go, in reading order: its
+   *  navigation, header, toolbar, side panels and footer, and each part of
+   *  its body named by what it holds. `astryx build` puts each block it
+   *  names into the first slot whose kind the block fits. Integration
+   *  templates need `@astryxdesign/cli` 0.7.16 or later: earlier CLIs reject
+   *  the field and drop that template. */
+  slots?: TemplateSlot[];
 }
+
+/**
+ * A named place in a page template where blocks go.
+ */
+export interface TemplateSlot {
+  /** The slot's name, unique in the page: lowercase words joined by hyphens,
+   *  named for what it holds (`'filters'`, `'kpis'`, `'activity'`). */
+  name: string;
+  /** What kind of place it is. A block fits the slot when the block's
+   *  `fits` lists this kind; a `main` slot takes every block that goes in
+   *  a page. */
+  kind: TemplateSlotKind;
+  /** Where the slot is in the page and what goes there, in one sentence, so
+   *  a builder finds it in the source. */
+  description?: string;
+}
+
+/**
+ * The kinds of place a block goes, shared by page slots and block fits.
+ * Regions are places in a page's layout; sections are parts of a page body,
+ * named by what they hold; `overlay` and `inline` are contexts, which no page
+ * slot holds. `astryx docs authoring/template-doc` describes each one.
+ */
+export type TemplateSlotKind =
+  // Regions
+  | 'navigation'
+  | 'header'
+  | 'toolbar'
+  | 'main'
+  | 'panel'
+  | 'footer'
+  // Sections
+  | 'metrics'
+  | 'chart'
+  | 'table'
+  | 'list'
+  | 'form'
+  | 'content'
+  | 'feedback'
+  | 'chat'
+  // Contexts
+  | 'overlay'
+  | 'inline';
 
 /**
  * Functional category for a page template, used to group templates on the

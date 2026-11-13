@@ -17,4 +17,18 @@ export const doc = {
   ],
   isReady: true,
   category: 'Content - Documentation Catalog',
+  slots: [
+    {
+      name: 'banner',
+      kind: 'header',
+      description:
+        'Gray card at the top with the display title, intro text, and a primary get-started button.',
+    },
+    {
+      name: 'categories',
+      kind: 'list',
+      description:
+        'Below the banner, headed groups of clickable category cards in a grid, each linking into a section.',
+    },
+  ],
 };

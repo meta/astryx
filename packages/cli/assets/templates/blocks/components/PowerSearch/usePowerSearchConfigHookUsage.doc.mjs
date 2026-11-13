@@ -11,4 +11,5 @@ export const doc = {
   isReady: true,
   aspectRatio: 4 / 3,
   componentsUsed: ['PowerSearch', 'Table', 'Layout'],
+  fits: ['table', 'toolbar'],
 };

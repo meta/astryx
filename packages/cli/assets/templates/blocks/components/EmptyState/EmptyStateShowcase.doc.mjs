@@ -13,4 +13,5 @@ export const doc = {
   aspectRatio: 1,
   componentsUsed: ['EmptyState', 'Button', 'Icon'],
   icons: {MagnifyingGlassIcon: 'search'},
+  fits: ['feedback', 'list'],
 };

@@ -10,4 +10,5 @@ export const doc = {
   isReady: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['Tokenizer', 'Button', 'Layout', 'Text'],
+  fits: ['form', 'toolbar'],
 };

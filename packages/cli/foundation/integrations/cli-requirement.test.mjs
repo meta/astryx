@@ -12,6 +12,7 @@ import {
   DOC_TOKENS_CLI,
   STABILITY_CLI,
   TEMPLATE_ICONS_CLI,
+  TEMPLATE_SLOTS_CLI,
   TEMPLATE_REPLACES_CLI,
   cliRangeProblem,
   componentReplacesCliProblem,
@@ -344,6 +345,8 @@ describe('every feature check names its CLI floor', () => {
     themesCliProblem: '0.6.4',
     stabilityCliProblem: STABILITY_CLI,
     templateIconsCliProblem: TEMPLATE_ICONS_CLI,
+    // The release that first reads a page's `slots` and a block's `fits`.
+    templateSlotsCliProblem: TEMPLATE_SLOTS_CLI,
     // The release doc tokens ship in.
     docTokensCliProblem: '0.7.4',
   };

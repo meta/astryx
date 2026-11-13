@@ -11,4 +11,5 @@ export const doc = {
   isReady: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['Collapsible', 'Divider', 'Text', 'Stack'],
+  fits: ['panel', 'content'],
 };

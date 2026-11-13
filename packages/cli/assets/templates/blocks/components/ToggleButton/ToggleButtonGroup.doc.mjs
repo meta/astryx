@@ -25,4 +25,5 @@ export const doc = {
     TableCellsIcon: 'table',
     UnderlineIcon: 'underline',
   },
+  fits: ['toolbar'],
 };

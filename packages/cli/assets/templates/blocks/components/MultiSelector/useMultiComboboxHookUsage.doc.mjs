@@ -20,4 +20,5 @@ export const doc = {
     'Token',
     'Layout',
   ],
+  fits: ['form', 'inline'],
 };

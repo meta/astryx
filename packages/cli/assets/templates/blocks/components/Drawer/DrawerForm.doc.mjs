@@ -21,4 +21,5 @@ export const doc = {
     'VStack',
     'TextInput',
   ],
+  fits: ['overlay', 'form'],
 };

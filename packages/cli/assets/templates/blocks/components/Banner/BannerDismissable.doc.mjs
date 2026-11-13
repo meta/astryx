@@ -10,4 +10,5 @@ export const doc = {
   isReady: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['Banner', 'Layout'],
+  fits: ['feedback'],
 };

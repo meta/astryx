@@ -11,4 +11,5 @@ export const doc = {
   isShowcase: true,
   aspectRatio: 1,
   componentsUsed: ['ContextMenu'],
+  fits: ['overlay'],
 };

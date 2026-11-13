@@ -11,4 +11,5 @@ export const doc = {
   isReady: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['HStack', 'Badge'],
+  fits: ['inline', 'list'],
 };

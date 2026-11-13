@@ -106,3 +106,61 @@ describe('kitAnswer', () => {
     expect(kit.data.blocks[0].description.length).toBeGreaterThan(0);
   });
 });
+
+describe('kitAnswer places each block in a slot of the start', () => {
+  const start = {
+    name: 'dashboard',
+    package: '@a/one',
+    slots: [
+      {name: 'filters', kind: 'toolbar', description: 'The filter bar.'},
+      {name: 'kpis', kind: 'metrics', description: 'The headline tiles.'},
+      {name: 'body', kind: 'main', description: 'Everything else.'},
+    ],
+  };
+  const bar = {name: 'FilterBar', package: '@a/one', score: 90, reason: 'name'};
+  const tile = {name: 'StatTile', package: '@a/one', score: 80, reason: 'name'};
+  const menu = {name: 'RowMenu', package: '@a/one', score: 70, reason: 'name'};
+  const form = {name: 'SignupForm', package: '@a/one', score: 60, reason: 'name'};
+  const sizes = {name: 'ButtonSizes', package: '@a/one', score: 50, reason: 'name'};
+  const catalog = [
+    {...bar, fits: ['toolbar']},
+    {...tile, fits: ['metrics', 'list']},
+    {...menu, fits: ['overlay']},
+    {...form, fits: ['form']},
+    {...sizes, fits: []},
+  ];
+  const kit = (/** @type {any} */ withStart, /** @type {any[]} */ blocks) =>
+    kitAnswer(
+      /** @type {any} */ ({
+        ...signals(blocks),
+        start: withStart,
+        catalog,
+      }),
+    );
+
+  it("names the slot of each block's best fit, else the page body", () => {
+    const placed = kit(start, [bar, tile, form]).data.blocks.map(b => [
+      b.name,
+      /** @type {any} */ (b).slot,
+    ]);
+    expect(placed).toEqual([
+      ['FilterBar', 'filters'],
+      ['StatTile', 'kpis'],
+      ['SignupForm', 'body'],
+    ]);
+  });
+
+  it('carries each block’s declared fits, and no slot for an overlay or a reference', () => {
+    const blocks = /** @type {any[]} */ (kit(start, [menu, sizes]).data.blocks);
+    expect(blocks[0]).toEqual({...menu, fits: ['overlay']});
+    expect(blocks[1]).toEqual({...sizes, fits: []});
+  });
+
+  it('adds no slot without a start or without slots, and leaves undeclared blocks as they are', () => {
+    const none = kit(null, [bar]).data.blocks[0];
+    expect(none).toEqual({...bar, fits: ['toolbar']});
+    const plain = {name: 'Plain', package: '@a/one', score: 40, reason: 'name'};
+    expect(kit(start, [plain]).data.blocks[0]).toBe(plain);
+  });
+});
+

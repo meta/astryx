@@ -69,6 +69,10 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template ToolbarTableFilter --type block",
+        "fits": [
+          "<text>",
+          "<text>"
+        ],
         "mentions": []
       },
       {

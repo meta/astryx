@@ -37,4 +37,18 @@ export const doc = {
     SwatchIcon: 'swatch',
     TagIcon: 'tag',
   },
+  slots: [
+    {
+      name: 'nav',
+      kind: 'navigation',
+      description:
+        'Top bar with brand heading, centered mega-menu and link items, and end search, sign-in and checkout actions.',
+    },
+    {
+      name: 'body',
+      kind: 'main',
+      description:
+        'Centered, width-capped page body under the top nav, holding placeholder content for any page sections.',
+    },
+  ],
 };

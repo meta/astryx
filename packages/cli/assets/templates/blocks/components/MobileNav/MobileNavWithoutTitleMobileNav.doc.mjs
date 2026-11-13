@@ -11,4 +11,5 @@ export const doc = {
   aspectRatio: 4 / 3,
   componentsUsed: ['MobileNav', 'SideNav', 'Button', 'Icon'],
   icons: {FolderIcon: 'folder', HomeIcon: 'home'},
+  fits: ['overlay', 'navigation'],
 };

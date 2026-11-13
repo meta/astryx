@@ -12,4 +12,5 @@ export const doc = {
   description:
     'A fullscreen image viewer with caption.',
   componentsUsed: ['Lightbox'],
+  fits: ['overlay'],
 };

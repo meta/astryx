@@ -10,4 +10,5 @@ export const doc = {
   isReady: true,
   aspectRatio: 4 / 3,
   componentsUsed: ['Grid', 'GridSpan', 'Card', 'Text'],
+  fits: ['metrics', 'main'],
 };

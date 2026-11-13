@@ -16,4 +16,5 @@ export const doc = {
     'ChatComposer',
     'ChatComposerInput',
   ],
+  fits: ['chat', 'inline'],
 };

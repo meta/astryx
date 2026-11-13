@@ -18,4 +18,18 @@ export const doc = {
   isReady: true,
   category: 'Gallery - Hero',
   icons: {ArrowRightIcon: 'arrowRight'},
+  slots: [
+    {
+      name: 'header',
+      kind: 'header',
+      description:
+        'Centered top stack with the display headline, short blurb, and primary and secondary call-to-action buttons.',
+    },
+    {
+      name: 'gallery',
+      kind: 'list',
+      description:
+        'Responsive photo grid below the header showing a set of 4:5 rounded images.',
+    },
+  ],
 };

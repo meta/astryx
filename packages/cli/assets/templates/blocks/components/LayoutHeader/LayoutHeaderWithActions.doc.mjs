@@ -20,4 +20,5 @@ export const doc = {
     'Heading',
     'Button',
   ],
+  fits: ['header'],
 };

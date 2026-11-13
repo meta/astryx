@@ -46,6 +46,49 @@ describe('parseTemplate (load boundary)', () => {
     }
   });
 
+  it("accepts a page's slots and a block's fits, an unknown kind included", () => {
+    const page = parseTemplate({
+      type: 'page',
+      name: 'Acme dashboard',
+      slots: [
+        {name: 'filters', kind: 'toolbar', description: 'The filter bar.'},
+        {name: 'hologram', kind: 'hologram-wall'},
+      ],
+    });
+    expect(page.type === 'page' && page.slots?.map(s => s.name)).toEqual([
+      'filters',
+      'hologram',
+    ]);
+    const block = parseTemplate({
+      type: 'block',
+      name: 'Acme filter bar',
+      fits: ['toolbar', 'hologram-wall'],
+    });
+    expect(block.type === 'block' && block.fits).toEqual([
+      'toolbar',
+      'hologram-wall',
+    ]);
+    const reference = parseTemplate({type: 'block', name: 'Acme sizes', fits: []});
+    expect(reference.type === 'block' && reference.fits).toEqual([]);
+  });
+
+  it('rejects a slot or fit that is not a lowercase name, and fields on the wrong kind', () => {
+    expect(
+      reason({type: 'page', name: 'Acme', slots: [{name: 'Filters', kind: 'toolbar'}]}),
+    ).toMatch(/slot name/);
+    expect(
+      reason({type: 'page', name: 'Acme', slots: [{name: 'filters', kind: 'Tool Bar'}]}),
+    ).toMatch(/slot kind/);
+    expect(
+      reason({type: 'page', name: 'Acme', slots: [{name: 'filters', kind: 'toolbar', size: 2}]}),
+    ).toMatch(/size/);
+    expect(reason({type: 'block', name: 'Acme', fits: 'toolbar'})).toMatch(/fits/);
+    expect(reason({type: 'page', name: 'Acme', fits: ['toolbar']})).toMatch(/fits/);
+    expect(
+      reason({type: 'block', name: 'Acme', slots: [{name: 'a', kind: 'main'}]}),
+    ).toMatch(/slots/);
+  });
+
   it('rejects keywords that are not a list of words', () => {
     expect(
       reason({type: 'page', name: 'Acme health', keywords: 'uptime'}),

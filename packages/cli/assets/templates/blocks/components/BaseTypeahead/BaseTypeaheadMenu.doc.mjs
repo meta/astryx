@@ -20,4 +20,5 @@ export const doc = {
     'Text',
   ],
   icons: {FunnelIcon: 'funnel'},
+  fits: ['toolbar'],
 };

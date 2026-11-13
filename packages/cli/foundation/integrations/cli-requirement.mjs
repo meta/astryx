@@ -93,6 +93,16 @@ export const STABILITY_CLI = '0.7.4';
 export const TEMPLATE_ICONS_CLI = '0.7.4';
 
 /**
+ * The first stable CLI release that reads a page template's `slots` and a
+ * block template's `fits`. Published 0.7.15 refuses either field and drops
+ * that template.
+ *
+ * Tied to the next patch slot: it must equal the first stable release that
+ * reads the fields.
+ */
+export const TEMPLATE_SLOTS_CLI = '0.7.16';
+
+/**
  * The first CLI release that reads a doc section's `before` and `after`.
  * Earlier releases reject the fields and hide every doc topic the package
  * ships.
@@ -391,6 +401,22 @@ export function templateIconsCliProblem(pkg) {
     'has a template that declares `icons`',
     'rejects the field and drops that template',
     TEMPLATE_ICONS_CLI,
+  );
+}
+
+/**
+ * Why a package with a page template that declares `slots` or a block
+ * template that declares `fits` would lose that template on an older CLI, or
+ * null when its declared CLI range admits only CLIs that read the fields.
+ * @param {any} pkg package.json
+ * @returns {string | null}
+ */
+export function templateSlotsCliProblem(pkg) {
+  return cliRangeProblem(
+    pkg,
+    'has a template that declares `slots` or `fits`',
+    'rejects the field and drops that template',
+    TEMPLATE_SLOTS_CLI,
   );
 }
 

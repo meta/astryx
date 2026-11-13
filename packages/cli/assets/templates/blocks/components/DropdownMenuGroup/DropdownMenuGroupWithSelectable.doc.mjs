@@ -17,4 +17,5 @@ export const doc = {
     'DropdownMenuRadioItem',
     'DropdownMenuCheckboxItem',
   ],
+  fits: ['overlay', 'toolbar'],
 };

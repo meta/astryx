@@ -18,4 +18,5 @@ export const doc = {
     'DrawerHeader',
     'Text',
   ],
+  fits: ['overlay', 'navigation'],
 };

@@ -12,4 +12,5 @@ export const doc = {
   aspectRatio: 4 / 3,
   componentsUsed: ['Typeahead', 'Center'],
   icons: {MagnifyingGlassIcon: 'search'},
+  fits: ['form', 'toolbar'],
 };

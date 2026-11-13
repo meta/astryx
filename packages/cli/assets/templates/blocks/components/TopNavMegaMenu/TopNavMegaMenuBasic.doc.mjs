@@ -18,4 +18,5 @@ export const doc = {
     'TopNavMegaMenuItem',
   ],
   icons: {BookOpenIcon: 'book', RocketLaunchIcon: 'rocket'},
+  fits: ['navigation', 'overlay'],
 };

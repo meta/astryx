@@ -12,4 +12,5 @@ export const doc = {
   aspectRatio: 4 / 3,
   componentsUsed: ['Pagination', 'Card', 'Text', 'Layout', 'Icon', 'Avatar'],
   icons: {StarIcon: 'star'},
+  fits: ['list', 'content'],
 };

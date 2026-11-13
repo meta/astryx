@@ -10,4 +10,5 @@ export const doc = {
   isReady: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['Card', 'Layout', 'Button', 'Text'],
+  fits: ['form', 'content'],
 };

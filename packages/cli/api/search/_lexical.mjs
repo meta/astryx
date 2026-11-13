@@ -96,6 +96,10 @@ import {toResult, searchedComponentsOf} from './_result.mjs';
  *   member; a query naming the family lists its first members.
  * @property {number} [_familyIndex] - The member's place in that doc's list.
  * @property {'page'|'block'} [_kind]
+ * @property {import('../../foundation/discovery/template-adapter.mjs').TemplateSlotInfo[]} [_slots] -
+ *   A page template's named places where blocks go, as its doc declares them.
+ * @property {string[]} [_fits] - The kinds of place a block template goes in,
+ *   best first, as its doc declares them.
  * @property {string} [_resultName]
  * @property {string} [_commandName]
  * @property {'file'|'doc'} [_hold] - How an integration component holds its

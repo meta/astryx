@@ -12,4 +12,5 @@ export const doc = {
   description:
     'A skeleton loading placeholder.',
   componentsUsed: ['Skeleton'],
+  fits: ['feedback', 'content'],
 };

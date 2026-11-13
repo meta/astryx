@@ -77,6 +77,8 @@ export function toResult(
         displayName: c._displayName,
         kind: c._kind,
         command: `astryx template ${c._commandName ?? c.name} --type ${c._kind}`,
+        ...(c._slots ? {slots: c._slots} : {}),
+        ...(c._fits ? {fits: c._fits} : {}),
       };
       break;
     case 'theme':

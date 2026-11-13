@@ -21,4 +21,5 @@ export const doc = {
     'Button',
     'Badge',
   ],
+  fits: [],
 };

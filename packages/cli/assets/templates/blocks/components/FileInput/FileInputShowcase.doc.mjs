@@ -9,4 +9,5 @@ export const doc = {
   aspectRatio: 16 / 9,
   isShowcase: true,
   componentsUsed: ['FileInput'],
+  fits: ['form', 'inline'],
 };

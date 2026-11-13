@@ -11,4 +11,18 @@ export const doc = {
   isReady: true,
   scaffold: true,
   category: 'Shell - Blank',
+  slots: [
+    {
+      name: 'heading',
+      kind: 'header',
+      description:
+        'Top of LayoutContent: the large Text title "New Page" that names the page.',
+    },
+    {
+      name: 'content',
+      kind: 'main',
+      description:
+        'The empty LayoutContent body below the heading, where the builder adds any section blocks.',
+    },
+  ],
 };

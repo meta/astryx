@@ -16,4 +16,5 @@ export const doc = {
     CubeIcon: 'package',
     ShieldCheckIcon: 'shield',
   },
+  fits: ['navigation'],
 };

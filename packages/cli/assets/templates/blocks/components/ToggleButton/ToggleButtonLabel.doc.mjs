@@ -22,4 +22,5 @@ export const doc = {
     FunnelIcon: 'funnel',
     MapPinIcon: 'location',
   },
+  fits: ['toolbar', 'inline'],
 };

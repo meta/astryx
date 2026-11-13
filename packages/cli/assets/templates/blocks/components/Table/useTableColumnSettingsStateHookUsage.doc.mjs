@@ -11,4 +11,5 @@ export const doc = {
   isReady: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['Button', 'CheckboxInput', 'Popover', 'Table', 'Layout'],
+  fits: ['table', 'toolbar'],
 };

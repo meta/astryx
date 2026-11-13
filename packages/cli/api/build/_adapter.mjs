@@ -49,6 +49,7 @@ export {withListingCache} from '../../foundation/fs/listing-cache.mjs';
  * @property {string[]} keywords The ideas the page serves, as its own descriptor names them; empty when it declares none.
  * @property {string} filePath Absolute path to the template source file on disk.
  * @property {string[]} components The components its page composes, read from its source on first use; empty when the source cannot be read.
+ * @property {import('../../foundation/discovery/template-adapter.mjs').TemplateSlotInfo[]} [slots] The named places in the page where blocks go, in reading order, as its doc declares them; absent when it declares none.
  */
 
 /**
@@ -82,6 +83,7 @@ export async function loadPageTemplates(cwd) {
  * @property {string} displayName Human-facing name.
  * @property {string} description What the block is.
  * @property {string} command `astryx template <id> --type block`, as search prints it.
+ * @property {string[]} [fits] The kinds of place the block goes in, best first, as its doc declares them; empty for a reference block, absent when it declares none.
  */
 
 /**
@@ -114,6 +116,7 @@ export async function loadTemplates(cwd) {
           // The id `template()` resolves back to this entry: an active
           // replacement owns the Core id it names, so that id selects it.
           command: `astryx template ${t.replaces ?? t.dirName} --type page`,
+          ...(t.slots ? {slots: t.slots} : {}),
         },
         t.filePath,
       ),
@@ -126,6 +129,7 @@ export async function loadTemplates(cwd) {
       displayName: t.name,
       description: t.description || '',
       command: `astryx template ${t.replaces ?? t.dirName} --type block`,
+      ...(t.fits ? {fits: t.fits} : {}),
     }));
   return {pages, blocks};
 }

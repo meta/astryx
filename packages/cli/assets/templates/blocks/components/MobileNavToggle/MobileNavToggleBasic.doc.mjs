@@ -20,4 +20,5 @@ export const doc = {
     'HStack',
     'Text',
   ],
+  fits: ['navigation', 'header'],
 };

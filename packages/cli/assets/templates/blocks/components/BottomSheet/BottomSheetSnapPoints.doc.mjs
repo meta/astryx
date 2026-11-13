@@ -28,4 +28,5 @@ export const doc = {
     FlagIcon: 'flag',
     MapPinIcon: 'location',
   },
+  fits: ['overlay', 'list'],
 };

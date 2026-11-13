@@ -6,6 +6,7 @@ $ astryx search close
 
 $ astryx template settings-dialog
 package: @astryxdesign/core
+<text>
 
 $ astryx theme list
 

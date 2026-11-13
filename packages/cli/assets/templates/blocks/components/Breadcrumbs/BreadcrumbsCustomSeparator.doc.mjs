@@ -10,4 +10,5 @@ export const doc = {
   isReady: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['Breadcrumbs', 'Layout', 'Text'],
+  fits: [],
 };

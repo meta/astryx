@@ -12,4 +12,5 @@ export const doc = {
   description:
     'A progress bar filled to 60%.',
   componentsUsed: ['ProgressBar'],
+  fits: ['feedback', 'inline'],
 };

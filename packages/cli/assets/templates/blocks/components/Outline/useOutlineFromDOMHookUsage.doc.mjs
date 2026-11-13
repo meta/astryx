@@ -18,4 +18,5 @@ export const doc = {
     'Text',
     'Layout',
   ],
+  fits: ['content', 'main'],
 };

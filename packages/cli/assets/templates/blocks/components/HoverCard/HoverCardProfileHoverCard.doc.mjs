@@ -12,4 +12,5 @@ export const doc = {
   aspectRatio: 16 / 9,
   componentsUsed: ['HoverCard', 'Button', 'Layout', 'Text'],
   icons: {CalendarIcon: 'calendar'},
+  fits: ['overlay', 'inline'],
 };

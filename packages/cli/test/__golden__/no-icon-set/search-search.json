@@ -116,6 +116,9 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template PowerSearchContentSearch --type block",
+        "fits": [
+          "<text>"
+        ],
         "mentions": []
       },
       {
@@ -128,6 +131,9 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template PowerSearchFullFeatured --type block",
+        "fits": [
+          "<text>"
+        ],
         "mentions": []
       },
       {
@@ -140,6 +146,9 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template PowerSearchPresetFilters --type block",
+        "fits": [
+          "<text>"
+        ],
         "mentions": []
       },
       {
@@ -152,6 +161,10 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template PowerSearchSearchWithTable --type block",
+        "fits": [
+          "<text>",
+          "<text>"
+        ],
         "mentions": []
       },
       {
@@ -164,6 +177,9 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template PowerSearchShowcase --type block",
+        "fits": [
+          "<text>"
+        ],
         "mentions": []
       },
       {
@@ -176,6 +192,9 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template TableFilterableTable --type block",
+        "fits": [
+          "<text>"
+        ],
         "mentions": []
       },
       {
@@ -188,6 +207,9 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template TableInlineFilterTable --type block",
+        "fits": [
+          "<text>"
+        ],
         "mentions": []
       },
       {
@@ -200,6 +222,10 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template usePowerSearchConfigHookUsage --type block",
+        "fits": [
+          "<text>",
+          "<text>"
+        ],
         "mentions": []
       },
       {

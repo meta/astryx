@@ -16,4 +16,5 @@ export const doc = {
     'Button',
     'ScrollableArea',
   ],
+  fits: ['table', 'metrics'],
 };

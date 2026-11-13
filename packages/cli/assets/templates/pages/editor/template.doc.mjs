@@ -42,4 +42,36 @@ export const doc = {
     ViewColumnsIcon: 'viewColumns',
     XMarkIcon: 'close',
   },
+  slots: [
+    {
+      name: 'header',
+      kind: 'header',
+      description:
+        'Top of the start sidebar panel: the page title heading, which can be edited inline.',
+    },
+    {
+      name: 'toolbar',
+      kind: 'toolbar',
+      description:
+        'Sidebar Toolbar under the title: viewport SegmentedControl at start, Preview and Publish buttons at end.',
+    },
+    {
+      name: 'tabs',
+      kind: 'navigation',
+      description:
+        'Sidebar TabList under the toolbar that switches between the Blocks and Properties views.',
+    },
+    {
+      name: 'inspector',
+      kind: 'panel',
+      description:
+        'Sidebar Section under the tabs: Add Block and Layers lists, or the selected block\'s properties form.',
+    },
+    {
+      name: 'canvas',
+      kind: 'main',
+      description:
+        'LayoutContent canvas: stacked block previews sized to the chosen viewport width, or an empty state.',
+    },
+  ],
 };

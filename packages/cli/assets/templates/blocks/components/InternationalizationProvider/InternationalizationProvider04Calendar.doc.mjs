@@ -19,4 +19,5 @@ export const doc = {
     'Layout',
     'Text',
   ],
+  fits: ['form', 'content'],
 };

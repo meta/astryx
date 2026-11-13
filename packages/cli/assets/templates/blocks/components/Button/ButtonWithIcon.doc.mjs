@@ -16,4 +16,5 @@ export const doc = {
     PlusIcon: 'add',
     TrashIcon: 'delete',
   },
+  fits: ['toolbar', 'header'],
 };

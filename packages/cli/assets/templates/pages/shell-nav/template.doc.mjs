@@ -23,4 +23,30 @@ export const doc = {
     MagnifyingGlassIcon: 'search',
     PlayIcon: 'play',
   },
+  slots: [
+    {
+      name: 'top-nav',
+      kind: 'navigation',
+      description:
+        'Top menu bar with File, Edit, View dropdown menus, command-palette search field, and run and share actions.',
+    },
+    {
+      name: 'side-nav',
+      kind: 'navigation',
+      description:
+        'Resizable left side rail holding a compact file hierarchy tree list.',
+    },
+    {
+      name: 'header',
+      kind: 'header',
+      description:
+        'Layout header with a divider at the top of the body, holding placeholder editor tab cards.',
+    },
+    {
+      name: 'content',
+      kind: 'main',
+      description:
+        'LayoutContent body below the header, holding placeholder code-line cards; any page section fits here.',
+    },
+  ],
 };

@@ -2,7 +2,7 @@
 
 /**
  * @file `astryx docs authoring/building-blocks/templates/document-the-template/page-template`:
- * the page-only fields that help people find a page.
+ * the page-only fields that help people find a page and name where blocks go.
  */
 
 /** @type {import('@astryxdesign/cli/authoring').ReferenceDoc} */
@@ -17,7 +17,7 @@ export const docs = {
   title: 'Page template',
   category: 'guide',
   description:
-    'Help people find a page: give it a category for `{@command search}` and template listings, and flag a sparse starting shell as a scaffold.',
+    'Help people find a page and fill it: give it a category for `{@command search}` and template listings, name the slots where blocks go, and flag a sparse starting shell as a scaffold.',
   sections: [
     {
       id: 'start-from-the-generated-page-doc',
@@ -40,7 +40,31 @@ export default {
     'A filterable account-health dashboard with headline metrics, trends, and a recent-activity table. Dashboard, reporting, analytics, or status overview.',
   category: 'Dashboard - Analytics',
   isReady: false,
+  slots: [
+    {name: 'header', kind: 'header', description: 'The title row.'},
+    {name: 'body', kind: 'main', description: 'Everything under the title row.'},
+  ],
 };`,
+        },
+      ],
+    },
+    {
+      id: 'name-the-places-blocks-go',
+      title: 'Name the places blocks go',
+      content: [
+        {
+          type: 'prose',
+          text: 'Declare `slots` so `{@command build}` can put the blocks it suggests into the right part of your page. Block templates name the kinds of place they fit with the same vocabulary; the fields, the kinds and the CLI release that reads them are in {@link schema:template-doc}.',
+        },
+        {
+          type: 'list',
+          style: 'unordered',
+          items: [
+            'List each region a builder fills or replaces: the navigation, the page header, a toolbar, each part of the body, a side panel, and a footer.',
+            'Give each slot the one kind that says what goes there. Name a part of the body by what it holds, and keep `main` for a body that takes any part.',
+            'Name each slot with one or two lowercase words joined by a hyphen, unique in the page, and describe in one sentence where it is.',
+            'A layer the page opens from a trigger is not a slot: blocks for it fit `overlay`, which no page holds.',
+          ],
         },
       ],
     },

@@ -32,4 +32,42 @@ export const doc = {
     TrashIcon: 'delete',
     ViewColumnsIcon: 'viewColumns',
   },
+  slots: [
+    {
+      name: 'header',
+      kind: 'header',
+      description:
+        'Top page header with back link, breadcrumb, title, status selector, and watch, share, details actions.',
+    },
+    {
+      name: 'description',
+      kind: 'content',
+      description:
+        'First main-column section holding the work item\'s written description text.',
+    },
+    {
+      name: 'subtasks',
+      kind: 'list',
+      description:
+        'Main-column subtask checklist with a progress bar, each row showing due date and assignee.',
+    },
+    {
+      name: 'attachments',
+      kind: 'list',
+      description:
+        'Main-column list of attachment cards for links, images, and files, with an add button.',
+    },
+    {
+      name: 'activity',
+      kind: 'chat',
+      description:
+        'Bottom of the main column: comment and activity feed with a comment composer.',
+    },
+    {
+      name: 'details',
+      kind: 'panel',
+      description:
+        'End-side property rail listing status, assignee, dates, labels, watchers, and linked items.',
+    },
+  ],
 };

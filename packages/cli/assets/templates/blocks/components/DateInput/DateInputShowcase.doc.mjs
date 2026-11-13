@@ -12,4 +12,5 @@ export const doc = {
   isShowcase: true,
   aspectRatio: 1,
   componentsUsed: ['DateInput', 'Layout'],
+  fits: ['form', 'toolbar'],
 };

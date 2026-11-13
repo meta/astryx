@@ -11,4 +11,5 @@ export const doc = {
   isReady: true,
   aspectRatio: 1,
   componentsUsed: ['ScrollableArea', 'Card', 'Grid'],
+  fits: ['list'],
 };

@@ -13,4 +13,5 @@ export const doc = {
   isShowcase: true,
   aspectRatio: 1,
   componentsUsed: ['HoverCard', 'Button', 'Layout', 'Text', 'Avatar'],
+  fits: ['overlay', 'inline'],
 };

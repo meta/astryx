@@ -19,4 +19,5 @@ export const doc = {
     'ListItem',
     'Card',
   ],
+  fits: ['navigation', 'panel'],
 };

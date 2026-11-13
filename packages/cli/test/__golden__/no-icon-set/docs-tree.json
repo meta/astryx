@@ -415,6 +415,7 @@
     "sections": [
       "start-with-a-standalone-block",
       "choose-the-component-relationship",
+      "say-where-the-block-goes",
       "choose-a-useful-preview"
     ],
     "mentions": []
@@ -423,6 +424,7 @@
     "type": "docs.detail",
     "sections": [
       "start-from-the-generated-page-doc",
+      "name-the-places-blocks-go",
       "help-people-find-the-page"
     ],
     "mentions": []

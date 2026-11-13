@@ -11,4 +11,5 @@ export const doc = {
   isReady: true,
   aspectRatio: 1,
   componentsUsed: ['ClickableCard', 'Button', 'Layout', 'Text'],
+  fits: ['list'],
 };

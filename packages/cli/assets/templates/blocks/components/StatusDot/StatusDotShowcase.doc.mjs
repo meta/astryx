@@ -12,4 +12,5 @@ export const doc = {
   description:
     'A positive status dot indicator.',
   componentsUsed: ['StatusDot'],
+  fits: [],
 };

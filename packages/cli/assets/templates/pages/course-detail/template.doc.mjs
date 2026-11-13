@@ -34,4 +34,48 @@ export const doc = {
     ArrowRightIcon: 'arrowRight',
     BookOpenIcon: 'book',
   },
+  slots: [
+    {
+      name: 'course-head',
+      kind: 'header',
+      description:
+        'Top of the main column: badges, course title, rating, preview poster, and a row of course facts.',
+    },
+    {
+      name: 'about',
+      kind: 'content',
+      description:
+        'About section under the head: course pitch paragraph and skill chips.',
+    },
+    {
+      name: 'syllabus',
+      kind: 'list',
+      description:
+        'Syllabus section in the main column: collapsible modules, each listing its lessons and durations.',
+    },
+    {
+      name: 'instructor',
+      kind: 'content',
+      description:
+        'Instructor section in the main column: profile card with portrait, stats, bio, and actions.',
+    },
+    {
+      name: 'reviews',
+      kind: 'list',
+      description:
+        'Reviews section in the main column: rating summary with scored aspects and a grid of review cards.',
+    },
+    {
+      name: 'faq',
+      kind: 'list',
+      description:
+        'FAQ section at the bottom of the main column: collapsible common questions with answers.',
+    },
+    {
+      name: 'enroll-rail',
+      kind: 'panel',
+      description:
+        'Sticky right rail: price, enroll buttons, self-paced or cohort start picker, pace slider, and inclusions.',
+    },
+  ],
 };

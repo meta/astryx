@@ -11,4 +11,5 @@ export const doc = {
   isShowcase: true,
   aspectRatio: 3,
   componentsUsed: ['TopNav', 'TopNavHeading'],
+  fits: [],
 };

@@ -17,4 +17,5 @@ export const doc = {
     'Selector',
     'Layout',
   ],
+  fits: ['form', 'toolbar'],
 };

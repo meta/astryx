@@ -22,4 +22,5 @@ export const doc = {
     'TextArea',
     'useMediaQuery',
   ],
+  fits: ['overlay', 'form'],
 };

@@ -11,4 +11,5 @@ export const doc = {
   isReady: true,
   aspectRatio: 4 / 3,
   componentsUsed: ['Popover', 'Button', 'Layout', 'Text', 'Divider'],
+  fits: ['overlay'],
 };

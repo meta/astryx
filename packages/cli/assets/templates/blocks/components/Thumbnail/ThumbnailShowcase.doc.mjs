@@ -12,4 +12,5 @@ export const doc = {
   description:
     'A thumbnail with an image and label.',
   componentsUsed: ['Thumbnail'],
+  fits: ['inline', 'list'],
 };

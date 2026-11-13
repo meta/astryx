@@ -32,4 +32,36 @@ export const doc = {
     UserIcon: 'user',
     WrenchScrewdriverIcon: 'wrench',
   },
+  slots: [
+    {
+      name: 'nav',
+      kind: 'navigation',
+      description:
+        'Start side panel with the Account settings heading and section list that swaps the content pane.',
+    },
+    {
+      name: 'header',
+      kind: 'header',
+      description:
+        'Top of the content pane: section heading, or the mobile back button beside the section title.',
+    },
+    {
+      name: 'tabs',
+      kind: 'navigation',
+      description:
+        'Tab list under the section heading switching Login and Shared access views.',
+    },
+    {
+      name: 'settings',
+      kind: 'form',
+      description:
+        'Content pane body: setting rows that edit in place, switch groups, and info rows under subheadings.',
+    },
+    {
+      name: 'help',
+      kind: 'content',
+      description:
+        'Info card below the settings rows explaining hidden, editable and shared account details.',
+    },
+  ],
 };

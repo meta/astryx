@@ -19,4 +19,5 @@ export const doc = {
     'Button',
     'Layout',
   ],
+  fits: ['list', 'footer'],
 };

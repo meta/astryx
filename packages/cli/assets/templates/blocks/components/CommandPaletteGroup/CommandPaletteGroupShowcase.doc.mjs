@@ -11,4 +11,5 @@ export const doc = {
   isShowcase: true,
   aspectRatio: 4 / 3,
   componentsUsed: ['CommandPalette', 'CommandPaletteGroup', 'CommandPaletteItem', 'CommandPaletteList', 'Layout', 'Text'],
+  fits: ['overlay'],
 };

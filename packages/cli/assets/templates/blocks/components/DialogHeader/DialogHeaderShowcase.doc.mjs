@@ -12,4 +12,5 @@ export const doc = {
   isShowcase: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['Dialog', 'DialogHeader'],
+  fits: ['overlay', 'header'],
 };

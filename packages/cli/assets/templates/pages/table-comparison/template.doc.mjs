@@ -23,4 +23,18 @@ export const doc = {
     Video: 'video',
     Zap: 'bolt',
   },
+  slots: [
+    {
+      name: 'header',
+      kind: 'header',
+      description:
+        'Layout header with the Compare models title, the Highlight best switch, and the Add model button.',
+    },
+    {
+      name: 'matrix',
+      kind: 'table',
+      description:
+        'Card in the layout content holding the comparison table: model selector columns, grouped criteria rows, pinned label column.',
+    },
+  ],
 };

@@ -274,12 +274,18 @@ export function registerTemplate(program) {
               description,
               components,
               skeleton,
+              slots,
+              fits,
             } = result.data;
+            const placement = placementLine(slots, fits);
             emit(
               record({package: result.package}),
               text(
                 `# ${tName}${description ? ' — ' + description : ''}\n` +
-                  `# Components: ${components.join(', ')}`,
+                  `# Components: ${components.join(', ')}` +
+                  (placement
+                    ? `\n# ${placement[0].toUpperCase()}${placement.slice(1)}`
+                    : ''),
               ),
               code(skeleton),
             );
@@ -291,9 +297,19 @@ export function registerTemplate(program) {
             // from (cli-surface INV28) and the note about replaced demo media go
             // to stderr, the note in the copy receipt's words. (Text mode only:
             // --json returned above with both in the envelope.)
-            const {source, demoMediaReplaced, demoContentReplaced, icons} =
-              result.data;
+            const {
+              source,
+              demoMediaReplaced,
+              demoContentReplaced,
+              icons,
+              slots,
+              fits,
+            } = result.data;
             console.error(`package: ${result.package}`);
+            // Where blocks go in a page, or where a block goes: on stderr
+            // with the package, so stdout stays the source.
+            const placement = placementLine(slots, fits);
+            if (placement) console.error(placement);
             emit(code(source));
             if (demoMediaReplaced > 0) {
               console.error(
@@ -356,4 +372,24 @@ export function registerTemplate(program) {
         return answered;
       },
   });
+}
+
+/**
+ * A template's placement in one line: a page's slots (`slots: kpis
+ * (metrics), …`) or a block's fit (`fits: toolbar, header`; a reference block
+ * declares none). Null when the template declares neither.
+ * @param {{name: string, kind: string}[] | undefined} slots
+ * @param {string[] | undefined} fits
+ * @returns {string | null}
+ */
+function placementLine(slots, fits) {
+  if (slots?.length) {
+    return `slots: ${slots.map(slot => `${slot.name} (${slot.kind})`).join(', ')}`;
+  }
+  if (fits) {
+    return fits.length > 0
+      ? `fits: ${fits.join(', ')}`
+      : "fits: none (a reference: it shows the component's options and is not placed in a page as it is)";
+  }
+  return null;
 }

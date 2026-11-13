@@ -198,9 +198,26 @@ export function registerBuild(program) {
           'import',
           'description',
           'command',
+          'slot',
+          'fits',
         ],
         format: {command: formatCliCommand, deprecated: formatDeprecation},
       };
+      /**
+       * The start's slots on one line: each slot's name and kind, and under
+       * --verbose what goes there.
+       * @param {unknown} slots
+       */
+      const formatSlots = slots =>
+        /** @type {{name: string, kind: string, description?: string}[]} */ (
+          slots
+        )
+          .map(slot =>
+            verbose && slot.description
+              ? `${slot.name} (${slot.kind}): ${slot.description}`
+              : `${slot.name} (${slot.kind})`,
+          )
+          .join(verbose ? '; ' : ', ');
       /** @param {string[]} fields */
       const brief = fields => ({
         fields,
@@ -252,10 +269,17 @@ export function registerBuild(program) {
                     'displayName',
                     'description',
                     'command',
+                    'slots',
                   ],
-                  format: {command: formatCliCommand},
+                  format: {command: formatCliCommand, slots: formatSlots},
                 }
-              : brief(['name', 'package', 'description', 'command']),
+              : {
+                  ...brief(['name', 'package', 'description', 'command', 'slots']),
+                  format: {
+                    ...brief([]).format,
+                    slots: formatSlots,
+                  },
+                },
           ),
           ...(start.notes ?? []).map(note => text(note)),
         );
@@ -290,14 +314,18 @@ export function registerBuild(program) {
         if (verbose) out.push(records(pages, full));
       }
       if (blocks.length) {
+        // A block that names a slot goes in that slot of the TEMPLATE.
+        const placed = blocks
+          .slice(0, verbose ? blocks.length : TOP)
+          .some(b => Boolean(b.slot));
         out.push(
           section(
             'BLOCKS',
-            `Ready-made sections for parts the template lacks${more(blocks)}. Print one: ${formatCliCommand('template <name>')}`,
+            `Ready-made sections for parts the template lacks${more(blocks)}.${placed ? " `slot` names the TEMPLATE's slot each one goes in." : ''} Print one: ${formatCliCommand('template <name>')}`,
           ),
           records(
             shown(blocks),
-            verbose ? full : brief(['name', 'package', 'description']),
+            verbose ? full : brief(['name', 'package', 'description', 'slot']),
           ),
         );
       }

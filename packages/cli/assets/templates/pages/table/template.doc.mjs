@@ -19,4 +19,18 @@ export const doc = {
   isReady: false,
   category: 'Table - Basic',
   isHiddenFromOverview: true,
+  slots: [
+    {
+      name: 'header',
+      kind: 'header',
+      description:
+        'Top layout header with the page title text and the primary add-item button.',
+    },
+    {
+      name: 'table',
+      kind: 'table',
+      description:
+        'Main layout content area holding the table of item records with status badges and per-row actions.',
+    },
+  ],
 };

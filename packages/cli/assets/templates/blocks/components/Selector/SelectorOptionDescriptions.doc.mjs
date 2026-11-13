@@ -18,4 +18,5 @@ export const doc = {
     'Stack',
   ],
   icons: {GlobeAltIcon: 'globe', LockClosedIcon: 'lock'},
+  fits: [],
 };

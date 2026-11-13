@@ -17,4 +17,5 @@ export const doc = {
     DocumentTextIcon: 'document',
     HomeIcon: 'home',
   },
+  fits: ['navigation'],
 };

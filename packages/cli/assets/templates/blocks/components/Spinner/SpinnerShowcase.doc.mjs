@@ -12,4 +12,5 @@ export const doc = {
   description:
     'A large spinner indicator.',
   componentsUsed: ['Spinner'],
+  fits: ['feedback', 'inline'],
 };

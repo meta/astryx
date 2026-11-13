@@ -11,4 +11,5 @@ export const doc = {
   isReady: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['ProgressBar', 'Center', 'VStack', 'Text'],
+  fits: ['feedback', 'inline'],
 };

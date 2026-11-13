@@ -129,6 +129,10 @@ export function effectiveTemplateDiscovery(templates) {
  * @property {Record<string, string>} [icons] the icon definition each
  *   imported icon draws, by its imported name
  * @property {boolean} [isShowcase]
+ * @property {TemplateSlotInfo[]} [slots] a page's named places where blocks
+ *   go, in reading order, as its doc declares them
+ * @property {string[]} [fits] the kinds of place a block goes in, best first,
+ *   as its doc declares them; empty for a reference block
  * @property {string} filePath
  * @property {string} docPath
  * @property {string} [package]
@@ -138,6 +142,30 @@ export function effectiveTemplateDiscovery(templates) {
  * @property {boolean} [replacementRejected] whether an invalid declaration was disabled
  * @property {string} [replacementTarget] disabled declaration target
  */
+
+/**
+ * A page template's slot, as its doc declares it.
+ * @typedef {{name: string, kind: string, description?: string}} TemplateSlotInfo
+ */
+
+/**
+ * A page's declared slots, when its doc declares a list of them.
+ * @param {any} doc
+ * @returns {{slots?: TemplateSlotInfo[]}}
+ */
+function declaredSlots(doc) {
+  return Array.isArray(doc?.slots) ? {slots: doc.slots} : {};
+}
+
+/**
+ * A block's declared fit, when its doc declares a list of kinds. An empty
+ * list is kept: it says the block is a reference.
+ * @param {any} doc
+ * @returns {{fits?: string[]}}
+ */
+function declaredFits(doc) {
+  return Array.isArray(doc?.fits) ? {fits: doc.fits} : {};
+}
 
 /**
  * An integration-template discovery error.
@@ -1211,6 +1239,7 @@ async function discoverPages() {
       isReady: doc?.isReady ?? true,
       scaffold: doc?.scaffold ?? false,
       ...(doc?.icons ? {icons: doc.icons} : {}),
+      ...declaredSlots(doc),
       filePath: path.join(dirPath, 'page.tsx'),
       docPath,
     });
@@ -1246,6 +1275,7 @@ async function discoverBlocks() {
       ...(typeof doc?.exampleFor === 'string'
         ? {exampleFor: doc.exampleFor}
         : {}),
+      ...declaredFits(doc),
       filePath: tsxPath,
       docPath,
       category: relPath,
@@ -1385,6 +1415,7 @@ async function discoverExternalBlocks(cwd = process.cwd()) {
         ...(typeof doc?.exampleFor === 'string'
           ? {exampleFor: doc.exampleFor}
           : {}),
+        ...declaredFits(doc),
         filePath: tsxPath,
         docPath,
         category: relPath,
@@ -2093,6 +2124,7 @@ export async function discoverIntegrationTemplatesForOne(integration) {
       componentsUsed:
         /** @type {{componentsUsed?: string[]}} */ (doc).componentsUsed ?? [],
       ...(doc?.icons ? {icons: doc.icons} : {}),
+      ...(doc?.type === 'page' ? declaredSlots(doc) : declaredFits(doc)),
       filePath: sourcePath,
       docPath,
       package: pkgLabel,

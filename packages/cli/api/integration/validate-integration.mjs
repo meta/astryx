@@ -42,6 +42,7 @@ import {
 } from '../../foundation/discovery/icon-set-checks.mjs';
 import {olderCliNotes} from '../../foundation/discovery/doc-stability.mjs';
 import {templateIconMeanings} from '../../foundation/discovery/template-icon-meanings.mjs';
+import {templateSlotNotes} from '../../foundation/discovery/template-slot-notes.mjs';
 import {
   templateIconNotes,
   templateIconUndeclaredNotes,
@@ -576,6 +577,11 @@ async function validateAtPackageDir(
       );
     if (undeclared.unchecked.length > 0)
       result.templateIconsUnchecked = undeclared.unchecked;
+    // A slot kind or fit the vocabulary lacks, a repeated slot name, or a
+    // context made a slot: `astryx build` cannot place a block by it. A note,
+    // never an issue.
+    const slotNotes = await templateSlotNotes(loaded, packageDir);
+    if (slotNotes.length > 0) (result.notes ??= []).push(...slotNotes);
   }
 
   return result;

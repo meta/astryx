@@ -47,7 +47,31 @@
  * @property {'direct' | 'closest' | 'fallback'} basis Why this template. The page ranker picks every start: it weighs each matched word by how rare it is among page templates, favors the family the idea's head names and the container it names ("in a modal"), and discounts words that only modify another. `direct` when its pick is also search's direct match (`directMatch`); `closest` when it is not; `fallback` when no template has the evidence to lead and the page starts from the app shell.
  * @property {string} reason One sentence saying the same as `basis`, for a reader.
  * @property {BuildAlternative[]} alternatives The ranker's next closest page templates (≤2), for when the start's layout is wrong.
+ * @property {BuildSlot[]} [slots] The named places in the start where blocks go, in reading order, as the template's doc declares them; each block in `blocks` names the one it goes in (`slot`). Absent when the template declares none.
  * @property {string[]} [notes] Setup notes: what the template needs that the project lacks (missing packages, missing StyleX compiler). Present only when the start template imports packages the project does not have or needs a StyleX compiler the project has not configured.
+ */
+
+/**
+ * A named place in the start template where blocks go.
+ *
+ * @typedef {object} BuildSlot
+ * @property {string} name The slot's name, unique in the template.
+ * @property {string} kind What kind of place it is: a region (`navigation`, `header`, `toolbar`, `main`, `panel`, `footer`) or a section of the body named by what it holds (`metrics`, `chart`, `table`, `list`, `form`, `content`, `feedback`, `chat`). `main` is the page body, which takes any block that goes in a page.
+ * @property {string} [description] Where the slot is in the template and what goes there.
+ */
+
+/**
+ * A block the kit names: search's entry for it (its `fits` included), and the
+ * start's slot it goes in.
+ *
+ * @typedef {import('../search/search.type.mjs').SearchResultEntry & BuildBlockPlacement} BuildBlockEntry
+ */
+
+/**
+ * Where a listed block goes in the start.
+ *
+ * @typedef {object} BuildBlockPlacement
+ * @property {string} [slot] The name of the start's slot the block goes in (`start.slots`): the slot whose kind is the block's best fit, else the page body (`main`). Absent when no slot fits, when the block declares no fits or an empty list, or when it fits only `overlay` (opens from a trigger) or `inline` (goes inside another piece).
  */
 
 /**
@@ -77,7 +101,7 @@
  * @property {boolean} data.directMatch True when the top page template is a confident direct match.
  * @property {BuildStart | null} data.start The page template to start from: the ranker's pick, else the app shell. Null only when the kit is narrowed to components or hooks (`type`), or when the project has no page template to offer.
  * @property {import('../search/search.type.mjs').SearchResultEntry[]} data.pages Closest page templates by search (≤3). Each entry's `command` carries `--skeleton` when `directMatch` is false, so it previews the layout; `start.command` is the scaffold.
- * @property {import('../search/search.type.mjs').SearchResultEntry[]} data.blocks Drop-in block patterns covering parts of the idea (≤5), best first. A block search returned keeps search's score and reason; any other block carries the block picker's relative score (100 for its best candidate, never below 1) and reason, so the two kinds of score are not comparable.
+ * @property {BuildBlockEntry[]} data.blocks Drop-in block patterns covering parts of the idea (≤5), best first. A block search returned keeps search's score and reason; any other block carries the block picker's relative score (100 for its best candidate, never below 1) and reason, so the two kinds of score are not comparable. Each block carries the kinds of place it goes in (`fits`) when its doc declares them, and the start's slot it goes in (`slot`) when one fits.
  * @property {import('../search/search.type.mjs').SearchResultEntry[]} data.domain Idea-specific components/hooks (≤6), excluding frame/foundation.
  * @property {string[]} data.frame Always-on page-shell component names. Every page template already uses them.
  * @property {string[]} data.foundation Always-on layout/typography/action component names. Every page template already uses them.

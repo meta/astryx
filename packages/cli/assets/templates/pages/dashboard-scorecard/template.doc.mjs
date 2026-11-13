@@ -17,4 +17,36 @@ export const doc = {
     ArrowUpIcon: 'arrowUp',
     StopIcon: 'stop',
   },
+  slots: [
+    {
+      name: 'header',
+      kind: 'header',
+      description:
+        'Top layout header with report title, period subtitle, generated timestamp, comparison period control and export button.',
+    },
+    {
+      name: 'scorecards',
+      kind: 'metrics',
+      description:
+        'Scorecards section in the content column: grid of six KPI tiles with period deltas and status coloring.',
+    },
+    {
+      name: 'goals',
+      kind: 'list',
+      description:
+        'Goal attainment section: card of OKR rows with owners and status-colored progress bars.',
+    },
+    {
+      name: 'trends',
+      kind: 'chart',
+      description:
+        'Trends section at the bottom of content: grid of current-vs-prior area and line chart cards.',
+    },
+    {
+      name: 'commentary',
+      kind: 'panel',
+      description:
+        'End-side layout panel with AI \'What changed & why\' callout cards; folds above scorecards when narrow.',
+    },
+  ],
 };

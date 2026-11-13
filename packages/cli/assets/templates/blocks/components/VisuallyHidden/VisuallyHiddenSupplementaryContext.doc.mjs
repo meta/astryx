@@ -19,4 +19,5 @@ export const doc = {
     'Icon',
   ],
   icons: {ArrowDownIcon: 'arrowDown', ArrowUpIcon: 'arrowUp'},
+  fits: ['metrics'],
 };

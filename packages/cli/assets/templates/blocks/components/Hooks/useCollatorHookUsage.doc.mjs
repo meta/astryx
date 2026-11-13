@@ -17,4 +17,5 @@ export const doc = {
     'List',
     'Layout',
   ],
+  fits: ['list'],
 };

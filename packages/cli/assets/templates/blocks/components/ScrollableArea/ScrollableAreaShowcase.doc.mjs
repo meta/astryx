@@ -12,4 +12,5 @@ export const doc = {
   aspectRatio: 1,
   isShowcase: true,
   componentsUsed: ['ScrollableArea', 'Card', 'Grid'],
+  fits: ['list', 'panel'],
 };

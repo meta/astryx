@@ -14,4 +14,5 @@ export const doc = {
   isShowcase: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['Resizable', 'Card', 'Layout', 'Text'],
+  fits: ['panel'],
 };

@@ -17,4 +17,5 @@ export const doc = {
     'Text',
     'Stack',
   ],
+  fits: ['content', 'list'],
 };

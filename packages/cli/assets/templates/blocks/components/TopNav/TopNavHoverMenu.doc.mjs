@@ -19,4 +19,5 @@ export const doc = {
     ShieldCheckIcon: 'shield',
     UserCircleIcon: 'userCircle',
   },
+  fits: ['navigation'],
 };

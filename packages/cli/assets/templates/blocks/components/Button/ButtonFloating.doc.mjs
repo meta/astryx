@@ -12,4 +12,5 @@ export const doc = {
   aspectRatio: 16 / 9,
   componentsUsed: ['Button', 'Icon', 'Layout', 'Text'],
   icons: {PlusIcon: 'add'},
+  fits: [],
 };

@@ -18,4 +18,5 @@ export const doc = {
     'Button',
     'Stack',
   ],
+  fits: ['form', 'list'],
 };

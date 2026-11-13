@@ -11,6 +11,7 @@
  */
 
 import {firstSentence} from '../../../foundation/text/string-utils.mjs';
+import {slotFor, wordsIn} from './place.mjs';
 import {FOUNDATION, FRAME} from './signals.mjs';
 
 /**
@@ -51,6 +52,10 @@ export function kitAnswer(
     own.set(b.name, [...(own.get(b.name) ?? []), b]);
   /** @type {Set<string>} */
   const added = new Set();
+  // Each listed block, with the kinds of place it goes in (its doc's `fits`)
+  // and the start's slot it goes in. One placed copy per entry, so build's
+  // own entries stay the same objects in both lists the size fit compares.
+  const place = placer(signals);
   const named = blocks
     .flatMap(name => {
       const entry = own.get(name)?.shift();
@@ -65,7 +70,8 @@ export function kitAnswer(
       added.add(name);
       return [found];
     })
-    .slice(0, signals.blocks.length);
+    .slice(0, signals.blocks.length)
+    .map(place);
 
   // What to try when the kit comes back thin. Keyword search over a design
   // system misses in a predictable way — the reader's words and the package's
@@ -108,11 +114,40 @@ export function kitAnswer(
   // An added block must not make the answer longer than build's own, as JSON
   // or as text: trim the added blocks' descriptions, never which blocks are
   // listed.
-  const fitted = fitDescriptions(named, signals.blocks, {
+  const fitted = fitDescriptions(named, signals.blocks.map(place), {
     json: list => bytes(answer(list)),
     text: textSize,
   });
   return answer(fitted);
+}
+
+/**
+ * A function that gives each block entry its declared `fits` and the start's
+ * slot it goes in (place.mjs), returning the same copy for the same entry. An
+ * entry keeps its own fields; a block that declares no fits, and a kit with
+ * no start or a start with no slots, get no `slot`.
+ * @param {import('./signals.mjs').KitSignals} signals
+ * @returns {<E extends import('../../search/search.type.mjs').SearchResultEntry>(entry: E) => E}
+ */
+function placer(signals) {
+  /** @type {Map<string, string[]>} */
+  const fitsOf = new Map();
+  for (const b of signals.catalog ?? [])
+    if (b.fits) fitsOf.set(`${b.package}\u0000${b.name}`, b.fits);
+  const slots = signals.start?.slots;
+  const words = wordsIn(signals.query);
+  /** @type {Map<object, any>} */
+  const placed = new Map();
+  return entry => {
+    let copy = placed.get(entry);
+    if (!copy) {
+      const fits = entry.fits ?? fitsOf.get(`${entry.package}\u0000${entry.name}`);
+      const slot = fits ? slotFor(fits, slots, words) : null;
+      copy = fits ? {...entry, fits, ...(slot ? {slot} : {})} : entry;
+      placed.set(entry, copy);
+    }
+    return copy;
+  };
 }
 
 /** @param {unknown} value */

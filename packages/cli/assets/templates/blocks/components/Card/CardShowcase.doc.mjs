@@ -12,4 +12,5 @@ export const doc = {
   isShowcase: true,
   aspectRatio: 1,
   componentsUsed: ['Card', 'Layout', 'Text'],
+  fits: ['content'],
 };

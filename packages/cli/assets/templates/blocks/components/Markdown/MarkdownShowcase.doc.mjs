@@ -12,4 +12,5 @@ export const doc = {
   description:
     'Rich markdown content with headings, lists, and formatting.',
   componentsUsed: ['Markdown'],
+  fits: ['content'],
 };

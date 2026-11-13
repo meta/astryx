@@ -20,4 +20,5 @@ export const doc = {
     'List',
   ],
   icons: {CalendarIcon: 'calendar', TagIcon: 'tag', UserIcon: 'user'},
+  fits: ['overlay'],
 };

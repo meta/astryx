@@ -19,4 +19,5 @@ export const doc = {
     PhotoIcon: 'image',
     UnderlineIcon: 'underline',
   },
+  fits: ['toolbar', 'inline'],
 };

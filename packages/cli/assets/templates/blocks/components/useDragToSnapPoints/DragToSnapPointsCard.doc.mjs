@@ -18,4 +18,5 @@ export const doc = {
     'VisuallyHidden',
     'useDragToSnapPoints',
   ],
+  fits: ['content'],
 };

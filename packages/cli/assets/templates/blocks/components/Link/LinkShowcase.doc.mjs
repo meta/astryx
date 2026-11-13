@@ -12,4 +12,5 @@ export const doc = {
   description:
     'A standalone link.',
   componentsUsed: ['Link'],
+  fits: ['inline'],
 };

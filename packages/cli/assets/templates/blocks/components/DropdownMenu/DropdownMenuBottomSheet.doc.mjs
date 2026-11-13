@@ -18,4 +18,5 @@ export const doc = {
     PencilIcon: 'edit',
     ShareIcon: 'share',
   },
+  fits: ['overlay', 'toolbar'],
 };

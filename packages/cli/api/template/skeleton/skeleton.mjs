@@ -260,6 +260,8 @@ export function templateSkeleton(match, templates) {
       description: match.description,
       components: componentsInSource(source),
       skeleton: extractSkeleton(source),
+      ...(match.slots ? {slots: match.slots} : {}),
+      ...(match.fits ? {fits: match.fits} : {}),
     },
   };
 }

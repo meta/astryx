@@ -29,4 +29,18 @@ export const doc = {
     MagnifyingGlassIcon: 'search',
     PlusIcon: 'add',
   },
+  slots: [
+    {
+      name: 'header',
+      kind: 'header',
+      description:
+        'Top LayoutHeader with board title, item count badge, and Toolbar of sprint selector, sort, filter, search, add-task.',
+    },
+    {
+      name: 'board',
+      kind: 'list',
+      description:
+        'LayoutContent body: horizontally scrolling BoardColumn lanes, one per status, holding draggable task cards or an empty state.',
+    },
+  ],
 };

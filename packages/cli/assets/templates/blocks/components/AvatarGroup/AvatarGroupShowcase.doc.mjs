@@ -11,4 +11,5 @@ export const doc = {
   isShowcase: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['AvatarGroup', 'Avatar', 'Layout', 'Text'],
+  fits: ['inline'],
 };

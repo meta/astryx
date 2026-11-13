@@ -24,4 +24,5 @@ export const doc = {
     SpeakerWaveIcon: 'audio',
     TrashIcon: 'delete',
   },
+  fits: [],
 };

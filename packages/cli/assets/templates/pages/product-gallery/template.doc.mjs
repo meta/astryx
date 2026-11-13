@@ -18,4 +18,18 @@ export const doc = {
   isReady: true,
   category: 'Gallery - Product',
   icons: {ArrowRightIcon: 'arrowRight'},
+  slots: [
+    {
+      name: 'header',
+      kind: 'header',
+      description:
+        'Top band of the content: two-column grid with the page headline, intro paragraph and primary get-started button.',
+    },
+    {
+      name: 'products',
+      kind: 'list',
+      description:
+        'Responsive card grid below the header; each product card shows square image, name, description and price.',
+    },
+  ],
 };

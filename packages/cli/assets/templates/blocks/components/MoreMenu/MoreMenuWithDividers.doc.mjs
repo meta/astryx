@@ -16,4 +16,5 @@ export const doc = {
     PencilIcon: 'edit',
     TrashIcon: 'delete',
   },
+  fits: ['overlay', 'inline'],
 };

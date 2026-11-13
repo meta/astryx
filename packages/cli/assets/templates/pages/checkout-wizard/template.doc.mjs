@@ -17,4 +17,30 @@ export const doc = {
     ShoppingCartIcon: 'cart',
     TruckIcon: 'shipping',
   },
+  slots: [
+    {
+      name: 'progress',
+      kind: 'navigation',
+      description:
+        'Stepper at the top of the form column showing Cart, Shipping, Delivery and Payment steps.',
+    },
+    {
+      name: 'step',
+      kind: 'form',
+      description:
+        'Current step body under the stepper: cart items and promo, address fields, delivery options, or payment fields.',
+    },
+    {
+      name: 'actions',
+      kind: 'footer',
+      description:
+        'Back and Continue or Pay button row closing the form column, with a blocked-step message.',
+    },
+    {
+      name: 'summary',
+      kind: 'panel',
+      description:
+        'Sticky order summary card beside the form, collapsed above the stepper on narrow hosts; items, promo, live totals.',
+    },
+  ],
 };

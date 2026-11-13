@@ -19,4 +19,5 @@ export const doc = {
     'LayoutContent',
     'Text',
   ],
+  fits: ['overlay', 'header'],
 };

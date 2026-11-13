@@ -16,4 +16,5 @@ export const doc = {
     ClipboardIcon: 'clipboard',
     ScissorsIcon: 'cut',
   },
+  fits: [],
 };

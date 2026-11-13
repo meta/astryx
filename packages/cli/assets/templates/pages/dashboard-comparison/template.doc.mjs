@@ -25,4 +25,36 @@ export const doc = {
     StopIcon: 'stop',
     UsersIcon: 'users',
   },
+  slots: [
+    {
+      name: 'header',
+      kind: 'header',
+      description:
+        'Top layout header with page title, filter summary, date/segment/device selectors, and export button.',
+    },
+    {
+      name: 'kpis',
+      kind: 'metrics',
+      description:
+        'Key metrics section: grid of metric cards, each with a sparkline and period-over-period deltas.',
+    },
+    {
+      name: 'trend',
+      kind: 'chart',
+      description:
+        'Devices section: card holding the daily active users area chart, split by device type.',
+    },
+    {
+      name: 'breakdowns',
+      kind: 'chart',
+      description:
+        'Audience demographics section after the divider: grid of stacked-bar breakdown cards for age, gender, device.',
+    },
+    {
+      name: 'acquisition',
+      kind: 'table',
+      description:
+        'Acquisition channels section at the bottom: card table of channels with users, share, and w/w change.',
+    },
+  ],
 };

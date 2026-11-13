@@ -15,4 +15,18 @@ export const doc = {
     CreditCardIcon: 'creditCard',
     PresentationChartLineIcon: 'activity',
   },
+  slots: [
+    {
+      name: 'header',
+      kind: 'header',
+      description:
+        'Top LayoutHeader with page title, net position summary, Expand all button and time range segmented control.',
+    },
+    {
+      name: 'groups',
+      kind: 'table',
+      description:
+        'LayoutContent stack of collapsible account cards, each with its own sortable table whose rows expand into charts.',
+    },
+  ],
 };

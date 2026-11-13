@@ -22,4 +22,24 @@ export const doc = {
   ],
   isReady: true,
   category: 'Form - Wizard',
+  slots: [
+    {
+      name: 'header',
+      kind: 'header',
+      description:
+        'Pinned top band with the wizard title, a ghost close button, and the horizontal Stepper progress track.',
+    },
+    {
+      name: 'step',
+      kind: 'form',
+      description:
+        'LayoutContent region rendering only the current step: heading, intro text, and FormLayout fields, or the review summary.',
+    },
+    {
+      name: 'footer',
+      kind: 'footer',
+      description:
+        'Pinned bottom bar with Skip at the start, a centered step counter, and Back and Next buttons.',
+    },
+  ],
 };

@@ -26,4 +26,5 @@ export const doc = {
     PaperClipIcon: 'attach',
     SparklesIcon: 'sparkles',
   },
+  fits: ['chat'],
 };

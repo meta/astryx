@@ -12,4 +12,5 @@ export const doc = {
   aspectRatio: 16 / 9,
   isShowcase: true,
   componentsUsed: ['Overlay', 'AspectRatio', 'Button', 'Layout', 'Text'],
+  fits: ['content', 'list'],
 };

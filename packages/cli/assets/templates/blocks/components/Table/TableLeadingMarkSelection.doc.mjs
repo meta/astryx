@@ -12,4 +12,5 @@ export const doc = {
   isReady: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['Table', 'CheckboxInput', 'Avatar'],
+  fits: ['table'],
 };

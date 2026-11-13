@@ -19,4 +19,5 @@ export const doc = {
     'Badge',
     'Banner',
   ],
+  fits: ['form'],
 };

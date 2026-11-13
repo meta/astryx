@@ -12,4 +12,5 @@ export const doc = {
   aspectRatio: 16 / 4,
   componentsUsed: ['Item', 'Divider', 'Icon', 'IconButton', 'Layout'],
   icons: {DocumentIcon: 'file', PlusIcon: 'add', XMarkIcon: 'close'},
+  fits: ['navigation', 'toolbar'],
 };

@@ -21,4 +21,5 @@ export const doc = {
     StrikethroughIcon: 'strikethrough',
     UnderlineIcon: 'underline',
   },
+  fits: ['toolbar', 'inline'],
 };

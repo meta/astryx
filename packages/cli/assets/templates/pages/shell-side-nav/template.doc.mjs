@@ -32,4 +32,24 @@ export const doc = {
     UserCircleIcon: 'userCircle',
     UserIcon: 'user',
   },
+  slots: [
+    {
+      name: 'nav',
+      kind: 'navigation',
+      description:
+        'Collapsible, resizable left SideNav rail with heading, menu items, grouped workspace conversations and account footer.',
+    },
+    {
+      name: 'content',
+      kind: 'main',
+      description:
+        'Main Layout content area right of the rail, holding the page body; here a placeholder message thread.',
+    },
+    {
+      name: 'footer',
+      kind: 'footer',
+      description:
+        'LayoutFooter pinned below the main content, holding a composer or bottom actions.',
+    },
+  ],
 };

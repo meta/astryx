@@ -11,4 +11,5 @@ export const doc = {
   isReady: true,
   aspectRatio: 4 / 3,
   componentsUsed: ['Slider', 'VStack', 'Center'],
+  fits: [],
 };

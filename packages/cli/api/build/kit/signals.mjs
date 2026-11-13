@@ -244,9 +244,16 @@ export async function kitSignals(query, options = {}) {
   // Name the ranker's next two templates beside the start: the reader judges
   // meaning better than keywords do, and an acceptable template is in these
   // three far more often than it is the start alone.
+  // The start's slots, the named places blocks go in, as its doc declares
+  // them: answer.mjs places each listed block in one.
+  const startSlots = chosen
+    ? catalog.find(t => t.name === chosen.name && t.package === chosen.package)
+        ?.slots
+    : undefined;
   /** @type {BuildStart | null} */
   const start = chosen && {
     ...chosen,
+    ...(startSlots ? {slots: startSlots} : {}),
     alternatives: pickStartAlternatives(
       ranked,
       kind,

@@ -12,4 +12,5 @@ export const doc = {
   description:
     'A number input for quantity entry.',
   componentsUsed: ['NumberInput'],
+  fits: ['form', 'inline'],
 };

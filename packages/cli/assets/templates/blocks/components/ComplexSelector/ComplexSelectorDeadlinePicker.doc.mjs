@@ -17,4 +17,5 @@ export const doc = {
     'TimeInput',
     'Button',
   ],
+  fits: ['form'],
 };

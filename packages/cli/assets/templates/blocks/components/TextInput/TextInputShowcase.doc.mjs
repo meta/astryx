@@ -10,4 +10,5 @@ export const doc = {
   aspectRatio: 16 / 9,
   isShowcase: true,
   componentsUsed: ['TextInput'],
+  fits: ['form', 'inline'],
 };

@@ -28,4 +28,5 @@ export const doc = {
     HomeIcon: 'home',
     UsersIcon: 'users',
   },
+  fits: [],
 };
