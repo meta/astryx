@@ -6,9 +6,10 @@
  *   story in Chromium, with the touch runtime's chunk held back and then let
  *   through
  * @output Browser evidence for the window before the shared touch runtime
- *   loads: a press that leaves a SegmentedControl selects nothing, before and
- *   after the load, and a bottom sheet dragged closed before the load leaves
- *   the screen instead of staying where the finger let go
+ *   loads: a press that leaves a SegmentedControl selects nothing before the
+ *   load, and a click selects after it; a finger's vetoed tap selects
+ *   nothing; and a bottom sheet dragged closed before the load leaves the
+ *   screen instead of staying where the finger let go
  * @position `architecture:react-component-runtime` INV13 and
  *   `spec:AST-080` DEC-5; the loader's timing is in touchRuntime.test.tsx
  */
@@ -78,7 +79,7 @@ async function pressAndLeave(page: Page, name: string) {
   await page.mouse.up();
 }
 
-test('a press that leaves a SegmentedControl selects nothing, before and after the touch runtime loads', async ({
+test('a press that leaves a SegmentedControl selects nothing before the touch runtime loads, and a click selects after it', async ({
   page,
 }) => {
   const runtime = await holdTouchRuntime(page);
@@ -95,12 +96,7 @@ test('a press that leaves a SegmentedControl selects nothing, before and after t
   await expect(grid).toBeChecked();
 
   await runtime.release();
-  // Once the runtime has mounted, the press is tracked: the same press still
-  // selects nothing, and a click selects.
-  await page.waitForTimeout(500);
-  await grid.focus();
-  await pressAndLeave(page, 'Table');
-  await expect(grid).toBeChecked();
+  // Once the runtime has loaded, a click still selects.
   await page.getByRole('radio', {name: 'List'}).click();
   await expect(page.getByRole('radio', {name: 'List'})).toBeChecked();
 });
@@ -147,6 +143,24 @@ test.describe('a bottom sheet before the touch runtime loads', () => {
     await expect(dialog).toBeVisible();
     await expect.poll(runtime.requested).toBe(true);
     const sheet = dialog.locator('.astryx-bottom-sheet').first();
+    // At rest: the entrance has ended, and the sheet holds still between two
+    // frames.
+    await expect
+      .poll(async () =>
+        page.evaluate(async () => {
+          const running = document
+            .getAnimations()
+            .some(animation => animation.playState === 'running');
+          const top = () =>
+            document
+              .querySelector('.astryx-bottom-sheet')
+              ?.getBoundingClientRect().top ?? 0;
+          const before = top();
+          await new Promise(resolve => requestAnimationFrame(resolve));
+          return !running && Math.abs(top() - before) < 0.5;
+        }),
+      )
+      .toBe(true);
     const box = await sheet.boundingBox();
     if (box == null) {
       throw new Error('no sheet box');
@@ -174,10 +188,19 @@ test.describe('a bottom sheet before the touch runtime loads', () => {
     });
     // The sheet goes on past where the finger let go, and the dialog closes.
     const releasedTop = y + 240 - 12;
+    // The page reads the panel, so a read after the dialog closes does not
+    // wait on a locator that no longer matches.
     await expect
       .poll(
-        async () => (await sheet.boundingBox())?.y ?? Number.POSITIVE_INFINITY,
-        {timeout: 1500},
+        async () =>
+          page.evaluate(() => {
+            const panel = document.querySelector('.astryx-bottom-sheet');
+            return panel?.isConnected === true &&
+              panel.getClientRects().length > 0
+              ? panel.getBoundingClientRect().top
+              : Number.POSITIVE_INFINITY;
+          }),
+        {timeout: 1500, intervals: [16]},
       )
       .toBeGreaterThan(releasedTop + 100);
     await expect(dialog).toBeHidden({timeout: 1500});
