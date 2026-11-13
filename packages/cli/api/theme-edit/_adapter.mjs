@@ -32,6 +32,7 @@
  */
 
 import {writeThemeTemplate} from '../theme/template/template.mjs';
+import {buildSuggestion} from '../theme/build/build.mjs';
 import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -48,9 +49,8 @@ import {
   getCliInvocation,
   quoteCommandArgument,
 } from '../../foundation/env/package-manager.mjs';
-import {DIALS, LIKE, P} from './_tables.mjs';
+import {LIKE, P} from './_tables.mjs';
 import {setLine} from './_check.mjs';
-import {colorProblem} from './_color.mjs';
 import {SHOWCASE_GROUPS} from './_preview.mjs';
 import {camel, typedThemeName} from './_settings.mjs';
 import {LOCAL_THEME_ROOT} from '../../foundation/config/theme-state.mjs';
@@ -96,31 +96,7 @@ export const builtInThemes = () => [...LIKE];
 /** The sections `show --section` takes. */
 export const showSections = () => [...SHOWCASE_GROUPS];
 
-/**
- * Whether a value fits what a dial takes, read from the dial's own list of
- * values: a named rung in any case, or a value of the kind it names (a size,
- * a color, a number). `set` still checks the value in full.
- * @param {string} dial
- * @param {string} value
- */
-export function dialValueFits(dial, value) {
-  const spec = DIALS[/** @type {keyof typeof DIALS} */ (dial)]?.values;
-  if (!spec) return false;
-  const v = String(value).trim();
-  if (v === '') return false;
-  return spec.split('|').some(option => {
-    if (!option.startsWith('<') && !option.startsWith('"'))
-      return option === v.toLowerCase();
-    if (option.startsWith('"')) return true;
-    if (option.includes('size')) return /^\d*\.?\d+(px|rem|em)$/.test(v);
-    // A color by the editor's own color check (a bare word only when it
-    // names a color).
-    if (option === '<color>') return colorProblem(v) == null;
-    if (option === '<0-100>') return /^\d{1,3}$/.test(v) && Number(v) <= 100;
-    if (option === '<number>') return /^\d*\.?\d+$/.test(v);
-    return false;
-  });
-}
+export {dialValueFits} from './_settings.mjs';
 
 /**
  * The project a command acts on: the Astryx project at or above `cwd`, found
@@ -723,11 +699,35 @@ export function editorThemeRefusal(err, cwd) {
  * take an editor theme, and `--check` checks an editor theme by the editor's
  * own rules (waiting for a change in progress).
  * @param {string[]} files
- * @param {{cwd: string, check?: boolean, family?: boolean}} options
+ * @param {{cwd: string, check?: boolean, family?: boolean, iconsSpecifier?: string, out?: string}} options
+ *   `check`, `out` and `iconsSpecifier` are kept in every compile a refusal
+ *   suggests
  * @returns {Promise<AstryxError | null>}
  */
-export async function editorCompileProblem(files, {cwd, check, family}) {
+export async function editorCompileProblem(
+  files,
+  {cwd, check, family, iconsSpecifier, out},
+) {
   const cwdRoot = projectRoot(cwd);
+  const COMPILE = {group: 'experimental theme', build: 'compile'};
+  /**
+   * The compile of `source` (from `from`) with the caller's mode: a check
+   * stays a check, and --out names the same file from there.
+   * @param {string} source @param {string} from
+   */
+  const compileLine = (source, from) =>
+    buildSuggestion(
+      source,
+      {
+        check,
+        iconsSpecifier,
+        out: out
+          ? path.relative(from, path.resolve(cwd, out)) || out
+          : undefined,
+      },
+      from,
+      COMPILE,
+    );
   for (const file of files) {
     const at = editorThemeAt(cwdRoot, path.resolve(cwd, file));
     if (!at || !editorOwnFile(at.slug, file)) continue;
@@ -741,7 +741,7 @@ export async function editorCompileProblem(files, {cwd, check, family}) {
         `${slug} is a theme the editor made; compile it from the app root (${path.relative(cwd, root) || '.'}), where the editor builds it.`,
         [
           {
-            name: `cd ${quoteCommandArgument(path.relative(cwd, root) || '.')} && ${runLine(root, `experimental theme compile ${source}${check ? ' --check' : ''}`)}`,
+            name: `cd ${quoteCommandArgument(path.relative(cwd, root) || '.')} && ${compileLine(source, root)}`,
             reason: 'do this instead',
           },
         ],
@@ -752,9 +752,9 @@ export async function editorCompileProblem(files, {cwd, check, family}) {
         `${file} is the editor's own settings for ${slug}, not a theme source; compile the theme source.`,
         [
           {
-            name: runLine(
+            name: compileLine(
+              path.relative(cwd, path.join(root, source)) || source,
               cwd,
-              `experimental theme compile ${quoteCommandArgument(path.relative(cwd, path.join(root, source)) || source)}`,
             ),
             reason: 'do this instead',
           },
@@ -766,9 +766,9 @@ export async function editorCompileProblem(files, {cwd, check, family}) {
         `${slug} is a theme the editor made; --family builds package theme families, not editor themes. Compile it on its own.`,
         [
           {
-            name: runLine(
+            name: compileLine(
+              path.relative(cwd, path.join(root, source)) || source,
               cwd,
-              `experimental theme compile ${quoteCommandArgument(path.relative(cwd, path.join(root, source)) || source)}`,
             ),
             reason: 'do this instead',
           },
