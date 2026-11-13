@@ -110,7 +110,7 @@ The Ethiopic and Coptic calendars end every year with a 13th month of five or si
 
 For Japanese eras, the touch picker seemed to need an era wheel. iOS's native picker doesn't have one: it shows two wheels, year and month, and labels each year with the era of the selected date. 2019 with July shows 令和元年 (Reiwa 1), and 2019 with January shows 平成31年 (Heisei 31). We copied that.
 
-Calendar names can be sensitive, so in docs and UI we use the English names from Unicode's CLDR, the same ones `Intl.DisplayNames` returns, rather than choosing our own.
+Calendar names can be sensitive, so in docs and UI we use the names from Unicode's CLDR, the same ones `Intl.DisplayNames` returns, rather than choosing our own.
 
 ## How it came together
 
