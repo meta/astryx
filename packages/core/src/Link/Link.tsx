@@ -64,9 +64,9 @@ registerEnglishFallback(english);
 const styles = stylex.create({
   base: {
     display: 'inline-flex',
-    // The root stops at its container, and the label below may shrink, so a
-    // label with no break opportunity (a bare URL) wraps inside the line
-    // instead of pushing past it (`component:Text` FR3).
+    // The root stops at its container, and the label below can shrink. Thus
+    // a label with no break opportunity, such as a bare URL, wraps inside the
+    // line and does not push past it.
     maxWidth: '100%',
     alignItems: 'center',
     gap: spacingVars['--spacing-0-5'],
