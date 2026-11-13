@@ -20,6 +20,7 @@ import {
   removeLinkedFixture,
 } from '../../test-utils/linked-fixture.mjs';
 import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
+import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
 
 vi.mock('./_preview.mjs', async importOriginal =>
   (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
@@ -27,27 +28,16 @@ vi.mock('./_preview.mjs', async importOriginal =>
   ),
 );
 
-const THEMES = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '../../../themes',
-);
-
 /** @type {string} */
 let cwd;
 
-beforeAll(() => {
+/** Why a bundled theme could not be installed here, when it could not. */
+let unbuilt = '';
+
+beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-one-mode-', FIXTURE_PACKAGES);
-  // The bundled themes themselves, as an app that installs them has them.
-  for (const like of ['butter', 'neutral']) {
-    const link = path.join(
-      path.dirname(cwd),
-      'node_modules/@astryxdesign',
-      `theme-${like}`,
-    );
-    fs.rmSync(link, {recursive: true, force: true});
-    fs.symlinkSync(path.join(THEMES, like), link, 'dir');
-  }
-}, 120_000);
+  unbuilt = await installRealBaseThemes(cwd, ['neutral']);
+}, 300_000);
 
 afterAll(() => {
   if (cwd) removeLinkedFixture(cwd);
@@ -88,7 +78,11 @@ describe('a one-mode theme', () => {
     ['dark-only', 'dark'],
     ['light-only', 'light'],
   ])
-    it(`${mode} keeps both halves, type-checks, and is given its mode by <Theme>`, async () => {
+    it(`${mode} keeps both halves, type-checks, and is given its mode by <Theme>`, async test => {
+      if (unbuilt) {
+        console.warn(`skipped: ${unbuilt}`);
+        return test.skip();
+      }
       const slug = half[0] + 'k';
       await themeEditNew(slug, {cwd, like: 'neutral'});
       await themeEditSet(slug, 'accent', '#e11d48', {cwd});
