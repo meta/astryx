@@ -280,6 +280,33 @@ export async function recordRunFor(argv, fn) {
 }
 
 /**
+ * How many {@link withoutModuleRecords} calls are running: while one is, the
+ * run's module hooks record nothing.
+ */
+let modulesUnrecorded = 0;
+
+/**
+ * Run `fn` (synchronous) with the modules it loads left out of the running
+ * gather's record: the CLI's own code and its dependencies, loaded on first
+ * use (foundation/runtime/lazy-parsers.mjs), which a run's kept entries never
+ * depended on when they loaded with the CLI at startup. The build id that
+ * keys every entry already names that code.
+ * @template T
+ * @param {() => T} fn
+ * @returns {T}
+ */
+export function withoutModuleRecords(fn) {
+  modulesUnrecorded++;
+  try {
+    // A `require` reads the module's source through fs, which the read
+    // record would note too.
+    return withoutRecording(fn);
+  } finally {
+    modulesUnrecorded--;
+  }
+}
+
+/**
  * Run `fn` as a recorded run (see `run`), armed from its start. Exported for
  * tests; `recordRunFor` decides which runs are recorded.
  * @template T
@@ -361,7 +388,9 @@ export async function recordRun(fn, {armedThroughout = false} = {}) {
          * @param {(specifier: string, context: any) => any} next
          */
         resolve(specifier, context, next) {
-          if (hooks) noteLookups(specifier, context?.parentURL, reads);
+          if (hooks && !modulesUnrecorded) {
+            noteLookups(specifier, context?.parentURL, reads);
+          }
           return next(specifier, context);
         },
         /**
@@ -370,7 +399,7 @@ export async function recordRun(fn, {armedThroughout = false} = {}) {
          * @param {(url: string, context: any) => any} next
          */
         load(url, context, next) {
-          if (hooks && url.startsWith('file:')) {
+          if (hooks && !modulesUnrecorded && url.startsWith('file:')) {
             try {
               const file = fileURLToPath(url);
               if (!reads.has(file)) reads.set(file, fileStamp(file));
