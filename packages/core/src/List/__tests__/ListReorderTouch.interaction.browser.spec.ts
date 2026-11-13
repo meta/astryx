@@ -10,7 +10,8 @@
  *   place. While the finger holds the drag, the rows stay still, the source
  *   dims, a preview follows and an insertion line marks the drop position. A
  *   flick on a handle scrolls and moves nothing. A cancelled drag puts the
- *   row back. With Reduce Motion the drop takes its place without travel. A
+ *   row back. With Reduce Motion the drop cross-fades into place, without
+ *   travel. A
  *   flush row's handle stays inside the list. A finger held on a handle
  *   refuses text selection on the list until it lifts. A drag that crosses
  *   rows forces no style or layout pass, and neither does the pick-up. A
@@ -483,7 +484,7 @@ test.describe('under a finger', () => {
     expect((await settledTops(page)).Inbox).toBe(before.Inbox);
   });
 
-  test('with Reduce Motion the drop takes its place without travel', async ({
+  test('with Reduce Motion the drop cross-fades each row it moved into its new place, without travel', async ({
     page,
   }) => {
     await page.emulateMedia({reducedMotion: 'reduce'});
@@ -497,7 +498,9 @@ test.describe('under a finger', () => {
         {holdMs: HOLD_MS, durationMs: 400, restMs: 120},
       ),
     );
-    // Two frames after the lift: already in place, nothing travelling.
+    // Two frames after the lift: the order is committed, and nothing
+    // travels. A running animation may only fade: each row the drop moved
+    // fades out where it was and in at its new place (design:reduced-motion).
     await page.evaluate(
       async () =>
         new Promise<void>(resolve =>
@@ -512,10 +515,6 @@ test.describe('under a finger', () => {
       'Spam',
       'Trash',
     ]);
-    expect((await settledTops(page)).Inbox).toBe(before.Drafts);
-    // Nothing travels. A running animation may only fade: the rows the drop
-    // passed take Reduce Motion's opacity dip in their new places
-    // (design:reduced-motion), and none moves.
     expect(
       await page
         .locator('#storybook-root li')
@@ -538,6 +537,10 @@ test.describe('under a finger', () => {
           ),
         ),
     ).toBe(false);
+    // Once the cross-fade ends, the dropped row sits in its new place.
+    await expect
+      .poll(async () => (await settledTops(page)).Inbox, {timeout: 1000})
+      .toBe(before.Drafts);
   });
 });
 

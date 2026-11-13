@@ -200,6 +200,11 @@ const {detach} = reorderable.attach(listElement, {
     faster the nearer it is, and stops at the end;
   - a drag commits once, at the drop (DR4), and `onReorder` is called once
     for it; a cancelled drag calls nothing;
+  - on the drop the rows glide to their new places with every pointer, each
+    from its place before the drag, the dropped row included, on the
+    theme's move curve (`spec:AST-105` FR4), which follows the theme's
+    `character` and `tempo`; a cancelled drag may put everything back at
+    once (`design:ordered-collection-reordering`);
   - under Reduce Motion the moving preview still follows the finger or pointer,
     and the other rows and the drop take their places without travel
     (`design:reduced-motion` DR1–DR3; a mouse drop follows DR2 on a coarse primary pointer and DR3

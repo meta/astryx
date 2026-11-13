@@ -19,7 +19,10 @@
  *   preview and the insertion line run along a row set in from the list's
  *   start, in either direction. A checked radio in the dragged row stays
  *   checked through the drag. With a mouse, the handle keeps a plain
- *   button's text selection and callout
+ *   button's text selection and callout. A mouse drop glides the rows into
+ *   their new places on the theme's move curve, each from where it was before
+ *   the drag, the dropped row included. Under Reduce Motion it puts them there
+ *   at once
  * @position Beside ListReorderTouch.interaction.browser.spec.ts, which proves
  *   the hold under a finger
  */
@@ -126,6 +129,170 @@ test('a mouse drags a row from its handle at once, where the primary pointer is 
     await page.mouse.move(at.x, at.y + rowHeight * 2.5, {steps: 12});
     await page.mouse.up();
     await expect.poll(async () => labels(page)).toEqual(movedTwoDown(before));
+  } finally {
+    await story.close();
+  }
+});
+
+/**
+ * The rows' translate animations running now, by label: their `translate`
+ * offset at this moment, in px.
+ */
+async function travelling(page: Page): Promise<Record<string, number>> {
+  return page
+    .locator('#storybook-root li:not([data-astryx-leaving])')
+    .evaluateAll(rows => {
+      const moving: Record<string, number> = {};
+      for (const row of rows) {
+        const runs = row
+          .getAnimations()
+          .some(
+            animation =>
+              animation.playState === 'running' &&
+              animation.effect instanceof KeyframeEffect &&
+              animation.effect
+                .getKeyframes()
+                .some(frame => frame.translate != null),
+          );
+        if (runs) {
+          const [, y = '0px'] = getComputedStyle(row).translate.split(' ');
+          moving[row.textContent?.trim() ?? ''] = Number.parseFloat(y);
+        }
+      }
+      return moving;
+    });
+}
+
+/** A mouse drags `label`'s row two and a half rows down and releases it. */
+async function mouseDropTwoDown(page: Page, label: string) {
+  const {at, rowHeight} = await handleOf(page, label);
+  await page.mouse.move(at.x, at.y);
+  await page.mouse.down();
+  await page.mouse.move(at.x, at.y + rowHeight * 2.5, {steps: 12});
+  await page.mouse.up();
+}
+
+/** Two frames: what the page shows once the drop's commit has painted. */
+async function twoFrames(page: Page) {
+  await page.evaluate(
+    async () =>
+      new Promise<void>(resolve =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+}
+
+test('a mouse drop glides each row it moved from where it was before the drag, the dropped row included', async ({
+  browser,
+}) => {
+  const story = await openFinePointerStory(browser);
+  try {
+    const {page} = story;
+    const before = await labels(page);
+    await mouseDropTwoDown(page, before[0]);
+    await twoFrames(page);
+    // Gliding: the dropped row comes from its place before the drag, above,
+    // where its dimmed source sat, not from where its preview was let go.
+    // The rows it passed come from their old places, below.
+    const moving = await travelling(page);
+    const detail = JSON.stringify(moving);
+    expect(Object.keys(moving).sort(), detail).toEqual(
+      expect.arrayContaining([before[0], before[1], before[2]].sort()),
+    );
+    expect(moving[before[0]], detail).toBeLessThan(0);
+    expect(moving[before[1]], detail).toBeGreaterThan(0);
+    expect(moving[before[2]], detail).toBeGreaterThan(0);
+    // The dropped row rides above the rows it passes, on an opaque
+    // background, so their text never shows through it.
+    const dropped = page
+      .locator('#storybook-root li:not([data-astryx-leaving])')
+      .filter({hasText: before[0]})
+      .first();
+    const riding = await dropped.evaluate(row => ({
+      zIndex: getComputedStyle(row).zIndex,
+      background: getComputedStyle(row).backgroundColor,
+    }));
+    expect(riding.zIndex, JSON.stringify(riding)).toBe('1');
+    expect(riding.background, JSON.stringify(riding)).not.toMatch(
+      /^(transparent|rgba\(0, 0, 0, 0\))$/,
+    );
+    // On the theme's move curve: the rows rest within --duration-medium
+    // where the list is (the settle spring took about 750 ms).
+    const timing = await page.evaluate(
+      async () =>
+        new Promise<{medium: number; rests: number}>(resolve => {
+          const list =
+            document.querySelector('#storybook-root li')?.parentElement;
+          const medium = Number.parseFloat(
+            list == null
+              ? ''
+              : getComputedStyle(list).getPropertyValue('--duration-medium'),
+          );
+          const start = performance.now();
+          const moving = () =>
+            document
+              .getAnimations()
+              .some(
+                animation =>
+                  animation.playState === 'running' &&
+                  animation.effect instanceof KeyframeEffect &&
+                  animation.effect.target instanceof Element &&
+                  animation.effect.target.closest('li') != null,
+              );
+          const poll = () => {
+            if (moving()) {
+              requestAnimationFrame(poll);
+            } else {
+              resolve({medium, rests: performance.now() - start});
+            }
+          };
+          poll();
+        }),
+    );
+    expect(timing.rests, JSON.stringify(timing)).toBeLessThanOrEqual(
+      timing.medium + 100,
+    );
+    // Then at rest in the new order, nothing running, and the row is itself.
+    await expect
+      .poll(async () => Object.keys(await travelling(page)).length, {
+        timeout: 3000,
+      })
+      .toBe(0);
+    expect(await labels(page)).toEqual(movedTwoDown(before));
+    await expect
+      .poll(async () =>
+        dropped.evaluate(row => [row.style.zIndex, row.style.backgroundColor]),
+      )
+      .toEqual(['', '']);
+  } finally {
+    await story.close();
+  }
+});
+
+test('under Reduce Motion a mouse drop puts the rows in their new places at once', async ({
+  browser,
+}) => {
+  const story = await openFinePointerStory(browser);
+  try {
+    const {page} = story;
+    await page.emulateMedia({reducedMotion: 'reduce'});
+    const before = await labels(page);
+    await mouseDropTwoDown(page, before[0]);
+    await twoFrames(page);
+    expect(await labels(page)).toEqual(movedTwoDown(before));
+    // Nothing travels, and with a fine pointer nothing fades either
+    // (design:reduced-motion DR3).
+    expect(
+      await page
+        .locator('#storybook-root li')
+        .evaluateAll(rows =>
+          rows.some(row =>
+            row
+              .getAnimations({subtree: true})
+              .some(animation => animation.playState === 'running'),
+          ),
+        ),
+    ).toBe(false);
   } finally {
     await story.close();
   }

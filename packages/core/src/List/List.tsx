@@ -108,8 +108,8 @@ export interface ListProps extends BaseProps<
    * its row. A flick on it still scrolls. The row stays in its place, dimmed,
    * while a copy of it follows the finger. An accent line marks where it
    * would land. The other rows stay still, the list scrolls near the edges,
-   * and on release the rows rearrange. A mouse drags a handle at once, the
-   * same way.
+   * and on release the rows glide to their new places. A mouse drags a handle
+   * at once, and its drop glides the same way.
    *
    * Without a drag, activating a handle (a click, Space or Enter) turns on
    * reorder mode for its row. Each arrow key moves it a place at once,
