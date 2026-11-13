@@ -25,7 +25,7 @@ RULES:
 - Read `astryx docs layout` before changing a template's frame.
 - Dense data = rows (Table, List/Item), not Card-wrapped lists. Badge = counts only.
 - Style with component props first, then the xstyle prop / StyleX tokens. No raw hex/px.
-- THEMES: to make or change a theme (colors, fonts, corners, spacing, a look from a picture) use the experimental theme editor, never hand-written theme files or :root overrides: `astryx experimental theme editor new <name> --like neutral`, then `editor set <name> <thing> <value>` or `editor how "<what you want>"`; wire it with `astryx theme add <name>`; look at it with `astryx experimental theme preview add`.
+- THEMES: to make or change a theme (colors, fonts, corners, spacing, a look from a picture) use the experimental theme editor, never hand-written theme files or :root overrides: `astryx experimental theme editor new <name> --like neutral`, then `editor set <name> <thing> <value>` or `editor how "<what you want>"`; wire it with `astryx theme add <name>`; after each change look at it with `astryx experimental theme editor show <name> --png` and open the PNGs it writes (changes nothing in the app); a theme change is not done until you have looked at the pictures.
 - SELF-CHECK: re-read the file; replace any className=, style={{…}}, raw <div>/<span>, imported .css/@apply, or hardcoded #hex/px with the component or the xstyle prop + a token.
 
 `astryx help` lists every command. Key ones beyond the workflow:

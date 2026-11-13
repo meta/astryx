@@ -11,7 +11,11 @@ describe('generated agent docs app-theme workflow', () => {
     expect(result).toContain('astryx experimental theme editor new <name>');
     expect(result).toContain(':root overrides');
     expect(result).toContain('astryx theme add <name>');
-    expect(result).toContain('astryx experimental theme preview add');
+    // Each change is looked at in the editor's pictures before it is done.
+    expect(result).toContain(
+      'astryx experimental theme editor show <name> --png',
+    );
+    expect(result).toContain('not done until you have looked');
     expect(result).not.toContain('theme add <slug> --import');
   });
 });
