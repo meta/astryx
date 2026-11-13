@@ -7,6 +7,12 @@
  * it, and its JSON holds each file base64-encoded with its SHA-256, so no text
  * in the source (`</script>` included) can end the block early.
  *
+ * The block's `version` is the render format. A CLI reads every format up to
+ * its own. The number goes up only when a CLI that reads the current number
+ * would read a new file wrong; a new optional field keeps the number, so older
+ * CLIs keep reading newer files. A CLI that meets a higher number refuses and
+ * names the CLI version that wrote the file.
+ *
  * @position foundation/render — used by render-page.mjs and the render subject
  */
 
@@ -14,6 +20,9 @@ import {createHash} from 'node:crypto';
 
 /** The script type of the embedded-source block. */
 export const SOURCE_TYPE = 'application/x-astryx-source';
+
+/** The render format this CLI writes, and the newest one it reads. */
+export const RENDER_FORMAT = 1;
 
 /**
  * @typedef {object} EmbeddedFile
@@ -23,31 +32,43 @@ export const SOURCE_TYPE = 'application/x-astryx-source';
  */
 
 /**
- * @typedef {object} EmbeddedSource
- * @property {1} version
- * @property {string} entry - The page's file name.
- * @property {EmbeddedFile[]} files
+ * What the render records about itself beside the files. Every field is
+ * optional: files from older CLIs have none of them.
+ * @typedef {object} RenderRecord
+ * @property {string} [cli] - The version of the CLI that rendered the file.
+ * @property {string} [page] - The page's path from its project's root, `/`-separated.
+ * @property {Record<string, string>} [packages] - The packages the page rendered with, by name: their versions.
+ * @property {{sha256: string, style?: string, text?: string}} [markup] - The page as rendered, so a reverse can tell what changed after the render: the SHA-256 of the markup in <body> and of the <style> element, and `text`, the base64 of the JSON `{title, runs}` (the title and the markup's runs of text in order). The text stays encoded so that a find-and-replace over the page's text cannot change the record too.
  */
 
-/** @param {Buffer} bytes */
+/**
+ * @typedef {RenderRecord & {version: number, entry: string, files: EmbeddedFile[]}} EmbeddedSource
+ */
+
+/** @param {Buffer | string} bytes */
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 
 /**
  * The data block for a page's files.
  * @param {string} entry the page's file name
  * @param {{path: string, bytes: Buffer}[]} files the page first
+ * @param {RenderRecord} [record] what the render records about itself
  * @returns {string}
  */
-export function sourceBlock(entry, files) {
+export function sourceBlock(entry, files, record = {}) {
   /** @type {EmbeddedSource} */
   const payload = {
-    version: 1,
+    version: RENDER_FORMAT,
     entry,
+    ...(record.cli ? {cli: record.cli} : {}),
+    ...(record.page ? {page: record.page} : {}),
+    ...(record.packages ? {packages: record.packages} : {}),
     files: files.map(f => ({
       path: f.path,
       sha256: sha256(f.bytes),
       base64: f.bytes.toString('base64'),
     })),
+    ...(record.markup ? {markup: record.markup} : {}),
   };
   const json = JSON.stringify(payload)
     .replace(/</g, '\\u003c')
@@ -57,29 +78,45 @@ export function sourceBlock(entry, files) {
 }
 
 /**
+ * Every embedded-source block in a file, in order.
+ * @param {string} html
+ */
+const blocksIn = html => [
+  ...html.matchAll(
+    new RegExp(
+      `<script\\s+type=["']${SOURCE_TYPE.replace(/[/+.-]/g, c => `\\${c}`)}["'][^>]*>([\\s\\S]*?)</script>`,
+      'gi',
+    ),
+  ),
+];
+
+/**
  * Read the embedded source from a rendered file.
  * @param {string} html
- * @returns {{found: false} | {found: true, source: EmbeddedSource} | {found: true, damaged: string}}
+ * @returns {{found: false} | {found: true, source: EmbeddedSource} | {found: true, damaged: string} | {found: true, newer: {format: number, cli: string | null}}}
  */
 export function readSourceBlock(html) {
-  const all = [
-    ...html.matchAll(
-      new RegExp(
-        `<script\\s+type=["']${SOURCE_TYPE.replace(/[/+.-]/g, c => `\\${c}`)}["'][^>]*>([\\s\\S]*?)</script>`,
-        'gi',
-      ),
-    ),
-  ];
   // The block is written last in the body; a page's own markup cannot end
   // it, so the last one is the CLI's.
-  const m = all.at(-1);
-  if (!m) return {found: false};
+  const m = blocksIn(html).at(-1);
+  if (!m) {
+    // An opening tag with no block after it: the file ends inside the block.
+    return html.includes(`<script type="${SOURCE_TYPE}">`)
+      ? {found: true, damaged: 'its embedded source is cut short: the file ends inside it'}
+      : {found: false};
+  }
   /** @type {any} */
   let payload;
   try {
     payload = JSON.parse(m[1]);
   } catch {
     return {found: true, damaged: 'its embedded source is not valid JSON'};
+  }
+  if (Number.isInteger(payload?.version) && payload.version > RENDER_FORMAT) {
+    return {
+      found: true,
+      newer: {format: payload.version, cli: typeof payload.cli === 'string' ? payload.cli : null},
+    };
   }
   if (
     payload?.version !== 1 ||
@@ -103,4 +140,55 @@ export function readSourceBlock(html) {
     }
   }
   return {found: true, source: payload};
+}
+
+/**
+ * The markup between `<body>` and the embedded source: what a render wrote
+ * there, unless someone changed it since. Null when the file no longer has
+ * that shape.
+ * @param {string} html
+ * @returns {string | null}
+ */
+export function renderedMarkupOf(html) {
+  const block = blocksIn(html).at(-1);
+  if (!block || block.index === undefined) return null;
+  const headEnd = html.indexOf('</head>');
+  const body = /<body\b[^>]*>/i.exec(html.slice(headEnd < 0 ? 0 : headEnd));
+  if (!body) return null;
+  const start = (headEnd < 0 ? 0 : headEnd) + body.index + body[0].length;
+  return start > block.index ? null : html.slice(start, block.index);
+}
+
+/**
+ * The title and the <style> element a render wrote in <head>, unless someone
+ * changed them since.
+ * @param {string} html
+ * @returns {{title: string | null, style: string | null}}
+ */
+export function renderedHeadOf(html) {
+  const body = html.search(/<body\b/i);
+  const head = body < 0 ? html : html.slice(0, body);
+  return {
+    title: /<title>([\s\S]*?)<\/title>/.exec(head)?.[1] ?? null,
+    style: /<style>[\s\S]*?<\/style>/.exec(head)?.[0] ?? null,
+  };
+}
+
+/**
+ * The title and the runs of text a record keeps, or null when the record
+ * keeps none or they do not decode.
+ * @param {{text?: unknown}} markup
+ * @returns {{title: string | null, runs: string[]} | null}
+ */
+export function recordedText(markup) {
+  if (typeof markup.text !== 'string') return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(markup.text, 'base64').toString('utf8'));
+    return {
+      title: typeof parsed?.title === 'string' ? parsed.title : null,
+      runs: Array.isArray(parsed?.runs) ? parsed.runs.filter((/** @type {unknown} */ r) => typeof r === 'string') : [],
+    };
+  } catch {
+    return null;
+  }
 }

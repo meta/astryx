@@ -81,7 +81,9 @@ describe('the embedded source', () => {
   it('reports a damaged block', () => {
     const block = sourceBlock('p.tsx', [{path: 'p.tsx', bytes: Buffer.from('a')}]);
     expect(readSourceBlock(block.replace(/"sha256":"[0-9a-f]/, '"sha256":"Z'))).toMatchObject({found: true});
-    expect('damaged' in readSourceBlock(block.replace('"version":1', '"version":2'))).toBe(true);
+    expect(readSourceBlock(block.replace('"version":1', '"version":2'))).toEqual({found: true, newer: {format: 2, cli: null}});
+    expect('damaged' in readSourceBlock(block.replace('"version":1', '"version":"one"'))).toBe(true);
+    expect('damaged' in readSourceBlock(block.replace('"version":1', '"version":0'))).toBe(true);
     expect(readSourceBlock('<p>none</p>')).toEqual({found: false});
   });
 });

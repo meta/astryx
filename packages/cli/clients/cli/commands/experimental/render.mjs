@@ -81,6 +81,7 @@ export function registerExperimentalRender(group, program) {
         return answered;
       }
       const d = result.data;
+      const edits = d.edits ?? [];
       emit(
         section(d.mode === 'embedded' ? `Restored ${d.output}` : `Rebuilt ${d.output}`),
         record({
@@ -98,6 +99,11 @@ export function registerExperimentalRender(group, program) {
                 ...(d.unknown?.length ? {unknown: d.unknown.join(', ')} : {}),
               }
             : {}),
+          ...(d.format === undefined ? {} : {format: d.format}),
+          ...(d.renderedBy ? {renderedBy: d.renderedBy} : {}),
+          ...(d.packages ? {packages: d.packages.join(', ') || 'none'} : {}),
+          ...(d.edited === undefined ? {} : {edited: d.edited}),
+          ...(d.stylesEdited === undefined ? {} : {stylesEdited: d.stylesEdited}),
         }),
         ...(d.mode === 'rebuilt'
           ? [
@@ -105,6 +111,25 @@ export function registerExperimentalRender(group, program) {
                 'The file had no embedded source, so the page was rebuilt from its Astryx markup: text and layout only. Review it before use.',
               ),
             ]
+          : []),
+        ...(d.edited
+          ? [
+              section('Changed after the render'),
+              ...(edits.length > 0
+                ? edits.map(edit =>
+                    record({
+                      was: edit.was ?? '(added after the render)',
+                      now: edit.now ?? '(removed after the render)',
+                      ...(edit.file ? {file: edit.file, line: edit.line} : {}),
+                    }),
+                  )
+                : [text(d.stylesEdited ? 'Only the styles changed after the render; the text did not.' : 'The markup changed after the render, but its text did not: only attributes, elements or formatting.')]),
+              ...(d.moreEdits ? [record({moreEdits: d.moreEdits})] : []),
+              text('The restored files are the page as rendered, without these changes: make them in the restored files, then render again.'),
+            ]
+          : []),
+        ...(d.mode === 'embedded'
+          ? [text(`Render it again: ${run} experimental render ${d.output} --out ${d.input}`)]
           : []),
       );
       return answered;

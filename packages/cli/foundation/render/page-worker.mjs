@@ -36,6 +36,7 @@ import {createJiti} from 'jiti';
 import {assetDataUri, isAssetPath} from './assets.mjs';
 import {SINGLE_COPY, isServedPackage, packageOf} from './served-packages.mjs';
 import {findNodeModulesPackage} from '../fs/paths.mjs';
+import {importSpecifiers} from './embedded-imports.mjs';
 import {CHART_GLOBAL, CHART_ROOTS, chartDocument, chartSize, markLegends} from './charts.mjs';
 
 /** @typedef {{level: string, text: string}} PageLog */
@@ -607,6 +608,24 @@ const namesAlias = spec => {
  */
 const resolveAlias = spec => resolvePath(PATHS, spec) ?? spec;
 
+/** The extensions an extensionless import may stand for, in the order the render loads them. */
+const LOAD_EXTENSIONS = ['.js', '.mjs', '.cjs', '.jsx', '.ts', '.tsx', '.mts', '.cts', '.json'];
+
+/**
+ * The file a relative or aliased import names, found the way the render
+ * loads it, or null for a package import or a file that does not exist.
+ * @param {string} spec
+ * @param {string} from the importing file
+ * @returns {string | null}
+ */
+function importedFile(spec, from) {
+  const raw = spec.split('?')[0];
+  const base = raw.startsWith('.') ? path.resolve(path.dirname(from), raw) : isAliased(raw) ? resolveAlias(raw) : null;
+  if (!base || !path.isAbsolute(base)) return null;
+  const candidates = [base, ...LOAD_EXTENSIONS.map(ext => base + ext), ...LOAD_EXTENSIONS.map(ext => path.join(base, `index${ext}`))];
+  return candidates.find(candidate => fs.statSync(candidate, {throwIfNoEntry: false})?.isFile()) ?? null;
+}
+
 /** Packages the page took from the package set, by name: their folders. */
 /** @type {Map<string, string>} */
 const fromSet = new Map();
@@ -911,6 +930,24 @@ try {
   if (stylexRules.length > 0) {
     reach('compiling styles');
     css = stylexPlugin.processStylexRules(stylexRules, {useLayers: false});
+  }
+  // Node loads some local modules itself (jiti hands it a plain ES module,
+  // such as a built theme), so they never pass the transform that records
+  // local files. Follow the imports of every local module instead, so the
+  // file carries each module the page reaches, as --reverse expects.
+  for (let i = 0; i < localFiles.length; i++) {
+    const file = localFiles[i];
+    if (!/\.[cm]?[jt]sx?$/.test(file)) continue;
+    let source;
+    try {
+      source = fs.readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    for (const spec of importSpecifiers(source, file)) {
+      const target = importedFile(spec, file);
+      if (target && isLocal(target) && !localFiles.includes(target)) localFiles.push(target);
+    }
   }
   parentPort?.postMessage({
     ok: true,
