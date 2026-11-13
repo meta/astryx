@@ -6,7 +6,8 @@
  * @output Receipted evidence that, with renderPopover, events are keyboard
  *   reachable buttons whose popup attributes track one view-owned popover:
  *   open on Enter, Space, click, and tap; close on Escape and light dismiss
- *   with focus returned to the event; switch between events in one gesture;
+ *   with focus returned to the event; switch between events in one gesture
+ *   with a mouse or a finger; close on a press on the open event;
  *   leave a null event read-only; keep the read-only story unchanged; show
  *   no scrollbar on a popover whose content fits; and scroll long content
  *   from the keyboard
@@ -228,6 +229,44 @@ test('click opens, clicking another event switches in one gesture, and light dis
   await expect
     .poll(async () => (await readDialog(page)).details)
     .toBe('contain-long');
+});
+
+test('a press on the open event closes it, and another event opens in the same press, with a mouse and a finger', async ({
+  page,
+}) => {
+  await openStory(evidence, page, POPOVER_STORY, WIDE);
+  const workshop = page.getByRole('button', {name: /^Workshop,/});
+  const coffee = page.getByRole('button', {name: /^Coffee chat,/});
+
+  // Mouse: the press on the open event closes it, and it stays closed.
+  await workshop.click();
+  await expect
+    .poll(async () => (await readDialog(page)).details)
+    .toBe('contain-long');
+  await workshop.click();
+  await expect.poll(async () => (await readDialog(page)).openCount).toBe(0);
+  await page.waitForTimeout(300);
+  expect((await readDialog(page)).openCount).toBe(0);
+  await expect(workshop).toHaveAttribute('aria-expanded', 'false');
+
+  // Finger: a tap on another event while one is open opens it there.
+  await workshop.tap();
+  await expect
+    .poll(async () => (await readDialog(page)).details)
+    .toBe('contain-long');
+  await coffee.tap();
+  await expect
+    .poll(async () => (await readDialog(page)).details)
+    .toBe('contain-short');
+  expect((await readDialog(page)).openCount).toBe(1);
+  await expect(coffee).toHaveAttribute('aria-expanded', 'true');
+  await expect(workshop).toHaveAttribute('aria-expanded', 'false');
+
+  // A tap on the open event closes it.
+  await coffee.tap();
+  await expect.poll(async () => (await readDialog(page)).openCount).toBe(0);
+  await page.waitForTimeout(300);
+  expect((await readDialog(page)).openCount).toBe(0);
 });
 
 test('an event without content stays read-only and the open popover closes when its event leaves', async ({

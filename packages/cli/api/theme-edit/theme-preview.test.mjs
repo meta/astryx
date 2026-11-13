@@ -119,11 +119,37 @@ afterAll(() => {
 });
 
 describe('preview add', () => {
-  it('refuses with no routes folder, naming --path and preview app', async () => {
+  it('refuses with no routes folder, naming the Next apps below and preview app', async () => {
     const r = await refusal(() => themeEditPreviewAdd(undefined, {cwd}));
     expect(r.code).toBe('ERR_NOT_FOUND');
-    expect(r.run.join(' ')).toContain('add --path app/theme-preview');
+    expect(r.run.join(' ')).not.toContain('--path app/theme-preview');
     expect(r.run.join(' ')).toContain('preview app theme-app');
+    // A routes folder made by --path has no root layout: refused, unwritten.
+    const made = await refusal(() =>
+      themeEditPreviewAdd(undefined, {cwd, path: 'app/theme-preview'}),
+    );
+    expect(made.message).toContain('has no root layout');
+    expect(fs.existsSync(path.join(cwd, 'app'))).toBe(false);
+    // A workspace root names the Next app below it, with a --path into it.
+    const web = path.join(cwd, 'apps/web');
+    fs.mkdirSync(path.join(web, 'src/app'), {recursive: true});
+    fs.writeFileSync(
+      path.join(web, 'package.json'),
+      '{"name": "web", "dependencies": {"next": "*"}}\n',
+    );
+    fs.writeFileSync(
+      path.join(web, 'src/app/layout.tsx'),
+      'export default 1;\n',
+    );
+    try {
+      const ws = await refusal(() => themeEditPreviewAdd(undefined, {cwd}));
+      expect(ws.message).toContain('the Next app below is apps/web/');
+      expect(ws.run[0]).toBe(
+        'astryx experimental theme preview add --path apps/web/src/app/theme-preview',
+      );
+    } finally {
+      fs.rmSync(path.join(cwd, 'apps'), {recursive: true, force: true});
+    }
   });
 
   it('writes the route, the default pages and the data file in the app routes folder', async () => {
@@ -178,6 +204,44 @@ describe('preview add', () => {
       }),
     ).toEqual([]);
   }, 120_000);
+
+  it('writes a one-mode route that imports only what it draws, and says what leaving out --theme does', async () => {
+    await themeEditNew('lo', {
+      cwd,
+      like: 'neutral',
+      settings: {mode: 'light-only'},
+    });
+    const dir = path.join(cwd, 'src/app/lo');
+    try {
+      await themeEditPreviewAdd(undefined, {
+        cwd,
+        theme: 'lo',
+        path: 'src/app/lo',
+      });
+      const route = read('src/app/lo/page.tsx');
+      expect(route).not.toContain('SegmentedControl');
+      expect(
+        typeErrors(dir, false, {
+          noUncheckedIndexedAccess: true,
+          noUnusedLocals: true,
+        }),
+      ).toEqual([]);
+      // With a preview that wears lo, leaving out --theme keeps lo.
+      const r = await refusal(() =>
+        themeEditPreviewAdd(undefined, {
+          cwd,
+          theme: 'neutral',
+          path: 'src/app/lo',
+        }),
+      );
+      expect(r.message).toContain(
+        'leave out --theme and the preview keeps wearing lo',
+      );
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+      fs.rmSync(path.join(cwd, 'themes/lo'), {recursive: true, force: true});
+    }
+  }, 240_000);
 
   it('adds a Colors page once the theme has generated colors, and keeps it in step', async () => {
     const dir = path.join(cwd, 'src/app/theme-preview');
@@ -511,7 +575,10 @@ describe('preview options and errors', () => {
   it('lists no pages when there is no routes folder', async () => {
     const bare = path.join(cwd, 'bare-app');
     fs.mkdirSync(bare);
-    fs.writeFileSync(path.join(bare, 'package.json'), '{"name": "bare"}\n');
+    fs.writeFileSync(
+      path.join(bare, 'package.json'),
+      '{"name": "bare", "dependencies": {"@astryxdesign/core": "*"}}\n',
+    );
     try {
       const r = await themeEditPreviewList({cwd: bare});
       expect(r.data).toEqual({
@@ -519,7 +586,8 @@ describe('preview options and errors', () => {
         theme: null,
         themeMissing: false,
         pages: [],
-        notes: [],
+        // No preview, and add would refuse here: the note says why.
+        notes: [expect.stringContaining('preview add refuses this folder')],
       });
     } finally {
       fs.rmSync(bare, {recursive: true, force: true});
@@ -834,6 +902,13 @@ describe('preview app', () => {
       expect(pkg.dependencies[name], name).toBe(
         name.startsWith('@astryxdesign/') ? '{{astryxVersion}}' : range,
       );
-    expect(pkg.devDependencies).toEqual(ex.devDependencies);
+    // The starter also names Node's types, which `next dev` would otherwise
+    // install (and stall on with no network); the example gets them from the
+    // workspace.
+    expect(pkg.devDependencies).toEqual({
+      ...ex.devDependencies,
+      '@types/node': pkg.devDependencies['@types/node'],
+    });
+    expect(pkg.devDependencies['@types/node']).toBeTruthy();
   });
 });
