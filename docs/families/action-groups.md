@@ -136,8 +136,11 @@ Selector's and MultiSelector's options FR1–FR5
   acts on the action the pointer lifts on, through that action's own
   activation; a press that never leaves its action acts on it. One gesture
   acts at most once (`spec:AST-094` FR26). After a slide, focus does what a
-  click on the lifted action does. A mouse press acts as the platform's
-  native button does: on the action it began on, released over that action.
+  click on the lifted action does. A mouse press acts as the platform's native
+  button does: on the action it began on, released over that action. Until the
+  shared touch runtime has loaded (`architecture:react-component-runtime`
+  INV13), each action in AlertDialog, ButtonGroup and ToggleButtonGroup keeps
+  its own press, with no slide between actions.
 - **FR2 — The highlight follows the pointer.** While the pointer is held, the
   enabled action under it is highlighted, at most one at a time, and nothing
   is highlighted over a disabled action, a gap, or outside the group

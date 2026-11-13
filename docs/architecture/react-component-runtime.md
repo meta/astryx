@@ -346,13 +346,16 @@ those contracts.
   an interaction. Until the shared touch runtime has loaded, SegmentedControl
   and Switch work by taps, clicks and keys, with no drag tracking and no slide
   or spring; a bottom sheet still drags, and a drag that closes it takes the
-  stylesheet exit instead of the spring. A gesture in that window does not
-  start the load. The bundler keeps one copy per page however many components
-  use them. `utils/touchRuntimeModules.tsx` is the one module the loader's
-  `import()` targets; it gathers the touch runtime, so the loader names a
-  single chunk. `motion/settleThreshold.ts` holds `SETTLE_THRESHOLD` apart
-  from the animator, so a component that reads the threshold statically does
-  not pull in the deferred runtime. `hooks/pagerIndex.ts` holds a looping
+  stylesheet exit instead of the spring; a toast does not swipe (its close
+  button and timer still dismiss it), and a popover presents as under a fine
+  pointer; each action in AlertDialog, ButtonGroup and ToggleButtonGroup keeps
+  its own press, with no slide between actions. A gesture in that window does
+  not start the load. The bundler keeps one copy per page however many
+  components use them. `utils/touchRuntimeModules.tsx` is the one module the
+  loader's `import()` targets; it gathers the touch runtime, so the loader
+  names a single chunk. `motion/settleThreshold.ts` holds `SETTLE_THRESHOLD`
+  apart from the animator, so a component that reads the threshold statically
+  does not pull in the deferred runtime. `hooks/pagerIndex.ts` holds a looping
   pager's index arithmetic apart from the pager, so the date and time wheels
   read it without loading the pager. `hooks/actionGroupNeighbours.ts` holds
   the action-group target helpers apart from the tracking runtime, so a
