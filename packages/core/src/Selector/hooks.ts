@@ -29,7 +29,7 @@ import {
 import {LAYER_KEYBOARD_INSET_PROPERTY} from '../Layer/useLayerKeyboardClearance';
 import {isImeKeyEvent} from '../utils/ime';
 import {layoutViewportHeight} from '../utils/layoutViewport';
-import {observeResize} from '../utils/sharedResizeObserver';
+import {observeResizeAfterLayout} from '../utils/sharedResizeObserver';
 import type {RefObject} from 'react';
 import type {SelectorOptionData} from './types';
 
@@ -262,17 +262,13 @@ export function useSelectedItemOverlayMargin({
     if (!isOpen || listbox == null) {
       return;
     }
-    // Skip the report at registration. It falls inside this commit, and the
-    // measuring Effect already runs in this commit.
-    let isRegistering = true;
-    const unobserve = observeResize(listbox, () => {
-      if (!isRegistering) {
-        // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the margin must change before the frame paints
-        flushSync(() => setListboxResizes(count => count + 1));
-      }
+    // The measuring Effect already runs in this commit, so the observation
+    // skips the report at registration.
+    const stop = observeResizeAfterLayout(listbox, () => {
+      // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the margin must change before the frame paints
+      flushSync(() => setListboxResizes(count => count + 1));
     });
-    isRegistering = false;
-    return unobserve;
+    return stop ?? undefined;
   }, [isOpen, listboxRef]);
 
   // Syncs the overlay's margin with the open list's layout: its selected
