@@ -251,7 +251,7 @@ useCalendarConstraints useCalendarConstraints Calendar/useCalendarConstraints.do
 useCalendarDays useCalendarDays Calendar/useCalendarDays.doc.mjs Calendar/hooks/useCalendarDays.ts
 useCalendarNavigation useCalendarNavigation Calendar/useCalendarNavigation.doc.mjs Calendar/hooks/useCalendarNavigation.ts
 useChatComposerTokens useChatComposerTokens Chat/Chat.doc.mjs Chat/useChatComposerTokens.ts
-useChatDictation useChatDictation Chat/Chat.doc.mjs Chat/useChatDictation.ts
+useChatDictation useChatDictation Chat/useChatDictation.doc.mjs Chat/useChatDictation.ts
 useChatNewMessages useChatNewMessages Chat/Chat.doc.mjs Chat/useChatNewMessages.ts
 useChatPasteAsToken useChatPasteAsToken Chat/Chat.doc.mjs Chat/useChatPasteAsToken.ts
 useChatStreamScroll useChatStreamScroll Chat/Chat.doc.mjs Chat/useChatStreamScroll.ts
