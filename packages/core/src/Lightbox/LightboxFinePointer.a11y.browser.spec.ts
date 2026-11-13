@@ -440,18 +440,61 @@ test('a mouse click above the photo closes the viewer with zoom on, as before', 
   });
 });
 
-test('in a gallery, a mouse click beside a large photo, level with it, leaves the viewer open, as on main', async ({
+test('in a gallery, a mouse click beside a large photo shown smaller, level with it, closes the viewer', async ({
   page,
 }) => {
-  // A photo wider than the viewer: the media spans the viewer's width, so
-  // a click beside the photo stays on it, as on main.
+  // A photo wider than the viewer is shown smaller. The media is the shown
+  // photo, not its natural width, so a click beside it is the backdrop's.
   const {dialog, current} = await openGallery(page);
   const shown = await boxOf(current);
   expect(shown.x).toBeGreaterThan(40);
   const level = shown.y + shown.height * 0.15;
-  await page.mouse.click(shown.x / 2, level);
-  await page.waitForTimeout(400);
-  await expect(dialog).toBeVisible();
+  await expectBackdropClickCloses(page, dialog, {x: shown.x / 2, y: level});
+});
+
+test('at 1280 × 800, a mouse click 4 or 20 px beside a gallery photo scaled down to fit closes the viewer, and one on the photo or its caption band keeps it open', async ({
+  page,
+}) => {
+  await page.setViewportSize({width: 1280, height: 800});
+  // The story's own photo size, which the window scales down to fit.
+  await page.route('https://picsum.photos/**', async route =>
+    route.fulfill({
+      contentType: 'image/svg+xml',
+      body: photoSvg(1200, 800),
+    }),
+  );
+  const open = async () => {
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=core-lightbox--gallery-with-zoom&viewMode=story`,
+    );
+    await page.getByRole('button', {name: 'Open gallery with zoom'}).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    const current = dialog.locator('[data-current] img');
+    await expect
+      .poll(async () =>
+        current.evaluate(el => (el as HTMLImageElement).naturalWidth),
+      )
+      .toBe(1200);
+    await settled(page);
+    return {dialog, shown: await boxOf(current)};
+  };
+  let {dialog, shown} = await open();
+  expect(shown.width).toBeLessThan(1200);
+  const level = shown.y + shown.height / 2;
+  for (const gap of [4, 20]) {
+    await expectBackdropClickCloses(page, dialog, {x: shown.x - gap, y: level});
+    ({dialog, shown} = await open());
+  }
+  expect(await staysOpenAfterClick(page, centre(shown))).toBe(true);
+  const {band, caption} = await captionBoxes(dialog);
+  expect(band.x).toBeLessThan(caption.x - 12);
+  expect(
+    await staysOpenAfterClick(page, {
+      x: band.x + 12,
+      y: caption.y + caption.height / 2,
+    }),
+  ).toBe(true);
 });
 
 test('a mouse click on the gallery counter leaves the viewer open, as on main', async ({
@@ -471,7 +514,7 @@ test('a mouse click on the gallery counter leaves the viewer open, as on main', 
   await expect(dialog).toBeVisible();
 });
 
-test('without zoom, a mouse click at the far edge beside a large gallery photo leaves the viewer open, as on main', async ({
+test('without zoom, a mouse click at the far edge beside a large gallery photo closes the viewer', async ({
   page,
 }) => {
   await page.setViewportSize({width: 1280, height: 800});
@@ -497,9 +540,10 @@ test('without zoom, a mouse click at the far edge beside a large gallery photo l
   const shown = await boxOf(current);
   // The photo leaves dark area at the window's right edge, level with it.
   expect(1280 - (shown.x + shown.width)).toBeGreaterThan(20);
-  await page.mouse.click(1276, shown.y + shown.height / 2);
-  await page.waitForTimeout(400);
-  await expect(dialog).toBeVisible();
+  await expectBackdropClickCloses(page, dialog, {
+    x: 1276,
+    y: shown.y + shown.height / 2,
+  });
 });
 
 test('a mouse double-click zooms 2× about the clicked point, and the next zooms back', async ({
@@ -736,23 +780,20 @@ async function staysOpenAfterClick(
   return page.evaluate(() => document.querySelector('dialog')?.open === true);
 }
 
-test('a mouse click beside the fitted photo, level with it, leaves the viewer open, as on main', async ({
+test('a mouse click beside the fitted photo, level with it, closes the viewer on either side', async ({
   page,
 }) => {
-  const {fitted, stageBox} = await openViewer(page);
-  // The fitted photo leaves dark stage on both sides. Main's media spans the
-  // viewer's width there, so a click beside the photo does not close.
+  const {dialog, fitted, stageBox} = await openViewer(page);
+  // The fitted photo leaves dark stage on both sides, where a click is the
+  // backdrop's.
   expect(fitted.x - stageBox.x).toBeGreaterThan(40);
   const level = fitted.y + fitted.height / 2;
-  expect(await staysOpenAfterClick(page, {x: stageBox.x + 20, y: level})).toBe(
-    true,
-  );
-  expect(
-    await staysOpenAfterClick(page, {
-      x: fitted.x + fitted.width + 20,
-      y: level,
-    }),
-  ).toBe(true);
+  await expectBackdropClickCloses(page, dialog, {x: stageBox.x + 20, y: level});
+  const again = await openViewer(page);
+  await expectBackdropClickCloses(page, again.dialog, {
+    x: again.fitted.x + again.fitted.width + 20,
+    y: level,
+  });
 });
 
 test('with zoom on, a mouse click on the photo leaves the viewer open and one below it closes, as on main', async ({
@@ -805,7 +846,7 @@ test('a mouse press on the fitted photo released above it closes the viewer, as 
   ).toBe(false);
 });
 
-test('without zoom, a mouse click beside the photo leaves the viewer open and one above it closes, as on main', async ({
+test('without zoom, a mouse click beside the photo or above it closes the viewer', async ({
   page,
 }) => {
   await page.route('https://picsum.photos/**', async route =>
@@ -836,7 +877,7 @@ test('without zoom, a mouse click beside the photo leaves the viewer open and on
       x: fitted.x / 2,
       y: fitted.y + fitted.height / 2,
     }),
-  ).toBe(true);
+  ).toBe(false);
   await page.setViewportSize({width: 1280, height: 1100});
   const tall = await open();
   expect(tall.y).toBeGreaterThan(40);
@@ -942,46 +983,54 @@ test('with zoom, a mouse double-click on a single photo’s caption zooms the ph
   );
 });
 
-test('in a gallery with zoom, a mouse click beside a small photo closes past its caption’s width and stays open within it, as on main', async ({
+test('in a gallery with zoom, a mouse click beside a narrow photo, level with it, closes the viewer within its caption’s width or past it', async ({
   page,
 }) => {
-  // A photo narrower than the viewer: the media is as wide as its caption,
-  // which is wider than the photo here.
+  // A photo narrower than its caption. The caption's band sits under the
+  // photo, so the dark space beside the photo is the backdrop's.
   await page.setViewportSize({width: 1280, height: 1100});
   await page.route('https://picsum.photos/**', async route =>
     route.fulfill({contentType: 'image/svg+xml', body: photoSvg(200, 1200)}),
   );
-  await page.goto(
-    `${storybook.origin}/iframe.html?id=core-lightbox--gallery-with-zoom&viewMode=story`,
-  );
-  await page.getByRole('button', {name: 'Open gallery with zoom'}).click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog).toBeVisible();
-  const img = dialog.getByRole('img').first();
-  await expect
-    .poll(async () => img.evaluate(el => (el as HTMLImageElement).naturalWidth))
-    .toBe(200);
-  await settled(page);
-  const photo = await boxOf(img);
-  // The current page's own caption.
-  const caption = await dialog.evaluate(viewer => {
-    const r = viewer
-      .querySelector('[data-current] [data-lightbox-caption]')
-      ?.getBoundingClientRect();
-    return r == null ? null : {x: r.x, width: r.width};
-  });
-  if (caption == null) {
-    throw new Error('no caption');
-  }
-  const level = photo.y + photo.height / 2;
+  const open = async () => {
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=core-lightbox--gallery-with-zoom&viewMode=story`,
+    );
+    await page.getByRole('button', {name: 'Open gallery with zoom'}).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    const img = dialog.getByRole('img').first();
+    await expect
+      .poll(async () =>
+        img.evaluate(el => (el as HTMLImageElement).naturalWidth),
+      )
+      .toBe(200);
+    await settled(page);
+    // The current page's own caption.
+    const caption = await dialog.evaluate(viewer => {
+      const r = viewer
+        .querySelector('[data-current] [data-lightbox-caption]')
+        ?.getBoundingClientRect();
+      return r == null ? null : {x: r.x, width: r.width};
+    });
+    if (caption == null) {
+      throw new Error('no caption');
+    }
+    return {dialog, photo: await boxOf(img), caption};
+  };
+  const first = await open();
+  const level = first.photo.y + first.photo.height / 2;
   // Within the caption's width, beside the photo.
-  expect(caption.x).toBeLessThan(photo.x - 10);
-  expect(
-    await staysOpenAfterClick(page, {x: (caption.x + photo.x) / 2, y: level}),
-  ).toBe(true);
+  expect(first.caption.x).toBeLessThan(first.photo.x - 10);
+  await expectBackdropClickCloses(page, first.dialog, {
+    x: (first.caption.x + first.photo.x) / 2,
+    y: level,
+  });
   // Past the caption's width.
-  expect(caption.x).toBeGreaterThan(60);
-  expect(await staysOpenAfterClick(page, {x: caption.x - 30, y: level})).toBe(
-    false,
-  );
+  const second = await open();
+  expect(second.caption.x).toBeGreaterThan(60);
+  await expectBackdropClickCloses(page, second.dialog, {
+    x: second.caption.x - 30,
+    y: level,
+  });
 });

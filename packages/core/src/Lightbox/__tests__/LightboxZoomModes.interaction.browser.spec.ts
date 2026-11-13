@@ -322,7 +322,7 @@ test('with a mouse the zoom-in cursor shows over the fitted photo, not over the 
     if (photo == null) {
       throw new Error('no photo');
     }
-    // The fitted photo leaves dark stage on its left, where a click closes.
+    // The fitted photo leaves dark stage on its left.
     expect(photo.x - stage.x).toBeGreaterThan(20);
     const cursorAt = async (x: number, y: number) => {
       await page.mouse.move(x, y);
@@ -334,6 +334,9 @@ test('with a mouse the zoom-in cursor shows over the fitted photo, not over the 
     expect(await cursorAt(stage.x + 20, y)).toBe('default');
     expect(await cursorAt(photo.x + photo.width / 2, y)).toBe('zoom-in');
     expect(await cursorAt(stage.x + 20, y)).toBe('default');
+    // A click on that dark stage closes the viewer.
+    await page.mouse.click(stage.x + 20, y);
+    await expect(page.getByRole('dialog')).toBeHidden();
   } finally {
     await context.close();
   }
@@ -375,7 +378,7 @@ test('with a mouse a gallery page shows the zoom-in cursor over the fitted photo
     };
     const x = photo.x + photo.width / 2;
     const y = photo.y + photo.height / 2;
-    // The fitted photo leaves dark stage on its left, where a click closes.
+    // The fitted photo leaves dark stage on its left.
     expect(await cursorAt(photo.x - 20, y)).toBe('default');
     expect(await cursorAt(x, y)).toBe('zoom-in');
     expect(await cursorAt(photo.x - 20, y)).toBe('default');
@@ -384,6 +387,13 @@ test('with a mouse a gallery page shows the zoom-in cursor over the fitted photo
     await waitForRest(img);
     expect((await readTransform(img)).scale).toBeGreaterThan(1);
     expect(await cursorAt(x, y)).toBe('grab');
+    // Back at fit, a click on the dark stage beside the photo closes the
+    // viewer.
+    await page.mouse.dblclick(x, y);
+    await waitForRest(img);
+    expect((await readTransform(img)).scale).toBe(1);
+    await page.mouse.click(photo.x - 20, y);
+    await expect(dialog).toBeHidden();
   } finally {
     await context.close();
   }

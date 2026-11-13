@@ -109,10 +109,11 @@ import {
 import {
   renderPreview,
   renderSheet,
+  previewIsCurrent,
   takeFirstAppCopy,
   writeAppCopy,
 } from './_preview.mjs';
-import {appWiring, refreshPreviewRoute} from './_preview-app.mjs';
+import {appWiring, refreshPreviewRoute, seeLine} from './_preview-app.mjs';
 import {baseInstalled, baseResolved, installLine} from './_project.mjs';
 import {reactMissing} from './_parts.mjs';
 import {
@@ -805,6 +806,23 @@ function unquoteWord(word) {
 }
 
 /**
+ * The preview page most about a change: Colors for a color (a color dial
+ * or a color token), Components for a part setting, else Overview.
+ * @param {{thing: string, on?: string | null}} s
+ * @returns {'colors' | 'components' | 'overview'}
+ */
+function changeFocus(s) {
+  if (s.on) return 'components';
+  if (
+    PALETTE_DIALS.includes(s.thing) ||
+    s.thing === 'vibrancy' ||
+    /^--color-/.test(s.thing)
+  )
+    return 'colors';
+  return 'overview';
+}
+
+/**
  * The preview after a change, with the in-app preview route kept in step:
  * its imports follow the theme, such as the stylesheet of a font package
  * installed since the last change.
@@ -812,13 +830,29 @@ function unquoteWord(word) {
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
  * @param {boolean} png
+ * @param {'colors' | 'components' | 'overview'} [focus] the preview page
+ *   most about the change: Colors for a color, Components for a part
  */
-async function previewAndRoute(ctx, slug, data, png) {
+async function previewAndRoute(ctx, slug, data, png, focus = 'overview') {
   const p = await previewAfter(ctx, slug, data, png);
   const wrote = takeFirstAppCopy(ctx.project.cwd, slug);
   return {
     ...p,
     previewStale: await keepPreviewRoute(ctx, slug),
+    // How to see the change: the page about it, at its own URL.
+    // A page not written this time (preview null) still shows the theme
+    // as it was; checks that failed with the page written do not.
+    see: seeLine(
+      ctx.project.cwd,
+      slug,
+      focus,
+      p.preview == null
+        ? (p.notChecked ?? {
+            code: 'ERR_THEME_NOT_CHECKED',
+            cause: 'no preview was rendered',
+          })
+        : null,
+    ),
     // The first time the theme's app copy is written, its files are named.
     ...(wrote ? {appCopy: {wrote}} : {}),
   };
@@ -1681,6 +1715,31 @@ async function changeOnce(
           !ownPartHits.some(h => h.target === target && h.prop === prop)
         )
           ownPartHits.push({target, key: s.when ?? 'base', prop, value});
+  // A padding the own source sets on a rule wins over every padding setting
+  // there (the editor writes none), whichever sides each names.
+  if (
+    sub === 'set' &&
+    s.source === 'property' &&
+    s.on &&
+    /^padding(-|$)/.test(s.thing)
+  )
+    for (const target of partsOf(ctx, s)) {
+      const state = s.state ? `:${s.state}` : null;
+      for (const [prop, value] of ownPartTokens(
+        cwd,
+        slug,
+        target,
+        s.when ?? 'base',
+        state,
+      ))
+        if (
+          /^padding(-|$)/.test(prop) &&
+          !ownPartHits.some(h => h.target === target && h.prop === prop)
+        ) {
+          ownPartHits.push({target, key: s.when ?? 'base', state, prop, value});
+          break;
+        }
+    }
   // A direct setting on exactly the rule the own source sets: its undo
   // takes it back (anything else the file wins over either way).
   const ownHitDirect =
@@ -1955,18 +2014,24 @@ async function changeOnce(
     notes.push(
       'text below the base size keeps its standard sizes, so small text stays readable',
     );
-  // A change that changed nothing writes nothing, the preview included.
+  // A change that changed nothing writes nothing, the preview included,
+  // once preview.html was rendered from the theme as it is now (a retry
+  // after a render that failed renders it).
   const f0 = themeFiles(cwd, slug);
   const p =
-    r.unchanged && !png && fs.existsSync(f0.preview)
+    r.unchanged &&
+    !png &&
+    fs.existsSync(f0.preview) &&
+    previewIsCurrent(ctx, slug, data)
       ? {
           preview: shown(cwd, f0.preview),
           pictures: [],
           pictureProblem: null,
           notChecked: null,
           previewStale: [],
+          see: seeLine(cwd, slug, changeFocus(s)),
         }
-      : await previewAndRoute(ctx, slug, data, png);
+      : await previewAndRoute(ctx, slug, data, png, changeFocus(s));
   return {
     type: sub === 'set' ? 'themeEdit.set' : 'themeEdit.undo',
     data: {
@@ -2703,9 +2768,16 @@ function ownOverSettingNotes(cwd, slug, data) {
     if (!parts.has(key))
       parts.set(key, ownPartTokens(cwd, slug, x.on, x.when ?? 'base', state));
     const own = /** @type {Map<string, string | null>} */ (parts.get(key));
-    if (own.has(x.thing))
+    // A padding the own source sets on the rule wins over every padding
+    // setting there, whichever sides each names.
+    const shown = own.has(x.thing)
+      ? x.thing
+      : /^padding(-|$)/.test(x.thing)
+        ? [...own.keys()].find(k => /^padding(-|$)/.test(k))
+        : undefined;
+    if (shown)
       out.push(
-        `${describe(x)}: ${slug}.theme.ts sets ${x.thing} on ${x.on}${state ? ` ${state}` : ''}${x.when ? ` when ${x.when}` : ''} itself${own.get(x.thing) != null ? ` (${own.get(x.thing)})` : ''}, so this setting does not show there`,
+        `${describe(x)}: ${slug}.theme.ts sets ${shown} on ${x.on}${state ? ` ${state}` : ''}${x.when ? ` when ${x.when}` : ''} itself${own.get(shown) != null ? ` (${own.get(shown)})` : ''}, so this setting does not show there`,
       );
   }
   return out;
@@ -3208,7 +3280,18 @@ export async function themeEditUndo(theme, options = {}) {
     );
   if (current && current.mode !== prev.mode)
     undone.push(`mode ${current.mode} is back to ${prev.mode}`);
-  const p = await previewAndRoute(ctx, theme, prev, png);
+  // The page most about what the step reverted: Colors for a color,
+  // Components for a part setting, else Overview.
+  const touched = [
+    ...[...was].filter(([k, s]) => now.get(k)?.value !== s.value),
+    ...[...now].filter(([k]) => !was.has(k)),
+  ].map(([, s]) => changeFocus(s));
+  const focus = touched.includes('colors')
+    ? 'colors'
+    : touched.includes('components')
+      ? 'components'
+      : 'overview';
+  const p = await previewAndRoute(ctx, theme, prev, png, focus);
   return {
     type: 'themeEdit.undo',
     data: {

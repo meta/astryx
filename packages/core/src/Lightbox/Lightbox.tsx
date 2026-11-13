@@ -1149,9 +1149,8 @@ export function Lightbox({
   );
   // Whether a mouse's or a pen's click on the media closes the viewer. It
   // does when its press or its release lands outside the current page's
-  // media. That is the fitted photo's rows, as wide as the photo's natural
-  // width or the caption, up to the viewer's, and the caption's own box.
-  // While zoomed, the photo's shown box is media too.
+  // media. That is the fitted photo's laid-out box, the caption's band and
+  // the caption's own box. While zoomed, the photo's shown box is media too.
   const isClickOutsideMedia = useCallback((e: ReactMouseEvent<HTMLElement>) => {
     const viewer = imageWrapperRef.current;
     const page = viewer?.querySelector('[data-current]');
@@ -1177,12 +1176,7 @@ export function Lightbox({
     const top = boxRect.top + space;
     const bottom = top + media.offsetHeight;
     const caption = page.querySelector<HTMLElement>('[data-lightbox-caption]');
-    const natural =
-      media instanceof HTMLImageElement ? media.naturalWidth : media.videoWidth;
-    const width = Math.min(
-      viewer.clientWidth,
-      Math.max(natural, caption?.offsetWidth ?? 0),
-    );
+    const width = media.offsetWidth;
     const middle = boxRect.left + box.clientWidth / 2;
     const shown = media.getBoundingClientRect();
     // The caption band can sit apart from the photo. There the media is the

@@ -20,7 +20,7 @@ import {
   requireCoreDir,
 } from '../../foundation/fs/paths.mjs';
 import {tryLock, userCacheDir} from '../../foundation/release/cache.mjs';
-import {Project} from '../../foundation/config/project.mjs';
+import {Project, providerLedgerOf} from '../../foundation/config/project.mjs';
 import {
   BUNDLED_THEME_PACKAGE,
   THEMES_DIR,
@@ -137,9 +137,23 @@ async function availableThemeState(cwd, {includeLocal = true} = {}) {
     // One broken local folder must not hide every other theme: it is
     // skipped with its reason, and only a lookup of that slug fails.
     const themes = await project.themes({includeLocal, skipBrokenLocal: true});
+    // An installed dependency whose manifest could not load for want of a
+    // package it requires has an issue too (INV14), but nothing of it was
+    // ever discovered: a lookup in it stays an unknown theme, as before.
+    const unloaded = new Set(
+      [...providerLedgerOf(project).values()].flatMap(entry =>
+        entry.outcome === 'load-failed' &&
+        entry.candidate.source === 'autolinked'
+          ? [entry.candidate.spec ?? entry.label]
+          : [],
+      ),
+    );
     return {
       themes,
-      issues: await project.issues(),
+      issues: (await project.issues()).filter(
+        issue =>
+          !(issue.code === 'integration_error' && unloaded.has(issue.package)),
+      ),
       skipped: project.skippedLocalThemes(),
     };
   } catch (error) {

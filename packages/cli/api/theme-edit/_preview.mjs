@@ -474,13 +474,13 @@ const withRenderKey = (html, key) => {
 };
 
 /**
- * Render the sample app page with the theme to themes/<slug>/preview.html.
+ * The sample page source of a theme's preview.html, its file, and the key
+ * of the inputs it is rendered from.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
- * @returns {Promise<string>} the file written, as shown
  */
-export async function renderPreview(ctx, slug, data) {
+function previewInputs(ctx, slug, data) {
   const {project} = ctx;
   const imports = /** @type {Record<string, string>} */ ({});
   for (const n of elementNames(SAMPLE_PAGE)) {
@@ -495,8 +495,36 @@ export async function renderPreview(ctx, slug, data) {
     title: `${slug}: sample page`,
   });
   const out = themeFiles(project.cwd, slug).preview;
+  return {source, out, key: renderKey(project, slug, source, data.like)};
+}
+
+/**
+ * Whether themes/<slug>/preview.html was rendered from the theme as it is
+ * now (the same check renderPreview makes before it renders again).
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ */
+export function previewIsCurrent(ctx, slug, data) {
+  try {
+    const {out, key} = previewInputs(ctx, slug, data);
+    return renderedFrom(out, key);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Render the sample app page with the theme to themes/<slug>/preview.html.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {Promise<string>} the file written, as shown
+ */
+export async function renderPreview(ctx, slug, data) {
+  const {project} = ctx;
+  const {source, out, key} = previewInputs(ctx, slug, data);
   // Rendered from the same inputs before: the page is as it would be.
-  const key = renderKey(project, slug, source, data.like);
   if (renderedFrom(out, key)) return shown(project.cwd, out);
   const {html} = await renderGenerated(project, `preview-${slug}.mjs`, source);
   // Written whole and renamed in, never through a link.
@@ -1282,7 +1310,9 @@ export function previewRouteSource({
     '        sideNav={',
     '          <SideNav>',
     '            {PAGES.map(p => (',
-    '              <SideNavItem key={p.id} label={p.label} isSelected={p.id === current.id} onClick={() => setPage(p.id)} />',
+    // Only a plain left click switches the page in place; a modified or
+    // middle click opens the page's URL as a link does (a new tab).
+    '              <SideNavItem key={p.id} label={p.label} isSelected={p.id === current.id} href={`?page=${p.id}`} onClick={e => { if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; e.preventDefault(); go(p.id); }} />',
     '            ))}',
     '          </SideNav>',
     '        }>',
@@ -1336,6 +1366,22 @@ export function previewRouteSource({
     '',
     'export default function ThemePreviewPage() {',
     '  const [page, setPage] = React.useState(PAGES[0]?.id);',
+    // Each page has its own URL (?page=<id>), so a link, a reload, the back
+    // button or a screenshot reaches any page; the page renders after mount.
+    "  const fromUrl = () => new URLSearchParams(window.location.search).get('page');",
+    '  React.useEffect(() => {',
+    // A URL with no (or an unknown) ?page shows the first page, as a reload does.
+    '    const sync = () => { const id = fromUrl(); setPage(id && PAGES.some(p => p.id === id) ? id : PAGES[0]?.id); };',
+    '    sync();',
+    "    window.addEventListener('popstate', sync);",
+    "    return () => window.removeEventListener('popstate', sync);",
+    '  }, []);',
+    '  const go = (id: string) => {',
+    '    setPage(id);',
+    '    const url = new URL(window.location.href);',
+    "    url.searchParams.set('page', id);",
+    "    window.history.pushState(null, '', url);",
+    '  };',
     // Pages render only in the browser: some components crash a server
     // render, and Next prerenders a client page's first state.
     '  const [ready, setReady] = React.useState(false);',
@@ -1480,7 +1526,8 @@ function chromeBinary() {
 }
 
 /** The first line of every file the editor writes into a theme's app copy. */
-export const APP_COPY_MARK = 'Written by `astryx experimental theme editor`';
+export {APP_COPY_MARK} from './_marks.mjs';
+import {APP_COPY_MARK} from './_marks.mjs';
 
 /**
  * The app's copy of an editor theme: a standard local theme in
