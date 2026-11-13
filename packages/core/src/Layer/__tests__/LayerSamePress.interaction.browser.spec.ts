@@ -141,6 +141,10 @@ test.describe('with a mouse, a context menu', () => {
 });
 
 test.describe('with a finger, a context menu', () => {
+  test.skip(
+    ({browserName}) => browserName !== 'chromium',
+    'Chromium holds a finger for the long press through the DevTools protocol',
+  );
   test.use({
     hasTouch: true,
     isMobile: true,
