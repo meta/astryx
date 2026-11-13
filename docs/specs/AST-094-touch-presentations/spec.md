@@ -152,8 +152,10 @@ a measured, sourced difference exists.
   its use (`architecture:theme-tokens` INV3), with one exception. A
   gesture-driven exit (a release that closes or dismisses) may play a spring
   measured from the platform reference without a named motion role (FR45); its
-  component's motion table lists that spring with its platform source. Every
-  other gesture-driven motion plays a motion role. The roles this record names
+  component's motion table lists that spring with its platform source. Toast's
+  exit under a finger plays a measured curve instead (FR45, `component:Toast`
+  DEC-2). Every other gesture-driven motion plays a motion role.
+  The roles this record names
   are listed below with their defaults and sources; further roles a component's
   own record measures join through the generated motion role table (DEC-5). With
   tempo 1 and character standard, every role plays its measured value exactly
@@ -302,7 +304,8 @@ a measured, sourced difference exists.
   platform: a menu shrinks into its trigger, and an alert fades. In a component
   whose main interaction is a tap, an exit that a tap, a key, an outside press
   or the program starts plays the theme's exit duration and easing,
-  `--duration-exit` and `--ease-exit` (`spec:AST-090` FR14, FR45). A component
+  `--duration-exit` and `--ease-exit` (`spec:AST-090` FR14, FR45). Toast's exit
+  under a finger is FR45's exception (`component:Toast` DEC-2). A component
   whose main interaction is a gesture, such as a sheet or the Lightbox, plays
   every exit on its spring: a close that a tap, a key, an outside press or the
   program starts plays the same settle as a swipe close, from rest, and an exit
@@ -384,11 +387,13 @@ a measured, sourced difference exists.
   | Gesture                           | Springs: a tap, key or program turn plays `springs.settle` from rest; the flick coast keeps UIKit's measured deceleration; the slow-release snap stays as recorded                                              | the DateInput and TimeInput wheels                                                                                                         |
   | Tap                               | Curve tokens                                                                                                                                                                                                    | Accordion, Disclosure, Collapsible, DropdownMenu, Popover, Tooltip, HoverCard, Dialog, AlertDialog, Tabs, Checkbox, press feedback         |
   | Gesture-capable                   | Springs under a touch presentation: the thumb drags, so every tap, click, key or value change settles on the same spring; without a touch presentation they keep the theme's curve (owner decision, 2026-11-04) | Switch, SegmentedControl                                                                                                                   |
-  | Open (as its record states today) | Theme timing for a tap dismiss; a spring from the release for a swipe                                                                                                                                           | Toast                                                                                                                                      |
+  | Exception, under a finger (Toast) | Under a finger every exit, a tap dismiss too, plays the banner's measured slide, also in place of a swipe commit's FR38 spring and FR4 role; a fine pointer keeps the theme's fade (`component:Toast` DEC-2)    | Toast                                                                                                                                      |
 
-  Toast keeps the motion its record states today: theme timing for a tap
-  dismiss, and a spring from the release for a swipe (`component:Toast` FR5).
-  Which main interaction classifies it is open.
+  Toast is the exception: under a finger every exit plays the notification
+  banner's measured slide, a tap dismiss included, and a fine pointer keeps
+  the theme's fade. For a swipe's commit the slide also takes the place of
+  FR38's tempo-scaled spring and FR4's named motion role (`component:Toast`
+  DEC-2).
 
   | Spring roles                                                                                                                                                                                                        | Timing tier                                     |
   | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
@@ -718,15 +723,20 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   detent closes it (`component:BottomSheet` FR19). When the owner refuses the
   close and opens a confirmation dialog in answer, the sheet waits at a peek
   until the dialog closes instead of springing back (`component:BottomSheet`
-  FR21). A row swipe keeps
-  `spec:AST-057`'s own release rule.
+  FR21). A Toast's touch release takes the notification banner's measured
+  values, the UIKit table's Toast domain. Its projection is 0, and its commit
+  point is 15.7 px out. A release past its measured flick speed, 105 px/s
+  toward the edge from at or past rest, commits (`component:Toast` FR4). A row
+  swipe keeps `spec:AST-057`'s own release rule.
 - **FR37 — Moving back cancels.** A release whose velocity points back
   toward the start MUST cancel, whatever the travel so far.
 - **FR38 — The settle continues the pointer.** The commit or the spring-back
   MUST start at the release velocity (FR6), under every pointer (FR43), on a
   spring whose duration the theme's `tempo` scales and whose measured bounce
-  its `character` offsets by the role's fixed weight (FR45). Under reduced motion it follows `design:reduced-motion` DR2, and a
-  release from a mouse, a trackpad or a pen follows FR43.
+  its `character` offsets by the role's fixed weight (FR45). Toast's commit
+  under a finger is FR45's exception (`component:Toast` DEC-2). Under reduced
+  motion it follows `design:reduced-motion` DR2, and a release from a mouse, a
+  trackpad or a pen follows FR43.
 - **FR39 — The action never needs a drag.** Every action a drag commits MUST
   also be reachable without a drag, by keyboard and by mouse
   (`architecture:interaction-modality` INV4).

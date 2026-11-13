@@ -100,6 +100,12 @@ export const categories: SandboxCategory[] = [
           'A full page ChatLayout for phone checks. ?case= long (the default), composer or streaming scroll the document; docked scrolls a fixed-height panel',
       },
       {
+        name: 'Toast Swipe Cases',
+        href: '/pages/toast-swipe-cases/',
+        description:
+          'A top toast to swipe away, turn back or pull past where it started, on a page that scrolls with the document, to check on a phone',
+      },
+      {
         name: 'AlertDialog Cases',
         href: '/pages/alert-dialog-cases/',
         description:
