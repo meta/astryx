@@ -1741,7 +1741,7 @@
   },
   "@astryx.numberInput.invalidNumber": {
     "defaultMessage": "Invalid number",
-    "description": "Error in NumberInput, shown below the field and announced, when Enter or blur meets typed text the field cannot commit: text that is not a number, a number with a fraction in a whole-number field, or any number while the field's minimum is above its maximum. The typed text stays in the field."
+    "description": "Error in NumberInput, shown as the field's error status and announced, when Enter or blur meets typed text the field cannot commit: text that is not a number, a number with a fraction in a whole-number field, or any number while the field's minimum is above its maximum. The typed text stays in the field."
   },
   "@astryx.selector.clearLabel": {
     "defaultMessage": "Clear {label}",
