@@ -93,9 +93,10 @@ export const ${slug}Theme = {name: '${slug}'};`,
       ).toBe(
         normalizeThemeVerifyForCompare(builtModule('acme astryx', slug)),
       );
+      // theme build --check reads them as the same module too.
       expect(
         normalizeThemeBuildForCompare(builtModule('yarn astryx', slug)),
-      ).not.toBe(
+      ).toBe(
         normalizeThemeBuildForCompare(builtModule('pnpm exec astryx', slug)),
       );
     },
