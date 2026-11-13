@@ -111,6 +111,9 @@ export function formatBestPractices(practices) {
   for (const bp of practices) {
     const next = bp.guidance ? 'Do:' : "Don't:";
     if (next !== label) {
+      // In Markdown, a line right under a list item continues that item, so a
+      // later label needs a blank line before it to start its own run.
+      if (label) lines.push('');
       lines.push(next);
       label = next;
     }

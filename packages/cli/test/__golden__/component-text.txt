@@ -10,6 +10,7 @@ A zorblax card that groups one topic.
 
 Do:
 - Keep one idea per card.
+
 Don't:
 - Do not nest cards.
 
