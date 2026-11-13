@@ -19,7 +19,15 @@ import {
   onTestFinished,
 } from 'vitest';
 import {act, cleanup, render, screen, fireEvent} from '@testing-library/react';
-import {Profiler, createRef, useState, type ReactNode} from 'react';
+import {
+  Profiler,
+  Suspense,
+  createRef,
+  startTransition,
+  use,
+  useState,
+  type ReactNode,
+} from 'react';
 import {BottomSheet} from './BottomSheet';
 import {BottomSheetEscapeContext} from './bottomSheetEscape';
 import {resetBottomSheetStackForTests} from './bottomSheetStack';
@@ -966,6 +974,61 @@ describe('BottomSheet', () => {
       } finally {
         elsewhere.remove();
         target.remove();
+      }
+    });
+
+    it('returns focus to the committed finalFocusRef when it unmounts after React discards a render with another', async () => {
+      // A transition that suspends for good: React renders it, then keeps the
+      // committed tree and never commits that render.
+      const forever = new Promise<never>(() => {});
+      function Forever(): null {
+        use(forever);
+        return null;
+      }
+      const target = document.createElement('button');
+      const discardedTarget = document.createElement('button');
+      document.body.append(target, discardedTarget);
+      const finalFocusRef = {current: target as HTMLElement | null};
+      const discardedFinalFocusRef = {
+        current: discardedTarget as HTMLElement | null,
+      };
+      const page = (
+        focusRef: {current: HTMLElement | null} | null,
+        isPending = false,
+      ) => (
+        <Suspense fallback={null}>
+          {focusRef == null ? null : (
+            <BottomSheet
+              isOpen
+              onOpenChange={() => {}}
+              finalFocusRef={focusRef}
+              label="Filters">
+              <button type="button">Inside</button>
+            </BottomSheet>
+          )}
+          {isPending ? <Forever /> : null}
+        </Suspense>
+      );
+      try {
+        const {rerender} = render(page(finalFocusRef));
+        act(() =>
+          screen.getByRole('button', {name: 'Inside', hidden: true}).focus(),
+        );
+        await act(async () => {
+          startTransition(() => {
+            rerender(page(discardedFinalFocusRef, true));
+          });
+        });
+
+        // The page removes the open sheet; its removal returns focus.
+        rerender(page(null));
+        await act(async () => {});
+
+        expect(document.activeElement).not.toBe(discardedTarget);
+        expect(document.activeElement).toBe(target);
+      } finally {
+        target.remove();
+        discardedTarget.remove();
       }
     });
 
@@ -2055,6 +2118,62 @@ describe('BottomSheet', () => {
 
       // Half of the 800px window is 400px of visible sheet: 736 - 400 = 336px
       // of travel, taken as layout height once the snap lands.
+      dragHandleTo(336);
+
+      expect(sheet.style.height).toBe('448px');
+      expect(sheet.style.transform).toBe('');
+    });
+
+    it('rests at the committed stop when React discards a render that moves it', async () => {
+      const observers = mockResizeObserverInstances();
+      mockVisualViewport(800);
+      mockWindowHeight(800);
+      // A transition that suspends for good: React renders the new stops,
+      // then keeps the committed tree and never commits that render.
+      const forever = new Promise<never>(() => {});
+      function Forever(): null {
+        use(forever);
+        return null;
+      }
+      function Screen({
+        snapPoints,
+        isPending,
+      }: {
+        snapPoints: ReadonlyArray<number>;
+        isPending: boolean;
+      }) {
+        return (
+          <Suspense fallback={null}>
+            <BottomSheet
+              isOpen
+              onOpenChange={() => {}}
+              label="Release notes"
+              snapPoints={snapPoints}
+              height="tall">
+              Content
+            </BottomSheet>
+            {isPending ? <Forever /> : null}
+          </Suspense>
+        );
+      }
+      const view = render(<Screen snapPoints={[0.5]} isPending={false} />);
+      const sheet = getSheet();
+      const sheetObserver = observers.find(instance =>
+        instance.observed.has(sheet),
+      );
+      act(() => {
+        sheetObserver?.callback(
+          [resizeEntry(784, 736)],
+          sheetObserver as unknown as ResizeObserver,
+        );
+      });
+      await act(async () => {
+        startTransition(() => {
+          view.rerender(<Screen snapPoints={[0.25]} isPending />);
+        });
+      });
+
+      // The committed stop is still half the window: 336px of travel.
       dragHandleTo(336);
 
       expect(sheet.style.height).toBe('448px');
@@ -4924,6 +5043,31 @@ describe('BottomSheet', () => {
       expect(dialog).toHaveAttribute('open');
       fireEvent.transitionEnd(getSheet(), {propertyName: 'opacity'});
       expect(dialog).not.toHaveAttribute('open');
+    });
+  });
+
+  describe('scrim property isolation', () => {
+    // A drag writes the scrim's opacity on the dialog for each move, and only
+    // the dialog's backdrop reads it. An inherited custom property restyles
+    // every element under the one it changes on. jsdom reports the declared
+    // `initial`. A browser computes no value, which the interaction proof
+    // BottomSheetDragRestyle covers.
+    it("declares the dialog's scrim properties `initial` on the sheet panel", () => {
+      render(
+        <BottomSheet isOpen onOpenChange={() => {}} label="Filters">
+          Content
+        </BottomSheet>,
+      );
+      const dialog = screen.getByRole('dialog', {hidden: true});
+      dialog.style.setProperty('--_sheet-scrim-opacity', '0.5');
+      dialog.style.setProperty('--_sheet-scrim-duration', '120ms');
+      const computed = window.getComputedStyle(getSheet());
+      expect(computed.getPropertyValue('--_sheet-scrim-opacity')).toBe(
+        'initial',
+      );
+      expect(computed.getPropertyValue('--_sheet-scrim-duration')).toBe(
+        'initial',
+      );
     });
   });
 

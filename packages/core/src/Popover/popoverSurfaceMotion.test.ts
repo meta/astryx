@@ -14,6 +14,7 @@
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {LAYER_SIDE_CASES} from '../Layer/__tests__/layerEntranceSide.fixture';
 import {isInHeldLayer, isInputShield} from '../Layer/inputHold';
 import {cubicBezier} from '../motion/bezier';
 import {ENTRANCE_OPACITY_FLOOR} from '../motion/opacityFloor';
@@ -126,6 +127,25 @@ describe('popoverCollapsedState', () => {
     });
     expect([left.originX, left.originY, left.axis]).toEqual([180, 70, 'x']);
   });
+
+  it.each(LAYER_SIDE_CASES)(
+    'grows a popover $name from the point the pointer entrance scales about',
+    ({layer, trigger, origin, touchAxis}) => {
+      const state = popoverCollapsedState({surface: layer, source: trigger});
+      expect([state.originX, state.originY]).toEqual([origin.x, origin.y]);
+      if (touchAxis == null) {
+        // No side: it only scales, so its length starts full.
+        expect(state.length).toBe(1);
+        return;
+      }
+      expect(state.axis).toBe(touchAxis);
+      const fullLength = touchAxis === 'x' ? layer.width : layer.height;
+      expect(state.length).toBeCloseTo(
+        Math.min(1, popover.collapsedLengthPx / fullLength),
+        12,
+      );
+    },
+  );
 
   it('keeps the point on the popover when its source is wider than it, and never grows a short popover', () => {
     const state = popoverCollapsedState({

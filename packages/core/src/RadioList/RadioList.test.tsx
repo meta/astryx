@@ -53,7 +53,93 @@ beforeEach(() => {
   };
 });
 
+/** A pointer press on `target`, as the press controller and React read it. */
+function pointerDown(
+  target: Element,
+  init: {pointerType: string; button: number; ctrlKey?: boolean},
+): void {
+  fireEvent.pointerDown(target, {pointerId: 1, ...init});
+  fireEvent.pointerUp(target, {pointerId: 1, ...init});
+}
+
+/** Runs `check` on macOS, where a ctrl-click is the context click. */
+function onApplePlatform(check: () => void): void {
+  Object.defineProperty(navigator, 'platform', {
+    configurable: true,
+    get: () => 'MacIntel',
+  });
+  try {
+    check();
+  } finally {
+    Reflect.deleteProperty(navigator, 'platform');
+  }
+}
+
 describe('RadioList', () => {
+  it("paints a primary mouse press on an option at once, and none for a macOS ctrl-click or a pen's barrel button", () => {
+    render(
+      <RadioList label="Plan" value="free" onChange={() => {}}>
+        <RadioListItem label="Free" value="free" />
+        <RadioListItem label="Pro" value="pro" />
+      </RadioList>,
+    );
+    const target = screen.getByText('Pro');
+    const row = target.closest('[data-astryx-pressable]');
+    if (row == null) {
+      throw new Error('the control has no press surface');
+    }
+    onApplePlatform(() =>
+      pointerDown(target, {pointerType: 'mouse', button: 0, ctrlKey: true}),
+    );
+    expect(row).not.toHaveAttribute('data-astryx-press');
+    pointerDown(target, {pointerType: 'pen', button: 2});
+    expect(row).not.toHaveAttribute('data-astryx-press');
+    fireEvent.pointerDown(target, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+    });
+    expect(row).toHaveAttribute('data-astryx-press', 'on');
+    fireEvent.pointerUp(target, {
+      pointerId: 1,
+      pointerType: 'mouse',
+      button: 0,
+    });
+  });
+
+  it('paints no row press for a mouse, pen or finger press on a select in end content, and one for a press on the label', () => {
+    render(
+      <RadioList label="Plan" value="free" onChange={() => {}}>
+        <RadioListItem label="Free" value="free" />
+        <RadioListItem
+          label="Pro"
+          value="pro"
+          endContent={
+            <select aria-label="Billing">
+              <option>Monthly</option>
+              <option>Yearly</option>
+            </select>
+          }
+        />
+      </RadioList>,
+    );
+    const select = screen.getByRole('combobox', {name: 'Billing'});
+    const row = select.closest('[data-astryx-pressable]');
+    if (row == null) {
+      throw new Error('the control has no press surface');
+    }
+    for (const pointerType of ['mouse', 'pen', 'touch']) {
+      fireEvent.pointerDown(select, {pointerId: 1, pointerType, button: 0});
+      expect(row).not.toHaveAttribute('data-astryx-press');
+      fireEvent.pointerUp(select, {pointerId: 1, pointerType, button: 0});
+    }
+    const label = screen.getByText('Pro');
+    const mouse = {pointerId: 1, pointerType: 'mouse', button: 0};
+    fireEvent.pointerDown(label, mouse);
+    expect(row).toHaveAttribute('data-astryx-press', 'on');
+    fireEvent.pointerUp(label, mouse);
+  });
+
   it('renders with label', () => {
     render(
       <RadioList label="Preference" value="" onChange={() => {}}>
@@ -1069,14 +1155,14 @@ function readsRowPress(el: Element): boolean {
 
 /**
  * Does the row declare the mouse press's paint while pressed, but not while a
- * nested link or button is the pressed one?
+ * nested control is the pressed one?
  */
 function declaresRowPress(el: Element): boolean {
   return rulesWithSelector(el, ':active').some(
     rule =>
       rule.includes('--_radio-row-press:') &&
       rule.includes('var(--color-overlay-pressed)') &&
-      /:not\(:has\(a:active, ?button:active/.test(rule),
+      rule.includes(':not(:has(button:not([aria-readonly="true"]):active'),
   );
 }
 

@@ -5,8 +5,8 @@
 /**
  * @file useZoomCore.ts
  * @input A stage element ref, which clips and centres the photo, and the
- *   element the gestures attach to: the stage, or a gallery's track. Also
- *   whether zoom is on, the current item's key and the zoom and fit callbacks
+ *   element the gestures attach to, the viewer's track of pages. Also whether
+ *   zoom is on, the current item's key and the zoom callback
  * @output Exports `useZoomCore`: Lightbox's zoom stage for every pointer. It
  *   writes the photo's transform through the compositor animator and settles
  *   every zoom, the keyboard's zoom and pan included, on `springs.settle`. Its
@@ -65,21 +65,6 @@ export interface UseZoomCoreOptions {
   itemKey: unknown;
   /** The photo became zoomed or returned to the fitted size. */
   onZoomedChange: (isZoomed: boolean) => void;
-  /**
-   * The photo left or came back to its fitted size on screen. It reads false
-   * from a gesture's first move or a settle's start, and true once a settle
-   * back lands.
-   */
-  onFitChange?: (isAtFit: boolean) => void;
-}
-
-/** Whether a shown transform is the fitted size, to within a pixel. */
-function isAtFit(transform: ZoomTransform): boolean {
-  return (
-    Math.abs(transform.scale - 1) < 1e-3 &&
-    Math.abs(transform.x) < 0.5 &&
-    Math.abs(transform.y) < 0.5
-  );
 }
 
 /** What Lightbox calls: the photo's ref and the keyboard's zoom and pan. */
@@ -130,11 +115,6 @@ export interface ZoomCore {
   /** Where the photo is going, when an animation the core did not start ends there. */
   setTarget(transform: ZoomTransform): void;
   setZoomed(next: boolean): void;
-  /**
-   * Reports that the photo shows at its fitted size again, when an animation
-   * the core did not start lands there (`onFitChange`).
-   */
-  setAtFit(next: boolean): void;
   /** Whether the photo is moving (shown away from where it is going). */
   isMoving(): boolean;
   /** Whether a zoomed photo's edge toward `direction` is at the stage's. */
@@ -260,21 +240,12 @@ export function useZoomCore(options: UseZoomCoreOptions): ZoomCore {
     [animator],
   );
 
-  const atFitRef = useRef(true);
-  const setAtFit = useCallback((next: boolean) => {
-    if (atFitRef.current !== next) {
-      atFitRef.current = next;
-      optionsRef.current.onFitChange?.(next);
-    }
-  }, []);
-
   const write = useCallback(
     (transform: ZoomTransform) => {
       targetRef.current = transform;
       animator.set({x: transform.x, y: transform.y, scale: transform.scale});
-      setAtFit(isAtFit(transform));
     },
-    [animator, setAtFit],
+    [animator],
   );
 
   const setTarget = useCallback((transform: ZoomTransform) => {
@@ -333,12 +304,8 @@ export function useZoomCore(options: UseZoomCoreOptions): ZoomCore {
         from.y === target.y &&
         from.scale === target.scale
       ) {
-        setAtFit(isAtFit(target));
         return;
       }
-      // The photo is off its fitted size while it moves, back at it only
-      // once a settle there lands.
-      setAtFit(false);
       // Registers the reduced-motion cross-fade once; later calls do nothing.
       registerReducedMotionCrossFade();
       // Every zoom settles on `springs.settle`, read where the stage is. A
@@ -349,7 +316,7 @@ export function useZoomCore(options: UseZoomCoreOptions): ZoomCore {
       const span = target.scale - from.scale;
       const rate =
         Number.isFinite(scaleVelocity) && span !== 0 ? scaleVelocity / span : 0;
-      const handle = animator.animate(
+      animator.animate(
         {x: target.x, y: target.y, scale: target.scale},
         {
           spring: resolveMotion(stageElement, springs.settle),
@@ -361,15 +328,8 @@ export function useZoomCore(options: UseZoomCoreOptions): ZoomCore {
         },
         {touchRelease},
       );
-      if (isAtFit(target)) {
-        void handle.finished.then(landed => {
-          if (landed && targetRef.current === target) {
-            setAtFit(true);
-          }
-        });
-      }
     },
-    [animator, current, setAtFit, setZoomed],
+    [animator, current, setZoomed],
   );
 
   // Another item: back to the fitted size before it paints. Lightbox resets
@@ -380,8 +340,7 @@ export function useZoomCore(options: UseZoomCoreOptions): ZoomCore {
     targetRef.current = IDENTITY;
     zoomedRef.current = false;
     geometryRef.current = null;
-    setAtFit(true);
-  }, [animator, options.itemKey, setAtFit]);
+  }, [animator, options.itemKey]);
 
   // A rotation or resize keeps the same photo point centred at the same
   // on-screen size (the shared resize observer). It watches the surface: in
@@ -498,7 +457,6 @@ export function useZoomCore(options: UseZoomCoreOptions): ZoomCore {
       write,
       setTarget,
       setZoomed,
-      setAtFit,
       isMoving,
       isAtEdgeOf,
       settleTo,
@@ -512,7 +470,6 @@ export function useZoomCore(options: UseZoomCoreOptions): ZoomCore {
       write,
       setTarget,
       setZoomed,
-      setAtFit,
       isMoving,
       isAtEdgeOf,
       settleTo,
