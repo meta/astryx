@@ -261,6 +261,67 @@ describe('theme, caller and spec config through Vega-Lite', () => {
     expect(options.config?.axisY).not.toHaveProperty('domain');
   });
 
+  it('keeps the left axis themed when a key names only the right orient of a dual-axis chart', () => {
+    const dual = {
+      $schema: 'https://vega.github.io/schema/vega-lite/v6.json',
+      data: {
+        values: [
+          {a: 1, b: 1, c: 5},
+          {a: 2, b: 3, c: 2},
+        ],
+      },
+      layer: [
+        {
+          mark: 'line',
+          encoding: {
+            x: {field: 'a', type: 'quantitative'},
+            y: {field: 'b', type: 'quantitative'},
+          },
+        },
+        {
+          mark: 'line',
+          encoding: {
+            x: {field: 'a', type: 'quantitative'},
+            y: {field: 'c', type: 'quantitative', axis: {orient: 'right'}},
+          },
+        },
+      ],
+      resolve: {scale: {y: 'independent'}},
+    } as TopLevelSpec;
+    const compiled = compile(
+      dual,
+      withAstryxConfig(
+        echo,
+        {config: {axisRight: {domain: true, gridWidth: 2}}},
+        dual,
+      ),
+    );
+    const config = compiled.spec.config as Record<
+      string,
+      Record<string, unknown> | undefined
+    >;
+    expect(config.axisY?.domain).toBeUndefined();
+    expect(config.axisLeft?.domain).toBe(false);
+    expect(config.axisRight?.domain).toBe(true);
+    expect(config.axisLeft?.gridWidth).toBe(0.5);
+    expect(config.axisRight?.gridWidth).toBe(2);
+  });
+
+  it('skips inline data when it reads the drawn axes', () => {
+    const many = {
+      ...spec,
+      data: {
+        values: Array.from({length: 150_000}, (_, index) => ({
+          a: index,
+          b: index,
+        })),
+      },
+    } as TopLevelSpec;
+    expect(() =>
+      withAstryxConfig(echo, {config: {axisTop: {grid: true}}}, many),
+    ).not.toThrow();
+  });
+
   it('keeps the theme per-axis value for a key no override sets', () => {
     const options = withAstryxConfig(echo, {
       config: {axis: {labelFontSize: 14}},

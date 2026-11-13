@@ -202,6 +202,7 @@ const mergeVegaLiteConfig = mergeConfig as unknown as (
 ) => VegaLiteConfig;
 
 type AxisOrient = 'top' | 'bottom' | 'left' | 'right';
+type AxisChannel = 'x' | 'y';
 
 const ORIENT_BLOCK: Record<AxisOrient, string> = {
   top: 'axisTop',
@@ -210,14 +211,30 @@ const ORIENT_BLOCK: Record<AxisOrient, string> = {
   right: 'axisRight',
 };
 
+const CHANNEL_BLOCK: Record<AxisChannel, string> = {x: 'axisX', y: 'axisY'};
+
+/** The theme's per-axis blocks, by channel and by whether they are quantitative only. */
+const THEME_AXIS_BLOCKS = [
+  {key: 'axisX', channel: 'x', isQuantitative: false},
+  {key: 'axisY', channel: 'y', isQuantitative: false},
+  {key: 'axisXQuantitative', channel: 'x', isQuantitative: true},
+  {key: 'axisYQuantitative', channel: 'y', isQuantitative: true},
+] as const;
+
 /**
- * The orients at which the spec draws its x and y axes. An encoding without
- * an axis orient draws x at the bottom and y at the left; `axis: null` draws
- * none. Each view in a layered or composed spec counts. The walk visits each
- * object once, so a cyclic spec ends.
+ * The orients at which the spec draws an x or y axis, each with the field
+ * types of the axes drawn there. An encoding without an axis orient draws x
+ * at the bottom and y at the left, and `axis: null` draws none. Every view of
+ * a layered or composed spec counts. Inline data is not walked, so a spec
+ * with many rows costs nothing here.
  */
-function drawnAxisOrients(spec: unknown): {x: AxisOrient[]; y: AxisOrient[]} {
-  const found = {x: new Set<AxisOrient>(), y: new Set<AxisOrient>()};
+function drawnAxes(
+  spec: unknown,
+): Record<AxisChannel, Map<AxisOrient, Set<string>>> {
+  const drawn = {x: new Map(), y: new Map()} as Record<
+    AxisChannel,
+    Map<AxisOrient, Set<string>>
+  >;
   const seen = new WeakSet<object>();
   const stack: unknown[] = [spec];
   while (stack.length > 0) {
@@ -233,77 +250,107 @@ function drawnAxisOrients(spec: unknown): {x: AxisOrient[]; y: AxisOrient[]} {
         if (def === null || typeof def !== 'object') {
           continue;
         }
-        const axis = (def as {axis?: {orient?: AxisOrient} | null}).axis;
+        const {axis, type} = def as {
+          axis?: {orient?: AxisOrient} | null;
+          type?: string;
+        };
         if (axis === null) {
           continue;
         }
-        found[channel].add(
-          axis?.orient ?? (channel === 'x' ? 'bottom' : 'left'),
-        );
+        const orient = axis?.orient ?? (channel === 'x' ? 'bottom' : 'left');
+        const types = drawn[channel].get(orient) ?? new Set<string>();
+        types.add(type ?? 'quantitative');
+        drawn[channel].set(orient, types);
       }
     }
-    stack.push(...Object.values(node));
+    for (const [key, value] of Object.entries(node)) {
+      if (key !== 'data' && key !== 'datasets') {
+        stack.push(value);
+      }
+    }
   }
-  return {
-    x: found.x.size > 0 ? [...found.x] : ['bottom'],
-    y: found.y.size > 0 ? [...found.y] : ['left'],
-  };
+  for (const channel of ['x', 'y'] as const) {
+    if (drawn[channel].size === 0) {
+      drawn[channel].set(
+        channel === 'x' ? 'bottom' : 'left',
+        new Set(['quantitative']),
+      );
+    }
+  }
+  return drawn;
 }
 
 /**
- * For each per-axis block the theme sets, the axis blocks that Vega-Lite
- * resolves before it for the same axes: `axis`, the orient blocks of the
- * orients the chart draws, `axisX` or `axisY`, and the type blocks such as
- * `axisQuantitative`.
- */
-function earlierAxisBlocks(orients: {
-  x: AxisOrient[];
-  y: AxisOrient[];
-}): Record<string, string[]> {
-  const x = orients.x.map(orient => ORIENT_BLOCK[orient]);
-  const y = orients.y.map(orient => ORIENT_BLOCK[orient]);
-  return {
-    axisX: ['axis', ...x],
-    axisY: ['axis', ...y],
-    axisXQuantitative: ['axis', ...x, 'axisX', 'axisQuantitative'],
-    axisYQuantitative: ['axis', ...y, 'axisY', 'axisQuantitative'],
-  };
-}
-
-/**
- * The theme config without each per-axis value that the caller or the spec
- * sets in an axis block Vega-Lite resolves earlier for the same axes. The
- * later theme block would otherwise outrank it: a themed
- * `axisYQuantitative.grid` would win over a caller's `axisY.grid`.
+ * The theme config with its per-axis values moved out of the way of the
+ * caller's and the spec's own axis keys. Vega-Lite resolves `axis`, then the
+ * orient blocks, then `axisX` and `axisY`, then the type blocks such as
+ * `axisQuantitative`, then the channel-and-type blocks. A theme per-axis
+ * value would outrank a key set in an earlier block. So a value set for every
+ * axis of the theme block is left out. A value set in the orient blocks of
+ * only some of the orients the chart draws moves to the orient blocks of the
+ * others, so those axes keep it. A quantitative-only value moves only to an
+ * orient whose axes are all quantitative.
  */
 function withoutOverriddenAxisValues(
   theme: VegaLiteConfig,
   overrides: ReadonlyArray<VegaLiteConfig | undefined>,
   spec: unknown,
 ): VegaLiteConfig {
-  const result: Record<string, unknown> = {...theme};
-  const blocks = earlierAxisBlocks(drawnAxisOrients(spec));
-  for (const [key, earlier] of Object.entries(blocks)) {
-    const block = (theme as Record<string, object | undefined>)[key];
-    if (!block) {
-      continue;
-    }
-    const setProps = new Set(
+  const setIn = (name: string) =>
+    new Set(
       overrides.flatMap(config =>
-        earlier.flatMap(name =>
-          Object.keys(
-            (config as Record<string, object | undefined> | undefined)?.[
-              name
-            ] ?? {},
-          ),
+        Object.keys(
+          (config as Record<string, object | undefined> | undefined)?.[name] ??
+            {},
         ),
       ),
     );
-    if (setProps.size > 0) {
-      result[key] = Object.fromEntries(
-        Object.entries(block).filter(([prop]) => !setProps.has(prop)),
-      );
+  const drawn = drawnAxes(spec);
+  const result: Record<string, Record<string, unknown> | unknown> = {
+    ...theme,
+  };
+  for (const {key, channel, isQuantitative} of THEME_AXIS_BLOCKS) {
+    const block = (
+      theme as Record<string, Record<string, unknown> | undefined>
+    )[key];
+    if (!block) {
+      continue;
     }
+    const everywhere = new Set([
+      ...setIn('axis'),
+      ...(isQuantitative
+        ? [...setIn(CHANNEL_BLOCK[channel]), ...setIn('axisQuantitative')]
+        : []),
+    ]);
+    const orients = [...drawn[channel].entries()].filter(
+      ([, types]) => !isQuantitative || types.has('quantitative'),
+    );
+    const kept: Record<string, unknown> = {};
+    for (const [prop, value] of Object.entries(block)) {
+      const setAt = orients.filter(([orient]) =>
+        setIn(ORIENT_BLOCK[orient]).has(prop),
+      );
+      if (!everywhere.has(prop) && setAt.length === 0) {
+        kept[prop] = value;
+        continue;
+      }
+      if (everywhere.has(prop)) {
+        continue;
+      }
+      for (const [orient, types] of orients) {
+        const isSetHere = setAt.some(([setOrient]) => setOrient === orient);
+        const isExact =
+          !isQuantitative || [...types].every(type => type === 'quantitative');
+        if (!isSetHere && isExact) {
+          const name = ORIENT_BLOCK[orient];
+          result[name] = {
+            ...((result[name] as Record<string, unknown> | undefined) ?? {}),
+            [prop]: value,
+          };
+        }
+      }
+    }
+    result[key] = kept;
   }
   return result as VegaLiteConfig;
 }
