@@ -153,6 +153,8 @@ describe('reads the review found unaudited', () => {
     'cat > notes.txt <<EOF\n`cat /repo/x.probe.mjs`\nEOF',
     `find "/home/agent/my code" -name '*.mjs' -exec grep -l getByRole {} +`,
     `grep -rn "getByRole" "/repo/my dir"`,
+    `echo x | xargs grep -n getByRole "/repo/my dir/x.probe.mjs"`,
+    `find src -name x -exec sed -n 1,40p "/home/agent/my notes/a.txt" \\;`,
   ])('fails %j', command => {
     expect(audit(command).violations.length).toBeGreaterThan(0);
   });
@@ -187,6 +189,9 @@ describe('reads the review found unaudited', () => {
     `find src -name '*.tsx' -exec rg -l "from '../lib" {} +`,
     `sed -i -e "s|'../lib/a'|'@/lib/a'|" -e "s|'../lib/b'|'@/lib/b'|" src/App.tsx`,
     'cat > run.sh <<EOF\nROOT=\\$(cd .. && pwd)\nEOF',
+    `grep -rn --include='*.tsx' "from '../lib" src`,
+    `rg -g '*.tsx' "from '../lib"`,
+    `grep -rn -e "from '../lib" -e "from '../ui" src`,
   ])('passes %j', command => {
     expect(audit(command).violations).toEqual([]);
   });

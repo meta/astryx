@@ -98,7 +98,17 @@ const RECURSIVE_READER =
 
 /** Commands whose quoted arguments are text: a sed script or a search pattern. */
 const TEXT_COMMAND =
-  /(?:^(?:\w+=\S*\s+)*(?:xargs\s[^|]*?)?|\s-exec(?:dir)?\s+)(?:sed|[efz]?grep|rg|ag|ack|git\s+grep)(?=\s|$)/;
+  /(?:^(?:\w+=\S*\s+)*(?:xargs\s[^|]*?)?|\s-exec(?:dir)?\s+)(sed|[efz]?grep|rg|ag|ack|git\s+grep)(?=\s|$)/;
+
+/** Options that take the next word as their value, per command. */
+const VALUE_OPTIONS = {
+  sed: ['-e', '-f', '-l', '--expression', '--file'],
+  grep: ['-e', '-f', '-A', '-B', '-C', '-m', '-d', '-D', '--regexp', '--file', '--context', '--max-count', '--include', '--exclude', '--exclude-dir'],
+  rg: ['-e', '-f', '-g', '-t', '-T', '-A', '-B', '-C', '-m', '-j', '-M', '--regexp', '--file', '--glob', '--iglob', '--type', '--type-not', '--max-count', '--max-depth'],
+  ag: ['-G', '-A', '-B', '-C', '-m', '--ignore', '--file-search-regex'],
+  ack: ['-A', '-B', '-C', '-m', '--type', '--ignore-dir'],
+};
+const PATTERN_OPTIONS = new Set(['-e', '--regexp', '--expression']);
 
 /** Splits a segment at pipes that are outside quotes. */
 function pipelineStages(segment) {
@@ -121,11 +131,23 @@ function pipelineStages(segment) {
 }
 
 /**
+ * Words of a command line with their positions, keeping quoted text together.
+ * @returns {{text: string, start: number, end: number}[]}
+ */
+function shellWords(text) {
+  return [...text.matchAll(/(?:"[^"]*"|'[^']*'|[^\s"'])+/g)].map(match => ({
+    text: match[0],
+    start: match.index,
+    end: match.index + match[0].length,
+  }));
+}
+
+/**
  * In a pipeline stage that runs sed or a search command (also through `xargs`
- * or `find -exec`), blanks the script or pattern: the first quoted argument after
- * the command, and any quoted argument after `-e`, when it holds a space, a `|`
- * or a nested quote. So `'../lib'` inside a pattern is not a path, while a quoted
- * path before the command or after the pattern is still audited.
+ * or `find -exec`), blanks the script or pattern when it is quoted text that
+ * holds a space, a `|` or a nested quote, so `'../lib'` inside it is not a path.
+ * The script or pattern is the value of `-e`, or else the first word that is not
+ * an option or an option's value. Paths and option values stay audited.
  */
 function textAsText(segment) {
   return pipelineStages(segment)
@@ -133,13 +155,34 @@ function textAsText(segment) {
       const lead = /^\s*/.exec(stage)[0];
       const match = TEXT_COMMAND.exec(stage.slice(lead.length));
       if (!match) return stage;
+      const command = match[1].startsWith('git') ? 'grep' : match[1].replace(/^[efz](?=grep)/, '');
+      const takesValue = new Set(VALUE_OPTIONS[command] ?? []);
       const at = lead.length + match.index + match[0].length;
-      let first = true;
-      const rest = stage.slice(at).replace(/(-e\s+)?("[^"]*"|'[^']*')/g, (whole, flag, quoted) => {
-        const isScript = first || Boolean(flag);
-        first = false;
-        return isScript && /[\s|'"]/.test(quoted.slice(1, -1)) ? `${flag ?? ''}""` : whole;
-      });
+      const words = shellWords(stage.slice(at));
+      const scripts = [];
+      let positional = null;
+      for (let index = 0; index < words.length; index++) {
+        const word = words[index].text;
+        if (word === '--') {
+          positional ??= words[index + 1] ?? null;
+          break;
+        }
+        if (word.startsWith('-')) {
+          if (takesValue.has(word) && index + 1 < words.length) {
+            if (PATTERN_OPTIONS.has(word)) scripts.push(words[index + 1]);
+            index++;
+          }
+          continue;
+        }
+        positional ??= words[index];
+        break;
+      }
+      if (scripts.length === 0 && positional) scripts.push(positional);
+      let rest = stage.slice(at);
+      for (const word of scripts.sort((a, b) => b.start - a.start)) {
+        const quoted = /^(["'])([\s\S]*)\1$/.exec(word.text);
+        if (quoted && /[\s|'"]/.test(quoted[2])) rest = `${rest.slice(0, word.start)}""${rest.slice(word.end)}`;
+      }
       return stage.slice(0, at) + rest;
     })
     .join('|');

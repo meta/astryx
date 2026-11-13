@@ -62,8 +62,11 @@ run root; a recursive read of one of those roots, or of a folder that holds one,
 by `grep -r`, `rg`, `ag`, `ack`, `find -exec`, `find | xargs` or the Grep tool;
 and any use of a web tool or a sub-agent. Paths in shell commands resolve from
 the folder the agent's shell is in, which persists between commands. Heredoc
-bodies that are file content are skipped; shell heredocs are audited as shell
-text, and other interpreter heredocs are scanned for path literals. The agent's
+bodies that are file content are skipped, except the command substitutions
+(`$(…)`, backticks) that the shell runs in an unquoted heredoc; shell heredocs
+are audited as shell text, and other interpreter heredocs are scanned for path
+literals. The script or pattern of `sed` and search commands is text, not a
+path. The agent's
 own session folder, where it saves long tool output, is allowed. Any other
 outside path, including a root named by another command, is a warning, and
 `report.md` lists every run with warnings for a person to review. When the agent exits or times out, the runner kills its whole process
