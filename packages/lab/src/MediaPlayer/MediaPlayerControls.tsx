@@ -204,7 +204,7 @@ const styles = stylex.create({
         '@media (hover: hover)': '1fr auto',
       },
       ':focus-within': '1fr auto',
-      '@media (any-pointer: coarse)': '1fr auto',
+      '@media (pointer: coarse)': '1fr auto',
     },
   },
   // The slider opens after the button; the tracks hug the start.
@@ -216,7 +216,7 @@ const styles = stylex.create({
         '@media (hover: hover)': 'auto 1fr',
       },
       ':focus-within': 'auto 1fr',
-      '@media (any-pointer: coarse)': 'auto 1fr',
+      '@media (pointer: coarse)': 'auto 1fr',
     },
   },
   revealSlot: {
