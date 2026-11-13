@@ -545,6 +545,12 @@ describe('build kit — every page starts from a template', () => {
     expect(r.data.start).toMatchObject({name: 'table-inbox', basis: 'closest'});
   });
 
+  it('starts a part that reads as a whole page from a page template', async () => {
+    const r = await build('a sortable list of tasks with priority and assignee', {cwd: REPO});
+    if (r.type !== 'build.kit') throw new Error(r.type);
+    expect(r.data.start).toMatchObject({name: 'table-grouped', basis: 'closest'});
+  });
+
   it('keeps the shell for a part and for a change to an existing page', async () => {
     for (const idea of [
       'a tooltip on the save button',

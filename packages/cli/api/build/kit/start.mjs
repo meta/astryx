@@ -63,7 +63,9 @@ function placement(kind, inPage) {
  * whole page, edit, blend margin over the shell, the shell's blend score, the
  * gap to the blend's second template, the idea's comma count, the text score
  * (shellcall.mjs) and its edit-word flag. Fixed constants; nothing is trained
- * at run time.
+ * at run time. An edit phrase keeps the shell before the decision runs, so the
+ * two edit inputs are 0 whenever it runs; they stay because the constants were
+ * fit with them.
  */
 const LIFT = [
   -0.7707, 0.6706, -0.2642, 0.2815, -0.1621, 0.1759, 0.1713, 0.2891, -0.3491,
