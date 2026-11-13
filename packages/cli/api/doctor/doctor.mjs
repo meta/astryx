@@ -100,7 +100,7 @@ import {
   COMPUTER_INSTALL_STEP,
 } from '../../foundation/agent-docs/computer-agent-text.mjs';
 import {
-  keptFileCheck,
+  keptFileChecks,
   alignCommand,
   addCliCommandFor,
   computerAgentTextState,
@@ -2553,20 +2553,16 @@ export async function runChecks(options = {}) {
   }
   checks.push(await checkAuthoringDocs(ctx));
   // The checks that read only files, each kept while every file it read is
-  // unchanged; the Core the project loads is part of what they read.
+  // unchanged; the Core the project loads is part of what they read. They
+  // write none of those files and read mostly the same ones, so each file's
+  // state is checked once for the three.
   const where = {cwd, coreDir: coreDir ?? null};
   checks.push(
-    await keptFileCheck({name: 'cli-docs', ...where}, () => checkCliDocs(ctx)),
-  );
-  checks.push(
-    await keptFileCheck({name: 'docs-tree', ...where}, () =>
-      checkDocsTree(ctx),
-    ),
-  );
-  checks.push(
-    await keptFileCheck({name: 'docs-progressive', ...where}, () =>
-      checkDocsProgressiveDisclosure(ctx),
-    ),
+    ...(await keptFileChecks(where, [
+      ['cli-docs', () => checkCliDocs(ctx)],
+      ['docs-tree', () => checkDocsTree(ctx)],
+      ['docs-progressive', () => checkDocsProgressiveDisclosure(ctx)],
+    ])),
   );
 
   const summary = {pass: 0, warn: 0, fail: 0, info: 0};

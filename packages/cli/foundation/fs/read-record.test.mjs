@@ -13,7 +13,9 @@ import {
   recordContentRead,
   recordReads,
   reusedWhileUnchanged,
+  stillInState,
   unchangedSince,
+  withStampMemo,
 } from './read-record.mjs';
 
 /**
@@ -200,5 +202,27 @@ describe('reusedWhileUnchanged', () => {
     });
     await expect(get()).rejects.toThrow('first try');
     expect(await get()).toBe('second try');
+  });
+});
+
+describe('withStampMemo', () => {
+  it('checks each path once while it runs, and afresh after', async () => {
+    const dir = fs.mkdtempSync(path.join(TEMP_ROOT, 'stamp-memo-'));
+    const file = path.join(dir, 'a.txt');
+    fs.writeFileSync(file, 'one');
+    /** @type {Map<string, string>} */
+    const recorded = new Map();
+    recordReads(recorded, () => {
+      fs.readFileSync(file, 'utf8');
+    });
+    const [[, state]] = [...recorded].filter(([f]) => f === file);
+    expect(stillInState(file, state)).toBe(true);
+    await withStampMemo(async () => {
+      expect(stillInState(file, state)).toBe(true);
+      // A change made while it runs is not seen: the first check answers.
+      fs.writeFileSync(file, 'changed, longer');
+      expect(stillInState(file, state)).toBe(true);
+    });
+    expect(stillInState(file, state)).toBe(false);
   });
 });

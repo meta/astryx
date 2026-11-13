@@ -184,9 +184,36 @@ function probeStamp(file) {
  * @returns {boolean}
  */
 export function stillInState(file, state) {
-  return (
-    (state.startsWith('dir:') ? probeStamp(file) : stateOf(file)) === state
-  );
+  const probe = state.startsWith('dir:');
+  const memo = stampMemo.getStore();
+  if (!memo) return (probe ? probeStamp(file) : stateOf(file)) === state;
+  const key = `${probe ? 'probe' : 'state'}\0${file}`;
+  let current = memo.get(key);
+  if (current === undefined) {
+    current = probe ? probeStamp(file) : stateOf(file);
+    memo.set(key, current);
+  }
+  return current === state;
+}
+
+/**
+ * Each path's state as {@link stillInState} first found it inside
+ * {@link withStampMemo}.
+ * @type {AsyncLocalStorage<Map<string, string>>}
+ */
+const stampMemo = new AsyncLocalStorage();
+
+/**
+ * Run `fn` with each path {@link stillInState} checks looked at once: kept
+ * entries that read the same files (doctor's three docs checks) check each
+ * file's state a single time. Only for work that writes none of the files it
+ * checks, since a path keeps the state first found for it until `fn` ends.
+ * @template T
+ * @param {() => T} fn
+ * @returns {T}
+ */
+export function withStampMemo(fn) {
+  return stampMemo.run(new Map(), fn);
 }
 
 /**

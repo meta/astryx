@@ -50,6 +50,7 @@ import {
   persistedGather,
   recordedRun,
 } from '../../foundation/fs/gather-cache.mjs';
+import {withStampMemo} from '../../foundation/fs/read-record.mjs';
 import {getCliInvocation} from '../../foundation/env/package-manager.mjs';
 import {
   Project,
@@ -126,6 +127,27 @@ export function keptFileCheck({name, cwd, coreDir}, check) {
     check,
     CHECK_CODEC,
   );
+}
+
+/**
+ * Doctor's file-only checks, each a {@link keptFileCheck}, in order. They
+ * write none of the files they read and read mostly the same ones, so each
+ * file's state is checked once for all of them (withStampMemo).
+ * @template T
+ * @param {{cwd: string, coreDir: string | null}} where
+ * @param {Array<[string, () => Promise<T>]>} checks - Each check's name and
+ *   how to run it.
+ * @returns {Promise<T[]>}
+ */
+export function keptFileChecks(where, checks) {
+  return withStampMemo(async () => {
+    /** @type {T[]} */
+    const results = [];
+    for (const [name, check] of checks) {
+      results.push(await keptFileCheck({name, ...where}, check));
+    }
+    return results;
+  });
 }
 
 /**
