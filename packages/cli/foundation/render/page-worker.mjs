@@ -946,7 +946,11 @@ try {
     }
     for (const spec of importSpecifiers(source, file)) {
       const target = importedFile(spec, file);
-      if (target && isLocal(target) && !localFiles.includes(target)) localFiles.push(target);
+      // Modules and JSON only: the transform already carries the stylesheets
+      // and images a module imports, and a Sass file is never carried.
+      if (target && /\.([cm]?[jt]sx?|json)$/i.test(target) && isLocal(target) && !localFiles.includes(target)) {
+        localFiles.push(target);
+      }
     }
   }
   parentPort?.postMessage({

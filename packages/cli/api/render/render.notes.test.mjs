@@ -269,6 +269,32 @@ describe('render --reverse says what changed after the render', () => {
   });
 });
 
+describe('render carries every module the page reaches', () => {
+  it('carries a type-only import and a plain ES module Node loads itself, so the page comes back whole', async () => {
+    put('reach/page.tsx', `import type {Row} from './types';
+import {rows} from './rows.js';
+import '../sheets/site.scss';
+
+const all: Row[] = rows;
+export default function Page() {
+  return <ul>{all.map(r => <li key={r.a}>{r.a}</li>)}</ul>;
+}
+`);
+    put('reach/types.ts', 'export type Row = {a: string};\n');
+    put('reach/rows.js', "export const rows = [{a: 'one'}, {a: 'two'}];\n");
+    put('sheets/site.scss', '$x: 1px;\n');
+    const result = /** @type {any} */ (await render('reach/page.tsx', {cwd: dir}));
+    expect(result.data.files).toEqual(expect.arrayContaining(['page.tsx', 'types.ts', 'rows.js']));
+    expect(result.data.files.some((/** @type {string} */ f) => f.endsWith('.scss'))).toBe(false);
+    // The Sass file gets its one warning, and no second one for not being carried.
+    expect(result.data.warnings.filter((/** @type {any} */ w) => w.message.includes('site.scss'))).toHaveLength(1);
+    // Every module comes back; the Sass file a render never carries is named.
+    const back = /** @type {any} */ (await render('reach/page.html', {cwd: dir, reverse: true, out: 'reach-back/page.tsx'}));
+    expect(back.data.files).toEqual(expect.arrayContaining(['reach-back/types.ts', 'reach-back/rows.js']));
+    expect(back.data).toMatchObject({exact: false, missing: ['../sheets/site.scss']});
+  });
+});
+
 describe('text edits', () => {
   it('pairs replaced runs, keeps the order, and caps the list', () => {
     expect(textEdits(['a', 'b', 'c'], ['a', 'B', 'c'])).toEqual({edits: [{was: 'b', now: 'B'}], more: 0});
