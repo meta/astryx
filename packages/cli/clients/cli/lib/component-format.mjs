@@ -283,9 +283,7 @@ function formatTargetsTable(docs, themeData) {
   lines.push(
     '| Component class | Preferred data attributes | Props | States |',
   );
-  lines.push(
-    '|---|---|---|---|',
-  );
+  lines.push('|---|---|---|---|');
 
   for (const target of docs.theming.targets) {
     const coreVariants = getTargetVariants(target, docs);
