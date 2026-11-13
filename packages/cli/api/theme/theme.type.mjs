@@ -103,7 +103,34 @@
  * `notes` is present only when the command did more than its change says:
  * it chose between a local and a package theme with one slug, replaced a
  * recorded owner, or dropped a recorded theme whose source is gone.
- * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean}, notes?: string[]}} data
+ * `iconSet` is present only when astryx.config names an icon set
+ * (`experimental.iconSet`) whose main set has a theme map for the project's
+ * look: the module then draws every theme's built-in icons from that map.
+ * Experimental: it may change or be removed in a patch release.
+ * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean}, iconSet?: ThemeIconSetReceipt, notes?: string[]}} data
+ */
+
+/**
+ * The icon set that draws the built-in icons of every theme in the generated
+ * theme module: its full name, the module that exports its theme map, and
+ * that map's export.
+ * @typedef {object} ThemeIconSetReceipt
+ * @property {string} set `<package>/<set>`
+ * @property {string} module
+ * @property {string} export `themeIcons`, or the map for the project's look
+ *   (`themeIconsFilled`)
+ */
+
+/**
+ * What `astryx experimental icon use` did to the generated theme module.
+ * `problem` is present when the module could not be rewritten; it says why
+ * and which command rewrites it.
+ * @typedef {object} ThemeModuleRefresh
+ * @property {string} path the module's project path
+ * @property {boolean} changed
+ * @property {ThemeIconSetReceipt | null} iconSet the set the module now
+ *   draws the built-in icons from, or null for none
+ * @property {string} [problem]
  */
 
 /**

@@ -9,6 +9,7 @@ import * as path from 'node:path';
 
 import {themeBuild} from '../build/build.mjs';
 import {themeAdd} from './add.mjs';
+import {writeIconPackage} from '../../../test-utils/icon-set-fixture.mjs';
 
 vi.setConfig({testTimeout: 120_000});
 
@@ -130,6 +131,49 @@ describe('generated app-theme module types', () => {
     write(
       path.join(project, 'src/use-themes.ts'),
       "import {defaultThemeSlug, themes} from './astryx-themes.js';\nimport type {ThemeSlug} from './astryx-themes.js';\nexport const activeTheme = themes[defaultThemeSlug];\nexport const activeSlug: ThemeSlug = defaultThemeSlug;\n",
+    );
+
+    try {
+      execFileSync(
+        process.execPath,
+        [TSC_BIN, '--project', path.join(project, 'tsconfig.json')],
+        {cwd: project, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe']},
+      );
+    } catch (error) {
+      const failure = /** @type {{stdout?: unknown, stderr?: unknown}} */ (
+        error
+      );
+      throw new Error(`${failure.stdout ?? ''}${failure.stderr ?? ''}`, {
+        cause: error,
+      });
+    }
+  });
+
+  it('type-checks the module and keeps each theme type when an icon set draws the built-in icons', async () => {
+    const project = makeProject();
+    const pkgFile = path.join(project, 'package.json');
+    const pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf-8'));
+    pkg.dependencies['@acme/glyphs'] = '1.0.0';
+    fs.writeFileSync(pkgFile, JSON.stringify(pkg));
+    const glyphsDir = path.join(project, 'node_modules/@acme/glyphs');
+    writeIconPackage(glyphsDir);
+    write(
+      path.join(glyphsDir, 'index.d.ts'),
+      'export declare const themeIcons: Record<string, unknown>;\n',
+    );
+    write(
+      path.join(project, 'astryx.config.mjs'),
+      "export default {experimental: {iconSet: 'glyphs'}};\n",
+    );
+
+    const added = await themeAdd('ocean', {
+      cwd: project,
+      package: '@acme/themes',
+    });
+    expect(added.data.iconSet).toMatchObject({export: 'themeIcons'});
+    write(
+      path.join(project, 'src/use-themes.ts'),
+      "import {themes} from './astryx-themes.js';\nexport const name: 'ocean' = themes.ocean.name;\n",
     );
 
     try {

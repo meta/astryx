@@ -6,7 +6,9 @@
  * `experimental.iconSet` and `experimental.iconVariant` in astryx.config in
  * one write. With no backup it writes the set name as a string; with backups
  * it writes a list, the main set first. With no variant it removes
- * `experimental.iconVariant`, so the sets draw their default looks.
+ * `experimental.iconVariant`, so the sets draw their default looks. In an
+ * app with a generated theme module, it then rewrites that module, so every
+ * added theme draws the built-in icons from the main set's theme map.
  *
  * @output the `icon.use` envelope
  * @position api/icon/use — dispatched by the `experimental icon use` command
@@ -188,6 +190,11 @@ export async function iconUse(
       : null;
   const themeMap =
     variant === undefined ? null : lookThemeMap(main.data, variant);
+  // The app's generated theme module draws the built-in icons from the main
+  // set, so components switch with the set. It is loaded only here, since
+  // no other icon command writes it.
+  const {refreshThemeAppIconSet} = await import('../../theme/_adapter.mjs');
+  const themeModule = await refreshThemeAppIconSet(projectDir);
   return {
     type: 'icon.use',
     data: {
@@ -216,6 +223,7 @@ export async function iconUse(
       ...(themeMap
         ? {themeMap: {module: main.data.module, export: themeMap}}
         : {}),
+      ...(themeModule ? {themeModule} : {}),
       ...(left ? {next: `${left.problem}. ${left.fix}`} : {}),
       ...(warning ? {warning} : {}),
     },

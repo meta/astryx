@@ -280,7 +280,7 @@ export const brand = defineTheme({name: 'brand', icons: themeIcons});`,
         },
         {
           type: 'prose',
-          text: "`themeIcons` draws your default look. For each other variant that one of your icons draws, the module also exports a map named after it, `themeIcons<Variant>` (`themeIconsFilled` for `filled`): the same keys, each your icon's export for that variant, or its own export when it has none. An app whose icons draw that look sets `icons: themeIconsFilled` instead. `integration check` holds each of these maps to `map` as well; when an older module lacks one, it names the `experimental icon add --variant <variant> --from <module> --all` run that writes it.",
+          text: "`themeIcons` draws your default look. For each other variant that one of your icons draws, the module also exports a map named after it, `themeIcons<Variant>` (`themeIconsFilled` for `filled`): the same keys, each your icon's export for that variant, or its own export when it has none. An app whose icons draw that look sets `icons: themeIconsFilled` instead. An app that picks your set with `experimental icon use` and gets its themes from the generated theme module needs neither line: the module takes the right map by itself. `integration check` holds each of these maps to `map` as well; when an older module lacks one, it names the `experimental icon add --variant <variant> --from <module> --all` run that writes it.",
         },
       ],
     },
@@ -377,6 +377,10 @@ astryx experimental icon use brand --variant filled   # every icon in its filled
           type: 'prose',
           text: "Each `icons` key is the name the template imports from its module, not a local alias. When a template imports the same name from two modules, such as `TrashIcon` from a library's outline and solid modules, one key covers both: both draw the same definition. Each then becomes the chosen set's variant of the same name when its module belongs to an installed set that declares the variant (so solid stays solid). When the chosen set's icon has no such variant, it draws the set's default look, and the report names both looks as `variant: {asked, used}`. A missing look never moves an icon to a backup set. When the project picks a look (`experimental.iconVariant`), every icon asks for that look instead.",
         },
+        {
+          type: 'prose',
+          text: "Components switch too. Core components take their built-in icons, such as the dialog close button, the select arrow, and the search icon, from the theme. When the app gets its themes from the generated theme module (`astryx theme add`), `experimental icon use` rewrites that module, so every added theme draws those icons from the main set's theme map, over the theme's own icons, with no theme edit. The receipt names the module (`themeModule`), and `theme add`, `theme use`, and `theme remove` keep the set when they rewrite the module (`iconSet` in their receipt). An app that passes its own theme to `Theme` sets the set's theme map as `icons` itself (see The theme map).",
+        },
       ],
     },
     {
@@ -415,7 +419,7 @@ astryx experimental icon use brand --variant filled   # every icon in its filled
         },
         {
           type: 'prose',
-          text: "Only the main set's theme map feeds `defineTheme({icons})`. Backups never change the theme. The copy report lists each set it used, with its license (`icons.sets`).",
+          text: "Only the main set's theme map draws the built-in icons. Backups never change them. The copy report lists each set it used, with its license (`icons.sets`).",
         },
       ],
     },
@@ -449,7 +453,7 @@ astryx experimental icon use brand --variant filled   # every icon in its filled
         },
         {
           type: 'prose',
-          text: "Components take the built-in icons from the theme. Where an icon of the main set draws the look, the set's package exports a theme map for it, `themeIconsFilled`, and the receipt names that export and its module (`themeMap`):",
+          text: "Components take the built-in icons from the theme. Where an icon of the main set draws the look, the set's package exports a theme map for it, `themeIconsFilled`, and the receipt names that export and its module (`themeMap`). The generated theme module takes that map by itself; an app that passes its own theme to `Theme` sets it:",
         },
         {
           type: 'code',
