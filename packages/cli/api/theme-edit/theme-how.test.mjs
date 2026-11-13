@@ -2343,7 +2343,11 @@ const QUESTIONS_G = [
     'Times New Roman for headings, lol',
     {top: /^set q font 'Times New Roman' --on heading$/},
   ],
-  ['code blocks should use Menlo', {top: /^set q font Menlo --on code$/}],
+  // Code blocks are Core's code-block part (hunt68).
+  [
+    'code blocks should use Menlo',
+    {top: /^set q font-family Menlo --on code-block$/},
+  ],
   ['Fira Code for monospace', {top: /^set q font 'Fira Code' --on code$/}],
   // part words: a catalog part, or say there is none
   ['menu rounder', {top: /^set q corners more --on dropdown-menu$/}],
@@ -3117,7 +3121,8 @@ const QUESTIONS_J = [
   ],
   [
     'buttons twice as round as inputs',
-    {top: /^set q corners more --on button$/},
+    // Twice the inputs' radius, on buttons only (hunt68).
+    {top: /^set q border-radius \d*\.?\d+(px|rem) --on button$/},
   ],
   [
     'focus ring the same color as the danger color',

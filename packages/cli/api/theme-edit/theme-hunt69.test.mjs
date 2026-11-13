@@ -195,9 +195,10 @@ describe('hunt69: how amounts', () => {
     );
     expect(
       await how('no inner spacing on text-input when disabled', 's'),
-    ).toMatch(/padding 0px --on inputs --state disabled/);
+    ).toMatch(/padding 0px --on text-input --state disabled/);
+    // A group member named in words is that member (hunt68 F24e-18).
     expect(await how('more padding on text inputs on hover', 's')).toMatch(
-      /--on inputs --state hover/,
+      /--on text-input --state hover/,
     );
   }, 240_000);
 

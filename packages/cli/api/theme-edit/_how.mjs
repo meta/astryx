@@ -214,7 +214,22 @@ async function answer(subject, options, cwd) {
       run: [`${HOW} ${t ? JSON.stringify(t) : 'card'}`],
     });
   if (options.theme != null) {
-    loadTheme(cwd, options.theme);
+    try {
+      loadTheme(cwd, options.theme);
+    } catch (e) {
+      // A theme name near the one typed: the same question for it, never
+      // only `show` (the question is kept).
+      const err = /** @type {any} */ (e);
+      if (err?.code === ERROR_CODES.ERR_UNKNOWN_THEME && err.suggestions)
+        for (const s of err.suggestions) {
+          const near = / show ([a-z][a-z0-9-]*)$/.exec(
+            String(s.name ?? ''),
+          )?.[1];
+          if (near)
+            s.name = `${HOW} ${quoteCommandArgument(t || 'card')} --theme ${near}`;
+        }
+      throw e;
+    }
     // A theme whose source no longer extends its settings takes no setting:
     // an answer would suggest commands that cannot run.
     const broken = themeSourceProblem(cwd, options.theme);
