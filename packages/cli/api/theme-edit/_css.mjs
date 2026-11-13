@@ -980,3 +980,97 @@ export function takesPercentage(prop) {
   percentCache.set(prop, found);
   return found;
 }
+
+/** The generic font families CSS names, which are never quoted. */
+const GENERIC_FAMILIES = new Set([
+  'serif',
+  'sans-serif',
+  'monospace',
+  'cursive',
+  'fantasy',
+  'system-ui',
+  'math',
+  'emoji',
+  'fangsong',
+  'ui-serif',
+  'ui-sans-serif',
+  'ui-monospace',
+  'ui-rounded',
+]);
+
+/**
+ * A font family list with its missing commas put back, read with css-tree:
+ * within one comma-separated entry, a quoted family next to another quoted
+ * family or a generic one (`"Open Sans" serif`) is two families. Returns the
+ * list as CSS writes it (`"Open Sans", serif`), or null when nothing is
+ * missing, the value does not parse, or a family would hold a quote.
+ * @param {string} value
+ * @returns {string | null}
+ */
+export function familyListMeant(value) {
+  const {parse} = csstree();
+  /** @type {any} */
+  let ast;
+  try {
+    ast = parse(value, {context: 'value'});
+  } catch {
+    return null;
+  }
+  /** @type {Array<Array<{type: string, value: string}>>} */
+  const entries = [[]];
+  let ok = true;
+  ast.children.forEach((/** @type {any} */ n) => {
+    if (n.type === 'Operator' && n.value === ',') entries.push([]);
+    else if (n.type === 'String' || n.type === 'Identifier')
+      entries[entries.length - 1].push({
+        type: n.type,
+        value: n.type === 'String' ? n.value : n.name,
+      });
+    else ok = false;
+  });
+  if (!ok) return null;
+  /** @type {string[]} */
+  const families = [];
+  let changed = false;
+  for (const entry of entries) {
+    if (!entry.length) return null;
+    // One family: a quoted name alone, or a run of bare words.
+    if (
+      entry.length === 1 ||
+      entry.every(
+        x =>
+          x.type === 'Identifier' &&
+          !GENERIC_FAMILIES.has(x.value.toLowerCase()),
+      )
+    ) {
+      families.push(
+        entry.length === 1 && entry[0].type === 'String'
+          ? JSON.stringify(entry[0].value)
+          : entry.map(x => x.value).join(' '),
+      );
+      continue;
+    }
+    // A quoted name or a generic family ends a family: the comma between
+    // them was left out.
+    changed = true;
+    /** @type {string[]} */
+    let words = [];
+    const flush = () => {
+      if (words.length) families.push(words.join(' '));
+      words = [];
+    };
+    for (const x of entry) {
+      if (x.type === 'String') {
+        flush();
+        families.push(JSON.stringify(x.value));
+      } else if (GENERIC_FAMILIES.has(x.value.toLowerCase())) {
+        flush();
+        families.push(x.value);
+      } else words.push(x.value);
+    }
+    flush();
+  }
+  // A family that would hold a quote (escaped) is never a suggestion.
+  if (!changed || families.some(f => f.includes('\\'))) return null;
+  return families.join(', ');
+}

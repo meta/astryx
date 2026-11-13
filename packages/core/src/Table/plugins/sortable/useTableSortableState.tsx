@@ -20,6 +20,7 @@
 import {useState, useMemo, useCallback, useRef} from 'react';
 import type {TableSortState, UseTableSortableConfig} from './useTableSortable';
 import {useCollator} from '../../../i18n/useCollator';
+import {useCommittedRef} from '../../../hooks/useCommittedRef';
 
 // =============================================================================
 // Comparator Types
@@ -288,12 +289,11 @@ export function useTableSortableState<
   comparatorsRef.current = comparators;
 
   // The config holds one stable handler, so an inline callback does not
-  // recreate it. The handler reads the latest callback when the user sorts.
-  const onSortChangeRef = useRef(onSortChange);
-  onSortChangeRef.current = onSortChange;
+  // recreate it. The handler reads the committed callback when the user sorts.
+  const onSortChangeRef = useCommittedRef(onSortChange);
   const handleSortChange = useCallback(
     (nextSort: TableSortState<TSortKey>) => onSortChangeRef.current(nextSort),
-    [],
+    [onSortChangeRef],
   );
 
   // Sorted data — memoized on sort state + data identity

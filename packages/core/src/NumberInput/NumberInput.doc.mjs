@@ -119,7 +119,14 @@ export const docs = {
     {
       name: 'status',
       type: "{type: 'error' | 'warning' | 'success', message?: string}",
-      description: 'Validation status with optional message.',
+      description:
+        'Validation status with optional message. Typing never shows a rejection: a typed number is complete only at commit. When Enter or blur meets text that is not a number, a fraction in an integer-only field, or any number while min is above max, the text stays in the field and the field shows its own error message in place of status. An error status with a message shows instead of that message, and the rejection is still announced and marks the field invalid. A warning or success status, or an error status without a message, never replaces it. A number outside an ordinary range clamps instead.',
+    },
+    {
+      name: 'onEntryErrorChange',
+      type: "(error: {kind: 'unreadable' | 'fractional' | 'outOfRange', text: string, value?: number} | null) => void",
+      description:
+        "Called each time the field's rejection of typed text changes, and with null when the rejection ends. A rejection starts only at Enter or blur. kind is 'unreadable' (text that is not a number), 'fractional' (a fraction when isIntegerOnly), or 'outOfRange' (any number while min is above max); text is the typed text; value is the number it names, for 'fractional' and 'outOfRange'. It also runs when an edit makes the text valid or empty, when a new value, min, max, or isIntegerOnly changes or ends the rejection, and when disabling the field drops the text, and never twice for the same rejection; it reports null when the field unmounts while a rejection stands. Pass an error status with a message to word the rejection yourself.",
     },
     {
       name: 'statusVariant',
@@ -187,7 +194,8 @@ export const docs = {
     {
       name: 'htmlName',
       type: 'string',
-      description: 'HTML name attribute for form submissions.',
+      description:
+        'HTML name attribute for form submissions. While blur keeps rejected text, the form posts the committed number, until the person edits the text or a new value replaces it.',
     },
     {
       name: 'autoComplete',
@@ -438,7 +446,14 @@ export const docsZh = {
     {
       name: 'status',
       type: "{type: 'error' | 'warning' | 'success', message?: string}",
-      description: '带可选消息的验证状态。',
+      description:
+        '带可选消息的验证状态。输入过程中不会显示拒绝：输入的数字只有在提交时才算完整。按 Enter 或失焦时，若文本不是数字、在仅限整数的字段中带有小数，或 min 大于 max 时输入了任何数字，文本会保留在字段中，字段显示自身的错误消息以替代 status。带消息的 error 状态会替代该消息，拒绝仍会被播报并将字段标记为无效。warning 或 success 状态，以及不带消息的 error 状态，不会替代拒绝消息。超出普通范围的数字会被限制到边界值。',
+    },
+    {
+      name: 'onEntryErrorChange',
+      type: "(error: {kind: 'unreadable' | 'fractional' | 'outOfRange', text: string, value?: number} | null) => void",
+      description:
+        "每当字段对输入文本的拒绝发生变化时调用，拒绝结束时传入 null。拒绝只在按 Enter 或失焦时开始。kind 为 'unreadable'（不是数字的文本）、'fractional'（启用 isIntegerOnly 时的小数）或 'outOfRange'（min 大于 max 时的任何数字）；text 为输入的文本；value 为文本所指的数字，用于 'fractional' 和 'outOfRange'。编辑使文本有效或为空时、新的 value、min、max 或 isIntegerOnly 改变或结束拒绝时、禁用字段丢弃文本时也会调用；同一拒绝不会重复调用；拒绝仍存在时字段卸载会传入 null。传入带消息的 error 状态即可自行措辞拒绝消息。",
     },
     {
       name: 'statusVariant',
@@ -503,7 +518,8 @@ export const docsZh = {
     {
       name: 'htmlName',
       type: 'string',
-      description: '用于表单提交的 HTML name 属性。',
+      description:
+        '用于表单提交的 HTML name 属性。失焦后保留被拒绝的文本时，表单提交已提交的数字，直到用户编辑该文本或新的 value 替换它。',
     },
     {
       name: 'autoComplete',
@@ -752,7 +768,10 @@ export const docsDense = {
     labelTooltip: 'Tooltip text in info icon at label end.',
     startIcon: 'Icon at input start.',
     labelIcon: 'Icon before label text.',
-    status: 'Validation status w/ optional message.',
+    status:
+      "Validation status w/ optional message; nothing shows while typing; at Enter/blur, unreadable text, a fraction when isIntegerOnly, or any number while min > max stays w/ the field's own error message in place of status, unless status is an error w/ message (still announced + aria-invalid); warning/success never hide it; out-of-range numbers clamp.",
+    onEntryErrorChange:
+      "(error|null) on each typed-rejection change, starting only at Enter/blur: kind 'unreadable'|'fractional' (isIntegerOnly)|'outOfRange' (min > max), text, value (fractional/outOfRange); also on an edit to valid/empty, new value/min/max/isIntegerOnly, disable; never twice for one rejection; null on unmount mid-rejection; word it via an error status w/ message",
     statusVariant:
       'How status message is placed: attached overlaps below input; detached floats below w/ spacing; tooltip hides the box and shows it on the status icon.',
     min: 'Minimum value allowed.',
@@ -768,7 +787,8 @@ export const docsDense = {
     isIntegerOnly: 'Only allow integer values.',
     hasClear:
       'Shows clear button when input has value. onChange also accepts null on clear.',
-    htmlName: 'HTML name for form submissions.',
+    htmlName:
+      'HTML name for form submissions; while blur keeps rejected text, posts the committed number until an edit or a new value.',
     autoComplete: 'HTML autocomplete attribute.',
     hasAutoFocus: 'Focus input on mount.',
     onFocus: 'Callback on focus.',
