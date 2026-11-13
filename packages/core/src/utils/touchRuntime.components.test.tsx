@@ -107,6 +107,33 @@ describe('a touch component before and after the touch runtime loads', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  it("keeps a SegmentedControl finger tap's veto before the load: the focus move after the lift does not select", () => {
+    const onChange = vi.fn();
+    render(
+      <SegmentedControl label="View" value="list" onChange={onChange}>
+        <SegmentedControlItem value="list" label="List" />
+        <SegmentedControlItem
+          value="grid"
+          label="Grid"
+          onClick={event => event.preventDefault()}
+        />
+      </SegmentedControl>,
+    );
+    const list = screen.getByRole('radio', {name: 'List'});
+    const grid = screen.getByRole('radio', {name: 'Grid'});
+    act(() => {
+      list.focus();
+    });
+    // A finger's tap: down, up, then the focus move, then the click.
+    fireEvent.pointerDown(grid, {pointerId: 4, pointerType: 'touch'});
+    fireEvent.pointerUp(grid, {pointerId: 4, pointerType: 'touch'});
+    act(() => {
+      grid.focus();
+    });
+    fireEvent.click(grid);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it('selects nothing for a SegmentedControl press the browser cancels before the load', () => {
     const onChange = vi.fn();
     render(

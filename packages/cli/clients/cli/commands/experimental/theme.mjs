@@ -30,6 +30,7 @@ import {
   text,
 } from '../../formatters/index.mjs';
 import {cliError} from '../../lib/cli-error.mjs';
+import {editorMissingArgument} from '../../lib/json-shim.mjs';
 import {AstryxError} from '../../../../api/error.mjs';
 import {defineCommand} from '../../lib/define-command.mjs';
 import {
@@ -902,13 +903,28 @@ export function registerExperimentalTheme(group, program) {
         /** @type {string} */ thing,
         /** @type {string[]} */ value,
         /** @type {any} */ o,
-      ) =>
-        strayOption('set', value) ??
-        run(
-          program,
-          () => themeEditSet(name, thing, value.join(' '), changeOptions(o)),
-          changeBlocks,
-        ),
+      ) => {
+        // A declaration pasted as one argument (`--color-accent: #e11d48`,
+        // or `--color-accent:#e11d48`) is the token and its value; with no
+        // value otherwise, the missing-argument error the parser gives.
+        if (!value.length) {
+          const pasted = /^(--[a-z0-9-]+)\s*:\s*(.+?);?\s*$/i.exec(thing);
+          if (!pasted)
+            return missingSetValue(
+              editor.commands.find(c => c.name() === 'set'),
+            );
+          thing = pasted[1];
+          value = [pasted[2]];
+        }
+        return (
+          strayOption('set', value) ??
+          run(
+            program,
+            () => themeEditSet(name, thing, value.join(' '), changeOptions(o)),
+            changeBlocks,
+          )
+        );
+      },
     }),
     setDoc,
     {tokens: true},
@@ -1108,7 +1124,12 @@ export function registerExperimentalTheme(group, program) {
                 )
               : [
                   ...project(/** @type {any} */ (r.data)),
-                  `Tip: ${PREFIX} preview add${o.path == null ? '' : ` --path ${quoteCommandArgument(String(o.path))}`}`,
+                  // A folder add refuses has a note that says why instead.
+                  ...(r.data.notes.some(n => n.includes(' refuses this folder'))
+                    ? []
+                    : [
+                        `Tip: ${PREFIX} preview add${o.path == null ? '' : ` --path ${quoteCommandArgument(String(o.path))}`}`,
+                      ]),
                 ],
           r =>
             resultSet({
@@ -1280,4 +1301,22 @@ export function registerExperimentalTheme(group, program) {
       hold: editorThemeHold,
     },
   );
+}
+
+/**
+ * The error for `set` given a theme and a thing but no value: the parser's
+ * missing-argument report, from the one builder it uses.
+ * @param {any} cmd the set command
+ * @returns {never}
+ */
+function missingSetValue(cmd) {
+  const {message, suggestions} = editorMissingArgument(
+    cmd,
+    ['theme', 'thing', 'value'],
+    'value',
+  );
+  return cliError(message, {
+    code: ERROR_CODES.ERR_MISSING_ARGUMENT,
+    suggestions,
+  });
 }

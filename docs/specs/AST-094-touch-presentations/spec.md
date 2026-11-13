@@ -887,8 +887,10 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   coarse primary pointer and DR3 otherwise; and gestures add no stylesheet
   bytes (DEC-21). Until the shared touch runtime has loaded
   (`architecture:react-component-runtime` INV13; `spec:AST-080` DEC-5
-  amendment), a press works by its click and keys work as always, with no drag
-  tracking and no slide; a gesture in that window does not start the load.
+  amendment), SegmentedControl and Switch work by taps, clicks and keys, with
+  no drag tracking and no slide or spring; a bottom sheet still drags, and a
+  drag that closes it takes the stylesheet exit instead of the spring. A
+  gesture in that window does not start the load.
 
 ### Platform support
 
