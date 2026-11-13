@@ -68,22 +68,44 @@ import {
 import {CLI_PROVIDER_ID} from '../../foundation/identity/providers.mjs';
 import {
   CORE_PACKAGE,
+  discoverComponentNamesWhere,
+  discoverIntegrationComponents,
   discoverOwnedComponents,
   discoverValidIntegrationComponents,
 } from '../../foundation/discovery/component-discovery.mjs';
 import {loadComponentDoc} from '../../foundation/discovery/component-loader.mjs';
 import {
+  coreFilesNaming,
+  foldEntryName,
+  integrationsFilesNaming,
+} from '../../foundation/discovery/entry-name-files.mjs';
+import {getAllHookNames} from '../../foundation/discovery/hook-discovery.mjs';
+import {
+  coreTemplateIds,
   discoverCoreTemplates,
   discoverIntegrationTemplatesForOne,
+  integrationsMayReplaceTemplate,
+  listTemplates,
+  templateFilesNaming,
 } from '../../foundation/discovery/template-adapter.mjs';
 import {findCoreDir} from '../../foundation/fs/paths.mjs';
 import {reusedWhileUnchanged} from '../../foundation/fs/read-record.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
-import {orderRouteSuggestions} from '../../foundation/text/suggest-order.mjs';
+import {
+  carriesTypedWord,
+  orderRouteSuggestions,
+} from '../../foundation/text/suggest-order.mjs';
 import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
 
 export {OVERLAY_LANGUAGES, overlayLanguages};
+
+/**
+ * The project each loaded catalog came from, so a later step of the same read
+ * does not load the project again.
+ * @type {WeakMap<DocsCatalog, Project>}
+ */
+const projectOfCatalog = new WeakMap();
 
 /**
  * The project's topics: the built-in ones plus whatever the configured
@@ -101,7 +123,9 @@ export {OVERLAY_LANGUAGES, overlayLanguages};
 export async function loadDocsCatalog(cwd = process.cwd()) {
   try {
     const project = await Project.load(cwd);
-    return await project.docs();
+    const catalog = await project.docs();
+    projectOfCatalog.set(catalog, project);
+    return catalog;
   } catch {
     return DocsCatalog.fromBuiltins();
   }
@@ -700,7 +724,8 @@ function docFinderOver(catalog, tree, fromProvider, summaries = true) {
         entry &&
         !entry.tree &&
         (providerOf(entry) === provider ||
-          catalog.aliasesOf(entry).includes(parsed.name.toLowerCase()))
+          catalog.aliasesOf(entry).includes(parsed.name.toLowerCase()) ||
+          entry.replaces?.toLowerCase() === parsed.name.toLowerCase())
       ) {
         let title = entry.title ?? entry.name;
         let summary = entry.description ?? '';
@@ -1764,9 +1789,87 @@ export function nameOwner(tree, catalog, name) {
     return entry == null ? null : {kind: 'topic', entry};
   }
   const entry = catalog.resolve(name);
-  if (entry == null) return null;
-  const owner = routeOwner(tree, entry);
-  return owner == null ? {kind: 'topic', entry} : {kind: 'node', node: owner};
+  if (entry != null) {
+    const owner = routeOwner(tree, entry);
+    return owner == null ? {kind: 'topic', entry} : {kind: 'node', node: owner};
+  }
+  return childOwner(tree, name);
+}
+
+/**
+ * The child a reader names without its namespace, or with a route that leaves
+ * out the prefix the child's own name repeats (spec:AST-046 FR5). A namespace
+ * whose children repeat its name makes its own routes stutter: `tokens` holds
+ * `tokens-color`, so the route is `tokens/tokens-color`, while the namespace
+ * listing shows the bare `tokens-color`. Both spellings name one child, so
+ * that child answers. Two or more children answering is ambiguous, and the
+ * read falls through to the suggestion list, unchanged. An experimental doc
+ * never answers to a bare name: its project reaches it only by a marked route
+ * (spec:AST-017 FR27).
+ * @param {DocsTree} tree
+ * @param {string} name
+ * @returns {{kind: 'node', node: TreeNode} | null}
+ */
+function childOwner(tree, name) {
+  const wanted = name.toLowerCase();
+  const slash = wanted.lastIndexOf('/');
+  const parent = slash > 0 ? wanted.slice(0, slash) : null;
+  const unstuttered =
+    parent == null
+      ? null
+      : `${parent}/${parent.slice(parent.lastIndexOf('/') + 1)}-${wanted.slice(slash + 1)}`;
+  const matches = [...tree.nodes.values()].filter(
+    node =>
+      node.ref?.flatTopic == null &&
+      node.route.includes('/') &&
+      // An experimental doc is reachable only by a route its project marked
+      // as experimental (spec:AST-017 FR27): a bare name never opens one.
+      !isExperimentalTreeNode(tree, node) &&
+      (node.name?.toLowerCase() === wanted ||
+        (unstuttered != null && node.route.toLowerCase() === unstuttered)),
+  );
+  return matches.length === 1 ? {kind: 'node', node: matches[0]} : null;
+}
+
+/**
+ * `stability: 'experimental'` for a node whose doc is marked experimental, or
+ * that sits under an experimental namespace (spec:AST-017 FR27), the way help
+ * marks an experimental command; nothing for a stable one, so stable entries
+ * read as they always have.
+ * @param {DocsTree} tree
+ * @param {TreeNode} node
+ * @returns {{stability?: 'experimental'}}
+ */
+export function stabilityOf(tree, node) {
+  return isExperimentalTreeNode(tree, node) ? {stability: 'experimental'} : {};
+}
+
+/**
+ * The fields every child carries: what it is, and the route that opens it.
+ * Shared, so a child reads the same whether a namespace read or the topic
+ * list names it — including the package, which is the integration's for a
+ * guide an integration replaced, not the package whose route it took.
+ * @param {DocsTree} tree
+ * @param {TreeNode} child
+ * @returns {import('./docs.type.mjs').DocsNodeChild}
+ */
+export function childIdentity(tree, child) {
+  return {
+    route: child.route,
+    name: child.route.slice(child.route.lastIndexOf('/') + 1),
+    package: child.guideOverlay?.replacement?.package ?? child.provider,
+    // A guide an integration's doc took the place of names whose it was.
+    ...(child.guideOverlay?.replacement
+      ? {
+          replaces: child.route,
+          replacedPackage: child.guideOverlay.replacedPackage ?? child.provider,
+        }
+      : {}),
+    kind: child.kind,
+    title: child.title,
+    summary: child.summary,
+    ...stabilityOf(tree, child),
+  };
 }
 
 /**
@@ -1853,12 +1956,16 @@ function movedRoute(topic, tree) {
  * Otherwise it suggests the docs the argument names in another spelling, or
  * failing that the topics and top-level namespaces, closest first and cut
  * where the matches get weaker (every one of them when none shares a word
- * with the argument).
+ * with the argument). When the argument is the name of a component, hook or
+ * template, the command that reads that entry comes first and takes the last
+ * suggestion's place, so the list keeps its length; when no suggested doc
+ * shares a word with the argument, that command is the only suggestion.
  * @param {unknown} topic
  * @param {DocsCatalog} catalog
+ * @param {{cwd?: string}} [options]
  * @returns {Promise<AstryxError>}
  */
-export async function unknownTopicError(topic, catalog) {
+export async function unknownTopicError(topic, catalog, {cwd} = {}) {
   const tree = await projectTree(catalog);
   /** @type {Array<{name: string, reason: string}>} */
   let suggestions = [];
@@ -1896,7 +2003,10 @@ export async function unknownTopicError(topic, catalog) {
       )
       .map(node => ({name: node.route, reason: node.summary}));
   }
+  // Every topic and namespace: the list a name no doc shares a word with gets.
+  let everyDoc = false;
   if (suggestions.length === 0) {
+    everyDoc = true;
     suggestions = [
       ...tree
         .roots()
@@ -1922,11 +2032,192 @@ export async function unknownTopicError(topic, catalog) {
       ERROR_CODES.ERR_UNKNOWN_TOPIC,
     );
   }
+  const elsewhere =
+    suggestions.length > 0 ? await entryElsewhere(topic, catalog, cwd) : null;
+  if (elsewhere) {
+    const sharesAWord =
+      !everyDoc ||
+      suggestions.some(entry => carriesTypedWord(String(topic), entry.name));
+    suggestions = sharesAWord
+      ? [elsewhere, ...suggestions.slice(0, -1)]
+      : [elsewhere];
+  }
   return new AstryxError(
     `Unknown topic "${String(topic)}"${notLoaded(catalog)}`,
     suggestions,
     ERROR_CODES.ERR_UNKNOWN_TOPIC,
   );
+}
+
+/**
+ * The command that reads the component, hook or template a docs argument
+ * names, or null. Only an exact name counts, in any case and with or without
+ * spaces and hyphens; a hook also answers to its name without `use`. A
+ * component wins over a hook, and a hook over a template. A route never names
+ * one of them.
+ * @param {string} topic
+ * @param {{components?: string[], hooks?: string[], templates?: string[]}} names
+ * @returns {{name: string, reason: string} | null}
+ */
+export function entryCommand(
+  topic,
+  {components = [], hooks = [], templates = []},
+) {
+  if (topic.includes('/')) return null;
+  const wanted = foldEntryName(topic);
+  if (wanted === '') return null;
+  const component = components.find(name => foldEntryName(name) === wanted);
+  if (component) {
+    return {
+      name: `astryx component ${component}`,
+      reason: 'a component, not a docs topic',
+    };
+  }
+  const hook = hooks.find(name => {
+    const folded = foldEntryName(name);
+    return folded === wanted || folded === `use${wanted}`;
+  });
+  if (hook) {
+    return {name: `astryx hook ${hook}`, reason: 'a hook, not a docs topic'};
+  }
+  const template = templates.find(name => foldEntryName(name) === wanted);
+  if (template) {
+    return {
+      name: `astryx template ${template}`,
+      reason: 'a template, not a docs topic',
+    };
+  }
+  return null;
+}
+
+/**
+ * {@link entryCommand} over the names the project's catalogs hold. File names
+ * and doc text say first which catalogs can hold the argument; a catalog is
+ * asked only then, only for the names that fold to the argument, and only
+ * when the one before it has no match. So a name no file carries reads no doc.
+ * A check that fails gives no hint.
+ * @param {unknown} topic
+ * @param {DocsCatalog} catalog the catalog the read used; its project is
+ *   reused
+ * @param {string} [cwd]
+ * @returns {Promise<{name: string, reason: string} | null>}
+ */
+async function entryElsewhere(topic, catalog, cwd = process.cwd()) {
+  if (typeof topic !== 'string' || topic.includes('/')) return null;
+  const wanted = foldEntryName(topic);
+  if (wanted === '') return null;
+  let project = projectOfCatalog.get(catalog);
+  try {
+    project ??= await Project.load(cwd);
+  } catch {
+    return null;
+  }
+  const coreDir = project.coreDir();
+  const integrations = project.loadedIntegrations;
+  /** @param {string} name */
+  const isWanted = name => foldEntryName(name) === wanted;
+  /** @param {string} name */
+  const isWantedHook = name =>
+    isWanted(name) || foldEntryName(name) === `use${wanted}`;
+  /** @type {{component: boolean, hook: boolean, componentTops?: Set<string>, hookTops?: Set<string>}} */
+  let inCore = {component: false, hook: false};
+  try {
+    if (coreDir) inCore = coreFilesNaming(coreDir, wanted);
+  } catch {
+    inCore = {component: true, hook: true};
+  }
+  /** @type {Array<() => Promise<{components?: string[], hooks?: string[], templates?: string[]}>>} */
+  const catalogs = [
+    async () => ({
+      components:
+        coreDir && inCore.component
+          ? discoverComponentNamesWhere(coreDir, isWanted, inCore.componentTops)
+          : [],
+    }),
+    async () => ({
+      components: await integrationComponentNames(
+        integrations,
+        wanted,
+        isWanted,
+      ),
+    }),
+    async () => ({
+      hooks:
+        coreDir && inCore.hook
+          ? getAllHookNames(coreDir, isWantedHook, inCore.hookTops)
+          : [],
+    }),
+    async () => ({
+      templates: await templateNames(project, integrations, wanted),
+    }),
+  ];
+  for (const load of catalogs) {
+    let names;
+    try {
+      names = await load();
+    } catch {
+      continue;
+    }
+    const found = entryCommand(topic, names);
+    if (found) return found;
+  }
+  return null;
+}
+
+/**
+ * The names `isWanted` accepts among the valid components of the loaded
+ * integrations, in project order. Only an integration whose files can carry
+ * the name is read, and it loads its docs only when it lists such a name.
+ * @param {import('../../foundation/integrations/integrations.mjs').LoadedIntegration[]} integrations
+ * @param {string} wanted the folded name
+ * @param {(name: string) => boolean} isWanted
+ * @returns {Promise<string[]>}
+ */
+async function integrationComponentNames(integrations, wanted, isWanted) {
+  const naming = integrationsFilesNaming(
+    integrations.map(integration => integration.components),
+    wanted,
+  );
+  for (const [at, integration] of integrations.entries()) {
+    if (!naming[at]) continue;
+    if (!discoverIntegrationComponents(integration).some(r => isWanted(r.name)))
+      continue;
+    const {components} = await discoverValidIntegrationComponents(integration);
+    const names = components.map(r => r.name).filter(isWanted);
+    if (names.length > 0) return names;
+  }
+  return [];
+}
+
+/**
+ * The template ids that fold to `wanted`, as the project's template list
+ * holds them. Core's ids come from file names. The whole list loads only when
+ * an integration ships a template doc with such an id, when more than one
+ * Core id folds to it (the list decides their order), or when one does and
+ * an integration template may replace it.
+ * @param {Project} project
+ * @param {import('../../foundation/integrations/integrations.mjs').LoadedIntegration[]} integrations
+ * @param {string} wanted the folded name
+ * @returns {Promise<string[]>}
+ */
+async function templateNames(project, integrations, wanted) {
+  /** @param {string} name */
+  const isWanted = name => foldEntryName(name) === wanted;
+  const {blocks, listed} = templateFilesNaming(integrations, wanted);
+  const core = blocks
+    ? coreTemplateIds(isWanted)
+    : listTemplates().filter(isWanted);
+  if (
+    !listed &&
+    core.length < 2 &&
+    (core.length === 0 || !integrationsMayReplaceTemplate(integrations))
+  ) {
+    return core;
+  }
+  return /** @type {Array<{dirName?: unknown}>} */ (await project.templates())
+    .map(record => record.dirName)
+    .filter(name => typeof name === 'string')
+    .filter(isWanted);
 }
 
 /**
@@ -1962,7 +2253,7 @@ export async function resolveTopicDocs(topic, options = {}, loaded) {
           undefined,
           ERROR_CODES.ERR_UNKNOWN_TOPIC,
         )
-      : await unknownTopicError(topic, found.catalog);
+      : await unknownTopicError(topic, found.catalog, {cwd});
   }
   const {catalog, entry} = found;
   const node = await lowerTopic(catalog, entry, effectiveLang);

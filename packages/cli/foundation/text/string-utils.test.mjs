@@ -13,11 +13,18 @@
  *     sorts by score desc then name asc.
  * The doc-file reading (Pass 2) is exercised end-to-end elsewhere; here we use
  * a non-existent coreDir so Pass 2 is a no-op and the tests stay pure + fast.
+ * One case writes a doc in a temporary folder: Pass 2 looks for each doc once
+ * per operation.
  */
 
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import {describe, it, expect} from 'vitest';
+import {withListingCache} from '../fs/listing-cache.mjs';
 import {
   findClosestComponents,
+  firstSentence,
   searchComponents,
   levenshteinDistance,
 } from './string-utils.mjs';
@@ -81,6 +88,31 @@ describe('findClosestComponents', () => {
 });
 
 describe('searchComponents', () => {
+  it('looks for each doc once per operation and fresh outside one', async () => {
+    const core = fs.mkdtempSync(path.join(os.tmpdir(), 'as-su-once-'));
+    try {
+      const dir = path.join(core, 'src', 'Card');
+      fs.mkdirSync(dir, {recursive: true});
+      const matchesKeyword = async () =>
+        (await searchComponents('panel', core, {Card: ['Card']})).some(
+          result => result.reason === 'keyword "panel"',
+        );
+      await withListingCache(async () => {
+        expect(await matchesKeyword()).toBe(false);
+        fs.writeFileSync(
+          path.join(dir, 'Card.doc.mjs'),
+          "export const docs = {keywords: ['panel']};\n",
+        );
+        // The operation looked for the doc once, so the new doc does not
+        // reach it.
+        expect(await matchesKeyword()).toBe(false);
+      });
+      expect(await matchesKeyword()).toBe(true);
+    } finally {
+      fs.rmSync(core, {recursive: true, force: true});
+    }
+  });
+
   it('scores an exact name match 100', async () => {
     const results = await searchComponents('Button', NO_CORE, COMPONENTS);
     expect(results[0]).toEqual({
@@ -171,5 +203,27 @@ describe('searchComponents', () => {
 
   it('returns an empty array for an empty registry without throwing', async () => {
     await expect(searchComponents('Button', NO_CORE, {})).resolves.toEqual([]);
+  });
+});
+
+describe('firstSentence', () => {
+  it('ends at the first sentence and collapses whitespace', () => {
+    expect(firstSentence('One thing.  Two\nthings.')).toBe('One thing.');
+    expect(firstSentence('No end mark')).toBe('No end mark');
+  });
+
+  it('keeps going past e.g and i.e', () => {
+    expect(firstSentence('Pick one, e.g. a Card. Then more.')).toBe(
+      'Pick one, e.g. a Card.',
+    );
+  });
+
+  it('does not end inside an open quote', () => {
+    const description =
+      'An invoice summary that formats its date and amount with Intl using the locale from useLocale, so switching the provider from English to German changes "Nov 2, 2026" and "$1,234.50" to "2. Nov. 2026" and "1.234,50 $" with no second locale source.';
+    expect(firstSentence(description)).toBe(description);
+    expect(
+      firstSentence('It reads \u201C2. Nov.\u201D in German. More.'),
+    ).toBe('It reads \u201C2. Nov.\u201D in German.');
   });
 });

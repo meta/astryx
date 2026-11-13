@@ -7,6 +7,7 @@ import {BottomSheet} from '@astryxdesign/core/BottomSheet';
 import {Popover} from '@astryxdesign/core/Popover';
 import type {PopoverTriggerRenderProps} from '@astryxdesign/core/Popover';
 import {Button} from '@astryxdesign/core/Button';
+import {ResizeHandle, useResizable} from '@astryxdesign/core/Resizable';
 import {Token} from '@astryxdesign/core/Token';
 import {Link} from '@astryxdesign/core/Link';
 import {List, ListItem} from '@astryxdesign/core/List';
@@ -344,6 +345,66 @@ export const Default: Story = {
   },
 };
 
+function ResizablePanel() {
+  const resizable = useResizable({defaultSize: 120, minSize: 60, maxSize: 320});
+  return (
+    <div style={{display: 'flex', blockSize: 64}}>
+      <section
+        aria-label="Resizable panel"
+        style={{inlineSize: resizable.size, overflow: 'hidden'}}>
+        <Text>{resizable.size}px</Text>
+      </section>
+      <ResizeHandle
+        direction="horizontal"
+        hasDivider
+        resizable={resizable}
+        label="Resize panel"
+      />
+    </div>
+  );
+}
+
+/**
+ * An open Popover above page controls that take a finger's drag: a resize
+ * handle and rows with swipe actions. On a touch screen each follows the
+ * finger while the Popover is open.
+ */
+export const OverPageControls: Story = {
+  tags: ['!autodocs'],
+  render: () => (
+    <VStack gap={4}>
+      <Popover
+        placement="below"
+        label="Settings"
+        width={240}
+        content={<Text>Popover content</Text>}>
+        <Button label="Settings">Settings</Button>
+      </Popover>
+      <div style={{blockSize: 120}} />
+      <ResizablePanel />
+      <List>
+        {['Message 1', 'Message 2', 'Message 3'].map(label => (
+          <ListItem
+            key={label}
+            label={label}
+            onClick={() => {}}
+            swipeActions={{
+              trailing: [
+                {label: 'Archive', onActivate: () => {}, variant: 'neutral'},
+                {
+                  label: 'Delete',
+                  onActivate: () => {},
+                  variant: 'destructive',
+                },
+              ],
+            }}
+          />
+        ))}
+      </List>
+    </VStack>
+  ),
+};
+
 // =============================================================================
 // Filter Panel
 // =============================================================================
@@ -407,6 +468,46 @@ function FilterContent({onApply}: {onApply?: () => void}) {
     </VStack>
   );
 }
+
+/**
+ * A controlled Popover that a separate button also opens and closes. A press
+ * on that button while the popover is open closes it, and the button's label
+ * follows the state.
+ */
+export const ToggledByAnotherControl: Story = {
+  render: function ToggledByAnotherControlStory() {
+    const [isOpen, setIsOpen] = React.useState(false);
+    return (
+      <HStack gap={3}>
+        <Popover
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          label="Details"
+          width={260}
+          placement="below"
+          content={
+            <VStack gap={2}>
+              <Heading level={4} tabIndex={-1}>
+                Details
+              </Heading>
+              <Text type="body">
+                The button beside the trigger also opens and closes this
+                popover.
+              </Text>
+            </VStack>
+          }>
+          <Button label="Details">Details</Button>
+        </Popover>
+        <Button
+          label={isOpen ? 'Hide details' : 'Show details'}
+          variant="secondary"
+          onClick={() => setIsOpen(value => !value)}>
+          {isOpen ? 'Hide details' : 'Show details'}
+        </Button>
+      </HStack>
+    );
+  },
+};
 
 export const FilterPanel: Story = {
   render: function FilterPanelStory() {

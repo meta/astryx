@@ -7,7 +7,7 @@
  * project and integration modules. The project, integration and contribution
  * modules use them. A component lookup loads no code-rewrite package, which
  * only patching an integration manifest uses. A module hook in the child
- * records every module that the run resolves.
+ * records every module that the run loads (resolving a package loads none).
  */
 
 import {spawnSync} from 'node:child_process';
@@ -74,27 +74,46 @@ function packageOf(url) {
 
 /**
  * Run the bin with `args` in an empty folder, with its own home folder, and
- * return the packages of the modules it resolved and the paths of the CLI's
+ * return the packages of the modules it loaded and the paths of the CLI's
  * own modules under the CLI root.
  * @param {string[]} args
  * @returns {{status: number | null, packages: Set<string>, cliModules: Set<string>}}
  */
 function modulesLoadedBy(args) {
-  const log = path.join(dir, 'resolved.txt');
+  const log = path.join(dir, 'loaded.txt');
   fs.rmSync(log, {force: true});
-  const hook = path.join(dir, 'record-resolved.mjs');
+  const hook = path.join(dir, 'record-loaded.mjs');
   fs.writeFileSync(
     hook,
     [
       "import {appendFileSync} from 'node:fs';",
-      "import {registerHooks} from 'node:module';",
-      'registerHooks({',
-      '  resolve(specifier, context, nextResolve) {',
-      '    const result = nextResolve(specifier, context);',
-      `    appendFileSync(${JSON.stringify(log)}, result.url + '\\n');`,
-      '    return result;',
-      '  },',
-      '});',
+      // Loads, not resolutions: resolving a package reads no module of it.
+      'export async function load(url, context, nextLoad) {',
+      '  const result = await nextLoad(url, context);',
+      `  appendFileSync(${JSON.stringify(log)}, url + '\\n');`,
+      '  return result;',
+      '}',
+      '',
+    ].join('\n'),
+  );
+  const preload = path.join(dir, 'register-loaded.mjs');
+  fs.writeFileSync(
+    preload,
+    [
+      "import {appendFileSync} from 'node:fs';",
+      "import Module, {register} from 'node:module';",
+      "import {isAbsolute} from 'node:path';",
+      "import {pathToFileURL} from 'node:url';",
+      // Async module hooks do not observe CommonJS require calls: note each
+      // CommonJS module as it loads.
+      'const load = Module.prototype.load;',
+      'Module.prototype.load = function (file, ...rest) {',
+      '  if (isAbsolute(file)) {',
+      `    appendFileSync(${JSON.stringify(log)}, pathToFileURL(file).href + '\\n');`,
+      '  }',
+      '  return load.call(this, file, ...rest);',
+      '};',
+      `register(${JSON.stringify(pathToFileURL(hook).href)});`,
       '',
     ].join('\n'),
   );
@@ -119,7 +138,7 @@ function modulesLoadedBy(args) {
   });
   const result = spawnSync(
     process.execPath,
-    ['--import', pathToFileURL(hook).href, BIN, ...args],
+    ['--import', pathToFileURL(preload).href, BIN, ...args],
     {cwd: app, env, encoding: 'utf8'},
   );
   const packages = new Set();
@@ -142,6 +161,9 @@ describe('a run of the bin that prints the version', () => {
     const {status, packages, cliModules} = modulesLoadedBy(['--version']);
     expect(status).toBe(0);
     expect(packages.has('commander')).toBe(true);
+    expect(fs.readFileSync(path.join(dir, 'loaded.txt'), 'utf8')).toContain(
+      '/node_modules/commander/lib/command.js',
+    );
     expect(cliModules.has('clients/cli/bin/astryx.mjs')).toBe(true);
   });
 

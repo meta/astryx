@@ -49,7 +49,7 @@ import {
 } from '../../foundation/discovery/docs-discovery.mjs';
 import {discoverIntegrationThemes} from '../../foundation/discovery/theme-discovery.mjs';
 import {inspectPackageExport} from '../../foundation/discovery/package-exports.mjs';
-import {parse as parseModule} from '@babel/parser';
+import {babelParse as parseModule} from '../../foundation/runtime/lazy-dependencies.mjs';
 import {moduleExportsName} from '../../foundation/discovery/module-exports.mjs';
 import {
   ThemeImportError,
@@ -57,7 +57,7 @@ import {
 } from '../../foundation/discovery/theme-imports.mjs';
 import {
   normalizeThemeBuildForCompare,
-  themeBuild,
+  themeBuildWithHandOff,
 } from '../theme/build/build.mjs';
 import {
   discoverIntegrationComponents,
@@ -99,14 +99,20 @@ const GENERATED_HEADER_LINE =
 const SOURCE_LINE = /^( \* Source: )(\S(?:.*\S)?)(\s*)$/u;
 const CLI_VERSION_LINE = /^( \* CLI: @astryxdesign\/cli@)(\S+)(\s*)$/u;
 const CORE_VERSION_LINE = /^( \* Core: @astryxdesign\/core@)(\S+)(\s*)$/u;
+// The built module's own doc comment names the command that built it, which
+// depends on the package manager and host that ran the build.
+const BUILT_BY_LINE =
+  /^( \* \S(?:.*\S)? theme — built by `)(\S(?:.*\S)?)( theme build`)(\s*)$/u;
 
 /**
- * Compare generated theme outputs without making their build directory or
- * CLI/Core version look like source drift. Normalization applies only to the
- * first generated JS or CSS comment and only when it contains exactly one
- * well-formed Source, CLI, and Core line. Missing, duplicate, malformed,
- * reordered, or any other bytes stay significant. `theme build --check`
- * deliberately stays strict.
+ * Compare generated theme outputs without making their build directory,
+ * CLI/Core version, or build command look like source drift. Normalization
+ * applies only to a file whose first comment is the generated header with
+ * exactly one well-formed Source, CLI, and Core line; it covers those lines
+ * and, in a built module, the one `built by` line that names the command
+ * (`yarn astryx`, `pnpm exec astryx`, or a host's own). Missing, duplicate,
+ * malformed, reordered, or any other bytes stay significant. `theme build
+ * --check` deliberately stays strict.
  * @param {string} content
  */
 export function normalizeThemeVerifyForCompare(content) {
@@ -125,8 +131,12 @@ export function normalizeThemeVerifyForCompare(content) {
   if (source.length !== 1 || cli.length !== 1 || core.length !== 1) {
     return normalized;
   }
+  const builtBy = lines.filter(line => BUILT_BY_LINE.test(line)).length;
   return lines
     .map((line, index) => {
+      if (builtBy === 1 && BUILT_BY_LINE.test(line)) {
+        return line.replace(BUILT_BY_LINE, '$1<command>$3$4');
+      }
       if (index >= close) return line;
       if (SOURCE_LINE.test(line)) {
         return line.replace(SOURCE_LINE, '$1<source>$3');
@@ -631,8 +641,12 @@ async function validateIncompleteThemeExports(
     if (outputs.some(output => output.kind !== 'font stylesheet')) {
       // The scratch directory is the write root; the package stays the cwd,
       // so the build selects the package's Core and its paths as before.
-      const scratchBuild = {out: expectedCss, __writeRoot: expectedDir};
-      const receipt = await themeBuild(source, scratchBuild, {cwd: packageDir});
+      const receipt = await themeBuildWithHandOff(
+        source,
+        {out: expectedCss},
+        {cwd: packageDir},
+        {writeRoot: expectedDir},
+      );
       if (receipt == null || receipt.type !== 'theme.build') {
         throw new Error('the theme build produced no complete receipt');
       }
@@ -1069,10 +1083,12 @@ async function validatePackedThemeExports(
     try {
       // The scratch directory is the write root; the package stays the cwd,
       // so the build selects the package's Core and its paths as before.
-      const scratchBuild = {out: expectedCss, __writeRoot: expectedDir};
-      const receipt = await themeBuild(source, scratchBuild, {
-        cwd: localIntegration.__packageDir,
-      });
+      const receipt = await themeBuildWithHandOff(
+        source,
+        {out: expectedCss},
+        {cwd: localIntegration.__packageDir},
+        {writeRoot: expectedDir},
+      );
       if (receipt == null || receipt.type !== 'theme.build') {
         issues.push(
           error(

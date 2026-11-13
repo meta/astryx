@@ -97,6 +97,19 @@ describe('parseIntegration (load boundary)', () => {
     expect(reason({docsiteUrl: 'nope'})).toContain('docsiteUrl');
   });
 
+  it('accepts a logo with a light path and an optional dark one', () => {
+    const light = {logo: {light: './logo.svg'}};
+    const both = {logo: {light: './logo.svg', dark: './logo-dark.svg'}};
+    expect(parseIntegration(light)).toEqual(light);
+    expect(parseIntegration(both)).toEqual(both);
+    expect(unknownIntegrationKeys(both)).toEqual([]);
+  });
+
+  it('rejects a logo that is a bare path or has no light path', () => {
+    expect(reason({logo: './logo.svg'})).toContain('logo');
+    expect(reason({logo: {dark: './logo-dark.svg'}})).toContain('logo');
+  });
+
   it('accepts a cliCommand and rejects one that is not a single clean line', () => {
     expect(parseIntegration({cliCommand: 'acme astryx'})).toEqual({
       cliCommand: 'acme astryx',

@@ -9,6 +9,7 @@ import {
   onTestFinished,
   vi,
 } from 'vitest';
+import {act} from '@testing-library/react';
 import {GestureHost} from '../gestures/GestureHost';
 import {subscribeInput} from '../utils/inputStream';
 import {
@@ -514,6 +515,211 @@ describe("holdInput decides by each event's pointer (spec:AST-094 FR35)", () => 
     expect(shield.style.pointerEvents).toBe('auto');
   });
 
+  /** A mouse comes to rest at (x, y), heard as press feedback hears it. */
+  function mouseRestsAt(x: number, y: number) {
+    const stop = subscribeInput(window, 'pointermove', () => {});
+    document.body.dispatchEvent(
+      new PointerEvent('pointermove', {
+        ...INIT,
+        pointerType: 'mouse',
+        clientX: x,
+        clientY: y,
+      }),
+    );
+    stop();
+  }
+
+  /** The clip-path that leaves a 4 px square open around (x, y). */
+  const openingAt = (x: number, y: number) =>
+    `polygon(0 0, 100% 0, 100% 100%, 0 100%, 0 ${y - 2}px, ${x - 2}px ${y - 2}px, ${x - 2}px ${y + 2}px, ${x + 2}px ${y + 2}px, ${x + 2}px ${y - 2}px, 0 ${y - 2}px)`;
+
+  it("leaves the point where the mouse rests open on a presentation's shield that a finger raised: a still mouse's press reaches what is under it, a finger's press is still held, and a dismissal's shield stays whole (spec:AST-094 FR35)", () => {
+    const {layer} = mountLayer();
+    const {button, reached} = recorder(layer);
+    mouseRestsAt(120, 80);
+    // A finger opened the layer: it is the stream's last pointer.
+    lastPointerWas('touch');
+    hold(layer);
+    const shield = layer.lastElementChild as HTMLElement;
+    expect(shield.style.pointerEvents).toBe('auto');
+    expect(shield.style.getPropertyValue('clip-path')).toBe(openingAt(120, 80));
+    // A finger's or a pen's press is held wherever it lands, there too.
+    pointer(button, 'pointerdown', 'touch', 2);
+    pointer(button, 'pointerup', 'touch', 2);
+    click(button, 'touch');
+    pointer(button, 'pointerdown', 'pen', 4);
+    pointer(button, 'pointerup', 'pen', 4);
+    click(button, 'pen');
+    expect(reached).toEqual([]);
+    expect(shield.style.getPropertyValue('clip-path')).toBe(openingAt(120, 80));
+    // The still mouse's press, which the browser hit-tests through the opening.
+    pointer(button, 'pointerdown', 'mouse', 1, 1);
+    pointer(button, 'pointerup', 'mouse');
+    click(button, 'mouse');
+    expect(reached).toEqual(['pointerdown', 'pointerup', 'click']);
+    // A moving mouse lowers the shield, and the opening goes with it.
+    mouseRestsAt(130, 90);
+    expect(shield.style.pointerEvents).toBe('none');
+    expect(shield.style.getPropertyValue('clip-path')).toBe('');
+    // A finger raises it again, open where the mouse now rests.
+    pointer(button, 'pointerdown', 'touch', 3);
+    expect(shield.style.pointerEvents).toBe('auto');
+    expect(shield.style.getPropertyValue('clip-path')).toBe(openingAt(130, 90));
+    pointer(button, 'pointerup', 'touch', 3);
+    // A dismissal's shield takes every hit, a mouse's included.
+    hold(layer, 'layer');
+    expect(shield.style.pointerEvents).toBe('auto');
+    expect(shield.style.getPropertyValue('clip-path')).toBe('');
+  });
+
+  /** The part of a clip-path that leaves a 4 px square open around (x, y). */
+  const holeAt = (x: number, y: number) =>
+    `0 ${y - 2}px, ${x - 2}px ${y - 2}px, ${x - 2}px ${y + 2}px, ${x + 2}px ${y + 2}px, ${x + 2}px ${y - 2}px, 0 ${y - 2}px`;
+
+  it("leaves a presentation's shield open where a finger or pen went down before it came up, follows that press, and closes the opening when it lifts", () => {
+    const {layer} = mountLayer();
+    const outside = document.createElement('button');
+    document.body.append(outside);
+    const stops = (
+      ['pointerdown', 'pointermove', 'pointerup', 'pointercancel'] as const
+    ).map(type => subscribeInput(window, type, () => {}));
+    const press = (
+      type: string,
+      pointerType: string,
+      id: number,
+      x: number,
+      y: number,
+    ) =>
+      outside.dispatchEvent(
+        new PointerEvent(type, {
+          ...INIT,
+          pointerId: id,
+          pointerType,
+          clientX: x,
+          clientY: y,
+        }),
+      );
+    press('pointerdown', 'touch', 61, 20, 680);
+    press('pointerdown', 'pen', 62, 300, 40);
+    press('pointerdown', 'touch', 63, 90, 90);
+    press('pointerup', 'touch', 63, 90, 90);
+    hold(layer);
+    const shield = layer.lastElementChild as HTMLElement;
+    const clip = () => shield.style.getPropertyValue('clip-path');
+    expect(clip()).toContain(holeAt(20, 680));
+    expect(clip()).toContain(holeAt(300, 40));
+    expect(clip()).not.toContain(holeAt(90, 90));
+    // The opening follows the press, and closes when it lifts.
+    press('pointermove', 'touch', 61, 24, 676);
+    expect(clip()).toContain(holeAt(24, 676));
+    expect(clip()).not.toContain(holeAt(20, 680));
+    press('pointerup', 'touch', 61, 24, 676);
+    expect(clip()).not.toContain(holeAt(24, 676));
+    press('pointercancel', 'pen', 62, 300, 40);
+    expect(clip()).not.toContain(holeAt(300, 40));
+    for (const stop of stops) {
+      stop();
+    }
+    outside.remove();
+  });
+
+  it('merges an earlier press opening that overlaps the still-mouse opening into one box', () => {
+    const {layer} = mountLayer();
+    mouseRestsAt(100, 100);
+    lastPointerWas('touch');
+    const stops = (['pointerdown', 'pointerup', 'pointercancel'] as const).map(
+      type => subscribeInput(window, type, () => {}),
+    );
+    document.body.dispatchEvent(
+      new PointerEvent('pointerdown', {
+        ...INIT,
+        pointerId: 81,
+        pointerType: 'touch',
+        clientX: 103,
+        clientY: 101,
+      }),
+    );
+    hold(layer);
+    const shield = layer.lastElementChild as HTMLElement;
+    expect(shield.style.getPropertyValue('clip-path')).toBe(
+      'polygon(0 0, 100% 0, 100% 100%, 0 100%, 0 98px, 98px 98px, 98px 103px, 105px 103px, 105px 98px, 0 98px)',
+    );
+    document.body.dispatchEvent(
+      new PointerEvent('pointerup', {
+        ...INIT,
+        pointerId: 81,
+        pointerType: 'touch',
+        clientX: 103,
+        clientY: 101,
+      }),
+    );
+    expect(shield.style.getPropertyValue('clip-path')).toBe(
+      openingAt(100, 100),
+    );
+    for (const stop of stops) {
+      stop();
+    }
+  });
+
+  it("gives no opening to a press the press hold holds, and none on a dismissal's shield", () => {
+    const {layer, child} = mountLayer();
+    const stops = (['pointerdown', 'pointerup', 'pointercancel'] as const).map(
+      type => subscribeInput(window, type, () => {}),
+    );
+    const press = (
+      target: Element,
+      type: string,
+      id: number,
+      x: number,
+      y: number,
+    ) =>
+      target.dispatchEvent(
+        new PointerEvent(type, {
+          ...INIT,
+          pointerId: id,
+          pointerType: 'touch',
+          clientX: x,
+          clientY: y,
+        }),
+      );
+    press(document.body, 'pointerdown', 71, 10, 10);
+    hold(layer, 'surface');
+    // Held: it lands on the layer during the surface hold.
+    press(child, 'pointerdown', 72, 50, 50);
+    hold(layer, 'viewport');
+    const shield = layer.lastElementChild as HTMLElement;
+    expect(shield.style.getPropertyValue('clip-path')).toContain(
+      holeAt(10, 10),
+    );
+    expect(shield.style.getPropertyValue('clip-path')).not.toContain(
+      holeAt(50, 50),
+    );
+    // A dismissal's shield takes every hit.
+    hold(layer, 'layer');
+    expect(shield.style.getPropertyValue('clip-path')).toBe('');
+    press(document.body, 'pointerup', 71, 10, 10);
+    press(child, 'pointerup', 72, 50, 50);
+    for (const stop of stops) {
+      stop();
+    }
+  });
+
+  it("stops a shield over the layer's box alone from taking hits once the stream heard a mouse, while a finger's press on the layer is still held (spec:AST-094 FR35)", () => {
+    const {layer} = mountLayer();
+    const {button, reached} = recorder(layer);
+    mouseRestsAt(40, 40);
+    lastPointerWas('touch');
+    hold(layer, 'surface');
+    const shield = layer.lastElementChild as HTMLElement;
+    expect(isInputShield(shield)).toBe(true);
+    expect(shield.style.pointerEvents).toBe('none');
+    pointer(button, 'pointerdown', 'touch', 2);
+    pointer(button, 'pointerup', 'touch', 2);
+    click(button, 'touch');
+    expect(reached).toEqual([]);
+    expect(shield.style.pointerEvents).toBe('none');
+  });
+
   it("starts a presentation's shield up when the stream last heard a finger, or no pointer at all", () => {
     const {layer, child} = mountLayer();
     lastPointerWas('touch');
@@ -695,5 +901,161 @@ describe("holdInput decides by each event's pointer (spec:AST-094 FR35)", () => 
     const {button, reached} = recorder();
     tap(button, 'touch');
     expect(reached).toEqual(['pointerdown', 'pointerup', 'click']);
+  });
+});
+
+describe("holdInput's dismissal that keeps focus inside (component:BottomSheet FR9)", () => {
+  it('keeps the page live: no shield, the layer lets pointers through, and a finger press on the page still acts', async () => {
+    const {layer, child} = mountLayer();
+    const page = document.createElement('button');
+    document.body.append(page);
+    onTestFinished(() => {
+      layer.remove();
+      page.remove();
+    });
+    act(() => child.focus());
+    const end = deferred();
+    holdInput(layer, {
+      until: end.promise,
+      scope: 'layer',
+      focus: 'kept-inside',
+    });
+    expect(layer.style.pointerEvents).toBe('none');
+    expect(isInHeldLayer(child)).toBe(false);
+    expect(
+      document.querySelector('[popover="manual"][aria-hidden="true"]'),
+    ).toBeNull();
+    const onPageClick = vi.fn();
+    page.addEventListener('click', onPageClick);
+    page.dispatchEvent(
+      new PointerEvent('pointerdown', {bubbles: true, pointerType: 'touch'}),
+    );
+    page.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+    expect(onPageClick).toHaveBeenCalledTimes(1);
+    end.resolve();
+    await flush();
+    expect(layer.style.pointerEvents).toBe('');
+  });
+
+  it('keeps focused content exposed and takes no click and no key but Tab while focus stays inside', () => {
+    const {layer, child} = mountLayer();
+    onTestFinished(() => layer.remove());
+    act(() => child.focus());
+    const release = holdInput(layer, {
+      until: new Promise<never>(() => {}),
+      scope: 'layer',
+      focus: 'kept-inside',
+    });
+    expect(layer).not.toHaveAttribute('inert');
+    expect(layer).not.toHaveAttribute('aria-hidden');
+    expect(child).not.toHaveAttribute('inert');
+    expect(child).toHaveFocus();
+    const onClick = vi.fn();
+    const onKey = vi.fn();
+    child.addEventListener('click', onClick);
+    child.addEventListener('keydown', onKey);
+    child.dispatchEvent(
+      new MouseEvent('click', {bubbles: true, cancelable: true}),
+    );
+    const enter = new KeyboardEvent('keydown', {
+      key: 'Enter',
+      bubbles: true,
+      cancelable: true,
+    });
+    child.dispatchEvent(enter);
+    expect(onClick).not.toHaveBeenCalled();
+    expect(onKey).not.toHaveBeenCalled();
+    expect(enter.defaultPrevented).toBe(true);
+    const tab = new KeyboardEvent('keydown', {
+      key: 'Tab',
+      bubbles: true,
+      cancelable: true,
+    });
+    child.dispatchEvent(tab);
+    expect(onKey).toHaveBeenCalledTimes(1);
+    expect(tab.defaultPrevented).toBe(false);
+    release();
+  });
+
+  it('lets a document listener added before the hold, as the modality tracker is, hear a key it keeps from the layer', () => {
+    const {layer, child} = mountLayer();
+    onTestFinished(() => layer.remove());
+    const onDocumentKey = vi.fn();
+    document.addEventListener('keydown', onDocumentKey, {capture: true});
+    onTestFinished(() =>
+      document.removeEventListener('keydown', onDocumentKey, {capture: true}),
+    );
+    act(() => child.focus());
+    const release = holdInput(layer, {
+      until: new Promise<never>(() => {}),
+      scope: 'layer',
+      focus: 'kept-inside',
+    });
+    const onLayerCapture = vi.fn();
+    layer.addEventListener('keydown', onLayerCapture, {capture: true});
+    child.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'Escape',
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    expect(onDocumentKey).toHaveBeenCalledTimes(1);
+    expect(onLayerCapture).not.toHaveBeenCalled();
+    release();
+  });
+
+  it('makes the layer itself inert and aria-hidden once focus leaves, and gives both back at the end', async () => {
+    const {layer, child} = mountLayer();
+    const outside = document.createElement('button');
+    document.body.append(outside);
+    onTestFinished(() => {
+      layer.remove();
+      outside.remove();
+    });
+    act(() => child.focus());
+    const end = deferred();
+    holdInput(layer, {
+      until: end.promise,
+      scope: 'layer',
+      focus: 'kept-inside',
+    });
+    act(() => outside.focus());
+    await flush();
+    expect(layer).toHaveAttribute('inert');
+    expect(layer).toHaveAttribute('aria-hidden', 'true');
+    end.resolve();
+    await flush();
+    expect(layer).not.toHaveAttribute('inert');
+    expect(layer).not.toHaveAttribute('aria-hidden');
+  });
+
+  it('makes the layer itself inert and aria-hidden at once when focus was not inside', () => {
+    const {layer} = mountLayer();
+    onTestFinished(() => layer.remove());
+    const release = holdInput(layer, {
+      until: new Promise<never>(() => {}),
+      scope: 'layer',
+      focus: 'kept-inside',
+    });
+    expect(layer).toHaveAttribute('inert');
+    expect(layer).toHaveAttribute('aria-hidden', 'true');
+    release();
+    expect(layer).not.toHaveAttribute('inert');
+  });
+
+  it("leaves a 'blur' dismissal as before: its content inert under a shield, focus moved out", () => {
+    const {layer, child} = mountLayer();
+    onTestFinished(() => layer.remove());
+    act(() => child.focus());
+    const release = holdInput(layer, {
+      until: new Promise<never>(() => {}),
+      scope: 'layer',
+    });
+    expect(child).toHaveAttribute('inert');
+    expect(layer).not.toHaveAttribute('inert');
+    expect(child).not.toHaveFocus();
+    expect(isInHeldLayer(child)).toBe(true);
+    release();
   });
 });

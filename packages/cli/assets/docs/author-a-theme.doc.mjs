@@ -7,7 +7,7 @@ export const docs = {
   title: 'Author a theme',
   category: 'guide',
   keywords: ['defineTheme', 'create theme', 'custom theme', 'extends', 'component overrides', 'custom variants', 'adaptations', 'breakpoints', 'theme build', 'theme family', 'tokenVar', 'resolveThemeTokens', 'useTheme', 'palette', 'generate palette', 'seed colors', 'color ramp', 'icon registry'],
-  description: 'Create, customize, and build a theme: defineTheme, palette generation, token overrides, component style overrides, custom variants, responsive adaptations, and production builds.',
+  description: 'Start here: the experimental theme editor makes and changes themes for you (`astryx experimental theme editor new <name> --like neutral`; see the theme doc), checked against what components read. By hand: create, customize, and build a theme: defineTheme, palette generation, token overrides, component style overrides, custom variants, responsive adaptations, and production builds.',
 
   sections: [
     {
@@ -15,6 +15,8 @@ export const docs = {
       title: 'Custom themes',
       content: [
         {type: 'prose', text: "Use an installed built theme as the base for ordinary customization. Import it into your source and pass it as `extends` to `defineTheme({extends: importedTheme, ...})`. Build the result, then add the local slug. Only eject when you need to own and maintain a full source fork."},
+        {type: 'prose', text: "A local theme is a folder in `src/themes/<slug>/` holding a `<name>Theme.ts` source that exports `<name>Theme`, and a same-stem `<name>Theme.doc.mjs` descriptor that `theme add` reads. The stem must be a valid export name, so a hyphenated slug drops the hyphen: `brand-dark` lives in `src/themes/brand-dark/brandDarkTheme.ts` exporting `brandDarkTheme`, beside `brandDarkTheme.doc.mjs`. The descriptor's `name` is the folder's slug, and it must declare its type or `theme add` and `theme list` refuse it. {@command docs authoring theme-doc} lists every field."},
+        {type: 'code', lang: 'js', label: 'src/themes/brand-dark/brandDarkTheme.doc.mjs', code: "/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {\n  type: 'theme',\n  name: 'brand-dark',\n  displayName: 'Brand Dark',\n  description: 'The brand accent, tuned for dark mode.',\n  maintained: false,\n};"},
         {type: 'code', lang: 'bash', label: 'Add to use, eject to fork', code: '{@command theme list}\n{@command theme add stone}\n{@command theme eject stone}\n{@command theme build src/themes/stone/stoneTheme.ts}\n{@command theme add stone}'},
         {type: 'prose', text: "For an annotated map of the whole surface (every defineTheme field, the token families, and the component override syntax, each with the CLI command that prints its reference), run `{@command theme template}`. It writes `theme.template.ts` into your project to read and copy from (`{@command init --features theme}` writes it as part of project setup)."},
         {type: 'prose', text: 'To apply a theme you created, see {@link generic:use-a-theme}. To generate colors from seed values, see the Palette section below. Before you eject a package theme instead, see when that fits in {@link generic:use-a-theme}.'},
@@ -44,6 +46,7 @@ export const docs = {
           ['motion', 'Every --duration-* token, --ease-entrance and --ease-move (tempo also times the touch springs)', 'tempo? (0.75–1.5), character? (crisp|standard|expressive); and/or a duration scale: fast (ms), medium (ms), ratio, slow?, easing?. The scale wins over tempo for the durations it sets, and explicit tokens win over both. Fixed whatever the knobs say: drags and momentum, rubber band, keyboard, press onset/cancel/flash, hover intent, gesture thresholds, Spinner/Skeleton loops, the 200 ms Reduce Motion cap. See {@link generic:motion}.'],
         ]},
         {type: 'prose', text: 'For dark mode tuples in token values, see the Dark mode section of {@link generic:use-a-theme}.'},
+        {type: 'prose', text: "A theme with one color mode exports `colorModes` beside it: `export const colorModes = ['light'];` (or `['dark']`). `theme build` copies the export into the built module, and `theme add` reads it so the app wires the theme in that mode. A theme with both modes exports none. Any other value is ignored without a warning, and a `--family` build never writes the export."},
       ],
     },
     {

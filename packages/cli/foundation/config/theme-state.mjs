@@ -26,7 +26,54 @@ export const THEME_RECORD_MARKER = '@astryx-theme-record';
 
 const THEME_SLUG_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
 
-export class ThemeStateError extends Error {}
+export class ThemeStateError extends Error {
+  /**
+   * @param {string} message
+   * @param {{cause?: unknown, suggestions?: Array<{name: string, reason: string}>}} [options]
+   */
+  constructor(message, options = {}) {
+    super(
+      message,
+      options.cause === undefined ? undefined : {cause: options.cause},
+    );
+    /** Commands that move past the refusal. */
+    this.suggestions = options.suggestions ?? [];
+  }
+}
+
+/**
+ * The refusal for a generated module whose record header cannot be read. No
+ * theme command can read the record to rewrite it, so the way out is to
+ * delete the module and add its themes again, named from its `themes` export.
+ * @param {string} label the module's project path
+ * @param {string} problem what is wrong with the header
+ * @param {string} source the module text
+ */
+function damagedRecordError(label, problem, source) {
+  const slugs = [
+    ...source.matchAll(/^\s*"([a-z][a-z0-9-]*)":\s*_astryxTheme\d+,/gmu),
+  ].map(match => match[1]);
+  const adds = (slugs.length > 0 ? slugs : ['<slug>']).map(slug =>
+    formatCliCommand(`theme add ${slug}`),
+  );
+  return new ThemeStateError(
+    `${label} ${problem}, so no theme command can read or rewrite it. Delete ${label}, then add its themes again: ${adds.map(add => `\`${add}\``).join(', ')}.`,
+    {
+      suggestions:
+        slugs.length > 0
+          ? adds.map((name, index) => ({
+              name,
+              reason: `add ${slugs[index]} again once ${label} is deleted`,
+            }))
+          : [
+              {
+                name: formatCliCommand('theme list'),
+                reason: `the themes you can add, once ${label} is deleted`,
+              },
+            ],
+    },
+  );
+}
 
 /** @param {unknown} value @returns {value is Record<string, unknown>} */
 function isRecord(value) {
@@ -62,7 +109,26 @@ export function findThemeProject(cwd) {
  * @param {string} owner
  */
 export function isLocalThemeOwner(owner) {
-  return owner.startsWith('./') || owner.startsWith('../') || path.isAbsolute(owner);
+  return (
+    owner.startsWith('./') || owner.startsWith('../') || path.isAbsolute(owner)
+  );
+}
+
+/**
+ * The theme editor's record for the theme in `dir`, when the editor made it:
+ * the folder `<slug>/` holds `<slug>.settings.json`. The editor owns every
+ * theme file in that folder and regenerates it from the record, so eject and
+ * template never write there. Another `*.settings.json` is not the editor's.
+ * @param {string} dir
+ * @returns {string | null} the record's file name
+ */
+export function editorThemeRecord(dir) {
+  const record = `${path.basename(path.resolve(dir))}.settings.json`;
+  try {
+    return fs.statSync(path.join(dir, record)).isFile() ? record : null;
+  } catch {
+    return null;
+  }
 }
 
 /** @param {string} projectDir */
@@ -72,8 +138,7 @@ export function projectUsesTypeScript(projectDir) {
       .readdirSync(projectDir, {withFileTypes: true})
       .some(
         entry =>
-          entry.isFile() &&
-          /^tsconfig(?:\.[^.]+)*\.json$/u.test(entry.name),
+          entry.isFile() && /^tsconfig(?:\.[^.]+)*\.json$/u.test(entry.name),
       );
   } catch {
     return false;
@@ -104,10 +169,12 @@ export function themeModuleCandidates(projectDir) {
  * @param {unknown} value
  * @param {string} label
  */
-function validThemeRecord(value, label) {
+function validThemeRecord(value, label, source = '') {
   if (!isRecord(value) || !isRecord(value.themes)) {
-    throw new ThemeStateError(
-      `${label} must carry a static ${THEME_RECORD_MARKER} header. Regenerate it with \`${formatCliCommand('theme add <slug>')}\`.`,
+    throw damagedRecordError(
+      label,
+      `has no static ${THEME_RECORD_MARKER} header`,
+      source,
     );
   }
   const keys = Object.keys(value);
@@ -139,8 +206,13 @@ function validThemeRecord(value, label) {
     typeof value.defaultThemeSlug !== 'string' ||
     !THEME_SLUG_RE.test(value.defaultThemeSlug)
   ) {
+    const first = Object.keys(themes)[0];
+    const use = formatCliCommand(`theme use ${first ?? '<slug>'}`);
     throw new ThemeStateError(
-      `${label} defaultThemeSlug must be a lowercase kebab-case slug. Regenerate it with \`${formatCliCommand('theme use <slug>')}\`.`,
+      `${label} defaultThemeSlug must be a lowercase kebab-case slug. Choose a default with \`${use}\`.`,
+      first
+        ? {suggestions: [{name: use, reason: `make ${first} the default`}]}
+        : {},
     );
   }
   return {themes, defaultSlug: value.defaultThemeSlug};
@@ -153,14 +225,20 @@ function validThemeRecord(value, label) {
  */
 export function parseThemeModuleRecord(source, label = 'theme module') {
   if (!source.includes(THEME_MODULE_MARKER)) {
-    throw new ThemeStateError(`${label} does not carry the Astryx generated marker.`);
+    throw new ThemeStateError(
+      `${label} does not carry the Astryx generated marker.`,
+    );
   }
   const recordLines = source
     .split(/\r?\n/u)
     .filter(line => /^\s*\*\s*@astryx-theme-record\s+/u.test(line));
   if (recordLines.length !== 1) {
-    throw new ThemeStateError(
-      `${label} must carry exactly one static ${THEME_RECORD_MARKER} header. Regenerate it with \`${formatCliCommand('theme add <slug>')}\`.`,
+    throw damagedRecordError(
+      label,
+      recordLines.length === 0
+        ? `has no static ${THEME_RECORD_MARKER} header`
+        : `has more than one ${THEME_RECORD_MARKER} header`,
+      source,
     );
   }
   const payload = recordLines[0].replace(
@@ -170,13 +248,14 @@ export function parseThemeModuleRecord(source, label = 'theme module') {
   let record;
   try {
     record = JSON.parse(payload);
-  } catch (error) {
-    throw new ThemeStateError(
-      `${label} has an invalid ${THEME_RECORD_MARKER} header: ${error instanceof Error ? error.message : String(error)}`,
-      {cause: error},
+  } catch {
+    throw damagedRecordError(
+      label,
+      `has a ${THEME_RECORD_MARKER} header that is not valid JSON`,
+      source,
     );
   }
-  return validThemeRecord(record, label);
+  return validThemeRecord(record, label, source);
 }
 
 /**
@@ -198,7 +277,9 @@ export function resolveThemeModule(projectDir, {forWrite = false} = {}) {
     throw new ThemeStateError(
       `More than one generated theme module exists: ${generated
         .map(file => projectPath(path.relative(projectDir, file)))
-        .join(', ')}. Keep one and remove the others before running the command again.`,
+        .join(
+          ', ',
+        )}. Keep one and remove the others before running the command again.`,
     );
   }
   const file = generated[0] ?? candidates[0];
@@ -215,6 +296,11 @@ export function resolveThemeModule(projectDir, {forWrite = false} = {}) {
     }
   }
   let expectedOriginal;
+  if (fs.existsSync(file) && fs.statSync(file).isDirectory()) {
+    throw new ThemeStateError(
+      `${projectPath(path.relative(projectDir, file))} is a folder, where the generated theme module goes. Move or delete that folder, then run the same command again.`,
+    );
+  }
   if (fs.existsSync(file)) {
     expectedOriginal = fs.readFileSync(file);
     if (!expectedOriginal.toString('utf-8').includes(THEME_MODULE_MARKER)) {
@@ -308,6 +394,8 @@ export function readThemeState(cwd = process.cwd()) {
  * @property {string} stylesheetFile
  * @property {string} [fontStylesheetFile]
  * @property {'bundled'|'package'|'local'} source
+ * @property {'light'|'dark'} [mode] the one color mode its built module
+ *   exports; absent for a theme with both modes
  */
 
 /**
@@ -315,11 +403,26 @@ export function readThemeState(cwd = process.cwd()) {
  * @param {ResolvedAppTheme[]} themes
  * @param {string} defaultSlug
  * @param {boolean} typescript
+ * @param {{keepModes?: boolean}} [options] `keepModes`: the module has
+ *   exported `themeModes` before, so it keeps exporting it (empty when no
+ *   theme has one mode), as the app's wiring imports it
  */
-export function renderThemeModule(themes, defaultSlug, typescript) {
+export function renderThemeModule(
+  themes,
+  defaultSlug,
+  typescript,
+  {keepModes = false} = {},
+) {
   if (!themes.some(theme => theme.slug === defaultSlug)) {
+    // The record's default names no added theme; choosing an added one as the
+    // default rewrites the record.
+    const first = themes[0]?.slug;
+    const use = formatCliCommand(`theme use ${first ?? '<slug>'}`);
     throw new ThemeStateError(
-      `Default theme "${defaultSlug}" is not added. Run \`${formatCliCommand(`theme add ${defaultSlug}`)}\` first.`,
+      `Default theme "${defaultSlug}" is not added. Choose an added theme as the default with \`${use}\`.`,
+      first
+        ? {suggestions: [{name: use, reason: `make ${first} the default`}]}
+        : {},
     );
   }
   /** @type {string[]} */
@@ -328,7 +431,14 @@ export function renderThemeModule(themes, defaultSlug, typescript) {
   const entries = [];
   /** @type {Record<string, string>} */
   const owners = {};
+  /** The one color mode of each theme that has one only. */
+  /** @type {string[]} */
+  const modes = [];
   themes.forEach((theme, index) => {
+    if (theme.mode)
+      modes.push(
+        `  ${JSON.stringify(theme.slug)}: ${JSON.stringify(theme.mode)},`,
+      );
     const local = `_astryxTheme${index}`;
     imports.push(
       `import {${theme.exportName} as ${local}} from ${JSON.stringify(theme.module)};`,
@@ -340,7 +450,10 @@ export function renderThemeModule(themes, defaultSlug, typescript) {
     entries.push(`  ${JSON.stringify(theme.slug)}: ${local},`);
     owners[theme.slug] = theme.owner;
   });
-  const record = JSON.stringify({themes: owners, defaultThemeSlug: defaultSlug});
+  const record = JSON.stringify({
+    themes: owners,
+    defaultThemeSlug: defaultSlug,
+  });
   return `/**\n * ${THEME_MODULE_MARKER}\n * ${THEME_RECORD_MARKER} ${record}\n */\n\n${imports.join(
     '\n',
   )}\n\nexport const themes = {\n${entries.join('\n')}\n}${
@@ -349,7 +462,19 @@ export function renderThemeModule(themes, defaultSlug, typescript) {
     typescript ? 'export type ThemeSlug = keyof typeof themes;\n' : ''
   }\nexport const defaultThemeSlug${
     typescript ? ': keyof typeof themes' : ''
-  } = ${JSON.stringify(defaultSlug)};\n`;
+  } = ${JSON.stringify(defaultSlug)};\n${
+    // When an added theme has one color mode: `Theme`'s `mode` for each
+    // such theme, so the app follows the selected one; kept (empty) once the
+    // module has exported it, as the app's wiring imports it. A record of
+    // two-mode themes that never had one writes the module as before.
+    modes.length > 0 || keepModes
+      ? `\nexport const themeModes${
+          typescript
+            ? `: Partial<Record<keyof typeof themes, 'light' | 'dark'>>`
+            : ''
+        } = {${modes.length > 0 ? `\n${modes.join('\n')}\n` : ''}};\n`
+      : ''
+  }`;
 }
 
 /**
@@ -401,6 +526,11 @@ export function planThemeAppWrite(state, themes, defaultSlug, resolvedThemes) {
     entries,
     defaultSlug,
     module.typescript,
+    {
+      keepModes: /\bexport const themeModes\b/.test(
+        String(module.expectedOriginal ?? ''),
+      ),
+    },
   );
   return {
     module,

@@ -133,6 +133,12 @@ export const docs = {
           description: 'Disables the selector.',
         },
         {
+          name: 'disabledMessage',
+          type: 'string',
+          description:
+            "Explains why the selector is disabled. With isDisabled, shows the reason in a tooltip on hover and keyboard focus, and the reason describes the trigger through aria-describedby. The disabled trigger keeps its tab stop and still cannot open. Works with renderTrigger too: the tooltip and the description go to the control you render; drop the tooltip of that control while disabled, for example tooltip={isDisabled ? undefined : 'Filter'}. Use this instead of wrapping a disabled ComplexSelector in Tooltip, whose text would not describe the trigger.",
+        },
+        {
           name: 'isLoading',
           type: 'boolean',
           description: 'Shows loading state on the trigger.',
@@ -307,6 +313,11 @@ export const docs = {
         description:
           'Do not use ComplexSelector for a plain single-column text list; use Selector instead.',
       },
+      {
+        guidance: false,
+        description:
+          'Wrap a disabled ComplexSelector in Tooltip to explain why it is disabled; the text would not describe the trigger. Use the disabledMessage prop instead.',
+      },
     ],
   },
 };
@@ -368,6 +379,11 @@ export const docsDense = {
         description:
           'Do not use ComplexSelector for a plain single-column text list; use Selector instead.',
       },
+      {
+        guidance: false,
+        description:
+          'Wrap a disabled ComplexSelector in Tooltip to explain why it is disabled; the text would not describe the trigger. Use the disabledMessage prop instead.',
+      },
     ],
   },
   propDescriptions: {
@@ -375,6 +391,8 @@ export const docsDense = {
     value: 'Controlled value.',
     onChange: 'Commit value.',
     changeAction: 'Async action after onChange; drives optimistic value/busy.',
+    disabledMessage:
+      'why disabled; w/ isDisabled shows tooltip on hover/focus and describes the trigger; use instead of Tooltip wrapper',
     children: 'Render custom dialog content from (value,onChange,close,state).',
     triggerLabel: 'Closed trigger label/content.',
     variant:
