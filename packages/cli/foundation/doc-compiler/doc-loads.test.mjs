@@ -57,8 +57,8 @@ const RUNNERS = {
     sites: ['child_process.spawnSync ×3', 'loadTopicModule'],
   },
   'api/theme/_adapter.mjs': {
-    runs: 'recorded built theme modules through the shared app-theme loader',
-    sites: ['importThemeArtifact'],
+    runs: 'recorded built theme modules through the shared app-theme loader, and the released package.json astryx.theme value when no generated record exists',
+    sites: ['importThemeArtifact', 'require(<computed>)'],
   },
   'api/theme-edit/_context.mjs': {
     runs: "the project's installed Core registry of the variables a part's plain corners or padding also write, to refuse a state they would miss",
@@ -333,10 +333,6 @@ const RUNNERS = {
   'clients/cli/lib/manifest.mjs': {
     runs: 'the manifest command doc, for the exit codes the manifest reports',
     sites: ['import ../commands/manifest.doc.mjs'],
-  },
-  'clients/cli/lib/resolve-theme.mjs': {
-    runs: 'the generated record default theme, or the released package.json astryx.theme value when no record exists',
-    sites: ['require(<computed>)'],
   },
   'foundation/config/project.mjs': {
     runs: 'astryx.config, through the config parser',

@@ -33,7 +33,7 @@ import {
 } from '../_adapter.mjs';
 
 /**
- * @typedef {import('../component.type.mjs').ComponentListResponse} ComponentListResponse
+ * @typedef {import('../component.type.mjs').ComponentListRead} ComponentListResponse
  * @typedef {import('../component.type.mjs').ComponentListEntry} ComponentListEntry
  * @typedef {import('../component.type.mjs').ComponentBriefEntry} ComponentBriefEntry
  */

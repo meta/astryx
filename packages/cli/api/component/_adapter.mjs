@@ -613,7 +613,7 @@ function withExampleKinds(examples) {
  * @param {OwnershipSubject} owner
  * @param {string} componentName
  * @param {string} coreDir
- * @returns {import('./component.type.mjs').ComponentDetailResponse['data']}
+ * @returns {import('./component.type.mjs').ComponentDetailRead['data']}
  */
 export function withOwnership(docs, owner, componentName, coreDir) {
   const importSpec =
@@ -929,4 +929,36 @@ async function listingParent(block, coreDir, cwd) {
     }
   }
   return null;
+}
+
+/**
+ * The configured theme's custom values for a component read: its name and,
+ * by component key and prop, the values it adds. `null` when no theme is
+ * configured or the configured theme is not found. A JSON read stays silent,
+ * so this prints no warning.
+ *
+ * @param {string} cwd
+ * @returns {Promise<import('./component.type.mjs').ComponentTheme>}
+ * @throws {AstryxError} `ERR_THEME_LOAD` when the recorded theme fails to load.
+ */
+export async function componentTheme(cwd) {
+  // The theme subject loads on first use: most reads never need it.
+  const {resolveActiveTheme} = await import('../theme/theme.mjs');
+  let active;
+  try {
+    active = await resolveActiveTheme(cwd);
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message.split('\n', 1)[0]?.trim() || error.name
+        : String(error);
+    throw new AstryxError(
+      `Could not load the recorded theme: ${message}`,
+      undefined,
+      ERROR_CODES.ERR_THEME_LOAD,
+    );
+  }
+  return active
+    ? {name: active.name ?? null, values: active.variants ?? {}}
+    : null;
 }

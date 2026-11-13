@@ -24,7 +24,10 @@ export const doc = {
     'showcase, or example blocks. An integration component that replaces a Core ' +
     'component (its doc sets replaces, and its package declares the CLI range that ' +
     'turns replacement on) answers to the Core name in detail, batch, and list ' +
-    "results; use options.package '@astryxdesign/core' for the original." +
+    "results; use options.package '@astryxdesign/core' for the original. A detail result, " +
+    "each batch row's detail, and a list result carry data.theme: the configured theme's name and the custom " +
+    'values it adds by component and prop (null without a theme), the values the ' +
+    "command's text output marks with *." +
     " In global mode: with `cwd` outside a project, components from integrations installed next to this CLI package globally resolve too; inside a project, only the project's own integrations count. See {@link namespace:global} and {@link generic:computer-integrations}.",
   importPath: '@astryxdesign/cli/api',
   signature:

@@ -6,7 +6,9 @@
  * Keeps the historical synchronous bundled-theme helper, resolves project-aware
  * source themes, loads recorded built artifacts through the shared runtime
  * loader, reads static generated-module state, and applies each add/remove/use
- * regeneration through the shared atomic write transaction.
+ * regeneration through the shared atomic write transaction. Also resolves the
+ * active theme and the custom values its built module exports, for component
+ * metadata.
  */
 
 import * as crypto from 'node:crypto';
@@ -1509,4 +1511,177 @@ export function requireThemeCoreDir(cwd) {
  */
 export function fetchCarriedThemeCoreDir(cwd) {
   return findCarriedCoreDir(cwd, {fetch: true});
+}
+
+// ── Active theme for component metadata ─────────────────────────────────
+// A generated app-theme module is authoritative when present: its static
+// record selects the default theme's built module. Without that module, the
+// released `package.json#astryx.theme` field keeps its meaning. Environment
+// variables never select a theme. For the configured value, a path that
+// starts with `.` or `/` resolves from cwd, a name that starts with `@` is a
+// package, and any other name tries `@astryxdesign/theme-{name}` and then the
+// bare name.
+
+const activeThemeRequire = createRequire(import.meta.url);
+
+/**
+ * @typedef {object} ActiveTheme
+ * @property {string|null} name
+ * @property {Record<string, Record<string, string[]>>|null} variants - Custom values by component key and prop.
+ * @property {Record<string, string>|null} fonts
+ */
+
+/**
+ * Released package-field loader. Bare package names resolve from the CLI's own
+ * installation; relative paths resolve from the exact cwd given to the command.
+ * @param {string} specifier
+ * @param {string} cwd
+ * @returns {unknown}
+ */
+function tryLoadLegacyModule(specifier, cwd) {
+  const target =
+    specifier.startsWith('.') || specifier.startsWith('/')
+      ? path.resolve(cwd, specifier)
+      : specifier;
+  try {
+    return activeThemeRequire(target);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Extract theme data from a loaded module.
+ * Handles both `module.default` and direct `module` patterns,
+ * as well as named exports like `module.theme` or `module.{name}Theme`.
+ * @param {any} mod
+ * @returns {any}
+ */
+function extractTheme(mod) {
+  if (!mod || typeof mod !== 'object') return null;
+
+  const obj = mod.default || mod;
+  if (obj.name && (obj.tokens || obj.variants)) return obj;
+
+  if (mod.theme && typeof mod.theme === 'object' && mod.theme.name) {
+    return mod.theme;
+  }
+
+  for (const key of Object.keys(mod)) {
+    if (
+      key.endsWith('Theme') &&
+      typeof mod[key] === 'object' &&
+      mod[key]?.name
+    ) {
+      return mod[key];
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Read the custom-value metadata a built theme module exports as
+ * `themeVariants`: `{ [componentKey]: { [prop]: value[] } }`. It is a sibling
+ * of the theme object rather than a theme field, because build/CLI metadata
+ * stays outside `DefinedTheme` (docs/architecture/theme-authoring-contract.md).
+ * @param {any} mod
+ * @returns {Record<string, Record<string, string[]>> | null}
+ */
+function extractVariants(mod) {
+  const variants = mod?.themeVariants;
+  return variants && typeof variants === 'object' ? variants : null;
+}
+
+/**
+ * @param {unknown} mod
+ * @param {string} specifier
+ * @param {(message: string) => void} onWarning
+ */
+function resolvedThemeData(mod, specifier, onWarning) {
+  const theme = extractTheme(mod);
+  if (!theme) {
+    onWarning(
+      `⚠ theme: loaded "${specifier}" but could not find a theme object`,
+    );
+    return null;
+  }
+  return {
+    name: theme.name || null,
+    variants: extractVariants(mod),
+    fonts: theme.fonts || null,
+  };
+}
+
+/**
+ * Resolve the active Astryx theme from the generated record, or from
+ * `package.json#astryx.theme` when there is no generated module. A theme that
+ * cannot be found resolves to null and reports why through `onWarning`. The
+ * default drops the report, so a JSON read stays silent. An unrelated error
+ * from loading the recorded module is thrown.
+ *
+ * @param {string} [cwd] Working directory (defaults to process.cwd())
+ * @param {{onWarning?: (message: string) => void}} [options]
+ * @returns {Promise<ActiveTheme|null>}
+ */
+export async function resolveActiveTheme(
+  cwd = process.cwd(),
+  {onWarning = () => {}} = {},
+) {
+  const loaded = await resolveRecordedTheme(cwd);
+  if (loaded.configured) {
+    if (!loaded.module) {
+      onWarning(
+        `⚠ theme: ${loaded.problem ?? `could not resolve the generated default theme (${loaded.specifier})`}`,
+      );
+      return null;
+    }
+    return resolvedThemeData(loaded.module, loaded.specifier, onWarning);
+  }
+
+  // No generated module: keep the released package-field lookup byte-for-byte in
+  // behavior. It reads only cwd/package.json, resolves relative paths from cwd,
+  // and resolves bare packages from the CLI installation.
+  let specifier = null;
+  const pkgPath = path.join(cwd, 'package.json');
+  if (fs.existsSync(pkgPath)) {
+    try {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+      specifier = pkg.astryx?.theme || null;
+    } catch {
+      // Ignore parse errors.
+    }
+  }
+
+  // `astryx.theme` is user/third-party controlled and may be any value.
+  // Anything that is not a usable non-empty string means "no theme".
+  if (typeof specifier !== 'string' || specifier.length === 0) return null;
+
+  let mod;
+  if (specifier.startsWith('.') || specifier.startsWith('/')) {
+    mod = tryLoadLegacyModule(specifier, cwd);
+    if (!mod) {
+      onWarning(`⚠ theme: could not resolve file "${specifier}" from ${cwd}`);
+      return null;
+    }
+  } else if (specifier.startsWith('@')) {
+    mod = tryLoadLegacyModule(specifier, cwd);
+    if (!mod) {
+      onWarning(`⚠ theme: could not resolve package "${specifier}"`);
+      return null;
+    }
+  } else {
+    const conventional = `@astryxdesign/theme-${specifier}`;
+    mod =
+      tryLoadLegacyModule(conventional, cwd) ??
+      tryLoadLegacyModule(specifier, cwd);
+    if (!mod) {
+      onWarning(
+        `⚠ theme: could not resolve "${specifier}" (tried ${conventional} and ${specifier})`,
+      );
+      return null;
+    }
+  }
+
+  return resolvedThemeData(mod, specifier, onWarning);
 }

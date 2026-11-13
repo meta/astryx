@@ -40,7 +40,30 @@
  *   - 'full'    -> ComponentDoc[]        (full authored doc per entry, plus its owner package)
  * @typedef {object} ComponentListResponse
  * @property {'component.list'} type
- * @property {ComponentListData} data
+ * @property {ComponentListData & ComponentThemeField} data
+ */
+
+/**
+ * The configured theme's custom values: its name and, by component key and
+ * prop, the values it adds, which the text view marks with `*`. `values` is
+ * empty until the theme's built module exports `themeVariants`. `null` when
+ * no theme is configured or the configured theme is not found.
+ * @typedef {{name: string | null; values: Record<string, Record<string, string[]>>} | null} ComponentTheme
+ */
+
+/**
+ * @typedef {object} ComponentThemeField
+ * @property {ComponentTheme} theme
+ */
+
+/**
+ * A list read before `component()` adds `data.theme`.
+ * @typedef {{type: 'component.list'; data: ComponentListData}} ComponentListRead
+ */
+
+/**
+ * A detail read before `component()` adds `data.theme`.
+ * @typedef {Omit<ComponentDetailResponse, 'data'> & {data: Omit<ComponentDetailResponse['data'], 'theme'>}} ComponentDetailRead
  */
 
 /**
@@ -120,7 +143,7 @@
  * @typedef {object} ComponentDetailResponse
  * @property {'component.detail'} type
  * @property {string} package The npm package that owns the component.
- * @property {import('@astryxdesign/cli/authoring').ComponentDoc & ComponentOwnership & ComponentDetailScope} data
+ * @property {import('@astryxdesign/cli/authoring').ComponentDoc & ComponentOwnership & ComponentDetailScope & ComponentThemeField} data
  */
 
 /**

@@ -39,6 +39,7 @@ import {
   resolveComponentReplacement,
   unscopedComponentOwners,
   linkComponentResponse,
+  componentTheme,
 } from './_adapter.mjs';
 import {componentList} from './list/list.mjs';
 import {componentDetail} from './detail/detail.mjs';
@@ -269,7 +270,7 @@ export async function component(name, options = {}) {
   // FR9); a batch's results are each a read of their own. Doc tokens render
   // for the project in `cwd`. A call's lookups walk the same source tree, so
   // the call reads each directory once.
-  return withListingCache(() =>
+  const response = await withListingCache(() =>
     runWithDocPackageManager(
       docPackageManager(cwd),
       async () =>
@@ -278,13 +279,50 @@ export async function component(name, options = {}) {
         ),
     ),
   );
+  return withComponentTheme(response, cwd);
 }
+
+/**
+ * The response types whose text view prints the theme's custom values. A
+ * batch row is a detail read of its own, so it carries the theme too.
+ */
+const THEMED_TYPES = new Set(['component.detail', 'component.list']);
+
+/**
+ * The response with `data.theme`, the configured theme's custom values, on a
+ * detail or list read. The text view marks the same values with `*`.
+ *
+ * @template {{type: string; data: any}} T
+ * @param {T} response
+ * @param {string} cwd
+ * @returns {Promise<T>}
+ */
+async function withComponentTheme(response, cwd) {
+  if (!THEMED_TYPES.has(response.type)) {
+    return response;
+  }
+  const theme = await componentTheme(cwd);
+  return {...response, data: {...response.data, theme}};
+}
+
+/**
+ * What a read returns before {@link component} adds `data.theme`.
+ * @typedef {(
+ *   | import('./component.type.mjs').ComponentListRead
+ *   | import('./component.type.mjs').ComponentBatchResponse
+ *   | import('./component.type.mjs').ComponentDetailRead
+ *   | import('./component.type.mjs').ComponentDetailPropsResponse
+ *   | import('./component.type.mjs').ComponentDetailSourceResponse
+ *   | import('./component.type.mjs').ComponentDetailShowcaseResponse
+ *   | import('./component.type.mjs').ComponentDetailBlocksResponse
+ * )} ComponentRead
+ */
 
 /**
  * {@link component}, with each `{@link}` in its doc text as written.
  * @param {string|string[]} [name]
  * @param {Parameters<typeof component>[1]} [options]
- * @returns {ReturnType<typeof component>}
+ * @returns {Promise<ComponentRead>}
  */
 async function componentRead(name, options = {}) {
   const {
