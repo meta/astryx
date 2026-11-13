@@ -201,33 +201,74 @@ const mergeVegaLiteConfig = mergeConfig as unknown as (
   ...configs: VegaLiteConfig[]
 ) => VegaLiteConfig;
 
-/** The theme's per-axis blocks. Vega-Lite applies each one over `axis`. */
+type AxisOrient = 'top' | 'bottom' | 'left' | 'right';
+
+const ORIENT_BLOCK: Record<AxisOrient, string> = {
+  top: 'axisTop',
+  bottom: 'axisBottom',
+  left: 'axisLeft',
+  right: 'axisRight',
+};
+
+/**
+ * The orients at which the spec draws its x and y axes. An encoding without
+ * an axis orient draws x at the bottom and y at the left; `axis: null` draws
+ * none. Each view in a layered or composed spec counts. The walk visits each
+ * object once, so a cyclic spec ends.
+ */
+function drawnAxisOrients(spec: unknown): {x: AxisOrient[]; y: AxisOrient[]} {
+  const found = {x: new Set<AxisOrient>(), y: new Set<AxisOrient>()};
+  const seen = new WeakSet<object>();
+  const stack: unknown[] = [spec];
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (node === null || typeof node !== 'object' || seen.has(node)) {
+      continue;
+    }
+    seen.add(node);
+    const encoding = (node as {encoding?: unknown}).encoding;
+    if (encoding !== null && typeof encoding === 'object') {
+      for (const channel of ['x', 'y'] as const) {
+        const def = (encoding as Record<string, unknown>)[channel];
+        if (def === null || typeof def !== 'object') {
+          continue;
+        }
+        const axis = (def as {axis?: {orient?: AxisOrient} | null}).axis;
+        if (axis === null) {
+          continue;
+        }
+        found[channel].add(
+          axis?.orient ?? (channel === 'x' ? 'bottom' : 'left'),
+        );
+      }
+    }
+    stack.push(...Object.values(node));
+  }
+  return {
+    x: found.x.size > 0 ? [...found.x] : ['bottom'],
+    y: found.y.size > 0 ? [...found.y] : ['left'],
+  };
+}
+
 /**
  * For each per-axis block the theme sets, the axis blocks that Vega-Lite
- * resolves before it for the same axes. Vega-Lite resolves `axis`, then the
- * orient blocks, then `axisX` and `axisY`, then the type blocks such as
- * `axisQuantitative`, then the channel-and-type blocks such as
- * `axisYQuantitative`. The orient blocks are matched as by default: x at
- * the bottom or top, y at the left or right.
+ * resolves before it for the same axes: `axis`, the orient blocks of the
+ * orients the chart draws, `axisX` or `axisY`, and the type blocks such as
+ * `axisQuantitative`.
  */
-const EARLIER_AXIS_BLOCKS = {
-  axisX: ['axis', 'axisBottom', 'axisTop'],
-  axisY: ['axis', 'axisLeft', 'axisRight'],
-  axisXQuantitative: [
-    'axis',
-    'axisBottom',
-    'axisTop',
-    'axisX',
-    'axisQuantitative',
-  ],
-  axisYQuantitative: [
-    'axis',
-    'axisLeft',
-    'axisRight',
-    'axisY',
-    'axisQuantitative',
-  ],
-} as const;
+function earlierAxisBlocks(orients: {
+  x: AxisOrient[];
+  y: AxisOrient[];
+}): Record<string, string[]> {
+  const x = orients.x.map(orient => ORIENT_BLOCK[orient]);
+  const y = orients.y.map(orient => ORIENT_BLOCK[orient]);
+  return {
+    axisX: ['axis', ...x],
+    axisY: ['axis', ...y],
+    axisXQuantitative: ['axis', ...x, 'axisX', 'axisQuantitative'],
+    axisYQuantitative: ['axis', ...y, 'axisY', 'axisQuantitative'],
+  };
+}
 
 /**
  * The theme config without each per-axis value that the caller or the spec
@@ -238,10 +279,12 @@ const EARLIER_AXIS_BLOCKS = {
 function withoutOverriddenAxisValues(
   theme: VegaLiteConfig,
   overrides: ReadonlyArray<VegaLiteConfig | undefined>,
+  spec: unknown,
 ): VegaLiteConfig {
   const result: Record<string, unknown> = {...theme};
-  for (const [key, earlier] of Object.entries(EARLIER_AXIS_BLOCKS)) {
-    const block = theme[key as keyof typeof EARLIER_AXIS_BLOCKS];
+  const blocks = earlierAxisBlocks(drawnAxisOrients(spec));
+  for (const [key, earlier] of Object.entries(blocks)) {
+    const block = (theme as Record<string, object | undefined>)[key];
     if (!block) {
       continue;
     }
@@ -280,18 +323,19 @@ function withoutOverriddenAxisValues(
  * @example
  * ```
  * const {token} = useTheme();
- * compile(spec, withAstryxConfig(token, compileOptions));
+ * compile(spec, withAstryxConfig(token, compileOptions, spec));
  * ```
  */
 export function withAstryxConfig(
   token: TokenResolver,
   compileOptions?: CompileOptions,
-  specConfig?: VegaLiteConfig,
+  spec?: {config?: VegaLiteConfig},
 ): CompileOptions {
-  const theme = withoutOverriddenAxisValues(buildVegaLiteConfig(token), [
-    compileOptions?.config as VegaLiteConfig | undefined,
-    specConfig,
-  ]);
+  const theme = withoutOverriddenAxisValues(
+    buildVegaLiteConfig(token),
+    [compileOptions?.config as VegaLiteConfig | undefined, spec?.config],
+    spec,
+  );
   return {
     ...compileOptions,
     config: compileOptions?.config

@@ -198,7 +198,7 @@ describe('theme, caller and spec config through Vega-Lite', () => {
   it("lets the spec's inline generic axis key outrank the theme's per-axis value", () => {
     const inline = {...spec, config: {axis: {grid: true}}} as TopLevelSpec;
     const orients = gridOrients(
-      compile(inline, withAstryxConfig(echo, undefined, {axis: {grid: true}})),
+      compile(inline, withAstryxConfig(echo, undefined, inline)),
     );
     expect(orients).toContain('bottom');
   });
@@ -213,10 +213,7 @@ describe('theme, caller and spec config through Vega-Lite', () => {
   it("lets the spec's inline channel-level axis key outrank the theme's channel-and-type value", () => {
     const inline = {...spec, config: {axisY: {grid: false}}} as TopLevelSpec;
     const orients = gridOrients(
-      compile(
-        inline,
-        withAstryxConfig(echo, undefined, {axisY: {grid: false}}),
-      ),
+      compile(inline, withAstryxConfig(echo, undefined, inline)),
     );
     expect(orients).not.toContain('left');
   });
@@ -229,6 +226,39 @@ describe('theme, caller and spec config through Vega-Lite', () => {
       ),
     );
     expect(orients).not.toContain('left');
+  });
+
+  it('ignores an orient block for an orient the chart does not draw', () => {
+    // The x axis is at the bottom, so axisTop applies to no axis.
+    const orients = gridOrients(
+      compile(
+        spec,
+        withAstryxConfig(echo, {config: {axisTop: {grid: true}}}, spec),
+      ),
+    );
+    expect(orients).not.toContain('bottom');
+    const options = withAstryxConfig(
+      echo,
+      {config: {axisRight: {domain: true}}},
+      spec,
+    );
+    expect(options.config?.axisY?.domain).toBe(false);
+  });
+
+  it('counts an orient block for an orient the chart draws', () => {
+    const rightY = {
+      ...spec,
+      encoding: {
+        ...(spec as {encoding: object}).encoding,
+        y: {field: 'b', type: 'quantitative', axis: {orient: 'right'}},
+      },
+    } as TopLevelSpec;
+    const options = withAstryxConfig(
+      echo,
+      {config: {axisRight: {domain: true}}},
+      rightY,
+    );
+    expect(options.config?.axisY).not.toHaveProperty('domain');
   });
 
   it('keeps the theme per-axis value for a key no override sets', () => {

@@ -123,11 +123,7 @@ export function VegaChart({
   const schema = parseSchema(spec?.$schema);
   const isVegaLite = schema.ok && schema.library === 'vega-lite';
   const effectiveCompileOptions = isVegaLite
-    ? withAstryxConfig(
-        token,
-        compileOptions,
-        (spec as {config?: VegaLiteConfig}).config,
-      )
+    ? withAstryxConfig(token, compileOptions, spec as {config?: VegaLiteConfig})
     : compileOptions;
 
   // Rebuild only when a value the runtime is built from actually differs.
