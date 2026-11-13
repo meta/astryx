@@ -2824,12 +2824,11 @@ describe('parts28', () => {
         },
       ],
       [
+        // The shorthand is physical: its left and right are per direction.
         '4px 8px 12px 16px',
         {
           '-block-start': '4px',
-          '-inline-end': '8px',
           '-block-end': '12px',
-          '-inline-start': '16px',
         },
       ],
     ]) {
@@ -2838,6 +2837,18 @@ describe('parts28', () => {
       for (const [k, v] of Object.entries(want))
         expect(sides[k], `${value} ${k}`).toBe(v);
       expect(JSON.stringify(sides), value).not.toMatch(/: \+|"\+"/);
+      if (value === '4px 8px 12px 16px') {
+        const ltr = cardSides('.astryx-card:dir(ltr)');
+        const rtl = cardSides('.astryx-card:dir(rtl)');
+        expect([ltr['-inline-start'], ltr['-inline-end']]).toEqual([
+          '16px',
+          '8px',
+        ]);
+        expect([rtl['-inline-start'], rtl['-inline-end']]).toEqual([
+          '8px',
+          '16px',
+        ]);
+      }
       await themeEditUndo('p', {cwd, thing: 'padding', on: 'card'});
     }
   });
@@ -2937,8 +2948,9 @@ describe('parts30', () => {
     await themeEditSet('p', 'padding', 'initial', {cwd, on: 'card'});
     const css2 = read('p.css');
     const at2 = css2.indexOf('.astryx-card {');
+    // initial leaves the variable without a value: Core's own default.
     expect(css2.slice(at2, css2.indexOf('}', at2))).toMatch(
-      /--astryx-card-padding[a-z-]*:\s*0/,
+      /--astryx-card-padding[a-z-]*:\s*initial/,
     );
     await themeEditUndo('p', {cwd, thing: 'padding', on: 'card'});
     expect(
@@ -3082,9 +3094,9 @@ describe('parts33', () => {
       cwd,
       on: 'card',
     });
+    // initial leaves the side without a value: Core's own default for it.
     const card = blockOf('.astryx-card');
-    expect(card).toMatch(/--astryx-card-padding-block-start:\s*0/);
-    expect(card).not.toContain('initial');
+    expect(card).toMatch(/--astryx-card-padding-block-start:\s*initial/);
     await themeEditUndo('p', {cwd, thing: 'padding-block-start', on: 'card'});
   });
 });
@@ -3124,32 +3136,42 @@ describe('parts34', () => {
   });
 });
 
-describe('r19 (1): physical sides stay physical', () => {
-  it('writes a card padding-left as padding-left, not a logical side variable', async () => {
+describe('r19 (1) / parts35: a card physical side is its side in each direction', () => {
+  it('writes a card padding-left as the inline-start variable left-to-right and the inline-end right-to-left', async () => {
     await themeEditSet('p', 'padding-left', '20px', {cwd, on: 'card'});
     const css = read('p.css');
-    const at = css.indexOf('.astryx-card {');
-    const body = css.slice(at, css.indexOf('}', at));
-    expect(body).toMatch(/padding-left:\s*20px/);
-    expect(body).not.toMatch(/--astryx-card-padding-inline-start:\s*20px/);
+    const rule = (/** @type {string} */ sel) => {
+      const at = css.indexOf(`${sel} {`);
+      return at < 0 ? '' : css.slice(at, css.indexOf('}', at));
+    };
+    expect(rule('.astryx-card:dir(ltr)')).toMatch(
+      /--astryx-card-padding-inline-start:\s*20px/,
+    );
+    expect(rule('.astryx-card:dir(rtl)')).toMatch(
+      /--astryx-card-padding-inline-end:\s*20px/,
+    );
+    expect(rule('.astryx-card')).not.toMatch(/(^|[;{\s])padding-left:/);
     await themeEditUndo('p', {cwd, thing: 'padding-left', on: 'card'});
   });
 });
 
 describe('r19b (1): a card physical side beside other sides', () => {
-  it('writes padding-left as itself after another side, with a keyword, and with math', async () => {
+  it('writes padding-left as its side after another side, with a keyword, and with math', async () => {
     for (const [first, value, want] of [
-      [['padding-top', '12px'], '20px', /(^|[;{\s])padding-left:\s*20px/],
-      [null, 'initial', /(^|[;{\s])padding-left:\s*0/],
-      [null, 'calc(4px + 2px)', /(^|[;{\s])padding-left:\s*calc\(4px \+ 2px\)/],
+      [['padding-top', '12px'], '20px', '20px'],
+      [null, 'initial', 'initial'],
+      [null, '0', '0px'],
+      [null, 'calc(4px + 2px)', 'calc(4px + 2px)'],
     ]) {
       if (first) await themeEditSet('p', first[0], first[1], {cwd, on: 'card'});
       await themeEditSet('p', 'padding-left', value, {cwd, on: 'card'});
       const css = read('p.css');
-      const at = css.indexOf('.astryx-card {');
+      const at = css.indexOf('.astryx-card:dir(ltr) {');
       const body = css.slice(at, css.indexOf('}', at));
-      expect(body, value).toMatch(want);
-      expect(body, value).not.toContain('padding-left-start');
+      expect(body, value).toContain(
+        `--astryx-card-padding-inline-start: ${want};`,
+      );
+      expect(css, value).not.toContain('padding-left-start');
       await themeEditUndo('p', {cwd, thing: 'padding-left', on: 'card'});
       if (first) await themeEditUndo('p', {cwd, thing: first[0], on: 'card'});
     }
@@ -3208,19 +3230,32 @@ describe('r19d: per-direction sides under a state, and later paddings that cover
     }
   });
 
-  it('on a card, a later logical side replaces an earlier physical one, and the latest physical side stays', async () => {
+  it('on a card, the later of a physical and a logical side wins in each direction, in either order', async () => {
     await themeEditSet('p', 'padding-left', '20px', {cwd, on: 'card'});
     await themeEditSet('p', 'padding-inline-start', '6px', {cwd, on: 'card'});
-    let card = blockOf('.astryx-card');
-    expect(card).not.toMatch(/(^|[;{\s])padding-left:\s*20px/);
+    // Left-to-right the later inline-start wins; right-to-left the left is
+    // the inline-end, which stays.
+    expect(blockOf('.astryx-card')).toMatch(
+      /--astryx-card-padding-inline-start:\s*6px/,
+    );
+    expect(blockOf('.astryx-card:dir(rtl)')).toMatch(
+      /--astryx-card-padding-inline-end:\s*20px/,
+    );
     await themeEditUndo('p', {cwd, thing: 'padding-inline-start', on: 'card'});
     await themeEditUndo('p', {cwd, thing: 'padding-left', on: 'card'}).catch(
       () => {},
     );
     await themeEditSet('p', 'padding-inline-start', '6px', {cwd, on: 'card'});
     await themeEditSet('p', 'padding-left', '20px', {cwd, on: 'card'});
-    card = blockOf('.astryx-card');
-    expect(card).toMatch(/(^|[;{\s])padding-left:\s*20px/);
+    expect(blockOf('.astryx-card:dir(ltr)')).toMatch(
+      /--astryx-card-padding-inline-start:\s*20px/,
+    );
+    expect(blockOf('.astryx-card:dir(rtl)')).toMatch(
+      /--astryx-card-padding-inline-start:\s*6px/,
+    );
+    expect(blockOf('.astryx-card:dir(rtl)')).toMatch(
+      /--astryx-card-padding-inline-end:\s*20px/,
+    );
     await themeEditUndo('p', {cwd, thing: 'padding-left', on: 'card'});
     await themeEditUndo('p', {cwd, thing: 'padding-inline-start', on: 'card'});
   });
@@ -3243,5 +3278,367 @@ describe('r19d: per-direction sides under a state, and later paddings that cover
       on: 'context-menu',
     });
     await themeEditUndo('p', {cwd, thing: 'padding-left', on: 'context-menu'});
+  });
+});
+
+describe('parts35: one padding model', () => {
+  /** @param {string} selector */
+  const at = selector => read('p.css').indexOf(`${selector} {`);
+  /** @param {string} selector */
+  const ruleOf = selector => {
+    const css = read('p.css');
+    const i = css.indexOf(`${selector} {`);
+    return i < 0 ? '' : css.slice(i, css.indexOf('}', i));
+  };
+
+  it('lets a variant padding out-rank a base physical side in both directions', async () => {
+    await themeEditSet('p', 'padding-left', '20px', {cwd, on: 'card'});
+    await themeEditSet('p', 'padding', '8px', {
+      cwd,
+      on: 'card',
+      when: 'variant:muted',
+    });
+    const muted = '.astryx-card[data-variant="muted"]';
+    const variant = ruleOf(muted);
+    for (const k of ['inline-start', 'inline-end', 'block-start', 'block-end'])
+      expect(variant, k).toMatch(
+        new RegExp(`--astryx-card-padding-${k}:\\s*8px`),
+      );
+    // Same weight as the base's direction rules, and after them.
+    expect(at(muted)).toBeGreaterThan(at('.astryx-card:dir(rtl)'));
+    await themeEditUndo('p', {
+      cwd,
+      thing: 'padding',
+      on: 'card',
+      when: 'variant:muted',
+    });
+    await themeEditUndo('p', {cwd, thing: 'padding-left', on: 'card'});
+  });
+
+  it('puts the base before a variant set earlier, and its direction rules before a state', async () => {
+    await themeEditSet('p', 'padding', '3px', {
+      cwd,
+      on: 'dropdown-menu',
+      state: 'hover',
+    });
+    await themeEditSet('p', 'padding-inline-start', '9px', {
+      cwd,
+      on: 'dropdown-menu',
+    });
+    const css0 = read('p.css');
+    expect(css0.indexOf('.astryx-dropdown-menu:dir(ltr) {')).toBeLessThan(
+      css0.indexOf('.astryx-dropdown-menu:hover'),
+    );
+    await themeEditUndo('p', {
+      cwd,
+      thing: 'padding-inline-start',
+      on: 'dropdown-menu',
+    });
+    await themeEditUndo('p', {
+      cwd,
+      thing: 'padding',
+      on: 'dropdown-menu',
+      state: 'hover',
+    });
+    await themeEditSet('p', 'padding', '8px', {
+      cwd,
+      on: 'card',
+      when: 'variant:muted',
+    });
+    await themeEditSet('p', 'padding-inline-start', '9px', {cwd, on: 'card'});
+    expect(at('.astryx-card[data-variant="muted"]')).toBeGreaterThan(
+      at('.astryx-card'),
+    );
+    await themeEditUndo('p', {cwd, thing: 'padding-inline-start', on: 'card'});
+    await themeEditUndo('p', {
+      cwd,
+      thing: 'padding',
+      on: 'card',
+      when: 'variant:muted',
+    });
+  });
+
+  it('pads a clickable card as a card', async () => {
+    await themeEditSet('p', 'padding', '7px', {cwd, on: 'clickable-card'});
+    const rule = ruleOf('.astryx-clickable-card');
+    expect(rule).toMatch(/--astryx-card-padding-inline-start:\s*7px/);
+    expect(rule).not.toMatch(/(^|[;{\s])padding:\s*7px/);
+    await themeEditUndo('p', {cwd, thing: 'padding', on: 'clickable-card'});
+  });
+
+  it('takes one length as the chat composer padding, a variable or math too', async () => {
+    for (const value of ['4px 8px', '0', 'inherit', '50%', '12'])
+      expect(
+        (
+          await refusal(() =>
+            themeEditSet('p', 'padding', value, {cwd, on: 'chat-composer'}),
+          )
+        ).code,
+        value,
+      ).toBe('ERR_THEME_BAD_VALUE');
+    const twelve = await refusal(() =>
+      themeEditSet('p', 'padding', '12', {cwd, on: 'chat-composer'}),
+    );
+    expect(twelve.run[0]).toMatch(/padding 12px --on chat-composer$/);
+    for (const value of [
+      'var(--spacing-3)',
+      'calc(var(--spacing-2) + 2px)',
+      'max(4px, 1vw)',
+      'clamp(4px, 1vw, 12px)',
+      'min(8px, var(--spacing-3))',
+    ]) {
+      await themeEditSet('p', 'padding', value, {cwd, on: 'chat-composer'});
+      await themeEditUndo('p', {cwd, thing: 'padding', on: 'chat-composer'});
+    }
+    const keeps = await refusal(() =>
+      themeEditSet('p', 'padding', 'var(--spacing-2) var(--spacing-3)', {
+        cwd,
+        on: 'chat-composer',
+      }),
+    );
+    expect(keeps.run[0]).toMatch(
+      /padding 'var\(--spacing-2\)' --on chat-composer$/,
+    );
+  });
+});
+
+describe('parts36', () => {
+  /** @param {string} selector */
+  const ruleOf = selector => {
+    const css = read('p.css');
+    const i = css.indexOf(`${selector} {`);
+    return i < 0 ? '' : css.slice(i, css.indexOf('}', i));
+  };
+  const SIDES = ['block-start', 'block-end', 'inline-start', 'inline-end'];
+
+  it('resets a plain card inside a clickable card or a variant that sets its sides, never copying a value', async () => {
+    // Custom properties inherit: a plain card nested in a padded clickable
+    // card (or a default card in a muted one) gets each side reset on its
+    // own class, so Core's own fallback holds; the card's base copies no
+    // theme's value.
+    for (const [on, when, narrow] of [
+      ['clickable-card', undefined, '.astryx-clickable-card'],
+      ['card', 'variant:muted', '.astryx-card[data-variant="muted"]'],
+    ]) {
+      await themeEditSet('p', 'padding', '7px', {
+        cwd,
+        on,
+        ...(when ? {when} : {}),
+      });
+      const css = read('p.css');
+      const reset = ruleOf(`.astryx-card:where(${narrow} *)`);
+      for (const k of SIDES)
+        expect(reset, `${on} ${k}`).toMatch(
+          new RegExp(`--astryx-card-padding-${k}:\\s*initial`),
+        );
+      expect(ruleOf('.astryx-card')).not.toMatch(
+        /--astryx-card-padding-block-start:/,
+      );
+      expect(ruleOf(narrow)).not.toMatch(/--astryx-card-padding:\s*7px/);
+      expect(css.indexOf(`.astryx-card:where(${narrow} *)`)).toBeGreaterThan(
+        -1,
+      );
+      await themeEditUndo('p', {
+        cwd,
+        thing: 'padding',
+        on,
+        ...(when ? {when} : {}),
+      });
+    }
+  });
+
+  it('takes one length where Core reads the padding inside calc(), on every such part', async () => {
+    for (const [prop, on] of [
+      ['padding', 'segmented-control'],
+      ['padding', 'dropdown-menu'],
+      ['padding', 'chat-composer'],
+      ['padding-inline', 'item'],
+    ])
+      expect(
+        (await refusal(() => themeEditSet('p', prop, '4px 8px', {cwd, on})))
+          .code,
+        `${prop} ${on}`,
+      ).toBe('ERR_THEME_BAD_VALUE');
+    const group = await refusal(() =>
+      themeEditSet('p', 'padding', '0', {cwd, on: 'menus'}),
+    );
+    expect(group.code).toBe('ERR_THEME_BAD_VALUE');
+    expect(group.run[0]).toMatch(/padding 0px --on menus$/);
+    for (const value of [
+      'var(--spacing-2)',
+      'calc(var(--spacing-2) + 2px)',
+      'max(4px, 1vw)',
+    ]) {
+      await themeEditSet('p', 'padding', value, {cwd, on: 'chat-composer'});
+      await themeEditUndo('p', {cwd, thing: 'padding', on: 'chat-composer'});
+    }
+    const keeps = await refusal(() =>
+      themeEditSet('p', 'padding', 'var(--spacing-2) var(--spacing-3)', {
+        cwd,
+        on: 'chat-composer',
+      }),
+    );
+    expect(keeps.run[0]).toMatch(
+      /padding 'var\(--spacing-2\)' --on chat-composer$/,
+    );
+  });
+
+  it('takes a state padding on a card through the padding model', async () => {
+    await themeEditSet('p', 'padding', '5px', {
+      cwd,
+      on: 'card',
+      state: 'hover',
+    });
+    const css = read('p.css');
+    expect(css).toMatch(
+      /\.astryx-card:hover[^{]*\{[^}]*--astryx-card-padding-inline-start:\s*5px/,
+    );
+    await themeEditUndo('p', {
+      cwd,
+      thing: 'padding',
+      on: 'card',
+      state: 'hover',
+    });
+  });
+});
+
+describe('parts37', () => {
+  /** @param {string} selector */
+  const ruleOf = selector => {
+    const css = read('p.css');
+    const i = css.indexOf(`${selector} {`);
+    return i < 0 ? '' : css.slice(i, css.indexOf('}', i));
+  };
+
+  it("writes a section padding as its whole padding, so a nested section keeps its parent's", async () => {
+    await themeEditSet('p', 'padding', '20px', {cwd, on: 'section'});
+    const rule = ruleOf('.astryx-section');
+    expect(rule).toMatch(/--astryx-section-padding:\s*20px/);
+    expect(rule).not.toMatch(/--astryx-section-padding-(block|inline)-/);
+    await themeEditUndo('p', {cwd, thing: 'padding', on: 'section'});
+    // A hover-only padding writes the hover sides and resets nested
+    // sections; the plain section's base gets nothing.
+    await themeEditSet('p', 'padding', '20px', {
+      cwd,
+      on: 'section',
+      state: 'hover',
+    });
+    expect(ruleOf('.astryx-section')).not.toMatch(/--astryx-section-padding/);
+    await themeEditUndo('p', {
+      cwd,
+      thing: 'padding',
+      on: 'section',
+      state: 'hover',
+    });
+  });
+
+  it('writes padding 0 as a length on every part Core reads it inside calc()', async () => {
+    for (const on of ['card', 'section', 'dialog', 'drawer', 'bottom-sheet']) {
+      await themeEditSet('p', 'padding', '0', {cwd, on});
+      const rule = ruleOf(`.astryx-${on}`);
+      expect(rule, on).toMatch(new RegExp(`--astryx-${on}-padding:\\s*0px`));
+      expect(rule, on).not.toMatch(/:\s*0;/);
+      await themeEditUndo('p', {cwd, thing: 'padding', on});
+    }
+  });
+
+  it('refuses at the next set a hand edit that set would refuse', async () => {
+    await themeEditNew('h37', {cwd});
+    const file = path.join(cwd, 'themes', 'h37', 'h37.settings.json');
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    data.settings.push({
+      thing: 'padding',
+      value: '4px 8px',
+      source: 'property',
+      on: 'chat-composer',
+    });
+    fs.writeFileSync(file, JSON.stringify(data, null, 2));
+    const r = await refusal(() =>
+      themeEditSet('h37', 'corners', 'pill', {cwd}),
+    );
+    expect(r.message).toContain('4px 8px');
+    expect(r.run.join(' ')).toMatch(/undo h37 padding --on chat-composer/);
+    fs.rmSync(path.join(cwd, 'themes', 'h37'), {recursive: true, force: true});
+  });
+
+  it('copies no padding onto the plain card for a clickable card hover padding', async () => {
+    // A card padding from the user's own theme source (or a variant they
+    // wrote) is not overridden: the plain card's base gets no padding
+    // variable, only the reset for cards nested in a clickable card.
+    await themeEditSet('p', 'padding', '5px', {
+      cwd,
+      on: 'clickable-card',
+      state: 'hover',
+    });
+    expect(ruleOf('.astryx-card')).not.toMatch(/--astryx-card-padding/);
+    expect(read('p.css')).toMatch(
+      /\.astryx-card:where\(\.astryx-clickable-card:hover \*\)/,
+    );
+    await themeEditUndo('p', {
+      cwd,
+      thing: 'padding',
+      on: 'clickable-card',
+      state: 'hover',
+    });
+  });
+});
+
+describe('parts38', () => {
+  /** @param {string} selector */
+  const ruleOf = selector => {
+    const css = read('p.css');
+    const i = css.indexOf(`${selector} {`);
+    return i < 0 ? '' : css.slice(i, css.indexOf('}', i));
+  };
+
+  it("writes a card padding so Core lowers it with the base theme's: the later wins", async () => {
+    // The base theme (neutral here, as every bundled theme) gives the card
+    // padding var(--spacing-3); the editor's padding must replace it.
+    await themeEditSet('p', 'padding', '20px', {cwd, on: 'card'});
+    const rule = ruleOf('.astryx-card');
+    expect(rule).toMatch(/--astryx-card-padding:\s*20px/);
+    expect(rule).not.toMatch(/--astryx-card-padding:\s*var\(--spacing-3\)/);
+    await themeEditUndo('p', {cwd, thing: 'padding', on: 'card'});
+  });
+
+  it('lets a clickable card win over a card physical side in each direction', async () => {
+    await themeEditSet('p', 'padding-left', '30px', {cwd, on: 'card'});
+    await themeEditSet('p', 'padding', '7px', {cwd, on: 'clickable-card'});
+    const css = read('p.css');
+    for (const dir of ['ltr', 'rtl']) {
+      const card = css.indexOf(`.astryx-card:dir(${dir}) {`);
+      const clickable = css.indexOf(`.astryx-clickable-card:dir(${dir}) {`);
+      expect(clickable, dir).toBeGreaterThan(card);
+      expect(ruleOf(`.astryx-clickable-card:dir(${dir})`), dir).toMatch(
+        /--astryx-card-padding-inline-start:\s*7px/,
+      );
+    }
+    await themeEditUndo('p', {cwd, thing: 'padding', on: 'clickable-card'});
+    await themeEditUndo('p', {cwd, thing: 'padding-left', on: 'card'});
+  });
+
+  it('writes a zero with an exponent as 0px, and names the default initial means', async () => {
+    await themeEditSet('p', 'padding', '0e0', {cwd, on: 'drawer'});
+    expect(ruleOf('.astryx-drawer')).toMatch(/--astryx-drawer-padding:\s*0px/);
+    await themeEditUndo('p', {cwd, thing: 'padding', on: 'drawer'});
+    const r = await themeEditSet('p', 'padding', 'initial', {cwd, on: 'card'});
+    expect(r.data.notes.join(' ')).toMatch(
+      /initial means card's own default padding from Core/,
+    );
+    await themeEditUndo('p', {cwd, thing: 'padding', on: 'card'});
+  });
+
+  it('refuses a hand-edited padding on another part when this command sets padding too', async () => {
+    await themeEditNew('h38', {cwd});
+    await themeEditSet('h38', 'padding', '3px', {cwd, on: 'segmented-control'});
+    const file = path.join(cwd, 'themes', 'h38', 'h38.settings.json');
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    data.settings[data.settings.length - 1].value = '2px 6px';
+    fs.writeFileSync(file, JSON.stringify(data, null, 2));
+    const r = await refusal(() =>
+      themeEditSet('h38', 'padding', '4px', {cwd, on: 'card'}),
+    );
+    expect(r.message).toContain('2px 6px');
+    fs.rmSync(path.join(cwd, 'themes', 'h38'), {recursive: true, force: true});
   });
 });

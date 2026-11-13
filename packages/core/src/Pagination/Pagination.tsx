@@ -23,7 +23,7 @@
  *   hasFirstLast, step, siblingCount, size, isDisabled, label, data-testid, xstyle
  */
 
-import {useOptimistic, useTransition} from 'react';
+import {useOptimistic, useState, useTransition} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
@@ -455,6 +455,9 @@ export function Pagination({
   // Track the page optimistically so rapid prev/next clicks advance from the
   // in-flight target instead of stalling on the last committed page.
   const [optimisticPage, setOptimisticPage] = useOptimistic(page);
+  // Whether the page box keeps a rejected entry, which widens it to fit the
+  // status icon beside the typed text.
+  const [isPageEntryRejected, setIsPageEntryRejected] = useState(false);
 
   // Roving-tabindex + arrow/Home/End keyboard nav for the dots variant, owned
   // by the shared useListFocus primitive (mirrors SegmentedControl). It stamps a
@@ -762,6 +765,9 @@ export function Pagination({
         // convention that a typeable page box requires a known total.
         const isInputDisabled = isDisabled || computedTotalPages == null;
 
+        const pageBoxWidth = isSm
+          ? sizeVars['--size-element-sm']
+          : sizeVars['--size-element-md'];
         const inputNode = (
           <NumberInput
             label={goToPageLabel}
@@ -772,10 +778,14 @@ export function Pagination({
             max={computedTotalPages ?? undefined}
             isIntegerOnly
             size={size}
+            // The message shows on the status icon, so a rejection keeps the
+            // bar's height; the box grows to hold the icon beside the text.
+            statusVariant="tooltip"
+            onEntryErrorChange={error => setIsPageEntryRejected(error != null)}
             width={
-              isSm
-                ? sizeVars['--size-element-sm']
-                : sizeVars['--size-element-md']
+              isPageEntryRejected
+                ? `calc(${pageBoxWidth} + ${spacingVars['--spacing-10']})`
+                : pageBoxWidth
             }
             isDisabled={isInputDisabled}
             data-testid={testId != null ? `${testId}-input` : undefined}

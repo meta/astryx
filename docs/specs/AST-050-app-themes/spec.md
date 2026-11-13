@@ -194,7 +194,11 @@ described.
   header names its source from the project root of the outputs, so a build
   from any folder writes the same outputs. At a path `--out` names, it
   replaces its own earlier outputs. It replaces the output of another theme
-  source that still exists and warns, naming both sources. Into a folder the
+  source that still exists and warns, naming both sources, once every output
+  of the build may be written. A backslash in `--out` separates folders.
+  Building a theme the theme editor made (`<slug>.theme.ts` beside
+  `<slug>.settings.json`) warns and names the editor's command that builds it
+  from its settings. Into a folder the
   theme editor made (folder `<slug>/` holds `<slug>.settings.json`), `--out`
   for a source outside that folder writes there and warns, naming the build
   beside the source and another `--out`.

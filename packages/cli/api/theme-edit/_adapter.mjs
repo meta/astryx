@@ -40,19 +40,16 @@ import {themeCacheRoot} from './_project.mjs';
 import * as preview from './_preview-app.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
-import {
-  findAstryxProject,
-  findPackageRoot,
-} from '../../foundation/fs/paths.mjs';
+import {findPackageRoot} from '../../foundation/fs/paths.mjs';
+import {coreApp} from './_context.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {withFolderLock} from '../../foundation/release/folder-lock.mjs';
 import {
   getCliInvocation,
   quoteCommandArgument,
 } from '../../foundation/env/package-manager.mjs';
-import {DIALS, LIKE, P} from './_tables.mjs';
+import {LIKE, P} from './_tables.mjs';
 import {setLine} from './_check.mjs';
-import {colorProblem} from './_color.mjs';
 import {SHOWCASE_GROUPS} from './_preview.mjs';
 import {camel, typedThemeName} from './_settings.mjs';
 import {LOCAL_THEME_ROOT} from '../../foundation/config/theme-state.mjs';
@@ -98,31 +95,7 @@ export const builtInThemes = () => [...LIKE];
 /** The sections `show --section` takes. */
 export const showSections = () => [...SHOWCASE_GROUPS];
 
-/**
- * Whether a value fits what a dial takes, read from the dial's own list of
- * values: a named rung in any case, or a value of the kind it names (a size,
- * a color, a number). `set` still checks the value in full.
- * @param {string} dial
- * @param {string} value
- */
-export function dialValueFits(dial, value) {
-  const spec = DIALS[/** @type {keyof typeof DIALS} */ (dial)]?.values;
-  if (!spec) return false;
-  const v = String(value).trim();
-  if (v === '') return false;
-  return spec.split('|').some(option => {
-    if (!option.startsWith('<') && !option.startsWith('"'))
-      return option === v.toLowerCase();
-    if (option.startsWith('"')) return true;
-    if (option.includes('size')) return /^\d*\.?\d+(px|rem|em)$/.test(v);
-    // A color by the editor's own color check (a bare word only when it
-    // names a color).
-    if (option === '<color>') return colorProblem(v) == null;
-    if (option === '<0-100>') return /^\d{1,3}$/.test(v) && Number(v) <= 100;
-    if (option === '<number>') return /^\d*\.?\d+$/.test(v);
-    return false;
-  });
-}
+export {dialValueFits} from './_settings.mjs';
 
 /**
  * The project a command acts on: the Astryx project at or above `cwd`, found
@@ -136,7 +109,9 @@ export function dialValueFits(dial, value) {
  */
 export function projectRoot(cwd) {
   const start = path.resolve(cwd);
-  const project = findAstryxProject(start);
+  // One rule: the nearest folder at or above cwd whose package.json lists
+  // @astryxdesign/core.
+  const project = coreApp(start);
   const pkg = findPackageRoot(start);
   const inReach = (/** @type {string} */ dir) =>
     project ? !path.relative(project, dir).startsWith('..') : true;
@@ -146,13 +121,19 @@ export function projectRoot(cwd) {
     let json;
     try {
       json = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
-    } catch {
+    } catch (e) {
+      // Name the file and what the parser says is wrong, with its place.
+      const rel = path.relative(start, file) || 'package.json';
+      const why = String(/** @type {Error} */ (e).message ?? '').replace(
+        /^Unexpected token.*?, /,
+        '',
+      );
       throw new AstryxError(
-        `${path.relative(start, file) || 'package.json'} is not valid JSON, so the app it belongs to is unknown. Fix it, then run the command again. Nothing was written.`,
+        `${rel} is not valid JSON (${why}), so the app it belongs to is unknown. Fix it, then run the command again. Nothing was written.`,
         [
           {
-            name: runLine(start, 'doctor'),
-            reason: 'names the file and what is wrong in it',
+            name: `\${EDITOR:-vi} ${quoteCommandArgument(rel)}`,
+            reason: 'open the file and fix it',
           },
         ],
         ERROR_CODES.ERR_PROJECT_REQUIRED,
@@ -899,6 +880,23 @@ export async function editorThemeHold(files, {cwd}) {
     });
   }
   return releaseAll;
+}
+
+/**
+ * For `compile` of a file that is not there: when it is an editor theme's
+ * own source (`themes/<t>/<t>.theme.ts` beside its settings), the command
+ * that writes it again; null otherwise.
+ * @param {string} file the path as given
+ * @param {string} cwd
+ * @returns {{name: string, reason: string} | null}
+ */
+export function editorMissingSource(file, cwd) {
+  const at = editorThemeAt(projectRoot(cwd), path.resolve(cwd, file));
+  if (!at || path.basename(file) !== `${at.slug}.theme.ts`) return null;
+  return {
+    name: runLine(cwd, `experimental theme editor show ${at.slug}`),
+    reason: `the editor writes ${at.slug}.theme.ts again from its settings`,
+  };
 }
 
 /**

@@ -25,6 +25,10 @@ import {
   findInstalledPackage,
   findProjectCoreDir,
 } from '../../foundation/fs/paths.mjs';
+import {
+  oncePerListing,
+  withListingCache,
+} from '../../foundation/fs/listing-cache.mjs';
 
 /**
  * @typedef {object} ThemeProject
@@ -281,11 +285,13 @@ export async function openProject(cwd) {
     // Not cached yet.
   }
   if (!docs) {
-    docs = {
+    // Each component's import path walks Core's source tree. One listing
+    // cache reads each folder once for all of them.
+    docs = await withListingCache(async () => ({
       version: DOCS_VERSION,
       targets: await collectThemingTargets(path.join(coreDir, 'src')),
       components: await readComponents(coreDir),
-    };
+    }));
     try {
       fs.mkdirSync(cacheDir, {recursive: true});
       fs.writeFileSync(docsFile, JSON.stringify(docs));
@@ -320,7 +326,9 @@ export async function openProject(cwd) {
 export function importPathOf(project, name) {
   const spec =
     project.components[name]?.importPath ??
-    resolveImportPath(project.coreDir, name);
+    oncePerListing(`importPath ${project.coreDir} ${name}`, () =>
+      resolveImportPath(project.coreDir, name),
+    );
   return spec && spec !== '@astryxdesign/core' ? spec : null;
 }
 
