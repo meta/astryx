@@ -72,6 +72,7 @@ import {
   type AppShellDrawerFocus,
 } from '../AppShell/appShellDrawerFocus';
 import {useCommittedRef} from '../hooks/useCommittedRef';
+import {focusForLastInputTemporarily} from '../utils/focusReturn';
 import {holdEntranceInput} from '../Layer/holdEntranceInput';
 import {mergeProps, composeEventHandlers} from '../utils';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
@@ -407,10 +408,13 @@ function closeAndRestoreFocus(
   const isRemovedByHiding =
     !opener.isConnected && shellFocus?.isDrawerEmpty() === true;
   if (isHidden || isRemovedByHiding) {
-    (
+    const main =
       shellFocus?.main() ??
-      opener.ownerDocument.querySelector<HTMLElement>('[role="main"], main')
-    )?.focus();
+      opener.ownerDocument.querySelector<HTMLElement>('[role="main"], main');
+    // A plain <main> has no tab stop. It gets one until focus leaves it.
+    if (main != null) {
+      focusForLastInputTemporarily(main);
+    }
     return;
   }
   if (!opener.isConnected) {

@@ -186,7 +186,7 @@ function DetachHarness() {
 }
 
 /** Hides the opener (an inert navigation region) as the drawer closes. */
-function HiddenOpenerHarness() {
+function HiddenOpenerHarness({isPlainMain = false}: {isPlainMain?: boolean}) {
   const [isOpen, setIsOpen] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
   return (
@@ -199,7 +199,7 @@ function HiddenOpenerHarness() {
           Open nav
         </button>
       </div>
-      <div role="main" tabIndex={-1} data-testid="main">
+      <main tabIndex={isPlainMain ? undefined : -1} data-testid="main">
         <button
           type="button"
           data-testid="hide"
@@ -209,7 +209,7 @@ function HiddenOpenerHarness() {
           }}>
           Hide
         </button>
-      </div>
+      </main>
       <MobileNav isOpen={isOpen} onOpenChange={setIsOpen} side="start">
         <span>Content</span>
       </MobileNav>
@@ -564,6 +564,23 @@ describe('MobileNav focus restoration', () => {
         vi.advanceTimersByTime(400);
       });
       expect(screen.getByTestId('main')).toHaveFocus();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('moves focus to a plain main with no tab stop when the opener is hidden', () => {
+    vi.useFakeTimers();
+    try {
+      render(<HiddenOpenerHarness isPlainMain />);
+      const main = screen.getByTestId('main');
+      expect(main.hasAttribute('tabindex')).toBe(false);
+      openFromTrigger();
+      fireEvent.click(screen.getByTestId('hide'));
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+      expect(main).toHaveFocus();
     } finally {
       vi.useRealTimers();
     }
