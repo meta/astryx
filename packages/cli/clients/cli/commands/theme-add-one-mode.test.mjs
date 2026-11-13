@@ -13,6 +13,9 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {runCli} from '../../../test-utils/run-cli.mjs';
+import {spawnSync} from 'node:child_process';
+import {createRequire} from 'node:module';
+import {renderThemeModule} from '../../../foundation/config/theme-state.mjs';
 
 /** @type {string[]} */
 const dirs = [];
@@ -136,7 +139,7 @@ describe('theme add of a theme with one color mode', () => {
         "import {themes, defaultThemeSlug, themeModes} from './astryx-themes';",
       );
       expect(text.stdout).toContain(
-        '<Theme theme={themes[defaultThemeSlug]} mode={themeModes[defaultThemeSlug]}>',
+        "<Theme theme={themes[defaultThemeSlug]} mode={themeModes[defaultThemeSlug] ?? 'system'}>",
       );
       expect(text.stdout).toMatch(new RegExp(`^mode:\\s+${mode}$`, 'm'));
     },
@@ -193,4 +196,105 @@ describe('theme add of a theme with one color mode', () => {
       expect(JSON.parse(r.stdout).data.themes[0]).not.toHaveProperty('mode');
     }
   });
+
+  it('a one-mode theme added after a two-mode first import prints the wiring that takes its mode', async () => {
+    const dir = app('');
+    fs.appendFileSync(
+      path.join(dir, 'node_modules/@acme/themes/dist/sand.js'),
+      'export const colorModes = ["light"];\n',
+    );
+    expect((await add(dir, true)).status).toBe(0);
+    const sand = await runCli(
+      ['theme', 'add', 'sand', '--package', '@acme/themes', '--json'],
+      dir,
+    );
+    expect(JSON.parse(sand.stdout).data.change.wireModes).toBe(true);
+    // The module already lists modes: a later change prints no update.
+    const used = await runCli(['theme', 'use', 'sand'], dir);
+    expect(used.stdout).not.toContain('now exports themeModes');
+    fs.rmSync(path.join(dir, 'src/astryx-themes.ts'));
+    const text = await runCli(
+      ['theme', 'add', 'ocean', '--package', '@acme/themes'],
+      dir,
+    );
+    expect(text.status, text.stderr).toBe(0);
+    const again = await runCli(
+      ['theme', 'add', 'sand', '--package', '@acme/themes'],
+      dir,
+    );
+    expect(again.stdout).toContain('now exports themeModes');
+    expect(again.stdout).toContain(
+      "<Theme theme={themes[defaultThemeSlug]} mode={themeModes[defaultThemeSlug] ?? 'system'}>",
+    );
+  });
+
+  it('reads the mode through a theme export that re-exports the built module', async () => {
+    const dir = app('export const colorModes = ["dark"];\n');
+    const pkg = path.join(dir, 'node_modules/@acme/themes');
+    fs.writeFileSync(
+      path.join(pkg, 'dist/ocean-entry.js'),
+      "export * from './ocean.js';\n",
+    );
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(pkg, 'package.json'), 'utf8'),
+    );
+    manifest.exports['./themes/ocean'] = './dist/ocean-entry.js';
+    fs.writeFileSync(path.join(pkg, 'package.json'), JSON.stringify(manifest));
+    const r = await add(dir, true);
+    expect(r.status, r.stderr).toBe(0);
+    expect(JSON.parse(r.stdout).data.themes[0].mode).toBe('dark');
+  });
+
+  it('the printed wiring type-checks with exactOptionalPropertyTypes', () => {
+    // A folder inside the CLI package, so Core and React types resolve.
+    const dir = fs.mkdtempSync(path.join(import.meta.dirname, '.wiring-tsc-'));
+    dirs.push(dir);
+    const module = renderThemeModule(
+      [
+        {
+          slug: 'neutral',
+          owner: '@astryxdesign/theme-neutral',
+          exportName: 'neutralTheme',
+          module: '@astryxdesign/theme-neutral',
+          stylesheet: '@astryxdesign/theme-neutral/theme.css',
+          moduleFile: '',
+          stylesheetFile: '',
+          source: 'package',
+          mode: 'light',
+        },
+      ],
+      'neutral',
+      true,
+    ).replace(/^import "[^"]+";$/gm, '');
+    fs.writeFileSync(path.join(dir, 'astryx-themes.ts'), module);
+    fs.writeFileSync(
+      path.join(dir, 'app.tsx'),
+      "import {Theme} from '@astryxdesign/core/theme';\nimport {themes, defaultThemeSlug, themeModes} from './astryx-themes';\n\nexport const App = () => (\n  <Theme theme={themes[defaultThemeSlug]} mode={themeModes[defaultThemeSlug] ?? 'system'}>\n    <div />\n  </Theme>\n);\n",
+    );
+    fs.writeFileSync(
+      path.join(dir, 'tsconfig.json'),
+      JSON.stringify({
+        compilerOptions: {
+          strict: true,
+          exactOptionalPropertyTypes: true,
+          jsx: 'react-jsx',
+          module: 'esnext',
+          moduleResolution: 'bundler',
+          noEmit: true,
+          skipLibCheck: true,
+          target: 'es2022',
+        },
+        files: ['app.tsx'],
+      }),
+    );
+    const tsc = createRequire(
+      path.resolve(import.meta.dirname, '../../../../..', 'package.json'),
+    ).resolve('typescript/bin/tsc');
+    const r = spawnSync(process.execPath, [tsc, '-p', 'tsconfig.json'], {
+      cwd: dir,
+      encoding: 'utf8',
+    });
+    expect(r.stdout + r.stderr).toBe('');
+    expect(r.status).toBe(0);
+  }, 120_000);
 });

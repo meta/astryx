@@ -15,7 +15,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {findInstalledPackage} from '../fs/paths.mjs';
-import {moduleExportsName} from './module-exports.mjs';
+import {moduleExportSource, moduleExportsName} from './module-exports.mjs';
 import {inspectPackageExport} from './package-exports.mjs';
 import {themeImportPackage} from './theme-discovery.mjs';
 import {isLocalThemeOwner, projectPath} from '../config/theme-state.mjs';
@@ -243,9 +243,13 @@ function resolvePackageTheme(theme, cwd, ownerThemeCount) {
  */
 export function builtColorMode(moduleFile) {
   if (!moduleFile) return {};
+  // The file that declares it: the module, or the built module it re-exports
+  // (`export * from './ocean.js'`).
+  const declaring = moduleExportSource(moduleFile, 'colorModes');
+  if (!declaring) return {};
   let text;
   try {
-    text = fs.readFileSync(moduleFile, 'utf8');
+    text = fs.readFileSync(declaring, 'utf8');
   } catch {
     return {};
   }

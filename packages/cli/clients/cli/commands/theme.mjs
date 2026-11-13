@@ -646,6 +646,7 @@ function printThemeApp(result) {
           slug: change.slug,
           changed: change.changed,
           firstAdd: change.firstAdd,
+          ...(change.wireModes ? {wireModes: true} : {}),
         },
       ],
       {
@@ -656,14 +657,30 @@ function printThemeApp(result) {
           'slug',
           'changed',
           'firstAdd',
+          'wireModes',
         ],
         layout: 'stacked',
       },
     ),
   );
   for (const note of result.data.notes ?? []) emit(text(`[note] ${note}`));
-  if (!change.firstAdd) return;
   const stem = path.basename(modulePath, path.extname(modulePath));
+  if (!change.firstAdd) {
+    // The module now lists one-mode themes' modes: the app's wiring, made
+    // without them, passes the selected theme's mode from now on.
+    if (change.wireModes)
+      emit(
+        text(
+          "The theme module now exports themeModes. Pass the selected theme's mode to Theme in the app root:",
+        ),
+        code(
+          "import {Theme} from '@astryxdesign/core/theme';\n" +
+            `import {themes, defaultThemeSlug, themeModes} from './${stem}';\n\n` +
+            "<Theme theme={themes[defaultThemeSlug]} mode={themeModes[defaultThemeSlug] ?? 'system'}>\n  <App />\n</Theme>",
+        ),
+      );
+    return;
+  }
   // With a theme of one color mode added, the generated module lists each
   // such theme's mode in `themeModes`, and the wiring passes the selected
   // theme's (none for a two-mode theme, which follows the system).
@@ -673,7 +690,7 @@ function printThemeApp(result) {
     code(
       "import {Theme} from '@astryxdesign/core/theme';\n" +
         `import {themes, defaultThemeSlug${modes ? ', themeModes' : ''}} from './${stem}';\n\n` +
-        `<Theme theme={themes[defaultThemeSlug]}${modes ? ' mode={themeModes[defaultThemeSlug]}' : ''}>\n  <App />\n</Theme>`,
+        `<Theme theme={themes[defaultThemeSlug]}${modes ? " mode={themeModes[defaultThemeSlug] ?? 'system'}" : ''}>\n  <App />\n</Theme>`,
     ),
   );
 }

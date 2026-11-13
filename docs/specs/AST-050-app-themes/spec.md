@@ -122,7 +122,8 @@ described.
   pass `themes[defaultThemeSlug]` to `Theme`. A theme whose built module
   exports one color mode (`colorModes`) carries that `mode`, the module lists
   it in `themeModes`, and the wiring passes the selected theme's mode to
-  `Theme`.
+  `Theme`; a change that first adds `themeModes` to an app already wired marks
+  `wireModes` and shows that wiring.
 - **FR6 — Ejecting is the author fork.**
   `theme eject <slug> [path] [--overwrite] [--package <package>]` MUST copy a
   theme's complete source directory into the project exactly as the copying
