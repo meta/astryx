@@ -33,6 +33,12 @@
       ]
     },
     {
+      "from": "packages/core/src/DateTimeInput/",
+      "specs": [
+        "packages/core/src/DateInput/__tests__/DateInputRejectedEntry.interaction.browser.spec.ts"
+      ]
+    },
+    {
       "from": "packages/core/src/Field/",
       "specs": [
         "packages/core/src/Button/__tests__/ButtonHitArea.interaction.browser.spec.ts"

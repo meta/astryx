@@ -9,6 +9,7 @@
  */
 
 import * as zlib from 'node:zlib';
+import {wordTable} from './_tables.mjs';
 
 const SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 
@@ -25,20 +26,24 @@ export const MAX_PIXELS_16 = 20_000_000;
 const SAMPLE_BUDGET = 4_000_000;
 
 /** The bit depths each PNG color type allows. */
-const DEPTHS = /** @type {Record<number, number[]>} */ ({
-  0: [1, 2, 4, 8, 16],
-  2: [8, 16],
-  3: [1, 2, 4, 8],
-  4: [8, 16],
-  6: [8, 16],
-});
-const CHANNELS = /** @type {Record<number, number>} */ ({
-  0: 1,
-  2: 3,
-  3: 1,
-  4: 2,
-  6: 4,
-});
+const DEPTHS = wordTable(
+  /** @type {Record<number, number[]>} */ ({
+    0: [1, 2, 4, 8, 16],
+    2: [8, 16],
+    3: [1, 2, 4, 8],
+    4: [8, 16],
+    6: [8, 16],
+  }),
+);
+const CHANNELS = wordTable(
+  /** @type {Record<number, number>} */ ({
+    0: 1,
+    2: 3,
+    3: 1,
+    4: 2,
+    6: 4,
+  }),
+);
 
 /** @typedef {{width: number, height: number, rgba: Uint8Array}} Picture */
 

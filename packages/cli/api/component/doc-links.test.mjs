@@ -139,6 +139,7 @@ describe("a link in a component doc's text", () => {
       expect(read.data.examples[0]).toEqual({
         label: 'As `astryx docs acme-setup` shows',
         code: '// {@link generic:acme-setup}',
+        kind: 'demo',
       });
     },
     SLOW,

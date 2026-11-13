@@ -100,6 +100,7 @@ import {
   COMPUTER_INSTALL_STEP,
 } from '../../foundation/agent-docs/computer-agent-text.mjs';
 import {
+  keptFileCheck,
   alignCommand,
   addCliCommandFor,
   computerAgentTextState,
@@ -2192,7 +2193,7 @@ export function checkGatherCache() {
     id: 'gather-cache',
     label: 'Kept catalog cache',
     status: 'info',
-    message: `search, build, component, template, theme and discover keep what they gather (search's catalogs and each integration's check results) in ${summary.dir} (${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, and deleting the folder clears it.`,
+    message: `search, build, component, template, theme, discover and doctor keep what they gather (search's catalogs, each integration's check results, and doctor's docs checks) in ${summary.dir} (${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, and deleting the folder clears it.`,
   };
 }
 
@@ -2465,9 +2466,22 @@ export async function runChecks(options = {}) {
     );
   }
   checks.push(await checkAuthoringDocs(ctx));
-  checks.push(await checkCliDocs(ctx));
-  checks.push(await checkDocsTree(ctx));
-  checks.push(await checkDocsProgressiveDisclosure(ctx));
+  // The checks that read only files, each kept while every file it read is
+  // unchanged; the Core the project loads is part of what they read.
+  const where = {cwd, coreDir: coreDir ?? null};
+  checks.push(
+    await keptFileCheck({name: 'cli-docs', ...where}, () => checkCliDocs(ctx)),
+  );
+  checks.push(
+    await keptFileCheck({name: 'docs-tree', ...where}, () =>
+      checkDocsTree(ctx),
+    ),
+  );
+  checks.push(
+    await keptFileCheck({name: 'docs-progressive', ...where}, () =>
+      checkDocsProgressiveDisclosure(ctx),
+    ),
+  );
 
   const summary = {pass: 0, warn: 0, fail: 0, info: 0};
   for (const c of checks) summary[c.status] += 1;
