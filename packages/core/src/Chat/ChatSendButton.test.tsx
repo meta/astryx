@@ -14,14 +14,18 @@ import {render, screen, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {ChatSendButton} from './ChatSendButton';
 import {ChatComposer} from './ChatComposer';
-import {Button} from '../Button';
-import {registerIcons, resetIcons} from '../Icon';
+import {Button} from '../Button/Button';
+import {registerIcons, resetIcons} from '../Icon/globalIconRegistry';
 import {TestIcon} from '../__tests__/TestIcon';
 import {declaredValue} from '../__tests__/stylexDeclarations';
+import {defineTheme} from '../theme/defineTheme';
+import {Theme} from '../theme/Theme';
+import {resetThemes} from '../theme/themeRegistry';
 
 describe('ChatSendButton', () => {
   afterEach(() => {
     resetIcons();
+    resetThemes();
   });
 
   describe('send state', () => {
@@ -181,29 +185,65 @@ describe('ChatSendButton', () => {
       expect(declaredValue(send, 'background-color')).toBe(primary);
     });
 
-    it('resolves its default icon from the registry arrowUp entry', () => {
+    it('resolves its registry arrowUp fallback at the contextual icon size', () => {
       registerIcons({
-        arrowUp: (
-          <svg data-testid="registry-arrow-up">
+        arrowUp: ({size}) => (
+          <svg data-testid="registry-arrow-up" data-entry-size={size}>
             <path d="M0 0" />
           </svg>
         ),
       });
       render(<ChatSendButton />);
-      expect(screen.getByTestId('registry-arrow-up')).toBeInTheDocument();
+      expect(screen.getByTestId('registry-arrow-up')).toHaveAttribute(
+        'data-entry-size',
+        'sm',
+      );
     });
 
-    it('renders an explicit sendIcon instead of the registry icon', () => {
-      registerIcons({
-        arrowUp: (
-          <svg data-testid="registry-arrow-up">
-            <path d="M0 0" />
-          </svg>
-        ),
-      });
-      render(<ChatSendButton sendIcon={<TestIcon data-testid="my-send" />} />);
+    it('renders an explicit sendIcon even when the theme hides the send slot', () => {
+      render(
+        <Theme
+          theme={defineTheme({
+            name: 'send-slot-caller',
+            componentIcons: {'chat-send-button-send': null},
+          })}>
+          <ChatSendButton sendIcon={<TestIcon data-testid="my-send" />} />
+        </Theme>,
+      );
       expect(screen.getByTestId('my-send')).toBeInTheDocument();
-      expect(screen.queryByTestId('registry-arrow-up')).not.toBeInTheDocument();
+    });
+
+    it('uses the theme send slot when sendIcon is null', () => {
+      render(
+        <Theme
+          theme={defineTheme({
+            name: 'send-slot-mapped',
+            icons: {clock: <TestIcon data-testid="mapped-send" />},
+            componentIcons: {'chat-send-button-send': 'clock'},
+          })}>
+          <ChatSendButton sendIcon={null} />
+        </Theme>,
+      );
+      expect(screen.getByRole('button', {name: 'Send'})).toContainElement(
+        screen.getByTestId('mapped-send'),
+      );
+    });
+
+    it('hides only the glyph when the theme maps the send slot to null', () => {
+      const onSend = vi.fn();
+      render(
+        <Theme
+          theme={defineTheme({
+            name: 'send-slot-hidden',
+            componentIcons: {'chat-send-button-send': null},
+          })}>
+          <ChatSendButton isDisabled={false} onSend={onSend} />
+        </Theme>,
+      );
+      const button = screen.getByRole('button', {name: 'Send'});
+      expect(button.querySelector('svg')).toBeNull();
+      fireEvent.click(button);
+      expect(onSend).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -259,7 +299,7 @@ describe('ChatSendButton', () => {
       expect(onClick).toHaveBeenCalledTimes(1);
     });
 
-    it('resolves its default icon from the registry stop entry', () => {
+    it('resolves the registry stop icon independently of the send slot', () => {
       registerIcons({
         stop: (
           <svg data-testid="registry-stop">
@@ -267,7 +307,15 @@ describe('ChatSendButton', () => {
           </svg>
         ),
       });
-      render(<ChatSendButton isStopShown />);
+      render(
+        <Theme
+          theme={defineTheme({
+            name: 'send-slot-stop',
+            componentIcons: {'chat-send-button-send': null},
+          })}>
+          <ChatSendButton isStopShown />
+        </Theme>,
+      );
       expect(screen.getByTestId('registry-stop')).toBeInTheDocument();
     });
 

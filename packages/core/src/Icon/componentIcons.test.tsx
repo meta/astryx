@@ -347,6 +347,7 @@ describe('ComponentIcon', () => {
 describe('component icon slot types', () => {
   it('types slot names, values, and the static view', () => {
     expectTypeOf<ComponentIconSlotName>().toEqualTypeOf<
+      | 'chat-send-button-send'
       | 'code-block-copy'
       | 'timestamp-copy'
       | 'table-sort-indicator'
