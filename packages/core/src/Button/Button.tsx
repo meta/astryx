@@ -76,6 +76,8 @@ import {createSharedContext} from '../utils/sharedContext';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import type {LinkComponentType} from '../Link/types';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
+import {useFocusAcrossSwap} from '../utils/useFocusAcrossSwap';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
@@ -713,6 +715,14 @@ function addsNoName(node: ReactNode): boolean {
   return typeof label !== 'string' || label.trim() === '';
 }
 
+function getButtonFocusTarget(node: HTMLSpanElement): HTMLElement | null {
+  const root = node.closest('.astryx-button');
+  const control = node.closest<HTMLElement>(
+    'a,button,[role="link"],[role="button"],[tabindex]',
+  );
+  return control && root?.contains(control) ? control : null;
+}
+
 /**
  * A versatile button component with multiple variants.
  *
@@ -843,6 +853,10 @@ export function Button({
   // When false (default), label is always rendered as visible text.
 
   const LinkComponent = useLinkComponent(as);
+  const contentRef = useFocusAcrossSwap<HTMLSpanElement>(undefined, {
+    getFocusTarget: getButtonFocusTarget,
+  });
+  const callerProps = withholdCallerHandlers(props, buttonDisabled);
 
   // Render as link when href is provided and the button is not TRULY
   // disabled. Disabled links are an accessibility anti-pattern, so a
@@ -1014,6 +1028,7 @@ export function Button({
         </span>
       )}
       <span
+        ref={contentRef}
         {...stylex.props(
           styles.contentWrapper,
           // The content wrapper's `::after` carries the touch band, so the
@@ -1110,19 +1125,24 @@ export function Button({
   let element: ReactNode;
 
   if (renderAsLink) {
+    // Busy links bypass routers that require a live destination.
+    const Element = buttonDisabled ? 'a' : LinkComponent;
     element = (
-      <LinkComponent
+      <Element
         ref={mergedButtonRef as React.Ref<HTMLAnchorElement>}
-        href={href}
-        target={target}
-        rel={rel}
+        href={buttonDisabled ? undefined : href}
+        target={buttonDisabled ? undefined : target}
+        rel={buttonDisabled ? undefined : rel}
         {...(inputGroup != null && buttonGroup == null
           ? inputGroupItemProps
           : undefined)}
         {...sharedMergedProps}
         {...pressFeedback}
         {...groupItemProps}
-        {...props}
+        {...callerProps}
+        {...(buttonDisabled
+          ? {role: props.role ?? 'link', tabIndex: props.tabIndex ?? 0}
+          : null)}
         {...ariaLabelProp}
         {...describedByProp}
         {...edgeCompAttr}
@@ -1131,7 +1151,7 @@ export function Button({
         aria-busy={isLoadingState || props['aria-busy'] || undefined}
         aria-disabled={buttonDisabled || props['aria-disabled'] || undefined}
         onPointerDown={composeEventHandlers(
-          props.onPointerDown,
+          callerProps.onPointerDown,
           cutLabel.onPointerDown,
         )}
         onFocus={composeEventHandlers(props.onFocus, cutLabel.onFocus)}
@@ -1139,7 +1159,7 @@ export function Button({
         onClick={handleClick}
         {...(handleKeyDown ? {onKeyDown: handleKeyDown} : null)}>
         {buttonContent}
-      </LinkComponent>
+      </Element>
     );
   } else {
     element = (
@@ -1152,7 +1172,7 @@ export function Button({
         {...sharedMergedProps}
         {...pressFeedback}
         {...groupItemProps}
-        {...props}
+        {...callerProps}
         {...(isTrueDisabled ? {name: undefined} : null)}
         {...ariaLabelProp}
         {...describedByProp}
@@ -1162,7 +1182,7 @@ export function Button({
         aria-busy={isLoadingState || props['aria-busy'] || undefined}
         aria-disabled={buttonDisabled || props['aria-disabled'] || undefined}
         onPointerDown={composeEventHandlers(
-          props.onPointerDown,
+          callerProps.onPointerDown,
           cutLabel.onPointerDown,
         )}
         onFocus={composeEventHandlers(props.onFocus, cutLabel.onFocus)}

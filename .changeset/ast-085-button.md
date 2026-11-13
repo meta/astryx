@@ -2,8 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] Disabled Buttons, including IconButton, ToggleButton, and group members, now keep focus and their enabled Tab eligibility with `aria-disabled` instead of native `disabled`. Activation callbacks, Actions, form submission/reset, and link navigation remain blocked. Link-mode Buttons retain focus through disablement without invoking a custom router or exposing a destination; busy-only controls retain their pending appearance. Fully disabled roving groups keep one focusable entry, while hidden Carousel edge actions remain outside Tab order and the accessibility tree.
-
-Use `[aria-disabled="true"]` rather than `:disabled` or native-disabled test assertions when selecting disabled Buttons.
+[fix] A focused link-mode Button keeps focus when it becomes disabled, including with a custom router that does not forward a DOM ref. Disabled Buttons block caller activation handlers as well as onClick and clickAction. Busy link-mode Buttons keep their link role and tab eligibility without exposing a navigable destination or invoking a custom router; re-enabling restores the current destination.
 
 @korkt-kim
