@@ -3762,6 +3762,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-chat-dictation-voice-input",
+      "path": "examples/use-chat-dictation/voice-input",
+      "aliases": []
+    },
+    {
       "name": "example-use-clickable-container-clickable-project-card",
       "path": "examples/use-clickable-container/clickable-project-card",
       "aliases": []
@@ -4149,6 +4154,11 @@
     {
       "name": "hook-use-calendar-navigation",
       "path": "hooks/use-calendar-navigation",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-chat-dictation",
+      "path": "hooks/use-chat-dictation",
       "aliases": []
     },
     {
