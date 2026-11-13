@@ -1536,7 +1536,17 @@ export function ownPartTokens(cwd, slug, part, scope = 'base', state = null) {
   const stamp = /\/\/ Built with \S+\.theme\.ts ([0-9a-f]{16})\./.exec(
     module,
   )?.[1];
-  if (!stamp || stamp !== themeSourceHash(cwd, slug)) return out;
+  /** @param {string} k */
+  const css = k =>
+    k.startsWith('--')
+      ? k
+      : k.replace(/[A-Z]/g, (/** @type {string} */ c) => `-${c.toLowerCase()}`);
+  // With no build made from the source as it is now (an edit since the last
+  // build), the file is read as written, as ownTokens reads page tokens.
+  if (!stamp || stamp !== themeSourceHash(cwd, slug)) {
+    for (const [k, v] of blockOf(f.ts, at)) out.set(css(k), v);
+    return out;
+  }
   const like = /\/\/ Built on @astryxdesign\/theme-([a-z0-9-]+) /.exec(
     module,
   )?.[1];
@@ -1546,16 +1556,7 @@ export function ownPartTokens(cwd, slug, part, scope = 'base', state = null) {
   const named = namedInOwnSource(cwd, slug);
   for (const [k, v] of blockOf(f.js, at)) {
     const given = settings.has(k) ? settings.get(k) : base.get(k);
-    if (given !== v && named(k))
-      out.set(
-        k.startsWith('--')
-          ? k
-          : k.replace(
-              /[A-Z]/g,
-              (/** @type {string} */ c) => `-${c.toLowerCase()}`,
-            ),
-        v,
-      );
+    if (given !== v && named(k)) out.set(css(k), v);
   }
   return out;
 }
@@ -2071,8 +2072,9 @@ function keepShades(pal, kept) {
  * Control heights scaled with the spacing dial (a denser theme has shorter
  * controls), each kept distinct and in order: smallest to largest, a
  * control never under 24px (the smallest target a pointer can use
- * comfortably, unless the theme starts below it), and each size above the
- * one below it by at least its own step scaled, so two sizes never meet.
+ * comfortably, unless the theme starts below it), each the plain scaled
+ * value unless it would meet the one below, which then keeps its own step
+ * scaled above it.
  * @param {Array<[string, string]>} sizes token name and the theme's value
  * @param {number} f the spacing rung's factor
  * @returns {Array<[string, string]>} the tokens it writes, in px
@@ -2088,8 +2090,10 @@ export function controlSizes(sizes, f) {
   let prevOwn = null;
   for (const [k, v] of px) {
     let n = Math.max(Math.min(24, v), Math.round(v * f));
-    if (prev != null && prevOwn != null)
-      n = Math.max(n, prev + Math.max(1, Math.round((v - prevOwn) * f)));
+    // Only a size that would meet (or pass) the one below moves: the plain
+    // scaled value otherwise.
+    if (prev != null && prevOwn != null && n <= prev)
+      n = prev + Math.max(1, Math.round((v - prevOwn) * f));
     out.push([k, `${n}px`]);
     prev = n;
     prevOwn = v;

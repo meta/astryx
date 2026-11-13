@@ -32,7 +32,7 @@ let unbuilt = '';
 
 beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-real-bases-', FIXTURE_PACKAGES);
-  unbuilt = await installRealBaseThemes(cwd, ['butter', 'neutral']);
+  unbuilt = await installRealBaseThemes(cwd, ['butter', 'neutral', 'matcha']);
 }, 300_000);
 
 afterAll(() => {
@@ -172,31 +172,70 @@ describe('padding on real base themes', () => {
     );
   }, 240_000);
 
-  it('keeps control sizes apart and in order at every spacing step (parts41)', async ctx => {
+  it('keeps control sizes apart and in order at every spacing step, the plain scale unless two would meet (parts41)', async ctx => {
     if (unbuilt) {
       console.warn(`skipped: ${unbuilt}`);
       return ctx.skip();
     }
-    await themeEditNew('sp', {cwd, like: 'neutral'});
-    const sizes = () => {
-      const css = fs.readFileSync(path.join(cwd, 'themes/sp/sp.css'), 'utf8');
-      return ['sm', 'md', 'lg'].map(n => {
-        const m = new RegExp(`--size-element-${n}:\\s*(\\d+)px`).exec(css);
-        return m ? Number(m[1]) : null;
-      });
+    // Neutral takes Core's 28/32/36px; Matcha sets 36/40/44px. Only tight on
+    // Neutral would make two sizes meet (21px under the 24px floor, 24px).
+    const want = {
+      neutral: {
+        tight: [24, 27, 30],
+        compact: [25, 28, 32],
+        roomy: [32, 36, 41],
+        spacious: [35, 40, 45],
+      },
+      matcha: {
+        tight: [27, 30, 33],
+        compact: [32, 35, 39],
+        roomy: [41, 45, 50],
+        spacious: [45, 50, 55],
+      },
     };
-    for (const step of ['tight', 'compact', 'medium', 'roomy', 'spacious']) {
-      await themeEditSet('sp', 'spacing', step, {cwd});
-      const [sm, md, lg] = sizes();
-      if (step === 'medium' && sm == null) continue;
-      expect(sm, step).not.toBeNull();
-      expect(/** @type {number} */ (sm), step).toBeGreaterThanOrEqual(24);
-      expect(/** @type {number} */ (md), step).toBeGreaterThan(
-        /** @type {number} */ (sm),
-      );
-      expect(/** @type {number} */ (lg), step).toBeGreaterThan(
-        /** @type {number} */ (md),
-      );
+    for (const [like, steps] of Object.entries(want)) {
+      const slug = `sp-${like}`;
+      await themeEditNew(slug, {cwd, like});
+      for (const [step, sizes] of Object.entries(steps)) {
+        await themeEditSet(slug, 'spacing', step, {cwd});
+        const css = fs.readFileSync(
+          path.join(cwd, 'themes', slug, `${slug}.css`),
+          'utf8',
+        );
+        const got = ['sm', 'md', 'lg'].map(n =>
+          Number(new RegExp(`--size-element-${n}:\\s*(\\d+)px`).exec(css)?.[1]),
+        );
+        expect(got, `${like} ${step}`).toEqual(sizes);
+      }
     }
+  }, 240_000);
+
+  it('reads an own-source padding edited since the last build, so the set and its note agree (11490)', async ctx => {
+    if (unbuilt) {
+      console.warn(`skipped: ${unbuilt}`);
+      return ctx.skip();
+    }
+    await themeEditNew('ed', {cwd, like: 'neutral'});
+    const ts = path.join(cwd, 'themes/ed/ed.theme.ts');
+    const src = fs.readFileSync(ts, 'utf8');
+    const mine = "card: {base: {padding: '6px'}},";
+    fs.writeFileSync(
+      ts,
+      src.includes('components:')
+        ? src.replace('components: {', `components: {\n    ${mine}`)
+        : src.replace(
+            /defineTheme\(\{/,
+            `defineTheme({\n  components: {${mine}},`,
+          ),
+    );
+    // No build between the edit and the set.
+    const r = await themeEditSet('ed', 'padding', '20px', {cwd, on: 'card'});
+    expect(r.data.notes.join(' ')).toMatch(
+      /ed\.theme\.ts sets padding on card itself/,
+    );
+    expect(ruleOf('ed', '.astryx-card')).toMatch(
+      /--astryx-card-padding:\s*6px/,
+    );
+    expect(ruleOf('ed', '.astryx-card')).not.toMatch(/20px/);
   }, 240_000);
 });
