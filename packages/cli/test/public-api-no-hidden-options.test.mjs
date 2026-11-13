@@ -187,8 +187,32 @@ function scanSource(file, code) {
     hits.push(`${file}:${line + 1} ${what}`);
   };
   const OPTION_NAMES = new Set(['options', 'opts']);
-  /** @param {any} n */
-  const isOptions = n => ts.isIdentifier(n) && OPTION_NAMES.has(n.text);
+  /**
+   * The options parameter, however it is spelled: through parentheses and a
+   * JSDoc cast (`/** @type {any} *\/ (options)`), an `as`/`satisfies`/type
+   * assertion, or on the left of a default (`options ?? {}`, `opts || {}`).
+   * @param {any} n
+   * @returns {boolean}
+   */
+  const isOptions = n => {
+    if (!n) return false;
+    if (ts.isIdentifier(n)) return OPTION_NAMES.has(n.text);
+    if (
+      ts.isParenthesizedExpression(n) ||
+      (ts.isAsExpression && ts.isAsExpression(n)) ||
+      (ts.isSatisfiesExpression && ts.isSatisfiesExpression(n)) ||
+      (ts.isTypeAssertionExpression && ts.isTypeAssertionExpression(n)) ||
+      (ts.isNonNullExpression && ts.isNonNullExpression(n))
+    )
+      return isOptions(n.expression);
+    if (
+      ts.isBinaryExpression(n) &&
+      (n.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken ||
+        n.operatorToken.kind === ts.SyntaxKind.BarBarToken)
+    )
+      return isOptions(n.left);
+    return false;
+  };
   /** @param {any} n */
   const propName = n =>
     n && (ts.isIdentifier(n) || ts.isStringLiteral(n)) ? n.text : null;
@@ -217,21 +241,21 @@ function scanSource(file, code) {
       isOptions(node.expression) &&
       HIDDEN.test(node.name.text)
     )
-      hit(node, `${node.expression.text}.${node.name.text}`);
+      hit(node, node.getText());
     if (
       ts.isElementAccessExpression(node) &&
       isOptions(node.expression) &&
       ts.isStringLiteral(node.argumentExpression) &&
       HIDDEN.test(node.argumentExpression.text)
     )
-      hit(node, `${node.expression.text}['${node.argumentExpression.text}']`);
+      hit(node, node.getText());
     if (
       ts.isVariableDeclaration(node) &&
       node.initializer &&
       isOptions(node.initializer)
     )
       for (const key of hiddenKeys(node.name))
-        hit(node, `{${key}} = ${node.initializer.text}`);
+        hit(node, `{${key}} = ${node.initializer.getText()}`);
     if (
       ts.isBinaryExpression(node) &&
       node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
@@ -241,7 +265,7 @@ function scanSource(file, code) {
         ? node.left.expression
         : node.left;
       for (const key of hiddenKeys(left))
-        hit(node, `{${key}} = ${node.right.text}`);
+        hit(node, `{${key}} = ${node.right.getText()}`);
     }
     if (ts.isParameter(node))
       for (const key of hiddenKeys(node.name)) hit(node, `parameter {${key}}`);
@@ -291,6 +315,11 @@ describe('public API functions take no hidden options', () => {
       'export function e(file, options) { const {__x: y} = options; return y; }',
       'export function f(file, {out, __x} = {}) { return out; }',
       'export function g(file, options) { let w; ({__x: w} = options); return w; }',
+      'export function i(file, options) { return /** @type {any} */ (options).__x; }',
+      'export function j(file, options) { const {__x} = /** @type {any} */ (options); return __x; }',
+      'export function k(file, options) { const {__x} = options ?? {}; return __x; }',
+      'export function l(file, opts) { const {__x} = opts || {}; return __x; }',
+      "export function m(file, options) { return (options ?? {})['__x']; }",
     ];
     for (const code of planted) {
       expect(scanSource('planted.mjs', code), code).not.toEqual([]);
