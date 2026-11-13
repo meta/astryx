@@ -2617,10 +2617,6 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       'aria-controls': isEffectivelyReadOnly ? undefined : listboxId,
       'aria-busy': isBusy || undefined,
       'aria-disabled': isDisabled || callerProps['aria-disabled'],
-      // Withholding the disclosure attributes stops the control lying about
-      // a panel, but leaves it silent about WHY it does not open. The field
-      // path says so through its own chrome; the caller's control has none,
-      // so the state is handed over for it to present.
       'aria-readonly': isEffectivelyReadOnly || undefined,
     };
     return (

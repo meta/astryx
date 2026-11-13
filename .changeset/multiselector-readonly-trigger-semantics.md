@@ -2,5 +2,5 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] Preserve combobox semantics and localized read-only descriptions on caller-rendered MultiSelector triggers.
+[fix] Read-only MultiSelector triggers rendered with `renderTrigger` now expose the combobox role and the localized read-only description.
 @korkt-kim
