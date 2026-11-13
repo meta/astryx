@@ -309,8 +309,8 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   the failure, and the command's own work proceeds without that integration's
   contributions. The diagnostic command is the exception by purpose (INV29).
   A command whose own module cannot load (a broken install) still answers
-  every run of it, whatever options and words it was given, with the load
-  error and exit 1.
+  every run of it with the load error: whatever other options and words it
+  was given, it exits 1; `--help` prints its usage with the load error.
 - **INV29 — `astryx doctor` fails on a configured integration that cannot
   load.** An integration named in `astryx.config` that is not installed, has
   no manifest, or whose manifest throws or fails its schema is a failed

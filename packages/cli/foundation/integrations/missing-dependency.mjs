@@ -12,7 +12,8 @@
  *   not marked optional in peerDependenciesMeta), else null. A dev dependency
  *   is never installed for a consumer and an optional one may be skipped by
  *   design, so a manifest that needs either has a packaging bug, which
- *   reinstalling does not clear.
+ *   reinstalling does not clear. A package listed both as a dependency and
+ *   as an optional one is optional, as npm reads it.
  * @position Read by the project (foundation/config/project.mjs) to tell an
  *   install the user can repair from a dependency's own packaging bug, which
  *   stays out of the project's issues.
@@ -33,6 +34,8 @@ function requires(pkg, name) {
   /** @param {unknown} field */
   const has = field =>
     field != null && typeof field === 'object' && Object.hasOwn(field, name);
+  // npm treats a package listed in both as optional (fsevents, say).
+  if (has(pkg.optionalDependencies)) return false;
   if (has(pkg.dependencies)) return true;
   return (
     has(pkg.peerDependencies) &&

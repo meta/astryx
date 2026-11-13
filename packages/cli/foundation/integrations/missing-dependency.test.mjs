@@ -35,8 +35,9 @@ describe('missingDeclaredDependency', () => {
   const lacks = pkg('lacks');
   const spaced = pkg('with space', {dependencies: {recast: '1.0.0'}});
   const others = pkg('others', {
+    dependencies: {fsevents: '2.0.0'},
     devDependencies: {recast: '1.0.0'},
-    optionalDependencies: {postcss: '8.0.0'},
+    optionalDependencies: {postcss: '8.0.0', fsevents: '2.0.0'},
     peerDependencies: {jiti: '2.0.0', zod: '4.0.0'},
     peerDependenciesMeta: {zod: {optional: true}},
   });
@@ -70,7 +71,7 @@ describe('missingDeclaredDependency', () => {
     ).toBe('recast');
   });
 
-  it('counts a peer not marked optional, and no dev, optional or optional-peer package', () => {
+  it('counts a peer not marked optional, and no dev, optional (even if also a dependency) or optional-peer package', () => {
     /** @param {string} name */
     const missing = name =>
       missingDeclaredDependency(
@@ -80,6 +81,8 @@ describe('missingDeclaredDependency', () => {
     expect(missing('recast')).toBeNull();
     expect(missing('postcss')).toBeNull();
     expect(missing('zod')).toBeNull();
+    // Listed as both a dependency and an optional one: optional, as npm reads it.
+    expect(missing('fsevents')).toBeNull();
   });
 
   it('is null for an undeclared package, a relative path, or another error', () => {
