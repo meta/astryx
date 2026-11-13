@@ -69,6 +69,27 @@ function resolveLocalTheme(theme, cwd) {
       return true;
     }
   });
+  if (missing.length > 0 && theme.editor) {
+    // The editor builds its themes from their settings.
+    const show = formatCliCommand(
+      `experimental theme editor show ${theme.slug}`,
+      cwd,
+    );
+    throw new ThemeImportError(
+      `Theme "${theme.slug}" was made with the theme editor and is not built. Run \`${show}\` to build it, and try again. Missing: ${missing
+        .map(file => projectPath(path.relative(cwd, file)))
+        .join(', ')}.`,
+      {
+        suggestions: [
+          {name: show, reason: 'build the theme from its settings'},
+          {
+            name: formatCliCommand(`theme add ${theme.slug}`, cwd),
+            reason: 'add it once it is built',
+          },
+        ],
+      },
+    );
+  }
   if (missing.length > 0) {
     const source = projectPath(
       path.relative(cwd, path.join(theme.sourceDir, theme.entry)),

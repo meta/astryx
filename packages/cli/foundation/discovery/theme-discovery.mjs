@@ -24,7 +24,11 @@ import {packageSource} from '../doc-compiler/source.mjs';
 import {CLI_ROOT} from '../fs/paths.mjs';
 import {listDirEntries} from '../fs/listing-cache.mjs';
 import {formatCliCommand} from '../env/package-manager.mjs';
-import {LOCAL_THEME_ROOT} from '../config/theme-state.mjs';
+import {
+  EDITOR_THEME_ROOT,
+  LOCAL_THEME_ROOT,
+  editorThemeRecord,
+} from '../config/theme-state.mjs';
 import {assertWithin, PathSafetyError} from '../fs/path-safety.mjs';
 import {THEME_MODULE_EXTENSIONS} from './theme-module-extensions.mjs';
 
@@ -76,6 +80,8 @@ function sourceParser() {
  * @property {string} sourceDir absolute directory holding this theme's files
  * @property {boolean} bundled
  * @property {string} docPath absolute descriptor path
+ * @property {boolean} [editor] a theme the theme editor made under ./themes,
+ *   built by the editor from its settings
  */
 
 /**
@@ -1764,6 +1770,50 @@ export function discoverLocalThemes(
     packageExports: null,
     source: /** @type {const} */ ('local'),
   }));
+}
+
+/**
+ * The themes the theme editor made under `./themes/<slug>/`: a folder named
+ * after its theme holding `<slug>.settings.json`. Each is a local theme, so
+ * `theme add` records its built `<slug>.js` and `<slug>.css` as it does for
+ * a built local theme, and refuses with the editor's own build step while
+ * they are missing.
+ * @param {string} projectDir
+ * @returns {DiscoveredTheme[]}
+ */
+export function discoverEditorThemes(projectDir) {
+  const root = path.resolve(projectDir, EDITOR_THEME_ROOT);
+  if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) return [];
+  return listDirEntries(root)
+    .filter(
+      entry =>
+        entry.isDirectory() &&
+        !isIgnoredThemeEntry(entry.name) &&
+        /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(entry.name) &&
+        editorThemeRecord(path.join(root, entry.name)),
+    )
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map(entry => {
+      const slug = entry.name;
+      const exportName = `${slug.replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase())}Theme`;
+      return {
+        slug,
+        displayName: slug,
+        description: 'A theme the theme editor made.',
+        maintained: false,
+        entry: `${slug}.theme.ts`,
+        exportName,
+        files: [],
+        package: EDITOR_THEME_ROOT,
+        packageDir: projectDir,
+        packageExports: null,
+        source: /** @type {const} */ ('local'),
+        sourceDir: path.join(root, slug),
+        bundled: false,
+        docPath: '',
+        editor: true,
+      };
+    });
 }
 
 /**

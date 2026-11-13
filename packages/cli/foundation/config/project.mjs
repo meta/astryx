@@ -88,6 +88,7 @@ import {
   discoverBundledThemes,
   discoverIntegrationThemes,
   discoverLocalThemes,
+  discoverEditorThemes,
 } from '../discovery/theme-discovery.mjs';
 import {
   chooseProjectIconSet,
@@ -983,6 +984,8 @@ export class Project {
                   })
               : undefined,
           }),
+          // The themes the theme editor made, wired like local themes.
+          ...discoverEditorThemes(projectDir),
         );
       }
 
