@@ -186,14 +186,13 @@ export interface LightboxProps extends BaseProps<HTMLDialogElement> {
 const OVER_PHOTO_ATTRIBUTE = 'data-lightbox-over-photo';
 
 /**
- * Whether the toggle's place fits at the end of the caption text's last line.
- * It reads the current layout, where the place ends below the text, so the
- * text's lines are its own. The decision leans to a line of its own, as a
- * place that does not quite fit gives.
+ * The current layout has the place below the text, so the text's lines are its
+ * own. Only text nodes count, since a block element's box spans the caption.
  */
 function placeFitsBesideLastLine(flow: HTMLElement): boolean {
   const place = flow.firstElementChild;
-  const view = flow.ownerDocument.defaultView ?? window;
+  const doc = flow.ownerDocument;
+  const view = doc.defaultView ?? window;
   if (!(place instanceof HTMLElement)) {
     return true;
   }
@@ -201,26 +200,35 @@ function placeFitsBesideLastLine(flow: HTMLElement): boolean {
   if (placeStyle.display === 'none') {
     return true;
   }
+  const range = doc.createRange();
+  if (typeof range.getClientRects !== 'function') {
+    return true;
+  }
+  const words: DOMRect[] = [];
+  const walker = doc.createTreeWalker(flow, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node != null; node = walker.nextNode()) {
+    range.selectNodeContents(node);
+    for (const rect of range.getClientRects()) {
+      if (rect.width > 0 && rect.height > 0) {
+        words.push(rect);
+      }
+    }
+  }
+  if (words.length === 0) {
+    return true;
+  }
+  const lowest = words.reduce((a, b) => (b.bottom > a.bottom ? b : a));
+  const lastLine = words.filter(
+    rect => (rect.top + rect.bottom) / 2 > lowest.top,
+  );
   const needed =
     place.getBoundingClientRect().width +
     parseFloat(placeStyle.marginLeft) +
     parseFloat(placeStyle.marginRight);
-  const range = flow.ownerDocument.createRange();
-  range.setStartAfter(place);
-  range.setEnd(flow, flow.childNodes.length);
-  const rects =
-    typeof range.getClientRects === 'function'
-      ? [...range.getClientRects()].filter(r => r.width > 0 && r.height > 0)
-      : [];
-  if (rects.length === 0) {
-    return true;
-  }
-  const lowest = rects.reduce((a, b) => (b.bottom > a.bottom ? b : a));
-  const lastLine = rects.filter(r => (r.top + r.bottom) / 2 > lowest.top);
   const box = flow.getBoundingClientRect();
   return view.getComputedStyle(flow).direction === 'rtl'
-    ? Math.min(...lastLine.map(r => r.left)) - needed >= box.left + 0.5
-    : Math.max(...lastLine.map(r => r.right)) + needed <= box.right - 0.5;
+    ? Math.min(...lastLine.map(rect => rect.left)) - needed >= box.left
+    : Math.max(...lastLine.map(rect => rect.right)) + needed <= box.right;
 }
 
 // The caption's backing: the controls' backing colour, darker, so the caption
