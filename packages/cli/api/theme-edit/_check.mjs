@@ -1862,22 +1862,29 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         .replace(/^astryx-/, '')
         .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
         .toLowerCase();
+      // A part named in words (dialog header, text inputs) is the dashed
+      // part, read before any group a single word of it names.
+      const dashed = lower.trim().replace(/[\s_]+/g, '-');
       // A plain word how reads as a part or group (checkboxes: checks).
       const byWord = partForWord(lower);
       // A plain plural of a part (cards, dialogs, tabs) is that part.
-      const singular = [
-        lower.replace(/ies$/, 'y'),
-        lower.replace(/(ch|sh|x|s)es$/, '$1'),
-        lower.replace(/s$/, ''),
-      ].find(x => x !== lower && (TARGET.has(x) || FAMILIES[x]));
+      const singular = [lower, dashed]
+        .flatMap(w => [
+          w.replace(/ies$/, 'y'),
+          w.replace(/(ch|sh|x|s)es$/, '$1'),
+          w.replace(/s$/, ''),
+        ])
+        .find(x => x !== lower && (TARGET.has(x) || FAMILIES[x]));
       const named =
         TARGET.has(lower) || FAMILIES[lower]
           ? lower
-          : singular
-            ? singular
-            : byWord && (TARGET.has(byWord) || FAMILIES[byWord])
-              ? byWord
-              : null;
+          : TARGET.has(dashed) || FAMILIES[dashed]
+            ? dashed
+            : singular
+              ? singular
+              : byWord && (TARGET.has(byWord) || FAMILIES[byWord])
+                ? byWord
+                : null;
       if (named)
         refuse(
           E.ERR_THEME_UNKNOWN_PART,
@@ -1904,6 +1911,26 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       );
     }
     if (s.when) {
+      // A prop and value in other letters, with spaces or `=` between
+      // (`Variant: Primary`, `variant=primary`): the working command.
+      const m = /^\s*([^:=\s]+)\s*[:=]\s*([^:=]+?)\s*$/.exec(s.when);
+      if (m) {
+        const prop = t.props.find(x => x.toLowerCase() === m[1].toLowerCase());
+        const vals = prop ? (C.variantValues(s.on)[prop] ?? []) : [];
+        const val = vals.length
+          ? vals.find(x => x.toLowerCase() === m[2].toLowerCase())
+          : m[2];
+        const when = prop && val ? `${prop}:${val}` : null;
+        if (when && when !== s.when)
+          refuse(
+            E.ERR_THEME_UNKNOWN_VARIANT,
+            `--when "${s.when}" is written ${when}.`,
+            {
+              didYouMean: [when],
+              run: [setLine(slug, thing, v, {...s, when}, unset)],
+            },
+          );
+      }
       const [p, wv, ...more] = s.when.split(':');
       if (!wv || more.length)
         refuse(

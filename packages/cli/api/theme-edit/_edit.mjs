@@ -70,6 +70,7 @@ import {
   settingsEntriesOk,
   slugFor,
   typedThemeName,
+  themeNameReadings,
   themeSource,
   themeSourceProblem,
   refuseThemeParse,
@@ -88,6 +89,7 @@ import {
   folderIsEmpty,
   dialValueFits,
   holdAfterBuild,
+  fieldsMeant,
 } from './_settings.mjs';
 import {
   checkSetting,
@@ -137,6 +139,7 @@ import {
 } from './_context.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
+  formatCliCommand,
   getCliInvocation,
   quoteCommandArgument,
 } from '../../foundation/env/package-manager.mjs';
@@ -357,12 +360,18 @@ export async function themeEditNew(name, options = {}) {
   if (!slugOk(name)) {
     // A path typed for the name (themes/brand, ./t, t/) names the theme the
     // path ends in.
+    // A file name, the app copy's export (tTheme), camelCase or spaces
+    // (BrandDark, "Brand Dark") name the theme they read as: when it is
+    // here already, that is said, never a numbered second copy offered.
     const typed = String(name ?? '');
     const path_ = /[\\/]/.test(typed);
-    const fixed = slugFor(path_ ? typedThemeName(typed) : typed);
-    // A name typed in another case, or as a path, is the theme here already.
-    const sameName = path_ || typed.toLowerCase() === fixed;
-    const exists = sameName && fs.existsSync(themeFiles(cwd, fixed).settings);
+    const readings = themeNameReadings(typed);
+    const present = readings.find(n =>
+      fs.existsSync(themeFiles(cwd, n).settings),
+    );
+    const fixed =
+      present ?? readings[0] ?? slugFor(path_ ? typedThemeName(typed) : typed);
+    const exists = Boolean(present);
     refuse(
       E.ERR_INVALID_ARGUMENT,
       `"${String(name ?? '').slice(0, 80)}" is not a theme name (${NAME_RULE})${exists ? `; ${fixed} is a theme here already` : ''}.${dropped}`,
@@ -600,7 +609,7 @@ export async function themeEditNew(name, options = {}) {
   }
   refuseIfLockLost();
   fs.rmSync(marker, {force: true});
-  const p = await previewAndRoute(ctx, name, data, png);
+  const p = await previewAndRoute(ctx, name, data, png, 'overview', 'new');
   /** @type {string[]} */
   const notes = [
     ...keptNotes,
@@ -679,7 +688,18 @@ function applyNewSettings(
       /** @type {import('./_settings.mjs').Setting} */
       let s;
       try {
-        s = checkSetting(ctx, slug, data, thing, String(value), {}, false);
+        // The same input cleanup set gives a typed value (quotes of any
+        // kind around a font, invisible spaces, a pasted `name: value`).
+        const typed = normalizeEntry(thing, String(value)).value;
+        s = checkSetting(
+          ctx,
+          slug,
+          data,
+          thing,
+          typed ?? String(value),
+          {},
+          false,
+        );
       } catch (e) {
         throw asNewRefusal(
           vetSuggestions(e, ctx, slug, data),
@@ -848,16 +868,25 @@ function changeFocus(s) {
 
 /**
  * A signal handler for the checks and pictures after a change is saved: it
- * says the change is saved and how to run what did not, then lets the
+ * says what is saved (in the words of the command that ran) and how to run
+ * what did not, with the project's own CLI invocation, then lets the
  * signal end the process (the render's own handler re-raises it; with none,
  * this one does).
  * @param {string} slug
+ * @param {'set' | 'undo' | 'new'} [kind] the command that saved
+ * @param {string} [cwd] the project, for the CLI invocation
  * @returns {(sig: NodeJS.Signals) => void}
  */
-export function stoppedAfterSave(slug) {
+export function stoppedAfterSave(slug, kind = 'set', cwd = process.cwd()) {
+  const done =
+    kind === 'undo'
+      ? `the undo is done: ${slug} is saved and built as it was before that change`
+      : kind === 'new'
+        ? `${slug} is made and built`
+        : `the change to ${slug} is saved and built (and its undo step kept)`;
   return sig => {
     process.stderr.write(
-      `Stopped: the change to ${slug} is saved and built (and its undo step kept); its checks and pictures did not run. ${P} show ${slug} runs them.\n`,
+      `Stopped: ${done}; its checks and pictures did not run. ${formatCliCommand(`${P} show ${slug}`, cwd)} runs them.\n`,
     );
     if (process.listenerCount(sig) === 0) process.kill(process.pid, sig);
   };
@@ -873,11 +902,19 @@ export function stoppedAfterSave(slug) {
  * @param {boolean} png
  * @param {'colors' | 'components' | 'overview'} [focus] the preview page
  *   most about the change: Colors for a color, Components for a part
+ * @param {'set' | 'undo' | 'new'} [kind] the command that saved
  */
-async function previewAndRoute(ctx, slug, data, png, focus = 'overview') {
+async function previewAndRoute(
+  ctx,
+  slug,
+  data,
+  png,
+  focus = 'overview',
+  kind = /** @type {'set' | 'undo' | 'new'} */ ('set'),
+) {
   // Stopped (Ctrl-C) while the checks and pictures run: the change is saved
   // and built already, which one line says before the process ends.
-  const stopped = stoppedAfterSave(slug);
+  const stopped = stoppedAfterSave(slug, kind, ctx.project.cwd);
   process.once('SIGINT', stopped);
   process.once('SIGTERM', stopped);
   /** @type {Awaited<ReturnType<typeof previewAfter>>} */
@@ -1406,16 +1443,36 @@ async function changeOnce(
     // A damaged field the command does not set goes back to its default,
     // so the theme loads again (a change or removal of any setting repairs
     // it on the way).
+    // One written in other letters or as a package name (`Dark-Only`,
+    // `@astryxdesign/theme-neutral`) is cleaned to the value meant, never
+    // reset.
+    const meant = fieldsMeant(data);
     if (
       thing !== 'mode' &&
       !['both', 'light-only', 'dark-only'].includes(data.mode)
     ) {
-      data.mode = 'both';
-      fieldNotes.push('mode was missing or damaged, so it is both again');
+      if (['both', 'light-only', 'dark-only'].includes(meant.mode)) {
+        fieldNotes.push(
+          `mode was written "${data.mode}", so it is saved as ${meant.mode}`,
+        );
+        data.mode = /** @type {'both' | 'light-only' | 'dark-only'} */ (
+          meant.mode
+        );
+      } else {
+        data.mode = 'both';
+        fieldNotes.push('mode was missing or damaged, so it is both again');
+      }
     }
     if (thing !== 'base' && data.like != null && !LIKE.includes(data.like)) {
-      delete data.like;
-      fieldNotes.push('base was not a built-in theme, so it is none again');
+      if (LIKE.includes(meant.like) && baseInstalled(cwd, meant.like)) {
+        fieldNotes.push(
+          `base was written "${data.like}", so it is saved as ${meant.like}`,
+        );
+        data.like = meant.like;
+      } else {
+        delete data.like;
+        fieldNotes.push('base was not a built-in theme, so it is none again');
+      }
     }
   }
   const ctx = await context(cwd);
@@ -1646,7 +1703,7 @@ async function changeOnce(
     } else
       data.mode = /** @type {'both' | 'light-only' | 'dark-only'} */ (s.value);
     const r = await commitTheme(ctx, slug, data, {history: true});
-    const p = await previewAndRoute(ctx, slug, data, png);
+    const p = await previewAndRoute(ctx, slug, data, png, 'overview', sub);
     const after = await baseResolved(ctx.project, data.like).catch(() => base);
     return {
       type: 'themeEdit.set',
@@ -1717,13 +1774,27 @@ async function changeOnce(
   }
   const k = keyOf(s);
   const prevIdx =
-    rawIdx >= 0 ? rawIdx : data.settings.findIndex(x => keyOf(x) === k);
+    rawIdx >= 0
+      ? rawIdx
+      : // A setting listed twice by hand: the last entry is the one the
+        // build reads, so it is the one this command changes.
+        data.settings.map(x => keyOf(x)).lastIndexOf(k);
   /** @type {string | null} */
   let vibrancyGone = null;
   const prev = prevIdx >= 0 ? data.settings[prevIdx] : null;
   if (sub === 'undo') {
     if (!prev) {
-      const near = data.settings.filter(x => x.thing === s.thing).map(describe);
+      // A padding set in the other form (a side for the shorthand, or the
+      // shorthand for a side) on the same part is a near one too.
+      const PAD = /^padding(?:-(?:inline|block|top|right|bottom|left))?$/;
+      const nearOnes = data.settings.filter(
+        x =>
+          x.thing === s.thing ||
+          (PAD.test(s.thing) &&
+            PAD.test(x.thing) &&
+            (x.on ?? null) === (s.on ?? null)),
+      );
+      const near = nearOnes.map(describe);
       // headings has two halves: name the one that is set.
       const otherHalf =
         s.thing === 'headings'
@@ -1736,11 +1807,12 @@ async function changeOnce(
           : `The theme does not set ${describe({...s, value: '?'}).replace(' = ?', '')}.`,
         {
           also: near.length
-            ? [`settings for ${s.thing}: ${near.join('; ')}`]
+            ? [
+                `settings for ${s.thing}: ${near.join('; ')}${nearOnes.some(x => x.thing === 'padding' && s.thing !== 'padding') ? ' (undoing padding removes all four sides)' : ''}`,
+              ]
             : [],
           run: [
-            ...data.settings
-              .filter(x => x.thing === s.thing)
+            ...nearOnes
               .slice(0, 3)
               .map(x => `${P} undo ${slug} ${undoArgs(x)}`),
             `${P} show ${slug}`,
@@ -2384,7 +2456,7 @@ async function changeOnce(
           // A copy something keeps behind is said here too.
           ...appCopyStale(cwd, slug),
         }
-      : await previewAndRoute(ctx, slug, data, png, changeFocus(s));
+      : await previewAndRoute(ctx, slug, data, png, changeFocus(s), sub);
   return {
     type: sub === 'set' ? 'themeEdit.set' : 'themeEdit.undo',
     data: {
@@ -3680,7 +3752,7 @@ export async function themeEditUndo(theme, options = {}) {
     : touched.includes('components')
       ? 'components'
       : 'overview';
-  const p = await previewAndRoute(ctx, theme, prev, png, focus);
+  const p = await previewAndRoute(ctx, theme, prev, png, focus, 'undo');
   return {
     type: 'themeEdit.undo',
     data: {

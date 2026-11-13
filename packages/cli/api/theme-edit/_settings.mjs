@@ -10,7 +10,7 @@
  * @position api/theme-edit — storage and compile for the theme commands
  */
 
-import {EDITOR_GENERATED_MARK} from './_marks.mjs';
+import {APP_COPY_MARK, EDITOR_GENERATED_MARK} from './_marks.mjs';
 import {parse as parseModule} from '@babel/parser';
 import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
@@ -597,6 +597,79 @@ export function typedThemeName(s) {
 }
 
 /**
+ * The theme names a name typed the way the app shows it may mean, most
+ * likely first: a path with doubled slashes or `../` (`themes//t`), a file
+ * name with or without its folder (`brand.theme.ts`, `tTheme.ts`), the app
+ * copy's export (`tTheme`), camelCase (`brandDark`) and spaces
+ * (`Brand Dark`) each read as dashes. The caller picks the first that
+ * exists, else the first.
+ * @param {string} s
+ * @returns {string[]}
+ */
+export function themeNameReadings(s) {
+  const base = unlabeledThemeName(String(s ?? ''))
+    .replace(/[\\/]+/g, '/')
+    .replace(/^(\.\.?\/)+/, '')
+    .replace(/^.*themes\//i, '')
+    .replace(/\/.*$/, '')
+    .replace(
+      /\.(theme\.ts|settings\.(json|ts)|history\.json|css\.d\.ts|d\.ts|doc\.mjs|fonts\.css|css|mjs|js|tsx?)$/i,
+      '',
+    )
+    .trim();
+  const noTheme = base.replace(/([a-z0-9])Theme$/, '$1');
+  const read = [base, noTheme === base ? '' : noTheme]
+    .flatMap(x => [kebab(x), x.toLowerCase()])
+    .filter(x => /[a-z]/i.test(x))
+    .map(x => slugFor(x));
+  // A module name in any letters (brandtheme, brand-theme) last: only
+  // when the theme it names exists does it win.
+  const moduleNames = read
+    .map(n => n.replace(/-?theme$/, ''))
+    .filter(n => n && slugOk(n));
+  return [...new Set([...read, ...moduleNames])];
+}
+
+/**
+ * A vibrancy written as set reads typed input: a share of one (0.5) or a
+ * percent (50%) is that much of the 0-100 scale, as a whole number. Any
+ * other dial's value, or a vibrancy that is no such number, comes back as
+ * it was.
+ * @param {string} dial
+ * @param {string} v
+ * @returns {string}
+ */
+export function vibrancyMeant(dial, v) {
+  if (dial !== 'vibrancy') return v;
+  const m = /^(\d*\.?\d+)\s*(%?)$/.exec(v.trim());
+  if (!m) return v;
+  const n = Number(m[1]);
+  const scaled = !m[2] && n > 0 && n < 1 ? n * 100 : n;
+  return scaled <= 100 ? String(Math.round(scaled)) : v;
+}
+
+/**
+ * The mode and base a damaged theme file meant, read the way typed input
+ * is: other letters, stray spaces, `_` or a space for a dash (`Dark-Only`,
+ * ` Neutral`), and a base written as its package name
+ * (`@astryxdesign/theme-neutral`). Each is the cleaned text even when it is
+ * no value the editor takes; the caller checks it.
+ * @param {any} data
+ * @returns {{mode: string, like: string}}
+ */
+export function fieldsMeant(data) {
+  const mode = String(data?.mode ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_]+/g, '-');
+  const like = String(data?.like ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/^@astryxdesign\/theme-/, '');
+  return {mode, like};
+}
+
+/**
  * The settings of a theme, or a refusal naming the command that makes it.
  * @param {string} cwd
  * @param {string} slug
@@ -634,12 +707,12 @@ export function loadTheme(
     const exists = (/** @type {string} */ n) =>
       Boolean(n) && fs.existsSync(themeFiles(cwd, n).settings);
     // The module or export name (brandTheme, the app copy's brandTheme.ts)
-    // names the theme brand.
-    const moduleName = [camelWords, named]
-      .map(n => n.replace(/-?theme$/, ''))
-      .filter(n => n && slugOk(n));
+    // names the theme brand: one reader for every way a name is typed.
+    const readings = themeNameReadings(slug);
     const fixed =
-      [named, whole, camelWords, ...moduleName].find(exists) ?? named;
+      [named, whole, camelWords, ...readings].find(exists) ??
+      readings[0] ??
+      named;
     const same = fs.existsSync(themeFiles(cwd, fixed).settings) ? fixed : null;
     // A list where one theme goes (t,u or "t;u"): one theme at a time,
     // each that exists named; never a new theme made of the list. A name
@@ -773,6 +846,30 @@ export function loadTheme(
         `themes/${slug} is an empty folder: there is no theme ${slug} yet. new makes it there.`,
         {run: [`${P} new ${slug}`]},
       );
+    // The editor's own app copy left behind when themes/<slug>/ is gone
+    // (a git clean, a wrong rm, a branch switch): `new` makes the theme
+    // again and writes the copy over.
+    const copyName = `${camel(slug)}Theme`;
+    if (
+      !same &&
+      other &&
+      other[1] === `src/themes/${slug}` &&
+      !fs.existsSync(f.dir) &&
+      [`${copyName}.ts`, `${copyName}.doc.mjs`, `${slug}.fonts.css`].some(n => {
+        try {
+          return fs
+            .readFileSync(path.join(other[0], n), 'utf8')
+            .includes(APP_COPY_MARK);
+        } catch {
+          return false;
+        }
+      })
+    )
+      refuse(
+        ERROR_CODES.ERR_UNKNOWN_THEME,
+        `themes/${slug}/, the theme's source folder, is missing; src/themes/${slug}/ is the editor's app copy of it, left behind. \`new ${slug}\` makes the theme again and writes the copy over (its settings are lost: restore themes/${slug}/ from version control to keep them).`,
+        {run: [`${P} new ${slug}`]},
+      );
     if (!same && (other || LIKE.includes(slug)))
       refuse(
         ERROR_CODES.ERR_UNKNOWN_THEME,
@@ -886,14 +983,23 @@ export function loadTheme(
       })),
       ERROR_CODES.ERR_THEME_INVALID,
     );
-  const bad = problem ? badSetting(data) : null;
+  // A damaged mode or base is fixed first: the message names it, so the
+  // suggestions set it (another bad value is named on the next run).
+  // (Not an entry named mode or base inside the settings list.)
+  const fieldBroken =
+    (/^(it has no mode|mode ")/.test(problem ?? '') &&
+      !['both', 'light-only', 'dark-only'].includes(data?.mode)) ||
+    (/^base "/.test(problem ?? '') &&
+      data?.like != null &&
+      !LIKE.includes(data.like));
+  const bad = problem && !fieldBroken ? badSetting(data) : null;
   if (problem && bad && settingsProblem(data, bad.thing) !== problem) {
     // The value it holds, cleaned as typed input is (stray or invisible
     // spaces, other letters, a pasted `corners: pill`), when the dial takes
     // that; else a value it takes, for a dial; a color for a color token.
     const cleaned =
       DIALS[bad.thing] && typeof bad.value === 'string'
-        ? cleanDialValue(bad.thing, bad.value)
+        ? vibrancyMeant(bad.thing, cleanDialValue(bad.thing, bad.value))
         : null;
     const meant =
       cleaned &&
@@ -903,7 +1009,9 @@ export function loadTheme(
         : null;
     const example =
       meant ??
-      (DIALS[bad.thing]
+      // A vibrancy step (more, less) from a value it cannot read is a
+      // guess set may refuse; the undo is the fix there.
+      (DIALS[bad.thing] && bad.thing !== 'vibrancy'
         ? DIALS[bad.thing].values.split('|').find(w => !w.startsWith('<'))
         : isColorToken(bad.thing)
           ? '#1f2937'
@@ -930,12 +1038,7 @@ export function loadTheme(
   }
   // A bad mode or base is fixed by setting it.
   // A value written in other letters (Dark-Only, Neutral) is the one meant.
-  const modeMeant = String(data?.mode ?? '')
-    .trim()
-    .toLowerCase();
-  const likeMeant = String(data?.like ?? '')
-    .trim()
-    .toLowerCase();
+  const {mode: modeMeant, like: likeMeant} = fieldsMeant(data);
   const fieldFix = /^(it has no mode|mode ")/.test(problem ?? '')
     ? `${P} set ${slug} mode ${['both', 'light-only', 'dark-only'].includes(modeMeant) ? modeMeant : 'both'}`
     : /^base "/.test(problem ?? '')
