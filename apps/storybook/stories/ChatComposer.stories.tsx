@@ -525,6 +525,7 @@ function KeyedDialogFixture() {
       <ChatComposer
         value={draft}
         onChange={setDraft}
+        onSubmit={() => {}}
         input={
           <ChatComposerInput
             label="Chat input"
