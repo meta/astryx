@@ -108,6 +108,7 @@ describe('architecture:react-component-runtime INV13 shared touch loader', () =>
     'AlertDialog/index.ts',
     'ButtonGroup/index.ts',
     'ToggleButton/index.ts',
+    'Lightbox/index.ts',
   ])('%s reaches no touch module statically', entry => {
     expect(touchChains(entry)).toEqual([]);
   });
