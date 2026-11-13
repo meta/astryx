@@ -28,7 +28,10 @@ import type {StyleXStyles} from '../theme/types';
 import type {TableContextActions} from './types';
 import {overflowStyles, containerEdgeStyles} from './table.stylex';
 import {useTableContext, mergeXStyle} from './useTableCellStyles';
-import {wrapInTableContextMenu} from './tableContextMenu';
+import {
+  hasTableContextActions,
+  wrapInTableContextMenu,
+} from './tableContextMenu';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
 
@@ -150,9 +153,7 @@ export function TableHeaderCell({
   // Header cells always get the bottom divider (separates header from body).
   // When used standalone (no table context) the cell renders plain, with no
   // density/divider styles.
-  const hasContextMenu =
-    typeof contextMenuActions === 'function' ||
-    (Array.isArray(contextMenuActions) && contextMenuActions.length > 0);
+  const hasContextMenu = hasTableContextActions(contextMenuActions);
   const cellStyles: StyleXStyles[] = [];
   if (ctx) {
     cellStyles.push(
