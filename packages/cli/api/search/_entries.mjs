@@ -97,10 +97,23 @@ let last = null;
  * A table's plain-JSON form and back. Candidates are kept as their place in
  * `all`, maps as their entries in order, so the table reads back the same.
  * @param {any[]} all
- * @returns {{encode: (table: EntryTable) => any, decode: (stored: any) => EntryTable}}
+ * @returns {{encode: (table: EntryTable) => any, decode: (stored: any) => EntryTable, valid: (table: any) => boolean}}
  */
 export function tableCodec(all) {
   return {
+    /**
+     * The shape a read-back table needs: a candidate for every id, and its
+     * fields.
+     * @param {any} table
+     */
+    valid: table =>
+      table != null &&
+      Array.isArray(table.ids) &&
+      Array.isArray(table.candidate) &&
+      table.candidate.length === table.ids.length &&
+      table.candidate.every((/** @type {any} */ c) => c != null) &&
+      table.fields != null &&
+      typeof table.fields === 'object',
     encode(table) {
       const place = new Map(all.map((c, k) => [c, k]));
       const t = /** @type {any} */ (table);

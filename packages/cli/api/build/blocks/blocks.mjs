@@ -45,7 +45,7 @@ import {STOPWORDS} from '../../search/_query.mjs';
 /**
  * Keeps a value derived from the catalog between runs (build's adapter does
  * it beside the kept search catalog), or works it out.
- * @typedef {<T>(key: unknown[], compute: () => T, codec: {encode: (value: T) => any, decode: (stored: any) => T}) => T} KeepCatalog
+ * @typedef {<T>(key: unknown[], compute: () => T, codec: {encode: (value: T) => any, decode: (stored: any) => T, valid?: (value: any) => boolean}) => T} KeepCatalog
  */
 
 /**
@@ -410,6 +410,19 @@ function computeCatalog(key, catalog, components, weights) {
  * projection as its numbers.
  */
 const CATALOG_CODEC = {
+  /**
+   * The shape a read-back catalog needs: its blocks, each with its vectors.
+   * @param {any} read
+   */
+  valid: read =>
+    read != null &&
+    read.blocks instanceof Map &&
+    [...read.blocks.values()].every(
+      (/** @type {any} */ b) =>
+        b != null &&
+        b.vector instanceof Map &&
+        b.projected instanceof Float64Array,
+    ),
   /** @param {ReturnType<typeof computeCatalog>} read */
   encode: read => ({
     key: read.key,

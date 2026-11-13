@@ -138,6 +138,18 @@ async function gatherDomains(options) {
  */
 const GATHER_CODEC = {
   /**
+   * The shape a read-back gather needs: its candidates and components.
+   * @param {any} gathered
+   */
+  valid: gathered =>
+    gathered != null &&
+    Array.isArray(gathered.all) &&
+    Array.isArray(gathered.components) &&
+    gathered.all.every(
+      (/** @type {any} */ c) => c != null && typeof c === 'object',
+    ) &&
+    gathered.components.every((/** @type {any} */ c) => c != null),
+  /**
    * @param {any} gathered
    * @returns {any}
    */
