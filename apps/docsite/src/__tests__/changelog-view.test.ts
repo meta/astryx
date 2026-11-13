@@ -1,14 +1,44 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Regression tests for the changelog package selection and empty state.
+ * @file Regression tests for the changelog frame (package tabs, empty state)
+ *   and one page of release notes with its page navigation.
  *
  * Run: pnpm -F @astryxdesign/docsite test ChangelogView
  */
 
 import {createElement, type ReactNode} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
-import {describe, expect, it, vi} from 'vitest';
+import {beforeEach, describe, expect, it, vi} from 'vitest';
+
+const navigation = vi.hoisted(() => ({
+  pathname: '/changelog',
+  replace: vi.fn(),
+}));
+
+vi.mock('next/navigation', () => ({
+  usePathname: () => navigation.pathname,
+  useRouter: () => ({replace: navigation.replace}),
+}));
+
+vi.mock('next/link', () => ({
+  default: ({
+    children,
+    href,
+    replace,
+    scroll,
+  }: {
+    children: ReactNode;
+    href: string;
+    replace?: boolean;
+    scroll?: boolean;
+  }) =>
+    createElement(
+      'a',
+      {href, 'data-replace': String(replace), 'data-scroll': String(scroll)},
+      children,
+    ),
+}));
 
 vi.mock('@stylexjs/stylex', () => ({
   create: <T>(styles: T) => styles,
@@ -40,12 +70,42 @@ vi.mock('@astryxdesign/core/Section', () => ({
 vi.mock('@astryxdesign/core/TabList', () => ({
   TabList: ({children, value}: {children: ReactNode; value: string}) =>
     createElement('div', {'data-selected': value}, children),
-  Tab: ({label}: {label: string}) => createElement('span', null, label),
+  Tab: ({
+    label,
+    href,
+    as: LinkComponent,
+  }: {
+    label: string;
+    href: string;
+    as: (props: {href: string; to: string; children: ReactNode}) => ReactNode;
+  }) => createElement(LinkComponent, {href, to: href, children: label}),
 }));
 
 vi.mock('@astryxdesign/core/Carousel', () => ({
   Carousel: ({children}: {children: ReactNode}) =>
     createElement('div', null, children),
+}));
+
+const pagination = vi.hoisted(() => ({
+  onChange: (_page: number) => {},
+}));
+
+vi.mock('@astryxdesign/core/Pagination', () => ({
+  Pagination: ({
+    page,
+    totalPages,
+    onChange,
+  }: {
+    page: number;
+    totalPages: number;
+    onChange: (page: number) => void;
+  }) => {
+    pagination.onChange = onChange;
+    return createElement('nav', {
+      'data-page': page,
+      'data-total-pages': totalPages,
+    });
+  },
 }));
 
 vi.mock('@astryxdesign/core/theme/tokens.stylex', () => ({
@@ -55,109 +115,105 @@ vi.mock('@astryxdesign/core/theme/tokens.stylex', () => ({
   },
 }));
 
-import {ChangelogView} from '../components/ChangelogView';
+import {ChangelogFrame, ChangelogNotes} from '../components/ChangelogView';
+import {changelogPackages} from '../lib/changelogPages';
 
-function renderChangelog(
-  changelogs: Array<{pkg: string; content: string}>,
-  selectedPackage?: string,
-): string {
+const packages = changelogPackages([
+  {pkg: '@astryxdesign/cli', content: '# CLI\n\n# 0.0.1\n\nCLI notes'},
+  {pkg: '@astryxdesign/core', content: '# Core\n\n# 0.0.1\n\nCore notes'},
+]);
+
+function renderFrame(pathname: string, shown = packages): string {
+  navigation.pathname = pathname;
   return renderToStaticMarkup(
-    createElement(ChangelogView, {
-      changelogs,
-      componentNames: [],
-      selectedPackage,
+    createElement(ChangelogFrame, {
+      packages: shown,
+      defaultSlug: 'core',
+      children: createElement('article', null, 'Notes of the page'),
     }),
   );
 }
 
-describe('ChangelogView', () => {
-  it('defaults to the core package when it is available', () => {
-    const html = renderChangelog([
-      {pkg: '@astryxdesign/cli', content: '# CLI\n\nCLI release notes'},
-      {pkg: '@astryxdesign/core', content: '# Core\n\nCore release notes'},
-    ]);
+beforeEach(() => {
+  navigation.replace.mockClear();
+});
+
+describe('ChangelogFrame', () => {
+  it('selects the default package on /changelog', () => {
+    const html = renderFrame('/changelog');
 
     expect(html).toContain('data-selected="@astryxdesign/core"');
-    expect(html).toContain('Core release notes');
-    expect(html).not.toContain('CLI release notes');
+    expect(html).toContain('Notes of the page');
   });
 
-  it('orders core first, CLI second, and preserves the remaining order', () => {
-    const html = renderChangelog([
-      {
-        pkg: '@astryxdesign/richtext',
-        content: '# Rich text\n\nRich text release notes',
-      },
-      {pkg: '@astryxdesign/cli', content: '# CLI\n\nCLI release notes'},
-      {pkg: '@astryxdesign/core', content: '# Core\n\nCore release notes'},
-      {
-        pkg: '@astryxdesign/charts',
-        content: '# Charts\n\nCharts release notes',
-      },
-    ]);
+  it('selects the package that the URL names, on any of its pages', () => {
+    expect(renderFrame('/changelog/cli')).toContain(
+      'data-selected="@astryxdesign/cli"',
+    );
+    expect(renderFrame('/changelog/core/2')).toContain(
+      'data-selected="@astryxdesign/core"',
+    );
+  });
+
+  it('lists the packages in tab order', () => {
+    const html = renderFrame('/changelog');
 
     expect(html.indexOf('@astryxdesign/core')).toBeLessThan(
       html.indexOf('@astryxdesign/cli'),
     );
-    expect(html.indexOf('@astryxdesign/cli')).toBeLessThan(
-      html.indexOf('@astryxdesign/richtext'),
+  });
+
+  it("makes each tab a link to the package's newest releases that replaces the history entry and keeps the scroll position", () => {
+    const html = renderFrame('/changelog/cli');
+
+    expect(html).toContain(
+      '<a href="/changelog" data-replace="true" data-scroll="false">@astryxdesign/core</a>',
     );
-    expect(html.indexOf('@astryxdesign/richtext')).toBeLessThan(
-      html.indexOf('@astryxdesign/charts'),
+    expect(html).toContain(
+      '<a href="/changelog/cli" data-replace="true" data-scroll="false">@astryxdesign/cli</a>',
     );
   });
 
-  it('uses a valid package from the URL as the initial selection', () => {
-    const html = renderChangelog(
-      [
-        {pkg: '@astryxdesign/cli', content: '# CLI\n\nCLI release notes'},
-        {pkg: '@astryxdesign/core', content: '# Core\n\nCore release notes'},
-      ],
-      '@astryxdesign/cli',
+  it('shows an empty state, and no release notes, when no package has a changelog', () => {
+    const html = renderFrame('/changelog', []);
+
+    expect(html).toContain('Changelogs could not be loaded.');
+    expect(html).not.toContain('Notes of the page');
+  });
+});
+
+describe('ChangelogNotes', () => {
+  function renderNotes(page: number, pageCount: number): string {
+    return renderToStaticMarkup(
+      createElement(ChangelogNotes, {
+        markdown: '# 0.0.9\n\nNotes',
+        page,
+        pageCount,
+        slug: 'cli',
+        defaultSlug: 'core',
+      }),
     );
+  }
 
-    expect(html).toContain('data-selected="@astryxdesign/cli"');
-    expect(html).toContain('CLI release notes');
-    expect(html).not.toContain('Core release notes');
+  it('renders the release notes with the page navigation below', () => {
+    const html = renderNotes(2, 3);
+
+    expect(html).toContain('# 0.0.9');
+    expect(html.indexOf('</article>')).toBeLessThan(html.indexOf('<nav'));
+    expect(html).toContain('data-page="2"');
+    expect(html).toContain('data-total-pages="3"');
   });
 
-  it('ignores a hidden theme package from the URL', () => {
-    const html = renderChangelog(
-      [
-        {pkg: '@astryxdesign/core', content: '# Core\n\nCore release notes'},
-        {
-          pkg: '@astryxdesign/theme-neutral',
-          content: '# Neutral\n\nNeutral release notes',
-        },
-      ],
-      '@astryxdesign/theme-neutral',
-    );
-
-    expect(html).toContain('data-selected="@astryxdesign/core"');
-    expect(html).not.toContain('Neutral release notes');
+  it('has no page navigation when the releases fit on one page', () => {
+    expect(renderNotes(1, 1)).not.toContain('<nav');
   });
 
-  it('hides theme packages from the primary changelog tabs', () => {
-    const html = renderChangelog([
-      {pkg: '@astryxdesign/core', content: '# Core\n\nCore release notes'},
-      {
-        pkg: '@astryxdesign/theme-neutral',
-        content: '# Neutral\n\nNeutral release notes',
-      },
-    ]);
+  it("opens the chosen page of the package's releases in place of the current history entry", () => {
+    renderNotes(2, 3);
+    pagination.onChange(3);
+    expect(navigation.replace).toHaveBeenLastCalledWith('/changelog/cli/3');
 
-    expect(html).toContain('@astryxdesign/core');
-    expect(html).not.toContain('@astryxdesign/theme-neutral');
-  });
-
-  it('shows an empty state when a package has no release entries', () => {
-    const html = renderChangelog([
-      {
-        pkg: '@astryxdesign/richtext',
-        content: '# @astryxdesign/richtext\n\n# 0.1.9\n\n---\n\n# 0.1.8\n',
-      },
-    ]);
-
-    expect(html).toContain('No changes in this release.');
+    pagination.onChange(1);
+    expect(navigation.replace).toHaveBeenLastCalledWith('/changelog/cli');
   });
 });

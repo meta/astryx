@@ -130,6 +130,20 @@ const nextConfig = {
         destination,
         permanent: false,
       })),
+      // Changelog links from before each package had its own page name the
+      // package in the query string. A theme package has no changelog page.
+      {
+        source: '/changelog',
+        has: [
+          {
+            type: 'query',
+            key: 'package',
+            value: '@astryxdesign/(?<changelogPackage>(?!theme-)[a-z0-9-]+)',
+          },
+        ],
+        destination: '/changelog/:changelogPackage',
+        permanent: false,
+      },
     ];
   },
   // The playground preview evaluates user-authored code, so it is the one
