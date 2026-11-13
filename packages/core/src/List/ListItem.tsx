@@ -483,6 +483,12 @@ export function ListItem({
   const rowLabel = restProps['aria-label'];
   const rowLabelledBy = restProps['aria-labelledby'];
   const rowAlign = hasHandle ? (align ?? 'center') : undefined;
+  // A handle cannot hang after a list marker, which it would cover, or in a
+  // row that reaches the container's padding edge, where nothing keeps it.
+  const handleStaysInRow =
+    (ctx?.listStyle ?? 'none') !== 'none' ||
+    ctx?.edge === 'outset' ||
+    ctx?.edge === 'bleed';
   const Handle = reorder?.session.Handle;
   const reorderHandle = useMemo(
     () =>
@@ -494,11 +500,13 @@ export function ListItem({
           rowLabel={rowLabel}
           rowLabelledBy={rowLabelledBy}
           rowAlign={rowAlign}
+          isInRow={handleStaysInRow}
         />
       ) : null,
     [
       Handle,
       hasHandle,
+      handleStaysInRow,
       isDisabled,
       itemKey,
       label,

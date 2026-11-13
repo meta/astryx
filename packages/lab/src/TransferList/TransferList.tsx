@@ -156,12 +156,25 @@ export interface TransferListProps<T extends string = string> extends Omit<
 }
 
 const styles = stylex.create({
-  // Core List's reorder handle is a small control, 28 px for every pointer,
-  // at the start of its row, before the row's gap. A finger's 44 px target is
-  // its invisible hit layer. A row without one starts its label where the
-  // other rows' labels start, so every label sits in one column.
+  // Core List's reorder handle starts its row. Where it shows only on hover
+  // or focus, it hangs 30 px before the row's label. The panel clips. So in
+  // a reorderable selection, the panel's heading and rows start 20 px
+  // further in, and the labels stay under the heading. Under a coarse
+  // pointer the handle always shows in its row: 28 px and the row's 8 px
+  // gap. A row without a handle then starts its label past it. So every
+  // label sits in one column. SYNC: core List/ListReorderHandle.tsx
+  // HANDLE_SIZE and REORDER_HANDLE_HANG.
+  orderingInset: {
+    paddingInlineStart: {
+      default: `calc(${spacingVars['--spacing-3']} + 20px)`,
+      '@media (pointer: coarse)': spacingVars['--spacing-3'],
+    },
+  },
   clearsHandle: {
-    paddingInlineStart: `calc(${spacingVars['--spacing-3']} + 28px + ${spacingVars['--spacing-2']})`,
+    paddingInlineStart: {
+      default: `calc(${spacingVars['--spacing-3']} + 20px)`,
+      '@media (pointer: coarse)': `calc(${spacingVars['--spacing-3']} + 28px + ${spacingVars['--spacing-2']})`,
+    },
   },
   root: {
     display: 'flex',
@@ -608,6 +621,7 @@ export function TransferList<T extends string = string>({
   // Reordering is off while a search filters the panel. A hidden row could
   // otherwise move past the shown rows.
   const isOrdering = reorderableProp != null && normalizedQuery === '';
+  const keepsHandleRoom = reorderableProp != null;
   // The owner's object decides which values move and takes each move.
   const owner =
     reorderableProp == null ? undefined : reorderableOptions(reorderableProp);
@@ -755,7 +769,12 @@ export function TransferList<T extends string = string>({
             styles.item,
             // A row that keeps its place has no handle: its label keeps the
             // movable rows' column, clear of where their handles sit.
-            isOrdering && !canMove(option.value) && styles.clearsHandle,
+            // While a search pauses reordering, every row keeps that column,
+            // so nothing moves as the query changes.
+            keepsHandleRoom &&
+              (isOrdering && canMove(option.value)
+                ? styles.orderingInset
+                : styles.clearsHandle),
             isDisabled && styles.disabledItem,
           ]}
           data-transfer-list-row={option.value}
@@ -845,7 +864,11 @@ export function TransferList<T extends string = string>({
             themeProps('transfer-list-panel', {side: 'selected'}),
             stylex.props(focusOutlineStyles.focusVisible, styles.panel),
           )}>
-          <div {...stylex.props(styles.panelHeader)}>
+          <div
+            {...stylex.props(
+              styles.panelHeader,
+              keepsHandleRoom && styles.orderingInset,
+            )}>
             <Text id={selectedHeadingId} type="label" color="secondary">
               {selectedLabel}
             </Text>

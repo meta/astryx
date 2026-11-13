@@ -57,7 +57,7 @@ export interface ListReorderOptions {
   readonly startedBy?: ListReorderOptions;
 }
 
-/** The handle a reorderable row ends with (List/ListReorderHandle.tsx). */
+/** The handle a reorderable row starts with (List/ListReorderHandle.tsx). */
 export interface ListReorderHandleProps {
   /** The row's label: its text names the handle. */
   readonly label: ReactNode;
@@ -83,6 +83,12 @@ export interface ListReorderHandleProps {
    * child, before its label, so no slot aligns it.
    */
   readonly rowAlign?: ItemAlign;
+  /**
+   * The handle takes its place in the row instead of hanging before the
+   * text: after a list marker, and in a row that reaches its container's
+   * padding edge (List `edge` `'outset'` or `'bleed'`).
+   */
+  readonly isInRow?: boolean;
 }
 
 /**
@@ -115,7 +121,7 @@ export interface ListReorderSession {
    * handles' instructions and disposes of the session when it goes.
    */
   readonly Host: ComponentType<{reorder: ListReorderContextValue}>;
-  /** The handle each reorderable row ends with. */
+  /** The handle each reorderable row starts with. */
   readonly Handle: ComponentType<ListReorderHandleProps>;
   /** Names a row without a handle for the announcements; renders nothing. */
   readonly RowName: ComponentType<ListReorderRowNameProps>;

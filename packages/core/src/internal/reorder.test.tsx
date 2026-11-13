@@ -121,7 +121,7 @@ describe("Core's internal reorder entry", () => {
     expect(screen.queryByRole('button')).toBeNull();
   });
 
-  it('loads no reorder code: the entry and the scope import the context and types only', () => {
+  it("loads no reorder code: the entry and the scope import the context, the private attribute's owner and types only", () => {
     for (const file of ['./reorder.ts', '../List/ListReorderScope.tsx']) {
       const source = readFileSync(new URL(file, import.meta.url), 'utf8');
       const imports = Array.from(
@@ -136,7 +136,8 @@ describe("Core's internal reorder entry", () => {
             isType ||
               from.endsWith('/listReorderContext') ||
               from === './listReorderContext' ||
-              from.endsWith('/ListReorderScope'),
+              from.endsWith('/ListReorderScope') ||
+              from.endsWith('/privateAttributes/listReorder.stylex'),
             `${file} imports ${from}`,
           ).toBe(true);
         }
