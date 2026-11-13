@@ -46,6 +46,7 @@ import {
   WRAPPED_PARTS,
   CARD_LIKE,
 } from './_tables.mjs';
+import {cleanDialValue} from './_normal.mjs';
 import {
   alphaOf,
   colorProblem,
@@ -871,20 +872,7 @@ export function loadTheme(
     // that; else a value it takes, for a dial; a color for a color token.
     const cleaned =
       DIALS[bad.thing] && typeof bad.value === 'string'
-        ? bad.value
-            .replace(/[\u200B-\u200D\u2060\uFEFF]/g, '')
-            .replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, ' ')
-            .trim()
-            .replace(/;+$/, '')
-            .replace(
-              new RegExp(
-                `^${bad.thing.replace(/[-]/g, '\\-')}\\s*[:=]\\s*`,
-                'i',
-              ),
-              '',
-            )
-            .trim()
-            .toLowerCase()
+        ? cleanDialValue(bad.thing, bad.value)
         : null;
     const meant =
       cleaned &&

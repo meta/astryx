@@ -74,6 +74,11 @@ describe('N64/N59: quotes only delimit', () => {
     ['`Inter`', '"Inter"'],
     ['\uFF02Inter\uFF02', '"Inter"'],
     ['\u2018Inter\u2019', "'Inter'"],
+    // Curly quotes pair by kind, in any shape; one left unpaired is straight.
+    ['\u201EInter\u201C', '"Inter"'],
+    ['\u201AInter\u2018', "'Inter'"],
+    ['\u201CInter"', '"Inter"'],
+    ['Macy\u2019s, serif', "Macy's, serif"],
     ['"a\u00A0b" x\u00A0y', '"a\u00A0b" x y'],
   ])('%j reads as %j', (typed, want) => {
     expect(normalValueText(typed)).toBe(want);
@@ -125,6 +130,16 @@ describe('N66/N67/N62/N69: entry repair', () => {
     [
       ['accent', '#e11d48; text-size: 18'],
       ['accent', '#e11d48'],
+    ],
+    // A `;` inside a quoted string is the string's, never a second
+    // declaration.
+    [
+      ['content', '"Tip; note: x"'],
+      ['content', '"Tip; note: x"'],
+    ],
+    [
+      ['content', "'a; b: c'"],
+      ['content', "'a; b: c'"],
     ],
     [
       ['--color\u2013accent', 'red'],
@@ -293,7 +308,14 @@ describe('N65: a saved value with quotes', () => {
 });
 
 describe('hunt64 (1): a saved dial value is offered cleaned', () => {
-  it.each(['pill\u00A0', ' pill', 'Pill', 'corners: pill'])(
+  it.each([
+    'pill\u00A0',
+    ' pill',
+    'Pill',
+    'corners: pill',
+    '\u201Cpill\u201D',
+    '"pill"',
+  ])(
     '%j',
     async raw => {
       await themeEditSet('b', 'corners', 'pill', {cwd});
@@ -347,6 +369,27 @@ describe('hunt64 (3): a mistyped theme name keeps the command', () => {
       );
       expect(names(err)[0]).toMatch(want);
       expect(names(err)).not.toContainEqual(expect.stringMatching(/ show b$/));
+    },
+    240_000,
+  );
+});
+
+describe('#11527: quotes and declarations, set end to end', () => {
+  it('a content string holding `; name:` is saved as typed', async () => {
+    await themeEditSet('b', 'content', '"Tip; note: x"', {cwd, on: 'badge'});
+    const s = JSON.parse(fs.readFileSync(file(), 'utf8')).settings.find(
+      (/** @type {any} */ x) => x.thing === 'content' && x.on === 'badge',
+    );
+    expect(s.value).toBe('"Tip; note: x"');
+    await themeEditUndo('b', {cwd, thing: 'content', on: 'badge'});
+  }, 240_000);
+
+  it.each(['\u201EInter\u201C', '\u201AInter\u2018', '\u201CInter"'])(
+    'font %j saves no curly quote in the family',
+    async value => {
+      await themeEditSet('b', '--font-family-body', value, {cwd});
+      expect(saved('--font-family-body')).not.toMatch(/[\u2018-\u201F]/);
+      expect(saved('--font-family-body')).toContain('Inter');
     },
     240_000,
   );
