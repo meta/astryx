@@ -46,6 +46,7 @@ import {
   WRAPPED_PARTS,
   CARD_LIKE,
 } from './_tables.mjs';
+import {cleanDialValue} from './_normal.mjs';
 import {
   alphaOf,
   colorProblem,
@@ -204,13 +205,23 @@ export const FOLDER_JUNK = new Set(['.DS_Store', '.gitkeep', 'Thumbs.db']);
  * files (what `git rm -r` or a branch switch leaves). A path that is not a
  * folder, or one that does not read, is not empty.
  * @param {string} dir
+ * @returns {boolean}
  */
 export function folderIsEmpty(dir) {
   if (!fs.existsSync(dir)) return true;
   try {
+    // A folder holding only empty folders (an empty tokens/) holds nothing
+    // either; a link is never followed.
     return (
       fs.lstatSync(dir).isDirectory() &&
-      fs.readdirSync(dir).every(n => FOLDER_JUNK.has(n))
+      fs
+        .readdirSync(dir)
+        .every(
+          n =>
+            FOLDER_JUNK.has(n) ||
+            (fs.lstatSync(path.join(dir, n)).isDirectory() &&
+              folderIsEmpty(path.join(dir, n))),
+        )
     );
   } catch {
     return false;
@@ -856,12 +867,26 @@ export function loadTheme(
     );
   const bad = problem ? badSetting(data) : null;
   if (problem && bad && settingsProblem(data, bad.thing) !== problem) {
-    // A value it takes, for a dial; a color for a color token.
-    const example = DIALS[bad.thing]
-      ? DIALS[bad.thing].values.split('|').find(w => !w.startsWith('<'))
-      : isColorToken(bad.thing)
-        ? '#1f2937'
+    // The value it holds, cleaned as typed input is (stray or invisible
+    // spaces, other letters, a pasted `corners: pill`), when the dial takes
+    // that; else a value it takes, for a dial; a color for a color token.
+    const cleaned =
+      DIALS[bad.thing] && typeof bad.value === 'string'
+        ? cleanDialValue(bad.thing, bad.value)
         : null;
+    const meant =
+      cleaned &&
+      cleaned !== bad.value &&
+      !valueProblem({...bad, value: cleaned})
+        ? cleaned
+        : null;
+    const example =
+      meant ??
+      (DIALS[bad.thing]
+        ? DIALS[bad.thing].values.split('|').find(w => !w.startsWith('<'))
+        : isColorToken(bad.thing)
+          ? '#1f2937'
+          : null);
     throw new AstryxError(
       `themes/${slug}/${slug}.settings.json: ${problem}, a value the editor no longer accepts. Remove or change that setting; nothing else needs to change. Nothing was changed.`,
       [
@@ -870,7 +895,9 @@ export function loadTheme(
           ? [
               {
                 name: `${P} set ${slug} ${undoArgs(bad).replace(bad.thing, `${bad.thing} ${quoteCommandArgument(example)}`)}`,
-                reason: 'or give it a value it takes',
+                reason: meant
+                  ? 'or set the value it holds, cleaned'
+                  : 'or give it a value it takes',
               },
             ]
           : []),
@@ -2110,28 +2137,30 @@ function keepShades(pal, kept) {
  * scaled above it.
  * @param {Array<[string, string]>} sizes token name and the theme's value
  * @param {number} f the spacing rung's factor
+ * @param {Record<string, number>} [kept] exact sizes the theme keeps, in px,
+ *   which the others stay in order around
  * @returns {Array<[string, string]>} the tokens it writes, in px
  */
-export function controlSizes(sizes, f) {
+export function controlSizes(sizes, f, kept = {}) {
   const px = sizes
     .filter(([, v]) => /^[\d.]+px$/.test(String(v).trim()))
     .map(([k, v]) => /** @type {[string, number]} */ ([k, parseFloat(v)]))
     .sort((a, b) => a[1] - b[1]);
-  /** @type {Array<[string, string]>} */
-  const out = [];
-  let prev = null;
-  let prevOwn = null;
-  for (const [k, v] of px) {
-    let n = Math.max(Math.min(24, v), Math.round(v * f));
-    // Only a size that would meet (or pass) the one below moves: the plain
-    // scaled value otherwise.
-    if (prev != null && prevOwn != null && n <= prev)
-      n = prev + Math.max(1, Math.round((v - prevOwn) * f));
-    out.push([k, `${n}px`]);
-    prev = n;
-    prevOwn = v;
-  }
-  return out;
+  /** @type {number[]} */
+  const n = px.map(([k, v]) =>
+    k in kept ? kept[k] : Math.max(Math.min(24, v), Math.round(v * f)),
+  );
+  /** The step between two sizes, scaled. @param {number} i */
+  const step = i => Math.max(1, Math.round((px[i][1] - px[i - 1][1]) * f));
+  // Only a size that would meet (or pass) the one below moves, up; then one
+  // that would meet a kept size above it moves down (a kept size stays).
+  for (let i = 1; i < n.length; i++)
+    if (!(px[i][0] in kept) && n[i] <= n[i - 1]) n[i] = n[i - 1] + step(i);
+  for (let i = n.length - 2; i >= 0; i--)
+    if (!(px[i][0] in kept) && n[i] >= n[i + 1]) n[i] = n[i + 1] - step(i + 1);
+  return px
+    .map(([k], i) => /** @type {[string, string]} */ ([k, `${n[i]}px`]))
+    .filter(([k]) => !(k in kept));
 }
 
 /**
@@ -2177,12 +2206,16 @@ export function compileTheme(ctx, data, base) {
       if (!mode || mode === 'dark') t.dark = v[1];
       return;
     }
-    if (!MODAL.has(ctx.C.typeOf(name)) || modeOnly || !mode) {
+    // A color set in a one-mode theme fills its mode's half only; the other
+    // half keeps what it had (the base theme's), for the regions Core draws
+    // in the other mode.
+    const half = mode ?? modeOnly;
+    if (!MODAL.has(ctx.C.typeOf(name)) || !half) {
       t.light = v;
       t.dark = v;
       return;
     }
-    t[/** @type {'light' | 'dark'} */ (mode)] = v;
+    t[/** @type {'light' | 'dark'} */ (half)] = v;
   };
   /** @param {Setting} s @param {string} target @returns {Record<string, any>} */
   const block = (s, target) => {
@@ -2471,9 +2504,11 @@ export function compileTheme(ctx, data, base) {
       return n && n.unit === '' && n.value === 0 ? '0px' : v;
     };
     for (const {target, s, list} of padQueue.values()) {
-      // The own source's padding on the same rule wins over the editor's:
-      // nothing is written there (the result says so).
-      if (ownPads(target, s)) continue;
+      // The own source's padding on the same rule wins over the editor's on
+      // the sides it sets (the result says so); the editor's other sides
+      // still apply.
+      const own = ownBox(target, s);
+      if (own.ltr.size === 4 && own.rtl.size === 4) continue;
       const prefix = /** @type {string} */ (padVars(target));
       const owner = prefix.slice('--astryx-'.length, -'-padding'.length);
       const scoped = target !== owner || s.when != null || s.state != null;
@@ -2517,6 +2552,10 @@ export function compileTheme(ctx, data, base) {
           }
         }
       }
+      // The sides the own source pads in a direction are its own there.
+      for (const dir of /** @type {const} */ (['ltr', 'rtl']))
+        for (const x of Object.keys(side[dir]))
+          if (own[dir].has(boxSide(x, dir))) delete side[dir][x];
       /** @type {Record<string, string>} */
       let plain = {};
       /** @type {Record<string, string>} */
@@ -2584,6 +2623,53 @@ export function compileTheme(ctx, data, base) {
         if (Object.keys(rule).length) {
           const [b, key] = dirBlock(s, target, dir);
           b[key] = {...(b[key] ?? {}), ...rule};
+        }
+    }
+    // A variant the own source pads: the sides it sets are left without a
+    // side variable there, so the variant's own padding (which Core writes
+    // as the whole padding) wins over any side the plain rule writes.
+    for (const owner of new Set(
+      [...padQueue.values()]
+        .filter(({target, s}) => !s.when && !s.state && padVars(target))
+        .map(({target}) =>
+          /** @type {string} */ (padVars(target)).slice(
+            '--astryx-'.length,
+            -'-padding'.length,
+          ),
+        ),
+    )) {
+      const values = ctx.C.variantValues(owner);
+      for (const [prop, vals] of Object.entries(values ?? {}))
+        for (const v of /** @type {string[]} */ (vals ?? [])) {
+          const when = `${prop}:${v}`;
+          const own = ownBox(owner, /** @type {any} */ ({when}));
+          if (!own.ltr.size && !own.rtl.size) continue;
+          const variant = /** @type {any} */ ({when});
+          const logical = [
+            'block-start',
+            'block-end',
+            'inline-start',
+            'inline-end',
+          ];
+          const at = (/** @type {'ltr' | 'rtl'} */ dir) =>
+            logical.filter(x => own[dir].has(boxSide(x, dir)));
+          const [l, r] = [at('ltr'), at('rtl')];
+          const b = block(variant, owner);
+          for (const x of l.filter(x => r.includes(x)))
+            b[`--astryx-${owner}-padding-${x}`] ??= 'initial';
+          for (const [dir, xs] of /** @type {const} */ ([
+            [':dir(ltr)', l.filter(x => !r.includes(x))],
+            [':dir(rtl)', r.filter(x => !l.includes(x))],
+          ]))
+            if (xs.length) {
+              const [db, key] = dirBlock(variant, owner, dir);
+              db[key] = {
+                ...(db[key] ?? {}),
+                ...Object.fromEntries(
+                  xs.map(x => [`--astryx-${owner}-padding-${x}`, 'initial']),
+                ),
+              };
+            }
         }
     }
     // A plain part inside a narrower one: each side the narrower selector
@@ -2668,25 +2754,66 @@ export function compileTheme(ctx, data, base) {
     return out;
   };
   /**
-   * Whether the theme's own source sets a padding on a part's rule for a
-   * scope (its plain rule, a variant, a state).
-   * @param {string} target @param {Setting} s
+   * The box side a padding side names in a direction: a physical side as it
+   * is, a logical one as the direction reads it (inline-start is the left in
+   * left-to-right text, the right in right-to-left).
+   * @param {string} x top, right, bottom, left, or a logical side
+   * @param {'ltr' | 'rtl'} dir
    */
-  const ownPads = (target, s) => {
-    try {
-      return [
-        ...ownPartTokens(
-          ctx.project.cwd,
-          data.name,
-          target,
-          s.when ?? 'base',
-          s.state ? `:${s.state}` : null,
-        ).keys(),
-      ].some(k => /^padding(-|$)/.test(k));
-    } catch {
-      return false;
+  const boxSide = (x, dir) =>
+    ({
+      'block-start': 'top',
+      'block-end': 'bottom',
+      'inline-start': dir === 'ltr' ? 'left' : 'right',
+      'inline-end': dir === 'ltr' ? 'right' : 'left',
+    })[x] ?? x;
+  /**
+   * The padding sides a padding property names, as it names them (physical
+   * stays physical, logical stays logical), with each one's value.
+   * @param {string} prop kebab-case
+   * @param {string} value
+   * @returns {Record<string, string>}
+   */
+  const paddingSides = (prop, value) => {
+    const w = splitTop(String(value).trim(), ' ').map(y => y.trim());
+    if (prop === 'padding') {
+      const [top, right = top, bottom = top, left = right] = w;
+      return {top, right, bottom, left};
     }
+    if (prop === 'padding-block')
+      return {'block-start': w[0], 'block-end': w[1] ?? w[0]};
+    if (prop === 'padding-inline')
+      return {'inline-start': w[0], 'inline-end': w[1] ?? w[0]};
+    const side = prop.slice('padding-'.length);
+    return /^(top|right|bottom|left|(block|inline)-(start|end))$/.test(side)
+      ? {[side]: w[0]}
+      : {};
   };
+  /**
+   * The box sides the theme's own source pads on a part's rule for a scope
+   * (its plain rule, a variant, a state), in each direction.
+   * @param {string} target @param {Setting} s
+   * @returns {Record<'ltr' | 'rtl', Set<string>>}
+   */
+  const ownBox = (target, s) => {
+    const out = {ltr: new Set(), rtl: new Set()};
+    try {
+      for (const k of ownPartTokens(
+        ctx.project.cwd,
+        data.name,
+        target,
+        s.when ?? 'base',
+        s.state ? `:${s.state}` : null,
+      ).keys())
+        for (const x of Object.keys(paddingSides(k, '0')))
+          for (const dir of /** @type {const} */ (['ltr', 'rtl']))
+            out[dir].add(boxSide(x, dir));
+    } catch {
+      // No own source.
+    }
+    return out;
+  };
+
   /**
    * The selector a narrower padding scope is written with (a clickable
    * card's class, a variant's attribute, a state's pseudo-class), or null
@@ -2770,7 +2897,13 @@ export function compileTheme(ctx, data, base) {
   /** @param {Setting} s @param {string} target @param {string} prop @param {string} v */
   const putComp = (s, target, prop, v) => {
     const b = block(s, target);
-    if (s.mode && !modeOnly) {
+    // A color set in a one-mode theme fills its mode's half only (as a
+    // setting for that mode does), so a region Core draws in the other mode
+    // reads the other half.
+    const mode =
+      s.mode ??
+      (modeOnly && parseColor(String(v).trim()) ? modeOnly : undefined);
+    if (mode) {
       const prev = b[prop];
       // The other mode keeps exactly what it had: the value set for it, the
       // part's own, else what the property shows unset (light-dark() takes
@@ -2791,7 +2924,7 @@ export function compileTheme(ctx, data, base) {
         return halves.length === 2 ? halves[side - 1].trim() : x;
       };
       b[prop] =
-        s.mode === 'light'
+        mode === 'light'
           ? `light-dark(${v}, ${prev ? split(prev, 2) : other})`
           : `light-dark(${prev ? split(prev, 1) : other}, ${v})`;
     } else b[prop] = v;
@@ -3011,11 +3144,26 @@ export function compileTheme(ctx, data, base) {
           if (/^--spacing-/.test(k) && /rem$/.test(v))
             put(k, `${Number((parseFloat(v) * f).toFixed(3))}rem`);
         }
+        // An exact size the theme keeps (it wins over the dial) is a fixed
+        // point the others stay in order around.
+        /** @type {Record<string, number>} */
+        const kept = {};
+        for (const x of data.settings)
+          if (
+            x.source === 'token' &&
+            /^--size-element-/.test(x.thing) &&
+            !x.on &&
+            !x.when &&
+            !x.state &&
+            /^[\d.]+px$/.test(String(x.value).trim())
+          )
+            kept[x.thing] = parseFloat(String(x.value));
         for (const [k, nv] of controlSizes(
           Object.keys(/** @type {Record<string, string>} */ (TOKENS))
             .filter(k => /^--size-element-/.test(k))
             .map(k => [k, base.light[k] ?? TOKENS[k]]),
           f,
+          parts.length ? {} : kept,
         ))
           put(k, nv);
       }
@@ -3029,6 +3177,33 @@ export function compileTheme(ctx, data, base) {
         if (padVars(t) && /^padding(-|$)/.test(kebab(s.thing))) {
           queuePadding(s, t);
           continue;
+        }
+        // A padding on a part without padding variables, where the own source
+        // pads some sides of the same rule: the editor writes the other
+        // sides only, each as it names it (physical stays physical), so the
+        // own sides win; a side the own source holds in one direction only
+        // is written for the other direction.
+        if (/^padding(-|$)/.test(kebab(s.thing)) && !s.mode && !padVars(t)) {
+          const own = ownBox(t, s);
+          if (own.ltr.size || own.rtl.size) {
+            for (const [x, v] of Object.entries(
+              paddingSides(kebab(s.thing), String(s.value)),
+            )) {
+              const prop = camel(`padding-${x}`);
+              const [inL, inR] = [
+                own.ltr.has(boxSide(x, 'ltr')),
+                own.rtl.has(boxSide(x, 'rtl')),
+              ];
+              if (inL && inR) continue;
+              if (!inL && !inR) {
+                putComp(s, t, prop, v);
+                continue;
+              }
+              const [db, key] = dirBlock(s, t, inL ? ':dir(rtl)' : ':dir(ltr)');
+              db[key] = {...(db[key] ?? {}), [prop]: v};
+            }
+            continue;
+          }
         }
         const sides =
           wrappedPadding(t, s) ??
