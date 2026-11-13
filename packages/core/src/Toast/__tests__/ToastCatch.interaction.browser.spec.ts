@@ -6,8 +6,8 @@
  * @output Proves that a finger catches the card while it springs back and
  *   while it leaves, holds it there, then moves it. A card caught on its way
  *   out, or dismissed during a drag, leaves at the lift. Under reduced motion
- *   a spring-back fades once. A dragging or catching finger starts no text
- *   selection; a still hold on a resting card can. A tap, a drag or a
+ *   a spring-back fades once. A finger on the card starts no text
+ *   selection, even a slow drag or a still hold. A tap, a drag or a
  *   dismissal during the entrance leaves it running. Under reduced motion
  *   the dismissal fades from there, and a spring-back or a catch then shows
  *   the card at full opacity. A lost lift ends at the next touch
@@ -451,7 +451,7 @@ test('under reduced motion, a drag that turns back fades the card back to rest o
   expect(opacity[opacity.length - 1]).toBe(1);
 });
 
-test('a finger that drags or catches the card starts no text selection; a still hold on a resting card still can', async ({
+test('a finger on the card starts no text selection: a still hold, a drag or a catch', async ({
   page,
 }) => {
   const card = await showToast(page);
@@ -521,6 +521,17 @@ test('a finger that drags or catches the card starts no text selection; a still 
     ...hold(0, start, 0, 300),
     {t: 300 + FRAME_MS, fingers: []},
   ]);
+  // Its lift's probe runs before the next finger lands.
+  await expect
+    .poll(async () =>
+      page.evaluate(
+        () =>
+          (window as unknown as {__refused: Record<string, boolean>}).__refused[
+            'after 1'
+          ],
+      ),
+    )
+    .toBeDefined();
   // Then a drag: 20 px toward the edge, so the swipe claims the touch, then
   // 140 px back. The card stretches and springs back at the lift.
   const begun = {x: start.x, y: start.y + 20};
@@ -552,9 +563,10 @@ test('a finger that drags or catches the card starts no text selection; a still 
   const refused = await page.evaluate(
     () => (window as unknown as {__refused: Record<string, boolean>}).__refused,
   );
-  expect(refused['hold 1'], 'a still hold on a resting card can select').toBe(
-    false,
+  expect(refused['hold 1'], 'a still hold on a resting card starts none').toBe(
+    true,
   );
+  expect(refused['after 1'], 'the lift lets selection start again').toBe(false);
   expect(refused['drag 2'], 'a drag starts no selection').toBe(true);
   expect(refused['after 2'], 'the lift lets selection start again').toBe(false);
   expect(
@@ -941,4 +953,80 @@ test('under reduced motion, a finger that catches a dismissal during the entranc
   ).toBeGreaterThan(0.99);
   // Its toast is dismissed, so the card leaves when the finger lifts.
   await expect(page.locator('.astryx-toast')).toHaveCount(0, {timeout: 3000});
+});
+
+test('a slow drag on the card text starts no text selection before the swipe begins, and the card follows', async ({
+  page,
+}) => {
+  const card = await showToast(page);
+  const text = await card.evaluate(element => {
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    let node = walker.nextNode();
+    while (node != null && (node.textContent ?? '').trim() === '') {
+      node = walker.nextNode();
+    }
+    const range = document.createRange();
+    range.selectNodeContents(node as Node);
+    const box = range.getClientRects()[0];
+    return {x: box.x, y: box.y, width: box.width, height: box.height};
+  });
+  const driver = await touchDriver(page);
+  await recordCard(page);
+  // A probe asks the card's text for a selection, as a long press does, a
+  // tenth of a second into the drag: Chromium has sent no move yet, and
+  // WebKit's moves have not reached the swipe's start.
+  await page.evaluate(() => {
+    const recorder = window as unknown as {__refused: boolean | null};
+    recorder.__refused = null;
+    window.addEventListener(
+      'touchstart',
+      () => {
+        setTimeout(() => {
+          const element = document.querySelector('.astryx-toast');
+          const walker = document.createTreeWalker(
+            element as Node,
+            NodeFilter.SHOW_TEXT,
+          );
+          let node = walker.nextNode();
+          while (node != null && (node.textContent ?? '').trim() === '') {
+            node = walker.nextNode();
+          }
+          const event = new Event('selectstart', {
+            bubbles: true,
+            cancelable: true,
+          });
+          (node?.parentElement ?? element)?.dispatchEvent(event);
+          recorder.__refused = event.defaultPrevented;
+        }, 100);
+      },
+      {capture: true, passive: true, once: true},
+    );
+  });
+  // A slow 60 px drag toward the edge, 1.2 s long, then a rest and the lift.
+  const start = {
+    x: Math.round(text.x + Math.min(40, text.width / 2)),
+    y: Math.round(text.y + text.height / 2),
+  };
+  const end = {x: start.x, y: start.y + 60};
+  const frames: TouchFrame[] = [
+    {t: 0, fingers: [{id: 0, ...start}]},
+    ...move(0, start, end, 0, 1200),
+    ...hold(0, end, 1200 + FRAME_MS, 200),
+  ];
+  await driver.play([
+    ...frames,
+    {t: +(frames[frames.length - 1].t + FRAME_MS).toFixed(3), fingers: []},
+  ]);
+  const refused = await page.evaluate(
+    () => (window as unknown as {__refused: boolean | null}).__refused,
+  );
+  expect(refused, 'the slow drag starts no selection').toBe(true);
+  const {__frames: shown} = await readRecord(page);
+  expect(
+    Math.max(...shown.map(frame => frame.y ?? 0)),
+    'the card follows the finger (px)',
+  ).toBeGreaterThan(10);
+  expect(
+    await page.evaluate(() => document.getSelection()?.toString() ?? ''),
+  ).toBe('');
 });

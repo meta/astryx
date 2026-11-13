@@ -41,11 +41,12 @@ interface SwipeSession {
   /** Where the finger caught the card, px from rest toward the edge. */
   caughtAt: number;
   /**
-   * Ends the session's hold on text selection. A finger that caught the card
-   * holds it from touch-down, any other once the swipe claims the touch. A
-   * still hold on a resting card selects text as usual.
+   * Ends the session's hold on text selection, which starts at touch-down.
+   * Chrome withholds a touch's moves inside its touch slop, and a finger held
+   * there long enough starts a long-press selection. So a slow drag would
+   * select text before the swipe could claim it.
    */
-  releaseSelection: (() => void) | null;
+  releaseSelection: () => void;
 }
 
 /** A retract in flight: where the card ends, and what its callers wait on. */
@@ -283,7 +284,6 @@ export function useToastBannerSwipe(
             const isLeaving = exitRef.current != null;
             const animator = cardAnimator();
             let caughtAt = 0;
-            let releaseSelection: (() => void) | null = null;
             if (
               animator != null &&
               (isLeaving || settlingRef.current != null)
@@ -292,11 +292,11 @@ export function useToastBannerSwipe(
               caughtAt = animator.get('y') * current.direction;
               animator.stop();
               settlingRef.current = null;
-              releaseSelection = lockSelection(
-                [root],
-                touch.target as EventTarget | null,
-              );
             }
+            const releaseSelection = lockSelection(
+              [root],
+              touch.target as EventTarget | null,
+            );
             // Touch-down: hold the auto-hide timer while the finger is on
             // the card. A leaving card's toast is already dismissed.
             const pausedTimer =
@@ -386,10 +386,6 @@ export function useToastBannerSwipe(
         // included: the card's dead zone is measured from where it landed.
         const fingerTravel = recognizer.totalTranslation().y * direction;
         if (to === 'began' || to === 'changed') {
-          const root = rootRef.current;
-          if (session.releaseSelection == null && root != null) {
-            session.releaseSelection = lockSelection([root], null);
-          }
           session.offset = session.caughtAt + followOffset(fingerTravel);
           cardAnimator()?.set({y: session.offset * direction});
           return;
@@ -397,7 +393,7 @@ export function useToastBannerSwipe(
         if (to !== 'ended' && to !== 'cancelled' && to !== 'failed') {
           return;
         }
-        session.releaseSelection?.();
+        session.releaseSelection();
         sessionRef.current = null;
         const fingerVelocity = recognizer.velocity().y * direction;
         if (exitRef.current != null) {

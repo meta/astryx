@@ -3200,6 +3200,28 @@ describe('Toast swipe dismissal under a finger', () => {
     expect(onHide).toHaveBeenCalledTimes(1);
   });
 
+  it('refuses a text selection on the card from touch-down to the lift', async () => {
+    const {visualToast} = await renderSwipeToast();
+    const text = within(visualToast).getByText('Swipe toast');
+    const selectStart = () => {
+      const event = new Event('selectstart', {bubbles: true, cancelable: true});
+      text.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    expect(selectStart()).toBe(false);
+    const start = strokeStart();
+    act(() => {
+      pen(visualToast, 'pointerDown', 31, start, 0);
+    });
+    // No move yet: Chrome can start a long press's selection before it sends
+    // a slow drag's first move.
+    expect(selectStart()).toBe(true);
+    act(() => {
+      pen(visualToast, 'pointerUp', 31, start + 600, 0);
+    });
+    expect(selectStart()).toBe(false);
+  });
+
   it("leaves the card's own transitions running while a finger drags it and while it retracts", async () => {
     // They run the card's entrance, which a finger takes from where it shows.
     const {visualToast, onHide} = await renderSwipeToast();
