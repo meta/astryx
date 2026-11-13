@@ -388,22 +388,6 @@ behavior made for accessibility conformance to FR53.
 Requirement gaps, each a WCAG 2.2 Level A mismatch that FR53 fixes unless it
 says otherwise:
 
-- FR1–FR3 gap: `TimeInput` and `DateTimeInput`'s time segment mark every
-  draft that is not an accepted value invalid and announce it on each
-  keystroke, unfinished drafts included.
-- FR4 gap (WCAG 2.2 3.3.1): a `TimeInput` or `DateTimeInput` time draft that
-  does not parse, or is out of range, reverts on blur. It does not say so on
-  screen.
-- FR5 gap (WCAG 2.2 1.4.1, 3.3.1): in a standalone field, `TimeInput`,
-  `DateTimeInput`'s time segment, and the native time controls set
-  `aria-invalid` and announce through a visually hidden region with no visible
-  message; the text only turns secondary.
-- FR7 gap: with a caller `status`, `TimeInput` announces the rejection on
-  every keystroke rather than once, and a `warning` or `success` status stays
-  shown over a rejection.
-- FR8 gap: `TimeInput` has no `onEntryErrorChange`.
-- FR9 gap: `TimeInput` takes no commit on Enter, and `DateTimeInput`'s time
-  segment commits on Enter only while its preset-time list is open.
 - AR3 gap (WCAG 2.2 3.3.1), outside this fix: inside an InputGroup, a member's
   own rejection is announced and sets `aria-invalid` but shows no visible
   message.
