@@ -1282,6 +1282,27 @@ export function valueProblem(s) {
 }
 
 /**
+ * One entry of the top-level `tokens` map in a theme's own source, as
+ * written: its token (null for a computed key no read of the file can
+ * resolve), the key as typed, the line that sets it, and its value's shape.
+ * @typedef {{token: string | null, key: string, line: number | null, kind: 'text' | 'number' | 'pair' | 'other', value?: string | number, halves?: Array<string | number | undefined>}} OwnTokenEntry
+ */
+
+/**
+ * The entries of the top-level `tokens` map in a theme's own source, read
+ * from its syntax tree, each with the line that sets it.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {OwnTokenEntry[]}
+ */
+export function ownTokenEntries(cwd, slug) {
+  /** @type {OwnTokenEntry[]} */
+  const detail = [];
+  ownPageTokens(cwd, slug, detail);
+  return detail;
+}
+
+/**
  * The page-wide tokens a theme's own source sets: the keys of the top-level
  * `tokens` map in its `defineTheme({...})`, read from the syntax tree, each
  * with its value when that is plain text (else null). A token set only in a
@@ -1290,7 +1311,11 @@ export function valueProblem(s) {
  * @param {string} slug
  * @returns {Map<string, string | null>}
  */
-function ownPageTokens(cwd, slug) {
+function ownPageTokens(
+  cwd,
+  slug,
+  detail = /** @type {OwnTokenEntry[] | null} */ (null),
+) {
   /** @type {Map<string, string | null>} */
   const out = new Map();
   /** @type {string} */
@@ -1404,14 +1429,46 @@ function ownPageTokens(cwd, slug) {
       unresolved = true;
       return;
     }
-    // Spreads and keys merge in order: a later one wins.
+    // Spreads and keys merge in order: a later one wins. A computed key
+    // that is text (`['--radius-page']`) is read like a literal one.
     for (const p of obj.properties) {
       if (p.type === 'SpreadElement') collect(p.argument, depth + 1);
-      else if (p.type === 'ObjectProperty' && !p.computed) {
-        const k = keyOf(p.key);
+      else if (p.type === 'ObjectProperty') {
+        const k = p.computed ? textOf(unwrap(p.key)) : keyOf(p.key);
         if (k?.startsWith('--')) out.set(k, textOf(unwrap(p.value)));
+        else if (p.computed) unresolved = true;
+        if (detail && (k?.startsWith('--') || p.computed))
+          detail.push({
+            token: k?.startsWith('--') ? k : null,
+            key: code.slice(p.key.start, p.key.end),
+            line: p.loc?.start?.line ?? null,
+            ...valueShape(unwrap(p.value)),
+          });
       } else unresolved = true;
     }
+  };
+  /**
+   * What a token's value is, as written: text, a number, a [light, dark]
+   * pair (each half's text, a number, or undefined), or something else.
+   * @param {any} node
+   * @returns {Pick<OwnTokenEntry, 'kind' | 'value' | 'halves'>}
+   */
+  const valueShape = node => {
+    const t = textOf(node);
+    if (t != null) return {kind: 'text', value: t};
+    if (node?.type === 'NumericLiteral')
+      return {kind: 'number', value: node.value};
+    if (node?.type === 'ArrayExpression')
+      return {
+        kind: 'pair',
+        halves: node.elements.map((/** @type {any} */ e) => {
+          const h = unwrap(e);
+          return (
+            textOf(h) ?? (h?.type === 'NumericLiteral' ? h.value : undefined)
+          );
+        }),
+      };
+    return {kind: 'other'};
   };
   collect(tokensProp.value, 0);
   // A value no read of the file can resolve (a call, an import) is read
@@ -5357,7 +5414,7 @@ function nonTextToken(t, typeOf = (/** @type {string} */ _k) => 'other') {
  * @param {string} slug
  * @param {[string, unknown, ('object' | 'pair' | 'unit' | 'value' | 'mode')?]} bad
  */
-function nonTextMessage(ctx, slug, [name, value, kind = 'value']) {
+export function nonTextMessage(ctx, slug, [name, value, kind = 'value']) {
   const type = ctx.C.typeOf(name);
   if (kind === 'mode') return ownPairMessage(slug, [name]);
   if (kind === 'object')

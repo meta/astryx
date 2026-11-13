@@ -76,6 +76,8 @@ import {
   refuseThemeParse,
   ownSourceTokens,
   ownSourceTokenValues,
+  ownTokenEntries,
+  nonTextMessage,
   ownPartTokens,
   PHONE_TYPE,
   refreshSourceStamp,
@@ -97,7 +99,7 @@ import {
   normalizeEntry,
   storedProblems,
 } from './_check.mjs';
-import {MODAL} from './_compiler.mjs';
+import {MODAL, isColorToken} from './_compiler.mjs';
 import {
   PALETTE_DIALS,
   VIBRANCY_DEFAULT,
@@ -1148,32 +1150,84 @@ function ownTokenProblems(ctx, slug, data) {
   const {cwd} = ctx.project;
   /** @type {Array<{token: string, value: string, why: string, line: number | null}>} */
   const out = [];
-  /** @type {string[]} */
-  let lines = [];
-  try {
-    lines = fs.readFileSync(themeFiles(cwd, slug).ts, 'utf8').split('\n');
-  } catch {
-    // No own source.
+  const known = ctx.project.core.tokenDefaults;
+  /** @param {string} token @param {string} value @returns {string | null} */
+  const refused = (token, value) => {
+    // A family list wholly in quotes (`"Georgia, serif"`, as Core returns
+    // a family set through typography) is that list.
+    const v = /^--font-family-/.test(token)
+      ? value.replace(/^\s*"([^"]*,[^"]*)"\s*$/, '$1')
+      : value;
+    try {
+      checkSetting(ctx, slug, {...data, settings: []}, token, v, {});
+      return null;
+    } catch (e) {
+      if (!(e instanceof AstryxError)) throw e;
+      return e.message.replace(/ Nothing was changed\.$/, '');
+    }
+  };
+  // The tokens map as written, entry by entry, with the line that sets
+  // each: every value is checked as `set` checks it (each half of a
+  // [light, dark] pair; a number is not text, as show says), and a key no
+  // read of the file can resolve is named as not checked.
+  const entries = ownTokenEntries(cwd, slug);
+  const seen = new Set();
+  for (const e of entries) {
+    if (e.token == null) {
+      out.push({
+        token: e.key,
+        value: '',
+        why: `the key ${e.key} is computed, so the editor cannot read which token it sets and has not checked its value; write the token's name as text, such as '--radius-page'`,
+        line: e.line,
+      });
+      continue;
+    }
+    seen.add(e.token);
+    if (!(e.token in known)) continue;
+    if (e.kind === 'number') {
+      out.push({
+        token: e.token,
+        value: String(e.value),
+        why: nonTextMessage(ctx, slug, [e.token, e.value]),
+        line: e.line,
+      });
+      continue;
+    }
+    if (e.kind === 'text') {
+      const why = refused(e.token, String(e.value));
+      if (why)
+        out.push({token: e.token, value: String(e.value), why, line: e.line});
+      continue;
+    }
+    const token = e.token;
+    if (e.kind === 'pair' && isColorToken(token)) {
+      const halves = e.halves ?? [];
+      halves.forEach((h, i) => {
+        const half = i === 0 ? 'light' : 'dark';
+        const why =
+          typeof h === 'string'
+            ? refused(token, h)
+            : nonTextMessage(ctx, slug, [token, halves]);
+        if (why)
+          out.push({
+            token,
+            value: String(h),
+            why: `its ${half} half: ${why}`,
+            line: e.line,
+          });
+      });
+    }
   }
+  // A value the file gives another way (a spread, a const), as the build
+  // or the file shows it; a family set through typography is not in the
+  // map, so it is not checked here (the font dial checks it).
   for (const [token, value] of Object.entries(
     ownSourceTokenValues(cwd, slug),
   )) {
-    if (!(token in ctx.project.core.tokenDefaults)) continue;
-    // A font family the file sets through typography comes back as Core
-    // writes it (quoted); its own check is the font dial's.
+    if (seen.has(token) || !(token in known)) continue;
     if (/^--font-family-/.test(token)) continue;
-    try {
-      checkSetting(ctx, slug, {...data, settings: []}, token, value, {});
-    } catch (e) {
-      if (!(e instanceof AstryxError)) throw e;
-      const at = lines.findIndex(l => l.includes(token));
-      out.push({
-        token,
-        value,
-        why: e.message.replace(/ Nothing was changed\.$/, ''),
-        line: at >= 0 ? at + 1 : null,
-      });
-    }
+    const why = refused(token, value);
+    if (why) out.push({token, value, why, line: null});
   }
   return out;
 }
@@ -1207,16 +1261,21 @@ function ownTokenRefusal(ctx, slug, data) {
       .slice(0, 3)
       .map(
         b =>
-          `${b.token}: "${b.value}"${b.line ? ` (line ${b.line})` : ''}: ${b.why}`,
+          `${b.token}${b.value ? `: "${b.value}"` : ''}${b.line ? ` (line ${b.line})` : ''}: ${b.why}`,
       )
       .join(
         '; ',
       )}${bad.length > 3 ? `; and ${bad.length - 3} more` : ''}. Change it in ${file}. Nothing was changed.`,
     [
-      {
-        name: `grep -n -- ${quoteCommandArgument(bad[0].token)} ${quoteCommandArgument(file)}`,
-        reason: 'see the line',
-      },
+      bad[0].line
+        ? {
+            name: `sed -n ${bad[0].line}p ${quoteCommandArgument(file)}`,
+            reason: 'see the line that sets it',
+          }
+        : {
+            name: `grep -n -- ${quoteCommandArgument(bad[0].token)} ${quoteCommandArgument(file)}`,
+            reason: 'see the line',
+          },
     ],
     ERROR_CODES.ERR_THEME_INVALID,
   );

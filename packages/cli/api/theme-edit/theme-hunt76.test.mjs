@@ -75,7 +75,7 @@ describe('the editor checks what it is given', () => {
     ownTokens('own', "'--radius-page': 'banana',");
     const show = await refusal(() => themeEditShow('own', {cwd}));
     expect(show.message).toMatch(/--radius-page: "banana" \(line \d+\)/);
-    expect(show.run[0]).toMatch(/grep -n -- --radius-page /);
+    expect(show.run[0]).toMatch(/sed -n \d+p .*own\.theme\.ts/);
     const set = await refusal(() =>
       themeEditSet('own', 'corners', 'pill', {cwd}),
     );
