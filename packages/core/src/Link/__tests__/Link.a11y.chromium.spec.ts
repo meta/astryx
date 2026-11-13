@@ -156,3 +156,66 @@ for (const state of LINK_A11Y_STATES) {
     expect(report.counts.unexpectedPass).toBe(0);
   });
 }
+
+test('a focused native Link keeps focus when disabled', async ({
+  page,
+}, testInfo) => {
+  const storyId = 'core-link--default';
+  const pageErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(String(error)));
+  const updateArgs = async (updatedArgs: Record<string, unknown>) =>
+    page.evaluate(
+      ({storyId, updatedArgs}) => {
+        const channel = (
+          window as unknown as {
+            __STORYBOOK_ADDONS_CHANNEL__: {
+              emit: (event: string, payload: unknown) => void;
+            };
+          }
+        ).__STORYBOOK_ADDONS_CHANNEL__;
+        channel.emit('updateStoryArgs', {storyId, updatedArgs});
+      },
+      {storyId, updatedArgs},
+    );
+  for (const tabIndex of [0, -1]) {
+    await page.goto(storyUrl(storyId));
+    const link = page.getByRole('link', {name: 'Documentation'});
+    await expect(link).toHaveAttribute('href', '/docs');
+    await holdMotionStill(page);
+    await updateArgs({tabIndex});
+    await expect(link).toHaveAttribute('tabindex', String(tabIndex));
+    await page.keyboard.press('Tab');
+    if (tabIndex === -1) {
+      await expect(link).not.toBeFocused();
+      await link.focus();
+    }
+    await expect(link).toBeFocused();
+    await updateArgs({isDisabled: true});
+    await expect(link).toHaveAttribute('aria-disabled', 'true');
+    await expect(link).toBeFocused();
+    await expect(link).not.toHaveAttribute('href');
+    await expect(link).toHaveAttribute('tabindex', String(tabIndex));
+    await expect(link).toMatchAriaSnapshot('- link "Documentation" [disabled]');
+    expect(
+      await link.evaluate(element => {
+        const style = getComputedStyle(element);
+        return (
+          style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) > 0
+        );
+      }),
+    ).toBe(true);
+    const url = page.url();
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Space');
+    await link.evaluate(element => (element as HTMLElement).click());
+    expect(page.url()).toBe(url);
+    await expect(link).toBeFocused();
+    await testInfo.attach(`disabled-native-tabindex-${tabIndex}`, {
+      body: await page.screenshot(),
+      contentType: 'image/png',
+    });
+    await page.keyboard.press('Tab');
+    await expect(link).not.toBeFocused();
+  }
+  expect(pageErrors).toEqual([]);
+});

@@ -9,11 +9,11 @@
  * SYNC: When Link.tsx changes, update tests to match new behavior
  */
 
+import {Component, StrictMode, useRef, type ReactNode} from 'react';
 import {describe, it, expect, vi} from 'vitest';
 import {fireEvent, render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {hasPressedArm} from '../__tests__/pressState';
-import type {ReactNode} from 'react';
 import {InteractiveRoleContext} from '../InteractiveRoleContext/InteractiveRoleContext';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
 import {Text} from '../Text/Text';
@@ -249,6 +249,283 @@ describe('Link', () => {
     expect(link).not.toBeNull();
     expect(link).not.toHaveAttribute('data-custom-link');
     expect(link).not.toHaveAttribute('href');
+  });
+
+  it.each([undefined, -1])(
+    'keeps a plain focused href link inert when disabled with tabIndex=%s',
+    async tabIndex => {
+      const user = userEvent.setup();
+      const fixture = (isDisabled: boolean) => (
+        <>
+          <button type="button">Before</button>
+          <Link
+            href="#destination"
+            isDisabled={isDisabled}
+            tabIndex={tabIndex}
+            aria-describedby="reason">
+            Destination
+          </Link>
+          <span id="reason">Unavailable reason</span>
+          <button type="button">After</button>
+        </>
+      );
+      const {rerender} = render(fixture(false));
+      screen.getByRole('link').focus();
+      rerender(fixture(true));
+      const disabled = screen.getByRole('link');
+      expect(disabled).toHaveFocus();
+      expect(disabled).toHaveAttribute('aria-disabled', 'true');
+      expect(disabled).not.toHaveAttribute('href');
+      expect(disabled).toHaveAccessibleDescription('Unavailable reason');
+      expect(fireEvent.click(disabled)).toBe(false);
+      await user.keyboard('{Enter} ');
+      expect(disabled).toHaveFocus();
+      screen.getByRole('button', {name: 'Before'}).focus();
+      await user.tab();
+      expect(
+        tabIndex === -1
+          ? screen.getByRole('button', {name: 'After'})
+          : disabled,
+      ).toHaveFocus();
+      disabled.focus();
+      rerender(fixture(false));
+      expect(screen.getByRole('link')).not.toHaveFocus();
+      expect(screen.getByRole('link')).toHaveAttribute('href', '#destination');
+    },
+  );
+
+  it('does not restore focus for a root swap while already disabled', () => {
+    const fixture = (onClick?: () => void) => (
+      <Link href="#destination" isDisabled onClick={onClick}>
+        Destination
+      </Link>
+    );
+    const {rerender} = render(fixture());
+    screen.getByRole('link').focus();
+    rerender(fixture(vi.fn()));
+    expect(screen.getByRole('button', {name: 'Destination'})).not.toHaveFocus();
+  });
+
+  it('keeps a focused href link with onClick inert and reachable across disablement', async () => {
+    const user = userEvent.setup();
+    const ref = vi.fn();
+    const onClick = vi.fn();
+    const fixture = (isDisabled: boolean) => (
+      <>
+        <Link
+          href="#destination"
+          onClick={onClick}
+          isDisabled={isDisabled}
+          aria-describedby="reason"
+          ref={ref}>
+          Destination
+        </Link>
+        <span id="reason">Unavailable reason</span>
+        <button type="button">After</button>
+      </>
+    );
+    const {rerender} = render(fixture(false));
+    await user.tab();
+    expect(screen.getByRole('link')).toHaveFocus();
+
+    rerender(fixture(true));
+    const disabled = screen.getByRole('button', {name: 'Destination'});
+    expect(disabled).toHaveFocus();
+    expect(disabled).toHaveAttribute('aria-disabled', 'true');
+    expect(disabled).not.toHaveAttribute('href');
+    expect(disabled).toHaveAccessibleDescription('Unavailable reason');
+    await user.keyboard('{Enter} ');
+    expect(fireEvent.click(disabled)).toBe(false);
+    expect(onClick).not.toHaveBeenCalled();
+    await user.tab();
+    expect(screen.getByRole('button', {name: 'After'})).toHaveFocus();
+    await user.tab({shift: true});
+    expect(disabled).toHaveFocus();
+
+    rerender(fixture(false));
+    const enabled = screen.getByRole('link');
+    expect(enabled).toHaveAttribute('href', '#destination');
+    expect(ref).toHaveBeenLastCalledWith(enabled);
+  });
+
+  it('keeps focus when disabled under an inherited button role', () => {
+    const fixture = (isDisabled: boolean) => (
+      <InteractiveRoleContext value="button">
+        <Link href="#destination" isDisabled={isDisabled}>
+          Destination
+        </Link>
+      </InteractiveRoleContext>
+    );
+    const {rerender} = render(fixture(false));
+    screen.getByRole('link').focus();
+    rerender(fixture(true));
+    const disabled = screen.getByRole('button', {name: 'Destination'});
+    expect(disabled).toHaveFocus();
+    expect(disabled).toHaveAttribute('aria-disabled', 'true');
+    expect(disabled).not.toHaveAttribute('href');
+    rerender(fixture(false));
+    expect(screen.getByRole('link')).toHaveAttribute('href', '#destination');
+  });
+
+  it('keeps a focused provider link and its explicit negative tabIndex when disabled', async () => {
+    function RouterLink({
+      href,
+      ref: _ref,
+      ...props
+    }: React.ComponentPropsWithRef<'a'>) {
+      if (href == null) {
+        throw new Error('RouterLink requires a destination');
+      }
+      return <a {...props} data-router="true" href={href} />;
+    }
+    const user = userEvent.setup();
+    const fixture = (isDisabled: boolean) => (
+      <LinkProvider component={RouterLink}>
+        <button type="button">Before</button>
+        <Link href="#destination" tabIndex={-1} isDisabled={isDisabled}>
+          Destination
+        </Link>
+        <button type="button">After</button>
+      </LinkProvider>
+    );
+    const {rerender} = render(fixture(false));
+    const link = screen.getByRole('link');
+    expect(link).toHaveAttribute('data-router', 'true');
+    link.focus();
+    rerender(fixture(true));
+    const disabled = screen.getByRole('link');
+    expect(disabled).toHaveFocus();
+    expect(disabled).not.toHaveAttribute('href');
+    expect(disabled).toHaveAttribute('tabindex', '-1');
+    screen.getByRole('button', {name: 'Before'}).focus();
+    await user.tab();
+    expect(screen.getByRole('button', {name: 'After'})).toHaveFocus();
+
+    disabled.focus();
+    rerender(fixture(false));
+    expect(screen.getByRole('link')).toHaveAttribute('href', '#destination');
+  });
+
+  it('restores navigation with an ordinary composed callback ref', () => {
+    function Router({ref, ...props}: React.ComponentPropsWithRef<'a'>) {
+      const internalRef = useRef<HTMLAnchorElement | null>(null);
+      return (
+        <a
+          {...props}
+          ref={node => {
+            internalRef.current = node;
+            if (typeof ref === 'function') {
+              ref(node);
+            } else if (ref) {
+              ref.current = node;
+            }
+          }}
+        />
+      );
+    }
+    const onClick = vi.fn();
+    const fixture = (isDisabled: boolean) => (
+      <StrictMode>
+        <Link
+          as={Router}
+          href="#destination"
+          isDisabled={isDisabled}
+          onClick={onClick}>
+          Destination
+        </Link>
+      </StrictMode>
+    );
+    const {rerender} = render(fixture(false));
+    screen.getByRole('link').focus();
+    rerender(fixture(true));
+    expect(screen.getByRole('button', {name: 'Destination'})).toHaveFocus();
+    rerender(fixture(false));
+    const enabled = screen.getByRole('link');
+    expect(enabled).toHaveAttribute('href', '#destination');
+    fireEvent.click(enabled);
+    expect(onClick).toHaveBeenCalledOnce();
+  });
+
+  it('keeps class adapters compatible with disabled transitions', () => {
+    class Router extends Component<React.ComponentPropsWithoutRef<'a'>> {
+      render() {
+        return <a {...this.props} />;
+      }
+    }
+    const fixture = (isDisabled: boolean) => (
+      <Link as={Router} href="#destination" isDisabled={isDisabled}>
+        Destination
+      </Link>
+    );
+    const {rerender} = render(fixture(false));
+    screen.getByRole('link').focus();
+    rerender(fixture(true));
+    expect(screen.getByRole('link')).toHaveFocus();
+    expect(screen.getByRole('link')).not.toHaveAttribute('href');
+    rerender(fixture(false));
+    expect(screen.getByRole('link')).toHaveAttribute('href', '#destination');
+  });
+
+  it('does not invoke a custom router capture action while disabled', () => {
+    const navigate = vi.fn();
+    function Router({
+      onClickCapture,
+      ...props
+    }: React.ComponentPropsWithRef<'a'>) {
+      return (
+        <a
+          {...props}
+          onClickCapture={event => {
+            navigate();
+            onClickCapture?.(event);
+          }}
+        />
+      );
+    }
+    const fixture = (isDisabled: boolean) => (
+      <Link as={Router} href="#destination" isDisabled={isDisabled}>
+        Destination
+      </Link>
+    );
+    const {rerender} = render(fixture(false));
+    screen.getByRole('link').focus();
+    rerender(fixture(true));
+    expect(screen.getByRole('link')).toHaveFocus();
+    expect(fireEvent.click(screen.getByRole('link'))).toBe(false);
+    expect(navigate).not.toHaveBeenCalled();
+    rerender(fixture(false));
+    fireEvent.click(screen.getByRole('link'));
+    expect(navigate).toHaveBeenCalledOnce();
+  });
+
+  it('does not take focus from another control during a disabled transition', () => {
+    let moveFocusOnDetach = false;
+    const ref = (node: HTMLAnchorElement | HTMLButtonElement | null) => {
+      if (!node && moveFocusOnDetach) {
+        document.getElementById('other')?.focus();
+      }
+    };
+    const fixture = (isDisabled: boolean) => (
+      <>
+        <Link href="#destination" ref={ref} isDisabled={isDisabled}>
+          Destination
+        </Link>
+        <button id="other" type="button">
+          Other
+        </button>
+      </>
+    );
+    const {rerender} = render(fixture(false));
+    const other = screen.getByRole('button', {name: 'Other'});
+    other.focus();
+    rerender(fixture(true));
+    expect(other).toHaveFocus();
+    rerender(fixture(false));
+    expect(other).toHaveFocus();
+    screen.getByRole('link').focus();
+    moveFocusOnDetach = true;
+    rerender(fixture(true));
+    expect(other).toHaveFocus();
   });
 
   it('renders external link with icon and target="_blank"', () => {

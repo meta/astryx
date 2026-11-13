@@ -41,6 +41,7 @@ import type {
   TextDisplay,
 } from '../theme/types';
 import {useLinkComponent} from './useLinkComponent';
+import {useFocusAcrossSwap} from '../utils/useFocusAcrossSwap';
 import type {LinkComponentType} from './types';
 import {mergeProps} from '../utils';
 import {computeTargetAndRel} from './computeTargetAndRel';
@@ -311,6 +312,14 @@ function disabledAnchorProps(onKeyDown?: LinkKeyDownHandler) {
   } as const;
 }
 
+function resolveLinkFocusTarget(node: HTMLElement): HTMLElement | null {
+  const root = node.closest('.astryx-link');
+  const control = node.closest<HTMLElement>(
+    'a,button,[role="link"],[role="button"],[tabindex]',
+  );
+  return control && root?.contains(control) ? control : null;
+}
+
 // The native button keeps its own role.
 function disabledButtonProps(onKeyDown?: LinkKeyDownHandler) {
   return {
@@ -362,6 +371,7 @@ export function Link({
   className,
   style,
   ref,
+  tabIndex,
   ...props
 }: LinkProps) {
   // Constant marker props; the hook's only effect is installing the shared
@@ -372,6 +382,11 @@ export function Link({
   const newTabLabel = newTabLabelFromProps ?? t('@astryx.link.newTab');
   const LinkComponent = useLinkComponent(as);
   const role = useInteractiveRole({href, onClick, isDisabled});
+  const contentRef = useFocusAcrossSwap<HTMLElement>(undefined, {
+    resolveFocusTarget: resolveLinkFocusTarget,
+    restoreFocus: isDisabled,
+    isDisabled,
+  });
   // Determine target and rel based on isExternalLink
   const {target, rel} = computeTargetAndRel(
     isExternalLink ? '_blank' : targetFromProps,
@@ -399,6 +414,7 @@ export function Link({
   const sharedContent = (
     <>
       <Text
+        ref={contentRef}
         type={type}
         size={size}
         weight={weight}
@@ -428,6 +444,7 @@ export function Link({
       <button
         ref={ref as React.Ref<HTMLButtonElement>}
         type="button"
+        tabIndex={tabIndex}
         onClick={onClick}
         {...(isDisabled ? undefined : pressable)}
         aria-label={label || undefined}
@@ -466,7 +483,7 @@ export function Link({
       <a
         ref={ref as React.Ref<HTMLAnchorElement>}
         aria-label={label || undefined}
-        tabIndex={0}
+        tabIndex={tabIndex ?? 0}
         {...mergeProps(
           themeProps('link', {color}),
           focusOutlineProps.focusVisible(
@@ -499,7 +516,7 @@ export function Link({
         {...(isDisabled ? undefined : pressable)}
         aria-label={label || undefined}
         aria-disabled={isDisabled || undefined}
-        tabIndex={isDisabled ? -1 : undefined}
+        tabIndex={tabIndex}
         {...mergeProps(
           themeProps('link', {color}),
           focusOutlineProps.focusVisible(
