@@ -35,6 +35,7 @@ import {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
+import type {StyleXStyles} from '@stylexjs/stylex';
 import {BottomSheet} from '../BottomSheet';
 import {Button} from '../Button';
 import {useCalendarConstraints, type ISODateString} from '../Calendar';
@@ -59,6 +60,8 @@ import {useTooltip} from '../Tooltip';
 import {useFieldInputStyling} from '../Field/fieldParts';
 import {
   colorVars,
+  durationVars,
+  easeVars,
   fontWeightVars,
   radiusVars,
   sizeVars,
@@ -102,7 +105,7 @@ import {
 } from '../DateInput/MonthScroller';
 import {MonthYearWheels} from '../DateInput/MonthYearWheels';
 import {Wheel, type WheelOption} from '../DateInput/Wheel';
-import {TimeWheels} from '../DateInput/datePickerTouch';
+import {MonthPager, TimeWheels} from '../DateInput/datePickerTouch';
 import {
   hour12From24,
   hour24From12,
@@ -112,6 +115,8 @@ import {
   secondRows,
   wheelBounds,
 } from '../TimeInput/timeWheelRules';
+import {useMonthYearToggle} from '../DateInput/useMonthYearToggle';
+import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
 import {useTouchPresentation} from '../utils/touchPresentation';
 import {
   dateInputTouchGeometry,
@@ -185,6 +190,17 @@ const sizeStyles = stylex.create({
 });
 
 const HORIZONTAL_SEGMENT_BASIS = 196;
+
+/**
+ * The month/year toggle under a finger, as in DateInput: the theme duration
+ * token nearest UIDatePicker's measured 0.25 s in the Storybook theme. A part
+ * that arrives eases on the entrance curve, and the hidden styles carry the
+ * exit curve. The chevron's turn takes the move curve.
+ */
+const TOGGLE_DURATION = durationVars['--duration-medium-min'];
+const TOGGLE_ENTRANCE = easeVars['--ease-entrance'];
+const TOGGLE_EXIT = easeVars['--ease-exit'];
+const TOGGLE_TURN = easeVars['--ease-move'];
 
 const styles = stylex.create({
   iconButton: {
@@ -328,11 +344,43 @@ const styles = stylex.create({
     alignItems: 'center',
     gap: spacingVars['--spacing-0-5'],
     marginInlineStart: 'auto',
+    // Under a finger the month/year toggle cross-fades on its tokens
+    // (TOGGLE_DURATION). With a mouse the swap stays instant. Under Reduced
+    // Motion a touch screen gets the policy's cross-fade and a mouse the
+    // instant swap.
+    transitionProperty: {
+      default: 'none',
+      '@media (pointer: coarse)': 'opacity, visibility',
+      '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+        'none',
+    },
+    transitionDuration: {
+      default: null,
+      '@media (pointer: coarse)': TOGGLE_DURATION,
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        reducedMotionFadeConsts.duration,
+      '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+        '0s',
+    },
+    transitionTimingFunction: {
+      default: 'linear',
+      '@media (pointer: coarse)': TOGGLE_ENTRANCE,
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        reducedMotionFadeConsts.easing,
+    },
   },
+  // No `pointerEvents` in these two: it is inherited, so flipping it in the
+  // toggle's commit would restyle the calendar before the fade's first frame.
+  // `inert` and `visibility` cover it.
   touchHeaderActionsHidden: {
     visibility: 'hidden',
     opacity: 0,
-    pointerEvents: 'none',
+    transitionTimingFunction: {
+      default: 'linear',
+      '@media (pointer: coarse)': TOGGLE_EXIT,
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        reducedMotionFadeConsts.easing,
+    },
   },
   touchArrow: {
     minBlockSize: {
@@ -360,6 +408,21 @@ const styles = stylex.create({
     display: 'grid',
     inlineSize: '100%',
     minInlineSize: 0,
+    position: 'relative',
+  },
+  /**
+   * While the month/year toggle cross-fades, a shield over both surfaces
+   * takes touches, as a UIKit view animation ignores them. `inert` swaps only
+   * at the fade's end (useMonthYearToggle). A pseudo-element, so showing it
+   * restyles nothing inside the surfaces.
+   */
+  touchDateSurfaceStackFading: {
+    '::after': {
+      content: '""',
+      position: 'absolute',
+      inset: 0,
+      zIndex: 3,
+    },
   },
   touchDateSurface: {
     gridArea: '1 / 1',
@@ -368,11 +431,101 @@ const styles = stylex.create({
     minInlineSize: 0,
     flexDirection: 'column',
     gap: spacingVars['--spacing-2'],
+    // Under a finger the month/year toggle cross-fades on its tokens
+    // (TOGGLE_DURATION). With a mouse the swap stays instant. Under Reduced
+    // Motion a touch screen gets the policy's cross-fade and a mouse the
+    // instant swap.
+    transitionProperty: {
+      default: 'none',
+      '@media (pointer: coarse)': 'opacity, visibility',
+      '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+        'none',
+    },
+    transitionDuration: {
+      default: null,
+      '@media (pointer: coarse)': TOGGLE_DURATION,
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        reducedMotionFadeConsts.duration,
+      '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+        '0s',
+    },
+    transitionTimingFunction: {
+      default: 'linear',
+      '@media (pointer: coarse)': TOGGLE_ENTRANCE,
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        reducedMotionFadeConsts.easing,
+    },
   },
   touchDateSurfaceHidden: {
     visibility: 'hidden',
     opacity: 0,
-    pointerEvents: 'none',
+    transitionTimingFunction: {
+      default: 'linear',
+      '@media (pointer: coarse)': TOGGLE_EXIT,
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        reducedMotionFadeConsts.easing,
+    },
+  },
+  // Shown at opacity 0 once the sheet settles, still inert (useMonthYearToggle).
+  touchDateSurfaceWarm: {
+    visibility: 'visible',
+  },
+  /**
+   * The wheels cover the calendar with an opaque plate in the sheet's color,
+   * so only they fade and the calendar beneath stays drawn. `isolation` keeps
+   * the calendar's text from painting through the plate at full opacity,
+   * where no stacking context forms.
+   */
+  touchWheelsSurface: {
+    backgroundColor: colorVars['--color-background-surface'],
+    isolation: 'isolate',
+  },
+  // The calendar never fades: the wheels' plate covers it. With a mouse it
+  // takes `hidden` when the wheels show.
+  touchCalendarSurfaceHidden: {
+    visibility: 'hidden',
+  },
+  // Under a finger, UIDatePicker's chevron: it points along the reading
+  // direction for the calendar and turns down on the toggle's clock. With a
+  // mouse it points down and stays. Under Reduced Motion it does not turn.
+  // The turn lands mid-dip on a touch screen (useMonthYearToggle). A test
+  // holds the quarter turn to the UIKit table.
+  touchTitleChevron: {
+    display: 'inline-flex',
+    flexShrink: 0,
+    transform: {
+      default: 'none',
+      '@media (pointer: coarse)': {
+        default: 'rotate(-90deg)',
+        // Mirrored under RTL, so it points along the reading direction; the
+        // same function list in both states keeps the turn a turn.
+        ':is([dir="rtl"] *)': 'scaleX(-1) rotate(-90deg)',
+      },
+    },
+    transitionProperty: {
+      default: 'none',
+      '@media (pointer: coarse)': 'transform',
+    },
+    transitionDuration: {
+      default: null,
+      '@media (pointer: coarse)': TOGGLE_DURATION,
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)': '0s',
+      '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+        '0s',
+    },
+    transitionTimingFunction: {
+      default: 'ease',
+      '@media (pointer: coarse)': TOGGLE_TURN,
+    },
+  },
+  touchTitleChevronOpen: {
+    transform: {
+      default: 'none',
+      '@media (pointer: coarse)': {
+        default: 'rotate(0deg)',
+        ':is([dir="rtl"] *)': 'scaleX(-1) rotate(0deg)',
+      },
+    },
   },
   touchWeekdays: {
     display: 'grid',
@@ -567,7 +720,32 @@ export function TouchDateTimeField({
   );
   const [activePanel, setActivePanel] = useState<TouchDateTimePanel>('date');
   const [isWheelOpen, setIsWheelOpen] = useState(false);
+  // The surfaces swap `inert` when the toggle's fade ends (useMonthYearToggle),
+  // since flipping it restyles a surface's subtree. `aria-hidden` follows the
+  // toggle at once, and a shield takes touches while the fade runs.
+  const calendarSurfaceRef = useRef<HTMLDivElement | null>(null);
+  const wheelsSurfaceRef = useRef<HTMLDivElement | null>(null);
   const {isTouch} = useTouchPresentation();
+  const {
+    isCalendarInert,
+    isWheelsInert,
+    isFading,
+    isWheelsWarm,
+    titleRef,
+    toggle,
+  } = useMonthYearToggle({
+    isWheelOpen,
+    setIsWheelOpen,
+    isTouch,
+    isSheetOpen,
+    calendarRef: calendarSurfaceRef,
+    wheelsRef: wheelsSurfaceRef,
+  });
+  // The header's arrows and Reset leave with the toggle and arrive with the
+  // fade's end. They sit outside the surfaces' shield, so they go inert at
+  // once.
+  const isCalendarActionsInert = isWheelOpen || isCalendarInert || isFading;
+  const MonthGrid = isTouch ? MonthPager : MonthScroller;
   const [draftTime, setDraftTime] = useState<ISOTimeString | undefined>(() =>
     normalizeISOTime(splitDateTime(value).time, hasSeconds),
   );
@@ -1027,8 +1205,9 @@ export function TouchDateTimeField({
           )}>
           <div {...stylex.props(styles.touchHeader)}>
             <button
+              ref={titleRef}
               type="button"
-              onClick={() => setIsWheelOpen(open => !open)}
+              onClick={() => toggle(!isWheelOpen)}
               aria-expanded={isWheelOpen}
               aria-label={t('@astryx.dateInput.chooseMonthYear', {
                 monthYear: monthYearLabel,
@@ -1040,10 +1219,22 @@ export function TouchDateTimeField({
               <span {...stylex.props(styles.touchTitleText)}>
                 {monthYearLabel}
               </span>
-              <Icon icon="chevronDown" size="sm" color="secondary" />
+              <Icon
+                icon="chevronDown"
+                size="sm"
+                color="secondary"
+                // StyleX's types do not model the touch key's nested RTL
+                // condition, so the styles are cast; they compile as written.
+                xstyle={
+                  [
+                    styles.touchTitleChevron,
+                    isWheelOpen && styles.touchTitleChevronOpen,
+                  ] as StyleXStyles
+                }
+              />
             </button>
             <span
-              inert={isWheelOpen ? true : undefined}
+              inert={isCalendarActionsInert ? true : undefined}
               {...stylex.props(
                 styles.touchHeaderActions,
                 isWheelOpen && styles.touchHeaderActionsHidden,
@@ -1092,14 +1283,23 @@ export function TouchDateTimeField({
             </span>
           </div>
 
-          <div {...stylex.props(styles.touchDateSurfaceStack)}>
+          <div
+            {...stylex.props(
+              styles.touchDateSurfaceStack,
+              isFading && styles.touchDateSurfaceStackFading,
+            )}>
             <div
+              ref={calendarSurfaceRef}
               data-date-surface="calendar"
               aria-hidden={isWheelOpen ? 'true' : undefined}
-              inert={isWheelOpen ? true : undefined}
+              inert={isCalendarInert ? true : undefined}
               {...stylex.props(
                 styles.touchDateSurface,
-                isWheelOpen && styles.touchDateSurfaceHidden,
+                // Under a finger the calendar stays drawn beneath the opaque
+                // wheels, and `aria-hidden` and `inert` keep it out of reach.
+                // Flipping the inherited `visibility` would restyle it in the
+                // toggle's commit.
+                isWheelOpen && !isTouch && styles.touchCalendarSurfaceHidden,
               )}>
               <div aria-hidden="true" {...stylex.props(styles.touchWeekdays)}>
                 {weekdayHeaders.map(({dayOfWeek, name}) => (
@@ -1108,7 +1308,7 @@ export function TouchDateTimeField({
                   </div>
                 ))}
               </div>
-              <MonthScroller
+              <MonthGrid
                 key={`${minMonthIndex}:${maxMonthIndex}`}
                 handleRef={scrollerHandleRef}
                 monthModel={monthModel}
@@ -1145,12 +1345,15 @@ export function TouchDateTimeField({
             </div>
 
             <div
+              ref={wheelsSurfaceRef}
               data-date-surface="wheels"
               aria-hidden={!isWheelOpen ? 'true' : undefined}
-              inert={!isWheelOpen ? true : undefined}
+              inert={isWheelsInert ? true : undefined}
               {...stylex.props(
                 styles.touchDateSurface,
+                styles.touchWheelsSurface,
                 !isWheelOpen && styles.touchDateSurfaceHidden,
+                !isWheelOpen && isWheelsWarm && styles.touchDateSurfaceWarm,
               )}>
               <div
                 aria-hidden="true"
@@ -1173,7 +1376,7 @@ export function TouchDateTimeField({
                   size="md"
                   width="100%"
                   label={t('@astryx.dateInput.doneChoosingMonth')}
-                  onClick={() => setIsWheelOpen(false)}
+                  onClick={() => toggle(false)}
                 />
               </div>
             </div>
