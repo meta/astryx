@@ -155,51 +155,65 @@ export interface TransferListProps<T extends string = string> extends Omit<
   noResultsText?: string;
 }
 
+// A handle that shows in its row under a coarse pointer: core List's touch
+// edge guard (its finger target's 14 px reach, less the row's 8 px inset), its
+// 16 px grip and the row's gap. SYNC: core List/ListReorderHandle.tsx
+// TOUCH_EDGE_GUARD and HANDLE_SIZE.
+const TOUCH_HANDLE_ROOM = `calc(max(0px, calc(14px - ${spacingVars['--spacing-2']})) + 16px + ${spacingVars['--spacing-2']})`;
+// Where a handle hangs, core List keeps its room on that side: its 20 px hang
+// and its target's 4 px reach, less the row's own inline inset. SYNC: core
+// List/ListReorderHandle.tsx REORDER_HANDLE_HANG and TARGET_REACH.
+const HANG_ROOM = `calc(24px - ${spacingVars['--spacing-2']})`;
+
 const styles = stylex.create({
   // Core List's reorder handle sits at its row's start or end (the owner's
   // `handle.placement`). Where it shows only on hover or focus, it hangs
-  // outside the row's content, and core List keeps that room on its side
-  // (30 px less the row's own inline inset). The selected panel's heading moves in by the
-  // same room at the start, so the labels stay under it. Where the handle
-  // shows in its row, it takes 28 px and the row's gap: always, or under a
-  // coarse pointer. A row without a handle then clears it, so every label
-  // and every Remove keeps its column. SYNC: core List/ListReorderHandle.tsx
-  // HANDLE_SIZE, REORDER_HANDLE_HANG and END_REACH.
+  // outside the row's content, and core List keeps that room on its side.
+  // The selected panel's heading moves in by the same room at the start, so
+  // the labels stay under it. Where the handle shows in its row, it takes its
+  // 16 px grip and the row's gap: always, or under a coarse pointer. A row
+  // without a handle then clears it, so every label and every Remove keeps
+  // its column.
   headingPastHangingHandle: {
     paddingInlineStart: {
-      default: `calc(${spacingVars['--spacing-3']} + 30px - ${spacingVars['--spacing-2']})`,
-      '@media (pointer: coarse)': `calc(${spacingVars['--spacing-3']} + 28px + ${spacingVars['--spacing-2']})`,
+      default: `calc(${spacingVars['--spacing-3']} + ${HANG_ROOM})`,
+      '@media (pointer: coarse)': `calc(${spacingVars['--spacing-3']} + ${TOUCH_HANDLE_ROOM})`,
     },
   },
   clearsHandleAtStart: {
     paddingInlineStart: {
       default: spacingVars['--spacing-3'],
-      '@media (pointer: coarse)': `calc(${spacingVars['--spacing-3']} + 28px + ${spacingVars['--spacing-2']})`,
+      '@media (pointer: coarse)': `calc(${spacingVars['--spacing-3']} + ${TOUCH_HANDLE_ROOM})`,
     },
   },
   clearsShownHandleAtStart: {
-    paddingInlineStart: `calc(${spacingVars['--spacing-3']} + 28px + ${spacingVars['--spacing-2']})`,
+    paddingInlineStart: {
+      default: `calc(${spacingVars['--spacing-3']} + 16px + ${spacingVars['--spacing-2']})`,
+      '@media (pointer: coarse)': `calc(${spacingVars['--spacing-3']} + ${TOUCH_HANDLE_ROOM})`,
+    },
   },
   // While a search pauses reordering, core List keeps no room, so a row keeps
   // the room of the handles that hang at its end itself.
   endRoomWhileSearching: {
     paddingInlineEnd: {
-      default: `calc(${spacingVars['--spacing-3']} + 30px - ${spacingVars['--spacing-2']})`,
+      default: `calc(${spacingVars['--spacing-3']} + ${HANG_ROOM})`,
       '@media (pointer: coarse)': spacingVars['--spacing-3'],
     },
   },
   // At the end, a handle that always shows joins the row's end slot after
-  // Remove and reaches 8 px into the row's end padding, so a row without one
-  // keeps its Remove 20 px clear. An adaptive handle under a coarse pointer
-  // follows the slot, after the row's gap.
+  // Remove, so a row without one keeps its Remove clear by the handle's room.
+  // An adaptive handle under a coarse pointer follows the slot too.
   clearsHandleAtEnd: {
     marginInlineEnd: {
       default: 0,
-      '@media (pointer: coarse)': `calc(${spacingVars['--spacing-2']} + 20px)`,
+      '@media (pointer: coarse)': TOUCH_HANDLE_ROOM,
     },
   },
   clearsShownHandleAtEnd: {
-    marginInlineEnd: 20,
+    marginInlineEnd: {
+      default: `calc(16px + ${spacingVars['--spacing-2']})`,
+      '@media (pointer: coarse)': TOUCH_HANDLE_ROOM,
+    },
   },
   root: {
     display: 'flex',

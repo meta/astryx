@@ -96,8 +96,8 @@ export interface ListProps extends BaseProps<
    * unless the object's `handle.placement` is `'start'`. It always shows, in a
    * place of its own in the row: after end content, in the end slot. At the
    * start, a row that stays put keeps that room, so labels line up. With `handle.revealBehavior` `'adaptive'`, it
-   * shows while the row is hovered or holds the focus. It then hangs 30px
-   * outside the row's text, so the text keeps its place. The list takes that
+   * shows while the row is hovered or holds the focus. It then hangs
+   * outside the row's text, its target 24px out, so the text keeps its place. The list takes that
    * room from its container's padding. Where the padding is narrower, its
    * rows move in by the difference. Under a coarse pointer, under `edge`
    * `'outset'` or `'bleed'`, and after a list marker, it then sits inside

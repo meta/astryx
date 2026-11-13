@@ -91,34 +91,53 @@ import type {
 registerEnglishFallback(english);
 
 /**
- * The handle's side, for every pointer: a small control's size. A finger's
- * 44 px target is an invisible coarse-only hit layer, clamped so it never
- * takes from a neighbour (utils/hitArea.ts), not a bigger handle.
+ * The handle is its grip alone, the `sm` icon: 16 px, its share of its row.
+ * SYNC: List/ListItem.tsx, lab ListInput/ListInput.tsx and
+ * TransferList/TransferList.tsx, which lay out around it.
  */
-const HANDLE_SIZE = 28;
-/** The grip's side, the `sm` icon size: the handle's share of its row's height. */
-const GRIP_SIZE = '1rem';
+const HANDLE_SIZE = 16;
+/**
+ * The handle's target with a fine pointer, px: an invisible square around the
+ * grip, the WCAG 2.5.8 minimum. A finger's 44 px target is a coarse-only hit
+ * layer, clamped so it never takes from a neighbour (utils/hitArea.ts).
+ */
+const TARGET_SIZE = 24;
+/** How far the target reaches past the grip on each side, px. */
+const TARGET_REACH = (TARGET_SIZE - HANDLE_SIZE) / 2;
 /**
  * How far a hanging handle sits outside its row's content, px: its own side
- * and a small clearance. The grip's edge then sits 8 px from the content.
+ * and its target's reach, so the target never covers the row's content.
  * SYNC: lab ListInput/ListInput.tsx REORDER_HANDLE_HANG and the handle
  * clearances in lab TransferList/TransferList.tsx, which lay out around it.
  */
-const REORDER_HANDLE_HANG = HANDLE_SIZE + 2;
+const REORDER_HANDLE_HANG = HANDLE_SIZE + TARGET_REACH;
 /** The hanging handle's inner margin: it gives back the row's gap. */
 const HANG_GIVE_BACK = `calc(${REORDER_HANDLE_HANG - HANDLE_SIZE}px - ${spacingVars['--spacing-2']})`;
-/** How far a handle at the row's end reaches into the row's inline inset. */
-const END_REACH = 'calc(-1 * min(8px, var(--_item-inset-inline, 8px)))';
+/**
+ * A handle in its row steps in from a row edge closer than its target's
+ * reach, as a flush row's edge is. So the list never clips its target or
+ * ring. SYNC: List/ListItem.tsx EDGE_GUARD.
+ */
+const EDGE_GUARD = `max(0px, calc(${TARGET_REACH}px - var(--_item-inset-inline, ${TARGET_REACH}px)))`;
+/**
+ * How far a finger's 44 px target reaches past the grip on each side, px.
+ * SYNC: utils/hitArea.ts MIN_TOUCH_TARGET.
+ */
+const TOUCH_REACH = 14;
+/**
+ * Under a coarse pointer the handle steps in by the finger target's reach.
+ * So the list's inline clip never cuts that target. SYNC: List/ListItem.tsx
+ * TOUCH_EDGE_GUARD and lab TransferList.
+ */
+const TOUCH_EDGE_GUARD = `max(0px, calc(${TOUCH_REACH}px - var(--_item-inset-inline, ${TOUCH_REACH}px)))`;
 
 /** The grip when the theme maps nothing to `list-reorder-handle`. */
 const GRIP_FALLBACK = {icon: 'drag', size: 'sm'} as const;
 
 const styles = stylex.create({
   handle: {
-    // Centred on its row, with the grip in its middle. It takes only the
-    // grip's height in the row's layout (the negative block margins). So a
-    // compact row stays compact. The handle and its focus ring reach past
-    // that into the row's padding, never past it.
+    // Centred on its row: the grip alone, so a compact row stays compact.
+    // Its target, fill and focus ring reach past it into the row's padding.
     position: 'relative',
     alignSelf: 'center',
     display: 'flex',
@@ -127,23 +146,34 @@ const styles = stylex.create({
     flexShrink: 0,
     width: HANDLE_SIZE,
     height: HANDLE_SIZE,
-    marginBlock: `calc((${GRIP_SIZE} - ${HANDLE_SIZE}px) / 2)`,
     padding: 0,
     borderWidth: 0,
     borderRadius: 4,
-    // The ring sits inside the handle, so a flush row's list never clips it.
+    backgroundColor: 'transparent',
+    // The ring's outer edge is the target's edge, not the grip's: room for
+    // it inside the row and clear of the label.
     outlineOffset: {
       default: '0',
-      ':focus-visible': `calc(-1 * ${focusVars['--focus-outline-width']})`,
+      ':focus-visible': `calc(${TARGET_REACH}px - ${focusVars['--focus-outline-width']})`,
     },
-    // A bare glyph: no hover fill of its own. Only reorder mode
-    // fills it, as a pressed toggle button; in forced colors, the system's
-    // highlight.
-    backgroundColor: {
-      default: 'transparent',
-      ':is([aria-pressed="true"])': {
-        default: colorVars['--color-overlay-pressed'],
-        '@media (forced-colors: active)': 'Highlight',
+    // The target: an invisible square round the grip, square so a pointer
+    // hits it to its corners. A bare glyph: no hover fill of its own. Only
+    // reorder mode fills the target, as a pressed toggle button, and rounds
+    // its corners; in forced colors, the system's highlight. The fill paints
+    // under the grip, inside the handle's own stacking context.
+    isolation: 'isolate',
+    '::before': {
+      content: '""',
+      position: 'absolute',
+      inset: -TARGET_REACH,
+      zIndex: -1,
+      borderRadius: 4,
+      backgroundColor: {
+        default: 'transparent',
+        ':is([aria-pressed="true"])': {
+          default: colorVars['--color-overlay-pressed'],
+          '@media (forced-colors: active)': 'Highlight',
+        },
       },
     },
     forcedColorAdjust: {
@@ -181,7 +211,7 @@ const styles = stylex.create({
   hangAtStart: {
     marginInlineStart: {
       default: -REORDER_HANDLE_HANG,
-      '@media (pointer: coarse)': 0,
+      '@media (pointer: coarse)': TOUCH_EDGE_GUARD,
     },
     marginInlineEnd: {
       default: HANG_GIVE_BACK,
@@ -195,15 +225,24 @@ const styles = stylex.create({
     },
     marginInlineEnd: {
       default: -REORDER_HANDLE_HANG,
-      '@media (pointer: coarse)': END_REACH,
+      '@media (pointer: coarse)': TOUCH_EDGE_GUARD,
     },
   },
-  // In its place at the row's end, the handle ends the row, as an end slot
-  // would. It and its focus ring reach into the row's inline inset, never
-  // past it, so a flush row's handle stays inside the clip.
+  // In its place at the row's start or end. At the end it ends the row, as
+  // an end slot would. A row edge closer than the target's reach moves it in,
+  // so a flush row's list never clips its target or ring.
+  inRowAtStart: {
+    marginInlineStart: {
+      default: EDGE_GUARD,
+      '@media (pointer: coarse)': TOUCH_EDGE_GUARD,
+    },
+  },
   inRowAtEnd: {
     marginInlineStart: 'auto',
-    marginInlineEnd: END_REACH,
+    marginInlineEnd: {
+      default: EDGE_GUARD,
+      '@media (pointer: coarse)': TOUCH_EDGE_GUARD,
+    },
   },
   // Presses on the grip land on the handle.
   grip: {
@@ -288,11 +327,13 @@ const listStyles = stylex.create({
 export const reorderListStyle = [listStyles.list, reorderLineStyles.list];
 
 // The room a list keeps for handles that hang outside its rows' text, which
-// List applies through the session. A padded row's own inset holds part of
-// that room (Item's `--_item-inset-inline`).
-const PADDED_ROOM = `calc(${REORDER_HANDLE_HANG}px - ${spacingVars['--spacing-2']})`;
-const SPACIOUS_ROOM = `calc(${REORDER_HANDLE_HANG}px - ${spacingVars['--spacing-3']})`;
-const FLUSH_ROOM = `${REORDER_HANDLE_HANG}px`;
+// List applies through the session: the hang, then the target past it, which
+// holds the focus ring. A padded row's own inset holds part of that room
+// (Item's `--_item-inset-inline`).
+const HANG_ROOM = REORDER_HANDLE_HANG + TARGET_REACH;
+const PADDED_ROOM = `calc(${HANG_ROOM}px - ${spacingVars['--spacing-2']})`;
+const SPACIOUS_ROOM = `calc(${HANG_ROOM}px - ${spacingVars['--spacing-3']})`;
+const FLUSH_ROOM = `${HANG_ROOM}px`;
 // As much of a room as the container's padding on that side holds. Outside
 // a container that publishes its padding, none: the list's rows move in by
 // the whole room, so nothing reaches past the host.
@@ -391,8 +432,10 @@ export function reorderGutterStyle(
 const INSET = 'var(--_item-inset-inline)';
 const BLEED_START =
   'max(var(--container-padding-inline-start, 0px), var(--_item-inset-inline))';
-// A handle's room in its row: its side and the row's gap after it.
-const IN_ROW_ROOM = `${HANDLE_SIZE}px + ${spacingVars['--spacing-2']}`;
+// A handle's room in its row: the edge guard, its side and the row's gap
+// after it. Under a coarse pointer the guard is the finger target's.
+const IN_ROW_ROOM = `${EDGE_GUARD} + ${HANDLE_SIZE}px + ${spacingVars['--spacing-2']}`;
+const TOUCH_IN_ROW_ROOM = `${TOUCH_EDGE_GUARD} + ${HANDLE_SIZE}px + ${spacingVars['--spacing-2']}`;
 const COARSE = '@media (pointer: coarse)';
 
 // The room a row that stays put keeps where its neighbours' handles start
@@ -400,21 +443,34 @@ const COARSE = '@media (pointer: coarse)';
 // After a list marker, the room goes after the marker (Item's
 // `--_item-marker-room`), where those handles sit whether or not they show.
 const roomStyles = stylex.create({
-  afterMarker: {'--_item-marker-room': `calc(${IN_ROW_ROOM})`},
-  shownAtStart: {paddingInlineStart: `calc(${INSET} + ${IN_ROW_ROOM})`},
+  afterMarker: {
+    '--_item-marker-room': {
+      default: `calc(${IN_ROW_ROOM})`,
+      [COARSE]: `calc(${TOUCH_IN_ROW_ROOM})`,
+    },
+  },
+  shownAtStart: {
+    paddingInlineStart: {
+      default: `calc(${INSET} + ${IN_ROW_ROOM})`,
+      [COARSE]: `calc(${INSET} + ${TOUCH_IN_ROW_ROOM})`,
+    },
+  },
   coarseAtStart: {
     paddingInlineStart: {
       default: INSET,
-      [COARSE]: `calc(${INSET} + ${IN_ROW_ROOM})`,
+      [COARSE]: `calc(${INSET} + ${TOUCH_IN_ROW_ROOM})`,
     },
   },
   bleedShownAtStart: {
-    paddingInlineStart: `calc(${BLEED_START} + ${IN_ROW_ROOM})`,
+    paddingInlineStart: {
+      default: `calc(${BLEED_START} + ${IN_ROW_ROOM})`,
+      [COARSE]: `calc(${BLEED_START} + ${TOUCH_IN_ROW_ROOM})`,
+    },
   },
   bleedCoarseAtStart: {
     paddingInlineStart: {
       default: BLEED_START,
-      [COARSE]: `calc(${BLEED_START} + ${IN_ROW_ROOM})`,
+      [COARSE]: `calc(${BLEED_START} + ${TOUCH_IN_ROW_ROOM})`,
     },
   },
 });
