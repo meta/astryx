@@ -63,6 +63,7 @@ export default function UseEntryAnimationHookUsage() {
               key={item}
               label={item}
               variant={preset === item ? 'primary' : 'secondary'}
+              aria-pressed={preset === item}
               onClick={() => {
                 setPreset(item);
                 setIsVisible(false);
