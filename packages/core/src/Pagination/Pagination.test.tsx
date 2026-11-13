@@ -927,13 +927,25 @@ describe('Pagination', () => {
       expect(onChange).not.toHaveBeenCalled();
       expect(box).toHaveValue('abc');
       expect(box).toHaveAttribute('aria-invalid', 'true');
-      expect(screen.getByText('Invalid number')).toBeInTheDocument();
+      // The message sits on the status icon, not in a box under the bar, and
+      // the box widens to hold the icon beside the text.
+      expect(document.querySelector('.astryx-field-status')).toBeNull();
+      expect(
+        screen.getByRole('button', {name: 'Error details'}),
+      ).toBeInTheDocument();
+      const describedBy = box.getAttribute('aria-describedby')!.split(' ');
+      expect(
+        describedBy.map(id => document.getElementById(id)?.textContent),
+      ).toContain('Invalid number');
+      const field = box.closest<HTMLElement>('[style*="calc("]');
+      expect(field).not.toBeNull();
 
       // Emptying the box and blurring reverts to the committed page too.
       await user.clear(box);
       await user.tab();
       expect(onChange).not.toHaveBeenCalled();
       expect(box).toHaveValue('3');
+      expect(box.closest('[style*="calc("]')).toBeNull();
     });
 
     it('announces the committed page to screen readers', async () => {

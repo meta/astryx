@@ -750,8 +750,8 @@ export function NumberInput({
   // draft is complete only at commit, and only Enter or blur shows one.
   const [shownRejection, setShownRejection] =
     useState<NumberInputEntryError | null>(null);
-  // Whether blur kept a rejected draft. A hidden input then posts the
-  // committed number, which a form posted when blur reverted the draft.
+  // While blur keeps a rejected draft, a hidden input posts the committed
+  // number, so the form value does not change.
   const [isDraftKeptAtBlur, setIsDraftKeptAtBlur] = useState(false);
   const rejectionRules = useMemo(
     () => ({min, max, isIntegerOnly, locale}),
