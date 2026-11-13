@@ -504,8 +504,6 @@ const styles = stylex.create({
     color: colorVars['--color-text-primary'],
     whiteSpace: 'nowrap',
     flexShrink: 0,
-    // Every digit is as wide as `0`, so a `ch` reserves a digit exactly.
-    fontVariantNumeric: 'tabular-nums',
     textAlign: 'end',
   },
   marksContainer: {
