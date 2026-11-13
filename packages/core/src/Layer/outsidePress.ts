@@ -5,7 +5,8 @@
 /**
  * @file outsidePress.ts
  * @input Pointer presses on a document and on the shadow roots around a
- *   given root; with closesOnPan or onPan, pan moves from core's input stream
+ *   given root. With closesOnPan or onPan, pan moves from core's input
+ *   stream. With pressTypes, the presses' bubbling mousedown
  * @output watchOutsidePress, and useOutsidePress, one watch per component.
  *   noteOutsideDismissal and outsideDismissalCount keep a per-document count
  *   of layers that an outside press or focus move closed. The inside tests
@@ -47,6 +48,14 @@ export interface OutsidePressOptions {
    * document judges presses too, and an inner root's judgment stands.
    */
   readonly root?: Node | null;
+  /**
+   * The pointer types judged at the press rather than at the lift. A press
+   * outside by one of them closes the layer at its bubbling `mousedown`, as a
+   * manual popover's own dismissal does. A press's type is that of the last
+   * `pointerdown` before its `mousedown`. With none, or one that names no
+   * type, it is a mouse. The watch does not follow these types at the lift.
+   */
+  readonly pressTypes?: ReadonlyArray<string>;
 }
 
 // A modal host's backdrop press reads this. A press that closed a layer above
@@ -75,7 +84,7 @@ export function outsideDismissalCount(doc: Document): number {
  * @param isInside - Whether a press with this composed path is inside.
  * @param onOutside - Called once for each press that starts and ends outside,
  *   as native light dismiss does. With `closesOnPan`, also when that press
- *   pans or is cancelled.
+ *   pans or is cancelled. For a press type, at the press.
  * @returns Stops watching.
  */
 export function watchOutsidePress(
@@ -87,6 +96,7 @@ export function watchOutsidePress(
     closesOnPan = false,
     onPan,
     root = null,
+    pressTypes = [],
   }: OutsidePressOptions = {},
 ): () => void {
   const doc = owner.ownerDocument;
@@ -95,8 +105,11 @@ export function watchOutsidePress(
   const shadows = root == null ? [] : shadowRootsOutward(root);
   let startedOutside = false;
   let panStart: {id: number; x: number; y: number} | null = null;
+  // The type of the pointer whose press the next mousedown belongs to.
+  let pressType: string | null = null;
   const follows = (event: PointerEvent) =>
-    pointerTypes == null || pointerTypes.includes(event.pointerType);
+    !pressTypes.includes(event.pointerType) &&
+    (pointerTypes == null || pointerTypes.includes(event.pointerType));
   const close = () => {
     startedOutside = false;
     panStart = null;
@@ -108,6 +121,7 @@ export function watchOutsidePress(
   // An inner root's listener runs after the outer ones', so its judgment
   // stands.
   const handleDown = (event: PointerEvent) => {
+    pressType = event.pointerType;
     if (!follows(event)) {
       return;
     }
@@ -205,10 +219,30 @@ export function watchOutsidePress(
     }
   };
 
+  // A press type's press is judged at its bubbling mousedown, so a handler
+  // that stops it keeps the layer open. An inner root sees it first, with the
+  // real target, and the outer ones skip it.
+  let judgedPress: Event | null = null;
+  const handlePress = (event: Event) => {
+    if (event === judgedPress) {
+      return;
+    }
+    judgedPress = event;
+    const type = pressType || 'mouse';
+    pressType = null;
+    if (pressTypes.includes(type) && !isInside(event.composedPath())) {
+      close();
+    }
+  };
+
   const judges: EventTarget[] = [
     doc,
     ...shadows.map(({root: shadow}) => shadow),
   ];
+  const pressJudges = pressTypes.length > 0 ? judges : [];
+  for (const target of pressJudges) {
+    target.addEventListener('mousedown', handlePress);
+  }
   for (const target of judges) {
     target.addEventListener('pointerdown', handleDown as EventListener, true);
   }
@@ -230,6 +264,9 @@ export function watchOutsidePress(
         handleDown as EventListener,
         true,
       );
+    }
+    for (const target of pressJudges) {
+      target.removeEventListener('mousedown', handlePress);
     }
     stopMoves?.();
     doc.removeEventListener('pointerup', handleUp, true);
