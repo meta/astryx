@@ -1527,7 +1527,7 @@ const activeThemeRequire = createRequire(import.meta.url);
 /**
  * @typedef {object} ActiveTheme
  * @property {string|null} name
- * @property {Record<string, Record<string, string[]>>|null} variants - Custom values by component key and prop.
+ * @property {Record<string, string[]>|null} variants - Custom values by component key, the list the text view marks with `*`.
  * @property {Record<string, string>|null} fonts
  */
 
@@ -1581,16 +1581,54 @@ function extractTheme(mod) {
 }
 
 /**
- * Read the custom-value metadata a built theme module exports as
- * `themeVariants`: `{ [componentKey]: { [prop]: value[] } }`. It is a sibling
- * of the theme object rather than a theme field, because build/CLI metadata
- * stays outside `DefinedTheme` (docs/architecture/theme-authoring-contract.md).
+ * The custom values the text view marks with `*`, one list per component key:
+ * the values a built theme module exports as `themeVariants`
+ * (`{ [componentKey]: { [prop]: value[] } }`, flattened across props) and the
+ * theme object's own `variants` field (`{ [componentKey]: value[] }`), without
+ * duplicates. `themeVariants` is a sibling of the theme object, because
+ * build/CLI metadata stays outside `DefinedTheme`. `null` when the module has
+ * neither.
  * @param {any} mod
- * @returns {Record<string, Record<string, string[]>> | null}
+ * @param {any} theme
+ * @returns {Record<string, string[]> | null}
  */
-function extractVariants(mod) {
-  const variants = mod?.themeVariants;
-  return variants && typeof variants === 'object' ? variants : null;
+function extractVariants(mod, theme) {
+  const exported = mod?.themeVariants;
+  const own = theme?.variants;
+  const hasExported = exported !== null && typeof exported === 'object';
+  const hasOwn = own !== null && typeof own === 'object';
+  if (!hasExported && !hasOwn) {
+    return null;
+  }
+  /** @type {Record<string, string[]>} */
+  const merged = {};
+  /** @param {string} key @param {unknown} values */
+  const add = (key, values) => {
+    if (!Array.isArray(values)) {
+      return;
+    }
+    const list = (merged[key] ??= []);
+    for (const value of values) {
+      if (typeof value === 'string' && !list.includes(value)) {
+        list.push(value);
+      }
+    }
+  };
+  if (hasExported) {
+    for (const [key, props] of Object.entries(exported)) {
+      if (props !== null && typeof props === 'object') {
+        for (const values of Object.values(props)) {
+          add(key, values);
+        }
+      }
+    }
+  }
+  if (hasOwn) {
+    for (const [key, values] of Object.entries(own)) {
+      add(key, values);
+    }
+  }
+  return merged;
 }
 
 /**
@@ -1608,7 +1646,7 @@ function resolvedThemeData(mod, specifier, onWarning) {
   }
   return {
     name: theme.name || null,
-    variants: extractVariants(mod),
+    variants: extractVariants(mod, theme),
     fonts: theme.fonts || null,
   };
 }

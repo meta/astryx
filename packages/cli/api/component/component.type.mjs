@@ -44,11 +44,12 @@
  */
 
 /**
- * The configured theme's custom values: its name and, by component key and
- * prop, the values it adds, which the text view marks with `*`. `values` is
- * empty until the theme's built module exports `themeVariants`. `null` when
- * no theme is configured or the configured theme is not found.
- * @typedef {{name: string | null; values: Record<string, Record<string, string[]>>} | null} ComponentTheme
+ * The configured theme's custom values: its name and, by component key, the
+ * values it adds, the list the text view marks with `*`. The list merges a
+ * built module's `themeVariants` export (across props) and the theme object's
+ * own `variants` field. `null` when no theme is configured or the configured
+ * theme is not found.
+ * @typedef {{name: string | null; values: Record<string, string[]>} | null} ComponentTheme
  */
 
 /**

@@ -253,12 +253,9 @@ describe('formatBrief signature stays terse', () => {
 });
 
 describe('theme custom-variant annotation', () => {
-  // Regression guard: built themes never carried runtime variant
-  // metadata, so every `themeData?.variants` read below was dead code and the
-  // `*` annotation could not fire for ANY built theme. The theme lookup reads
-  // a `themeVariants: { [componentKey]: { [prop]: value[] } }` export beside
-  // the built theme; these tests pin the annotation rendering each value under
-  // the prop that accepts it.
+  // The theme lookup returns one list per component key, merged from a built
+  // module's `themeVariants` export and the theme object's own `variants`
+  // field; these tests pin the `*` annotation for that list.
   const docs = {
     name: 'Badge',
     description: 'A badge.',
@@ -273,63 +270,32 @@ describe('theme custom-variant annotation', () => {
       },
     ],
   };
-  const themeData = {name: 'vartheme', variants: {badge: {variant: ['gray']}}};
+  const themeData = {name: 'vartheme', variants: {badge: ['gray']}};
 
   it('formatFull suffixes theme variants with * and prints the footnote', () => {
     const out = formatFull(docs, {themeData});
 
-    // Core variants stay plain; the theme-added one is starred under its prop.
-    expect(out).toContain('neutral, info, variant:gray*');
+    // Core variants stay plain; the theme-added one is starred.
+    expect(out).toContain('neutral, info, gray*');
     expect(out).toContain('_\\* = custom variant from vartheme theme_');
   });
 
   it('formatBrief appends the starred theme variants to the Targets line', () => {
     const out = formatBrief(docs, 'Badge', '', {themeData});
 
-    expect(out).toContain('theme: variant:gray*');
+    expect(out).toContain('theme: gray*');
   });
 
-  it('names the accepting prop for each value on a two-prop target', () => {
-    const banner = {
-      name: 'Banner',
-      description: 'A banner.',
-      theming: {
-        targets: [
-          {className: 'astryx-banner', visualProps: ['container', 'status']},
-        ],
-      },
-    };
-    const bannerTheme = {
-      name: 'vartheme',
-      variants: {banner: {container: ['glass'], status: ['critical', 'muted']}},
-    };
-
-    const full = formatFull(banner, {themeData: bannerTheme});
-    expect(full).toContain(
-      '| container, status, container:glass*, status:critical*, status:muted* |',
-    );
-    const brief = formatBrief(banner, 'Banner', '', {themeData: bannerTheme});
-    expect(brief).toContain(
-      'theme: container:glass*, status:critical*, status:muted*',
-    );
-    for (const out of [full, brief]) {
-      expect(out).not.toMatch(/container:(critical|muted)|status:glass/);
-    }
-  });
-
-  it('stays silent for a theme without runtime variants (older built module)', () => {
-    // A theme built by an older CLI resolves with `variants: null` —
-    // the docs must not crash, star anything, or print the footnote.
+  it('stays silent for a theme without custom values', () => {
     const out = formatFull(docs, {
       themeData: {name: 'vartheme', variants: null},
     });
 
-    // The targets row ends at the core variants — nothing starred after them.
     expect(out).toContain('neutral, info |');
     expect(out).not.toContain('custom variant from');
   });
 
-  it('stays silent for a theme whose themeVariants export is empty', () => {
+  it('stays silent for a theme whose custom values are empty', () => {
     const out = formatFull(docs, {themeData: {name: 'vartheme', variants: {}}});
 
     expect(out).toContain('neutral, info |');

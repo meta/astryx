@@ -245,7 +245,7 @@ describe('resolveTheme package field', () => {
 
     expect(await resolveTheme(dir)).toEqual({
       name: 'legacy',
-      variants: {button: {variant: ['legacy']}},
+      variants: {button: ['legacy']},
       fonts: {body: 'legacy'},
     });
   });
@@ -570,9 +570,10 @@ describe('component output with a broken recorded theme', () => {
       const json = runComponent(dir, ['--json', 'component', 'Button']);
       expect(json.status, json.stderr).toBe(0);
       expect(JSON.parse(json.stdout).type).toBe('component.detail');
+      // The built fixture carries a `variants` field on its theme object.
       expect(JSON.parse(json.stdout).data.theme).toEqual({
         name: 'ocean',
-        values: {},
+        values: {Button: ['ocean']},
       });
       expect(json.stderr).toBe('');
     },
@@ -649,13 +650,13 @@ describe('component() data.theme', () => {
     expect(result.type).toBe('component.detail');
     expect(/** @type {any} */ (result.data).theme).toEqual({
       name: 'ocean',
-      values: {button: {variant: ['glass']}},
+      values: {button: ['glass']},
     });
   });
 
   it('carries the same theme on a list read and on each batch row', async () => {
     const cwd = themedProject();
-    const expected = {name: 'ocean', values: {button: {variant: ['glass']}}};
+    const expected = {name: 'ocean', values: {button: ['glass']}};
     const list = await component(undefined, {cwd, list: true});
     expect(/** @type {any} */ (list.data).theme).toEqual(expected);
     // Each batch row is a detail read of its own.
@@ -693,7 +694,7 @@ describe('component() data.theme', () => {
       /** @type {any} */ ((await component('Button', {cwd})).data).theme,
     );
     const text = runComponent(cwd, ['component', 'Button']);
-    expect(text.stdout).toContain('variant:glass*');
+    expect(text.stdout).toContain('glass*');
   });
 });
 
@@ -713,17 +714,21 @@ describe('resolveTheme — custom variant metadata', () => {
 
     expect(await resolveTheme(cwd)).toEqual({
       name: 'acme',
-      variants: {banner: {container: ['glass'], status: ['critical']}},
+      variants: {banner: ['glass', 'critical']},
       fonts: null,
     });
   });
 
-  it('does not read CLI metadata from the theme object itself', async () => {
+  it("still reads the theme object's own variants field, merged without duplicates", async () => {
     const cwd = themeModule(`module.exports = {
-      acmeTheme: {name: 'acme', tokens: {}, variants: {badge: ['gray']}},
+      acmeTheme: {name: 'acme', tokens: {}, variants: {badge: ['gray'], banner: ['glass']}},
+      themeVariants: {banner: {container: ['glass'], status: ['critical']}},
     };`);
 
-    expect((await resolveTheme(cwd))?.variants).toBeNull();
+    expect((await resolveTheme(cwd))?.variants).toEqual({
+      banner: ['glass', 'critical'],
+      badge: ['gray'],
+    });
   });
 
   it('resolves variants to null for a module without the export', async () => {
@@ -744,7 +749,7 @@ describe('resolveTheme — custom variant metadata', () => {
 
     expect(await resolveTheme(dir)).toEqual({
       name: 'ocean',
-      variants: {banner: {container: ['glass'], status: ['critical']}},
+      variants: {banner: ['glass', 'critical']},
       fonts: null,
     });
   });
