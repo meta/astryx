@@ -187,6 +187,9 @@ what the eval measures, so compare results only within one arm version.
   `tar -C`, a subshell `cd`, `pushd`, a symlink), a read behind a variable or
   an encoded path, and a script the agent writes and then runs give a warning
   at most. Running each agent in an isolated filesystem would close this.
+- The audit reads `sed` and search options from per-command lists. An option
+  missing from those lists can shift which word it reads as the script or
+  pattern, so a quoted path there can pass, or a correct pattern can fail.
 - One agent harness. Results describe that harness and model, not agents in
   general.
 - This folder writes its own record schema (`schemaVersion: 1` in `meta.json`).

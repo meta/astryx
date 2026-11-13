@@ -155,6 +155,10 @@ describe('reads the review found unaudited', () => {
     `grep -rn "getByRole" "/repo/my dir"`,
     `echo x | xargs grep -n getByRole "/repo/my dir/x.probe.mjs"`,
     `find src -name x -exec sed -n 1,40p "/home/agent/my notes/a.txt" \\;`,
+    `find src -name x -exec grep -f pats.txt "/repo/internal/x.probe.m""js" \\;`,
+    `echo x | xargs sed -f fix.sed "/home/agent/my notes/a.txt"`,
+    `echo x | xargs grep --file=pats.txt "/repo/my dir/x.probe.mjs"`,
+    `echo x | xargs grep -e"getByRole" "/repo/my dir/x.probe.mjs"`,
   ])('fails %j', command => {
     expect(audit(command).violations.length).toBeGreaterThan(0);
   });
@@ -192,6 +196,12 @@ describe('reads the review found unaudited', () => {
     `grep -rn --include='*.tsx' "from '../lib" src`,
     `rg -g '*.tsx' "from '../lib"`,
     `grep -rn -e "from '../lib" -e "from '../ui" src`,
+    `grep -rnA 2 "from '../lib" src`,
+    `grep -rn --after-context 2 "from '../lib" src`,
+    `rg --context 2 "from '../lib" src`,
+    `grep -e"from '../lib" -rn src`,
+    `grep -rn --regexp="from '../lib" src`,
+    `sed -i.bak "s|'../lib/utils'|'@/lib/utils'|" src/App.tsx`,
   ])('passes %j', command => {
     expect(audit(command).violations).toEqual([]);
   });
