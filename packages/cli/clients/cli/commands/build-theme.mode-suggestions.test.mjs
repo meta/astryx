@@ -109,3 +109,44 @@ describe('buildSuggestion quotes for the shell it runs in', () => {
     }
   });
 });
+
+describe('a write build refusal keeps --icons-specifier and quotes the source', () => {
+  it.each(['linux', 'win32'])('%s', async platform => {
+    const {themeBuild} = await import('../../../api/theme/build/build.mjs');
+    fs.writeFileSync(
+      path.join(app, "Macy's.theme.mjs"),
+      "export default { name: 'macys', tokens: { '--color-bg': '#000' } };\n",
+    );
+    // A file the build did not write sits where --out points.
+    fs.writeFileSync(path.join(app, 'mine.css'), 'body {}\n');
+    const real = Object.getOwnPropertyDescriptor(process, 'platform');
+    Object.defineProperty(process, 'platform', {value: platform});
+    /** @type {any} */
+    let err;
+    try {
+      await themeBuild(
+        "Macy's.theme.mjs",
+        {out: 'mine.css', iconsSpecifier: './icons.mjs'},
+        {cwd: app},
+      );
+    } catch (e) {
+      err = e;
+    } finally {
+      if (real) Object.defineProperty(process, 'platform', real);
+    }
+    const names = (err?.suggestions ?? []).map(
+      (/** @type {any} */ x) => x.name,
+    );
+    expect(names.length, String(err)).toBeGreaterThan(0);
+    const source =
+      platform === 'win32' ? "'Macy''s.theme.mjs'" : "'Macy'\\''s.theme.mjs'";
+    for (const n of names) {
+      expect(n).toContain(` theme build ${source}`);
+      expect(n).toContain('--icons-specifier ./icons.mjs');
+    }
+    // One of them drops --out: the outputs beside the source.
+    expect(names.some((/** @type {string} */ n) => !n.includes('--out'))).toBe(
+      true,
+    );
+  });
+});

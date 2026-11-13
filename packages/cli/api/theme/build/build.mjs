@@ -1230,9 +1230,7 @@ function assertOutputsReplaceable(
   let warnedOtherSource = false;
   // The same build without --out, with its other options.
   const beside = {
-    name: rerun
-      ? rerun(null)
-      : formatCliCommand(`theme build ${shellWord(rel(filePath))}`, cwd),
+    name: rerun ? rerun(null) : buildSuggestion(rel(filePath), {}, cwd),
     reason: 'write the outputs beside this source',
   };
   // A folder the theme editor made holds that theme's outputs only: another
@@ -1255,10 +1253,8 @@ function assertOutputsReplaceable(
         `The output ${rel(write.dest)} is the theme source itself. Pick another --out.`,
         [
           {
-            name: formatCliCommand(
-              `theme build ${shellWord(rel(filePath))}`,
-              cwd,
-            ),
+            // The same build without --out (its --icons-specifier kept).
+            name: beside.name,
             reason: 'write the outputs beside the source',
           },
         ],
@@ -4520,8 +4516,14 @@ async function themeBuildInternal(
   // outside cwd read-only.
   if (!options.check) {
     confineOutputs(writes, writeRoot, options.out ? OUT_REMEDY : SOURCE_REMEDY);
-    // prettier-ignore
-    const rerun = (/** @type {string | null} */ out) => formatCliCommand(['theme', 'build', path.relative(cwd, filePath), ...(out == null ? [] : ['--out', out]), ...(options.iconsSpecifier ? ['--icons-specifier', options.iconsSpecifier] : [])].map(shellWord).join(' '), cwd);
+    // This write build with another --out, or none: its --icons-specifier
+    // kept, quoted for the shell.
+    const rerun = (/** @type {string | null} */ out) =>
+      buildSuggestion(
+        path.relative(cwd, filePath),
+        {iconsSpecifier: options.iconsSpecifier, out: out ?? undefined},
+        cwd,
+      );
     // A header-less file at the default paths beside the source is an output
     // of a CLI before 0.6.7, which the build has always replaced. A path that
     // --out names may hold anything, so there only build outputs are replaced.
