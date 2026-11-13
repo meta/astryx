@@ -679,6 +679,92 @@ Module._resolveFilename = function (request, parent, isMain, options) {
     }
   }, 120_000);
 
+  it('reports an installed dependency whose manifest fails to load as its issue', () => {
+    const tmp = keptTmp('unloadable');
+    const other = makeProject();
+    try {
+      // No config: the dependency is linked because it ships a manifest,
+      // which imports a package the install lacks.
+      fs.rmSync(path.join(other.dir, 'astryx.config.mjs'));
+      fs.writeFileSync(
+        path.join(other.dir, 'package.json'),
+        JSON.stringify({
+          name: 'consumer',
+          dependencies: {'@acme/widgets': '1.0.0'},
+        }),
+      );
+      // The package declares what its manifest imports: an install without
+      // it is broken, which reinstalling fixes.
+      fs.writeFileSync(
+        path.join(other.widgets, 'package.json'),
+        JSON.stringify({
+          name: '@acme/widgets',
+          version: '1.0.0',
+          dependencies: {'astryx-test-missing-package': '1.0.0'},
+        }),
+      );
+      const manifest = path.join(other.widgets, 'astryx.integration.mjs');
+      fs.writeFileSync(
+        manifest,
+        "import 'astryx-test-missing-package';\nexport default { templates: './templates' };\n",
+      );
+      fs.mkdirSync(path.join(other.widgets, 'templates'), {recursive: true});
+      const list = run(['template', '--list'], {
+        tmp,
+        cwd: other.dir,
+        json: false,
+      });
+      expect(list.status).toBe(0);
+      expect(list.stderr).toContain('@acme/widgets has 1 integration issue');
+      const check = JSON.parse(
+        run(['doctor'], {tmp, cwd: other.dir}).stdout,
+      ).data.checks.find(
+        (/** @type {{id: string}} */ c) => c.id === 'integration-issues',
+      );
+      expect(check.status).toBe('warn');
+      expect(check.message).toContain('@acme/widgets');
+      expect(check.message).toContain('astryx-test-missing-package');
+      // A theme lookup in that package is still an unknown theme.
+      expect(
+        JSON.parse(
+          run(['theme', 'add', 'tally', '--package', '@acme/widgets'], {
+            tmp,
+            cwd: other.dir,
+          }).stdout,
+        ).code,
+      ).toBe('ERR_UNKNOWN_THEME');
+      // Kept, it says the same; once the missing package is installed (the
+      // reinstall that repairs it), it says nothing.
+      expect(
+        run(['template', '--list'], {tmp, cwd: other.dir, json: false}),
+      ).toEqual(list);
+      const installed = path.join(
+        other.dir,
+        'node_modules',
+        'astryx-test-missing-package',
+      );
+      fs.mkdirSync(installed, {recursive: true});
+      fs.writeFileSync(
+        path.join(installed, 'package.json'),
+        JSON.stringify({
+          name: 'astryx-test-missing-package',
+          version: '1.0.0',
+          type: 'module',
+          exports: './index.mjs',
+        }),
+      );
+      fs.writeFileSync(path.join(installed, 'index.mjs'), 'export {};\n');
+      const fixed = run(['template', '--list'], {
+        tmp,
+        cwd: other.dir,
+        json: false,
+      });
+      expect(fixed.stderr).not.toContain('integration issue');
+    } finally {
+      fs.rmSync(other.dir, {recursive: true, force: true});
+    }
+  }, 120_000);
+
   it("keeps an integration's themes, and finds an edit to a theme or a module it imports", () => {
     const tmp = keptTmp('themes');
     const other = makeProject();
