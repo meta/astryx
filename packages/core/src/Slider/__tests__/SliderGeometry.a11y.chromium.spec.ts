@@ -442,10 +442,6 @@ test('padding on the control keeps the thumb on the track, the fill and the mark
   );
 });
 
-// Desktop keeps the pointer model: no touch targets, and the control's own
-// touch-action and user-select. None of the touch presentation's inline
-// styles show. The gesture host sets those only under a finger, while it is
-// down.
 test('a horizontal slider keeps room for its mark labels, whatever line height surrounds it', async ({
   page,
 }) => {
@@ -478,6 +474,10 @@ test('a horizontal slider keeps room for its mark labels, whatever line height s
   }
 });
 
+// Desktop keeps the pointer model: no touch targets, and the control's own
+// touch-action and user-select. None of the touch presentation's inline
+// styles show. The gesture host sets those only under a finger, while it is
+// down.
 test('a desktop slider keeps its pointer styles: no touch targets, no inline touch styles', async ({
   page,
 }) => {

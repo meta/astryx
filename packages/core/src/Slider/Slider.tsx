@@ -226,6 +226,9 @@ interface ValueAnchor {
 // under the thumb's lower edge.
 const MARK_LABEL_OFFSET = THUMB_SIZE / 2 + 4;
 
+// The horizontal track's block size under a touch pointer (WCAG 2.5.8 AA).
+const TOUCH_TRACK_MIN_BLOCK = 24;
+
 const styles = stylex.create({
   sliderRow: {
     display: 'flex',
@@ -293,7 +296,7 @@ const styles = stylex.create({
     // tappable area grows. Desktop (fine pointer) is unchanged.
     minBlockSize: {
       default: null,
-      '@media (pointer: coarse)': '24px',
+      '@media (pointer: coarse)': `${TOUCH_TRACK_MIN_BLOCK}px`,
     },
     width: '100%',
     cursor: {
@@ -572,7 +575,7 @@ const styles = stylex.create({
   sliderRowMarkLabels: {
     paddingBlockEnd: {
       default: `calc(${MARK_LABEL_OFFSET - THUMB_SIZE / 2}px + ${typeScaleVars['--text-supporting-size']} * ${typeScaleVars['--text-supporting-leading']})`,
-      '@media (pointer: coarse)': `calc(${MARK_LABEL_OFFSET - 24 / 2}px + ${typeScaleVars['--text-supporting-size']} * ${typeScaleVars['--text-supporting-leading']})`,
+      '@media (pointer: coarse)': `calc(${MARK_LABEL_OFFSET - TOUCH_TRACK_MIN_BLOCK / 2}px + ${typeScaleVars['--text-supporting-size']} * ${typeScaleVars['--text-supporting-leading']})`,
     },
   },
 });
