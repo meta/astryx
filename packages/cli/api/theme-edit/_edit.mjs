@@ -77,6 +77,7 @@ import {
   freeThemeName,
   refuseLinks,
   usableNewName,
+  dialValueFits,
 } from './_settings.mjs';
 import {checkSetting, exampleOf, storedProblems} from './_check.mjs';
 import {MODAL} from './_compiler.mjs';
@@ -272,10 +273,34 @@ export async function themeEditNew(name, options = {}) {
       : LIKE.includes(baseName(like))
         ? baseName(like)
         : (nearest(baseName(like), have)[0] ?? null);
+  // A dial value the dial does not take is left out of a suggested `new`
+  // (a corrected name must not repeat it), and the refusal says so.
+  /** @type {Array<[string, string]>} */
+  const unfit = Object.entries(settings).flatMap(([k, v]) =>
+    (Array.isArray(v) ? v : v == null ? [] : [v])
+      .map(x => /** @type {[string, string]} */ ([k, String(x)]))
+      .filter(([dial, x]) => DIALS[dial] && !dialValueFits(dial, x)),
+  );
+  const isUnfit = (/** @type {string} */ k, /** @type {unknown} */ x) =>
+    unfit.some(([a, b]) => a === k && b === String(x));
+  /** @type {Record<string, string | string[] | undefined>} */
+  const fitSettings = Object.fromEntries(
+    Object.entries(settings).map(([k, v]) => [
+      k,
+      Array.isArray(v)
+        ? v.filter(x => !isUnfit(k, x))
+        : isUnfit(k, v)
+          ? undefined
+          : v,
+    ]),
+  );
+  const dropped = unfit.length
+    ? ` The suggestion leaves out ${unfit.map(([k, x]) => `--${k} ${quoteCommandArgument(x)}`).join(', ')}: not ${unfit.length === 1 ? 'a value its dial takes' : 'values their dials take'} (${[...new Set(unfit.map(([k]) => `${k} takes ${DIALS[k].values}`))].join('; ')}).`
+    : '';
   const again = (
     /** @type {string} */ newName,
     /** @type {string | null | undefined} */ likeValue = likeFixed,
-  ) => `${P} new ${newName}${newFlags(likeValue, settings, png)}`;
+  ) => `${P} new ${newName}${newFlags(likeValue, fitSettings, png)}`;
   if (!slugOk(name)) {
     const fixed = slugFor(name);
     // Only a name typed in another case is the theme here already.
@@ -283,7 +308,7 @@ export async function themeEditNew(name, options = {}) {
     const exists = sameName && fs.existsSync(themeFiles(cwd, fixed).settings);
     refuse(
       E.ERR_INVALID_ARGUMENT,
-      `"${String(name ?? '').slice(0, 80)}" is not a theme name (${NAME_RULE})${exists ? `; ${fixed} is a theme here already` : ''}.`,
+      `"${String(name ?? '').slice(0, 80)}" is not a theme name (${NAME_RULE})${exists ? `; ${fixed} is a theme here already` : ''}.${dropped}`,
       {
         run: exists
           ? [`${P} show ${fixed}`]
@@ -296,7 +321,7 @@ export async function themeEditNew(name, options = {}) {
   if (LIKE.includes(name))
     refuse(
       E.ERR_FILE_EXISTS,
-      `${name} is a built-in theme; an editor theme needs a name of its own. To start from ${name}, build on it.`,
+      `${name} is a built-in theme; an editor theme needs a name of its own. To start from ${name}, build on it.${dropped}`,
       {
         run: [
           again(
@@ -330,14 +355,14 @@ export async function themeEditNew(name, options = {}) {
   if (dirSt && (dirSt.isSymbolicLink() || !dirSt.isDirectory()))
     refuse(
       E.ERR_FILE_EXISTS,
-      `themes/${name} is ${dirSt.isSymbolicLink() ? 'a link' : 'a file'}, so a theme is not made there.`,
+      `themes/${name} is ${dirSt.isSymbolicLink() ? 'a link' : 'a file'}, so a theme is not made there.${dropped}`,
       {run: [again(freeThemeName(cwd, name))]},
     );
   // Settings that are not valid JSON are kept aside, and the theme is
   // made again beside them.
   const damaged = fs.existsSync(f.settings) && !readableJson(f.settings);
   if (fs.existsSync(f.settings) && !damaged)
-    refuse(E.ERR_FILE_EXISTS, `Theme "${name}" already exists.`, {
+    refuse(E.ERR_FILE_EXISTS, `Theme "${name}" already exists.${dropped}`, {
       // What the command asked for, on the theme that exists or as a new one.
       run: [
         `${P} show ${name}`,
@@ -361,7 +386,7 @@ export async function themeEditNew(name, options = {}) {
   if (holdsOther)
     refuse(
       E.ERR_FILE_EXISTS,
-      `themes/${name}/ already holds files this command did not make; choose another name.`,
+      `themes/${name}/ already holds files this command did not make; choose another name.${dropped}`,
       {run: [again(freeThemeName(cwd, name))]},
     );
   if (like != null && !LIKE.includes(like))

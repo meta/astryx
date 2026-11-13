@@ -77,7 +77,6 @@ import {
   baseModule,
   baseResolved,
   baseThemeFile,
-  themeCacheRoot,
 } from './_project.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 
@@ -188,23 +187,47 @@ export function themeFiles(cwd, slug) {
     preview: path.join(dir, 'preview.html'),
     sheet: path.join(dir, 'sheet.html'),
     previewPng: path.join(dir, 'preview.png'),
+    pictures: path.join(dir, `${slug}.pictures.json`),
     sheetPng: path.join(dir, 'sheet.png'),
   };
 }
 
 /**
- * Where the editor records the pictures it wrote into a theme folder (each
- * by name with the hash of what it wrote), in the project's theme cache;
- * null without one.
+ * Whether a value fits what a dial takes, read from the dial's own list of
+ * values: a named rung in any case, or a value of the kind it names (a size,
+ * a color, a number). `set` still checks the value in full.
+ * @param {string} dial
+ * @param {string} value
+ */
+export function dialValueFits(dial, value) {
+  const spec = DIALS[/** @type {keyof typeof DIALS} */ (dial)]?.values;
+  if (!spec) return false;
+  const v = String(value).trim();
+  if (v === '') return false;
+  return spec.split('|').some(option => {
+    if (!option.startsWith('<') && !option.startsWith('"'))
+      return option === v.toLowerCase();
+    if (option.startsWith('"')) return true;
+    if (option.includes('size')) return /^\d*\.?\d+(px|rem|em)$/.test(v);
+    // A color by the editor's own color check (a bare word only when it
+    // names a color).
+    if (option === '<color>') return colorProblem(v) == null;
+    if (option === '<0-100>') return /^\d{1,3}$/.test(v) && Number(v) <= 100;
+    if (option === '<number>') return /^\d*\.?\d+$/.test(v);
+    return false;
+  });
+}
+
+/**
+ * Where the editor records the pictures it wrote into a theme folder: a
+ * file of the theme's own beside its settings and history, each picture by
+ * its name with the hash of what was written, so the record moves and is
+ * copied with the theme.
  * @param {string} cwd
  * @param {string} slug
  */
 function writtenRecord(cwd, slug) {
-  const root = themeCacheRoot(cwd);
-  if (!root) return null;
-  const dir = path.resolve(themeFiles(cwd, slug).dir);
-  const key = createHash('sha256').update(dir).digest('hex').slice(0, 12);
-  return path.join(root, 'written', `${slug}-${key}.json`);
+  return themeFiles(cwd, slug).pictures;
 }
 
 /** @param {string} file @returns {string | null} */
@@ -216,9 +239,8 @@ const contentHash = file => {
   }
 };
 
-/** @param {string | null} rec @returns {Record<string, string>} */
+/** @param {string} rec @returns {Record<string, string>} */
 const readRecord = rec => {
-  if (!rec) return {};
   try {
     const json = JSON.parse(fs.readFileSync(rec, 'utf8'));
     return json && typeof json === 'object' && !Array.isArray(json) ? json : {};
@@ -230,8 +252,8 @@ const readRecord = rec => {
 /** @param {string} rec @param {Record<string, string>} map */
 const writeRecord = (rec, map) => {
   try {
-    fs.mkdirSync(path.dirname(rec), {recursive: true});
-    fs.writeFileSync(rec, `${JSON.stringify(map, null, 2)}\n`);
+    if (!Object.keys(map).length) fs.rmSync(rec, {force: true});
+    else writeWhole(rec, `${JSON.stringify(map, null, 2)}\n`);
   } catch {
     // Without a record nothing is removed later: the safe way round.
   }
@@ -245,7 +267,6 @@ const writeRecord = (rec, map) => {
  */
 export function recordWritten(cwd, slug, files) {
   const rec = writtenRecord(cwd, slug);
-  if (!rec) return;
   const map = readRecord(rec);
   for (const file of files) {
     const hash = contentHash(file);
@@ -276,7 +297,6 @@ export function editorWrote(cwd, slug, file) {
 function forgetWritten(cwd, slug, names) {
   if (!names.length) return;
   const rec = writtenRecord(cwd, slug);
-  if (!rec) return;
   const map = readRecord(rec);
   for (const n of names) delete map[n];
   writeRecord(rec, map);
@@ -630,9 +650,12 @@ export function loadTheme(
         `themes/${slug} holds the editor files of a theme named ${copied} (${files.slice(0, 4).join(', ')}${files.length > 4 ? ', …' : ''}): it looks like a copy or rename of ${copied}. The editor reads a theme's files by its folder's name, so to edit it as ${slug}, rename each ${copied}.* file there to ${slug}.* (${files
           .slice(0, 2)
           .map(n => `${n} to ${slug}${n.slice(copied.length)}`)
-          .join(
-            ', ',
-          )}${files.length > 2 ? ', and so on' : ''})${original ? `; ${copied} itself is still in themes/${copied}` : ''}.`,
+          .join(', ')}${files.length > 2 ? ', and so on' : ''})${
+          // The theme source names the theme inside it too: every step.
+          files.includes(`${copied}.theme.ts`)
+            ? `, then in ${slug}.theme.ts change './${copied}.settings' to './${slug}.settings', ${camel(copied)}Settings to ${camel(slug)}Settings (in the import and in extends), name: '${copied}' to name: '${slug}', and ${camel(copied)}Theme to ${camel(slug)}Theme`
+            : ''
+        }${original ? `; ${copied} itself is still in themes/${copied}` : ''}.`,
         {
           run: original
             ? [`${P} show ${copied}`, `ls -la themes/${slug}`]

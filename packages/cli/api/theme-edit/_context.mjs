@@ -43,6 +43,7 @@ import {
   modesOf,
   nearest,
   refuse,
+  editorWrote,
   recordWritten,
   themeFiles,
   refuseThemesNotFolder,
@@ -383,23 +384,41 @@ export async function pictures(project, shots, modes) {
   const files = [];
   /** @type {string[]} */
   const cut = [];
+  /** @param {string} png @param {'light' | 'dark'} m */
+  const outOf = (png, m) =>
+    modes.length > 1 && m === 'dark' ? png.replace(/\.png$/, '-dark.png') : png;
+  /** The theme a picture's folder is, when it is a theme folder. @param {string} out */
+  const themeOf = out => {
+    const slug = path.basename(path.dirname(out));
+    return path.resolve(path.dirname(out)) ===
+      path.resolve(themeFiles(project.cwd, slug).dir)
+      ? slug
+      : null;
+  };
+  // A picture is written only over a picture the editor took, unchanged
+  // since: a file of the user's by that name blocks every picture, and is
+  // named.
+  const blocked = shots
+    .flatMap(({png}) => modes.map(m => outOf(png, m)))
+    .filter(out => {
+      const slug = themeOf(out);
+      return slug && fs.existsSync(out) && !editorWrote(project.cwd, slug, out);
+    });
+  if (blocked.length)
+    return {
+      files,
+      problem: `${blocked.map(f => path.relative(project.cwd, f)).join(', ')} ${blocked.length === 1 ? 'is a file' : 'are files'} the editor did not write (or changed since it did), so no picture was taken and ${blocked.length === 1 ? 'it is' : 'they are'} left as ${blocked.length === 1 ? 'it is' : 'they are'}`,
+    };
   for (const {html, png} of shots) {
     for (const m of modes) {
-      const out =
-        modes.length > 1 && m === 'dark'
-          ? png.replace(/\.png$/, '-dark.png')
-          : png;
+      const out = outOf(png, m);
       const r = await screenshot(project, html, out, m);
       if (!r.ok) return {files, problem: r.reason};
       files.push(r.file);
       // A picture in a theme folder is recorded as the editor's, so a later
       // change removes it and never a picture of the user's.
-      const slug = path.basename(path.dirname(out));
-      if (
-        path.resolve(path.dirname(out)) ===
-        path.resolve(themeFiles(project.cwd, slug).dir)
-      )
-        recordWritten(project.cwd, slug, [out]);
+      const slug = themeOf(out);
+      if (slug) recordWritten(project.cwd, slug, [out]);
       if (r.cut) cut.push(r.file);
     }
   }
@@ -631,7 +650,15 @@ export async function previewAfter(ctx, slug, data, png) {
         }
       : sectionsStale.length
         ? {
-            sheetStale: `${[...(sheetStale ? ['sheet.html'] : []), ...sectionsStale].join(', ')} show ${slug} as it was before this change; ${P} show ${slug} makes sheet.html again, and ${P} show ${slug} --section <section> a section's sheet`,
+            sheetStale: `${[...(sheetStale ? ['sheet.html'] : []), ...sectionsStale].join(', ')} show ${slug} as it was before this change; ${[
+              ...(sheetStale
+                ? [`${P} show ${slug} makes sheet.html again`]
+                : []),
+              ...sectionsStale.map(
+                n =>
+                  `${P} show ${slug} --section ${n.replace(/^sheet-|\.html$/g, '')} makes ${n} again`,
+              ),
+            ].join(', ')}`,
           }
         : {}),
   };
@@ -720,7 +747,10 @@ function markSheetStale(file, slug, cwd) {
     return false;
   }
   if (html.includes(STALE_MARK)) return true;
-  const banner = `${STALE_MARK}<div style="position:sticky;top:0;z-index:9999;padding:8px 12px;background:#fff3cd;color:#3d2c00;font:14px system-ui,sans-serif;border-bottom:1px solid #e0c870">This sheet shows ${slug} as it was before the last change. Run ${P} show ${slug} to make it again.</div>`;
+  // A section's sheet is made again by its own show.
+  const section = /^sheet-([a-z-]+)\.html$/.exec(path.basename(file))?.[1];
+  const again = `${P} show ${slug}${section ? ` --section ${section}` : ''}`;
+  const banner = `${STALE_MARK}<div style="position:sticky;top:0;z-index:9999;padding:8px 12px;background:#fff3cd;color:#3d2c00;font:14px system-ui,sans-serif;border-bottom:1px solid #e0c870">This sheet shows ${slug} as it was before the last change. Run ${again} to make it again.</div>`;
   const at = html.search(/<body[^>]*>/i);
   const next =
     at < 0 ? banner + html : html.replace(/<body[^>]*>/i, m => `${m}${banner}`);
