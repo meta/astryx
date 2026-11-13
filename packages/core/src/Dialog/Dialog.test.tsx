@@ -568,6 +568,17 @@ describe('Dialog', () => {
     expect(dialog).not.toHaveAttribute('open');
   });
 
+  it("paints the theme's text color on its surface, not the browser's", () => {
+    render(
+      <Dialog isOpen onOpenChange={() => {}} aria-label="Notes">
+        <label>Title</label>
+      </Dialog>,
+    );
+    expect(getComputedStyle(screen.getByRole('dialog')).color).toBe(
+      'var(--color-text-primary)',
+    );
+  });
+
   it('has aria-modal attribute', () => {
     render(
       <Dialog isOpen={true} onOpenChange={() => {}}>
