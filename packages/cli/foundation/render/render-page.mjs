@@ -19,15 +19,19 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fork, spawnSync} from 'node:child_process';
+import {builtinModules} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import postcss from 'postcss';
 import {assetDataUri, isAssetBytes, isAssetPath, RenderAssetError} from './assets.mjs';
 import {classesIn, cutCss, layerOrderOf} from './css-cut.mjs';
-import {sourceBlock} from './source-block.mjs';
+import {RENDER_FORMAT, sha256, sourceBlock} from './source-block.mjs';
 import {embeddedPathProblem} from './embedded-files.mjs';
-import {resolveServed} from './served-packages.mjs';
+import {isServedPackage, resolveServed} from './served-packages.mjs';
 import {CHART_CSS} from './charts.mjs';
 import {HOST_EXIT} from './host-exit.mjs';
+import {endNote, headerNote} from './file-header.mjs';
+import {textRuns} from './markup-edits.mjs';
+import {findNodeModulesPackage} from '../fs/paths.mjs';
 
 /** How long one page may take to render before it is stopped. */
 export const RENDER_TIMEOUT_MS = 60_000;
@@ -369,7 +373,9 @@ function runWorker(input, timeoutMs) {
     host.once('error', error => {
       finish(() => reject(new RenderError('ERR_RENDER_FAILED', `The page could not be rendered: ${String(error?.message ?? error).split('\n')[0]}`)));
     });
-    host.once('exit', (code, signal) => {
+    // 'close' comes after the IPC channel drains, so an answer the host sent
+    // just before it exited still wins; 'exit' can come first under load.
+    host.once('close', (code, signal) => {
       finish(() => {
         const crash = crashOf(code, signal);
         if (crash) resolve({crashed: crash});
@@ -484,6 +490,26 @@ function inlineAssets(text, kind, ctx) {
     });
 }
 
+/**
+ * The version of a package the page rendered with: the package set's copy
+ * when the page took it from there, else the copy Node's resolver finds from
+ * the page's folder.
+ * @param {string} name
+ * @param {string} dir the page's folder
+ * @param {Map<string, string>} setDirs the packages the page took from the package set: their folders
+ * @returns {string | null}
+ */
+function installedVersion(name, dir, setDirs) {
+  const packageDir = setDirs.get(name) ?? findNodeModulesPackage(dir, name)?.packageDir;
+  if (!packageDir) return null;
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(packageDir, 'package.json'), 'utf8'));
+    return pkg?.name === name && typeof pkg.version === 'string' ? pkg.version : null;
+  } catch {
+    return null;
+  }
+}
+
 /** The light and dark switch every rendered page carries. */
 const SCHEME_CSS =
   ':root{color-scheme:light dark}:root[data-theme="light"]{color-scheme:light}:root[data-theme="dark"]{color-scheme:dark}';
@@ -491,9 +517,13 @@ const SCHEME_CSS =
 /**
  * Render a page module to one self-contained HTML file.
  * @param {string} entry absolute path of the page module
- * @param {{title?: string, timeoutMs?: number, version?: string, served?: ServedSet | null}} [options]
+ * @param {{title?: string, timeoutMs?: number, version?: string, served?: ServedSet | null, output?: string}} [options]
  *   `served`: the Core of the package set the CLI runs from, for the packages
- *   the page's folder has no copy of
+ *   the page's folder has no copy of; `output`: the file the HTML goes to.
+ *   With `output`, the file describes itself: notes at its top and end name
+ *   what made it and the commands that give the page back and render it
+ *   again, and its embedded source records the CLI version, the packages
+ *   the page rendered with, and the markup as rendered.
  * @returns {Promise<RenderedPage>}
  */
 export async function renderPage(entry, options = {}) {
@@ -739,14 +769,62 @@ export async function renderPage(entry, options = {}) {
   }
   const heading = /<h1\b[^>]*>([\s\S]*?)<\/h1>/i.exec(markup)?.[1]?.replace(/<[^>]*>/g, '').trim();
   const title = options.title ?? (heading ? decodeAttr(heading) : path.basename(entry).replace(/\.[^.]+$/, ''));
-  const html =
-    '<!doctype html><html lang="en"><head><meta charset="utf-8">' +
-    '<meta name="viewport" content="width=device-width,initial-scale=1">' +
-    '<meta name="color-scheme" content="light dark">' +
-    `<meta name="generator" content="Astryx${options.version ? ` ${escapeHtml(options.version)}` : ''}">` +
-    `<title>${escapeHtml(title)}</title>` +
-    `<style>${SCHEME_CSS}${markup.includes('class="recharts-responsive-container"') ? CHART_CSS : ''}${css}</style></head><body>${markup}` +
-    `${sourceBlock(path.basename(entry), embedded)}</body></html>\n`;
+  const generator = `<meta name="generator" content="Astryx${options.version ? ` ${escapeHtml(options.version)}` : ''}">`;
+  const style = `<style>${SCHEME_CSS}${markup.includes('class="recharts-responsive-container"') ? CHART_CSS : ''}${css}</style>`;
+  let html;
+  if (options.output) {
+    // The charset and generator metas come first: a browser reads the
+    // charset only from the first 1024 bytes, and a CLI decides whether a
+    // render wrote a file from its first 4096.
+    const setDirs = new Map(/** @type {{name: string, dir: string}[]} */ (message.fromSet ?? []).map(p => [p.name, p.dir]));
+    const names = new Set([...(message.packages ?? []), ...setDirs.keys(), 'react', 'react-dom']);
+    if (hasCore) names.add('@astryxdesign/core');
+    /** @type {Record<string, string>} */
+    const packages = {};
+    for (const name of [...names].sort()) {
+      if (name.startsWith('node:') || builtinModules.includes(name)) continue;
+      const version = installedVersion(name, dir, setDirs);
+      if (version) packages[name] = version;
+    }
+    const file = path.basename(options.output);
+    const facts = {
+      cli: options.version ?? null,
+      format: RENDER_FORMAT,
+      file,
+      page: path.relative(root, entry).split(path.sep).join('/'),
+      restored: `${file.replace(/\.[^.]+$/, '')}-restored/${embedded[0].path}`,
+      files: embedded.map(f => f.path),
+      packages,
+      install: Object.entries(packages)
+        .filter(([name]) => !isServedPackage(name, []))
+        .map(([name, version]) => `${name}@${version}`),
+      ...(options.title === undefined ? {} : {title: options.title}),
+    };
+    const record = {
+      ...(facts.cli ? {cli: facts.cli} : {}),
+      page: facts.page,
+      ...(options.title === undefined ? {} : {title: options.title}),
+      packages,
+      markup: {
+        sha256: sha256(markup),
+        style: sha256(style),
+        text: Buffer.from(JSON.stringify({title, runs: textRuns(markup)})).toString('base64'),
+      },
+    };
+    html =
+      `<!doctype html><html lang="en"><head><meta charset="utf-8">${generator}\n${headerNote(facts)}\n` +
+      '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+      '<meta name="color-scheme" content="light dark">' +
+      `<title>${escapeHtml(title)}</title>${style}</head><body>${markup}` +
+      `${sourceBlock(path.basename(entry), embedded, record)}\n${endNote(facts)}\n</body></html>\n`;
+  } else {
+    html =
+      '<!doctype html><html lang="en"><head><meta charset="utf-8">' +
+      '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+      '<meta name="color-scheme" content="light dark">' +
+      `${generator}<title>${escapeHtml(title)}</title>${style}</head><body>${markup}` +
+      `${sourceBlock(path.basename(entry), embedded)}</body></html>\n`;
+  }
   return {
     html,
     files: embedded.map(f => f.path),
