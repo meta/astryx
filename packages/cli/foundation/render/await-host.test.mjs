@@ -154,6 +154,27 @@ describe("the host's state file", () => {
     expect(fs.existsSync(path.dirname(seen))).toBe(false);
   });
 
+  it('is left out when no temporary folder can be made, and the render still runs', async () => {
+    /** @type {string | undefined | null} */
+    let given = null;
+    const result = await withHostStateFile(
+      async file => {
+        given = file;
+        return 'rendered';
+      },
+      {
+        makeTempDir: () => {
+          throw Object.assign(
+            new Error('ENOENT: no such file or directory, mkdtemp'),
+            {code: 'ENOENT'},
+          );
+        },
+      },
+    );
+    expect(result).toBe('rendered');
+    expect(given).toBeUndefined();
+  });
+
   it('is removed after a run that fails, too', async () => {
     let seen = '';
     await expect(

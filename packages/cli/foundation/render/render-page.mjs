@@ -374,13 +374,26 @@ function runWorker(input, timeoutMs) {
 
 /**
  * Run `use` with a state file for one host in a new folder under the system's
- * temporary folder, never in the project, and remove the folder after.
+ * temporary folder, never in the project, and remove the folder after. The
+ * state file only explains a failure: without a temporary folder, `use` gets
+ * none and the render runs without it.
  * @template T
- * @param {(stateFile: string) => Promise<T>} use
+ * @param {(stateFile: string | undefined) => Promise<T>} use
+ * @param {{makeTempDir?: (prefix: string) => string}} [options]
  * @returns {Promise<T>}
  */
-export async function withHostStateFile(use) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-render-'));
+export async function withHostStateFile(
+  use,
+  {makeTempDir = prefix => fs.mkdtempSync(prefix)} = {},
+) {
+  /** @type {string} */
+  let dir;
+  try {
+    dir = makeTempDir(path.join(os.tmpdir(), 'astryx-render-'));
+  } catch {
+    // No temporary folder (missing or read-only): render without the state file.
+    return use(undefined);
+  }
   try {
     return await use(path.join(dir, 'host-state.json'));
   } finally {
