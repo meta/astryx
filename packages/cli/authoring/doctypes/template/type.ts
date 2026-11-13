@@ -112,7 +112,7 @@ export interface BlockTemplateDoc extends BaseTemplateDoc {
    *  component's options side by side and is not put into a page as it is.
    *  Decide it from what the block renders. `astryx build` uses it to name
    *  the slot of the start template each block goes in. Integration
-   *  templates need `@astryxdesign/cli` 0.7.16 or later: earlier CLIs reject
+   *  templates need `@astryxdesign/cli` 0.7.17 or later: earlier CLIs reject
    *  the field and drop that template. */
   fits?: TemplateSlotKind[];
 }
@@ -123,7 +123,7 @@ export interface PageTemplateDoc extends BaseTemplateDoc {
    *  navigation, header, toolbar, side panels and footer, and each part of
    *  its body named by what it holds. `astryx build` puts each block it
    *  names into the first slot whose kind the block fits. Integration
-   *  templates need `@astryxdesign/cli` 0.7.16 or later: earlier CLIs reject
+   *  templates need `@astryxdesign/cli` 0.7.17 or later: earlier CLIs reject
    *  the field and drop that template. */
   slots?: TemplateSlot[];
 }

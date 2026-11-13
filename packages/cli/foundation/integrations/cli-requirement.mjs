@@ -100,7 +100,7 @@ export const TEMPLATE_ICONS_CLI = '0.7.4';
  * Tied to the next patch slot: it must equal the first stable release that
  * reads the fields.
  */
-export const TEMPLATE_SLOTS_CLI = '0.7.16';
+export const TEMPLATE_SLOTS_CLI = '0.7.17';
 
 /**
  * The first CLI release that reads a doc section's `before` and `after`.

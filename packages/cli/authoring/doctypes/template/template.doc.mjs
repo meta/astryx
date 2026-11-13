@@ -141,13 +141,13 @@ export const doc = {
       name: 'slots',
       type: 'TemplateSlot[]',
       description:
-        "Page templates only: the named places in the page where blocks go, in reading order. Each slot is `{name, kind, description}`: `name` is lowercase words joined by hyphens and unique in the page, `kind` is one of the slot kinds below, and `description` says in one sentence where the slot is and what goes there. A shell is a layout: its slots are its navigation and its body (`main`). `astryx build` lists the start's slots and names the slot each block it suggests goes in. Integration templates need @astryxdesign/cli 0.7.16 or later: earlier CLIs reject the field and drop that template.",
+        "Page templates only: the named places in the page where blocks go, in reading order. Each slot is `{name, kind, description}`: `name` is lowercase words joined by hyphens and unique in the page, `kind` is one of the slot kinds below, and `description` says in one sentence where the slot is and what goes there. A shell is a layout: its slots are its navigation and its body (`main`). `astryx build` lists the start's slots and names the slot each block it suggests goes in. Integration templates need @astryxdesign/cli 0.7.17 or later: earlier CLIs reject the field and drop that template.",
     },
     {
       name: 'fits',
       type: 'TemplateSlotKind[]',
       description:
-        "Block templates only: the kinds of place the block goes in, best first: page slot kinds, or a context, `overlay` (opens from a trigger) or `inline` (goes inside another piece). An empty list says the block is a reference that shows a component's options and is not put into a page as it is. Decide it from what the block renders. `astryx build` puts each block it suggests into the start's slot of its best fit, else into the page body (`main`); an overlay or inline block goes in no slot. Integration templates need @astryxdesign/cli 0.7.16 or later: earlier CLIs reject the field and drop that template.",
+        "Block templates only: the kinds of place the block goes in, best first: page slot kinds, or a context, `overlay` (opens from a trigger) or `inline` (goes inside another piece). An empty list says the block is a reference that shows a component's options and is not put into a page as it is. Decide it from what the block renders. `astryx build` puts each block it suggests into the start's slot of its best fit, else into the page body (`main`); an overlay or inline block goes in no slot. Integration templates need @astryxdesign/cli 0.7.17 or later: earlier CLIs reject the field and drop that template.",
     },
   ],
   examples: [
