@@ -28,8 +28,8 @@ export interface UseTableColumnsVirtualizationConfig {
 
 /**
  * Opt into Table column windowing: only the unpinned columns near the inline
- * viewport mount. Columns keep their declared widths; unsupported content or
- * structure renders every column.
+ * viewport mount, plus the column of a focused cell. Columns keep their
+ * declared widths; unsupported content or structure renders every column.
  *
  * @example
  * ```

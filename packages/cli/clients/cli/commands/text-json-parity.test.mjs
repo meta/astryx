@@ -760,11 +760,14 @@ const CASES = [
       'neutral',
     ],
     prepare: themeProject,
-    beforeEachRun: async cwd =>
-      fs.rmSync(path.join(cwd, 'themes', 'fresh'), {
-        recursive: true,
-        force: true,
-      }),
+    // The theme and its app copy go, so each run is the same first write.
+    beforeEachRun: async cwd => {
+      for (const dir of [
+        path.join(cwd, 'themes', 'fresh'),
+        path.join(cwd, 'src', 'themes', 'fresh'),
+      ])
+        fs.rmSync(dir, {recursive: true, force: true});
+    },
   },
   {
     name: 'experimental theme editor new',
@@ -782,11 +785,14 @@ const CASES = [
       'round',
     ],
     prepare: themeProject,
-    beforeEachRun: async cwd =>
-      fs.rmSync(path.join(cwd, 'themes', 'flagged'), {
-        recursive: true,
-        force: true,
-      }),
+    // The theme and its app copy go, so each run is the same first write.
+    beforeEachRun: async cwd => {
+      for (const dir of [
+        path.join(cwd, 'themes', 'flagged'),
+        path.join(cwd, 'src', 'themes', 'flagged'),
+      ])
+        fs.rmSync(dir, {recursive: true, force: true});
+    },
   },
   {
     name: 'experimental theme editor set',

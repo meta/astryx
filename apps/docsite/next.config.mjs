@@ -25,6 +25,10 @@ const playgroundCookieCompatibility = readFileSync(
   'utf8',
 );
 
+const landingPreviewsInBrowser = resolve(
+  import.meta.dirname,
+  'src/app/(site)/_landing/landingPreviewsInBrowser.ts',
+);
 // Slugs that are not pages of their own (generate-data.mjs): a guide under a
 // docs-tree namespace opens at its section on the namespace's full page, and
 // a flat topic merged into another page opens there.
@@ -191,6 +195,21 @@ const nextConfig = {
         ...[config.externals ?? []].flat(),
         {'@astryxdesign/cli/api': 'module @astryxdesign/cli/api'},
       ];
+    }
+    // The landing preview markup reaches the page once, as server HTML. The
+    // browser bundle gets an empty map in place of the generated one, so the
+    // markup is not sent again in the page's scripts or RSC payload.
+    if (!isServer) {
+      config.plugins.push(
+        new webpack.NormalModuleReplacementPlugin(
+          /[\\/]src[\\/]generated[\\/]landingPreviews\.ts$/u,
+          resource => {
+            if (resource.createData) {
+              resource.createData.resource = landingPreviewsInBrowser;
+            }
+          },
+        ),
+      );
     }
     // Webpack's CSS @import resolver doesn't follow package.json "exports".
     // Map each theme's /theme.css subpath to the actual dist file.
