@@ -3196,7 +3196,23 @@ export async function themeEditUndo(theme, options = {}) {
   const {cwd = process.cwd(), png = false, thing} = options;
   // base and mode are not settings in the list: undoing one goes back to
   // what the theme was made with (the oldest step the history keeps).
-  if (thing === 'base' || thing === 'mode') {
+  // A `base` or `mode` entry a hand edit put in the settings list is a
+  // setting like any other there: undo removes it.
+  const listed =
+    (thing === 'base' || thing === 'mode') &&
+    slugOk(theme) &&
+    (() => {
+      try {
+        return JSON.parse(
+          fs
+            .readFileSync(themeFiles(cwd, theme).settings, 'utf8')
+            .replace(/^\uFEFF/, ''),
+        ).settings.some((/** @type {any} */ x) => x?.thing === thing);
+      } catch {
+        return false;
+      }
+    })();
+  if ((thing === 'base' || thing === 'mode') && !listed) {
     requireProject(cwd);
     const now = loadTheme(cwd, theme, thing);
     const historyFile = themeFiles(cwd, theme).history;

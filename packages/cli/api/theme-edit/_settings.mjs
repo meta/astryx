@@ -906,7 +906,9 @@ export function loadTheme(
       `themes/${slug}/${slug}.settings.json: ${problem}, a value the editor no longer accepts. Remove or change that setting; nothing else needs to change. Nothing was changed.`,
       [
         {name: `${P} undo ${slug} ${undoArgs(bad)}`, reason: 'do this instead'},
-        ...(example
+        // Only a set that replaces this very entry: `mode` and `base` set
+        // the theme's own fields, not an entry in the list.
+        ...(example && !['mode', 'base'].includes(bad.thing)
           ? [
               {
                 name: `${P} set ${slug} ${undoArgs(bad).replace(bad.thing, `${bad.thing} ${quoteCommandArgument(example)}`)}`,
@@ -1831,7 +1833,9 @@ function scopeProblem(s) {
 export const keyOf = s =>
   [
     s.thing,
-    s.axis ?? '',
+    // A headings value saved with no axis is its weight half, as the build
+    // reads it, so a set or undo of the weight replaces it.
+    s.thing === 'headings' ? (s.axis ?? 'weight') : (s.axis ?? ''),
     s.on ?? '',
     s.when ?? '',
     s.state ?? '',
