@@ -554,6 +554,35 @@ function scaled(v, f) {
 }
 
 /**
+ * The part a clause measures against ("cards twice the padding of
+ * buttons": buttons), by clause.
+ * @type {WeakMap<object, string>}
+ */
+const compared = new WeakMap();
+
+/**
+ * An exact relative amount the words give ("half", "double", "twice",
+ * "triple", "a third", "a quarter", "50%", "x0.8"), as a factor of the
+ * theme's current value; null when the words give only a direction.
+ * @param {string} text
+ * @returns {number | null}
+ */
+export function exactFactor(text) {
+  const t = text.toLowerCase();
+  if (/\b(half|halve|halved)\b/.test(t)) return 0.5;
+  if (/\b(double|doubled|twice)\b/.test(t)) return 2;
+  if (/\b(triple|tripled|three times)\b/.test(t)) return 3;
+  if (/\ba third\b/.test(t)) return 1 / 3;
+  if (/\ba quarter\b/.test(t)) return 0.25;
+  const pct = /\b(\d{1,3})\s?%\s*(?:strength|of|as)\b/.exec(t);
+  if (pct && Number(pct[1]) > 0) return Number(pct[1]) / 100;
+  const times = /\bx\s?(\d*\.?\d+)\b/.exec(t);
+  if (times && Number(times[1]) > 0 && Number(times[1]) <= 4)
+    return Number(times[1]);
+  return null;
+}
+
+/**
  * @typedef {{on: string, when?: string, role?: string, level?: string}} PartRef
  */
 
@@ -1525,6 +1554,54 @@ export function draftAnswer(ctx, env, question) {
       '$2 $4 in $1 mode',
     )
     .replace(/^\s*(dark|light) mode only\s*:\s*/i, 'in $1 mode: ')
+    // "cards with twice the padding of buttons": one comparison, not two
+    // asks.
+    .replace(
+      /\bwith\s+(?=(?:twice|double|half|triple|three times)\s+(?:the\s+)?\w+\s+(?:of|than|as)\b)/gi,
+      '',
+    )
+    // "just the headers bolder", "only the titles bigger": a scope, not a
+    // break between asks.
+    .replace(/(?<![-\w])(?:just|only)\s+(?=(?:the|my)\s+\w+\s+\w)/gi, '')
+    // "headers bolder", "titles bigger": with a text word and no surface
+    // word, the headings' type; with a surface word ("header background"),
+    // the app header part.
+    .replace(/\b(headers?|titles?)\b/gi, (m, _w, at, all) => {
+      // The clause the word is in: from the last break before it (a comma,
+      // semicolon, full stop or new line) to the next one after it.
+      const head = String(all).slice(0, at);
+      const from =
+        Math.max(...[',', ';', '.', '\n'].map(b => head.lastIndexOf(b))) + 1;
+      const clause = String(all)
+        .slice(from)
+        .split(/[,;.\n]/)[0];
+      const text =
+        /\b(bold(er)?|bigger|smaller|larger|font|weight|size|serif|sans|italic|heavier|lighter|thinner|uppercase|letter[- ]?spacing|tracking|line[- ]?height)\b/i.test(
+          clause,
+        );
+      const surface =
+        /\b(background|bg|bar|border|sticky|height|shadow|color of the bar|padding|fixed)\b/i.test(
+          clause,
+        );
+      // "table header", "accordion header", "card title": that part's own.
+      // A place ("not in the header") is the header part too.
+      const before = String(all).slice(Math.max(0, at - 16), at);
+      const owned =
+        /\b(table|column|accordion|card|dialog|modal|page|section|app|site|product|top ?nav)\s+$/i.test(
+          before,
+        ) || /\b(in|on|inside|into|across|of)\s+(the\s+|my\s+)?$/i.test(before);
+      return text && !surface && !owned
+        ? /s$/i.test(m)
+          ? 'headings'
+          : 'heading'
+        : m;
+    })
+    // "focus ring on inputs only, at half strength": an amount alone after a
+    // comma belongs to the ask before it.
+    .replace(
+      /,\s*(?=(?:at|with|by|to)?\s*(?:about\s+)?(?:half|double|twice|triple|a third|a quarter|\d{1,3}\s?%)(?:\s+(?:the\s+)?(?:strength|width|size|thickness|weight|intensity|as (?:much|strong|thick|wide)))?\s*(?:[;.\n]|$))/gi,
+      ' ',
+    )
     // "I need: 1. accent red 2. pill badges": inline list numbers are breaks,
     // not values.
     .replace(/(?:^|\s)\d{1,2}[.)]\s+(?=[a-z#])/gi, m =>
@@ -3083,13 +3160,20 @@ export function draftAnswer(ctx, env, question) {
     );
     // "buttons twice as round as inputs": the part after "as" is only the
     // measure; the first part is the one that changes.
-    const asAs = /\bas \w+ as (?:the )?([a-z-]+)/.exec(c.text);
+    const asAs =
+      /\bas \w+ as (?:the )?([a-z-]+)/.exec(c.text) ??
+      // "cards twice the padding of buttons": the same, by the measure.
+      /\b(?:twice|double|half|triple|three times)\s+(?:the\s+)?\w+\s+(?:of|than|as)\s+(?:the\s+)?([a-z-]+)/.exec(
+        c.text,
+      );
     if (asAs && c.parts.length >= 2) {
       const after = (/** @type {{on: string}} */ p) =>
         lex.parts.some(
           ([re, x]) =>
             x.on === p.on && (re.exec(c.text)?.index ?? -1) > (asAs.index ?? 0),
         );
+      const other = c.parts.find(p => after(p));
+      if (other) compared.set(c, other.on);
       c.parts = c.parts.filter(p => !after(p));
     }
     // "focus ring the same color as the danger color": a role's token.
@@ -3716,13 +3800,19 @@ export function draftAnswer(ctx, env, question) {
       ]);
     if (on === 'focus-ring') {
       const ringColor = colorFor(c, 'fill');
+      // "focus ring on inputs only": the ring's tokens set on that part or
+      // group, so the other parts keep theirs.
+      const scope =
+        c.parts.map(x => x.on).find(x => x && x !== 'focus-ring') ?? null;
+      const sc = scope ? {on: scope} : {};
+      const scoped = scope ? ` on ${scope} only` : '';
       if (ringColor && c.lengths[0] && !c.neg)
         return {
-          text: "the focus ring's width and color: --focus-outline-width and --focus-outline-color",
+          text: `the focus ring's width and color${scoped}: --focus-outline-width and --focus-outline-color`,
           options: [
             [
-              set('--focus-outline-width', c.lengths[0]),
-              set('--focus-outline-color', ringColor, modeOf(c)),
+              set('--focus-outline-width', c.lengths[0], sc),
+              set('--focus-outline-color', ringColor, {...modeOf(c), ...sc}),
             ],
           ],
           sequence: true,
@@ -3731,45 +3821,49 @@ export function draftAnswer(ctx, env, question) {
       // nothing only on the ask, and say what that costs.
       if (c.neg || /\b(remove|hide|get rid of)\b/.test(c.text))
         return {
-          text: 'no focus ring: --focus-outline-width 0px. Keyboard users then cannot see where they are, so keep a visible focus style another way',
-          options: [[set('--focus-outline-width', '0px')]],
+          text: `no focus ring${scoped}: --focus-outline-width 0px. Keyboard users then cannot see where they are, so keep a visible focus style another way`,
+          options: [[set('--focus-outline-width', '0px', sc)]],
         };
       // "focus ring offset 2px": the gap between the part and its ring.
       if (/\boffset\b/.test(c.text))
         return c.lengths[0]
           ? {
-              text: "the focus ring's offset: --focus-outline-offset",
-              options: [[set('--focus-outline-offset', c.lengths[0])]],
+              text: `the focus ring's offset${scoped}: --focus-outline-offset`,
+              options: [[set('--focus-outline-offset', c.lengths[0], sc)]],
             }
           : null;
       if (
         (a === 'border' && !ringColor) ||
         a === 'size' ||
         a === 'spacing' ||
-        /\b(thick|thin|width)/.test(c.text)
+        /\b(thick|thin|width|strength|stronger|weaker|bolder|subtler)/.test(
+          c.text,
+        )
       ) {
-        const w =
-          c.lengths[0] ??
-          scaled(
-            current('--focus-outline-width'),
-            c.dir === 'less' ? 0.5 : 1.5,
-          ) ??
-          '3px';
+        // From the theme's own width there (on the part when it sets one).
+        const own = scope ? partValue(scope, '--focus-outline-width') : null;
+        const now = own ?? current('--focus-outline-width');
+        const exact = exactFactor(c.text);
+        const factor = exact ?? (c.dir === 'less' ? 0.5 : 1.5);
+        const w = c.lengths[0] ?? scaled(now, factor);
+        const strength = /\bstrength\b/.test(c.text) && !c.lengths[0];
         return {
-          text: `the focus ring's width${where}: --focus-outline-width`,
-          options: [[set('--focus-outline-width', w)]],
+          text: `the focus ring's width${scoped || where}: --focus-outline-width ${w ?? ''}${!c.lengths[0] && now ? ` (now ${now})` : ''}${strength ? '; "strength" read as the width of the ring' : ''}${!c.lengths[0] && !exact && !c.dir ? '; no amount was given, so this is a guess: give a width (2px)' : ''}`,
+          options: w ? [[set('--focus-outline-width', w, sc)]] : [],
         };
       }
       const color = colorFor(c, 'fill');
       if (c.neg)
         return {
-          text: 'the focus ring shows keyboard users where they are; it can be made subtle but not removed',
-          options: [[set('--focus-outline-width', '1px')]],
+          text: `the focus ring shows keyboard users where they are; it can be made subtle but not removed${scoped}`,
+          options: [[set('--focus-outline-width', '1px', sc)]],
         };
       return color
         ? {
-            text: `the focus ring's color: --focus-outline-color`,
-            options: [[set('--focus-outline-color', color, modeOf(c))]],
+            text: `the focus ring's color${scoped}: --focus-outline-color`,
+            options: [
+              [set('--focus-outline-color', color, {...modeOf(c), ...sc})],
+            ],
           }
         : null;
     }
@@ -4039,6 +4133,29 @@ export function draftAnswer(ctx, env, question) {
         // A radius of 0 is square.
         const px = typedPx && parseFloat(typedPx) === 0 ? null : typedPx;
         const zero = Boolean(typedPx) && !px;
+        // "half the corner radius on buttons": an exact amount of the
+        // radius the part has now (its own setting, else the token it reads).
+        // Not a comparison with another part ("twice as round as inputs"):
+        // that amount is of the other part's radius.
+        const cornerFactor =
+          !typedPx &&
+          on &&
+          !/\b(as|than)\s+(the\s+)?\w+\s*$|\bas \w+ as\b/.test(c.text)
+            ? exactFactor(c.text)
+            : null;
+        if (cornerFactor) {
+          const part = /** @type {string} */ (on);
+          const read = C.partReads(one(part), 'corners')[0];
+          const now =
+            partValue(part, 'border-radius') ??
+            (read?.token ? current(read.token) : null);
+          const value = now ? scaled(now, cornerFactor) : null;
+          if (value)
+            return {
+              text: `corners${where}: border-radius ${value} (now ${now})`,
+              options: [[set('border-radius', value, f)]],
+            };
+        }
         // "revert the rounded corners": take back what the theme sets.
         if (/\b(revert|undo|take back)\b/.test(c.text)) {
           const back = existing(['corners', 'border-radius'], on);
@@ -4354,6 +4471,36 @@ export function draftAnswer(ctx, env, question) {
             text: `${gap ? 'the gap' : 'padding'}${where}: ${box}`,
             options: [[set(gap ? 'gap' : 'padding', box, f)]],
           };
+        }
+        // "double the padding on cards": an exact amount of the padding the
+        // part has now, when the theme sets one; else the dial's step, and
+        // the answer says the amount is a step.
+        const padFactor = exactFactor(c.text);
+        // A comparison ("twice the padding of buttons"): the amount is of
+        // the other part's padding, when the theme sets one; else a step,
+        // and the answer says so.
+        const versus = compared.get(c) ?? null;
+        if (padFactor && versus) {
+          const now = partValue(versus, gap ? 'gap' : 'padding');
+          const exact = now ? scaled(now, padFactor) : null;
+          return exact
+            ? {
+                text: `${gap ? 'the gap' : 'padding'}${where}: ${exact} (${versus} has ${now})`,
+                options: [[set(gap ? 'gap' : 'padding', exact, f)]],
+              }
+            : {
+                text: `room inside ${on}: spacing ${value ?? 'more'}; this theme sets no ${gap ? 'gap' : 'padding'} of its own on ${versus}, so this is a step, not an exact amount of ${versus}'s: give a value (24px) for one`,
+                options: [[set('spacing', value ?? 'more', f)]],
+              };
+        }
+        if (padFactor) {
+          const now = partValue(on, gap ? 'gap' : 'padding');
+          const value = now ? scaled(now, padFactor) : null;
+          if (value)
+            return {
+              text: `${gap ? 'the gap' : 'padding'}${where}: ${value} (now ${now})`,
+              options: [[set(gap ? 'gap' : 'padding', value, f)]],
+            };
         }
         if (!value)
           return {

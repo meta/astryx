@@ -31,6 +31,7 @@ affects_consumer_docs:
     "packages/core/src/TimeInput/**",
     "packages/core/src/NumberInput/**",
     "packages/core/src/FormLayout/**",
+    "packages/core/src/Field/useEntryErrorBehavior.ts",
     "packages/core/src/PowerSearch/PowerSearchValueEditor.tsx",
     "packages/core/src/Table/plugins/filtering/useTableFiltering.tsx",
     "packages/core/src/Pagination/Pagination.tsx"
@@ -194,9 +195,9 @@ Classified under `spec:AST-017` against the latest stable release:
   and their default, `'complete'`, is each member's shipped behavior (FR3), so
   usage that sets neither is unchanged: additive (`spec:AST-017` FR5;
   `architecture:public-component-api` INV3).
-- `'blur-or-enter'` applies only where a caller sets it. It makes Enter a commit for
-  `TimeInput` and for `DateTimeInput`'s time segment, which have no Enter
-  commit by default: additive (`spec:AST-017` FR5).
+- `'blur-or-enter'` applies only where a caller sets it. It makes Enter reveal
+  a held native time rejection in `TimeInput` and in `DateTimeInput`'s time
+  segment, which reveal it at once by default: additive (`spec:AST-017` FR5).
 
 ### Platform support
 
@@ -222,10 +223,8 @@ Classified under `spec:AST-017` against the latest stable release:
 
 Requirement gaps:
 
-- FR1–FR6 gap: no member accepts `entryErrorBehavior`, and `FormLayout` has no
-  `defaultEntryErrorBehavior`; every member behaves as FR3 states.
-- FR4 gap: `TimeInput` and `DateTimeInput`'s time segment take no commit on
-  Enter.
+- FR6 gap: a busy `TimeInput` (`isLoading` or a pending `changeAction`) stays
+  editable but reveals no rejection of its own until it is idle.
 
 ## Verification
 

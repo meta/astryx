@@ -111,8 +111,15 @@ export const GENERATION_INPUT_KEYS = Object.freeze([
   'vibrancy',
   'neutralProfile',
   'modeStrategy',
+  'darkChromaTaper',
   'stops',
   'families',
+]);
+const DARK_CHROMA_TAPER_KEYS = Object.freeze([
+  'edgeMultiplier',
+  'throughStop',
+  'recoverAtStop',
+  'familyMultipliers',
 ]);
 export const FAMILY_INPUT_KEYS = Object.freeze([
   'id',
@@ -235,6 +242,8 @@ function anchorPolarAtStop(seed, anchors, stop) {
  * @param {PaletteMode} mode
  * @param {number} vibrancy
  * @param {boolean} coordinateWithOtherFamilies
+ * @param {number} [chromaMultiplier] Share of its in-gamut chroma the stop
+ * keeps (see darkChromaMultiplier).
  */
 function generateCandidate(
   source,
@@ -242,6 +251,7 @@ function generateCandidate(
   mode,
   vibrancy,
   coordinateWithOtherFamilies,
+  chromaMultiplier = 1,
 ) {
   const adjustedTone = tone;
   const adjustedHue = toneAdjustedHue(source.hue, adjustedTone);
@@ -256,9 +266,16 @@ function generateCandidate(
     toneChromaEnvelope(adjustedTone) *
     (mode === 'dark' ? DARK_CHROMA_FACTOR : 1);
   const lightness = toneToOklabLightness(adjustedTone);
+  const maxChroma = maxOklchChroma(adjustedHue, lightness);
+  // A taper scales the chroma the stop shows after gamut mapping, so a stop
+  // the gamut already limits loses the same share as any other stop.
+  const shownChroma =
+    chromaMultiplier === 1
+      ? chroma
+      : Math.min(chroma, maxChroma) * chromaMultiplier;
   return {
-    hex: oklchClampedHex(lightness, chroma, adjustedHue),
-    gamutMapped: chroma > maxOklchChroma(adjustedHue, lightness) + 0.000001,
+    hex: oklchClampedHex(lightness, shownChroma, adjustedHue),
+    gamutMapped: chroma > maxChroma + 0.000001,
   };
 }
 
@@ -490,6 +507,31 @@ function buildDiagnostics(colors, stops, sourceHue, gamutMappedStops, anchors) {
   };
 }
 
+/**
+ * The share of its chroma a stop keeps under the request's
+ * `darkChromaTaper`: the edge multiplier through `throughStop`, a smoothstep
+ * back to 1 at `recoverAtStop`, and 1 from there on. Light ramps, neutral
+ * families, and the black and white endpoints keep all of it.
+ * @param {NormalizedRequest['darkChromaTaper']} taper
+ * @param {NormalizedFamily} family
+ * @param {PaletteMode} mode
+ * @param {number} stop
+ */
+function darkChromaMultiplier(taper, family, mode, stop) {
+  if (!taper || mode !== 'dark' || family.kind === 'neutral') return 1;
+  if (stop <= 0 || stop >= 100 || stop >= taper.recoverAtStop) return 1;
+  // Read own keys only. A family id such as `constructor` must not get a
+  // multiplier from the object prototype.
+  const edge = Object.hasOwn(taper.familyMultipliers, family.id)
+    ? taper.familyMultipliers[family.id]
+    : taper.edgeMultiplier;
+  if (stop <= taper.throughStop) return edge;
+  const recovery = smoothstep(
+    (stop - taper.throughStop) / (taper.recoverAtStop - taper.throughStop),
+  );
+  return edge + (1 - edge) * recovery;
+}
+
 /** @param {NormalizedRequest} request @param {NormalizedFamily} family @param {PaletteMode} mode @returns {GeneratedRamp} */
 function generateRamp(request, family, mode) {
   const seedHex = normalizeColor(family.seed);
@@ -508,6 +550,7 @@ function generateRamp(request, family, mode) {
     mode,
     request.vibrancy,
     family.kind !== 'neutral',
+    darkChromaMultiplier(request.darkChromaTaper, family, mode, 50),
   ).hex;
   for (const stop of request.stops) {
     const source = anchorPolarAtStop(seed, anchors, stop);
@@ -517,6 +560,7 @@ function generateRamp(request, family, mode) {
       mode,
       request.vibrancy,
       family.kind !== 'neutral',
+      darkChromaMultiplier(request.darkChromaTaper, family, mode, stop),
     );
     colors[stop] = generated.hex;
     if (generated.gamutMapped) gamutMappedStops.push(stop);
@@ -600,6 +644,95 @@ function buildCoordinationDiagnostics(request, families) {
           : null,
     };
   });
+}
+
+/** @param {unknown} value @param {string} label */
+function assertMultiplier(value, label) {
+  if (
+    typeof value !== 'number' ||
+    !Number.isFinite(value) ||
+    value < 0 ||
+    value > 1
+  ) {
+    throw new Error(`${label} must be a number from 0 to 1.`);
+  }
+  return value;
+}
+
+/**
+ * The request's dark chroma taper, checked against its stops and families,
+ * or undefined when the request has none. The receipt records the taper, so
+ * a field the taper does not read fails instead of changing nothing.
+ * @param {unknown} taper
+ * @param {number[]} stops
+ * @param {NormalizedFamily[]} families
+ * @returns {NormalizedRequest['darkChromaTaper']}
+ */
+function normalizeDarkChromaTaper(taper, stops, families) {
+  if (taper == null) return undefined;
+  if (typeof taper !== 'object' || Array.isArray(taper)) {
+    throw new Error('darkChromaTaper must be an object.');
+  }
+  const fields = /** @type {Record<string, unknown>} */ (taper);
+  const unread = Object.keys(fields).filter(
+    key => !DARK_CHROMA_TAPER_KEYS.includes(key),
+  );
+  if (unread.length > 0) {
+    throw new Error(
+      `darkChromaTaper does not read ${unread.join(', ')}; it reads ${DARK_CHROMA_TAPER_KEYS.join(', ')}.`,
+    );
+  }
+  const {edgeMultiplier, throughStop, recoverAtStop, familyMultipliers} =
+    fields;
+  const edge = assertMultiplier(
+    edgeMultiplier,
+    'darkChromaTaper.edgeMultiplier',
+  );
+  if (typeof throughStop !== 'number' || !stops.includes(throughStop)) {
+    throw new Error(
+      'darkChromaTaper.throughStop must be a stop in the requested stop layout.',
+    );
+  }
+  if (
+    typeof recoverAtStop !== 'number' ||
+    !stops.includes(recoverAtStop) ||
+    recoverAtStop <= throughStop
+  ) {
+    throw new Error(
+      'darkChromaTaper.recoverAtStop must be a stop in the requested stop layout after throughStop.',
+    );
+  }
+  if (
+    familyMultipliers != null &&
+    (typeof familyMultipliers !== 'object' || Array.isArray(familyMultipliers))
+  ) {
+    throw new Error('darkChromaTaper.familyMultipliers must be an object.');
+  }
+  /** @type {Record<string, number>} */
+  const multipliers = {};
+  for (const [id, value] of Object.entries(familyMultipliers ?? {})) {
+    const family = families.find(candidate => candidate.id === id);
+    if (!family) {
+      throw new Error(
+        `darkChromaTaper.familyMultipliers names unknown family ${id}.`,
+      );
+    }
+    if (family.kind === 'neutral') {
+      throw new Error(
+        `darkChromaTaper.familyMultipliers names neutral family ${id}; the taper changes only chromatic families.`,
+      );
+    }
+    multipliers[id] = assertMultiplier(
+      value,
+      `darkChromaTaper.familyMultipliers.${id}`,
+    );
+  }
+  return {
+    edgeMultiplier: edge,
+    throughStop,
+    recoverAtStop,
+    familyMultipliers: multipliers,
+  };
 }
 
 /** @param {TonalPaletteGenerationInput} input @returns {NormalizedRequest} */
@@ -708,12 +841,18 @@ export function normalizeGenerationRequest(input) {
   if (!NEUTRAL_PROFILES.includes(neutralProfile)) {
     throw new Error(`Unknown neutral profile: ${String(neutralProfile)}`);
   }
+  const darkChromaTaper = normalizeDarkChromaTaper(
+    input.darkChromaTaper,
+    stops,
+    normalizedFamilies,
+  );
   /** @type {NormalizedRequest} */
   const request = {
     recipe: PALETTE_RECIPE,
     vibrancy: input.vibrancy ?? 50,
     neutralProfile,
     modeStrategy,
+    ...(darkChromaTaper ? {darkChromaTaper} : {}),
     stops,
     families: normalizedFamilies,
   };

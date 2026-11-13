@@ -113,7 +113,9 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
       const [name] = [...entries(kept).keys()];
       const file = path.join(kept, CACHE_NAME, name);
       const entry = JSON.parse(fs.readFileSync(file, 'utf8'));
+      // An altered but well-formed catalog, which a run that reads it shows.
       entry.value.all = [];
+      entry.value.components = [];
       fs.writeFileSync(file, JSON.stringify(entry));
       expect(run(QUERIES[0], {tmp: kept}).stdout).not.toBe(fresh.stdout);
       expect(run(QUERIES[0], {tmp: kept, env: asPnp})).toEqual(fresh);
