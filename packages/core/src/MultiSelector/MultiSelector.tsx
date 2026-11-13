@@ -1538,7 +1538,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
 
   // Open dropdown on mount when isDefaultOpen is true and interaction is allowed.
   useEffect(() => {
-    if (isDefaultOpen && !isEffectivelyReadOnly) {
+    if (isDefaultOpen && !isDisabled && !isEffectivelyReadOnly) {
       surface.show();
     }
     // eslint-disable-next-line @eslint-react/exhaustive-deps -- mount-only: isDefaultOpen is not reactive
