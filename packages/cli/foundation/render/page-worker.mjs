@@ -31,7 +31,7 @@ import {pathToFileURL} from 'node:url';
 import {format} from 'node:util';
 import {parentPort, workerData} from 'node:worker_threads';
 import {transformSync} from '@babel/core';
-import {matchPath, readPathsIn, resolvePath} from './ts-paths.mjs';
+import {LOAD_EXTENSIONS, existingFile, matchPath, readPathsIn, resolvePath} from './ts-paths.mjs';
 import {createJiti} from 'jiti';
 import {assetDataUri, isAssetPath} from './assets.mjs';
 import {SINGLE_COPY, isServedPackage, packageOf} from './served-packages.mjs';
@@ -608,9 +608,6 @@ const namesAlias = spec => {
  */
 const resolveAlias = spec => resolvePath(PATHS, spec) ?? spec;
 
-/** The extensions an extensionless import may stand for, in the order the render loads them. */
-const LOAD_EXTENSIONS = ['.js', '.mjs', '.cjs', '.jsx', '.ts', '.tsx', '.mts', '.cts', '.json'];
-
 /**
  * The file a relative or aliased import names, found the way the render
  * loads it, or null for a package import or a file that does not exist.
@@ -620,10 +617,9 @@ const LOAD_EXTENSIONS = ['.js', '.mjs', '.cjs', '.jsx', '.ts', '.tsx', '.mts', '
  */
 function importedFile(spec, from) {
   const raw = spec.split('?')[0];
-  const base = raw.startsWith('.') ? path.resolve(path.dirname(from), raw) : isAliased(raw) ? resolveAlias(raw) : null;
-  if (!base || !path.isAbsolute(base)) return null;
-  const candidates = [base, ...LOAD_EXTENSIONS.map(ext => base + ext), ...LOAD_EXTENSIONS.map(ext => path.join(base, `index${ext}`))];
-  return candidates.find(candidate => fs.statSync(candidate, {throwIfNoEntry: false})?.isFile()) ?? null;
+  if (raw.startsWith('.')) return existingFile(path.resolve(path.dirname(from), raw), LOAD_EXTENSIONS);
+  // An alias resolves by TypeScript's rules, as the import rewrite loads it.
+  return isAliased(raw) ? resolveAlias(raw) : null;
 }
 
 /** Packages the page took from the package set, by name: their folders. */
@@ -722,7 +718,7 @@ const plain = createJiti(entry, {fsCache: false, jsx: {runtime: 'automatic'}});
 const jiti = createJiti(entry, {
   fsCache: false,
   tryNative: false,
-  extensions: ['.js', '.mjs', '.cjs', '.jsx', '.ts', '.tsx', '.mts', '.cts', '.json'],
+  extensions: [...LOAD_EXTENSIONS],
   moduleCache: true,
   interopDefault: true,
   alias: SINGLE_COPY_ALIASES,

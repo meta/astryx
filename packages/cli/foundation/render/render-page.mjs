@@ -31,6 +31,7 @@ import {CHART_CSS} from './charts.mjs';
 import {HOST_EXIT} from './host-exit.mjs';
 import {endNote, headerNote} from './file-header.mjs';
 import {textRuns} from './markup-edits.mjs';
+import {findNodeModulesPackage} from '../fs/paths.mjs';
 
 /** How long one page may take to render before it is stopped. */
 export const RENDER_TIMEOUT_MS = 60_000;
@@ -491,31 +492,22 @@ function inlineAssets(text, kind, ctx) {
 
 /**
  * The version of a package the page rendered with: the package set's copy
- * when the page took it from there, else the nearest copy in a node_modules
- * folder at or above the page's folder.
+ * when the page took it from there, else the copy Node's resolver finds from
+ * the page's folder.
  * @param {string} name
  * @param {string} dir the page's folder
  * @param {Map<string, string>} setDirs the packages the page took from the package set: their folders
  * @returns {string | null}
  */
 function installedVersion(name, dir, setDirs) {
-  /** @type {string[]} */
-  const candidates = [];
-  const fromSet = setDirs.get(name);
-  if (fromSet) candidates.push(fromSet);
-  for (let d = dir; ; d = path.dirname(d)) {
-    candidates.push(path.join(d, 'node_modules', ...name.split('/')));
-    if (path.dirname(d) === d) break;
+  const packageDir = setDirs.get(name) ?? findNodeModulesPackage(dir, name)?.packageDir;
+  if (!packageDir) return null;
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(packageDir, 'package.json'), 'utf8'));
+    return pkg?.name === name && typeof pkg.version === 'string' ? pkg.version : null;
+  } catch {
+    return null;
   }
-  for (const candidate of candidates) {
-    try {
-      const pkg = JSON.parse(fs.readFileSync(path.join(candidate, 'package.json'), 'utf8'));
-      if (pkg?.name === name && typeof pkg.version === 'string') return pkg.version;
-    } catch {
-      // Not installed here: look further up.
-    }
-  }
-  return null;
 }
 
 /** The light and dark switch every rendered page carries. */

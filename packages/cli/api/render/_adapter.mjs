@@ -22,7 +22,6 @@ import {
   packageName,
   readSourceBlock,
   recordedText,
-  releaseVersion,
   renderedHeadOf,
   renderedMarkupOf,
   sha256,
@@ -31,6 +30,7 @@ import {decode} from '../../foundation/render/html-reader.mjs';
 import {locate, textEdits, textRuns} from '../../foundation/render/markup-edits.mjs';
 import {cliCommand} from '../../foundation/render/file-header.mjs';
 import {shellArg} from '../../foundation/text/shell-arg.mjs';
+import {isValidSemver} from '../../foundation/env/semver.mjs';
 import {embeddedPathProblem, runnerPicksUp} from '../../foundation/render/embedded-files.mjs';
 import {isAssetBytes, isAssetPath} from '../../foundation/render/assets.mjs';
 import {createFileProtectionResolver} from '../../foundation/fs/file-protection.mjs';
@@ -395,10 +395,8 @@ function restoreFolder(input) {
  * @returns {string | null}
  */
 function renderedByOf(source, html) {
-  return (
-    releaseVersion(source.cli) ??
-    releaseVersion(/<meta name="generator" content="Astryx ([^"<>]+)">/.exec(html.slice(0, 4096))?.[1])
-  );
+  const named = source.cli ?? /<meta name="generator" content="Astryx ([^"<>]+)">/.exec(html.slice(0, 4096))?.[1];
+  return isValidSemver(named) ? /** @type {string} */ (named) : null;
 }
 
 /**
@@ -411,7 +409,7 @@ function packagesOf(source) {
   const recorded = source.packages;
   if (!recorded || typeof recorded !== 'object' || Array.isArray(recorded)) return null;
   return Object.entries(recorded)
-    .filter(([name, version]) => packageName(name) && releaseVersion(version) !== null)
+    .filter(([name, version]) => packageName(name) && isValidSemver(version))
     .map(([name, version]) => `${name}@${version}`);
 }
 

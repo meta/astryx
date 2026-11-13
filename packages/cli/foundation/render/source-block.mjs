@@ -17,6 +17,7 @@
  */
 
 import {createHash} from 'node:crypto';
+import {isValidSemver} from '../env/semver.mjs';
 
 /** The script type of the embedded-source block. */
 export const SOURCE_TYPE = 'application/x-astryx-source';
@@ -48,19 +49,6 @@ export const RENDER_FORMAT = 1;
 
 /** @param {Buffer | string} bytes */
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
-
-/**
- * A version a received file names, when it is a semantic version
- * (`0.7.16`, `0.8.0-canary.g1a2b3c4`); null for anything else. A received
- * file is untrusted, and its versions reach printed commands.
- * @param {unknown} value
- * @returns {string | null}
- */
-export const releaseVersion = value =>
-  typeof value === 'string' &&
-  /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.test(value)
-    ? value
-    : null;
 
 /**
  * Whether a received name is an npm package name.
@@ -135,11 +123,11 @@ export function readSourceBlock(html) {
   }
   // A CLI version that is not a semantic version is never a render's: the
   // file was changed, and the value would reach a printed command.
-  if (payload?.cli !== undefined && releaseVersion(payload.cli) === null) {
+  if (payload?.cli !== undefined && !isValidSemver(payload.cli)) {
     return {found: true, damaged: 'its embedded source names a CLI version that is not a release version'};
   }
   if (Number.isInteger(payload?.version) && payload.version > RENDER_FORMAT) {
-    return {found: true, newer: {format: payload.version, cli: releaseVersion(payload.cli)}};
+    return {found: true, newer: {format: payload.version, cli: isValidSemver(payload.cli) ? payload.cli : null}};
   }
   if (
     payload?.version !== 1 ||
