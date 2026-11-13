@@ -157,6 +157,7 @@ const ICON_SET_READERS = {
   'api/doctor/doctor.mjs': 'project.iconSets()',
   'api/template/_adapter.mjs': 'project.iconSets()',
   'foundation/doc-compiler/inputs.mjs': 'project.iconSets()',
+  'foundation/config/theme-icon-set.mjs': 'project.iconSets()',
   'foundation/discovery/icon-set-discovery.mjs':
     'discovery itself: called by the gated readers',
   'foundation/discovery/icon-set-checks.mjs':

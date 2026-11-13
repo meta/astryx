@@ -142,6 +142,7 @@
  * @property {string[]} data.unlisted - Installed sets the list leaves out, as `<package>/<set>`. Doctor fails a project that installs more than one set and leaves one out.
  * @property {Array<{set: string, variant: string | null}>} [data.looks] - Present when a variant is named: each set in the list, main set first, as `<package>/<set>`, with the look its icons draw: the variant, or the set's default look when it declares no variant of that name (null when it declares no variants).
  * @property {{module: string, export: string}} [data.themeMap] - Present when a variant is named and the main set has a theme map for that look: the export a theme sets as `icons` to draw the built-in icons in it (`themeIconsFilled`), and the module it is imported from.
+ * @property {import('../theme/theme.type.mjs').ThemeModuleRefresh} [data.themeModule] - Present when the app has a generated theme module (`astryx theme add`): its path, whether it changed, and the set it now draws every theme's built-in icons from (`iconSet`: the main set's theme map for the project's look, or null when the set has none). `problem` says why the module was not rewritten, and which command rewrites it.
  * @property {string} [data.next] - Present when `unlisted` is not empty: the command that adds them as backups.
  * @property {string} [data.warning] - Present when the project's
  *   `@astryxdesign/cli` range admits a release that refuses the config

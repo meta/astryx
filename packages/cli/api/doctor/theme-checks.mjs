@@ -24,6 +24,7 @@ import {
   listDoctorThemePackages,
   listProjectSourceFiles,
   planThemeAppWrite,
+  themeIconSet,
   readPackageJson,
   readTextFile,
   readTextFileIfExists,
@@ -1051,6 +1052,7 @@ export async function checkAppThemes(cwd) {
         state.themes,
         state.defaultSlug,
         resolved,
+        await themeIconSet(state.projectDir),
       );
     } catch {
       prepared = null;

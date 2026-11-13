@@ -51,7 +51,9 @@ export class ThemeStateError extends Error {
  */
 function damagedRecordError(label, problem, source) {
   const slugs = [
-    ...source.matchAll(/^\s*"([a-z][a-z0-9-]*)":\s*_astryxTheme\d+,/gmu),
+    ...source.matchAll(
+      /^\s*"([a-z][a-z0-9-]*)":\s*(?:_astryxWithIconSet\()?_astryxTheme\d+\)?,/gmu,
+    ),
   ].map(match => match[1]);
   const adds = (slugs.length > 0 ? slugs : ['<slug>']).map(slug =>
     formatCliCommand(`theme add ${slug}`),
@@ -138,8 +140,7 @@ export function projectUsesTypeScript(projectDir) {
       .readdirSync(projectDir, {withFileTypes: true})
       .some(
         entry =>
-          entry.isFile() &&
-          /^tsconfig(?:\.[^.]+)*\.json$/u.test(entry.name),
+          entry.isFile() && /^tsconfig(?:\.[^.]+)*\.json$/u.test(entry.name),
       );
   } catch {
     return false;
@@ -226,7 +227,9 @@ function validThemeRecord(value, label, source = '') {
  */
 export function parseThemeModuleRecord(source, label = 'theme module') {
   if (!source.includes(THEME_MODULE_MARKER)) {
-    throw new ThemeStateError(`${label} does not carry the Astryx generated marker.`);
+    throw new ThemeStateError(
+      `${label} does not carry the Astryx generated marker.`,
+    );
   }
   const recordLines = source
     .split(/\r?\n/u)
@@ -276,7 +279,9 @@ export function resolveThemeModule(projectDir, {forWrite = false} = {}) {
     throw new ThemeStateError(
       `More than one generated theme module exists: ${generated
         .map(file => projectPath(path.relative(projectDir, file)))
-        .join(', ')}. Keep one and remove the others before running the command again.`,
+        .join(
+          ', ',
+        )}. Keep one and remove the others before running the command again.`,
     );
   }
   const file = generated[0] ?? candidates[0];
@@ -394,12 +399,52 @@ export function readThemeState(cwd = process.cwd()) {
  */
 
 /**
+ * The icon set that draws the built-in icons of every added theme: the
+ * project's main icon set, in the project's look (`experimental.iconSet`,
+ * `experimental.iconVariant`).
+ * @typedef {object} ThemeIconSet
+ * @property {string} set the set's full name, `<package>/<set>`
+ * @property {string} module the module that exports the set's theme map
+ * @property {string} exportName the theme map: `themeIcons`, or the map for
+ *   the project's look (`themeIconsFilled`)
+ */
+
+/** The local name of the icon set's theme map in the generated module. */
+const ICON_SET_BINDING = '_astryxIconSet';
+
+/** The generated helper that puts the icon set's icons over a theme's own. */
+const WITH_ICON_SET = '_astryxWithIconSet';
+
+/**
+ * The helper the module declares when an icon set draws the built-in icons.
+ * It keeps every field of the built theme and puts the set's entries over
+ * the theme's own icons, in the node view and in the full view that holds
+ * function entries.
+ * @param {ThemeIconSet} iconSet
+ * @param {boolean} typescript
+ */
+function renderIconSetHelper(iconSet, typescript) {
+  const comment = `/**\n * The built-in icons of every theme below come from the icon set ${iconSet.set}.\n * \`astryx experimental icon use\` chose it (experimental.iconSet in astryx.config).\n */\n`;
+  if (typescript) {
+    return `${comment}function ${WITH_ICON_SET}<T extends object>(theme: T): T {\n  const own = theme as {icons?: object; __icons?: object};\n  return {\n    ...theme,\n    icons: {...own.icons, ...${ICON_SET_BINDING}},\n    ...(own.__icons ? {__icons: {...own.__icons, ...${ICON_SET_BINDING}}} : {}),\n  };\n}\n`;
+  }
+  return `${comment}function ${WITH_ICON_SET}(theme) {\n  return {\n    ...theme,\n    icons: {...theme.icons, ...${ICON_SET_BINDING}},\n    ...(theme.__icons ? {__icons: {...theme.__icons, ...${ICON_SET_BINDING}}} : {}),\n  };\n}\n`;
+}
+
+/**
  * Render one generated module from final resolved state.
  * @param {ResolvedAppTheme[]} themes
  * @param {string} defaultSlug
  * @param {boolean} typescript
+ * @param {ThemeIconSet | null} [iconSet] the set that draws the built-in
+ *   icons of every theme; with none, the module carries each theme as built
  */
-export function renderThemeModule(themes, defaultSlug, typescript) {
+export function renderThemeModule(
+  themes,
+  defaultSlug,
+  typescript,
+  iconSet = null,
+) {
   if (!themes.some(theme => theme.slug === defaultSlug)) {
     // The record's default names no added theme; choosing an added one as the
     // default rewrites the record.
@@ -427,13 +472,24 @@ export function renderThemeModule(themes, defaultSlug, typescript) {
     if (theme.fontStylesheet) {
       imports.push(`import ${JSON.stringify(theme.fontStylesheet)};`);
     }
-    entries.push(`  ${JSON.stringify(theme.slug)}: ${local},`);
+    entries.push(
+      `  ${JSON.stringify(theme.slug)}: ${iconSet ? `${WITH_ICON_SET}(${local})` : local},`,
+    );
     owners[theme.slug] = theme.owner;
   });
-  const record = JSON.stringify({themes: owners, defaultThemeSlug: defaultSlug});
+  if (iconSet) {
+    imports.push(
+      `import {${iconSet.exportName} as ${ICON_SET_BINDING}} from ${JSON.stringify(iconSet.module)};`,
+    );
+  }
+  const helper = iconSet ? `\n${renderIconSetHelper(iconSet, typescript)}` : '';
+  const record = JSON.stringify({
+    themes: owners,
+    defaultThemeSlug: defaultSlug,
+  });
   return `/**\n * ${THEME_MODULE_MARKER}\n * ${THEME_RECORD_MARKER} ${record}\n */\n\n${imports.join(
     '\n',
-  )}\n\nexport const themes = {\n${entries.join('\n')}\n}${
+  )}\n${helper}\nexport const themes = {\n${entries.join('\n')}\n}${
     typescript ? ' as const' : ''
   };\n${
     typescript ? 'export type ThemeSlug = keyof typeof themes;\n' : ''
@@ -460,8 +516,16 @@ export function localImportSpecifier(moduleFile, target) {
  * @param {Record<string, string>} themes
  * @param {string} defaultSlug
  * @param {ResolvedAppTheme[]} resolvedThemes
+ * @param {ThemeIconSet | null} [iconSet] the set that draws the built-in
+ *   icons of every theme
  */
-export function planThemeAppWrite(state, themes, defaultSlug, resolvedThemes) {
+export function planThemeAppWrite(
+  state,
+  themes,
+  defaultSlug,
+  resolvedThemes,
+  iconSet = null,
+) {
   const module = resolveThemeModule(state.projectDir, {forWrite: true});
   const entries = resolvedThemes.map(theme =>
     theme.source === 'local'
@@ -491,6 +555,7 @@ export function planThemeAppWrite(state, themes, defaultSlug, resolvedThemes) {
     entries,
     defaultSlug,
     module.typescript,
+    iconSet,
   );
   return {
     module,
