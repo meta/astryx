@@ -34,6 +34,10 @@ export const PREPACK_FILES = [
     script: 'scripts/generate-template-components.mjs',
   },
   {
+    file: 'assets/component-list.generated.json',
+    script: 'scripts/generate-component-list.mjs',
+  },
+  {
     file: 'assets/docs.generated.json',
     script: 'scripts/generate-stored-docs.mjs',
   },
@@ -62,6 +66,7 @@ export const PREPACK_FILES = [
 const PREPACK_STAGES = [
   [
     'scripts/generate-template-components.mjs',
+    'scripts/generate-component-list.mjs',
     'scripts/generate-stored-docs.mjs',
     'scripts/generate-command-list.mjs',
   ],

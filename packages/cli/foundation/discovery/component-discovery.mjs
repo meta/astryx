@@ -19,6 +19,10 @@ import {existsCaseExact} from '../fs/paths.mjs';
 import {CORE_PROVIDER_ID} from '../identity/providers.mjs';
 import {loadComponentDoc} from './component-loader.mjs';
 import {
+  checkedComponentList,
+  storedComponentList,
+} from './stored-component-list.mjs';
+import {
   HAS_COMPUTED,
   moduleExportSource,
   moduleExportsName,
@@ -371,8 +375,10 @@ export function familyMember(docs, name) {
 export function discoverComponents(coreDir) {
   // The component matcher calls this for each name it resolves, so one
   // operation reads the docs once. Each caller gets its own copy to change.
-  const found = oncePerListing(`components\0${coreDir}`, () =>
-    readComponentGroups(coreDir),
+  // The Core the CLI was published with, unchanged, has its list stored.
+  const found = oncePerListing(
+    `components\0${coreDir}`,
+    () => storedComponentList(coreDir)?.groups ?? readComponentGroups(coreDir),
   );
   return Object.fromEntries(
     Object.entries(found).map(([key, names]) => [key, [...names]]),
@@ -795,6 +801,10 @@ function caseSpelledComponentSource(srcDir, name) {
  * @returns {string}
  */
 export function resolveImportPath(coreDir, componentName) {
+  const stored = checkedComponentList(coreDir)?.imports;
+  if (stored && Object.hasOwn(stored, componentName)) {
+    return stored[componentName];
+  }
   const srcDir = path.join(coreDir, 'src');
   const exportKeys = exportKeysOf(coreDir);
 

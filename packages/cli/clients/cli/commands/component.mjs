@@ -11,6 +11,7 @@ import {findCoreDir} from '../../../foundation/fs/paths.mjs';
 import {
   resolveImportPath,
 } from '../../../foundation/discovery/component-discovery.mjs';
+import {storedComponentList} from '../../../foundation/discovery/stored-component-list.mjs';
 import {
   formatFull,
   formatCompact,
@@ -388,12 +389,14 @@ export function registerComponent(program) {
               : section(`Components (${sorted.length})`),
             records(
               // Each row resolves its import by walking the same source tree.
-              withListingCache(() =>
-                sorted.map(item => ({
+              withListingCache(() => {
+                // One check of Core's stored list answers every row's import.
+                storedComponentList(coreDir);
+                return sorted.map(item => ({
                   name: item.name,
                   import: importCell(item),
-                })),
-              ),
+                }));
+              }),
               {fields: ['name', 'import']},
             ),
             listFooter,

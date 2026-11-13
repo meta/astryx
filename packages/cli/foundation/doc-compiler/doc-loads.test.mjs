@@ -497,6 +497,10 @@ const RUNNERS = {
     runs: "`astryx manifest --json`, from a folder beside each package manager's lockfile, to store the manifest at `prepack` (build time)",
     sites: ['child_process.spawnSync'],
   },
+  'scripts/generate-component-list.mjs': {
+    runs: "`npm pack --dry-run --json --ignore-scripts` in Core, to list the files Core publishes, and node, to work out Core's component list on a copy of exactly those files (at `prepack`)",
+    sites: ['child_process.spawnSync ×2'],
+  },
   'scripts/generate-self-audit.mjs': {
     runs: "`npm pack --dry-run --json --ignore-scripts`, to list the files the package publishes, and node, to run Doctor's audit of the CLI's own files on a copy of exactly those files (at `prepack`)",
     sites: ['child_process.spawnSync ×2'],
