@@ -49,6 +49,7 @@ import {
   dialValueFits,
   newFlagList,
   editorCompileProblem,
+  editorLoadedFonts,
   editorThemeHold,
   editorThemeRefusal,
   editorMissingSource,
@@ -1306,6 +1307,7 @@ export function registerExperimentalTheme(group, program) {
       missingSource: editorMissingSource,
       template: editorThemeTemplate,
       hold: editorThemeHold,
+      loadedFonts: editorLoadedFonts,
     },
   );
 }

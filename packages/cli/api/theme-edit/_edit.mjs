@@ -2088,6 +2088,8 @@ async function changeOnce(
           notChecked: null,
           previewStale: [],
           see: seeLine(cwd, slug, changeFocus(s)),
+          // A copy something keeps behind is said here too.
+          ...appCopyStale(cwd, slug),
         }
       : await previewAndRoute(ctx, slug, data, png, changeFocus(s));
   return {

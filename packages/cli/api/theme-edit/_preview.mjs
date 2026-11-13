@@ -1607,17 +1607,36 @@ export function writeAppCopyAt(cwd, slug, fontsCss) {
       ? `${head('/*', '*/')}${fonts.map(c => `@import ${JSON.stringify(c)};`).join('\n')}\n`
       : `${head('/*', '*/')}/* No font stylesheets: the theme uses fonts the system has. */\n`,
   };
-  fs.mkdirSync(dir, {recursive: true});
-  for (const [n, text] of Object.entries(files)) {
-    const file = path.join(dir, n);
-    if (fs.existsSync(file) && fs.readFileSync(file, 'utf8') === text) continue;
-    writeWhole(file, text);
+  const failKey = `${path.resolve(cwd)}\0${slug}`;
+  try {
+    fs.mkdirSync(dir, {recursive: true});
+    for (const [n, text] of Object.entries(files)) {
+      const file = path.join(dir, n);
+      if (fs.existsSync(file) && fs.readFileSync(file, 'utf8') === text)
+        continue;
+      writeWhole(file, text);
+    }
+    // A copy's own file this build no longer writes goes; anything else in
+    // the folder (yours, or the system's) stays as it is.
+    for (const n of fs.readdirSync(dir))
+      if (appCopyNames(slug).has(n) && !(n in files))
+        fs.rmSync(path.join(dir, n), {force: true});
+  } catch (e) {
+    // A copy that cannot be written is said, with the system's reason;
+    // the change itself stands.
+    const code = /** @type {any} */ (e)?.code ?? 'error';
+    const rel = path.relative(cwd, dir).split(path.sep).join('/');
+    COPY_FAILED.set(
+      failKey,
+      code === 'EACCES' || code === 'EPERM' || code === 'EROFS'
+        ? `${rel} is not writable (${code})`
+        : code === 'ENOSPC'
+          ? `the disk is full (${code})`
+          : `${rel} could not be written (${code})`,
+    );
+    return null;
   }
-  // A copy's own file this build no longer writes goes; anything else in
-  // the folder (yours, or the system's) stays as it is.
-  for (const n of fs.readdirSync(dir))
-    if (appCopyNames(slug).has(n) && !(n in files))
-      fs.rmSync(path.join(dir, n), {force: true});
+  COPY_FAILED.delete(failKey);
   // The first write is named in the command's result; later ones are not.
   if (first)
     FIRST_COPIES.set(
@@ -1639,7 +1658,10 @@ export function writeAppCopyAt(cwd, slug, fontsCss) {
  * @returns {{appCopyStale?: string}}
  */
 export function appCopyStale(cwd, slug) {
-  const blocker = appCopyBlocker(cwd, slug);
+  const blocker =
+    appCopyBlocker(cwd, slug) ??
+    COPY_FAILED.get(`${path.resolve(cwd)}\0${slug}`) ??
+    null;
   return blocker
     ? {
         appCopyStale: `the app copy in src/themes/${slug}/ was not updated: ${blocker}. The app keeps the theme as it was until that is out of the way; then any set or show writes it.`,
@@ -1683,19 +1705,31 @@ export function appCopyBlocker(cwd, slug) {
   // (src/, src/themes/, the copy's folder), as for themes/.
   for (const part of ['src', 'src/themes', rel]) {
     try {
-      if (fs.lstatSync(path.join(cwd, part)).isSymbolicLink())
+      const st = fs.lstatSync(path.join(cwd, part));
+      if (st.isSymbolicLink())
         return `${part} is a link (to ${fs.readlinkSync(path.join(cwd, part))}), and the editor writes nothing through a link`;
+      // A file where a folder on the way goes: nothing is half-written.
+      if (!st.isDirectory())
+        return part === rel
+          ? `${rel} is a file, where the copy's folder goes`
+          : `${part} is a file, where a folder on the way to the copy goes`;
     } catch {
       break;
     }
+  }
+  try {
+    if (!fs.lstatSync(dir).isDirectory())
+      return `${rel} is a file, where the copy's folder goes`;
+  } catch {
+    // Not there yet: the copy makes it.
   }
   if (folderIsEmpty(dir)) return null;
   /** @type {string[]} */
   let names;
   try {
     names = fs.readdirSync(dir);
-  } catch {
-    return `${rel} cannot be read`;
+  } catch (e) {
+    return `${rel} cannot be read (${/** @type {any} */ (e)?.code ?? 'error'})`;
   }
   /** @param {string} n */
   const marked = n => {
@@ -1707,11 +1741,24 @@ export function appCopyBlocker(cwd, slug) {
   };
   const own = appCopyNames(slug);
   const present = names.filter(n => own.has(n));
-  const ours = marked(`${name}.doc.mjs`);
+  // A link at a copy name is never written through or replaced.
+  for (const n of present)
+    try {
+      const st = fs.lstatSync(path.join(dir, n));
+      if (st.isSymbolicLink())
+        return `${rel}/${n} is a link (to ${fs.readlinkSync(path.join(dir, n))}), at a name the copy uses, and the editor writes nothing through a link`;
+      if (st.isDirectory())
+        return `${rel}/${n} is a folder, at a name the copy uses for a file`;
+    } catch {
+      // Gone since it was listed.
+    }
+  // The copy is the editor's when any of its marked files carries the
+  // mark (one of them deleted is written back); then only a marked name
+  // without the mark is yours.
+  const markedNames = [`${name}.doc.mjs`, `${name}.ts`, `${slug}.fonts.css`];
+  const ours = markedNames.some(n => present.includes(n) && marked(n));
   const foreign = ours
-    ? present.find(
-        n => (n === `${name}.ts` || n === `${slug}.fonts.css`) && !marked(n),
-      )
+    ? present.find(n => markedNames.includes(n) && !marked(n))
     : present[0];
   return foreign
     ? `${rel}/${foreign} is yours, at a name the copy uses, and the editor never writes over your files`
@@ -1720,6 +1767,9 @@ export function appCopyBlocker(cwd, slug) {
 
 /** The build outputs of a theme, by their ending after `<theme>`. */
 const APP_COPY_BUILT = ['.css', '.css.d.ts', '.js', '.d.ts', '.variants.d.ts'];
+
+/** Why the last write of a theme's app copy failed, by app and theme. @type {Map<string, string>} */
+const COPY_FAILED = new Map();
 
 /** App copies written for the first time in this process, by app and theme. @type {Map<string, string[]>} */
 const FIRST_COPIES = new Map();

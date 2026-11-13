@@ -14,7 +14,7 @@ export const doc = {
   stability: 'experimental',
   summary: 'Compile standalone themes or one keyed theme family',
   description:
-    'Compiles defineTheme() sources through the same theme pipeline into scoped CSS, standard ESM, and type declarations. Ordinary mode writes one complete set per theme. --family combines one selected extension tree into the three files named by the required --family-key, ready for one CSS load and identity-only switching. With --check it writes nothing and reports source drift. --icons-specifier keeps its existing generated-module behavior. It prints one line per built theme and one line naming fonts the themes do not load; --detail full adds the install example and the font recipe, once for a batch.',
+    "Compiles defineTheme() sources through the same theme pipeline into scoped CSS, standard ESM, and type declarations. Compiling a theme made by experimental theme editor (themes/<theme>/<theme>.theme.ts, or its app copy src/themes/<theme>/<Theme>Theme.ts) takes that theme's lock and also writes its app copy in src/themes/<theme>/ again; --check fails while that copy is behind or gone. Ordinary mode writes one complete set per theme. --family combines one selected extension tree into the three files named by the required --family-key, ready for one CSS load and identity-only switching. With --check it writes nothing and reports source drift. --icons-specifier keeps its existing generated-module behavior. It prints one line per built theme and one line naming fonts the themes do not load; --detail full adds the install example and the font recipe, once for a batch.",
   fn: 'themeBuild',
   args: [
     {
