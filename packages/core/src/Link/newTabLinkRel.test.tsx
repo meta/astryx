@@ -8,8 +8,8 @@
  * @position Unit evidence shared by the three link-rendering components
  */
 
-import {describe, it, expect} from 'vitest';
-import {render, screen} from '@testing-library/react';
+import {describe, it, expect, vi, afterEach} from 'vitest';
+import {fireEvent, render, screen} from '@testing-library/react';
 import {Button} from '../Button/Button';
 import {IconButton} from '../IconButton/IconButton';
 import {ClickableCard} from '../ClickableCard/ClickableCard';
@@ -81,6 +81,42 @@ describe('ClickableCard as a link', () => {
     );
     expect(screen.getByRole('link', {name: 'Docs'}).hasAttribute('rel')).toBe(
       false,
+    );
+  });
+});
+
+describe('ClickableCard surface clicks that open a new tab', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('drop the referrer for a target="_blank" card', () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    render(
+      <ClickableCard label="Docs" href="https://example.com" target="_blank">
+        Card body
+      </ClickableCard>,
+    );
+    fireEvent.click(screen.getByText('Card body'));
+    expect(open).toHaveBeenCalledWith(
+      'https://example.com',
+      '_blank',
+      'noopener,noreferrer',
+    );
+  });
+
+  it('keep the referrer for a modifier click on another card', () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    render(
+      <ClickableCard label="Docs" href="https://example.com">
+        Card body
+      </ClickableCard>,
+    );
+    fireEvent.click(screen.getByText('Card body'), {metaKey: true});
+    expect(open).toHaveBeenCalledWith(
+      'https://example.com',
+      '_blank',
+      'noopener',
     );
   });
 });

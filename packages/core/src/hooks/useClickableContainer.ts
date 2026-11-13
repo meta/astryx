@@ -241,6 +241,16 @@ export interface ClickableContainerResult {
  * );
  * ```
  */
+/**
+ * The `window.open` features for a container link opened in a new tab. A
+ * `target="_blank"` link drops the referrer too, as its anchor's
+ * `rel="noopener noreferrer"` does. A modifier or middle click on another
+ * link keeps the referrer, as a native link does.
+ */
+function newTabFeatures(target: string | undefined): string {
+  return target === '_blank' ? 'noopener,noreferrer' : 'noopener';
+}
+
 export function useClickableContainer(
   options: UseClickableContainerOptions,
 ): ClickableContainerResult {
@@ -308,7 +318,7 @@ export function useClickableContainerProxy({
         const shouldOpenNewTab =
           target === '_blank' || event.ctrlKey || event.metaKey;
         if (shouldOpenNewTab) {
-          window.open(href, '_blank', 'noopener');
+          window.open(href, '_blank', newTabFeatures(target));
         } else if (interactiveRef?.current) {
           // Proxy click to the sr-only link so the framework link component
           // handles navigation (client-side transitions in Next.js, etc.).
@@ -363,10 +373,10 @@ export function useClickableContainerProxy({
         (eventTarget === event.currentTarget ||
           !hasInteractiveAncestor(eventTarget, containerEl))
       ) {
-        window.open(href, '_blank', 'noopener');
+        window.open(href, '_blank', newTabFeatures(target));
       }
     },
-    [containerRef, href, disabled],
+    [containerRef, href, target, disabled],
   );
 
   // The press-state counterpart of onClick's rule: a press that would not
