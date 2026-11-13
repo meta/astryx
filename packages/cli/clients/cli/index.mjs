@@ -949,6 +949,10 @@ export async function createProgram({argv} = {}) {
       const stub = program
         .command(cmd.name)
         .description(`(failed to load: ${reason})`)
+        // Whatever options and words the run passed, it gets the load
+        // error, not a complaint about an option this stand-in never knew.
+        .allowUnknownOption()
+        .allowExcessArguments()
         .action(() => {
           // Nothing loaded, so nothing was answered — say that rather than
           // leaving the run's result unreported.
