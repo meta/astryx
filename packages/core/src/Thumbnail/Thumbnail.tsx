@@ -505,7 +505,9 @@ export function Thumbnail({
       <div
         {...(isInteractive ? pressable : undefined)}
         {...mergeProps(
-          focusOutlineProps.focusWithin(
+          // The container rings only for Open, its first child. The remove
+          // button rings itself, so one focus move shows one ring.
+          focusOutlineProps.focusWithinFirstChild(
             styles.imageContainer,
             isInteractive && styles.interactive,
             isInteractive && styles.overlay,
@@ -522,7 +524,7 @@ export function Thumbnail({
             onKeyDown={isInteractive ? undefined : suppressActivationKeys}
             aria-label={t('@astryx.thumbnail.open', {accessibleName})}
             aria-disabled={isInteractive ? undefined : 'true'}
-            {...stylex.props(styles.interactiveButton)}>
+            {...focusOutlineProps.suppressed(styles.interactiveButton)}>
             {imageContent}
           </button>
         ) : (
