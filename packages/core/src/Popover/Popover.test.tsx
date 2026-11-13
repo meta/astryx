@@ -142,6 +142,17 @@ describe('Popover', () => {
     expect(screen.getByRole('button', {name: 'Open'})).toBeInTheDocument();
   });
 
+  it("paints the theme's text color on its surface, not the browser's", () => {
+    render(
+      <Popover isOpen content={<span>Popover content</span>} label="Notes">
+        <button type="button">Open</button>
+      </Popover>,
+    );
+    expect(
+      getComputedStyle(screen.getByRole('dialog', {hidden: true})).color,
+    ).toBe('var(--color-text-primary)');
+  });
+
   it('does not open from an aria-disabled trigger', () => {
     render(
       <Popover content={<span>Content</span>} label="Test">

@@ -981,6 +981,17 @@ describe('HoverCard', () => {
     });
   });
 
+  it("paints the theme's text color on its surface, not the browser's", () => {
+    render(
+      <HoverCard label="History" content={<span>Card</span>} isOpen>
+        <button type="button">Edited</button>
+      </HoverCard>,
+    );
+    expect(
+      getComputedStyle(screen.getByRole('dialog', {hidden: true})).color,
+    ).toBe('var(--color-text-primary)');
+  });
+
   describe('a replaced trigger element', () => {
     function SwapsItsRoot() {
       const [isLink, setIsLink] = useState(false);
