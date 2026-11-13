@@ -950,14 +950,21 @@ describe('app-theme doctor checks', () => {
       check(await checkAppThemes(dir), 'theme-stylesheet-imports'),
     ).toMatchObject({status: 'pass'});
 
-    // An app file that renders the theme without its stylesheet still fails.
-    fs.writeFileSync(
-      path.join(dir, 'src/Page.tsx'),
-      `import {oceanTheme} from '${specifier}';\nexport const page = oceanTheme;\n`,
-    );
-    expect(
-      check(await checkAppThemes(dir), 'theme-stylesheet-imports'),
-    ).toMatchObject({status: 'fail'});
+    // An app file that renders the theme without its stylesheet still
+    // fails, even beside an inline extends or a comment naming one.
+    for (const body of [
+      `export const page = oceanTheme;\n`,
+      `import {defineTheme} from '@astryxdesign/core/theme';\nexport const themes = [oceanTheme, defineTheme({extends: oceanTheme, name: 'x'})];\n`,
+      `// defineTheme({extends: oceanTheme})\nexport const page = oceanTheme;\n`,
+    ]) {
+      fs.writeFileSync(
+        path.join(dir, 'src/Page.tsx'),
+        `import {oceanTheme} from '${specifier}';\n${body}`,
+      );
+      expect(
+        check(await checkAppThemes(dir), 'theme-stylesheet-imports'),
+      ).toMatchObject({status: 'fail'});
+    }
   });
 
   it('check 5 fails when an added local theme cannot reproduce its outputs', async () => {
