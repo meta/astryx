@@ -459,7 +459,8 @@ export interface TapRecognizer {
 /** One tap recognizer for a trigger, released on unmount. Internal. */
 export function useTapRecognizer(): TapRecognizer {
   const [recognizer] = useState(createTapRecognizer);
-  // Releases a pending tap on unmount.
+  // Syncs the trigger's tap listeners (click, pointercancel) with its
+  // lifetime: a tap still waiting is released on unmount.
   useEffect(() => () => recognizer.forget(), [recognizer]);
   return recognizer;
 }
