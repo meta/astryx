@@ -41,8 +41,9 @@ export {astryxIconDefinitions} from '../../foundation/discovery/icon-definition-
 export {iconSetKey} from '../../foundation/discovery/icon-set-discovery.mjs';
 export {
   setConfigString,
-  setConfigValue,
+  setConfigValues,
 } from '../../foundation/config/config-writer.mjs';
+export {lookThemeMap} from '../../foundation/discovery/icon-set-theme-maps.mjs';
 export {
   ICON_USE_ORDER_COMMAND,
   unlistedIconSets,
@@ -167,7 +168,12 @@ export async function loadIconSets(cwd) {
 export async function loadIconProject(cwd) {
   const project = await Project.load(cwd);
   const {sets, withdrawn} = await project.iconSets({experimental: true});
-  return {projectDir: findProjectDir(cwd), sets, withdrawn};
+  return {
+    projectDir: findProjectDir(cwd),
+    sets,
+    withdrawn,
+    variant: project.config.experimental?.iconVariant ?? null,
+  };
 }
 
 /**
@@ -190,7 +196,8 @@ function findProjectDir(cwd) {
  * `experimental.iconSet`, read from the project's package.json; null when
  * nothing says so.
  * @param {string} projectDir
- * @param {{list?: boolean}} [options] `list`: the value written is a list
+ * @param {{list?: boolean, variant?: boolean}} [options] `list`: the value
+ *   written is a list; `variant`: `experimental.iconVariant` is written too
  * @returns {string | null}
  */
 export function iconSetConfigCliWarning(projectDir, options = {}) {

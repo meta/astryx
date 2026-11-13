@@ -3,7 +3,7 @@
 /**
  * @file `icon.list` leaf (AST-084 FR7): every installed icon set with the
  * icon definitions its `map` covers, the project's main set and backups in
- * order, and the sets withdrawn with why.
+ * order, the look the project's icons draw, and the sets withdrawn with why.
  *
  * @output the `icon.list` envelope
  * @position api/icon/list — dispatched by ../icon.mjs
@@ -15,6 +15,22 @@ import {
   iconSetKey,
   loadIconSets,
 } from '../_adapter.mjs';
+
+/**
+ * The look a set's icons draw in the project: the project's variant when the
+ * set declares it, else its default look; null for a set the project's list
+ * leaves out, and for a set that declares no variants.
+ * @param {import('../../../foundation/discovery/icon-set-discovery.mjs').DiscoveredIconSet} set
+ * @param {string | null} variant the project's variant, null for a set the
+ *   list leaves out
+ * @returns {string | null}
+ */
+function lookOf(set, variant) {
+  if (variant == null) return null;
+  return (set.data.variants ?? []).includes(variant)
+    ? variant
+    : (set.data.default?.variant ?? null);
+}
 
 /**
  * List the installed icon sets.
@@ -36,6 +52,7 @@ export async function iconList({cwd}) {
         : null,
       reason: choice.reason,
       order: order.map(iconSetKey),
+      variant: choice.variant ?? null,
       backups: (choice.backups ?? []).map(each => ({
         iconSet: each.selector,
         status: each.status,
@@ -78,6 +95,9 @@ export async function iconList({cwd}) {
                 ? /** @type {const} */ ('backup')
                 : null,
           rank: rank === -1 ? null : rank + 1,
+          ...(choice.variant
+            ? {look: lookOf(set, rank === -1 ? null : choice.variant)}
+            : {}),
         };
       }),
       withdrawn: withdrawn.map(each => ({

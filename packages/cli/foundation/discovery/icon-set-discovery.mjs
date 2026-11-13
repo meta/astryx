@@ -125,6 +125,10 @@ export function hasLicenseNotice(dir) {
  * @property {DiscoveredIconSet[]} [order] the sets a template icon is looked
  *   up in, in order: the main set, then each backup that resolves. Present
  *   only when the main set is selected
+ * @property {string} [variant] the look every icon draws, as
+ *   `experimental.iconVariant` names it: each set in the list draws its
+ *   variant of that name, or its default look when it declares none. Present
+ *   only when `experimental.iconSet` and `experimental.iconVariant` are set
  * @property {string} reason one sentence saying why
  */
 
@@ -511,9 +515,15 @@ export function unlistedIconSets(installed, main, backups, unlisted) {
  * @param {DiscoveredIconSet[]} sets installed sets, in integration load order
  * @param {string | readonly string[] | undefined} configured the `experimental.iconSet` config value
  * @param {WithdrawnIconSet[]} [withdrawn] installed sets that were withdrawn
+ * @param {string} [variant] the `experimental.iconVariant` config value
  * @returns {IconSetChoice}
  */
-export function chooseProjectIconSet(sets, configured, withdrawn = []) {
+export function chooseProjectIconSet(
+  sets,
+  configured,
+  withdrawn = [],
+  variant = undefined,
+) {
   const [main, ...rest] = iconSetList(configured);
   if (main) {
     const resolved = resolveSelector(sets, main, withdrawn);
@@ -528,6 +538,7 @@ export function chooseProjectIconSet(sets, configured, withdrawn = []) {
       ...(resolved.set ? {set: resolved.set} : {}),
       configured: main,
       ...(backups.length > 0 ? {backups} : {}),
+      ...(variant ? {variant} : {}),
       reason: resolved.reason,
     };
     if (resolved.set) {
