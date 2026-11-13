@@ -97,15 +97,13 @@ const styles = stylex.create({
     '--_popover-radius': radiusVars['--radius-container'],
     borderRadius: 'var(--_popover-radius)',
     boxShadow: shadowVars['--shadow-low'],
-    // Forced colors drops box-shadow, which is this surface's only edge, so it
-    // would run straight into what is under it (WCAG 1.4.11). The border
-    // exists only in forced colors; nothing changes anywhere else.
+    // Forced colors removes box-shadow, which is this surface's only edge.
     borderWidth: {
-      default: 0,
+      default: null,
       '@media (forced-colors: active)': '1px',
     },
     borderStyle: {
-      default: 'none',
+      default: null,
       '@media (forced-colors: active)': 'solid',
     },
     borderColor: {

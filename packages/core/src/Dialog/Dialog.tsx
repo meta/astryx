@@ -319,9 +319,7 @@ const styles = stylex.create({
     '--_dialog-radius': radiusVars['--radius-container'],
     borderRadius: 'var(--_dialog-radius)',
     boxShadow: shadowVars['--shadow-high'],
-    // Forced colors drops box-shadow, which is this surface's only edge, so it
-    // would run straight into what is under it (WCAG 1.4.11). The border
-    // exists only in forced colors; nothing changes anywhere else.
+    // Forced colors removes box-shadow, which is this surface's only edge.
     borderWidth: {
       default: 0,
       '@media (forced-colors: active)': '1px',
