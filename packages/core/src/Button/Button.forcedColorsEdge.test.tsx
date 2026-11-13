@@ -72,6 +72,24 @@ describe.each(['horizontal', 'vertical'] as const)(
       expect(colors.filter(d => /ButtonText/i.test(d))).toEqual([]);
       expect(colors.some(d => /CanvasText/i.test(d))).toBe(true);
     });
+
+    it('draws its leading edge, the divider before it, in CanvasText', () => {
+      render(
+        <ButtonGroup orientation={orientation} label="Actions">
+          <Button label="Keep" />
+          <Button label="Delete" variant="destructive" />
+        </ButtonGroup>,
+      );
+      const leadingEdge =
+        orientation === 'horizontal'
+          ? /^border-(inline-start|left)-color:CanvasText/i
+          : /^border-(block-start|top)-color:CanvasText/i;
+      expect(
+        forcedBorderColors(screen.getByRole('button', {name: 'Delete'})).some(
+          d => leadingEdge.test(d),
+        ),
+      ).toBe(true);
+    });
   },
 );
 

@@ -706,7 +706,9 @@ const forcedColorsEdge = stylex.create({
 // The color of a grouped button's forced-colors edge: `destructive` takes
 // `CanvasText`, the others `ButtonText`. These are the same longhands the
 // edge sets, so the color holds whichever order a build puts shorthands and
-// longhands in.
+// longhands in. A `destructive` button also colors its leading edge: that
+// divider is its own, and the group's divider color would win over the
+// variant's shorthand in a build that puts longhands last.
 const forcedColorsEdgeColor = stylex.create({
   horizontal: {
     borderBlockStartColor: {default: null, [FORCED_COLORS]: 'ButtonText'},
@@ -717,6 +719,7 @@ const forcedColorsEdgeColor = stylex.create({
     },
   },
   horizontalOnError: {
+    borderInlineStartColor: {default: null, [FORCED_COLORS]: 'CanvasText'},
     borderBlockStartColor: {default: null, [FORCED_COLORS]: 'CanvasText'},
     borderBlockEndColor: {default: null, [FORCED_COLORS]: 'CanvasText'},
     borderInlineEndColor: {
@@ -733,6 +736,7 @@ const forcedColorsEdgeColor = stylex.create({
     },
   },
   verticalOnError: {
+    borderBlockStartColor: {default: null, [FORCED_COLORS]: 'CanvasText'},
     borderInlineStartColor: {default: null, [FORCED_COLORS]: 'CanvasText'},
     borderInlineEndColor: {default: null, [FORCED_COLORS]: 'CanvasText'},
     borderBlockEndColor: {
