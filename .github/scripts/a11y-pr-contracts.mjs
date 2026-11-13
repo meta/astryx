@@ -816,6 +816,25 @@ function median(values) {
 export const LEG_BUDGET_MS = 10 * 60 * 1000;
 
 /**
+ * The longest a leg may be planned at: a leg's job has 15 minutes, and its
+ * setup takes about two. A plan over it fails by name before any leg starts.
+ */
+export const LEG_LIMIT_MS = 12 * 60 * 1000;
+
+/**
+ * The error a pull request's plan fails with when its longest leg is over
+ * LEG_LIMIT_MS, or '' when it fits. A release check runs every spec in one
+ * job with hours to spare, so it never fails here.
+ * @param {{count: number, longestMs: number}} legs
+ * @param {boolean} isPullRequest
+ */
+export function planOverLimit(legs, isPullRequest) {
+  if (!isPullRequest || legs.longestMs <= LEG_LIMIT_MS) return '';
+  const minutes = (legs.longestMs / 60000).toFixed(1);
+  return `::error title=Accessibility specs over twelve minutes::${legs.count} legs still leave ${minutes} min of recorded time in one leg, more than the ${LEG_LIMIT_MS / 60000} minutes a leg's 15-minute job leaves for its specs. Split the change, or its longest spec files.`;
+}
+
+/**
  * The legs an opt-in run needs: enough that each leg's recorded time fits
  * LEG_BUDGET_MS, at most `maxLegs`, split slowest first onto the leg with the
  * least time (`splitByDuration`, as the other leg planners). The recorded
@@ -1314,9 +1333,14 @@ function main() {
     console.log(
       `Accessibility legs: ${legs.count} for ${budgeted.run.length} spec files (the longest leg's recorded time ${minutes} min).`,
     );
+    const overLimit = planOverLimit(legs, isPullRequest && !scopeLost);
+    if (overLimit) {
+      console.log(overLimit);
+      return 1;
+    }
     if (legs.longestMs > LEG_BUDGET_MS) {
       console.log(
-        `::warning title=Accessibility specs over ten minutes::${legs.count} legs still leave ${minutes} min of recorded time in one leg. The selection needs more legs.`,
+        `::warning title=Accessibility specs over ten minutes::${legs.count} legs still leave ${minutes} min of recorded time in one leg.`,
       );
     }
     // The run step reads this leg's share from here, so it runs exactly
@@ -1329,9 +1353,19 @@ function main() {
       );
     }
     if (process.env.GITHUB_OUTPUT) {
+      // The plan job hands every leg its share, so a leg starts only with a
+      // share to run.
+      const shares = legs.shares.map(list => {
+        const share = new Set(list);
+        return {
+          scopeKnown,
+          run: budgeted.run.filter(({file}) => share.has(file)),
+        };
+      });
+      const numbers = Array.from({length: legs.count}, (_, i) => i + 1);
       fs.appendFileSync(
         process.env.GITHUB_OUTPUT,
-        `count=${legs.count}\nruns=${leg <= legs.count}\nleg=${leg}\n`,
+        `count=${legs.count}\nruns=${leg <= legs.count}\nleg=${leg}\nlegs=${JSON.stringify(numbers)}\nshares=${JSON.stringify(shares)}\n`,
       );
     }
     return 0;
