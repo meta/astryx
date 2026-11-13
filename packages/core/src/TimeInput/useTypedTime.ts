@@ -5,15 +5,19 @@
 /**
  * @file useTypedTime.ts
  * @input Provider locale, a time field's hour format, seconds, bounds, the
- *   caller's status, and the shared time parser
+ *   caller's status, the shared time parser, and Field/useEntryErrorReport
+ *   for the rejection status, alert and report
  * @output useTypedTime, the typed-time draft and its rejection that TimeInput
  *   and DateTimeInput's time segment share, and TimeInputEntryError
  * @position TimeInput helper hook; used by TimeInput and DateTimeInput
  */
 
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {useCallback, useState} from 'react';
 import type {InputStatus} from '../Field/types';
-import {useCommittedRef} from '../hooks/useCommittedRef';
+import {
+  isSameEntryError,
+  useEntryErrorReport,
+} from '../Field/useEntryErrorReport';
 import {useLocale} from '../i18n/useLocale';
 import {isTimeInRange, type ISOTimeString} from '../utils/timeParser';
 import {
@@ -37,20 +41,6 @@ export interface TimeInputEntryError {
   text: string;
   /** The ISO time that the text names. It is set for `outOfRange`. */
   value?: ISOTimeString;
-}
-
-function isSameEntryError(
-  a: TimeInputEntryError | null,
-  b: TimeInputEntryError | null,
-): boolean {
-  return (
-    a === b ||
-    (a != null &&
-      b != null &&
-      a.kind === b.kind &&
-      a.text === b.text &&
-      a.value === b.value)
-  );
 }
 
 interface Draft {
@@ -77,9 +67,9 @@ export interface UseTypedTimeOptions {
   /** Without the typed input, the field drops its draft. */
   hasTypedField: boolean;
   errorMessage: string;
-  /** Whether the field may show its own message as its status. */
-  canShowMessage: boolean;
-  /** The caller's status, which announces itself. */
+  /** Whether the shown status announces itself, as Field's status does. */
+  isStatusAnnounced: boolean;
+  /** The caller's status. */
   status?: InputStatus;
   onEntryErrorChange?: (error: TimeInputEntryError | null) => void;
 }
@@ -102,7 +92,7 @@ export function useTypedTime({
   isLocked,
   hasTypedField,
   errorMessage,
-  canShowMessage,
+  isStatusAnnounced,
   status,
   onEntryErrorChange,
 }: UseTypedTimeOptions) {
@@ -218,129 +208,16 @@ export function useTypedTime({
   const isSurfaceRejectionShown = !isLocked && isSurfaceRejected;
   const isRejected = entryError != null || isSurfaceRejectionShown;
 
-  // The rejection that the caller last received. Handlers report a rejection
-  // that they cause in the same update. A rejection that a prop change causes
-  // reaches the caller only after the render. Until then the field keeps the
-  // caller's status, so it never shows and announces its own message just
-  // before the caller's message replaces it.
-  const [heardEntryError, setHeardEntryError] =
-    useState<TimeInputEntryError | null>(null);
-  const reportedEntryErrorRef = useRef<TimeInputEntryError | null>(null);
-  // The callback of the latest commit, for the report at unmount.
-  const latestEntryErrorCallbackRef = useCommittedRef(onEntryErrorChange);
-  const hasEntryErrorCallback = onEntryErrorChange != null;
-  const isCallerBehind =
-    hasEntryErrorCallback && !isSameEntryError(entryError, heardEntryError);
-  // A caller error with a message shows in place of the field's own message.
-  // A warning or a success never hides a rejection.
-  const callerErrorMessage =
-    status?.type === 'error' && status.message ? status.message : null;
-  const ownStatus: InputStatus | undefined =
-    isRejected && canShowMessage
-      ? {type: 'error', message: errorMessage}
-      : undefined;
-  const fieldStatus =
-    isCallerBehind || callerErrorMessage != null
-      ? status
-      : (ownStatus ?? status);
-
-  // The caller's status announces itself when it appears or changes. A
-  // rejection that starts under the caller's error message changes no status,
-  // so with the callback the field's alert announces that message once. This
-  // record holds the error message that the status showed while no rejection
-  // stood. A change of the shown message during the rejection ends the
-  // repeat, because the status announces that change.
-  const shownErrorMessage =
-    fieldStatus?.type === 'error' ? (fieldStatus.message ?? null) : null;
-  const [statusRecord, setStatusRecord] = useState<{
-    message: string | null;
-    isRepeatable: boolean;
-  }>({message: shownErrorMessage, isRepeatable: true});
-  const statusRecordInput = `${isRejected}:${shownErrorMessage}`;
-  const [prevStatusRecordInput, setPrevStatusRecordInput] =
-    useState(statusRecordInput);
-  if (statusRecordInput !== prevStatusRecordInput) {
-    setPrevStatusRecordInput(statusRecordInput);
-    if (!isRejected) {
-      if (
-        statusRecord.message !== shownErrorMessage ||
-        !statusRecord.isRepeatable
-      ) {
-        setStatusRecord({message: shownErrorMessage, isRepeatable: true});
-      }
-    } else if (
-      statusRecord.isRepeatable &&
-      statusRecord.message !== shownErrorMessage
-    ) {
-      setStatusRecord({message: statusRecord.message, isRepeatable: false});
-    }
-  }
-
-  let alertMessage = '';
-  if (isRejected && !isCallerBehind) {
-    if (callerErrorMessage != null) {
-      if (!hasEntryErrorCallback) {
-        alertMessage = errorMessage;
-      } else if (
-        statusRecord.isRepeatable &&
-        statusRecord.message === callerErrorMessage
-      ) {
-        alertMessage = callerErrorMessage;
-      }
-    } else if (ownStatus == null) {
-      alertMessage = errorMessage;
-    }
-  }
-
-  const reportEntryError = useCallback(
-    (error: TimeInputEntryError | null) => {
-      if (onEntryErrorChange == null) {
-        return;
-      }
-      setHeardEntryError(error);
-      if (!isSameEntryError(error, reportedEntryErrorRef.current)) {
-        reportedEntryErrorRef.current = error;
-        onEntryErrorChange(error);
-      }
-    },
-    [onEntryErrorChange],
-  );
-
-  // Syncs the caller's entry error with a rejection that a new `min`, `max`,
-  // `value`, or disabled state starts, changes, or ends.
-  useEffect(() => {
-    if (onEntryErrorChange == null) {
-      return;
-    }
-    if (!isSameEntryError(entryError, reportedEntryErrorRef.current)) {
-      reportedEntryErrorRef.current = entryError;
-      // Called through the ref: the set-state-in-effect rule takes a call to a
-      // hook parameter for the whole hook's body.
-      latestEntryErrorCallbackRef.current?.(entryError);
-    }
-    if (!isSameEntryError(entryError, heardEntryError)) {
-      // eslint-disable-next-line @eslint-react/set-state-in-effect -- shows the field's own message once the caller has the rejection
-      setHeardEntryError(entryError);
-    }
-  }, [
+  // A caller error with a message always shows in place of the field's own
+  // message.
+  const {fieldStatus, alertMessage, reportEntryError} = useEntryErrorReport({
     entryError,
-    heardEntryError,
+    rejectionMessage: isRejected ? errorMessage : null,
+    status,
+    isStatusAnnounced,
+    callerErrorPrecedence: 'always',
     onEntryErrorChange,
-    latestEntryErrorCallbackRef,
-  ]);
-
-  // Syncs the caller's entry error at unmount. A presentation or pointer
-  // change can replace the field while its reported rejection stands, and
-  // the rejection ends with the field.
-  useEffect(
-    () => () => {
-      if (reportedEntryErrorRef.current != null) {
-        reportedEntryErrorRef.current = null;
-        latestEntryErrorCallbackRef.current?.(null);
-      }
-    },
-    [latestEntryErrorCallbackRef],
-  );
+  });
 
   const handleChange = useCallback(
     (text: string) => {

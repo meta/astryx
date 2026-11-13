@@ -1513,6 +1513,26 @@ describe('DateTimeInput', () => {
       },
     );
 
+    it('hides a native time rejection while a changeAction is pending', () => {
+      const changeAction = vi.fn(async () => new Promise<void>(() => {}));
+      const {container} = render(field({presentation: 'native', changeAction}));
+      const nativeTime =
+        container.querySelector<HTMLInputElement>('input[type="time"]');
+      const nativeDate =
+        container.querySelector<HTMLInputElement>('input[type="date"]');
+      if (nativeTime == null || nativeDate == null) {
+        throw new Error('no native controls');
+      }
+      fireEvent.change(nativeTime, {target: {value: '08:00'}});
+      expect(statusText(container)).toBe('Invalid time');
+      fireEvent.change(nativeDate, {target: {value: '2026-03-16'}});
+      expect(changeAction).toHaveBeenCalledWith('2026-03-16T10:00');
+      expect(nativeTime).toHaveAttribute('aria-busy', 'true');
+      expect(nativeTime).not.toHaveAttribute('aria-invalid');
+      expect(statusText(container)).toBeNull();
+      expect(timeAlert(container)).toHaveTextContent('');
+    });
+
     it('restores the native time at blur and keeps its rejection shown', () => {
       const {container} = render(field({presentation: 'native'}));
       const nativeTime =

@@ -93,6 +93,14 @@ Consumer migration instructions belong in consumer docs and release notes.
 - Surface selection and its fallbacks.
 - The typed field: parsing, draft, commit, invalid-entry announcement, and
   arrow-key stepping with its announcement.
+- The internal hook `useTypedTime`
+  (`packages/core/src/TimeInput/useTypedTime.ts`). It owns the typed draft, its point of completion, its commit at Enter and
+  blur, the kept draft and the form value it posts, and the rejection of the
+  native time control (FR11, FR14). DateTimeInput's time segment uses it,
+  because `component:DateTimeInput` FR16 gives the segment FR14's rules, as it
+  uses the native time control. The family hook `useEntryErrorReport` owns
+  only the status, alert, and report of a rejection, and `useTypedDate` reads
+  dates, so neither holds the time rules.
 - The native time control's integration and the bottom-sheet time wheels.
 - The change and Action pipeline, busy state, and clear.
 - Disabled and disabled-reason behavior; the `time-input` target; its grouped
@@ -222,7 +230,8 @@ anatomy-theming map.
 - `spec:AST-085` owns disabled focusability; FR9 records the handler gap.
 - `spec:AST-086` owns the persistent invalid-entry region and busy
   announcement.
-- DateTimeInput shares the native time control and the wheel behavior.
+- DateTimeInput shares the native time control, the wheel behavior, and
+  `useTypedTime`.
 - `spec:AST-117` owns entry error behavior; FR13 projects its FR1–FR6.
 - `spec:AST-118` owns rejected-entry feedback; FR14 and FR15 project its
   FR1–FR9 and TimeInput's point of completion.

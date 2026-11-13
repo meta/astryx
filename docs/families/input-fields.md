@@ -126,9 +126,10 @@ another implementation helper.
   become member-specific APIs when composed into a field.
 - The internal hook `useEntryErrorReport`
   (`packages/core/src/Field/useEntryErrorReport.ts`) owns the shared part of
-  FR15 for DateInput, DateTimeInput's date segment, and NumberInput: the status
-  a shown rejection takes over a caller `status`, the alert that announces a
-  message no shown status announces, and the `onEntryErrorChange` report
+  FR15 for DateInput, DateTimeInput's two segments, NumberInput, and
+  TimeInput: the status a shown rejection takes over a caller `status`, the
+  alert that announces a message no shown status announces, and the
+  `onEntryErrorChange` report
   (`spec:AST-118` FR5, FR7, FR8). Each member passes its rejection, its
   message, and whether a caller `error` status wins without the callback; when
   an entry is rejected and what its message says stay with the member.

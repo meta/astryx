@@ -1110,8 +1110,15 @@ describe('TimeInput rejected entries', () => {
         {field({label: 'Start time', isLabelHidden: true})}
       </InputGroup>,
     );
-    expect(type('25:99', 'blur')).toHaveAttribute('aria-invalid', 'true');
+    const input = type('25:99', 'blur');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
     expect(statusText(container)).toBeNull();
+    expect(container.querySelector('.astryx-time-input')).not.toHaveAttribute(
+      'data-status',
+    );
+    for (const id of input.getAttribute('aria-describedby')?.split(' ') ?? []) {
+      expect(document.getElementById(id)).not.toBeNull();
+    }
     expect(fieldAlert(container)).toHaveTextContent('Invalid time');
   });
 
@@ -1270,6 +1277,25 @@ describe('TimeInput rejected entries', () => {
       expect(screen.getByRole('textbox')).not.toHaveAttribute(
         'onentryerrorchange',
       );
+    });
+
+    it('reports a rejection that typing ends from the handler, before onChange', () => {
+      const calls: string[] = [];
+      render(
+        field({
+          hourFormat: '24h',
+          max,
+          onChange: time => calls.push(`change ${time}`),
+          onEntryErrorChange: error => calls.push(`error ${error?.kind}`),
+        }),
+      );
+      type('18:30');
+      type('16:30');
+      expect(calls).toEqual([
+        'error outOfRange',
+        'error undefined',
+        'change 16:30',
+      ]);
     });
 
     it('reports the end of a rejection that a new max, a new value, disabling, or unmounting causes', () => {

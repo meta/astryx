@@ -865,10 +865,10 @@ function PointerDateTimeField({
     min: timeMin,
     max: timeMax,
     isDisabled: false,
-    isLocked: isEffectivelyDisabled,
+    isLocked: isEffectivelyDisabled || isBusy,
     hasTypedField: !usesNativeTimePicker,
     errorMessage: t('@astryx.timeInput.invalidTime'),
-    canShowMessage: true,
+    isStatusAnnounced: true,
     status,
   });
   const timePendingInput = typedTime.pendingInput;

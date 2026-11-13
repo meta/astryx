@@ -573,11 +573,15 @@ function TimeField({
     isLocked: isDisabled || isBusy,
     hasTypedField: !usesNativeTimePicker,
     errorMessage: t('@astryx.timeInput.invalidTime'),
-    canShowMessage: !inputGroup,
+    // Inside an InputGroup the field shows no status of its own; the group's
+    // status channel announces a caller status message.
+    isStatusAnnounced:
+      !inputGroup || (status?.type === 'error' && !!status.message),
     status,
     onEntryErrorChange,
   });
-  const {pendingInput, fieldStatus} = typedTime;
+  const {pendingInput} = typedTime;
+  const fieldStatus = inputGroup ? status : typedTime.fieldStatus;
 
   // Status icon mapping
   const {statusIcon, describedBy: statusTooltipDescribedBy} =
