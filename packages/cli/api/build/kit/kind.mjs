@@ -66,12 +66,15 @@ const REFERENCE =
  */
 const CHANGE_HEADS = new Set(loadEditHeads());
 
-/** A placement phrase that names a new place: "for a settings page". */
-const PLACE =
-  /\b(?:for|on|in|into|as|onto)\s+(?:a|an)\s+([a-z-]+(?:\s+[a-z-]+)?)/g;
+/** "a" or "an", the start of a phrase that names something new. */
+const NEW_THING = /\b(?:a|an)\s+/g;
+
+/** Where a phrase that names a new thing ends: punctuation or a joining word. */
+const NEW_THING_END =
+  /[^a-z0-9\s-]|\s(?:and|or|with|of|to|in|on|at|by|from|that|which|so|plus)\s/;
 
 /** The words that name a page itself rather than what is on it. */
-const PAGE_WORD = /\b(?:page|app|screen|site|view)s?\b/;
+const PAGE_WORD = /^(?:page|app|screen|site|view)s?$/;
 
 /**
  * The word that marks an idea asking for a new page ("a new dashboard", "as a
@@ -161,27 +164,41 @@ function opensAChange(text, familyWords, componentWords) {
   if (namesNewPlace(lower, familyWords)) return false;
   const named = lower.slice(found.index + found[0].length).split(PHRASE_END)[0];
   return (
-    PAGE_WORD.test(named) ||
+    namesPage(named, familyWords) ||
     terms(named).some(t => familyWords.has(t) || componentWords.has(t))
   );
 }
 
 /**
- * Whether an idea names a new page to put the request on: a placement word and
- * "a" or "an" before a family of page templates or a page word ("for a
- * settings page", "on a dashboard"). Such an idea asks for that page, whatever
- * current or existing thing it mentions.
+ * Whether an idea names a new page anywhere: "a" or "an" before a phrase whose
+ * last word names a family of page templates or a page ("to build a settings
+ * page", "for a new analytics dashboard"). Such an idea asks for that page,
+ * whatever current or existing thing it mentions.
  * @param {string} lower
  * @param {Map<string, string>} familyWords
  * @returns {boolean}
  */
 function namesNewPlace(lower, familyWords) {
-  for (const m of lower.matchAll(PLACE)) {
-    const named = terms(m[1]);
-    if (PAGE_WORD.test(m[1]) || named.some(t => familyWords.has(t)))
-      return true;
+  for (const m of lower.matchAll(NEW_THING)) {
+    const phrase = lower.slice(m.index + m[0].length).split(NEW_THING_END)[0];
+    if (namesPage(phrase, familyWords)) return true;
   }
   return false;
+}
+
+/**
+ * Whether a phrase's last word names a family of page templates or a page:
+ * "settings page", "analytics dashboard", but not "app version".
+ * @param {string} phrase
+ * @param {Map<string, string>} familyWords
+ * @returns {boolean}
+ */
+function namesPage(phrase, familyWords) {
+  const words = phrase.match(/[a-z0-9]+/g) ?? [];
+  const last = words[words.length - 1] ?? '';
+  if (PAGE_WORD.test(last)) return true;
+  const t = terms(last);
+  return t.length > 0 && familyWords.has(t[0]);
 }
 
 /**

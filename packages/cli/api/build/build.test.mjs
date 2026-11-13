@@ -582,6 +582,9 @@ describe('build kit — every page starts from a template', () => {
       ['use the existing brand colors for a login page', 'login'],
       ['use the current theme for a settings page', 'settings'],
       ['show the current progress of each project on a dashboard', 'dashboard'],
+      ['use the current theme to build a settings page', 'settings'],
+      ['use the current theme for a team member settings page', 'settings'],
+      ['show the current app usage stats for a new analytics dashboard', 'dashboard'],
     ]) {
       const r = await build(idea, {cwd: REPO});
       if (r.type !== 'build.kit') throw new Error(r.type);
