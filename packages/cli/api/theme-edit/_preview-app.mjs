@@ -4417,6 +4417,27 @@ export async function themeEditPreviewApp(dir, options = {}) {
     copyDir('');
     if (theme.like && theme.like !== 'neutral')
       dependencies[`@astryxdesign/theme-${theme.like}`] = cliVersion();
+    // The copied build was made on this project's Core and base theme: the
+    // new app installs those same versions, so the build is current there.
+    /** @type {string[]} */
+    const pinnedTo = [];
+    for (const pkg of [
+      '@astryxdesign/core',
+      '@astryxdesign/theme-neutral',
+      ...(theme.like && theme.like !== 'neutral'
+        ? [`@astryxdesign/theme-${theme.like}`]
+        : []),
+    ]) {
+      const v = installedVersion(cwd, pkg);
+      if (v && v !== cliVersion()) {
+        dependencies[pkg] = v;
+        pinnedTo.push(`${pkg} ${v}`);
+      }
+    }
+    if (pinnedTo.length)
+      notes.push(
+        `the new app installs ${pinnedTo.join(', ')}, the versions this project has and ${slug}'s build was made on, not this CLI's ${cliVersion()}; to move it to ${cliVersion()}, update those packages in the new app and run ${EDITOR} show ${slug} there`,
+      );
     /** @param {string} rel */
     const fromRoute = rel => {
       const r = path.relative(routeDir, rel).split(path.sep).join('/');
@@ -4531,6 +4552,26 @@ export async function themeEditPreviewApp(dir, options = {}) {
 
 /** The version range of an open font package the host project lacks. */
 const OPEN_FONT_RANGE = '^5.0.0';
+
+/**
+ * The version of a package installed for the project, read off disk (a
+ * package need not export its package.json).
+ * @param {string} cwd
+ * @param {string} pkg
+ * @returns {string | null}
+ */
+function installedVersion(cwd, pkg) {
+  const found = findNodeModulesPackage(cwd, pkg);
+  if (!found) return null;
+  try {
+    const v = JSON.parse(
+      fs.readFileSync(path.join(found.packageDir, 'package.json'), 'utf8'),
+    ).version;
+    return typeof v === 'string' ? v : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * The installed version of a package, as the project resolves it.
