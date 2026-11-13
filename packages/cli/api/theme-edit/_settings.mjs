@@ -2110,28 +2110,30 @@ function keepShades(pal, kept) {
  * scaled above it.
  * @param {Array<[string, string]>} sizes token name and the theme's value
  * @param {number} f the spacing rung's factor
+ * @param {Record<string, number>} [kept] exact sizes the theme keeps, in px,
+ *   which the others stay in order around
  * @returns {Array<[string, string]>} the tokens it writes, in px
  */
-export function controlSizes(sizes, f) {
+export function controlSizes(sizes, f, kept = {}) {
   const px = sizes
     .filter(([, v]) => /^[\d.]+px$/.test(String(v).trim()))
     .map(([k, v]) => /** @type {[string, number]} */ ([k, parseFloat(v)]))
     .sort((a, b) => a[1] - b[1]);
-  /** @type {Array<[string, string]>} */
-  const out = [];
-  let prev = null;
-  let prevOwn = null;
-  for (const [k, v] of px) {
-    let n = Math.max(Math.min(24, v), Math.round(v * f));
-    // Only a size that would meet (or pass) the one below moves: the plain
-    // scaled value otherwise.
-    if (prev != null && prevOwn != null && n <= prev)
-      n = prev + Math.max(1, Math.round((v - prevOwn) * f));
-    out.push([k, `${n}px`]);
-    prev = n;
-    prevOwn = v;
-  }
-  return out;
+  /** @type {number[]} */
+  const n = px.map(([k, v]) =>
+    k in kept ? kept[k] : Math.max(Math.min(24, v), Math.round(v * f)),
+  );
+  /** The step between two sizes, scaled. @param {number} i */
+  const step = i => Math.max(1, Math.round((px[i][1] - px[i - 1][1]) * f));
+  // Only a size that would meet (or pass) the one below moves, up; then one
+  // that would meet a kept size above it moves down (a kept size stays).
+  for (let i = 1; i < n.length; i++)
+    if (!(px[i][0] in kept) && n[i] <= n[i - 1]) n[i] = n[i - 1] + step(i);
+  for (let i = n.length - 2; i >= 0; i--)
+    if (!(px[i][0] in kept) && n[i] >= n[i + 1]) n[i] = n[i + 1] - step(i + 1);
+  return px
+    .map(([k], i) => /** @type {[string, string]} */ ([k, `${n[i]}px`]))
+    .filter(([k]) => !(k in kept));
 }
 
 /**
@@ -2177,12 +2179,16 @@ export function compileTheme(ctx, data, base) {
       if (!mode || mode === 'dark') t.dark = v[1];
       return;
     }
-    if (!MODAL.has(ctx.C.typeOf(name)) || modeOnly || !mode) {
+    // A color set in a one-mode theme fills its mode's half only; the other
+    // half keeps what it had (the base theme's), for the regions Core draws
+    // in the other mode.
+    const half = mode ?? modeOnly;
+    if (!MODAL.has(ctx.C.typeOf(name)) || !half) {
       t.light = v;
       t.dark = v;
       return;
     }
-    t[/** @type {'light' | 'dark'} */ (mode)] = v;
+    t[/** @type {'light' | 'dark'} */ (half)] = v;
   };
   /** @param {Setting} s @param {string} target @returns {Record<string, any>} */
   const block = (s, target) => {
@@ -2471,9 +2477,11 @@ export function compileTheme(ctx, data, base) {
       return n && n.unit === '' && n.value === 0 ? '0px' : v;
     };
     for (const {target, s, list} of padQueue.values()) {
-      // The own source's padding on the same rule wins over the editor's:
-      // nothing is written there (the result says so).
-      if (ownPads(target, s)) continue;
+      // The own source's padding on the same rule wins over the editor's on
+      // the sides it sets (the result says so); the editor's other sides
+      // still apply.
+      const ownCovers = ownSides(target, s);
+      if (ownCovers.size === 4) continue;
       const prefix = /** @type {string} */ (padVars(target));
       const owner = prefix.slice('--astryx-'.length, -'-padding'.length);
       const scoped = target !== owner || s.when != null || s.state != null;
@@ -2516,6 +2524,10 @@ export function compileTheme(ctx, data, base) {
             if (/^(block|inline)-(start|end)$/.test(k)) o[k] = one;
           }
         }
+      }
+      for (const x of ownCovers) {
+        delete side.ltr[x];
+        delete side.rtl[x];
       }
       /** @type {Record<string, string>} */
       let plain = {};
@@ -2584,6 +2596,30 @@ export function compileTheme(ctx, data, base) {
         if (Object.keys(rule).length) {
           const [b, key] = dirBlock(s, target, dir);
           b[key] = {...(b[key] ?? {}), ...rule};
+        }
+    }
+    // A variant the own source pads: the sides it sets are left without a
+    // side variable there, so the variant's own padding (which Core writes
+    // as the whole padding) wins over any side the plain rule writes.
+    for (const owner of new Set(
+      [...padQueue.values()]
+        .filter(({target, s}) => !s.when && !s.state && padVars(target))
+        .map(({target}) =>
+          /** @type {string} */ (padVars(target)).slice(
+            '--astryx-'.length,
+            -'-padding'.length,
+          ),
+        ),
+    )) {
+      const values = ctx.C.variantValues(owner);
+      for (const [prop, vals] of Object.entries(values ?? {}))
+        for (const v of /** @type {string[]} */ (vals ?? [])) {
+          const when = `${prop}:${v}`;
+          const covers = ownSides(owner, /** @type {any} */ ({when}));
+          if (!covers.size) continue;
+          const b = block(/** @type {any} */ ({when}), owner);
+          for (const x of covers)
+            b[`--astryx-${owner}-padding-${x}`] ??= 'initial';
         }
     }
     // A plain part inside a narrower one: each side the narrower selector
@@ -2668,25 +2704,42 @@ export function compileTheme(ctx, data, base) {
     return out;
   };
   /**
-   * Whether the theme's own source sets a padding on a part's rule for a
-   * scope (its plain rule, a variant, a state).
+   * The sides (block-start, inline-end, …) the theme's own source pads on a
+   * part's rule for a scope (its plain rule, a variant, a state).
    * @param {string} target @param {Setting} s
    */
-  const ownPads = (target, s) => {
+  const ownSides = (target, s) => {
+    /** @type {Set<string>} */
+    const out = new Set();
+    /** @type {Record<string, string[]>} */
+    const SIDES = {
+      padding: ['block-start', 'block-end', 'inline-start', 'inline-end'],
+      'padding-block': ['block-start', 'block-end'],
+      'padding-inline': ['inline-start', 'inline-end'],
+      'padding-top': ['block-start'],
+      'padding-bottom': ['block-end'],
+      'padding-left': ['inline-start'],
+      'padding-right': ['inline-end'],
+      'padding-block-start': ['block-start'],
+      'padding-block-end': ['block-end'],
+      'padding-inline-start': ['inline-start'],
+      'padding-inline-end': ['inline-end'],
+    };
     try {
-      return [
-        ...ownPartTokens(
-          ctx.project.cwd,
-          data.name,
-          target,
-          s.when ?? 'base',
-          s.state ? `:${s.state}` : null,
-        ).keys(),
-      ].some(k => /^padding(-|$)/.test(k));
+      for (const k of ownPartTokens(
+        ctx.project.cwd,
+        data.name,
+        target,
+        s.when ?? 'base',
+        s.state ? `:${s.state}` : null,
+      ).keys())
+        for (const x of SIDES[k] ?? []) out.add(x);
     } catch {
-      return false;
+      // No own source.
     }
+    return out;
   };
+
   /**
    * The selector a narrower padding scope is written with (a clickable
    * card's class, a variant's attribute, a state's pseudo-class), or null
@@ -2770,7 +2823,13 @@ export function compileTheme(ctx, data, base) {
   /** @param {Setting} s @param {string} target @param {string} prop @param {string} v */
   const putComp = (s, target, prop, v) => {
     const b = block(s, target);
-    if (s.mode && !modeOnly) {
+    // A color set in a one-mode theme fills its mode's half only (as a
+    // setting for that mode does), so a region Core draws in the other mode
+    // reads the other half.
+    const mode =
+      s.mode ??
+      (modeOnly && parseColor(String(v).trim()) ? modeOnly : undefined);
+    if (mode) {
       const prev = b[prop];
       // The other mode keeps exactly what it had: the value set for it, the
       // part's own, else what the property shows unset (light-dark() takes
@@ -2791,7 +2850,7 @@ export function compileTheme(ctx, data, base) {
         return halves.length === 2 ? halves[side - 1].trim() : x;
       };
       b[prop] =
-        s.mode === 'light'
+        mode === 'light'
           ? `light-dark(${v}, ${prev ? split(prev, 2) : other})`
           : `light-dark(${prev ? split(prev, 1) : other}, ${v})`;
     } else b[prop] = v;
@@ -3011,11 +3070,26 @@ export function compileTheme(ctx, data, base) {
           if (/^--spacing-/.test(k) && /rem$/.test(v))
             put(k, `${Number((parseFloat(v) * f).toFixed(3))}rem`);
         }
+        // An exact size the theme keeps (it wins over the dial) is a fixed
+        // point the others stay in order around.
+        /** @type {Record<string, number>} */
+        const kept = {};
+        for (const x of data.settings)
+          if (
+            x.source === 'token' &&
+            /^--size-element-/.test(x.thing) &&
+            !x.on &&
+            !x.when &&
+            !x.state &&
+            /^[\d.]+px$/.test(String(x.value).trim())
+          )
+            kept[x.thing] = parseFloat(String(x.value));
         for (const [k, nv] of controlSizes(
           Object.keys(/** @type {Record<string, string>} */ (TOKENS))
             .filter(k => /^--size-element-/.test(k))
             .map(k => [k, base.light[k] ?? TOKENS[k]]),
           f,
+          parts.length ? {} : kept,
         ))
           put(k, nv);
       }
@@ -3029,6 +3103,51 @@ export function compileTheme(ctx, data, base) {
         if (padVars(t) && /^padding(-|$)/.test(kebab(s.thing))) {
           queuePadding(s, t);
           continue;
+        }
+        // A padding on a part without padding variables, where the own source
+        // pads some sides of the same rule: the editor writes the other
+        // sides only, as longhands, so the own sides win.
+        if (/^padding(-|$)/.test(kebab(s.thing)) && !s.mode) {
+          const covers = ownSides(t, s);
+          if (covers.size) {
+            const w = splitTop(String(s.value).trim(), ' ').map(y => y.trim());
+            const prop = kebab(s.thing);
+            /** @type {Record<string, string>} */
+            const mine = {};
+            if (prop === 'padding') {
+              const [top, r = top, bottom = top, l = r] = w;
+              Object.assign(mine, {
+                'block-start': top,
+                'inline-end': r,
+                'block-end': bottom,
+                'inline-start': l,
+              });
+            } else if (prop === 'padding-block')
+              Object.assign(mine, {
+                'block-start': w[0],
+                'block-end': w[1] ?? w[0],
+              });
+            else if (prop === 'padding-inline')
+              Object.assign(mine, {
+                'inline-start': w[0],
+                'inline-end': w[1] ?? w[0],
+              });
+            else {
+              const one =
+                {
+                  'padding-top': 'block-start',
+                  'padding-bottom': 'block-end',
+                  'padding-left': 'inline-start',
+                  'padding-right': 'inline-end',
+                }[prop] ?? prop.slice('padding-'.length);
+              mine[one] = w[0];
+            }
+            if (!padVars(t)) {
+              for (const [x, v] of Object.entries(mine))
+                if (!covers.has(x)) putComp(s, t, camel(`padding-${x}`), v);
+              continue;
+            }
+          }
         }
         const sides =
           wrappedPadding(t, s) ??

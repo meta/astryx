@@ -1391,6 +1391,15 @@ async function changeOnce(
               ]
             : []),
           ...otherModeNotes(data),
+          // Back to both modes: a mode the app's <Theme> was given for the
+          // one-mode theme pins it still.
+          ...(s.thing === 'mode' &&
+          data.mode === 'both' &&
+          (before === 'light-only' || before === 'dark-only')
+            ? [
+                `if the app's <Theme> was given mode="${before === 'light-only' ? 'light' : 'dark'}" for ${slug}, take it out: with it the app stays ${before === 'light-only' ? 'light' : 'dark'}, whatever the system asks for`,
+              ]
+            : []),
           // Core has no mode inside a theme: the app's <Theme> is given it.
           ...(s.thing === 'mode' &&
           (data.mode === 'light-only' || data.mode === 'dark-only')
@@ -1787,7 +1796,7 @@ async function changeOnce(
             )
             .join(
               ', ',
-            )}${ownPartHits.length > 3 ? ` and ${ownPartHits.length - 3} more` : ''}, and your own source wins over the settings, so this does not show there; change it in ${slug}.theme.ts${ownHitDirect ? `, or take this back with \`${P} undo ${slug} ${undoArgs(s)}\`` : ''}`,
+            )}${ownPartHits.length > 3 ? ` and ${ownPartHits.length - 3} more` : ''}, and your own source wins over the settings, so this does not show ${/^padding(-|$)/.test(s.thing) && ownPartHits.every(h => /^padding-/.test(h.prop)) ? 'on the sides that sets; its other sides take this setting' : 'there'}; change it in ${slug}.theme.ts${ownHitDirect ? `, or take this back with \`${P} undo ${slug} ${undoArgs(s)}\`` : ''}`,
         ]
       : []),
     ...(ownOverToken

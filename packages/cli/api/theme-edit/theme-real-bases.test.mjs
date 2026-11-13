@@ -238,4 +238,102 @@ describe('padding on real base themes', () => {
     );
     expect(ruleOf('ed', '.astryx-card')).not.toMatch(/20px/);
   }, 240_000);
+
+  describe('parts42', () => {
+    /** @param {string} slug @param {string} mine */
+    const ownEdit = (slug, mine) => {
+      const ts = path.join(cwd, 'themes', slug, `${slug}.theme.ts`);
+      const src = fs.readFileSync(ts, 'utf8');
+      fs.writeFileSync(
+        ts,
+        src.includes('components:')
+          ? src.replace('components: {', `components: {\n    ${mine}`)
+          : src.replace(
+              /defineTheme\(\{/,
+              `defineTheme({\n  components: {${mine}},`,
+            ),
+      );
+    };
+    /** @param {string} slug */
+    const cssOf = slug =>
+      fs.readFileSync(path.join(cwd, 'themes', slug, `${slug}.css`), 'utf8');
+
+    it("fills only its mode's half with a color set in a one-mode theme, and keeps a saved --mode half", async ctx => {
+      if (unbuilt) return ctx.skip();
+      await themeEditNew('om1', {cwd, like: 'neutral'});
+      await themeEditSet('om1', 'background', '#eeeeee', {
+        cwd,
+        on: 'button',
+        when: 'variant:secondary',
+        mode: 'light',
+      });
+      await themeEditSet('om1', 'mode', 'light-only', {cwd});
+      expect(ruleOf('om1', '.astryx-button[data-variant="secondary"]')).toMatch(
+        /background(-color)?:\s*light-dark\(#eeeeee,/,
+      );
+      await themeEditSet('om1', 'background', '#f4f4f4', {cwd, on: 'card'});
+      expect(ruleOf('om1', '.astryx-card')).toMatch(
+        /background(-color)?:\s*light-dark\(#f4f4f4,/,
+      );
+      await themeEditSet('om1', '--color-background-card', '#fafafa', {cwd});
+      expect(cssOf('om1')).toMatch(
+        /--color-background-card:\s*light-dark\(#fafafa,/,
+      );
+      const both = await themeEditSet('om1', 'mode', 'both', {cwd});
+      expect(both.data.notes.join(' ')).toMatch(/mode="light".*take it out/);
+    }, 240_000);
+
+    it('keeps control sizes in order around an exact size the theme keeps', async ctx => {
+      if (unbuilt) return ctx.skip();
+      await themeEditNew('ks', {cwd, like: 'neutral'});
+      await themeEditSet('ks', '--size-element-md', '34px', {cwd});
+      for (const step of ['tight', 'spacious']) {
+        await themeEditSet('ks', 'spacing', step, {cwd});
+        const css = cssOf('ks');
+        const [sm, md, lg] = ['sm', 'md', 'lg'].map(n =>
+          Number(new RegExp(`--size-element-${n}:\\s*(\\d+)px`).exec(css)?.[1]),
+        );
+        expect(md, step).toBe(34);
+        expect(sm, step).toBeLessThan(md);
+        expect(lg, step).toBeGreaterThan(md);
+      }
+    }, 240_000);
+
+    it("lets own sides win and the editor's other sides apply, on a plain part and a card (butter)", async ctx => {
+      if (unbuilt) return ctx.skip();
+      await themeEditNew('ob', {cwd, like: 'butter'});
+      ownEdit(
+        'ob',
+        "button: {base: {paddingInline: '30px'}}, card: {base: {paddingInline: '6px'}},",
+      );
+      const r = await themeEditSet('ob', 'padding', '2px', {cwd, on: 'button'});
+      expect(r.data.notes.join(' ')).toMatch(/other sides take this setting/);
+      const button = ruleOf('ob', '.astryx-button');
+      expect(button).toMatch(/padding-inline:\s*30px/);
+      expect(button).not.toMatch(/(^|[;{\s])padding:\s*2px/);
+      expect(button).toMatch(/padding-(block-start|top):\s*2px/);
+      await themeEditSet('ob', 'padding', '20px', {cwd, on: 'card'});
+      const card = ruleOf('ob', '.astryx-card');
+      expect(card).toMatch(/--astryx-card-padding-block-start:\s*20px/);
+      expect(card).toMatch(/--astryx-card-padding-inline(-start)?:\s*6px/);
+    }, 240_000);
+
+    it('lets an own variant padding win over an unequal editor padding on the plain rule', async ctx => {
+      if (unbuilt) return ctx.skip();
+      await themeEditNew('ov', {cwd, like: 'neutral'});
+      ownEdit('ov', "card: {'variant:muted': {padding: '5px'}},");
+      await themeEditSet('ov', 'padding', '4px 8px', {cwd, on: 'card'});
+      const muted = ruleOf('ov', '.astryx-card[data-variant="muted"]');
+      expect(muted).toMatch(/--astryx-card-padding:\s*5px/);
+      for (const x of [
+        'block-start',
+        'block-end',
+        'inline-start',
+        'inline-end',
+      ])
+        expect(muted, x).toMatch(
+          new RegExp(`--astryx-card-padding-${x}:\\s*initial`),
+        );
+    }, 240_000);
+  });
 });
