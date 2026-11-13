@@ -1756,35 +1756,58 @@ function schemeDependentEntries(
 }
 
 /**
- * The value a re-declared root token takes on a media surface. A reference to
- * a token the surface declares itself is replaced with the root's value of
- * that token. Without lowering, the root resolves the reference and the
- * surface inherits the result, so the surface's own value never applies; the
- * replacement keeps that result. A reference whose root value is unknown, is
- * `!important`, or is in a cycle stays as it is.
+ * The value a re-declared root token takes on a media surface, or `null` when
+ * the surface must not re-declare it. A reference to a token the surface
+ * declares itself is replaced with the theme's value of that token. Without
+ * lowering, the root resolves the reference and the surface inherits the
+ * result, so the surface's own value never applies; the replacement keeps that
+ * result. When the theme does not declare the referenced token, its value
+ * comes from an ancestor this theme cannot see, so the token is not
+ * re-declared. A reference in a cycle stays as it is.
  */
 function withRootValuesForSurfaceTokens(
   value: string,
   surfaceNames: ReadonlySet<string>,
-  rootValues: Record<string, string>,
+  declaredValues: Record<string, string>,
   resolving: ReadonlySet<string> = new Set(),
-): string {
-  return substituteVarReferences(value, reference => {
-    const rootValue = rootValues[reference];
-    if (
-      !surfaceNames.has(reference) ||
-      resolving.has(reference) ||
-      typeof rootValue !== 'string' ||
-      analyzeDeclarationValue(rootValue).important
-    ) {
+): string | null {
+  let isUnknown = false;
+  const result = substituteVarReferences(value, reference => {
+    if (!surfaceNames.has(reference) || resolving.has(reference)) {
       return null;
     }
-    return withRootValuesForSurfaceTokens(
-      rootValue,
+    const declared = declaredValues[reference];
+    const replaced =
+      typeof declared !== 'string' ||
+      analyzeDeclarationValue(declared).important
+        ? null
+        : withRootValuesForSurfaceTokens(
+            declared,
+            surfaceNames,
+            declaredValues,
+            new Set([...resolving, reference]),
+          );
+    if (replaced === null) {
+      isUnknown = true;
+    }
+    return replaced;
+  });
+  return isUnknown ? null : result;
+}
+
+/** Each entry's surface value; an entry the surface must not re-declare is dropped. */
+function surfaceValues(
+  entries: [string, string][],
+  surfaceNames: ReadonlySet<string>,
+  declaredValues: Record<string, string>,
+): [string, string][] {
+  return entries.flatMap(([name, value]): [string, string][] => {
+    const surfaceValue = withRootValuesForSurfaceTokens(
+      value,
       surfaceNames,
-      rootValues,
-      new Set([...resolving, reference]),
+      declaredValues,
     );
+    return surfaceValue === null ? [] : [[name, surfaceValue]];
   });
 }
 
@@ -1870,14 +1893,11 @@ export function generateOnMediaCSS(
       ...statusRoleDefaults,
     ];
     const replayedEntries = withoutDeclarationCycles(
-      schemeDependentEntries(
-        schemeValues,
-        Object.keys(rootValues),
+      surfaceValues(
+        schemeDependentEntries(schemeValues, Object.keys(rootValues), ownNames),
         ownNames,
-      ).map(([name, value]): [string, string] => [
-        name,
-        withRootValuesForSurfaceTokens(value, ownNames, schemeValues),
-      ]),
+        rootValues,
+      ),
       ownEntries,
     );
     surfaceReplays.set(surface, replayedEntries);
@@ -1946,34 +1966,42 @@ export function generateOnMediaCSS(
         ...(surfaceOwnNames.get(surface) ?? []),
         ...restorationEntries.map(([role]) => role),
       ]);
-      const replayedNames = new Set(
-        (surfaceReplays.get(surface) ?? []).map(([name]) => name),
-      );
-      const dependentNames = new Set(
-        schemeDependentEntries(
-          {...schemeValues, ...ruleValues},
-          Object.keys(ruleValues),
+      // Under this query the theme root declares the rule's values over the
+      // base values. The surface takes every value the root resolves under the
+      // query: a token that becomes scheme-dependent, and a base replay whose
+      // value changes, for example because the rule sets a token it refers
+      // to. A base replay that must no longer be re-declared inherits.
+      const ruleDeclared = {...rootValues, ...ruleValues};
+      const baseReplayValues = new Map(surfaceReplays.get(surface) ?? []);
+      const candidateNames = new Set([
+        ...schemeDependentEntries(
+          {...SCHEME_CAPABLE_DEFAULTS, ...ruleDeclared},
+          Object.keys(ruleDeclared),
           excluded,
         ).map(([name]) => name),
+        ...baseReplayValues.keys(),
+      ]);
+      const ruleReplays = [...candidateNames].flatMap(
+        (name): [string, string][] => {
+          if (excluded.has(name)) {
+            return [];
+          }
+          const ruleValue =
+            withRootValuesForSurfaceTokens(
+              ruleDeclared[name],
+              excluded,
+              ruleDeclared,
+            ) ?? (baseReplayValues.has(name) ? 'inherit' : null);
+          return ruleValue === null || baseReplayValues.get(name) === ruleValue
+            ? []
+            : [[name, ruleValue]];
+        },
       );
-      // A rule restates each token the base surface replays, scheme-dependent
-      // or not. Otherwise the base replay hides the rule's value on the
-      // surface.
-      const ruleRootValues = {...schemeValues, ...ruleValues};
-      const ruleReplays = Object.entries(ruleValues)
-        .filter(
-          ([name]) =>
-            !excluded.has(name) &&
-            (dependentNames.has(name) || replayedNames.has(name)),
-        )
-        .map(([name, value]): [string, string] => [
-          name,
-          withRootValuesForSurfaceTokens(value, excluded, ruleRootValues),
-        ]);
+      const restatedNames = new Set(ruleReplays.map(([name]) => name));
       // Under this query the surface also holds the base replays this rule
       // does not restate.
       const baseReplays = (surfaceReplays.get(surface) ?? []).filter(
-        ([name]) => !(name in ruleValues),
+        ([name]) => !restatedNames.has(name),
       );
       const schemeEntries = withoutDeclarationCycles(ruleReplays, [
         ...baseReplays,

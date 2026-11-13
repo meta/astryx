@@ -456,6 +456,65 @@ describe('generateOnMediaCSS scheme-dependent replays', () => {
     );
   });
 
+  it('restates a reference under an adaptation that changes the surface token', () => {
+    const adapted = defineTheme({
+      name: 'media-scheme-replay-adapted-reference',
+      tokens: {
+        '--color-accent': ['#111111', '#eeeeee'],
+        '--color-border-emphasized': 'var(--color-accent)',
+      },
+      adaptations: {
+        rules: [
+          {
+            when: {contrast: 'more'},
+            value: {tokens: {'--color-accent': '#ff0000'}},
+          },
+        ],
+      },
+    });
+    const adaptedCss = generateOnMediaCSS(adapted);
+    const query = adaptedCss.slice(adaptedCss.indexOf('\n@media '));
+    // Without lowering, the root resolves the reference to the adapted accent
+    // under the query, and the surface inherits that value.
+    expect(query).toContain('--color-border-emphasized: #ff0000;');
+  });
+
+  it('does not re-declare a reference to a surface token the theme leaves unset', () => {
+    const referring = defineTheme({
+      name: 'media-scheme-replay-unset-reference',
+      tokens: {'--color-border-emphasized': 'var(--color-accent)'},
+    });
+    // The accent comes from an ancestor theme or Core, so the surface keeps
+    // inheriting the value the root resolved.
+    expect(
+      mediaDeclarations(generateOnMediaCSS(referring), 'dark'),
+    ).not.toHaveProperty('--color-border-emphasized');
+  });
+
+  it('re-declares a token that an adaptation makes scheme-dependent', () => {
+    const adapted = defineTheme({
+      name: 'media-scheme-replay-adapted-dependence',
+      tokens: {
+        '--color-text-secondary': '#555555',
+        '--color-border': 'var(--color-text-secondary)',
+      },
+      adaptations: {
+        rules: [
+          {
+            when: {contrast: 'more'},
+            value: {tokens: {'--color-text-secondary': ['#000000', '#ffffff']}},
+          },
+        ],
+      },
+    });
+    const adaptedCss = generateOnMediaCSS(adapted);
+    expect(mediaDeclarations(adaptedCss, 'dark')).not.toHaveProperty(
+      '--color-border',
+    );
+    const query = adaptedCss.slice(adaptedCss.indexOf('\n@media '));
+    expect(query).toContain('--color-border: var(--color-text-secondary);');
+  });
+
   it('writes no core default the theme leaves unset', () => {
     expect(mediaDeclarations(css, 'dark')).not.toHaveProperty(
       '--color-background-surface',
