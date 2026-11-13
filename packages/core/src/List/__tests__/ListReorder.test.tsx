@@ -408,7 +408,7 @@ describe('List reorderable', () => {
     rerender(rows(createReorderable({onReorder: () => {}})));
     expect(outsideHandle(inbox, handleOf('Inbox'))).toBe(before[0] + 1);
     expect(outsideHandle(sent, handleOf('Sent'))).toBe(before[1] + 1);
-    // The handle is the row's own child, after the label.
+    // The handle is the row's own child, before the label.
     expect(handleOf('Inbox').parentElement).toBe(inbox);
     expect(handleOf('Sent').parentElement).toBe(sent);
   });

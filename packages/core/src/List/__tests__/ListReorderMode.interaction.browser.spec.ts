@@ -177,16 +177,10 @@ test.describe('with a mouse', () => {
     await page.waitForTimeout(300);
     const keyboard = await openHint(page);
     // Reorder mode's hint, below the handle whose row is in the mode. The
-    // list is narrowed so its handles, at the rows' end, are as far from the
-    // viewport's edge as the tab list is. So each hint has the room to line
-    // up with its anchor's start, and the layer flips neither.
+    // handles start the rows, near the viewport's start edge, as the tab list
+    // does. So each hint has the room to line up with its anchor's start, and
+    // the layer flips neither.
     await openStory(page, storybook(), STORY);
-    await page.evaluate(() => {
-      const root = document.getElementById('storybook-root');
-      if (root != null) {
-        root.style.width = '420px';
-      }
-    });
     await handle(page, 'Inbox').focus();
     await page.keyboard.press('Space');
     await expect(page.getByRole('button', {name: 'Done'})).toBeVisible();

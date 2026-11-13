@@ -221,6 +221,8 @@ function revealClasses() {
     grip,
     onlyInactive: containerInactive.filter(token => !container.includes(token)),
     onlyShown: gripShown.filter(token => !grip.includes(token)),
+    // The fade's own tokens (its transition), without its opacity.
+    fade: grip.filter(token => gripShown.includes(token)),
   };
 }
 
@@ -815,7 +817,7 @@ describe('ListInput', () => {
     ).not.toBeInTheDocument();
   });
 
-  it("ends each record with core List's reorder handle, revealed on hover or focus", () => {
+  it("starts each record with core List's reorder handle, revealed on hover or focus", () => {
     // A fine pointer (jsdom models a mouse): hover reveals the handle.
     expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
     const reveal = revealClasses();
@@ -824,21 +826,18 @@ describe('ListInput', () => {
     const handle = screen.getByRole('button', {name: 'Reorder guest 1'});
     const remove = screen.getByRole('button', {name: 'Remove guest 1'});
 
-    // The handle is the record's last control, after Remove in Remove's
-    // cell, as UIKit's reorder control ends an editing row.
-    expect(within(row!).getAllByRole('button')).toEqual([remove, handle]);
+    // The handle is the record's first control, beside its first field.
+    expect(within(row!).getAllByRole('button')).toEqual([handle, remove]);
     expect(handle).toHaveAttribute('data-astryx-list-reorder');
-    expect(row!.querySelector('[data-list-input-cell]')?.contains(handle)).toBe(
-      false,
-    );
+    expect(
+      row!.querySelector('[data-list-input-cell="0"]')?.contains(handle),
+    ).toBe(true);
 
-    // The row is the reveal container; the controls' cell fades with opacity
-    // alone, so at rest the handle stays mounted, named, and focusable.
-    const handleCell = [...row!.children].find(child => child.contains(handle));
+    // The row is the reveal container. The handle fades with opacity alone,
+    // so at rest it stays mounted, named, and focusable.
+    expect(reveal.fade.length).toBeGreaterThan(0);
     expect(classTokens(row)).toEqual(expect.arrayContaining(reveal.container));
-    expect(classTokens(handleCell ?? null)).toEqual(
-      expect.arrayContaining(reveal.grip),
-    );
+    expect(classTokens(handle)).toEqual(expect.arrayContaining(reveal.fade));
     expect(handle).toBeEnabled();
     expect(handle).not.toHaveAttribute('tabindex', '-1');
   });

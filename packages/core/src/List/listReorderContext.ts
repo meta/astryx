@@ -79,9 +79,8 @@ export interface ListReorderHandleProps {
    */
   readonly isDisabled?: boolean;
   /**
-   * The row's alignment (ListItem `align`) when the handle is the row's own
-   * child, after its label. That is a row without end content, which has no
-   * end slot to align it. Absent inside the end slot.
+   * The row's alignment (ListItem `align`). The handle is the row's own
+   * child, before its label, so no slot aligns it.
    */
   readonly rowAlign?: ItemAlign;
 }
