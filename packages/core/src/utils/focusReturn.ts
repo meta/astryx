@@ -22,17 +22,69 @@ import {
 } from './interactionModality';
 import {isFocusDetached} from './isFocusDetached';
 
+function focusRoot(node: Node): Document | ShadowRoot | null {
+  const root = node.getRootNode();
+  if (!('activeElement' in root)) {
+    return null;
+  }
+  const focusRoot = root as Document | ShadowRoot;
+  if (!('host' in focusRoot)) {
+    const view = focusRoot.defaultView;
+    // frameElement is also null for cross-origin parents; do not infer lost focus.
+    if (
+      view &&
+      view.parent !== view &&
+      view.frameElement === null &&
+      !focusRoot.hasFocus()
+    ) {
+      return null;
+    }
+  }
+  return focusRoot;
+}
+
+/** Whether the element owns focus through its shadow hosts and frames. Internal. */
+export function ownsFocus(element: Element): boolean {
+  // An iframe can retain activeElement after focus leaves its document.
+  const root = focusRoot(element);
+  if (!root || root.activeElement !== element) {
+    return false;
+  }
+  const owner = 'host' in root ? root.host : root.defaultView?.frameElement;
+  return owner == null || ownsFocus(owner);
+}
+
 /**
  * True when focus would be lost if `surface` hid now: nothing is focused (see
- * isFocusDetached) or focus sits inside `surface`. Reads `surface`'s own
- * document, so a surface in an iframe or Picture-in-Picture window is
- * answered there. Internal: not exported from the utils barrel.
+ * isFocusDetached) or focus sits inside `surface`. Reads its own focus root
+ * and enclosing frames, so a focus handoff outside its document wins.
+ * Internal: not exported from the utils barrel.
  */
-export function isFocusLost(surface: Element | null, doc?: Document): boolean {
-  const ownerDocument = doc ?? surface?.ownerDocument ?? document;
+export function isFocusLost(
+  surface: Element | null,
+  doc?: Document | ShadowRoot,
+): boolean {
+  const root = focusRoot(
+    doc ??
+      (surface?.isConnected ? surface : (surface?.ownerDocument ?? document)),
+  );
+  if (!root) {
+    return false;
+  }
+  const active = root.activeElement;
+  const isWithin = surface != null && surface.contains(active);
+  if ('host' in root) {
+    if (active == null) {
+      // A host fallback can be a caller's chosen focus target.
+      // Do not restore focus when that ownership is ambiguous.
+      const parentRoot = focusRoot(root.host);
+      return parentRoot != null && isFocusLost(null, parentRoot);
+    }
+    return isWithin && ownsFocus(root.host);
+  }
+  const frame = root.defaultView?.frameElement;
   return (
-    isFocusDetached(ownerDocument) ||
-    (surface != null && surface.contains(ownerDocument.activeElement))
+    (isFocusDetached(root) || isWithin) && (frame == null || isFocusLost(frame))
   );
 }
 

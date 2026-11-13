@@ -23,7 +23,7 @@ import {
   typeScaleVars,
   radiusVars,
 } from '../theme/tokens.stylex';
-import {composeEventHandlers} from '../utils/composeEventHandlers';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {mergeProps} from '../utils/mergeProps';
 import {useFocusAcrossSwap} from '../utils/useFocusAcrossSwap';
 import type {BaseProps} from '../BaseProps';
@@ -169,27 +169,12 @@ export function NavHeadingMenuItem({
     getFocusTarget: getMenuItemFromContent,
   });
 
-  // Leave parent routing and caller-owned child events intact.
-  const guardActivationKeyCallback = (
-    handler: React.KeyboardEventHandler<HTMLElement> | undefined,
-  ): React.KeyboardEventHandler<HTMLElement> | undefined => {
-    if (!isDisabled || !handler) {
-      return handler;
-    }
-    return event => {
-      if (event.key !== 'Enter' && event.key !== ' ') {
-        handler(event);
-      }
-    };
-  };
-
   return (
     <Element
-      {...restProps}
-      onMouseDown={composeEventHandlers(
-        restProps.onMouseDown,
-        isDisabled ? keepDisabledRowUnfocused : undefined,
-      )}
+      {...withholdCallerHandlers(restProps, isDisabled)}
+      onMouseDown={
+        isDisabled ? keepDisabledRowUnfocused : restProps.onMouseDown
+      }
       ref={ref}
       role="menuitem"
       // Every row, disabled included, takes focus but is not a Tab stop.
@@ -200,21 +185,6 @@ export function NavHeadingMenuItem({
       // another row would start a drag and cancel the press.
       draggable={href != null ? false : undefined}
       onClick={handleClick}
-      onClickCapture={isDisabled ? undefined : restProps.onClickCapture}
-      onAuxClick={isDisabled ? undefined : restProps.onAuxClick}
-      onAuxClickCapture={isDisabled ? undefined : restProps.onAuxClickCapture}
-      onDoubleClick={isDisabled ? undefined : restProps.onDoubleClick}
-      onDoubleClickCapture={
-        isDisabled ? undefined : restProps.onDoubleClickCapture
-      }
-      onKeyDownCapture={guardActivationKeyCallback(restProps.onKeyDownCapture)}
-      onKeyDown={guardActivationKeyCallback(restProps.onKeyDown)}
-      onKeyPressCapture={guardActivationKeyCallback(
-        restProps.onKeyPressCapture,
-      )}
-      onKeyPress={guardActivationKeyCallback(restProps.onKeyPress)}
-      onKeyUpCapture={guardActivationKeyCallback(restProps.onKeyUpCapture)}
-      onKeyUp={guardActivationKeyCallback(restProps.onKeyUp)}
       data-testid={testId}
       {...mergeProps(
         themeProps('nav-heading-menu-item', {size}),

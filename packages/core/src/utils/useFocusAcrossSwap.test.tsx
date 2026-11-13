@@ -97,12 +97,14 @@ describe('useFocusAcrossSwap', () => {
       </>
     );
     const {rerender, unmount} = render(fixture(false));
-    screen.getByRole('button').focus();
     rerender(fixture(true));
+    expect(document.body).toHaveFocus();
+    screen.getByRole('button').focus();
+    rerender(fixture(false));
     expect(ref.current).toBe(screen.getByRole('button'));
     expect(ref.current).toHaveFocus();
     handOff = true;
-    rerender(fixture(false));
+    rerender(fixture(true));
     expect(notes.current).toHaveFocus();
     unmount();
     expect(ref.current).toBeNull();
@@ -125,6 +127,82 @@ describe('useFocusAcrossSwap', () => {
     unmount();
     expect(release).toHaveBeenCalledTimes(3);
     expect(ref).not.toHaveBeenCalledWith(null);
+  });
+
+  it('restores focus when the replacement finds focus on the document root', () => {
+    const root = document.documentElement;
+    const originalTabIndex = root.getAttribute('tabindex');
+    root.tabIndex = -1;
+    const ref = () => () => root.focus();
+    const {rerender, unmount} = render(
+      <ContentExample isDisabled={false} forwardedRef={ref} />,
+    );
+    try {
+      screen.getByRole('button').focus();
+      rerender(<ContentExample isDisabled forwardedRef={ref} />);
+      expect(screen.getByRole('button')).toHaveFocus();
+    } finally {
+      unmount();
+      if (originalTabIndex === null) {
+        root.removeAttribute('tabindex');
+      } else {
+        root.setAttribute('tabindex', originalTabIndex);
+      }
+      root.blur();
+    }
+  });
+
+  it('restores a frame target but respects a caller handoff outside its frame', () => {
+    const frame = document.createElement('iframe');
+    const outside = document.createElement('button');
+    document.body.append(frame, outside);
+    const doc = frame.contentDocument!;
+    let handOff = false;
+    const ref = () => () => {
+      if (handOff) {
+        outside.focus();
+      }
+    };
+    const {rerender, unmount} = render(
+      <ContentExample isDisabled={false} forwardedRef={ref} />,
+      {container: doc.body},
+    );
+    try {
+      doc.querySelector<HTMLElement>('[role="button"]')!.focus();
+      rerender(<ContentExample isDisabled forwardedRef={ref} />);
+      expect(doc.activeElement).toBe(doc.querySelector('[role="button"]'));
+      expect(document.activeElement).toBe(frame);
+      handOff = true;
+      rerender(<ContentExample isDisabled={false} forwardedRef={ref} />);
+      expect(outside).toHaveFocus();
+    } finally {
+      unmount();
+      frame.remove();
+      outside.remove();
+    }
+  });
+
+  it('leaves a caller-selected shadow host focused through a swap', () => {
+    const host = document.createElement('div');
+    host.tabIndex = -1;
+    document.body.append(host);
+    const root = host.attachShadow({mode: 'open'});
+    const container = document.createElement('div');
+    root.append(container);
+    const ref = () => () => host.focus();
+    const {rerender, unmount} = render(
+      <ContentExample isDisabled={false} forwardedRef={ref} />,
+      {container},
+    );
+    try {
+      container.querySelector<HTMLElement>('[role="button"]')!.focus();
+      rerender(<ContentExample isDisabled forwardedRef={ref} />);
+      expect(host).toHaveFocus();
+      expect(root.activeElement).toBeNull();
+    } finally {
+      unmount();
+      host.remove();
+    }
   });
 
   it('does not resurrect owned-content focus after availability changes while hidden', () => {

@@ -154,6 +154,7 @@ describe('NavHeadingMenuItem disabled navigation', () => {
   it('suppresses disabled pointer callbacks and restores enabled capture cancellation', async () => {
     const user = userEvent.setup();
     const activate = vi.fn();
+    const press = vi.fn();
     const select = vi.fn();
     const closeMenu = vi.fn();
     const fixture = (isDisabled: boolean, cancel = false) => (
@@ -170,6 +171,14 @@ describe('NavHeadingMenuItem disabled navigation', () => {
             onAuxClick={activate}
             onDoubleClickCapture={activate}
             onDoubleClick={activate}
+            onPointerDownCapture={press}
+            onPointerDown={press}
+            onPointerUpCapture={press}
+            onPointerUp={press}
+            onMouseDownCapture={press}
+            onMouseDown={press}
+            onMouseUpCapture={press}
+            onMouseUp={press}
           />
         </NavHeadingMenu>
       </NavHeadingCloseContext>
@@ -181,6 +190,7 @@ describe('NavHeadingMenuItem disabled navigation', () => {
     await user.dblClick(item);
     await user.pointer({target: item, keys: '[MouseMiddle]'});
     expect(activate).not.toHaveBeenCalled();
+    expect(press).not.toHaveBeenCalled();
     expect(select).not.toHaveBeenCalled();
     expect(closeMenu).not.toHaveBeenCalled();
     expect(item).toHaveFocus();
@@ -189,6 +199,7 @@ describe('NavHeadingMenuItem disabled navigation', () => {
     await user.dblClick(item);
     await user.pointer({target: item, keys: '[MouseMiddle]'});
     expect(activate).toHaveBeenCalledTimes(6);
+    expect(press).toHaveBeenCalledTimes(24);
     expect(select).toHaveBeenCalledTimes(2);
     expect(closeMenu).toHaveBeenCalledTimes(2);
     select.mockClear();
@@ -199,7 +210,7 @@ describe('NavHeadingMenuItem disabled navigation', () => {
     expect(closeMenu).not.toHaveBeenCalled();
   });
 
-  it('filters only disabled Enter/Space callbacks across all keyboard phases', async () => {
+  it('withholds disabled keyboard callbacks without blocking parent handlers', async () => {
     const user = userEvent.setup();
     const onKey = vi.fn();
     const parent = vi.fn<KeyboardEventHandler<HTMLDivElement>>();
@@ -234,21 +245,22 @@ describe('NavHeadingMenuItem disabled navigation', () => {
       ' ',
       ' ',
     ]);
+    parent.mockClear();
     await user.keyboard('a');
-    expect(onKey).toHaveBeenCalledTimes(6);
+    expect(onKey).not.toHaveBeenCalled();
+    expect(parent.mock.calls.map(([event]) => event.key)).toEqual(['a', 'a']);
     expect(item).toHaveFocus();
 
-    onKey.mockClear();
     rerender(fixture(false));
-    await user.keyboard('{Enter}{ }');
-    expect(onKey).toHaveBeenCalledTimes(12);
+    await user.keyboard('{Enter}{ }a');
+    expect(onKey).toHaveBeenCalledTimes(18);
     parent.mockClear();
     rerender(fixture(false, true));
     await user.keyboard('{Enter}');
     expect(parent.mock.calls.map(([event]) => event.type)).toEqual(['keyup']);
   });
 
-  it('keeps observation and caller-owned child events on a disabled item', async () => {
+  it('keeps focus and child events but withholds disabled hover callbacks', async () => {
     const user = userEvent.setup();
     const focus = vi.fn();
     const blur = vi.fn();
@@ -286,8 +298,8 @@ describe('NavHeadingMenuItem disabled navigation', () => {
     screen.getByRole('button').focus();
     expect(focus).toHaveBeenCalledOnce();
     expect(blur).toHaveBeenCalledOnce();
-    expect(enter).toHaveBeenCalledOnce();
-    expect(leave).toHaveBeenCalledOnce();
+    expect(enter).not.toHaveBeenCalled();
+    expect(leave).not.toHaveBeenCalled();
 
     const child = screen.getByRole('link');
     await user.click(child);

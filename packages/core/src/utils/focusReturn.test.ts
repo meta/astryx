@@ -322,6 +322,7 @@ describe('temporary programmatic focus', () => {
 
 describe('isFocusLost', () => {
   afterEach(() => {
+    vi.restoreAllMocks();
     document.body.innerHTML = '';
   });
 
@@ -335,6 +336,57 @@ describe('isFocusLost', () => {
     document.getElementById('outside')?.focus();
     expect(isFocusLost(surface)).toBe(false);
     expect(isFocusLost(null)).toBe(false);
+  });
+
+  it('reads a shadow root without taking focus from its host or a sibling', () => {
+    const host = document.createElement('div');
+    host.tabIndex = -1;
+    document.body.append(host);
+    const root = host.attachShadow({mode: 'open'});
+    const surface = document.createElement('div');
+    const inside = document.createElement('button');
+    const outside = document.createElement('button');
+    surface.append(inside);
+    root.append(surface, outside);
+
+    inside.focus();
+    expect(isFocusLost(surface)).toBe(true);
+    outside.focus();
+    expect(isFocusLost(surface)).toBe(false);
+    host.focus();
+    expect(root.activeElement).toBeNull();
+    expect(isFocusLost(surface)).toBe(false);
+  });
+
+  it('preserves focus outside a nested frame even when its document is detached', () => {
+    const outer = document.createElement('iframe');
+    const outside = document.createElement('button');
+    document.body.append(outer, outside);
+    const outerDocument = outer.contentDocument!;
+    const inner = outerDocument.createElement('iframe');
+    outerDocument.body.append(inner);
+    const innerDocument = inner.contentDocument!;
+    const target = innerDocument.createElement('button');
+    innerDocument.body.append(target);
+
+    target.focus();
+    expect(isFocusLost(target)).toBe(true);
+    target.remove();
+    expect(isFocusLost(null, innerDocument)).toBe(true);
+    outside.focus();
+    expect(isFocusLost(null, innerDocument)).toBe(false);
+  });
+
+  it('does not repair an unfocused child when its parent frame is inaccessible', () => {
+    const frame = document.createElement('iframe');
+    document.body.append(frame);
+    const doc = frame.contentDocument!;
+    vi.spyOn(doc.defaultView!, 'frameElement', 'get').mockReturnValue(null);
+    const hasFocus = vi.spyOn(doc, 'hasFocus').mockReturnValue(true);
+
+    expect(isFocusLost(null, doc)).toBe(true);
+    hasFocus.mockReturnValue(false);
+    expect(isFocusLost(null, doc)).toBe(false);
   });
 });
 

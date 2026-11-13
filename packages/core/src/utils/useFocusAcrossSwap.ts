@@ -20,8 +20,9 @@
  */
 
 import {useCallback, useEffect, useRef, type Ref} from 'react';
+import {isFocusLost, ownsFocus} from './focusReturn';
 import {mergeRefs} from './mergeRefs';
-import {isHTMLElement} from './nodeType';
+import {isHTMLElement, isShadowRoot} from './nodeType';
 
 function isNativeTarget(value: unknown): value is HTMLElement {
   // A router ref can hold an instance instead of an HTML element.
@@ -30,27 +31,6 @@ function isNativeTarget(value: unknown): value is HTMLElement {
     typeof value.getRootNode === 'function' &&
     typeof value.focus === 'function'
   );
-}
-
-function focusRoot(element: Element): Document | ShadowRoot | null {
-  const root = element.getRootNode();
-  if (!('activeElement' in root)) {
-    return null;
-  }
-  const focusRoot = root as Document | ShadowRoot;
-  if (!('host' in focusRoot)) {
-    const view = focusRoot.defaultView;
-    // frameElement is also null for cross-origin parents; do not infer lost focus.
-    if (
-      view &&
-      view.parent !== view &&
-      view.frameElement === null &&
-      !focusRoot.hasFocus()
-    ) {
-      return null;
-    }
-  }
-  return focusRoot;
 }
 
 function wasHidden(node: HTMLElement): boolean {
@@ -65,33 +45,6 @@ function wasHidden(node: HTMLElement): boolean {
     }
   }
   return false;
-}
-
-function ownsFocus(element: Element): boolean {
-  // An iframe can retain activeElement after focus leaves its document.
-  const root = focusRoot(element);
-  if (!root || root.activeElement !== element) {
-    return false;
-  }
-  const owner = 'host' in root ? root.host : root.defaultView?.frameElement;
-  return owner == null || ownsFocus(owner);
-}
-
-function focusIsUnclaimed(element: Element): boolean {
-  const root = focusRoot(element);
-  if (!root) {
-    return false;
-  }
-  if ('host' in root) {
-    // A host fallback can be a caller's chosen focus target.
-    // Do not restore focus when that ownership is ambiguous.
-    return root.activeElement == null && focusIsUnclaimed(root.host);
-  }
-  const frame = root.defaultView?.frameElement;
-  return (
-    (root.activeElement == null || root.activeElement === root.body) &&
-    (frame == null || ownsFocus(frame) || focusIsUnclaimed(frame))
-  );
 }
 
 export function useFocusAcrossSwap<T extends HTMLElement>(
@@ -122,13 +75,14 @@ export function useFocusAcrossSwap<T extends HTMLElement>(
       focusedNodeRef.current = null;
       const resolved = getFocusTarget ? getFocusTarget(node) : node;
       const target = isNativeTarget(resolved) ? resolved : null;
+      const root = target?.getRootNode();
       if (
         target?.isConnected &&
         outgoing !== null &&
         outgoing.target !== target &&
         !outgoing.target.isConnected &&
         !wasHidden(outgoing.source) &&
-        focusIsUnclaimed(target)
+        isFocusLost(null, isShadowRoot(root) ? root : target.ownerDocument)
       ) {
         target.focus({preventScroll: true});
       }
