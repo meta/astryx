@@ -58,6 +58,7 @@ const RELEASE_CHECK_JOBS = [
   'pr-a11y-shard',
   'pr-a11y-audit',
   'pr-a11y-guards',
+  'pr-a11y-plan',
   'pr-a11y-specs',
   'a11y-contracts-shard',
   'visual-scout',
