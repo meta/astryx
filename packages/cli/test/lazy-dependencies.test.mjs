@@ -102,15 +102,16 @@ describe('lazy dependencies', () => {
   });
 
   it('are not loaded by importing the API', () => {
+    // Every package here is CommonJS, so a load shows in the require cache
+    // (on every supported Node, unlike module hooks).
     const script = `
-      import {registerHooks} from 'node:module';
-      const loaded = new Set();
-      registerHooks({load(url, context, next) {
-        const m = url.match(/node_modules\\/((?:@[^/]+\\/)?[^/]+)\\//g);
-        if (m) loaded.add(m[m.length - 1].slice(13, -1));
-        return next(url, context);
-      }});
+      import {createRequire} from 'node:module';
       await import(${JSON.stringify(pathToFileURL(API).href)});
+      const loaded = new Set();
+      for (const file of Object.keys(createRequire(import.meta.url).cache)) {
+        const m = file.match(/node_modules[\\\\/]((?:@[^\\\\/]+[\\\\/])?[^\\\\/]+)[\\\\/]/g);
+        if (m) loaded.add(m[m.length - 1].slice(13, -1).replace(/\\\\/g, '/'));
+      }
       process.stdout.write(JSON.stringify([...loaded]));
     `;
     const result = spawnSync(
@@ -120,6 +121,7 @@ describe('lazy dependencies', () => {
     );
     expect(result.status, result.stderr).toBe(0);
     const loaded = JSON.parse(result.stdout);
+    expect(loaded.length).toBeGreaterThan(0);
     for (const pkg of LAZY_PACKAGES) expect(loaded).not.toContain(pkg);
   }, 60_000);
 });
