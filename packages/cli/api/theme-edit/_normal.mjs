@@ -158,7 +158,16 @@ export function escapesMeant(thing, value) {
     try {
       j = JSON.parse(t);
     } catch {
-      return v;
+      // A list in single quotes, as a JS config writes it (`['Inter',
+      // 'serif']`): read like the JSON one.
+      const items =
+        /^\[\s*('(?:[^'\\]|\\.)*'\s*(?:,\s*'(?:[^'\\]|\\.)*'\s*)*),?\s*\]$/.exec(
+          t,
+        );
+      if (!items) return v;
+      j = [...items[1].matchAll(/'((?:[^'\\]|\\.)*)'/g)].map(x =>
+        x[1].replace(/\\(.)/g, '$1'),
+      );
     }
     /** @param {any} x */
     const text = x =>
@@ -531,7 +540,7 @@ export function colorPair(value) {
       .replace(/^(["'])(.*)\1$/, '$2')
       .trim();
   const labeled =
-    /^\{?\s*["']?(light|dark)["']?\s*[:=]\s*(.+?)\s*[;,]\s*["']?(light|dark)["']?\s*[:=]\s*(.+?)\s*;?\s*\}?$/i.exec(
+    /^\{?\s*["']?(light|dark)["']?\s*[:=]\s*(.+?)\s*(?:[;,]\s*|\s+)["']?(light|dark)["']?\s*[:=]\s*(.+?)\s*;?\s*\}?$/i.exec(
       v,
     );
   if (labeled && labeled[1].toLowerCase() !== labeled[3].toLowerCase()) {

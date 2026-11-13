@@ -514,7 +514,33 @@ export function mixSide(side) {
     if (w == null) return null;
     const plain = /^calc\(\s*(.*?)\s*\)$/i.exec(w)?.[1] ?? w;
     const n = cssNumber(plain);
-    return n?.unit === '%' ? n.value : null;
+    if (n) return n.unit === '%' ? n.value : null;
+    // Math of two terms that gives a percentage: percentages added or
+    // taken away (`25% + 25%`), a percentage scaled by a number
+    // (`50% * 1`, `100% / 2`).
+    const m = /^(\S+)\s*([*/+-])\s*(\S+)$/.exec(plain);
+    if (!m) return null;
+    const [a, b] = [cssNumber(m[1]), cssNumber(m[3])];
+    if (!a || !b) return null;
+    const pct = (/** @type {{unit: string}} */ x) => x.unit === '%';
+    const plainNum = (/** @type {{unit: string}} */ x) => x.unit === '';
+    const r =
+      m[2] === '+' || m[2] === '-'
+        ? pct(a) && pct(b)
+          ? m[2] === '+'
+            ? a.value + b.value
+            : a.value - b.value
+          : null
+        : m[2] === '*'
+          ? pct(a) && plainNum(b)
+            ? a.value * b.value
+            : plainNum(a) && pct(b)
+              ? a.value * b.value
+              : null
+          : pct(a) && plainNum(b) && b.value !== 0
+            ? a.value / b.value
+            : null;
+    return r != null && Number.isFinite(r) ? r : null;
   };
   if (words.length < 2) return {color: side.trim(), pct: null};
   const last = share(words.at(-1));
