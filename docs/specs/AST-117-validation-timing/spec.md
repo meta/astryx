@@ -223,9 +223,6 @@ Classified under `spec:AST-017` against the latest stable release:
 
 Requirement gaps:
 
-- FR1, FR2 gap: `NumberInput` takes no `entryErrorBehavior` and reads no
-  `FormLayout` default. It reveals each rejection only at commit under both
-  values, as FR4 states.
 - FR6 gap: a busy `TimeInput` (`isLoading` or a pending `changeAction`) stays
   editable but reveals no rejection of its own until it is idle.
 
