@@ -3287,7 +3287,11 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       }
     // initial and unset leave a part's padding variables without a value:
     // the part takes Core's own default, which the result names.
-    if (/^padding/.test(prop) && /^(initial|unset)$/i.test(v.trim()) && s.on) {
+    if (
+      /^padding/.test(prop) &&
+      /^(initial|unset|inherit|revert|revert-layer)$/i.test(v.trim()) &&
+      s.on
+    ) {
       const owner = (ctx.derived?.[s.on] ?? []).some(
         d => d.property === 'padding' && d.expand,
       )
@@ -3370,25 +3374,6 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           },
         );
     }
-    // Core writes a container part's padding to variables of its own, where
-    // a keyword that takes its value from elsewhere means no value at all.
-    if (
-      /^padding/.test(prop) &&
-      /^(inherit|revert|revert-layer)$/i.test(v.trim()) &&
-      (ctx.derived?.[/** @type {string} */ (s.on)] ?? []).some(
-        d => d.property === 'padding' && d.expand,
-      )
-    )
-      refuse(
-        E.ERR_THEME_BAD_VALUE,
-        `${s.on} writes ${prop} to variables of its own, where "${v.trim()}" has nothing to take its value from, so ${s.on} would fall back to its default padding. Give a length, or undo the padding to go back to the base theme's.`,
-        {
-          run: [
-            `${P} set ${slug} ${prop} 0 --on ${s.on}`,
-            `${P} undo ${slug} ${prop} --on ${s.on}`,
-          ],
-        },
-      );
     // Text, headings and links take their color from the color prop.
     const textParts = COLOR_PROP_PARTS;
     if (

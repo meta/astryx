@@ -429,7 +429,7 @@ export const DIALS = wordTable({
     help:
       'How much room there is: padding, gaps and control heights together. Rungs: ' +
       SPACING.map(([n, f]) => `${n} (x${f})`).join(', ') +
-      '. Whole theme: scales every spacing token and control height. With --on <part or group>: only inside it.',
+      '. Whole theme: scales every spacing token and control height (a denser theme has shorter controls; the small, medium and large sizes stay apart and in order, none under 24px). With --on <part or group>: only inside it.',
     values: 'tight|compact|medium|roomy|spacious|more|less',
     examples: [
       'set my spacing compact',

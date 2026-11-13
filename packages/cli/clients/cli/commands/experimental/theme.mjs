@@ -1128,7 +1128,11 @@ export function registerExperimentalTheme(group, program) {
               : [
                   ...project(/** @type {any} */ (r.data)),
                   // A folder add refuses has a note that says why instead.
-                  ...(r.data.notes.some(n => n.includes(' refuses this folder'))
+                  ...(r.data.notes.some(
+                    n =>
+                      n.includes(' refuses this folder') ||
+                      n.startsWith('no preview here; '),
+                  )
                     ? []
                     : [
                         `Tip: ${PREFIX} preview add${o.path == null ? '' : ` --path ${quoteCommandArgument(String(o.path))}`}`,

@@ -53,6 +53,7 @@
  * @property {{code: string, cause: string} | null} notChecked - Set when the change is saved but the components could not be rendered, so it was not checked and has no preview: the cause, such as two copies of React.
  * @property {string} [sheetStale] - Set when sheet.html (the sheet of every component, made by `show`) shows the theme as it was before this change: it says so at its top until `show` makes it again.
  * @property {string[]} [previewStale] - Files of the in-app theme preview that were not written again and still show the theme as it was: changed by hand, or a preview folder where a stopped preview change waits for the next preview command.
+ * @property {string} see - One line on how to see the change: first a look that changes nothing in the app (the editor's preview.html, current after the change, and `png`, which takes pictures with no dev server), then the in-app preview page most about it (Colors for a color, Components for a part, else Overview) at its own URL when there is a preview, and adding one to the app last, as an option. When the change could not be rendered, it names why instead of the editor's page.
  * @property {{wrote: string[]}} [appCopy] - Only the first time the theme's app copy is written (src/themes/<theme>/, a standard local theme `astryx theme add <theme>` takes, written again after every build): the files written.
  */
 
@@ -97,6 +98,7 @@
  * @property {string | null} pictureProblem
  * @property {{code: string, cause: string} | null} notChecked - Saved but not checked: see ThemeEditPreviewFields.
  * @property {string[]} [previewStale] - In-app preview files changed by hand: see ThemeEditPreviewFields.
+ * @property {string} see - How to see the change: see ThemeEditPreviewFields.
  * @property {string} [sheetStale] - Set when sheet.html shows the theme as it was before this change: see ThemeEditPreviewFields.
  * @property {{wrote: string[]}} [appCopy] - Only the first time the theme's app copy is written: see ThemeEditPreviewFields.
  */
@@ -196,6 +198,7 @@
  * @property {string[]} data.pages - Every page of the preview, in order.
  * @property {string[]} data.files - Every file the preview wrote.
  * @property {string} data.open - How to open the preview.
+ * @property {Record<string, string>} data.urls - Each page's own URL in the running app (the preview's path with ?page=<id>), so any page can be opened or pictured; empty when no URL can be told.
  */
 
 /**
@@ -217,6 +220,7 @@
  * @property {string[]} data.files - Every file written.
  * @property {string[]} data.notes - What else to know.
  * @property {string} data.open - How to install, run and open the app.
+ * @property {Record<string, string>} data.urls - Each page's own URL once the app runs (/theme-preview?page=<id>).
  */
 
 /**
@@ -231,7 +235,7 @@
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditPreviewListResponse
  * @property {'themeEdit.previewList'} type
- * @property {{folder: string | null, theme: string | null, themeMissing: boolean, pages: Array<{id: string, label: string, missing?: boolean}>, notes: string[]}} data - `themeMissing`: the theme the preview wears is gone, so its route does not build; a page's `missing`: its file is gone; `notes`: what else to know, such as the command that fixes it.
+ * @property {{folder: string | null, theme: string | null, themeMissing: boolean, pages: Array<{id: string, label: string, url?: string, missing?: boolean}>, notes: string[]}} data - `themeMissing`: the theme the preview wears is gone, so its route does not build; a page's `url`: its own URL in the running app; a page's `missing`: its file is gone; `notes`: what else to know, such as the command that fixes it.
  */
 
 /**

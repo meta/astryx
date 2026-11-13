@@ -35,6 +35,7 @@ import {
   shown,
   staleBuild,
   themeFiles,
+  unlabeledThemeName,
   usableNewName,
   windowsReserved,
 } from './_settings.mjs';
@@ -72,7 +73,6 @@ import {
 } from '../../foundation/env/package-manager.mjs';
 import {sha256} from '../../foundation/render/source-block.mjs';
 import {findNodeModulesPackage} from '../../foundation/fs/paths.mjs';
-import {normalizeEntry} from './_check.mjs';
 
 const E = ERROR_CODES;
 
@@ -3313,17 +3313,121 @@ function recordPreview(cwd, slug, dir, keep = true) {
 }
 
 /**
+ * The routes folder a preview folder is in, by place (also one a command
+ * has just made), or null.
+ * @param {string} cwd
+ * @param {{dir: string, app: string | null}} at
+ */
+function routesOf(cwd, at) {
+  return (
+    at.app ??
+    [path.join(cwd, 'app'), path.join(cwd, 'src', 'app')].find(r =>
+      at.dir.startsWith(r + path.sep),
+    ) ??
+    null
+  );
+}
+
+/**
+ * The URL path the app serves a preview at (with the basePath next.config
+ * sets), or null when no URL can be told: outside the routes folder, under
+ * a [param] folder, or a basePath set from code.
+ * @param {string} cwd
+ * @param {{dir: string, app: string | null}} at
+ * @returns {string | null}
+ */
+function previewPath(cwd, at) {
+  const app = routesOf(cwd, at);
+  if (!app) return null;
+  const segs = urlSegments(app, at.dir);
+  if (segs.some(seg => /^\[.+\]$/.test(seg))) return null;
+  const base = nextBasePath(cwd);
+  if (base == null) return null;
+  return `${base}/${segs.map(seg => encodeURIComponent(seg)).join('/')}`;
+}
+
+/**
+ * Each page's own URL in the running app: the preview's path with
+ * ?page=<id>, the first page at the bare path too. Empty when no URL can
+ * be told.
+ * @param {string} cwd
+ * @param {{dir: string, app: string | null}} at
+ * @param {string[]} ids
+ * @returns {Record<string, string>}
+ */
+function pageUrls(cwd, at, ids) {
+  const base = previewPath(cwd, at);
+  if (base == null) return {};
+  return Object.fromEntries(ids.map(id => [id, `${base}?page=${id}`]));
+}
+
+/**
+ * One line that says how to see a theme after a change. First a look that
+ * changes nothing in the app: the editor's own preview.html (current after
+ * the change) and --png, which takes pictures with no dev server; then the
+ * in-app preview page most about what changed (Colors after a color,
+ * Components after a part, else Overview) at its own URL when there is a
+ * preview; adding one to the app last, as an option. A change that could
+ * not be rendered names why instead of the editor's page.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {'colors' | 'components' | 'overview'} focus
+ * @param {{code: string, cause: string} | null} [notChecked] why the change
+ *   could not be rendered
+ * @returns {string}
+ */
+export function seeLine(cwd, slug, focus, notChecked = null) {
+  /** @type {string[]} */
+  const urls = [];
+  /** Previews whose URL depends on the app's routing. @type {string[]} */
+  const unplain = [];
+  // The previews recorded for the theme, and any found in the routes
+  // folders that wear it (a folder renamed by hand), as remove finds them.
+  const dirs = [
+    ...new Set([...recordedPreviews(cwd, slug), ...previewsIn(cwd)]),
+  ];
+  for (const dir of dirs) {
+    /** @type {any} */
+    let data;
+    try {
+      data = JSON.parse(fs.readFileSync(path.join(dir, PREVIEW_DATA), 'utf8'));
+    } catch {
+      continue;
+    }
+    if (data?.theme !== slug) continue;
+    const ids = Array.isArray(data?.pages)
+      ? data.pages.map((/** @type {any} */ x) => String(x?.id))
+      : [];
+    // Only a page the preview has.
+    const id = ids.includes(focus) ? focus : ids[0];
+    const url = id ? pageUrls(cwd, {dir, app: null}, [id])[id] : undefined;
+    if (url) urls.push(url);
+    else
+      unplain.push(
+        `${shownDir(cwd, dir)}/${id ? ` (its ${id} page: add ?page=${id} to its URL)` : ''}`,
+      );
+  }
+  const f = themeFiles(cwd, slug);
+  const own = notChecked
+    ? /could not be written/.test(notChecked.cause)
+      ? `the change is saved, but ${notChecked.cause}; --png takes no pictures until that is fixed`
+      : `the change is saved, but the components could not be rendered here (${notChecked.cause}), so ${shown(cwd, f.preview)} still shows the theme as it was and --png takes no pictures until that is fixed`
+    : `look without changing your app: open or screenshot ${shown(cwd, f.preview)} (one self-contained page, current after this change; ${EDITOR} show ${slug} also writes ${shown(cwd, f.sheet)}, every component), or run it with --png for pictures in ${shownDir(cwd, f.dir)}/ with no dev server (it needs a Playwright or a Chrome)`;
+  if (urls.length)
+    return `${own}; in the running app: open ${urls.slice(0, 2).join(' or ')}`;
+  if (unplain.length)
+    return `${own}; the in-app preview is in ${unplain.slice(0, 2).join(', ')}, at a URL that depends on the app's routing`;
+  return `${own}; to see it inside your app, ${PREVIEW} add puts the preview pages there, each at its own URL`;
+}
+
+/**
  * How to open the preview, from where it is.
  * @param {string} cwd
  * @param {{dir: string, app: string | null}} at
  */
 function openLine(cwd, at) {
   // The routes folder by place, also one this command has just made.
-  const app =
-    at.app ??
-    [path.join(cwd, 'app'), path.join(cwd, 'src', 'app')].find(r =>
-      at.dir.startsWith(r + path.sep),
-    );
+  const app = routesOf(cwd, at);
   if (app) {
     // A (group) folder is not part of the URL; a [param] folder is a value
     // the person picks; each other folder is one URL segment, encoded.
@@ -3926,11 +4030,7 @@ async function reportingRecovery(fn) {
  * @returns {string | undefined}
  */
 function themeArg(v) {
-  if (typeof v !== 'string') return v;
-  const {thing, value} = normalizeEntry(v, undefined);
-  return /^-*theme$/i.test(thing) && value?.trim()
-    ? value.trim().replace(/^['"]|['"]$/g, '')
-    : v;
+  return typeof v === 'string' ? unlabeledThemeName(v) : v;
 }
 
 /**
@@ -4418,6 +4518,12 @@ async function addPreview(description, options, box) {
       pages: data.pages.map(x => x.id),
       files: data.files.map(f => shown(cwd, path.join(at.dir, f))),
       open: openLine(cwd, at),
+      // Each page's own URL, so any page can be opened or pictured.
+      urls: pageUrls(
+        cwd,
+        at,
+        data.pages.map(x => x.id),
+      ),
     },
   };
 }
@@ -4653,6 +4759,9 @@ export async function themeEditPreviewApp(dir, options = {}) {
       folder,
       theme: slug,
       pages: data.pages.map(x => x.id),
+      urls: Object.fromEntries(
+        data.pages.map(x => [x.id, `/theme-preview?page=${x.id}`]),
+      ),
       files,
       notes,
       // A folder named like a flag (`-`, `-k`) is a path to cd only with ./.
@@ -4761,9 +4870,27 @@ export async function themeEditPreviewList(options = {}) {
     notes.push(
       `${[...missing].join(', ')} ${missing.size > 1 ? 'are' : 'is'} listed, but ${missing.size > 1 ? 'their files are' : 'its file is'} gone, so the route does not build; ${PREVIEW} add${pf} writes ${missing.size > 1 ? 'them' : 'it'} again`,
     );
+  // No preview here, but one elsewhere in the routes folders (a folder
+  // renamed by hand, as remove finds it): name it, with its list.
+  const elsewhere = !data
+    ? previewsIn(cwd).filter(d => !at || d !== at.dir)
+    : [];
+  if (elsewhere.length)
+    notes.push(
+      `no preview here; ${elsewhere.length > 1 ? 'the previews are in' : 'the preview is in'} ${elsewhere
+        .slice(0, 3)
+        .map(d => `${shownDir(cwd, d)}/`)
+        .join(', ')}: ${elsewhere
+        .slice(0, 3)
+        .map(
+          d =>
+            `${PREVIEW} list --path ${quoteCommandArgument(shownDir(cwd, d))}`,
+        )
+        .join('; ')}`,
+    );
   // No preview yet: say so when `add` would refuse the folder, with its
   // reason and the way on, rather than suggest it.
-  if (!data) {
+  if (!data && !elsewhere.length) {
     try {
       previewDir(cwd, options.path, {
         write: true,
@@ -4790,11 +4917,16 @@ export async function themeEditPreviewList(options = {}) {
       folder: at && data ? shownDir(cwd, at.dir) : null,
       theme: data?.theme ?? null,
       themeMissing,
-      pages: (data?.pages ?? []).map(x => ({
-        id: x.id,
-        label: x.label,
-        ...(missing.has(x.id) ? {missing: true} : {}),
-      })),
+      pages: (data?.pages ?? []).map(x => {
+        const url = at && data ? pageUrls(cwd, at, [x.id])[x.id] : undefined;
+        return {
+          id: x.id,
+          label: x.label,
+          // The page's own URL in the running app, when one can be told.
+          ...(url ? {url} : {}),
+          ...(missing.has(x.id) ? {missing: true} : {}),
+        };
+      }),
       notes,
     },
   };
