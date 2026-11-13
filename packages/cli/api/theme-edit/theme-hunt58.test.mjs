@@ -15,6 +15,7 @@ import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {themeEditNew, themeEditSet, themeEditShow} from './theme-edit.mjs';
 import {editorThemeRefusal} from './_adapter.mjs';
 import {AstryxError} from '../error.mjs';
+import {runCli} from '../../test-utils/run-cli.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -51,6 +52,25 @@ describe('hunt58 (a): one set of steps', () => {
       /editor show y\n.* theme add y$/,
     );
   }, 120_000);
+});
+
+describe('hunt58 (a): a copy folder of only system files', () => {
+  it('add and use give the no-copy steps, as with no folder', async () => {
+    await themeEditNew('jo', {cwd, like: 'neutral'});
+    const dir = path.join(cwd, 'src/themes/jo');
+    fs.rmSync(dir, {recursive: true, force: true});
+    fs.mkdirSync(dir, {recursive: true});
+    fs.writeFileSync(path.join(dir, '.DS_Store'), '');
+    for (const verb of ['add', 'use']) {
+      const r = await runCli(['--json', 'experimental', 'theme', verb, 'jo'], {
+        cwd,
+      });
+      expect(r.status).toBe(1);
+      const out = JSON.parse(r.stdout);
+      expect(out.error).toContain('has no app copy yet');
+      expect(out.error).not.toMatch(/Unknown theme|no such theme/i);
+    }
+  }, 240_000);
 });
 
 describe('hunt58 (b): a stopped color change', () => {

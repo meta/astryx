@@ -57,7 +57,7 @@ import {
   writeAppCopyAt,
 } from './_preview.mjs';
 import {humanWarn} from '../../foundation/response/json.mjs';
-import {setAfterBuild, typedThemeName} from './_settings.mjs';
+import {folderIsEmpty, setAfterBuild, typedThemeName} from './_settings.mjs';
 
 // Every build of a theme writes its app copy (src/themes/<theme>/).
 setAfterBuild(writeAppCopy);
@@ -673,7 +673,8 @@ export function editorThemeRefusal(err, cwd) {
   if (!slug) return null;
   // A local theme of that name (a fork in the app's own themes folder) is
   // one the stable commands take: their own message stands.
-  if (fs.existsSync(path.join(root, LOCAL_THEME_ROOT, slug))) return null;
+  // A folder of only system files (or empty) holds no theme: as absent.
+  if (!folderIsEmpty(path.join(root, LOCAL_THEME_ROOT, slug))) return null;
   // No app copy yet (a theme made before the editor wrote one, or the
   // copy removed): the next build writes it, then the same steps every
   // place gives (`wiring` of new and show).

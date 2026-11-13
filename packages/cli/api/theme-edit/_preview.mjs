@@ -33,6 +33,7 @@ import {
 import {OVERVIEW_SECTIONS} from './_overview.mjs';
 import {
   FOLDER_JUNK,
+  folderIsEmpty,
   camel,
   fontPackages,
   modesOf,
@@ -1600,7 +1601,7 @@ export function appCopyBlocker(cwd, slug) {
   const dir = path.join(cwd, 'src', 'themes', slug);
   const name = `${camel(slug)}Theme`;
   const rel = path.relative(cwd, dir).split(path.sep).join('/');
-  if (!fs.existsSync(dir)) return null;
+  if (folderIsEmpty(dir)) return null;
   /** @type {string[]} */
   let names;
   try {
@@ -1608,9 +1609,6 @@ export function appCopyBlocker(cwd, slug) {
   } catch {
     return rel;
   }
-  // A folder of system files only (or empty), as `git rm -r` or a branch
-  // switch leaves it, holds nothing of anyone's.
-  if (names.every(n => FOLDER_JUNK.has(n))) return null;
   /** @type {boolean} */
   let marked;
   try {

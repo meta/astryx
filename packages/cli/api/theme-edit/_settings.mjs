@@ -199,6 +199,24 @@ export function themeFiles(cwd, slug) {
 export const FOLDER_JUNK = new Set(['.DS_Store', '.gitkeep', 'Thumbs.db']);
 
 /**
+ * Whether `dir` holds nothing of anyone's: absent, empty, or only system
+ * files (what `git rm -r` or a branch switch leaves). A path that is not a
+ * folder, or one that does not read, is not empty.
+ * @param {string} dir
+ */
+export function folderIsEmpty(dir) {
+  if (!fs.existsSync(dir)) return true;
+  try {
+    return (
+      fs.lstatSync(dir).isDirectory() &&
+      fs.readdirSync(dir).every(n => FOLDER_JUNK.has(n))
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Whether a value fits what a dial takes, read from the dial's own list of
  * values: a named rung in any case, or a value of the kind it names (a size,
  * a color, a number). `set` still checks the value in full.
@@ -683,7 +701,7 @@ export function loadTheme(
       other[0] === f.dir &&
       !LIKE.includes(slug) &&
       fs.lstatSync(f.dir).isDirectory() &&
-      fs.readdirSync(f.dir).every(n => FOLDER_JUNK.has(n))
+      folderIsEmpty(f.dir)
     )
       refuse(
         ERROR_CODES.ERR_UNKNOWN_THEME,
