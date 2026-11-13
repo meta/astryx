@@ -127,6 +127,40 @@ export const docs = {
             'Which side the drawer slides from. Start is left in LTR, right in RTL. Auto picks a side based on the trigger position.',
           default: "'auto'",
         },
+        {
+          name: 'label',
+          type: 'string',
+          description:
+            "Accessible name for the drawer's dialog and its navigation landmark. Without it, a string header names them, else the localized default ('Navigation' in English). A caller aria-labelledby outranks all three.",
+        },
+        {
+          name: 'xstyle',
+          type: 'StyleXStyles',
+          description:
+            'StyleX styles for the dialog, the full-viewport overlay that holds the drawer. Must be a stylex.create() value.',
+        },
+        {
+          name: 'className',
+          type: 'string',
+          description:
+            'CSS class name for the dialog. Prefer xstyle for styling; className is provided for integration with non-StyleX systems.',
+        },
+        {
+          name: 'style',
+          type: 'CSSProperties',
+          description:
+            'Inline styles for the dialog. Prefer xstyle for styling; inline styles bypass StyleX optimization.',
+        },
+        {
+          name: 'ref',
+          type: 'React.Ref<HTMLDialogElement>',
+          description: 'Ref forwarded to the dialog element.',
+        },
+        {
+          name: 'data-testid',
+          type: 'string',
+          description: 'Test selector for the dialog element.',
+        },
       ],
     },
     {
@@ -197,14 +231,12 @@ export const docsZh = {
       name: 'isOpen',
       type: 'boolean',
       description: '抽屉是否打开。',
-      required: true,
     },
     {
       name: 'onOpenChange',
       type: '(isOpen: boolean) => void',
       description:
         '当抽屉可见性变化时调用（点击背景遮罩、按 Escape 键或点击关闭按钮）。在手机或平板上（主指针为粗指针时），抽屉滑入期间不接受点按或拖动；键盘和辅助技术仍可操作。关闭后，焦点会在对话框关闭时回到打开它的元素。',
-      required: true,
     },
     {
       name: 'children',
@@ -231,6 +263,38 @@ export const docsZh = {
       description:
         '抽屉滑出的方向。在 LTR 布局中 start 为左侧，在 RTL 布局中为右侧。auto 根据触发元素的位置自动选择方向。',
       default: "'auto'",
+    },
+    {
+      name: 'label',
+      type: 'string',
+      description:
+        '抽屉对话框及其导航地标的无障碍名称。未提供时使用字符串 header，否则为本地化的默认名称（英文为 “Navigation”）。调用方的 aria-labelledby 优先于这三者。',
+    },
+    {
+      name: 'xstyle',
+      type: 'StyleXStyles',
+      description:
+        '对话框（容纳抽屉的全视口遮罩层）的 StyleX 样式。必须是 stylex.create() 的值。',
+    },
+    {
+      name: 'className',
+      type: 'string',
+      description: '对话框的 CSS 类名。优先使用 xstyle。',
+    },
+    {
+      name: 'style',
+      type: 'CSSProperties',
+      description: '对话框的内联样式。优先使用 xstyle。',
+    },
+    {
+      name: 'ref',
+      type: 'React.Ref<HTMLDialogElement>',
+      description: '转发到对话框元素的 ref。',
+    },
+    {
+      name: 'data-testid',
+      type: 'string',
+      description: '对话框元素的测试选择器。',
     },
   ],
   theming: {
@@ -319,5 +383,12 @@ export const docsDense = {
     width:
       'drawer width px; capped at 85vw to prevent overflow on small screens',
     side: 'slide direction; start=left LTR, right RTL',
+    label:
+      "name for the dialog and its nav landmark; else string header, else localized default ('Navigation' in English); aria-labelledby outranks",
+    xstyle: 'styles on the dialog (full-viewport overlay)',
+    className: 'class on the dialog',
+    style: 'inline style on the dialog',
+    ref: 'the dialog element',
+    'data-testid': 'test id on the dialog',
   },
 };
