@@ -17,6 +17,7 @@ export const doc = {
   isReady: true,
   category: 'Tools - IDE',
   icons: {
+    ClockIcon: 'clock',
     DocumentTextIcon: 'document',
     FolderIcon: 'folder',
     MagnifyingGlassIcon: 'search',
