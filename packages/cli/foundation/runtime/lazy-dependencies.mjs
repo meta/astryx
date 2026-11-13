@@ -16,7 +16,10 @@
  *   modules. Each package is still resolved when this module loads, which
  *   reads no module, so every module that imports this loader needs all four
  *   packages installed: a broken install without one fails when such a
- *   module loads, never as a parse that quietly finds nothing.
+ *   module loads, never as a parse that quietly finds nothing. The `Project`
+ *   seam and the agent docs reach this loader through component discovery,
+ *   so on such an install every command except `help`, `--version`, `blog`
+ *   and `manifest` stops at load and names the missing package.
  */
 
 import {createRequire} from 'node:module';
