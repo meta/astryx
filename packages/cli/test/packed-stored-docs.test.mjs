@@ -168,6 +168,24 @@ describe('the packed package', () => {
         ]);
       },
     ],
+    [
+      'whose entries hold a value of the wrong kind',
+      (/** @type {Buffer} */ bytes) => {
+        const end = bytes.indexOf(0x0a);
+        const ranges = JSON.parse(bytes.toString('utf8', 0, end));
+        const data = bytes.subarray(end + 1);
+        // A number appended after the values, which every descriptor
+        // entry now names.
+        for (const key of Object.keys(ranges)) {
+          if (key.startsWith('descriptor:')) ranges[key] = [data.length, 1];
+        }
+        return Buffer.concat([
+          Buffer.from(JSON.stringify(ranges) + '\n'),
+          data,
+          Buffer.from('5'),
+        ]);
+      },
+    ],
   ])('answers theme list as before with a store %s', (_, damage) => {
     const store = path.join(packed, STORE);
     /** @param {string} cliRoot */
@@ -189,12 +207,16 @@ describe('the packed package', () => {
     const sound = themeList(packed);
     expect(sound.status, sound.stderr).toBe(0);
     const bytes = fs.readFileSync(store);
+    // Every placed copy shares the store's file: unlink this copy's before
+    // writing its own, as placeCli does for package.json.
+    fs.rmSync(store);
     fs.writeFileSync(store, damage(bytes));
     try {
       const damaged = themeList(packed);
       expect(damaged.status, damaged.stderr).toBe(0);
       expect(damaged.stdout).toBe(sound.stdout);
     } finally {
+      fs.rmSync(store);
       fs.writeFileSync(store, bytes);
     }
   });
