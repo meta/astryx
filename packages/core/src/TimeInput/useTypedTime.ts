@@ -101,6 +101,8 @@ export function useTypedTime({
   // How the draft was last committed. After blur, a hidden input carries the
   // field's name until the next edit.
   const [committedBy, setCommittedBy] = useState<'enter' | 'blur' | null>(null);
+  // Counts the commits that kept a rejected draft.
+  const [keptCommits, setKeptCommits] = useState(0);
   // The rejection last revealed. An edit that leaves the draft rejected but
   // not complete keeps it.
   const [keptRejection, setKeptRejection] =
@@ -149,14 +151,21 @@ export function useTypedTime({
   }, []);
 
   // A value from outside, disabling, and leaving the typed surface drop the
-  // draft. Adjusted during render, so no render shows a stale draft.
+  // draft. Adjusted during render, so no render shows a stale draft. A value
+  // passed in the same update as a commit that keeps a rejected draft keeps it.
+  const [seenKeptCommits, setSeenKeptCommits] = useState(keptCommits);
+  const isKeptAtThisUpdate = keptCommits !== seenKeptCommits;
+  if (isKeptAtThisUpdate) {
+    setSeenKeptCommits(keptCommits);
+  }
   const [prevValue, setPrevValue] = useState(value);
   if (value !== prevValue) {
     setPrevValue(value);
     if (isSurfaceRejected) {
       setSurfaceRejected(false);
     }
-    if (lastCommitted === null || value !== lastCommitted.time) {
+    const isEcho = lastCommitted !== null && value === lastCommitted.time;
+    if (!isKeptAtThisUpdate && !isEcho) {
       setLastCommitted(null);
       if (pendingInput !== null) {
         drop();
@@ -219,6 +228,12 @@ export function useTypedTime({
     onEntryErrorChange,
   });
 
+  // A locked field reports once it is editable.
+  const reportIfEditable = useCallback(
+    (error: TimeInputEntryError | null) => !isLocked && reportEntryError(error),
+    [isLocked, reportEntryError],
+  );
+
   const handleChange = useCallback(
     (text: string) => {
       if (isDisabled) {
@@ -227,10 +242,8 @@ export function useTypedTime({
       setPendingInput(text);
       setCommittedBy(null);
       const next = readDraft(text);
-      if (next.rejection == null) {
-        reportEntryError(null);
-      } else if (next.isComplete) {
-        reportEntryError(next.rejection);
+      if (next.rejection == null || next.isComplete) {
+        reportIfEditable(next.rejection);
       }
       if (next.time == null || next.time === value) {
         return null;
@@ -238,7 +251,7 @@ export function useTypedTime({
       setLastCommitted({time: next.time});
       return next.time;
     },
-    [isDisabled, readDraft, reportEntryError, value],
+    [isDisabled, readDraft, reportIfEditable, value],
   );
 
   const reset = useCallback(() => {
@@ -255,7 +268,8 @@ export function useTypedTime({
       if (current.rejection != null) {
         // Keep the text and show why it cannot commit.
         setCommittedBy(by => (by === 'blur' ? by : trigger));
-        reportEntryError(current.rejection);
+        setKeptCommits(count => count + 1);
+        reportIfEditable(current.rejection);
         return null;
       }
       if (trigger === 'blur') {
@@ -268,7 +282,7 @@ export function useTypedTime({
       setLastCommitted({time});
       return time;
     },
-    [pendingInput, isDisabled, readDraft, reportEntryError, value, reset],
+    [pendingInput, isDisabled, readDraft, reportIfEditable, value, reset],
   );
 
   return {

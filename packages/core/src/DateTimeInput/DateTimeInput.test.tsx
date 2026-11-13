@@ -1513,6 +1513,28 @@ describe('DateTimeInput', () => {
       },
     );
 
+    it.each(['blur', 'Enter'] as const)(
+      'keeps a rejected time and its message when the caller restores its value at that %s',
+      commit => {
+        function Restoring() {
+          const [dateTime, setDateTime] = useState(VALUE);
+          const restore = () =>
+            setDateTime('2026-03-15T09:30' as ISODateTimeString);
+          const handler =
+            commit === 'blur' ? {onBlur: restore} : {onKeyDown: restore};
+          return <div {...handler}>{field({value: dateTime})}</div>;
+        }
+        const {container} = render(<Restoring />);
+        const timeInput = screen.getByLabelText('Meeting time');
+        fireEvent.change(timeInput, {target: {value: '25:99'}});
+        fireEvent[commit === 'blur' ? 'blur' : 'keyDown'](timeInput, {
+          key: 'Enter',
+        });
+        expect(timeInput).toHaveValue('25:99');
+        expect(statusText(container)).toBe('Invalid time');
+      },
+    );
+
     it('hides a native time rejection while a changeAction is pending', () => {
       const changeAction = vi.fn(async () => new Promise<void>(() => {}));
       const {container} = render(field({presentation: 'native', changeAction}));

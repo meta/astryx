@@ -1103,6 +1103,27 @@ describe('TimeInput rejected entries', () => {
     expect(statusText(container)).toBeNull();
   });
 
+  it.each(['blur', 'Enter'] as const)(
+    'keeps a rejected draft and its message when the caller restores its value at that %s, and drops it for a later value',
+    commit => {
+      const onEntryErrorChange = vi.fn();
+      function Restoring({later}: {later?: ISOTimeString}) {
+        const [time, setTime] = useState('10:00' as ISOTimeString);
+        const restore = () => setTime('09:00' as ISOTimeString);
+        const handler =
+          commit === 'blur' ? {onBlur: restore} : {onKeyDown: restore};
+        return field({value: later ?? time, onEntryErrorChange, ...handler});
+      }
+      const {container, rerender} = render(<Restoring />);
+      expect(type('25:99', commit)).toHaveValue('25:99');
+      expect(statusText(container)).toBe('Invalid time');
+      expect(onEntryErrorChange).toHaveBeenCalledOnce();
+      rerender(<Restoring later={'11:00' as ISOTimeString} />);
+      expect(screen.getByRole('textbox')).toHaveValue('11:00 AM');
+      expect(onEntryErrorChange).toHaveBeenLastCalledWith(null);
+    },
+  );
+
   it('inside an InputGroup, sets aria-invalid and announces through the alert with no message of its own', () => {
     const {container} = render(
       <InputGroup label="Schedule">
@@ -1259,6 +1280,34 @@ describe('TimeInput rejected entries', () => {
   describe('onEntryErrorChange', () => {
     const max = '17:00' as ISOTimeString;
     const outOfRange = {kind: 'outOfRange', text: '18:30', value: '18:30'};
+
+    it('reports nothing while isLoading, and the rejection once the field is idle', () => {
+      const onEntryErrorChange = vi.fn();
+      const props = {hourFormat: '24h', max, onEntryErrorChange} as const;
+      const {rerender} = render(field({...props, isLoading: true}));
+      type('18:30');
+      type('25:99', 'blur');
+      expect(onEntryErrorChange).not.toHaveBeenCalled();
+      rerender(field(props));
+      expect(onEntryErrorChange.mock.calls).toEqual([
+        [{kind: 'unreadable', text: '25:99'}],
+      ]);
+    });
+
+    it('reports nothing while a changeAction is pending, and the rejection once it settles', async () => {
+      const onEntryErrorChange = vi.fn();
+      let settle = () => {};
+      // The caller keeps its value, so the field stays busy until it settles.
+      const changeAction = async () =>
+        new Promise<void>(resolve => (settle = resolve));
+      render(field({hourFormat: '24h', max, onEntryErrorChange, changeAction}));
+      type('10:00');
+      expect(screen.getByRole('textbox')).toHaveAttribute('aria-busy', 'true');
+      type('18:30', 'Enter');
+      expect(onEntryErrorChange).not.toHaveBeenCalled();
+      await act(async () => settle());
+      expect(onEntryErrorChange.mock.calls).toEqual([[outOfRange]]);
+    });
 
     it('reports each kind once, with the time for a time out of range, and null when the draft is fixed', () => {
       const onEntryErrorChange = vi.fn();
