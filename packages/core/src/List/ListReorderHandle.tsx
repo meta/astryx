@@ -46,7 +46,12 @@ import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
-import {colorVars, focusVars, typeScaleVars} from '../theme/tokens.stylex';
+import {
+  colorVars,
+  focusVars,
+  spacingVars,
+  typeScaleVars,
+} from '../theme/tokens.stylex';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {
   ownRingContainerStyles,
@@ -88,6 +93,12 @@ registerEnglishFallback(english);
 const HANDLE_SIZE = 28;
 /** The grip's side, the `sm` icon size: the handle's share of its row's height. */
 const GRIP_SIZE = '1rem';
+/**
+ * How far a hanging handle sits before its row's text, px: its own side and
+ * a small clearance. The grip's edge then sits 8 px from the text.
+ * SYNC: List/List.tsx REORDER_GUTTER.
+ */
+const REORDER_HANDLE_HANG = HANDLE_SIZE + 2;
 
 /** The grip when the theme maps nothing to `list-reorder-handle`. */
 const GRIP_FALLBACK = {icon: 'drag', size: 'sm'} as const;
@@ -107,6 +118,18 @@ const styles = stylex.create({
     width: HANDLE_SIZE,
     height: HANDLE_SIZE,
     marginBlock: `calc((${GRIP_SIZE} - ${HANDLE_SIZE}px) / 2)`,
+    // Where it shows only on hover or focus (no coarse pointer), it hangs
+    // before the row's text and takes no width, so the text keeps its place.
+    // The end margin gives back the row's gap after it. Where it always
+    // shows (a coarse pointer), it takes its place in the row.
+    marginInlineStart: {
+      default: -REORDER_HANDLE_HANG,
+      '@media (any-pointer: coarse)': 0,
+    },
+    marginInlineEnd: {
+      default: `calc(${REORDER_HANDLE_HANG - HANDLE_SIZE}px - ${spacingVars['--spacing-2']})`,
+      '@media (any-pointer: coarse)': 0,
+    },
     padding: 0,
     borderWidth: 0,
     borderRadius: 4,
@@ -151,6 +174,13 @@ const styles = stylex.create({
       default: null,
       '@media (pointer: coarse)': 'transparent',
     },
+  },
+  // It takes its place in the row where hanging cannot work: after a list
+  // marker, which it would cover, and in a row that reaches its container's
+  // padding edge, where nothing past the row keeps it.
+  inRowPlace: {
+    marginInlineStart: 0,
+    marginInlineEnd: 0,
   },
   // Presses on the grip land on the handle.
   grip: {
@@ -243,6 +273,7 @@ export function ListReorderHandle({
   rowLabel,
   rowLabelledBy,
   rowAlign,
+  isInRow = false,
 }: ListReorderHandleProps) {
   const ref = useRef<HTMLButtonElement>(null);
   const t = useComponentTranslator();
@@ -395,6 +426,7 @@ export function ListReorderHandle({
         styles.reveal,
         reorderingHandleStyles.cursor,
         touchHitAreaStyles.layer,
+        isInRow && styles.inRowPlace,
         rowAlign === 'start' && styles.inRowStart,
         rowAlign === 'first-line' && styles.inRowFirstLine,
       )}>

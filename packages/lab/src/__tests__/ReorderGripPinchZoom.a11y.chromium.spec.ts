@@ -90,8 +90,8 @@ async function openStory(page: Page, surface: Surface) {
   const grip = page.locator(surface.grip).first();
   await expect(grip).toBeVisible();
   expect(await page.evaluate(() => window.visualViewport?.scale)).toBe(1);
-  // A wide story can put the handle past the phone's visible width, since it
-  // ends the row. A finger can only land on what is on screen.
+  // A story can put the handle outside the phone's visible area. A finger
+  // can only land on what is on screen.
   await grip.scrollIntoViewIfNeeded();
   const box = (await grip.boundingBox()) as Box;
   const center = {x: box.x + box.width / 2, y: box.y + box.height / 2};

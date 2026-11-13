@@ -747,6 +747,25 @@ describe('TransferList', () => {
       expect(screen.getByRole('button', {name: 'Reorder Name'})).toBeVisible();
     });
 
+    it("keeps the selected panel's heading in place while a search pauses reordering", async () => {
+      const user = userEvent.setup();
+      render(
+        <ControlledTransferList
+          initialValue={['name', 'owner', 'status']}
+          hasSearch
+        />,
+      );
+      // The panel's heading: the label element with an id, which names the
+      // panel.
+      const heading = () =>
+        screen
+          .getAllByText('Selected columns')
+          .find(element => element.id !== '')?.parentElement;
+      const before = heading()?.className;
+      await user.type(screen.getByRole('searchbox'), 'n');
+      expect(heading()?.className).toBe(before);
+    });
+
     it('reports each move so the owner keeps the shown rows in the order the list shows, around a value without an option', async () => {
       const user = userEvent.setup();
       const onValueChange = vi.fn();

@@ -11,8 +11,9 @@
  *   owner's object.
  *   It also gives List's reorder session for rows that are not ListItems,
  *   for Lab's ListInput: `useListReorderScope` and `ListReorderScope`. The
- *   handle each row ends with is the session's `Handle`: it comes with the
- *   owner's object, so this entry loads no reorder code
+ *   handle each row starts with is the session's `Handle`: it comes with the
+ *   owner's object, so this entry loads no reorder code. `isReorderHandle`
+ *   tells a handle from the controls beside it
  * @position `@astryxdesign/core/internal/reorder`: an internal entry reserved
  *   for Core and Lab. It is undocumented, outside the public API and its
  *   compatibility promise, and versioned in lockstep with Core.
@@ -59,6 +60,7 @@ export function adaptReorderable<TKey extends string | number, TTo>(
 }
 
 export {ListReorderScope, useListReorderScope} from '../List/ListReorderScope';
+export {isReorderHandle} from '../privateAttributes/listReorder.stylex';
 export type {
   ListReorderContextValue,
   ListReorderHandleProps,

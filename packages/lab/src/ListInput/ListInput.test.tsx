@@ -879,6 +879,27 @@ describe('ListInput', () => {
     expect(screen.getByDisplayValue('Linus')).toHaveFocus();
   });
 
+  it("focuses an added record's first field when that field is a toggle", () => {
+    render(
+      <OwnedList
+        columns={[
+          {
+            key: 'vip',
+            header: 'VIP',
+            renderInput: ({item, label}) => (
+              <button type="button" aria-pressed={false}>
+                {`${label} ${item.name}`}
+              </button>
+            ),
+          },
+        ]}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Add guest'}));
+
+    expect(screen.getByRole('button', {name: /Linus/})).toHaveFocus();
+  });
+
   it('supports consumer-owned validation that appears after blur', () => {
     function BlurValidatedList() {
       const [value, setValue] = useState<Guest[]>([guests[0]]);
@@ -1069,7 +1090,11 @@ describe('ListInput', () => {
         .split(',')
         .map(name => name.trim())
         .filter(name => name !== '');
-    expect(names?.sort()).toEqual(['ListReorderScope', 'useListReorderScope']);
+    expect(names?.sort()).toEqual([
+      'ListReorderScope',
+      'isReorderHandle',
+      'useListReorderScope',
+    ]);
     expect(source).not.toMatch(/ListReorderHandle/);
   });
 

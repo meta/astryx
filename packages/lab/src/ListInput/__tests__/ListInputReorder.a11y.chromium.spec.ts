@@ -242,12 +242,6 @@ test.describe('the record columns', () => {
                 right(handle) - right(handle.closest('[data-list-input-row]')),
             ),
           ),
-          handleBeforeRecord: Math.max(
-            ...handles.map(
-              handle =>
-                left(handle.closest('[data-list-input-row]')) - left(handle),
-            ),
-          ),
           handleOverField: Math.max(
             ...handles.map(
               handle =>
@@ -280,11 +274,8 @@ test.describe('the record columns', () => {
         overflow.handlePastList,
         JSON.stringify(overflow),
       ).toBeLessThanOrEqual(0.5);
-      // The handle starts its record, inside it, before its first field.
-      expect(
-        overflow.handleBeforeRecord,
-        JSON.stringify(overflow),
-      ).toBeLessThanOrEqual(0.5);
+      // The handle sits before its record's first field and never covers it.
+      // With a mouse it hangs there, outside the record.
       expect(
         overflow.handleOverField,
         JSON.stringify(overflow),
