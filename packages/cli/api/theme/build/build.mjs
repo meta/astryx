@@ -1427,20 +1427,25 @@ function toIdentifier(name) {
 }
 
 /**
- * Import specifier for install/scaffold instructions. Drops a leading `src/`
- * from the cwd-relative dir (most consumers import from a file under src/) but
- * keeps the rest of the path (e.g. `themes/gothic`). Callers note the path is
- * relative to the consumer's file.
- * @param {string} relDir
+ * Import specifier for install/scaffold instructions, from a file directly
+ * in the project's src/ (the file the printed snippet says it is relative
+ * to; callers pass the output folder from the outputs' project root): an output
+ * under src/ is `./themes/gothic/gothic`, one beside src/ is
+ * `../themes/gothic/gothic`.
+ * @param {string} relDir the output folder, relative to the outputs' project root
  * @param {string} base
  * @returns {string}
  */
 export function importSpecifier(relDir, base) {
   // An import specifier always uses `/`. On Windows the cwd-relative dir comes
   // from path.relative with `\`, which would print `./\themes\ocean/ocean`.
-  const normalized = relDir === '.' ? '' : relDir.split(path.sep).join('/');
-  const withinSrc = normalized.replace(/^src\/?/, '').replace(/\/+$/, '');
-  return withinSrc ? `./${withinSrc}/${base}` : `./${base}`;
+  const normalized = relDir === '.' ? '.' : relDir.split(path.sep).join('/');
+  const fromSrc = path.posix.relative('src', normalized.replace(/\/+$/, ''));
+  if (!fromSrc) return `./${base}`;
+  // Only a parent step (`..` or `../…`), never a folder named like `..cache`.
+  return fromSrc === '..' || fromSrc.startsWith('../')
+    ? `${fromSrc}/${base}`
+    : `./${fromSrc}/${base}`;
 }
 
 /**
@@ -4546,7 +4551,9 @@ async function themeBuildInternal(
     }
   }
 
-  const relOutDir = path.relative(cwd, outDir) || '.';
+  // From the outputs' project root, whatever folder the build ran in: the
+  // snippet is relative to a file in that project's src/.
+  const relOutDir = path.relative(headerRoot(outDir, cwd), outDir) || '.';
   const jsImport = importSpecifier(relOutDir, baseName);
   const cssImport = importSpecifier(relOutDir, path.basename(outPath));
   const exportName = `${toIdentifier(baseName)}Theme`;
@@ -5216,11 +5223,13 @@ export async function themeBuildFamily(
   writeBuildOutputs(writes);
   for (const output of Object.values(outputs)) logger.log(`[ok] ${output}`);
   const themeBindings = members.map(member => bindings.get(member.theme.name));
-  const relOutDir = path.relative(cwd, outDir) || '.';
+  // From the outputs' project root, whatever folder the build ran in: the
+  // snippet is relative to a file in that project's src/.
+  const relOutDir = path.relative(headerRoot(outDir, cwd), outDir) || '.';
   const jsImport = importSpecifier(relOutDir, baseName);
   const cssImport = `${jsImport}.css`;
   logger.log(`
-Load the family CSS once, then select any member by theme identity:
+Load the family CSS once, then select any member by theme identity (paths are relative to a file in src/; adjust if yours lives elsewhere):
   import { ${themeBindings.join(', ')} } from '${jsImport}';
   import '${cssImport}';
 Or load the same stylesheet natively:
