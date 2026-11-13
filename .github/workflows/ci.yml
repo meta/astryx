@@ -1621,7 +1621,16 @@ jobs:
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.base_ref }}
-        run: echo "sha=$(.github/scripts/merge-base.sh "$BASE_REF" 'the size comparisons' || true)" >> "$GITHUB_OUTPUT"
+        # Up to five deepens of 200 commits. A branch further behind fails
+        # here by name, instead of skipping main's size records and API
+        # surface without a word.
+        run: |
+          sha=$(.github/scripts/merge-base.sh "$BASE_REF" 'the size comparisons' 5 || true)
+          if [ -z "$sha" ]; then
+            echo "::error::Merge base not within 1000 commits of $BASE_REF: merge $BASE_REF into this branch."
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
       - name: Find main's size records for the merge base
         id: size-records
@@ -1956,9 +1965,10 @@ jobs:
         continue-on-error: true
         timeout-minutes: 2
         env:
-          BASE_REF: ${{ github.base_ref }}
+          # The merge base the size comparisons found, so both compare the same
+          # commit.
+          BASE_SHA: ${{ steps.merge-base.outputs.sha }}
         run: |
-          BASE_SHA=$(.github/scripts/merge-base.sh "$BASE_REF" 'the API changes' || true)
           [ -n "$BASE_SHA" ] || exit 0
           # Main's surface of the merge base, else the base built above,
           # reported here.
