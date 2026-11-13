@@ -67,8 +67,9 @@ import {
   NEW_MARKER,
   clearNewMarker,
   refuseThemeSource,
-  settingsShapeOk,
+  settingsEntriesOk,
   slugFor,
+  typedThemeName,
   themeSource,
   themeSourceProblem,
   refuseThemeParse,
@@ -212,7 +213,9 @@ function editorLeftovers(dir, slug, damaged = false) {
 /** Whether a settings file parses, in the shape the editor reads. @param {string} file */
 function readableJson(file) {
   try {
-    return settingsShapeOk(
+    // An entry with no thing or no source is damage too: `new` keeps the
+    // file aside, as the refusal for it says.
+    return settingsEntriesOk(
       JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '')),
     );
   } catch {
@@ -349,9 +352,13 @@ export async function themeEditNew(name, options = {}) {
     /** @type {string | null | undefined} */ likeValue = likeFixed,
   ) => `${P} new ${newName}${newFlags(likeValue, fitSettings, png)}`;
   if (!slugOk(name)) {
-    const fixed = slugFor(name);
-    // Only a name typed in another case is the theme here already.
-    const sameName = String(name ?? '').toLowerCase() === fixed;
+    // A path typed for the name (themes/brand, ./t, t/) names the theme the
+    // path ends in.
+    const typed = String(name ?? '');
+    const path_ = /[\\/]/.test(typed);
+    const fixed = slugFor(path_ ? typedThemeName(typed) : typed);
+    // A name typed in another case, or as a path, is the theme here already.
+    const sameName = path_ || typed.toLowerCase() === fixed;
     const exists = sameName && fs.existsSync(themeFiles(cwd, fixed).settings);
     refuse(
       E.ERR_INVALID_ARGUMENT,
@@ -837,6 +844,23 @@ function changeFocus(s) {
 }
 
 /**
+ * A signal handler for the checks and pictures after a change is saved: it
+ * says the change is saved and how to run what did not, then lets the
+ * signal end the process (the render's own handler re-raises it; with none,
+ * this one does).
+ * @param {string} slug
+ * @returns {(sig: NodeJS.Signals) => void}
+ */
+export function stoppedAfterSave(slug) {
+  return sig => {
+    process.stderr.write(
+      `Stopped: the change to ${slug} is saved and built (and its undo step kept); its checks and pictures did not run. ${P} show ${slug} runs them.\n`,
+    );
+    if (process.listenerCount(sig) === 0) process.kill(process.pid, sig);
+  };
+}
+
+/**
  * The preview after a change, with the in-app preview route kept in step:
  * its imports follow the theme, such as the stylesheet of a font package
  * installed since the last change.
@@ -848,7 +872,19 @@ function changeFocus(s) {
  *   most about the change: Colors for a color, Components for a part
  */
 async function previewAndRoute(ctx, slug, data, png, focus = 'overview') {
-  const p = await previewAfter(ctx, slug, data, png);
+  // Stopped (Ctrl-C) while the checks and pictures run: the change is saved
+  // and built already, which one line says before the process ends.
+  const stopped = stoppedAfterSave(slug);
+  process.once('SIGINT', stopped);
+  process.once('SIGTERM', stopped);
+  /** @type {Awaited<ReturnType<typeof previewAfter>>} */
+  let p;
+  try {
+    p = await previewAfter(ctx, slug, data, png);
+  } finally {
+    process.removeListener('SIGINT', stopped);
+    process.removeListener('SIGTERM', stopped);
+  }
   const wrote = takeFirstAppCopy(ctx.project.cwd, slug);
   return {
     ...p,
@@ -890,6 +926,33 @@ async function keepPreviewRoute(ctx, slug) {
     // A damaged or moved preview.
     return [];
   }
+}
+
+/**
+ * What a change of mode asks of the app's wiring: a one-mode theme is
+ * given its mode by the app's <Theme>, and one back to both modes no longer.
+ * @param {string} slug
+ * @param {string | undefined} before
+ * @param {string | undefined} after
+ * @returns {string[]}
+ */
+function modeWiringNotes(slug, before, after) {
+  const one = (/** @type {string | undefined} */ m) =>
+    m === 'light-only' ? 'light' : m === 'dark-only' ? 'dark' : null;
+  const [was, now] = [one(before), one(after)];
+  if (was === now) return [];
+  return [
+    ...(was
+      ? [
+          `if the app's <Theme> was given mode="${was}" for ${slug}, take it out${now ? ` (or make it mode="${now}")` : ''}: with it the app stays ${was}, whatever the system asks for`,
+        ]
+      : []),
+    ...(now && !was
+      ? [
+          `the app shows ${slug} in ${now} mode when its <Theme> is given mode="${now}" (<Theme theme={…} mode="${now}">), as the preview does; the theme keeps both halves of its colors, so a toast or a lightbox Core draws in the other mode stays readable`,
+        ]
+      : []),
+  ];
 }
 
 /**
@@ -1160,9 +1223,10 @@ async function changeOnce(
   const data = loadTheme(cwd, slug, target);
   /** @type {string[]} */
   const fieldNotes = [];
-  if (sub === 'set' && (thing === 'base' || thing === 'mode')) {
-    // The other field, when it is damaged too, goes back to its default,
-    // so the theme loads again.
+  {
+    // A damaged field the command does not set goes back to its default,
+    // so the theme loads again (a change or removal of any setting repairs
+    // it on the way).
     if (
       thing !== 'mode' &&
       !['both', 'light-only', 'dark-only'].includes(data.mode)
@@ -1820,6 +1884,7 @@ async function changeOnce(
         : null;
   /** @type {string[]} */
   const notes = [
+    ...fieldNotes,
     ...(covered.length ? [`replaces ${covered.map(describe).join(', ')}`] : []),
     ...(ownPartHits.length
       ? [
@@ -3189,10 +3254,18 @@ export async function themeEditUndo(theme, options = {}) {
   // A link in the theme is refused as set refuses it, never read as an
   // empty history.
   if (slugOk(theme)) refuseLinks(cwd, theme);
+  /** The command that works when the settings cannot be read. @type {string[] | null} */
+  let repair = null;
   try {
     current = loadTheme(cwd, theme);
   } catch (e) {
     if (!(e instanceof AstryxError && e.code === E.ERR_THEME_INVALID)) throw e;
+    // What the refusal itself names (make the theme again, keeping the
+    // damaged file), never `show`, which fails the same way.
+    repair = (e.suggestions ?? [])
+      .map(x => x.name)
+      .filter(n => !/ show /.test(` ${n} `) && !/ undo /.test(` ${n} `));
+    if (!repair.length) repair = [`${P} new ${theme}`];
   }
   const f = themeFiles(cwd, theme);
   const {steps: history, dropped} = readHistory(f.history);
@@ -3202,14 +3275,14 @@ export async function themeEditUndo(theme, options = {}) {
       `${theme}.history.json is damaged, so there is no step to go back to.`,
       {
         fix: `move ${shown(cwd, f.history)} out of the theme folder (it is kept as it is): the next change starts a new history, and your settings stay as they are`,
-        run: [`${P} show ${theme}`],
+        run: repair ?? [`${P} show ${theme}`],
       },
     );
   if (!history.length)
     refuse(
       E.ERR_THEME_NOTHING_TO_UNDO,
-      `Nothing to undo: ${theme} has no earlier change.`,
-      {run: [`${P} show ${theme}`]},
+      `Nothing to undo: ${theme} has no earlier change${repair ? `, and ${theme}.settings.json cannot be read` : ''}.`,
+      {run: repair ?? [`${P} show ${theme}`]},
     );
   // A top step equal to the settings now (left by an undo stopped between
   // its two writes) changes nothing: skip it.
@@ -3339,8 +3412,10 @@ export async function themeEditUndo(theme, options = {}) {
     undone.push(
       `base ${current.like ?? 'none'} is back to ${prev.like ?? 'none'}`,
     );
-  if (current && current.mode !== prev.mode)
+  if (current && current.mode !== prev.mode) {
     undone.push(`mode ${current.mode} is back to ${prev.mode}`);
+    undone.push(...modeWiringNotes(theme, current.mode, prev.mode));
+  }
   // The page most about what the step reverted: Colors for a color,
   // Components for a part setting, else Overview.
   const touched = [

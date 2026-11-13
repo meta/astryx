@@ -198,7 +198,12 @@ export function themeFiles(cwd, slug) {
 }
 
 /** Files a system or a tool puts in any folder; a folder of only these is empty. */
-export const FOLDER_JUNK = new Set(['.DS_Store', '.gitkeep', 'Thumbs.db']);
+export const FOLDER_JUNK = new Set([
+  '.DS_Store',
+  '.gitkeep',
+  'Thumbs.db',
+  'desktop.ini',
+]);
 
 /**
  * Whether `dir` holds nothing of anyone's: absent, empty, or only system
@@ -496,16 +501,19 @@ export const shown = (cwd, f) =>
  * @param {number} [n]
  */
 export function nearest(x, list, n = 3) {
+  const limit = Math.max(2, Math.floor(x.length / 3));
+  // Nearest by edit distance first (brand-drak is brand-dark, not brand); a
+  // name one holds inside the other is near too, after the close ones.
   return [...list]
     .filter(c => c.length > 2)
-    .map(
-      c =>
-        /** @type {[string, number]} */ ([
-          c,
-          c.includes(x) || x.includes(c) ? 1 : levenshteinDistance(x, c),
-        ]),
-    )
-    .filter(([, s]) => s <= Math.max(2, Math.floor(x.length / 3)))
+    .map(c => {
+      const d = levenshteinDistance(x, c);
+      return /** @type {[string, number]} */ ([
+        c,
+        d <= limit ? d : c.includes(x) || x.includes(c) ? limit + 0.5 : d,
+      ]);
+    })
+    .filter(([, s]) => s <= limit + 0.5)
     .sort((a, b) => a[1] - b[1])
     .slice(0, n)
     .map(([c]) => c);
@@ -616,9 +624,16 @@ export function loadTheme(
     );
     const plain = typedThemeName(slug);
     const named = slugFor(plain);
+    // brandDark is brand-dark.
+    const camelWords = slugFor(
+      unlabeledThemeName(String(slug ?? '')).replace(
+        /([a-z0-9])([A-Z])/g,
+        '$1-$2',
+      ),
+    );
     const exists = (/** @type {string} */ n) =>
       Boolean(n) && fs.existsSync(themeFiles(cwd, n).settings);
-    const fixed = !exists(named) && exists(whole) ? whole : named;
+    const fixed = [named, whole, camelWords].find(exists) ?? named;
     const same = fs.existsSync(themeFiles(cwd, fixed).settings) ? fixed : null;
     // A list where one theme goes (t,u or "t;u"): one theme at a time,
     // each that exists named; never a new theme made of the list. A name
@@ -988,9 +1003,11 @@ export function settingsProblem(
 ) {
   if (!data || typeof data !== 'object' || Array.isArray(data))
     return 'the file is not a settings object';
-  // `set <theme> mode` and `set <theme> base` fix their own field.
+  // A command that changes or removes a setting (or sets mode or base)
+  // puts a damaged mode or base back to its default itself, with a note, so
+  // two damaged fields never send each fix to the other.
   const fixing = typeof skip === 'string' ? skip : skip?.thing;
-  const field = fixing === 'mode' || fixing === 'base';
+  const field = Boolean(fixing);
   if (!field && !['both', 'light-only', 'dark-only'].includes(data.mode))
     return data.mode == null
       ? 'it has no mode'
@@ -4627,8 +4644,26 @@ function parseSettings(text) {
 }
 
 /**
- * Whether parsed settings have the shape the editor reads: an object with a
- * list of settings.
+ * Whether every settings entry has the parts the editor reads (a thing, a
+ * value and a source); one without is damage `new` keeps aside.
+ * @param {any} data
+ */
+export function settingsEntriesOk(data) {
+  return (
+    settingsShapeOk(data) &&
+    data.settings.every(
+      (/** @type {any} */ s) =>
+        s &&
+        typeof s.thing === 'string' &&
+        'value' in s &&
+        ['dial', 'token', 'property'].includes(s.source),
+    )
+  );
+}
+
+/**
+ * Whether settings data has the shape the editor reads: an object with a
+ * settings list.
  * @param {any} data
  */
 export function settingsShapeOk(data) {
