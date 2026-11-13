@@ -112,7 +112,7 @@ test('Tab walks header, menu, footer, and wraps at both ends', async ({
 test('the popover is a modal dialog around the menu, and the trigger points at it', async ({
   page,
 }) => {
-  const menu = await openMenu(page);
+  await openMenu(page);
   const dialog = page.getByRole('dialog', {name: 'Labels'});
   await expect(dialog).toBeVisible();
   await expect(dialog).toHaveAttribute('aria-modal', 'true');

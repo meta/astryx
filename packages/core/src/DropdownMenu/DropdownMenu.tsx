@@ -23,11 +23,10 @@
  * A sub-menu drills in on a phone through the view stack useMenuDrillIn
  * keeps; the root shows the drilled view in place of its rows.
  *
- * Initial focus on open follows the menu-button pattern: keyboard opens focus
- * the first enabled item (or the last one for ArrowUp), while pointer opens
- * preserve a row already reached by the pointer and otherwise focus the first
- * enabled item. The shared focus helper keeps pointer focus from painting a
- * keyboard focus ring.
+ * Initial focus follows input modality: keyboard opens focus the first enabled
+ * item (or the last one for ArrowUp); pointer opens preserve a row already
+ * reached by the pointer and otherwise focus the first enabled item. Pointer
+ * focus does not paint a keyboard focus ring.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/DropdownMenu/DropdownMenu.doc.mjs
@@ -1155,8 +1154,8 @@ function DropdownMenuPopover({
     // a picker's list clamps instead.
     wrap: true,
     hasPaging: true,
-    // Pointer opens still place semantic focus on the first row, while the
-    // shared helper keeps its focus indication out of keyboard mode.
+    // Pointer opens preserve a row already reached by the pointer; otherwise
+    // the open effect focuses the first enabled row.
     focusFollowsLastInput: true,
     onEscape: closeMenu,
   });
@@ -1491,8 +1490,7 @@ function DropdownMenuPopover({
         return;
       }
       openModalityRef.current = event.detail === 0 ? 'keyboard' : 'pointer';
-      // Synthesized activation and real clicks use the same open path; the
-      // shared modality tracker owns the focus indication.
+      // The shared modality tracker controls the resulting focus indication.
       if (isControlled) {
         if (controlledIsOpen) {
           onClick?.();
@@ -1777,11 +1775,8 @@ function DropdownMenuPopover({
             }}
             id={menuId}
             role="menu"
-            // The menu remains a focusable fallback for overflow and regions
-            // when no row can take focus.
-            // An overflowing menu joins the Tab order so its scrollable region is
-            // keyboard-accessible; Tab still dismisses through listKeyDown. With
-            // a header or footer the menu is one Tab stop between them.
+            // The menu is a focusable fallback when no row can take focus;
+            // overflow and header/footer regions also make it a Tab stop.
             tabIndex={hasOverflow || hasRegions ? 0 : -1}
             // Give the menu an accessible name from its trigger's label, so
             // screen readers announce e.g. "Actions menu" rather than an unnamed
