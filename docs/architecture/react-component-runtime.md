@@ -343,21 +343,22 @@ those contracts.
   idle within a time cap, whatever the input (`spec:AST-080` DEC-5). It exists
   so that no component's static graph carries the touch runtime, while every
   page still has it once the page settles. Nothing loads them on demand or on
-  an interaction. Until they have loaded, a component that uses them works by
-  taps, clicks and keys, with no drag tracking and no spring. The bundler
-  keeps one copy per page however many components use them.
-  `utils/touchRuntimeModules.tsx` is the one module the loader's `import()`
-  targets; it gathers the touch runtime, so the loader names a single chunk.
-  `motion/settleThreshold.ts` holds `SETTLE_THRESHOLD` apart from the
-  animator, so a component that reads the threshold statically does not pull
-  in the deferred runtime. Gap: these modules still import the shared touch
-  modules statically, so a page that renders them carries the touch runtime in
-  its first load: Toast (`useToastGesture`), Popover (`popoverSurfaceMotion`),
-  `hooks/useActionGroupTracking`, `hooks/usePager`, Lightbox (`useZoomCore`,
-  `useZoomStage`), Resizable (`resizablePane`), Slider
-  (`sliderTouchController`), SnapPaging, Chat (`useChatKeyboard`), and the
-  date and time fields' wheels (`motion/reducedMotion`). Each follow-up
-  removes its own names. A surface
+  an interaction. Until the shared touch runtime has loaded, SegmentedControl
+  and Switch work by taps, clicks and keys, with no drag tracking and no slide
+  or spring; a bottom sheet still drags, and a drag that closes it takes the
+  stylesheet exit instead of the spring. A gesture in that window does not
+  start the load. The bundler keeps one copy per page however many components
+  use them. `utils/touchRuntimeModules.tsx` is the one module the loader's
+  `import()` targets; it gathers the touch runtime, so the loader names a
+  single chunk. `motion/settleThreshold.ts` holds `SETTLE_THRESHOLD` apart
+  from the animator, so a component that reads the threshold statically does
+  not pull in the deferred runtime. Gap: these modules still import the shared
+  touch modules statically, so a page that renders them carries the touch
+  runtime in its first load: Toast (`useToastGesture`), Popover
+  (`popoverSurfaceMotion`), `hooks/useActionGroupTracking`, `hooks/usePager`,
+  Lightbox (`useZoomCore`, `useZoomStage`), Resizable (`resizablePane`),
+  Slider (`sliderTouchController`), SnapPaging, Chat (`useChatKeyboard`), and
+  the date and time fields' wheels (`motion/reducedMotion`). A surface
   revealed by interaction that a component loads with `import()` under
   `architecture:component-import-boundaries` INV1 imports these modules
   statically too; the bundler still keeps one copy per page. That `import()`

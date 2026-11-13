@@ -7,7 +7,8 @@
  * @input Pointer and context-menu events through the shared input stream;
  *   keydown and click on the document
  * @output Exports the gesture identity, whether its click has run, whether a
- *   press is down, and the press claims (claimPress, claimContextMenuPress)
+ *   press is down or awaits its click, and the press claims (claimPress,
+ *   claimContextMenuPress)
  * @position Internal to the package, not exported. useLayer reads it to tell
  *   a click that belongs to a dismissing press from a fresh one.
  *   useTouchTrigger, useMenuPress, ContextMenu and DropdownMenu read the
@@ -28,6 +29,7 @@ import {sharedState} from '../utils/sharedRealm';
 const state = sharedState('layer/gesture-counter/state', 1, () => ({
   gesture: 0,
   clickedGesture: null as number | null,
+  pressGesture: null as number | null,
   contextMenuGesture: null as number | null,
   pressPointerId: null as number | null,
   claimedPress: null as {
@@ -48,6 +50,7 @@ function advance() {
 function startPress(event: PointerEvent) {
   advance();
   state.pressPointerId = event.pointerId;
+  state.pressGesture = state.gesture;
   const view = event.view ?? document.defaultView;
   if (state.unsubscribePress != null || view == null) {
     return;
@@ -112,6 +115,21 @@ export function currentGestureHasClicked(): boolean {
 export function isPressInFlight(): boolean {
   listen();
   return state.pressPointerId !== null;
+}
+
+/**
+ * Whether the current gesture is a press whose click has not run yet: the
+ * press is down, or it was lifted and its click is still to come. A finger
+ * moves focus after its lift and before its click. A press the browser
+ * cancels has no click, so this stays true until the next press or
+ * keystroke.
+ */
+export function isPressAwaitingClick(): boolean {
+  listen();
+  return (
+    state.pressGesture === state.gesture &&
+    state.clickedGesture !== state.gesture
+  );
 }
 
 /**

@@ -105,6 +105,35 @@ test('a press that leaves a SegmentedControl selects nothing, before and after t
   await expect(page.getByRole('radio', {name: 'List'})).toBeChecked();
 });
 
+test.describe('a finger before the touch runtime loads', () => {
+  test.use({hasTouch: true, viewport: {width: 390, height: 844}});
+
+  test('a tap on a SegmentedControl segment whose click is vetoed selects nothing', async ({
+    page,
+  }) => {
+    const runtime = await holdTouchRuntime(page);
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=core-segmentedcontrol--default&viewMode=story`,
+    );
+    const grid = page.getByRole('radio', {name: 'Grid'});
+    const list = page.getByRole('radio', {name: 'List'});
+    await expect(grid).toBeChecked();
+    await grid.focus();
+    await expect.poll(runtime.requested).toBe(true);
+    // A caller's click handler that vetoes the selection.
+    await list.evaluate(element => {
+      element.addEventListener('click', event => event.preventDefault());
+    });
+    const box = await list.boundingBox();
+    if (box == null) {
+      throw new Error('no box for List');
+    }
+    await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+    await expect(grid).toBeChecked();
+    await runtime.release();
+  });
+});
+
 test.describe('a bottom sheet before the touch runtime loads', () => {
   test.use({hasTouch: true, viewport: {width: 390, height: 844}});
 
