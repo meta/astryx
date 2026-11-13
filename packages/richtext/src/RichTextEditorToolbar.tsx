@@ -12,9 +12,8 @@
  * @output Exports RichTextEditorToolbar (a compact formatting toolbar with a
  *   RichText-owned 4px control gutter, a horizontally scrollable action row,
  *   and a link popover anchored to its Link button) and
- *   RichTextEditorToolbarProps, plus the inline formats, their labels, the
- *   formats a selection carries, the format command, and the glyph resolver,
- *   which the package shares internally.
+ *   RichTextEditorToolbarProps, plus format and glyph helpers RichText shares
+ *   internally.
  * @position @astryxdesign/richtext. Drop into RichTextEditor's `toolbar` slot to
  *   add a flush top formatting toolbar. Themed via Astryx Toolbar, Selector,
  *   IconButton, and ToggleButton, so it inherits the active theme. Base props

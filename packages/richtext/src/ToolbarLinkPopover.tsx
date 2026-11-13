@@ -119,9 +119,8 @@ export function useToolbarLink(
   const [url, setUrl] = useState('');
   const [error, setError] = useState('');
 
-  // The selection the popover will act on: the last range selection, so a
-  // press that moved the editor's selection elsewhere first still links the
-  // words that were selected.
+  // The popover acts on the last range selection. So a press that moved the
+  // editor's selection first still links the words that were selected.
   const $noteSelection = useCallback((): LinkContext | null => {
     const selection = $getSelection();
     if (!$isRangeSelection(selection)) {
