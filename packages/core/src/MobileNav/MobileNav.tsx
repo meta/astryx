@@ -587,9 +587,13 @@ export function MobileNav({
       if (trigger) {
         const rect = trigger.getBoundingClientRect();
         const triggerCenter = rect.left + rect.width / 2;
-        // The left half is the inline start in LTR and the inline end in RTL.
-        const isInLeftHalf = triggerCenter < window.innerWidth / 2;
-        setAutoSide(isInLeftHalf !== isRtlElement(trigger) ? 'start' : 'end');
+        const half = window.innerWidth / 2;
+        // An opener in the inline-start half opens the drawer at the start. A
+        // centred opener opens it at the end in both directions.
+        const isInStartHalf = isRtlElement(trigger)
+          ? triggerCenter > half
+          : triggerCenter < half;
+        setAutoSide(isInStartHalf ? 'start' : 'end');
       }
     }
   }

@@ -53,7 +53,12 @@ function resolvedSide() {
 
 function openFrom(
   dir: 'ltr' | 'rtl',
-  opts: {focused: boolean; id?: string; inlineEnd?: boolean},
+  opts: {
+    focused: boolean;
+    id?: string;
+    inlineEnd?: boolean;
+    centered?: boolean;
+  },
 ) {
   document.documentElement.setAttribute('dir', dir);
   vi.stubGlobal('innerWidth', 400);
@@ -64,7 +69,8 @@ function openFrom(
   opener.style.direction = dir;
   // `inlineEnd` mirrors the opener to the opposite half.
   const rtlSide = (dir === 'rtl') !== Boolean(opts.inlineEnd);
-  mockRect(opener, rtlSide ? 340 : 20);
+  // A centred opener's centre is the viewport's centre (400 / 2).
+  mockRect(opener, opts.centered ? 180 : rtlSide ? 340 : 20);
   if (opts.focused) {
     opener.focus();
   }
@@ -110,6 +116,14 @@ describe('MobileNav side="auto"', () => {
     'opens at the inline end for an inline-end opener in %s',
     dir => {
       openFrom(dir, {focused: true, inlineEnd: true});
+      expect(resolvedSide()).toBe('end');
+    },
+  );
+
+  it.each(['ltr', 'rtl'] as const)(
+    'opens at the inline end for a centred opener in %s',
+    dir => {
+      openFrom(dir, {focused: true, centered: true});
       expect(resolvedSide()).toBe('end');
     },
   );
