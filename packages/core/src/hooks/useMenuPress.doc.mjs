@@ -113,6 +113,12 @@ export const docs = {
       description:
         'End the gesture in flight with nothing acting, for when the menu closes under it.',
     },
+    {
+      name: 'continueGesture',
+      type: '(pointer: MenuPressContinuation) => void',
+      description:
+        "Hand a pointer that went down elsewhere, such as a long press on another element, to the menu that just opened under it. It becomes the menu's opening press: a finger or a pen picks a row only after it has moved 10 px in the open menu, and its lift before that leaves the menu open. Call it as the menu opens, with the pointer's pointerId and pointerType and Date.now(). It does nothing while another gesture is live or the model is off.",
+    },
   ],
   usage: {
     description:
@@ -181,6 +187,8 @@ export const docsDense = {
     isTriggerClickFromPress:
       'true = the trigger click belongs to the press that already opened / closed; ignore it.',
     cancel: 'end the gesture w/o acting.',
+    continueGesture:
+      'hand a pointer still down from elsewhere (a long press) to the just-opened menu as its opening press; a finger picks after 10 px. Call as it opens: {pointerId, pointerType, time: Date.now()}.',
   },
   usage: {
     description:

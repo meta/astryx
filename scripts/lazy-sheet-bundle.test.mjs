@@ -7,8 +7,9 @@
  * @output Pins that a menu's static import keeps its on-demand bottom sheet's
  *   keyboard code on demand. The sheet's keyboard ride (the animator and
  *   `rideKeyboard`) stays in the chunks the import loads only when the sheet
- *   opens. This holds though the layer runtime's keyboard cap imports the
- *   keyboard module statically.
+ *   opens. A menu that uses the animator at once loads it with the menu. This
+ *   holds though the layer runtime's keyboard cap imports the keyboard module
+ *   statically.
  * @position Node test over source, so it needs no build
  */
 
@@ -110,20 +111,28 @@ function rideIn(bytes) {
 
 describe('a menu with an on-demand bottom sheet', () => {
   it.each([
-    ['DropdownMenu', 'packages/core/src/DropdownMenu/index.ts'],
-    ['ContextMenu', 'packages/core/src/ContextMenu/index.ts'],
-    ['Selector', 'packages/core/src/Selector/index.ts'],
-    ['MultiSelector', 'packages/core/src/MultiSelector/index.ts'],
+    ['DropdownMenu', 'packages/core/src/DropdownMenu/index.ts', []],
+    // ContextMenu's touch growth plays on the animator, so the animator loads
+    // with the menu. The sheet's own ride is then `rideKeyboard` alone.
+    [
+      'ContextMenu',
+      'packages/core/src/ContextMenu/index.ts',
+      ['packages/core/src/motion/animator.ts'],
+    ],
+    ['Selector', 'packages/core/src/Selector/index.ts', []],
+    ['MultiSelector', 'packages/core/src/MultiSelector/index.ts', []],
   ])(
     "%s loads the sheet's keyboard ride only with the sheet",
-    (name, entry) => {
+    (name, entry, eagerRide) => {
       const {eager, onDemand} = importOf(entry, name);
       // The sheet still rides the keyboard, on demand.
-      expect(rideIn(onDemand)).toEqual([
-        'packages/core/src/keyboard/rideKeyboard.ts',
-        'packages/core/src/motion/animator.ts',
-      ]);
-      expect(rideIn(eager)).toEqual([]);
+      expect(rideIn(onDemand)).toEqual(
+        [
+          'packages/core/src/keyboard/rideKeyboard.ts',
+          'packages/core/src/motion/animator.ts',
+        ].filter(input => !eagerRide.includes(input)),
+      );
+      expect(rideIn(eager)).toEqual(eagerRide);
     },
   );
 });

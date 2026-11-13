@@ -877,7 +877,8 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   browser's own menu closed. A hold loses to a claim another recognizer made
   first. The headless context menu (`spec:AST-107` FR8) makes its request
   through it, and ContextMenu through that menu (`component:ContextMenu`
-  FR10). One module keeps these rules the same in every menu. The
+  FR10). FR10's implementation gap records that ContextMenu times its touch
+  model's hold itself. One module keeps these rules the same in every menu. The
   press model has a fine-pointer profile with no delay (FR11); and with a
   mouse, a trackpad, or a pen where the primary pointer is fine a reorder
   starts on a drag from its handle without a hold, while a pen where the
@@ -1060,6 +1061,15 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
 - FR6 gap: a resize during a settle drops its velocity when it leaves the row
   past its new last page, or when the settle began before the viewport had a
   width. The row lands on its target at once.
+- FR16 gap: ContextMenu's long press keeps its outcome on a blocked main
+  thread, but its menu can show later. When the menu's timer runs more than a
+  frame late, the menu waits up to 50 ms for moves still queued. A move from
+  before the moment that reaches the page more than two frames late holds it
+  the same way.
+- Two waits: the arena's yield covers one task; the press's 50 ms covers moves
+  Chromium queues past the task and frame (FR16). The press reads when the page
+  runs from the arena (`pageTime()`), and each touch carries the time and
+  samples of the input that moved it (`inputTime`, `inputSamples`).
 - Consumer docs: none until a component ships its touch presentation; each
   component documents its own, including the `presentation` value that keeps
   the released surface (FR25).
