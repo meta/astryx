@@ -868,6 +868,46 @@ describe('JSON help, suggestions, and codemods on a non-Core base', () => {
   );
 });
 
+describe('help reads the base --base names, and a bare group help', () => {
+  it(
+    'names only what the named base serves, with its command',
+    () => {
+      const dir = project({
+        '@acme/native-ui': {
+          manifest: "export default {base: {}, cliCommand: 'acme astryx'};\n",
+        },
+      });
+      fs.mkdirSync(path.join(dir, 'node_modules', '@astryxdesign'));
+      fs.symlinkSync(
+        CORE_ROOT,
+        path.join(dir, 'node_modules', '@astryxdesign', 'core'),
+        'dir',
+      );
+      const theme = astryx(['--base', '@acme/native-ui', 'theme', '--help'], dir);
+      expect(theme.stdout).not.toContain('experimental theme editor');
+      const template = astryx(
+        ['--base', '@acme/native-ui', 'template', '--help'],
+        dir,
+      );
+      expect(template.stdout).toContain('acme astryx template');
+      const onCore = astryx(['theme', '--help'], dir);
+      expect(onCore.stdout).toContain('experimental theme editor');
+    },
+    SLOW,
+  );
+
+  it(
+    'leaves unserved commands out of a bare group run',
+    () => {
+      const dir = project({'@acme/native-ui': CONTENT_BASE});
+      const bare = astryx(['theme'], dir);
+      expect(bare.stdout).not.toContain('experimental theme editor');
+      expect(bare.stdout).not.toMatch(/^ {2}build /m);
+    },
+    SLOW,
+  );
+});
+
 describe('a command that refuses outside a project', () => {
   it('refuses there before any base check', () => {
     const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-bases-empty-'));

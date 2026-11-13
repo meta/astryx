@@ -494,14 +494,24 @@ function printsRootHelp(argv) {
 }
 
 /**
- * Does a run in the working folder read Core? Loads the project, as the help
- * preload would, to see which base it reads.
- * @param {string[]} argv
+ * Does a run in the working folder read Core? Loads the project, as the
+ * preAction hook would, to see which base it reads.
  * @returns {Promise<boolean>}
  */
-async function readsCore(argv) {
-  await loadProjectForHelp(argv);
-  const {runBase} = await import('../../foundation/bases/resolve.mjs');
+async function readsCore() {
+  const {runBase, requestedBase} = await import(
+    '../../foundation/bases/resolve.mjs'
+  );
+  // A base is an integration, so where none can load, and no --base names
+  // another, the run reads Core with no project load.
+  const named = requestedBase();
+  if (
+    !mayHaveIntegrations(process.cwd()) &&
+    (named == null || named === '@astryxdesign/core')
+  ) {
+    return true;
+  }
+  await loadProjectOnce();
   const run = runBase();
   return run.ok && run.base.core;
 }
@@ -1000,19 +1010,16 @@ export async function createProgram({argv} = {}) {
     }
   });
 
-  // Help on a base other than Core reads every command, so its examples and
-  // text can name only what that base serves.
-  const offCoreHelp =
-    argv != null &&
-    (argv.includes('--help') || argv.includes('-h') || firstOperand(argv, program) === 'help') &&
-    !(await readsCore(argv));
-  const loads = argv == null || offCoreHelp ? null : commandsForArgs(program, argv);
-  // The stored list holds Core's commands, so a run on another base, or one
-  // whose base does not resolve, loads every command instead.
+  const scanned = argv == null ? null : commandsForArgs(program, argv);
+  // A run that only prints the version reads no project. Every other run on a
+  // base other than Core loads every command, so help, examples, and
+  // suggestions can name only what that base serves.
+  const versionOnly = scanned != null && scanned.size === 0;
+  const onCore = argv == null || versionOnly || (await readsCore());
+  const loads = onCore ? scanned : null;
+  // The stored list holds Core's commands, so only a run on Core prints it.
   const listed =
-    argv != null && printsRootHelp(argv) && (await readsCore(argv))
-      ? storedCommandList()
-      : null;
+    argv != null && onCore && printsRootHelp(argv) ? storedCommandList() : null;
   if (listed) listStoredCommands(program, listed);
   for (const cmd of listed ? [] : commands) {
     if (loads != null && !loads.has(cmd.name)) continue;
