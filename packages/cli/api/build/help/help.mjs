@@ -48,7 +48,7 @@ export function buildHelp() {
             {
               command: 'template <BlockName>',
               purpose:
-                'print a block for a part the template lacks, and put it in the template slot build names for it',
+                'print a block to put inside a section, for a part the template lacks',
             },
             {
               command: 'component <Name>',

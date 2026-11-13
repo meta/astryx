@@ -197,7 +197,7 @@ export function registerSearch(program) {
               )
                 .map(slot =>
                   slot.description
-                    ? `${slot.name} (${slot.kind}): ${slot.description}`
+                    ? `${slot.name} (${slot.kind}): ${slot.description.replace(/\.$/, '')}`
                     : `${slot.name} (${slot.kind})`,
                 )
                 .join('; '),
