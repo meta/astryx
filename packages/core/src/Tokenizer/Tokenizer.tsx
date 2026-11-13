@@ -518,9 +518,8 @@ const styles = stylex.create({
     minWidth: {
       default: '40px',
       ':placeholder-shown:is(:not(:focus), :read-only)': 0,
-      // Empty and focused, the input has its inset and the caret room. In a
-      // field with no spare room on the row, a zero-width content box hides the
-      // caret.
+      // In a field with no spare room on the row, a zero-width content box
+      // hides the caret.
       ':placeholder-shown:focus:not(:read-only)': `calc(${INPUT_TEXT_INSET} + ${INPUT_CARET_ROOM})`,
     },
     flex: {
