@@ -67,7 +67,13 @@ describe('the weekly WebKit accessibility report', () => {
   it('lists each failed and flaky test with a command that runs it again in WebKit', () => {
     const result = buildReport(report, {sha: 'abc123'});
     expect(result.ok).toBe(false);
-    expect(result.counts).toEqual({failed: 1, flaky: 1, passed: 1, skipped: 0});
+    expect(result.counts).toEqual({
+      failed: 1,
+      flaky: 1,
+      passed: 1,
+      skipped: 0,
+      notRun: 0,
+    });
     expect(result.failures.map(test => test.repro)).toEqual([
       'pnpm exec playwright test packages/core/src/Dialog/__tests__/Dialog.a11y.browser.spec.ts:22 --config playwright.config.ts --project webkit',
       'pnpm exec playwright test packages/core/src/Dialog/__tests__/Dialog.a11y.browser.spec.ts:40 --config playwright.config.ts --project webkit',
@@ -91,6 +97,67 @@ describe('the weekly WebKit accessibility report', () => {
     expect(result.ok).toBe(true);
     expect(result.markdown).toContain(
       'Every WebKit accessibility contract passed.',
+    );
+  });
+
+  it('never reads a run that stopped before its tests ran as a pass', () => {
+    const file =
+      'packages/core/src/Dialog/__tests__/Dialog.a11y.browser.spec.ts';
+    const run = (/** @type {any[]} */ specs) =>
+      buildReport({suites: [{title: file, file, specs}]});
+    const notRun = (/** @type {string} */ title) => spec(title, 'skipped', []);
+    // No test finished.
+    const none = run([notRun('a'), notRun('b')]);
+    expect(none.ok).toBe(false);
+    expect(none.markdown).toContain('stopped before 2 of 2 tests ran');
+    expect(none.markdown).not.toContain(
+      'Every WebKit accessibility contract passed',
+    );
+    // Some finished.
+    const some = run([
+      spec('a', 'expected', [{status: 'passed'}]),
+      spec('b', 'expected', [{status: 'passed'}]),
+      ...Array.from({length: 10}, (_, i) => notRun(`c${i}`)),
+    ]);
+    expect(some.ok).toBe(false);
+    expect(some.counts).toMatchObject({passed: 2, notRun: 10});
+    expect(some.markdown).toContain('stopped before 10 of 12 tests ran');
+    // A test cut mid-run.
+    expect(run([spec('a', 'skipped', [{status: 'interrupted'}])]).ok).toBe(
+      false,
+    );
+  });
+
+  it('counts a test a spec skips on purpose as skipped, and still passes', () => {
+    const file =
+      'packages/core/src/Dialog/__tests__/Dialog.a11y.browser.spec.ts';
+    const result = buildReport({
+      suites: [
+        {
+          title: file,
+          file,
+          specs: [
+            spec('a', 'expected', [{status: 'passed'}]),
+            {
+              title: 'b',
+              file,
+              line: 12,
+              tests: [
+                {
+                  status: 'skipped',
+                  results: [{status: 'skipped'}],
+                  annotations: [{type: 'skip'}],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    expect(result.ok).toBe(true);
+    expect(result.counts).toMatchObject({passed: 1, skipped: 1, notRun: 0});
+    expect(result.markdown).toContain(
+      'Every WebKit accessibility contract passed',
     );
   });
 

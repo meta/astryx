@@ -21,7 +21,7 @@ const CONFIG = 'playwright.config.ts';
 /**
  * Every test in a Playwright JSON report, with its outcome.
  * @param {any} report Playwright's JSON report
- * @returns {{file: string, line: number, title: string, status: string, error: string}[]}
+ * @returns {{file: string, line: number, title: string, status: string, ran: boolean, error: string}[]}
  */
 export function testsOf(report) {
   const tests = [];
@@ -38,11 +38,24 @@ export function testsOf(report) {
         );
         const message =
           failed?.error?.message ?? failed?.errors?.[0]?.message ?? '';
+        // A run that stops early leaves its other tests skipped with no
+        // result, or interrupted. A test a spec skips on purpose has a skip
+        // or fixme annotation.
+        const skippedOnPurpose = (test.annotations ?? []).some(
+          (/** @type {any} */ a) => a.type === 'skip' || a.type === 'fixme',
+        );
+        const ran =
+          skippedOnPurpose ||
+          (results.length > 0 &&
+            results.every(result => result.status !== 'interrupted') &&
+            (test.status !== 'skipped' ||
+              results.some(result => result.status === 'skipped')));
         tests.push({
           file: spec.file ?? suite.file,
           line: spec.line,
           title: [...here, spec.title].join(' › '),
           status: test.status,
+          ran,
           error:
             message
               .replace(/\x1b\[[0-9;]*m/g, '')
@@ -87,12 +100,14 @@ export function buildReport(report, {sha = ''} = {}) {
       markdown: `# WebKit accessibility contracts (report-only)\n\nThe run left no results${sha ? ` for ${sha}` : ''}: ${why}. See the run's log.\n`,
     };
   }
-  const count = status => tests.filter(test => test.status === status).length;
+  const count = status =>
+    tests.filter(test => test.ran && test.status === status).length;
   const counts = {
     failed: count('unexpected'),
     flaky: count('flaky'),
     passed: count('expected'),
     skipped: count('skipped'),
+    notRun: tests.filter(test => !test.ran).length,
   };
   const failures = tests
     .filter(test => test.status === 'unexpected' || test.status === 'flaky')
@@ -107,18 +122,31 @@ export function buildReport(report, {sha = ''} = {}) {
   const markdown = [
     '# WebKit accessibility contracts (report-only)',
     '',
-    `${sha ? `Commit ${sha}. ` : ''}${counts.failed} failed, ${counts.flaky} flaky, ${counts.passed} passed, ${counts.skipped} skipped. A failure here holds no release; each goes to the fix loop with the command below.`,
+    `${sha ? `Commit ${sha}. ` : ''}${counts.failed} failed, ${counts.flaky} flaky, ${counts.passed} passed, ${counts.skipped} skipped${counts.notRun ? `, ${counts.notRun} not run` : ''}. A failure here holds no release; each goes to the fix loop with the command below.`,
     '',
+    ...(counts.notRun
+      ? [
+          `The run stopped before ${counts.notRun} of ${tests.length} tests ran, so this is not a pass. See the run's log.`,
+          '',
+        ]
+      : []),
     ...(failures.length
       ? [
           '| Result | Spec | Test | Error | Run it again |',
           '| --- | --- | --- | --- | --- |',
           ...rows,
         ]
-      : ['Every WebKit accessibility contract passed.']),
+      : counts.notRun
+        ? []
+        : ['Every WebKit accessibility contract passed.']),
     '',
   ].join('\n');
-  return {ok: counts.failed === 0, counts, failures, markdown};
+  return {
+    ok: counts.failed === 0 && counts.notRun === 0,
+    counts,
+    failures,
+    markdown,
+  };
 }
 
 if (
