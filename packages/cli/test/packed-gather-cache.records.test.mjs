@@ -786,9 +786,13 @@ Module._resolveFilename = function (request, parent, isMain, options) {
       const first = run(ask, {tmp: freshTmp(), cwd: other.dir});
       expect(first.stdout).toContain('Ship it on Tuesdays.');
       expect(run(ask, {tmp, cwd: other.dir})).toEqual(first);
-      // docs keeps the integration's check results like the other commands.
+      // docs keeps the integration's check results only when module reads can be recorded.
       const kept = issuesEntries(tmp);
-      expect(kept.size).toBeGreaterThan(0);
+      if (hasModuleHooks) {
+        expect(kept.size).toBeGreaterThan(0);
+      } else {
+        expect(kept.size).toBe(0);
+      }
       expect(run(ask, {tmp, cwd: other.dir})).toEqual(first);
       expect(issuesEntries(tmp)).toEqual(kept);
       // An in-place edit to the topic shows on the very next call.
