@@ -2336,49 +2336,74 @@ function commitStep(step) {
 }
 
 /**
- * Files in a preview folder the preview did not write that import its
- * pages (`./_pages/...` or `./pages/...`), as paths in the folder.
- * @param {string} dir
+ * Files of the app's own that import preview pages, so deleting those pages
+ * would break the app's build: every source file under the routes folder
+ * and src/ (node_modules, .next and dot folders left out; the preview's own
+ * files too), with each import resolved (relative, `@/`, or a tsconfig
+ * `paths` alias). Project-relative paths, sorted.
+ * @param {string} cwd
+ * @param {{dir: string, app: string | null}} at
  * @param {PreviewData} data
+ * @param {PreviewPage[]} pages the pages about to be deleted
  * @returns {string[]}
  */
-function pageImporters(dir, data) {
-  /** @type {string[]} */
-  const out = [];
-  /** @param {string} sub */
-  const walk = sub => {
+function pageImporters(cwd, at, data, pages) {
+  const targets = new Set(pages.map(p => path.join(at.dir, p.file)));
+  if (!targets.size) return [];
+  const own = new Set(data.files.map(f => path.join(at.dir, f)));
+  const aliases = tsconfigAliases(cwd);
+  /** @type {Set<string>} */
+  const out = new Set();
+  const seen = new Set();
+  let budget = 5000;
+  /** @param {string} file @param {string} spec */
+  const resolves = (file, spec) => {
+    const alias = aliases.find(x => spec.startsWith(x.prefix));
+    const bases = alias
+      ? alias.to.map(t => path.join(t, spec.slice(alias.prefix.length)))
+      : spec.startsWith('@/')
+        ? [path.join(cwd, 'src', spec.slice(2)), path.join(cwd, spec.slice(2))]
+        : spec.startsWith('.')
+          ? [path.resolve(path.dirname(file), spec)]
+          : [];
+    return bases.some(b => targets.has(b.replace(/\.(tsx|ts|jsx|js)$/, '')));
+  };
+  /** @param {string} dir */
+  const walk = dir => {
+    if (seen.has(dir) || budget <= 0) return;
+    seen.add(dir);
     /** @type {fs.Dirent[]} */
     let entries;
     try {
-      entries = fs.readdirSync(path.join(dir, sub), {withFileTypes: true});
+      entries = fs.readdirSync(dir, {withFileTypes: true});
     } catch {
       return;
     }
     for (const e of entries) {
-      const rel = sub ? `${sub}/${e.name}` : e.name;
+      const full = path.join(dir, e.name);
       if (e.isDirectory()) {
-        if (!sub && e.name !== 'node_modules') walk(rel);
+        if (e.name !== 'node_modules' && !e.name.startsWith('.')) walk(full);
         continue;
       }
-      if (!/\.(tsx|ts|jsx|js|mjs)$/.test(e.name) || data.files.includes(rel))
-        continue;
+      if (!/\.(tsx|ts|jsx|js|mjs)$/.test(e.name) || own.has(full)) continue;
+      if (--budget <= 0) return;
       try {
-        const text = fs.readFileSync(path.join(dir, rel), 'utf8');
-        if (
-          data.pages.some(p =>
-            new RegExp(
-              `from\\s*['"][./]*(?:\\.\\./)*${p.file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"]`,
-            ).test(text),
-          )
-        )
-          out.push(rel);
+        const text = fs.readFileSync(full, 'utf8');
+        for (const m of text.matchAll(
+          /(?:from\s*|import\s*\(\s*|import\s+)['"]([^'"]+)['"]/g,
+        ))
+          if (resolves(full, m[1])) {
+            out.add(shown(cwd, full));
+            break;
+          }
       } catch {
         // Unreadable: not one that imports the pages, as far as can be told.
       }
     }
   };
-  walk('');
-  return out.sort();
+  for (const root of [at.dir, at.app, path.join(cwd, 'src')])
+    if (root) walk(root);
+  return [...out].sort();
 }
 
 /**
@@ -4608,6 +4633,22 @@ async function removePreview(page, options, box) {
       });
   }
 
+  // A file of the app's own that imports a page about to go would break:
+  // the page stays, and the file is named. One guard for a page and for the
+  // whole preview.
+  {
+    const going = one && data.pages.length > 1 ? [one] : data.pages;
+    const importers = pageImporters(cwd, at, data, going);
+    if (importers.length)
+      refuse(
+        E.ERR_FILE_EXISTS,
+        `${importers.slice(0, 3).join(', ')}${importers.length > 3 ? ` and ${importers.length - 3} more` : ''} ${importers.length > 1 ? 'import' : 'imports'} ${going.length > 1 ? 'the preview pages' : `the ${going[0]?.id} page`}, and the preview did not write ${importers.length > 1 ? 'them' : 'it'}, so removing ${going.length > 1 ? 'them' : 'it'} would break the app's build.`,
+        {
+          fix: `stop ${importers.length > 1 ? 'those files' : importers[0]} importing ${going.length > 1 ? 'the preview pages' : 'the page'} (or move what ${importers.length > 1 ? 'they need' : 'it needs'} out of ${folder}/), then run ${PREVIEW} remove${one ? ` ${one.id}` : ''}${pf} again`,
+        },
+      );
+  }
+
   if (one && data.pages.length > 1) {
     const target = one;
     const rel = `${target.file}.tsx`;
@@ -4742,17 +4783,6 @@ async function removePreview(page, options, box) {
       `${shown(cwd, path.join(at.dir, 'page.tsx'))} was changed by hand after the preview wrote it. It imports the preview pages, so removing them would leave a route that does not build.`,
       {
         fix: `move ${shown(cwd, path.join(at.dir, 'page.tsx'))} out of ${folder}/ (copy what you changed somewhere else in the app), then run ${PREVIEW} remove${pf} again`,
-      },
-    );
-  // A file of yours in the folder (a copy of the route under another name)
-  // that imports the preview pages would break once they are deleted.
-  const importer = pageImporters(at.dir, data)[0];
-  if (importer)
-    refuse(
-      E.ERR_FILE_EXISTS,
-      `${shown(cwd, path.join(at.dir, importer))} imports the preview pages and the preview did not write it, so removing them would leave it broken.`,
-      {
-        fix: `move ${shown(cwd, path.join(at.dir, importer))} out of ${folder}/ and stop it importing the preview pages, then run ${PREVIEW} remove${pf} again`,
       },
     );
   const ids = new Set(data.pages.map(p => p.id));

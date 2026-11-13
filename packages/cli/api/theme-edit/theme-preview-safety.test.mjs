@@ -2714,4 +2714,38 @@ describe('final pass 5', () => {
     expect(list).toBe(want);
     expect(list).not.toBe('astryx template --list --type page');
   }, 120_000);
+
+  it("keeps a page the app's own code imports, for a page and for the whole preview", async () => {
+    await themeEditPreviewAdd(undefined, {cwd, path: 'src/app/r22'});
+    write(
+      'src/app/report/page.tsx',
+      "import Overview from '../r22/_pages/overview';\nexport default function R() { return <Overview />; }\n",
+    );
+    try {
+      const one = await refusal(() =>
+        themeEditPreviewRemove('overview', {cwd, path: 'src/app/r22'}),
+      );
+      expect(one.code).toBe('ERR_FILE_EXISTS');
+      expect(one.message).toContain(
+        'src/app/report/page.tsx imports the overview page',
+      );
+      expect(exists('src/app/r22/_pages/overview.tsx')).toBe(true);
+      const all = await refusal(() =>
+        themeEditPreviewRemove(undefined, {cwd, path: 'src/app/r22'}),
+      );
+      expect(all.message).toContain(
+        'src/app/report/page.tsx imports the preview pages',
+      );
+      expect(exists('src/app/r22/_pages/overview.tsx')).toBe(true);
+      // A page nothing imports still goes.
+      const r = await themeEditPreviewRemove('components', {
+        cwd,
+        path: 'src/app/r22',
+      });
+      expect(r.data.pages).not.toContain('components');
+    } finally {
+      rm('src/app/report');
+      rm('src/app/r22');
+    }
+  }, 180_000);
 });
