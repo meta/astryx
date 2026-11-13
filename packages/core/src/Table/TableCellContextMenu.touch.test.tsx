@@ -3,7 +3,8 @@
 /**
  * @file TableCellContextMenu.touch.test.tsx
  * @output Tests what an invocation before the menu loads does once it loads:
- *   a long press opens the menu, a tap does not, only the last held cell
+ *   a long press opens the menu, timed and recognized by the loaded menu from
+ *   the held touch, a tap or a moved press does not, only the last held cell
  *   opens, a later press or key drops the hold, the held point stays in the
  *   cell across a scroll, focus returns to the cell, and an unmounted cell
  *   drops only its own hold
@@ -141,6 +142,76 @@ describe('TableCellContextMenu early invocation', () => {
     // The menu module loaded through this test's own gated factory.
     expect(gate.factoryRuns).toBe(runsBefore + 1);
   });
+  it('recognizes no gesture before the menu loads: the loaded menu reads the held touch', async () => {
+    const detectorsMade = {count: 0};
+    vi.doMock('../hooks/longPressDetector', async importOriginal => {
+      const original =
+        await importOriginal<typeof import('../hooks/longPressDetector')>();
+      return {
+        ...original,
+        createLongPressDetector: (
+          ...args: Parameters<typeof original.createLongPressDetector>
+        ) => {
+          detectorsMade.count += 1;
+          return original.createLongPressDetector(...args);
+        },
+      };
+    });
+    const {trigger, loadMenu} = await renderColdCell('Hold me');
+    fireEvent.touchStart(trigger, {touches: [{clientX: 10, clientY: 10}]});
+    await wait(650);
+    fireEvent.touchEnd(trigger, {touches: []});
+    expect(detectorsMade.count).toBe(0);
+
+    await loadMenu();
+
+    expect(
+      screen.getByRole('menuitem', {name: 'Copy', hidden: true}),
+    ).toBeTruthy();
+    vi.doUnmock('../hooks/longPressDetector');
+  });
+
+  it('opens the menu at the deadline counted from the touch start for a press still held when the menu loads', async () => {
+    const {trigger, loadMenu} = await renderColdCell('Hold me');
+    fireEvent.touchStart(trigger, {touches: [{clientX: 10, clientY: 10}]});
+    await wait(200);
+
+    await loadMenu();
+    expect(screen.queryByRole('menu', {hidden: true})).toBeNull();
+    await wait(400);
+
+    expect(
+      screen.getByRole('menuitem', {name: 'Copy', hidden: true}),
+    ).toBeTruthy();
+    fireEvent.touchEnd(trigger, {touches: []});
+  });
+
+  it('does not open the menu for a press that moved past the tolerance before the menu loads', async () => {
+    const {trigger, loadMenu} = await renderColdCell('Scroll me');
+    fireEvent.touchStart(trigger, {touches: [{clientX: 10, clientY: 10}]});
+    fireEvent.touchMove(trigger, {touches: [{clientX: 10, clientY: 60}]});
+    await wait(650);
+    fireEvent.touchEnd(trigger, {touches: []});
+
+    await loadMenu();
+    await wait(600);
+
+    expect(screen.queryByRole('menu', {hidden: true})).toBeNull();
+  });
+
+  it('drops a held touch once a press elsewhere comes before the menu loads', async () => {
+    const {trigger, loadMenu} = await renderColdCell('Hold me');
+    fireEvent.touchStart(trigger, {touches: [{clientX: 10, clientY: 10}]});
+    await wait(650);
+    fireEvent.touchEnd(trigger, {touches: []});
+    fireEvent.pointerDown(document.body);
+
+    await loadMenu();
+    await wait(600);
+
+    expect(screen.queryByRole('menu', {hidden: true})).toBeNull();
+  });
+
   it('opens only the last of two cells right-clicked before the menu loads', async () => {
     const {triggers, loadMenu} = await renderColdCells([
       {label: 'Name', actions: [{id: 'a', label: 'Alpha', onSelect: () => {}}]},

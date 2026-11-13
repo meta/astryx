@@ -91,8 +91,12 @@ export const CORE_BOUNDARIES = {
   // Trigger contract and context plumbing that live in a surface folder. A
   // truncated Text hands its held intent to the tooltip through
   // `tooltipPresentInterest`; every scoped context uses `layerScopedContext`.
+  // A table cell renders `ContextMenuTrigger` before its menu loads, and reads
+  // `gestureCounter` to drop a held invocation at a later press or key.
   baseModulesInSurfaceFolders: [
     'Tooltip/tooltipPresentInterest',
+    'ContextMenu/ContextMenuTrigger',
+    'Layer/gestureCounter',
     'Layer/layerScopedContext',
   ],
   // The shared internal touch modules, and the layer's touch tap recognizer.

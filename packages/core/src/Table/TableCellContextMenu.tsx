@@ -5,13 +5,14 @@
 /**
  * @file TableCellContextMenu.tsx
  * @input React (lazy, Suspense), createModuleLoader, ContextMenuTrigger,
- *   useLongPress, useIsHydrating, useInteractionModalityTracking
+ *   useIsHydrating, useInteractionModalityTracking
  * @output TableCellContextMenu, loadTableContextMenu
  * @position Renders a cell's `contextMenuActions` for TableCell and
  * TableHeaderCell. The menu code loads only for cells that have actions. The
  * cell renders the trigger, and the menu loads beside it, so the content
  * keeps its node, focus and state. The cell holds an invocation that comes
- * before the load and replays it when the menu arrives.
+ * before the load and replays it when the menu arrives. It recognizes no
+ * gesture itself: the loaded menu reads a held touch's events.
  */
 
 import {
@@ -23,6 +24,7 @@ import {
   type ComponentProps,
   type ComponentType,
   type ReactNode,
+  type TouchEvent as ReactTouchEvent,
 } from 'react';
 import type {
   ContextMenuExternalTrigger,
@@ -31,11 +33,9 @@ import type {
 import {
   ContextMenuTrigger,
   contextMenuPoint,
-  longPressPoint,
   type TriggerPoint,
 } from '../ContextMenu/ContextMenuTrigger';
 import {useIsHydrating} from '../hooks/useIsHydrating';
-import {useLongPress} from '../hooks/useLongPress';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {currentGesture} from '../Layer/gestureCounter';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
@@ -133,6 +133,58 @@ function takeHeldInvocation(owner: object): HeldInvocation | null {
   return held;
 }
 
+type TouchPhase = 'start' | 'move' | 'end' | 'cancel';
+
+/**
+ * The touch events of a press that starts before the menu attaches. The menu
+ * gets them in order when it attaches. Its long press then times the press
+ * from the touch's own start, and tells a long press from a tap.
+ */
+type HeldTouch = {
+  gesture: number;
+  events: {phase: TouchPhase; event: ReactTouchEvent<HTMLElement>}[];
+};
+
+/** Adds a touch event to a held press. Only the last move is kept. */
+function holdTouchEvent(
+  held: HeldTouch | null,
+  phase: TouchPhase,
+  event: ReactTouchEvent<HTMLElement>,
+): HeldTouch | null {
+  if (phase === 'start' && event.touches.length === 1) {
+    return {gesture: currentGesture(), events: [{phase, event}]};
+  }
+  if (held == null) {
+    return null;
+  }
+  const last = held.events.at(-1);
+  if (last?.phase === 'end' || last?.phase === 'cancel') {
+    return held;
+  }
+  const events =
+    phase === 'move' && last?.phase === 'move'
+      ? held.events.slice(0, -1)
+      : held.events;
+  return {...held, events: [...events, {phase, event}]};
+}
+
+function replayTouch(
+  held: HeldTouch,
+  handlers: ContextMenuTriggerHandlers,
+): void {
+  for (const {phase, event} of held.events) {
+    if (phase === 'start') {
+      handlers.onTouchStart(event);
+    } else if (phase === 'move') {
+      handlers.onTouchMove(event);
+    } else if (phase === 'end') {
+      handlers.onTouchEnd(event);
+    } else {
+      handlers.onTouchCancel(event);
+    }
+  }
+}
+
 /**
  * A cell's content, wrapped in a right-click context menu when `actions` can
  * open one. Without actions it returns the content untouched, so the native
@@ -169,10 +221,7 @@ function CellTrigger({
   const triggerRef = useRef<HTMLElement>(null);
   const anchorRef = useRef<HTMLSpanElement>(null);
   const handlersRef = useRef<ContextMenuTriggerHandlers | null>(null);
-  // True from a touch that starts before the menu attaches until it ends. The
-  // cell's own detector follows that press to its end, even if the menu
-  // attaches during it, because the menu's detector never saw it start.
-  const earlyPressRef = useRef(false);
+  const heldTouchRef = useRef<HeldTouch | null>(null);
   // True after this cell's menu failed to load, until a later load succeeds.
   const [isMenuUnavailable, setMenuUnavailable] = useState(false);
   const retryMenu = () => {
@@ -191,19 +240,23 @@ function CellTrigger({
         return;
       }
       const held = takeHeldInvocation(triggerRef);
-      if (held == null) {
+      const heldTouch = heldTouchRef.current;
+      heldTouchRef.current = null;
+      if (held == null && heldTouch == null) {
         return;
       }
       // Replay after the commit that attached the menu, so the menu anchors its
       // layer before it opens. A press or key since the hold drops it.
       queueMicrotask(() => {
-        if (
-          handlersRef.current !== handlers ||
-          currentGesture() !== held.gesture
-        ) {
+        if (handlersRef.current !== handlers) {
           return;
         }
-        handlers.openAtTriggerPoint(held.point);
+        if (heldTouch != null && currentGesture() === heldTouch.gesture) {
+          replayTouch(heldTouch, handlers);
+        }
+        if (held != null && currentGesture() === held.gesture) {
+          handlers.openAtTriggerPoint(held.point);
+        }
       });
     },
   }).current;
@@ -221,31 +274,21 @@ function CellTrigger({
   // before its menu loads drops its own hold, and keeps another cell's.
   useEffect(() => () => dropHeldInvocation(triggerRef), []);
 
-  // The same hold time, movement tolerance and lift rule as the menu's own
-  // long press, for a press that starts before the menu attaches.
-  const earlyLongPress = useLongPress({
-    onLongPress: point => {
-      const handlers = handlersRef.current;
-      if (handlers != null) {
-        handlers.openFromLongPress(point);
-      } else {
-        holdInvocation({
-          owner: triggerRef,
-          gesture: currentGesture(),
-          point: longPressPoint(point, triggerRef.current),
-        });
-      }
-    },
-  });
-
-  // A failed load ends this cell's early press too, so its long press cannot
-  // hold an invocation that no menu will open.
+  // A failed load drops this cell's held touch and invocation, so no later
+  // menu opens for them.
   const onMenuUnavailable = useRef(() => {
-    earlyLongPress.cancel();
-    earlyPressRef.current = false;
+    heldTouchRef.current = null;
     dropHeldInvocation(triggerRef);
     setMenuUnavailable(true);
   }).current;
+
+  // Before the menu attaches, a touch only starts the load and is held.
+  const holdTouch = (
+    phase: TouchPhase,
+    event: ReactTouchEvent<HTMLElement>,
+  ): void => {
+    heldTouchRef.current = holdTouchEvent(heldTouchRef.current, phase, event);
+  };
 
   return (
     <>
@@ -279,7 +322,7 @@ function CellTrigger({
         }}
         onTouchStart={event => {
           const handlers = handlersRef.current;
-          if (handlers != null && !earlyPressRef.current) {
+          if (handlers != null) {
             handlers.onTouchStart(event);
             return;
           }
@@ -289,31 +332,31 @@ function CellTrigger({
               return;
             }
           }
-          earlyPressRef.current = true;
-          earlyLongPress.onTouchStart(event);
+          holdTouch('start', event);
           preloadTableContextMenu();
         }}
         onTouchMove={event => {
-          if (earlyPressRef.current) {
-            earlyLongPress.onTouchMove(event);
+          const handlers = handlersRef.current;
+          if (handlers != null) {
+            handlers.onTouchMove(event);
           } else {
-            handlersRef.current?.onTouchMove(event);
+            holdTouch('move', event);
           }
         }}
         onTouchEnd={event => {
-          if (earlyPressRef.current) {
-            earlyLongPress.onTouchEnd(event);
-            earlyPressRef.current = event.touches.length > 0;
+          const handlers = handlersRef.current;
+          if (handlers != null) {
+            handlers.onTouchEnd(event);
           } else {
-            handlersRef.current?.onTouchEnd(event);
+            holdTouch('end', event);
           }
         }}
         onTouchCancel={event => {
-          if (earlyPressRef.current) {
-            earlyLongPress.onTouchCancel(event);
-            earlyPressRef.current = false;
+          const handlers = handlersRef.current;
+          if (handlers != null) {
+            handlers.onTouchCancel(event);
           } else {
-            handlersRef.current?.onTouchCancel(event);
+            holdTouch('cancel', event);
           }
         }}>
         {children}
