@@ -593,6 +593,10 @@
       "status": "open",
       "group": "triage"
     },
+    "packages/lab/src/MediaPlayer/mediaStore.ts:volumeProbeResult": {
+      "status": "allowed",
+      "reason": "A cache of a platform probe (whether script can set volume); a second cache per copy computes the same answer and changes no result."
+    },
     "packages/lab/src/Schedule/Schedule.tsx:eventLoaderCache": {
       "status": "allowed",
       "reason": "A memo cache; a second cache per copy changes no result."
