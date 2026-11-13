@@ -122,6 +122,7 @@ import {doc as themePaletteGenerateFn} from '../../../api/theme/themePaletteGene
  * @property {(files: string[], options: {cwd: string, check?: boolean, family?: boolean, iconsSpecifier?: string, out?: string}) => Promise<import('../../../api/error.mjs').AstryxError | null>} [preflight] - A refusal before a build starts, or null.
  * @property {(files: string[], options: {cwd: string}) => Promise<() => Promise<void>>} [hold] - Locks held while a build or check runs; resolves to their release.
  * @property {(file: string, cwd: string, opts: {check: boolean, upToDate?: boolean}) => Record<string, unknown> | null | Promise<Record<string, unknown> | null>} [extraData] - Fields a group adds to a build's result data (the editor's `appCopyStale`); in a check, `upToDate: false` fails it.
+ * @property {(file: string, cwd: string) => (['light'] | ['dark'] | null)} [colorModes] - The one color mode a theme file has that the file itself cannot say, for the build to write into the built module.
  * @property {(file: string, cwd: string) => ((family: string) => boolean) | null} [loadedFonts] - Font families the app loads for a theme file that the file itself cannot say, so the build does not name them as unloaded.
  * @property {(file: string, cwd: string) => {name: string, reason: string} | null} [missingSource] - For a source file that is not there, this group's way to write it again, or null.
  * @property {(options: {targetPath?: string, overwrite?: boolean, cwd?: string}) => import('../../../api/theme/theme.type.mjs').ThemeTemplateResponse} [template] - This group's template write, in place of `themeTemplate`.
@@ -632,6 +633,7 @@ function printThemeApp(result) {
         'stylesheet',
         'fontStylesheet',
         'source',
+        'mode',
       ],
       layout: 'stacked',
     }),
@@ -644,6 +646,7 @@ function printThemeApp(result) {
           slug: change.slug,
           changed: change.changed,
           firstAdd: change.firstAdd,
+          ...(change.wireModes ? {wireModes: true} : {}),
         },
       ],
       {
@@ -654,20 +657,40 @@ function printThemeApp(result) {
           'slug',
           'changed',
           'firstAdd',
+          'wireModes',
         ],
         layout: 'stacked',
       },
     ),
   );
   for (const note of result.data.notes ?? []) emit(text(`[note] ${note}`));
-  if (!change.firstAdd) return;
   const stem = path.basename(modulePath, path.extname(modulePath));
+  if (!change.firstAdd) {
+    // The module now lists one-mode themes' modes: the app's wiring, made
+    // without them, passes the selected theme's mode from now on.
+    if (change.wireModes)
+      emit(
+        text(
+          "The theme module now exports themeModes. Pass the selected theme's mode to Theme in the app root:",
+        ),
+        code(
+          "import {Theme} from '@astryxdesign/core/theme';\n" +
+            `import {themes, defaultThemeSlug, themeModes} from './${stem}';\n\n` +
+            "<Theme theme={themes[defaultThemeSlug]} mode={themeModes[defaultThemeSlug] ?? 'system'}>\n  <App />\n</Theme>",
+        ),
+      );
+    return;
+  }
+  // With a theme of one color mode added, the generated module lists each
+  // such theme's mode in `themeModes`, and the wiring passes the selected
+  // theme's (none for a two-mode theme, which follows the system).
+  const modes = result.data.themes.some(t => t.mode);
   emit(
     text('Wire the generated module once in the app root:'),
     code(
       "import {Theme} from '@astryxdesign/core/theme';\n" +
-        `import {themes, defaultThemeSlug} from './${stem}';\n\n` +
-        '<Theme theme={themes[defaultThemeSlug]}>\n  <App />\n</Theme>',
+        `import {themes, defaultThemeSlug${modes ? ', themeModes' : ''}} from './${stem}';\n\n` +
+        `<Theme theme={themes[defaultThemeSlug]}${modes ? " mode={themeModes[defaultThemeSlug] ?? 'system'}" : ''}>\n  <App />\n</Theme>`,
     ),
   );
 }
@@ -1393,6 +1416,7 @@ function registerThemeCommands(theme, program, docs, words) {
             claimedOutputs,
             deferredWrites: deferred ? writes : undefined,
             commandWords: words,
+            colorModes: words.colorModes?.(entry.file, process.cwd()) ?? null,
           };
           let result;
           if (report) {

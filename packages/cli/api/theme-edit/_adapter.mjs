@@ -66,6 +66,7 @@ import {
 } from './_preview.mjs';
 import {humanWarn} from '../../foundation/response/json.mjs';
 import {
+  buildColorModes,
   camel,
   folderIsEmpty,
   loadTheme,
@@ -1317,6 +1318,22 @@ export async function editorBuildExtra(file, cwd, opts) {
   }
   const stale = appCopyStale(root, slug).appCopyStale;
   return stale ? {appCopyStale: stale} : null;
+}
+
+/**
+ * For `compile` of an editor theme's own source (themes/<t>/<t>.theme.ts):
+ * the one color mode a light-only or dark-only theme has, which its source
+ * cannot say, for the build to write into the built module. Null for any
+ * other file (the app copy's source re-exports it from its build).
+ * @param {string} file the path as given
+ * @param {string} cwd
+ * @returns {['light'] | ['dark'] | null}
+ */
+export function editorColorModes(file, cwd) {
+  const root = projectRoot(cwd);
+  const at = editorThemeAt(root, path.resolve(cwd, file));
+  if (!at || path.basename(file) !== `${at.slug}.theme.ts`) return null;
+  return buildColorModes(at.root, at.slug);
 }
 
 /**

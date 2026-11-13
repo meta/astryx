@@ -25,7 +25,7 @@ import {AstryxError} from '../error.mjs';
 import {logger} from '../logger.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
-import {themeBuildForReport} from '../theme/build/build.mjs';
+import {oneColorMode, themeBuildForReport} from '../theme/build/build.mjs';
 import {
   AUTO_SPREAD,
   CORNERS,
@@ -3797,6 +3797,19 @@ export function compileTheme(ctx, data, base) {
     ...data.settings.filter(x => x.source === 'dial' && roleFont(x)),
     ...data.settings.filter(x => x.source !== 'dial'),
   ];
+  // The shell regions a setting gives a background of their own keep it
+  // when the page background paints the rest of the shell.
+  const regionsWithOwnBackground = new Set(
+    data.settings
+      .filter(
+        x =>
+          x.source === 'property' &&
+          /^background(-color|-image)?$/.test(kebab(x.thing)),
+      )
+      .flatMap(x => partsOf(ctx, x)),
+  );
+  /** @type {Record<string, any>[]} */
+  const fixedToViewport = [];
   for (const s of ordered) {
     // A setting for the mode a one-mode theme does not have stays saved but
     // does not apply (maskedSettings names it).
@@ -4085,7 +4098,7 @@ export function compileTheme(ctx, data, base) {
         for (const region of ['app-shell-header', 'app-shell-sidenav'])
           if (
             ctx.project.target.has(region) &&
-            !ownBackground(block({...s, mode: undefined}, region))
+            !regionsWithOwnBackground.has(region)
           )
             pageParts.push(region);
         if (ctx.project.target.has('layout-content')) {
@@ -4093,9 +4106,11 @@ export function compileTheme(ctx, data, base) {
           const main = (lc[':where(.astryx-app-shell [role="main"])'] ??= {});
           if (!ownBackground(main)) main.backgroundColor = 'transparent';
         }
+        // Written after every setting (below), so no background shorthand
+        // in the same rule resets it.
         if (/gradient\(/.test(String(s.value)))
           for (const t of ['app-shell', ...pageParts])
-            block({...s, mode: undefined}, t).backgroundAttachment = 'fixed';
+            fixedToViewport.push(block({...s, mode: undefined}, t));
         (ctx.compileNotes ??= []).push(
           "the page background on app-shell also paints the shell's header and side nav (they stay opaque when content scrolls under them) and makes the main content area see-through; what is drawn inside keeps its colors, and in the default elevated layout the content panel keeps its own surface",
         );
@@ -4230,6 +4245,10 @@ export function compileTheme(ctx, data, base) {
   }
   emitPadding();
   orderBlocks();
+  for (const r of fixedToViewport) {
+    delete r.backgroundAttachment;
+    r.backgroundAttachment = 'fixed';
+  }
   // Core gives headings the body font when a theme sets only the body's:
   // a font for the body alone keeps the base theme's heading font.
   if (theme.typography?.body && !theme.typography.heading) {
@@ -5361,7 +5380,7 @@ export async function buildTheme(ctx, slug, data) {
       fs.rmSync(file, {force: true});
     forgetWritten(cwd, slug, pictures);
   });
-  let receipt = await step(() => runBuild(ctx, slug));
+  let receipt = await step(() => runBuild(ctx, slug, data));
   // A state setting on the plain part that the own source's same state
   // rule wins over is not repeated on the variants either: the own source
   // wins on every variant, as the result says.
@@ -5447,7 +5466,7 @@ export async function buildTheme(ctx, slug, data) {
       );
       syncPaletteRefs(cwd, slug, fs.readFileSync(f.settingsTs, 'utf8'), pal);
     });
-    receipt = await step(() => runBuild(ctx, slug));
+    receipt = await step(() => runBuild(ctx, slug, data));
   }
   for (const out of [f.css, f.js])
     if (fs.existsSync(out))
@@ -5468,8 +5487,34 @@ export async function buildTheme(ctx, slug, data) {
   return {warnings, lifted, notes};
 }
 
-/** @param {Ctx} ctx @param {string} slug @returns {Promise<any>} */
-async function runBuild(ctx, slug) {
+/**
+ * The one color mode of a light-only or dark-only theme, from its settings,
+ * for the build to write into the built module (`colorModes`); null for a
+ * theme with both modes.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {['light'] | ['dark'] | null}
+ */
+export function buildColorModes(cwd, slug) {
+  try {
+    return oneColorMode(
+      modesOf(
+        JSON.parse(fs.readFileSync(themeFiles(cwd, slug).settings, 'utf8')),
+      ),
+    );
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * @param {Ctx} ctx
+ * @param {string} slug
+ * @param {{mode?: string}} [data] the settings being built (saved after the
+ *   build), whose mode the built module exports
+ * @returns {Promise<any>}
+ */
+async function runBuild(ctx, slug, data) {
   const {cwd} = ctx.project;
   const f = themeFiles(cwd, slug);
   const silent = logger.silent;
@@ -5483,6 +5528,11 @@ async function runBuild(ctx, slug) {
       {},
       {cwd},
       {compact: true},
+      {
+        colorModes: data
+          ? oneColorMode(modesOf(data))
+          : buildColorModes(cwd, slug),
+      },
     );
     return receipt;
   } finally {
@@ -5509,6 +5559,7 @@ export async function outputsDrift(ctx, slug) {
       {check: true},
       {cwd},
       {compact: true},
+      {colorModes: buildColorModes(cwd, slug)},
     );
     const first = /** @type {any} */ (receipt)?.data?.stale?.[0];
     if (!first) return null;

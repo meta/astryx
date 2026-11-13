@@ -51,6 +51,7 @@ import {
   editorCompileProblem,
   editorBuildExtra,
   editorLoadedFonts,
+  editorColorModes,
   editorThemeHold,
   editorThemeRefusal,
   editorMissingSource,
@@ -1329,6 +1330,7 @@ export function registerExperimentalTheme(group, program) {
       hold: editorThemeHold,
       loadedFonts: editorLoadedFonts,
       extraData: editorBuildExtra,
+      colorModes: editorColorModes,
     },
   );
 }

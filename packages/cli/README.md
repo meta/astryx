@@ -87,7 +87,7 @@ Options:
 
 - `--type <component|hook|doc|template|theme>`: restrict to a single domain (`doc` and `theme` work outside an app too)
 - `--limit <n>`: cap the number of results (default 20)
-- `--verbose`: also print each result's match score and reason
+- `--verbose`: also print each result's match score and reason, and its whole description
 - `--json`: typed `{ apiVersion, type: 'search', data: { query, matchCount, results } }` envelope — `matchCount` is how many candidates matched in total, `results` the slice `--limit` allowed
 
 ## Commands
@@ -298,7 +298,7 @@ Shape:
           {
             "flag": "--props",
             "type": "boolean",
-            "description": "Print only the props table",
+            "description": "Print only the props list",
           },
         ],
         "json": true,
@@ -543,7 +543,7 @@ Every response has a `type` discriminant. The full set is below (generated from 
 
 `astryx doctor` runs health checks against your project and environment. It
 changes nothing in the project; once the per-user cache folder exists, it
-keeps its docs checks and integration check results there. Each record uses `[ok]`, `[warn]`, `[fail]`, or `[info]`, and
+keeps its docs checks, its theme-wiring scan and integration check results there. Each record uses `[ok]`, `[warn]`, `[fail]`, or `[info]`, and
 includes an actionable `fix` when one is available. Field names match the
 `--json` keys. The exact checks and values depend on the project; the output
 shape is stable:
