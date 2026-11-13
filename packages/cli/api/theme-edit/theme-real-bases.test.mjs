@@ -9,7 +9,8 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {execFileSync} from 'node:child_process';
+import {createRequire} from 'node:module';
+import * as os from 'node:os';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditSet, themeEditShow} from './theme-edit.mjs';
 import {
@@ -30,6 +31,36 @@ let cwd;
 
 /** Why a bundled theme could not be built here, when it could not. */
 let unbuilt = '';
+
+// The render check runs in the Chromium the repository pins for Playwright,
+// launched once. Each launch and render has this bound; one that does not
+// finish fails naming what it waited on. ASTRYX_THEME_EDITOR_BROWSER=1 (the CI
+// step after the browser install) makes a missing browser fail the case.
+const BROWSER_WAIT_MS = 60_000;
+const {chromium} = createRequire(import.meta.url)('playwright');
+
+/**
+ * @template T
+ * @param {Promise<T>} work
+ * @param {string} what what the case waits on, for the failure
+ * @param {number} [ms]
+ * @returns {Promise<T>}
+ */
+function within(work, what, ms = BROWSER_WAIT_MS) {
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let timer;
+  // A late failure of work that already timed out is not a second failure.
+  work.catch(() => {});
+  return Promise.race([
+    work,
+    new Promise((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`${what} did not finish within ${ms / 1000} s`)),
+        ms,
+      );
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
 
 beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-real-bases-', FIXTURE_PACKAGES);
@@ -364,50 +395,49 @@ describe('padding on real base themes', () => {
       );
       // In a page under each direction (a dir="rtl" ancestor), the own start
       // side holds and the editor's sides land on the other side.
-      const chromium = ['chromium-browser', 'chromium', 'google-chrome'].find(
-        bin => {
-          try {
-            execFileSync('which', [bin], {stdio: 'ignore'});
-            return true;
-          } catch {
-            return false;
-          }
-        },
-      );
-      if (!chromium) {
-        console.warn('no headless Chromium here: the render check did not run');
+      const executablePath = chromium.executablePath();
+      if (!fs.existsSync(executablePath)) {
+        if (process.env.ASTRYX_THEME_EDITOR_BROWSER === '1')
+          throw new Error(
+            `Playwright's Chromium is not installed at ${executablePath}: run npx playwright install chromium`,
+          );
+        console.warn(
+          "Playwright's Chromium is not installed here: the render check did not run",
+        );
         return;
       }
       const css = fs.readFileSync(path.join(cwd, 'themes/pl/pl.css'), 'utf8');
-      /** @param {'ltr' | 'rtl'} dir */
-      const padding = dir => {
-        const page = path.join(path.dirname(cwd), `pl-${dir}.html`);
-        fs.writeFileSync(
-          page,
-          `<!doctype html><html><head><style>${css}</style></head><body>` +
-            `<div data-astryx-theme="pl" dir="${dir}"><button class="astryx-button" id="b">x</button></div>` +
-            '<pre id="r"></pre><script>const c=getComputedStyle(document.getElementById("b"));' +
-            'document.getElementById("r").textContent=c.paddingLeft+" "+c.paddingRight</script></body></html>',
-        );
-        const dom = execFileSync(
-          chromium,
-          [
-            '--headless=new',
-            '--no-sandbox',
-            '--disable-gpu',
-            '--dump-dom',
-            `file://${page}`,
-          ],
-          {
-            encoding: 'utf8',
-            timeout: 60_000,
-            stdio: ['ignore', 'pipe', 'ignore'],
-          },
-        );
-        return /<pre id="r">([^<]*)<\/pre>/.exec(dom)?.[1];
-      };
-      expect(padding('ltr')).toBe('30px 4px');
-      expect(padding('rtl')).toBe('8px 30px');
+      const browser = await within(
+        chromium.launch({
+          args: ['--no-sandbox'],
+          timeout: BROWSER_WAIT_MS + 5000,
+        }),
+        "launching Playwright's Chromium",
+      );
+      try {
+        const page = await browser.newPage();
+        /** @param {'ltr' | 'rtl'} dir */
+        const padding = async dir => {
+          await within(
+            page.setContent(
+              `<!doctype html><html><head><style>${css}</style></head><body>` +
+                `<div data-astryx-theme="pl" dir="${dir}"><button class="astryx-button" id="b">x</button></div>` +
+                '</body></html>',
+            ),
+            `rendering the ${dir} page`,
+          );
+          return page.evaluate(() => {
+            const c = getComputedStyle(
+              /** @type {Element} */ (document.getElementById('b')),
+            );
+            return `${c.paddingLeft} ${c.paddingRight}`;
+          });
+        };
+        expect(await padding('ltr')).toBe('30px 4px');
+        expect(await padding('rtl')).toBe('8px 30px');
+      } finally {
+        await browser.close();
+      }
     }, 240_000);
 
     it('lets an own variant padding win over an unequal editor padding on the plain rule', async ctx => {
@@ -428,4 +458,24 @@ describe('padding on real base themes', () => {
         );
     }, 240_000);
   });
+
+  it('names what it waited on when the browser does not start', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'real-bases-browser-'));
+    try {
+      // A browser that never starts: it never opens the channel Playwright waits on.
+      const hanging = path.join(dir, 'chromium');
+      fs.writeFileSync(hanging, '#!/bin/sh\nsleep 30\n', {mode: 0o755});
+      await expect(
+        within(
+          chromium.launch({executablePath: hanging, timeout: 3000}),
+          "launching Playwright's Chromium",
+          1000,
+        ),
+      ).rejects.toThrow(
+        "launching Playwright's Chromium did not finish within 1 s",
+      );
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  }, 20_000);
 });
