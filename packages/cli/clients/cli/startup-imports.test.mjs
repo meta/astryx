@@ -74,7 +74,7 @@ function packageOf(url) {
 
 /**
  * Run the bin with `args` in an empty folder, with its own home folder, and
- * return the packages of the modules it resolved and the paths of the CLI's
+ * return the packages of the modules it loaded and the paths of the CLI's
  * own modules under the CLI root.
  * @param {string[]} args
  * @returns {{status: number | null, packages: Set<string>, cliModules: Set<string>}}
@@ -87,9 +87,10 @@ function modulesLoadedBy(args) {
     hook,
     [
       "import {appendFileSync} from 'node:fs';",
-      'export async function resolve(specifier, context, nextResolve) {',
-      '  const result = await nextResolve(specifier, context);',
-      `  appendFileSync(${JSON.stringify(log)}, result.url + '\\n');`,
+      // Loads, not resolutions: resolving a package reads no module of it.
+      'export async function load(url, context, nextLoad) {',
+      '  const result = await nextLoad(url, context);',
+      `  appendFileSync(${JSON.stringify(log)}, url + '\\n');`,
       '  return result;',
       '}',
       '',
@@ -103,14 +104,14 @@ function modulesLoadedBy(args) {
       "import Module, {register} from 'node:module';",
       "import {isAbsolute} from 'node:path';",
       "import {pathToFileURL} from 'node:url';",
-      // Async module hooks do not observe CommonJS require calls.
-      'const resolveFilename = Module._resolveFilename;',
-      'Module._resolveFilename = function (...args) {',
-      '  const file = resolveFilename.apply(this, args);',
+      // Async module hooks do not observe CommonJS require calls: note each
+      // CommonJS module as it loads.
+      'const load = Module.prototype.load;',
+      'Module.prototype.load = function (file, ...rest) {',
       '  if (isAbsolute(file)) {',
       `    appendFileSync(${JSON.stringify(log)}, pathToFileURL(file).href + '\\n');`,
       '  }',
-      '  return file;',
+      '  return load.call(this, file, ...rest);',
       '};',
       `register(${JSON.stringify(pathToFileURL(hook).href)});`,
       '',
