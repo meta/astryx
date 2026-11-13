@@ -1697,11 +1697,11 @@
   },
   "@astryx.lightbox.captionMore": {
     "defaultMessage": "more",
-    "description": "Visible label of the button after a gallery caption that two lines cut short in a Lightbox. It opens the full caption over the photo. Pairs with `lightbox.captionLess`."
+    "description": "Visible label of the button after a Lightbox caption that two lines cut short, for a single photo or a gallery. It opens the full caption over the photo. Pairs with `lightbox.captionLess`."
   },
   "@astryx.lightbox.captionLess": {
     "defaultMessage": "less",
-    "description": "Visible label of the same button while a Lightbox gallery's full caption is open over the photo. It closes the full caption. Pairs with `lightbox.captionMore`."
+    "description": "Visible label of the same button while a Lightbox caption is open in full over the photo. It closes the full caption. Pairs with `lightbox.captionMore`."
   },
   "@astryx.metadataList.showMore": {
     "defaultMessage": "Show more",
