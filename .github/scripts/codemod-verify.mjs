@@ -19,7 +19,7 @@
  * a maintainer applies (ALLOW_MANUAL_EDIT=true). It still lists every mismatch.
  */
 
-import {execSync} from 'node:child_process';
+import {execFileSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {pathToFileURL} from 'node:url';
@@ -29,16 +29,49 @@ import {runCodemods} from '../../packages/cli/assets/codemods/runner.mjs';
 // Consumer directories whose changes should be reproducible by codemods
 const CONSUMER_DIRS = ['apps/storybook', 'apps/sandbox', 'e2e'];
 
-function run(cmd) {
-  return execSync(cmd, {encoding: 'utf-8'}).trim();
+/**
+ * Runs a command with its arguments as given. No shell reads them, so a path
+ * with any characters (a space, parentheses, `$`, a backtick) passes through.
+ * @param {string} command
+ * @param {string[]} args
+ * @param {{cwd?: string}} [options]
+ */
+function run(command, args, {cwd} = {}) {
+  return execFileSync(command, args, {encoding: 'utf-8', cwd}).trim();
+}
+
+/**
+ * The files the branch changed since `base`, read NUL-separated so git
+ * neither quotes nor escapes a path.
+ * @param {string} base
+ * @param {{cwd?: string}} [options]
+ */
+export function changedFiles(base, options = {}) {
+  return run('git', ['diff', '--name-only', '-z', base, 'HEAD'], options)
+    .split('\0')
+    .filter(Boolean);
+}
+
+/**
+ * A file's content at `base`, or null when the file is new since then.
+ * @param {string} base
+ * @param {string} file
+ * @param {{cwd?: string}} [options]
+ */
+export function baseVersion(base, file, options = {}) {
+  try {
+    return execFileSync('git', ['show', `${base}:${file}`], {
+      encoding: 'utf-8',
+      cwd: options.cwd,
+    });
+  } catch {
+    return null;
+  }
 }
 
 function getChangedFiles() {
-  const base = run('git merge-base HEAD origin/main');
-  return {
-    base,
-    files: run(`git diff --name-only ${base} HEAD`).split('\n').filter(Boolean),
-  };
+  const base = run('git', ['merge-base', 'HEAD', 'origin/main']);
+  return {base, files: changedFiles(base)};
 }
 
 function getCodemodTargets(changedFiles) {
@@ -123,13 +156,13 @@ async function main() {
   // Revert consumer files to base branch state
   let revertedFiles = [];
   for (const file of consumerFiles) {
-    try {
-      const baseContent = run(`git show ${base}:${file}`);
-      fs.writeFileSync(file, baseContent);
-      revertedFiles.push(file);
-    } catch {
+    const baseContent = baseVersion(base, file);
+    if (baseContent == null) {
       console.log(`  ⏭  ${file} — new in this PR, skipping`);
+      continue;
     }
+    fs.writeFileSync(file, baseContent);
+    revertedFiles.push(file);
   }
   console.log(
     `Reverted ${revertedFiles.length} files to base (${base.slice(0, 8)})\n`,
@@ -236,9 +269,7 @@ async function main() {
   // (jscodeshift's toSource() may change quotes, spacing, etc.)
   console.log('\nFormatting codemod output with prettier...');
   try {
-    run(
-      `npx prettier --write ${codemodModifiedFiles.map(f => `"${f}"`).join(' ')}`,
-    );
+    run('npx', ['prettier', '--write', ...codemodModifiedFiles]);
   } catch (e) {
     console.log('  ⚠️  Prettier formatting failed, comparing raw output');
   }
@@ -251,7 +282,7 @@ async function main() {
     const tmpFile = file.replace(ext, `.expected${ext}`);
     fs.writeFileSync(tmpFile, prVersions[file]);
     try {
-      run(`npx prettier --write "${tmpFile}"`);
+      run('npx', ['prettier', '--write', tmpFile]);
       formattedExpected[file] = fs.readFileSync(tmpFile, 'utf-8');
     } catch {
       formattedExpected[file] = prVersions[file];

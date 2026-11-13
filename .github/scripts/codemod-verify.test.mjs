@@ -1,10 +1,17 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
-import {ALLOW_LABEL, report} from './codemod-verify.mjs';
+import {
+  ALLOW_LABEL,
+  baseVersion,
+  changedFiles,
+  report,
+} from './codemod-verify.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const workflow = yaml.parse(
@@ -121,5 +128,53 @@ describe('the allow-manual-edit owner exception', () => {
     expect(evaluate(allow, {labels: ['ci:run']})).toBe(false);
     // Without the label, the next run fails again.
     expect(evaluate(allow, {labels: []})).toBe(false);
+  });
+});
+
+describe('consumer paths with shell characters', () => {
+  // A route group, a dollar sign, a space and a backtick: a shell string
+  // would break on each, and the file would be skipped as new.
+  const changed = [
+    'apps/sandbox/src/app/(raw)/page.tsx',
+    'apps/sandbox/src/$cost.tsx',
+    'apps/sandbox/src/two words.tsx',
+    'apps/sandbox/src/tick`tock.tsx',
+  ];
+  const added = 'apps/sandbox/src/(new) $one.tsx';
+
+  it('lists every changed path and reads each one at the base', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codemod-verify-'));
+    try {
+      const git = (/** @type {string[]} */ ...args) =>
+        execFileSync('git', args, {cwd: dir, encoding: 'utf8'});
+      const write = (
+        /** @type {string} */ file,
+        /** @type {string} */ text,
+      ) => {
+        fs.mkdirSync(path.dirname(path.join(dir, file)), {recursive: true});
+        fs.writeFileSync(path.join(dir, file), text);
+      };
+      git('init', '-q');
+      git('config', 'user.email', 'test@example.com');
+      git('config', 'user.name', 'test');
+      git('config', 'commit.gpgsign', 'false');
+      for (const file of changed) write(file, 'base\n');
+      git('add', '-A');
+      git('commit', '-qm', 'base');
+      const base = git('rev-parse', 'HEAD').trim();
+      for (const file of changed) write(file, 'changed\n');
+      write(added, 'new\n');
+      git('add', '-A');
+      git('commit', '-qm', 'change');
+
+      expect(changedFiles(base, {cwd: dir}).sort()).toEqual(
+        [...changed, added].sort(),
+      );
+      for (const file of changed)
+        expect(baseVersion(base, file, {cwd: dir}), file).toBe('base\n');
+      expect(baseVersion(base, added, {cwd: dir})).toBeNull();
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
   });
 });
