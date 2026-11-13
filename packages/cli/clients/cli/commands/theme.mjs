@@ -115,6 +115,7 @@ import {doc as themeEjectFn} from '../../../api/theme/themeEject.doc.mjs';
 import {doc as themeTemplateFn} from '../../../api/theme/themeTemplate.doc.mjs';
 import {doc as themeTargetsFn} from '../../../api/theme/themeTargets.doc.mjs';
 import {doc as themePaletteGenerateFn} from '../../../api/theme/themePaletteGenerate.doc.mjs';
+import {currentNonCoreBase} from '../../../foundation/bases/state.mjs';
 
 /**
  * The words a theme command is run with: `theme build` here, and the copies
@@ -863,6 +864,8 @@ export function registerTheme(program) {
       `\nComponent style overrides:\n` +
       overrides
         .filter(([cli]) => exampleAvailable(program, cli, helpBase()))
+        // The theme topic describes Core's theming; another base has none.
+        .filter(([cli]) => !(cli === 'docs theme' && currentNonCoreBase()))
         .map(([, line]) => line)
         .join(''),
   );
