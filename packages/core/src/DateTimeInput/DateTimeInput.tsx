@@ -5,7 +5,7 @@
 /**
  * @file DateTimeInput.tsx
  * @input Uses React, Field, Calendar, NativeDateSegment, NativeTimeSegment, TouchDateTimeField, usePopover, useAnnounce, time parsing utilities, StyleX intrinsic flex layout
- * @output Exports DateTimeInput component, DateTimeInputProps, DateInputEntryError, and native picker type; cleared values keep the pointer Calendar controlled-empty; typed date rejections reach onEntryErrorChange
+ * @output Exports DateTimeInput component, DateTimeInputProps, DateInputEntryError, EntryErrorBehavior, and native picker type; cleared values keep the pointer Calendar controlled-empty; typed date rejections reach onEntryErrorChange
  * @position Core implementation; consumed by index.ts, tested by DateTimeInput.test.tsx
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -34,6 +34,8 @@ import {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
+import {useEntryErrorBehavior} from '../Field/useEntryErrorBehavior';
+import type {EntryErrorBehavior} from '../FormLayout/FormLayoutContext';
 import {
   colorVars,
   sizeVars,
@@ -132,6 +134,7 @@ import english from '../i18n/generated-english/DateTimeInput/DateTimeInput.gener
 
 registerEnglishFallback(english);
 export type {DateInputEntryError} from '../DateInput/useTypedDate';
+export type {EntryErrorBehavior} from '../FormLayout/FormLayoutContext';
 export type ISODateTimeString = string & {
   readonly __brand: 'ISODateTimeString';
 };
@@ -538,6 +541,30 @@ export interface DateTimeInputProps extends Omit<
   onEntryErrorChange?: (error: DateInputEntryError | null) => void;
 
   /**
+   * When both segments show their own entry errors: a typed date or time that
+   * the field rejects. It sets when the error shows, not when validation
+   * runs, so it is not React Aria's `validationBehavior` (native versus ARIA
+   * validation). It does not change a caller's `status`.
+   *
+   * - `'complete'` — a complete typed date the calendar does not have or that
+   *   is out of range, and a complete typed time outside the range, show at
+   *   once. A time the native control reports outside the range shows at
+   *   once. Other rejected text shows at Enter or blur.
+   * - `'blur-or-enter'` — every rejection waits for Enter or blur in its
+   *   segment. The message, `aria-invalid`, the invalid styling, the
+   *   announcement, and the date segment's `onEntryErrorChange` report then
+   *   appear together. An edit that the field accepts or that empties the
+   *   segment clears the error at once. An edit that leaves the entry wrong
+   *   keeps the shown error until the next Enter or blur.
+   *
+   * A date that the native control refuses shows at Enter or blur under both
+   * values.
+   *
+   * @default the nearest FormLayout's `defaultEntryErrorBehavior`, else `'complete'`
+   */
+  entryErrorBehavior?: EntryErrorBehavior;
+
+  /**
    * Width of the field. Numbers are treated as pixels, strings are used as-is
    * (e.g. `'100%'`). Sizes the whole field (label, control, and status) so they
    * stay aligned, unlike setting width via `containerXstyle` or `controlXstyle`.
@@ -698,6 +725,7 @@ function PointerDateTimeField({
   size: sizeProp,
   status,
   onEntryErrorChange,
+  entryErrorBehavior,
   labelTooltip,
   numberOfMonths = 1,
   weekStartsOn,
@@ -858,6 +886,7 @@ function PointerDateTimeField({
     }
   }
   const nativeTimeValue = nativeTimeDraft ?? valueParts.time;
+  const resolvedEntryErrorBehavior = useEntryErrorBehavior(entryErrorBehavior);
   const typedTime = useTypedTime({
     value: valueParts.time,
     hourFormat,
@@ -870,6 +899,7 @@ function PointerDateTimeField({
     errorMessage: t('@astryx.timeInput.invalidTime'),
     isStatusAnnounced: true,
     status,
+    entryErrorBehavior: resolvedEntryErrorBehavior,
   });
   const timePendingInput = typedTime.pendingInput;
 
@@ -1084,6 +1114,7 @@ function PointerDateTimeField({
     isStatusAnnounced: true,
     onEntryErrorChange,
     hasPlaceholder: placeholderFromProps != null,
+    entryErrorBehavior: resolvedEntryErrorBehavior,
   });
 
   const nativeDateRejection = useNativeDateRejection({
@@ -1974,6 +2005,7 @@ function PointerDateTimeField({
               ariaDescribedBy={ariaDescribedBy}
               isRejected={typedTime.isSurfaceRejectionShown}
               onRejectedChange={typedTime.setSurfaceRejected}
+              onCommit={typedTime.commitSurface}
               alertMessage={timeAlertMessage}
             />
           ) : (
@@ -2187,7 +2219,11 @@ export function DateTimeInput(props: DateTimeInputProps) {
       return <PointerDateTimeField {...rest} nativeMode="adaptive" />;
     case 'sheet': {
       // The sheet takes no typed text.
-      const {onEntryErrorChange: _onEntryErrorChange, ...sheetProps} = rest;
+      const {
+        onEntryErrorChange: _onEntryErrorChange,
+        entryErrorBehavior: _entryErrorBehavior,
+        ...sheetProps
+      } = rest;
       // Month indexes depend on the calendar. A new calendar remounts the sheet.
       return <TouchDateTimeField key={calendar} {...sheetProps} />;
     }

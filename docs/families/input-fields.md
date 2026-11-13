@@ -139,6 +139,13 @@ another implementation helper.
   the same update as an Enter or blur that keeps rejected text does not
   (`spec:AST-118` FR4, FR6, DEC-14). Each member passes its `value` and a
   signal that changes at each such commit.
+- The internal hook `useEntryErrorBehavior`
+  (`packages/core/src/Field/useEntryErrorBehavior.ts`) resolves FR14 for
+  DateInput, DateTimeInput, and TimeInput: the field's own
+  `entryErrorBehavior`, else the nearest FormLayout's
+  `defaultEntryErrorBehavior`, else `'complete'` (`spec:AST-117` FR2). Each
+  member decides which of its rejections the resolved value holds until
+  commit.
 - FieldStatus owns its direct `attached` and `detached` message-box
   presentations. Field owns composition with an input: it consumes `tooltip`
   before rendering FieldStatus and applies the member's supported placement
@@ -160,7 +167,7 @@ another implementation helper.
 | Transition Action    | absent or component-supported `changeAction`                   | Callback first, optimistic value next, Action in a transition, one busy presentation                                                                      | approved family rule where exposed                   |
 | status placement     | `attached`, `detached`, or `tooltip` at the input-family layer | Attached is the default where the member supports safe overlap; detached and tooltip remain available to every input                                      | approved family rule                                 |
 | prop targets         | base props, `container*`, `control*`                           | Base props reach the primary semantic control; `container*` reaches Field; `control*` reaches the control box; no root styling input                      | approved by DEC-7                                    |
-| entry error behavior | `complete` or `blur-or-enter` on members that reject entries   | A member reveals its own rejection as it ships, or holds every signal of it until commit; a field's own prop wins over the form's                         | proposed by `spec:AST-117`                           |
+| entry error behavior | `complete` or `blur-or-enter` on members that reject entries   | A member reveals its own rejection as it ships, or holds every signal of it until commit; a field's own prop wins over the form's                         | approved by `spec:AST-117`                           |
 
 ## Cross-component invariants
 
@@ -456,8 +463,8 @@ DEC-6 does not require unrelated components to add a new floor.
 - **On-screen keyboard (FR13):** no member meets FR13 on current main. No
   member has keyboard handling, and the keyboard module does not exist
   yet; `spec:AST-099` lists each gap.
-- **Entry error behavior (FR14):** no member takes `entryErrorBehavior`, and
-  FormLayout has no form default; `spec:AST-117` lists each gap.
+- **Entry error behavior (FR14):** NumberInput takes no `entryErrorBehavior`
+  and reads no FormLayout default; `spec:AST-117` lists the gap.
 - **Rejected entries (FR15):** Inside an InputGroup, a member's own rejection
   shows no visible message. `spec:AST-118` lists each gap.
 - **Verification coverage:** current unit tests prove composition, semantics, and
@@ -485,7 +492,7 @@ The exhaustive coverage obligation follows the membership and adoption tables.
 | FR11     | `InputClearButton.test.tsx` tooltip and accessible-name assertions, plus real-Chromium hover captures                                                                                                                                                                                                                    | a long field label; a locale override; light and dark                                                                             | The tooltip repeats the field label, or the accessible name loses the field label                                                                                                                                                                                                                                                          |
 | FR12     | `Typeahead.test.tsx`, `BaseTypeahead.test.tsx`, `Tokenizer.test.tsx`, `Selector.test.tsx`, and `MultiSelector.test.tsx` cases for both attributes, with Enter keeping its member-owned effect; `SearchKeyboard.interaction.browser.spec.ts` on a touch-emulated phone, where the search input a tap focuses carries both | Typeahead; Tokenizer; Selector and MultiSelector search row; a phone viewport with touch emulation                                | A missing attribute, or an Enter whose effect changes with the label, fails                                                                                                                                                                                                                                                                |
 | FR13     | TBD (gap): the per-field keyboard focus tests and simulator evidence `spec:AST-099` FR9 names                                                                                                                                                                                                                            | each member FR13 covers, in the page, a sheet, a docked bar Core moves, a floating bar, and a bar with its own `translate`        | A focused field left under the keyboard in a scroller (including one inside a fixed container FR9 leaves to the app), a Core host, or a docked bar Core moves, or a public prop for the behavior; a field with no scroller between it and a floating, own-`translate`, or full-viewport host is the app's to position and is not a failure |
-| FR14     | TBD (gap): the entry error behavior suites `spec:AST-117` names                                                                                                                                                                                                                                                          | DateInput, DateTimeInput, TimeInput, and NumberInput under each value, standalone and in a FormLayout                             | A signal appears before commit under `'blur-or-enter'`, `'complete'` differs from the shipped behavior, or a form default outranks a field's own prop                                                                                                                                                                                      |
+| FR14     | `DateInput.test.tsx`, `DateTimeInput.test.tsx`, and `TimeInput.test.tsx` entryErrorBehavior cases; `FormLayout.test.tsx` "FormLayout defaultEntryErrorBehavior" cases; TBD (gap): NumberInput                                                                                                                            | DateInput, DateTimeInput, TimeInput, and NumberInput under each value, standalone and in a FormLayout                             | A signal appears before commit under `'blur-or-enter'`, `'complete'` differs from the shipped behavior, or a form default outranks a field's own prop                                                                                                                                                                                      |
 | FR15     | `NumberInput.rejectedEntry.test.tsx`; `TimeInput.test.tsx` and `NativeTimeInput.test.tsx` rejected-entry suites; the DateInput and DateTimeInput rejected-entry suites their records name                                                                                                                                | DateInput, DateTimeInput, TimeInput, and NumberInput, typed and native, standalone and grouped                                    | An unfinished entry is flagged, a commit drops rejected text, a rejection shows no message, or its signals part                                                                                                                                                                                                                            |
 
 ## Decision links
