@@ -146,15 +146,28 @@ function supportsWebAnimations(): boolean {
 
 /**
  * How a drag's close plays: the close spring's move from where the finger
- * left the sheet, timed as the shared animator times it, and its progress.
+ * left the sheet, timed as the shared animator times it, and its progress
+ * toward the point where the sheet leaves view. The sheet's surface reaches
+ * below the screen (the reserve), so it leaves view before the close ends,
+ * and the scrim is clear when it does.
  */
 function dragExitFade(element: Element, exit: SheetDragExit): ScrimFade {
-  return resolveMoveTiming(element, springs.sheetDismissSwipe, {
-    from: 0,
-    to: exit.distance,
-    velocity: exit.velocity,
-    epsilon: SETTLE_THRESHOLD.y,
-  });
+  const viewportHeight = element.ownerDocument.defaultView?.innerHeight ?? 0;
+  const shown = Math.max(
+    0,
+    viewportHeight - element.getBoundingClientRect().top,
+  );
+  return resolveMoveTiming(
+    element,
+    springs.sheetDismissSwipe,
+    {
+      from: 0,
+      to: exit.distance,
+      velocity: exit.velocity,
+      epsilon: SETTLE_THRESHOLD.y,
+    },
+    Math.min(exit.distance, shown),
+  );
 }
 
 /** The running fade that clears the scrim behind `panel`, if any. */

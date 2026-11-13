@@ -376,9 +376,51 @@ it('fades the scrim along the close spring when a drag closes the sheet', () => 
   expect(easing).toMatch(/^linear\(/);
   // At each moment of the close, the scrim has faded as far as the sheet has
   // moved: a sheet already gone leaves no dim behind it.
+  // The close overshoots a little. Once the sheet is closed, the scrim stays
+  // clear.
+  let reachedS = Infinity;
+  for (let ms = 0; ms <= durationS * 1000; ms++) {
+    if (close.value(ms / 1000) >= distance) {
+      reachedS = ms / 1000;
+      break;
+    }
+  }
   for (const fraction of [0, 0.05, 0.1, 0.25, 0.5, 1]) {
-    const moved = close.value(fraction * durationS) / distance;
+    const atS = fraction * durationS;
+    const moved = atS >= reachedS ? 1 : close.value(atS) / distance;
     expect(linearAt(easing, fraction)).toBeCloseTo(moved, 2);
+  }
+});
+
+it('clears the scrim as the sheet leaves view, before its close ends', () => {
+  render(<Host />);
+  layOutSheet();
+  const sheet = document.querySelector<HTMLElement>(
+    'dialog[aria-label="Sheet"] .astryx-bottom-sheet',
+  )!;
+  // The sheet's top sits 140 px above the bottom of the screen at release:
+  // the rest of its surface is below the screen.
+  vi.spyOn(sheet, 'getBoundingClientRect').mockReturnValue({
+    top: window.innerHeight - 140,
+  } as DOMRect);
+  flickDown();
+  const [exit] = exits;
+  const distance = exit.values.y;
+  expect(distance).toBeGreaterThan(140);
+  const close = solveSpring(toSpring(springs.sheetDismissSwipe), {
+    from: 0,
+    to: distance,
+    velocity: exit.options.velocity?.y,
+  });
+  const durationS = close.settleTime(SETTLE_THRESHOLD.y);
+  // The fade still lasts the whole close.
+  expect(scrimFade()).toBe(`${durationS * 1000}ms`);
+  const easing = scrimEasing();
+  // Each moment, the scrim has faded as far as the sheet has gone out of
+  // view, and it is clear once the sheet is.
+  for (const fraction of [0.02, 0.05, 0.1, 0.25, 0.5, 1]) {
+    const shownGone = Math.min(1, close.value(fraction * durationS) / 140);
+    expect(linearAt(easing, fraction)).toBeCloseTo(shownGone, 1);
   }
 });
 
