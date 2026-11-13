@@ -90,6 +90,8 @@ const CURLY_SINGLE = new Set(['\u2018', '\u2019', '\u201A', '\u201B']);
 /** The other delimiting quotes and the one that closes each. */
 /** @type {Record<string, string>} */
 const QUOTE_PAIRS = {
+  '\u300C': '\u300D',
+  '\u300E': '\u300F',
   '\u00AB': '\u00BB',
   '\u00BB': '\u00AB',
   '\u2039': '\u203A',
@@ -180,6 +182,21 @@ export function normalizeEntry(thing, value) {
     v = v.replace(/\s*!\s*important\s*;?\s*$/i, '').replace(/;+\s*$/, '');
   }
   if (typeof v === 'string') v = withoutDebris(v);
+  // A font stack written as a JSON string (`"\\"Open Sans\\", serif"`): the
+  // stack it holds.
+  if (
+    typeof v === 'string' &&
+    /font/i.test(t) &&
+    /^"(?:[^"\\]|\\.)*"$/.test(v.trim()) &&
+    v.includes('\\"')
+  ) {
+    try {
+      const inner = JSON.parse(v.trim());
+      if (typeof inner === 'string') v = inner;
+    } catch {
+      // Not a JSON string.
+    }
+  }
   // A font family's name never starts or ends with a space: French quotes
   // (« Inter », with a no-break or narrow no-break space) hold the name.
   if (typeof v === 'string' && /font/i.test(t)) v = trimInsideQuotes(v);
@@ -319,7 +336,12 @@ export function withoutSecondDeclaration(v) {
       continue;
     }
     if (c === '"' || c === "'") q = c;
-    else if (c === ';' && /^\s*[a-z-]+\s*:/i.test(v.slice(i + 1)))
+    else if (
+      c === ';' &&
+      /^\s*[a-z-]+\s*:/i.test(v.slice(i + 1)) &&
+      // `light: red; dark: blue` is one value for two modes.
+      !/^\s*(?:light|dark)\s*:/i.test(v.slice(i + 1))
+    )
       return v.slice(0, i);
   }
   return v;
@@ -338,6 +360,7 @@ export function cleanDialValue(dial, value) {
   return read
     .trim()
     .replace(new RegExp(`^${dial.replace(/-/g, '\\-')}\\s*[:=]\\s*`, 'i'), '')
+    .replace(/\s*!\s*important\s*$/i, '')
     .replace(/;+\s*$/, '')
     .replace(/^(["'])(.*)\1$/, '$2')
     .trim()
@@ -356,4 +379,57 @@ export function trimInsideQuotes(v) {
     new RegExp(`(["'])${SP}((?:(?!\\1)[^\\\\]|\\\\.)*?)${SP}\\1`, 'g'),
     '$1$2$1',
   );
+}
+
+/**
+ * The other setting a dial's value is labeled with, when pasted with a
+ * label that names a different dial or a token (`neutral: #64748b` given
+ * to accent): that label and the value after it, else null. A label that
+ * names this dial, or a CSS property (`color: #e11d48`), is no other
+ * setting.
+ * @param {string} dial
+ * @param {string} value
+ * @returns {{thing: string, value: string} | null}
+ */
+export function otherSettingLabel(dial, value) {
+  const m =
+    /^\s*["']?([a-z][a-z0-9-]*|--[a-z0-9-]+)["']?\s*[:=]\s*(.+?)\s*;?\s*$/i.exec(
+      String(value),
+    );
+  if (!m) return null;
+  const label = m[1].toLowerCase();
+  if (label === dial) return null;
+  if (!DIALS[label] && !label.startsWith('--')) return null;
+  return {thing: label, value: m[2]};
+}
+
+/**
+ * A light and a dark color typed as a pair: labeled (`light: red; dark:
+ * blue`), a JSON object (`{"light": "red", "dark": "blue"}`), or two colors
+ * with a slash or a comma between (`red / blue`, `red, blue`). Null when the
+ * value is no such pair; the caller checks that both are colors.
+ * @param {string} value
+ * @returns {{light: string, dark: string} | null}
+ */
+export function colorPair(value) {
+  const v = String(value).trim();
+  const unq = (/** @type {string} */ x) =>
+    x
+      .trim()
+      .replace(/^(["'])(.*)\1$/, '$2')
+      .trim();
+  const labeled =
+    /^\{?\s*["']?(light|dark)["']?\s*[:=]\s*(.+?)\s*[;,]\s*["']?(light|dark)["']?\s*[:=]\s*(.+?)\s*;?\s*\}?$/i.exec(
+      v,
+    );
+  if (labeled && labeled[1].toLowerCase() !== labeled[3].toLowerCase()) {
+    const a = unq(labeled[2]);
+    const b = unq(labeled[4]);
+    return labeled[1].toLowerCase() === 'light'
+      ? {light: a, dark: b}
+      : {light: b, dark: a};
+  }
+  const two = /^([^\s,/()]+)\s*(?:\s\/\s|,)\s*([^\s,/()]+)$/.exec(v);
+  if (two) return {light: unq(two[1]), dark: unq(two[2])};
+  return null;
 }

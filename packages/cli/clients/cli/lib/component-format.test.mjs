@@ -63,12 +63,39 @@ describe('formatFull sub-component rendering', () => {
     };
     const out = formatFull(docs);
 
-    expect(out).toContain('### XDSRadioListItem');
+    expect(out).toContain('XDSRadioListItem');
     expect(out).not.toContain('undefined');
     // Points the reader at the sub-component's own docs instead of a blank.
     expect(out).toMatch(
-      /(?:astryx|@astryxdesign\/cli(?:@\S+)?) component XDSRadioListItem/,
+      /^See `(?:\S+ )*(?:astryx|@astryxdesign\/cli(?:@\S+)?) component XDSRadioListItem` for its props and usage\.$/m,
     );
+    expect(out).not.toContain('### XDSRadioListItem');
+  });
+
+  it('names consecutive bare sub-components on one line, in order', () => {
+    const docs = {
+      name: 'Table',
+      description: 'Rows and columns.',
+      components: [
+        {name: 'TableHeader'},
+        {name: 'TableBody'},
+        {name: 'TableRow', description: 'One row of cells.'},
+        {name: 'TableCell'},
+        {name: 'useTableSortable'},
+      ],
+    };
+    for (const out of [formatFull(docs), formatCompact(docs, 'Table', '')]) {
+      const lines = out.split('\n');
+      const shared = lines.filter(l => l.startsWith('Read each with'));
+      expect(shared).toHaveLength(2);
+      expect(shared[0]).toMatch(/: TableHeader, TableBody\.$/);
+      expect(shared[1]).toMatch(/: TableCell, useTableSortable\.$/);
+      expect(out).not.toContain('### TableHeader');
+      // A sub-component with its own text keeps its heading, between the two runs.
+      const row = lines.indexOf('### TableRow');
+      expect(row).toBeGreaterThan(lines.indexOf(shared[0]));
+      expect(row).toBeLessThan(lines.indexOf(shared[1]));
+    }
   });
 
   it('renders a full props table for a sub-component that has inline props', () => {

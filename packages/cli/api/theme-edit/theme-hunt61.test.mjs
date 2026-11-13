@@ -180,8 +180,9 @@ describe('hunt61c: clause breaks and comparisons', () => {
     // No padding of the theme's own on buttons: twice the padding a button
     // has now (the token it reads, hunt63), on cards.
     const step = await top('cards with twice the padding of buttons');
-    expect(step.command).toMatch(/^set q padding \S+ --on card$/);
-    expect(step.text).toMatch(/\(button has \S+\)/);
+    // Each side of the button's padding.
+    expect(step.command).toMatch(/^set q padding ('[^']+'|\S+) --on card$/);
+    expect(step.text).toMatch(/\(button has [^)]+\)/);
     // With one: twice that, on cards only.
     await themeEditSet('q', 'padding', '10px', {cwd, on: 'button'});
     const exact = await top('cards with twice the padding of buttons');

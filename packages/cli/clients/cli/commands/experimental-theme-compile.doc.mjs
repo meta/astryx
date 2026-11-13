@@ -14,7 +14,7 @@ export const doc = {
   stability: 'experimental',
   summary: 'Compile standalone themes or one keyed theme family',
   description:
-    'Compiles defineTheme() sources through the same theme pipeline into scoped CSS, standard ESM, and type declarations. Ordinary mode writes one complete set per theme. --family combines one selected extension tree into the three files named by the required --family-key, ready for one CSS load and identity-only switching. With --check it writes nothing and reports source drift. --icons-specifier keeps its existing generated-module behavior. It prints one line per built theme and one line naming fonts the themes do not load; --detail full adds the install example and the font recipe, once for a batch.',
+    "Compiles defineTheme() sources through the same theme pipeline into scoped CSS, standard ESM, and type declarations. Compiling a theme made by experimental theme editor (themes/<theme>/<theme>.theme.ts, or its app copy src/themes/<theme>/<Theme>Theme.ts) takes that theme's lock and also writes its app copy in src/themes/<theme>/ again; --check fails while that copy is behind or gone. Ordinary mode writes one complete set per theme. --family combines one selected extension tree into the three files named by the required --family-key, ready for one CSS load and identity-only switching. With --check it writes nothing and reports source drift. --icons-specifier keeps its existing generated-module behavior. It prints one line per built theme and one line naming fonts the themes do not load; --detail full adds the install example and the font recipe, once for a batch.",
   fn: 'themeBuild',
   args: [
     {
@@ -89,7 +89,7 @@ export const doc = {
     },
     {
       code: 1,
-      when: 'a build or validation error (an error envelope), or --check finds stale or missing outputs (the check result, with upToDate false, the stale files and code ERR_THEME_STALE, is still printed: it is a result, not an error). One exception: an editor theme whose settings changed after its build is refused (ERR_THEME_INVALID, an error envelope) before any file is checked, with `editor show <theme>` to build it again. An editor theme run from a folder other than its app root is refused (ERR_INVALID_ARGUMENT) with the `cd` to the root and the same command; `--family` does not take an editor theme (ERR_INVALID_ARGUMENT); its damaged or unbuildable settings are refused (ERR_THEME_INVALID)',
+      when: "a build or validation error (an error envelope), or --check finds stale or missing outputs (the check result, with upToDate false, the stale files and code ERR_THEME_STALE, is still printed: it is a result, not an error). One exception: an editor theme whose settings changed after its build is refused (ERR_THEME_INVALID, an error envelope) before any file is checked, with `editor show <theme>` to build it again. An editor theme run from a folder other than its app root is refused (ERR_INVALID_ARGUMENT) with the `cd` to the root and the same command; `--family` does not take an editor theme (ERR_INVALID_ARGUMENT); its damaged or unbuildable settings are refused (ERR_THEME_INVALID). An editor theme's compile also writes its app copy in src/themes/<theme>/ (the copy follows each theme this run built), and --check also compares that copy: a copy that is kept back, missing a file or not the current build fails the check (ERR_THEME_STALE), naming why",
     },
   ],
   related: ['experimental theme add', 'experimental theme list'],
