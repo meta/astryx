@@ -20,7 +20,8 @@ export const doc = {
     'how-to-build-a-page playbook as data: the workflow steps with their ' +
     'commands, the on-system rules, and related lookups. Called with a query it names the page template to ' +
     'START from (always one: the page template a ranker built for long descriptions puts first; for a part ' +
-    'of a page, the page it names; else the app shell) and the next two templates, ' +
+    'of a page, the page it names; else the app shell, unless the idea reads as a whole page, which starts ' +
+    'from the closest page template) and the next two templates, ' +
     'and the unified search grouped around it: the other close page templates, drop-in blocks, and ' +
     'idea-specific components/hooks, plus the always-on frame + foundation. A template carries the page ' +
     'frame and spacing, so the kit never recommends composing a page from components.',

@@ -702,6 +702,9 @@ export async function themeImportWiring(cwd) {
     } catch {
       continue;
     }
+    // A file the CLI generates (a theme build, the editor's files) imports
+    // its base to extend it, never to render it: it wires nothing.
+    if (generatedThemeFile(source)) continue;
     const shown = relative(projectDir, file);
     const candidates = themes.filter(
       theme =>
@@ -718,6 +721,11 @@ export async function themeImportWiring(cwd) {
           path.extname(file) === '.css'
             ? doctorStylesheetImports(source)
             : moduleSpecifiers(source, {runtimeOnly: true});
+        // An import used only as a theme's `extends` (a theme source such
+        // as the editor's) renders nothing.
+        if (path.extname(file) !== '.css')
+          for (const from of extendOnlySpecifiers(parseModule(source)))
+            specifiers.delete(from);
       } catch {
         specifiers = new Set();
       }
