@@ -181,6 +181,14 @@ export class GestureArena {
     return this.currentTime ?? Math.max(this.latestTime, this.clock.now());
   }
 
+  /**
+   * The injected clock's own reading: when the page runs now. Behind a block,
+   * the event clock lags it.
+   */
+  pageTime(): number {
+    return this.clock.now();
+  }
+
   /** Whether a recognizer owns this touch, so the browser must not pan or zoom it. */
   isClaimed(id: number): boolean {
     return this.records.get(id)?.isClaimed === true;
@@ -238,6 +246,11 @@ export class GestureArena {
           x: input.x,
           y: input.y,
           time,
+          inputTime: input.time,
+          inputSamples: [
+            ...(input.history ?? []),
+            {x: input.x, y: input.y, time: input.time},
+          ],
           startX: input.x,
           startY: input.y,
           startTime: time,
@@ -328,6 +341,8 @@ export class GestureArena {
         x: input.x,
         y: input.y,
         time,
+        inputTime: input.time,
+        inputSamples: [{x: input.x, y: input.y, time: input.time}],
         startX: input.x,
         startY: input.y,
         startTime: time,
@@ -993,6 +1008,11 @@ export class GestureArena {
       touch.x = input.x;
       touch.y = input.y;
       touch.time = time;
+      touch.inputTime = input.time;
+      touch.inputSamples = [
+        ...(input.history ?? []),
+        {x: input.x, y: input.y, time: input.time},
+      ];
       touch.phase = phase;
       changed.push(touch);
     }
