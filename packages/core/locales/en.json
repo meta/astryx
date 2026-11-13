@@ -1695,6 +1695,14 @@
     "defaultMessage": "Zoomed out",
     "description": "Polite screen-reader announcement after zooming back out of a Lightbox image. Pairs with `lightbox.zoomedIn`."
   },
+  "@astryx.lightbox.captionMore": {
+    "defaultMessage": "more",
+    "description": "Visible label of the button after a gallery caption that two lines cut short in a Lightbox. It opens the full caption over the photo. Pairs with `lightbox.captionLess`."
+  },
+  "@astryx.lightbox.captionLess": {
+    "defaultMessage": "less",
+    "description": "Visible label of the same button while a Lightbox gallery's full caption is open over the photo. It closes the full caption. Pairs with `lightbox.captionMore`."
+  },
   "@astryx.metadataList.showMore": {
     "defaultMessage": "Show more",
     "description": "Button label under a MetadataList that reveals items hidden beyond the configured maximum. Toggles with `metadataList.showLess` — keep the pair parallel in your language."

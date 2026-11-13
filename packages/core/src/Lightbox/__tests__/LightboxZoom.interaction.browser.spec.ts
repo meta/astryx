@@ -303,6 +303,50 @@ const SHIPPED_THEMES = [
   'y2k',
 ] as const;
 
+/**
+ * The caption's colour against the lightest pixel in its top padding, above
+ * its first line: what the text sits on, with no glyph there.
+ */
+async function captionContrast(page: Page, caption: Locator) {
+  await frames(page, 2);
+  const {color, points, isOverPhoto} = await caption.evaluate(box => {
+    const element =
+      box.matches('.astryx-text') || box.querySelector('.astryx-text') == null
+        ? box
+        : (box.querySelector('.astryx-text') as Element);
+    const style = getComputedStyle(element);
+    const rect = element.getBoundingClientRect();
+    const y = rect.top + parseFloat(style.paddingTop) / 2;
+    const spots = [0.25, 0.5, 0.75].map(f => ({
+      x: rect.left + rect.width * f,
+      y,
+    }));
+    const photo = element
+      .closest('[data-current]')
+      ?.querySelector('img')
+      ?.getBoundingClientRect();
+    return {
+      color: style.color,
+      points: spots,
+      isOverPhoto:
+        photo != null &&
+        spots.every(
+          ({x, y: top}) =>
+            top >= photo.top &&
+            top <= photo.bottom &&
+            x >= photo.left &&
+            x <= photo.right,
+        ),
+    };
+  });
+  const shot = PNG.sync.read(await page.screenshot());
+  const scale = shot.width / (page.viewportSize()?.width ?? shot.width);
+  return {
+    value: contrast(parseRgb(color), lightestAt(shot, scale, points)),
+    isOverPhoto,
+  };
+}
+
 for (const theme of SHIPPED_THEMES) {
   test(`over a zoomed light photo, Close, Previous, Next and the counter keep their contrast (${theme})`, async ({
     page,
@@ -335,8 +379,9 @@ for (const theme of SHIPPED_THEMES) {
     await tapOn(dialog.getByRole('button', {name: 'Next'}));
     await expect(dialog.getByText('2 / 4')).toBeVisible();
     const img = dialog.getByRole('img', {name: 'Mountain lake'});
-    // The stage, and whatever moved inside it to show the second photo, rests.
-    await waitForRest(dialog.getByRole('button', {name: 'Zoom'}));
+    // The viewport, and whatever moved inside it to show the second photo,
+    // rests.
+    await waitForRest(dialog.locator('[data-lightbox-media] > :first-child'));
     const rect = await img.boundingBox();
     if (rect == null) {
       throw new Error('no photo');
@@ -424,6 +469,150 @@ for (const theme of SHIPPED_THEMES) {
       expect(ratios[name], name).toBeGreaterThanOrEqual(3);
     }
     expect(ratios.counter, 'counter').toBeGreaterThanOrEqual(4.5);
+  });
+}
+
+test("with zoom, a theme's button and Text colours reach neither the controls' icons nor the counter's text", async ({
+  page,
+}) => {
+  await page.goto(
+    `${storybook()}/iframe.html?id=core-lightbox--gallery-with-zoom&viewMode=story`,
+  );
+  await page.locator('#storybook-root > *').first().waitFor();
+  // Rules shaped as a theme writes them: the component's class and its
+  // reflected prop, more specific than a component's own styles.
+  await page.addStyleTag({
+    content:
+      '.astryx-button[data-variant="ghost"] { color: rgb(17, 17, 17); } .astryx-text[data-color="primary"] { color: rgb(17, 17, 17); }',
+  });
+  const driver = await touchDriver(page);
+  const trigger = await page
+    .getByRole('button', {name: 'Open gallery with zoom'})
+    .boundingBox();
+  if (trigger == null) {
+    throw new Error('no trigger');
+  }
+  await driver.tap({
+    x: trigger.x + trigger.width / 2,
+    y: trigger.y + trigger.height / 2,
+  });
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  // The on-dark colour as this theme resolves it, inside the viewer.
+  const onDark = await dialog.evaluate(element => {
+    const probe = element.ownerDocument.createElement('span');
+    probe.style.color = 'var(--color-on-dark)';
+    element.append(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  });
+  for (const name of ['Close', 'Previous', 'Next']) {
+    const icon = await dialog
+      .getByRole('button', {name})
+      .evaluate(
+        element =>
+          getComputedStyle(element.querySelector('svg') ?? element).color,
+      );
+    expect(icon, name).toBe(onDark);
+  }
+  const counter = await dialog
+    .getByText('1 / 4')
+    .evaluate(element => getComputedStyle(element).color);
+  expect(counter).toBe(onDark);
+});
+
+for (const [photo, fill] of [
+  ['mid-grey', '#7f7f7f'],
+  ['white', '#ffffff'],
+  ['black', '#000000'],
+] as const) {
+  test(`the caption keeps 4.5:1 on its backing, in its band and open, over a ${photo} photo`, async ({
+    page,
+  }) => {
+    await page.route('https://picsum.photos/**', async route =>
+      route.fulfill({
+        contentType: 'image/svg+xml',
+        // A tall photo fills the stage, so an open caption lies over it.
+        body: `<svg xmlns="http://www.w3.org/2000/svg" width="2000" height="4000"><rect width="2000" height="4000" fill="${fill}"/></svg>`,
+      }),
+    );
+    await page.goto(
+      `${storybook()}/iframe.html?id=core-lightbox--gallery-with-captions&viewMode=story`,
+    );
+    await page.locator('#storybook-root > *').first().waitFor();
+    await frames(page, 2);
+    const driver = await touchDriver(page);
+    const tapOn = async (locator: Locator) => {
+      const b = await locator.boundingBox();
+      if (b == null) {
+        throw new Error('nothing to tap');
+      }
+      await driver.tap({x: b.x + b.width / 2, y: b.y + b.height / 2});
+    };
+    await tapOn(page.getByRole('button', {name: 'Open gallery with captions'}));
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    // The current photo has loaded, so it has its box.
+    await expect
+      .poll(async () =>
+        dialog
+          .locator('[data-current] img')
+          .first()
+          .evaluate(img => (img as HTMLImageElement).naturalWidth),
+      )
+      .toBe(2000);
+    const caption = dialog
+      .locator('[data-current] [data-lightbox-caption]')
+      .first();
+    const ratio = async () => captionContrast(page, caption);
+    const inBand = await ratio();
+    expect(inBand.value, 'in the band').toBeGreaterThanOrEqual(4.5);
+    await tapOn(dialog.getByRole('button', {name: 'more'}));
+    await expect(dialog.getByRole('button', {name: 'less'})).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    // Open, its first lines lie over the photo's bottom.
+    const open = await ratio();
+    expect(open.isOverPhoto).toBe(true);
+    expect(open.value, 'open').toBeGreaterThanOrEqual(4.5);
+  });
+}
+
+// A light page's overlay is the lightest backdrop under the caption's band.
+for (const theme of SHIPPED_THEMES) {
+  test(`in light mode, a gallery's caption keeps 4.5:1 in its band (${theme})`, async ({
+    page,
+  }) => {
+    await page.route('https://picsum.photos/**', async route =>
+      route.fulfill({
+        contentType: 'image/svg+xml',
+        body: '<svg xmlns="http://www.w3.org/2000/svg" width="3000" height="2000"><rect width="3000" height="2000" fill="#fff"/></svg>',
+      }),
+    );
+    await page.goto(
+      `${storybook()}/iframe.html?id=core-lightbox--gallery-with-captions&viewMode=story&globals=astryxTheme:${theme};colorMode:light`,
+    );
+    await page.locator('#storybook-root > *').first().waitFor();
+    await frames(page, 2);
+    const driver = await touchDriver(page);
+    const opener = await page
+      .getByRole('button', {name: 'Open gallery with captions'})
+      .boundingBox();
+    if (opener == null) {
+      throw new Error('no opener');
+    }
+    await driver.tap({
+      x: opener.x + opener.width / 2,
+      y: opener.y + opener.height / 2,
+    });
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    const caption = dialog.locator('[data-lightbox-caption]').first();
+    await expect(caption).toBeVisible();
+    const {value} = await captionContrast(page, caption);
+    expect(value).toBeGreaterThanOrEqual(4.5);
   });
 }
 
