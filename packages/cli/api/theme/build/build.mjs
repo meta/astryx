@@ -1428,10 +1428,11 @@ function toIdentifier(name) {
 
 /**
  * Import specifier for install/scaffold instructions, from a file directly
- * in src/ (the file the printed snippet says it is relative to): an output
+ * in the project's src/ (the file the printed snippet says it is relative
+ * to; callers pass the output folder from the outputs' project root): an output
  * under src/ is `./themes/gothic/gothic`, one beside src/ is
  * `../themes/gothic/gothic`.
- * @param {string} relDir the output folder, relative to the cwd
+ * @param {string} relDir the output folder, relative to the outputs' project root
  * @param {string} base
  * @returns {string}
  */
@@ -4550,7 +4551,9 @@ async function themeBuildInternal(
     }
   }
 
-  const relOutDir = path.relative(cwd, outDir) || '.';
+  // From the outputs' project root, whatever folder the build ran in: the
+  // snippet is relative to a file in that project's src/.
+  const relOutDir = path.relative(headerRoot(outDir, cwd), outDir) || '.';
   const jsImport = importSpecifier(relOutDir, baseName);
   const cssImport = importSpecifier(relOutDir, path.basename(outPath));
   const exportName = `${toIdentifier(baseName)}Theme`;
@@ -5220,7 +5223,9 @@ export async function themeBuildFamily(
   writeBuildOutputs(writes);
   for (const output of Object.values(outputs)) logger.log(`[ok] ${output}`);
   const themeBindings = members.map(member => bindings.get(member.theme.name));
-  const relOutDir = path.relative(cwd, outDir) || '.';
+  // From the outputs' project root, whatever folder the build ran in: the
+  // snippet is relative to a file in that project's src/.
+  const relOutDir = path.relative(headerRoot(outDir, cwd), outDir) || '.';
   const jsImport = importSpecifier(relOutDir, baseName);
   const cssImport = `${jsImport}.css`;
   logger.log(`

@@ -166,4 +166,48 @@ describe('theme build install-instructions import path', () => {
       removeLinkedFixture(project);
     }
   });
+
+  it('from inside src/, an output under src/ is still ./ (the trailer and the family snippet)', async () => {
+    const project = makeLinkedFixture('astryx-src-cwd-import-', [
+      '@astryxdesign',
+    ]);
+    try {
+      const src = path.join(project, 'src');
+      const dir = path.join(src, 'themes');
+      fs.mkdirSync(dir, {recursive: true});
+      fs.writeFileSync(
+        path.join(project, 'package.json'),
+        '{"type":"module"}\n',
+      );
+      fs.writeFileSync(
+        path.join(dir, 'ocean.mjs'),
+        `import {defineTheme} from '@astryxdesign/core/theme';\nexport const oceanTheme = defineTheme({name: 'ocean', tokens: {'--color-background-body': '#ffffff'}});\n`,
+      );
+      fs.writeFileSync(
+        path.join(dir, 'ocean-calm.mjs'),
+        `import {defineTheme} from '@astryxdesign/core/theme';\nimport {oceanTheme} from './ocean.mjs';\nexport const oceanCalmTheme = defineTheme({name: 'ocean-calm', extends: oceanTheme, tokens: {'--color-background-body': '#eeeeee'}});\n`,
+      );
+      const single = await runCli(
+        ['--detail', 'full', 'theme', 'build', 'themes/ocean.mjs'],
+        src,
+      );
+      expect(single.stdout).toContain("from './themes/ocean'");
+      expect(single.stdout).not.toContain("'../themes/ocean'");
+      const family = await runCli(
+        [
+          'theme',
+          'build',
+          '--family',
+          'themes/ocean.mjs',
+          'themes/ocean-calm.mjs',
+          '--family-key',
+          'ocean-family',
+        ],
+        src,
+      );
+      expect(family.stdout).toContain("from './themes/ocean-family'");
+    } finally {
+      removeLinkedFixture(project);
+    }
+  });
 });
