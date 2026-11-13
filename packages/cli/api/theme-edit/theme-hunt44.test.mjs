@@ -186,20 +186,29 @@ describe('hunt44', () => {
     );
   }, 240_000);
 
-  it('R21-B: compile of an edited source records it', async () => {
-    const {editorAfterCompile} = await import('./_adapter.mjs');
-    const {editorStale} = await import('./_edit.mjs');
+  it('R21-B: after compile of an edited source, show reads the build as current', async () => {
+    const {themeBuild} = await import('../theme/build/build.mjs');
     await themeEditNew('rb', {cwd});
-    source('rb', "tokens: {'--radius-page': '9px'}");
-    expect(await editorStale(cwd, 'rb')).toMatch(
-      /changed since the last build/,
-    );
-    await editorAfterCompile(['themes/rb/rb.theme.ts'], {cwd});
-    expect(await editorStale(cwd, 'rb')).toBeNull();
-    // The settings never carry what the file sets: a font edit is
-    // recorded too (F20-N2).
-    source('rb', "tokens: {'--font-family-body': 'Georgia, serif'}");
-    await editorAfterCompile(['themes/rb/rb.theme.ts'], {cwd});
-    expect(await editorStale(cwd, 'rb')).toBeNull();
+    for (const value of ['9px', 'Georgia, serif']) {
+      source(
+        'rb',
+        value.endsWith('px')
+          ? `tokens: {'--radius-page': '${value}'}`
+          : `tokens: {'--font-family-body': '${value}'}`,
+      );
+      await themeBuild('themes/rb/rb.theme.ts', {}, {cwd});
+      const check = await themeBuild(
+        'themes/rb/rb.theme.ts',
+        {check: true},
+        {cwd},
+      );
+      expect(/** @type {any} */ (check).data.upToDate).toBe(true);
+      const shown = await themeEditShow('rb', {cwd});
+      expect(notes(shown)).not.toMatch(/not current/);
+    }
+    // An edit not compiled since is still built again.
+    source('rb', "tokens: {'--radius-page': '11px'}");
+    const again = await themeEditShow('rb', {cwd});
+    expect(notes(again)).toMatch(/not current/);
   }, 240_000);
 });

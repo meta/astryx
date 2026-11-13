@@ -74,6 +74,9 @@ import {
   ownSourceTokens,
   ownSourceTokenValues,
   ownPartTokens,
+  PHONE_TYPE,
+  refreshSourceStamp,
+  sourceChangedReason,
   freeThemeName,
   refuseLinks,
   usableNewName,
@@ -1868,9 +1871,20 @@ export async function themeEditShow(theme, options = {}) {
   const brokenSource = themeSourceProblem(cwd, theme);
   // Every output, as `compile --check` reads them: one missing or edited by
   // hand is built again too.
-  const stale =
-    staleBuild(cwd, theme, data) ||
-    (brokenSource ? null : await outputsDrift(ctx, theme));
+  let stale = staleBuild(cwd, theme, data);
+  // An own source changed since the editor's build, whose outputs a build
+  // of it now makes as they are (it was compiled since): current, as
+  // `compile --check` reads it, so the editor records the source it was
+  // built with instead of building again. One rule for both.
+  if (
+    stale === sourceChangedReason(theme) &&
+    !brokenSource &&
+    !(await outputsDrift(ctx, theme))
+  ) {
+    if (!readOnly) refreshSourceStamp(cwd, theme);
+    stale = readOnly ? stale : staleBuild(cwd, theme, data);
+  }
+  stale ||= brokenSource ? null : await outputsDrift(ctx, theme);
   // Every file the build may rewrite or remove (the settings module, the
   // built outputs, the variants types, section sheets, pictures), so a
   // theme source that does not build, or builds a value that is not text,
@@ -2443,8 +2457,6 @@ function ownOverSettingNotes(cwd, slug, data) {
   return out;
 }
 
-/** The type tokens base themes set again for phones. */
-const PHONE_TYPE = /^--font-family|^--(text-[a-z0-9-]+|font)-weight/;
 /** Phones, as the base themes' type rule names them. */
 const PHONES = 'phones (touch screens below 1024px)';
 

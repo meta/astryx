@@ -1889,6 +1889,17 @@ function sealModule(text) {
 }
 
 /**
+ * The staleness reason for an own source changed since the editor's build.
+ * @param {string} slug
+ */
+export function sourceChangedReason(slug) {
+  return `${slug}.theme.ts or a module it imports changed since the last build`;
+}
+
+/** The type tokens base themes set again for phones: families and weights. */
+export const PHONE_TYPE = /^--font-family|^--(text-[a-z0-9-]+|font)-weight/;
+
+/**
  * Record in an editor theme's generated settings that they were built with
  * its own source as it is now, after `compile` built that source (the
  * settings do not depend on what the source sets), only in a module as the
@@ -2921,7 +2932,6 @@ export function compileTheme(ctx, data, base) {
   // Sizes are not: phones keep their reading base. (What the theme's own
   // source sets is not repeated: on phones the base theme's type comes
   // back for it, a Core limit the notes name.)
-  const PHONE_TYPE = /^--font-family|^--(text-[a-z0-9-]+|font)-weight/;
   const phone = Object.fromEntries([
     ...data.settings
       .filter(
@@ -4655,7 +4665,7 @@ export function staleBuild(cwd, slug, data) {
   // wins over the settings) is built in.
   const source = /\/\/ Built with \S+\.theme\.ts ([0-9a-f]{16})\./.exec(ts);
   if (source && fs.existsSync(f.ts) && source[1] !== themeSourceHash(cwd, slug))
-    return `${slug}.theme.ts or a module it imports changed since the last build`;
+    return sourceChangedReason(slug);
   // By content, never by file times (an editor's re-save or a checkout
   // changes those): a generated module cut short, or built outputs whose
   // header names another CLI than the settings were written by (a build

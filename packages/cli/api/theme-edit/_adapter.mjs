@@ -51,7 +51,7 @@ import {
 import {LIKE, P} from './_tables.mjs';
 import {setLine} from './_check.mjs';
 import {SHOWCASE_GROUPS} from './_preview.mjs';
-import {camel, refreshSourceStamp, typedThemeName} from './_settings.mjs';
+import {camel, typedThemeName} from './_settings.mjs';
 import {LOCAL_THEME_ROOT} from '../../foundation/config/theme-state.mjs';
 
 export {parsePoints} from './_how.mjs';
@@ -907,24 +907,4 @@ export function editorMissingSource(file, cwd) {
  */
 export function editorThemeTemplate(options) {
   return writeThemeTemplate(options, true);
-}
-
-/**
- * After `compile` of an editor theme's own source left its outputs current:
- * the generated settings record the source they were built with, so the
- * next editor command does not build it again for that alone.
- * @param {string[]} files
- * @param {{cwd: string}} options
- */
-export async function editorAfterCompile(files, {cwd}) {
-  const root = projectRoot(cwd);
-  for (const file of files) {
-    const at = editorThemeAt(root, path.resolve(cwd, file));
-    if (!at || path.basename(file) !== `${at.slug}.theme.ts`) continue;
-    try {
-      refreshSourceStamp(at.root, at.slug);
-    } catch {
-      // Not recorded: the next editor command builds it again, as before.
-    }
-  }
 }
