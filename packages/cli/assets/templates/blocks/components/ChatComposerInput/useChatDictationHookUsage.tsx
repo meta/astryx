@@ -14,10 +14,7 @@ import {Text} from '@astryxdesign/core/Text';
 
 export default function UseChatDictationHookUsage() {
   const inputRef = useRef<ChatComposerInputHandle>(null);
-  const dictation = useChatDictation({
-    inputRef,
-    lang: 'en-US',
-  });
+  const dictation = useChatDictation({inputRef});
   const status = !dictation.isSupported
     ? 'This browser has no speech recognition'
     : dictation.isListening
@@ -27,9 +24,6 @@ export default function UseChatDictationHookUsage() {
   return (
     <VStack gap={3} align="start" width="100%">
       <Text type="body">{status}</Text>
-      <Text type="body" color="secondary">
-        {dictation.interimTranscript || 'No words yet'}
-      </Text>
       <ChatComposerInput handleRef={inputRef} label="Message" />
       <Button
         label={dictation.isListening ? 'Stop' : 'Start'}

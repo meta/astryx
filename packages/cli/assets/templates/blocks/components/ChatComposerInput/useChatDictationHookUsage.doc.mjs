@@ -7,7 +7,7 @@ export const doc = {
   name: 'useChatDictation — Voice input',
   displayName: 'useChatDictation — Voice input',
   description:
-    'A composer filled by useChatDictation. Partial words show above the field, and each finished phrase is inserted into the composer. The control stays off when the browser has no speech recognition.',
+    'A composer filled by useChatDictation in the provider locale. Partial words show in the composer as ghost text, and each finished phrase is inserted there once. The control stays off when the browser has no speech recognition.',
   isReady: true,
   aspectRatio: 4 / 3,
   componentsUsed: ['ChatComposerInput', 'Button', 'Text', 'Layout'],

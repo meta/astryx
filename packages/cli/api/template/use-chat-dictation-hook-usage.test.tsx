@@ -3,7 +3,8 @@
 
 /**
  * The useChatDictation example keeps the control off when the browser has no
- * speech recognition.
+ * speech recognition, shows partial words as composer ghost text, and inserts
+ * each finished phrase into the composer once.
  */
 
 import {act} from 'react';
@@ -50,7 +51,7 @@ describe('useChatDictation example', () => {
     );
   });
 
-  it('puts a finished phrase in the composer', () => {
+  it('puts a finished phrase in the composer once', () => {
     class Recognition {
       lang = '';
       continuous = false;
@@ -72,15 +73,17 @@ describe('useChatDictation example', () => {
         this.onend?.();
       }
     }
-    let latest: Recognition | null = null;
-    (
-      window as unknown as {SpeechRecognition: new () => Recognition}
-    ).SpeechRecognition = class extends Recognition {
-      constructor() {
-        super();
-        latest = this;
-      }
-    };
+    const created: Recognition[] = [];
+    vi.stubGlobal(
+      'SpeechRecognition',
+      class extends Recognition {
+        constructor() {
+          super();
+          created.push(this);
+        }
+      },
+    );
+    const latest = () => created[created.length - 1];
     act(() => {
       root?.unmount();
       root = createRoot(container);
@@ -91,7 +94,7 @@ describe('useChatDictation example', () => {
     );
     act(() => button?.click());
     act(() => {
-      latest?.onresult?.({
+      latest()?.onresult?.({
         resultIndex: 0,
         results: {
           length: 1,
@@ -99,9 +102,10 @@ describe('useChatDictation example', () => {
         },
       });
     });
-    expect(container.textContent).toContain('hel');
+    const ghost = container.querySelector('[data-astryx-dictation-interim]');
+    expect(ghost?.textContent).toBe('hel');
     act(() => {
-      latest?.onresult?.({
+      latest()?.onresult?.({
         resultIndex: 0,
         results: {
           length: 1,
@@ -110,6 +114,6 @@ describe('useChatDictation example', () => {
       });
     });
     const editor = container.querySelector('[role="textbox"]');
-    expect(editor?.textContent).toContain('hello');
+    expect(editor?.textContent?.match(/hello/g)).toHaveLength(1);
   });
 });
