@@ -337,7 +337,7 @@ beforeAll(async () => {
   writeFixtureBaseTheme(cwd, 'neutral');
   fs.writeFileSync(
     path.join(cwd, 'package.json'),
-    `${JSON.stringify({name: 'app', private: true, type: 'module'})}\n`,
+    `${JSON.stringify({name: 'app', private: true, type: 'module', dependencies: {'@astryxdesign/core': '*'}})}\n`,
   );
   fs.mkdirSync(path.join(cwd, 'src/app'), {recursive: true});
   // A routes folder has a root layout, which loads Core's stylesheet.

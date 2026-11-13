@@ -327,6 +327,56 @@ test('with a mouse the zoom-in cursor shows over the fitted photo, not over the 
   }
 });
 
+test('with a mouse a gallery page shows the zoom-in cursor over the fitted photo, the arrow beside it and the grab cursor while zoomed', async ({
+  browser,
+}) => {
+  const context = await browser.newContext({
+    viewport: {width: 1280, height: 800},
+    hasTouch: false,
+    isMobile: false,
+  });
+  try {
+    const page = await context.newPage();
+    await routePhoto(page);
+    await openStory(page, storybook(), 'core-lightbox--gallery-with-zoom');
+    await page.getByRole('button', {name: 'Open gallery with zoom'}).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    const img = dialog.getByRole('img', {name: 'Forest path'});
+    await decoded(img);
+    await waitForRest(img);
+    await frames(page, 2);
+    const photo = await img.boundingBox();
+    if (photo == null) {
+      throw new Error('no photo');
+    }
+    // The page shows the cursor of the element under the pointer.
+    const cursorAt = async (x: number, y: number) => {
+      await page.mouse.move(x, y);
+      return page.evaluate(
+        ([px, py]) => {
+          const el = document.elementFromPoint(px, py);
+          return el == null ? null : getComputedStyle(el).cursor;
+        },
+        [x, y],
+      );
+    };
+    const x = photo.x + photo.width / 2;
+    const y = photo.y + photo.height / 2;
+    // The fitted photo leaves dark stage on its left, where a click closes.
+    expect(await cursorAt(photo.x - 20, y)).toBe('default');
+    expect(await cursorAt(x, y)).toBe('zoom-in');
+    expect(await cursorAt(photo.x - 20, y)).toBe('default');
+    // A double-click zooms the photo about the pointer.
+    await page.mouse.dblclick(x, y);
+    await waitForRest(img);
+    expect((await readTransform(img)).scale).toBeGreaterThan(1);
+    expect(await cursorAt(x, y)).toBe('grab');
+  } finally {
+    await context.close();
+  }
+});
+
 test('with a mouse a zoomed drag follows the pointer’s whole travel from the press, with no lasting offset', async ({
   browser,
 }) => {
