@@ -4062,22 +4062,31 @@ export function compileTheme(ctx, data, base) {
       else putTok(s.thing, s.value, s.mode);
     } else if (s.source === 'property') {
       // A background on the whole app shell is the page background: the
-      // shell's content and nav areas paint the body and surface colors
-      // over it in every variant but section, so inside the shell those
-      // are see-through and the page shows in every AppShell.
+      // shell's own header, side nav and main content area paint the body
+      // or surface color over it in every variant but section, so those
+      // regions (and only they, never what is drawn inside them) are made
+      // see-through and the page shows in every AppShell. A background a
+      // setting gives one of those regions itself is kept.
       if (
         parts.includes('app-shell') &&
         /^background(-color|-image)?$/.test(kebab(s.thing)) &&
         !s.when &&
         !s.state
       ) {
-        for (const tok of [
-          '--color-background-body',
-          '--color-background-surface',
-        ])
-          block({...s, mode: undefined}, 'app-shell')[tok] = 'transparent';
+        /** @param {Record<string, any>} r */
+        const clear = r => {
+          if (!['background', 'backgroundColor'].some(k => k in r))
+            r.backgroundColor = 'transparent';
+        };
+        for (const region of ['app-shell-header', 'app-shell-sidenav'])
+          if (ctx.project.target.has(region))
+            clear(block({...s, mode: undefined}, region));
+        if (ctx.project.target.has('layout-content')) {
+          const lc = ((theme.components['layout-content'] ??= {}).base ??= {});
+          clear((lc[':where(.astryx-app-shell [role="main"])'] ??= {}));
+        }
         (ctx.compileNotes ??= []).push(
-          'the page background on app-shell shows in every AppShell variant: inside the shell its content and nav areas are see-through (--color-background-body and --color-background-surface are transparent there), so parts in it that read those colors show the page too',
+          "the page background on app-shell shows in every AppShell variant: the shell's header, side nav and main content area are see-through (their own background is transparent); what is drawn inside them keeps its colors",
         );
       }
       for (const t of parts) {

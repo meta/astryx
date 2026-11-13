@@ -238,8 +238,25 @@ describe('the page background', () => {
     });
     const shell = ruleOf('p1', '.astryx-app-shell');
     expect(shell).toMatch(/background: #ff0000/);
-    expect(shell).toMatch(/--color-background-body: transparent/);
-    expect(shell).toMatch(/--color-background-surface: transparent/);
+    // The tokens stay defined for what is drawn inside the shell.
+    expect(cssOf('p1')).not.toMatch(
+      /--color-background-(body|surface): transparent/,
+    );
+    // The shell's own regions are see-through.
+    for (const sel of [
+      '.astryx-app-shell-header',
+      '.astryx-app-shell-sidenav',
+      '.astryx-layout-content:where(.astryx-app-shell [role="main"])',
+    ])
+      expect(ruleOf('p1', sel), sel).toMatch(/background-color: transparent/);
     expect(r.data.notes.join(' ')).toMatch(/every AppShell variant/);
+    // The page gradient how offers reads no token the shell would lose.
+    const how = await themeEditHow('a gradient on the page background', {
+      cwd,
+      theme: 'p1',
+    });
+    const text = JSON.stringify(how.data);
+    expect(text).toMatch(/--on app-shell/);
+    expect(text).not.toMatch(/gradient\([^']*var\(--color-background/);
   }, 240_000);
 });

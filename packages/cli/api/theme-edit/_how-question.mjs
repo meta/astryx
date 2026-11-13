@@ -6060,7 +6060,7 @@ export function draftAnswer(ctx, env, question) {
               set(
                 'background',
                 /\bgradient\b/.test(c.text)
-                  ? 'linear-gradient(180deg, var(--color-background-body), var(--color-background-surface))'
+                  ? 'linear-gradient(180deg, #f5f7fa, #e4ebf5)'
                   : '#f5f7fa',
                 {on: 'app-shell'},
               ),
