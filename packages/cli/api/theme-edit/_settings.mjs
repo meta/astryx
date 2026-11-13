@@ -5243,6 +5243,21 @@ export function builtFiles(cwd, slug, data, some = false) {
 }
 
 /**
+ * The file's stat, or undefined when it is not there. On Node 22.13 a folder
+ * above the file that is a file throws ENOTDIR even with throwIfNoEntry
+ * false; that file is not there either, as on later Node.
+ * @param {string} file
+ */
+function statIfThere(file) {
+  try {
+    return fs.statSync(file, {throwIfNoEntry: false});
+  } catch (e) {
+    if (/** @type {any} */ (e)?.code === 'ENOTDIR') return undefined;
+    throw e;
+  }
+}
+
+/**
  * Refuse, by name, a built file that is there but cannot be read: its
  * permissions, or a folder where the file goes.
  * @param {string} cwd
@@ -5250,7 +5265,7 @@ export function builtFiles(cwd, slug, data, some = false) {
  */
 function refuseUnreadable(cwd, files) {
   for (const file of files) {
-    const st = fs.statSync(file, {throwIfNoEntry: false});
+    const st = statIfThere(file);
     if (!st) continue;
     const rel = shown(cwd, file);
     if (st.isDirectory())
