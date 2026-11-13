@@ -388,4 +388,25 @@ describe('deleteDigitAcrossGroupSeparator', () => {
       deleteDigitAcrossGroupSeparator('1,500,000', 3, 'Delete', 'en-US'),
     ).toBeNull();
   });
+
+  it('leaves a typed decimal or malformed group to the browser', () => {
+    expect(
+      deleteDigitAcrossGroupSeparator('1.5', 2, 'Backspace', 'vi-VN'),
+    ).toBeNull();
+    expect(
+      deleteDigitAcrossGroupSeparator('1.', 2, 'Backspace', 'vi-VN'),
+    ).toBeNull();
+    expect(
+      deleteDigitAcrossGroupSeparator('3.14', 1, 'Delete', 'de-DE'),
+    ).toBeNull();
+    expect(
+      deleteDigitAcrossGroupSeparator('1,23', 2, 'Backspace', 'en-US'),
+    ).toBeNull();
+  });
+
+  it('still deletes across the field grouping in de-DE', () => {
+    expect(
+      deleteDigitAcrossGroupSeparator('1.500', 2, 'Backspace', 'de-DE'),
+    ).toEqual({text: '500', caret: 0});
+  });
 });

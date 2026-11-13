@@ -722,6 +722,11 @@ function digitIndexAfterGroup(
  * Backspace after a group separator, or Delete before one, would otherwise
  * remove only the separator. The next keystroke then puts it back. Delete the
  * digit on the far side of the separator instead.
+ *
+ * Only when the integer run carries exactly the field's own grouping. A group
+ * character the person typed as a decimal (de-DE / vi-VN `1.5`) or a malformed
+ * group (en-US `1,23`) is left to the browser, which deletes just that
+ * character.
  */
 export function deleteDigitAcrossGroupSeparator(
   text: string,
@@ -729,8 +734,14 @@ export function deleteDigitAcrossGroupSeparator(
   key: 'Backspace' | 'Delete',
   locale?: Locale,
 ): GroupedEditableDraft | null {
-  const {group, hasGrouping} = getLocaleNumberSymbols(locale);
+  const {group, hasGrouping, primaryGroupSize, secondaryGroupSize} =
+    getLocaleNumberSymbols(locale);
   if (!hasGrouping || group === '' || caret < 0 || caret > text.length) {
+    return null;
+  }
+  if (
+    !hasOnlyFieldGrouping(text, group, primaryGroupSize, secondaryGroupSize)
+  ) {
     return null;
   }
   let digitIndex: number;
