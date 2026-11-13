@@ -971,10 +971,15 @@ export function NumberInput({
   );
 
   const applyGroupedDraft = useCallback(
-    (input: HTMLInputElement, text: string, caret: number) => {
+    (
+      input: HTMLInputElement,
+      text: string,
+      caret: number,
+      previousText?: string,
+    ) => {
       const next =
         isGroupedWhileEditing && !isComposingRef.current
-          ? groupEditableDraft(text, caret, locale)
+          ? groupEditableDraft(text, caret, locale, previousText)
           : {text, caret};
       if (next.text !== input.value) {
         // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the grouped text must be in the input before this event restores the caret
@@ -1008,11 +1013,19 @@ export function NumberInput({
         commitDraftText(text);
         return;
       }
-      applyGroupedDraft(input, text, input.selectionStart ?? text.length);
+      // The draft before this edit tells a separator the field wrote, and an
+      // edit has shifted, from one the person typed.
+      applyGroupedDraft(
+        input,
+        text,
+        input.selectionStart ?? text.length,
+        displayValue,
+      );
     },
     [
       applyGroupedDraft,
       commitDraftText,
+      displayValue,
       isDisabled,
       isGroupedWhileEditing,
       isReadOnly,

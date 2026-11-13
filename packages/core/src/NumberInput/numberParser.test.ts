@@ -305,6 +305,44 @@ describe('groupEditableDraft', () => {
     expect(parseLocaleNumber(malformed.text, 'en-US')).toBeNull();
   });
 
+  it('regroups an edit in the last digit group of a field-grouped draft', () => {
+    expect(groupEditableDraft('1,5000', 6, 'en-US', '1,500')).toEqual({
+      text: '15,000',
+      caret: 6,
+    });
+    expect(groupEditableDraft('1.5000', 6, 'vi-VN', '1.500')).toEqual({
+      text: '15.000',
+      caret: 6,
+    });
+    expect(groupEditableDraft('1,500,00', 8, 'en-US', '1,500,000')).toEqual({
+      text: '150,000',
+      caret: 7,
+    });
+    expect(groupEditableDraft('1,500,00', 7, 'en-US', '1,500,000')).toEqual({
+      text: '150,000',
+      caret: 6,
+    });
+  });
+
+  it('leaves a typed separator alone even with a previous draft', () => {
+    expect(groupEditableDraft('1.5', 3, 'vi-VN', '1')).toEqual({
+      text: '1.5',
+      caret: 3,
+    });
+    expect(groupEditableDraft('1.55', 4, 'vi-VN', '1.5')).toEqual({
+      text: '1.55',
+      caret: 4,
+    });
+    expect(groupEditableDraft('1,23', 4, 'en-US', '1,2')).toEqual({
+      text: '1,23',
+      caret: 4,
+    });
+    expect(groupEditableDraft('1,23', 4, 'en-US', '')).toEqual({
+      text: '1,23',
+      caret: 4,
+    });
+  });
+
   it('regroups a well-formed ungrouped integer', () => {
     expect(groupEditableDraft('1234567', 7, 'en-US')).toEqual({
       text: '1,234,567',
@@ -334,6 +372,12 @@ describe('deleteDigitAcrossGroupSeparator', () => {
     expect(
       deleteDigitAcrossGroupSeparator('1.500.000', 1, 'Delete', 'vi-VN'),
     ).toEqual({text: '100.000', caret: 1});
+  });
+
+  it('regroups after Delete across a separator into the last group', () => {
+    expect(
+      deleteDigitAcrossGroupSeparator('1,500,000', 5, 'Delete', 'en-US'),
+    ).toEqual({text: '150,000', caret: 5});
   });
 
   it('returns null when the key would not hit a separator', () => {
