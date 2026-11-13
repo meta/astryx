@@ -17,6 +17,7 @@ import {describe, it, expect, vi, beforeEach} from 'vitest';
 import {act, fireEvent, render, screen} from '@testing-library/react';
 import type {ReactNode} from 'react';
 import type {TableContextAction} from './types';
+import type * as LongPressDetectorModule from '../hooks/longPressDetector';
 import {mockPopover, scenarioActions} from './__tests__/menuLoadScenario';
 
 const gate = {
@@ -145,8 +146,7 @@ describe('TableCellContextMenu early invocation', () => {
   it('recognizes no gesture before the menu loads: the loaded menu reads the held touch', async () => {
     const detectorsMade = {count: 0};
     vi.doMock('../hooks/longPressDetector', async importOriginal => {
-      const original =
-        await importOriginal<typeof import('../hooks/longPressDetector')>();
+      const original = await importOriginal<typeof LongPressDetectorModule>();
       return {
         ...original,
         createLongPressDetector: (

@@ -10,13 +10,15 @@
  *   its menu code still loads: the server-rendered table hydrates without a
  *   recoverable error, the browser's own menu stays shut, the held invocation
  *   opens the cell's menu once when the code arrives, focus lands on the first
- *   row (with no keyboard ring after a mouse open), and Escape hands it back
+ *   row (with no keyboard ring after a mouse open), and Escape hands it back.
+ *   With no invocation, the load changes no box and no axe result
  * @position Real-browser layer for TableCellContextMenu's early invocations
  *   (spec:AST-013 FR9, FR10, FR13). The fixture server holds the menu chunk
  *   until the test releases it.
  */
 
 import {once} from 'node:events';
+import AxeBuilder from '@axe-core/playwright';
 import fs from 'node:fs';
 import {createServer, type Server, type ServerResponse} from 'node:http';
 import path from 'node:path';
@@ -34,6 +36,7 @@ const SERVER_ENTRY = path.resolve(
 
 let server: Server;
 let origin: string;
+let menuChunkFile: string;
 
 /** The fixture server holds the menu chunk until a test releases it. */
 const gate = {
@@ -94,6 +97,7 @@ test.beforeAll(async () => {
   if (menuChunk == null) {
     throw new Error('the build has no lazy table menu chunk');
   }
+  menuChunkFile = menuChunk;
   const page = fs
     .readFileSync(path.join(clientDir, 'TableCellMenuLoad.html'), 'utf8')
     .replace('<!--ssr-->', renderHtml());
@@ -220,6 +224,61 @@ async function cellPoint(page: Page) {
 async function settle(page: Page) {
   await page.waitForTimeout(300);
 }
+
+const AXE_DISABLED_RULES = [
+  // The fixture is a fragment, not a page.
+  'landmark-one-main',
+  'page-has-heading-one',
+  'region',
+];
+
+async function axeViolations(page: Page): Promise<string[]> {
+  const results = await new AxeBuilder({page})
+    .disableRules(AXE_DISABLED_RULES)
+    .analyze();
+  return results.violations.map(
+    violation =>
+      `${violation.id}: ${violation.nodes.map(node => node.target.join(' ')).join(', ')}`,
+  );
+}
+
+/** The boxes of the cell, its menu trigger and its button. */
+async function cellBoxes(page: Page) {
+  return {
+    cell: await cell(page).boundingBox(),
+    trigger: await cell(page).locator('> *').first().boundingBox(),
+    button: await page.getByRole('button', {name: 'Edit'}).boundingBox(),
+  };
+}
+
+test('the menu load changes no box in the cell and no axe result', async ({
+  page,
+}) => {
+  const before = await cellBoxes(page);
+  expect(await axeViolations(page)).toEqual([]);
+
+  release();
+  // The browser received the menu code.
+  await page.waitForFunction(
+    file =>
+      performance
+        .getEntriesByType('resource')
+        .some(entry => entry.name.endsWith(file)),
+    menuChunkFile,
+  );
+  await settle(page);
+
+  expect(await cellBoxes(page)).toEqual(before);
+  expect(await axeViolations(page)).toEqual([]);
+  await expect(page.getByRole('menu')).toHaveCount(0);
+  expect((await state(page)).shows).toBe(0);
+
+  // The loaded menu opens on the first right-click.
+  const point = await cellPoint(page);
+  await page.mouse.click(point.x, point.y, {button: 'right'});
+  await expect(page.getByRole('menuitem', {name: 'Copy'})).toBeFocused();
+  expect((await state(page)).contextmenus).toEqual([true]);
+});
 
 test('a right-click before the menu code arrives keeps the browser menu shut and opens the cell menu once, focused without a ring', async ({
   page,
