@@ -163,4 +163,3 @@ describe('kitAnswer places each block in a slot of the start', () => {
     expect(kit(start, [plain]).data.blocks[0]).toBe(plain);
   });
 });
-
