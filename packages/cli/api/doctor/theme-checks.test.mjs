@@ -86,7 +86,7 @@ async function fixture(themeSpecs = [{slug: 'ocean'}], options = {}) {
   );
 
   for (const spec of themeSpecs) {
-    const exportName = `${spec.slug}Theme`;
+    const exportName = spec.exportName ?? `${spec.slug}Theme`;
     const sourceDir = path.join(packageDir, 'themes', spec.slug);
     const fontProperty = spec.fontFamily
       ? `, fontFamily: ${JSON.stringify(spec.fontFamily)}`
@@ -1127,6 +1127,31 @@ describe('app-theme doctor checks', () => {
       expect(owners.fix, mark).not.toMatch(/theme build/);
       expect(owners.message, mark).not.toMatch(/Run `[^`]*theme build/);
     }
+    // A theme whose name has a dash: its source is named by the theme's
+    // identifier (myThemeTheme.ts), as the editor and eject write it.
+    const {dir} = await fixture([
+      {slug: 'my-theme', exportName: 'myThemeTheme'},
+    ]);
+    await themeEject('my-theme', {cwd: dir, package: '@acme/themes'});
+    const localDir = path.join(dir, 'src/themes/my-theme');
+    const sourceFile = path.join(localDir, 'myThemeTheme.ts');
+    expect(fs.existsSync(sourceFile)).toBe(true);
+    fs.writeFileSync(
+      sourceFile,
+      "const myThemeTheme = {name: 'my-theme', tokens: {'--color-bg': '#000'}};\nexport {myThemeTheme};\nexport default myThemeTheme;\n",
+    );
+    await themeBuild(sourceFile, {}, {cwd: dir});
+    await themeAdd('my-theme', {cwd: dir, import: true});
+    fs.writeFileSync(
+      sourceFile,
+      "// Written by `astryx experimental theme editor show my-theme` after every build; do not edit it here.\nexport {myThemeTheme, default} from './my-theme.js';\n",
+    );
+    fs.rmSync(path.join(localDir, 'my-theme.js'));
+    const owners = check(await checkAppThemes(dir), 'theme-owners');
+    expect(owners.status).toBe('fail');
+    expect(owners.fix).toMatch(
+      / experimental theme editor show my-theme; .* theme add my-theme$/,
+    );
   });
 
   it('check 5 leaves a local theme that sets a private var to the private-variables check', async () => {

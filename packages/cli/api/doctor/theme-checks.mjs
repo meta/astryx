@@ -13,6 +13,7 @@ import postcss from 'postcss';
 import {
   collectUnloadedFonts,
   discoverDoctorThemes,
+  themeIdentifier,
   discoverDoctorUnmigratedCopies,
   corePeerRange,
   findDoctorCoreDir,
@@ -117,12 +118,11 @@ function refreshThemeCommand(projectDir, run, available, slug, owner) {
   }
   const source = theme
     ? relative(projectDir, path.join(theme.sourceDir, theme.entry))
-    : projectPath(path.join(owner, slug, `${slug}Theme.ts`));
+    : projectPath(path.join(owner, slug, `${themeIdentifier(slug)}Theme.ts`));
   // A source another command generates (its leading comment carries that
   // command's mark), or a missing one that command writes: the fix is that
   // command, which writes the source and its outputs together.
   const by = generatedSourceCommand(path.resolve(projectDir, source));
-  // The exact command its mark names, run the way this project runs the CLI.
   if (by)
     return /^astryx\s/.test(by)
       ? `${run} ${by.replace(/^astryx\s+/, '')}; ${run} theme add ${slug}`
@@ -1127,7 +1127,6 @@ export async function checkAppThemes(cwd) {
             `(^|[\\s/"'(])${slug.replace(/[-]/g, '\\-')}([\\s/"').,:]|$)`,
           ).test(discoveryError.message),
         )?.[0];
-        // Only a theme the message names: never a guess at another one.
         if (!named)
           return 'Fix or move what the message names, then run doctor again.';
         // A theme another command generates: that command writes it again

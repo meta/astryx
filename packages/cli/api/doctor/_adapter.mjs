@@ -86,6 +86,7 @@ export {
 } from '../theme/build/build.mjs';
 export {installCommandFor as packageInstallCommand} from '../../foundation/discovery/template-needs.mjs';
 export {resolveRecordedTheme} from '../theme/theme.mjs';
+export {themeIdentifier} from '../theme/_fork.mjs';
 export {collectUnloadedFonts} from '../theme/build/font-warning.mjs';
 
 // What the authoring-docs check reads (./_authoring-audit.mjs), reached only
@@ -337,7 +338,7 @@ export function doctorStylesheetImportFile(specifier, fromFile) {
     try {
       real = fs.realpathSync(fromFile);
     } catch {
-      // The path as given.
+      real = fromFile;
     }
     const file = createRequire(real).resolve(specifier);
     return isFile(file) ? file : null;
