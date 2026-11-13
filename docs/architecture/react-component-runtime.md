@@ -353,8 +353,9 @@ those contracts.
   and arrow keys at once, with no drag or slide; a Lightbox shows each item at
   its fit size: pinch, double-tap, double-click and the zoom keys do not zoom,
   and a drag does not dismiss; the close button, Escape and the backdrop work
-  as always. A gesture in that window does not start the load. The bundler
-  keeps one copy per page however many components use them.
+  as always; a resize handle pulled past its pane's limit stops at the limit,
+  with no overshoot. A gesture in that window does not start the load. The
+  bundler keeps one copy per page however many components use them.
   `utils/touchRuntimeModules.tsx` is the one module the loader's `import()`
   targets; it gathers the touch runtime, so the loader names a single chunk.
   `motion/settleThreshold.ts` holds `SETTLE_THRESHOLD` apart from the
@@ -365,9 +366,9 @@ those contracts.
   target helpers apart from the tracking runtime, so a group's static code
   finds its neighbours without loading gesture code. Gap: these modules still
   import the shared touch modules statically, so a page that renders them
-  carries the touch runtime in its first load: Resizable (`resizablePane`),
-  Slider (`sliderTouchController`), SnapPaging, Chat (`useChatKeyboard`), and
-  the date and time fields' wheels (`motion/reducedMotion`). A surface
+  carries the touch runtime in its first load: Slider
+  (`sliderTouchController`), SnapPaging, Chat (`useChatKeyboard`), and the
+  date and time fields' wheels (`motion/reducedMotion`). A surface
   revealed by interaction that a component loads with `import()` under
   `architecture:component-import-boundaries` INV1 imports these modules
   statically too; the bundler still keeps one copy per page. That `import()`

@@ -20,7 +20,8 @@ import {
   reportLayoutEdge,
   springGlide,
 } from '../motion/animatedLayout';
-import {animatorFor, type MotionHandle} from '../motion/animator';
+import type {MotionHandle} from '../motion/animator';
+import {getTouchRuntime} from '../utils/touchRuntime';
 import {resolveMotion} from '../motion/resolveMotion';
 import type {SpringDescription} from '../motion/spring';
 import {springs} from '../motion/uikit/springs';
@@ -551,9 +552,12 @@ export function createOvershootDrawing(pane: ResizablePane): OvershootDrawing {
     };
     return geometry;
   };
+  // The animator comes with the shared touch runtime, which loads after
+  // first paint. Before that a pull past a limit draws no overshoot.
   const animator = () => {
     const handle = geometry?.handle;
-    return handle == null ? null : animatorFor(handle);
+    const animatorFor = getTouchRuntime()?.animatorFor;
+    return handle == null || animatorFor == null ? null : animatorFor(handle);
   };
 
   return {
