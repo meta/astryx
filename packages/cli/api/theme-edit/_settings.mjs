@@ -4612,22 +4612,28 @@ export async function buildTheme(ctx, slug, data) {
   let receipt = await step(() => runBuild(ctx, slug));
   const found = findOverrides(fs.readFileSync(f.css, 'utf8'), theme).filter(
     x =>
-      // A variant whose rule the settings already give this property, a
-      // shorthand covering it, or a longhand of it that already carries the
-      // plain value (a one-mode background color written per variant, the
-      // plain color as its other half) needs no copy of it.
+      // By property: a variant whose rule the settings give this property
+      // or a shorthand covering it needs no copy; nor one holding a
+      // longhand of it that the base theme's rule also holds and that has
+      // no sides to be written as (a background color, one-mode or not):
+      // the copy would come after it there and win. Any other longhand
+      // takes the copy, then is written after it (as its sides where the
+      // base holds it).
       !Object.entries(
         (x.state
           ? theme.components[x.target][x.key]?.[x.state]
           : theme.components[x.target][x.key]) ?? {},
-      ).some(
-        ([k, v]) =>
-          !k.startsWith(':') &&
-          (k === x.prop ||
-            coversProperty(kebab(k), kebab(x.prop)) ||
-            (coversProperty(kebab(x.prop), kebab(k)) &&
-              String(v).includes(String(x.value)))),
-      ),
+      ).some(([k, v]) => {
+        if (k.startsWith(':')) return false;
+        if (k === x.prop || coversProperty(kebab(k), kebab(x.prop)))
+          return true;
+        if (!coversProperty(kebab(x.prop), kebab(k))) return false;
+        const baseRule = /** @type {any} */ (base).components?.[x.target]?.[
+          x.key
+        ];
+        const held = (x.state ? baseRule?.[x.state] : baseRule)?.[k];
+        return held != null && sidesOf(kebab(k), String(v)) == null;
+      }),
   );
   /** @type {string[]} */
   const lifted = [];

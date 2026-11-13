@@ -242,6 +242,94 @@ describe('one-mode backgrounds on parts whose variants have their own', () => {
     expect(after).not.toMatch(/border-(width|style):/);
   }, 240_000);
 
+  for (const [
+    like,
+    plain,
+    plainValue,
+    name,
+    prop,
+    value,
+    wholeAfter,
+  ] of /** @type {Array<[string, string, string, string, string, string, string]>} */ ([
+    [
+      'butter',
+      'border-width',
+      '2px',
+      'secondary',
+      'border-bottom-width',
+      '12px',
+      'border-width: 2px',
+    ],
+    [
+      'butter',
+      'border-color',
+      '#ff0000',
+      'secondary',
+      'border-bottom-color',
+      '#ff000080',
+      'border-color: #ff0000',
+    ],
+    [
+      'butter',
+      'border-style',
+      'dashed',
+      'secondary',
+      'border-bottom-style',
+      'dashed',
+      'border-style: dashed',
+    ],
+    [
+      'butter',
+      'background',
+      '#123456',
+      'secondary',
+      'background-color',
+      '#00ff00',
+      '',
+    ],
+    [
+      'neutral',
+      'background',
+      '#123456',
+      'destructive',
+      'background-color',
+      '#00ff00',
+      '',
+    ],
+    [
+      'neutral',
+      'border-width',
+      '2px',
+      'destructive',
+      'border-bottom-width',
+      '12px',
+      'border-width: 2px',
+    ],
+  ]))
+    it(`writes a variant's later ${prop} after the part's ${plain} (${like})`, async ctx => {
+      if (needBases(ctx)) return;
+      const slug =
+        `o6${like[0]}${plain.replace(/\W/g, '')}${prop.replace(/\W/g, '')}`.slice(
+          0,
+          40,
+        );
+      await themeEditNew(slug, {cwd, like});
+      await themeEditSet(slug, plain, plainValue, {cwd, on: 'button'});
+      await themeEditSet(slug, prop, value, {
+        cwd,
+        on: 'button',
+        when: `variant:${name}`,
+      });
+      const rule = ruleOf(slug, `.astryx-button[data-variant="${name}"]`);
+      const own = rule.lastIndexOf(`${prop}: ${value}`);
+      expect(own, rule).toBeGreaterThan(-1);
+      // No shorthand covering it comes after the variant's own value.
+      const short = plain === 'background' ? 'background:' : `${plain}:`;
+      expect(rule.slice(own), rule).not.toContain(short);
+      // The part's value still reaches the variant's other sides.
+      if (wholeAfter) expect(rule, rule).toContain(wholeAfter);
+    }, 240_000);
+
   it("says once that a variant keeps its own gradient, and that a part's own gradient covers the color", async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('m5n1', {cwd, like: 'neutral'});
