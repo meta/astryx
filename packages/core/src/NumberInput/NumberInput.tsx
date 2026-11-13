@@ -252,6 +252,7 @@ import {
 } from '../Field/useEntryErrorReport';
 import {useValueReplacesEntry} from '../Field/useValueReplacesEntry';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {useMobileKeyboard} from '../keyboard/useMobileKeyboard';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -732,6 +733,7 @@ export function NumberInput({
   const statusMessageID = useId();
   const unitsID = useId();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  useMobileKeyboard(inputRef);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const inputGroup = useInputGroup();
   const inputGroupState = use(InputGroupInternalContext);
