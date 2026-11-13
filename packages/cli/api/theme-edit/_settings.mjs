@@ -3754,6 +3754,15 @@ export function setAfterBuild(fn) {
 const afterSave = new WeakSet();
 
 /**
+ * Hold the after-build hook for this command's builds: the command writes
+ * the app copy itself once it succeeds (show).
+ * @param {Ctx} ctx
+ */
+export function holdAfterBuild(ctx) {
+  afterSave.add(ctx);
+}
+
+/**
  * Generate the theme source, build it with the theme build, then repeat any
  * part setting a more specific rule would beat and build again.
  * @param {Ctx} ctx

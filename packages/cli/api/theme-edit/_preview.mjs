@@ -31,7 +31,14 @@ import {
   renderGenerated,
 } from './_parts.mjs';
 import {OVERVIEW_SECTIONS} from './_overview.mjs';
-import {camel, fontPackages, modesOf, themeFiles, shown} from './_settings.mjs';
+import {
+  FOLDER_JUNK,
+  camel,
+  fontPackages,
+  modesOf,
+  themeFiles,
+  shown,
+} from './_settings.mjs';
 import {writeWhole} from './_palette.mjs';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
 import {importPathOf, installLine} from './_project.mjs';
@@ -1518,35 +1525,8 @@ export function writeAppCopyAt(cwd, slug, fontsCss) {
   if (!fs.existsSync(f.js) || !fs.existsSync(f.css)) return null;
   // The copy's source, as the stable build's header names it.
   const source = `src/themes/${slug}/${name}.ts`;
-  // Only the editor's own copy is written over: its descriptor carries the
-  // editor's mark, and it holds only the copy's own files. Its built files
-  // are exactly what `theme build` of the copy's source writes, so a stable
-  // rebuild of the copy (doctor's fix) leaves it the editor's.
-  if (fs.existsSync(dir)) {
-    /** @type {string[]} */
-    let names;
-    try {
-      names = fs.readdirSync(dir);
-    } catch {
-      return null;
-    }
-    /** @type {boolean} */
-    let marked;
-    try {
-      marked = fs
-        .readFileSync(path.join(dir, `${name}.doc.mjs`), 'utf8')
-        .includes(APP_COPY_MARK);
-    } catch {
-      marked = false;
-    }
-    const own = new Set([
-      `${name}.doc.mjs`,
-      `${name}.ts`,
-      `${slug}.fonts.css`,
-      ...APP_COPY_BUILT.map(ext => `${slug}${ext}`),
-    ]);
-    if (!marked || !names.every(n => own.has(n))) return null;
-  }
+  // Only the editor's own copy is written over.
+  if (appCopyBlocker(cwd, slug) !== null) return null;
   const head = (/** @type {string} */ open, /** @type {string} */ close) =>
     `${open} ${APP_COPY_MARK} after every build of themes/${slug}/; do not edit it here. Change the theme with the editor. ${close}\n`;
   const keptFonts = path.join(dir, `${slug}.fonts.css`);
@@ -1586,9 +1566,11 @@ export function writeAppCopyAt(cwd, slug, fontsCss) {
     if (fs.existsSync(file) && fs.readFileSync(file, 'utf8') === text) continue;
     writeWhole(file, text);
   }
-  // A file an earlier copy had (a font stylesheet no longer needed) goes.
+  // A file an earlier copy had (a font stylesheet no longer needed) goes;
+  // system files stay.
   for (const n of fs.readdirSync(dir))
-    if (!(n in files)) fs.rmSync(path.join(dir, n), {force: true});
+    if (!(n in files) && !FOLDER_JUNK.has(n))
+      fs.rmSync(path.join(dir, n), {force: true});
   // The first write is named in the command's result; later ones are not.
   if (first)
     FIRST_COPIES.set(
@@ -1600,6 +1582,50 @@ export function writeAppCopyAt(cwd, slug, fontsCss) {
         ),
     );
   return dir;
+}
+
+/**
+ * Why the editor will not write a theme's app copy, or null when it will:
+ * the folder is not there yet, or its descriptor carries the editor's mark
+ * and it holds only the copy's own files (system files such as .DS_Store
+ * aside). Otherwise the name of what is in the way (a file of yours), or
+ * the folder itself when it is not the editor's copy. Built bytes are not
+ * compared, so a stable rebuild of the copy leaves it the editor's. The one
+ * test the copy's writer and `wiring` both use.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {string | null}
+ */
+export function appCopyBlocker(cwd, slug) {
+  const dir = path.join(cwd, 'src', 'themes', slug);
+  const name = `${camel(slug)}Theme`;
+  const rel = path.relative(cwd, dir).split(path.sep).join('/');
+  if (!fs.existsSync(dir)) return null;
+  /** @type {string[]} */
+  let names;
+  try {
+    names = fs.readdirSync(dir);
+  } catch {
+    return rel;
+  }
+  /** @type {boolean} */
+  let marked;
+  try {
+    marked = fs
+      .readFileSync(path.join(dir, `${name}.doc.mjs`), 'utf8')
+      .includes(APP_COPY_MARK);
+  } catch {
+    marked = false;
+  }
+  if (!marked) return rel;
+  const own = new Set([
+    `${name}.doc.mjs`,
+    `${name}.ts`,
+    `${slug}.fonts.css`,
+    ...APP_COPY_BUILT.map(ext => `${slug}${ext}`),
+  ]);
+  const other = names.find(n => !own.has(n) && !FOLDER_JUNK.has(n));
+  return other ? `${rel}/${other}` : null;
 }
 
 /** The build outputs of a theme, by their ending after `<theme>`. */

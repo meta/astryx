@@ -84,6 +84,7 @@ import {
   usableNewName,
   FOLDER_JUNK,
   dialValueFits,
+  holdAfterBuild,
 } from './_settings.mjs';
 import {
   checkSetting,
@@ -2056,6 +2057,9 @@ export async function themeEditShow(theme, options = {}) {
   const section = checkSection(options.section, theme);
   const data = loadTheme(cwd, theme);
   const ctx = await context(cwd);
+  // The app copy is written once show succeeds (at its end), never by a
+  // build a later refusal puts back.
+  holdAfterBuild(ctx);
   refuseStoredTokens(ctx, theme, data);
   // Without React, show still lists the settings and builds the theme, as
   // set does; only the pages, pictures and the checks that render are

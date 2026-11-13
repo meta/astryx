@@ -44,7 +44,7 @@ import {
   componentsPageSource,
   overviewPageSource,
   previewRouteSource,
-  APP_COPY_MARK,
+  appCopyBlocker,
   themeImports,
 } from './_preview.mjs';
 import {
@@ -1316,15 +1316,17 @@ export function appWiring(ctx, slug, data) {
   // The app's copy (src/themes/<theme>/, a standard local theme) is what
   // the stable theme commands add: one command, which prints the one-time
   // app wiring itself.
-  const copy = path.join(cwd, 'src', 'themes', slug);
-  if (
-    fs.existsSync(path.join(copy, `${name}.doc.mjs`)) &&
-    fs
-      .readFileSync(path.join(copy, `${name}.doc.mjs`), 'utf8')
-      .includes(APP_COPY_MARK)
-  )
+  // Only while the copy is the editor's (the same test its writer uses);
+  // else the steps by hand, naming what is in the way.
+  const blocker = appCopyBlocker(cwd, slug);
+  if (blocker === null && fs.existsSync(path.join(cwd, 'src', 'themes', slug)))
     return addWiring(cwd, slug, ti.mode);
   return [
+    ...(blocker
+      ? [
+          `${blocker} is not the editor's, so the editor does not write the theme's app copy in src/themes/${slug}/ (and theme add does not take it); the steps by hand:`,
+        ]
+      : []),
     `in ${where}, import the theme and its stylesheets: import {Theme} from '@astryxdesign/core/theme'; import {${name}} from '${ti.module.replace(/\.js$/, '')}'; ${ti.css.map(c => `import '${c}';`).join(' ')}`,
     `wrap the app in it: <Theme theme={${name}}${ti.mode === 'system' ? '' : ` mode="${ti.mode}"`}>{children}</Theme>`,
     ...(appModule
