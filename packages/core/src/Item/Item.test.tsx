@@ -9,7 +9,7 @@
  * SYNC: When Item component changes, update tests to match new behavior
  */
 
-import {Activity, use, useRef, type ReactNode} from 'react';
+import {Activity, use, useRef, useState, type ReactNode} from 'react';
 import {
   afterEach,
   beforeAll,
@@ -649,7 +649,8 @@ describe('Item', () => {
     expect(screen.getByTestId('item')).toHaveAttribute('aria-disabled', 'true');
   });
 
-  it("gives a disabled row's link no destination (spec:AST-085 FR2)", () => {
+  it("keeps a disabled row's link keyboard-reachable and gives it no destination (spec:AST-085 FR1, FR2)", async () => {
+    const user = userEvent.setup();
     function RouterLink({ref, ...props}: React.ComponentPropsWithRef<'a'>) {
       return <a ref={ref} data-router-link {...props} />;
     }
@@ -669,6 +670,7 @@ describe('Item', () => {
     // menu cannot navigate; it keeps the link role and skips the router link.
     const disabled = screen.getByRole('link', {name: 'Billing'});
     expect(disabled).toHaveAttribute('aria-disabled', 'true');
+    expect(disabled).toHaveAttribute('tabindex', '0');
     for (const attribute of ['href', 'target', 'rel', 'data-router-link']) {
       expect(disabled).not.toHaveAttribute(attribute);
     }
@@ -676,6 +678,9 @@ describe('Item', () => {
     expect(enabled).toHaveAttribute('href', '/profile');
     expect(enabled).toHaveAttribute('data-router-link');
     expect(enabled).not.toHaveAttribute('aria-disabled');
+
+    await user.tab();
+    expect(disabled).toHaveFocus();
   });
 
   it('keeps focus on a focused link row that becomes disabled (spec:AST-085 FR4)', () => {
@@ -686,6 +691,7 @@ describe('Item', () => {
     // focus moves to it instead of falling to the page.
     const disabled = screen.getByRole('link', {name: 'Billing'});
     expect(disabled).not.toHaveAttribute('href');
+    expect(disabled).toHaveAttribute('tabindex', '0');
     expect(disabled).toHaveFocus();
     rerender(<Item label="Billing" href="/billing" />);
     expect(screen.getByRole('link', {name: 'Billing'})).toHaveFocus();
@@ -708,12 +714,42 @@ describe('Item', () => {
     expect(screen.getByRole('button', {name: 'Elsewhere'})).toHaveFocus();
   });
 
-  it('disables the invisible button when isDisabled', () => {
-    const {container} = render(
-      <Item label="Disabled" onClick={() => {}} isDisabled />,
+  it('keeps a disabled action focusable and inert (spec:AST-085 FR1, FR2)', async () => {
+    const onClick = vi.fn();
+    const onAncestorClick = vi.fn();
+    const user = userEvent.setup();
+    const {rerender} = render(
+      <div onClick={onAncestorClick}>
+        <button type="button">Before</button>
+        <Item label="Action" onClick={onClick} />
+        <button type="button">After</button>
+      </div>,
     );
-    const button = container.querySelector('button');
-    expect(button).toBeDisabled();
+
+    await user.tab();
+    expect(screen.getByRole('button', {name: 'Before'})).toHaveFocus();
+    await user.tab();
+
+    const action = screen.getByRole('button', {name: 'Action'});
+    expect(action).toHaveFocus();
+    rerender(
+      <div onClick={onAncestorClick}>
+        <button type="button">Before</button>
+        <Item label="Action" onClick={onClick} isDisabled />
+        <button type="button">After</button>
+      </div>,
+    );
+
+    expect(action).toHaveAttribute('aria-disabled', 'true');
+    expect(action).not.toBeDisabled();
+    expect(action).toHaveFocus();
+
+    await user.keyboard('{Enter}');
+    await user.keyboard(' ');
+    fireEvent.click(action);
+    expect(onClick).not.toHaveBeenCalled();
+    expect(onAncestorClick).not.toHaveBeenCalled();
+    expect(action).toHaveFocus();
   });
 
   it('does not fire onClick when disabled item is clicked', async () => {
@@ -1674,7 +1710,7 @@ describe('swipeActions', () => {
       );
     });
 
-    it('fires the outermost entry and no other on a drag past the commit point, then springs back', () => {
+    it('opens the row on a drag past the commit point from closed when its side has two entries, and fires nothing', () => {
       const inner = vi.fn();
       const outer = vi.fn();
       const {row} = renderRow({
@@ -1685,10 +1721,39 @@ describe('swipeActions', () => {
       });
       touch(row, 'pointerDown', 10);
       touch(row, 'pointerMove', 40);
-      // Two entries: a 144 px panel; the commit point is 192 (panel + 48),
-      // past half the 300 px row.
+      // Two entries: a 144 px panel; the commit point is 192 (panel + 48).
       touch(row, 'pointerMove', 210);
       touch(row, 'pointerUp', 210);
+      settled();
+      settled();
+      expect(travelOf(row)).toBe('144px');
+      expect(outer).not.toHaveBeenCalled();
+      expect(inner).not.toHaveBeenCalled();
+      expect(screen.getByRole('button', {name: 'Pin'})).toBeVisible();
+    });
+
+    it('fires the outermost entry and no other on a drag from the resting open row past the commit point, then springs back', () => {
+      const inner = vi.fn();
+      const outer = vi.fn();
+      const {row} = renderRow({
+        leading: [
+          {label: 'Unread', onActivate: inner},
+          {label: 'Pin', onActivate: outer},
+        ],
+      });
+      touch(row, 'pointerDown', 10);
+      touch(row, 'pointerMove', 40);
+      touch(row, 'pointerMove', 90);
+      touch(row, 'pointerMove', 110);
+      touch(row, 'pointerUp', 110);
+      settled();
+      expect(travelOf(row)).toBe('144px');
+      // From the resting row: 144 px already open, 60 more passes 192.
+      touch(row, 'pointerDown', 140);
+      touch(row, 'pointerMove', 160);
+      touch(row, 'pointerMove', 180);
+      touch(row, 'pointerMove', 200);
+      touch(row, 'pointerUp', 200);
       expect(outer).not.toHaveBeenCalled();
       // One beat: the slide out, then the entry fires.
       expect(travelOf(row)).toBe('324px');
@@ -1700,7 +1765,20 @@ describe('swipeActions', () => {
       expect(travelOf(row)).toBe('');
     });
 
-    it('commits on a fling short of the commit point', () => {
+    it('fires a side\u2019s only entry on a drag from closed past the commit point', () => {
+      const onActivate = vi.fn();
+      const {row} = renderRow({leading: [{label: 'Unread', onActivate}]});
+      touch(row, 'pointerDown', 10);
+      touch(row, 'pointerMove', 40);
+      // One entry: a 72 px panel; the commit point is half the 300 px row.
+      touch(row, 'pointerMove', 120);
+      touch(row, 'pointerMove', 170);
+      touch(row, 'pointerUp', 170);
+      settled();
+      expect(onActivate).toHaveBeenCalledTimes(1);
+    });
+
+    it('opens the row on a fling short of the commit point, and fires nothing', () => {
       const onActivate = vi.fn();
       const {row} = renderRow({leading: [{label: 'Unread', onActivate}]});
       touch(row, 'pointerDown', 10);
@@ -1709,7 +1787,128 @@ describe('swipeActions', () => {
       touch(row, 'pointerMove', 80);
       touch(row, 'pointerUp', 80);
       settled();
-      expect(onActivate).toHaveBeenCalledTimes(1);
+      settled();
+      expect(onActivate).not.toHaveBeenCalled();
+      expect(travelOf(row)).toBe('72px');
+      expect(screen.getByRole('button', {name: 'Unread'})).toBeVisible();
+    });
+
+    it('lets the outermost entry cover its panel from the commit point until the row is home, with no frame of the others', () => {
+      const {row} = renderRow({
+        leading: [
+          {label: 'Unread', onActivate: vi.fn()},
+          {label: 'Pin', onActivate: vi.fn()},
+        ],
+      });
+      const unread = () => screen.getByText('Unread').closest('button')!;
+      const pin = () => screen.getByText('Pin').closest('button')!;
+      const takesNoSpace = (el: Element) =>
+        rulesDeclaredFor(el).some(rule => rule.includes('flex-basis: 0'));
+      const hugsTheRow = (el: Element) =>
+        rulesDeclaredFor(el).some(rule =>
+          rule.includes('align-items: flex-end'),
+        );
+      touch(row, 'pointerDown', 10);
+      touch(row, 'pointerMove', 40);
+      touch(row, 'pointerMove', 90);
+      touch(row, 'pointerMove', 110);
+      touch(row, 'pointerUp', 110);
+      settled();
+      expect(takesNoSpace(unread())).toBe(false);
+      touch(row, 'pointerDown', 140);
+      touch(row, 'pointerMove', 160);
+      touch(row, 'pointerMove', 200);
+      void act(() => vi.advanceTimersByTime(16));
+      // Armed: Pin covers the panel, Unread takes no space.
+      expect(takesNoSpace(unread())).toBe(true);
+      expect(hugsTheRow(pin())).toBe(true);
+      touch(row, 'pointerUp', 200);
+      // The slide out, the fire and the way home keep the cover.
+      expect(takesNoSpace(unread())).toBe(true);
+      settled();
+      expect(takesNoSpace(unread())).toBe(true);
+      void act(() => vi.advanceTimersByTime(100));
+      expect(takesNoSpace(unread())).toBe(true);
+      settled();
+      expect(travelOf(row)).toBe('');
+      expect(takesNoSpace(unread())).toBe(false);
+    });
+
+    it('lets a tapped entry with hasRemoval cover its panel while the row slides and holds out, through a stray touch', () => {
+      const archive = vi.fn();
+      const {row} = renderRow({
+        leading: [],
+        trailing: [
+          {label: 'Archive', onActivate: archive, hasRemoval: true},
+          {label: 'Delete', onActivate: vi.fn(), variant: 'destructive'},
+        ],
+      });
+      touch(row, 'pointerDown', 290);
+      touch(row, 'pointerMove', 260);
+      touch(row, 'pointerMove', 210);
+      touch(row, 'pointerMove', 190);
+      touch(row, 'pointerUp', 190);
+      settled();
+      expect(travelOf(row)).toBe('-144px');
+      fireEvent.click(screen.getByRole('button', {name: 'Archive'}));
+      expect(archive).toHaveBeenCalledTimes(1);
+      const del = screen.getByText('Delete').closest('button')!;
+      const takesNoSpace = (el: Element) =>
+        rulesDeclaredFor(el).some(rule => rule.includes('flex-basis: 0'));
+      expect(takesNoSpace(del)).toBe(true);
+      // A finger that lands while the row slides out starts no swipe, and
+      // the cover stays.
+      touch(row, 'pointerDown', 150);
+      touch(row, 'pointerUp', 150);
+      expect(takesNoSpace(del)).toBe(true);
+      settled();
+      expect(travelOf(row)).toBe('-324px');
+      expect(takesNoSpace(del)).toBe(true);
+      // The same on the held-out row, before the caller removes it.
+      touch(row, 'pointerDown', 150);
+      touch(row, 'pointerUp', 150);
+      expect(takesNoSpace(del)).toBe(true);
+    });
+
+    it('keeps a tapped entry covering its panel when firing changes its label', () => {
+      function Toggling() {
+        const [isRead, setIsRead] = useState(false);
+        return (
+          <Item
+            label="Conversation"
+            data-testid="row"
+            swipeActions={{
+              trailing: [
+                {
+                  label: isRead ? 'Unread' : 'Read',
+                  onActivate: () => setIsRead(read => !read),
+                },
+                {label: 'Delete', onActivate: vi.fn(), variant: 'destructive'},
+              ],
+            }}
+          />
+        );
+      }
+      render(<Toggling />);
+      const row = screen.getByTestId('row');
+      layOut(row);
+      touch(row, 'pointerDown', 290);
+      touch(row, 'pointerMove', 260);
+      touch(row, 'pointerMove', 210);
+      touch(row, 'pointerMove', 190);
+      touch(row, 'pointerUp', 190);
+      settled();
+      expect(travelOf(row)).toBe('-144px');
+      fireEvent.click(screen.getByRole('button', {name: 'Read'}));
+      // The row returns with Unread covering the panel, not a bare surface.
+      const takesNoSpace = (el: Element) =>
+        rulesDeclaredFor(el).some(rule => rule.includes('flex-basis: 0'));
+      expect(takesNoSpace(screen.getByText('Unread').closest('button')!)).toBe(
+        false,
+      );
+      expect(takesNoSpace(screen.getByText('Delete').closest('button')!)).toBe(
+        true,
+      );
     });
 
     it('lays the entries outermost last: at the leading edge the row of entries runs in reverse', () => {
@@ -1736,14 +1935,20 @@ describe('swipeActions', () => {
           r.includes('flex-direction: row-reverse'),
         ),
       ).toBe(false);
-      // The panel wears its outermost entry's colour, so a slide-out fills
-      // the row with it.
-      const outerVariant = (panelOf(row, 'trailing') as HTMLElement).className;
-      const deleteVariant = (trailing.lastElementChild as HTMLElement)
-        .className;
-      expect(outerVariant.split(' ').some(c => deleteVariant.includes(c))).toBe(
-        true,
-      );
+      // The panel wears no entry's colour, so none shows behind another; the
+      // entries grow to fill it.
+      const panel = panelOf(row, 'trailing') as HTMLElement;
+      expect(
+        rulesDeclaredFor(panel).some(r => r.includes('background-color')),
+      ).toBe(false);
+      expect(
+        rulesDeclaredFor(trailing).some(r => r.includes('min-width: 100%')),
+      ).toBe(true);
+      expect(
+        rulesDeclaredFor(trailing.lastElementChild as HTMLElement).some(r =>
+          r.includes('flex-grow: 1'),
+        ),
+      ).toBe(true);
     });
   });
 

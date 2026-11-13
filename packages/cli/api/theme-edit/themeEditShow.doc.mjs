@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-/** @file FunctionDoc for `themeEditShow()` / `astryx experimental theme show`. */
+/** @file FunctionDoc for `themeEditShow()` / `astryx experimental theme editor show`. */
 
 /** @type {import('@astryxdesign/cli/authoring').FunctionDoc} */
 export const doc = {
@@ -13,7 +13,7 @@ export const doc = {
   summary:
     'Every setting, key values, problems the theme caused, and the theme-building page with every component.',
   description:
-    'Lists every setting with where it applies and its source (dial, token or property), the resolved value of key tokens in each mode, contrast problems this theme caused versus its base, and font notes. Writes two self-contained HTML files: preview.html (the sample app page) and sheet.html (the theme-building page: every component grouped, each variant side by side, overlays open, and real template pages, with an auto/light/dark switch; the same page `preview` makes). --group limits the sheet to one group. Experimental: it may change or be removed in a patch release.',
+    'Lists every setting with where it applies and its source (dial, token or property), the resolved value of key tokens in each mode, the colors (the vibrancy; each color with its seed and the shade each token uses in light and dark, marked when an exact token setting wins; any shade moved so text reads), contrast problems this theme caused versus its base, font notes, and last the generated color files. Writes two self-contained HTML files: preview.html (the sample app page) and sheet.html (the theme-building page: every component grouped, each variant side by side, overlays open, and real template pages, with an auto/light/dark switch). A theme with no build is built first, and an in-app preview (`preview add`) of the theme has its route and Colors page rewritten. --section limits the sheet to one section. An own change to <theme>.theme.ts since the last build is built first, and the colors mark where it wins over a generated shade; a theme source that no longer builds, or a token in it that is not text, is refused (ERR_THEME_INVALID, exit 1) and the folder stays as it was. Experimental: it may change or be removed in a patch release.',
   importPath: '@astryxdesign/cli/api/experimental',
   signature: 'themeEditShow(theme: string, options?: object): Promise<object>',
   keywords: [
@@ -31,9 +31,9 @@ export const doc = {
       required: true,
     },
     {
-      name: 'options.group',
+      name: 'options.section',
       type: 'string',
-      description: 'Only one group on the sheet.',
+      description: 'Only one section of the sheet.',
     },
     {
       name: 'options.png',
@@ -43,7 +43,8 @@ export const doc = {
     {
       name: 'options.cwd',
       type: 'string',
-      description: 'The app folder.',
+      description:
+        'The folder to start from (default: the current directory): commands act on the Astryx project at or above it, so a subfolder of an app works.',
     },
   ],
   returns: [
@@ -56,19 +57,31 @@ export const doc = {
   throws: [
     {
       code: 'ERR_INVALID_ARGUMENT',
-      when: 'an unknown group',
+      when: 'an unknown section',
     },
     {
       code: 'ERR_UNKNOWN_THEME',
-      when: 'the theme does not exist; the suggestion is the `new` command',
+      when: 'the theme does not exist (the suggestion is the `new` command), or its base theme package is not installed (the suggestion installs it, such as `npm install @astryxdesign/theme-neutral`)',
     },
     {
       code: 'ERR_PROJECT_REQUIRED',
       when: '@astryxdesign/core is not installed in the folder',
     },
     {
+      code: 'ERR_THEME_BUSY',
+      when: 'another command is changing the same theme and did not finish within 30 seconds; nothing was changed',
+    },
+    {
       code: 'ERR_THEME_INVALID',
-      when: 'the theme does not build (the change is undone)',
+      when: 'the theme does not build, its own <theme>.theme.ts does not parse, or a token in it is not text; the folder stays as it was',
+    },
+    {
+      code: 'ERR_FILE_EXISTS',
+      when: 'a folder sits where the build writes a file (such as themes/<theme>/<theme>.d.ts); the suggestion lists it',
+    },
+    {
+      code: 'ERR_WRITE_FAILED',
+      when: 'a built file cannot be read or replaced (its permissions), or a file cannot be written; the suggestion shows its permissions',
     },
     {
       code: 'ERR_RENDER_FAILED',
@@ -81,6 +94,6 @@ export const doc = {
       code: 'await themeEditShow(...)',
     },
   ],
-  command: 'experimental theme show',
+  command: 'experimental theme editor show',
   related: ['themeBuild'],
 };
