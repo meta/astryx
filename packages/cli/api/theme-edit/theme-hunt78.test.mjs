@@ -410,3 +410,109 @@ describe('a theme name typed in another case keeps the question', () => {
     T,
   );
 });
+
+describe('"like" and "as" compare only in comparison forms', () => {
+  it.each(
+    /** @type {Array<[string, string[]]>} */ ([
+      // Examples of the subject: every named part changes.
+      [
+        'make form controls like inputs and checkboxes rounder',
+        ['inputs', 'checks'],
+      ],
+      [
+        'make controls like selects and switches bolder',
+        ['selector', 'switch'],
+      ],
+      ['rounder components like dialogs and drawers', ['dialog', 'drawer']],
+      ['components such as cards and dialogs rounder', ['card', 'dialog']],
+    ]),
+  )(
+    '%s',
+    async (q, parts) => {
+      const {commands} = await answer(q);
+      for (const p of parts)
+        expect(commands.some(c => c.includes(`--on ${p}`))).toBe(true);
+    },
+    T,
+  );
+
+  it.each(
+    /** @type {Array<[string, string]>} */ ([
+      // A value for that part.
+      [
+        'use red as the button background',
+        "set q background '#dc2626' --on button",
+      ],
+      [
+        'use navy as the card background',
+        "set q background '#1e3a8a' --on card",
+      ],
+      ['use 8px as the button radius', 'set q border-radius 8px --on button'],
+      ['use 12px as the card padding', 'set q padding 12px --on card'],
+    ]),
+  )(
+    '%s',
+    async (q, want) => {
+      expect((await answer(q)).commands[0]).toBe(want);
+    },
+    T,
+  );
+
+  it.each(
+    /** @type {Array<[string, string, string]>} */ ([
+      // Comparisons: the subject changes, the other part never.
+      ['cards as round as buttons', 'card', 'button'],
+      ['make cards as round as dialogs', 'card', 'dialog'],
+      ['dialogs the same padding as cards', 'dialog', 'card'],
+      ['make badges rounded like buttons', 'badge', 'button'],
+      ['make cards round like the dialogs are', 'card', 'dialog'],
+    ]),
+  )(
+    '%s',
+    async (q, subject, other) => {
+      const {commands} = await answer(q);
+      expect(commands.some(c => c.includes(`--on ${subject}`))).toBe(true);
+      expect(commands.some(c => c.includes(`--on ${other}`))).toBe(false);
+    },
+    T,
+  );
+});
+
+describe('a lighter or darker accent moves that way in both modes', () => {
+  /** @param {string} hex */
+  const lum = hex => {
+    const n = Number.parseInt(hex.slice(1, 7), 16);
+    return (
+      ((n >> 16) & 255) * 0.299 + ((n >> 8) & 255) * 0.587 + (n & 255) * 0.114
+    );
+  };
+  it.each(['#2563eb', '#16a34a', '#db2777'])(
+    'accent %s',
+    async seed => {
+      await themeEditSet('r', 'accent', seed, {cwd});
+      const {context} = await import('./_context.mjs');
+      const {howTheme} = await import('./_how-commands.mjs');
+      const env = await howTheme(await context(cwd), cwd, 'r');
+      const darkNow = String(env.own?.dark['--color-accent'] ?? '');
+      expect(darkNow).toMatch(/^#[0-9a-f]{6}/);
+      for (const way of ['lighter', 'darker']) {
+        const {commands} = await answer(`make the accent ${way}`, 'r');
+        const light = /^set r accent '(#[0-9a-f]{6})'/.exec(
+          commands[0] ?? '',
+        )?.[1];
+        const dark = commands
+          .map(
+            c =>
+              /^set r --color-accent '(#[0-9a-f]{6})' --mode dark$/.exec(
+                c,
+              )?.[1],
+          )
+          .find(Boolean);
+        expect(light && dark).toBeTruthy();
+        expect(lum(String(light)) > lum(seed)).toBe(way === 'lighter');
+        expect(lum(String(dark)) > lum(darkNow)).toBe(way === 'lighter');
+      }
+    },
+    240_000,
+  );
+});

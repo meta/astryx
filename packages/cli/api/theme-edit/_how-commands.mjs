@@ -328,6 +328,16 @@ function measureNumber(v) {
   return m ? Number(m[1]) * (m[2] === 'rem' || m[2] === 'em' ? 16 : 1) : null;
 }
 
+/**
+ * Whether a color is a foreground (text or a border): in dark mode "darker" asks it for more contrast, so it
+ * moves lighter there, and "lighter" darker; a fill moves the same way in
+ * both modes.
+ * @param {string} name a token or a property
+ */
+const isForeground = name =>
+  !/background|surface|fill|accent|overlay/.test(name) &&
+  /text|border|outline|^color$|on-/.test(name);
+
 /** @param {number[]} c */
 const luminance = c => c[0] * 0.299 + c[1] * 0.587 + c[2] * 0.114;
 
@@ -481,7 +491,7 @@ function measureFit(ctx, base, was, now, intent, steps) {
           // A part's color, per variant: only the rule a step writes (its
           // own --when, else the plain rule), in the mode the question
           // names (else light), never an overlay layer over the fill.
-          if (mode !== (intent.mode ?? 'light')) continue;
+          if (intent.mode && mode !== intent.mode) continue;
           const [when, state] = k.split('|');
           const written = steps.some(
             st =>
@@ -498,9 +508,13 @@ function measureFit(ctx, base, was, now, intent, steps) {
             continue;
           const x = parseColor(after);
           const y = parseColor(before);
+          const want =
+            mode === 'dark' && isForeground(prop)
+              ? !intent.lighter
+              : intent.lighter;
           if (x && y && Math.abs(luminance(x) - luminance(y)) >= 0.5)
-            if (intent.lighter !== luminance(x) > luminance(y))
-              return `${part}'s ${prop}${when !== 'base' ? ` (${when})` : ''} would get ${intent.lighter ? 'darker' : 'lighter'} in ${mode} mode (${before} to ${after})`;
+            if (want !== luminance(x) > luminance(y))
+              return `${part}'s ${prop}${when !== 'base' ? ` (${when})` : ''} would get ${want ? 'darker' : 'lighter'} in ${mode} mode (${before} to ${after})`;
           continue;
         }
         const dir = fam === 'opacity' ? intent.opacityDir : intent.dir;
@@ -557,12 +571,16 @@ function measureFit(ctx, base, was, now, intent, steps) {
         continue;
       }
       if (fam === 'color' && intent.lighter != null) {
-        if (mode !== (intent.mode ?? 'light')) continue;
+        if (intent.mode && mode !== intent.mode) continue;
         const x = parseColor(after);
         const y = parseColor(before);
+        const want =
+          mode === 'dark' && isForeground(tok)
+            ? !intent.lighter
+            : intent.lighter;
         if (x && y && Math.abs(luminance(x) - luminance(y)) >= 0.5)
-          if (intent.lighter !== luminance(x) > luminance(y))
-            return `${tok} would get ${intent.lighter ? 'darker' : 'lighter'} in ${mode} mode (${before} to ${after})`;
+          if (want !== luminance(x) > luminance(y))
+            return `${tok} would get ${want ? 'darker' : 'lighter'} in ${mode} mode (${before} to ${after})`;
         continue;
       }
       const dir = fam === 'opacity' ? intent.opacityDir : intent.dir;

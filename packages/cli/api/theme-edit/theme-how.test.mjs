@@ -143,7 +143,8 @@ const QUESTIONS = [
   [
     'make the error red darker',
     {
-      top: /^set q danger '#[0-9a-f]{6}'$/,
+      // The seed, then the dark half stepped darker from its own value.
+      top: /^set q danger '#[0-9a-f]{6}' && set q --color-error '#[0-9a-f]{6}' --mode dark$/,
       adds: /--color-error(\.0)?=#[0-9a-f]{6}/,
     },
   ],
