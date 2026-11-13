@@ -261,7 +261,7 @@ test.describe('a disabled list', () => {
     deviceScaleFactor: 1,
   });
 
-  test('dims a disabled row once: its label, Remove and handle at half opacity', async ({
+  test('dims a disabled row once: its label, Remove and revealed handle at half opacity', async ({
     page,
   }) => {
     await page.goto(
@@ -292,6 +292,10 @@ test.describe('a disabled list', () => {
     await expect
       .poll(() => seen('[data-transfer-list-action="selected"]'))
       .toBe(0.5);
+    // At rest the handle is hidden. A disabled row does not reveal it on
+    // hover; keyboard focus on it does.
+    await expect.poll(() => seen(handle)).toBe(0);
+    await row.locator(handle).focus();
     await expect.poll(() => seen(handle)).toBe(0.5);
   });
 

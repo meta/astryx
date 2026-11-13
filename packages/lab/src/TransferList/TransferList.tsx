@@ -157,11 +157,11 @@ export interface TransferListProps<T extends string = string> extends Omit<
 
 const styles = stylex.create({
   // Core List's reorder handle is a small control, 28 px for every pointer,
-  // overlapping the row's end padding by 8 px. A finger's 44 px target is its
-  // invisible hit layer. A row without one keeps its end content clear of
-  // it, so every Remove sits in one column.
+  // at the start of its row, before the row's gap. A finger's 44 px target is
+  // its invisible hit layer. A row without one starts its label where the
+  // other rows' labels start, so every label sits in one column.
   clearsHandle: {
-    marginInlineEnd: 20,
+    paddingInlineStart: `calc(${spacingVars['--spacing-3']} + 28px + ${spacingVars['--spacing-2']})`,
   },
   root: {
     display: 'flex',
@@ -346,8 +346,8 @@ interface DisabledHandleTooltipProps {
 /**
  * The tooltip and description of a disabled list's reorder handle, which say
  * why the row does not move. Core List renders the handle. So the tooltip
- * finds it in its row when it attaches. It takes the row's last toggle
- * button: the handle comes after the row's own content.
+ * finds it in its row when it attaches. It takes the row's first toggle
+ * button: the handle comes before the row's own content.
  */
 function DisabledHandleTooltip({
   rootRef,
@@ -357,12 +357,11 @@ function DisabledHandleTooltip({
   const anchorRef = useMemo(
     () => ({
       get current() {
-        const toggles = rootRef.current?.querySelectorAll<HTMLElement>(
-          `[data-transfer-list-row="${CSS.escape(value)}"] button[aria-pressed]`,
+        return (
+          rootRef.current?.querySelector<HTMLElement>(
+            `[data-transfer-list-row="${CSS.escape(value)}"] button[aria-pressed]`,
+          ) ?? null
         );
-        return toggles == null || toggles.length === 0
-          ? null
-          : toggles[toggles.length - 1];
       },
     }),
     [rootRef, value],
@@ -705,12 +704,7 @@ export function TransferList<T extends string = string>({
         tooltip={isTransferDisabled ? disabledReason : undefined}
         data-transfer-list-action="selected"
         onClick={() => removeOption(option, index)}
-        // A row that keeps its place has no handle: its Remove keeps the
-        // movable rows' column, clear of where their handles sit.
-        xstyle={[
-          isOrdering && !canMove(option.value) && styles.clearsHandle,
-          isDisabled && styles.removeInDisabledRow,
-        ]}
+        xstyle={isDisabled && styles.removeInDisabledRow}
       />
     );
     if (!isDisabled || !isOrdering || !canMove(option.value)) {
@@ -757,7 +751,13 @@ export function TransferList<T extends string = string>({
           // A disabled list keeps each handle as a focusable disabled
           // control. Core List ends its reorder mode and sends a drag home.
           isDisabled={isDisabled}
-          xstyle={[styles.item, isDisabled && styles.disabledItem]}
+          xstyle={[
+            styles.item,
+            // A row that keeps its place has no handle: its label keeps the
+            // movable rows' column, clear of where their handles sit.
+            isOrdering && !canMove(option.value) && styles.clearsHandle,
+            isDisabled && styles.disabledItem,
+          ]}
           data-transfer-list-row={option.value}
           data-transfer-list-index={String(value.indexOf(option.value))}
           {...theme}

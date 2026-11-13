@@ -237,8 +237,11 @@ Consumer migration instructions belong in consumer docs and release notes.
 - `spec:AST-103` owns reordering. List is its first adopter: it
   takes the `reorderable` object, a row's key is its `ListItem`'s `itemKey`
   and its position is its index, and the
-  handle is the one element reordering adds to a row, at its trailing edge
-  (`spec:AST-103` FR5). The reorder controller finds a collection's rows
+  handle is the one element reordering adds to a row, at its leading edge,
+  before the row's start content (`spec:AST-103` FR5). The handle shows
+  while its row is hovered or holds the focus, and always under a coarse
+  pointer; hidden, it keeps its place and its tab stop. The reorder
+  controller finds a collection's rows
   through a rows reader, which lists them in order and tells whether an
   element is one; List's rows are its element children.
 

@@ -10,7 +10,8 @@
  *   the same on every touch screen. With a mouse, the records take their
  *   places without travel. Reorder mode marks the record with the list's
  *   insertion line, and stays on through each move. The Add button, each
- *   handle and a fixed record's Remove keep to the record columns
+ *   handle and a fixed record's Remove and first field keep to the record
+ *   columns
  * @position Chromium proof for ListInput's reorder, which runs on core List's
  *   reorder session (List/ListReorderScope.tsx)
  */
@@ -208,6 +209,8 @@ test.describe('the record columns', () => {
       const overflow = await page.evaluate(() => {
         const right = (element: Element | null) =>
           element?.getBoundingClientRect().right ?? Number.NaN;
+        const left = (element: Element | null) =>
+          element?.getBoundingClientRect().left ?? Number.NaN;
         const fieldsEnd = Math.max(
           ...Array.from(
             document.querySelectorAll(
@@ -239,6 +242,24 @@ test.describe('the record columns', () => {
                 right(handle) - right(handle.closest('[data-list-input-row]')),
             ),
           ),
+          handleBeforeRecord: Math.max(
+            ...handles.map(
+              handle =>
+                left(handle.closest('[data-list-input-row]')) - left(handle),
+            ),
+          ),
+          handleOverField: Math.max(
+            ...handles.map(
+              handle =>
+                right(handle) -
+                left(
+                  handle
+                    .closest('[data-list-input-row]')
+                    ?.querySelector('[data-list-input-cell="0"] > :last-child')
+                    ?.lastElementChild ?? null,
+                ),
+            ),
+          ),
           handles: handles.length,
         };
       });
@@ -259,6 +280,15 @@ test.describe('the record columns', () => {
         overflow.handlePastList,
         JSON.stringify(overflow),
       ).toBeLessThanOrEqual(0.5);
+      // The handle starts its record, inside it, before its first field.
+      expect(
+        overflow.handleBeforeRecord,
+        JSON.stringify(overflow),
+      ).toBeLessThanOrEqual(0.5);
+      expect(
+        overflow.handleOverField,
+        JSON.stringify(overflow),
+      ).toBeLessThanOrEqual(0.5);
     });
   }
 });
@@ -270,7 +300,7 @@ test.describe('a record that stays put', () => {
     {width: 390, height: 844},
     {width: 1024, height: 768},
   ]) {
-    test(`at ${viewport.width} px, keeps its Remove in the column of every other record's Remove`, async ({
+    test(`at ${viewport.width} px, keeps its Remove and its first field in the columns of every other record's`, async ({
       page,
     }) => {
       await page.setViewportSize(viewport);
@@ -288,6 +318,11 @@ test.describe('a record that stays put', () => {
               record
                 .querySelector('[data-list-input-remove]')
                 ?.getBoundingClientRect().left ?? Number.NaN,
+            // The first field's control, after the handle's track.
+            fieldLeft:
+              record
+                .querySelector('[data-list-input-cell="0"] > :last-child')
+                ?.lastElementChild?.getBoundingClientRect().left ?? Number.NaN,
           }),
         ),
       );
@@ -297,6 +332,11 @@ test.describe('a record that stays put', () => {
       for (const record of records) {
         expect(
           Math.abs(record.removeLeft - fixed[0].removeLeft),
+          detail,
+        ).toBeLessThanOrEqual(0.5);
+        // Its first field starts in the column of every other first field.
+        expect(
+          Math.abs(record.fieldLeft - fixed[0].fieldLeft),
           detail,
         ).toBeLessThanOrEqual(0.5);
       }
