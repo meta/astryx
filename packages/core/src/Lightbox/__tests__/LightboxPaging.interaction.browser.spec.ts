@@ -1982,6 +1982,10 @@ const CAPTION_STORIES = [
     name: 'a paragraph caption',
     story: 'core-lightbox--gallery-with-paragraph-caption-fixture',
   },
+  {
+    name: 'a centred paragraph caption',
+    story: 'core-lightbox--gallery-with-centered-paragraph-caption-fixture',
+  },
 ];
 
 for (const {name, story} of CAPTION_STORIES) {
@@ -2205,12 +2209,13 @@ for (const {name, story} of CAPTION_STORIES) {
             ) <=
             lineHeight / 2,
           lastLineEnd: Math.max(...lastLine.map(rect => rect.right)),
+          lastLineStart: Math.min(...lastLine.map(rect => rect.left)),
           toggleLeft: toggleBox.left,
           needed:
             place.getBoundingClientRect().width +
             parseFloat(placeStyle.marginLeft) +
             parseFloat(placeStyle.marginRight),
-          flowRight: flow.getBoundingClientRect().right,
+          flowWidth: flow.getBoundingClientRect().width,
         };
       });
     const {lines: narrowLines} = await read();
@@ -2231,7 +2236,11 @@ for (const {name, story} of CAPTION_STORIES) {
         continue;
       }
       checked += 1;
-      const fits = facts.lastLineEnd + facts.needed <= facts.flowRight;
+      // "less" fits where the last line's width and its place fit the
+      // caption's, whatever the line's alignment.
+      const fits =
+        facts.lastLineEnd - facts.lastLineStart + facts.needed <=
+        facts.flowWidth;
       if (facts.isBeside ? !fits : fits) {
         misplaced.push(`${width} px: ${JSON.stringify(facts)}`);
       }

@@ -242,6 +242,31 @@ export const GalleryWithParagraphCaptionFixture: Story = {
 };
 
 /**
+ * The paragraph caption, centred, as a caller may set it.
+ */
+export const GalleryWithCenteredParagraphCaptionFixture: Story = {
+  tags: ['!autodocs', 'no-visual'],
+  args: {
+    media: [
+      {
+        ...GALLERY_MEDIA[0],
+        caption: (
+          <p style={{textAlign: 'center'}}>
+            A winding path through the forest, past the old mill and down to the
+            river, where the trail turns back toward the village. In autumn the
+            beeches along it turn copper, and on a clear morning you can see the
+            church spire from the bridge before the path climbs the last hill
+            home.
+          </p>
+        ),
+      },
+      GALLERY_MEDIA[1],
+    ],
+  },
+  render: GalleryWithCaptions.render,
+};
+
+/**
  * A controlled gallery whose parent keeps its index, paging only with its own
  * buttons, say while a change is confirmed. A swipe returns to the photo the
  * parent shows.
