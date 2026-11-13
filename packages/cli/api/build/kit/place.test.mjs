@@ -1,7 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, expect, it} from 'vitest';
-import {slotFor, wordsIn} from './place.mjs';
+import {doc as aiChat} from '../../../assets/templates/pages/ai-chat/template.doc.mjs';
+import {blockWords, slotFor, wordsIn} from './place.mjs';
 
 /** A dashboard-shaped page: a filter bar, two chart bands, a table. */
 const PAGE = [
@@ -60,6 +61,38 @@ describe('slotFor', () => {
 
   it('never lets request words move a block out of its best fit', () => {
     expect(slotFor(['metrics', 'chart'], PAGE, wordsIn('a signup funnel tile'))).toBe('kpis');
+  });
+
+  it("picks between slots of one kind by the block's own words before the request's", () => {
+    // ai-chat has two `chat` slots: the message list and the composer.
+    const request = wordsIn('chat page with a message composer');
+    const list = {
+      name: 'ChatMessageListShowcase',
+      displayName: 'ChatMessageList',
+      description: 'Basic AI chat conversation with user and assistant messages.',
+    };
+    const composer = {
+      name: 'ChatComposerSimple',
+      displayName: 'ChatComposer — Simple',
+      description: 'Minimal chat composer with a placeholder and submit handler.',
+    };
+    expect(aiChat.slots?.filter(slot => slot.kind === 'chat').map(slot => slot.name)).toEqual([
+      'messages',
+      'composer',
+    ]);
+    expect(slotFor(['chat'], aiChat.slots, request, blockWords(list))).toBe('messages');
+    expect(slotFor(['chat'], aiChat.slots, request, blockWords(composer))).toBe('composer');
+  });
+});
+
+describe('blockWords', () => {
+  it("splits a block's id and display name at each capital", () => {
+    expect([...blockWords({name: 'ChatMessageListShowcase'})].sort()).toEqual([
+      'chat',
+      'list',
+      'message',
+      'showcase',
+    ]);
   });
 });
 

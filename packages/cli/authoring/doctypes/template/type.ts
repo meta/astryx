@@ -122,9 +122,11 @@ export interface PageTemplateDoc extends BaseTemplateDoc {
   /** The named places in this page where blocks go, in reading order: its
    *  navigation, header, toolbar, side panels and footer, and each part of
    *  its body named by what it holds. `astryx build` puts each block it
-   *  names into the first slot whose kind the block fits. Integration
-   *  templates need `@astryxdesign/cli` 0.7.17 or later: earlier CLIs reject
-   *  the field and drop that template. */
+   *  names into the slot of the block's best fit this page has, else into
+   *  the page body (`main`). Between two slots of one kind, it takes the one
+   *  that shares more words with the block, then with the request.
+   *  Integration templates need `@astryxdesign/cli` 0.7.17 or later: earlier
+   *  CLIs reject the field and drop that template. */
   slots?: TemplateSlot[];
 }
 

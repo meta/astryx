@@ -11,7 +11,7 @@
  */
 
 import {firstSentence} from '../../../foundation/text/string-utils.mjs';
-import {slotFor, wordsIn} from './place.mjs';
+import {blockWords, slotFor, wordsIn} from './place.mjs';
 import {FOUNDATION, FRAME} from './signals.mjs';
 
 /**
@@ -142,7 +142,7 @@ function placer(signals) {
     let copy = placed.get(entry);
     if (!copy) {
       const fits = entry.fits ?? fitsOf.get(`${entry.package}\u0000${entry.name}`);
-      const slot = fits ? slotFor(fits, slots, words) : null;
+      const slot = fits ? slotFor(fits, slots, words, blockWords(entry)) : null;
       copy = fits ? {...entry, fits, ...(slot ? {slot} : {})} : entry;
       placed.set(entry, copy);
     }

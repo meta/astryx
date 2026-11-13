@@ -247,8 +247,12 @@ export function registerTemplate(program) {
                   ? t.package
                   : '',
               replaces: t.replaces ?? '',
+              slots: t.slots?.length
+                ? t.slots.map(slot => `${slot.name} (${slot.kind})`).join(', ')
+                : '',
+              fits: t.fits ? t.fits.join(', ') || 'none' : '',
             });
-            const fields = ['id', 'name', 'description', 'package', 'replaces'];
+            const fields = ['id', 'name', 'description', 'package', 'replaces', 'slots', 'fits'];
             emit(
               pages.length > 0 && section('Page Templates'),
               pages.length > 0 && records(pages.map(toRow), {fields}),
