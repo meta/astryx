@@ -1520,7 +1520,7 @@ function planStarterApp(cwd, where, extra, dependencies, slug = null) {
     if (e instanceof PathSafetyError)
       refuse(
         E.ERR_PATH_TRAVERSAL,
-        `${where} is outside the current folder; make the app inside the folder you run the command from.`,
+        `${where} is outside the project; make the app inside the project folder.`,
         {run: [again(null)]},
       );
     throw e;
@@ -3460,6 +3460,8 @@ export function seeLine(cwd, slug, focus, notChecked = null, extra = {}) {
   const unplain = [];
   /** Previews in a folder Next does not serve. @type {string[]} */
   const unserved = [];
+  /** Their folders, as --path takes them. @type {string[]} */
+  const unservedDirs = [];
   /** @type {string[]} */
   const stale = extra.stale ?? [];
   /** Previews whose route was changed by hand. @type {string[]} */
@@ -3490,6 +3492,7 @@ export function seeLine(cwd, slug, focus, notChecked = null, extra = {}) {
     const why = unservedWhy(cwd, dir);
     if (why) {
       unserved.push(`${shownDir(cwd, dir)}/ (${why})`);
+      unservedDirs.push(shownDir(cwd, dir));
       continue;
     }
     if (
@@ -3534,8 +3537,16 @@ export function seeLine(cwd, slug, focus, notChecked = null, extra = {}) {
     return `${own}; in the running app: open ${urls.slice(0, 2).join(' or ')}${edited}`;
   if (unplain.length)
     return `${own}; the in-app preview is in ${unplain.slice(0, 2).join(', ')}, at a URL that depends on the app's routing${edited}`;
-  if (unserved.length)
-    return `${own}; the in-app preview is in ${unserved.slice(0, 2).join(', ')}, which the app does not serve: move it back, or make one with ${PREVIEW} add --theme ${slug}${edited}`;
+  if (unserved.length) {
+    // What fixes it, by why it is not served: add's own answer for each.
+    const why = unserved.join(' ');
+    const fix = /Next serves .* when both are there/.test(why)
+      ? `${PREVIEW} remove --path ${quoteCommandArgument(unservedDirs[0])}, then ${PREVIEW} add --theme ${slug} puts it in the folder Next serves`
+      : /pageExtensions/.test(why)
+        ? `add "tsx" to pageExtensions in next.config so Next serves the preview's page.tsx`
+        : `move it back into a folder Next routes, or make one there with ${PREVIEW} add --theme ${slug} --path <a routed folder>`;
+    return `${own}; the in-app preview is in ${unserved.slice(0, 2).join(', ')}, which the app does not serve: ${fix}${edited}`;
+  }
   if (edited) return `${own}${edited}`;
   if (damaged.length)
     return `${own}; the in-app preview in ${damaged.slice(0, 2).join(', ')}/ has a damaged ${PREVIEW_DATA}, so it does not follow this change: fix it by hand, or give the folder a new name that starts with _ and run ${PREVIEW} add${editorThemeCount(cwd) > 1 ? ` --theme ${slug}` : ''}`;

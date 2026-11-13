@@ -450,6 +450,16 @@ export async function pictures(project, shots, modes) {
           files,
           problem: `${path.relative(project.cwd, part)} is a folder, where --png writes a picture before moving it into place, so no picture was taken; move it out of ${path.relative(project.cwd, path.dirname(out))}/`,
         };
+      // A folder it cannot write gets no picture: named before the browser
+      // starts, never read as a browser that failed.
+      try {
+        fs.accessSync(path.dirname(out), fs.constants.W_OK);
+      } catch (e) {
+        return {
+          files,
+          problem: `${path.relative(project.cwd, path.dirname(out))}/ cannot be written (${/** @type {any} */ (e)?.code ?? 'no access'}), so no picture was taken; fix its permissions, then run the command again`,
+        };
+      }
       const r = await screenshot(project, html, part, m);
       if (!r.ok) {
         fs.rmSync(part, {force: true});

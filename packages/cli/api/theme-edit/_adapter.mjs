@@ -51,6 +51,9 @@ import {
   quoteCommandArgument,
 } from '../../foundation/env/package-manager.mjs';
 import {LIKE, P} from './_tables.mjs';
+
+/** The preview command, as a person runs it. */
+const PREVIEW_WORDS = P.replace(/ editor$/, ' preview');
 import {setLine} from './_check.mjs';
 import {
   SHOWCASE_GROUPS,
@@ -398,7 +401,8 @@ function absolute(result, root, from) {
   /** @param {any} v @param {string} [key] @returns {any} */
   const map = (v, key) =>
     typeof v === 'string'
-      ? /^themes\//.test(v)
+      ? // A path alone; a line that starts with one is read as prose below.
+        /^themes\/\S*$/.test(v) && !(key && PROSE.has(key))
         ? path.join(root, v)
         : key && PROSE.has(key)
           ? v.replace(
@@ -588,37 +592,114 @@ export const themeEditShow = (theme, options = {}) =>
   );
 /** @type {typeof preview.themeEditPreviewAdd} */
 export const themeEditPreviewAdd = (description, options = {}) =>
-  inProject(options, 'preview', o =>
-    preview.themeEditPreviewAdd(description, withThemeLock(o)),
+  stopTold(
+    `a preview change stopped part way is finished by the next ${PREVIEW_WORDS} add, and one written in full stands (${PREVIEW_WORDS} list says which)`,
+    () =>
+      inProject(options, 'preview', o =>
+        preview.themeEditPreviewAdd(description, withThemeLock(o)),
+      ),
   );
+
+/**
+ * Run a preview command with a stop (Ctrl-C, SIGTERM) heard for its whole
+ * run, and after it: the stop ends the process as stopped, with one line
+ * saying where the change stands (a change stopped part way is finished by
+ * the next preview command), never an ok with exit 0.
+ * @template T
+ * @param {string} where where the change stands, and what finishes it
+ * @param {() => Promise<T>} fn
+ * @returns {Promise<T>}
+ */
+async function stopTold(where, fn) {
+  const on = (/** @type {NodeJS.Signals} */ sig) => {
+    process.removeListener('SIGINT', on);
+    process.removeListener('SIGTERM', on);
+    process.stderr.write(`Stopped: ${where}.\n`);
+    // With no other listener (a lock's, which ends the process itself),
+    // the stop ends it here.
+    if (process.listenerCount(sig) === 0) process.kill(process.pid, sig);
+  };
+  process.on('SIGINT', on);
+  process.on('SIGTERM', on);
+  try {
+    const r = await fn();
+    // A turn of the event loop, so a stop that came while the work ran
+    // without a pause is heard now, before the result is printed.
+    await new Promise(resolve => setImmediate(resolve));
+    return r;
+  } finally {
+    process.removeListener('SIGINT', on);
+    process.removeListener('SIGTERM', on);
+  }
+}
 /**
  * `preview app` runs from the project root, with `dir` kept pointing where
  * it was given. With a theme it holds that theme's lock, since it may build
  * the theme and copies its files: a `set` beside it waits.
  * @type {typeof preview.themeEditPreviewApp}
  */
-export const themeEditPreviewApp = (dir, options = {}) => {
+export const themeEditPreviewApp = async (dir, options = {}) => {
   const from = options.cwd ?? process.cwd();
-  return inProject(
-    options,
-    options.theme == null ? null : lockName(options.theme),
-    o =>
-      preview.themeEditPreviewApp(
-        typeof dir === 'string' && dir.trim() && dir === dir.trim()
-          ? path.relative(o.cwd, path.resolve(from, dir)) || '.'
-          : dir,
-        o,
-      ),
-    true,
+  return fromHere(
+    await stopTold(
+      `the new app may be part made; ${PREVIEW_WORDS} app with a new folder name makes a whole one`,
+      () =>
+        inProject(
+          options,
+          options.theme == null ? null : lockName(options.theme),
+          o =>
+            preview.themeEditPreviewApp(
+              typeof dir === 'string' && dir.trim() && dir === dir.trim()
+                ? path.relative(o.cwd, path.resolve(from, dir)) || '.'
+                : dir,
+              o,
+            ),
+          true,
+        ),
+    ),
+    from,
   );
 };
+/**
+ * A new app's folder and its open line, as they work from where the command
+ * ran (`cd ../../theme-app` from src/app), not from the project root.
+ * @template T
+ * @param {T} r
+ * @param {string} from
+ * @returns {T}
+ */
+function fromHere(r, from) {
+  const d = /** @type {any} */ (r)?.data;
+  if (!d || typeof d.folder !== 'string') return r;
+  const root = projectRoot(from);
+  if (!root || path.resolve(from) === root) return r;
+  const here = path.relative(from, path.join(root, d.folder)) || '.';
+  const shown = here.split(path.sep).join('/');
+  const cdArg = quoteCommandArgument(
+    shown.startsWith('-') ? `./${shown}` : shown,
+  );
+  return /** @type {T} */ ({
+    ...r,
+    data: {
+      ...d,
+      folder: shown,
+      ...(typeof d.open === 'string'
+        ? {open: d.open.replace(/^cd \S+ &&/, `cd ${cdArg} &&`)}
+        : {}),
+    },
+  });
+}
 /** @type {typeof preview.themeEditPreviewList} */
 export const themeEditPreviewList = (options = {}) =>
   inProject(options, null, async o => preview.themeEditPreviewList(o));
 /** @type {typeof preview.themeEditPreviewRemove} */
 export const themeEditPreviewRemove = (page, options = {}) =>
-  inProject(options, 'preview', o =>
-    preview.themeEditPreviewRemove(page, withThemeLock(o)),
+  stopTold(
+    `a removal stopped part way is finished by the next ${PREVIEW_WORDS} remove, and one made in full stands (${PREVIEW_WORDS} list says which)`,
+    () =>
+      inProject(options, 'preview', o =>
+        preview.themeEditPreviewRemove(page, withThemeLock(o)),
+      ),
   );
 
 /**

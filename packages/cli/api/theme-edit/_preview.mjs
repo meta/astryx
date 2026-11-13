@@ -16,6 +16,7 @@ import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {spawn} from 'node:child_process';
+import * as os from 'node:os';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {
   SAMPLE_PAGE,
@@ -1480,6 +1481,21 @@ export async function screenshot(project, html, png, mode) {
         stopped: r.stoppedBy,
         reason: `the pictures were stopped (${r.stoppedBy}) before the browser finished`,
       };
+    // The editor's own bound, not an outside kill: said so, with a retry.
+    if (r.timedOut)
+      return {
+        ok: false,
+        reason: `the browser (${chrome}) did not finish the picture within 60 seconds, so it was stopped; run the command again, or open the .html beside the picture to look without one`,
+      };
+    // A picture folder it cannot write: the folder, never the browser.
+    try {
+      fs.accessSync(path.dirname(png), fs.constants.W_OK);
+    } catch (e) {
+      return {
+        ok: false,
+        reason: `${shown(project.cwd, path.dirname(png))}/ cannot be written (${/** @type {any} */ (e)?.code ?? 'no access'}), so no picture was taken; fix its permissions, then run the command again`,
+      };
+    }
     // Chrome alone takes the window, not the whole page.
     if (r.status === 0 && fs.existsSync(png))
       return {ok: true, file: shown(project.cwd, png), cut: true};
@@ -1490,7 +1506,8 @@ export async function screenshot(project, html, png, mode) {
           // with unrelated noise (dbus) on Linux.
           (r.signal
             ? `stopped by ${r.signal}`
-            : r.stderr || `exit ${r.status}, and no picture was written`),
+            : meaningfulLine(r.stderr) ||
+              `exit ${r.status}, and no picture was written`),
       )}`,
     );
   }
@@ -1867,23 +1884,67 @@ export function takeFirstAppCopy(cwd, slug) {
  * Bounded to 60 seconds, as a picture run always was.
  * @param {string} bin
  * @param {string[]} args
- * @returns {Promise<{status: number | null, signal: string | null, stderr: string, error?: Error, stoppedBy?: string}>}
+ * @param {number} [bound] milliseconds before the browser is stopped
+ * @returns {Promise<{status: number | null, signal: string | null, stderr: string, error?: Error, stoppedBy?: string, timedOut?: boolean}>}
  */
-function runBrowser(bin, args) {
+export function runBrowser(bin, args, bound = 60_000) {
   return new Promise(resolve => {
     /** @type {string | undefined} */
     let stoppedBy;
     let stderr = '';
-    const child = spawn(bin, args, {stdio: ['ignore', 'ignore', 'pipe']});
+    // A profile folder of its own, removed on every way out (done, failed,
+    // timed out, stopped): Chrome leaves its org.chromium.* folders in the
+    // system temp folder otherwise.
+    /** @type {string | null} */
+    let profile = null;
+    try {
+      profile = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-chrome-'));
+    } catch {
+      // No temp folder: Chrome's own default.
+    }
+    const dropProfile = () => {
+      if (profile)
+        try {
+          fs.rmSync(profile, {recursive: true, force: true});
+        } catch {
+          // Gone already.
+        }
+    };
+    process.once('exit', dropProfile);
+    const child = spawn(
+      bin,
+      [...(profile ? [`--user-data-dir=${profile}`] : []), ...args],
+      {
+        stdio: ['ignore', 'ignore', 'pipe'],
+        env: profile ? {...process.env, TMPDIR: profile} : process.env,
+        // A group of its own, so a stop takes Chrome's helper processes
+        // with it, before its profile folder is removed.
+        detached: process.platform !== 'win32',
+      },
+    );
+    const killAll = () => {
+      try {
+        if (process.platform !== 'win32' && child.pid)
+          process.kill(-child.pid, 'SIGKILL');
+        else child.kill('SIGKILL');
+      } catch {
+        child.kill('SIGKILL');
+      }
+    };
     child.stderr?.setEncoding('utf8');
     child.stderr?.on('data', d => {
       if (stderr.length < 8000) stderr += d;
     });
-    const timer = setTimeout(() => child.kill('SIGKILL'), 60_000);
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      killAll();
+    }, bound);
     /** @param {NodeJS.Signals} sig */
     const onStop = sig => {
       stoppedBy = sig;
-      child.kill('SIGKILL');
+      killAll();
+      dropProfile();
       // Nothing else listening: the stop ends this process, as it would
       // have without this listener.
       if (process.listenerCount(sig) === 0) {
@@ -1896,11 +1957,41 @@ function runBrowser(bin, args) {
     process.once('SIGTERM', onStop);
     const done = (/** @type {any} */ out) => {
       clearTimeout(timer);
+      dropProfile();
+      process.removeListener('exit', dropProfile);
       process.removeListener('SIGINT', onStop);
       process.removeListener('SIGTERM', onStop);
-      resolve({...out, stderr, ...(stoppedBy ? {stoppedBy} : {})});
+      resolve({
+        ...out,
+        stderr,
+        ...(stoppedBy ? {stoppedBy} : {}),
+        ...(timedOut ? {timedOut} : {}),
+      });
     };
     child.on('error', error => done({status: null, signal: null, error}));
     child.on('close', (status, signal) => done({status, signal}));
   });
+}
+
+/**
+ * The first stderr line that says something about the picture: Chrome's
+ * startup warnings (dbus, GPU, sandbox notices) come first on Linux and
+ * say nothing about why no picture was written.
+ * @param {string} text
+ */
+export function meaningfulLine(text) {
+  const lines = String(text ?? '')
+    .split(/\r?\n/)
+    .map(l => l.trim())
+    .filter(Boolean);
+  return (
+    lines.find(
+      l =>
+        !/dbus|bus\.cc|gpu_|gl_|sandbox|fontconfig|crashpad|DevTools listening|WARNING:/i.test(
+          l,
+        ),
+    ) ??
+    lines[0] ??
+    ''
+  );
 }
