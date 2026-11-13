@@ -49,6 +49,7 @@ import {
   recordWritten,
   themeFiles,
   refuseThemesNotFolder,
+  shown,
 } from './_settings.mjs';
 import {SHOWCASE_GROUPS, renderPreview, screenshot} from './_preview.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
@@ -422,8 +423,34 @@ export async function pictures(project, shots, modes) {
   for (const {html, png} of shots) {
     for (const m of modes) {
       const out = outOf(png, m);
-      const r = await screenshot(project, html, out, m);
-      if (!r.ok) return {files, problem: r.reason};
+      // Taken under a name of its own and moved into place once whole: a
+      // run stopped while the browser runs leaves no picture at the real
+      // name (one the next run would read as a file of yours). A part left
+      // by a run stopped before is cleared.
+      const part = path.join(
+        path.dirname(out),
+        `.${path.basename(out, '.png')}.part-${process.pid}.png`,
+      );
+      for (const n of fs.existsSync(path.dirname(out))
+        ? fs.readdirSync(path.dirname(out))
+        : [])
+        if (n.startsWith(`.${path.basename(out, '.png')}.part-`))
+          fs.rmSync(path.join(path.dirname(out), n), {force: true});
+      const r = await screenshot(project, html, part, m);
+      if (!r.ok) {
+        fs.rmSync(part, {force: true});
+        return {files, problem: r.reason};
+      }
+      try {
+        fs.renameSync(part, out);
+      } catch (e) {
+        fs.rmSync(part, {force: true});
+        return {
+          files,
+          problem: `the picture could not be moved into ${path.relative(project.cwd, out)} (${/** @type {any} */ (e)?.code ?? e})`,
+        };
+      }
+      r.file = path.relative(project.cwd, out).split(path.sep).join('/');
       files.push(r.file);
       // A picture in a theme folder is recorded as the editor's, so a later
       // change removes it and never a picture of the user's.
@@ -650,6 +677,7 @@ export async function previewAfter(ctx, slug, data, png) {
   /** @type {string | null} */
   let preview = null;
   let cause = ctx.unchecked ?? null;
+  const f0 = themeFiles(ctx.project.cwd, slug);
   try {
     preview = await renderPreview(ctx, slug, data);
   } catch (e) {
@@ -659,7 +687,12 @@ export async function previewAfter(ctx, slug, data, png) {
       ? renderCause(ctx.project, /** @type {Error} */ (e).message)
       : ['ENOSPC', 'EACCES', 'EPERM', 'EROFS', 'EIO'].includes(code)
         ? `preview.html could not be written (${code === 'ENOSPC' ? 'the disk is full' : code}), so it still shows the theme as it was`
-        : `checking it failed: ${e instanceof Error ? e.message : String(e)}`;
+        : // A folder (or another thing) where preview.html goes: the page
+          // was rendered, and could not be written there.
+          code === ERROR_CODES.ERR_WRITE_FAILED ||
+            (fs.existsSync(f0.preview) && !fs.statSync(f0.preview).isFile())
+          ? `preview.html could not be written (${shown(ctx.project.cwd, f0.preview)} is ${fs.existsSync(f0.preview) && fs.statSync(f0.preview).isDirectory() ? 'a folder' : 'in the way'}; move it, then run ${P} show ${slug}), so it still shows the theme as it was`
+          : `checking it failed: ${e instanceof Error ? e.message : String(e)}`;
   }
   const f = themeFiles(ctx.project.cwd, slug);
   // The sheet of every component is made by show only: after a change it

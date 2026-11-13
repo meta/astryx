@@ -142,6 +142,63 @@ function formatSubComponent(comp) {
 }
 
 /**
+ * Whether a sub-component entry is only a name: its description, props and
+ * examples live in its own doc, which `component <Name>` prints.
+ * @param {any} comp
+ * @returns {boolean}
+ */
+function isBareReference(comp) {
+  return (
+    !comp.description &&
+    !comp.props?.length &&
+    !comp.usage?.accessibility?.length &&
+    !comp.examples?.length
+  );
+}
+
+/**
+ * Render the sub-components under "## Components", in order. Consecutive bare
+ * references share one line that names the command reading each, so a family
+ * of twenty parts costs one line instead of twenty headings.
+ * @param {any[]} components
+ * @param {string} [exampleHashes] - heading level for inline examples; none when omitted
+ * @returns {string[]}
+ */
+function formatSubComponents(components, exampleHashes) {
+  /** @type {string[]} */
+  const out = [];
+  /** @type {string[]} */
+  let names = [];
+  const flush = () => {
+    if (names.length === 1) {
+      out.push(
+        `See \`${getCliInvocation()} component ${names[0]}\` for its props and usage.\n`,
+      );
+    } else if (names.length > 1) {
+      out.push(
+        `Read each with \`${getCliInvocation()} component <Name>\`: ${names.join(', ')}.\n`,
+      );
+    }
+    names = [];
+  };
+  for (const comp of components) {
+    if (isBareReference(comp)) {
+      names.push(comp.name);
+      continue;
+    }
+    flush();
+    out.push(...formatSubComponent(comp));
+    if (exampleHashes && comp.examples?.length) {
+      for (const ex of comp.examples) {
+        out.push(...formatExample(ex, exampleHashes));
+      }
+    }
+  }
+  flush();
+  return out;
+}
+
+/**
  * Get the variant values for a given theming target, extracting them from
  * the visualProps and the variant prop in the component's props list.
  * Returns an array of variant strings from the `variant` prop type,
@@ -320,14 +377,7 @@ export function formatFull(docs, options = {}) {
   // Multi-component
   if ('components' in docs) {
     sections.push('## Components\n');
-    for (const comp of docs.components) {
-      sections.push(...formatSubComponent(comp));
-      if (comp.examples?.length) {
-        for (const ex of comp.examples) {
-          sections.push(...formatExample(ex, '####'));
-        }
-      }
-    }
+    sections.push(...formatSubComponents(docs.components, '####'));
   }
 
   if (docs.examples?.length) {
@@ -521,9 +571,7 @@ export function formatCompact(docs, componentName, importHint) {
   }
 
   if ('components' in docs) {
-    for (const comp of docs.components) {
-      sections.push(...formatSubComponent(comp));
-    }
+    sections.push(...formatSubComponents(docs.components));
   }
 
   // Limited examples (max 3)

@@ -1526,7 +1526,7 @@ function chromeBinary() {
 
 /** The first line of every file the editor writes into a theme's app copy. */
 export {APP_COPY_MARK} from './_marks.mjs';
-import {APP_COPY_MARK} from './_marks.mjs';
+import {APP_COPY_MARK, appCopyMark} from './_marks.mjs';
 
 /**
  * The app's copy of an editor theme: a standard local theme in
@@ -1557,25 +1557,22 @@ export function writeAppCopy(ctx, slug, data) {
 }
 
 /**
- * {@link writeAppCopy} with the font stylesheets given, or null to keep the
- * copy's own (a compile, which changes no setting).
+ * The files of a theme's app copy as the editor would write them now, by
+ * name; null with no build to copy. Font stylesheets as given, or null for
+ * the copy's own.
  * @param {string} cwd
  * @param {string} slug
  * @param {string[] | null} fontsCss
- * @returns {string | null}
+ * @returns {Record<string, string> | null}
  */
-export function writeAppCopyAt(cwd, slug, fontsCss) {
+function appCopyFiles(cwd, slug, fontsCss) {
   const f = themeFiles(cwd, slug);
   const dir = path.join(cwd, 'src', 'themes', slug);
   const name = `${camel(slug)}Theme`;
-  const first = !fs.existsSync(path.join(dir, `${name}.doc.mjs`));
   if (!fs.existsSync(f.js) || !fs.existsSync(f.css)) return null;
-  // The copy's source, as the stable build's header names it.
   const source = `src/themes/${slug}/${name}.ts`;
-  // Only the editor's own copy is written over.
-  if (appCopyBlocker(cwd, slug) !== null) return null;
   const head = (/** @type {string} */ open, /** @type {string} */ close) =>
-    `${open} ${APP_COPY_MARK} after every build of themes/${slug}/; do not edit it here. Change the theme with the editor. ${close}\n`;
+    `${open} ${appCopyMark(slug)} after every build of themes/${slug}/; do not edit it here. Change the theme with the editor. ${close}\n`;
   const keptFonts = path.join(dir, `${slug}.fonts.css`);
   const fonts =
     fontsCss ??
@@ -1607,17 +1604,93 @@ export function writeAppCopyAt(cwd, slug, fontsCss) {
       ? `${head('/*', '*/')}${fonts.map(c => `@import ${JSON.stringify(c)};`).join('\n')}\n`
       : `${head('/*', '*/')}/* No font stylesheets: the theme uses fonts the system has. */\n`,
   };
-  fs.mkdirSync(dir, {recursive: true});
+  return files;
+}
+
+/**
+ * Why a theme's app copy is behind its build, or null when it is current:
+ * something in its way (appCopyStale), a copy file missing, or a file
+ * whose content is not what the editor would write now.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {string | null}
+ */
+export function appCopyBehind(cwd, slug) {
+  const stale = appCopyStale(cwd, slug).appCopyStale;
+  if (stale) return stale;
+  const files = appCopyFiles(cwd, slug, null);
+  if (!files) return null;
+  const dir = path.join(cwd, 'src', 'themes', slug);
+  if (!fs.existsSync(dir))
+    return `the app copy in src/themes/${slug}/ is gone; the editor writes it again`;
   for (const [n, text] of Object.entries(files)) {
-    const file = path.join(dir, n);
-    if (fs.existsSync(file) && fs.readFileSync(file, 'utf8') === text) continue;
-    writeWhole(file, text);
+    /** @type {string} */
+    let now;
+    try {
+      now = fs.readFileSync(path.join(dir, n), 'utf8');
+    } catch {
+      return `src/themes/${slug}/${n} is missing from the app copy`;
+    }
+    if (now !== text)
+      return `src/themes/${slug}/${n} is not the current build of themes/${slug}/`;
   }
-  // A copy's own file this build no longer writes goes; anything else in
-  // the folder (yours, or the system's) stays as it is.
-  for (const n of fs.readdirSync(dir))
-    if (appCopyNames(slug).has(n) && !(n in files))
-      fs.rmSync(path.join(dir, n), {force: true});
+  return null;
+}
+
+/**
+ * {@link writeAppCopy} with the font stylesheets given, or null to keep the
+ * copy's own (a compile, which changes no setting).
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {string[] | null} fontsCss
+ * @returns {string | null}
+ */
+export function writeAppCopyAt(cwd, slug, fontsCss) {
+  const f = themeFiles(cwd, slug);
+  const dir = path.join(cwd, 'src', 'themes', slug);
+  const name = `${camel(slug)}Theme`;
+  const first = !fs.existsSync(path.join(dir, `${name}.doc.mjs`));
+  if (!fs.existsSync(f.js) || !fs.existsSync(f.css)) return null;
+  // Only the editor's own copy is written over.
+  if (appCopyBlocker(cwd, slug) !== null) return null;
+  const files = appCopyFiles(cwd, slug, fontsCss);
+  if (!files) return null;
+  const failKey = `${path.resolve(cwd)}\0${slug}`;
+  try {
+    fs.mkdirSync(dir, {recursive: true});
+    for (const [n, text] of Object.entries(files)) {
+      const file = path.join(dir, n);
+      if (fs.existsSync(file) && fs.readFileSync(file, 'utf8') === text)
+        continue;
+      writeWhole(file, text);
+    }
+    // A copy's own file this build no longer writes goes; anything else in
+    // the folder (yours, or the system's) stays as it is.
+    for (const n of fs.readdirSync(dir))
+      if (appCopyNames(slug).has(n) && !(n in files))
+        fs.rmSync(path.join(dir, n), {force: true});
+  } catch (e) {
+    // A copy that cannot be written is said, with the system's reason;
+    // the change itself stands.
+    const code = /** @type {any} */ (e)?.code ?? 'error';
+    // The folder that failed: the copy's, or a parent it could not be
+    // made in.
+    const failed = /** @type {any} */ (e)?.path
+      ? path.resolve(String(/** @type {any} */ (e).path))
+      : dir;
+    const at = fs.existsSync(failed) ? failed : path.dirname(failed);
+    const rel = path.relative(cwd, at).split(path.sep).join('/');
+    COPY_FAILED.set(
+      failKey,
+      code === 'EACCES' || code === 'EPERM' || code === 'EROFS'
+        ? `${rel} is not writable (${code})`
+        : code === 'ENOSPC'
+          ? `the disk is full (${code})`
+          : `${rel} could not be written (${code})`,
+    );
+    return null;
+  }
+  COPY_FAILED.delete(failKey);
   // The first write is named in the command's result; later ones are not.
   if (first)
     FIRST_COPIES.set(
@@ -1639,7 +1712,10 @@ export function writeAppCopyAt(cwd, slug, fontsCss) {
  * @returns {{appCopyStale?: string}}
  */
 export function appCopyStale(cwd, slug) {
-  const blocker = appCopyBlocker(cwd, slug);
+  const blocker =
+    appCopyBlocker(cwd, slug) ??
+    COPY_FAILED.get(`${path.resolve(cwd)}\0${slug}`) ??
+    null;
   return blocker
     ? {
         appCopyStale: `the app copy in src/themes/${slug}/ was not updated: ${blocker}. The app keeps the theme as it was until that is out of the way; then any set or show writes it.`,
@@ -1683,19 +1759,31 @@ export function appCopyBlocker(cwd, slug) {
   // (src/, src/themes/, the copy's folder), as for themes/.
   for (const part of ['src', 'src/themes', rel]) {
     try {
-      if (fs.lstatSync(path.join(cwd, part)).isSymbolicLink())
+      const st = fs.lstatSync(path.join(cwd, part));
+      if (st.isSymbolicLink())
         return `${part} is a link (to ${fs.readlinkSync(path.join(cwd, part))}), and the editor writes nothing through a link`;
+      // A file where a folder on the way goes: nothing is half-written.
+      if (!st.isDirectory())
+        return part === rel
+          ? `${rel} is a file, where the copy's folder goes`
+          : `${part} is a file, where a folder on the way to the copy goes`;
     } catch {
       break;
     }
+  }
+  try {
+    if (!fs.lstatSync(dir).isDirectory())
+      return `${rel} is a file, where the copy's folder goes`;
+  } catch {
+    // Not there yet: the copy makes it.
   }
   if (folderIsEmpty(dir)) return null;
   /** @type {string[]} */
   let names;
   try {
     names = fs.readdirSync(dir);
-  } catch {
-    return `${rel} cannot be read`;
+  } catch (e) {
+    return `${rel} cannot be read (${/** @type {any} */ (e)?.code ?? 'error'})`;
   }
   /** @param {string} n */
   const marked = n => {
@@ -1707,11 +1795,37 @@ export function appCopyBlocker(cwd, slug) {
   };
   const own = appCopyNames(slug);
   const present = names.filter(n => own.has(n));
-  const ours = marked(`${name}.doc.mjs`);
+  // A link at a copy name is never written through or replaced.
+  for (const n of present)
+    try {
+      const st = fs.lstatSync(path.join(dir, n));
+      if (st.isSymbolicLink())
+        return `${rel}/${n} is a link (to ${fs.readlinkSync(path.join(dir, n))}), at a name the copy uses, and the editor writes nothing through a link`;
+      if (st.isDirectory())
+        return `${rel}/${n} is a folder, at a name the copy uses for a file`;
+    } catch {
+      // Gone since it was listed.
+    }
+  // The copy is the editor's when any of its marked files carries the
+  // mark (one of them deleted is written back); then only a marked name
+  // without the mark is yours.
+  const markedNames = [`${name}.doc.mjs`, `${name}.ts`, `${slug}.fonts.css`];
+  // A build output of the copy's source carries the build's own header.
+  const generated = (/** @type {string} */ n) => {
+    try {
+      return /@generated by `astryx theme build`/.test(
+        fs.readFileSync(path.join(dir, n), 'utf8').slice(0, 600),
+      );
+    } catch {
+      return false;
+    }
+  };
+  const ours =
+    markedNames.some(n => present.includes(n) && marked(n)) ||
+    (present.length > 0 &&
+      present.every(n => !markedNames.includes(n) && generated(n)));
   const foreign = ours
-    ? present.find(
-        n => (n === `${name}.ts` || n === `${slug}.fonts.css`) && !marked(n),
-      )
+    ? present.find(n => markedNames.includes(n) && !marked(n))
     : present[0];
   return foreign
     ? `${rel}/${foreign} is yours, at a name the copy uses, and the editor never writes over your files`
@@ -1720,6 +1834,9 @@ export function appCopyBlocker(cwd, slug) {
 
 /** The build outputs of a theme, by their ending after `<theme>`. */
 const APP_COPY_BUILT = ['.css', '.css.d.ts', '.js', '.d.ts', '.variants.d.ts'];
+
+/** Why the last write of a theme's app copy failed, by app and theme. @type {Map<string, string>} */
+const COPY_FAILED = new Map();
 
 /** App copies written for the first time in this process, by app and theme. @type {Map<string, string[]>} */
 const FIRST_COPIES = new Map();
