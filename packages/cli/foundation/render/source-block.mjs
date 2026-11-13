@@ -80,14 +80,57 @@ export function sourceBlock(entry, files, record = {}) {
   return `<script type="${SOURCE_TYPE}">${json}</script>`;
 }
 
+/** Elements whose text is never markup: a comment opener or a tag in it is text. */
+const RAW_TEXT = new Set(['script', 'style', 'title', 'textarea']);
+
+/**
+ * The parts of a rendered file a reverse reads, found as a browser finds them:
+ * outside comments (the note is one, and it may quote a path that looks like
+ * a tag) and outside the text of a style, script, title or textarea element
+ * (a stylesheet may hold any text).
+ * @param {string} html
+ * @returns {{title: string | null, style: string | null, body: number}} the
+ *   text of the first title and the first style element before <body>, and
+ *   where the content of <body> starts (-1 without a <body> tag)
+ */
+function pageParts(html) {
+  const tags = /<!--|<([a-z][a-z0-9-]*)\b[^>]*>/gi;
+  /** @type {string | null} */
+  let title = null;
+  /** @type {string | null} */
+  let style = null;
+  for (let m = tags.exec(html); m; m = tags.exec(html)) {
+    if (m[0] === '<!--') {
+      // A comment ends at the first `-->`, even `<!-->` and `<!--->`.
+      const end = html.indexOf('-->', m.index + 2);
+      tags.lastIndex = end < 0 ? html.length : end + 3;
+      continue;
+    }
+    const tag = m[1].toLowerCase();
+    if (tag === 'body') return {title, style, body: tags.lastIndex};
+    if (!RAW_TEXT.has(tag)) continue;
+    const closing = new RegExp(`</${tag}`, 'gi');
+    closing.lastIndex = tags.lastIndex;
+    const close = closing.exec(html)?.index ?? -1;
+    const stop = close < 0 ? html.length : close;
+    if (tag === 'title' && title === null) title = html.slice(tags.lastIndex, stop);
+    if (tag === 'style' && style === null) {
+      const end = close < 0 ? -1 : html.indexOf('>', close);
+      style = html.slice(m.index, end < 0 ? html.length : end + 1);
+    }
+    tags.lastIndex = stop;
+  }
+  return {title, style, body: -1};
+}
+
 /**
  * Every embedded-source block in a file's body, in order, with its index in
- * the whole file. The note in <head> may quote a title with any text, so the
- * search starts at <body>.
+ * the whole file. The note in <head> may quote a title or a path with any
+ * text, so the search starts at <body>.
  * @param {string} html
  */
 const blocksIn = html => {
-  const start = Math.max(0, html.search(/<body\b/i));
+  const start = Math.max(0, pageParts(html).body);
   return [
     ...html.slice(start).matchAll(
       new RegExp(
@@ -109,7 +152,7 @@ export function readSourceBlock(html) {
   const m = blocksIn(html).at(-1);
   if (!m) {
     // An opening tag with no block after it: the file ends inside the block.
-    return html.slice(Math.max(0, html.search(/<body\b/i))).includes(`<script type="${SOURCE_TYPE}">`)
+    return html.slice(Math.max(0, pageParts(html).body)).includes(`<script type="${SOURCE_TYPE}">`)
       ? {found: true, damaged: 'its embedded source is cut short: the file ends inside it'}
       : {found: false};
   }
@@ -162,11 +205,8 @@ export function readSourceBlock(html) {
 export function renderedMarkupOf(html) {
   const block = blocksIn(html).at(-1);
   if (!block || block.index === undefined) return null;
-  const headEnd = html.indexOf('</head>');
-  const body = /<body\b[^>]*>/i.exec(html.slice(headEnd < 0 ? 0 : headEnd));
-  if (!body) return null;
-  const start = (headEnd < 0 ? 0 : headEnd) + body.index + body[0].length;
-  return start > block.index ? null : html.slice(start, block.index);
+  const start = pageParts(html).body;
+  return start < 0 || start > block.index ? null : html.slice(start, block.index);
 }
 
 /**
@@ -176,13 +216,8 @@ export function renderedMarkupOf(html) {
  * @returns {{title: string | null, style: string | null}}
  */
 export function renderedHeadOf(html) {
-  const body = html.search(/<body\b/i);
-  // The note is a comment and may quote a title that looks like a tag.
-  const head = (body < 0 ? html : html.slice(0, body)).replace(/<!--[\s\S]*?-->/g, '');
-  return {
-    title: /<title>([\s\S]*?)<\/title>/.exec(head)?.[1] ?? null,
-    style: /<style>[\s\S]*?<\/style>/.exec(head)?.[0] ?? null,
-  };
+  const {title, style} = pageParts(html);
+  return {title, style};
 }
 
 /**
