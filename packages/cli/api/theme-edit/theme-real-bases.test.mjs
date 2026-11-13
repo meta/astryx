@@ -354,51 +354,59 @@ describe('padding on real base themes', () => {
       expect(card).toMatch(/--astryx-card-padding-inline(-start)?:\s*6px/);
     }, 240_000);
 
+    it('keeps physical sides physical next to own sides, in each text direction (butter)', async ctx => {
+      if (unbuilt) return ctx.skip();
+      // Own physical left: the editor's left is never written (in either
+      // direction), its right stays a physical right.
+      await themeEditNew('pr', {cwd, like: 'butter'});
+      ownEdit('pr', "button: {base: {paddingLeft: '30px'}},");
+      await themeEditSet('pr', 'padding', '2px 4px 6px 8px', {
+        cwd,
+        on: 'button',
+      });
+      const button = ruleOf('pr', '.astryx-button');
+      expect(button).toMatch(/padding-left:\s*30px/);
+      expect(button).toMatch(/padding-right:\s*4px/);
+      expect(button).toMatch(/padding-top:\s*2px/);
+      expect(button).toMatch(/padding-bottom:\s*6px/);
+      // (Butter's own padding-inline comes first in the rule; the editor
+      // writes no logical side.)
+      expect(button).not.toMatch(/padding-inline-(start|end)/);
+      expect(button).not.toMatch(/padding-left:\s*8px/);
+      expect(button.indexOf('padding-right')).toBeGreaterThan(
+        button.indexOf('padding-inline'),
+      );
+      // Own logical start: the editor's left shows only right-to-left (where
+      // the start is the right), its right only left-to-right.
+      await themeEditNew('pl', {cwd, like: 'butter'});
+      ownEdit('pl', "button: {base: {paddingInlineStart: '30px'}},");
+      await themeEditSet('pl', 'padding-left', '8px', {cwd, on: 'button'});
+      await themeEditSet('pl', 'padding-right', '4px', {cwd, on: 'button'});
+      expect(ruleOf('pl', '.astryx-button')).not.toMatch(
+        /padding-(left|right):/,
+      );
+      expect(ruleOf('pl', '.astryx-button:where(:dir(rtl))')).toMatch(
+        /padding-left:\s*8px/,
+      );
+      expect(ruleOf('pl', '.astryx-button:where(:dir(ltr))')).toMatch(
+        /padding-right:\s*4px/,
+      );
+      expect(ruleOf('pl', '.astryx-button:where(:dir(ltr))')).not.toMatch(
+        /padding-left/,
+      );
+      expect(ruleOf('pl', '.astryx-button:where(:dir(rtl))')).not.toMatch(
+        /padding-right/,
+      );
+    }, 240_000);
+
     it.runIf(BROWSER_STEP)(
-      'keeps physical sides physical next to own sides, in each text direction (butter)',
+      'renders own and editor sides in each text direction (butter)',
       async ctx => {
         if (unbuilt) return ctx.skip();
-        // Own physical left: the editor's left is never written (in either
-        // direction), its right stays a physical right.
-        await themeEditNew('pr', {cwd, like: 'butter'});
-        ownEdit('pr', "button: {base: {paddingLeft: '30px'}},");
-        await themeEditSet('pr', 'padding', '2px 4px 6px 8px', {
-          cwd,
-          on: 'button',
-        });
-        const button = ruleOf('pr', '.astryx-button');
-        expect(button).toMatch(/padding-left:\s*30px/);
-        expect(button).toMatch(/padding-right:\s*4px/);
-        expect(button).toMatch(/padding-top:\s*2px/);
-        expect(button).toMatch(/padding-bottom:\s*6px/);
-        // (Butter's own padding-inline comes first in the rule; the editor
-        // writes no logical side.)
-        expect(button).not.toMatch(/padding-inline-(start|end)/);
-        expect(button).not.toMatch(/padding-left:\s*8px/);
-        expect(button.indexOf('padding-right')).toBeGreaterThan(
-          button.indexOf('padding-inline'),
-        );
-        // Own logical start: the editor's left shows only right-to-left (where
-        // the start is the right), its right only left-to-right.
-        await themeEditNew('pl', {cwd, like: 'butter'});
-        ownEdit('pl', "button: {base: {paddingInlineStart: '30px'}},");
-        await themeEditSet('pl', 'padding-left', '8px', {cwd, on: 'button'});
-        await themeEditSet('pl', 'padding-right', '4px', {cwd, on: 'button'});
-        expect(ruleOf('pl', '.astryx-button')).not.toMatch(
-          /padding-(left|right):/,
-        );
-        expect(ruleOf('pl', '.astryx-button:where(:dir(rtl))')).toMatch(
-          /padding-left:\s*8px/,
-        );
-        expect(ruleOf('pl', '.astryx-button:where(:dir(ltr))')).toMatch(
-          /padding-right:\s*4px/,
-        );
-        expect(ruleOf('pl', '.astryx-button:where(:dir(ltr))')).not.toMatch(
-          /padding-left/,
-        );
-        expect(ruleOf('pl', '.astryx-button:where(:dir(rtl))')).not.toMatch(
-          /padding-right/,
-        );
+        await themeEditNew('plr', {cwd, like: 'butter'});
+        ownEdit('plr', "button: {base: {paddingInlineStart: '30px'}},");
+        await themeEditSet('plr', 'padding-left', '8px', {cwd, on: 'button'});
+        await themeEditSet('plr', 'padding-right', '4px', {cwd, on: 'button'});
         // In a page under each direction (a dir="rtl" ancestor), the own start
         // side holds and the editor's sides land on the other side.
         const executablePath = chromium.executablePath();
@@ -406,7 +414,10 @@ describe('padding on real base themes', () => {
           throw new Error(
             `Playwright's Chromium is not installed at ${executablePath}: run npx playwright install chromium`,
           );
-        const css = fs.readFileSync(path.join(cwd, 'themes/pl/pl.css'), 'utf8');
+        const css = fs.readFileSync(
+          path.join(cwd, 'themes/plr/plr.css'),
+          'utf8',
+        );
         const browser = await within(
           chromium.launch({
             args: ['--no-sandbox'],
@@ -421,8 +432,9 @@ describe('padding on real base themes', () => {
             await within(
               page.setContent(
                 `<!doctype html><html><head><style>${css}</style></head><body>` +
-                  `<div data-astryx-theme="pl" dir="${dir}"><button class="astryx-button" id="b">x</button></div>` +
+                  `<div data-astryx-theme="plr" dir="${dir}"><button class="astryx-button" id="b">x</button></div>` +
                   '</body></html>',
+                {timeout: BROWSER_WAIT_MS + 5000},
               ),
               `rendering the ${dir} page`,
             );

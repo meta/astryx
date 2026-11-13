@@ -1200,9 +1200,11 @@ jobs:
         env:
           SCOPED: ${{ github.event_name == 'pull_request' && steps.scope.outputs.vitest_full_suite == 'false' }}
           VITEST_SHARD_TIMES_FILE: ${{ runner.temp }}/node-file-times.json
-          # The split gives this leg its own later steps' time
-          # (scripts/vitest-node-durations.json legOneSteps).
-          VITEST_LEG_ONE_RESERVE: '1'
+          # The split gives the first leg its own later steps' time
+          # (scripts/vitest-node-durations.json legOneSteps), under those
+          # steps' scope condition. Every leg sets the same value, so every
+          # leg computes the same split.
+          VITEST_LEG_ONE_RESERVE: "${{ steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && '1' || '0' }}"
         run: |
           started=$(ps -o etimes= -C Runner.Worker 2>/dev/null | sort -n | tail -1 | tr -d ' ')
           VITEST_SHARD_WATCHDOG_SECONDS=$(( 14 * 60 - ${started:-180} ))

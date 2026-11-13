@@ -194,7 +194,7 @@ describe('browser-gated script tests in the workflows', () => {
       "const BROWSER_STEP = process.env.ASTRYX_THEME_EDITOR_BROWSER === '1';",
     );
     expect(source).toMatch(
-      /it\.runIf\(BROWSER_STEP\)\(\s*'keeps physical sides physical next to own sides, in each text direction \(butter\)'/,
+      /it\.runIf\(BROWSER_STEP\)\(\s*'renders own and editor sides in each text direction \(butter\)'/,
     );
     expect(source).not.toContain('the render check did not run');
   });

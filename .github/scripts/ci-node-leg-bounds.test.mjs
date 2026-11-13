@@ -77,8 +77,7 @@ describe('the Node legs inside their job limit', () => {
     const legOneOnly = job.steps
       .filter(
         each =>
-          typeof each.if === 'string' &&
-          each.if.startsWith('matrix.shard == 1'),
+          typeof each.if === 'string' && /\bmatrix\.shard == 1\b/.test(each.if),
       )
       .map(each => each.name)
       .sort();
@@ -87,6 +86,10 @@ describe('the Node legs inside their job limit', () => {
     expect(Object.keys(record.legOneSteps).sort()).toEqual(legOneOnly);
     for (const seconds of Object.values(record.legOneSteps))
       expect(Number.isFinite(seconds) && seconds >= 0).toBe(true);
-    expect(step.env.VITEST_LEG_ONE_RESERVE).toBe('1');
+    // Only where those steps run, the same value on every leg.
+    expect(step.env.VITEST_LEG_ONE_RESERVE).toBe(
+      "${{ steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && '1' || '0' }}",
+    );
+    expect(step.env.VITEST_LEG_ONE_RESERVE).not.toMatch(/matrix\.shard/);
   });
 });
