@@ -76,25 +76,26 @@ export function mdCell(value) {
   return String(value ?? '').replace(/\|/g, '\\|');
 }
 
-/** @param {import('@astryxdesign/cli/authoring').ComponentPropDoc[]} [props] @returns {string} */
-function formatPropsTable(props) {
+/**
+ * Render props as a list, one prop per line: name, type, default, the
+ * required and experimental markers, then the description. A list item needs
+ * no cell escaping, so a union type keeps its pipes as written.
+ * @param {import('@astryxdesign/cli/authoring').ComponentPropDoc[]} [props]
+ * @returns {string}
+ */
+function formatPropsList(props) {
   if (!props || props.length === 0) return '';
-  /** @type {string[]} */
-  const lines = [];
-  lines.push('| Prop | Type | Default | Description |');
-  lines.push('|------|------|---------|-------------|');
-  for (const p of props) {
-    const def = p.default ? `\`${mdCell(p.default)}\`` : '-';
-    const req = p.required ? ' **(required)**' : '';
-    // The text projection of the prop doc's `stability` field: an
-    // experimental prop is outside the stable compatibility promise.
-    const stability =
-      p.stability === 'experimental' ? ' **(experimental)**' : '';
-    lines.push(
-      `| \`${mdCell(p.name)}\` | \`${mdCell(p.type)}\` | ${def} | ${mdCell(p.description)}${req}${stability} |`,
-    );
-  }
-  return lines.join('\n');
+  return props
+    .map(p => {
+      const def = p.default ? ` = \`${p.default}\`` : '';
+      const req = p.required ? ' **(required)**' : '';
+      // The text projection of the prop doc's `stability` field: an
+      // experimental prop is outside the stable compatibility promise.
+      const stability =
+        p.stability === 'experimental' ? ' **(experimental)**' : '';
+      return `- \`${p.name}\`: \`${p.type}\`${def}${req}${stability} - ${p.description}`;
+    })
+    .join('\n');
 }
 
 /**
@@ -130,9 +131,9 @@ function formatSubComponent(comp) {
     out.push(comp.description + '\n');
   }
   out.push(...formatAccessibility(comp.usage?.accessibility, '####'));
-  const table = formatPropsTable(comp.props);
-  if (table) {
-    out.push(table + '\n');
+  const list = formatPropsList(comp.props);
+  if (list) {
+    out.push(list + '\n');
   } else {
     out.push(
       `See \`${getCliInvocation()} component ${comp.name}\` for props and usage.\n`,
@@ -371,7 +372,7 @@ export function formatFull(docs, options = {}) {
   // Single component props
   if ('props' in docs) {
     sections.push('## Props\n');
-    sections.push(formatPropsTable(docs.props) + '\n');
+    sections.push(formatPropsList(docs.props) + '\n');
   }
 
   // Multi-component
@@ -567,7 +568,7 @@ export function formatCompact(docs, componentName, importHint) {
   // Props
   if ('props' in docs) {
     sections.push('## Props\n');
-    sections.push(formatPropsTable(docs.props) + '\n');
+    sections.push(formatPropsList(docs.props) + '\n');
   }
 
   if ('components' in docs) {
@@ -791,7 +792,7 @@ export function formatBrief(docs, componentName, importHint, options = {}) {
  */
 export function formatProps(docs, componentName) {
   if ('props' in docs) {
-    return `## Props\n\n${formatPropsTable(docs.props)}\n`;
+    return `## Props\n\n${formatPropsList(docs.props)}\n`;
   }
 
   if ('components' in docs) {
@@ -799,7 +800,7 @@ export function formatProps(docs, componentName) {
     const sections = [];
     for (const comp of docs.components) {
       sections.push(`### ${comp.name} Props\n`);
-      sections.push(formatPropsTable(comp.props) + '\n');
+      sections.push(formatPropsList(comp.props) + '\n');
     }
     return sections.join('\n');
   }

@@ -98,7 +98,7 @@ describe('formatFull sub-component rendering', () => {
     }
   });
 
-  it('renders a full props table for a sub-component that has inline props', () => {
+  it('renders a full props list for a sub-component that has inline props', () => {
     const docs = {
       name: 'ButtonGroup',
       description: 'Groups buttons.',
@@ -121,7 +121,9 @@ describe('formatFull sub-component rendering', () => {
 
     expect(out).toContain('### XDSButtonGroup');
     expect(out).toContain('Connected button styling.');
-    expect(out).toContain('| `label` |');
+    expect(out).toContain(
+      '- `label`: `string` **(required)** - Accessible label.',
+    );
     expect(out).not.toContain('undefined');
     // With real props, it should NOT emit the "see docs" pointer.
     expect(out).not.toContain('astryx component XDSButtonGroup');
@@ -172,19 +174,11 @@ describe('formatFull theming override keys', () => {
   });
 });
 
-/** Pipes that actually separate cells — a `\|` is content, not a separator. */
-function cellPipes(row) {
-  return (row.match(/(?<!\\)\|/g) || []).length;
-}
-
-describe('markdown table cells escape their pipes', () => {
-  // A prop type is a union, and a union is spelled with `|` — the very
-  // character GFM uses to separate cells. Backticks do not protect it: a row
-  // with more cells than the header has columns gets its excess *discarded*,
-  // so an unescaped `gap: 0 | 0.5 | ...` silently eats its own Default and
-  // Description columns. See packages/core/src/Markdown/parser.ts, which
-  // splits on unescaped pipes and preserves `\|` as literal.
-  it('keeps a union-typed prop row at four cells', () => {
+describe('prop lists keep union types whole', () => {
+  // A prop type is a union, spelled with `|`. In a list item the pipes are
+  // plain text, so the type, default and description stay on one line as
+  // written, with nothing escaped.
+  it('prints a union-typed prop on one line with its default and description', () => {
     const docs = {
       name: 'Grid',
       description: 'A grid.',
@@ -197,19 +191,16 @@ describe('markdown table cells escape their pipes', () => {
         },
       ],
     };
-    const row = formatFull(docs)
+    const line = formatFull(docs)
       .split('\n')
-      .find(l => l.startsWith('| `gap`'));
+      .find(l => l.startsWith('- `gap`'));
 
-    // A 4-column row has exactly 5 separators. Unescaped, this row had 15.
-    expect(cellPipes(row)).toBe(5);
-    expect(row).toContain('\\|');
-    // The columns the unescaped pipes were swallowing.
-    expect(row).toContain('`2`');
-    expect(row).toContain('Spacing between all items.');
+    expect(line).toBe(
+      '- `gap`: `0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10` = `2` - Spacing between all items.',
+    );
   });
 
-  it('escapes pipes in a description too', () => {
+  it('keeps pipes in a description as written', () => {
     const docs = {
       name: 'AppShell',
       description: 'A shell.',
@@ -221,11 +212,13 @@ describe('markdown table cells escape their pipes', () => {
         },
       ],
     };
-    const row = formatFull(docs)
+    const line = formatFull(docs)
       .split('\n')
-      .find(l => l.startsWith('| `mobileNav`'));
+      .find(l => l.startsWith('- `mobileNav`'));
 
-    expect(cellPipes(row)).toBe(5);
+    expect(line).toBe(
+      "- `mobileNav`: `ReactNode` - Config. breakpoint is 'sm' | 'md' | 'lg' | 'none'.",
+    );
   });
 });
 
