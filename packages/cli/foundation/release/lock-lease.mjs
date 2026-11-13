@@ -57,9 +57,14 @@ const observed = new Map();
  * not changed for `LEASE_SILENCE_MS` of this process's own observation.
  * @param {string} lockDir
  * @param {number} [now]
+ * @param {number} [window] how long the record must stand unchanged (default `LEASE_SILENCE_MS`)
  * @returns {boolean}
  */
-export function foreignLockIsSilent(lockDir, now = Date.now()) {
+export function foreignLockIsSilent(
+  lockDir,
+  now = Date.now(),
+  window = LEASE_SILENCE_MS,
+) {
   let text;
   try {
     text = fs.readFileSync(path.join(lockDir, 'owner.json'), 'utf-8');
@@ -71,7 +76,7 @@ export function foreignLockIsSilent(lockDir, now = Date.now()) {
     observed.set(lockDir, {text, since: now});
     return false;
   }
-  return now - seen.since >= LEASE_SILENCE_MS;
+  return now - seen.since >= window;
 }
 
 /** Forget what this process observed (tests). */

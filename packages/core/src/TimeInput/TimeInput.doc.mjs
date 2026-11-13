@@ -247,7 +247,13 @@ export const docs = {
       name: 'status',
       type: "{type: 'warning' | 'error' | 'success', message?: string}",
       description:
-        'Status indicator that colors the border and displays an icon. When a message is provided it is rendered below the input.',
+        "Status indicator that colors the border and displays an icon. When a message is provided it is rendered below the input. A typed time the field rejects, and a native edit outside min or max, show the field's own error message instead; an error status with a message shows in its place, and the rejection is still announced. A warning or success never replaces a rejection.",
+    },
+    {
+      name: 'onEntryErrorChange',
+      type: "(error: {kind: 'unreadable' | 'outOfRange', text: string, value?: ISOTimeString} | null) => void",
+      description:
+        "Called each time the field's rejection of typed text changes, and with null when the rejection ends. kind is 'unreadable' (text that is not a time) or 'outOfRange' (a time before min or after max); text is the typed text; value is the ISO time the text names, for 'outOfRange'. A rejection shows once the typed time is complete (in 12-hour text, with its day period unless the hour reads 0 or 13–23), or at Enter or blur; rejected text stays in the field. It also runs when a new min, max, or value, or disabling the field, changes the rejection, never twice for the same rejection, and with null when the field unmounts while a rejection stands. The native and bottom-sheet surfaces take no typed text, so they never report.",
     },
     {
       name: 'statusVariant',
@@ -330,7 +336,8 @@ export const docsZh = {
     {
       name: 'isDisabled',
       type: 'boolean',
-      description: '禁用输入框并抑制交互。输入框仍可聚焦并暴露 `aria-disabled`。',
+      description:
+        '禁用输入框并抑制交互。输入框仍可聚焦并暴露 `aria-disabled`。',
       default: 'false',
     },
     {
@@ -428,7 +435,13 @@ export const docsZh = {
       name: 'status',
       type: "{type: 'warning' | 'error' | 'success', message?: string}",
       description:
-        '为边框着色并显示图标的状态指示器。当提供消息时，消息渲染在输入框下方。',
+        '为边框着色并显示图标的状态指示器。当提供消息时，消息渲染在输入框下方。字段拒绝的输入时间，以及超出 min 或 max 的原生编辑，会显示字段自身的错误消息；带消息的 error 状态会显示在其位置，拒绝仍会被播报。warning 或 success 状态不会替代拒绝消息。',
+    },
+    {
+      name: 'onEntryErrorChange',
+      type: "(error: {kind: 'unreadable' | 'outOfRange', text: string, value?: ISOTimeString} | null) => void",
+      description:
+        "每当字段对输入文本的拒绝发生变化时调用，拒绝结束时传入 null。kind 为 'unreadable'（不是时间的文本）或 'outOfRange'（早于 min 或晚于 max 的时间）；text 为输入的文本；value 为文本所指的 ISO 时间，用于 'outOfRange'。输入的时间完整后（12 小时制文本需带上午/下午，除非小时为 0 或 13–23），或按 Enter、失焦时，拒绝才会显示；被拒绝的文本保留在字段中。新的 min、max 或 value，或禁用字段改变拒绝时也会调用；同一拒绝不会重复调用；拒绝仍存在时字段卸载会传入 null。原生和底部面板界面不接受输入文本，因此不会报告。",
     },
     {
       name: 'statusVariant',
@@ -633,7 +646,10 @@ export const docsDense = {
       "deprecated, use presentation: 'touch'='adaptive-native', 'always'='native', 'never'='text-input'. still works as released; presentation wins if both set.",
     placeholder: 'Placeholder when empty. Focused+empty shows format hint.',
     size: 'Input element height.',
-    status: 'Colored border+icon. Message rendered below input.',
+    status:
+      'Colored border+icon. Message rendered below input. A rejected typed time or native edit outside min/max shows its own error instead; an error status w/ message wins (rejection still announced); warning/success never hide a rejection.',
+    onEntryErrorChange:
+      "(error|null) on each typed-rejection change: kind 'unreadable'|'outOfRange' (min/max), text, value (ISO time, outOfRange); shows when the typed time is complete (12h: day period unless hour 0/13-23) or at Enter/blur, text kept; also on new min/max/value, disable; never twice for one rejection; null on unmount mid-rejection; never on native/sheet",
     statusVariant:
       'How status message is placed: attached overlaps below input; detached floats below w/ spacing; tooltip hides the box and shows it on the status icon.',
     labelTooltip: 'Tooltip as info icon at label row end.',

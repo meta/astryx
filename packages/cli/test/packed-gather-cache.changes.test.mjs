@@ -1,0 +1,434 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+/**
+ * A published CLI keeps the catalog `search` and `build` gather between runs
+ * (foundation/fs/gather-cache.mjs) and uses it only while nothing it read has
+ * changed: a kept catalog is not used after edits, a change above the project, or another project or environment.
+ * Each case's answer from a kept catalog must equal a fresh gather's.
+ */
+
+import {describe, expect, it} from 'vitest';
+import {spawnSync} from 'node:child_process';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import {pathToFileURL} from 'node:url';
+import {
+  usePackedCli,
+  BUILD_ID,
+  packed,
+  project,
+  widgets,
+  writeTemplate,
+  makeProject,
+  run,
+  keptTmp,
+  allInodes,
+  expectWarmHit,
+  freshTmp,
+  entries,
+  templatesEntries,
+  QUERIES,
+  expectSameAsFresh,
+  hasModuleHooks,
+  userConfig,
+  work,
+} from '../test-utils/packed-gather-cache-fixture.mjs';
+
+usePackedCli();
+
+describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
+  it.skipIf(!hasModuleHooks)(
+    'is not used after an edit, an added or removed file, or a copy that keeps the time',
+    async () => {
+      const tmp = keptTmp('stale');
+      expect(await expectSameAsFresh(tmp)).toEqual(['miss', 'hit']);
+      writeTemplate('ledger', 'Entries as rows with running balances.');
+      expect(await expectSameAsFresh(tmp)).toEqual(['miss', 'hit']);
+      writeTemplate('kanban', 'Cards in columns with running totals.');
+      expect(await expectSameAsFresh(tmp)).toEqual(['miss', 'hit']);
+      fs.rmSync(path.join(widgets, 'templates', 'kanban.doc.mjs'));
+      expect(await expectSameAsFresh(tmp)).toEqual(['miss', 'hit']);
+      // Same size and times, other text: a copy that keeps the time.
+      const doc = path.join(widgets, 'templates', 'roster.doc.mjs');
+      const {atime, mtime, size} = fs.statSync(doc);
+      const text = fs.readFileSync(doc, 'utf8').replace('team', 'crew');
+      expect(Buffer.byteLength(text)).toBe(size);
+      const copy = `${doc}.copy`;
+      fs.writeFileSync(copy, text);
+      fs.utimesSync(copy, atime, mtime);
+      fs.renameSync(copy, doc);
+      expect(await expectSameAsFresh(tmp)).toEqual(['miss', 'hit']);
+      writeTemplate('roster', 'People as rows with role and team.');
+    },
+    300_000,
+  );
+
+  it.skipIf(!hasModuleHooks)(
+    'is not used by another project, another CLI, or another environment',
+    async () => {
+      const tmp = keptTmp('other');
+      // The second query reads the first's catalog back: the warm path hits.
+      expect(await expectSameAsFresh(tmp)).toEqual(['miss', 'hit']);
+      const other = makeProject();
+      try {
+        expect(await expectSameAsFresh(tmp, {cwd: other.dir})).toEqual([
+          'miss',
+          'hit',
+        ]);
+        expect(entries(tmp).size).toBe(2);
+      } finally {
+        fs.rmSync(other.dir, {recursive: true, force: true});
+      }
+      fs.writeFileSync(
+        path.join(packed, BUILD_ID),
+        JSON.stringify({id: 'second'}) + '\n',
+      );
+      expect((await expectSameAsFresh(tmp))[0]).toBe('miss');
+      expect((await expectSameAsFresh(tmp, {env: {CI: '1'}}))[0]).toBe('miss');
+    },
+    300_000,
+  );
+
+  it('is not used after a change in a folder above the project', async () => {
+    const tmp = keptTmp('ancestors');
+    const parent = path.dirname(project);
+    const config = path.join(project, 'astryx.config.mjs');
+    // The project lists an integration it does not install itself.
+    fs.writeFileSync(
+      config,
+      `export default { integrations: ['@acme/widgets', '@acme/far'] };\n`,
+    );
+    /** @type {string[]} */
+    const made = [];
+    try {
+      const first = await expectSameAsFresh(tmp);
+      // Where the CLI keeps catalogs, the warm path hits.
+      if (hasModuleHooks) expect(first).toEqual(['miss', 'hit']);
+      // A package.json, then a config file, in the folder above.
+      for (const [name, text] of [
+        ['package.json', JSON.stringify({name: 'parent'})],
+        ['astryx.config.mjs', 'export default {};\n'],
+      ]) {
+        const file = path.join(parent, name);
+        fs.writeFileSync(file, text);
+        made.push(file);
+        await expectSameAsFresh(tmp);
+      }
+      // A node_modules folder above, then the listed integration in it.
+      const far = path.join(parent, 'node_modules', '@acme', 'far');
+      made.push(path.join(parent, 'node_modules'));
+      fs.mkdirSync(path.join(parent, 'node_modules'));
+      await expectSameAsFresh(tmp);
+      fs.mkdirSync(path.join(far, 'templates'), {recursive: true});
+      fs.writeFileSync(
+        path.join(far, 'package.json'),
+        JSON.stringify({name: '@acme/far', version: '1.0.0'}),
+      );
+      fs.writeFileSync(
+        path.join(far, 'astryx.integration.mjs'),
+        `export default { templates: './templates' };\n`,
+      );
+      fs.writeFileSync(
+        path.join(far, 'templates', 'tally.doc.mjs'),
+        `export default {type: 'page', name: 'tally', description: 'Running totals per team, tallied.', category: 'Far - Tally'};\n`,
+      );
+      fs.writeFileSync(
+        path.join(far, 'templates', 'tally.tsx'),
+        `export default function Page() { return null; }\n`,
+      );
+      const before = run(QUERIES[0], {tmp: freshTmp()});
+      expect((await expectSameAsFresh(tmp))[0]).toBe('miss');
+      expect(run(QUERIES[0], {tmp}).stdout).toBe(before.stdout);
+    } finally {
+      for (const file of made.reverse()) {
+        fs.rmSync(file, {recursive: true, force: true});
+      }
+      fs.writeFileSync(
+        config,
+        `export default { integrations: ['@acme/widgets'] };\n`,
+      );
+    }
+  }, 300_000);
+
+  it.skipIf(!hasModuleHooks)(
+    "does not depend on a variable's value when code only lists the names",
+    () => {
+      const tmp = keptTmp('env-values');
+      const other = makeProject();
+      try {
+        // A TypeScript manifest: loading it transforms it, and the transform
+        // lists every variable's name (it reads only its own variables).
+        fs.rmSync(path.join(other.widgets, 'astryx.integration.mjs'));
+        fs.writeFileSync(
+          path.join(other.widgets, 'astryx.integration.ts'),
+          "const integration: {templates: string} = {templates: './templates'};\nexport default integration;\n",
+        );
+        const templates = path.join(other.widgets, 'templates');
+        fs.mkdirSync(templates, {recursive: true});
+        fs.writeFileSync(
+          path.join(templates, 'tally.doc.mjs'),
+          `export default {type: 'page', name: 'tally', description: 'Running totals, tallied by team.', category: 'Widget - Tally'};\n`,
+        );
+        fs.writeFileSync(
+          path.join(templates, 'tally.tsx'),
+          `export default function Page() { return null; }\n`,
+        );
+        const ask = QUERIES[0];
+        const at = (/** @type {string} */ value) =>
+          run(ask, {tmp, cwd: other.dir, env: {ASTRYX_TEST_TOKEN: value}});
+        const first = at('one');
+        const inodes = () =>
+          new Map([...entries(tmp)].map(([name, {ino}]) => [name, ino]));
+        const kept = inodes();
+        expect(kept.size).toBeGreaterThan(0);
+        // An unrelated variable with another value, as a tool sets per call:
+        // the kept catalog is read back.
+        expect(at('two')).toEqual(first);
+        expect(inodes()).toEqual(kept);
+      } finally {
+        fs.rmSync(other.dir, {recursive: true, force: true});
+      }
+    },
+    120_000,
+  );
+
+  it('misses when a variable the gather reads has another value', () => {
+    const tmp = keptTmp('env-read');
+    const other = makeProject();
+    try {
+      // The manifest reads a variable's value to pick its templates.
+      fs.writeFileSync(
+        path.join(other.widgets, 'astryx.integration.mjs'),
+        "export default {templates: process.env.ASTRYX_TEST_ROOT === 'b' ? './templates-b' : './templates'};\n",
+      );
+      for (const [folder, description] of [
+        ['templates', 'Running totals, tallied by team.'],
+        ['templates-b', 'Grand totals, tallied by week.'],
+      ]) {
+        const dir = path.join(other.widgets, folder);
+        fs.mkdirSync(dir, {recursive: true});
+        fs.writeFileSync(
+          path.join(dir, 'tally.doc.mjs'),
+          `export default {type: 'page', name: 'tally', description: '${description}', category: 'Widget - Tally'};\n`,
+        );
+        fs.writeFileSync(
+          path.join(dir, 'tally.tsx'),
+          `export default function Page() { return null; }\n`,
+        );
+      }
+      const ask = ['template', '--list'];
+      const at = (/** @type {string} */ value, /** @type {string} */ where) =>
+        run(ask, {tmp: where, cwd: other.dir, env: {ASTRYX_TEST_ROOT: value}});
+      expect(at('a', tmp)).toEqual(at('a', freshTmp()));
+      // The warm path hits while the variable keeps its value.
+      if (hasModuleHooks) {
+        expectWarmHit(tmp, [ask], {
+          cwd: other.dir,
+          env: {ASTRYX_TEST_ROOT: 'a'},
+        });
+      }
+      const b = at('b', tmp);
+      expect(b.stdout).toContain('Grand totals');
+      expect(b).toEqual(at('b', freshTmp()));
+    } finally {
+      fs.rmSync(other.dir, {recursive: true, force: true});
+    }
+  }, 120_000);
+
+  it('hands a variable an inner kept gather read on to the gather around it', () => {
+    const tmp = keptTmp('env-nested');
+    const dir = fs.mkdtempSync(path.join(work, 'nested-'));
+    try {
+      // Two kept gathers of the installed CLI, one inside the other: the
+      // outer reads a file, the inner a variable.
+      const input = path.join(dir, 'outer.txt');
+      const script = path.join(dir, 'nested.mjs');
+      fs.writeFileSync(
+        script,
+        `import * as fs from 'node:fs';
+const {persistedGather, recordRun} = await import(${JSON.stringify(
+          pathToFileURL(
+            path.join(packed, 'foundation', 'fs', 'gather-cache.mjs'),
+          ).href,
+        )});
+const codec = {encode: v => v, decode: v => v};
+const answer = await recordRun(() =>
+  persistedGather(['nested-outer'], async () => {
+    const inner = await persistedGather(['nested-inner'], async () => process.env.ASTRYX_TEST_V, codec);
+    return inner + ':' + fs.readFileSync(${JSON.stringify(input)}, 'utf8');
+  }, codec),
+);
+process.stdout.write(answer);
+`,
+      );
+      const at = (/** @type {string} */ value) => {
+        const result = spawnSync(process.execPath, [script], {
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            XDG_CACHE_HOME: tmp,
+            XDG_CONFIG_HOME: userConfig(),
+            ASTRYX_TEST_V: value,
+          },
+        });
+        expect(result.status, result.stderr).toBe(0);
+        return result.stdout;
+      };
+      fs.writeFileSync(input, '1');
+      expect(at('a')).toBe('a:1');
+      // Nothing changed: both gathers are read back, nothing written again.
+      if (hasModuleHooks) {
+        const warm = allInodes(tmp);
+        expect(warm.size).toBe(2);
+        expect(at('a')).toBe('a:1');
+        expect(allInodes(tmp)).toEqual(warm);
+      }
+      // Only the outer input changes: the outer gathers again while the
+      // inner is read back.
+      fs.writeFileSync(input, '2');
+      expect(at('a')).toBe('a:2');
+      // Then the variable the inner read changes.
+      expect(at('b')).toBe('b:2');
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  }, 60_000);
+  describe('a contribution added to a folder a nested kept entry listed', () => {
+    /** What to add to each root so the integration's checks report it. */
+    const broken = {
+      themes: (/** @type {string} */ root) => {
+        fs.mkdirSync(path.join(root, 'broken'), {recursive: true});
+        fs.writeFileSync(
+          path.join(root, 'broken', 'brokenTheme.doc.mjs'),
+          "export default {type: 'theme', name: 'broken', displayName: 'Broken', description: 'Broken.', maintained: true};\n",
+        );
+        fs.writeFileSync(
+          path.join(root, 'broken', 'brokenTheme.ts'),
+          "export const brokenTheme = {name: 'broken', tokens: {}};\n",
+        );
+      },
+      templates: (/** @type {string} */ root) =>
+        fs.writeFileSync(
+          path.join(root, 'broken.doc.mjs'),
+          "export default {type: 'page'};\n",
+        ),
+      components: (/** @type {string} */ root) =>
+        fs.writeFileSync(
+          path.join(root, 'Broken.doc.mjs'),
+          "export default {type: 'component'};\n",
+        ),
+      docs: (/** @type {string} */ root) =>
+        fs.writeFileSync(
+          path.join(root, 'broken.doc.mjs'),
+          "export const docs = {type: 'generic'};\n",
+        ),
+    };
+    const commands = [
+      ['component', 'Button'],
+      ['template', '--list'],
+      ['theme', 'list'],
+      ['search', 'running', 'totals'],
+    ];
+    for (const [root, add] of Object.entries(broken)) {
+      for (const ask of commands) {
+        // theme list discovers integration themes afresh on every call, so
+        // that pair shows nothing about kept entries.
+        if (root === 'themes' && ask[1] === 'list') continue;
+        it.skipIf(!hasModuleHooks)(
+          `shows a broken entry added to ${root} on the next ${ask.join(' ')}`,
+          () => {
+            const tmp = keptTmp(`nested-${root}-${ask[0]}`);
+            const other = makeProject();
+            try {
+              fs.writeFileSync(
+                path.join(other.widgets, 'astryx.integration.mjs'),
+                "export default {themes: './themes', templates: './templates', components: './components', docs: './docs'};\n",
+              );
+              for (const dir of ['themes', 'templates', 'components', 'docs']) {
+                fs.mkdirSync(path.join(other.widgets, dir), {recursive: true});
+              }
+              const at = (/** @type {string} */ where) =>
+                run(ask, {tmp: where, cwd: other.dir, json: false});
+              at(tmp);
+              at(tmp);
+              // The warm path hits: nothing is written again.
+              const [before] = expectWarmHit(tmp, [ask], {
+                cwd: other.dir,
+                json: false,
+              });
+              add(path.join(other.widgets, root));
+              const after = at(tmp);
+              // The broken entry changes the answer, so equal to fresh shows it.
+              expect(after).not.toEqual(before);
+              expect(after).toEqual(at(freshTmp()));
+            } finally {
+              fs.rmSync(other.dir, {recursive: true, force: true});
+            }
+          },
+          120_000,
+        );
+      }
+    }
+  });
+
+  it('sees a template added or renamed after template discovery was kept inside search', () => {
+    const tmp = keptTmp('nested-listing');
+    const other = makeProject();
+    try {
+      const templates = path.join(other.widgets, 'templates');
+      fs.mkdirSync(templates, {recursive: true});
+      /** @param {string} name @param {string} description */
+      const template = (name, description) => {
+        fs.writeFileSync(
+          path.join(templates, `${name}.doc.mjs`),
+          `export default {type: 'block', name: '${name}', description: '${description}', category: 'Widget - Gate'};\n`,
+        );
+        fs.writeFileSync(
+          path.join(templates, `${name}.tsx`),
+          `export default function Block() { return null; }\n`,
+        );
+      };
+      template('gate-fixture', 'Gate fixture block with running totals.');
+      const ask = ['search', 'gate', 'fixture', 'block'];
+      const searchAt = (/** @type {string} */ where) =>
+        run(ask, {tmp: where, cwd: other.dir});
+      // Template discovery is kept by template --list; search then keeps its
+      // catalog with discovery read back inside it.
+      run(['template', '--list'], {tmp, cwd: other.dir, json: false});
+      const kept = templatesEntries(tmp);
+      expect(kept.size).toBe(1);
+      searchAt(tmp);
+      const catalogs = entries(tmp);
+      const inodes = () =>
+        new Map([...entries(tmp)].map(([name, {ino}]) => [name, ino]));
+      const warm = inodes();
+      expect(catalogs.size).toBeGreaterThan(0);
+      // The warm path hits: the same answer from the same files.
+      searchAt(tmp);
+      expect(inodes()).toEqual(warm);
+      expect(templatesEntries(tmp)).toEqual(kept);
+      // A template added: the next search sees it, as a fresh one does.
+      template('gate-fixture-extra', 'Gate fixture extra block for ledgers.');
+      const added = searchAt(tmp);
+      expect(added.stdout).toContain('gate-fixture-extra');
+      expect(added).toEqual(searchAt(freshTmp()));
+      // Renamed: likewise.
+      for (const ext of ['.doc.mjs', '.tsx']) {
+        fs.renameSync(
+          path.join(templates, `gate-fixture-extra${ext}`),
+          path.join(templates, `gate-fixture-renamed${ext}`),
+        );
+      }
+      fs.writeFileSync(
+        path.join(templates, 'gate-fixture-renamed.doc.mjs'),
+        `export default {type: 'block', name: 'gate-fixture-renamed', description: 'Gate fixture extra block for ledgers.', category: 'Widget - Gate'};\n`,
+      );
+      const renamed = searchAt(tmp);
+      expect(renamed.stdout).toContain('gate-fixture-renamed');
+      expect(renamed.stdout).not.toContain('gate-fixture-extra');
+      expect(renamed).toEqual(searchAt(freshTmp()));
+    } finally {
+      fs.rmSync(other.dir, {recursive: true, force: true});
+    }
+  }, 180_000);
+});

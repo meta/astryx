@@ -20,7 +20,7 @@
  * split — no element is added for the swipe (spec AST-057, FR2).
  */
 
-import {useEffect, useRef, type RefObject} from 'react';
+import {useEffect, useRef, useState, type RefObject} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
   fontWeightVars,
@@ -119,11 +119,14 @@ const styles = stylex.create({
     width: `max(0px, calc(-1 * ${SWIPE_LOGICAL_TRAVEL}))`,
   },
   // The entries at their natural width; the panel clips them to the travel.
-  // The outermost entry is the last, at the panel's outer edge: on the leading
-  // side that is the inline start, so the row of entries runs in reverse.
+  // Past that width they grow to fill it, so every uncovered pixel shows the
+  // entry that owns it. The outermost entry is the last, at the panel's outer
+  // edge. On the leading side that is the inline start, so the row of entries
+  // runs in reverse.
   swipeEntries: {
     display: 'flex',
     flexShrink: 0,
+    minWidth: '100%',
     height: '100%',
     // The entries sit on the surface, not on the panel's own colour: the
     // neutral variant is translucent and would otherwise take the outermost
@@ -135,6 +138,7 @@ const styles = stylex.create({
   },
   swipeEntry: {
     display: 'flex',
+    flexGrow: 1,
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
@@ -160,10 +164,24 @@ const styles = stylex.create({
   swipeEntryDisabled: {
     opacity: 0.5,
   },
+  // While one entry fires, it covers the panel and the others take no space.
+  swipeEntryCovered: {
+    flexGrow: 0,
+    flexBasis: 0,
+    minWidth: 0,
+    paddingInline: 0,
+    overflow: 'hidden',
+  },
+  // The covering entry's label stays beside the row, as the row moves away.
+  swipeEntryCoveringLeading: {
+    alignItems: 'flex-end',
+  },
+  swipeEntryCoveringTrailing: {
+    alignItems: 'flex-start',
+  },
 });
 
-// A verb's colour: ordinary, the one you mean, the dangerous one. The panel
-// wears its outermost entry's, so a slide-out fills the row with it.
+// A verb's colour: ordinary, the one you mean, the dangerous one.
 const swipeVariantStyles = stylex.create({
   neutral: {
     backgroundColor: colorVars['--color-neutral'],
@@ -210,12 +228,17 @@ export default function ItemSwipeLayer({
     const entries = side === 'leading' ? leading : trailing;
     return entries[entries.length - 1];
   };
+  // The entry a tap fired, which covers its panel until a new swipe.
+  const [tapped, setTapped] = useState<{
+    side: SwipeSide;
+    index: number;
+  } | null>(null);
   const swipe = useSwipeAction({
     isEnabled: true,
     behavior,
     sides: {
-      leading: leading.length > 0,
-      trailing: trailing.length > 0,
+      leading: leading.length,
+      trailing: trailing.length,
     },
     measurePanel: side =>
       (side === 'leading' ? leadingEntriesRef : trailingEntriesRef).current
@@ -237,7 +260,17 @@ export default function ItemSwipeLayer({
   // stale bridge; and withdrawn when the layer leaves.
   useEffect(() => {
     onBridge({
-      handlers: swipe.handlers,
+      handlers: {
+        ...swipe.handlers,
+        // A swipe can start only from a row at rest or resting open. A touch
+        // that lands while the row slides out or holds out keeps the cover.
+        onPointerDown: event => {
+          if (swipe.state.phase === 'idle' || swipe.state.phase === 'resting') {
+            setTapped(null);
+          }
+          swipe.handlers.onPointerDown(event);
+        },
+      },
       shouldSuppressClick: swipe.shouldSuppressClick,
     });
     return () => {
@@ -254,9 +287,25 @@ export default function ItemSwipeLayer({
     if (entries.length === 0) {
       return null;
     }
-    const outer = entries[entries.length - 1];
     const isCommit = behavior === 'commit';
     const isLive = isSwipeResting && !isCommit;
+    // By position: an entry's label may change when it fires.
+    const coveringIndex =
+      swipe.state.side !== side
+        ? null
+        : swipe.state.isCovering
+          ? entries.length - 1
+          : tapped?.side === side && tapped.index < entries.length
+            ? tapped.index
+            : null;
+    const coverStyles = (index: number) =>
+      coveringIndex == null
+        ? null
+        : index === coveringIndex
+          ? side === 'leading'
+            ? styles.swipeEntryCoveringLeading
+            : styles.swipeEntryCoveringTrailing
+          : styles.swipeEntryCovered;
     return (
       <div
         key={side}
@@ -270,7 +319,6 @@ export default function ItemSwipeLayer({
             side === 'leading'
               ? styles.swipePanelLeading
               : styles.swipePanelTrailing,
-            swipeVariantStyles[outer.variant ?? 'accent'],
           ),
         )}>
         <div
@@ -279,7 +327,7 @@ export default function ItemSwipeLayer({
             styles.swipeEntries,
             side === 'leading' && styles.swipeEntriesLeading,
           )}>
-          {entries.map(entry => {
+          {entries.map((entry, index) => {
             const variant = entry.variant ?? 'accent';
             const content = (
               <>
@@ -291,6 +339,7 @@ export default function ItemSwipeLayer({
               styles.swipeEntry,
               swipeVariantStyles[variant],
               entry.isDisabled === true && styles.swipeEntryDisabled,
+              coverStyles(index),
             );
             if (isCommit) {
               return (
@@ -309,12 +358,13 @@ export default function ItemSwipeLayer({
                 key={entry.id ?? entry.label}
                 type="button"
                 aria-disabled={entry.isDisabled === true ? true : undefined}
-                onClick={() =>
+                onClick={() => {
+                  setTapped({side, index});
                   swipe.activateEntry(() => {
                     void entry.onActivate();
                     return entry.hasRemoval === true;
-                  })
-                }
+                  });
+                }}
                 // A disabled entry stays focusable while the row rests open but
                 // is inert: it runs no `onActivate` and its click does not
                 // reach the row (spec:AST-085 FR1, FR2).
@@ -327,6 +377,7 @@ export default function ItemSwipeLayer({
                     styles.swipeEntry,
                     swipeVariantStyles[variant],
                     entry.isDisabled === true && styles.swipeEntryDisabled,
+                    coverStyles(index),
                   ),
                 )}>
                 {content}

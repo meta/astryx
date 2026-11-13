@@ -21,6 +21,24 @@ import {
   removeLinkedFixture,
 } from '../../../test-utils/linked-fixture.mjs';
 
+/**
+ * The temp folder's entries, the fixture's own package.json aside: that
+ * file is the one the linked fixture writes (it lists Core, nothing else),
+ * checked unchanged, so a build that wrote any package.json still fails.
+ * @param {string} dir
+ * @returns {string[]}
+ */
+function ownEntries(dir) {
+  const pkg = path.join(dir, 'package.json');
+  if (fs.existsSync(pkg))
+    expect(JSON.parse(fs.readFileSync(pkg, 'utf8'))).toEqual({
+      private: true,
+      type: 'module',
+      dependencies: {'@astryxdesign/core': '*'},
+    });
+  return fs.readdirSync(dir).filter(f => f !== 'package.json');
+}
+
 let tmpDir;
 beforeEach(() => {
   // Real core and React imports resolve in both the theme loader and the
@@ -180,10 +198,7 @@ export default {name: 'selected', tokens: {'--color-bg': '#fff'}, icons: inlineI
     await expect(
       themeBuild('selected.mjs', {}, {cwd: tmpDir}),
     ).rejects.toMatchObject({code: 'ERR_THEME_INVALID'});
-    expect(fs.readdirSync(tmpDir).sort()).toEqual([
-      'icons.mjs',
-      'selected.mjs',
-    ]);
+    expect(ownEntries(tmpDir).sort()).toEqual(['icons.mjs', 'selected.mjs']);
   });
 
   it('unwraps TypeScript assertions around an aliased defineTheme call', async () => {
@@ -249,7 +264,7 @@ export default {name: 'inline', tokens: {'--color-bg': '#fff'}, icons: inlineIco
         themeBuild('inline.ts', {check}, {cwd: tmpDir}),
       ).rejects.toMatchObject({code: 'ERR_THEME_INVALID'});
     }
-    expect(fs.readdirSync(tmpDir).sort()).toEqual(['icons.mjs', 'inline.ts']);
+    expect(ownEntries(tmpDir).sort()).toEqual(['icons.mjs', 'inline.ts']);
   });
 
   it.each([
@@ -553,7 +568,7 @@ export default defineTheme({
           {cwd: tmpDir},
         ),
       ).rejects.toMatchObject({code: 'ERR_THEME_LOAD'});
-      expect(fs.readdirSync(tmpDir)).toEqual(['missing.mjs']);
+      expect(ownEntries(tmpDir)).toEqual(['missing.mjs']);
     });
 
     it('rejects a registry mutated through a destructured theme alias before writing', async () => {
@@ -580,10 +595,7 @@ export default config;
           {cwd: tmpDir},
         ),
       ).rejects.toMatchObject({code: 'ERR_THEME_INVALID'});
-      expect(fs.readdirSync(tmpDir).sort()).toEqual([
-        'icons.mjs',
-        'mutated.mjs',
-      ]);
+      expect(ownEntries(tmpDir).sort()).toEqual(['icons.mjs', 'mutated.mjs']);
     });
 
     it.each([
@@ -634,7 +646,7 @@ export const config = {name: 'raw-package', extends: baseTheme, tokens: {}};
             {cwd: tmpDir},
           ),
         ).rejects.toMatchObject({code: 'ERR_THEME_INVALID'});
-        expect(fs.readdirSync(tmpDir).sort()).toEqual([
+        expect(ownEntries(tmpDir).sort()).toEqual([
           'node_modules',
           'package-config.mjs',
         ]);

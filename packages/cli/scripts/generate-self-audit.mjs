@@ -21,17 +21,10 @@ import {fileURLToPath, pathToFileURL} from 'node:url';
 import {isDeepStrictEqual} from 'node:util';
 import {CLI_ROOT} from '../foundation/fs/paths.mjs';
 import {SELF_AUDIT_FILE} from '../foundation/discovery/stored-self-audit.mjs';
+import {assertSameBesideLockfiles} from './same-beside-lockfiles.mjs';
 
 /** The repository's folder, two levels above the package. */
 const REPO_DIR = path.resolve(CLI_ROOT, '..', '..');
-
-/** Each package manager's lockfile, as the CLI tells them apart. */
-const LOCKFILES = [
-  'package-lock.json',
-  'pnpm-lock.yaml',
-  'yarn.lock',
-  'bun.lock',
-];
 
 /**
  * The files the package publishes, by path in the package.
@@ -122,20 +115,11 @@ export function selfAuditText() {
     }
     // The audit reads where it runs only to spell commands: prove its answer
     // is the same beside each package manager's lockfile.
-    for (const lockfile of LOCKFILES) {
-      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-self-audit-'));
-      try {
-        fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"probe"}');
-        fs.writeFileSync(path.join(dir, lockfile), '');
-        if (!isDeepStrictEqual(runAudit(pkg, dir).value, value)) {
-          throw new Error(
-            `the authoring audit answers differently beside ${lockfile}`,
-          );
-        }
-      } finally {
-        fs.rmSync(dir, {recursive: true, force: true});
-      }
-    }
+    assertSameBesideLockfiles(
+      'the authoring audit',
+      value,
+      dir => runAudit(pkg, dir).value,
+    );
     return JSON.stringify({[name]: {inputs, value}}) + '\n';
   } finally {
     fs.rmSync(stage, {recursive: true, force: true});
