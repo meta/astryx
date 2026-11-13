@@ -1087,6 +1087,7 @@ export class Project {
         sets,
         this.#config.experimental?.iconSet,
         withdrawn,
+        this.#config.experimental?.iconVariant,
       );
       return {sets: orderIconSets(sets, choice), withdrawn, choice};
     });
