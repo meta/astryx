@@ -92,6 +92,9 @@
  * @property {string} stylesheet production stylesheet import
  * @property {string} [fontStylesheet] package-owned font stylesheet import
  * @property {'bundled'|'package'|'local'} source
+ * @property {'light'|'dark'} [mode] the one color mode the theme has, when its
+ *   built module exports one (`colorModes`); the generated module then lists
+ *   it in `themeModes`. Absent for a theme with both modes.
  */
 
 /**

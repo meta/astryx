@@ -1186,6 +1186,7 @@ async function writeThemeApp(
         stylesheet: theme.stylesheet,
         ...(theme.fontStylesheet ? {fontStylesheet: theme.fontStylesheet} : {}),
         source: theme.source,
+        ...(theme.mode ? {mode: theme.mode} : {}),
       })),
       default: defaultSlug,
       modulePath: prepared.module.path,

@@ -1198,7 +1198,9 @@ function assertThemeSourceFile(filePath, cwd, mode = {}) {
  * output must stay inside, for a scratch build; `commandWords` names the
  * command in the rebuild hint; `prepareFamily`, `familyLoader`, and
  * `familyInterception` make the build a family member's plan.
- * @typedef {{prepareFamily?: boolean, familyLoader?: any, familyInterception?: any, writeRoot?: string, claimedOutputs?: Map<string, string>, deferredWrites?: Array<Array<{dest: string, content: string}>>, commandWords?: {group: string, build: string}}} ThemeBuildHandOff
+ * `colorModes` is the one color mode a calling command knows the theme has
+ * (the theme editor, from its settings), written into the built module.
+ * @typedef {{prepareFamily?: boolean, familyLoader?: any, familyInterception?: any, writeRoot?: string, claimedOutputs?: Map<string, string>, deferredWrites?: Array<Array<{dest: string, content: string}>>, commandWords?: {group: string, build: string}, colorModes?: ['light'] | ['dark'] | null}} ThemeBuildHandOff
  */
 
 /**
@@ -2709,7 +2711,7 @@ function isSyncLoaderLimitation(error) {
  *
  * @param {string} filePath
  * @param {import('./core-interception.mjs').CoreInterception} [interception]
- * @returns {Promise<{theme: any, exportName: string, degraded: {topLevelAwait: boolean, commonJs: boolean}}>}
+ * @returns {Promise<{theme: any, exportName: string, degraded: {topLevelAwait: boolean, commonJs: boolean}, colorModes: ["light"] | ["dark"] | null}>}
  */
 // prettier-ignore
 async function importThemeModule(filePath, interception, /** @type {any} */ loader = undefined) {
@@ -2769,15 +2771,22 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
   // `default` with the module), so the module can pass for the theme while
   // its own keys hide the theme's fields.
   const isModule = mod != null && typeof mod === 'object';
+  // A theme with one color mode says so with a `colorModes` export beside
+  // the theme (`['light']` or `['dark']`); the build carries it into the
+  // built module.
+  const colorModes = oneColorMode(
+    isModule && Object.hasOwn(mod, 'colorModes') ? mod.colorModes : undefined,
+  );
   const hasDefault = isModule && Object.hasOwn(mod, 'default');
   const defaultExport = hasDefault ? mod.default : undefined;
   if (isThemeObject(defaultExport)) {
-    return {theme: defaultExport, exportName: 'default', degraded};
+    return {theme: defaultExport, exportName: 'default', degraded, colorModes};
   }
   if (isModule) {
     for (const [exportName, value] of Object.entries(mod)) {
       if (exportName === 'default' || exportName === 'module.exports') continue;
-      if (isThemeObject(value)) return {theme: value, exportName, degraded};
+      if (isThemeObject(value))
+        return {theme: value, exportName, degraded, colorModes};
     }
   }
   // The loader's interop answers a null default with the module itself, so
@@ -2799,7 +2808,7 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
   // be all it defines), or no name: the build's validation says what it
   // lacks.
   if (isPlainObject(defaultExport)) {
-    return {theme: defaultExport, exportName: 'default', degraded};
+    return {theme: defaultExport, exportName: 'default', degraded, colorModes};
   }
   // A CommonJS module whose exports are the theme (`module.exports =
   // theme`) has no default of its own: interop answers `default` with
@@ -2808,7 +2817,7 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
   if (isModule && !hasDefault) {
     const exportsObject = mod.default ?? mod;
     if (isThemeObject(exportsObject)) {
-      return {theme: exportsObject, exportName: 'default', degraded};
+      return {theme: exportsObject, exportName: 'default', degraded, colorModes};
     }
   }
 
@@ -2877,7 +2886,7 @@ function isThemeObject(value) {
  *
  * @param {string} filePath
  * @param {import('./core-interception.mjs').CoreInterception} [interception]
- * @returns {Promise<{theme: any, exportName?: string, degraded: {topLevelAwait: boolean, commonJs: boolean}}>}
+ * @returns {Promise<{theme: any, exportName?: string, degraded: {topLevelAwait: boolean, commonJs: boolean}, colorModes?: ['light'] | ['dark'] | null}>}
  */
 // prettier-ignore
 async function extractThemeDefinition(filePath, interception, /** @type {any} */ loader = undefined) {
@@ -2890,6 +2899,20 @@ async function extractThemeDefinition(filePath, interception, /** @type {any} */
       {cause: jitiError},
     );
   }
+}
+
+/**
+ * A one-mode `colorModes` value (`['light']` or `['dark']`), or null for
+ * anything else: a theme with both modes needs no export.
+ * @param {unknown} value
+ * @returns {['light'] | ['dark'] | null}
+ */
+export function oneColorMode(value) {
+  return Array.isArray(value) &&
+    value.length === 1 &&
+    (value[0] === 'light' || value[0] === 'dark')
+    ? /** @type {['light'] | ['dark']} */ ([value[0]])
+    : null;
 }
 
 /** Names a theme module's exports must take; ends a shape failure. */
@@ -3902,6 +3925,9 @@ async function themeBuildInternal(
   let themeExportName;
   /** Paths through the load that interception could not fully observe. */
   let loadDegradation;
+  /** The one color mode the theme module exports, or null for both. */
+  /** @type {['light'] | ['dark'] | null} */
+  let colorModes;
   /**
    * The theme file's bytes as loaded: read before and after the load, and the
    * registry scan below reads these rather than the file again. An editor's
@@ -3928,6 +3954,7 @@ async function themeBuildInternal(
     themeDef = loaded.theme;
     themeExportName = loaded.exportName;
     loadDegradation = loaded.degraded;
+    colorModes = handOff.colorModes ?? loaded.colorModes ?? null;
   } catch (e) {
     const err = /** @type {Error} */ (e);
     const shown = path.relative(cwd, filePath) || filePath;
@@ -4559,10 +4586,18 @@ async function themeBuildInternal(
             ? {}
             : {cssFileName: path.basename(outPath)}),
         },
-      );
+      ) +
+      // The one color mode, beside the theme export (a two-mode theme
+      // exports none, so its module is unchanged).
+      (colorModes
+        ? `export const colorModes = [${JSON.stringify(colorModes[0])}];\n`
+        : '');
   const dtsContent =
     generatedHeader(headerSource, 'ts', buildCommand, versions) +
-    generateBuiltTypes(resolvedTheme || themeDef, iconInfo, variantsFileName);
+    generateBuiltTypes(resolvedTheme || themeDef, iconInfo, variantsFileName) +
+    (colorModes
+      ? `export declare const colorModes: readonly [${JSON.stringify(colorModes[0])}];\n`
+      : '');
 
   const unloadedFonts = [
     ...new Set([

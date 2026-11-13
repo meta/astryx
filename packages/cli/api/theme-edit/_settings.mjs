@@ -4609,7 +4609,7 @@ export async function buildTheme(ctx, slug, data) {
       fs.rmSync(file, {force: true});
     forgetWritten(cwd, slug, pictures);
   });
-  let receipt = await step(() => runBuild(ctx, slug));
+  let receipt = await step(() => runBuild(ctx, slug, data));
   const found = findOverrides(fs.readFileSync(f.css, 'utf8'), theme).filter(
     x =>
       // By property: a variant whose rule the settings give this property
@@ -4669,7 +4669,7 @@ export async function buildTheme(ctx, slug, data) {
       writeWhole(f.settingsTs, settingsSource(slug, data, theme, pal, cwd));
       syncPaletteRefs(cwd, slug, fs.readFileSync(f.settingsTs, 'utf8'), pal);
     });
-    receipt = await step(() => runBuild(ctx, slug));
+    receipt = await step(() => runBuild(ctx, slug, data));
   }
   for (const out of [f.css, f.js])
     if (fs.existsSync(out))
@@ -4690,8 +4690,44 @@ export async function buildTheme(ctx, slug, data) {
   return {warnings, lifted, notes};
 }
 
-/** @param {Ctx} ctx @param {string} slug @returns {Promise<any>} */
-async function runBuild(ctx, slug) {
+/**
+ * The one color mode of a light-only or dark-only theme, from its settings,
+ * for the build to write into the built module (`colorModes`); null for a
+ * theme with both modes.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {['light'] | ['dark'] | null}
+ */
+export function buildColorModes(cwd, slug) {
+  try {
+    return oneModeOf(
+      JSON.parse(fs.readFileSync(themeFiles(cwd, slug).settings, 'utf8')),
+    );
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The one color mode of settings with one, or null.
+ * @param {any} data
+ * @returns {['light'] | ['dark'] | null}
+ */
+function oneModeOf(data) {
+  const modes = modesOf(data);
+  return modes.length === 1 && (modes[0] === 'light' || modes[0] === 'dark')
+    ? [modes[0]]
+    : null;
+}
+
+/**
+ * @param {Ctx} ctx
+ * @param {string} slug
+ * @param {{mode?: string}} [data] the settings being built (saved after the
+ *   build), whose mode the built module exports
+ * @returns {Promise<any>}
+ */
+async function runBuild(ctx, slug, data) {
   const {cwd} = ctx.project;
   const f = themeFiles(cwd, slug);
   const silent = logger.silent;
@@ -4705,6 +4741,7 @@ async function runBuild(ctx, slug) {
       {},
       {cwd},
       {compact: true},
+      {colorModes: data ? oneModeOf(data) : buildColorModes(cwd, slug)},
     );
     return receipt;
   } finally {
@@ -4731,6 +4768,7 @@ export async function outputsDrift(ctx, slug) {
       {check: true},
       {cwd},
       {compact: true},
+      {colorModes: buildColorModes(cwd, slug)},
     );
     const first = /** @type {any} */ (receipt)?.data?.stale?.[0];
     if (!first) return null;

@@ -101,6 +101,7 @@ function resolveLocalTheme(theme, cwd) {
     stylesheetFile,
     ...(fs.existsSync(fontStylesheetFile) ? {fontStylesheetFile} : {}),
     source: /** @type {const} */ ('local'),
+    ...builtColorMode(moduleFile),
   };
 }
 
@@ -228,7 +229,31 @@ function resolvePackageTheme(theme, cwd, ownerThemeCount) {
       /** @type {any} */ (theme).source === 'bundled' || theme.bundled
         ? /** @type {const} */ ('bundled')
         : /** @type {const} */ ('package'),
+    ...builtColorMode(selected.module.target),
   };
+}
+
+/**
+ * `{mode}` for a built theme module that exports one color mode
+ * (`export const colorModes = ["light"];`, which `theme build` writes beside
+ * the theme export), read without running it; nothing for a module with
+ * both modes, which exports none.
+ * @param {string | null | undefined} moduleFile
+ * @returns {{mode?: 'light' | 'dark'}}
+ */
+export function builtColorMode(moduleFile) {
+  if (!moduleFile) return {};
+  let text;
+  try {
+    text = fs.readFileSync(moduleFile, 'utf8');
+  } catch {
+    return {};
+  }
+  const m =
+    /^export const colorModes = \[\s*["'](light|dark)["']\s*\];?\s*$/m.exec(
+      text,
+    );
+  return m ? {mode: /** @type {'light' | 'dark'} */ (m[1])} : {};
 }
 
 /**

@@ -138,8 +138,7 @@ export function projectUsesTypeScript(projectDir) {
       .readdirSync(projectDir, {withFileTypes: true})
       .some(
         entry =>
-          entry.isFile() &&
-          /^tsconfig(?:\.[^.]+)*\.json$/u.test(entry.name),
+          entry.isFile() && /^tsconfig(?:\.[^.]+)*\.json$/u.test(entry.name),
       );
   } catch {
     return false;
@@ -226,7 +225,9 @@ function validThemeRecord(value, label, source = '') {
  */
 export function parseThemeModuleRecord(source, label = 'theme module') {
   if (!source.includes(THEME_MODULE_MARKER)) {
-    throw new ThemeStateError(`${label} does not carry the Astryx generated marker.`);
+    throw new ThemeStateError(
+      `${label} does not carry the Astryx generated marker.`,
+    );
   }
   const recordLines = source
     .split(/\r?\n/u)
@@ -276,7 +277,9 @@ export function resolveThemeModule(projectDir, {forWrite = false} = {}) {
     throw new ThemeStateError(
       `More than one generated theme module exists: ${generated
         .map(file => projectPath(path.relative(projectDir, file)))
-        .join(', ')}. Keep one and remove the others before running the command again.`,
+        .join(
+          ', ',
+        )}. Keep one and remove the others before running the command again.`,
     );
   }
   const file = generated[0] ?? candidates[0];
@@ -391,6 +394,8 @@ export function readThemeState(cwd = process.cwd()) {
  * @property {string} stylesheetFile
  * @property {string} [fontStylesheetFile]
  * @property {'bundled'|'package'|'local'} source
+ * @property {'light'|'dark'} [mode] the one color mode its built module
+ *   exports; absent for a theme with both modes
  */
 
 /**
@@ -418,7 +423,14 @@ export function renderThemeModule(themes, defaultSlug, typescript) {
   const entries = [];
   /** @type {Record<string, string>} */
   const owners = {};
+  /** The one color mode of each theme that has one only. */
+  /** @type {string[]} */
+  const modes = [];
   themes.forEach((theme, index) => {
+    if (theme.mode)
+      modes.push(
+        `  ${JSON.stringify(theme.slug)}: ${JSON.stringify(theme.mode)},`,
+      );
     const local = `_astryxTheme${index}`;
     imports.push(
       `import {${theme.exportName} as ${local}} from ${JSON.stringify(theme.module)};`,
@@ -430,7 +442,10 @@ export function renderThemeModule(themes, defaultSlug, typescript) {
     entries.push(`  ${JSON.stringify(theme.slug)}: ${local},`);
     owners[theme.slug] = theme.owner;
   });
-  const record = JSON.stringify({themes: owners, defaultThemeSlug: defaultSlug});
+  const record = JSON.stringify({
+    themes: owners,
+    defaultThemeSlug: defaultSlug,
+  });
   return `/**\n * ${THEME_MODULE_MARKER}\n * ${THEME_RECORD_MARKER} ${record}\n */\n\n${imports.join(
     '\n',
   )}\n\nexport const themes = {\n${entries.join('\n')}\n}${
@@ -439,7 +454,18 @@ export function renderThemeModule(themes, defaultSlug, typescript) {
     typescript ? 'export type ThemeSlug = keyof typeof themes;\n' : ''
   }\nexport const defaultThemeSlug${
     typescript ? ': keyof typeof themes' : ''
-  } = ${JSON.stringify(defaultSlug)};\n`;
+  } = ${JSON.stringify(defaultSlug)};\n${
+    // Only when an added theme has one color mode: `Theme`'s `mode` for
+    // each such theme, so the app follows the selected one. A record of
+    // two-mode themes writes the module exactly as before.
+    modes.length > 0
+      ? `\nexport const themeModes${
+          typescript
+            ? `: Partial<Record<keyof typeof themes, 'light' | 'dark'>>`
+            : ''
+        } = {\n${modes.join('\n')}\n};\n`
+      : ''
+  }`;
 }
 
 /**
