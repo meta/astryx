@@ -4,9 +4,9 @@
  * @file TableCellContextMenu.modality.test.tsx
  * @output Tests that a mouse right-click held before the menu loads opens the
  *   menu without the keyboard focus ring
- * @position Validates interaction-modality tracking for an early invocation
- *   (architecture:interaction-modality INV1). Its own file, so no earlier
- *   menu in this document has started the tracking.
+ * @position Validates interaction-modality tracking for an early invocation.
+ *   Its own file, so no earlier menu in this document has started the
+ *   tracking.
  */
 
 import {describe, it, expect, vi, beforeEach} from 'vitest';

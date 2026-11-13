@@ -5,7 +5,6 @@
  * @input Table cell server markup and React hydration
  * @output Proves body and header cells with context actions hydrate without a
  *   recoverable error or a console error while the menu has not loaded
- *   (spec:AST-013 FR9)
  * @position SSR acceptance test for TableCellContextMenu; it waits for the
  *   menu module each hydration starts, so none loads after teardown
  */

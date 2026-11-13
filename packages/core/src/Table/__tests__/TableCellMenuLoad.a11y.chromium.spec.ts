@@ -12,9 +12,8 @@
  *   opens the cell's menu once when the code arrives, focus lands on the first
  *   row (with no keyboard ring after a mouse open), and Escape hands it back.
  *   With no invocation, the load changes no box and no axe result
- * @position Real-browser layer for TableCellContextMenu's early invocations
- *   (spec:AST-013 FR9, FR10, FR13). The fixture server holds the menu chunk
- *   until the test releases it.
+ * @position Real-browser layer for TableCellContextMenu's early invocations.
+ *   The fixture server holds the menu chunk until the test releases it.
  */
 
 import {once} from 'node:events';
