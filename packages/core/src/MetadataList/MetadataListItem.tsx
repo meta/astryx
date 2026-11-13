@@ -123,7 +123,7 @@ const styles = stylex.create({
 // =============================================================================
 
 /**
- * A single labeled metadata value within an MetadataList.
+ * A single labeled metadata value within a MetadataList.
  *
  * Renders a `<dt>` / `<dd>` pair. Layout (side-by-side or stacked) is
  * determined by the parent MetadataList's label configuration.
