@@ -13,7 +13,7 @@
  */
 
 import type {ReactNode} from 'react';
-import {useThemeName} from '../theme/useTheme';
+import {useThemeDefinition} from '../theme/useTheme';
 import {
   getIcon,
   resolveComponentIcon,
@@ -36,8 +36,8 @@ import type {ComponentIconSlotName} from './index';
  * `<Icon icon={name} />` to resolve the entry at another size.
  */
 export function useIcon(name: IconName | NamespacedIconName): ReactNode {
-  const themeName = useThemeName();
-  return getIcon(name, themeName);
+  const theme = useThemeDefinition();
+  return getIcon(name, theme);
 }
 
 /**
@@ -50,6 +50,6 @@ export function useComponentIcon<Slot extends ComponentIconSlotName>(
   state: ComponentIconSlotState<Slot>,
   fallback: ComponentIconFallback,
 ): ResolvedComponentIcon {
-  const themeName = useThemeName();
-  return resolveComponentIcon(slot, state, fallback, themeName);
+  const theme = useThemeDefinition();
+  return resolveComponentIcon(slot, state, fallback, theme);
 }
