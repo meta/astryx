@@ -1547,6 +1547,37 @@ export function draftAnswer(ctx, env, question) {
       '$2 $4 in $1 mode',
     )
     .replace(/^\s*(dark|light) mode only\s*:\s*/i, 'in $1 mode: ')
+    // "just the headers bolder", "only the titles bigger": a scope, not a
+    // break between asks.
+    .replace(/(?<![-\w])(?:just|only)\s+(?=(?:the|my)\s+\w+\s+\w)/gi, '')
+    // "headers bolder", "titles bigger": with a text word and no surface
+    // word, the headings' type; with a surface word ("header background"),
+    // the app header part.
+    .replace(/\b(headers?|titles?)\b/gi, (m, _w, at, all) => {
+      const clause = String(all)
+        .slice(Math.max(0, String(all).lastIndexOf(',', at) + 1))
+        .split(/[,;.\n]/)[0];
+      const text =
+        /\b(bold(er)?|bigger|smaller|larger|font|weight|size|serif|sans|italic|heavier|lighter|thinner|uppercase|letter[- ]?spacing|tracking|line[- ]?height)\b/i.test(
+          clause,
+        );
+      const surface =
+        /\b(background|bg|bar|border|sticky|height|shadow|color of the bar|padding|fixed)\b/i.test(
+          clause,
+        );
+      // "table header", "accordion header", "card title": that part's own.
+      // A place ("not in the header") is the header part too.
+      const before = String(all).slice(Math.max(0, at - 16), at);
+      const owned =
+        /\b(table|column|accordion|card|dialog|modal|page|section|app|site|product|top ?nav)\s+$/i.test(
+          before,
+        ) || /\b(in|on|inside|into|across|of)\s+(the\s+|my\s+)?$/i.test(before);
+      return text && !surface && !owned
+        ? /s$/i.test(m)
+          ? 'headings'
+          : 'heading'
+        : m;
+    })
     // "focus ring on inputs only, at half strength": an amount alone after a
     // comma belongs to the ask before it.
     .replace(

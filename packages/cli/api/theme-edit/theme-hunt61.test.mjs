@@ -131,3 +131,31 @@ describe('hunt61: scope, state and amount', () => {
     expect(exactFactor('a bit rounder')).toBeNull();
   });
 });
+
+describe('hunt61b: headers and titles', () => {
+  it.each(
+    /** @type {Array<[string, RegExp]>} */ ([
+      // A text word: the headings' type, and "just" keeps that scope.
+      ['just the headers bolder', /^set q headings bold$/],
+      ['make the titles bigger', /^set q type /],
+      ['header font serif', /^set q font serif --on heading$/],
+      // A surface word: the app header part.
+      [
+        'header background dark',
+        /^set q background '#[0-9a-f]{6}' --on app-shell-header$/,
+      ],
+      ['the header bar border thicker', / --on app-shell-header$/],
+      // A part that owns its header keeps it.
+      [
+        'table header text bold',
+        /^set q font-weight 700 --on table-header-cell$/,
+      ],
+    ]),
+  )(
+    '%s',
+    async (q, want) => {
+      expect((await top(q)).command).toMatch(want);
+    },
+    120_000,
+  );
+});
