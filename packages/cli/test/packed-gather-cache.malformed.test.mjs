@@ -26,6 +26,22 @@ import {
 usePackedCli();
 
 /**
+ * The kind of a kept entry, from the key it was stored under.
+ * @param {string} file
+ * @returns {string}
+ */
+function kindOf(file) {
+  const key = JSON.parse(JSON.parse(fs.readFileSync(file, 'utf8')).key);
+  const [first, second] = key.slice(5);
+  if (first === 'derived') return String(second);
+  return typeof first === 'string' &&
+    !first.includes('/') &&
+    !first.includes('\\')
+    ? first
+    : 'search-catalog';
+}
+
+/**
  * Every kept entry, by name, with its inode.
  * @param {string} tmp
  * @returns {Map<string, number>}
@@ -74,6 +90,8 @@ const BREAKS = {
 const ASKS = [
   ['search', 'running', 'totals'],
   ['build', 'a', 'ledger', 'page', 'with', 'totals'],
+  // A block request, so build keeps its block catalog too.
+  ['build', 'a dashboard with a chart and a table'],
   ['template', '--list'],
   ['component', 'Button'],
   ['doctor'],
@@ -116,8 +134,20 @@ describe.skipIf(process.platform !== 'linux' || !hasModuleHooks)(
           const kept = [...keptInodes(tmp).keys()];
           // Every kind is kept: the catalog, its table and block catalog, the
           // integration's checks, the issue list, the template records and
-          // doctor's three docs checks.
-          expect(kept.length).toBeGreaterThanOrEqual(9);
+          // doctor's docs checks.
+          expect(
+            new Set(kept.map(file => kindOf(path.join(dir, file)))),
+          ).toEqual(
+            new Set([
+              'search-catalog',
+              'entry-table',
+              'block-catalog',
+              'integration-issues',
+              'project-issues',
+              'template-sources',
+              'doctor-check',
+            ]),
+          );
           for (const file of kept) {
             const entry = JSON.parse(
               fs.readFileSync(path.join(dir, file), 'utf8'),
