@@ -12,6 +12,7 @@
  * - /packages/core/src/NumberInput/numberParser.ts (locale-aware parsing)
  * - /packages/core/src/NumberInput/numberInputCommit.ts (draft commit policy)
  * - /packages/core/src/Field/useEntryErrorReport.ts (rejection status, alert, and report)
+ * - /packages/core/src/Field/useValueReplacesEntry.ts (when a new value replaces a kept draft)
  * - /packages/core/src/NumberInput/NumberInput.doc.mjs (props table, features, implementation notes)
  * - /packages/core/src/NumberInput/NumberInput.test.tsx (tests for new/changed behavior)
  * - /packages/core/src/NumberInput/index.ts (exports if types change)
@@ -249,6 +250,7 @@ import {
   isSameEntryError,
   useEntryErrorReport,
 } from '../Field/useEntryErrorReport';
+import {useValueReplacesEntry} from '../Field/useValueReplacesEntry';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
 import {
   registerEnglishFallback,
@@ -766,25 +768,16 @@ export function NumberInput({
     setShownRejection(null);
     setIsDraftKeptAtBlur(false);
   }
-  // A new value replaces a rejected or blur-kept draft. A value that changes
-  // at the commit that shows the rejection keeps the draft.
-  const [rendered, setRendered] = useState({value, rejection: shownRejection});
+  // A new value replaces a rejected or blur-kept draft. Each Enter or blur
+  // that keeps a draft sets a new rejection, so a value that arrives with it
+  // keeps the draft.
+  const isValueReplacing = useValueReplacesEntry(value, shownRejection);
   let isDraftReplaced = false;
-  if (
-    !Object.is(rendered.value, value) ||
-    rendered.rejection !== shownRejection
-  ) {
-    setRendered({value, rejection: shownRejection});
-    if (
-      !Object.is(rendered.value, value) &&
-      (shownRejection !== null || isDraftKeptAtBlur) &&
-      rendered.rejection === shownRejection
-    ) {
-      setPendingInput(null);
-      setShownRejection(null);
-      setIsDraftKeptAtBlur(false);
-      isDraftReplaced = true;
-    }
+  if (isValueReplacing && (shownRejection !== null || isDraftKeptAtBlur)) {
+    setPendingInput(null);
+    setShownRejection(null);
+    setIsDraftKeptAtBlur(false);
+    isDraftReplaced = true;
   }
   // New rules judge a rejected draft again, unless a new value replaced it in
   // the same update.
