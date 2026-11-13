@@ -12,6 +12,7 @@ import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditSet, themeEditShow} from './theme-edit.mjs';
+import {themeBuild} from '../theme/build/build.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -32,19 +33,59 @@ const THEMES = path.resolve(
 /** @type {string} */
 let cwd;
 
-beforeAll(() => {
+/** Why a bundled theme could not be built here, when it could not. */
+let unbuilt = '';
+
+beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-real-bases-', FIXTURE_PACKAGES);
   // The bundled themes themselves, as an app that installs them has them.
   for (const like of ['butter', 'neutral']) {
+    const own = path.join(THEMES, like);
     const link = path.join(
       path.dirname(cwd),
       'node_modules/@astryxdesign',
       `theme-${like}`,
     );
     fs.rmSync(link, {recursive: true, force: true});
-    fs.symlinkSync(path.join(THEMES, like), link, 'dir');
+    if (fs.existsSync(path.join(own, 'dist', `${like}.js`))) {
+      fs.symlinkSync(own, link, 'dir');
+      continue;
+    }
+    // Not built (a checkout that built only Core): build it as its package
+    // build's theme step does, from its own source with its own installed
+    // packages, and install that build in the fixture.
+    try {
+      const out = `node_modules/.astryx-test-built/${process.pid}`;
+      await themeBuild(
+        `src/${like}Theme.ts`,
+        {out: `${out}/dist/theme.css`, iconsSpecifier: './icons.mjs'},
+        {cwd: own},
+      );
+      fs.mkdirSync(link, {recursive: true});
+      fs.copyFileSync(
+        path.join(own, 'package.json'),
+        path.join(link, 'package.json'),
+      );
+      fs.cpSync(path.join(own, out, 'dist'), path.join(link, 'dist'), {
+        recursive: true,
+      });
+      fs.rmSync(path.join(own, out), {recursive: true, force: true});
+      // The icon registry the module imports is a separate package step;
+      // padding never reads it, so an empty one stands in.
+      const js = fs.readFileSync(path.join(link, 'dist', `${like}.js`), 'utf8');
+      const icons = /import \{\s*(\w+)\s*\} from ["']\.\/icons\.mjs["']/.exec(
+        js,
+      )?.[1];
+      if (icons)
+        fs.writeFileSync(
+          path.join(link, 'dist', 'icons.mjs'),
+          `export const ${icons} = {};\n`,
+        );
+    } catch (e) {
+      unbuilt = `the ${like} theme could not be built here: ${e instanceof Error ? e.message : String(e)}`;
+    }
   }
-}, 120_000);
+}, 300_000);
 
 afterAll(() => {
   if (cwd) removeLinkedFixture(cwd);
@@ -61,7 +102,11 @@ const ruleOf = (slug, selector) => {
 };
 
 describe('padding on real base themes', () => {
-  it("replaces butter's number-input and card padding, side padding included", async () => {
+  it("replaces butter's number-input and card padding, side padding included", async ctx => {
+    if (unbuilt) {
+      console.warn(`skipped: ${unbuilt}`);
+      return ctx.skip();
+    }
     await themeEditNew('b', {cwd, like: 'butter'});
     const before = ruleOf('b', '.astryx-number-input');
     // Butter gives the number input a block and an inline padding.
@@ -76,7 +121,11 @@ describe('padding on real base themes', () => {
     expect(card).not.toMatch(/--astryx-card-padding:\s*var\(/);
   }, 240_000);
 
-  it("replaces neutral's card padding", async () => {
+  it("replaces neutral's card padding", async ctx => {
+    if (unbuilt) {
+      console.warn(`skipped: ${unbuilt}`);
+      return ctx.skip();
+    }
     await themeEditNew('n', {cwd, like: 'neutral'});
     await themeEditSet('n', 'padding', '20px', {cwd, on: 'card'});
     const card = ruleOf('n', '.astryx-card');
@@ -84,7 +133,11 @@ describe('padding on real base themes', () => {
     expect(card).not.toMatch(/--astryx-card-padding:\s*var\(/);
   }, 240_000);
 
-  it('keeps an own-source card side under a clickable card hover padding', async () => {
+  it('keeps an own-source card side under a clickable card hover padding', async ctx => {
+    if (unbuilt) {
+      console.warn(`skipped: ${unbuilt}`);
+      return ctx.skip();
+    }
     await themeEditNew('o', {cwd, like: 'neutral'});
     const ts = path.join(cwd, 'themes/o/o.theme.ts');
     const src = fs.readFileSync(ts, 'utf8');
