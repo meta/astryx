@@ -5,13 +5,14 @@
 /**
  * @file touchRuntimeModules.tsx
  * @input The shared touch modules: the animator, and the touch parts of
- *   SegmentedControl and Switch, which use the gesture host
+ *   SegmentedControl, Switch, Toast and Popover, which use the animator and
+ *   the gesture host
  * @output `touchRuntime`, the one object the touch loader publishes
  * @position Loaded only through `import()` in utils/touchRuntime.ts. No
  *   other module imports this file
  */
 
-import type {RefObject} from 'react';
+import {useEffect, useRef, type RefObject} from 'react';
 import {animatorFor} from '../motion/animator';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {
@@ -23,6 +24,10 @@ import {
   type SwitchTouchOptions,
   type SwitchTouchParts,
 } from '../Switch/useSwitchTouch';
+import {PanGestureRecognizer} from '../gestures/PanGestureRecognizer';
+import {useGestureRecognizer} from '../gestures/useGestureRecognizer';
+import {createPopoverSurfaceMotion} from '../Popover/popoverSurfaceMotion';
+import type {ToastSwipeClaimProps} from '../Toast/useToastGesture';
 
 interface SegmentedMotionProps {
   readonly trackRef: RefObject<HTMLElement | null>;
@@ -78,11 +83,60 @@ function SwitchTouch({parts, options}: SwitchTouchProps): null {
   return null;
 }
 
+/**
+ * A toast's claim on a finger's touch: the gesture host's one-way pan, which
+ * claims the touch and never begins. It renders nothing. It mounts once the
+ * runtime has loaded, so the first touch it claims is the first one after
+ * the load.
+ */
+function ToastSwipeClaim({
+  rootRef,
+  direction,
+  isEnabled,
+  shouldReceive,
+  onClaim,
+}: ToastSwipeClaimProps): null {
+  const shouldReceiveRef = useRef(shouldReceive);
+  // Syncs the pan's touch filter with the toast's newest one.
+  useIsomorphicLayoutEffect(() => {
+    shouldReceiveRef.current = shouldReceive;
+  });
+  const claim = useGestureRecognizer(
+    rootRef,
+    () =>
+      new PanGestureRecognizer({
+        name: 'toast-swipe',
+        direction: direction === 1 ? 'down' : 'up',
+        firstMoveDecides: true,
+        maximumNumberOfTouches: 1,
+        hysteresis: Number.POSITIVE_INFINITY,
+        cancelsTouchesInView: false,
+        shouldReceiveTouch: (_recognizer, touch) =>
+          touch.pointerType === 'touch' &&
+          shouldReceiveRef.current(touch.target as EventTarget),
+      }),
+    undefined,
+    {isEnabled, manageStyle: false},
+  );
+  // Syncs the gesture host's pan with the edge this toast dismisses toward.
+  useEffect(() => {
+    claim.setDirection(direction === 1 ? 'down' : 'up');
+  }, [claim, direction]);
+  // Syncs the toast's swipe with this part's pan.
+  useIsomorphicLayoutEffect(() => {
+    onClaim(claim);
+    return () => onClaim(null);
+  }, [claim, onClaim]);
+  return null;
+}
+
 /** What the touch loader publishes once the page has loaded it. */
 export const touchRuntime = {
   animatorFor,
+  createPopoverSurfaceMotion,
   SegmentedMotion,
   SwitchTouch,
+  ToastSwipeClaim,
 } as const;
 
 export type TouchRuntime = typeof touchRuntime;

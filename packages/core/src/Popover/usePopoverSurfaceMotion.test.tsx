@@ -11,10 +11,28 @@
  */
 
 import {renderHook} from '@testing-library/react';
-import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  beforeAll,
+} from 'vitest';
 import {TOUCH_QUERY} from '../utils/touchPresentation';
 import {createPopoverSurfaceMotion} from './popoverSurfaceMotion';
 import {usePopoverSurfaceMotion} from './usePopoverSurfaceMotion';
+import {
+  __loadTouchRuntimeForTest,
+  __resetTouchRuntimeForTest,
+} from '../utils/touchRuntime';
+
+// These cases drive touch motion, which comes with the shared touch runtime
+// once the page has loaded it.
+beforeAll(async () => {
+  await __loadTouchRuntimeForTest();
+});
 
 vi.mock('./popoverSurfaceMotion', () => ({
   createPopoverSurfaceMotion: vi.fn(() => ({
@@ -70,6 +88,21 @@ describe('usePopoverSurfaceMotion', () => {
     result.current.closeStart();
     expect(createPopoverSurfaceMotion).not.toHaveBeenCalled();
     expect(layer.getAttribute('style')).toBeNull();
+  });
+
+  it('before the touch runtime loads, presents a coarse open as a fine-pointer one', async () => {
+    __resetTouchRuntimeForTest();
+    try {
+      isTouch = true;
+      const {layer, trigger} = layerAndTrigger();
+      const {result} = renderHook(() => usePopoverSurfaceMotion());
+      result.current.present(layer, trigger);
+      result.current.closeStart();
+      expect(createPopoverSurfaceMotion).not.toHaveBeenCalled();
+      expect(layer.getAttribute('style')).toBeNull();
+    } finally {
+      await __loadTouchRuntimeForTest();
+    }
   });
 
   it('under a coarse pointer, grows the popover as it opens and shrinks it as its close starts', () => {

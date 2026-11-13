@@ -348,9 +348,8 @@ those contracts.
   animator, so a component that reads the threshold statically does not pull
   in the deferred runtime. Gap: these modules still import the shared touch
   modules statically, so a page that renders them carries the touch runtime in
-  its first load: Toast (`useToastGesture`), Popover (`popoverSurfaceMotion`),
-  `hooks/useActionGroupTracking`, `hooks/usePager`, Lightbox (`useZoomCore`,
-  `useZoomStage`), and Resizable (`resizablePane`). A surface
+  its first load: `hooks/useActionGroupTracking`, `hooks/usePager`, Lightbox
+  (`useZoomCore`, `useZoomStage`), and Resizable (`resizablePane`). A surface
   revealed by interaction that a component loads with `import()` under
   `architecture:component-import-boundaries` INV1 imports these modules
   statically too; the bundler still keeps one copy per page. That `import()`
