@@ -231,6 +231,18 @@ describe('base resolution', () => {
     });
     expect(!notBase.ok && notBase.code).toBe('ERR_BASE_NOT_FOUND');
     expect(!notBase.ok && notBase.message).toContain('does not declare base');
+    const broken = resolveBase({
+      cwd: dir,
+      integrations: [
+        ...integrations,
+        loaded(dir, '@acme/broken', {__loadError: 'Unexpected token'}),
+      ],
+      requested: '@acme/broken',
+      projectHasCore: none,
+    });
+    expect(!broken.ok && broken.message).toBe(
+      '--base @acme/broken: its integration manifest does not load: Unexpected token',
+    );
     const missing = resolveBase({
       cwd: dir,
       integrations,

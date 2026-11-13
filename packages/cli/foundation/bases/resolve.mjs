@@ -210,7 +210,18 @@ export function resolveBase({
     if (name === CORE_BASE_NAME) return found(coreBase());
     const hit = bases.find(integration => integration.name === name);
     if (hit) return found(baseOf(hit));
-    const installed = resolveInstalledPackageDir(name, cwd) != null;
+    const broken = integrations.find(
+      integration => integration.name === name && integration.__loadError != null,
+    );
+    if (broken) {
+      return failed(
+        ERROR_CODES.ERR_BASE_NOT_FOUND,
+        `--base ${name}: its integration manifest does not load: ${broken.__loadError}`,
+      );
+    }
+    const installed =
+      integrations.some(integration => integration.name === name) ||
+      resolveInstalledPackageDir(name, cwd) != null;
     return failed(
       ERROR_CODES.ERR_BASE_NOT_FOUND,
       installed
