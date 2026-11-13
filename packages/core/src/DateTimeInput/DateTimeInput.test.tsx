@@ -3754,6 +3754,66 @@ describe('DateTimeInput date segment rejected entries', () => {
     expect(new FormData(form).getAll('starts')).toEqual(['02/31/2026']);
   });
 
+  it.each(['blur', 'Enter'])(
+    'keeps unreadable date text and its message when the caller restores its value at the %s that keeps it',
+    commit => {
+      function RestoringDateTimeInput() {
+        const [value, setValue] = useState<ISODateTimeString | undefined>(
+          '2026-01-25T10:00' as ISODateTimeString,
+        );
+        const [editStartValue, setEditStartValue] = useState(value);
+        const restore = () => {
+          if (value !== editStartValue) {
+            setValue(editStartValue);
+          }
+        };
+        return (
+          <>
+            <DateTimeInput
+              label="Starts"
+              value={value}
+              onChange={setValue}
+              onFocus={() => setEditStartValue(value)}
+              onBlur={restore}
+              onKeyDown={event => {
+                if (event.key === 'Enter') {
+                  restore();
+                }
+              }}
+            />
+            <output data-testid="value">{value ?? ''}</output>
+            <button
+              type="button"
+              onClick={() => setValue('2026-03-20T10:00' as ISODateTimeString)}>
+              Replace
+            </button>
+          </>
+        );
+      }
+      const {container} = render(<RestoringDateTimeInput />);
+      const dateInput = screen.getByRole('combobox');
+      fireEvent.focus(dateInput);
+      fireEvent.change(dateInput, {target: {value: '02/14/2026'}});
+      expect(screen.getByTestId('value')).toHaveTextContent('2026-02-14T10:00');
+      fireEvent.change(dateInput, {target: {value: 'tomorrowish'}});
+
+      if (commit === 'blur') {
+        fireEvent.blur(dateInput);
+      } else {
+        fireEvent.keyDown(dateInput, {key: 'Enter'});
+      }
+      expect(screen.getByTestId('value')).toHaveTextContent('2026-01-25T10:00');
+      expect(dateInput).toHaveValue('tomorrowish');
+      expect(dateInput).toHaveAttribute('aria-invalid', 'true');
+      expect(statusText(container)).toBe('Invalid date');
+
+      fireEvent.click(getButton('Replace'));
+      expect(dateInput).toHaveValue('March 20, 2026');
+      expect(dateInput).not.toHaveAttribute('aria-invalid');
+      expect(statusText(container)).toBe('');
+    },
+  );
+
   it('shows the date message when both segments hold a rejection', () => {
     const {container} = render(
       <DateTimeInput

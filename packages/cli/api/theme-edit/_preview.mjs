@@ -25,6 +25,7 @@ import {
 } from './_catalog.mjs';
 import {
   catalogVariants,
+  demoProps,
   needsParent,
   renderDir,
   renderGenerated,
@@ -188,6 +189,23 @@ function inParentOf(project, name) {
   const info = project.components[name];
   if (!info?.subComponentOf) return tree => tree;
   const wrapper = info.wrapper;
+  // A part of a parent that shows inline (a dialog's header) renders inside
+  // that parent shown open and inline, as Core's docs show it: alone, it
+  // acts as in a modal one (a dialog header takes focus as it mounts).
+  const of = info.subComponentOf;
+  const parent = project.components[of];
+  if (!wrapper && parent?.props?.isInline && parent.props.isOpen) {
+    const props = Object.fromEntries(
+      Object.entries(demoProps(project, of) ?? {}).filter(
+        ([k]) => k !== 'children',
+      ),
+    );
+    return tree => ({
+      __element: of,
+      props: {...props, isOpen: true, isInline: true},
+      children: [tree],
+    });
+  }
   // A part its parent does not list as an item, such as a heading of the
   // text family, renders on its own.
   if (!wrapper) return needsParent(project, name) ? null : tree => tree;
@@ -1275,7 +1293,13 @@ export function previewRouteSource({
     "import {TopNav} from '@astryxdesign/core/TopNav';",
     ...(theme
       ? [
-          "import {SegmentedControl, SegmentedControlItem} from '@astryxdesign/core/SegmentedControl';",
+          // The mode switch only for a theme with both modes: an import the
+          // route does not draw fails an app with noUnusedLocals.
+          ...(mode.length
+            ? [
+                "import {SegmentedControl, SegmentedControlItem} from '@astryxdesign/core/SegmentedControl';",
+              ]
+            : []),
           "import {Theme} from '@astryxdesign/core/theme';",
           `import {${camelName(theme.name)}Theme as theme} from ${JSON.stringify(theme.module.replace(/\.js$/, ''))};`,
           ...theme.css.map(c => `import ${JSON.stringify(c)};`),

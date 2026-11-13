@@ -23,6 +23,7 @@ verified_by:
     packages/core/src/Field/__tests__/SearchKeyboard.interaction.browser.spec.ts,
     packages/core/src/inputFontFloor.test.ts,
     packages/core/src/Field/useEntryErrorReport.test.tsx,
+    packages/core/src/Field/useValueReplacesEntry.test.tsx,
   ]
 members:
   [
@@ -133,6 +134,12 @@ another implementation helper.
   (`spec:AST-118` FR5, FR7, FR8). Each member passes its rejection, its
   message, and whether a caller `error` status wins without the callback; when
   an entry is rejected and what its message says stay with the member.
+- The internal hook `useValueReplacesEntry`
+  (`packages/core/src/Field/useValueReplacesEntry.ts`) decides, for the same
+  members, when a new `value` replaces a kept entry: a `value` that arrives in
+  the same update as an Enter or blur that keeps rejected text does not
+  (`spec:AST-118` FR4, FR6, DEC-14). Each member passes its `value` and a
+  signal that changes at each such commit.
 - FieldStatus owns its direct `attached` and `detached` message-box
   presentations. Field owns composition with an input: it consumes `tooltip`
   before rendering FieldStatus and applies the member's supported placement

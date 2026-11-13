@@ -1456,8 +1456,8 @@ describe('themeBuild() — outputs it may replace', () => {
   });
 
   it.each([
-    ['o/x.scss', './o/x.scss', 'o/x.css'],
-    ['o/y', './o/y', 'o/y.css'],
+    ['o/x.scss', '../o/x.scss', 'o/x.css'],
+    ['o/y', '../o/y', 'o/y.css'],
   ])(
     'builds an --out of %s with a warning, and imports the stylesheet by its name',
     async (out, cssImport, suggested) => {

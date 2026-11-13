@@ -98,14 +98,16 @@ describe('show follows every helper the build reads', () => {
 });
 
 describe('token values that are not text', () => {
-  it('accepts a pair of weights in quotes', async () => {
+  it('refuses a pair of weights: only colors differ by mode (F20-N1)', async () => {
     const original = fs.readFileSync(source(), 'utf8');
     try {
       fs.writeFileSync(
         source(),
         withToken('', "'--font-weight-bold': ['600', '700']"),
       );
-      await expect(themeEditShow('g', {cwd})).resolves.toBeTruthy();
+      await expect(themeEditShow('g', {cwd})).rejects.toThrow(
+        /--font-weight-bold a \[light, dark\] pair, but only colors differ by mode/,
+      );
     } finally {
       fs.writeFileSync(source(), original);
       await themeEditShow('g', {cwd});
@@ -122,13 +124,10 @@ describe('token values that are not text', () => {
       const err = await refusal(() => themeEditShow('g', {cwd}));
       expect(err.code).toBe('ERR_THEME_INVALID');
       expect(err.message).toContain(
-        "--radius-container, a size, a [light, dark] pair with a number without a unit (8, 8); a size needs one, such as ['8px', '8px']",
+        "--radius-container, a size, a [light, dark] pair with a number without a unit (8, 8); a size needs one, and is the same in light and dark, so give one value, such as '8px'",
       );
       fs.writeFileSync(source(), original);
-      fs.writeFileSync(
-        source(),
-        withToken('', "'--radius-container': ['8px', '8px']"),
-      );
+      fs.writeFileSync(source(), withToken('', "'--radius-container': '8px'"));
       await expect(themeEditShow('g', {cwd})).resolves.toBeTruthy();
     } finally {
       fs.writeFileSync(source(), original);
