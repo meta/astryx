@@ -54,6 +54,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from 'react';
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import {currentGesture} from './gestureCounter';
 import {noteOutsideDismissal} from './outsidePress';
 import {
@@ -450,19 +451,12 @@ export function useTouchTriggerInternal(
   } = options;
 
   const isTouchPointerRef = useRef(false);
-  // Mirrors `isOpen` for synchronous reads inside the pointer handler, which
-  // runs outside React's render and would otherwise close over a stale value.
-  const isOpenRef = useRef(isOpen);
-  isOpenRef.current = isOpen;
 
-  // Latest values for the document listener, which outlives the render that
-  // armed it.
-  const hideRef = useRef(hide);
-  hideRef.current = hide;
-  const layerIdRef = useRef(layerId);
-  layerIdRef.current = layerId;
-  const onReleaseInLayerRef = useRef(onReleaseInLayer);
-  onReleaseInLayerRef.current = onReleaseInLayer;
+  // The committed values for the document listener, which outlives the render
+  // that armed it.
+  const hideRef = useCommittedRef(hide);
+  const layerIdRef = useCommittedRef(layerId);
+  const onReleaseInLayerRef = useCommittedRef(onReleaseInLayer);
 
   // Whether a tap is what opened the layer. Only a tap-open owes the user an
   // outside-tap dismissal: a hover-opened layer already closes on
@@ -542,7 +536,13 @@ export function useTouchTriggerInternal(
       doc.addEventListener('pointerup', handleOutsidePointerEnd, true);
       doc.addEventListener('pointercancel', handleOutsidePointerEnd, true);
     }
-  }, [triggerRef, disarmOutsideDismiss]);
+  }, [
+    triggerRef,
+    disarmOutsideDismiss,
+    hideRef,
+    layerIdRef,
+    onReleaseInLayerRef,
+  ]);
 
   // Releases the outside-dismiss listener on unmount.
   useEffect(() => disarmOutsideDismiss, [disarmOutsideDismiss]);
@@ -560,10 +560,9 @@ export function useTouchTriggerInternal(
     isTouchPointerRef.current = event.pointerType === 'touch';
   }, []);
 
-  // What a tap on the trigger does. It runs from the tap's `click`, after the
-  // render that armed it, so it reads the latest props through this ref.
-  const answerTapRef = useRef<(tapEvent: Event | null) => void>(() => {});
-  answerTapRef.current = (tapEvent: Event | null) => {
+  // A tap's `click` runs this after a commit. It reads that commit's props
+  // through `answerTapRef`.
+  const respondToTap = (tapEvent: Event | null) => {
     const trigger = triggerRef.current;
     const tapped = isElement(tapEvent?.target) ? tapEvent.target : null;
     // A disabled field keeps its reason's tap, and a trigger that is itself
@@ -598,7 +597,7 @@ export function useTouchTriggerInternal(
 
     // A lazily mounted layer reports `isOpen` a tick after `show()`, so the
     // tap's own bookkeeping is what makes the second tap a close.
-    if (isOpenRef.current || isTapOpenRef.current) {
+    if (isOpen || isTapOpenRef.current) {
       disarmOutsideDismiss();
       hide();
       return;
@@ -607,6 +606,7 @@ export function useTouchTriggerInternal(
     armOutsideDismiss();
     show();
   };
+  const answerTapRef = useCommittedRef(respondToTap);
 
   const handlePointerDown = useCallback(
     (event: PointerEvent): boolean => {
@@ -625,7 +625,7 @@ export function useTouchTriggerInternal(
       );
       return true;
     },
-    [isControlled, triggerRef, tapRecognizer],
+    [isControlled, triggerRef, tapRecognizer, answerTapRef],
   );
 
   // A layer closed by any other path (Escape, a consumer, the browser) leaves
@@ -643,7 +643,7 @@ export function useTouchTriggerInternal(
 
   const answerTap = useCallback(
     (tapEvent: Event | null) => answerTapRef.current(tapEvent),
-    [],
+    [answerTapRef],
   );
 
   return {

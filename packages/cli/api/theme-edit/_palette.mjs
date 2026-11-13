@@ -650,8 +650,7 @@ const strategyOf = modes =>
   modes.length > 1 ? 'light-and-dark' : `${modes[0]}-only`;
 
 /**
- * The fields of a config the generator never reads (such as
- * `darkChromaTaper`), by path.
+ * The fields of a config the generator never reads, by path.
  * @param {any} config
  * @returns {string[]}
  */
@@ -1043,7 +1042,10 @@ function planPalette(cwd, slug, data, base) {
       ? {...existing}
       : {};
   const {settings: saved, mode: savedMode} = savedSettings(cwd, slug);
-  const modes = modesOf(data);
+  // Every theme's palette has both modes: a one-mode theme keeps both
+  // halves of its colors (its mode is the one the app's <Theme> is given),
+  // and a region Core draws in the other mode reads the other half.
+  const modes = modesForStrategy('light-and-dark');
 
   const vibrancy = dialVibrancy(data.settings);
   const savedVibrancy = dialVibrancy(saved);
@@ -1372,7 +1374,12 @@ function syncPaletteFiles(cwd, slug, data, base) {
     const hash = fs.existsSync(abs(f.config))
       ? sha256(fs.readFileSync(abs(f.config)))
       : null;
-    const mine = hash != null && (data.palette === hash || saved === hash);
+    // Or the config the editor recorded writing (a color change stopped
+    // before its settings were saved).
+    const recorded = readWrittenRecord(cwd, slug)['palette.config.json'];
+    const mine =
+      hash != null &&
+      (data.palette === hash || saved === hash || recorded === hash);
     delete data.palette;
     if (!mine) return [];
     // A palette file edited by hand is never deleted: it stays, and the
@@ -1385,6 +1392,7 @@ function syncPaletteFiles(cwd, slug, data, base) {
     const notes = [];
     for (const p of [f.config, f.receipt, f.refs])
       fs.rmSync(abs(p), {force: true});
+    noteWritten(cwd, slug, 'palette.config.json', null);
     if (editedPalette)
       notes.push(
         `${f.palette} was edited by hand, so it stays: the theme no longer reads it. Move it out of tokens/ to keep it as your own, or delete it`,
@@ -1433,10 +1441,73 @@ function syncPaletteFiles(cwd, slug, data, base) {
     );
   }
   fs.mkdirSync(path.dirname(abs(f.config)), {recursive: true});
+  // Recorded before it is written: a run stopped after this leaves a config
+  // the next build knows is the editor's.
+  noteWritten(cwd, slug, 'palette.config.json', sha256(Buffer.from(text)));
   writeWhole(abs(f.config), text);
   data.palette = sha256(Buffer.from(text));
   themePaletteGenerate(f.config, {out: f.palette, overwrite: true}, {cwd});
   return plan.notes;
+}
+
+/**
+ * The record of the files the editor wrote into a theme folder,
+ * `themes/<theme>/<theme>.pictures.json`: each by name, with the hash of
+ * what was written (its pictures and its color config). The one reader and
+ * writer of that record.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {Record<string, string>}
+ */
+export function readWrittenRecord(cwd, slug) {
+  try {
+    const json = JSON.parse(
+      fs.readFileSync(writtenRecordFile(cwd, slug), 'utf8'),
+    );
+    return json && typeof json === 'object' && !Array.isArray(json) ? json : {};
+  } catch {
+    return {};
+  }
+}
+
+/** @param {string} cwd @param {string} slug */
+const writtenRecordFile = (cwd, slug) =>
+  path.join(cwd, 'themes', slug, `${slug}.pictures.json`);
+
+/**
+ * Write the record whole, or remove it when it names nothing. A record that
+ * cannot be written leaves nothing removed later: the safe way round.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {Record<string, string>} map
+ */
+export function writeWrittenRecord(cwd, slug, map) {
+  const file = writtenRecordFile(cwd, slug);
+  try {
+    if (!Object.keys(map).length) fs.rmSync(file, {force: true});
+    else {
+      fs.mkdirSync(path.dirname(file), {recursive: true});
+      writeWhole(file, `${JSON.stringify(map, null, 2)}\n`);
+    }
+  } catch {
+    // Without the record, nothing it names is removed later.
+  }
+}
+
+/**
+ * Note a file the editor wrote into a theme folder, by name with the hash
+ * of what it wrote, or forget it (null).
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {string} name
+ * @param {string | null} hash
+ */
+export function noteWritten(cwd, slug, name, hash) {
+  const map = readWrittenRecord(cwd, slug);
+  if (hash) map[name] = hash;
+  else if (name in map) delete map[name];
+  else return;
+  writeWrittenRecord(cwd, slug, map);
 }
 
 /**
@@ -1832,7 +1903,8 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
   const candidate = generate(config, paletteFiles(slug).config);
   const t = tools(candidate, data, base, ownSourceTokenValues(cwd, slug));
   const {stops, at, ref, exactOf, rawOf, settingOf, side, solid, surfaces} = t;
-  const modes = modesOf(data);
+  // Both halves, for a one-mode theme too (see planPalette).
+  const modes = modesForStrategy('light-and-dark');
   /** @type {PaletteMapping['tokens']} */
   const tokens = {};
   /** @type {ContrastCheck[]} */
@@ -2261,6 +2333,37 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
     const found = {};
     for (const ground of new Set(LIFT_PARTS.map(([, , g]) => g))) {
       const {what, parts} = LIFT_GROUNDS[ground];
+      /**
+       * The shade the base theme itself lifts this ground's text to in a
+       * mode, when it gives one: the search starts there, so a change of
+       * color moves it only when that shade no longer reads.
+       * @param {Mode} m
+       * @returns {string | null}
+       */
+      const baseLift = m => {
+        for (const [part, block, g] of LIFT_PARTS) {
+          if (g !== ground) continue;
+          const v = /** @type {any} */ (base)?.components?.[part]?.[block]?.[
+            '--color-text-secondary'
+          ];
+          const pair = Array.isArray(v)
+            ? v
+            : typeof v === 'string'
+              ? /^light-dark\((.*)\)$/s.exec(v.trim())?.[1]
+                ? splitTop(
+                    /** @type {string} */ (
+                      /^light-dark\((.*)\)$/s.exec(v.trim())?.[1]
+                    ),
+                    ',',
+                  )
+                : [v, v]
+              : null;
+          const c = pair?.[m === 'light' ? 0 : 1]?.trim();
+          if (c && parseColor(c))
+            return hex(/** @type {number[]} */ (parseColor(c)));
+        }
+        return null;
+      };
       /** @type {Partial<Record<Mode, StopRef>>} */
       const byMode = {};
       for (const m of modes) {
@@ -2290,8 +2393,9 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
         const keys = Object.keys(g.ramp)
           .map(Number)
           .sort((a, b) => a - b);
+        const from = baseLift(m) ?? text;
         const start = keys.reduce((x, y) =>
-          perceptualDelta(g.ramp[y], text) < perceptualDelta(g.ramp[x], text)
+          perceptualDelta(g.ramp[y], from) < perceptualDelta(g.ramp[x], from)
             ? y
             : x,
         );
@@ -2312,7 +2416,7 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
           ? ref('neutral', m, b.stop)
           : {stop: b.stop, color: g.ramp[b.stop], family: 'literal'};
         const moved =
-          hex(/** @type {number[]} */ (parseColor(g.ramp[b.stop]))) !== text;
+          hex(/** @type {number[]} */ (parseColor(g.ramp[b.stop]))) !== from;
         if (b.r < TEXT || moved)
           checks.push({
             token: '--color-text-secondary',
@@ -2326,7 +2430,7 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
             dials: ['accent', 'neutral'],
             note:
               b.r >= TEXT
-                ? `--color-text-secondary on ${parts} uses ${g.ramp[b.stop]} in ${m}, not ${text}, so it reads at ${round(b.r)}:1 on ${what} and under a hover, as the official theme lifts it`
+                ? `--color-text-secondary on ${parts} uses ${g.ramp[b.stop]} in ${m}, not ${from}, so it stays readable (${round(b.r)}:1) on ${what} and under a hover`
                 : `--color-text-secondary on ${parts} reads at only ${round(b.r)}:1 in ${m} on ${what} even at ${g.ramp[b.stop]}, the most contrasting gray (needs ${TEXT}:1): pick another accent or neutral, or set --color-text-secondary on those parts exactly`,
           });
       }

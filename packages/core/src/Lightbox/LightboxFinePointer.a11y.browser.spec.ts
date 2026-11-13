@@ -124,12 +124,16 @@ test("the zoom target's focus ring sits inside the stage, which a clipping group
   await page.keyboard.press('Shift+Tab');
   await page.keyboard.press('Tab');
   await expect(stage).toBeFocused();
+  // The zoom target is the photo's box on the stage's one page. The stage
+  // clips it, as a gallery's.
   const ring = await stage.evaluate(el => {
     const style = getComputedStyle(el);
     return {
       width: parseFloat(style.outlineWidth),
       offset: parseFloat(style.outlineOffset),
-      clips: getComputedStyle(el.parentElement as Element).overflow,
+      clips: getComputedStyle(
+        el.closest('[data-lightbox-media] > :first-child') as Element,
+      ).overflow,
     };
   });
   expect(ring.clips).toBe('hidden');
@@ -138,10 +142,10 @@ test("the zoom target's focus ring sits inside the stage, which a clipping group
   expect(ring.offset).toBeLessThanOrEqual(-ring.width);
 });
 
-test('a caption sits under the fitted photo, as it does without zoom', async ({
+test("a caption sits in its band under the photo's box, zoomed or not, as in a gallery", async ({
   page,
 }) => {
-  // A 3:1 panorama leaves the filling stage most of its height free.
+  // A 3:1 panorama leaves the photo's box most of its height free.
   await page.route('https://picsum.photos/**', async route =>
     route.fulfill({
       contentType: 'image/svg+xml',
@@ -157,22 +161,29 @@ test('a caption sits under the fitted photo, as it does without zoom', async ({
   await expect
     .poll(async () => img.evaluate(el => (el as HTMLImageElement).naturalWidth))
     .toBe(3000);
-  const caption = dialog.getByText('A winding path through the forest');
-  await expect
-    .poll(async () => {
-      const photo = await boxOf(img);
-      const below = await boxOf(caption);
-      return Math.round(below.y - (photo.y + photo.height));
-    })
-    .toBe(0);
-  // Zoomed, the photo fills the stage, and the caption goes back below it.
+  const caption = dialog.locator('[data-lightbox-caption]');
   const stage = dialog.getByRole('button', {name: 'Zoom'});
+  // The band starts where the photo's box ends, and the fitted photo centres
+  // in that box, clear of the band.
+  const band = async () =>
+    caption.evaluate(el => {
+      const r = (el.parentElement as HTMLElement).getBoundingClientRect();
+      return {top: r.top, height: r.height};
+    });
   const stageBox = await boxOf(stage);
+  const fitted = await band();
+  expect(Math.abs(fitted.top - (stageBox.y + stageBox.height))).toBeLessThan(
+    0.5,
+  );
+  const photo = await boxOf(img);
+  expect(photo.y + photo.height).toBeLessThanOrEqual(fitted.top + 0.5);
+  // Zoomed, the photo fills its box, and the band and caption stay put.
+  const captionBox = await boxOf(caption);
   await page.mouse.dblclick(centre(stageBox).x, centre(stageBox).y);
   await expect(stage).toHaveAttribute('aria-pressed', 'true');
-  await expect
-    .poll(async () => (await boxOf(caption)).y - (stageBox.y + stageBox.height))
-    .toBeGreaterThanOrEqual(-0.5);
+  await settled(page);
+  expect(await band()).toEqual(fitted);
+  expect(await boxOf(caption)).toEqual(captionBox);
 });
 
 /** Opens the gallery story (zoom on) at its first photo with the mouse. */
@@ -288,10 +299,15 @@ test('the zoom target takes its touches as on a phone where the primary pointer 
   expect(await stage.evaluate(el => getComputedStyle(el).touchAction)).toBe(
     'none',
   );
-  // The last is the media surface, which has no box.
+  // As in a gallery, the photo's box claims them and the track, the zoom
+  // stage's surface, leaves only the page's pinch-zoom. The last is the media
+  // surface, which has no box.
   expect(await touchActionsAbove(img)).toEqual([
     'auto',
     'none',
+    'auto',
+    'pinch-zoom',
+    'auto',
     'auto',
     'auto',
     'auto',
@@ -317,8 +333,12 @@ test('a photo without zoom leaves its touches to the page where the primary poin
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   const photo = dialog.getByRole('img').first();
-  // The last is the media surface, which has no box.
+  // The photo's page, its track and the stage sit between them. The last is
+  // the media surface, which has no box.
   expect(await touchActionsAbove(photo)).toEqual([
+    'auto',
+    'auto',
+    'auto',
     'auto',
     'auto',
     'auto',
@@ -863,6 +883,63 @@ test('a mouse click between a gallery photo and its caption band closes the view
     x: photo.x + photo.width / 2,
     y: photo.y + photo.height + gap / 2,
   });
+});
+
+test('with zoom, a mouse double-click on a single photo’s caption zooms the photo, and the caption stays its description', async ({
+  page,
+}) => {
+  await page.route('https://picsum.photos/**', async route =>
+    route.fulfill({
+      contentType: 'image/svg+xml',
+      body: photoSvg(PHOTO.width, PHOTO.height),
+    }),
+  );
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-lightbox--zoom-with-caption&viewMode=story`,
+  );
+  await page.getByRole('button', {name: 'Open zoom with caption'}).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  const img = dialog.getByRole('img', {name: 'Forest path'});
+  await expect
+    .poll(async () => img.evaluate(el => (el as HTMLImageElement).naturalWidth))
+    .toBe(PHOTO.width);
+  await settled(page);
+  const fitted = await boxOf(img);
+  // The middle of the caption's first word.
+  const word = await dialog.evaluate(viewer => {
+    const caption = viewer.querySelector(
+      '[data-lightbox-caption] .astryx-text',
+    );
+    const walker = document.createTreeWalker(
+      caption ?? viewer,
+      NodeFilter.SHOW_TEXT,
+    );
+    let node = walker.nextNode() as Text | null;
+    while (node != null && node.data.trim() === '') {
+      node = walker.nextNode() as Text | null;
+    }
+    if (node == null) {
+      throw new Error('no caption text');
+    }
+    const start = node.data.search(/\S/);
+    const range = document.createRange();
+    range.setStart(node, start);
+    range.setEnd(node, start + 1);
+    const r = range.getBoundingClientRect();
+    return {x: r.x + r.width / 2, y: r.y + r.height / 2};
+  });
+  await page.mouse.dblclick(word.x, word.y);
+  await expect
+    .poll(async () => (await boxOf(img)).width)
+    .toBeGreaterThan(fitted.width * 1.5);
+  expect(await page.evaluate(() => String(window.getSelection()).trim())).toBe(
+    '',
+  );
+  // Screen readers still read the caption: it is the viewer's description.
+  await expect(dialog).toHaveAccessibleDescription(
+    'A winding path through the forest',
+  );
 });
 
 test('in a gallery with zoom, a mouse click beside a small photo closes past its caption’s width and stays open within it, as on main', async ({

@@ -1757,6 +1757,73 @@ describe('Lightbox', () => {
     });
   });
 
+  describe('a single photo', () => {
+    it("renders as a gallery's page: its photo's box, then its caption in the band below", () => {
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={() => {}}
+          media={{src: '/photo.jpg', alt: 'Photo', caption: 'A caption'}}
+        />,
+      );
+      const pages = document.querySelectorAll('[data-lightbox-page]');
+      expect(pages).toHaveLength(1);
+      const page = pages[0];
+      expect(page).toHaveAttribute('data-current');
+      const media = page.querySelector('[data-lightbox-page-media]')!;
+      expect(media).toContainElement(screen.getByAltText('Photo'));
+      const caption = page.querySelector<HTMLElement>(
+        '[data-lightbox-caption]',
+      )!;
+      expect(caption).toHaveTextContent('A caption');
+      expect(media.nextElementSibling).toContainElement(caption);
+      // Nothing to page to: no Previous, Next or counter.
+      expect(screen.queryByRole('button', {name: 'Previous'})).toBeNull();
+      expect(screen.queryByRole('button', {name: 'Next'})).toBeNull();
+      expect(screen.queryByText('1 / 1')).toBeNull();
+    });
+
+    it("gives a single captioned video a gallery page's box and band, and its caption describes the viewer", () => {
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={() => {}}
+          media={{
+            src: '/clip.mp4',
+            alt: 'A clip',
+            type: 'video',
+            caption: 'A caption',
+          }}
+        />,
+      );
+      const page = document.querySelector('[data-lightbox-page]')!;
+      expect(page).toHaveAttribute('data-current');
+      const media = page.querySelector('[data-lightbox-page-media]')!;
+      expect(media.querySelector('video')).toHaveAttribute('src', '/clip.mp4');
+      const caption = page.querySelector<HTMLElement>(
+        '[data-lightbox-caption]',
+      )!;
+      expect(caption).toHaveTextContent('A caption');
+      expect(media.nextElementSibling).toContainElement(caption);
+      expect(screen.getByRole('dialog')).toHaveAccessibleDescription(
+        'A caption',
+      );
+    });
+
+    it('with no caption has no band, as a gallery with none', () => {
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={() => {}}
+          media={{src: '/photo.jpg', alt: 'Photo'}}
+        />,
+      );
+      const page = document.querySelector('[data-lightbox-page]')!;
+      expect(page.children).toHaveLength(1);
+      expect(page.querySelector('[data-lightbox-caption]')).toBeNull();
+    });
+  });
+
   it('does not crash with an empty media array', () => {
     const {container} = render(
       <Lightbox isOpen={true} onOpenChange={() => {}} media={[]} />,
@@ -1765,7 +1832,7 @@ describe('Lightbox', () => {
   });
 
   describe('backdrop dismiss', () => {
-    it('closes on a click on the strip a raised caption leaves below the stage', () => {
+    it("closes on a mouse click above a single photo, as on a gallery's page", () => {
       const onOpenChange = vi.fn();
       render(
         <Lightbox
@@ -1775,14 +1842,16 @@ describe('Lightbox', () => {
           hasZoom
         />,
       );
-      // The media group: the stage, then the caption's place below it. A
-      // mouse's click there is below the raised caption.
-      const group = screen.getByText('A caption').parentElement!;
-      fireEvent.click(group, {detail: 1, clientY: 590});
+      // The stage centres the 200 px photo in its 600 px box.
+      const current = document.querySelector('[data-current]')!;
+      mousePress(current.querySelector('[data-lightbox-page-media]')!, {
+        x: 200,
+        y: 20,
+      });
       expect(onOpenChange).toHaveBeenCalledWith(false);
     });
 
-    it('without zoom, leaves a click beside a narrower caption alone', () => {
+    it("without zoom, leaves a mouse click on a single photo's caption alone", () => {
       const onOpenChange = vi.fn();
       render(
         <Lightbox
@@ -1791,8 +1860,17 @@ describe('Lightbox', () => {
           media={{src: '/photo.jpg', alt: 'Photo', caption: 'A caption'}}
         />,
       );
-      // The media group hugs its media and caption, as before.
-      fireEvent.click(screen.getByText('A caption').parentElement!);
+      const current = document.querySelector('[data-current]')!;
+      layOutPage(current, {
+        photo: rectAt(100, 200, 200, 200),
+        natural: 200,
+        caption: rectAt(50, 560, 300, 40),
+        viewer: 400,
+      });
+      mousePress(current.querySelector('[data-lightbox-caption]')!, {
+        x: 200,
+        y: 580,
+      });
       expect(onOpenChange).not.toHaveBeenCalled();
     });
 
@@ -2048,9 +2126,12 @@ describe('Lightbox gestures for a mouse and a pen (spec:AST-094 FR43)', () => {
     await act(async () => {
       await new Promise(resolve => setTimeout(resolve, 400));
     });
-    // Each caption click reads its own press, not the drag's.
+    // Each caption click reads its own press, not the drag's. The caption
+    // sits in its band, on the stage's surface, so its presses are timed as a
+    // browser times them: now.
     const caption = screen.getByText('A caption');
-    for (const at of [t0 + 1000, t0 + 2000]) {
+    for (let i = 0; i < 2; i++) {
+      const at = performance.now();
       pointer('pointerdown', caption, 'mouse', 200, 300, at);
       pointer('pointerup', caption, 'mouse', 200, 300, at + 40);
       fireEvent.click(caption, {clientX: 200, clientY: 300, detail: 1});
@@ -2138,12 +2219,12 @@ describe('Lightbox gestures for a mouse and a pen (spec:AST-094 FR43)', () => {
     pointer('pointerup', stage, 'mouse', 180, 300, t0 + 32);
     fireEvent.click(stage, {clientX: 180, clientY: 300, detail: 1});
     expect(onOpenChange).not.toHaveBeenCalled();
-    // A new press on the dark area above starts a new click, which closes.
-    const container =
-      screen.getByText('A caption').parentElement!.parentElement!;
-    pointer('pointerdown', container, 'mouse', 200, 10, t0 + 1000);
-    pointer('pointerup', container, 'mouse', 200, 10, t0 + 1040);
-    fireEvent.click(container, {clientX: 200, clientY: 10, detail: 1});
+    // A new press on the dark area above, on the stage, starts a new click,
+    // which closes. It is timed as a browser times it: now.
+    const later = performance.now();
+    pointer('pointerdown', stage, 'mouse', 200, 10, later);
+    pointer('pointerup', stage, 'mouse', 200, 10, later + 40);
+    fireEvent.click(stage, {clientX: 200, clientY: 10, detail: 1});
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 });
@@ -2207,6 +2288,7 @@ describe('Lightbox recognizers attach for every pointer (spec:AST-094 FR43)', ()
   }
 
   it('attaches no drag to dismiss where the primary pointer is fine', () => {
+    // Only the backdrop's tap beside the photo, as on a gallery's page.
     expect(
       lightboxRecognizersAttached(() => {
         render(
@@ -2217,7 +2299,7 @@ describe('Lightbox recognizers attach for every pointer (spec:AST-094 FR43)', ()
           />,
         );
       }),
-    ).toEqual([]);
+    ).toEqual(['lightbox-backdrop-tap']);
   });
 
   it('attaches the drag to dismiss under the touch layer', () => {
@@ -2301,24 +2383,6 @@ describe('Lightbox touch zoom (synthetic touches)', () => {
     });
   }
 
-  /** A finger's pointerdown, which a browser sends before its touchstart. */
-  function fingerDown(target: Element, x: number, y: number): void {
-    const event = new Event('pointerdown', {bubbles: true, cancelable: true});
-    const fields = {pointerType: 'touch', pointerId: 2, isPrimary: true};
-    for (const [key, value] of Object.entries({
-      ...fields,
-      button: 0,
-      buttons: 1,
-      clientX: x,
-      clientY: y,
-    })) {
-      Object.defineProperty(event, key, {value});
-    }
-    act(() => {
-      target.dispatchEvent(event);
-    });
-  }
-
   it('reports a tap beside the photo to the newest onOpenChange', async () => {
     // The stage's gestures read the props of the latest render, so a parent's
     // new callback is the one a tap beside the photo reaches.
@@ -2346,7 +2410,7 @@ describe('Lightbox touch zoom (synthetic touches)', () => {
     ['a fitted photo', false],
     ['a zoomed photo', true],
   ])(
-    'closes on a finger’s tap on the strip after a finger drag on %s, once the drag’s flag is clear',
+    'closes on a finger’s tap beside the photo after a finger drag on %s',
     async (_, isZoomedFirst) => {
       const onOpenChange = vi.fn();
       render(
@@ -2372,17 +2436,13 @@ describe('Lightbox touch zoom (synthetic touches)', () => {
         touch('touchmove', stage, [finger], [finger], 1000 + i * 16);
       }
       touch('touchend', stage, [], [finger], 1000 + 7 * 16);
-      const group = screen.getByText('A caption').parentElement!;
-      const tapStrip = () => {
-        fingerDown(group, 200, 590);
-        fireEvent.click(group, {clientX: 200, clientY: 590, detail: 1});
-      };
-      // A zoomed drag's flag takes the first tap. A fitted photo's drag starts
-      // no zoom pan, since paging owns it, so it leaves no flag.
-      tapStrip();
-      expect(onOpenChange).toHaveBeenCalledTimes(isZoomedFirst ? 0 : 1);
-      tapStrip();
-      expect(onOpenChange).toHaveBeenCalledWith(false);
+      // Above the photo, on the stage: its own tap closes the viewer, as on a
+      // gallery's page. The drag leaves nothing in its way.
+      const tap: Contact = {id: 7, x: 200, y: 50};
+      touch('touchstart', stage, [tap], [tap], 2000);
+      touch('touchend', stage, [], [tap], 2040);
+      // A single tap waits out a double tap's interval.
+      await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
     },
   );
 
@@ -2425,7 +2485,7 @@ describe('Lightbox touch zoom (synthetic touches)', () => {
     touch('touchend', stage, [], [a], 20 * 16);
   });
 
-  it("takes a caption off the photo from a pinch's first move", () => {
+  it('keeps a single photo’s caption in its band, outside the photo’s box, through a pinch', () => {
     render(
       <Lightbox
         isOpen={true}
@@ -2435,10 +2495,12 @@ describe('Lightbox touch zoom (synthetic touches)', () => {
       />,
     );
     const stage = screen.getByRole('button', {name: 'Zoom'});
-    const caption = screen.getByText('A caption');
-    // Fitted, the caption is raised by the stage's free space below the
-    // photo: (600 - 200) / 2.
-    expect(caption.style.translate).toBe('0 -200px');
+    const caption = stage.parentElement!.querySelector<HTMLElement>(
+      '[data-lightbox-caption]',
+    )!;
+    // The band is the page's row below the photo's box, as on a gallery's.
+    expect(stage).not.toContainElement(caption);
+    expect(caption.style.translate).toBe('');
     let a: Contact = {id: 1, x: 150, y: 300};
     let b: Contact = {id: 2, x: 250, y: 300};
     touch('touchstart', stage, [a], [a], 0);
@@ -2448,10 +2510,12 @@ describe('Lightbox touch zoom (synthetic touches)', () => {
       b = {...b, x: 250 + 6 * i};
       touch('touchmove', stage, [a, b], [a, b], i * 16);
     }
-    // Both fingers are still down, and the photo spreads over the stage.
+    // Both fingers are still down, and the photo spreads over the stage. The
+    // caption stays in its band, unmoved.
     expect(
       parseFloat(photoTransform(screen.getByAltText('Photo')).scale),
     ).toBeGreaterThan(1);
+    expect(stage).not.toContainElement(caption);
     expect(caption.style.translate).toBe('');
     touch('touchend', stage, [a], [b], 5 * 16);
     touch('touchend', stage, [], [a], 6 * 16);
@@ -2573,7 +2637,7 @@ describe('Lightbox touch zoom (synthetic touches)', () => {
     expect(onOpenChange).not.toHaveBeenCalled();
   });
 
-  it('ignores the first tap on the strip after a drag to close springs back, as before', async () => {
+  it('closes on a finger’s tap beside the photo after a drag to close springs back', async () => {
     const onOpenChange = vi.fn();
     render(
       <Lightbox
@@ -2593,16 +2657,15 @@ describe('Lightbox touch zoom (synthetic touches)', () => {
     touch('touchend', stage, [], [finger], clock + 7 * 16);
     await new Promise(resolve => setTimeout(resolve, 50));
     expect(onOpenChange).not.toHaveBeenCalled();
-    const group = screen.getByText('A caption').parentElement!;
-    const tapStrip = () => {
-      fingerDown(group, 200, 590);
-      fireEvent.click(group, {clientX: 200, clientY: 590, detail: 1});
-    };
-    // The first tap on the strip below the stage only clears the drag's flag.
-    tapStrip();
-    expect(onOpenChange).not.toHaveBeenCalled();
-    tapStrip();
-    expect(onOpenChange).toHaveBeenCalledWith(false);
+    // Above the photo, on the stage: its own tap closes the viewer, as on a
+    // gallery's page. The drag leaves nothing in its way. The tap is timed as
+    // a browser times it: now.
+    const tap: Contact = {id: 7, x: 200, y: 50};
+    const now = performance.now();
+    touch('touchstart', stage, [tap], [tap], now);
+    touch('touchend', stage, [], [tap], now + 40);
+    // A single tap waits out a double tap's interval.
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
   });
 });
 
