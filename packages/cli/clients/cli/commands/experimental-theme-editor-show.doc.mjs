@@ -32,7 +32,7 @@ export const doc = {
       flag: '--png',
       param: 'options.png',
       description:
-        'Also take PNG pictures of the previews (light and dark), with a Playwright installed in the project or a Chrome or Chromium found on the machine; without one, the result says how to get it. Nothing else changes',
+        'Also take PNG pictures of the previews (light and dark), with a Playwright installed in the project or a Chrome or Chromium found on the machine; without one, the result says how to get it. Each picture carries the editor stamp and is recorded, by name and content, in themes/<theme>/<theme>.pictures.json; a file of yours named like a picture (preview.png, sheet.png) is never written over: no picture is taken, and the result names the file',
     },
   ],
   examples: [
@@ -59,7 +59,7 @@ export const doc = {
     },
     {
       code: 1,
-      when: 'the theme does not exist, an unknown --section, or a page that does not render; or a folder outside a project with Core installed (ERR_PROJECT_REQUIRED)',
+      when: 'the theme does not exist or its base theme package is not installed (ERR_UNKNOWN_THEME), an unknown --section (ERR_INVALID_ARGUMENT), a theme source that does not build or parse or a token in it that is not text (ERR_THEME_INVALID), a folder where a built file goes (ERR_FILE_EXISTS), a built file that cannot be read or written (ERR_WRITE_FAILED), another command changing the theme (ERR_THEME_BUSY), a page that does not render (ERR_RENDER_FAILED), or a folder outside a project with Core installed (ERR_PROJECT_REQUIRED)',
     },
   ],
   related: ['experimental theme editor', 'experimental theme compile'],
