@@ -9,7 +9,7 @@
  */
 
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
-import {themeEditHow, themeEditNew} from './theme-edit.mjs';
+import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {exactFactor} from './_how-question.mjs';
 import {
   makeLinkedFixture,
@@ -145,6 +145,11 @@ describe('hunt61b: headers and titles', () => {
         /^set q background '#[0-9a-f]{6}' --on app-shell-header$/,
       ],
       ['the header bar border thicker', / --on app-shell-header$/],
+      // The clause starts after the last break: a full stop or semicolon too.
+      [
+        'make the body text bigger. header background dark',
+        /^set q text-size more$/,
+      ],
       // A part that owns its header keeps it.
       [
         'table header text bold',
@@ -158,4 +163,28 @@ describe('hunt61b: headers and titles', () => {
     },
     120_000,
   );
+});
+
+describe('hunt61c: clause breaks and comparisons', () => {
+  it('a header after a full stop is the app header part', async () => {
+    const {data} = await themeEditHow(
+      'make the body text bigger. header background dark',
+      {cwd, theme: 'q'},
+    );
+    const all = (data.results ?? []).flatMap(r => r.commands).join('\n');
+    expect(all).toMatch(/background '#[0-9a-f]{6}' --on app-shell-header/);
+    expect(all).not.toMatch(/--on heading\b/);
+  }, 120_000);
+
+  it('"cards with twice the padding of buttons" measures against buttons', async () => {
+    // No padding of the theme's own on buttons: a step, and it says so.
+    const step = await top('cards with twice the padding of buttons');
+    expect(step.command).toBe('set q spacing more --on card');
+    expect(step.text).toContain('sets no padding of its own on button');
+    // With one: twice that, on cards only.
+    await themeEditSet('q', 'padding', '10px', {cwd, on: 'button'});
+    const exact = await top('cards with twice the padding of buttons');
+    expect(exact.command).toBe('set q padding 20px --on card');
+    expect(exact.text).toContain('(button has 10px)');
+  }, 240_000);
 });

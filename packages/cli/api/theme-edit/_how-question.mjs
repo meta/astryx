@@ -554,6 +554,13 @@ function scaled(v, f) {
 }
 
 /**
+ * The part a clause measures against ("cards twice the padding of
+ * buttons": buttons), by clause.
+ * @type {WeakMap<object, string>}
+ */
+const compared = new WeakMap();
+
+/**
  * An exact relative amount the words give ("half", "double", "twice",
  * "triple", "a third", "a quarter", "50%", "x0.8"), as a factor of the
  * theme's current value; null when the words give only a direction.
@@ -1547,6 +1554,12 @@ export function draftAnswer(ctx, env, question) {
       '$2 $4 in $1 mode',
     )
     .replace(/^\s*(dark|light) mode only\s*:\s*/i, 'in $1 mode: ')
+    // "cards with twice the padding of buttons": one comparison, not two
+    // asks.
+    .replace(
+      /\bwith\s+(?=(?:twice|double|half|triple|three times)\s+(?:the\s+)?\w+\s+(?:of|than|as)\b)/gi,
+      '',
+    )
     // "just the headers bolder", "only the titles bigger": a scope, not a
     // break between asks.
     .replace(/(?<![-\w])(?:just|only)\s+(?=(?:the|my)\s+\w+\s+\w)/gi, '')
@@ -1554,8 +1567,13 @@ export function draftAnswer(ctx, env, question) {
     // word, the headings' type; with a surface word ("header background"),
     // the app header part.
     .replace(/\b(headers?|titles?)\b/gi, (m, _w, at, all) => {
+      // The clause the word is in: from the last break before it (a comma,
+      // semicolon, full stop or new line) to the next one after it.
+      const head = String(all).slice(0, at);
+      const from =
+        Math.max(...[',', ';', '.', '\n'].map(b => head.lastIndexOf(b))) + 1;
       const clause = String(all)
-        .slice(Math.max(0, String(all).lastIndexOf(',', at) + 1))
+        .slice(from)
         .split(/[,;.\n]/)[0];
       const text =
         /\b(bold(er)?|bigger|smaller|larger|font|weight|size|serif|sans|italic|heavier|lighter|thinner|uppercase|letter[- ]?spacing|tracking|line[- ]?height)\b/i.test(
@@ -3142,13 +3160,20 @@ export function draftAnswer(ctx, env, question) {
     );
     // "buttons twice as round as inputs": the part after "as" is only the
     // measure; the first part is the one that changes.
-    const asAs = /\bas \w+ as (?:the )?([a-z-]+)/.exec(c.text);
+    const asAs =
+      /\bas \w+ as (?:the )?([a-z-]+)/.exec(c.text) ??
+      // "cards twice the padding of buttons": the same, by the measure.
+      /\b(?:twice|double|half|triple|three times)\s+(?:the\s+)?\w+\s+(?:of|than|as)\s+(?:the\s+)?([a-z-]+)/.exec(
+        c.text,
+      );
     if (asAs && c.parts.length >= 2) {
       const after = (/** @type {{on: string}} */ p) =>
         lex.parts.some(
           ([re, x]) =>
             x.on === p.on && (re.exec(c.text)?.index ?? -1) > (asAs.index ?? 0),
         );
+      const other = c.parts.find(p => after(p));
+      if (other) compared.set(c, other.on);
       c.parts = c.parts.filter(p => !after(p));
     }
     // "focus ring the same color as the danger color": a role's token.
@@ -4451,6 +4476,23 @@ export function draftAnswer(ctx, env, question) {
         // part has now, when the theme sets one; else the dial's step, and
         // the answer says the amount is a step.
         const padFactor = exactFactor(c.text);
+        // A comparison ("twice the padding of buttons"): the amount is of
+        // the other part's padding, when the theme sets one; else a step,
+        // and the answer says so.
+        const versus = compared.get(c) ?? null;
+        if (padFactor && versus) {
+          const now = partValue(versus, gap ? 'gap' : 'padding');
+          const exact = now ? scaled(now, padFactor) : null;
+          return exact
+            ? {
+                text: `${gap ? 'the gap' : 'padding'}${where}: ${exact} (${versus} has ${now})`,
+                options: [[set(gap ? 'gap' : 'padding', exact, f)]],
+              }
+            : {
+                text: `room inside ${on}: spacing ${value ?? 'more'}; this theme sets no ${gap ? 'gap' : 'padding'} of its own on ${versus}, so this is a step, not an exact amount of ${versus}'s: give a value (24px) for one`,
+                options: [[set('spacing', value ?? 'more', f)]],
+              };
+        }
         if (padFactor) {
           const now = partValue(on, gap ? 'gap' : 'padding');
           const value = now ? scaled(now, padFactor) : null;
