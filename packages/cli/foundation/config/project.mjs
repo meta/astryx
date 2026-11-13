@@ -1365,8 +1365,8 @@ export class Project {
 
   /**
    * The installed dependencies, linked without a config entry, whose manifest
-   * could not be loaded because a package that the importing package declares
-   * is missing, with the load error. That is a broken install, which the
+   * could not be loaded because a package that the importing package requires
+   * (a dependency or a required peer) is missing, with the load error. That is a broken install, which the
    * project can fix by installing again; a dependency's own packaging bug (a
    * manifest that throws, does not validate, or imports what it does not
    * declare) stays out of the project's issues, since the project cannot fix

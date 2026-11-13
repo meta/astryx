@@ -723,6 +723,15 @@ Module._resolveFilename = function (request, parent, isMain, options) {
       expect(check.status).toBe('warn');
       expect(check.message).toContain('@acme/widgets');
       expect(check.message).toContain('astryx-test-missing-package');
+      // A theme lookup in that package is still an unknown theme.
+      expect(
+        JSON.parse(
+          run(['theme', 'add', 'tally', '--package', '@acme/widgets'], {
+            tmp,
+            cwd: other.dir,
+          }).stdout,
+        ).code,
+      ).toBe('ERR_UNKNOWN_THEME');
       // Kept, it says the same; once the missing package is installed (the
       // reinstall that repairs it), it says nothing.
       expect(

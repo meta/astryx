@@ -652,9 +652,11 @@ export function checkImplicitIntegrations(ctx) {
 
 /**
  * The sentence `implicit-integrations` adds for dependencies whose manifest
- * could not be loaded, or '' when there are none. Still informational: the
- * package is a dependency's own bug, which `doctor integration validate`
- * diagnoses, but doctor must not report it as absent.
+ * could not be loaded, or '' when there are none. Still informational: a
+ * broken install (a package the dependency requires is missing) is also that
+ * package's integration issue (INV14), and anything else is the dependency's
+ * own bug, which `doctor integration validate` diagnoses; either way doctor
+ * must not report it as absent.
  * @param {Array<{spec: string, error: string}>} failures
  * @returns {string}
  */
