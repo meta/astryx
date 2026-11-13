@@ -192,8 +192,9 @@ interface PendingMutationMotion<T> {
   matchesValue: (nextValue: T[]) => boolean;
 }
 
-// Core List's reorder handle is 28 px wide for every pointer.
-const REORDER_HANDLE_SIZE = 28;
+// Core List's reorder handle is its 16 px grip alone, for every pointer. Its
+// target reaches 4 px past it, into the gap beside it.
+const REORDER_HANDLE_SIZE = 16;
 const PAST_HANDLE = `calc(${REORDER_HANDLE_SIZE}px + ${spacingVars['--spacing-1']})`;
 
 const styles = stylex.create({

@@ -158,12 +158,13 @@ export interface TransferListProps<T extends string = string> extends Omit<
 const styles = stylex.create({
   // Core List's reorder handle sits at its row's start or end (the owner's
   // `handle.placement`). Where it shows only on hover or focus, it hangs
-  // 30 px outside the row's content. The panel clips, so while the selected
-  // options reorder, the panel's heading and rows move in 20 px on that side,
-  // and the labels stay under the heading. Where the handle shows in its row
-  // (always, or under a coarse pointer), it takes 28 px and the row's 8 px
-  // gap. A row without a handle then clears it, so every label and every
-  // Remove keeps its column.
+  // outside the row's content: its grip 24 px out, its target and focus ring
+  // 30 px. The panel clips, so while the selected options reorder, the
+  // panel's heading and rows move in 20 px on that side, and the labels stay
+  // under the heading. Where the handle shows in its row (always, or under a
+  // coarse pointer), it takes 16 px, its grip alone, and the row's 8 px gap.
+  // A row without a handle then clears it, so every label and every Remove
+  // keeps its column.
   hangRoomAtStart: {
     paddingInlineStart: {
       default: `calc(${spacingVars['--spacing-3']} + 20px)`,
@@ -179,20 +180,20 @@ const styles = stylex.create({
   clearsHandleAtStart: {
     paddingInlineStart: {
       default: `calc(${spacingVars['--spacing-3']} + 20px)`,
-      '@media (any-pointer: coarse)': `calc(${spacingVars['--spacing-3']} + 28px + ${spacingVars['--spacing-2']})`,
+      '@media (any-pointer: coarse)': `calc(${spacingVars['--spacing-3']} + 16px + ${spacingVars['--spacing-2']})`,
     },
   },
   clearsShownHandleAtStart: {
-    paddingInlineStart: `calc(${spacingVars['--spacing-3']} + 28px + ${spacingVars['--spacing-2']})`,
+    paddingInlineStart: `calc(${spacingVars['--spacing-3']} + 16px + ${spacingVars['--spacing-2']})`,
   },
   clearsHandleAtEnd: {
     marginInlineEnd: {
       default: 0,
-      '@media (any-pointer: coarse)': `calc(28px + ${spacingVars['--spacing-2']})`,
+      '@media (any-pointer: coarse)': `calc(16px + ${spacingVars['--spacing-2']})`,
     },
   },
   clearsShownHandleAtEnd: {
-    marginInlineEnd: `calc(28px + ${spacingVars['--spacing-2']})`,
+    marginInlineEnd: `calc(16px + ${spacingVars['--spacing-2']})`,
   },
   root: {
     display: 'flex',
