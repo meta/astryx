@@ -7,9 +7,17 @@
  *   windowing it carries, or why the value cannot window
  * @position Table's base wiring for column windowing. The column hook puts
  *   its implementation in the capability value, so a Table that never
- *   imports the hook carries none of the column windowing code.
+ *   imports the hook carries only this wiring, not the column planner,
+ *   the inline window or the spacer cells.
  */
-import type {ReactElement, ReactNode, RefObject} from 'react';
+import type {
+  FocusEventHandler,
+  MouseEventHandler,
+  PointerEventHandler,
+  ReactElement,
+  ReactNode,
+  RefObject,
+} from 'react';
 import {sharedKey} from '../utils/sharedRealm';
 import type {InlineListWindowGeometrySource} from '../virtualization/useInlineListWindow';
 import type {TableColumn} from './types';
@@ -58,8 +66,20 @@ export interface TableColumnWindowInput {
   hasRows: boolean;
   runtime: {
     table: RefObject<HTMLTableElement | null>;
+    viewport: RefObject<HTMLDivElement | null>;
     geometry: InlineListWindowGeometrySource;
   };
+}
+
+/**
+ * Handlers the column window gives the table element: focus tracking, and
+ * the press or context menu that names the cell a layer belongs to.
+ */
+export interface TableColumnFocusProps {
+  onFocus: FocusEventHandler<HTMLTableElement>;
+  onBlur: FocusEventHandler<HTMLTableElement>;
+  onPointerDown: PointerEventHandler<HTMLTableElement>;
+  onContextMenu: MouseEventHandler<HTMLTableElement>;
 }
 
 export interface TableColumnWindowProps {
@@ -67,7 +87,10 @@ export interface TableColumnWindowProps {
   capability: Readonly<TableColumnsCapabilityValue> | undefined;
   input: TableColumnWindowInput;
   /** Renders the table; a windowed table gets its column layout. */
-  render: (layout: TableColumnLayout | undefined) => ReactNode;
+  render: (
+    layout: TableColumnLayout | undefined,
+    focusProps?: TableColumnFocusProps,
+  ) => ReactNode;
 }
 
 /** The column windowing a columns capability carries. */

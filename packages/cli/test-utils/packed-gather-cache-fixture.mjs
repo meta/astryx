@@ -92,16 +92,19 @@ export const userConfig = () => path.join(work, 'config');
 /**
  * Run the packed CLI with `tmp` as the system temp folder.
  * @param {string[]} args
- * @param {{tmp: string, cwd?: string, env?: Record<string, string>, json?: boolean}} options
+ * @param {{tmp: string, cwd?: string, env?: Record<string, string>, json?: boolean, cli?: string}} options
  */
-export function run(args, {tmp, cwd = project, env = {}, json = true}) {
+export function run(
+  args,
+  {tmp, cwd = project, env = {}, json = true, cli = packed},
+) {
   fs.mkdirSync(tmp, {recursive: true});
   const base = {...process.env};
   delete base.CI;
   const result = spawnSync(
     process.execPath,
     [
-      path.join(packed, 'clients', 'cli', 'bin', 'astryx.mjs'),
+      path.join(cli, 'clients', 'cli', 'bin', 'astryx.mjs'),
       ...args,
       ...(json ? ['--json'] : []),
     ],
@@ -276,6 +279,43 @@ export function derivedEntries(tmp) {
 }
 
 /**
+ * Whether a kept file holds template discovery's records, not a catalog.
+ * @param {string} file
+ * @returns {boolean}
+ */
+export function templatesEntry(file) {
+  try {
+    const {value} = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return (
+      value != null &&
+      !Array.isArray(value) &&
+      Array.isArray(value.templates) &&
+      Array.isArray(value.errors) &&
+      Object.keys(value).length === 2
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The kept template discovery records in a temp folder's cache folder.
+ * @param {string} tmp
+ * @returns {Map<string, number>} name to inode
+ */
+export function templatesEntries(tmp) {
+  const dir = path.join(tmp, CACHE_NAME);
+  /** @type {Map<string, number>} */
+  const out = new Map();
+  if (!fs.existsSync(dir)) return out;
+  for (const name of fs.readdirSync(dir)) {
+    const file = path.join(dir, name);
+    if (templatesEntry(file)) out.set(name, fs.statSync(file).ino);
+  }
+  return out;
+}
+
+/**
  * The kept catalogs in a temp folder's cache: each file's inode and time
  * (a value derived from a catalog, search's entry table, is not a catalog).
  * @param {string} tmp
@@ -288,11 +328,47 @@ export function entries(tmp) {
   if (!fs.existsSync(dir)) return out;
   for (const name of fs.readdirSync(dir)) {
     const file = path.join(dir, name);
-    if (derivedEntry(file) || issuesEntry(file)) continue;
+    if (derivedEntry(file) || issuesEntry(file) || templatesEntry(file))
+      continue;
     const {ino, mtimeMs} = fs.statSync(file);
     out.set(name, {ino, mtimeMs});
   }
   return out;
+}
+
+/**
+ * Every gather entry in a temp folder's cache folder, by name, with its
+ * inode: a hit leaves every one in place, a miss writes one anew.
+ * @param {string} tmp
+ * @returns {Map<string, number>}
+ */
+export function allInodes(tmp) {
+  const dir = path.join(tmp, CACHE_NAME);
+  if (!fs.existsSync(dir)) return new Map();
+  return new Map(
+    fs
+      .readdirSync(dir)
+      .filter(name => name.startsWith('gather-'))
+      .map(name => [name, fs.statSync(path.join(dir, name)).ino]),
+  );
+}
+
+/**
+ * Run `asks` warm from `tmp` and check that they hit: no entry is written
+ * again. A stale test proves nothing unless its warm path hit before the edit.
+ * Needs module hooks: without them the CLI keeps nothing.
+ * @param {string} tmp
+ * @param {string[][]} asks
+ * @param {{cwd?: string, env?: Record<string, string>, json?: boolean}} [options]
+ * @returns {{status: number | null, stdout: string, stderr: string}[]} the
+ *   warm answers
+ */
+export function expectWarmHit(tmp, asks, options = {}) {
+  const warm = allInodes(tmp);
+  expect(warm.size).toBeGreaterThan(0);
+  const answers = asks.map(ask => run(ask, {tmp, ...options}));
+  expect(allInodes(tmp)).toEqual(warm);
+  return answers;
 }
 
 export const QUERIES = [
