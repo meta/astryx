@@ -534,16 +534,24 @@ export function refuse(code, message, extra = {}) {
 /**
  * A theme name without a pasted label: `theme: t`, `name=t`, `--theme t`
  * and `slug: "t"` name t; quotes and backticks around it go. Case is kept.
+ * A space is no label separator without dashes: "Theme Park" stays.
  * The one reader of such labels, for --theme and every editor command.
  * @param {unknown} s
  * @returns {string}
  */
 export function unlabeledThemeName(s) {
-  return String(s ?? '')
-    .trim()
-    .replace(/^-*(?:theme|name|slug)(?:\s*[:=]\s*|\s+)(?=\S)/i, '')
-    .replace(/^['"`]+|['"`]+$/g, '')
-    .trim();
+  return (
+    String(s ?? '')
+      .trim()
+      // A space ends a label only after dashes (`--theme t`): "Theme Park"
+      // is one name.
+      .replace(
+        /^(?:-+(?:theme|name|slug)(?:\s*[:=]\s*|\s+)|(?:theme|name|slug)\s*[:=]\s*)(?=\S)/i,
+        '',
+      )
+      .replace(/^['"`]+|['"`]+$/g, '')
+      .trim()
+  );
 }
 
 /**
@@ -587,8 +595,18 @@ export function loadTheme(
     // A path or a capital letter typed for a theme that exists names it.
     // A file name typed for the theme (t.theme.ts, Brand.settings.json)
     // names the theme.
+    // The whole name as typed first ("Theme: Park" may be theme-park),
+    // then without a pasted label.
+    const whole = slugFor(
+      String(slug ?? '')
+        .trim()
+        .toLowerCase(),
+    );
     const plain = typedThemeName(slug);
-    const fixed = slugFor(plain);
+    const fixed =
+      whole && fs.existsSync(themeFiles(cwd, whole).settings)
+        ? whole
+        : slugFor(plain);
     const same = fs.existsSync(themeFiles(cwd, fixed).settings) ? fixed : null;
     // A list where one theme goes (t,u or "t;u"): one theme at a time,
     // each that exists named; never a new theme made of the list. A name

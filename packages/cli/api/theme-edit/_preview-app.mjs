@@ -3409,7 +3409,9 @@ export function seeLine(cwd, slug, focus, notChecked = null) {
   }
   const f = themeFiles(cwd, slug);
   const own = notChecked
-    ? `the change is saved, but the components could not be rendered here (${notChecked.cause}), so ${shown(cwd, f.preview)} still shows the theme as it was and --png takes no pictures until that is fixed`
+    ? /could not be written/.test(notChecked.cause)
+      ? `the change is saved, but ${notChecked.cause}; --png takes no pictures until that is fixed`
+      : `the change is saved, but the components could not be rendered here (${notChecked.cause}), so ${shown(cwd, f.preview)} still shows the theme as it was and --png takes no pictures until that is fixed`
     : `look without changing your app: open or screenshot ${shown(cwd, f.preview)} (one self-contained page, current after this change; ${EDITOR} show ${slug} also writes ${shown(cwd, f.sheet)}, every component), or run it with --png for pictures in ${shownDir(cwd, f.dir)}/ with no dev server (it needs a Playwright or a Chrome)`;
   if (urls.length)
     return `${own}; in the running app: open ${urls.slice(0, 2).join(' or ')}`;

@@ -78,5 +78,11 @@ describe('a theme name with a space', () => {
     const r = await refusal(() => themeEditUndo('My Theme', {cwd}));
     expect(r.run[0]).toMatch(/ show my-theme$/);
     expect(r.message).not.toMatch(/more than one theme/);
+    // A name that starts with a label word is still one name: "Theme Park"
+    // is theme-park, never a label on "Park".
+    await themeEditNew('theme-park', {cwd});
+    const park = await refusal(() => themeEditUndo('Theme Park', {cwd}));
+    expect(park.run[0]).toMatch(/ show theme-park$/);
+    expect(park.run.join(' ')).not.toMatch(/ new park/);
   }, 240_000);
 });
