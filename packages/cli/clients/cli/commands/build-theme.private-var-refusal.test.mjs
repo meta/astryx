@@ -59,4 +59,33 @@ describe('a private var fails the build', () => {
       expect(`${r.stdout}${r.stderr}`).not.toContain('[ok]');
     });
   }
+
+  it('theme build --check text: exit 1, the code, no outputs', async () => {
+    const r = await runCli(['theme', 'build', 'pv.theme.mjs', '--check'], {
+      cwd: app,
+    });
+    expect(r.status).toBe(1);
+    // Text names the refusal (the code rides the --json envelope).
+    expect(`${r.stdout}${r.stderr}`).toContain('private var error');
+    expect(`${r.stdout}${r.stderr}`).not.toContain('[ok]');
+    expect(
+      fs
+        .readdirSync(app)
+        .filter(f => f !== 'pv.theme.mjs' && f !== 'package.json'),
+    ).toEqual([]);
+  });
+
+  it('a batch names the file once', async () => {
+    fs.writeFileSync(
+      path.join(app, 'ok.theme.mjs'),
+      "export default { name: 'ok', tokens: {} };\n",
+    );
+    const r = await runCli(['theme', 'build', 'ok.theme.mjs', 'pv.theme.mjs'], {
+      cwd: app,
+    });
+    expect(r.status).toBe(1);
+    const text = `${r.stdout}${r.stderr}`;
+    expect(text).toContain('pv.theme.mjs: ');
+    expect(text).not.toContain('pv.theme.mjs: pv.theme.mjs');
+  });
 });

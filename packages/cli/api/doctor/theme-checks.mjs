@@ -32,6 +32,7 @@ import {
   resolveRecordedTheme,
   resolveThemeModule,
   SOURCE_EXTENSIONS,
+  isPrivateVarRefusal,
   missingThemePackage,
   packageInstallCommand,
   themeBuild,
@@ -1111,6 +1112,9 @@ export async function checkAppThemes(cwd) {
             stale.push(theme.slug);
           }
         } catch (error) {
+          // A theme that sets a private var is the "Private theme
+          // variables" check's to report, not a stale output.
+          if (isPrivateVarRefusal(error)) continue;
           const missing = missingThemePackage(error);
           if (missing) {
             missingPackages.set(missing, [

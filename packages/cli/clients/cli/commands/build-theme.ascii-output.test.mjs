@@ -168,6 +168,22 @@ describe('theme command human output is plain ASCII', () => {
     expect(nonAscii(checked)).toEqual([]);
   });
 
+  it('a family refusal names the member that sets a private var', async () => {
+    const r = await run([
+      'build',
+      '--family',
+      'ocean.mjs',
+      'pv.mjs',
+      '--family-key',
+      'f',
+    ]);
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain('pv.mjs: ');
+    expect(r.stderr).toContain('--_button-radius');
+    expect(fs.existsSync(path.join(dir, 'f.css'))).toBe(false);
+    expect(nonAscii(r)).toEqual([]);
+  });
+
   it('a family build and a stale family check', async () => {
     const familyArgs = [
       'build',
