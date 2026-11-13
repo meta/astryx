@@ -51,17 +51,19 @@ function median(values) {
  * @param {Record<string, number>} measured
  * @param {Record<string, number>} recorded
  * @param {Set<string>} touched
- * @returns {{factor: number, peers: number, baseline: boolean}}
+ * @returns {{factor: number, peers: number, baseline: boolean, median?: number}}
  */
 export function legFactor(measured, recorded, touched) {
   const ratios = Object.entries(measured)
     .filter(([file]) => !touched.has(file) && recorded[file] > 0)
     .map(([file, seconds]) => seconds / recorded[file]);
   const baseline = ratios.length >= MIN_PEERS;
+  const measuredMedian = baseline ? median(ratios) : undefined;
   return {
-    factor: baseline ? Math.max(1, median(ratios)) : 1,
+    factor: baseline ? Math.max(1, /** @type {number} */ (measuredMedian)) : 1,
     peers: ratios.length,
     baseline,
+    median: measuredMedian,
   };
 }
 
