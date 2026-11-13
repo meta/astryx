@@ -9,7 +9,7 @@
  * @position api/theme-edit — imported only by _how.mjs
  */
 
-import {hex, parseColor, ratio} from './_color.mjs';
+import {COLOR_NAMES, hex, parseColor, ratio} from './_color.mjs';
 import {
   DESIGN,
   DIALS,
@@ -23,9 +23,10 @@ import {
   COLOR_PROPS,
   GROUPS,
   isSystemFamily,
+  wordTable,
 } from './_tables.mjs';
 import {PALETTE_DIALS, isGraySeed, seedOf} from './_palette.mjs';
-import {focusStateOf} from './_settings.mjs';
+import {focusStateOf, partRuleTokens} from './_settings.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {cssProperties, keywordsOf, matchValue} from './_css.mjs';
 
@@ -59,6 +60,7 @@ const TRANSLATE = /** @type {Array<[RegExp, string]>} */ (
       '圆|丸く|丸い|둥글게|둥근',
       'rounded',
     ],
+    ['cuadrad[oa]s|carrés|eckige\\p{L}*', '四角|方形|네모', 'square'],
     ['esquinas?|coins|ecken|углы', '角', 'corners'],
     [
       'sombras?|ombres?|ombra|ombre|schatten|тен[ьи]|ظل',
@@ -136,25 +138,36 @@ const DESIGN_WORDS = [
 ];
 
 /** Short forms people type, and the word each means. */
-const SHORT = /** @type {Record<string, string>} */ ({
-  btn: 'button',
-  btns: 'buttons',
-  bttn: 'button',
-  bttns: 'buttons',
-  brdr: 'border',
-  bdr: 'border',
-  hdr: 'header',
-  rad: 'radius',
-  dlg: 'dialog',
-  txt: 'text',
-  clr: 'color',
-  shdw: 'shadow',
-  fnot: 'font',
-  fnt: 'font',
-});
+const SHORT = wordTable(
+  /** @type {Record<string, string>} */ ({
+    btn: 'button',
+    btns: 'buttons',
+    bttn: 'button',
+    bttns: 'buttons',
+    brdr: 'border',
+    bdr: 'border',
+    hdr: 'header',
+    rad: 'radius',
+    dlg: 'dialog',
+    txt: 'text',
+    clr: 'color',
+    shdw: 'shadow',
+    squre: 'square',
+    sqaure: 'square',
+    suqare: 'square',
+    fnot: 'font',
+    fnt: 'font',
+  }),
+);
 
 /** Plain words that are never corrected, though one letter off a VOCAB word. */
 const KEEP = new Set([
+  'selection',
+  'placeholder',
+  'cursor',
+  'tablets',
+  'mobile',
+  'printing',
   'lines',
   'block',
   'blocks',
@@ -286,56 +299,60 @@ function grayStop(family, stop) {
 }
 
 /** Hues people name, as fills a part can take. */
-const HUES = /** @type {Record<string, string>} */ ({
-  red: '#dc2626',
-  orange: '#f97316',
-  amber: '#f59e0b',
-  yellow: '#eab308',
-  lime: '#65a30d',
-  green: '#16a34a',
-  mint: '#34d399',
-  minty: '#34d399',
-  teal: '#0d9488',
-  cyan: '#0891b2',
-  blue: '#2563eb',
-  navy: '#1e3a8a',
-  indigo: '#4f46e5',
-  purple: '#7c3aed',
-  charcoal: '#333333',
-  violet: '#7c3aed',
-  pink: '#db2777',
-  magenta: '#c026d3',
-  brown: '#92400e',
-  gray: '#9ca3af',
-  grey: '#9ca3af',
-  black: '#000000',
-  white: '#ffffff',
-  cream: '#fef3c7',
-  beige: '#f5f5dc',
-});
+const HUES = wordTable(
+  /** @type {Record<string, string>} */ ({
+    red: '#dc2626',
+    orange: '#f97316',
+    amber: '#f59e0b',
+    yellow: '#eab308',
+    lime: '#65a30d',
+    green: '#16a34a',
+    mint: '#34d399',
+    minty: '#34d399',
+    teal: '#0d9488',
+    cyan: '#0891b2',
+    blue: '#2563eb',
+    navy: '#1e3a8a',
+    indigo: '#4f46e5',
+    purple: '#7c3aed',
+    charcoal: '#333333',
+    violet: '#7c3aed',
+    pink: '#db2777',
+    magenta: '#c026d3',
+    brown: '#92400e',
+    gray: '#9ca3af',
+    grey: '#9ca3af',
+    black: '#000000',
+    white: '#ffffff',
+    cream: '#fef3c7',
+    beige: '#f5f5dc',
+  }),
+);
 /** A hue with light, pale or dark before it. */
-const SHADED = /** @type {Record<string, Record<string, string>>} */ ({
-  light: {
-    gray: '#e5e7eb',
-    grey: '#e5e7eb',
-    blue: '#dbeafe',
-    green: '#dcfce7',
-    red: '#fee2e2',
-    yellow: '#fef9c3',
-    purple: '#ede9fe',
-    pink: '#fce7f3',
-    orange: '#ffedd5',
-  },
-  pale: {gray: '#f3f4f6', grey: '#f3f4f6', blue: '#eff6ff', green: '#f0fdf4'},
-  dark: {
-    gray: '#374151',
-    grey: '#374151',
-    blue: '#1e40af',
-    green: '#166534',
-    red: '#991b1b',
-    purple: '#5b21b6',
-  },
-});
+const SHADED = wordTable(
+  /** @type {Record<string, Record<string, string>>} */ ({
+    light: {
+      gray: '#e5e7eb',
+      grey: '#e5e7eb',
+      blue: '#dbeafe',
+      green: '#dcfce7',
+      red: '#fee2e2',
+      yellow: '#fef9c3',
+      purple: '#ede9fe',
+      pink: '#fce7f3',
+      orange: '#ffedd5',
+    },
+    pale: {gray: '#f3f4f6', grey: '#f3f4f6', blue: '#eff6ff', green: '#f0fdf4'},
+    dark: {
+      gray: '#374151',
+      grey: '#374151',
+      blue: '#1e40af',
+      green: '#166534',
+      red: '#991b1b',
+      purple: '#5b21b6',
+    },
+  }),
+);
 
 /** The color tokens a word for a color the theme uses names. */
 const THEME_COLOR_WORDS = /** @type {Array<[RegExp, string, string]>} */ ([
@@ -537,6 +554,109 @@ function scaled(v, f) {
 }
 
 /**
+ * Scale each side of a box value (`4px 8px` by 2 is `8px 16px`); a 0 side
+ * stays 0. Null when a side is not a length this scales.
+ * @param {string} v @param {number} f
+ */
+function scaledBox(v, f) {
+  const sides = String(v ?? '')
+    .trim()
+    .split(/\s+/);
+  if (!sides.length || sides.length > 4) return null;
+  const out = sides.map(x => (/^0(px|rem|em)?$/.test(x) ? x : scaled(x, f)));
+  return out.every(Boolean) ? out.join(' ') : null;
+}
+
+/**
+ * "half the radius on buttons and cards on hover": two parts joined by
+ * "and" share everything around them (the ask before, the value and state
+ * after), so each piece is the whole ask for its part: "half the radius on
+ * buttons on hover and half the radius on cards on hover". Within one
+ * sentence or comma piece, once.
+ * @param {string} q
+ * @param {Array<[RegExp, PartRef]>} partWords
+ * @returns {string}
+ */
+function sharedAsk(q, partWords) {
+  return (
+    q
+      // The same breaks clausesOf splits at: a full stop only before a space
+      // or the end (never inside 0.5rem), a comma only outside parentheses.
+      .split(/([;\n]|,(?![^(]*\))|\.(?=\s|$))/)
+      .map(seg => {
+        const m = /\s+and\s+/.exec(seg);
+        if (!m || /\band\b/.test(seg.slice(m.index + m[0].length))) return seg;
+        const left = seg.slice(0, m.index);
+        const right = seg.slice(m.index + m[0].length);
+        for (const [re] of partWords) {
+          const l = new RegExp(`(?:${re.source})\\s*$`).exec(left);
+          if (!l) continue;
+          for (const [re2] of partWords) {
+            const r = new RegExp(`^\\s*(?:${re2.source})`).exec(right);
+            if (!r) continue;
+            const lead = left.slice(0, l.index);
+            const tail = right.slice(r[0].length);
+            // Only when something is shared: an ask on one side.
+            if (!lead.trim() && !tail.trim()) return seg;
+            return `${lead}${l[0].trim()}${tail} and ${lead}${r[0].trim()}${tail}`;
+          }
+        }
+        return seg;
+      })
+      .join('')
+  );
+}
+
+/**
+ * The part a clause measures against ("cards twice the padding of
+ * buttons": buttons), by clause.
+ * @type {WeakMap<object, string>}
+ */
+const compared = new WeakMap();
+
+/**
+ * An exact relative amount the words give ("half", "double", "twice",
+ * "triple", "a third", "a quarter", "50%", "x0.8"), as a factor of the
+ * theme's current value; null when the words give only a direction.
+ * @param {string} text
+ * @returns {number | null}
+ */
+export function exactFactor(text) {
+  const t = text.toLowerCase();
+  if (/\b(half|halve|halved)\b/.test(t)) return 0.5;
+  if (/\b(double|doubled|twice)\b/.test(t)) return 2;
+  if (/\b(triple|tripled|three times)\b/.test(t)) return 3;
+  if (/\ba third\b/.test(t)) return 1 / 3;
+  if (/\ba quarter\b/.test(t)) return 0.25;
+  const pct = /\b(\d{1,3})\s?%\s*(?:strength|of|as)\b/.exec(t);
+  if (pct && Number(pct[1]) > 0) return Number(pct[1]) / 100;
+  // "50% bigger", "20% less": a change by that share.
+  const by =
+    /\b(\d{1,3})\s?%\s*(bigger|larger|more|wider|taller|smaller|less|tighter|narrower)\b/.exec(
+      t,
+    );
+  if (by && Number(by[1]) > 0) {
+    const f = /^(smaller|less|tighter|narrower)$/.test(by[2])
+      ? 1 - Number(by[1]) / 100
+      : 1 + Number(by[1]) / 100;
+    return f > 0 ? f : null;
+  }
+  // "3 times bigger", "1.5 times as big", "2 times smaller".
+  const nTimes =
+    /\b(\d*\.?\d+)(?:px)?\s*(?:times|x)\s+(bigger|larger|more|wider|taller|thicker|as|smaller|less|thinner|narrower)\b/.exec(
+      t,
+    );
+  if (nTimes && Number(nTimes[1]) > 0 && Number(nTimes[1]) <= 10)
+    return /^(smaller|less|thinner|narrower)$/.test(nTimes[2])
+      ? 1 / Number(nTimes[1])
+      : Number(nTimes[1]);
+  const times = /\bx\s?(\d*\.?\d+)\b/.exec(t);
+  if (times && Number(times[1]) > 0 && Number(times[1]) <= 4)
+    return Number(times[1]);
+  return null;
+}
+
+/**
  * @typedef {{on: string, when?: string, role?: string, level?: string}} PartRef
  */
 
@@ -578,15 +698,23 @@ const OVERRIDES = [
     {on: 'dropdown-menu-item'},
   ],
   [/\b(nav(igation)? (links?|items?))\b/, {on: 'top-nav-item'}],
-  [/\b((dropdown |context )?menus?)\b/, {on: 'dropdown-menu'}],
-  [/\bfooters?\b/, {on: 'layout-footer'}],
+  // A context menu is its own part in Core (its items are the dropdown
+  // menu's items, which it reuses).
+  [/\b(context ?menus?|right[- ]click menus?)\b/, {on: 'context-menu'}],
+  [/\b((dropdown )?menus?)\b/, {on: 'dropdown-menu'}],
+  // A part's own header or footer ("dialog header", "card footer") is that
+  // part's, never the app's top bar or footer.
+  [
+    /(?<!\b(?:dialog|modal|card|drawer|sheet|popover|panel|section|table|menu)s? )\bfooters?\b/,
+    {on: 'layout-footer'},
+  ],
   [/\b(side ?nav|sidebar|side ?panel)\b/, {on: 'side-nav'}],
   [
     /\b(app (name|title)|logo|site title|product name)\b/,
     {on: 'top-nav-heading'},
   ],
   [
-    /\b(header|top ?bar|title ?bar|nav ?bar|app ?bar|masthead)\b/,
+    /(?<!\b(?:dialog|modal|card|drawer|sheet|popover|panel|section|table|menu)s? )\b(header|top ?bar|title ?bar|nav ?bar|app ?bar|masthead)\b/,
     {on: 'app-shell-header'},
   ],
   [/\b(page|app background|whole background|body background)\b/, {on: 'page'}],
@@ -625,6 +753,23 @@ const OVERRIDES = [
   [/\bcode\b/, {on: 'code', role: 'code'}],
   [/\bbody( text)?\b/, {on: 'body', role: 'body'}],
 ];
+
+/**
+ * The part or group a plain word names, as how reads it (`checkboxes` is
+ * the checks group, `panels` the containers), or null.
+ * @param {string} word
+ * @returns {string | null}
+ */
+export function partForWord(word) {
+  const w = String(word ?? '')
+    .trim()
+    .toLowerCase();
+  if (!w) return null;
+  for (const [re, hit] of OVERRIDES)
+    if (/** @type {RegExp} */ (re).test(w))
+      return /** @type {{on: string}} */ (hit).on;
+  return null;
+}
 
 /**
  * Target names in Core's catalog that are plain words a question uses for
@@ -689,7 +834,26 @@ function partLexicon(ctx) {
         .flatMap(key => [key, `${key}s`]),
     ]),
   ];
-  const lex = {parts: [...OVERRIDES, ...derived], vocab};
+  // Every group the editor knows, by its own name ("checks", "inputs"),
+  // read from its groups table: set --on <group> takes the same words.
+  /** @type {Array<[RegExp, PartRef]>} */
+  const groups = Object.keys(FAMILIES).map(name => [
+    new RegExp(`\\b${name.replace(/s$/, '')}s?\\b`),
+    {on: name},
+  ]);
+  const lex = {
+    parts: [
+      ...OVERRIDES,
+      ...derived,
+      ...groups,
+      // "smaller labels on form fields": a field's label.
+      /** @type {[RegExp, PartRef]} */ ([
+        /(?<!\b(?:button|tab|badge|chip|nav|menu|link|checkbox|switch|radio)s? )\b(field |form |input )?labels?\b/,
+        {on: 'field-label'},
+      ]),
+    ],
+    vocab,
+  };
   lexicons.set(project, lex);
   return lex;
 }
@@ -716,6 +880,8 @@ const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
   [/\b(after i check|once checked|i check)\b/, 'checked'],
   [/\b(picked|chosen|choose|pick)\b/, 'selected'],
   [/\b(invalid|errors? state|has an error|with an error)\b/, 'invalid'],
+  [/\bvisited\b/, 'visited'],
+  [/\b(opened|expanded)\b/, 'open'],
   // Words for states a part may not have: the answer says so.
   [/\bread-?only\b/, 'readonly'],
   [
@@ -796,6 +962,10 @@ function aspectsOf(text) {
   if (/\bitalics?\b/.test(c)) add('italic');
   if (
     /\b(bold(er)?|unbold\w*|weight|heav(y|ier)|semibold)\b/.test(c) ||
+    // "body 16px regular": a weight word after a size.
+    /\b\d+(\.\d+)?(px|rem|em|pt) (regular|normal|medium)\b|\b(body|text|headings?) (regular|normal)$/.test(
+      c,
+    ) ||
     /\bthin(ner)? (body |button |heading |label )?(font|text|type|letters|headings?|labels?|copy)\b/.test(
       c,
     ) ||
@@ -822,7 +992,7 @@ function aspectsOf(text) {
     (/\b(bigger|larger|smaller)\b/.test(c) &&
       /\b(text|font|headings?|titles?|h[1-6]|body)\b/.test(c)) ||
     /\b\d+(px|rem) (text|font|labels?|type)\b/.test(c) ||
-    /\b(text|font|headings?|titles?|labels?|h[1-6])\s+\d+(\.\d+)?(px|rem|em|pt)\b/.test(
+    /\b(text|font|body|headings?|titles?|labels?|h[1-6])\s+\d+(\.\d+)?(px|rem|em|pt)\b/.test(
       c,
     ) ||
     /\b(text|font|type)( is)? (way |far |much )?too (small|tiny|big|large)\b|\btoo (small|tiny) to read\b/.test(
@@ -857,16 +1027,18 @@ function aspectsOf(text) {
     /\b(transitions?|animations?|animate[sd]?|fade[sd]? (in|out)|motion)\b/.test(
       c,
     ) &&
-    /\b(fast(er)?|slow(er)?|quick(er)?|snappier|speed|duration|\d+m?s|off|no|none|disable|stop|remove)\b/.test(
+    (/\b(fast(er)?|slow(er)?|quick(er)?|snappier|speed|duration|\d+(\.\d+)?m?s|off|no|none|disable|stop|remove)\b/.test(
       c,
-    )
+    ) ||
+      /\bfade[sd]?[- ](in|out)\b/.test(c))
   ) {
     a.splice(0, a.length);
     add('motion');
     return a;
   }
   if (
-    /\b(faded|fade|opacity|see-through|washed out)\b/.test(c) ||
+    // Washed-out colors are a vibrancy ask, not an opacity one.
+    /\b(faded|fade|opacity|see-through|washed out(?! colou?rs?\b))\b/.test(c) ||
     // A percent is an opacity only beside an opacity word, never inside a
     // function or after a color ("#2563eb 0%" is a gradient stop).
     (/\d+%/.test(withoutFunctions(c)) &&
@@ -913,7 +1085,9 @@ const FONT_NAMES = [...Object.keys(OPEN_FONTS), ...Object.keys(FONTS)]
  */
 function clausesOf(q, partWords) {
   // "swap X and Y" is one ask.
-  const pieces = (/\bswap\b/.test(q) ? q.replace(/\band\b/g, '&') : q)
+  const pieces = (
+    /\bswap\b/.test(q) ? q.replace(/\band\b/g, '&') : sharedAsk(q, partWords)
+  )
     .split(
       /;|\.(?=\s|$)|,(?![^(]*\))|\b(?:and|with|but|then|plus|also|y|et|und|и)\b|\bwhile\b|(?=\bexcept\b)/,
     )
@@ -985,7 +1159,7 @@ function clausesOf(q, partWords) {
         /\?/.test(text));
     const neg =
       !askedFor &&
-      /\b(no|not|nothing|none of|don'?t|do not|never|without|remove|removing|get rid of|lose|drop|ditch|nix|scrap|kill|none|shouldn'?t|should not|mustn'?t|turn off|turn (the|it|them) off|switch off|stop|unbold\w*|unround\w*|disable|(?:revert|undo|take back) (?:the|those|that|these|my|our|all)|(?:shadows?|borders?|underlines?|outlines?|gradients?|uppercase|caps) (?:off|out|gone))\b/.test(
+      /\b(no|not|nothing|none of|don'?t|do not|never|avoid|without|remove|removing|get rid of|lose|drop|ditch|nix|scrap|kill|none|shouldn'?t|should not|mustn'?t|turn off|turn (the|it|them) off|switch off|stop|unbold\w*|unround\w*|disable|(?:revert|undo|take back) (?:the|those|that|these|my|our|all)|(?:shadows?|borders?|underlines?|outlines?|gradients?|uppercase|caps) (?:off|out|gone))\b/.test(
         negText
           .replace(/\bdisabled\b/g, ' ')
           // "not round enough" asks for more; "not so much" for less.
@@ -1004,7 +1178,7 @@ function clausesOf(q, partWords) {
         ? 'less'
         : tooMore.test(text)
           ? 'more'
-          : /\b(less|fewer|smaller|lower|reduce|softer|lighter|lighten|thinner|narrower|shorter|tight(en|er)?|dense(r)?|denser|compact|sharper|squarer|subtler|tone down|dimmer|halve|half|halved|least|minimum|min|minimal|barely|as little)\b|\bcut\b.*\bin half\b|\bx ?0?\.\d+\b|\b(knock|turn|dial|bring|tone)\b.*\bdown\b/.test(
+          : /\b(less|fewer|smaller|lower|reduce|decrease|shrink|minimi[sz]e|scale down|trim|softer|lighter|lighten|thinner|narrower|shorter|tight(en|er)?|dense(r)?|denser|compact|sharper|squarer|subtler|tone down|dimmer|halve|half|halved|least|minimum|min|minimal|barely|as little)\b|\bcut\b.*\bin half\b|\bx ?0?\.\d+\b|\b(knock|turn|dial|bring|tone)\b.*\bdown\b/.test(
                 text,
               )
             ? 'less'
@@ -1059,7 +1233,10 @@ function clausesOf(q, partWords) {
       // A typed clamp() or calc() is a length, kept whole.
       lengths: [
         ...(text.match(/\b(?:clamp|calc|min|max)\([^)]*\)/g) ?? []),
-        ...lengthsIn(text),
+        // "3 times bigger": the 3 is an amount, never a length.
+        ...lengthsIn(
+          text.replace(/\b\d*\.?\d+(?:px)?\s*(?:times|x)\s+(?=\w)/g, ' '),
+        ),
       ],
       state,
       mode,
@@ -1241,19 +1418,21 @@ const PLAIN_PROPERTIES = new Set([
 ]);
 
 /** Words people write for a CSS property. */
-const PROPERTY_WORDS = /** @type {Record<string, string>} */ ({
-  radius: 'border-radius',
-  'min height': 'min-height',
-  'max height': 'max-height',
-  'min width': 'min-width',
-  'max width': 'max-width',
-  'line height': 'line-height',
-  'letter spacing': 'letter-spacing',
-  'font size': 'font-size',
-  'font weight': 'font-weight',
-  'border color': 'border-color',
-  'border colour': 'border-color',
-});
+const PROPERTY_WORDS = wordTable(
+  /** @type {Record<string, string>} */ ({
+    radius: 'border-radius',
+    'min height': 'min-height',
+    'max height': 'max-height',
+    'min width': 'min-width',
+    'max width': 'max-width',
+    'line height': 'line-height',
+    'letter spacing': 'letter-spacing',
+    'font size': 'font-size',
+    'font weight': 'font-weight',
+    'border color': 'border-color',
+    'border colour': 'border-color',
+  }),
+);
 
 /**
  * The words of a value, with each function call kept whole, nested calls
@@ -1297,25 +1476,27 @@ function withoutFunctions(text) {
 }
 
 /** The settings each aspect names, for a reset; `*` matches a prefix. */
-const RESET_THINGS = /** @type {Record<string, string[]>} */ ({
-  corners: ['corners', 'border-radius', '--radius-*'],
-  spacing: ['spacing', 'padding', 'gap', 'margin', '--spacing-*'],
-  family: ['font', 'font-family', '--font-family-*'],
-  background: ['background', 'background-color'],
-  text: ['color', '--color-text-*'],
-  shadow: ['box-shadow', 'surfaces', '--shadow-*'],
-  border: [
-    'border',
-    'border-width',
-    'border-color',
-    '--border-width',
-    '--color-border',
-  ],
-  weight: ['headings', 'font-weight', '--text-body-weight'],
-  fontsize: ['text-size', 'type', 'font-size'],
-  leading: ['line-height', '--text-body-leading'],
-  tracking: ['letter-spacing'],
-});
+const RESET_THINGS = wordTable(
+  /** @type {Record<string, string[]>} */ ({
+    corners: ['corners', 'border-radius', '--radius-*'],
+    spacing: ['spacing', 'padding', 'gap', 'margin', '--spacing-*'],
+    family: ['font', 'font-family', '--font-family-*'],
+    background: ['background', 'background-color'],
+    text: ['color', '--color-text-*'],
+    shadow: ['box-shadow', 'surfaces', '--shadow-*'],
+    border: [
+      'border',
+      'border-width',
+      'border-color',
+      '--border-width',
+      '--color-border',
+    ],
+    weight: ['headings', 'font-weight', '--text-body-weight'],
+    fontsize: ['text-size', 'type', 'font-size'],
+    leading: ['line-height', '--text-body-leading'],
+    tracking: ['letter-spacing'],
+  }),
+);
 
 /** Words for a color the theme generates: the word, its dial, its token. */
 const ROLE_DIALS = /** @type {Array<[RegExp, string, string]>} */ ([
@@ -1328,37 +1509,39 @@ const ROLE_DIALS = /** @type {Array<[RegExp, string, string]>} */ ([
 ]);
 
 /** Number words, longest phrase first. */
-const NUMBER_WORDS = /** @type {Record<string, number>} */ ({
-  zero: 0,
-  one: 1,
-  two: 2,
-  three: 3,
-  four: 4,
-  five: 5,
-  six: 6,
-  seven: 7,
-  eight: 8,
-  nine: 9,
-  ten: 10,
-  eleven: 11,
-  twelve: 12,
-  thirteen: 13,
-  fourteen: 14,
-  fifteen: 15,
-  sixteen: 16,
-  seventeen: 17,
-  eighteen: 18,
-  nineteen: 19,
-  twenty: 20,
-  thirty: 30,
-  forty: 40,
-  fifty: 50,
-  sixty: 60,
-  seventy: 70,
-  eighty: 80,
-  ninety: 90,
-  hundred: 100,
-});
+const NUMBER_WORDS = wordTable(
+  /** @type {Record<string, number>} */ ({
+    zero: 0,
+    one: 1,
+    two: 2,
+    three: 3,
+    four: 4,
+    five: 5,
+    six: 6,
+    seven: 7,
+    eight: 8,
+    nine: 9,
+    ten: 10,
+    eleven: 11,
+    twelve: 12,
+    thirteen: 13,
+    fourteen: 14,
+    fifteen: 15,
+    sixteen: 16,
+    seventeen: 17,
+    eighteen: 18,
+    nineteen: 19,
+    twenty: 20,
+    thirty: 30,
+    forty: 40,
+    fifty: 50,
+    sixty: 60,
+    seventy: 70,
+    eighty: 80,
+    ninety: 90,
+    hundred: 100,
+  }),
+);
 const NUMBER_WORDS_RE = new RegExp(
   `\\b(?:(?:one|a) and a half|half an?|an? quarter(?: of an?)?|an? half|(?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)[- ](?:one|two|three|four|five|six|seven|eight|nine)|${Object.keys(NUMBER_WORDS).join('|')})\\b(?=\\s*(?:-|\\s)?\\s*(?:px|pixels?|rem|em|pt|percent|%|radius|corners?|line height|times|x\\b|\\w+ (?:tall|wide|thick)|tall|wide|thick))`,
   'gi',
@@ -1403,10 +1586,580 @@ export function draftAnswer(ctx, env, question) {
   const TARGET = ctx.project.target;
   const TOKENS = ctx.project.core.tokenDefaults;
   const lex = partLexicon(ctx);
+  // "corners NaNpx": not a number; never a guess. After a CSS property the
+  // property's own check says why.
+  const notNumber = /\b(nan|-?infinity)(px|rem|em|%)?(?![a-z])/i.exec(question);
+  const afterProperty = notNumber
+    ? cssProperties().has(
+        (
+          /([a-z-]+)\s*:?\s*$/i.exec(question.slice(0, notNumber.index))?.[1] ??
+          ''
+        ).toLowerCase(),
+      )
+    : false;
+  if (notNumber && !afterProperty)
+    return {
+      parts: [],
+      aspects: [],
+      drafts: [
+        {
+          text: `${notNumber[0]} is not a number a theme can use; give a number, like 8px`,
+          options: [],
+        },
+      ],
+    };
+  // Sarcasm and dislike name the thing to drop: "enough with the shadows",
+  // "nobody asked for borders", "who needs X", "shadows 👎".
+  question = question
+    .replace(/\b([a-z]+) (?:👎|❌)/gi, 'no $1')
+    .replace(/(?:👎|❌)\s*([a-z]+)/gi, 'no $1')
+    .replace(
+      /\b(?:enough with|quit with|nobody asked for|no one asked for|who needs|get rid of all|(?:i )?loathe) (?:the |all the |these |those )?/gi,
+      'no ',
+    )
+    .replace(/^\s*([a-z][a-z -]*?)\s*(?:👎|:-?\(|:thumbsdown:)\s*$/i, 'no $1')
+    // "too dark, I hate it": the description is the ask.
+    .replace(
+      /[,.;!]?\s*(?:i )?(?:hate|dislike|can'?t stand) (?:it|this|that)\b[.!]*/gi,
+      '',
+    );
+  // The gate works per clause: a clause that is a question, a "tell me",
+  // a "stop …" or a "don't touch …" blocks only itself; the other clauses
+  // are read, with the parts the blocked clause names.
+  const GATE =
+    /\b(tell me|explain|what does|how does|but not too|stop (making|turning|being|using)|don'?t (touch|change)(?! (the )?(dark|light) mode)|leave (?!(?:the )?(?:dark|light) mode)[a-z ]+ alone|who made|just what i wanted|eyes hurt|is a great)\b|^\s*(yeah|oh sure|sure|great|wow)\b|,\s*nice[.!]*\s*$/i;
+  const QUESTION_CLAUSE =
+    /^\s*(?!(?:can|could|would|will) you\b|why (?:are|is|aren'?t|isn'?t)\b[^?]*\bnot\b|why not\b|why don'?t (?:we|you)\b|what about\b|what if\b|how about\b|is it possible\b|is there a way\b|can we\b|could we\b)(what|whats|what's|which|why|where|who|when|is|are|does|do|did|can|could|should|will)\b[^?]*\?+!*\s*$|^\s*(?!why not\b|why don'?t (?:we|you)\b|what about\b|what if\b|why (?:are|is|aren'?t|isn'?t)\b[^?]*\bnot\b)(what|whats|what's|which|why|where)\b|^\s*(?!is it possible\b|is there a way\b)(are|is|does|did|would|should) (my|the|it|this|these|those|our|there|a|an|square|round|rounder|bigger|smaller|darker|lighter)\b/i;
+  // "if you can", "if possible": politeness, not a condition. "no fewer
+  // than 2px": a limit, the number.
+  question = question
+    .replace(
+      /\b(?:if (?:you can|possible|you could|you don'?t mind|it'?s not too much trouble|it is not too much trouble)|when you get a chance)\b[,]?\s*/gi,
+      '',
+    )
+    .replace(/\bno (?:less|fewer) than\s+(?=\d)/gi, '');
+  // "dark page #0b0b0f", "dark.page=#…", "dark page: #…": the mode word
+  // scopes the color. "dark mode only: accent #…" is that mode, not a
+  // dark-only theme. Vocabulary that names a direction: nuke/kill/zap =
+  // remove, sharpen = sharper, zero out = 0, flatten = flat, X++ / X-- =
+  // more / less X, "X: off|none" = no X.
+  question = question
+    .replace(
+      /\b(dark|light)[. ](page|background|body)( colou?r)?\s*[:=]?\s*(#[0-9a-f]{3,8})\b/gi,
+      '$2 $4 in $1 mode',
+    )
+    .replace(/^\s*(dark|light) mode only\s*:\s*/i, 'in $1 mode: ')
+    // "cards with twice the padding of buttons": one comparison, not two
+    // asks.
+    .replace(
+      /\bwith\s+(?=(?:twice|double|half|triple|three times)\s+(?:the\s+)?\w+\s+(?:of|than|as)\b)/gi,
+      '',
+    )
+    // "just the headers bolder", "only the titles bigger": a scope, not a
+    // break between asks.
+    .replace(/(?<![-\w])(?:just|only)\s+(?=(?:the|my)\s+\w+\s+\w)/gi, '')
+    // "headers bolder", "titles bigger": with a text word and no surface
+    // word, the headings' type; with a surface word ("header background"),
+    // the app header part.
+    .replace(/\b(headers?|titles?)\b/gi, (m, _w, at, all) => {
+      // The clause the word is in: from the last break before it (a comma,
+      // semicolon, full stop or new line) to the next one after it.
+      const head = String(all).slice(0, at);
+      // A full stop breaks only before a space or the end (never 1.5rem).
+      const breaks = [...head.matchAll(/[,;\n]|\.(?=\s|$)/g)];
+      const from = breaks.length ? (breaks.at(-1)?.index ?? -1) + 1 : 0;
+      const clause = String(all)
+        .slice(from)
+        .split(/[,;\n]|\.(?=\s|$)/)[0];
+      const text =
+        /\b(bold(er)?|bigger|smaller|larger|font|weight|size|serif|sans|italic|heavier|lighter|thinner|uppercase|letter[- ]?spacing|tracking|line[- ]?height)\b/i.test(
+          clause,
+        );
+      const surface =
+        /\b(background|bg|bar|border|sticky|height|shadow|color of the bar|padding|fixed)\b/i.test(
+          clause,
+        );
+      // "table header", "accordion header", "card title": that part's own.
+      // A place ("not in the header") is the header part too.
+      const before = String(all).slice(Math.max(0, at - 16), at);
+      const owned =
+        /\b(table|column|accordion|card|dialog|modal|page|section|app|site|product|top ?nav)\s+$/i.test(
+          before,
+        ) || /\b(in|on|inside|into|across|of)\s+(the\s+|my\s+)?$/i.test(before);
+      return text && !surface && !owned
+        ? /s$/i.test(m)
+          ? 'headings'
+          : 'heading'
+        : m;
+    })
+    // "focus ring on inputs only, at half strength": an amount alone after a
+    // comma belongs to the ask before it.
+    .replace(
+      /,\s*(?=(?:at|with|by|to)?\s*(?:about\s+)?(?:half|double|twice|triple|a third|a quarter|\d{1,3}\s?%)(?:\s+(?:the\s+)?(?:strength|width|size|thickness|weight|intensity|as (?:much|strong|thick|wide)))?\s*(?:[;.\n]|$))/gi,
+      ' ',
+    )
+    // "I need: 1. accent red 2. pill badges": inline list numbers are breaks,
+    // not values.
+    .replace(/(?:^|\s)\d{1,2}[.)]\s+(?=[a-z#])/gi, m =>
+      (question.match(/(?:^|\s)\d{1,2}[.)]\s+[a-z#]/gi) ?? []).length >= 2
+        ? '; '
+        : m,
+    )
+    // "only when dark mode is on", "except in dark mode": the mode itself.
+    .replace(
+      /\b(?:only )?(?:when|while|whenever) (?:the )?(dark|light) mode is (?:on|active|enabled|used)\b/gi,
+      'in $1 mode',
+    )
+    .replace(
+      /\b(?:except|but not|not) (?:in |for |on )?dark(?: mode| theme)?\b(?! enough\b)|\b(?:don'?t|do not) (?:touch|change) (?:the )?dark mode\b|\b(?:leave|keep) (?:the )?dark mode (?:alone|as it is|as is|untouched)\b/gi,
+      'in light mode',
+    )
+    .replace(
+      /\b(?:except|but not|not) (?:in |for |on )?light(?: mode| theme)?\b(?! enough\b)|\b(?:don'?t|do not) (?:touch|change) (?:the )?light mode\b|\b(?:leave|keep) (?:the )?light mode (?:alone|as it is|as is|untouched)\b/gi,
+      'in dark mode',
+    )
+    // Removal words in other languages and 🚫: none of it.
+    .replace(/(?:🚫|⛔)\s*/gu, 'no ')
+    .replace(
+      /\b(?:rimuovi|togli|elimina|entferne|quita|retire)\b\s*(?:l'|la |le |il |lo |el |los |las |o |a |os |as |die |der |das |den )?/gi,
+      'no ',
+    )
+    .replace(
+      /\b(?:sans|sin|sem|ohne)\s+(?=(?:l'|la |le |el |o |a |den )?(?:ombres?|bordures?|sombras?|bordes?|bordas?|schatten|rand)\b)/gi,
+      'no ',
+    )
+    // "those dialog shadows are heavy": too heavy, so lighter.
+    .replace(
+      /\b(?:are|is|look|looks|seem|seems) (?:so |very |way |kinda |pretty |quite )?(heavy|strong|harsh|loud|thick|dark|bright)\b/gi,
+      'too $1',
+    )
+    .replace(/\b(dark|light)mode\b/gi, '$1 mode')
+    .replace(/\b(?:nuke|kill|zap|axe)\b/gi, 'remove')
+    .replace(
+      /\bsharpen (?:the |all the |every |all )?([a-z]+)/gi,
+      'make the $1 sharper',
+    )
+    .replace(/\bzero out (?:the )?([a-z ]+?)(?=$|[,;.])/gi, '$1 0')
+    .replace(/\bflatten (?:the )?([a-z]+)/gi, 'make the $1 flat')
+    .replace(/\b([a-z][a-z -]*?)\s*\+\+/gi, 'more $1')
+    .replace(/\b([a-z][a-z -]*?)\s*--(?![a-z])/gi, 'less $1')
+    .replace(/\b([a-z][a-z -]*?)\s*[:=]\s*(?:off|none|no)\b/gi, 'no $1');
+  const segments = question
+    .split(
+      /\s*(?:,(?![^(]*\))|[;\n|]|\s[/+]\s(?![^(]*\))|\.{2,}|[.?!](?=\s)|\bjust\b|\bthen\b|\s[-\u2013\u2014]\s|\bstep \d+\b|\bbut\b(?= (?:make|set|change|use|give|turn|remove|add)\b)|(?<=\S)(?<!\b(?:don'?t|never|do not|not|to|please|and|you|we|i|let'?s|can|could|would|will))\s+(?=(?:make|set|change|give|turn) (?:it|them|the|my|this|that|those|these)\b)|(?<=\S)\s+(?=(?:do|does|will) \w+ (?:follow|match)\b))\s*/i,
+    )
+    .map(x => x.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, ''))
+    .filter(x => x.trim());
+  // "drop shadow: x 0, y 4, …", "card shadow: 0 1px …, 0 2px …": a label
+  // with its value is one clause, commas and all.
+  if (
+    /^\s*[a-z][\w -]{0,30}:\s*[^?]*$/i.test(question) &&
+    !/\n/.test(question) &&
+    !/;/.test(question)
+  )
+    segments.splice(0, segments.length, question);
+  // A clause writes only when it reads as a direct ask: an imperative, a
+  // request, or a thing with a value or a direction; a condition, an
+  // indirect question, a double negative or a statement of fact gets the
+  // lookup instead. A wrong write is worse than no command.
+  const CONDITION =
+    /^\s*(?:if|unless|in case|provided|providing|only if|assuming|suppose|supposing|as long as|whenever|as soon as|once|given|in the event|should (?:the|it|they)|were (?:the|it|they)|otherwise|on condition)\b|\b(?:except if|on condition that|in the event)\b/i;
+  const NOT_ASK =
+    /\b(i wonder|wondering|curious|would like to know|let me see|help me understand|any idea|just checking|just asking|check if|check whether|can you check|look at|double check|idk|quick q|do you think)\b|\b(don'?t not|not without|not un-?(?:bold|round|rounded|flat|square|styled)\w*|never no|no lighter|no darker|not at all|isn'?t it time|weren'?t)\b|^\s*(?!(?:can|could|would|will) (?:you|i|we)\b|can (?:the|my|our|all) [\w -]+ be\b|is it possible\b|is there a way\b)(?:do|does|did|will|would|can(?!'t|not)|could|should|is|are)\b(?!n'?t)|^\s*checking\b|\bno less (?!than)|^\s*(would|could|should|does|do|is|are|will)\b[^.]*\b(work|look|be (?:a )?(?:good|better|too much|ok|okay)|good|better|accessible|clash|too much)\b[^.]*\??$|\bor\b[^.]*\?\s*$|^\s*how (?:would|round|big|dark|light|thick)\b|\b(right now|rn)\b(?!.*\b(make|set|change)\b)/i;
+  const ASK_START =
+    /^\s*(?:please |pls |ok,? |okay,? |also |and |now |so |anyway,? )*(?:make|set|change|use|give|turn|add|remove|increase|decrease|lighten|darken|round|square|put|switch|swap|replace|drop|ditch|kill|hide|bump|reduce|raise|lower|tighten|loosen|shrink|grow|enlarge|boost|soften|sharpen|undo|revert|reset|restore|bring|go|keep|let'?s|try|apply|get rid|take|knock|cut|paint|colou?r|fill|flatten|thicken|widen|narrow|underline|bold|unbold|uppercase|lowercase|no|without|stop|don'?t|never|avoid|less|more|bigger|smaller|rounder|sharper|darker|lighter|softer|bolder|thinner|thicker|wider|tighter|looser)\b|^\s*(?:can|could|would|will) (?:you|i|we)\b|^\s*can (?:the|my|our|all) [\w -]+ be\b|^\s*(?:i|we) (?:want|need|'d like|would like)\b|^\s*(?:i'd|id) like\b|^\s*please\b/i;
+  // Strict: a clause writes only when it positively reads as an ask:
+  // (a) an imperative from a closed verb list, after an optional politeness
+  // prefix; (b) an assignment of a known thing ("<thing> <value>",
+  // "<thing>: <value>"); (c) a bare comparative or style word with a part
+  // ("rounder buttons", "serif headings"). Anything else is held back.
+  const VETO =
+    /^(?:don'?t|doesn'?t|isn'?t|aren'?t|won'?t|wouldn'?t|can'?t|shouldn'?t)\s+(?:the |my |our )?[a-z]+\s+(?:get|have|use|look|be|need|seem)\b|\b(no idea|who knows|not sure|no reason not|can'?t not|isn'?t wrong|not unlike|not never|wouldn'?t say no|can'?t say|it'?s not that|nobody said|hardly|imagine|picture|pretend|hypothetically|in theory|one day|might|toying|consider|someday|maybe|perhaps)\b|\b(?:don'?t|never|no)\b[^,;.]*\bnot\b|\bnever without\b/i;
+  const POLITE =
+    /^\s*(?:(?:please|pls|kindly|ok(?:ay)?|also|and|now|so|anyway|alright|hey|hi|then)[,\s]+|(?:can|could|would|will) (?:you|we|i) (?:please )?|i'?d like (?:you )?to |i'?d like |i (?:want|need|prefer) (?:you )?(?:to )?|we'?d (?:like|prefer) |we (?:want|need|prefer) |hoping for |my request is |let'?s (?:go with )?|lets (?:go with )?|how (?:about|'bout) |what about |why not |why don'?t we (?:go with )?|go ahead and |mind making |you'?d better |you can |you forgot to |only |just |everything |lol |umm+ |ugh,? |quick one:? |(?:way|much|much much|slightly|a bit|a little|a smidge|just slightly|even|super|really|very) |when (?:hovering|hovered|pressed|clicked|focused|i hover|i click|i tab to)(?: (?:on|over|a|an|the) [a-z]+)? |(?:the |our |my )?(?:designer|pm|client|boss|users?|marketing|legal|design spec|style guide|mockup|brand) (?:wants?|needs?|requires?|prefers?|asked for|said:?|says:?) |please and thank you:? |thank you:? |thanks:? |in (?:dark|light) mode[:,]?\s*|(?:dark|light) mode[:,]\s*)+/i;
+  const VERB =
+    /^(?:crank up|fix|make|set|change|use|turn|add|remove|drop|kill|increase|decrease|raise|lower|lighten|darken|round|sharpen|square|flatten|soften|tighten|loosen|beef up|bump|boost|tone down|thicken|thin|bold|unbold|underline|hide|put|switch|swap|replace|ditch|reduce|shrink|trim|minimi[sz]e|scale down|grow|enlarge|widen|narrow|paint|colou?r|fill|undo|revert|reset|restore|bring|go back|keep|apply|try|get rid|take|knock|cut|stop|don'?t|do not|never|avoid|no|without|scale|move|space|pad|center|align|uppercase|lowercase|italicize|enable|disable|switch)\b/i;
+  const THING =
+    /^(?:the |my |our |all |every |all the )?(?:--[a-z][\w-]*|accent|brand|primary|secondary|danger|success|warning|info|corners?|radius|border-radius|spacing|padding|gap|margin|density|headings?|titles?|text(?:-size)?|font(?:s|-size|-family|-weight)?|body|page|background|bg|vibrancy|shadows?|borders?|outlines?|underlines?|links?|mode|leading|line[- ]height|letter[- ]spacing|tracking|weight|focus(?: ring| outline)?|colou?rs?)\b/i;
+  const STYLE =
+    /^(?:muted|pastel|subdued|duller|vivid|saturated|desaturated|vibrant|\d+(?:\.\d+)?(?:px|rem|em|%)?|underlined?|more|less|extra|rounder|sharper|squarer|square|round(?:ed)?|pill|flat|serif|sans(?:-serif)?|mono(?:space)?|bold(?:er)?|italic|uppercase|lowercase|compact|roomy|dense|airy|tight(?:er)?|loose(?:r)?|wide(?:r)?|thin(?:ner)?|thick(?:er)?|big(?:ger)?|small(?:er)?|large(?:r)?|tiny|huge|dark(?:er)?|light(?:er)?|bright(?:er)?|soft(?:er)?|heav(?:y|ier)|no|without|#[0-9a-f]{3,8}|red|orange|yellow|green|teal|cyan|blue|indigo|purple|violet|pink|rose|gray|grey|black|white|navy|crimson|maroon)\b/i;
+  const COPULA =
+    /\b(is|are|was|were|has|have|had|isn'?t|aren'?t|doesn'?t|did|does|truly)\b|\?/i;
+  // Clauses that only scope or give a value ("in dark mode", "on hover",
+  // "4px", "at least 44px") join the ask next to them.
+  const NEUTRAL =
+    /^\s*(?:below|above|under|over)\s+\d+(?:px|em|rem)\s*$|^\s*(?:on|for) (?:mobile|phones?|tablets?|desktops?|print)\s*$|^\s*when printing\s*$|^\s*(?:(?:in|on) (?:the )?(?:dark|light) mode )?#[0-9a-f]{3,8}(?: in (?:dark|light)(?: mode)?)?\s*$|^\s*(?:leave|keep) (?:the )?(?:dark|light) mode (?:alone|as is|as it is|untouched)\s*$|^\s*(?:only |just )?(?:(?:in|on|for|when|while) )?(?:(?:the )?(?:dark|light) mode|hover(?:ed|ing)?|focus(?:ed)?|press(?:ed)?|click(?:ed)?|selected|checked|disabled)(?: only)?\s*$|^\s*(?:at (?:least|most) |about |around |roughly |maybe )?(?:-?\d*\.?\d+(?:px|rem|em|%|ms|s)?|#[0-9a-f]{3,8})\s*$/i;
+  const isAsk = (/** @type {string} */ x) => {
+    if (NEUTRAL.test(x)) return true;
+    // A bare CSS value ("0 8px 10px -6px rgb(0 0 0 / 0.1)") continues the
+    // clause before it.
+    const bare = x.replace(
+      /^\s*(?:like|e\.?g\.?|say|maybe|about|around|roughly)\s+/i,
+      '',
+    );
+    if (
+      /\d/.test(bare) &&
+      !/[a-z]{3,}/i.test(
+        bare.replace(
+          /\b(?:px|rem|em|rgba?|hsla?|oklch|oklab|var|calc|inset)\b|\([^)]*\)/gi,
+          '',
+        ),
+      )
+    )
+      return true;
+    const low = x.toLowerCase().trim();
+    // "card shadow: 0 1px 3px …", "Airbnb: accent #ff385c": a label and its
+    // value; "setRadius(4)"; "shouldn't links be underlined?"; a question in
+    // another language the editor translates.
+    if (
+      /^([a-z][\w -]{0,30}):\s*\S/.test(low) &&
+      !/^(?:just )?(?:checking|question|quick q|q|fyi|todo|note|changes)\s*:|:\s*(?:are|is|do|does|what|which|how|why)\b/.test(
+        low,
+      ) &&
+      !NOT_ASK.test(low) &&
+      !CONDITION.test(low) &&
+      !VETO.test(low) &&
+      !/\?\s*$/.test(low)
+    )
+      return true;
+    if (/^set[a-z]*\(|^shouldn'?t\b[^?]*\?\s*$/.test(low)) return true;
+    // "I set the accent to red by mistake", "does nothing visible".
+    if (
+      /\b(by mistake|by accident|accidentally|does nothing|do nothing)\b/.test(
+        low,
+      )
+    )
+      return true;
+    if (
+      /\b(schatten|karten|ecken|knöpfe|entfernen|pulsanti|arrotondat\w*|ombra|ombre|bordure|cartes|esquinas|redond\w*|botones|boutons|arrondi\w*|rouges?|bleus?|verts?|sombra|couleur|tarjetas|espacio|angoli|cantos|botões)\b/.test(
+        low,
+      )
+    )
+      return true;
+    // "I hate the shadows", "I can barely see the borders", "the client
+    // wants …": a wish or a complaint about a named thing.
+    if (
+      /^(?:i|we|they|the client|the designer|stakeholders?|users?|the night shift)\b[^?]*\b(hate|want|wants|need|needs|like|prefer|barely see|can'?t see|think|wish)\b(?! to know)/.test(
+        low,
+      ) &&
+      !VETO.test(low) &&
+      !CONDITION.test(low) &&
+      (aspectsOf(low).length > 0 ||
+        lex.parts.some(([re]) => re.test(low)) ||
+        /#[0-9a-f]{3,8}|\b(accent|colou?r|brand|grays?|font|purple|blue|red|green|orange|teal|pink|navy|black|white|yellow|violet)\b/.test(
+          low,
+        ))
+    )
+      return true;
+    // Typos are read as the words they are near ("accnet" is accent).
+    const t0 = x
+      .toLowerCase()
+      .trim()
+      .replace(/[a-z]+/g, w => corrected(w, lex.vocab));
+    // "our brand color is #0055ff": a value given for the brand; pasted CSS
+    // ("html.dark .card { … }"); "X should be/look Y".
+    if (
+      /^(?:our|my|the) brand colou?r is #[0-9a-f]{3,8}\b|\{[^}]*:|\bshould (?:be|look|have|get|use|match|feel)\b(?![^?]*\?)/.test(
+        t0,
+      ) &&
+      !CONDITION.test(t0) &&
+      !VETO.test(t0)
+    )
+      return true;
+    const raw = x.toLowerCase();
+    if (
+      [t0, raw].some(v => CONDITION.test(v) || NOT_ASK.test(v) || VETO.test(v))
+    )
+      return false;
+    // Questions in a script how cannot read word by word keep their ask.
+    if (/[^ -~]/.test(t0.replace(/[\u{1F000}-\u{1FFFF}\u2000-\u2BFF]/gu, '')))
+      return true;
+    if (
+      VERB.test(
+        raw
+          .replace(POLITE, '')
+          .replace(/^(?:the|my|our|all|every|a|an)\s+/, '')
+          .trim(),
+      )
+    )
+      return true;
+    const t = t0
+      .replace(POLITE, '')
+      .replace(
+        /^(?:the|my|our|all|every|all the|a|an|those|these|this|that)\s+/,
+        '',
+      )
+      .trim();
+    // "could the buttons be rounder", "can I get a serif font".
+    if (
+      /^(?:can|could) (?:the|my|our|all) [\w -]+ be\b|^(?:can|could) i (?:get|have)\b/.test(
+        t0,
+      )
+    )
+      return true;
+    if (VERB.test(t)) return true;
+    // "give buttons 8px corners": give a thing a value; "give me …" asks.
+    if (/^give (?!me\b|us\b)/.test(t)) return true;
+    const short = t.split(/\s+/).length <= 7;
+    const part = lex.parts.some(([re]) => re.exec(t)?.index === 0);
+    if ((THING.test(t) || part) && short && !COPULA.test(t)) return true;
+    if (
+      STYLE.test(t) &&
+      short &&
+      !COPULA.test(t) &&
+      (THING.test(t.replace(STYLE, '').trim()) ||
+        lex.parts.some(([re]) => re.test(t)) ||
+        /\b(corners?|spacing|padding|shadows?|borders?|accent|headings?|text|font|page|background|colou?rs?|colou?rful|pastel|muted|subdued|vivid|saturated|washed out)\b/.test(
+          t,
+        ))
+    )
+      return true;
+    // "why are my headings not bold", "I hate the purple": asks.
+    if (/^why (?:are|is|aren'?t|isn'?t)\b.*\bnot\b/.test(t)) return true;
+    if (/^(?:i )?(?:hate|dislike|(?:am )?not a fan of|don'?t like)\b/.test(t))
+      return true;
+    // A description of the look wanted ("stronger shadow on dialogs",
+    // "headings are 600 weight", "the page is white") names a thing and asks
+    // nothing back: an ask. An info request ("show me …") is a lookup.
+    if (
+      !/\?|\b(isn'?t|aren'?t|doesn'?t|don'?t|won'?t|wouldn'?t|did|does|was|were|could|might|should)\b/.test(
+        t,
+      ) &&
+      !/^(?:i|we|you|it|this|that|there|they|(?:show|give|tell|remind|walk) (?:me|us))\b/.test(
+        t,
+      ) &&
+      (aspectsOf(t).length > 0 ||
+        lex.parts.some(([re]) => re.test(t)) ||
+        /\b(accent|contrast|neutrals?|grays?|greys?|colou?rs?|font|fonts|everywhere|error|danger|success|warning|info|purple|blue|red|green|orange|teal|pink|navy|black|white|yellow|violet)\b/.test(
+          t,
+        ))
+    )
+      return true;
+    return false;
+  };
+  // "don't touch the buttons", "leave the corners": an exclusion. It writes
+  // nothing, and it gives nothing to the clause after it.
+  const EXCLUDE =
+    /^\s*(?:don'?t (?:touch|change)|do not (?:touch|change)|leave(?! (?:the )?(?:dark|light) mode\b)|keep (?:the )?[\w -]+ (?:alone|as is|as it is|unchanged|untouched|the same))\b/i;
+  const blocked = (/** @type {string} */ x) =>
+    EXCLUDE.test(x) ||
+    (!/^\s*(?:please )?(?:can|could) (?:the|my|our|all) [\w -]+ be\b|^\s*(?:can|could) i (?:get|have)\b/i.test(
+      x,
+    ) &&
+      (GATE.test(x) ||
+        (QUESTION_CLAUSE.test(x) && !ASK_START.test(x.toLowerCase())) ||
+        !isAsk(x)));
+  const gated = segments.filter(blocked);
+  // A condition holds back the whole question: the ask depends on it.
+  // Sarcasm makes every clause unsure, not only the one with the marker.
+  const SARCASM =
+    /^\s*(yeah|oh sure|sure|great|wow|oh great|brilliant|perfect|cool cool|amazing|thrilled|nothing says)\b|\bjust what i wanted\b|,\s*nice[.!]*\s*$|\bis a great\b|\bsaid no one\b|\btruly\b|🙃/iu;
+  // A hypothetical anywhere makes every clause one.
+  const HYPOTHETICAL =
+    /\b(imagine|picture|pretend|hypothetically|in theory|toying with)\b/i;
+  // A tag question ("corners are 10px, eh", "cards have a shadow, right?")
+  // asks back about the whole line.
+  const TAG =
+    /^(?:eh|right|correct|yeah|huh|no|isn'?t it|aren'?t they|are they|is it|are we|do they|does it|ok|okay)\s*[?!.]*$/i;
+  const gateAll =
+    segments.some(x => TAG.test(x.trim())) ||
+    SARCASM.test(question) ||
+    HYPOTHETICAL.test(question) ||
+    (gated.length > 0 && gated.length === segments.length) ||
+    segments.some(x => CONDITION.test(x.replace(/^[^:]*:\s*/, '')));
+  if (gated.length && !gateAll) {
+    // A held-back clause gives the next clause what it names: its part, and
+    // the thing a "them" or "it" there stands for.
+    /** @type {string[]} */
+    const kept = [];
+    let carry = '';
+    let carryPart = '';
+    for (const x of segments) {
+      if (gated.includes(x) && EXCLUDE.test(x)) {
+        carry = '';
+        carryPart = '';
+        continue;
+      }
+      if (gated.includes(x)) {
+        const part = [
+          ...lex.parts.map(([re]) => re.exec(x.toLowerCase())?.[0]),
+          /\b(accent|brand|primary|secondary|danger|success|warning|info)\b/i.exec(
+            x,
+          )?.[0],
+        ].find(Boolean);
+        const thing =
+          /\b(borders?|shadows?|radius|corners|padding|spacing|gap|font|underlines?|background)\b/i.exec(
+            x,
+          )?.[0];
+        carry = [part, thing].filter(Boolean).join(' ');
+        carryPart = part ?? '';
+        continue;
+      }
+      if (carry && /\b(them|it)\b/i.test(x))
+        kept.push(x.replace(/\b(them|it)\b/i, carry));
+      else if (carryPart) kept.push(carryPart, x);
+      else kept.push(x);
+      carry = '';
+      carryPart = '';
+    }
+    if (carryPart) kept.push(carryPart);
+    question = kept.filter(Boolean).join(', ');
+  }
   /** Family names written in quotes, kept as typed: qq<n>qq in the text. */
   const quoted = /** @type {string[]} */ ([]);
   let q = question
     .normalize('NFKC')
+    // "more muted", "pastel", "duller", "subdued": less vivid colors (free
+    // words only: never inside a token name like --color-background-muted).
+    .replace(
+      /(?<![-\w])less (?:muted|pastel|dull|subdued)(?![-\w])/gi,
+      'more saturated',
+    )
+    .replace(
+      /(?<![-\w])(?:more )?(?:muted|pastel|duller|subdued|desaturated)(?![-\w])/gi,
+      'less saturated',
+    )
+    // "less light", "less heavy", "less tight", "less thin": one step back on
+    // the same aspect.
+    .replace(
+      /\bless (?:light|thin|skinny)\b(?= (?:headings?|titles?|text|fonts?|weight)|\s*$)/gi,
+      'bolder',
+    )
+    .replace(
+      /\b(headings?|titles?|text|fonts?) (?:a bit |slightly )?less (?:light|thin)\b/gi,
+      '$1 bolder',
+    )
+    .replace(/\bless heavy\b/gi, 'less bold')
+    .replace(/\bless tight\b/gi, 'wider letter spacing')
+    // "too dark" asks for lighter, "too light" for darker.
+    .replace(/\btoo dark\b(?! mode)/gi, 'lighter')
+    .replace(/\btoo light(?: gray| grey)?\b(?! mode)/gi, 'darker')
+    // "no big gaps": less room.
+    .replace(
+      /\bno (?:big|large|huge) (?:gaps|spaces|spacing)\b/gi,
+      'less spacing',
+    )
+    // "too airy", "headings too thin", "not bright enough": the other way.
+    .replace(
+      /\btoo (airy|spacious|roomy|loose|spread out)\b/gi,
+      'tighter spacing',
+    )
+    .replace(
+      /\b(headings?|titles?|fonts?) (?:are |is |look |looks )?too (thin|light|weak)\b|\b(text|labels?) (?:are |is |looks? )?too (thin)\b/gi,
+      (_, a, _b, t) => `${a ?? t} bolder`,
+    )
+    .replace(
+      /\bnot (bright|dark|bold|round|big|light|soft|warm|cool) enough\b/gi,
+      (_, w) =>
+        `${{bright: 'brighter', dark: 'darker', bold: 'bolder', round: 'rounder', big: 'bigger', light: 'lighter', soft: 'softer', warm: 'warmer', cool: 'cooler'}[/** @type {'bright'} */ (w.toLowerCase())]}`,
+    )
+    // "change only light to violet": light mode, not a light-only theme.
+    .replace(
+      /\b(?:change |set |make )?only (light|dark)(?: mode)? (?=to\b)/gi,
+      'in $1 mode change ',
+    )
+    // "links not underlined until hover": none, then underlined on hover.
+    .replace(
+      /\b([a-z]+) (?:are |is )?not underlined until (?:you )?hover\w*/gi,
+      '$1 no underline; $1 underlined on hover',
+    )
+    // "3 pixels sharper": pixels are px.
+    .replace(/(\d+(?:\.\d+)?)\s*pixels?\b/gi, '$1px')
+    // "take 2px off", "remove 4px from": an amount down.
+    .replace(
+      /\b(?:take|knock|shave|cut)\s+(\d+(?:\.\d+)?(?:px|rem|em))\s+off\b/gi,
+      'minus $1 off',
+    )
+    .replace(
+      /\bremove\s+(\d+(?:\.\d+)?(?:px|rem|em))\s+(?=from\b)/gi,
+      'minus $1 ',
+    )
+    // "darkmode", "html.dark .card", "@media (prefers-color-scheme: dark)".
+    .replace(/\b(dark|light)mode\b/gi, '$1 mode')
+    .replace(
+      /@media\s*\(\s*prefers-color-scheme\s*:\s*(dark|light)\s*\)\s*\{/gi,
+      'in $1 mode {',
+    )
+    .replace(
+      /(?:\bhtml)?\.(dark|light)\s+(?=\.)|\[data-(?:theme|mode)=["']?(dark|light)["']?\]\s*/gi,
+      (_, a, b) => `in ${a ?? b} mode `,
+    )
+    // "I hate the shadows", "skip the shadows", "not a fan of": none of it.
+    // "I hate the shadows", "not a fan of the rounded buttons": none of it,
+    // when that is the whole ask.
+    .replace(
+      /^\s*(?:i )?(?:hate|dislike|can'?t stand|don'?t like|am not a fan of|not a fan of|skip|ditch)(?: the)? ([^,.;?!]+?)[.!]?\s*$/i,
+      'no $1',
+    )
+    // "pointer cursor on hover": the cursor, no state needed.
+    .replace(
+      /\bpointer cursor(?: on hover)?\b|\bcursor:?\s+pointer(?: on hover)?\b/gi,
+      'cursor: pointer',
+    )
+    // "cards look flat": a complaint that asks for depth.
+    .replace(
+      /\b(look|looks|feel|feels|seem|seems) (?:too |so |very )?flat\b(?!.*\bshadow)/gi,
+      'need more shadow',
+    )
+    // "darker while being clicked": the pressed state.
+    .replace(
+      /\b(darker|lighter) while being (clicked|pressed|tapped)\b/gi,
+      'get $1 when clicked',
+    )
+    // "except in dark mode", "but not in dark mode", "leave dark mode alone":
+    // the other mode.
+    .replace(
+      /\b(?:except|but not|not) (?:in |for |on )?dark(?: mode| theme)?\b(?! enough\b)|\b(?:leave|keep) dark mode (?:alone|as it is|as is|untouched)\b|\bdon'?t (?:touch|change) dark mode\b/gi,
+      'in light mode',
+    )
+    .replace(
+      /\b(?:except|but not|not) (?:in |for |on )?light(?: mode| theme)?\b(?! enough\b)|\b(?:leave|keep) light mode (?:alone|as it is|as is|untouched)\b|\bdon'?t (?:touch|change) light mode\b/gi,
+      'in dark mode',
+    )
+    // "not pure black": a near-black; "not pure white": a near-white.
+    .replace(/\bnot (?:pure |true |full )?black\b/gi, '#111111')
+    .replace(/\bnot (?:pure |true |full )?white\b/gi, '#fafafa')
+    // "dropdown shadow": the dropdown's menu, the part that floats.
+    .replace(/\bdropdowns? (?=shadows?|elevation)/gi, 'dropdown-menu ')
+    // "½rem": a fraction is a number.
+    .replace(/(\d*)(?:½|1\u20442)/g, (_, n) => `${n ? Number(n) + 0.5 : '0.5'}`)
+    .replace(
+      /(\d*)(?:¼|1\u20444)/g,
+      (_, n) => `${n ? Number(n) + 0.25 : '0.25'}`,
+    )
+    .replace(
+      /(\d*)(?:¾|3\u20444)/g,
+      (_, n) => `${n ? Number(n) + 0.75 : '0.75'}`,
+    )
+    // "radius sm", "setRadius(4)": the corner rungs and a number.
+    .replace(/\bset-?radius\s*\(\s*(\d+(?:\.\d+)?)\s*\)/gi, 'corners $1px')
+    .replace(
+      /\b(?:radius|corners|rounded)[- ](xs|sm|md|lg|xl)\b/gi,
+      (_, /** @type {string} */ r) =>
+        `corners ${/** @type {Record<string, string>} */ ({xs: '4px', sm: '8px', md: '10px', lg: '12px', xl: '16px'})[r.toLowerCase()]}`,
+    )
+    // "midnight blue": the CSS named color.
+    .replace(/\b([a-z]+) ([a-z]+)\b/gi, (m, a, b) =>
+      COLOR_NAMES.includes(`${a}${b}`.toLowerCase()) &&
+      !/^(dark|light)$/i.test(a)
+        ? `${a}${b}`.toLowerCase()
+        : m,
+    )
+    // "translateY(-2px) on hover": a transform.
+    .replace(
+      /(?<!transform\s*:?\s*)\b((?:translate[xyz]?|scale[xy]?|rotate)\([^)]*\))/gi,
+      (_, fn) => `transform: ${fn.toLowerCase()}`,
+    )
+    // "#22c55e in light, #4ade80 in dark": the accent, per mode.
+    .replace(
+      /^\s*(#[0-9a-f]{3,8}) in (light|dark)(?: mode)?\s*(,|and|;)\s*(#[0-9a-f]{3,8}) in (light|dark)(?: mode)?\s*$/i,
+      'accent $1 in $2 mode$3 accent $4 in $5 mode',
+    )
+    // ".btn-primary { … }": the primary button.
+    .replace(
+      /\.btn-(primary|secondary|ghost|destructive|danger)\b/g,
+      (_, v) => `${v === 'danger' ? 'destructive' : v} button `,
+    )
     // Markup and comment text are not part of the ask.
     .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, ' ')
     .replace(/<\/?[a-z][^>]*>/gi, ' ')
@@ -1471,6 +2224,15 @@ export function draftAnswer(ctx, env, question) {
     .replace(/\b(?:no|not) more than\s+|\bat most\s+|\bmax(?:imum)? of\s+/g, '')
     // Numbers written as words are numbers.
     .replace(NUMBER_WORDS_RE, m => numberWord(m))
+    // "less black", "not so white": a direction away from that color.
+    .replace(
+      /\b(?:slightly |a bit |a little )?(?:less|not so|not as) (black|dark)\b/g,
+      'lighter',
+    )
+    .replace(
+      /\b(?:slightly |a bit |a little )?(?:less|not so|not as) (white|bright)\b/g,
+      'dimmer',
+    )
     // "8 or so px", "about 8 px": the number.
     .replace(/\b(\d+(?:\.\d+)?)\s+or so\s+(?=px|rem|em|pixels?)/g, '$1 ')
     // "0.5 rem", "14 px": a number and its unit are one length.
@@ -1585,12 +2347,31 @@ export function draftAnswer(ctx, env, question) {
     // "bordes redondeados": rounded edges are corners.
     .replace(/\bborders?\s+rounded\b/g, 'rounded corners')
     .replace(/\bbutton-s\b/g, 'buttons')
-    .replace(/[a-z]+/g, w => corrected(w, lex.vocab))
+    .replace(/[a-z]+/g, w => {
+      const fixed = corrected(w, lex.vocab);
+      return fixed;
+    })
     // "buttons, but not bold": the "not" is about the buttons.
     .replace(
       /,?\s*\bbut not\s+(?=(bold|italic|uppercase|rounded|round|shadowed|underlined|bordered|faded|dark|light|bright|big|small|too \w+)\b)/g,
       ' not ',
     )
+    // Tailwind classes: "border-2" is 2px, "rounded-full" a pill.
+    .replace(/\bborder-(\d)\b/g, 'border width $1px')
+    .replace(/\brounded-full\b/g, 'pill corners')
+    .replace(/\brounded-none\b/g, 'square corners')
+    // "1e3px" is 1000px.
+    .replace(
+      /\b(\d+(?:\.\d+)?)e([+-]?\d+)(px|rem|em)\b/gi,
+      (_, n, e, u) => `${Number(n) * 10 ** Number(e)}${u}`,
+    )
+    // "not so round", "not that dark": one step less, not the opposite.
+    .replace(
+      /\bnot (?:so|that|as|too) (round(?:ed)?|bold|dark|big|bright|spacious|thick)\b/g,
+      'less $1',
+    )
+    // "flat cards, not flat buttons": the second part stays as it is.
+    .replace(/^(.*\b(\w{3,})\b.*?),\s*(?:but )?not \2 [a-z ]+$/, '$1')
     .replace(/\b(everything|everywhere|all) but\b/g, '$1 except')
     .replace(
       /\b(apart from|other than|excluding|but not (on|in|for)|but not)\b/g,
@@ -1598,7 +2379,75 @@ export function draftAnswer(ctx, env, question) {
     )
     .replace(/\s+/g, ' ')
     .trim();
+  // "cramped on mobile": the editor has no media conditions; the rest of
+  // the ask is answered, with a note.
+  const MEDIA_RE = new RegExp(
+    String.raw`(?<!\bno |\bnot )\b(?:below|above|under|over|wider than|narrower than)\s+(?:\d{3,}px|\d+em)\b|\b(?:screens?|viewports?|windows?) (?:below|above|under|over|less than|more than|wider than|narrower than)\s+\d+(?:px|em|rem)\b|\b(?:on|for) (?:mobile|phones?|tablets?|desktops?|touch(?: screens?)?|small screens?|large screens?|wide screens?|landscape|portrait)\b|\b(?:when )?print(?:ing)?\b|\b(?:the )?print version\b`,
+    'g',
+  );
+  const media = MEDIA_RE.test(q);
+  if (media) q = q.replace(MEDIA_RE, ' ').replace(/\s+/g, ' ').trim();
   const clauses = clausesOf(q, lex.parts);
+  // "checkboxes green": the color a checked box fills with.
+  for (const c of clauses)
+    if (
+      c.parts.length === 1 &&
+      c.parts[0].on === 'checks' &&
+      c.colors.length &&
+      !c.state &&
+      !c.named &&
+      !/\b(border|outline|background|unchecked)\b/.test(c.text)
+    )
+      c.state = 'checked';
+  // "labels on form fields": the label, not the field it sits on.
+  for (const c of clauses)
+    if (c.parts.some(p => p.on === 'field-label')) {
+      // A checkbox's or switch's own label part, when Core has one.
+      const own = c.parts
+        .map(p => ({
+          on:
+            /** @type {Record<string, string>} */ ({
+              checks: 'checkbox-label',
+              checkbox: 'checkbox-label',
+              switch: 'switch-label',
+            })[p.on] ?? p.on,
+        }))
+        .filter(
+          p =>
+            /-label$/.test(p.on) && p.on !== 'field-label' && TARGET.has(p.on),
+        );
+      // "button labels": the label is the button's own text.
+      const owner = c.parts.filter(
+        p =>
+          p.on !== 'field-label' &&
+          ![
+            'inputs',
+            'field',
+            'checks',
+            'checkbox',
+            'switch',
+            'text-input',
+          ].includes(p.on),
+      );
+      c.parts = own.length
+        ? own
+        : owner.length
+          ? owner
+          : c.parts.filter(p => p.on === 'field-label');
+    }
+  // "captions 12px": a clause led by a plural noun that names no part and
+  // no change takes nothing from its neighbors.
+  const unknownLead = (/** @type {Clause} */ c) => {
+    const lead = /^(?:the |my |our |all )?([a-z]{4,}s)\b/.exec(c.text)?.[1];
+    return Boolean(
+      lead &&
+      !c.parts.length &&
+      !lex.vocab.includes(lead) &&
+      !lex.vocab.includes(singular(lead)) &&
+      !aspectsOf(lead).length &&
+      !KEEP.has(lead),
+    );
+  };
   for (const c of clauses) {
     c.quoted = [...c.text.matchAll(/qq(\d+)qq/g)].map(
       m => quoted[Number(m[1])],
@@ -1705,6 +2554,8 @@ export function draftAnswer(ctx, env, question) {
       c.dir &&
       !c.aspects.length &&
       !c.colors.length &&
+      // "tooltips darker" is a color, never the border of the clause before.
+      !/\b(dark|light|bright|dim)(er)?\b/.test(c.text) &&
       prev.aspects.length
     )
       c.aspects = [...prev.aspects];
@@ -1974,6 +2825,7 @@ export function draftAnswer(ctx, env, question) {
       !(ROLE_WORDS.test(c.text) && !c.aspects.length) &&
       // "Circular font" after "12px cards" is the theme's font.
       !(c.aspects.length && c.aspects.every(a => a === 'family')) &&
+      !unknownLead(c) &&
       // "serif headings, no shadows": a type part does not take a shadow,
       // corner or border ask.
       !(
@@ -1991,6 +2843,7 @@ export function draftAnswer(ctx, env, question) {
     if (
       !c.aspects.length &&
       !ROLE_WORDS.test(c.text) &&
+      !unknownLead(c) &&
       (c.lengths.length || /\b(stay|keep)\b/.test(c.text))
     ) {
       const from = prev?.aspects.length
@@ -1998,7 +2851,12 @@ export function draftAnswer(ctx, env, question) {
         : next?.aspects.length
           ? next
           : null;
-      if (from) c.aspects = [...from.aspects];
+      // Only the aspects a length can set: "headings 32px bold, captions
+      // 12px" gives captions a size, not the headings' bold.
+      if (from)
+        c.aspects = from.aspects.filter(
+          a => !['weight', 'italic', 'case', 'family'].includes(a),
+        );
     }
     // "in dark mode, cards are #1c1c1e": a clause that only names the mode
     // gives it to the clauses after it.
@@ -2034,12 +2892,28 @@ export function draftAnswer(ctx, env, question) {
       c.parts = [];
       c.text = '';
     }
+  // "the same accent in light and dark": every mode, so no mode.
+  if (
+    /\b(light and dark|dark and light|both modes|every mode|all modes|same in (both|light and dark))\b/.test(
+      q,
+    )
+  )
+    for (const c of clauses) c.mode = null;
   // "only in dark mode, …": a clause that only names a mode scopes every
   // clause after it.
   for (let i = 0; i < clauses.length; i++) {
     const c = clauses[i];
-    if (c.mode && !c.parts.length && !c.aspects.length && !c.colors.length)
-      for (const o of clauses.slice(i + 1)) o.mode ??= c.mode;
+    if (c.mode && !c.parts.length && !c.aspects.length && !c.colors.length) {
+      // "don't touch dark mode, …": the other mode.
+      const scope = c.neg ? (c.mode === 'dark' ? 'light' : 'dark') : c.mode;
+      for (const o of c.neg ? clauses : clauses.slice(i + 1))
+        if (o !== c) o.mode ??= scope;
+      if (c.neg) {
+        for (const o of clauses)
+          if (o !== c && o.mode === c.mode) o.mode = scope;
+        c.text = '';
+      }
+    }
   }
   // The tab's text is on the tab, not on its underline.
   for (const c of clauses)
@@ -2067,8 +2941,49 @@ export function draftAnswer(ctx, env, question) {
     if (!aspectsSeen.includes(a)) aspectsSeen.push(a);
   };
   /** @param {string} token @param {'light' | 'dark'} [mode] */
+  // The theme's own value (its settings applied), else the base theme's.
   const current = (token, mode = 'light') =>
-    env.base[mode]?.[token] ?? String(TOKENS[token] ?? '');
+    env.own?.[mode]?.[token] ??
+    env.base[mode]?.[token] ??
+    String(TOKENS[token] ?? '');
+  /**
+   * What the theme itself sets for a CSS property on a part (its plain
+   * setting: no variant, state or mode), so a change by an amount starts
+   * from the theme, not from Core.
+   * @param {string} on @param {string} prop
+   */
+  const partValue = (on, prop) =>
+    [...env.data.settings]
+      .reverse()
+      .find(
+        st =>
+          st.thing === prop &&
+          st.on === on &&
+          !st.when &&
+          !st.state &&
+          !st.mode,
+      )?.value ?? null;
+  /**
+   * The theme's own whole-theme value for a dial (its last plain setting).
+   * @param {string} thing
+   */
+  const ownDial = thing =>
+    [...env.data.settings]
+      .reverse()
+      .find(
+        st => st.thing === thing && !st.on && !st.when && !st.state && !st.mode,
+      )?.value ?? null;
+  /**
+   * The text-size a step takes from the theme's own size: a number moves by
+   * the dial's step of 2px; a named size steps with more/less.
+   * @param {'more' | 'less'} dir
+   */
+  const textSizeStep = dir => {
+    const own = ownDial('text-size');
+    return own && /^\d+(\.\d+)?$/.test(own)
+      ? String(Number(own) + (dir === 'less' ? -2 : 2))
+      : dir;
+  };
   /** The member a group's checks read. @param {string} on */
   const one = on => (FAMILIES[on] ? FAMILIES[on][0] : on);
   /**
@@ -2229,6 +3144,15 @@ export function draftAnswer(ctx, env, question) {
       thing,
       value,
       ...Object.fromEntries(Object.entries(flags).filter(([, v]) => v)),
+      // One member of a group ("the text area") is that member only; set
+      // otherwise reaches the whole group.
+      // (set spreads only the inputs and checks groups).
+      ...(flags.on &&
+      ['inputs', 'checks'].some(g =>
+        (FAMILIES[g] ?? []).includes(/** @type {string} */ (flags.on)),
+      )
+        ? {only: true}
+        : {}),
     });
   /** A color for the clause, for a fill or a text color. @param {Clause} c @param {'fill' | 'text'} kind */
   const colorFor = (c, kind) => {
@@ -2332,13 +3256,20 @@ export function draftAnswer(ctx, env, question) {
     );
     // "buttons twice as round as inputs": the part after "as" is only the
     // measure; the first part is the one that changes.
-    const asAs = /\bas \w+ as (?:the )?([a-z-]+)/.exec(c.text);
+    const asAs =
+      /\bas \w+ as (?:the )?([a-z-]+)/.exec(c.text) ??
+      // "cards twice the padding of buttons": the same, by the measure.
+      /\b(?:twice|double|half|triple|three times)\s+(?:the\s+)?\w+\s+(?:of|than|as)\s+(?:the\s+)?([a-z-]+)/.exec(
+        c.text,
+      );
     if (asAs && c.parts.length >= 2) {
       const after = (/** @type {{on: string}} */ p) =>
         lex.parts.some(
           ([re, x]) =>
             x.on === p.on && (re.exec(c.text)?.index ?? -1) > (asAs.index ?? 0),
         );
+      const other = c.parts.find(p => after(p));
+      if (other) compared.set(c, other.on);
       c.parts = c.parts.filter(p => !after(p));
     }
     // "focus ring the same color as the danger color": a role's token.
@@ -2399,6 +3330,234 @@ export function draftAnswer(ctx, env, question) {
         continue;
       }
     }
+    // "decrease the radius by 2px", "add 8px to the padding": a change from
+    // the value now, never the new value itself.
+    // "shrink headings by 20%": a change by a share, from the value now.
+    const share = /\bby (\d+(?:\.\d+)?)%/.exec(c.text);
+    if (
+      share &&
+      /\b(shrink|grow|increase|decrease|reduce|raise|lower|bigger|smaller|more|less)\b/.test(
+        c.text,
+      )
+    ) {
+      push({
+        text: `set takes the new value, not a change by ${share[1]}%; look up what it is now, then set that value ${/\b(shrink|decrease|reduce|lower|smaller|less)\b/.test(c.text) ? 'minus' : 'plus'} ${share[1]}%`,
+        options: [],
+        lookup: c.parts[0]
+          ? `${HOW} ${c.parts[0].on}`
+          : `${P} show ${env.slug}`,
+      });
+      continue;
+    }
+    // "2px rounder", "8px larger", "4px wider": a change too.
+    const COMPARATIVE =
+      'more|less|bigger|smaller|rounder|sharper|squarer|larger|wider|narrower|taller|shorter|thicker|thinner|higher|lower|tighter|looser|roomier|airier|denser|bolder|heavier|lighter';
+    // A weight moved by a number ("100 bolder"): set takes the new weight.
+    const weightDelta = /\b(\d{2,3}) (bolder|heavier|lighter|thinner)\b/.exec(
+      c.text,
+    );
+    if (weightDelta) {
+      push({
+        text: `set takes the new weight, not a change by ${weightDelta[1]}; look up the weight now, then set it ${/lighter|thinner/.test(weightDelta[2]) ? 'minus' : 'plus'} ${weightDelta[1]}`,
+        options: [],
+        lookup: c.parts[0]
+          ? `${HOW} ${c.parts[0].on}`
+          : `${P} show ${env.slug}`,
+      });
+      continue;
+    }
+    // Amounts in rem or em count at a 16px root.
+    const delta = new RegExp(
+      `\\b(?:by|add(?:ing)?|plus|minus|subtract(?:ing)?)\\s+(\\d*\\.?\\d+)(px|rem|em)\\b|\\b(\\d*\\.?\\d+)(px|rem|em) (?:${COMPARATIVE})\\b`,
+    ).exec(c.text);
+    if (
+      delta &&
+      new RegExp(
+        `\\b(by|add|adding|plus|minus|subtract|subtracting|increase|decrease|reduce|${COMPARATIVE})\\b`,
+      ).test(c.text)
+    ) {
+      const unit = delta[2] ?? delta[4];
+      const n =
+        Math.round(
+          Number(delta[1] ?? delta[3]) * (unit === 'px' ? 1 : 16) * 100,
+        ) / 100;
+      const down =
+        /\b(decrease|reduce|less|smaller|minus|subtract|subtracting|lower|shrink|sharper|squarer|narrower|shorter|thinner|tighter|denser|lighter)\b/.test(
+          c.text,
+        );
+      const cornerAsk =
+        c.aspects.includes('corners') ||
+        /\b(rounder|sharper|squarer)\b/.test(c.text);
+      // A part's corners: its radius token, moved by the amount.
+      if (cornerAsk && c.parts.length) {
+        const on = c.parts[0].on;
+        const read = C.partReads(one(on), 'corners')[0];
+        // A radius the theme set on the part in px moves from that value.
+        const ownRadius = partValue(on, 'border-radius');
+        if (ownRadius && /^\d*\.?\d+px$/.test(ownRadius)) {
+          const next = Math.max(0, parseFloat(ownRadius) + (down ? -n : n));
+          const d = {
+            text: `${on}'s corners ${down ? 'down' : 'up'} by ${n}px: from ${ownRadius} to ${next}px`,
+            options: [[set('border-radius', `${next}px`, {on})]],
+          };
+          push(d);
+          recordTop(c, d.options[0] ?? []);
+          continue;
+        }
+        if (read) {
+          const d = {
+            text: `${on}'s corners ${down ? 'down' : 'up'} by ${n}px: ${read.token} ${down ? '-' : '+'} ${n}px`,
+            options: [
+              [
+                set(
+                  'border-radius',
+                  `max(0px, calc(var(${read.token}) ${down ? '-' : '+'} ${n}px))`,
+                  {on},
+                ),
+              ],
+            ],
+          };
+          push(d);
+          recordTop(c, d.options[0] ?? []);
+          continue;
+        }
+      }
+      if (cornerAsk && !c.parts.length) {
+        const now = parseFloat(current('--radius-element'));
+        const nowPx = /rem$/.test(current('--radius-element')) ? now * 16 : now;
+        const next = Math.max(
+          0,
+          Math.round((nowPx + (down ? -n : n)) * 100) / 100,
+        );
+        const d = {
+          text: `corners ${down ? 'down' : 'up'} by ${n}px: from ${Math.round(nowPx * 100) / 100}px to ${next}px`,
+          options: [[set('corners', `${next}px`)]],
+        };
+        push(d);
+        recordTop(c, d.options[0] ?? []);
+        continue;
+      }
+      push({
+        text: `set takes the new value, not a change by ${n}px; look up what it is now, then set it ${down ? 'minus' : 'plus'} ${n}px`,
+        options: [],
+        lookup: c.parts[0]
+          ? `${HOW} ${c.parts[0].on}`
+          : `${P} show ${env.slug}`,
+      });
+      continue;
+    }
+    // "all corners like the buttons": every other radius token takes the
+    // one the named part reads.
+    if (
+      c.parts.length === 1 &&
+      c.aspects.includes('corners') &&
+      /\b(all|every|other|everything|everywhere)\b/.test(c.text) &&
+      /\b(like|match(es|ing)?|same as)\b/.test(c.text)
+    ) {
+      const source = c.parts[0].on;
+      const read = C.partReads(one(source), 'corners')[0];
+      if (read) {
+        const others = Object.keys(TOKENS).filter(
+          t =>
+            /^--radius-/.test(t) &&
+            t !== read.token &&
+            !/^--radius-(none|full)$/.test(t),
+        );
+        const d = {
+          text: `every corner like ${source}'s: the other radius tokens take ${read.token}, which ${source} reads`,
+          options: [others.map(t => set(t, `var(${read.token})`))],
+          sequence: others.length > 1,
+        };
+        push(d);
+        recordTop(c, d.options[0] ?? []);
+        continue;
+      }
+    }
+    // "text on the accent color is hard to read": the on-accent text color,
+    // the one of black or white that reads on the accent in each mode.
+    if (
+      /\btext on (?:the )?accent\b/.test(c.text) &&
+      TOKENS['--color-on-accent'] !== undefined
+    ) {
+      const steps = /** @type {Array<'light' | 'dark'>} */ (['light', 'dark'])
+        .filter(m => env.data.mode === 'both' || m === 'light')
+        .map(m => {
+          const acc = parseColor(current('--color-accent', m));
+          const pick =
+            acc && ratio(acc, [255, 255, 255]) >= ratio(acc, [0, 0, 0])
+              ? '#ffffff'
+              : '#000000';
+          return set(
+            '--color-on-accent',
+            pick,
+            env.data.mode === 'both' ? {mode: m} : {},
+          );
+        });
+      const d = {
+        text: 'the text on the accent: --color-on-accent, black or white, whichever reads better on the accent',
+        options: [steps],
+        sequence: steps.length > 1,
+      };
+      push(d);
+      recordTop(c, d.options[0] ?? []);
+      continue;
+    }
+    // "5 lines tall text box": a text area's height in lines.
+    const lines = /\b(\d+) (?:lines?|rows?) (?:tall|high)\b/.exec(c.text);
+    if (lines && TARGET.has('text-area')) {
+      const d = {
+        text: `a text area ${lines[1]} lines tall: min-height ${lines[1]}lh`,
+        options: [[set('min-height', `${lines[1]}lh`, {on: 'text-area'})]],
+      };
+      push(d);
+      recordTop(c, d.options[0] ?? []);
+      continue;
+    }
+    // "outline offset 3px on focus": the focus ring's offset, not a border.
+    if (
+      !c.parts.length &&
+      /\boutline[- ]offset\b/.test(c.text) &&
+      c.lengths[0]
+    ) {
+      const d = {
+        text: "the focus ring's offset: --focus-outline-offset",
+        options: [[set('--focus-outline-offset', c.lengths[0])]],
+      };
+      push(d);
+      recordTop(c, d.options[0] ?? []);
+      continue;
+    }
+    // Placeholder, caret and selection colors.
+    if (
+      /\b(placeholders?|caret|cursor colou?r|colou?r (of )?the cursor|selection|selected text highlight|text highlight)\b/.test(
+        c.text,
+      ) &&
+      !/\bloading placeholder/.test(c.text)
+    ) {
+      const color = colorFor(c, 'fill');
+      const caret =
+        /\bcaret\b|\bcursor colou?r\b|\bcolou?r (of )?the cursor\b/.test(
+          c.text,
+        );
+      if (caret && color) {
+        const on = c.parts[0]?.on ?? 'inputs';
+        const d = {
+          text: `the text cursor color on ${on}: caret-color`,
+          options: [[set('caret-color', color, {on})]],
+        };
+        push(d);
+        recordTop(c, d.options[0] ?? []);
+        continue;
+      }
+      push({
+        text: caret
+          ? 'name the cursor color: caret-color takes a color'
+          : `${/\bplaceholder/.test(c.text) ? 'placeholder text' : 'the text selection highlight'} has no setting: the editor themes parts, not ${/\bplaceholder/.test(c.text) ? '::placeholder' : '::selection'}; it takes your own CSS`,
+        options: [],
+        lookup: `${HOW} inputs`,
+      });
+      continue;
+    }
     // "… and set --border-width 2px": a real token typed in a clause.
     // The value runs to the clause end ("--shadow-high 0 4px 12px black").
     const tok = /(?:^|\s)(--[a-z][a-z0-9-]*)\s*:?\s+([^;]+?)\s*$/.exec(c.text);
@@ -2421,10 +3580,7 @@ export function draftAnswer(ctx, env, question) {
     }
     // "error text red", "labels smaller": text that belongs to parts how
     // cannot pick alone is a lookup, never the whole theme's text.
-    if (
-      !c.parts.length &&
-      /\b(error (text|messages?)|(field |form |input )?labels?)\b/.test(c.text)
-    ) {
+    if (!c.parts.length && /\berror (text|messages?)\b/.test(c.text)) {
       const which = /\berror\b/.test(c.text) ? 'error text' : 'labels';
       push({
         text: `${which} belong to the parts that show them (an input's error message, a field's label); name the part, or look it up`,
@@ -2438,6 +3594,24 @@ export function draftAnswer(ctx, env, question) {
     if (
       named &&
       !named.bad &&
+      // A percent padding or gap is an amount of the one there now ("50%
+      // bigger", "150%"), answered below: a CSS percent padding is half the
+      // container's width.
+      !(
+        /^(padding|gap|row-gap|column-gap)$/.test(named.prop) &&
+        /^\d*\.?\d+%$/.test(String(named.value).trim())
+      ) &&
+      // "padding 3 times bigger", "25% darker": an amount of what is there,
+      // never the number as a value.
+      !(
+        exactFactor(c.text) &&
+        (/^\d*\.?\d+%?$/.test(String(named.value).trim()) ||
+          /\b\d*\.?\d+(px)?\s*(times|x)\s/.test(c.text))
+      ) &&
+      !(
+        /^\d*\.?\d+%$/.test(String(named.value).trim()) &&
+        /\b(darker|lighter|brighter|bigger|smaller|larger)\b/.test(c.text)
+      ) &&
       // A divider's thickness and color are its border tokens.
       !c.parts.some(p => p.on === 'divider') &&
       c.parts.length &&
@@ -2545,7 +3719,7 @@ export function draftAnswer(ctx, env, question) {
   function resetAnswer(c) {
     // "go back to the neutral theme", "start over": every setting.
     if (
-      /\b(back to|reset to|revert to|restore) (the )?(neutral|base|original|default|plain) theme\b|\bstart over\b|\breset (the )?(whole )?theme\b/.test(
+      /\b(back to|reset to|revert to|restore) (the )?(neutral|base|original|default|plain) theme\b|\bstart over\b|\breset (the )?(whole )?theme\b|\b(remove|undo|clear|drop|revert) (all|every one of|each of) (my |the )?(changes|settings|edits|overrides)\b|\bundo everything\b/.test(
         c.text,
       )
     ) {
@@ -2574,7 +3748,7 @@ export function draftAnswer(ctx, env, question) {
           };
     }
     if (
-      !/\b(reset|revert|restore|back to|default|original|what it was|standard|clear|no custom|remove the override|(remove|clear|drop|delete) (my |the )?(\w+ )?overrides?|by mistake|by accident|accidentally|put .* back|.* back to normal)\b/.test(
+      !/\b(reset|revert|restore|back to|default|original|what it was|standard|clear|no custom|remove the override|(remove|clear|drop|delete) (my |the )?(\w+ )?overrides?|by mistake|^undo|take back|like before|as before|the way (it|they) (was|were)|by accident|accidentally|put .* back|.* back to normal)\b/.test(
         c.text,
       ) ||
       /\bby default\b|\bthe last change\b|\beverything\b/.test(c.text) ||
@@ -2637,14 +3811,16 @@ export function draftAnswer(ctx, env, question) {
     if (st.on && st.on !== p.on && !(FAMILIES[st.on] ?? []).includes(one(p.on)))
       return null;
     if (st.thing === 'corners') {
-      const read = C.partReads(one(p.on), 'corners').find(r =>
-        r.when.includes(''),
-      );
+      // What the part has now: its own setting, else the token it reads
+      // (its plain rule first, else any rule's), never another token.
+      const reads = C.partReads(one(p.on), 'corners');
+      const read = reads.find(r => r.when.includes('')) ?? reads[0];
       return set(
         'border-radius',
-        read
-          ? current(read.token) || `var(${read.token})`
-          : current('--radius-element'),
+        partValue(p.on, 'border-radius') ??
+          (read
+            ? current(read.token) || `var(${read.token})`
+            : current('--radius-element')),
         flags,
       );
     }
@@ -2727,6 +3903,26 @@ export function draftAnswer(ctx, env, question) {
     const where = on
       ? ` on ${on}${f.when ? ` (${f.when.replace(':', ' ')})` : ''}${f.state ? ` when ${f.state}` : ''}`
       : ' for the whole theme';
+    /**
+     * What a part has now for a property in this clause's state or variant
+     * ("on hover"): that scope's own setting, else the plain one.
+     */
+    const nowIn = (/** @type {string} */ part, /** @type {string} */ prop) => {
+      if (f.state || f.when) {
+        const scoped = [...env.data.settings]
+          .reverse()
+          .find(
+            st =>
+              st.thing === prop &&
+              st.on === part &&
+              (st.state ?? null) === (f.state ?? null) &&
+              (st.when ?? null) === (f.when ?? null) &&
+              !st.mode,
+          );
+        if (scoped) return scoped.value;
+      }
+      return partValue(part, prop);
+    };
     const undo = (/** @type {string[]} */ things) =>
       existing(things, on).map(s => [
         /** @type {Step} */ ({
@@ -2740,45 +3936,132 @@ export function draftAnswer(ctx, env, question) {
       ]);
     if (on === 'focus-ring') {
       const ringColor = colorFor(c, 'fill');
+      // "focus ring color like the links": the part after "like" (or "the
+      // same as", "match") gives the ring its color; it is not a scope.
+      const likeAt =
+        /\b(?:like|same(?: colou?r)? as|(?:to )?match(?:es|ing)?)\s+(?:the\s+|my\s+)?/.exec(
+          c.text,
+        );
+      /** @param {string} part */
+      const partAt = part =>
+        Math.min(
+          ...lex.parts
+            .filter(([, x]) => x.on === part)
+            .map(([re]) => re.exec(c.text)?.index ?? Infinity),
+        );
+      const like = likeAt
+        ? (c.parts
+            .map(x => x.on)
+            .find(
+              x =>
+                x &&
+                x !== 'focus-ring' &&
+                partAt(x) >= (likeAt.index ?? 0) + likeAt[0].length - 1,
+            ) ?? null)
+        : null;
+      // "focus ring on inputs only": the ring's tokens set on that part or
+      // group, so the other parts keep theirs.
+      const scope =
+        c.parts
+          .map(x => x.on)
+          .find(x => x && x !== 'focus-ring' && x !== like) ?? null;
+      if (like) {
+        // The color the part shows: its fill, or its text for a part with
+        // no fill of its own (a link).
+        // Its plain look: the main variant (primary, accent) at rest, else
+        // any read at rest.
+        /** @param {Array<{token: string, when: string[]}>} reads */
+        const atRest = reads => {
+          const rest = reads.filter(
+            r =>
+              /^--color-/.test(r.token) &&
+              !/overlay|transparent|tint/.test(r.token) &&
+              r.when.some(w => !w.includes(':')),
+          );
+          return (
+            rest.find(r =>
+              r.when.some(w => w === '' || /=(primary|accent)$/.test(w)),
+            ) ??
+            rest[0] ??
+            null
+          );
+        };
+        const fill = atRest(C.partReads(one(like), 'background'));
+        const text = atRest(C.partReads(one(like), 'text'));
+        const read = like === 'link' || !fill ? (text ?? fill) : fill;
+        if (read)
+          return {
+            text: `the focus ring's color${scope ? ` on ${scope} only` : ''}, from ${like}: --focus-outline-color reads ${read.token} (now ${current(read.token) || 'unset'}), so it follows ${like}'s color`,
+            options: [
+              [
+                set('--focus-outline-color', `var(${read.token})`, {
+                  ...modeOf(c),
+                  ...(scope ? {on: scope} : {}),
+                }),
+              ],
+            ],
+          };
+      }
+      const sc = scope ? {on: scope} : {};
+      const scoped = scope ? ` on ${scope} only` : '';
       if (ringColor && c.lengths[0] && !c.neg)
         return {
-          text: "the focus ring's width and color: --focus-outline-width and --focus-outline-color",
+          text: `the focus ring's width and color${scoped}: --focus-outline-width and --focus-outline-color`,
           options: [
             [
-              set('--focus-outline-width', c.lengths[0]),
-              set('--focus-outline-color', ringColor, modeOf(c)),
+              set('--focus-outline-width', c.lengths[0], sc),
+              set('--focus-outline-color', ringColor, {...modeOf(c), ...sc}),
             ],
           ],
           sequence: true,
         };
+      // "remove the focus outline": a ring keyboard users need; set it to
+      // nothing only on the ask, and say what that costs.
+      if (c.neg || /\b(remove|hide|get rid of)\b/.test(c.text))
+        return {
+          text: `no focus ring${scoped}: --focus-outline-width 0px. Keyboard users then cannot see where they are, so keep a visible focus style another way`,
+          options: [[set('--focus-outline-width', '0px', sc)]],
+        };
+      // "focus ring offset 2px": the gap between the part and its ring.
+      if (/\boffset\b/.test(c.text))
+        return c.lengths[0]
+          ? {
+              text: `the focus ring's offset${scoped}: --focus-outline-offset`,
+              options: [[set('--focus-outline-offset', c.lengths[0], sc)]],
+            }
+          : null;
       if (
         (a === 'border' && !ringColor) ||
         a === 'size' ||
         a === 'spacing' ||
-        /\b(thick|thin|width)/.test(c.text)
+        /\b(thick|thin|width|strength|stronger|weaker|bolder|subtler)/.test(
+          c.text,
+        )
       ) {
-        const w =
-          c.lengths[0] ??
-          scaled(
-            current('--focus-outline-width'),
-            c.dir === 'less' ? 0.5 : 1.5,
-          ) ??
-          '3px';
+        // From the theme's own width there (on the part when it sets one).
+        const own = scope ? partValue(scope, '--focus-outline-width') : null;
+        const now = own ?? current('--focus-outline-width');
+        const exact = exactFactor(c.text);
+        const factor = exact ?? (c.dir === 'less' ? 0.5 : 1.5);
+        const w = c.lengths[0] ?? scaled(now, factor);
+        const strength = /\bstrength\b/.test(c.text) && !c.lengths[0];
         return {
-          text: `the focus ring's width${where}: --focus-outline-width`,
-          options: [[set('--focus-outline-width', w)]],
+          text: `the focus ring's width${scoped || where}: --focus-outline-width ${w ?? ''}${!c.lengths[0] && now ? ` (now ${now})` : ''}${strength ? '; "strength" read as the width of the ring' : ''}${!c.lengths[0] && !exact && !c.dir ? '; no amount was given, so this is a guess: give a width (2px)' : ''}`,
+          options: w ? [[set('--focus-outline-width', w, sc)]] : [],
         };
       }
       const color = colorFor(c, 'fill');
       if (c.neg)
         return {
-          text: 'the focus ring shows keyboard users where they are; it can be made subtle but not removed',
-          options: [[set('--focus-outline-width', '1px')]],
+          text: `the focus ring shows keyboard users where they are; it can be made subtle but not removed${scoped}`,
+          options: [[set('--focus-outline-width', '1px', sc)]],
         };
       return color
         ? {
-            text: `the focus ring's color: --focus-outline-color`,
-            options: [[set('--focus-outline-color', color, modeOf(c))]],
+            text: `the focus ring's color${scoped}: --focus-outline-color`,
+            options: [
+              [set('--focus-outline-color', color, {...modeOf(c), ...sc})],
+            ],
           }
         : null;
     }
@@ -2824,7 +4107,14 @@ export function draftAnswer(ctx, env, question) {
           sequence: true,
         };
       }
-      const typedMs = /\b(\d+)ms\b/.exec(c.text)?.[1];
+      const typedTime = /\b(\d+(?:\.\d+)?)(ms|s)\b/.exec(c.text);
+      const typedMs = typedTime
+        ? String(
+            Math.round(
+              Number(typedTime[1]) * (typedTime[2] === 's' ? 1000 : 1),
+            ),
+          )
+        : undefined;
       if (typedMs && !on)
         return {
           text: `every motion at ${typedMs}ms: the shared duration tokens`,
@@ -2980,13 +4270,67 @@ export function draftAnswer(ctx, env, question) {
         return {
           text: 'the body text size: text-size (every heading scales from it)',
           options: [
-            [set('text-size', px ?? (c.dir === 'less' ? 'less' : 'more'))],
+            [
+              set(
+                'text-size',
+                px ?? textSizeStep(c.dir === 'less' ? 'less' : 'more'),
+              ),
+            ],
           ],
         };
       }
     }
     if (p?.role === 'body' && a !== 'leading')
       return wholeTheme({...c, parts: []}, a);
+    // An exact amount ("half", "double", "a third", "3 times", "25%
+    // bigger") of a part's scalar value: that factor of what the part has
+    // now (its own setting, else the token it reads), never a step.
+    {
+      const amount = on && !compared.get(c) ? exactFactor(c.text) : null;
+      const borderWidth =
+        a === 'border' &&
+        /\b(border[- ]width|thick(er|ness)?|thin(ner)?)\b/.test(c.text);
+      const prop = !amount
+        ? null
+        : borderWidth
+          ? 'border-width'
+          : a === 'fontsize'
+            ? 'font-size'
+            : a === 'leading'
+              ? 'line-height'
+              : a === 'tracking'
+                ? 'letter-spacing'
+                : a === 'opacity'
+                  ? 'opacity'
+                  : a === 'size' && /\b(width|wider|narrower)\b/.test(c.text)
+                    ? 'max-width'
+                    : null;
+      if (prop && on && amount) {
+        const part = /** @type {string} */ (on);
+        const group = C.groupOfProp(prop);
+        const read = group
+          ? C.partReads(one(part), group).find(r =>
+              r.props.some(x => x === prop || x.startsWith(`${prop}-`)),
+            )
+          : null;
+        const now =
+          nowIn(part, prop) ??
+          (prop === 'max-width' ? nowIn(part, 'width') : null) ??
+          (read?.token ? current(read.token) : null);
+        const n = Number(now);
+        const value =
+          now == null
+            ? null
+            : /^\d*\.?\d+$/.test(String(now).trim())
+              ? String(Number((n * amount).toFixed(3)))
+              : scaled(String(now), amount);
+        if (value)
+          return {
+            text: `${prop}${where}: ${value} (now ${now})`,
+            options: [[set(prop, value, f)]],
+          };
+      }
+    }
     switch (a) {
       case 'underline': {
         if (!on) return null;
@@ -3029,13 +4373,42 @@ export function draftAnswer(ctx, env, question) {
       case 'corners': {
         const tall = tallIn(c.text);
         const tied = radiusIn(c.text);
-        const typedPx =
-          (tied && /^-?\d*\.?\d+$/.test(tied) ? `${tied}px` : tied) ??
-          c.lengths.find(l => l !== tall) ??
-          null;
+        // "1.5 times bigger": an amount, never a radius.
+        const typedPx = /\b\d*\.?\d+(px)?\s*(times|x)\s/.test(c.text)
+          ? null
+          : ((tied && /^-?\d*\.?\d+$/.test(tied) ? `${tied}px` : tied) ??
+            c.lengths.find(l => l !== tall) ??
+            null);
         // A radius of 0 is square.
         const px = typedPx && parseFloat(typedPx) === 0 ? null : typedPx;
         const zero = Boolean(typedPx) && !px;
+        // "half the corner radius on buttons": an exact amount of the
+        // radius the part has now (its own setting, else the token it reads).
+        // Not a comparison with another part ("twice as round as inputs"):
+        // that amount is of the other part's radius.
+        const cornerFactor =
+          !typedPx &&
+          on &&
+          // "half as round" is an amount; "as round as buttons" compares.
+          !compared.get(c) &&
+          !/\b(as|than)\s+(the\s+)?\w+\s*$|\bas \w+ as\b/.test(
+            c.text.replace(/\bas (round|rounded|sharp|curved)\s*$/, ''),
+          )
+            ? exactFactor(c.text)
+            : null;
+        if (cornerFactor) {
+          const part = /** @type {string} */ (on);
+          const read = C.partReads(one(part), 'corners')[0];
+          const now =
+            nowIn(part, 'border-radius') ??
+            (read?.token ? current(read.token) : null);
+          const value = now ? scaled(now, cornerFactor) : null;
+          if (value)
+            return {
+              text: `corners${where}: border-radius ${value} (now ${now})`,
+              options: [[set('border-radius', value, f)]],
+            };
+        }
         // "revert the rounded corners": take back what the theme sets.
         if (/\b(revert|undo|take back)\b/.test(c.text)) {
           const back = existing(['corners', 'border-radius'], on);
@@ -3288,7 +4661,13 @@ export function draftAnswer(ctx, env, question) {
             : /\bthin(ner)?\b/.test(c.text) || c.dir === 'less'
               ? '1px'
               : null);
-        const style = /\b(dashed|dotted|double)\b/.exec(c.text)?.[1] ?? null;
+        // "double the border width" is an amount, not the double style.
+        const style =
+          /\b(dashed|dotted)\b/.exec(c.text)?.[1] ??
+          (/\bdouble\b/.test(c.text) &&
+          !/\bdouble (the |its |their )?(border|width|thickness)\b/.test(c.text)
+            ? 'double'
+            : null);
         const side = /\b(top|bottom|left|right)\b/.exec(c.text)?.[1];
         const prop = side ? `border-${side}` : 'border';
         const own = C.MAP[one(on)]?.own ?? {};
@@ -3325,7 +4704,16 @@ export function draftAnswer(ctx, env, question) {
         };
       }
       case 'spacing': {
-        const px = c.lengths[0];
+        // A percent is an amount of the padding there now ("50% bigger",
+        // "150%"), never a CSS percent padding (half the container's width).
+        const pctLength =
+          c.lengths.find(l => /%$/.test(l)) ??
+          /\b(\d{1,3}(?:\.\d+)?)\s?%/.exec(c.text)?.[0] ??
+          null;
+        // "3 times bigger": the 3 is an amount, not a length.
+        const px = exactFactor(c.text)
+          ? null
+          : c.lengths.find(l => !/%$/.test(l));
         const gap = /\b(gaps?|between)\b/.test(c.text);
         const value =
           /\b(dense|compact)\b/.test(c.text) && !c.dir
@@ -3352,13 +4740,96 @@ export function draftAnswer(ctx, env, question) {
             options: [[set(gap ? 'gap' : 'padding', box, f)]],
           };
         }
+        // "double the padding on cards": an exact amount of the padding the
+        // part has now, when the theme sets one; else the dial's step, and
+        // the answer says the amount is a step.
+        const padFactor =
+          exactFactor(c.text) ??
+          (pctLength && Number.parseFloat(pctLength) > 0
+            ? Number.parseFloat(pctLength) / 100
+            : null);
+        /**
+         * The padding (or gap) a part has now: its own setting, else the
+         * token it reads, resolved in this theme.
+         * @param {string} part
+         */
+        const padNow = part => {
+          const own = nowIn(part, gap ? 'gap' : 'padding');
+          if (own) return own;
+          // The part's plain rule in the theme as built (the base theme's
+          // card padding), its tokens read in this theme.
+          const rule = partRuleTokens(
+            ctx.project.cwd,
+            env.slug,
+            env.data.like,
+            one(part),
+          ).get(gap ? 'gap' : 'padding');
+          if (rule) {
+            const resolved = String(rule).replace(
+              /var\(\s*(--[a-z0-9-]+)\s*(?:,[^)]*)?\)/gi,
+              (_, t) => current(t) || _,
+            );
+            if (scaledBox(resolved, 1)) return resolved;
+          }
+          const reads = C.partReads(one(part), 'spacing').filter(r =>
+            r.props.some(p => (gap ? /gap/ : /^padding/).test(p)),
+          );
+          const read =
+            reads.find(r => /^--spacing-/.test(r.token)) ?? reads[0] ?? null;
+          return read?.token ? current(read.token) : null;
+        };
+        // A comparison ("twice the padding of buttons"): the amount is of
+        // the other part's padding, when the theme sets one; else a step,
+        // and the answer says so.
+        const versus = compared.get(c) ?? null;
+        if (padFactor && versus) {
+          const now = padNow(versus);
+          const exact = now ? scaledBox(now, padFactor) : null;
+          return exact
+            ? {
+                text: `${gap ? 'the gap' : 'padding'}${where}: ${exact} (${versus} has ${now})`,
+                options: [[set(gap ? 'gap' : 'padding', exact, f)]],
+              }
+            : {
+                text: `room inside ${on}: spacing ${value ?? 'more'}; this theme sets no ${gap ? 'gap' : 'padding'} of its own on ${versus}, so this is a step, not an exact amount of ${versus}'s: give a value (24px) for one`,
+                options: [[set('spacing', value ?? 'more', f)]],
+              };
+        }
+        if (padFactor) {
+          const now = padNow(on);
+          const value = now ? scaledBox(now, padFactor) : null;
+          if (value)
+            return {
+              text: `${gap ? 'the gap' : 'padding'}${where}: ${value} (now ${now})`,
+              options: [[set(gap ? 'gap' : 'padding', value, f)]],
+            };
+        }
+        // No amount, and the part has an exact padding of its own: the dial
+        // does not move it (an exact setting wins), so a step of that
+        // padding, said to be a step.
+        const exactPad = !gap && value ? partValue(on, 'padding') : null;
+        const stepped = exactPad
+          ? scaledBox(exactPad, value === 'less' ? 0.8 : 1.25)
+          : null;
+        if (stepped)
+          return {
+            text: `padding${where}: ${stepped} (now ${exactPad}; a step, since your exact padding there wins over the spacing dial: give an amount, such as double or 24px, for an exact one)`,
+            options: [[set('padding', stepped, f)]],
+          };
+        // An amount with nothing there now to take it of: a step its way,
+        // said to be a step.
+        if (padFactor && padFactor !== 1)
+          return {
+            text: `room inside ${on}: spacing ${padFactor < 1 ? 'less' : 'more'} (one step, not an exact amount: ${on} has no ${gap ? 'gap' : 'padding'} this can read; give a value, such as 8px, for one)`,
+            options: [[set('spacing', padFactor < 1 ? 'less' : 'more', {on})]],
+          };
         if (!value)
           return {
             text: `no padding${where}`,
             options: [[set('padding', '0px', f)]],
           };
         return {
-          text: `room inside ${on}: spacing ${value} (padding, gaps and heights inside it)`,
+          text: `room inside ${on}: spacing ${value} (padding, gaps and heights inside it; one step${padFactor ? ', not an exact amount: give a value, such as 24px, for one' : ''})`,
           options: [[set('spacing', value, {on})]],
         };
       }
@@ -3400,6 +4871,33 @@ export function draftAnswer(ctx, env, question) {
         const rung = Object.entries(HEADING_WEIGHTS).find(
           ([, v]) => v === value,
         )?.[0];
+        // A step ("bolder", "a bit lighter") moves one rung from the
+        // headings rung the theme sets, never back to a fixed one.
+        const ownRung = ownDial('headings');
+        const rungs = Object.keys(HEADING_WEIGHTS);
+        const stepAsk =
+          !typedW &&
+          !c.neg &&
+          !/\btoo /.test(c.text) &&
+          /\b(bolder|heavier|lighter|thinner|less bold)\b/.test(c.text);
+        if (
+          stepAsk &&
+          ownRung &&
+          rungs.includes(ownRung) &&
+          ((!on && /\b(headings?|titles?)\b/.test(c.text)) ||
+            (on === 'heading' && !f.when))
+        ) {
+          const next = rungs[rungs.indexOf(ownRung) + (light ? -1 : 1)];
+          if (!next)
+            return {
+              text: `the headings are already ${light ? 'the lightest' : 'the boldest'} rung (${ownRung}), so nothing changes`,
+              options: [],
+            };
+          return {
+            text: `${next} headings: one rung ${light ? 'lighter' : 'bolder'} than ${ownRung}`,
+            options: [[set('headings', next)]],
+          };
+        }
         if (
           (!on && /\b(headings?|titles?)\b/.test(c.text)) ||
           (on === 'heading' && !f.when)
@@ -3450,6 +4948,49 @@ export function draftAnswer(ctx, env, question) {
         const px = c.lengths[0];
         const f2 = /\bmuch\b/.test(c.text) ? 1.5 : 1.25;
         const factor = c.dir === 'less' ? 1 / f2 : f2;
+        // An exact --font-size-base wins over the text-size dial, so the
+        // dial would change nothing there: step that token instead.
+        const pinned = on
+          ? null
+          : ([...env.data.settings]
+              .reverse()
+              .find(
+                st =>
+                  st.source === 'token' &&
+                  st.thing === '--font-size-base' &&
+                  !st.on &&
+                  !st.when &&
+                  !st.state &&
+                  !st.mode,
+              )?.value ?? null);
+        if (pinned != null) {
+          const m = /^(\d*\.?\d+)(px|rem|em)$/i.exec(pinned.trim());
+          const next = px
+            ? px
+            : m
+              ? `${Math.round(parseFloat(m[1]) * factor * 100) / 100}${m[2].toLowerCase()}`
+              : null;
+          return next
+            ? {
+                text: `the base text size: --font-size-base, set exactly to ${pinned} (it wins over the text-size dial)`,
+                options: [[set('--font-size-base', next)]],
+              }
+            : {
+                text: `the base text size: --font-size-base is set exactly to ${pinned}, which wins over the text-size dial; remove it, then text-size changes the size`,
+                options: [
+                  [
+                    /** @type {Step} */ ({
+                      verb: 'undo',
+                      thing: '--font-size-base',
+                    }),
+                    set(
+                      'text-size',
+                      textSizeStep(c.dir === 'less' ? 'less' : 'more'),
+                    ),
+                  ],
+                ],
+              };
+        }
         if (!on)
           return {
             text: 'the base text size: text-size (every heading scales from it)',
@@ -3463,9 +5004,7 @@ export function draftAnswer(ctx, env, question) {
                           ? Math.round(parseFloat(px) * 16 * 100) / 100
                           : parseFloat(px),
                       )
-                    : c.dir === 'less'
-                      ? 'less'
-                      : 'more',
+                    : textSizeStep(c.dir === 'less' ? 'less' : 'more'),
                 ),
               ],
             ],
@@ -3495,12 +5034,16 @@ export function draftAnswer(ctx, env, question) {
                 r.props.includes('font-size'),
               )?.token ??
               Object.keys(C.MAP[one(on)]?.own?.['font-size']?.tokens ?? {})[0]);
-        // A part with no size token of its own starts from the body size.
-        const now = sizeTok
-          ? current(sizeTok)
-          : on !== 'heading' && '--text-body-size' in TOKENS
-            ? current('--text-body-size')
-            : null;
+        // The theme's own size on the part first; a part with no size token
+        // of its own starts from the body size.
+        const own = on ? partValue(on, 'font-size') : null;
+        const now = own
+          ? own
+          : sizeTok
+            ? current(sizeTok)
+            : on !== 'heading' && '--text-body-size' in TOKENS
+              ? current('--text-body-size')
+              : null;
         const value = px ?? (now ? scaled(now, factor) : null);
         if (!value) return null;
         return {
@@ -3670,7 +5213,11 @@ export function draftAnswer(ctx, env, question) {
           tallIn(c.text) ??
           (/\b(taller|shorter|height|bigger|larger|tap targets?|touch targets?)\b/.test(
             c.text,
-          ) && !/\b(wider|narrower|width)\b/.test(c.text)
+          ) &&
+          !(
+            /\b(wider|narrower|width)\b/.test(c.text) &&
+            !/\bborder[- ]width\b/.test(c.text)
+          )
             ? c.lengths[0]
             : null);
         if (tall)
@@ -3692,7 +5239,10 @@ export function draftAnswer(ctx, env, question) {
               ],
             ],
           };
-        if (/\b(wider|narrower|width)\b/.test(c.text)) {
+        if (
+          /\b(wider|narrower|width)\b/.test(c.text) &&
+          !/\bborder[- ]width\b/.test(c.text)
+        ) {
           const w =
             c.lengths[0] ??
             (/\bnarrower\b/.test(c.text) || c.dir === 'less'
@@ -3972,7 +5522,11 @@ export function draftAnswer(ctx, env, question) {
                 options: [steps],
                 sequence: steps.length > 1,
               }
-            : null;
+            : {
+                // The theme's own page is already at the end of the range.
+                text: `the page background of ${env.slug} is already ${lighter ? 'as light' : 'as dark'} as it goes (${current('--color-background-body')}), so nothing changes`,
+                options: [],
+              };
         }
         if (c.decl.background || c.decl['background-color'])
           return {
@@ -4094,13 +5648,15 @@ export function draftAnswer(ctx, env, question) {
         options: [],
       };
     if (/\bswap\b/.test(t)) {
-      const ROLE_TOKEN = /** @type {Record<string, string>} */ ({
-        accent: '--color-accent',
-        danger: '--color-error',
-        success: '--color-success',
-        warning: '--color-warning',
-        info: '--color-info',
-      });
+      const ROLE_TOKEN = wordTable(
+        /** @type {Record<string, string>} */ ({
+          accent: '--color-accent',
+          danger: '--color-error',
+          success: '--color-success',
+          warning: '--color-warning',
+          info: '--color-info',
+        }),
+      );
       const named = Object.keys(ROLE_TOKEN).filter(r =>
         new RegExp(`\\b${r === 'danger' ? '(danger|error)' : r}\\b`).test(t),
       );
@@ -4178,6 +5734,9 @@ export function draftAnswer(ctx, env, question) {
       // "dark only" with no "mode" word describes the theme's look.
       (/\balways dark\b|\b(theme|app)\b/.test(t) ||
         !/\bmode\b|\bin dark\b/.test(t) ||
+        // "… accent and dark mode only": the last ask, scoping nothing.
+        (clauses.indexOf(c) === clauses.length - 1 &&
+          !/\b(in|for)\b/.test(c.text)) ||
         !clauses.some(
           o =>
             o.text !== c.text &&
@@ -4189,7 +5748,17 @@ export function draftAnswer(ctx, env, question) {
         options: [[set('mode', 'dark-only')]],
       };
     if (
-      /\blight[- ]?(mode|theme)? only\b|\bonly light\b|\blight-only\b/.test(t)
+      /\blight[- ]?(mode|theme)? only\b|\bonly light\b|\blight-only\b/.test(
+        t,
+      ) &&
+      // "light only" removes dark mode only when the ask is about the
+      // theme's modes, never beside another change.
+      (/\b(theme|app)\b/.test(t) ||
+        !clauses.some(
+          o =>
+            o.text !== c.text &&
+            (o.parts.length || o.colors.length || o.aspects.length),
+        ))
     )
       return {
         text: 'a theme with only a light mode: mode light-only',
@@ -4220,10 +5789,14 @@ export function draftAnswer(ctx, env, question) {
     }
     if (vib) {
       seenAspect('colors');
+      // "More" goes with the word after it: more washed out, more muted
+      // and more pastel are less vibrant; less muted is more.
+      const dim =
+        /\b(desaturat\w*|muted|dull|washed|pastel|gr[ae]yer|calm\w*|softer)\b/;
       const less =
-        /\b(less|desaturat\w*|muted|dull|washed|pastel|gr[ae]yer|calm\w*|softer)\b/.test(
-          t,
-        ) && !/\bmore\b/.test(t);
+        /\bless (desaturat\w*|muted|dull|washed|pastel|gr[ae]y\w*)\b/.test(t)
+          ? false
+          : dim.test(t) || (/\bless\b/.test(t) && !/\bmore\b/.test(t));
       const step = set('vibrancy', less ? 'less' : 'more');
       const colored = (/** @type {string} */ v) => !isGraySeed(seedOf(v));
       const hasColor = env.data.settings.some(
@@ -4441,12 +6014,14 @@ export function draftAnswer(ctx, env, question) {
           ? '#78716c'
           : null;
     // "make the error red darker": the hue names the color; the change is darker.
-    const NATURAL = /** @type {Record<string, string>} */ ({
-      danger: HUES.red,
-      success: HUES.green,
-      warning: HUES.yellow,
-      info: HUES.blue,
-    });
+    const NATURAL = wordTable(
+      /** @type {Record<string, string>} */ ({
+        danger: HUES.red,
+        success: HUES.green,
+        warning: HUES.yellow,
+        info: HUES.blue,
+      }),
+    );
     if (c.dir && color && (color === NATURAL[dial] || color === HUES.amber))
       color = null;
     if (!color && c.dir && !/\btoo (warm|cool)\b/.test(t)) {
@@ -4533,7 +6108,18 @@ export function draftAnswer(ctx, env, question) {
       })[a] ?? a;
     if (!C.MAP[one(on)] || !Object.hasOwn(GROUPS, group)) return '';
     // Reads that always apply first; partReads sorts them so.
+    // Only the reads of the property the aspect is about (a weight question
+    // never lists the size tokens).
+    const prop = /** @type {Record<string, RegExp>} */ ({
+      weight: /^font-weight$/,
+      family: /^font-family$/,
+      fontsize: /^font-size$/,
+      tracking: /^letter-spacing$/,
+      case: /^text-transform$/,
+      italic: /^font-style$/,
+    })[a];
     const toks = C.partReads(one(on), group)
+      .filter(r => !prop || r.props.some(x => prop.test(x)))
       .map(r => r.token)
       .slice(0, 4);
     return toks.length ? `; ${one(on)} reads ${toks.join(', ')} for it` : '';
@@ -4606,6 +6192,23 @@ export function draftAnswer(ctx, env, question) {
     });
   }
   result.push(...drafts.slice(0, clashes.length ? 0 : undefined));
+  // A confidence gate: a question, a "tell me", a "but not too" or a typo
+  // read as a direction leaves how unsure which way to go; a wrong write is
+  // worse than none, so it gives the lookup and asks for the ask.
+  const unsure = gateAll;
+  if (unsure && result.some(d => d.options.some(o => o.length))) {
+    const part = partsSeen[0];
+    result.splice(0, result.length, {
+      text: `how is not sure which change you want; say it as an ask instead (for example "rounder cards" or "no shadows on buttons")`,
+      options: [],
+      lookup: part ? `${HOW} ${part}` : `${P} show ${env.slug}`,
+    });
+  }
+  if (media)
+    result.push({
+      text: 'the theme editor has no screen-size, print or device conditions: this applies on every screen; a media query needs your own CSS',
+      options: [],
+    });
   return {parts: partsSeen, aspects: aspectsSeen, drafts: result};
 }
 

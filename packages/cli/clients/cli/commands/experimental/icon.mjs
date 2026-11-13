@@ -296,14 +296,23 @@ export function registerExperimentalIcon(group, program) {
         return answered;
       }
 
-      const {status, projectSet, reason, sets, withdrawn, order, next} =
-        result.data;
+      const {
+        status,
+        projectSet,
+        reason,
+        sets,
+        withdrawn,
+        order,
+        next,
+        variant,
+      } = result.data;
       emit(
         section('Icon sets'),
         record({
           status,
           projectSet,
           ...(order.length > 1 ? {order: order.join(' > ')} : {}),
+          ...(variant ? {variant} : {}),
           reason,
         }),
         ...(next ? [text(`[warn] ${next}`)] : []),
@@ -326,6 +335,7 @@ export function registerExperimentalIcon(group, program) {
                     'iconCount',
                     'default',
                     'variants',
+                    ...(variant ? ['look'] : []),
                     'builtIn',
                     'definitions',
                     'own',
@@ -396,10 +406,15 @@ export function registerExperimentalIcon(group, program) {
     fn: iconUseFn,
     action: (
       /** @type {string} */ set,
-      /** @type {{backup?: string[]}} */ options,
+      /** @type {{backup?: string[], variant?: string}} */ options,
     ) =>
       run(
-        () => iconUse(set, {cwd: process.cwd(), backups: options.backup ?? []}),
+        () =>
+          iconUse(set, {
+            cwd: process.cwd(),
+            backups: options.backup ?? [],
+            variant: options.variant,
+          }),
         ({data}) => {
           /** @type {Array<{iconSet: string, set: string}>} */
           const backups = data.backups;
@@ -410,9 +425,18 @@ export function registerExperimentalIcon(group, program) {
             backups.length > 0
               ? `main set ${main}, then ${backups.map(each => `"${each.iconSet}" (${each.set})`).join(', then ')}`
               : main;
+          const written =
+            backups.length > 0
+              ? [data.iconSet, ...backups.map(each => each.iconSet)]
+              : data.iconSet;
+          const setChanged =
+            JSON.stringify(data.previous) !== JSON.stringify(written);
+          const variantChanged = data.previousVariant !== data.variant;
+          /** @type {Array<{set: string, variant: string | null}>} */
+          const looks = data.looks ?? [];
           emit(
             text(
-              data.changed
+              setChanged
                 ? `[ok] experimental.iconSet is now ${order} in ${data.config}${data.created ? ', created' : ''}.`
                 : `[ok] experimental.iconSet already names ${order} in ${data.config}.`,
             ),
@@ -423,8 +447,39 @@ export function registerExperimentalIcon(group, program) {
                   ),
                 ]
               : []),
-            ...(data.previous && data.changed
+            ...(data.previous && setChanged
               ? [text(`It was ${shown(data.previous)}.`)]
+              : []),
+            ...(data.variant
+              ? [
+                  text(
+                    variantChanged
+                      ? `[ok] experimental.iconVariant is now "${data.variant}"${data.previousVariant ? ` (it was "${data.previousVariant}")` : ''}: every icon draws its ${data.variant} look where its set has one.`
+                      : `[ok] experimental.iconVariant already names "${data.variant}".`,
+                  ),
+                ]
+              : data.previousVariant
+                ? [
+                    text(
+                      `[ok] Removed experimental.iconVariant (it was "${data.previousVariant}"): each set draws its default look.`,
+                    ),
+                  ]
+                : []),
+            ...looks
+              .filter(look => look.variant !== data.variant)
+              .map(look =>
+                text(
+                  look.variant
+                    ? `[note] ${look.set} declares no "${data.variant}" variant: its icons draw its default look, ${look.variant}.`
+                    : `[note] ${look.set} declares no variants: its icons draw its one look.`,
+                ),
+              ),
+            ...(data.themeMap
+              ? [
+                  text(
+                    `A theme draws the built-in icons in this look with \`icons: ${data.themeMap.export}\` (import {${data.themeMap.export}} from '${data.themeMap.module}').`,
+                  ),
+                ]
               : []),
             ...(data.next ? [text(`[warn] ${data.next}`)] : []),
             ...(data.warning ? [text(`[warn] ${data.warning}`)] : []),

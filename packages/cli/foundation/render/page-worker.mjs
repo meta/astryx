@@ -835,10 +835,20 @@ function classify(e) {
   return fail('ERR_RENDER_FAILED', `The page threw while rendering: ${message.split('\n')[0]}`);
 }
 
+/**
+ * Tell the host what the page is doing, so an end without an answer can say
+ * where it ended.
+ * @param {string} name
+ */
+function reach(name) {
+  parentPort?.postMessage({stage: name});
+}
+
 try {
   /** @type {any} */
   let mod;
   try {
+    reach('importing the page');
     mod = await jiti.import(entry);
   } catch (e) {
     classify(e);
@@ -857,6 +867,7 @@ try {
   /** @type {any} */
   let server;
   try {
+    reach('loading React');
     React = await jiti.import('react');
     createElement = React.createElement;
     useContext = React.useContext;
@@ -874,11 +885,13 @@ try {
   /** @type {false | 'error' | 'changed' | 'rerendered'} */
   let chartsAlone = false;
   try {
+    reach('rendering on the server');
     markup = server.renderToStaticMarkup(React.createElement(Page));
     if (charts.length > 0) {
       // Drawing the page again re-runs its code: what it prints then was
       // already reported by the server render.
       const printed = logs.length;
+      reach('drawing charts');
       ({markup, failed: chartsFailed, alone: chartsAlone} = await drawCharts(markup, Page));
       logs.length = printed;
     }
@@ -893,6 +906,7 @@ try {
   /** @type {string} */
   let css = '';
   if (stylexRules.length > 0) {
+    reach('compiling styles');
     css = stylexPlugin.processStylexRules(stylexRules, {useLayers: false});
   }
   parentPort?.postMessage({

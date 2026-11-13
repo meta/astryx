@@ -30,7 +30,7 @@ import {
   resolveBuiltPath,
 } from './_adapter.mjs';
 import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
-import {parse as parseModule} from '@babel/parser';
+import {babelParse as parseModule} from '../../foundation/runtime/lazy-dependencies.mjs';
 
 /** Source files, read for imports and JSX. */
 const SOURCE_EXT = new Set(['.tsx', '.jsx', '.ts', '.js', '.mjs', '.cjs']);

@@ -418,3 +418,30 @@ export function weighStart(
   if (newPage && kept) return kept;
   return null;
 }
+
+/**
+ * The blend's scores: the app shell's, and the best non-shell template with
+ * its score and the runner-up's. Null without weights.
+ * @param {string} idea
+ * @param {import('./rank.mjs').RankedPage[]} ranked
+ * @param {import('./rank.mjs').RankedPage | null} pick
+ * @param {DescribedTemplate[]} catalog
+ * @param {WeightsFile | null} weights
+ */
+export function blendSummary(idea, ranked, pick, catalog, weights) {
+  if (!weights) return null;
+  const {cands, scores} = blend(idea, ranked, pick, catalog, weights);
+  let shell = 0;
+  const rest = [];
+  for (let i = 0; i < cands.length; i++) {
+    if (cands[i] === SHELL) shell = scores[i];
+    else rest.push({name: cands[i], score: scores[i], i});
+  }
+  rest.sort((x, y) => y.score - x.score || x.i - y.i);
+  return {
+    shell,
+    best: rest[0]?.name ?? null,
+    bestScore: rest[0]?.score ?? 0,
+    secondScore: rest[1]?.score ?? 0,
+  };
+}
