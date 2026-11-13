@@ -2895,8 +2895,12 @@ describe('final pass 5', () => {
     await themeEditNew('see', {cwd, like: 'neutral'});
     try {
       const before = await themeEditSet('see', 'corners', '6px', {cwd});
-      expect(before.data.see).toContain('themes/see/preview.html');
-      expect(before.data.see).toContain('--png');
+      // A look that changes nothing in the app comes first; adding the
+      // preview to the app comes last, as an option.
+      expect(before.data.see).toMatch(
+        /^look without changing your app: open or screenshot themes\/see\/preview\.html .*--png .*; to see it inside your app, astryx experimental theme preview add/,
+      );
+      expect(before.data.see).toContain('themes/see/sheet.html');
       const r = await themeEditPreviewAdd(undefined, {
         cwd,
         theme: 'see',
@@ -2909,6 +2913,42 @@ describe('final pass 5', () => {
       const route = read('src/app/see/page.tsx');
       expect(route).toContain("url.searchParams.set('page', id)");
       expect(route).toContain('href={`?page=${p.id}`}');
+      // A plain left click switches in place; a modified or middle click is
+      // left to the link (a new tab).
+      const handler = /onClick=\{(e => \{[^}]*\})\}/.exec(route)?.[1];
+      expect(handler).toBeTruthy();
+      const run = (/** @type {Record<string, unknown>} */ ev) => {
+        const went = [];
+        let prevented = false;
+        const click = new Function('go', 'p', `return ${handler};`)(
+          (/** @type {string} */ id) => went.push(id),
+          {id: 'components'},
+        );
+        click({
+          button: 0,
+          metaKey: false,
+          ctrlKey: false,
+          shiftKey: false,
+          altKey: false,
+          preventDefault: () => {
+            prevented = true;
+          },
+          ...ev,
+        });
+        return {went, prevented};
+      };
+      expect(run({})).toEqual({went: ['components'], prevented: true});
+      for (const ev of [
+        {metaKey: true},
+        {ctrlKey: true},
+        {shiftKey: true},
+        {altKey: true},
+        {button: 1},
+      ])
+        expect(run(ev), JSON.stringify(ev)).toEqual({
+          went: [],
+          prevented: false,
+        });
       expect(route).toContain("addEventListener('popstate'");
       const list = await themeEditPreviewList({cwd, path: 'src/app/see'});
       expect(list.data.pages.map(p => p.url)).toEqual([
@@ -2918,10 +2958,16 @@ describe('final pass 5', () => {
       const color = await themeEditSet('see', 'accent', 'teal', {cwd});
       await themeEditPreviewAdd(undefined, {cwd, path: 'src/app/see'});
       expect(color.data.see).toMatch(
-        /open \/see\?page=(colors|overview) in the running app/,
+        /in the running app: open \/see\?page=(colors|overview)/,
       );
       const again = await themeEditSet('see', 'accent', '#7c3aed', {cwd});
       expect(again.data.see).toContain('/see?page=colors');
+      // With a preview there, the editor's own page still leads, and the
+      // in-app page follows; no add is suggested.
+      expect(again.data.see.indexOf('preview.html')).toBeLessThan(
+        again.data.see.indexOf('/see?page=colors'),
+      );
+      expect(again.data.see).not.toContain('preview add');
       const part = await themeEditSet('see', 'background', 'red', {
         cwd,
         on: 'card',

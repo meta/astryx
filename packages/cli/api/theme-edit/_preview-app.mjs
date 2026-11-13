@@ -3389,10 +3389,14 @@ export function seeLine(cwd, slug, focus) {
     const url = id ? pageUrls(cwd, {dir, app: null}, [id])[id] : undefined;
     if (url) urls.push(url);
   }
-  const png = `or run it with --png for pictures with no dev server (it needs a Playwright or a Chrome)`;
+  // First a look that changes nothing in the app: the editor's own page,
+  // current after every change, and --png; the app's preview page only
+  // when there is one, and adding one last, as an option.
+  const f = themeFiles(cwd, slug);
+  const own = `look without changing your app: open or screenshot ${shown(cwd, f.preview)} (one self-contained page, current after this change; ${EDITOR} show ${slug} also writes ${shown(cwd, f.sheet)}, every component), or run it with --png for pictures in ${shownDir(cwd, f.dir)}/ with no dev server (it needs a Playwright or a Chrome)`;
   return urls.length
-    ? `open ${urls.slice(0, 2).join(' or ')} in the running app, ${png}`
-    : `open ${shown(cwd, themeFiles(cwd, slug).preview)} in a browser, ${png}; ${PREVIEW} add puts the preview pages in your app, each at its own URL`;
+    ? `${own}; in the running app: open ${urls.slice(0, 2).join(' or ')}`
+    : `${own}; to see it inside your app, ${PREVIEW} add puts the preview pages there, each at its own URL`;
 }
 
 /**

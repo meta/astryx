@@ -1282,7 +1282,9 @@ export function previewRouteSource({
     '        sideNav={',
     '          <SideNav>',
     '            {PAGES.map(p => (',
-    '              <SideNavItem key={p.id} label={p.label} isSelected={p.id === current.id} href={`?page=${p.id}`} onClick={e => { e.preventDefault(); go(p.id); }} />',
+    // Only a plain left click switches the page in place; a modified or
+    // middle click opens the page's URL as a link does (a new tab).
+    '              <SideNavItem key={p.id} label={p.label} isSelected={p.id === current.id} href={`?page=${p.id}`} onClick={e => { if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; e.preventDefault(); go(p.id); }} />',
     '            ))}',
     '          </SideNav>',
     '        }>',
