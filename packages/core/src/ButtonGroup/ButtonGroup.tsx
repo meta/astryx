@@ -226,7 +226,10 @@ export function ButtonGroup({
   const {isTouch} = useTouchPresentation();
   const tracksPress = !isDisabled && isTouch;
   const groupRef = useRef<HTMLDivElement>(null);
-  const {hitAreaRef} = useGroupPressTracking(groupRef, tracksPress);
+  const {hitAreaRef, trackingPart} = useGroupPressTracking(
+    groupRef,
+    tracksPress,
+  );
 
   return (
     <ButtonGroupContext value={contextValue}>
@@ -257,6 +260,7 @@ export function ButtonGroup({
             {children}
           </PressGroupContext>
         </div>
+        {trackingPart}
       </SizeProvider>
     </ButtonGroupContext>
   );
