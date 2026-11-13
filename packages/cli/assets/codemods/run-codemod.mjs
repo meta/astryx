@@ -337,6 +337,59 @@ export function runConfigCodemod(
 }
 
 /**
+ * A codemod as `upgrade` runs it. Core codemods may also declare `mentions`,
+ * internal to the CLI and not part of the codemod authoring type: the words a
+ * file must say for the transform to change or report it. A file that says
+ * none of them, holds no backslash, and parses, is skipped.
+ * @typedef {import('../../authoring/codemod/type').CodemodEntry['codemod'] & {mentions?: string[]}} CoreCodemod
+ */
+
+/**
+ * Whether a file parses as its codemod's transform would parse it, by parser
+ * and file, while its text is the same: each file is parsed once for every
+ * codemod that skips it.
+ * @type {Map<string, {source: string, parses: boolean}>}
+ */
+const parsedOnce = new Map();
+
+/**
+ * Whether a codemod cannot change a source file, so its transform need not
+ * run (stylesheets always run, whatever they parse as): the
+ * codemod declares every word a file must say for it to act (`mentions`), the
+ * file says none of them and holds no backslash (no escape can spell one),
+ * and the file parses, so the transform would neither
+ * change it nor report it unparseable. A codemod that declares no words runs
+ * on every file.
+ * @param {CoreCodemod} codemod
+ * @param {string} source
+ * @param {string} filePath
+ * @param {string} parser
+ * @param {any} j jscodeshift bound to the file's parser
+ * @returns {boolean}
+ */
+function cannotChange(codemod, source, filePath, parser, j) {
+  const {mentions} = codemod;
+  if (!Array.isArray(mentions) || mentions.length === 0) return false;
+  if (mentions.some(word => source.includes(word))) return false;
+  // An escape (`\u0054ypeahead`, `'base\x2dtable'`, a line continuation)
+  // can spell a word without its letters: such a file always runs.
+  if (source.includes('\\')) return false;
+  const key = `${parser}\0${filePath}`;
+  let known = parsedOnce.get(key);
+  if (known?.source !== source) {
+    let parses = true;
+    try {
+      j(source);
+    } catch {
+      parses = false;
+    }
+    known = {source, parses};
+    parsedOnce.set(key, known);
+  }
+  return known.parses;
+}
+
+/**
  * Apply a code codemod to discovered source files.
  *
  * @param {import('../../authoring/codemod/type').CodemodEntry} entry normalized codemod entry {id, codemod, package}
@@ -380,6 +433,14 @@ export function runCodeCodemod(
         contents?.get(filePath) ?? fs.readFileSync(filePath, 'utf-8');
       const parser = ext === '.tsx' || ext === '.ts' ? 'tsx' : 'babel';
       const j = jscodeshift.withParser(parser);
+      // Only source files: a stylesheet can happen to parse as JavaScript
+      // (`a.b` then `{ color: white; }`), yet its transform still changes it.
+      if (
+        PARSEABLE_EXTENSIONS.includes(ext) &&
+        cannotChange(codemod, source, filePath, parser, j)
+      ) {
+        continue;
+      }
       const api = {
         jscodeshift: markingSourceParseErrors(j, source),
         stats: () => {},

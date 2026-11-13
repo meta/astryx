@@ -61,6 +61,7 @@ import {
   type RefObject,
   type ReactNode,
 } from 'react';
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import {useIsHydrating} from '../hooks/useIsHydrating';
 import {useSettledOpen} from '../hooks/useSettledOpen';
 import * as stylex from '@stylexjs/stylex';
@@ -458,8 +459,9 @@ function StandaloneBottomSheet({
   // sheet leaves the page interactive, so it returns focus to its opener
   // only if the person was still in the sheet; a modal sheet always does.
   const hadFocusAtCloseRef = useRef(false);
-  const finalFocusRefRef = useRef(finalFocusRef);
-  finalFocusRefRef.current = finalFocusRef;
+  // The committed `finalFocusRef`. The stack reads it when it closes the
+  // sheet, which can happen in a layout effect.
+  const finalFocusRefRef = useCommittedRef(finalFocusRef);
   // A sheet rendered in another sheet's content is presented only while that
   // sheet is open: it leaves with its host and, if its own state is still
   // open, comes back when the host does (see BottomSheetHostContext). Its
@@ -562,8 +564,9 @@ function StandaloneBottomSheet({
     },
     [],
   );
+  // The stack's view for the handlers. The registry's `onView` writes it with
+  // each view it reports, together with the state.
   const stackViewRef = useRef(stackView);
-  stackViewRef.current = stackView;
   const scrimWriteRef = useRef<BottomSheetScrimWrite>({frame: null});
   // Releases the pending scrim write frame on unmount.
   useEffect(() => () => cancelScrimWrite(scrimWriteRef.current), []);
@@ -616,6 +619,9 @@ function StandaloneBottomSheet({
       dialog == null
         ? null
         : prepareFocusRepairOnRemoval(dialog, {keepRestingFocus: true});
+    // Where focus returns when the sheet leaves, read when it leaves.
+    const getReturnTarget = () =>
+      finalFocusRefRef.current?.current ?? triggerRef.current;
     const leave = registerBottomSheet(
       {
         key,
@@ -640,8 +646,7 @@ function StandaloneBottomSheet({
         },
         hide: () => closeDialogKeepingFocus(dialogRef.current),
         focus: reason => focusSheetPanel(panelRef.current, reason, hasScrim),
-        getReturnTarget: () =>
-          finalFocusRefRef.current?.current ?? triggerRef.current,
+        getReturnTarget,
         onView: view => {
           stackViewRef.current = view;
           setStackView(view);
@@ -679,8 +684,7 @@ function StandaloneBottomSheet({
       // person had already moved out of the sheet to the page body stays
       // there: the removal did not lose it.
       if (repairOnRemoval != null && isSheetHostPresented(dialog)) {
-        const returnTarget =
-          finalFocusRefRef.current?.current ?? triggerRef.current;
+        const returnTarget = getReturnTarget();
         const revealed = hasScrim ? getBottomSheetBeneath(key) : null;
         repairOnRemoval(() => {
           // The sheet beneath left too. Its own repair returns focus for the
@@ -700,7 +704,7 @@ function StandaloneBottomSheet({
       }
       leave();
     };
-  }, [hasScrim, shouldPresent, writeScrim]);
+  }, [finalFocusRefRef, hasScrim, shouldPresent, writeScrim]);
   useLayoutEffect(() => {
     if (!isOpen) {
       // Where focus was when the person closed the sheet. The closing sheet

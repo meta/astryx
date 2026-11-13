@@ -28,6 +28,7 @@ import {
 } from './_adapter.mjs';
 import {checkSearchArgs} from './_result.mjs';
 import {SEARCH_TREE} from './tree.mjs';
+import {searchView} from './_named-keywords.mjs';
 
 /**
  * Fields a gathered candidate holds that point into the folder it was read
@@ -185,8 +186,14 @@ export async function rankSearchIndex(query, indexes, options = {}) {
     all.push(...index.candidates);
   }
   const {type} = options;
+  // Keywords read as search() reads them (_named-keywords.mjs). The names
+  // come from every stored entry, before the `type` cut.
+  const view = searchView({
+    all,
+    components: all.filter(candidate => candidate.domain === 'component'),
+  }).all;
   const wanted =
-    type == null ? all : all.filter(candidate => candidate.domain === type);
+    type == null ? view : view.filter(candidate => candidate.domain === type);
   const {searchedComponents, coreSkipped} = coreFlags(list, type);
   const response = /** @type {import('./search.type.mjs').SearchResponse} */ (
     await runTree(

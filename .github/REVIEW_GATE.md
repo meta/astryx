@@ -13,7 +13,10 @@ neutral yellow "waiting" signal, not a red failure).
 | **Design owner** (`DESIGNOWNERS`) | needs code review | self-serve                       | self-serve        |
 | **Contributor** (anyone else)     | needs code review | needs code review + design label | needs code review |
 | **Bot** (Dependabot, etc.)        | exempt            | exempt                           | exempt            |
+| **The review app** (`REVIEW_APP`) | trainer pass      | trainer pass                     | trainer pass      |
 
+- **The review app's own pull requests** need a trainer pass: an engineering
+  owner's approval of the exact head. The app cannot approve its own work.
 - **Code review is the only hard gate.** It shows up as the `review-required`
   status: `pending` (🟡, blocks the merge) or `success` (🟢).
 - **Design review is advisory** — it labels the PR and requests design owners,
@@ -134,7 +137,9 @@ internal contributors' PRs. Owners still self-serve their own domain.
 
 ```
 ① PR opened / updated  ──pull_request_target──►  review-signal.yml : flag
-     bot? → status success, exempt, stop
+     the review app (REVIEW_APP)? → pending until an eng owner approves the exact head
+       (the trainer pass), then "Cleared by code-owner approval.", stop
+     other bot? → status success, exempt, stop
      resolve author bucket (DESIGNOWNERS → ENGOWNERS → contributor)
      detect high-risk / design from changed paths (lab filtered out)
      read reviews → codeApproved / designApproved

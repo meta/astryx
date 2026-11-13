@@ -14,14 +14,9 @@
  * @position api/theme-edit — imported by _preview.mjs
  */
 
-/** @typedef {import('./_catalog.mjs').Tree} Tree */
+import {h} from './_catalog.mjs';
 
-/** @param {string} name @param {Record<string, unknown>} [props] @param {...unknown} children @returns {Tree} */
-const h = (name, props = {}, ...children) => ({
-  __element: name,
-  props,
-  ...(children.length ? {children} : {}),
-});
+/** @typedef {import('./_catalog.mjs').Tree} Tree */
 
 const noop = {__code: '() => {}'};
 const STATUSES = ['info', 'success', 'warning', 'error'];
@@ -57,6 +52,51 @@ const ROWS = [
 
 /** @type {Array<{title: string, tree: Tree}>} */
 export const OVERVIEW_SECTIONS = [
+  {
+    title: 'Open layers',
+    // First on the page, so the layers open below their anchors on load,
+    // into space kept free for them: each anchor's cell keeps room for its
+    // layer, so nothing sits under one, side by side or stacked.
+    tree: h(
+      'Card',
+      {variant: 'transparent'},
+      h(
+        'Grid',
+        {columns: {minWidth: 280, repeat: 'fit'}, gap: 4},
+        h(
+          'Card',
+          {variant: 'transparent', minHeight: 150},
+          h(
+            'Popover',
+            {
+              isOpen: true,
+              // Shown open on the page: it never takes focus.
+              hasAutoFocus: false,
+              label: 'Menu',
+              placement: 'below',
+              content: h(
+                'VStack',
+                {gap: 1},
+                h('Text', {type: 'label'}, 'A popover shown open'),
+                h('Button', {label: 'Rename', variant: 'ghost', size: 'sm'}),
+                h('Button', {label: 'Delete', variant: 'ghost', size: 'sm'}),
+              ),
+            },
+            h('Button', {label: 'Anchor', variant: 'secondary'}),
+          ),
+        ),
+        h(
+          'Card',
+          {variant: 'transparent', minHeight: 150},
+          h(
+            'Tooltip',
+            {isOpen: true, placement: 'below', content: 'A tooltip shown open'},
+            h('Button', {label: 'Tooltip anchor', variant: 'secondary'}),
+          ),
+        ),
+      ),
+    ),
+  },
   {
     title: 'Type',
     tree: h(
@@ -249,33 +289,5 @@ export const OVERVIEW_SECTIONS = [
         {key: 'status', header: 'Status'},
       ],
     }),
-  },
-  {
-    title: 'Open layers',
-    tree: h(
-      'HStack',
-      {gap: 10, align: 'start', wrap: 'wrap'},
-      h(
-        'Popover',
-        {
-          isOpen: true,
-          label: 'Menu',
-          placement: 'end',
-          content: h(
-            'VStack',
-            {gap: 1},
-            h('Text', {type: 'label'}, 'A popover shown open'),
-            h('Button', {label: 'Rename', variant: 'ghost', size: 'sm'}),
-            h('Button', {label: 'Delete', variant: 'ghost', size: 'sm'}),
-          ),
-        },
-        h('Button', {label: 'Anchor', variant: 'secondary'}),
-      ),
-      h(
-        'Tooltip',
-        {isOpen: true, placement: 'end', content: 'A tooltip shown open'},
-        h('Button', {label: 'Tooltip anchor', variant: 'secondary'}),
-      ),
-    ),
   },
 ];
