@@ -1,5 +1,355 @@
 # @xds/cli
 
+# 0.7.15
+
+#### Experimental APIs
+
+- `astryx experimental theme`: the component catalog and the all-components sheet are now built from each component's doc playground. Overlays show open, and each component shows its variants, its checked and disabled states, and a heading's levels. The editor's own copies of these demos are gone. A playground default that lists several elements now renders, so the editor now knows the tokens that radio lists, steppers, carousels and similar components read. (#11350)
+- `astryx experimental theme editor`: colors and fonts that stay safe and say what they do. (#11244)
+
+  - Undo never deletes the generated color file (`tokens/<theme>.palette.ts`) when you edited it by hand. The file stays, and the result names it. The theme reads only the selected-shades file (`tokens/<theme>.palette-refs.ts`), which the editor writes from the generator on every change, so a hand edit to the palette file never shows; the result says so.
+  - A focus color (`--focus-outline-color`) or any other color token set for one mode no longer locks the theme. Every later command checks it as the color it is.
+  - A color file counts as edited only when its colors differ. Formatting, a byte order mark, semicolons or a hand edit to `palette.config.json` without a receipt do not count. When an edit blocks a color change, the refusal says how to keep or discard it and names the command to run next.
+  - An exact main color (`--color-accent` and the other fills, tints and on-colors) reports what it changes around it, including the light-page check, when you set it.
+  - The accent tint stays at the official shade. Secondary text on the parts that sit on it (selected items and rows, a dropzone, numbered citations) and on segmented-control labels (which sit on the neutral track) is lifted, as the official Neutral theme lifts it, to the nearest gray that reads at 4.5:1 there and under a hover: the neutral color's shades, else grays grown from the base theme's own secondary text, so every accent gets it. An exact `--color-text-secondary`, for the whole theme or on one of those parts, wins there, per mode. The contrast check measures those parts with the text they show, at 4.5:1.
+  - On a base whose light page is dark (Gothic), the colors take the shades meant for a dark page in light mode too, so text reads on it. See-through exact colors (a hover tint, a fill) are measured as they show over the surface.
+  - On a layout without shade 85, the light accent tint takes the lighter neighbor. Shades are shown rounded.
+  - `font inherit` and the other CSS keywords are refused, because the browser would drop the whole font. Generic families (`serif`, `system-ui`) and the usual desktop fonts (Arial, Segoe UI) count as system fonts, and the fallback never repeats the family. A family name that is not a plain CSS name (`3Dumb`, `My/Font`) is quoted, and `@fontsource/<font>` names its preset.
+
+- `astryx experimental theme editor`: every CSS math function is read by its type, and fonts are judged against the theme build's own list. (#11350)
+
+  - `pow()`, `sqrt()`, `hypot()`, `log()`, `exp()`, the trigonometric functions, `mod()`, `rem()`, `abs()`, `sign()` and `round()` are accepted where the type they give fits; `sqrt(4px)` and `mod(10px, 3s)` are refused.
+  - Which system fonts need no install comes from the list `astryx theme build` warns by, unchanged; the editor only knows which of them ship on one system.
+  - `font more` names the commands that work.
+  - Math inside a color is checked too (`rgb(calc(1px) 0 0)` is refused), and `color-mix()` needs a share of at least one color. `calc(1fr)` is refused, since math takes no `fr`.
+  - A token only widths and offsets read (`--border-width`, `--focus-outline-width`) refuses a percentage, which those properties drop.
+  - A font that ships on one system says which one (`"Segoe UI" ships only on Windows`), instead of calling it no system font.
+  - The check for a hand-edited settings module reads files with Windows line endings.
+
+- `astryx experimental theme editor`: every refusal on fonts and part colors names a command that works. (#11350)
+
+  - A dial typed in other letters (`Font`, `FONT`) is answered as the dial.
+  - A CSS `font` shorthand on a part (`bold 16px/1.5 Georgia, serif`) is split into the longhands to set, one command each.
+  - A suggestion is never MDN's note in place of a value (`dependsOnUserAgent`).
+  - A bad color on a part's color property suggests a color that works.
+
+- `astryx experimental theme editor`: per-mode part colors with commas, both-mode values and every `color()` space. (#11350)
+
+  - A part color set for one mode, then the other, keeps a color that holds commas (`rgb(0, 0, 255)`) whole, in either order.
+  - A value that already gives both modes (`light-dark(…)`) is refused with `--mode`; drop `--mode`.
+  - The color dials read every `color()` space CSS has: rec2020, a98-rgb, prophoto-rgb and xyz, as well as srgb and display-p3.
+
+- `astryx experimental theme editor`: font shorthands on a part split whole, and color mixes read. (#11350)
+
+  - A CSS `font` value on a part is split into every longhand it holds (`font-variant-caps small-caps`, `font-stretch condensed`, style, weight, size, line height, family). A lone keyword goes to its own longhand (`bold` is `font-weight bold`), never to `font-family`, and a system font keyword (`caption`) gets a family that works.
+  - A `color-mix()` of two fixed colors in srgb, srgb-linear, xyz, oklab or oklch is worked out to the color it gives, so a color dial takes it. A mix the editor cannot work out says so and asks for the mixed color.
+
+- `astryx experimental theme editor`: values the browser would drop are refused, and type and font settings do what they say. (#11350)
+
+  - An installed `@fontsource/<font>` package always loads the font it names.
+  - Math inside `calc()` and the other math functions must be sound (`calc(1px banana)` is refused).
+  - A duration or easing token takes one value, never a list.
+  - A line height of `0` is accepted.
+  - An exact `--color-text-secondary` reaches the parts that lift secondary text, with or without a color dial.
+  - A font for the body alone keeps the headings' font.
+  - After `font <x> --on body`, later commands keep working.
+  - `more` or `less` past the last text-size step is refused, instead of going the other way.
+  - A dial whose tokens an exact setting holds says so.
+  - A token only the base theme's part styles read is no longer called unused.
+
+- `astryx experimental theme editor`: what `set` accepts always loads, and a theme keeps the colors it shows. (#11350)
+
+  - A setting that the theme could not load is refused when you set it, such as a font with `!important` or a comment.
+  - A border or outline width below 0, a duration below 0, and an unquoted url with brackets are refused on a part.
+  - Switching a theme to light-only or dark-only lists the colors that visitors in the other mode lose.
+  - A change that leaves the colors, the mode and the base as they were keeps the shades the theme already shows, so a theme an earlier editor built keeps its colors, and undo brings them back. The next color change maps every color with the current rules.
+
+- `astryx experimental theme editor`: a theme an earlier editor built gets its colors right on the first change. (#11350)
+
+  - The color files are brought up to date before the theme is built from them. A font or corner change on such a theme no longer moves its colors, and the next change no longer moves them back.
+  - `filter` and `backdrop-filter` take only values the browser reads; `filter banana` is refused.
+  - A font for code alone falls back to a monospace font.
+
+- `astryx experimental theme editor`: math, keywords and fonts checked the way the browser reads them. (#11350)
+
+  - Math in `calc()` and the other math functions must add like types and give the type the value needs. `calc(4px + 2)`, `calc(10px / 2px)` and `padding calc(1s)` are refused.
+  - A token never takes a CSS-wide keyword (`--font-family-body inherit`): it would leave the token empty.
+  - A font that ships on one system only (Segoe UI, Consolas, Menlo, Helvetica Neue, Roboto) is named as such.
+  - `font` refuses `var()` and names the role's token that takes it. `font geist-sans` is the `geist` preset, and `text-size Medium` suggests `medium`.
+  - A hand edit to the generated settings module is built over from the settings, as the module says, instead of being kept by the next change.
+  - `how font` no longer says a body font moves the headings.
+
+- `astryx experimental theme editor how`: number words, typed token names and states worded as actions. (#11350)
+
+  - Numbers written as words are read: "zero radius everywhere" is square, "twelve pixel corners" 12px, "a two pixel border" 2px, "forty pixels tall", "a quarter rem", "one and a half line height".
+  - "least", "minimum", "as little as possible" and "barely any" mean less; "maximum roundness" is a pill.
+  - A token typed by name with a value ("--focus-outline-width: 3px", "--color-background-card to #fafafa in light mode") is set exactly. A token name that does not exist is refused with the nearest names, never answered with another token.
+  - States worded as actions keep the state: hover, click and press (active), typing and tabbing to (focus), "after I check" (checked), "picked" (selected). "Tab to" no longer names the tab part, and a link's color in one state is set for that state.
+  - "Cards the same radius as buttons" gives cards the token buttons read; "buttons twice as round as inputs" changes buttons; "the same color as the danger color" uses that color's token.
+  - "Shouldn't links be underlined?" asks for the underline.
+  - A pasted `h1, h2, h3 { … }` includes h1.
+
+- `astryx experimental theme editor how`: a mode phrase scopes the ask, and typed tokens are read only when they are real. (#11350)
+
+  - "In dark mode only, cards #111111" sets the cards in dark mode; the theme becomes dark-only only when the ask is about the theme's modes. A clause that only names a mode scopes every clause after it. "Daytime" is light mode; "at night", "night mode" and "OLED" are dark mode (a bare "day" or "night" is not a mode); "dark: …, light: …" sets each mode, and two values for different modes are not a contradiction.
+  - A token typed at the start of a question is set exactly; a flag-like word that is no token (`--like`, `--value`) is read as words, and a real token in a later clause ("and set --border-width 2px") joins the other changes. A quoted font stack keeps its quotes.
+  - "No more than 2px borders" and "at most 2px" are 2px, not none.
+  - "Error text" and "labels" with no part name give a lookup, never the whole theme's text.
+
+- `astryx experimental theme editor how`: lists of parts, undo wording and typed numbers beside direction words. (#11350)
+
+  - Parts listed before the ask all take it: "cards and dialogs with no shadow", "tooltips and toasts black". "Less padding on cards but more on buttons" answers both, each its own way.
+  - "Every part bold except body text" makes the headings bold and leaves the body as it is.
+  - "Remove my accent override", "revert the cards to default", "I set the accent to red by mistake" and "put the card shadows back" take back what the theme sets with undo.
+  - A typed number beside a direction word is the value: "thicker focus outline, 4px" is 4px, "bigger tap targets, at least 44px" is a 44px minimum height, "8 or so px" is 8px.
+
+- `astryx experimental theme editor how`: lists, several colors and per-mode colors. (#11229)
+
+  - Each line of a question, and each item of a bulleted or numbered list, is its own ask. A "no" on one line never reaches the next.
+  - Several colors in one question are each kept: "accent #0ea5e9; danger #ef4444; success #22c55e" sets all three. A hex binds to its word whether it comes before or after it ("#0d6efd primary"), "bg=#fff text=#000" splits per color, and "primary" is the accent. "Secondary" has no setting of its own, so it is offered as the secondary button fill.
+  - A color that `how` works out (darker, lighter, more contrast, stronger borders, a darker overlay) is set per mode, each from that mode's own value, so dark mode keeps light text. "More contrast" acts in light and dark mode and says so. "Fails contrast on white" never picks white. Text already at full contrast says so instead of changing nothing.
+  - CSS property names read as their properties: `letter-spacing`, `line-height`, `font-size`, `font-weight`.
+  - Better meaning: "drop shadow: x 0, y 4, blur 6, spread -1, <color>" sets that shadow; "ditch" removes; "revert the rounded corners" takes back the corner settings the theme has; "swap A for B" asks for B; a radius of 0 is square; "12 pixels" is exactly 12px; "taller (44px)" sets that height; "too warm" makes the grays cooler; a part with no recorded fill gets darker or lighter through a brightness filter.
+  - Typed values are kept: gradients written "from A to B", shadows with several layers, quoted font names and font names before the word "font". Quoted text that is not a font name is read as words.
+  - Parts: a table's header, the error banner (`--when status:error`), "button color" as the text color. Markup and comment text in a question are ignored.
+  - Italian, Spanish, Korean, Russian, Arabic and Hindi words for buttons, cards, rounded, shadow, remove and accent are read; "y", "et", "und" and "и" join two asks.
+  - A step given twice in one answer runs once. `undo` is suggested only when there is a change to undo.
+  - When `font --on body` also changes the heading font (the theme sets no heading font), `how font` says so, and a body font question uses `--font-family-body`.
+  - An answer with no command says why. Commands in an error's suggestions start the same way in JSON as in text.
+
+- `astryx experimental theme editor how`: "swap A for B" and "replace A with B" ask for B only when A and B are both colors or both fonts. "Replace the shadow on cards with a border" removes the shadow and adds a border, and "switch off" or "switch the buttons to" no longer names the Switch component. (#11262)
+- `astryx experimental theme editor how`: right way round, whole font names, and the app's themes from any folder. (#11262)
+
+  - Polarity: "flat cards" removes the cards' shadow ("too flat" adds one); "not round enough" is rounder; "nothing rounded except avatars" is square with round avatars; "shadows too strong" is softer; "borders too dark" is fainter and "too light" stronger, per mode; "not so much padding" is less.
+  - "Border radius" in two words is the radius, never the border width. A rem or em radius for the whole theme is set in pixels (0.75rem is 12px), and a `%` radius keeps its `%`. "button padding 8" is 8px.
+  - Font names of several words are kept: shipped fonts by their full name (DM Sans, IBM Plex Sans, Geist Mono, JetBrains Mono), and other names as typed (Roboto Mono, Source Sans 3). "Sans-serif" is never read as serif.
+  - "Off-white" is #fafafa. "Headings too big" changes the heading scale. "#e5e5e5 not pure white" sets #e5e5e5.
+  - "1) … 2) …" markers and "Feedback round 2" are not values. `primary=#7c3aed radius=10 font=Geist` reads each pair. "Body text 16px" is the text size.
+  - A link's color is `--color-text-accent`, the token a link reads; the answer says it also colors other accent text.
+  - Parts: table cells, menu items, radio buttons, text areas, selects, skeletons and popovers. A variant word before a part ("success badge") adds `--when variant:success`. "Card and Dialog" answers both. "Match the header to the sidebar" changes the header. A shadow ask after "serif headings" is for the theme, and a tab's text color is on the tab.
+  - "What does spacing more do" is a lookup. Light and dark values in one question set each mode. "I hate the purple, make it orange" sets the accent.
+  - A typed text color that one mode's page would make unreadable is set for the other mode only, unless the question asks for every mode or sets the page too. A sequence never gives the page the color it gives the text.
+  - `how` from a subfolder of the app finds the app's themes, like the other editor commands; a picture named from there still opens.
+
+- `astryx experimental theme editor how`: a picture named from a subfolder of the app opens from that folder. A number that ends a sentence ("Use radius 8. Shadows off.") is a value, not a list marker; only "N)", or "N." at the start of a line or after a semicolon, starts a list item. "Shadows off" and "borders off" remove them. (#11303)
+- `astryx experimental theme editor how`: named CSS properties, typed values kept whole, and parts it cannot name. (#11350)
+
+  - A CSS property named in the question is set as named, with its value checked against the property's grammar: `caret-color`, `outline-offset`, `text-shadow`, `accent-color`, `text-underline-offset`, `font-variant-numeric`, `text-wrap`, `transition`, `padding-block`, any property `set` accepts. It is never swapped for another property.
+  - Typed values are kept whole: `clamp()`, `calc()`, `color-mix()`, a four-value radius, `line-height: normal`. A font size of 0 is refused by name.
+  - "Modal" names the dialog again; "carrd" and "caard" are corrected to card, and "lines" is no longer corrected to "links".
+  - A typed color is the target: "too bright, use #b91c1c" sets #b91c1c.
+  - Gray stops are read ("gray-50", "zinc-900", "slate 100", "neutral-200"); "subtle gray" is a light gray; "charcoal text instead of black" sets a charcoal.
+  - Fonts any machine has (Arial, Menlo, Times New Roman, Helvetica Neue, SF Pro) and typed names (Plus Jakarta Sans, Noto Sans, Fira Code) are set as named; "the default Mac font" is the system font.
+  - "menu", "select", "list", "divider" and "footer" name their parts, and so do "combobox" (the complex selector) and "accordion" (the collapsible). A part word how cannot name ("image") gets the closest parts and a lookup, never a whole-theme change.
+  - "too shadowy" is softer. "On focus" reaches the next clause; "night mode" is dark mode; "dark by default" is a dark-only theme; "lift it with a bigger shadow" is the hover shadow only; "ON: CARD" names the part; "the cards and the dialogs both" answers both.
+  - A picture whose name has spaces, as macOS names screenshots, is read as a picture.
+  - Questions about the tool get the command that answers them: help, "list every dial", "which token sets the page background?", "explain text-size", "how do I see my changes", "difference between corners and border-radius".
+  - The corners lookup's example is a token whose change shows.
+
+- `astryx experimental theme editor how`: typed values win without a colon, and words read the right way round. (#11350)
+
+  - A percent inside a gradient or after a color is never an opacity; "50% opacity" still is. A typed gradient with stops ("#2563eb 0% to #9333ea 100%") is kept.
+  - A typed value after a property word is used whole, colon or not: gradients, `opacity 0.5`, `border 0`, `border color transparent`, `light-dark()`, `var()`, `margin 16px`, `filter: blur(2px)`, `backdrop-filter blur(8px)`, two-layer shadows. A property name never picks a part ("backdrop-filter" is not the backdrop). A value the property cannot take ("padding NaNpx") is refused by name, and so is a font size of 0.
+  - `drop-shadow()` is kept as typed.
+  - "halve", "half", "cut in half" and "x0.8" mean less; "twice" and "double" mean more. "0.5 rem", "1.5 em", "14 px" are one length.
+  - "reset", "revert", "back to default", "what it was", "clear the override" with a setting take it back with `undo <theme> <setting>`, or say the theme does not set it.
+  - "lighten up" is lighter, "tighten" is tighter tracking, "knock the contrast down" is less contrast, "open up the leading" is line height, and "the gray text fails contrast, darken it" darkens the secondary text. A clause that only describes the problem ("the hierarchy is flat") is not a change; "or maybe not. actually yes" keeps the ask.
+  - "heading color" is the text color. Accordions, comboboxes and notifications name their parts; a part list with no match lists the parts of components that use the word. "error toasts" adds `--when type:error`, "read-only" is the readonly state, and "loading" or "unchecked" say the part has no such state.
+  - CSS named colors such as tomato are read.
+
+- `astryx experimental theme editor how`: complete border values, layer opacity, and the right kind of change. (#11350)
+
+  - A border or outline value is complete or goes to the right longhand: "card border 2px" sets `border-width` (a border with no line style draws nothing), "border width 2px" and "border bottom width 2px" set those properties, "border 0 0 2px" keeps all four widths, a width with a color gets a solid line, and "text-decoration #2563eb" sets `text-decoration-color`. "border width" never sets the part's width.
+  - "shadow opacity 0.2" sets the shadow's alpha, and "background opacity" or "border opacity" make that layer see-through, never the whole part.
+  - Font names win over dial words: "Space Grotesk headings" and "headings in Space Mono" set the font.
+  - Negation is kept: "should not shrink when pressed" is no scale, "but not bold" is a regular weight, and "why are my headings not bold" asks for bold.
+  - The right kind of change: "thinner body text" is a lighter weight; "faster hover transitions" sets `transition-duration`; "turn off all animations" and "transition duration 300ms everywhere" set the shared duration tokens; a part with no motion of its own, or no fill (the spinner), says so; "dim the white text" dims it; "a border instead of a shadow" removes the shadow and adds the border; "button press scale 0.98" scales on press.
+  - Point sizes are read (11pt is 15px), and a rem text size is read in pixels.
+  - A heading's color, which comes from its prop, is set with `--color-text-primary --on heading`; "headings red" is the text color.
+  - The divider is a part: its thickness and color are `--border-width` and `--color-border` on the divider.
+  - "go back to the neutral theme" takes back every setting, one undo each.
+  - Small caps, tabular numbers, balanced heading lines, "I can barely see the borders" and "hover does nothing visible" are read; tool questions about using, renaming, versions, files and hand edits get the command that answers them.
+  - A fully see-through picture is refused: it has no visible colors.
+
+- `astryx experimental theme editor how`: a question names a part by any theming target name in Core's catalog ("drawer", "date range input"), read from Core instead of a list of its own; phrases, groups and variant words stay as overrides. Near misses are corrected with the CLI's shared edit distance. (#11350)
+- `astryx experimental theme editor how`: "day" is light mode only in a mode phrase ("daytime", "day mode", "in the day"), so "the selected day in the calendar" or "all day" no longer scopes the change to light mode; a token typed in a later clause ("and set --shadow-high 0 4px 12px black") keeps its whole value. (#11350)
+- `astryx experimental theme`: the tenth pass of fixes. (#11350)
+
+  - `--state disabled` styles a disabled button, link or tab the way Core marks it (`aria-disabled` as well as `:disabled`). A focus or active state on a part that never takes it is refused.
+  - A spacing step on a group member set alone starts from the group's value. Refusals keep every scope flag they can (`--when`, `--state`, `--only`). A tab inside a value is white space.
+  - Undoing an exact property names the dial that applies after it. A `font var(...)` refusal suggests only a command that works. A name Windows reserves (`con`, `nul`, `com1`) is refused, with one that works.
+  - `compile` of an editor theme finds the theme from the file, from any folder, and never mistakes a `src/themes/<name>` folder for one. A damaged settings file is refused as a normal error. Its suggestions run as printed in JSON too.
+  - The refusal for list, add, use, remove and eject on an editor theme says how to use its module, and not to edit the generated themes module.
+
+- `astryx experimental theme`: the eleventh pass of fixes. (#11350)
+
+  - A local theme with the same name as an editor theme keeps the stable message. Compile guards only the editor's own files, also through a linked folder. The refusal for an editor theme shows a merge snippet that runs, with its stylesheet.
+  - A list where one theme goes names each theme. `corners more` at pill and `less` at square write nothing. A corner word on `buttons` or `surfaces` names the corners dial.
+  - A bad property value suggests a value the property takes (`no-wrap` → `nowrap`), in the same scope.
+  - `--state disabled` is refused on a part that is never marked disabled. `focus-within` is refused where nothing inside takes focus. `how <part>` lists only states `set` takes there.
+  - Option errors suggest a help command that runs as printed in JSON too.
+
+- `astryx experimental theme`: a build is judged by its content, never by file times, so a settings module saved again (a format-on-save, a checkout) no longer fails `compile --check`, and `preview app --theme` copies a build that matches its settings without building it again. `--state disabled` on a tab styles it the way Core marks it. (#11350)
+- `astryx experimental theme`: the third pass of fixes. (#11262)
+
+  - Saved settings are checked on load as `set` checks them, including where they apply. Each setting the editor no longer accepts is listed with a command that removes it. Each command works on its own, however many are listed. A setting that is not accepted never reaches the build.
+  - `corners more` and `less` read the base theme's radius in any unit. A saved corners value must be a rung or a pixel size.
+  - `undo <theme> base` and `undo <theme> mode` go back to what the theme was made with. `undo <theme> headings weight|tracking` removes that half. A value given to `undo` is compared as `set` reads it. `undo <theme> <thing> <part>` names `--on <part>`. A blank `--on`, `--when`, `--state` or `--mode` is refused.
+  - If a group setting hides a value, setting the value again moves it last, so it wins. A change that changes nothing writes nothing, the preview included. A newer `background` wins over an older `background-color` on every variant. A color on text, a heading or a link is refused, naming the text color token, because the color prop decides it. A quoted string may hold `<` or `>`, and a value may span lines.
+  - A `<theme>.theme.ts` that no longer extends its settings is refused, and `show` says so. A built-in theme's name is refused for `new`. A theme written by hand or ejected gets a clear refusal from the editor. In both cases the refusal gives a command that works.
+  - `show` rebuilds a damaged build and says so, and `show --section --png` photographs the section's own sheet. A damaged `palette.config.json` is made again from the settings, and its text is kept as `palette.config.damaged.json`. The preview route compiles for names like `b-2`. `preview.html` is the same on every build, and a change of letter case alone is not listed as a token change.
+  - Refusals show control characters as escapes. Suggested commands quote their words for any shell, and fill in real values. A misspelled property points to the property.
+  - In `experimental theme`, a moved or misspelled subcommand names where it is now. A bare group answers `--json` with its help. `--detail compact` and `--dense` print the status line alone. `compile` refuses the editor's own settings files and `--family` for an editor theme. `compile --check` checks an editor theme by the editor's rules, and waits for a change in progress. The editor's builds write the same headers as `compile`. Compile errors and stale checks name the experimental commands and never change text that you typed. `add`, `use`, `remove` and `eject` explain what an editor theme is.
+
+- `astryx experimental theme`: the fourth pass of fixes. (#11303)
+
+  - The theme lock is the release cache's lock, renewed while a command runs, so a long build is never taken over from another computer or container. The lock and the part-data cache come from the same node_modules.
+  - Corners keep the base theme's proportions between radii, so a step up never makes a container or page radius smaller. Going up the scale never makes any radius smaller, inner corners included. A step on a part moves to the next rung that part shows bigger or smaller. A group setting that covers an earlier part setting says so, and `show` marks the part setting as not shown.
+  - A word for a value names that value (`surfaces elevated` suggests raised). `how base` lists installed bases and names the rest with their install line. Values a property does not take (`display flexx`, `padding auto`) are refused. A plain value that replaces per-mode values says which it replaced.
+  - A base theme updated since the build is noticed, and the theme is built again. A folder where a file goes is refused. When React is missing, `show` still lists the settings and builds the theme, skips the pages and pictures, and names the install line. The editor's own temp files left by a stopped command are removed.
+
+- `astryx experimental theme`: the fifth pass of fixes. (#11303)
+
+  - A theme lock whose holder stopped renewing it is taken over after 30 seconds, whatever computer it names, and a lock renewed or taken a moment before that takeover is put back. `compile` holds an editor theme's lock while it builds or checks it. The editor's cache stays in the project's node_modules.
+  - A corners rung gives a part what it gives the radius token that part reads, pill keeps checkboxes square, and corner sizes written any way are read plainly. Spacing is refused where it shows nothing, and controls stay at least 24px.
+  - Saved settings on a part, state or variant that does not exist are refused with the undo that removes them. A damaged mode or base is fixed by setting it. Text contrast is measured for each variant of a part.
+  - A one-mode theme changes the build. A per-mode color keeps the other mode as a color. Big files beside a theme are never read. Undo after a gray color writes the same bytes. A render folder a stopped command left is removed once it is ten minutes old. A damaged palette config is copied aside only by a command that writes, and the result names the copy.
+
+- `astryx experimental theme`: review follow-ups. (#11303)
+
+  - A corners step on a part moves to the next rung that part shows bigger or smaller, counting a group setting that covers it, and `show` reports the radius the build writes.
+  - CSS values are checked against the property's grammar, so valid values such as `12pt`, `stretch` and `env()` are taken, a value that is only a `var()` is taken on any property, and values the browser would drop are refused, with a value that works.
+  - A color set for one mode on a part keeps the base theme's own value in the other mode. Text contrast reads the same values.
+  - Every saved setting the editor no longer accepts is named, and each suggested undo works while the others are still saved.
+  - The CLI now depends on `css-tree` for these checks. It adds about 2.09 MB unpacked to the install (css-tree 1.36 MB and its `mdn-data` 0.73 MB), and loads only when the editor checks a CSS value; no other command loads it, and startup is unchanged.
+  - `show` suggests installing React only when React is missing, and the busy message says how long the other command has held the lock.
+
+- `astryx experimental theme`: the sixth pass of fixes. (#11350)
+
+  - A theme lock is never taken from a command that still runs: not from one in a container on the same computer, and not from one that is only stopped. A command that lost its lock while stopped writes nothing more, and leaves the files as the command that took the lock left them.
+  - A theme whose settings were deleted or damaged, or left by a stopped `new`, is made again by `new` with its name. Your own files stay, the damaged file is kept, and `undo` steps back to the earlier settings.
+  - `show` rebuilds a cut-short stylesheet, and names a picture cut to the window. Demo images open from disk. Leftover temp files are removed.
+  - Refusals for a bad argument, a damaged or missing theme file, a busy theme and a missing project lead with a command that runs.
+
+- `astryx experimental theme`: the seventh pass of fixes. (#11350)
+
+  - Settings of the wrong shape are recovered like damaged ones: `new` with the theme's name makes it again and keeps the file. A `new` that recovers a folder changes nothing until every check has passed.
+  - A command that lost its lock while stopped puts nothing back and leaves the other command's files alone.
+  - Pill never makes a container or page less round, and a whole group of containers gets the container radius. A step reads every setting that reaches the part. Focus on a text input is named as focus-within.
+  - `show` works without React and says what it skipped. The sheet says when a change made it out of date. A variable that is not a design token needs a fallback, and a value that is only a variable is taken on any property.
+  - `compile --watch` builds an editor theme again.
+
+- `astryx experimental theme`: a theme an earlier version built keeps its corner radii until corners or the base change, and undo restores the radii a step was built with, exactly. Each undo step now records those radii; steps an older version wrote are still read. (#11350)
+- `astryx experimental theme`: the ninth pass of fixes. (#11350)
+
+  - The undo history is never deleted by a recovering `new`, and a stopped `new`'s leftover marker is removed by the next change.
+  - A theme typed as a file name (`t.theme.ts`) is refused with a suggestion of the theme it names. An undo that is refused suggests undos.
+  - Undoing a radius token rebuilds the corners without it. Inner corners never get smaller going up the scale. A step never moves a part the other way, starts from an exact border-radius, and for a variant starts from the part's plain setting.
+  - A `--state` that a part never takes (disabled on a card, which is never marked disabled) is refused and says what to do.
+  - `undo` names the setting that applies after it. Refusals suggest the nearest value that works.
+  - A command that lost its theme lock publishes no build output. A change that changes nothing rebuilds a build left stale.
+
+- `astryx experimental theme preview`: `add` refuses a folder whose URL the app's own route handler or page already serves, including a `route.ts` or `page.jsx` in the folder itself and a `route.ts` in a route group. `add --path` and `app` refuse Next's build folder (`.next/`, `out/` or the `distDir` next.config names), which the next build empties. On the Components page, a component as tall as the window scrolls in a bounded frame, and each cell is only as tall as its content. (#11350)
+- `astryx experimental theme preview add`: next.config is read from its syntax, not its text. Comments, keys inside other objects and constants are read as Next reads them. A `pageExtensions` list built from a spread no longer refuses the app; the result notes that only running the config tells. `basePath` and `distDir` are read the same way. (#11350)
+- `astryx experimental theme preview`: last fixes. (#11262)
+
+  - Install suggestions name npm when nothing says which package manager the app uses, never `npx add` or `npx install`.
+  - A change stopped before its route was written is undone, so `list` shows only the pages the route shows. A refusal says what finishing a stopped change wrote. `editor set` names a preview it left as it was while such a change waits. A damaged step record no longer leaves temp files behind. A move of an older preview's pages stopped part way is finished: the old copies go once they still hold what the move planned to remove.
+  - `remove --path` at a folder that holds the app suggests a plain `remove`.
+  - Suggested `--path` and `preview app` folders are written from the folder the command ran in.
+  - `preview app -app` says to put the folder after `--`.
+
+- `astryx experimental theme preview`: running prettier over the preview, with any options, no longer makes its files count as changed by hand. The check compares the code, not its formatting. An edit to code, a string or a comment still counts. (#11303)
+- `astryx experimental theme preview add`: only an optional catch-all route (`[[...slug]]`) in or at the preview's URL is refused; a required one (`[...slug]`) never serves the folder's own URL. A root layout inside nested route groups is found. `basePath` is read with comments left out, and one set from code is named in the URL to open. (#11350)
+- `astryx experimental theme preview`: safer refusals and recovery. (#11209)
+
+  - No refusal suggests deleting files: a damaged theme-preview.json, a page changed by hand, or a file in the way gets plain instructions (fix it by hand, rename it, or move it into a folder of its own) instead.
+  - `--path` at the project root, in `src/` or at the routes folder itself is refused: those folders hold the app. An older preview found there is named, with the remove that clears it.
+  - A whole `remove` stops, deleting nothing, when `page.tsx` was changed by hand, since it imports the pages.
+  - A formatter run no longer counts as a change by hand. `editor set` and `show` name the preview files they left as they were (`previewStale`).
+  - A recorded page whose file is gone is written again, or left out of the nav, so the route always builds. Moved pages get a hash. A failed write leaves no temp file or empty folder, and says which step failed. A read-only file keeps its mode.
+  - `preview app --theme` waits for other commands changing that theme, and its retry suggestion keeps `--theme`.
+
+- `astryx experimental theme`: with an older installed Core whose component docs have no playground defaults, the catalog now builds each component's demo from its doc's props. Required props get a sample, and a group gets three of the items its doc suggests. The contact sheet, the Components page, `how` answers and contrast checks keep every component. A part with its own doc, such as Heading, now shows on its own. An open overlay shows once on the pages people see, and a switched-off switch or checkbox is labeled for the state it shows. `preview list` marks a theme whose folder is gone (`themeMissing`). After a damaged step record, a page file in no record is named, never deleted. `--png` with a browser that is installed but fails now names the error. (#11350)
+- `astryx experimental theme preview`: removes that never touch project files, and previews only where Next serves them. (#11229)
+
+  - `remove` deletes only the route file, the record and recorded page files, and only when a recorded hash shows they are as the preview wrote them. Any other file the record names, and any file with no recorded hash, is kept and named.
+  - `add` refuses a folder that holds a package.json, a URL another page already serves, an app whose next.config leaves out `tsx` page files, `src/app/` while `app/` is what Next serves, and a folder outside the root layout. An app with its root layout in `[locale]/` gets the preview there.
+  - A template's needs come from its real imports, never words in comments or strings. A package the app does not name gets the command that adds it.
+  - A theme with no build is built only after every check passed, holding the theme's lock, with a note. An edit inside a string counts as a change by hand.
+  - `editor show` and `preview app` run when the lock folder cannot be written.
+  - A damaged record in a folder that holds the app names renaming the record. A record with a byte-order mark is read. `list` says when the theme is gone. Base themes count as package themes, installed or not. `--template` takes any case. `preview app` refuses `public/` and names Windows does not allow. An empty route group folder goes with the preview.
+
+- `astryx experimental theme preview`: a preview change stopped part way (a kill, a crash) is finished by the next `preview add` or `preview remove`. The change writes a step record before its first rename. The next command removes leftover temp files, records the preview's own files, keeps a page whose new file never landed at its old place, and says so in a note. (#11262)
+- `astryx experimental theme preview add`: in an app with a root layout in each route group, the preview is accepted under any of them, and a refusal names each one. (#11262)
+- `astryx experimental theme preview`: the Components page now uses the playground a doc gives a component in its own entry, so Stack shows its cards. A nav that opens over the page, such as MobileNav, is left out like a drawer. The Text cell now suggests the text color token, a command that works. A divider fills its row, and a one-pixel line no longer counts as showing nothing. For an app folder named like a flag, `preview app` prints `cd ./-k`. (#11350)
+- `astryx experimental theme preview add`: refuses a folder with an optional catch-all route (`[[...slug]]`) in it or at its URL, an app whose routes folder has no root layout anywhere, and a default or recorded preview folder that leads outside the project through a link. The URL to open now starts with the `basePath` next.config sets. When the app never imports Core's stylesheet, the result names the import line to add. When a theme loses its last color under a Colors page changed by hand, the page is kept and the palette module it imports becomes an empty stand-in, so the app still builds, and the result says so. A link inside the preview folder that leads outside is refused, naming the link. (#11350)
+- `astryx experimental theme preview add`: the refusal for a next.config whose `pageExtensions` leaves out `tsx` now suggests commands: the same add once `tsx` is listed, or `preview app` for a new app of its own. (#11350)
+- `astryx experimental theme editor` reads CSS from one source instead of its own lists. Property names and value grammar now come from css-tree. The neutral color's shades come from the shipped Neutral theme, and system fonts from the list `astryx theme build` already uses. (#11350)
+
+  - Six newer standard properties (`timeline-trigger-range` and its relatives) are accepted. An outline style in capitals (`SOLID`) is accepted.
+
+#### New Features
+
+- The integration file takes an optional `logo` (`{light, dark?}`, paths to images the package ships): the logo catalogs show beside the package name. When the integration file has no `logo`, the check uses package.json `marketplace.logo`. `astryx integration check` adds two notes that say what a catalog needs to list a package: `package_without_logo`, when the logo names no PNG, JPEG, WebP or shapes-only SVG of at most 512 KB that the package ships, and `package_without_example`, when the package has components but no example block. A package of themes, docs or codemods alone needs no example, and a package of icon sets alone draws neither note. Both are information only: they fail no check, with or without `--strict` or `--next`. The new "Get your package ready to list" section of `astryx docs authoring/ship/checks` shows how to add both. (#11278)
+- `integration verify` adds an information line, in text output only, after a successful pack whose manifest is `astryx.integration.ts`: the CLI transpiles it on first read on each machine, so shipping `astryx.integration.mjs` loads faster (pointing at `astryx docs authoring/ship/publishing keep-private-files-out`). It changes neither the result nor the exit code. (#11382)
+
+#### Fixes
+
+- In a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, `doctor`'s search catalog cache row still names the folder and its size and adds that such a run keeps no catalogs, as search and build gather every time there. The plain `astryx` command in the same project keeps them as usual. (#11299)
+- The code the CLI transpiles from TypeScript files (an integration's `astryx.integration.ts`, a TypeScript config, codemod or template doc) is kept in the CLI's per-user cache folder (`~/.cache/astryx/jiti` on Linux, `~/Library/Caches/astryx/jiti` on macOS), made for the user alone, instead of the system temp folder, which on Linux every account on a machine shares; on macOS, where that folder is already per-user, the copy now survives temp clean-ups. A folder another account owns or can write to is not used; the transpiled code is then kept in memory only. Emptying the temp folder no longer makes the next run transpile everything again. (#11360)
+- A catalog `search` or `build` kept between runs now records which inputs it is for and is used only for those, so a cache file copied under another entry's name is never used. (#11301)
+- A run under Yarn Plug'n'Play's loader, such as `yarn astryx`, no longer reads a search catalog that a plain `astryx` run kept: it gathers every time, as `doctor` says, since its modules resolve through Plug'n'Play, which a kept catalog's checks do not follow. (#11344)
+- The release cache's lock takeover checks the owner record of the lock it moved aside. A lock another command took in the moment between the check and the move is put back instead of removed, and the takeover waits for it. (#11313)
+- `astryx swizzle` reports `ERR_WRITE_FAILED` when its output path is a file on the minimum supported Node version. The original file stays unchanged, and the error identifies the failed write relative to the project instead of exposing a cleanup error. (#11186)
+- `theme build --out` warns, naming both sources, when it replaces the built output of another theme source that still exists; an output there is its own when its header names this source, or names a source that no longer exists. A build output's header names its source from the project root of the outputs, so a build from any folder writes the same outputs and `--check` agrees with it from every folder; the source a header names is matched exactly. Builds to the default paths beside the source are unchanged. An `--out` path that does not end in `.css` still builds, with a warning, and the import line the build prints names the file as written. Several themes that build the same outputs are refused before any of them writes. The next steps after `theme eject` and `theme template` quote their paths, and `theme template` on a file `--overwrite` would refuse names a free path instead (its receipt adds `overwritable` and `alternative`). A damaged generated theme module names how to rebuild it (delete it, then `theme add` each theme it held), a default that is not added names `theme use` with an added theme, and a folder where the module goes is refused in plain words. A `--family` member that is a plain object says so and names a build of it on its own. (#11346)
+- Every refusal of `theme use`, `theme remove`, `theme add`, `theme eject`, `theme template`, `theme targets`, `theme build` and `theme list` names a command that works. `theme use` and `theme remove` of a theme that is not added suggest `theme add <slug>` only when that theme exists, and `theme list` otherwise; removing the default names `theme use` with another added theme. Unknown slugs in `theme add` and `theme eject` suggest whole commands for the closest themes, `theme targets` with no match suggests the full list, and refused paths, flag combinations and loads suggest the command that runs. A theme that imports a package the app lacks names the install command in `theme build`, without absolute paths, and in `doctor`, followed by the rebuild command of any other stale local theme. `theme use` or `theme remove` of a theme that is not added and that more than one package provides names `theme add <slug> --package <package>` for each. `theme build --check` text lists the checked outputs, as the JSON does. (#11346)
+- `theme build` refuses one of its own outputs (`.css`, `.d.ts`, `.js`) or a file of a kind no theme module has (a plain `.css` file) before loading it, and names the theme source to build instead of a loader error. A missing input that is a bare theme name (`theme build brand`) or a path with backslashes suggests the theme source that exists. `theme eject` from a subfolder forks into the project's `src/themes`, as `theme list` and `theme add` read it, and reads a relative path from the working folder. `theme targets .astryx-switch` reads the class as the output prints it. The `experimental theme` copies no longer reword text you typed that holds `astryx theme …`. (#11323)
+- `theme build --watch` (and `experimental theme compile --watch`, whose help says so too) rebuilds when the theme source or any local file it imports changes (an ejected fork's palettes, a split theme), not only the entry file. `theme eject` refuses the local themes folder itself, which made `theme list` and `theme add` fail for every theme, and a folder in it named after another theme, which they skipped; it names the default target. A fork into a new folder in the local themes folder takes the folder's name: its entry, descriptor and export are renamed to the build's binding (`src/themes/acme-ocean` → `acmeOceanTheme.ts`, `acmeOceanTheme`), so `theme list`, `theme build` and `theme add` find it as that theme; a backslash in its path separates folders. `--package` on `theme add`, `theme list` and `theme eject` also takes the package a bundled theme is imported from (`@astryxdesign/theme-butter`), the name the CLI records and prints. A bundled theme whose package is missing names the install command and then the add. An unknown subcommand of `theme` or `experimental` suggests whole commands, closest first, and `theme editor` / `theme preview` point at `experimental theme editor` / `experimental theme preview`. The discovery refusals for a theme descriptor outside a theme folder, or in a folder with another name, say where to move the files. (#11375)
+
+#### Performance
+
+- `build` keeps its block picker's per-block vectors beside the kept search catalog and reads them back on a later run with the same catalog, instead of working them out on every call. Every answer is the same. (#11342)
+- Checking whether a kept search catalog is still fresh no longer builds an error for each absent path it looked up, so warm `search` and `build` start a little faster. Every answer is the same. (#11316)
+- `component`, `template`, `theme`, `discover` and `search` keep each integration's contribution-check results in the per-user cache folder beside search's catalogs, and read them back while every file, folder and environment variable the checks read is unchanged, instead of checking the integration again on every call. On a project with a large integration this takes about 0.2–0.3 s off each of these commands. `doctor`'s cache row names the commands that keep what they gather. (#11367)
+- `search` and `build` keep the catalog they gather in a private folder in the user's cache folder (`catalogs`, beside the release cache), and a later run uses it only while every file and folder it read, every module it loaded, and every environment variable it read (kept as a digest, never its value) are unchanged. Otherwise the run gathers fresh, exactly as before. A run with unchanged inputs answers in about a third of the time, with the same output. Only a published CLI keeps catalogs, and not where folder ownership cannot be checked (Windows) or under Yarn Plug'n'Play; `doctor` lists the folder and its size, and deleting the folder clears it. (#11251)
+- `search` keeps the index it builds over a kept catalog beside that catalog, so a later search over the same catalog reads the index back instead of building it again. The index is a function of the catalog's text, so it reads back exactly as built; it is keyed by that text and by the CLI code and files that build it (the CLI files the catalog depends on, the index's own code and the component cards), so an edit to an installed copy, as patch-package or a hand edit leaves it, is never answered from an index built before the edit. It is kept only where catalogs are kept. Every search prints the same answer. (#11300)
+- Contribution validation now loads `@babel/parser` only when it parses a contribution's source, so a run where nothing else loads the parser, such as `component <Name> --json` or `hook --list`, no longer loads it. Every command prints the same output. (#11256)
+- jiti now loads on first use instead of with every command, and `component --json` no longer loads the theme API, which only `component`'s text output needs, so commands that never need them start faster. Every command prints the same output. (#11242)
+- `search` (and `build`, which ranks with it) splits each name into words, lowercases each description, and builds each query term's word pattern once per run instead of once per candidate and term. Every result is the same. (#11243)
+- In a project with no integration (no Astryx config, not an integration itself, and no installed dependency that ships one), `component`, `template`, `theme` and `discover` no longer record their run for kept check results, so they skip that work entirely (about 15–40 ms each). (#11380)
+- The stored doc exports now cover Core's docs and the CLI's own command and API docs too, and a read parses only the docs it needs. Any doc file whose text matches a stored doc reads the stored exports, since such a doc's exports depend on its text alone. `search` and `build` print the same output faster. (#11240)
+- `astryx manifest` reads the manifest stored in the package when it is published, instead of loading every command to build it. The stored manifest is what the fully loaded CLI builds, and the publish step checks it is the same beside each package manager's lockfile, so while every command loads `manifest` prints the same output. A command whose module fails to load is listed in the published manifest under its normal entry, instead of being marked as failed; running that command still reports the failure. (#11233)
+- `doctor` reads its audit of the CLI's own authoring docs from a copy stored in the package when it is published, instead of parsing the CLI's authoring sources on every run. The copy is used only while the package version and every doc, type file and folder the audit reads are unchanged, so an installed CLI's `doctor` reports the same thing. (#11232)
+- `build` reads which packages a template Astryx ships imports from a copy stored when the package is published, instead of parsing the template's source on every call. Any other template, such as an integration's, is parsed as before, and every answer is the same. (#11315)
+- `upgrade --from` a version before 0.7.0 skips the theme-alias codemod on source files that name none of the removed theme targets, as it already skips other codemods on files they cannot change. Every run writes and prints the same. (#11265)
+- `upgrade` skips a codemod on a file it cannot change: a core codemod may declare the words a file must say for it to act, and a file that says none of them, holds no backslash, and parses, is left untouched without running the transform. A file that does not parse still reaches the transform, so it is reported as before. One codemod that checked every spread against every component now checks only components the file imports. Every run writes and prints the same. (#11249)
+
+#### Documentation
+
+- The calendars guide is titled "Calendars", and the docsite shows it under Internationalization in the sidebar, at the same address. (#11269)
+- Hook docs for `useThemeName`, so `astryx hook useThemeName` and `astryx search` return it, and a `useThemeName — Active theme` example block: the name of the theme wrapped around the caller. (#11235)
+- List's anatomy now names its optional header and drops a description part that List does not render. The `ref` docs now say that the ref reaches the list element, with or without a header. (#11277)
+- `astryx docs authoring/ship/publishing` recommends shipping `astryx.integration.mjs` rather than `.ts` (and `.mjs` doc files and codemods): the CLI transpiles each TypeScript file it loads on first read per machine. It also says a package with two manifests fails to load. (#11364)
+
+#### Other Changes
+
+- Internal: the scanner that finds template fixture references takes the replacement as a function, so the docsite's preview build finds those references the same way a copy does. No change to any command's output. (#11320)
+- On Windows, the CLI's test setup now rebuilds a stale Core. It started `pnpm` directly, which Windows installs as a `pnpm.cmd` batch file that cannot start without a shell, so the setup stopped with `spawnSync pnpm ENOENT` before any test ran. It now runs the build through `cmd.exe`. macOS and Linux run the same command as before. (#11051)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @astracat-bot
+- @cixzhang
+- @josephfarina
+- @nynexman4464
+- @popsiclelmlm
+- @prath47
+
+---
+
 # 0.7.14
 
 #### Experimental APIs

@@ -13,6 +13,7 @@ import {spawn, spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import {pathToFileURL} from 'node:url';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {REPO_ROOT} from '../test-utils/repo-root.mjs';
 import {packPublishedCli} from '../test-utils/pack-published-cli.mjs';
@@ -242,6 +243,30 @@ function issuesEntry(file) {
   } catch {
     return false;
   }
+}
+
+/**
+ * doctor's kept docs checks in a temp folder's cache folder, by check id.
+ * @param {string} tmp
+ * @returns {Map<string, number>} check id to inode
+ */
+function doctorEntries(tmp) {
+  const dir = path.join(tmp, CACHE_NAME);
+  /** @type {Map<string, number>} */
+  const out = new Map();
+  if (!fs.existsSync(dir)) return out;
+  for (const name of fs.readdirSync(dir)) {
+    const file = path.join(dir, name);
+    try {
+      const {value} = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (value && typeof value.id === 'string' && 'label' in value) {
+        out.set(value.id, fs.statSync(file).ino);
+      }
+    } catch {
+      // Not a kept check.
+    }
+  }
+  return out;
 }
 
 /**
@@ -1040,6 +1065,65 @@ Module._resolveFilename = function (request, parent, isMain, options) {
     }
   }, 120_000);
 
+  it("keeps doctor's docs checks, and a broken link shows on the very next run", () => {
+    const tmp = keptTmp('doctor-docs');
+    const other = makeProject();
+    try {
+      fs.writeFileSync(
+        path.join(other.widgets, 'astryx.integration.mjs'),
+        `export default { docs: './docs' };\n`,
+      );
+      fs.mkdirSync(path.join(other.widgets, 'docs'));
+      // The link lives in a module the doc imports, so an edit to that module
+      // alone must show too.
+      const target = path.join(other.widgets, 'docs', 'target.mjs');
+      const link = (/** @type {string} */ to) =>
+        fs.writeFileSync(target, `export const target = '${to}';\n`);
+      link('quick-start');
+      fs.writeFileSync(
+        path.join(other.widgets, 'docs', 'deploying.doc.mjs'),
+        `import {target} from './target.mjs';\nexport const docs = {type: 'generic', name: 'deploying', title: 'Deploying', description: 'How to deploy.', sections: [{title: 'Overview', content: [{type: 'prose', text: 'Ship it, then see {@link generic:' + target + '}.'}]}]};\n`,
+      );
+      const tree = (/** @type {{stdout: string}} */ r) =>
+        JSON.parse(r.stdout).data.checks.find(
+          (/** @type {{id: string}} */ c) => c.id === 'docs-tree',
+        );
+      const doctor = (/** @type {string} */ at) =>
+        tree(run(['doctor'], {tmp: at, cwd: other.dir}));
+      const fresh = doctor(freshTmp());
+      expect(doctor(tmp)).toEqual(fresh);
+      const kept = doctorEntries(tmp);
+      expect([...kept.keys()].sort()).toEqual([
+        'cli-docs',
+        'docs-progressive-disclosure',
+        'docs-tree',
+      ]);
+      // Read back, not checked again: the same three files.
+      expect(doctor(tmp)).toEqual(fresh);
+      expect(doctorEntries(tmp)).toEqual(kept);
+      // Broken by an edit to the imported module alone: the very next doctor
+      // reports it, as a fresh one does, and checks the docs tree again.
+      link('no-such-topic');
+      const broken = doctor(tmp);
+      expect(JSON.stringify(broken)).toContain('no-such-topic');
+      expect(broken).toEqual(doctor(freshTmp()));
+      const after = doctorEntries(tmp);
+      expect(after.get('docs-tree')).not.toBe(kept.get('docs-tree'));
+      // Fixed: the next doctor no longer reports it.
+      link('quick-start');
+      expect(doctor(tmp)).toEqual(fresh);
+    } finally {
+      fs.rmSync(other.dir, {recursive: true, force: true});
+    }
+  }, 180_000);
+
+  it('leaves a missing cache folder missing when doctor runs', () => {
+    const tmp = freshTmp();
+    run(['doctor'], {tmp});
+    run(['doctor'], {tmp});
+    expect(fs.existsSync(path.join(tmp, CACHE_NAME))).toBe(false);
+  }, 60_000);
+
   it('keeps the whole issue list, and finds a replacement problem after an edit', async () => {
     const tmp = keptTmp('replacement');
     const other = makeProject();
@@ -1160,6 +1244,176 @@ Module._resolveFilename = function (request, parent, isMain, options) {
       fs.rmSync(dir, {recursive: true, force: true});
     }
   }, 120_000);
+
+  it.skipIf(process.getuid?.() === 0)(
+    'lets doctor answer the same, silently, when its cache cannot be written',
+    () => {
+      const other = makeProject();
+      /** @param {string} tmp @param {string} [mode] */
+      const doctor = (tmp, mode) => {
+        const catalogs = path.join(tmp, CACHE_NAME);
+        fs.mkdirSync(catalogs, {recursive: true, mode: 0o700});
+        if (mode === 'folder') fs.chmodSync(catalogs, 0o500);
+        if (mode === 'tree') {
+          fs.chmodSync(catalogs, 0o500);
+          fs.chmodSync(path.dirname(catalogs), 0o500);
+        }
+        try {
+          const r = run(['doctor'], {tmp, cwd: other.dir});
+          return {
+            status: r.status,
+            stderr: r.stderr,
+            // The cache row counts what the folder holds, which a write
+            // earlier in the run adds to: the rest must match exactly.
+            stdout: r.stdout
+              .split(tmp)
+              .join('<tmp>')
+              .replace(/\(\d+ entr(?:y|ies), [\d.]+ MB\)/g, '(<count>)'),
+          };
+        } finally {
+          fs.chmodSync(path.dirname(catalogs), 0o700);
+          fs.chmodSync(catalogs, 0o700);
+        }
+      };
+      try {
+        const writable = doctor(freshTmp());
+        expect(writable.status).toBe(0);
+        // An unwritable cache folder, and a cache whose whole tree is read
+        // only: doctor neither fails nor warns, and says the same.
+        expect(doctor(freshTmp(), 'folder')).toEqual(writable);
+        expect(doctor(freshTmp(), 'tree')).toEqual(writable);
+      } finally {
+        fs.rmSync(other.dir, {recursive: true, force: true});
+      }
+    },
+    120_000,
+  );
+
+  it("does not depend on a variable's value when code only lists the names", () => {
+    const tmp = keptTmp('env-values');
+    const other = makeProject();
+    try {
+      // A TypeScript manifest: loading it transforms it, and the transform
+      // lists every variable's name (it reads only its own variables).
+      fs.rmSync(path.join(other.widgets, 'astryx.integration.mjs'));
+      fs.writeFileSync(
+        path.join(other.widgets, 'astryx.integration.ts'),
+        "const integration: {templates: string} = {templates: './templates'};\nexport default integration;\n",
+      );
+      const templates = path.join(other.widgets, 'templates');
+      fs.mkdirSync(templates, {recursive: true});
+      fs.writeFileSync(
+        path.join(templates, 'tally.doc.mjs'),
+        `export default {type: 'page', name: 'tally', description: 'Running totals, tallied by team.', category: 'Widget - Tally'};\n`,
+      );
+      fs.writeFileSync(
+        path.join(templates, 'tally.tsx'),
+        `export default function Page() { return null; }\n`,
+      );
+      const ask = QUERIES[0];
+      const at = (/** @type {string} */ value) =>
+        run(ask, {tmp, cwd: other.dir, env: {ASTRYX_TEST_TOKEN: value}});
+      const first = at('one');
+      const inodes = () =>
+        new Map([...entries(tmp)].map(([name, {ino}]) => [name, ino]));
+      const kept = inodes();
+      expect(kept.size).toBeGreaterThan(0);
+      // An unrelated variable with another value, as a tool sets per call:
+      // the kept catalog is read back.
+      expect(at('two')).toEqual(first);
+      expect(inodes()).toEqual(kept);
+    } finally {
+      fs.rmSync(other.dir, {recursive: true, force: true});
+    }
+  }, 120_000);
+
+  it('misses when a variable the gather reads has another value', () => {
+    const tmp = keptTmp('env-read');
+    const other = makeProject();
+    try {
+      // The manifest reads a variable's value to pick its templates.
+      fs.writeFileSync(
+        path.join(other.widgets, 'astryx.integration.mjs'),
+        "export default {templates: process.env.ASTRYX_TEST_ROOT === 'b' ? './templates-b' : './templates'};\n",
+      );
+      for (const [folder, description] of [
+        ['templates', 'Running totals, tallied by team.'],
+        ['templates-b', 'Grand totals, tallied by week.'],
+      ]) {
+        const dir = path.join(other.widgets, folder);
+        fs.mkdirSync(dir, {recursive: true});
+        fs.writeFileSync(
+          path.join(dir, 'tally.doc.mjs'),
+          `export default {type: 'page', name: 'tally', description: '${description}', category: 'Widget - Tally'};\n`,
+        );
+        fs.writeFileSync(
+          path.join(dir, 'tally.tsx'),
+          `export default function Page() { return null; }\n`,
+        );
+      }
+      const ask = ['template', '--list'];
+      const at = (/** @type {string} */ value, /** @type {string} */ where) =>
+        run(ask, {tmp: where, cwd: other.dir, env: {ASTRYX_TEST_ROOT: value}});
+      expect(at('a', tmp)).toEqual(at('a', freshTmp()));
+      const b = at('b', tmp);
+      expect(b.stdout).toContain('Grand totals');
+      expect(b).toEqual(at('b', freshTmp()));
+    } finally {
+      fs.rmSync(other.dir, {recursive: true, force: true});
+    }
+  }, 120_000);
+
+  it('hands a variable an inner kept gather read on to the gather around it', () => {
+    const tmp = keptTmp('env-nested');
+    const dir = fs.mkdtempSync(path.join(work, 'nested-'));
+    try {
+      // Two kept gathers of the installed CLI, one inside the other: the
+      // outer reads a file, the inner a variable.
+      const input = path.join(dir, 'outer.txt');
+      const script = path.join(dir, 'nested.mjs');
+      fs.writeFileSync(
+        script,
+        `import * as fs from 'node:fs';
+const {persistedGather, recordRun} = await import(${JSON.stringify(
+          pathToFileURL(
+            path.join(packed, 'foundation', 'fs', 'gather-cache.mjs'),
+          ).href,
+        )});
+const codec = {encode: v => v, decode: v => v};
+const answer = await recordRun(() =>
+  persistedGather(['nested-outer'], async () => {
+    const inner = await persistedGather(['nested-inner'], async () => process.env.ASTRYX_TEST_V, codec);
+    return inner + ':' + fs.readFileSync(${JSON.stringify(input)}, 'utf8');
+  }, codec),
+);
+process.stdout.write(answer);
+`,
+      );
+      const at = (/** @type {string} */ value) => {
+        const result = spawnSync(process.execPath, [script], {
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            XDG_CACHE_HOME: tmp,
+            XDG_CONFIG_HOME: userConfig(),
+            ASTRYX_TEST_V: value,
+          },
+        });
+        expect(result.status, result.stderr).toBe(0);
+        return result.stdout;
+      };
+      fs.writeFileSync(input, '1');
+      expect(at('a')).toBe('a:1');
+      // Only the outer input changes: the outer gathers again while the
+      // inner is read back.
+      fs.writeFileSync(input, '2');
+      expect(at('a')).toBe('a:2');
+      // Then the variable the inner read changes.
+      expect(at('b')).toBe('b:2');
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  }, 60_000);
 
   it('is skipped silently when its folder cannot be used', () => {
     fs.mkdirSync(path.join(work, 'tmp'), {recursive: true});

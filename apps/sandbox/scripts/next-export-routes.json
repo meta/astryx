@@ -256,6 +256,7 @@
     "/templates/CollapsibleSingleAccordion/",
     "/templates/CollapsibleWithoutCard/",
     "/templates/ColumnResizeHookUsage/",
+    "/templates/ColumnsVirtualizationHookUsage/",
     "/templates/CommandPaletteAsyncSearch/",
     "/templates/CommandPaletteAutoGrouped/",
     "/templates/CommandPaletteCustomFooter/",
