@@ -224,6 +224,14 @@ export interface ComponentAccessibilityThemeCoverage {
 }
 
 /**
+ * What an example is for. A `demo` example runs on its own, so a docs site may
+ * render it as a live preview. A `setup` example is code to read and copy, such
+ * as an app setup file, a server route, or a snippet that uses variables
+ * defined elsewhere; it is always shown as code only.
+ */
+export type ExampleKind = 'demo' | 'setup';
+
+/**
  * Code example for a component or sub-component.
  */
 export interface ComponentExampleDoc {
@@ -231,6 +239,8 @@ export interface ComponentExampleDoc {
   label?: string;
   /** TSX source for the example. */
   code: string;
+  /** `demo` (default) may render as a live preview; `setup` is code only. */
+  kind?: ExampleKind;
 }
 
 /**

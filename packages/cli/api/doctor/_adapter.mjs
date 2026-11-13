@@ -44,7 +44,13 @@ export {placeholderFixes} from '../../foundation/discovery/template-icons.mjs';
 export {unlistedIconSets} from '../../foundation/discovery/icon-set-discovery.mjs';
 import {elementPropOrigins} from '../../foundation/discovery/module-exports.mjs';
 import {cssImports} from '../../foundation/render/embedded-imports.mjs';
+import {satisfiesRange} from '../../foundation/env/semver.mjs';
 import * as path from 'node:path';
+import {
+  persistedGather,
+  recordedRun,
+} from '../../foundation/fs/gather-cache.mjs';
+import {getCliInvocation} from '../../foundation/env/package-manager.mjs';
 import {
   Project,
   availableComputerIntegrations,
@@ -66,9 +72,60 @@ export {
   readThemeState,
   resolveThemeModule,
 } from '../../foundation/config/theme-state.mjs';
-export {themeBuild, validateThemePrivateInputs} from '../theme/build/build.mjs';
+export {
+  missingThemePackage,
+  themeBuild,
+  validateThemePrivateInputs,
+} from '../theme/build/build.mjs';
+export {installCommandFor as packageInstallCommand} from '../../foundation/discovery/template-needs.mjs';
 export {resolveRecordedTheme} from '../theme/theme.mjs';
 export {collectUnloadedFonts} from '../theme/build/font-warning.mjs';
+
+// What the authoring-docs check reads (./_authoring-audit.mjs), reached only
+// through this adapter.
+export {
+  AUTHORING_AUDIT,
+  authoringAudit,
+  authoringAuditData,
+} from './_authoring-audit.mjs';
+
+/** A doctor check record, kept as it is. */
+const CHECK_CODEC = {
+  encode: (/** @type {any} */ check) => check,
+  decode: (/** @type {any} */ check) => check,
+  /** A check record: its id, label, status and message. */
+  valid: (/** @type {any} */ check) =>
+    check != null &&
+    typeof check === 'object' &&
+    typeof check.id === 'string' &&
+    typeof check.label === 'string' &&
+    typeof check.status === 'string' &&
+    typeof check.message === 'string',
+};
+
+/**
+ * A doctor check that reads only files, kept between runs through the kept
+ * gather (foundation/fs/gather-cache.mjs): a later `doctor` with every file,
+ * folder, module and environment variable it read unchanged reads the check
+ * back. Only the docs checks go through here; a check that depends on the
+ * time, the network or anything else the stamps do not see never does.
+ * @template T
+ * @param {{name: string, cwd: string, coreDir: string | null}} where - The
+ *   check, the project folder, and the Core folder the project loads.
+ * @param {() => Promise<T>} check
+ * @returns {Promise<T>}
+ */
+export function keptFileCheck({name, cwd, coreDir}, check) {
+  // Only a recorded run (a plain `doctor` from the bin) reads or keeps one: a
+  // hosted run names its commands its own way, so it always checks.
+  if (!recordedRun()) return check();
+  return persistedGather(
+    // With the command name the checks print commands with.
+    ['doctor-check', name, cwd, coreDir, getCliInvocation(cwd)],
+    check,
+    CHECK_CODEC,
+  );
+}
 
 /**
  * Package written to the generated app record for one discovered theme.
@@ -241,6 +298,31 @@ export function doctorElementPropOrigins(file, element) {
  */
 export function doctorStylesheetImports(css) {
   return new Set(cssImports(css));
+}
+
+/**
+ * The `@astryxdesign/core` range a package's peerDependencies declare, and
+ * whether it accepts `coreVersion` (spec:AST-017/FR12). The one rule every
+ * doctor check uses to compare a package with the installed Core:
+ * `theme-core-peers` for added theme packages, `integration-core-range` for
+ * every other loaded integration.
+ * @param {{peerDependencies?: Record<string, unknown>} | null | undefined} pkg
+ * @param {string | null | undefined} coreVersion
+ * Any declared string is judged by `satisfiesRange`, so an empty range
+ * accepts every Core; only a missing range is `null`.
+ * @returns {{range: string | null, accepts: boolean}}
+ */
+export function corePeerRange(pkg, coreVersion) {
+  const raw = pkg?.peerDependencies?.['@astryxdesign/core'];
+  const range = typeof raw === 'string' ? raw.trim() : null;
+  return {
+    range,
+    accepts:
+      range !== null &&
+      typeof coreVersion === 'string' &&
+      coreVersion !== '' &&
+      satisfiesRange(coreVersion, range),
+  };
 }
 
 /** @param {string} projectDir */

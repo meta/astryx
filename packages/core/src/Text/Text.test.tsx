@@ -678,14 +678,148 @@ describe('the truncation tooltip mounts on the first interaction', () => {
         </Text>,
       );
       expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
+      // Tab focus matches :focus-visible in a browser; jsdom does not model it
+      // for a tab.
+      const link = screen.getByRole('link', {name: LABEL});
+      const realMatches = link.matches.bind(link);
+      vi.spyOn(link, 'matches').mockImplementation((selector: string) =>
+        selector === ':focus-visible' ? true : realMatches(selector),
+      );
       await user.tab();
-      expect(screen.getByRole('link', {name: LABEL})).toHaveFocus();
+      expect(link).toHaveFocus();
       await waitFor(
         () => {
           expect(screen.queryByRole('tooltip', {hidden: true})).not.toBeNull();
         },
         {timeout: 3000},
       );
+    } finally {
+      restore();
+    }
+  });
+
+  // Chrome on Android focuses a focusable element between a press and its
+  // click. That focus is not :focus-visible, so it must not take the tap.
+  it.each([
+    [
+      'opens on the first tap on a button inside truncated text, though the tap focuses it first',
+      <button key="edit" type="button">
+        Edit
+      </button>,
+      'button',
+      'Edit',
+      false,
+      true,
+    ],
+    // A tapped text field matches :focus-visible, unlike a tapped button.
+    [
+      'opens nothing on a tap on a text field inside truncated text; the tap only focuses it',
+      <input key="note" aria-label="Note" />,
+      'textbox',
+      'Note',
+      true,
+      false,
+    ],
+  ] as const)('%s', async (_name, child, role, name, isFocusVisible, opens) => {
+    const {showPopover, restore} = withOverflowAndPopover();
+    try {
+      render(
+        <Text type="body" maxLines={1}>
+          {LABEL} {child}
+        </Text>,
+      );
+      // Let the Tooltip module load, as it does once text is truncated.
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 300));
+      });
+      const target = screen.getByRole(role, {name});
+      const realMatches = target.matches.bind(target);
+      vi.spyOn(target, 'matches').mockImplementation((selector: string) =>
+        selector === ':focus-visible' ? isFocusVisible : realMatches(selector),
+      );
+      fireEvent.pointerDown(target, {pointerType: 'touch'});
+      fireEvent.pointerUp(target, {pointerType: 'touch'});
+      act(() => target.focus());
+      fireEvent.click(target);
+      if (opens) {
+        await waitFor(() => expect(showPopover).toHaveBeenCalled(), {
+          timeout: 3000,
+        });
+      } else {
+        await act(async () => {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        });
+        expect(showPopover).not.toHaveBeenCalled();
+        expect(target).toHaveFocus();
+      }
+    } finally {
+      restore();
+    }
+  });
+
+  it('with the tooltip mounted, a tap on a text field opens nothing and focuses it; a tap on the text still toggles', async () => {
+    const {showPopover, hidePopover, restore} = withOverflowAndPopover();
+    try {
+      render(
+        <Text type="body" maxLines={1}>
+          <span>{LABEL}</span> <input aria-label="Note" />
+        </Text>,
+      );
+      const text = screen.getByText(LABEL);
+      fireEvent.pointerEnter(text, {pointerType: 'touch'});
+      tap(text);
+      await waitFor(() => expect(showPopover).toHaveBeenCalledTimes(1), {
+        timeout: 3000,
+      });
+      tap(text);
+      await waitFor(() => expect(hidePopover).toHaveBeenCalled(), {
+        timeout: 3000,
+      });
+
+      const field = screen.getByRole('textbox', {name: 'Note'});
+      fireEvent.pointerDown(field, {pointerType: 'touch'});
+      fireEvent.pointerUp(field, {pointerType: 'touch'});
+      act(() => field.focus());
+      fireEvent.click(field);
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      });
+      expect(showPopover).toHaveBeenCalledTimes(1);
+      expect(field).toHaveFocus();
+
+      tap(text);
+      await waitFor(() => expect(showPopover).toHaveBeenCalledTimes(2), {
+        timeout: 3000,
+      });
+    } finally {
+      restore();
+    }
+  });
+
+  it('mounts on a keyboard Tab to a text field inside the clamped text, and opens nothing', async () => {
+    const {showPopover, restore} = withOverflowAndPopover();
+    try {
+      const user = userEvent.setup();
+      render(
+        <Text type="body" maxLines={1}>
+          {LABEL} <input aria-label="Note" />
+        </Text>,
+      );
+      const field = screen.getByRole('textbox', {name: 'Note'});
+      // A field matches :focus-visible on any focus; jsdom does not model it.
+      const realMatches = field.matches.bind(field);
+      vi.spyOn(field, 'matches').mockImplementation((selector: string) =>
+        selector === ':focus-visible' ? true : realMatches(selector),
+      );
+      await user.tab();
+      expect(field).toHaveFocus();
+      await waitFor(
+        () => {
+          expect(screen.queryByRole('tooltip', {hidden: true})).not.toBeNull();
+        },
+        {timeout: 3000},
+      );
+      expect(showPopover).not.toHaveBeenCalled();
     } finally {
       restore();
     }

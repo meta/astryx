@@ -26,6 +26,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {gatherCacheSummary} from '../../foundation/fs/gather-cache.mjs';
 
 import {
   MIN_NODE_VERSION,
@@ -73,12 +74,11 @@ import {
   compileTopic,
   docsLinkProblems,
   guideEntry,
-  lowerTopic,
   overlayLanguages,
   projectTree,
 } from '../docs/_adapter.mjs';
 import {typedEdges} from '../docs/node/node.mjs';
-import {detailView, indexView} from '../../foundation/doc-compiler/lenses.mjs';
+import {detailView} from '../../foundation/doc-compiler/lenses.mjs';
 import {isExperimentalTreeNode} from '../../foundation/doc-compiler/tree.mjs';
 import {
   semverCompare,
@@ -100,6 +100,7 @@ import {
   COMPUTER_INSTALL_STEP,
 } from '../../foundation/agent-docs/computer-agent-text.mjs';
 import {
+  keptFileCheck,
   alignCommand,
   addCliCommandFor,
   computerAgentTextState,
@@ -116,6 +117,10 @@ import {
   outsideProject,
   releaseFacts,
   builtIntegrationPackages,
+  authoringAudit,
+  corePeerRange,
+  isLocalThemeOwner,
+  readThemeState,
 } from './_adapter.mjs';
 import {checkBuilt} from './built-checks.mjs';
 
@@ -139,6 +144,8 @@ import {checkBuilt} from './built-checks.mjs';
  * @property {string|null} coreDir - Resolved core package directory, or null.
  * @property {boolean} [ownCli] - Whether the project installs its own CLI;
  *   false means the copy that started the run answered it (spec AST-081 FR2).
+ * @property {string[]} [addedThemePackages] - Packages of the project's added
+ *   themes, which `theme-core-peers` checks against Core
  * @property {string|null} [projectCore] - The Core release the project names
  *   (installed, else locked, else declared), as the daily hint reads it.
  * @property {string|null} configPath - Resolved astryx.config.mjs path, or null.
@@ -186,6 +193,22 @@ function readPkg(pkgPath) {
     return JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
   } catch {
     return null;
+  }
+}
+
+/**
+ * Packages that own the project's added themes (local themes excluded); empty
+ * when the project manages no themes or its theme state cannot be read.
+ * @param {string} cwd
+ * @returns {string[]}
+ */
+function addedThemePackages(cwd) {
+  try {
+    return Object.values(readThemeState(cwd).themes ?? {}).filter(
+      owner => typeof owner === 'string' && !isLocalThemeOwner(owner),
+    );
+  } catch {
+    return [];
   }
 }
 
@@ -1005,6 +1028,69 @@ export function checkIntegrationIssues(ctx) {
 }
 
 /**
+ * Every loaded integration's `@astryxdesign/core` peer range admits the
+ * installed Core: a package's declared peer ranges define the Core versions it
+ * supports (spec:AST-017 FR12). A package made for another Core installs with
+ * only a package manager warning, and its components, themes and docs may not
+ * work. New, so it warns: a project that passed before keeps passing.
+ * Packages of added themes are left to `theme-core-peers` (spec:AST-050 FR11),
+ * which applies the same rule. Null when Core is not installed or no other
+ * loaded integration declares a Core range.
+ * @param {DoctorContext} ctx
+ * @returns {DoctorCheck | null}
+ */
+export function checkIntegrationCoreRange(ctx) {
+  const core = pkgVersion(ctx.coreDir);
+  if (!core || ctx.integrations == null) return null;
+  // `theme-core-peers` already judges each added theme package by the same
+  // rule (`corePeerRange`), with a fix that keeps the theme setup working.
+  const reportedByThemeChecks = new Set(ctx.addedThemePackages ?? []);
+  /** @type {Array<{name: string, version: string | null, range: string, accepts: boolean}>} */
+  const declared = [];
+  for (const integration of ctx.integrations) {
+    if (integration.__loadError != null || !integration.__packageDir) continue;
+    const pkg = readPkg(path.join(integration.__packageDir, 'package.json'));
+    const name = typeof pkg?.name === 'string' ? pkg.name : integration.name;
+    if (reportedByThemeChecks.has(name)) continue;
+    const {range, accepts} = corePeerRange(pkg, core);
+    // An integration need not depend on Core; only a declared, non-empty range
+    // is a claim about which Core it supports.
+    if (range == null || range === '') continue;
+    declared.push({
+      name,
+      version: typeof pkg?.version === 'string' ? pkg.version : null,
+      range,
+      accepts,
+    });
+  }
+  if (declared.length === 0) return null;
+  const excluded = declared.filter(d => !d.accepts);
+  const label = 'Integrations support the installed Core';
+  if (excluded.length === 0) {
+    return {
+      id: 'integration-core-range',
+      label,
+      status: 'pass',
+      message: `${declared.length} loaded integration${declared.length === 1 ? ' supports' : 's support'} @astryxdesign/core ${core} (${nameIntegrations(declared)}).`,
+    };
+  }
+  return {
+    id: 'integration-core-range',
+    label,
+    status: 'warn',
+    message: `${excluded
+      .map(
+        d =>
+          `${d.name}${d.version ? `@${d.version}` : ''} supports @astryxdesign/core ${d.range}`,
+      )
+      .join(
+        '; ',
+      )}, but the project has ${core}. ${excluded.length === 1 ? 'Its' : 'Their'} components, themes and docs were made for another Core and may not work.`,
+    fix: `Install a release of ${excluded.length === 1 ? 'that package' : 'each package'} whose @astryxdesign/core range includes ${core}, or move the project to a Core in that range. When no such release exists, ask the package's owner for one.`,
+  };
+}
+
+/**
  * The project's icon sets (AST-084 FR17). Fails when `experimental.iconSet`
  * names a set, main or backup, that is not installed, that is installed but
  * withdrawn (with why), or that two packages ship under one name; and when
@@ -1308,30 +1394,6 @@ function nameTypes(names) {
 }
 
 /**
- * The section keys the field reference lists (`astryx docs
- * authoring/field-reference --index`), read the way that command reads them.
- * @returns {Promise<{keys: Set<string>} | {keys: null, error: string}>}
- */
-async function authoringTopicKeys() {
-  try {
-    const {AUTHORING_REFERENCE_ROUTE} =
-      await import('../../foundation/discovery/authoring-self-docs.mjs');
-    const catalog = DocsCatalog.fromBuiltins();
-    const node = (await projectTree(catalog)).get(AUTHORING_REFERENCE_ROUTE);
-    if (!node?.ref?.topicFile) {
-      return {keys: null, error: 'the docs tree has no field reference'};
-    }
-    const index = indexView(await lowerTopic(catalog, guideEntry(node)));
-    return {keys: new Set(index.sections.map(section => section.id))};
-  } catch (err) {
-    return {
-      keys: null,
-      error: err instanceof Error ? err.message : String(err),
-    };
-  }
-}
-
-/**
  * @param {Awaited<ReturnType<typeof import('../../foundation/discovery/authoring-surface.mjs').auditAuthoringSurface>>} surface
  * @returns {string[]}
  */
@@ -1386,12 +1448,7 @@ export async function checkAuthoringDocs(_ctx, options = {}) {
   const id = 'authoring-docs';
   const label = 'Authoring docs';
   try {
-    const {auditAuthoringSelfDocs} =
-      await import('../../foundation/discovery/authoring-self-docs.mjs');
-    const {auditAuthoringSurface} =
-      await import('../../foundation/discovery/authoring-surface.mjs');
-    const {root, sources} = options;
-    const audit = await auditAuthoringSelfDocs({root, sources});
+    const {audit, topic, surface: surfaceAudit} = await authoringAudit(options);
     const problems = [
       ...audit.unreachable.map(
         source =>
@@ -1405,19 +1462,13 @@ export async function checkAuthoringDocs(_ctx, options = {}) {
           `authoring section "${key}" is ${kilobytes(bytes)}, over the ${kilobytes(DOC_OUTPUT_BUDGET_BYTES)} one read may return`,
       ),
     ];
-    const topic =
-      options.topicKeys === undefined
-        ? await authoringTopicKeys()
-        : {keys: options.topicKeys};
     const surface = [
       ...('error' in topic
         ? [
             `\`${formatCliCommand('docs authoring/field-reference')}\` could not be read: ${topic.error}`,
           ]
         : []),
-      ...surfaceProblems(
-        await auditAuthoringSurface({root, sources, topicKeys: topic.keys}),
-      ),
+      ...surfaceProblems(surfaceAudit),
     ];
     if (problems.length + surface.length > 0) {
       return {
@@ -2213,6 +2264,24 @@ async function runComputerChecks(cwd) {
 }
 
 /**
+ * Where `search` and `build` keep their gathered catalog between runs, and
+ * how much it holds; and, in a run under Yarn Plug'n'Play's loader, that the
+ * run keeps none (runsUnderPnp). Left out of a checkout, which keeps none.
+ * @returns {DoctorCheck | null}
+ */
+export function checkGatherCache() {
+  const summary = gatherCacheSummary();
+  if (summary == null) return null;
+  const size = `${(summary.bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return {
+    id: 'gather-cache',
+    label: 'Kept catalog cache',
+    status: 'info',
+    message: `search, build, component, template, theme, discover and doctor keep what they gather (search's catalogs, each integration's check results, template discovery's records, integrations' theme records, and doctor's docs checks) in ${summary.dir} (${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, and deleting the folder clears it.`,
+  };
+}
+
+/**
  * Ordered list of synchronous check functions. Append here to add a check.
  * (checkConfig is async and is awaited separately by {@link runChecks}.)
  * A check that returns null does not apply to the project and is left out.
@@ -2226,12 +2295,14 @@ export const SYNC_CHECKS = [
   checkConfiguredIntegrations,
   checkProviderIdentity,
   checkIntegrationIssues,
+  checkIntegrationCoreRange,
   checkIconSets,
   checkIconPlaceholders,
   checkAgentDocs,
   checkPeerDeps,
   checkPackageManager,
   checkCliCommand,
+  checkGatherCache,
 ];
 
 /**
@@ -2415,6 +2486,7 @@ export async function runChecks(options = {}) {
     coreDir,
     ownCli: projectHasOwnCli(cwd),
     projectCore: projectCoreVersion(cwd),
+    addedThemePackages: addedThemePackages(cwd),
     configPath,
     integrations,
     docsCatalog,
@@ -2480,9 +2552,22 @@ export async function runChecks(options = {}) {
     );
   }
   checks.push(await checkAuthoringDocs(ctx));
-  checks.push(await checkCliDocs(ctx));
-  checks.push(await checkDocsTree(ctx));
-  checks.push(await checkDocsProgressiveDisclosure(ctx));
+  // The checks that read only files, each kept while every file it read is
+  // unchanged; the Core the project loads is part of what they read.
+  const where = {cwd, coreDir: coreDir ?? null};
+  checks.push(
+    await keptFileCheck({name: 'cli-docs', ...where}, () => checkCliDocs(ctx)),
+  );
+  checks.push(
+    await keptFileCheck({name: 'docs-tree', ...where}, () =>
+      checkDocsTree(ctx),
+    ),
+  );
+  checks.push(
+    await keptFileCheck({name: 'docs-progressive', ...where}, () =>
+      checkDocsProgressiveDisclosure(ctx),
+    ),
+  );
 
   const summary = {pass: 0, warn: 0, fail: 0, info: 0};
   for (const c of checks) summary[c.status] += 1;

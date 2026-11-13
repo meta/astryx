@@ -12,7 +12,7 @@ import {execFile} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {promisify} from 'node:util';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {
   themeEditHow,
   themeEditNew,
@@ -31,38 +31,25 @@ import {
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
 
-/** The packages the template pages import, so ranked pages can be added. */
-const APP_PACKAGES = {
-  name: 'app',
-  private: true,
-  type: 'module',
-  dependencies: {
-    '@heroicons/react': '*',
-    'lucide-react': '*',
-    recharts: '*',
-  },
-};
+import {withRealRenders} from '../../test-utils/theme-render-stub.mjs';
+import {
+  appPackages,
+  projectFiles,
+  refusal,
+} from '../../test-utils/theme-edit-fixture.mjs';
+// The page renders cost seconds and these tests read settings, builds and
+// files: a stand-in renders unless a test asks for the real thing.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
+
+const APP_PACKAGES = appPackages();
 
 /** @type {string} */
 let cwd;
-
-/** @param {string} rel */
-const read = rel => fs.readFileSync(path.join(cwd, rel), 'utf8');
-
-/** @param {() => Promise<unknown>} fn */
-async function refusal(fn) {
-  try {
-    await fn();
-  } catch (e) {
-    const err = /** @type {any} */ (e);
-    return {
-      code: err.code,
-      message: String(err.message),
-      run: (err.suggestions ?? []).map((/** @type {any} */ s) => s.name),
-    };
-  }
-  throw new Error('expected a refusal');
-}
+const {read} = projectFiles(() => cwd);
 
 beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-stress-', [
@@ -248,18 +235,24 @@ describe('how', () => {
       .flatMap((/** @type {any} */ x) => x.commands)
       .join('\n');
     expect(commands).toContain(
-      'color "var(--color-text-accent)" --on button --when variant:secondary',
+      "color 'var(--color-text-accent)' --on button --when variant:secondary",
     );
     expect(commands).toContain(
-      'background "#ffffff" --on button --when variant:secondary',
+      "background '#ffffff' --on button --when variant:secondary",
     );
-    expect(commands).not.toContain('color "#ffffff"');
+    expect(commands).not.toContain("color '#ffffff'");
   });
 });
 
 describe('preview pages', () => {
   it('leaves app frames out of a description and says what it matched', async () => {
     fs.mkdirSync(path.join(cwd, 'src', 'app'), {recursive: true});
+    // A routes folder has a root layout, which loads Core's stylesheet.
+    if (!fs.existsSync(path.join(cwd, 'src/app/layout.tsx')))
+      fs.writeFileSync(
+        path.join(cwd, 'src/app/layout.tsx'),
+        "import '@astryxdesign/core/astryx.css';\nexport default function RootLayout({children}) { return children; }\n",
+      );
     const r = await themeEditPreviewAdd(
       'a light fintech landing page: announcement bar, nav with sign-in buttons, big two-tone headline, two CTA buttons, and a customer logo strip',
       {cwd, theme: 's'},
@@ -383,7 +376,7 @@ describe('round 3', () => {
     const note = r.data.notes.join(' ');
     expect(note).toContain('keep the base theme');
     expect(note).toContain('colored cards');
-    expect(note).toMatch(/set s info "#[0-9a-fA-F]{6}"/);
+    expect(note).toMatch(/set s info '#[0-9a-fA-F]{6}'/);
     await themeEditUndo('s', {cwd, thing: 'vibrancy'});
     await themeEditUndo('s', {cwd, thing: 'accent'});
   }, 120_000);
@@ -414,7 +407,7 @@ describe('round 3', () => {
     expect(b.join('\n')).toContain(
       'set s border-width 1px --on button --when variant:secondary',
     );
-    expect(b.join('\n')).toContain('color "var(--color-text-accent)"');
+    expect(b.join('\n')).toContain("color 'var(--color-text-accent)'");
     const fill = /** @type {any} */ (
       (
         await themeEditHow(
@@ -427,8 +420,8 @@ describe('round 3', () => {
     );
     expect([...fill.understood.aspects].sort()).toEqual(['background', 'text']);
     const f = fill.results.map((/** @type {any} */ x) => x.commands).flat();
-    expect(f.join('\n')).toContain('background "#e5e7eb" --on button');
-    expect(f.join('\n')).toContain('color "#111827" --on button');
+    expect(f.join('\n')).toContain("background '#e5e7eb' --on button");
+    expect(f.join('\n')).toContain("color '#111827' --on button");
   });
 
   it('gives every controlled sample a change handler, so a click never throws', () => {
@@ -505,7 +498,9 @@ describe('round 4', () => {
     await themeEditSet('s', 'corners', 'large', {cwd, on: 'containers'});
     const show = await themeEditShow('s', {cwd});
     expect(show.data.partValues[0]).toMatch(
-      /^corners = large on containers -> border-radius 12px on card, .*\(whole theme: --radius-container \d+px\)$/,
+      // What the build writes on a container (large, by the container
+      // radius), not the element's 12px.
+      /^corners = large on containers -> border-radius \d+px.*card.*\(whole theme: --radius-container \d+px\)$/,
     );
     const r = await themeEditUndo('s', {
       cwd,
@@ -529,7 +524,7 @@ describe('round 4', () => {
       await themeEditUndo('s', {cwd, thing});
     const n = await themeEditSet('s', 'neutral', '#64748b', {cwd});
     expect(n.data.notes.join(' ')).toMatch(
-      /the page background stays the base theme's \(#[0-9a-fA-F]{6} in light.*--color-background-body "#ffffff" --mode light/,
+      /the page background stays the base theme's \(#[0-9a-fA-F]{6} in light.*--color-background-body '#ffffff' --mode light/,
     );
     await themeEditUndo('s', {cwd, thing: 'neutral'});
   }, 240_000);
@@ -565,7 +560,7 @@ describe('round 4 follow-ups', () => {
     // The width and the color the question names, with no comment or
     // placeholder in the command.
     expect(lines.join('\n')).toContain(
-      'set s border "1px solid #9ca3af" --on inputs',
+      "set s border '1px solid #9ca3af' --on inputs",
     );
     expect(lines.join('\n')).not.toMatch(/#\s|<color>/);
   });
@@ -608,7 +603,11 @@ describe('round 4 follow-ups', () => {
         path: 'src/app/my preview',
       }),
     );
-    expect(r.run[0]).toMatch(/--theme s --path 'src\/app\/my preview'$/);
+    // The folder name is no plain URL segment: the way on names one that is,
+    // with the description quoted.
+    expect(r.run[0]).toMatch(
+      /add 'a weather widget' --theme s --path src\/app\/my-preview$/,
+    );
   }, 120_000);
 });
 
@@ -710,20 +709,33 @@ describe('review fixes', () => {
     }
   }, 240_000);
 
-  it('lets two commands run at once, and a saved change never exits 1', async () => {
-    await themeEditNew('cc', {cwd, like: 'neutral'});
-    const [a, b] = await Promise.all([
-      cli(['experimental', 'theme', 'editor', 'show', 's']),
-      cli(['experimental', 'theme', 'editor', 'set', 'cc', 'corners', 'small']),
-    ]);
-    expect([a.code, b.code]).toEqual([0, 0]);
-    expect(
-      fs
-        .readdirSync(path.join(cwd, 'themes'))
-        .filter(f => f.startsWith('.astryx-render')),
-    ).toEqual([]);
-    fs.rmSync(path.join(cwd, 'themes/cc'), {recursive: true, force: true});
-  }, 240_000);
+  it(
+    'lets two commands run at once, and a saved change never exits 1',
+    () =>
+      withRealRenders(async () => {
+        await themeEditNew('cc', {cwd, like: 'neutral'});
+        const [a, b] = await Promise.all([
+          cli(['experimental', 'theme', 'editor', 'show', 's']),
+          cli([
+            'experimental',
+            'theme',
+            'editor',
+            'set',
+            'cc',
+            'corners',
+            'small',
+          ]),
+        ]);
+        expect([a.code, b.code]).toEqual([0, 0]);
+        expect(
+          fs
+            .readdirSync(path.join(cwd, 'themes'))
+            .filter(f => f.startsWith('.astryx-render')),
+        ).toEqual([]);
+        fs.rmSync(path.join(cwd, 'themes/cc'), {recursive: true, force: true});
+      }),
+    240_000,
+  );
 
   it("a one-mode theme leaves the other mode's settings out and names them", async () => {
     await themeEditNew('om', {
@@ -765,7 +777,9 @@ describe('review fixes', () => {
     const before = read('themes/hi/hi.settings.json');
     const u = await refusal(() => themeEditUndo('hi', {cwd}));
     expect(u.code).toBe('ERR_THEME_INVALID');
-    expect(u.message).toContain('delete themes/hi/hi.history.json');
+    expect(u.message).toContain(
+      'move themes/hi/hi.history.json out of the theme folder',
+    );
     expect(read('themes/hi/hi.settings.json')).toBe(before);
     const r = await themeEditSet('hi', 'spacing', 'roomy', {cwd});
     expect(r.data.notes.join(' ')).toContain('a new undo history starts');
@@ -843,8 +857,10 @@ describe('review fixes', () => {
     const line = show.data.partValues.find(x =>
       x.startsWith('corners = large on checks'),
     );
-    expect(line).toContain('--radius-inner');
-    expect(line).toContain('unknown for radio-indicator');
+    expect(line).toContain('--radius-inner 4px for checkbox-indicator');
+    // The radio list renders from its doc's playground, so its dot's
+    // token is known too.
+    expect(line).toContain('--radius-full 9999px for radio-indicator');
     await themeEditUndo('s', {cwd, thing: 'corners', on: 'checks'});
   }, 120_000);
 
