@@ -2068,6 +2068,36 @@ function keepShades(pal, kept) {
 }
 
 /**
+ * Control heights scaled with the spacing dial (a denser theme has shorter
+ * controls), each kept distinct and in order: smallest to largest, a
+ * control never under 24px (the smallest target a pointer can use
+ * comfortably, unless the theme starts below it), and each size above the
+ * one below it by at least its own step scaled, so two sizes never meet.
+ * @param {Array<[string, string]>} sizes token name and the theme's value
+ * @param {number} f the spacing rung's factor
+ * @returns {Array<[string, string]>} the tokens it writes, in px
+ */
+export function controlSizes(sizes, f) {
+  const px = sizes
+    .filter(([, v]) => /^[\d.]+px$/.test(String(v).trim()))
+    .map(([k, v]) => /** @type {[string, number]} */ ([k, parseFloat(v)]))
+    .sort((a, b) => a[1] - b[1]);
+  /** @type {Array<[string, string]>} */
+  const out = [];
+  let prev = null;
+  let prevOwn = null;
+  for (const [k, v] of px) {
+    let n = Math.max(Math.min(24, v), Math.round(v * f));
+    if (prev != null && prevOwn != null)
+      n = Math.max(n, prev + Math.max(1, Math.round((v - prevOwn) * f)));
+    out.push([k, `${n}px`]);
+    prev = n;
+    prevOwn = v;
+  }
+  return out;
+}
+
+/**
  * The settings, as a `defineTheme` object.
  * @param {Ctx} ctx
  * @param {ThemeData} data
@@ -2932,21 +2962,25 @@ export function compileTheme(ctx, data, base) {
       } else if (s.thing === 'spacing') {
         const f = SPACING.find(([n]) => n === s.value)?.[1] ?? 1;
         // The rungs scale the spacing the base theme starts from.
+        /** @param {string} k @param {string} nv */
+        const put = (k, nv) => {
+          if (parts.length) for (const t of parts) block(s, t)[k] = nv;
+          else putTok(k, nv);
+        };
         for (const [k, core] of Object.entries(
           /** @type {Record<string, string>} */ (TOKENS),
         )) {
           const v = base.light[k] ?? core;
-          let nv = null;
           if (/^--spacing-/.test(k) && /rem$/.test(v))
-            nv = `${Number((parseFloat(v) * f).toFixed(3))}rem`;
-          // A control never gets smaller than 24px, the smallest target a
-          // pointer can use comfortably.
-          if (/^--size-element-/.test(k) && /px$/.test(v))
-            nv = `${Math.max(Math.min(24, parseFloat(v)), Math.round(parseFloat(v) * f))}px`;
-          if (nv === null) continue;
-          if (parts.length) for (const t of parts) block(s, t)[k] = nv;
-          else putTok(k, nv);
+            put(k, `${Number((parseFloat(v) * f).toFixed(3))}rem`);
         }
+        for (const [k, nv] of controlSizes(
+          Object.keys(/** @type {Record<string, string>} */ (TOKENS))
+            .filter(k => /^--size-element-/.test(k))
+            .map(k => [k, base.light[k] ?? TOKENS[k]]),
+          f,
+        ))
+          put(k, nv);
       }
     } else if (s.source === 'token') {
       if (parts.length) for (const t of parts) putComp(s, t, s.thing, s.value);

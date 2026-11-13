@@ -171,4 +171,32 @@ describe('padding on real base themes', () => {
       /--astryx-card-padding:\s*5px/,
     );
   }, 240_000);
+
+  it('keeps control sizes apart and in order at every spacing step (parts41)', async ctx => {
+    if (unbuilt) {
+      console.warn(`skipped: ${unbuilt}`);
+      return ctx.skip();
+    }
+    await themeEditNew('sp', {cwd, like: 'neutral'});
+    const sizes = () => {
+      const css = fs.readFileSync(path.join(cwd, 'themes/sp/sp.css'), 'utf8');
+      return ['sm', 'md', 'lg'].map(n => {
+        const m = new RegExp(`--size-element-${n}:\\s*(\\d+)px`).exec(css);
+        return m ? Number(m[1]) : null;
+      });
+    };
+    for (const step of ['tight', 'compact', 'medium', 'roomy', 'spacious']) {
+      await themeEditSet('sp', 'spacing', step, {cwd});
+      const [sm, md, lg] = sizes();
+      if (step === 'medium' && sm == null) continue;
+      expect(sm, step).not.toBeNull();
+      expect(/** @type {number} */ (sm), step).toBeGreaterThanOrEqual(24);
+      expect(/** @type {number} */ (md), step).toBeGreaterThan(
+        /** @type {number} */ (sm),
+      );
+      expect(/** @type {number} */ (lg), step).toBeGreaterThan(
+        /** @type {number} */ (md),
+      );
+    }
+  }, 240_000);
 });
