@@ -119,7 +119,7 @@ import {doc as themePaletteGenerateFn} from '../../../api/theme/themePaletteGene
  * @property {string} group - The group's command path: `theme` or `experimental theme`.
  * @property {string} build - The build subcommand's name: `build` or `compile`.
  * @property {(err: import('../../../api/error.mjs').AstryxError, cwd: string) => import('../../../api/error.mjs').AstryxError | null} [explain] - A clearer refusal for this group, or null.
- * @property {(files: string[], options: {cwd: string, check?: boolean, family?: boolean}) => Promise<import('../../../api/error.mjs').AstryxError | null>} [preflight] - A refusal before a build starts, or null.
+ * @property {(files: string[], options: {cwd: string, check?: boolean, family?: boolean, iconsSpecifier?: string}) => Promise<import('../../../api/error.mjs').AstryxError | null>} [preflight] - A refusal before a build starts, or null.
  * @property {(files: string[], options: {cwd: string}) => Promise<() => Promise<void>>} [hold] - Locks held while a build or check runs; resolves to their release.
  * @property {(file: string, cwd: string) => {name: string, reason: string} | null} [missingSource] - For a source file that is not there, this group's way to write it again, or null.
  * @property {(options: {targetPath?: string, overwrite?: boolean, cwd?: string}) => import('../../../api/theme/theme.type.mjs').ThemeTemplateResponse} [template] - This group's template write, in place of `themeTemplate`.
@@ -979,7 +979,16 @@ function registerThemeCommands(theme, program, docs, words) {
               ? [
                   {
                     // The pattern stays unquoted: the shell expands it.
-                    name: `${getCliInvocation(process.cwd())} ${words.group} ${words.build} ${entry.file.replace(/['"]/g, '')}`,
+                    // The caller's mode follows it, quoted.
+                    name: `${getCliInvocation(process.cwd())} ${words.group} ${words.build} ${entry.file.replace(/['"]/g, '')}${[
+                      ...(options.out ? ['--out', options.out] : []),
+                      ...(options.iconsSpecifier
+                        ? ['--icons-specifier', options.iconsSpecifier]
+                        : []),
+                      ...(options.check ? ['--check'] : []),
+                    ]
+                      .map(w => ` ${quoteCommandArgument(w)}`)
+                      .join('')}`,
                     reason:
                       'globs are expanded by your shell; pass the pattern unquoted, or list the files',
                   },
@@ -1089,6 +1098,9 @@ function registerThemeCommands(theme, program, docs, words) {
                     ...(options.out && files.length === 1
                       ? ['--out', options.out]
                       : []),
+                    ...(options.iconsSpecifier
+                      ? ['--icons-specifier', options.iconsSpecifier]
+                      : []),
                     ...(options.check ? ['--check'] : []),
                   ],
                   'build each theme on its own',
@@ -1188,6 +1200,7 @@ function registerThemeCommands(theme, program, docs, words) {
         cwd: process.cwd(),
         check: options.check,
         family: Boolean(options.family),
+        iconsSpecifier: options.iconsSpecifier,
       });
       if (refused) return themeError(refused, words, buildFallback);
 

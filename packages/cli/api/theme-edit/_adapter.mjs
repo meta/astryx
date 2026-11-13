@@ -698,11 +698,23 @@ export function editorThemeRefusal(err, cwd) {
  * take an editor theme, and `--check` checks an editor theme by the editor's
  * own rules (waiting for a change in progress).
  * @param {string[]} files
- * @param {{cwd: string, check?: boolean, family?: boolean}} options
+ * @param {{cwd: string, check?: boolean, family?: boolean, iconsSpecifier?: string}} options
+ *   `check` and `iconsSpecifier` are kept in every compile a refusal
+ *   suggests
  * @returns {Promise<AstryxError | null>}
  */
-export async function editorCompileProblem(files, {cwd, check, family}) {
+export async function editorCompileProblem(
+  files,
+  {cwd, check, family, iconsSpecifier},
+) {
   const cwdRoot = projectRoot(cwd);
+  // The caller's mode, after the source: a check stays a check.
+  const tail = [
+    ...(iconsSpecifier ? ['--icons-specifier', iconsSpecifier] : []),
+    ...(check ? ['--check'] : []),
+  ]
+    .map(w => ` ${quoteCommandArgument(w)}`)
+    .join('');
   for (const file of files) {
     const at = editorThemeAt(cwdRoot, path.resolve(cwd, file));
     if (!at || !editorOwnFile(at.slug, file)) continue;
@@ -716,7 +728,7 @@ export async function editorCompileProblem(files, {cwd, check, family}) {
         `${slug} is a theme the editor made; compile it from the app root (${path.relative(cwd, root) || '.'}), where the editor builds it.`,
         [
           {
-            name: `cd ${quoteCommandArgument(path.relative(cwd, root) || '.')} && ${runLine(root, `experimental theme compile ${source}${check ? ' --check' : ''}`)}`,
+            name: `cd ${quoteCommandArgument(path.relative(cwd, root) || '.')} && ${runLine(root, `experimental theme compile ${source}${tail}`)}`,
             reason: 'do this instead',
           },
         ],
@@ -729,7 +741,7 @@ export async function editorCompileProblem(files, {cwd, check, family}) {
           {
             name: runLine(
               cwd,
-              `experimental theme compile ${quoteCommandArgument(path.relative(cwd, path.join(root, source)) || source)}`,
+              `experimental theme compile ${quoteCommandArgument(path.relative(cwd, path.join(root, source)) || source)}${tail}`,
             ),
             reason: 'do this instead',
           },
@@ -743,7 +755,7 @@ export async function editorCompileProblem(files, {cwd, check, family}) {
           {
             name: runLine(
               cwd,
-              `experimental theme compile ${quoteCommandArgument(path.relative(cwd, path.join(root, source)) || source)}`,
+              `experimental theme compile ${quoteCommandArgument(path.relative(cwd, path.join(root, source)) || source)}${tail}`,
             ),
             reason: 'do this instead',
           },

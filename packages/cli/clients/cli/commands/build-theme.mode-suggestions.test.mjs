@@ -150,3 +150,44 @@ describe('a write build refusal keeps --icons-specifier and quotes the source', 
     );
   });
 });
+
+describe('the glob and --family refusals keep the mode', () => {
+  it('a quoted glob stays unquoted, its flags follow quoted', async () => {
+    const r = await runCli(
+      [
+        '--json',
+        'theme',
+        'build',
+        'themes/*.mjs',
+        '--icons-specifier',
+        './icons.mjs',
+        '--check',
+      ],
+      {cwd: app},
+    );
+    expect(r.status).toBe(1);
+    const [first] = JSON.parse(r.stdout).suggestions;
+    expect(first.name).toMatch(
+      / theme build themes\/\*\.mjs --icons-specifier \.\/icons\.mjs --check$/,
+    );
+  });
+
+  it('--family without --family-key keeps --icons-specifier', async () => {
+    const r = await runCli(
+      [
+        '--json',
+        'theme',
+        'build',
+        '--family',
+        'themes/a.theme.mjs',
+        '--icons-specifier',
+        './icons.mjs',
+        '--check',
+      ],
+      {cwd: app},
+    );
+    expect(r.status).toBe(1);
+    const [first] = JSON.parse(r.stdout).suggestions;
+    expect(first.name).toMatch(/--icons-specifier \.\/icons\.mjs --check$/);
+  });
+});
