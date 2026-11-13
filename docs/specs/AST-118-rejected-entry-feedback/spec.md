@@ -24,6 +24,7 @@ affects_consumer_docs: [DateInput, DateTimeInput, TimeInput, NumberInput]
 {
   "paths": [
     "packages/core/src/DateInput/useTypedDate.ts",
+    "packages/core/src/Field/useEntryErrorReport.ts",
     "packages/core/src/DateInput/DateInput.tsx",
     "packages/core/src/DateInput/NativeDateField.tsx",
     "packages/core/src/DateTimeInput/**",
@@ -183,7 +184,11 @@ interface TimeInputEntryError {
   `formatValue` posts the committed number from its hidden input in every case,
   as it does there. The hidden input carries `name` until
   the person edits the kept text, or a new `value` or a pick replaces it; the
-  typed input then carries `name` again. Unreadable date text that Enter or blur
+  typed input then carries `name` again. A `value` that the caller passes in
+  the same update as the Enter or blur that reveals a rejection, as a caller
+  that restores its own value at that commit does, does not replace the kept
+  text: the text, its rejection, and its message stay, and a later new
+  `value` replaces it (DEC-14). Unreadable date text that Enter or blur
   kept is not pending typed text for `component:DateInput` FR16 and
   `component:DateTimeInput` FR10: the next Enter with no edit submits a
   surrounding form, and the hidden input posts the committed date. No member
@@ -221,7 +226,9 @@ interface TimeInputEntryError {
   another, is announced once, and the same message is not announced again. A
   new `value` from the caller, or a date or time the member accepts picked from
   a Calendar, sheet, or native picker, replaces the entry and clears its
-  rejection.
+  rejection, except a `value` that the caller passes in the same update as the
+  Enter or blur that reveals the rejection, which leaves the entry and its
+  rejection in place (FR4, DEC-14).
 - **FR7 — A caller status never hides a rejection behind a warning.** A
   `warning` or `success` caller status never replaces a rejection's message, on
   any member, with or without `onEntryErrorChange`, and a caller `error` status
@@ -247,7 +254,10 @@ interface TimeInputEntryError {
   `value` is the number or ISO time the text names, for `fractional` and
   `outOfRange`. Typing, Enter, blur, a new `value`, `min`, `max`, or
   `isIntegerOnly`, and disabling, which hides the rejection, each report a
-  changed rejection; an unchanged rejection never reports again; a field that
+  changed rejection; a `value` that the caller passes in the same update as
+  the Enter or blur that reveals a rejection changes no rejection, so it
+  reports nothing, not `null` (FR4, DEC-14); an unchanged rejection never
+  reports again; a field that
   unmounts while a reported rejection stands reports `null`. `TimeInput`'s
   native and sheet surfaces take no typed text, so they never report.
 - **FR9 — Enter commits every typed field.** Enter in the typed field of each
@@ -377,21 +387,23 @@ behavior made for accessibility conformance to FR53.
 Requirement gaps, each a WCAG 2.2 Level A mismatch that FR53 fixes unless it
 says otherwise:
 
-- FR1–FR3 gap: `NumberInput`, `TimeInput`, and `DateTimeInput`'s time segment
-  mark every draft that is not an accepted value invalid and announce it on
-  each keystroke, unfinished drafts included, such as `-`, or `1` with
-  `min={10}`.
+- FR1–FR3 gap: `TimeInput` and `DateTimeInput`'s time segment mark every
+  draft that is not an accepted value invalid and announce it on each
+  keystroke, unfinished drafts included.
 - FR4 gap (WCAG 2.2 3.3.1): a `TimeInput` or `DateTimeInput` time draft that
-  does not parse, or is out of range, reverts on blur; a `NumberInput` draft
-  that does not parse reverts on blur. Neither says so on screen.
-- FR5 gap (WCAG 2.2 1.4.1, 3.3.1): in a standalone field, `NumberInput`,
-  `TimeInput`, `DateTimeInput`'s time segment, and the native time controls
-  set `aria-invalid` and announce through a visually hidden region with no
-  visible message; the text only turns secondary.
-- FR7 gap: with a caller `status`, `NumberInput` and `TimeInput` announce the
-  rejection on every keystroke rather than once, and a `warning` or `success`
-  status stays shown over a rejection.
-- FR8 gap: `NumberInput` and `TimeInput` have no `onEntryErrorChange`.
+  does not parse, or is out of range, reverts on blur. It does not say so on
+  screen.
+- FR5 gap (WCAG 2.2 1.4.1, 3.3.1): in a standalone field, `TimeInput`,
+  `DateTimeInput`'s time segment, and the native time controls set
+  `aria-invalid` and announce through a visually hidden region with no visible
+  message; the text only turns secondary.
+- FR7 gap: with a caller `status`, `TimeInput` announces the rejection on
+  every keystroke rather than once, and a `warning` or `success` status stays
+  shown over a rejection.
+- FR8 gap: `TimeInput` has no `onEntryErrorChange`.
+- FR4, FR6 gap: `DateInput` drops kept date text and its rejection when the
+  caller passes a new `value` in the same update as the Enter or blur that
+  reveals the rejection.
 - FR9 gap: `TimeInput` takes no commit on Enter, and `DateTimeInput`'s time
   segment commits on Enter only while its preset-time list is open.
 - AR3 gap (WCAG 2.2 3.3.1), outside this fix: inside an InputGroup, a member's
@@ -562,6 +574,20 @@ stays an accessibility behavior fix under `spec:AST-017` FR53 (FR4).
 
 Rejected: the committed value's text in every case, because it changes what a
 released form posts, which `spec:AST-017` FR1 classes as breaking.
+
+### DEC-14 — A value passed at the revealing commit keeps the rejected entry
+
+**Reference:** `spec:AST-118/DEC-14`
+**Decider:** `nynexman4464`, `2026-11-12`
+
+A caller can pass a new `value` from the Enter or blur that reveals a
+rejection, as a live filter does when it restores the value it had before the
+edit. A field that took that `value` as a replacement would erase the text the
+commit just kept and discard the entry with no message (FR4, AR4). Keeping an
+invalid entry with a chance to correct it is preferred to removing it. A
+`value` passed in the same update as the revealing commit therefore leaves the
+entry, its rejection, and its message, and reports no change; a later new
+`value` replaces the entry (FR4, FR6, FR8).
 
 ## Open questions
 

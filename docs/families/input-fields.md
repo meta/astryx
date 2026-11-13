@@ -22,6 +22,7 @@ verified_by:
     packages/core/src/MultiSelector/MultiSelector.test.tsx,
     packages/core/src/Field/__tests__/SearchKeyboard.interaction.browser.spec.ts,
     packages/core/src/inputFontFloor.test.ts,
+    packages/core/src/Field/useEntryErrorReport.test.tsx,
   ]
 members:
   [
@@ -123,6 +124,14 @@ another implementation helper.
 - Shared primitives retain their own visual and accessibility ownership. In
   particular, InputClearButton, Spinner, Tooltip, FieldStatus, and Icon do not
   become member-specific APIs when composed into a field.
+- The internal hook `useEntryErrorReport`
+  (`packages/core/src/Field/useEntryErrorReport.ts`) owns the shared part of
+  FR15 for DateInput, DateTimeInput's date segment, and NumberInput: the status
+  a shown rejection takes over a caller `status`, the alert that announces a
+  message no shown status announces, and the `onEntryErrorChange` report
+  (`spec:AST-118` FR5, FR7, FR8). Each member passes its rejection, its
+  message, and whether a caller `error` status wins without the callback; when
+  an entry is rejected and what its message says stay with the member.
 - FieldStatus owns its direct `attached` and `detached` message-box
   presentations. Field owns composition with an input: it consumes `tooltip`
   before rendering FieldStatus and applies the member's supported placement
@@ -442,10 +451,10 @@ DEC-6 does not require unrelated components to add a new floor.
   yet; `spec:AST-099` lists each gap.
 - **Entry error behavior (FR14):** no member takes `entryErrorBehavior`, and
   FormLayout has no form default; `spec:AST-117` lists each gap.
-- **Rejected entries (FR15):** NumberInput, TimeInput, and DateTimeInput's
-  time segment mark unfinished drafts invalid and announce them on each
-  keystroke with no visible message, and unparsable drafts revert on blur;
-  and a native time rejection shows no message. Inside an InputGroup, a
+- **Rejected entries (FR15):** TimeInput and DateTimeInput's time segment
+  mark unfinished drafts invalid and announce them on each keystroke with no
+  visible message, unparsable drafts revert on blur, and a native time
+  rejection shows no message. Inside an InputGroup, a
   member's own rejection shows no visible message. `spec:AST-118` lists each
   gap.
 - **Verification coverage:** current unit tests prove composition, semantics, and
@@ -474,7 +483,7 @@ The exhaustive coverage obligation follows the membership and adoption tables.
 | FR12     | `Typeahead.test.tsx`, `BaseTypeahead.test.tsx`, `Tokenizer.test.tsx`, `Selector.test.tsx`, and `MultiSelector.test.tsx` cases for both attributes, with Enter keeping its member-owned effect; `SearchKeyboard.interaction.browser.spec.ts` on a touch-emulated phone, where the search input a tap focuses carries both | Typeahead; Tokenizer; Selector and MultiSelector search row; a phone viewport with touch emulation                                | A missing attribute, or an Enter whose effect changes with the label, fails                                                                                                                                                                                                                                                                |
 | FR13     | TBD (gap): the per-field keyboard focus tests and simulator evidence `spec:AST-099` FR9 names                                                                                                                                                                                                                            | each member FR13 covers, in the page, a sheet, a docked bar Core moves, a floating bar, and a bar with its own `translate`        | A focused field left under the keyboard in a scroller (including one inside a fixed container FR9 leaves to the app), a Core host, or a docked bar Core moves, or a public prop for the behavior; a field with no scroller between it and a floating, own-`translate`, or full-viewport host is the app's to position and is not a failure |
 | FR14     | TBD (gap): the entry error behavior suites `spec:AST-117` names                                                                                                                                                                                                                                                          | DateInput, DateTimeInput, TimeInput, and NumberInput under each value, standalone and in a FormLayout                             | A signal appears before commit under `'blur-or-enter'`, `'complete'` differs from the shipped behavior, or a form default outranks a field's own prop                                                                                                                                                                                      |
-| FR15     | TBD (gap): the completeness, commit, and message suites `spec:AST-118` names                                                                                                                                                                                                                                             | DateInput, DateTimeInput, TimeInput, and NumberInput, typed and native, standalone and grouped                                    | An unfinished entry is flagged, a commit drops rejected text, a rejection shows no message, or its signals part                                                                                                                                                                                                                            |
+| FR15     | `NumberInput.rejectedEntry.test.tsx`; TBD (gap) for DateInput, DateTimeInput, and TimeInput: the completeness, commit, and message suites `spec:AST-118` names                                                                                                                                                           | DateInput, DateTimeInput, TimeInput, and NumberInput, typed and native, standalone and grouped                                    | An unfinished entry is flagged, a commit drops rejected text, a rejection shows no message, or its signals part                                                                                                                                                                                                                            |
 
 ## Decision links
 

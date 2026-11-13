@@ -148,6 +148,7 @@ jobs:
     steps:
       - name: Check out the admission action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: .github/actions/ci-admission
           path: .ci-admission
@@ -195,6 +196,7 @@ jobs:
 
       - name: Check out the admission action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: .github/actions/ci-admission
           path: .ci-admission
@@ -399,6 +401,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
+        timeout-minutes: 10
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
@@ -476,6 +479,7 @@ jobs:
     steps:
       - name: Checkout merge-back candidate
         uses: actions/checkout@v7
+        timeout-minutes: 10
         with:
           fetch-depth: 0
 
@@ -586,6 +590,7 @@ jobs:
     steps:
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 3
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -643,6 +648,7 @@ jobs:
       # (spec:AST-030 FR13).
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -664,6 +670,7 @@ jobs:
         run: echo "Node-tooling PR — docsite generation is not an owned check"
 
       - uses: actions/checkout@v7
+        timeout-minutes: 8
         if: steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
 
       # Spec validation imports the canonical CLI discovery path, so the
@@ -792,6 +799,7 @@ jobs:
       NEXT_PUBLIC_DOCS_ACCESS_CHECK_ORIGIN: https://probe.example.test
     steps:
       - uses: actions/checkout@v7
+        timeout-minutes: 8
 
       - uses: ./.github/actions/setup
 
@@ -931,6 +939,7 @@ jobs:
       # everything is in scope when it cannot decide.
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -957,6 +966,7 @@ jobs:
       - name: Check out the change for the tests that read its records
         if: matrix.shard == 1 && steps.scope.outputs.spec_only == 'true'
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           fetch-depth: 2
 
@@ -987,6 +997,7 @@ jobs:
       # Two commits: a pull request's merge commit and its base parent, the
       # diff a scoped run follows.
       - uses: actions/checkout@v7
+        timeout-minutes: 8
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
         with:
           fetch-depth: 2
@@ -1109,6 +1120,7 @@ jobs:
       # everything is in scope when it cannot decide.
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -1130,6 +1142,7 @@ jobs:
       - name: Check out the change for the tests that read its records
         if: matrix.shard == 1 && steps.scope.outputs.spec_only == 'true'
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           fetch-depth: 2
 
@@ -1158,6 +1171,7 @@ jobs:
           pnpm test:node "${READERS[@]}"
 
       - uses: actions/checkout@v7
+        timeout-minutes: 8
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
         with:
           fetch-depth: 2
@@ -1249,6 +1263,7 @@ jobs:
     steps:
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 3
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -1290,6 +1305,7 @@ jobs:
         run: echo "No native Swift change in this scope."
 
       - uses: actions/checkout@v7
+        timeout-minutes: 8
         if: needs.native-swift-runner.outputs.applies == 'true'
 
       # The steps live in native-swift.sh, which is in the native Swift scope,
@@ -1325,6 +1341,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
+        timeout-minutes: 8
 
       - uses: ./.github/actions/setup
 
@@ -1431,6 +1448,7 @@ jobs:
 
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -1448,6 +1466,7 @@ jobs:
       # A release-branch pull request is spec-only by classification, but its
       # join still runs: it requires the release bump's own validation.
       - uses: actions/checkout@v7
+        timeout-minutes: 8
         if: steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true'
 
       - name: Require expected test-owner outcomes
@@ -1496,6 +1515,7 @@ jobs:
     steps:
       - name: Check out the decision script
         uses: actions/checkout@v7
+        timeout-minutes: 3
         with:
           sparse-checkout: |
             .github/scripts/run-labels.cjs
@@ -1540,6 +1560,7 @@ jobs:
       # everything is in scope when it cannot decide.
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -1564,6 +1585,7 @@ jobs:
       - name: Checkout
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           # Component evidence artifacts are named for and reviewed at the PR
           # head, so build their Storybook bytes from that exact tree rather
@@ -1987,6 +2009,7 @@ jobs:
       # everything is in scope when it cannot decide.
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -2008,6 +2031,7 @@ jobs:
       - name: Checkout
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
@@ -2113,6 +2137,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
@@ -2165,6 +2190,7 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
@@ -2220,6 +2246,7 @@ jobs:
       # Outside a pull request every audit applies in full.
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -2233,6 +2260,7 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
@@ -2359,6 +2387,7 @@ jobs:
       # pull request every audit applies in full.
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -2373,6 +2402,7 @@ jobs:
       - name: Checkout
         if: steps.scope.outputs.has_components == 'true'
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
@@ -2574,6 +2604,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
@@ -2716,6 +2747,7 @@ jobs:
     steps:
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 3
         with:
           sparse-checkout: |
             .github/actions/test-scope
@@ -2972,6 +3004,7 @@ jobs:
       # parent of the action, so the checkout's cone holds it).
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: |
             .github/actions/test-scope
@@ -3080,6 +3113,7 @@ jobs:
       - name: Check out the heavy-suite caps
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           path: .heavy-caps
           sparse-checkout: .github/actions/heavy-caps
@@ -3098,6 +3132,7 @@ jobs:
       - name: Checkout
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
@@ -3288,6 +3323,7 @@ jobs:
       # parent of the action, so the checkout's cone holds it).
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: |
             .github/actions/test-scope
@@ -3422,6 +3458,7 @@ jobs:
       - name: Check out the heavy-suite caps
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           path: .heavy-caps
           sparse-checkout: .github/actions/heavy-caps
@@ -3439,6 +3476,7 @@ jobs:
       - name: Checkout
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
@@ -3605,6 +3643,7 @@ jobs:
       # everything is in scope when it cannot decide.
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -3620,6 +3659,7 @@ jobs:
           echo "::notice title=Lab-only::Lab-only: Lab tests + Storybook build. This job's work is not required for a change only to the Lab package (spec:AST-030 FR26)."
 
       - uses: actions/checkout@v7
+        timeout-minutes: 8
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
 
       - name: Per-author heavy-suite caps
@@ -3689,6 +3729,7 @@ jobs:
       # Outside a pull request every audit applies in full.
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -3702,6 +3743,7 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v7
+        timeout-minutes: 8
 
       # Stable visual scope: Core and the non-private shipped themes take
       # part; canaryOnly packages do not. A change to the gate's probe fixture
@@ -3733,6 +3775,7 @@ jobs:
       - name: Check out the head's visual baseline
         if: steps.visual-scope.outputs.has_stable_visual == 'true' && steps.visual-scope.outputs.broad_stable_visual == 'true'
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           path: .head-visual-baseline
@@ -3820,6 +3863,7 @@ jobs:
       # Outside a pull request every audit applies in full.
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -3833,6 +3877,7 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v7
+        timeout-minutes: 8
 
       # Stable visual scope: Core and the non-private shipped themes take
       # part; canaryOnly packages do not. A change to the gate's probe fixture
@@ -3864,6 +3909,7 @@ jobs:
       - name: Check out the head's visual baseline
         if: github.event_name == 'pull_request' && steps.visual-scope.outputs.has_stable_visual == 'true'
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           path: .head-visual-baseline
@@ -4216,6 +4262,7 @@ jobs:
       # Outside a pull request every audit applies in full.
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -4229,6 +4276,7 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
@@ -4416,6 +4464,7 @@ jobs:
       # Outside a pull request every audit applies in full.
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -4429,6 +4478,7 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
@@ -4530,6 +4580,7 @@ jobs:
       # Outside a pull request every audit applies in full.
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 3
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -4542,6 +4593,7 @@ jobs:
           component-audit: 'true'
 
       - uses: actions/checkout@v7
+        timeout-minutes: 3
 
       - name: Download applicable RTL shard reports
         if: (steps.scope.outputs.has_rtl_components == 'true' || steps.scope.outputs.has_rtl_harness == 'true' || steps.scope.outputs.force_full_component_audits == 'true')
@@ -4587,6 +4639,7 @@ jobs:
       # decide a wide change.
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -4602,6 +4655,7 @@ jobs:
       # predates this check has none of its scripts at its own head.
       - name: Checkout
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           persist-credentials: false
 
@@ -4610,6 +4664,7 @@ jobs:
       # dropped a baseline entry would otherwise report that entry as new.
       - name: Check out the head's accessibility baseline
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           path: .head-baseline
@@ -4816,6 +4871,7 @@ jobs:
       # so the checkout's cone holds the marker).
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: |
             .github/actions/test-scope
@@ -4856,6 +4912,7 @@ jobs:
       - name: Check out the selection scripts
         if: steps.scope.outputs.applies == 'true'
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           persist-credentials: false
 
@@ -4944,6 +5001,7 @@ jobs:
       - name: Check out the head that built the Storybook
         if: steps.touched.outputs.contract_owners != '' || steps.specs.outputs.has_specs == 'true'
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
@@ -5038,6 +5096,7 @@ jobs:
     steps:
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 3
         with:
           sparse-checkout: |
             .github/actions/test-scope
@@ -5064,6 +5123,7 @@ jobs:
       - name: Check out the merge commit's sources
         if: steps.scope.outputs.applies == 'true'
         uses: actions/checkout@v7
+        timeout-minutes: 3
         with:
           sparse-checkout: |
             .github
@@ -5123,6 +5183,7 @@ jobs:
     steps:
       - name: Check out the workflow's scripts
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: .github/scripts
           path: .test-scope
@@ -5149,6 +5210,7 @@ jobs:
       # build.
       - name: Check out the head that built the Storybook
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
@@ -5259,6 +5321,7 @@ jobs:
     steps:
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 3
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -5289,6 +5352,7 @@ jobs:
       - name: Check out the planner
         if: steps.scope.outputs.applies == 'true'
         uses: actions/checkout@v7
+        timeout-minutes: 3
         with:
           persist-credentials: false
 
@@ -5389,6 +5453,7 @@ jobs:
       - name: Check out the scope action
         if: steps.leg.outputs.runs == 'true'
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: |
             .github/actions/test-scope
@@ -5406,6 +5471,7 @@ jobs:
       - name: Check out the head that built the Storybook
         if: steps.leg.outputs.runs == 'true'
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
