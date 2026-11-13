@@ -14,7 +14,11 @@ import {
   findHookDoc,
 } from '../../../foundation/discovery/hook-discovery.mjs';
 import {loadDocs} from '../../../foundation/discovery/component-loader.mjs';
-import {formatAccessibility, mdCell} from './component-format.mjs';
+import {
+  formatAccessibility,
+  formatBestPractices,
+  mdCell,
+} from './component-format.mjs';
 
 /**
  * Build a signature string from hook docs.
@@ -107,14 +111,7 @@ export function formatHookFull(docs) {
   if (desc) sections.push(desc + '\n');
 
   // Best Practices (same position as component format)
-  if (docs.usage?.bestPractices?.length) {
-    sections.push('## Best Practices\n');
-    for (const bp of docs.usage.bestPractices) {
-      const badge = bp.guidance ? '**Do:**' : "**Don't:**";
-      sections.push(`- ${badge} ${bp.description}`);
-    }
-    sections.push('');
-  }
+  sections.push(...formatBestPractices(docs.usage?.bestPractices));
 
   sections.push(...formatAccessibility(docs.usage?.accessibility));
 
@@ -161,14 +158,7 @@ export function formatHookCompact(docs, importPath) {
   }
 
   // Best Practices (matches component compact)
-  if (docs.usage?.bestPractices?.length) {
-    sections.push('## Best Practices\n');
-    for (const bp of docs.usage.bestPractices) {
-      const badge = bp.guidance ? '**Do:**' : "**Don't:**";
-      sections.push(`- ${badge} ${bp.description}`);
-    }
-    sections.push('');
-  }
+  sections.push(...formatBestPractices(docs.usage?.bestPractices));
 
   sections.push(...formatAccessibility(docs.usage?.accessibility));
 

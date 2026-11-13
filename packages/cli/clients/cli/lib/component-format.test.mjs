@@ -1,7 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect} from 'vitest';
-import {formatBrief, formatCompact, formatFull} from './component-format.mjs';
+import {
+  formatBestPractices,
+  formatBrief,
+  formatCompact,
+  formatFull,
+} from './component-format.mjs';
 
 describe('component accessibility guidance', () => {
   const docs = {
@@ -367,5 +372,33 @@ describe('example kind', () => {
     const out = formatBrief(docs, 'Widget');
     expect(out).toContain('<Widget label="Hi" />');
     expect(out).not.toContain('createWidgetStore');
+  });
+});
+
+describe('formatBestPractices', () => {
+  it("labels each run of Do and Don't items and keeps their order", () => {
+    const lines = formatBestPractices([
+      {guidance: true, description: 'Use one primary action.'},
+      {guidance: true, description: 'Write clear labels.'},
+      {guidance: false, description: 'Stack two primary buttons.'},
+      {guidance: true, description: 'Show progress.'},
+    ]);
+
+    expect(lines).toEqual([
+      '## Best Practices\n',
+      'Do:',
+      '- Use one primary action.',
+      '- Write clear labels.',
+      "Don't:",
+      '- Stack two primary buttons.',
+      'Do:',
+      '- Show progress.',
+      '',
+    ]);
+  });
+
+  it('prints nothing when there are no practices', () => {
+    expect(formatBestPractices([])).toEqual([]);
+    expect(formatBestPractices(undefined)).toEqual([]);
   });
 });

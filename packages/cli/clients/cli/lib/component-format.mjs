@@ -98,6 +98,29 @@ function formatPropsTable(props) {
 }
 
 /**
+ * Render best practices as runs of Do and Don't items. A label line starts
+ * each run of items with the same guidance, so every item keeps its place in
+ * the list and its guidance.
+ * @param {{guidance?: boolean, description: string}[] | undefined} practices
+ * @returns {string[]}
+ */
+export function formatBestPractices(practices) {
+  if (!practices?.length) return [];
+  const lines = ['## Best Practices\n'];
+  let label = '';
+  for (const bp of practices) {
+    const next = bp.guidance ? 'Do:' : "Don't:";
+    if (next !== label) {
+      lines.push(next);
+      label = next;
+    }
+    lines.push(`- ${bp.description}`);
+  }
+  lines.push('');
+  return lines;
+}
+
+/**
  * Render component-specific accessibility requirements.
  * @param {{name: string, description: string}[] | undefined} accessibility
  * @param {'##' | '####'} [heading]
@@ -357,14 +380,7 @@ export function formatFull(docs, options = {}) {
     sections.push('');
   }
 
-  if (docs.usage?.bestPractices?.length) {
-    sections.push('## Best Practices\n');
-    for (const bp of docs.usage.bestPractices) {
-      const badge = bp.guidance ? '**Do:**' : "**Don't:**";
-      sections.push(`- ${badge} ${bp.description}`);
-    }
-    sections.push('');
-  }
+  sections.push(...formatBestPractices(docs.usage?.bestPractices));
 
   sections.push(...formatAccessibility(docs.usage?.accessibility));
 
@@ -553,14 +569,7 @@ export function formatCompact(docs, componentName, importHint) {
     );
   }
 
-  if (docs.usage?.bestPractices?.length) {
-    sections.push('## Best Practices\n');
-    for (const bp of docs.usage.bestPractices) {
-      const badge = bp.guidance ? '**Do:**' : "**Don't:**";
-      sections.push(`- ${badge} ${bp.description}`);
-    }
-    sections.push('');
-  }
+  sections.push(...formatBestPractices(docs.usage?.bestPractices));
 
   sections.push(...formatAccessibility(docs.usage?.accessibility));
 
