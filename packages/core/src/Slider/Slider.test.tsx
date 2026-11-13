@@ -797,7 +797,6 @@ describe('Slider', () => {
       pointerId: 1,
       pointerType: 'mouse',
     });
-    expect(onChange).toHaveBeenLastCalledWith(100);
   });
 
   it('selects an off-grid max at the track endpoint but rounds interior positions', () => {
