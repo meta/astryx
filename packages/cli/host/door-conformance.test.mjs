@@ -272,7 +272,11 @@ describe.each(Object.entries(FOLDERS))('in %s', (_folder, setUp) => {
     examples.forEach(({cli}, index) => {
       runs.set(cli, {bin: results[2 * index], host: results[2 * index + 1]});
     });
-  }, 15 * 60_000);
+    // Each folder runs every example twice (bin and host entry), `limit` at a
+    // time: 4 on CI's 4-core runners. The whole file took 377 s on a loaded
+    // CI leg, so 10 minutes leaves a margin and still ends a run that hangs
+    // here, by this hook's name, before the leg's 15-minute job limit.
+  }, 10 * 60_000);
 
   it('runs every example', () => {
     expect(examples.length).toBeGreaterThan(100);
