@@ -31,6 +31,7 @@ import {useTableContext, mergeXStyle} from './useTableCellStyles';
 import {wrapInTableContextMenu} from './tableContextMenu';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
+import {tableStickyCellStyles} from './plugins/stickyColumns/useTableStickyColumns';
 
 /** Props for TableHeaderCell — `<th>` wrapper with context-aware styling */
 export interface TableHeaderCellProps extends BaseProps<HTMLTableCellElement> {
@@ -91,6 +92,13 @@ const headerDividerStyles = stylex.create({
   },
 });
 
+const stickyHeaderStyles = stylex.create({
+  cell: {
+    insetBlockStart: 0,
+    zIndex: 2,
+  },
+});
+
 const dividerColumnStyles = stylex.create({
   cell: {
     borderInlineEndWidth: {
@@ -147,6 +155,9 @@ export function TableHeaderCell({
     // Column dividers come from the shared builder (column axis only).
     if (ctx.dividers === 'columns' || ctx.dividers === 'grid') {
       cellStyles.push(dividerColumnStyles.cell);
+    }
+    if (ctx.hasStickyHeader) {
+      cellStyles.push(tableStickyCellStyles, stickyHeaderStyles.cell);
     }
   }
 

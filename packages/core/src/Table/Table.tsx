@@ -73,6 +73,8 @@ interface TableAppearanceProps<T extends Record<string, unknown>> extends Omit<
   isStriped?: boolean;
   /** Hover highlight on rows. @default false */
   hasHover?: boolean;
+  /** Keep header cells pinned while the surrounding scroll region moves. @default false */
+  hasStickyHeader?: boolean;
   /**
    * Vertical alignment for body row cells.
    * Controls `vertical-align` on `<td>` elements.
@@ -156,6 +158,11 @@ const scrollWrapperStyles = stylex.create({
     overflowX: 'auto',
     WebkitOverflowScrolling: 'touch',
   },
+  stickyHeaderIsolation: {
+    // Keep a pinned header's z-index inside the table's own stacking context;
+    // it must not rise above an AppShell navigation surface.
+    isolation: 'isolate',
+  },
   containerBleed: {
     marginInlineStart: 'calc(-1 * var(--container-padding-inline-start, 0px))',
     marginInlineEnd: 'calc(-1 * var(--container-padding-inline-end, 0px))',
@@ -208,6 +215,7 @@ const scrollWrapperStyles = stylex.create({
 const TableNameContext = createSharedContext<{
   label?: string;
   labelledBy?: string;
+  hasStickyHeader?: boolean;
 } | null>('TableNameContext', 1, null);
 TableNameContext.displayName = 'TableNameContext';
 
@@ -244,6 +252,8 @@ function TableScrollWrapper({
     axis: hasBlockViewport ? 'both' : 'inline',
     keyboardAccess: {owner: 'content'},
     overscroll: 'contain',
+    unrequestedOverflow:
+      tableName?.hasStickyHeader && !hasBlockViewport ? 'clip' : 'hidden',
   });
   // The spread below replaces className and style. Merge the plugin's instead.
   const {
@@ -289,6 +299,14 @@ function TableScrollWrapper({
   if (hasBlockViewport) {
     viewportProps.style = {...viewportProps.style, overscrollBehaviorY: 'auto'};
   }
+  if (tableName?.hasStickyHeader) {
+    viewportProps.className = [
+      viewportProps.className,
+      stylex.props(scrollWrapperStyles.stickyHeaderIsolation).className,
+    ]
+      .filter(Boolean)
+      .join(' ');
+  }
   return (
     <div {...viewportProps}>
       <div {...getContentProps<HTMLDivElement>()}>
@@ -331,6 +349,7 @@ function TableInner<T extends Record<string, unknown>>({
   dividers = 'rows',
   isStriped = false,
   hasHover = false,
+  hasStickyHeader = false,
   verticalAlign = 'middle',
   textOverflow: textOverflowProp,
   virtualization,
@@ -355,16 +374,29 @@ function TableInner<T extends Record<string, unknown>>({
       dividers,
       isStriped,
       hasHover,
+      hasStickyHeader,
       verticalAlign,
       textOverflow,
     }),
-    [density, dividers, isStriped, hasHover, verticalAlign, textOverflow],
+    [
+      density,
+      dividers,
+      isStriped,
+      hasHover,
+      hasStickyHeader,
+      verticalAlign,
+      textOverflow,
+    ],
   );
   const tableLabel = rest['aria-label'];
   const tableLabelledBy = rest['aria-labelledby'];
   const tableName = useMemo(
-    () => ({label: tableLabel, labelledBy: tableLabelledBy}),
-    [tableLabel, tableLabelledBy],
+    () => ({
+      label: tableLabel,
+      labelledBy: tableLabelledBy,
+      hasStickyHeader,
+    }),
+    [hasStickyHeader, tableLabel, tableLabelledBy],
   );
 
   return (

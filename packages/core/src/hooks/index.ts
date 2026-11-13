@@ -79,6 +79,7 @@ export type {
   ScrollAxisState,
   ScrollOverscroll,
   ScrollStickyContainment,
+  ScrollUnrequestedOverflow,
   ScrollKeyboardAccess,
   ScrollableAreaState,
   ScrollableElementProps,

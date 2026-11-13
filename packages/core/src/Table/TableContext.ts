@@ -23,6 +23,8 @@ export interface TableContextValue {
   dividers: 'rows' | 'columns' | 'grid' | 'none';
   isStriped: boolean;
   hasHover: boolean;
+  /** Whether header cells are pinned by the surrounding scroll region. */
+  hasStickyHeader?: boolean;
   verticalAlign: TableVerticalAlign;
   textOverflow: 'wrap' | 'truncate';
 }
