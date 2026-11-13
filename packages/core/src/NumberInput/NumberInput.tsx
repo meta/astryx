@@ -746,8 +746,7 @@ export function NumberInput({
   }
   const [isFocused, setIsFocused] = useState(false);
 
-  // The rejection that the field shows. A number has no fixed length, so a
-  // draft is complete only at commit, and only Enter or blur shows one.
+  // A number has no fixed length, so only Enter or blur shows a rejection.
   const [shownRejection, setShownRejection] =
     useState<NumberInputEntryError | null>(null);
   // While blur keeps a rejected draft, a hidden input posts the committed
