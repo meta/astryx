@@ -39,7 +39,11 @@ export const babelParse = (input, options) =>
 /** @returns {typeof import('@babel/core')} */
 export const babelCore = () => (core ??= require('@babel/core'));
 
-/** @returns {typeof import('jscodeshift').default} */
+/**
+ * Untyped here: jscodeshift ships no types, and this module is reached by
+ * type checks that do not load the CLI's ambient declaration for it.
+ * @returns {any}
+ */
 export const jscodeshift = () => (codeshift ??= require('jscodeshift'));
 
 /** @returns {typeof import('postcss-selector-parser')} */
