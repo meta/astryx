@@ -101,6 +101,7 @@ import {
 } from '../../foundation/agent-docs/computer-agent-text.mjs';
 import {
   keptFileCheck,
+  THEME_WIRING_CODEC,
   alignCommand,
   addCliCommandFor,
   computerAgentTextState,
@@ -2555,10 +2556,15 @@ export async function runChecks(options = {}) {
     if (check) checks.push(check);
     if (fn === checkVersionAlignment) {
       const appThemeChecks = await checkAppThemes(cwd);
-      checks.push(
-        checkThemes(cwd, appThemeChecks, await themeImportWiring(cwd)),
-        ...appThemeChecks,
+      // The wiring scan reads only files and modules (the app's source, the
+      // themes and the packages that declare them) and runs nothing, so it is
+      // kept like the docs checks.
+      const wiring = await keptFileCheck(
+        {name: 'theme-wiring', cwd, coreDir: coreDir ?? null},
+        () => themeImportWiring(cwd),
+        THEME_WIRING_CODEC,
       );
+      checks.push(checkThemes(cwd, appThemeChecks, wiring), ...appThemeChecks);
       checks.push(await checkConfig(ctx));
     }
   }
