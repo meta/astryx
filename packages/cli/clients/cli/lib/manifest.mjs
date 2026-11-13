@@ -190,6 +190,7 @@ function describeCommand(cmd, root, jsonSupported, base = null) {
       o => longFlag(o.flag) === longFlag(option.flag),
     );
     if (declared?.requires?.length) option.requires = [...declared.requires];
+    option.available = missingSteps(base ?? coreBase(), option.requires).length === 0;
   }
   for (const argument of entry.arguments) {
     const declared = (docs?.doc.args ?? []).find(a => a.name === argument.name);
@@ -297,15 +298,14 @@ export function storedManifest() {
 }
 
 /**
- * A stored manifest as a run on `base` reads it: each command's `available`
- * and the manifest's `base` follow that base. The stored manifest was built on
- * Core, so a run on Core reads it as it is.
+ * A stored manifest as a run on `base` reads it: each command's and option's
+ * `available` and the manifest's `base` follow that base, Core included.
  * @param {import('./manifest').CLIManifest} manifest
  * @param {import('../../../foundation/bases/resolve.mjs').ActiveBase | null} base
  * @returns {import('./manifest').CLIManifest}
  */
 export function rebaseManifest(manifest, base) {
-  if (base == null || base.core) return manifest;
+  const shown = base ?? coreBase();
   /** @param {import('./manifest').ManifestCommand[]} cmds @returns {import('./manifest').ManifestCommand[]} */
   const rebase = cmds =>
     cmds.map(cmd => {
@@ -313,13 +313,31 @@ export function rebaseManifest(manifest, base) {
       const available =
         subcommands && !cmd.requires?.length
           ? subcommands.some(sub => sub.available)
-          : missingSteps(base, cmd.requires).length === 0;
-      return {...cmd, ...(subcommands ? {subcommands} : {}), available};
+          : missingSteps(shown, cmd.requires).length === 0;
+      const options = (cmd.options ?? []).map(option => ({
+        ...option,
+        available: missingSteps(shown, option.requires).length === 0,
+      }));
+      return {...cmd, options, ...(subcommands ? {subcommands} : {}), available};
     });
   return {
     ...manifest,
     commands: rebase(manifest.commands),
-    base: {name: base.name, version: base.version, steps: [...base.steps]},
+    base: manifestBase(shown),
+  };
+}
+
+/**
+ * The manifest's `base`: the run's base and the steps it serves. On Core the
+ * version is the Core the run pairs with, as `meta.answeredBy` names it.
+ * @param {import('../../../foundation/bases/resolve.mjs').ActiveBase} base
+ * @returns {import('./manifest').CLIManifest['base']}
+ */
+function manifestBase(base) {
+  return {
+    name: base.name,
+    version: base.core ? answeredBy().core : base.version,
+    steps: [...base.steps],
   };
 }
 
@@ -354,11 +372,7 @@ export function buildManifest(program, opts = {}) {
     jsonSupported: [...jsonSupported].sort(),
     globalMode: GLOBAL_MODE,
     // The run's base and the steps it serves.
-    base: {
-      name: shown.name,
-      version: shown.core ? answeredBy().core : shown.version,
-      steps: [...shown.steps],
-    },
+    base: manifestBase(shown),
     // Flat index of every response `type` discriminator the CLI can emit,
     // keyed by command — lets an agent know what to expect back per call.
     responseTypes: Object.fromEntries(

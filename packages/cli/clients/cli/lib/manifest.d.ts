@@ -25,6 +25,9 @@ export interface ManifestOption {
   negate?: boolean;
   /** Platform steps the option cannot run without. */
   requires?: string[];
+  /** Whether the run's base serves the option; on every command option,
+   *  absent on the global options, which every base serves. */
+  available?: boolean;
 }
 
 /** A positional argument. */

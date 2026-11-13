@@ -296,6 +296,18 @@ export function refusesHereFirst(doc, cwd) {
   return doc?.outsideProject === 'refuse' && isOutsideProject(cwd);
 }
 
+/**
+ * Every step the commands below a group declare.
+ * @param {Command} group
+ * @returns {string[]}
+ */
+function stepsBelow(group) {
+  return childCommands(group).flatMap(child => [
+    ...(commandDocsOf(child)?.doc.requires ?? []),
+    ...stepsBelow(child),
+  ]);
+}
+
 /** The adapters the check loaded for the running command. */
 let checkedAdapters =
   /** @type {Record<string, Record<string, unknown>>} */ ({});
@@ -332,6 +344,22 @@ export async function checkRun(program, actionCommand) {
   if (!resolution.ok) refuseResolution(resolution);
   const base = /** @type {ActiveBase} */ (resolution.base);
   if (base.core) return;
+  // A group none of whose commands the base serves is a hidden name too.
+  if (!commandAvailable(actionCommand, base) && !doc?.requires?.length) {
+    const requires = [
+      ...new Set(stepsBelow(actionCommand).filter(step => !base.steps.includes(step))),
+    ];
+    refuseRequirement({
+      command: commandPath(actionCommand),
+      option: null,
+      argument: null,
+      requires,
+      missing: requires,
+      reason: 'not-declared',
+      module: null,
+      base: {name: base.name, version: base.version},
+    });
+  }
   const name = commandPath(actionCommand);
   const verdict = await checkRequirements(
     name,

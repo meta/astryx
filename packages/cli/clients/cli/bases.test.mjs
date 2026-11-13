@@ -284,7 +284,9 @@ describe('a stored manifest', () => {
         ]},
       ],
     });
-    expect(rebaseManifest(stored, coreBase())).toBe(stored);
+    const onCore = rebaseManifest(stored, coreBase());
+    expect(onCore.base.name).toBe('@astryxdesign/core');
+    expect(onCore.commands[0].subcommands.map(c => c.available)).toEqual([true, true]);
     const native = rebaseManifest(stored, {
       name: '@acme/native-ui', core: false, dir: null, version: '2.1.0', adapters: {}, steps: [],
     });
@@ -532,6 +534,13 @@ describe('a project whose only base is not Core', () => {
       expect(theme.stdout.trimEnd().split('\n').at(-1)).toBe(
         '6 commands hidden: the active base @acme/native-ui does not provide the steps they need.',
       );
+      const hiddenGroup = astryx(['--json', 'experimental', 'theme', 'editor'], dir);
+      expect(hiddenGroup.status).toBe(1);
+      expect(hiddenGroup.json().code).toBe('ERR_BASE_CAPABILITY');
+      const manifestOptions = astryx(['--json', 'manifest'], dir).json().data.commands
+        .find(c => c.name === 'template').options;
+      expect(manifestOptions.find(o => o.flag.includes('--skeleton')).available).toBe(false);
+      expect(manifestOptions.find(o => o.flag.includes('--list')).available).toBe(true);
       const groupJson = astryx(['--json', 'experimental', 'theme'], dir);
       expect(groupJson.json().data.commands.map(c => c.name)).not.toContain('compile');
       const bare = astryx(['--json', '--base', '@acme/nope'], dir);
