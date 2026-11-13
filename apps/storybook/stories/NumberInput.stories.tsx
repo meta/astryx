@@ -87,6 +87,11 @@ const meta: Meta<typeof NumberInput> = {
       control: false,
       description: 'Formats the committed value while the input is not focused',
     },
+    isGroupedWhileEditing: {
+      control: 'boolean',
+      description:
+        'Keeps locale digit grouping while the field is focused. Off by default.',
+    },
     isWheelEnabled: {
       control: 'boolean',
       description:
@@ -220,6 +225,73 @@ export const FormattedDisplay: Story = {
         style: 'currency',
         currency: 'USD',
       }).format(value),
+  },
+};
+
+export const GroupedWhileEditing: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'With isGroupedWhileEditing, focus keeps digit groups so large amounts stay readable while typing. The default still drops separators on focus. vi-VN groups with a full stop; en-US groups with a comma.',
+      },
+    },
+  },
+  render: () => {
+    const [viDefault, setViDefault] = useState<number | null>(1500000);
+    const [viGrouped, setViGrouped] = useState<number | null>(1500000);
+    const [enDefault, setEnDefault] = useState<number | null>(1500000);
+    const [enGrouped, setEnGrouped] = useState<number | null>(1500000);
+    return (
+      <div style={{display: 'flex', flexDirection: 'column', gap: 24}}>
+        <InternationalizationProvider locale="vi-VN">
+          <div style={{display: 'flex', flexDirection: 'column', gap: 16}}>
+            <NumberInput
+              label="Amount (vi-VN, default)"
+              description="Focus drops grouping: 1500000"
+              value={viDefault}
+              onChange={setViDefault}
+              formatValue={value =>
+                new Intl.NumberFormat('vi-VN').format(value)
+              }
+            />
+            <NumberInput
+              label="Amount (vi-VN, grouped while editing)"
+              description="Focus keeps grouping: 1.500.000"
+              value={viGrouped}
+              onChange={setViGrouped}
+              formatValue={value =>
+                new Intl.NumberFormat('vi-VN').format(value)
+              }
+              isGroupedWhileEditing
+            />
+          </div>
+        </InternationalizationProvider>
+        <InternationalizationProvider locale="en-US">
+          <div style={{display: 'flex', flexDirection: 'column', gap: 16}}>
+            <NumberInput
+              label="Amount (en-US, default)"
+              description="Focus drops grouping: 1500000"
+              value={enDefault}
+              onChange={setEnDefault}
+              formatValue={value =>
+                new Intl.NumberFormat('en-US').format(value)
+              }
+            />
+            <NumberInput
+              label="Amount (en-US, grouped while editing)"
+              description="Focus keeps grouping: 1,500,000"
+              value={enGrouped}
+              onChange={setEnGrouped}
+              formatValue={value =>
+                new Intl.NumberFormat('en-US').format(value)
+              }
+              isGroupedWhileEditing
+            />
+          </div>
+        </InternationalizationProvider>
+      </div>
+    );
   },
 };
 
