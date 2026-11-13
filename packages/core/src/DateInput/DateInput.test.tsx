@@ -9,8 +9,15 @@
  * SYNC: When DateInput.tsx changes, update tests to match new behavior
  */
 
-import {useState} from 'react';
-import {describe, it, expect, vi, beforeEach} from 'vitest';
+import {
+  Suspense,
+  startTransition,
+  use,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
+import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {
   render,
   screen,
@@ -21,7 +28,11 @@ import {
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {getButton, queryButton} from '../__tests__/fastRoleQueries';
-import {DateInput, type DateInputProps} from './DateInput';
+import {
+  DateInput,
+  type DateInputEntryError,
+  type DateInputProps,
+} from './DateInput';
 import {Icon} from '../Icon';
 import {InputGroup} from '../InputGroup';
 import {InputGroupText} from '../InputGroup/InputGroupText';
@@ -29,11 +40,44 @@ import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
 import {InternationalizationProvider} from '../i18n';
 import type {ISODateString} from '../utils';
+import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 
 function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {
   const {prose, component} = generateThemeCSS(theme);
   return [prose, component].filter(Boolean).join('\n\n');
 }
+// A transition that suspends for good: React renders its element, then keeps
+// the committed tree and never commits that render.
+const forever = new Promise<never>(() => {});
+function Forever(): null {
+  use(forever);
+  return null;
+}
+function Discardable({
+  children,
+  isPending = false,
+}: {
+  children: ReactNode;
+  isPending?: boolean;
+}) {
+  return (
+    <Suspense fallback={null}>
+      {children}
+      {isPending ? <Forever /> : null}
+    </Suspense>
+  );
+}
+async function discardRender(
+  rerender: (ui: ReactElement) => void,
+  ui: ReactElement,
+): Promise<void> {
+  await act(async () => {
+    startTransition(() => {
+      rerender(<Discardable isPending>{ui}</Discardable>);
+    });
+  });
+}
+
 describe('DateInput', () => {
   it('renders with label', () => {
     render(<DateInput label="Date" onChange={() => {}} />);
@@ -142,12 +186,14 @@ describe('DateInput', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it('sets aria-invalid="true" when typed input is unparseable', () => {
+  it('sets aria-invalid="true" on unparseable text at blur, not while typing', () => {
     render(<DateInput label="Date" onChange={() => {}} />);
 
     const input = screen.getByRole('combobox');
     fireEvent.change(input, {target: {value: '13/45/2024'}});
+    expect(input).not.toHaveAttribute('aria-invalid');
 
+    fireEvent.blur(input);
     expect(input).toHaveAttribute('aria-invalid', 'true');
   });
 
@@ -160,7 +206,7 @@ describe('DateInput', () => {
     expect(input).not.toHaveAttribute('aria-invalid');
   });
 
-  it('announces an alert message when typed input is invalid', () => {
+  it('shows unreadable text as the field status at blur, with an empty alert', () => {
     // Scope to the component's own container: the embedded Calendar uses the
     // shared `useAnnounce` hook, whose global polite/assertive live-region pair
     // (both mounted on document.body by any announce) would otherwise make a
@@ -169,10 +215,15 @@ describe('DateInput', () => {
 
     const input = screen.getByRole('combobox');
     fireEvent.change(input, {target: {value: '13/45/2024'}});
+    expect(within(container).getByRole('alert')).toHaveTextContent('');
+    expect(screen.queryByText('Invalid date')).not.toBeInTheDocument();
 
-    expect(within(container).getByRole('alert')).toHaveTextContent(
+    fireEvent.blur(input);
+    expect(container.querySelector('.astryx-field-status')).toHaveTextContent(
       'Invalid date',
     );
+    // The field status announces itself, so the field's alert stays empty.
+    expect(within(container).getByRole('alert')).toHaveTextContent('');
   });
 
   it('does not announce an alert message when input is valid', () => {
@@ -197,13 +248,14 @@ describe('DateInput', () => {
     fireEvent.change(screen.getByRole('combobox'), {
       target: {value: '13/45/2024'},
     });
+    fireEvent.blur(screen.getByRole('combobox'));
 
-    expect(within(container).getByRole('alert')).toHaveTextContent(
+    expect(container.querySelector('.astryx-field-status')).toHaveTextContent(
       'Ungültiges Datum',
     );
   });
 
-  it('reverts to previous value on blur when input is invalid', async () => {
+  it('keeps unreadable text on blur without committing it', async () => {
     const onChange = vi.fn();
     render(<DateInput label="Date" value="2026-01-25" onChange={onChange} />);
 
@@ -211,7 +263,8 @@ describe('DateInput', () => {
     fireEvent.change(input, {target: {value: 'not a date'}});
     fireEvent.blur(input);
 
-    expect(screen.getByDisplayValue('January 25, 2026')).toBeInTheDocument();
+    expect(input).toHaveValue('not a date');
+    expect(screen.getByText('Invalid date')).toBeInTheDocument();
     expect(onChange).not.toHaveBeenCalled();
   });
 
@@ -335,6 +388,66 @@ describe('DateInput', () => {
     fireEvent.change(input, {target: {value: '06/15/2026'}});
 
     expect(onChange).toHaveBeenCalledWith('2026-06-15');
+  });
+
+  it('keeps typed text when React discards a render with a value from outside', async () => {
+    const field = (label: string, value: ISODateString) => (
+      <DateInput label={label} value={value} onChange={() => {}} />
+    );
+    const {rerender} = render(
+      <Discardable>{field('Date', '2026-01-01')}</Discardable>,
+    );
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: '06/1'}});
+    expect(input).toHaveValue('06/1');
+
+    await discardRender(rerender, field('Date', '2026-03-21'));
+    // A committed render with the same value: nothing came from outside.
+    rerender(<Discardable>{field('Start date', '2026-01-01')}</Discardable>);
+
+    expect(input).toHaveValue('06/1');
+  });
+
+  it('reports a typed date once when React discards a render with a value from outside', async () => {
+    const onChange = vi.fn();
+    // The parent keeps its value: the typed date is reported, not accepted.
+    const field = (value: ISODateString) => (
+      <DateInput label="Date" value={value} onChange={onChange} />
+    );
+    const {rerender} = render(<Discardable>{field('2026-01-01')}</Discardable>);
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: '06/15/2026'}});
+    expect(onChange).toHaveBeenCalledExactlyOnceWith('2026-06-15');
+
+    await discardRender(rerender, field('2026-03-21'));
+    // The same date, typed again in the same typing session.
+    fireEvent.change(input, {target: {value: '6/15/2026'}});
+
+    expect(onChange).toHaveBeenCalledOnce();
+  });
+
+  it('keeps typed text when React discards a render that disables the field', async () => {
+    const onChange = vi.fn();
+    const field = (label: string, isDisabled: boolean) => (
+      <DateInput
+        label={label}
+        value="2026-01-01"
+        isDisabled={isDisabled}
+        onChange={onChange}
+      />
+    );
+    const {rerender} = render(
+      <Discardable>{field('Date', false)}</Discardable>,
+    );
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: '06/15/2026'}});
+    expect(onChange).toHaveBeenCalledOnce();
+
+    await discardRender(rerender, field('Date', true));
+    // A committed render, still enabled: the field was never re-enabled.
+    rerender(<Discardable>{field('Start date', false)}</Discardable>);
+
+    expect(input).toHaveValue('06/15/2026');
   });
 
   it('keeps a typed date that violates constraints and shows the bounds on blur', () => {
@@ -2095,5 +2208,1255 @@ describe('DateInput disabled theme state', () => {
     const {container} = render(<DateInput label="Date" onChange={() => {}} />);
     const root = container.querySelector('.astryx-date-input');
     expect(root).not.toHaveAttribute('data-disabled');
+  });
+});
+
+const afterEachCleanups: (() => void)[] = [];
+afterEach(() => {
+  afterEachCleanups.splice(0).forEach(cleanup => cleanup());
+});
+
+/**
+ * Records each text that the shared assertive live region shows, where Field
+ * announces an error status. Messages of one frame show joined.
+ */
+function recordAssertiveAnnouncements(): string[] {
+  const texts: string[] = [];
+  let last = '';
+  const observer = new MutationObserver(() => {
+    const text =
+      document.querySelector('[data-astryx-live-region="assertive"]')
+        ?.textContent ?? '';
+    if (text !== last) {
+      last = text;
+      if (text) {
+        texts.push(text);
+      }
+    }
+  });
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    characterData: true,
+  });
+  afterEachCleanups.push(() => observer.disconnect());
+  return texts;
+}
+
+/**
+ * A caller that restores the value it had when the edit began, at the Enter
+ * or blur that ends the edit, as a live filter does.
+ */
+function RestoringDateInput({
+  initialValue,
+  nextValue,
+  restoresOnEnter = true,
+  ...props
+}: Omit<DateInputProps, 'label' | 'value' | 'onChange'> & {
+  initialValue: ISODateString;
+  nextValue: ISODateString;
+  restoresOnEnter?: boolean;
+}) {
+  const [value, setValue] = useState<ISODateString | undefined>(initialValue);
+  const [editStartValue, setEditStartValue] = useState(value);
+  const restore = () => {
+    if (value !== editStartValue) {
+      setValue(editStartValue);
+    }
+  };
+  return (
+    <>
+      <DateInput
+        label="Due"
+        value={value}
+        onChange={setValue}
+        onFocus={() => setEditStartValue(value)}
+        onBlur={restore}
+        onKeyDown={event => {
+          if (event.key === 'Enter' && restoresOnEnter) {
+            restore();
+          }
+        }}
+        {...props}
+      />
+      <output data-testid="value">{value ?? ''}</output>
+      <button type="button" onClick={() => setValue(nextValue)}>
+        Replace
+      </button>
+    </>
+  );
+}
+
+describe('DateInput onEntryErrorChange', () => {
+  const OUT_OF_RANGE_MESSAGE = 'Enter a date on or before December 31, 2026';
+  const NONEXISTENT_MESSAGE = 'Enter a real date';
+
+  afterEach(() => {
+    __resetLiveRegionsForTest();
+    vi.unstubAllGlobals();
+  });
+
+  /** A form that words its own date errors from the reported kind. */
+  function WordedDateInput({
+    wording,
+    onEntryErrorChange,
+    ...props
+  }: Omit<DateInputProps, 'label'> & {
+    wording: (error: DateInputEntryError) => string | undefined;
+  }) {
+    const [entryError, setEntryError] = useState<DateInputEntryError | null>(
+      null,
+    );
+    const message = entryError != null ? wording(entryError) : undefined;
+    return (
+      <DateInput
+        label="Due"
+        {...props}
+        status={message != null ? {type: 'error', message} : props.status}
+        onEntryErrorChange={error => {
+          onEntryErrorChange?.(error);
+          setEntryError(error);
+        }}
+      />
+    );
+  }
+
+  it.each<
+    [string, Partial<DateInputProps>, string, boolean, DateInputEntryError]
+  >([
+    [
+      'unreadable',
+      {},
+      'tomorrowish',
+      true,
+      {kind: 'unreadable', text: 'tomorrowish'},
+    ],
+    ['incomplete', {}, '1/5/2', true, {kind: 'incomplete', text: '1/5/2'}],
+    [
+      'nonexistent',
+      {},
+      '02/31/2026',
+      false,
+      {kind: 'nonexistent', text: '02/31/2026'},
+    ],
+    [
+      'outOfRange',
+      {max: '2026-12-31'},
+      '01/05/2027',
+      false,
+      {
+        kind: 'outOfRange',
+        text: '01/05/2027',
+        date: '2027-01-05',
+      },
+    ],
+    [
+      'unavailable',
+      // 2026-03-14 is a Saturday.
+      {dateConstraints: [date => date.getDay() !== 0 && date.getDay() !== 6]},
+      '03/14/2026',
+      false,
+      {
+        kind: 'unavailable',
+        text: '03/14/2026',
+        date: '2026-03-14',
+      },
+    ],
+  ])('reports a %s rejection', (_kind, props, text, needsCommit, expected) => {
+    const onEntryErrorChange = vi.fn();
+    render(
+      <DateInput
+        label="Due"
+        onChange={() => {}}
+        onEntryErrorChange={onEntryErrorChange}
+        {...props}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: text}});
+    if (needsCommit) {
+      expect(onEntryErrorChange).not.toHaveBeenCalled();
+      fireEvent.blur(input);
+    }
+    expect(onEntryErrorChange).toHaveBeenCalledTimes(1);
+    expect(onEntryErrorChange).toHaveBeenLastCalledWith(expected);
+  });
+
+  it('reports null when the rejection ends, by typing or by a calendar pick', () => {
+    const onEntryErrorChange = vi.fn();
+    render(
+      <DateInput
+        label="Due"
+        value={'2026-03-20'}
+        onChange={() => {}}
+        onEntryErrorChange={onEntryErrorChange}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: '02/31/2026'}});
+    fireEvent.change(input, {target: {value: '02/28/2026'}});
+    expect(onEntryErrorChange.mock.calls).toEqual([
+      [{kind: 'nonexistent', text: '02/31/2026'}],
+      [null],
+    ]);
+
+    fireEvent.change(input, {target: {value: '02/31/2026'}});
+    fireEvent.click(getButton('Open calendar'));
+    fireEvent.click(getButton(/March 15, 2026/));
+    expect(onEntryErrorChange).toHaveBeenCalledTimes(4);
+    expect(onEntryErrorChange).toHaveBeenLastCalledWith(null);
+  });
+
+  it('reports a rejection that a new max starts on kept text, and its end', () => {
+    const onEntryErrorChange = vi.fn();
+    const {rerender} = render(
+      <DateInput
+        label="Due"
+        onChange={() => {}}
+        max={'2027-12-31'}
+        onEntryErrorChange={onEntryErrorChange}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: '01/05/2027'}});
+    expect(onEntryErrorChange).not.toHaveBeenCalled();
+
+    rerender(
+      <DateInput
+        label="Due"
+        onChange={() => {}}
+        max={'2026-12-31'}
+        onEntryErrorChange={onEntryErrorChange}
+      />,
+    );
+    expect(onEntryErrorChange).toHaveBeenCalledTimes(1);
+    expect(onEntryErrorChange).toHaveBeenLastCalledWith({
+      kind: 'outOfRange',
+      text: '01/05/2027',
+      date: '2027-01-05',
+    });
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+
+    rerender(
+      <DateInput
+        label="Due"
+        onChange={() => {}}
+        max={'2027-12-31'}
+        onEntryErrorChange={onEntryErrorChange}
+      />,
+    );
+    expect(onEntryErrorChange).toHaveBeenCalledTimes(2);
+    expect(onEntryErrorChange).toHaveBeenLastCalledWith(null);
+  });
+
+  it('reports null while the field is disabled, and the rejection again once editable', () => {
+    const onEntryErrorChange = vi.fn();
+    const field = (isDisabled: boolean) => (
+      <DateInput
+        label="Due"
+        onChange={() => {}}
+        isDisabled={isDisabled}
+        onEntryErrorChange={onEntryErrorChange}
+      />
+    );
+    const {rerender} = render(field(false));
+    fireEvent.change(screen.getByRole('combobox'), {
+      target: {value: '02/31/2026'},
+    });
+    rerender(field(true));
+    rerender(field(false));
+    expect(onEntryErrorChange.mock.calls).toEqual([
+      [{kind: 'nonexistent', text: '02/31/2026'}],
+      [null],
+      [{kind: 'nonexistent', text: '02/31/2026'}],
+    ]);
+  });
+
+  it('reports null when a new value drops the typed text', () => {
+    const onEntryErrorChange = vi.fn();
+    const {rerender} = render(
+      <DateInput
+        label="Due"
+        onChange={() => {}}
+        onEntryErrorChange={onEntryErrorChange}
+      />,
+    );
+    fireEvent.change(screen.getByRole('combobox'), {
+      target: {value: 'tomorrowish'},
+    });
+    fireEvent.blur(screen.getByRole('combobox'));
+    rerender(
+      <DateInput
+        label="Due"
+        value={'2026-03-20'}
+        onChange={() => {}}
+        onEntryErrorChange={onEntryErrorChange}
+      />,
+    );
+    expect(onEntryErrorChange.mock.calls).toEqual([
+      [{kind: 'unreadable', text: 'tomorrowish'}],
+      [null],
+    ]);
+  });
+
+  it('reports nothing when the caller restores its value at the blur that keeps the text, and null once a later value replaces it', () => {
+    const onEntryErrorChange = vi.fn();
+    render(
+      <RestoringDateInput
+        initialValue="2026-01-25"
+        nextValue="2026-03-20"
+        onEntryErrorChange={onEntryErrorChange}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    fireEvent.focus(input);
+    fireEvent.change(input, {target: {value: '02/14/2026'}});
+    fireEvent.change(input, {target: {value: 'tomorrowish'}});
+    fireEvent.blur(input);
+    expect(screen.getByTestId('value')).toHaveTextContent('2026-01-25');
+    expect(onEntryErrorChange.mock.calls).toEqual([
+      [{kind: 'unreadable', text: 'tomorrowish'}],
+    ]);
+
+    fireEvent.click(getButton('Replace'));
+    expect(onEntryErrorChange.mock.calls).toEqual([
+      [{kind: 'unreadable', text: 'tomorrowish'}],
+      [null],
+    ]);
+  });
+
+  it('does not report an unchanged rejection again', () => {
+    const onEntryErrorChange = vi.fn();
+    const field = (placeholder: string) => (
+      <DateInput
+        label="Due"
+        onChange={() => {}}
+        placeholder={placeholder}
+        // A new function on every render.
+        onEntryErrorChange={error => {
+          onEntryErrorChange(error);
+        }}
+      />
+    );
+    const {rerender} = render(field('One'));
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: '02/31/2026'}});
+    fireEvent.blur(input);
+    fireEvent.keyDown(input, {key: 'Enter'});
+    rerender(field('Two'));
+    expect(onEntryErrorChange).toHaveBeenCalledTimes(1);
+  });
+
+  it('with the callback, shows and announces the app error once, in place of the field message', async () => {
+    const announced = recordAssertiveAnnouncements();
+    const {container} = render(
+      <WordedDateInput
+        onChange={() => {}}
+        max={'2026-12-31'}
+        wording={error =>
+          error.kind === 'outOfRange' ? 'Pick a date in 2026' : undefined
+        }
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: '01/05/2027'}});
+    fireEvent.blur(input);
+
+    expect(screen.getByText('Pick a date in 2026')).toBeInTheDocument();
+    expect(screen.queryByText(OUT_OF_RANGE_MESSAGE)).not.toBeInTheDocument();
+    expect(within(container).getByRole('alert')).toHaveTextContent('');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    await waitFor(() => {
+      expect(announced).toEqual(['Pick a date in 2026']);
+    });
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(announced).toEqual(['Pick a date in 2026']);
+  });
+
+  it('never shows or announces the field message before the app error that a new max starts', async () => {
+    const announced = recordAssertiveAnnouncements();
+    const field = (max: string) => (
+      <WordedDateInput
+        onChange={() => {}}
+        max={max as ISODateString}
+        wording={error =>
+          error.kind === 'outOfRange' ? 'Pick an earlier date' : undefined
+        }
+      />
+    );
+    const {rerender} = render(field('2027-12-31'));
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: '01/05/2027'}});
+    rerender(field('2026-12-31'));
+
+    expect(screen.getByText('Pick an earlier date')).toBeInTheDocument();
+    expect(screen.queryByText(OUT_OF_RANGE_MESSAGE)).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(announced).toEqual(['Pick an earlier date']);
+    });
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(announced).toEqual(['Pick an earlier date']);
+  });
+
+  it('shows the field message once the app has the rejection and gives no error status', async () => {
+    const announced = recordAssertiveAnnouncements();
+    const onEntryErrorChange = vi.fn();
+    const field = (max: string) => (
+      <DateInput
+        label="Due"
+        onChange={() => {}}
+        max={max as ISODateString}
+        onEntryErrorChange={onEntryErrorChange}
+      />
+    );
+    const {rerender} = render(field('2027-12-31'));
+    fireEvent.change(screen.getByRole('combobox'), {
+      target: {value: '01/05/2027'},
+    });
+    rerender(field('2026-12-31'));
+
+    expect(screen.getByText(OUT_OF_RANGE_MESSAGE)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(announced).toEqual([OUT_OF_RANGE_MESSAGE]);
+    });
+  });
+
+  it('with the callback, a warning or success status never replaces a rejection', () => {
+    const {container, rerender} = render(
+      <DateInput
+        label="Due"
+        onChange={() => {}}
+        status={{type: 'warning', message: 'This date is a public holiday'}}
+        onEntryErrorChange={() => {}}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: '02/31/2026'}});
+    expect(screen.getByText(NONEXISTENT_MESSAGE)).toBeInTheDocument();
+    expect(
+      screen.queryByText('This date is a public holiday'),
+    ).not.toBeInTheDocument();
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(within(container).getByRole('alert')).toHaveTextContent('');
+
+    rerender(
+      <DateInput
+        label="Due"
+        onChange={() => {}}
+        status={{type: 'success', message: 'Looks good'}}
+        onEntryErrorChange={() => {}}
+      />,
+    );
+    expect(screen.getByText(NONEXISTENT_MESSAGE)).toBeInTheDocument();
+    expect(screen.queryByText('Looks good')).not.toBeInTheDocument();
+  });
+
+  it('with the callback, an error status without a message keeps the field message', () => {
+    render(
+      <DateInput
+        label="Due"
+        onChange={() => {}}
+        status={{type: 'error'}}
+        onEntryErrorChange={() => {}}
+      />,
+    );
+    fireEvent.change(screen.getByRole('combobox'), {
+      target: {value: '02/31/2026'},
+    });
+    expect(screen.getByText(NONEXISTENT_MESSAGE)).toBeInTheDocument();
+  });
+
+  it('announces an unchanged app error once through the field alert when a rejection starts', async () => {
+    const announced = recordAssertiveAnnouncements();
+    const {container} = render(
+      <DateInput
+        label="Due"
+        onChange={() => {}}
+        status={{type: 'error', message: 'Required'}}
+        onEntryErrorChange={() => {}}
+      />,
+    );
+    await waitFor(() => {
+      expect(announced).toEqual(['Required']);
+    });
+    const input = screen.getByRole('combobox');
+    const alert = within(container).getByRole('alert');
+    expect(alert).toHaveTextContent('');
+
+    fireEvent.change(input, {target: {value: 'tomorrowish'}});
+    expect(alert).toHaveTextContent('');
+    fireEvent.blur(input);
+    expect(container.querySelector('.astryx-field-status')).toHaveTextContent(
+      'Required',
+    );
+    expect(alert).toHaveTextContent('Required');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+
+    // The same rejection keeps the alert text, so nothing announces again.
+    fireEvent.change(input, {target: {value: 'tomorrowis'}});
+    fireEvent.change(input, {target: {value: '02/31/2026'}});
+    expect(alert).toHaveTextContent('Required');
+    expect(screen.queryByText(NONEXISTENT_MESSAGE)).not.toBeInTheDocument();
+
+    fireEvent.change(input, {target: {value: '02/28/2026'}});
+    expect(alert).toHaveTextContent('');
+    fireEvent.change(input, {target: {value: '02/30/2026'}});
+    expect(alert).toHaveTextContent('Required');
+
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(announced).toEqual(['Required']);
+  });
+
+  it('leaves the field alert empty when the app error changes as the rejection starts', () => {
+    const {container} = render(
+      <WordedDateInput
+        onChange={() => {}}
+        status={{type: 'error', message: 'Required'}}
+        wording={() => 'Pick a day that exists'}
+      />,
+    );
+    fireEvent.change(screen.getByRole('combobox'), {
+      target: {value: '02/31/2026'},
+    });
+    expect(screen.getByText('Pick a day that exists')).toBeInTheDocument();
+    expect(within(container).getByRole('alert')).toHaveTextContent('');
+  });
+
+  it('without the callback, the rejection replaces an error status as it always has', () => {
+    const {container} = render(
+      <DateInput
+        label="Due"
+        onChange={() => {}}
+        max={'2026-12-31'}
+        status={{type: 'error', message: 'HOST MESSAGE'}}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    const alert = within(container).getByRole('alert');
+
+    fireEvent.change(input, {target: {value: '02/31/2026'}});
+    expect(screen.getByText(NONEXISTENT_MESSAGE)).toBeInTheDocument();
+    expect(screen.queryByText('HOST MESSAGE')).not.toBeInTheDocument();
+    expect(alert).toHaveTextContent('');
+
+    fireEvent.change(input, {target: {value: '01/05/2027'}});
+    expect(screen.getByText(OUT_OF_RANGE_MESSAGE)).toBeInTheDocument();
+
+    // An edit that leaves the text rejected keeps the shown rejection.
+    fireEvent.change(input, {target: {value: 'tomorrowish'}});
+    expect(screen.getByText(OUT_OF_RANGE_MESSAGE)).toBeInTheDocument();
+
+    fireEvent.blur(input);
+    expect(screen.getByText('Invalid date')).toBeInTheDocument();
+    expect(screen.queryByText('HOST MESSAGE')).not.toBeInTheDocument();
+    expect(alert).toHaveTextContent('');
+  });
+
+  describe('inside an InputGroup', () => {
+    it('announces the winning app error through the field alert', () => {
+      const {container} = render(
+        <InputGroup label="Availability">
+          <InputGroupText>Starts</InputGroupText>
+          <DateInput
+            label="Date"
+            isLabelHidden
+            onChange={() => {}}
+            max={'2026-12-31'}
+            status={{type: 'error', message: 'Pick a date in 2026'}}
+            onEntryErrorChange={() => {}}
+          />
+        </InputGroup>,
+      );
+      const alert = within(container).getByRole('alert');
+      expect(alert).toHaveTextContent('');
+      fireEvent.change(screen.getByRole('combobox'), {
+        target: {value: '01/05/2027'},
+      });
+      expect(alert).toHaveTextContent('Pick a date in 2026');
+    });
+
+    it('announces the field message through the field alert when no app error wins', () => {
+      const {container} = render(
+        <InputGroup label="Availability">
+          <InputGroupText>Starts</InputGroupText>
+          <DateInput
+            label="Date"
+            isLabelHidden
+            onChange={() => {}}
+            max={'2026-12-31'}
+            status={{type: 'warning', message: 'Busy week'}}
+            onEntryErrorChange={() => {}}
+          />
+        </InputGroup>,
+      );
+      fireEvent.change(screen.getByRole('combobox'), {
+        target: {value: '01/05/2027'},
+      });
+      expect(within(container).getByRole('alert')).toHaveTextContent(
+        OUT_OF_RANGE_MESSAGE,
+      );
+    });
+  });
+
+  describe('on surfaces without typed text', () => {
+    function stubCoarsePointer() {
+      vi.stubGlobal('matchMedia', (query: string) => ({
+        matches: /pointer:\s*coarse/.test(query),
+        media: query,
+        onchange: null,
+        addListener: () => {},
+        removeListener: () => {},
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        dispatchEvent: () => false,
+      }));
+      vi.stubGlobal(
+        'ResizeObserver',
+        class {
+          observe() {}
+          unobserve() {}
+          disconnect() {}
+        },
+      );
+    }
+
+    it.each(['native', 'bottom-sheet'] as const)(
+      'reports null when a %s presentation replaces the field during a rejection',
+      presentation => {
+        stubCoarsePointer();
+        const onEntryErrorChange = vi.fn();
+        const field = (
+          surface: 'popover' | 'native' | 'bottom-sheet',
+          callback: (error: DateInputEntryError | null) => void,
+        ) => (
+          <DateInput
+            label="Due"
+            presentation={surface}
+            onChange={() => {}}
+            onEntryErrorChange={callback}
+          />
+        );
+        const {rerender} = render(field('popover', onEntryErrorChange));
+        fireEvent.change(screen.getByRole('combobox'), {
+          target: {value: '02/31/2026'},
+        });
+        const latest = vi.fn();
+        rerender(field('popover', latest));
+        rerender(field(presentation, latest));
+        expect(onEntryErrorChange.mock.calls).toEqual([
+          [{kind: 'nonexistent', text: '02/31/2026'}],
+        ]);
+        expect(latest.mock.calls).toEqual([[null]]);
+      },
+    );
+
+    it('reports nothing at unmount when no rejection stands', () => {
+      const onEntryErrorChange = vi.fn();
+      const {unmount} = render(
+        <DateInput
+          label="Due"
+          onChange={() => {}}
+          onEntryErrorChange={onEntryErrorChange}
+        />,
+      );
+      fireEvent.change(screen.getByRole('combobox'), {
+        target: {value: '02/31/2026'},
+      });
+      fireEvent.change(screen.getByRole('combobox'), {
+        target: {value: '02/28/2026'},
+      });
+      unmount();
+      expect(onEntryErrorChange.mock.calls).toEqual([
+        [{kind: 'nonexistent', text: '02/31/2026'}],
+        [null],
+      ]);
+    });
+
+    it('never reports from the native picker, and keeps the prop off the DOM', () => {
+      stubCoarsePointer();
+      const consoleError = vi.spyOn(console, 'error');
+      const onEntryErrorChange = vi.fn();
+      const {container} = render(
+        <DateInput
+          label="Due"
+          presentation="native"
+          max={'2026-12-31'}
+          onChange={() => {}}
+          onEntryErrorChange={onEntryErrorChange}
+        />,
+      );
+      const input =
+        container.querySelector<HTMLInputElement>('input[type="date"]')!;
+      fireEvent.change(input, {target: {value: '2027-01-05'}});
+      expect(onEntryErrorChange).not.toHaveBeenCalled();
+      expect(consoleError.mock.calls.flat().join(' ')).not.toContain(
+        'onEntryErrorChange',
+      );
+      consoleError.mockRestore();
+    });
+
+    it('never reports from the bottom sheet, and keeps the prop off the DOM', () => {
+      stubCoarsePointer();
+      const consoleError = vi.spyOn(console, 'error');
+      const onEntryErrorChange = vi.fn();
+      render(
+        <DateInput
+          label="Due"
+          presentation="bottom-sheet"
+          max={'2026-12-31'}
+          onChange={() => {}}
+          onEntryErrorChange={onEntryErrorChange}
+        />,
+      );
+      // The sheet's field is read-only: people pick, they do not type.
+      const field = screen.getByRole('combobox');
+      expect(field).toHaveAttribute('readonly');
+      fireEvent.change(field, {target: {value: '01/05/2027'}});
+      fireEvent.blur(field);
+      expect(onEntryErrorChange).not.toHaveBeenCalled();
+      expect(consoleError.mock.calls.flat().join(' ')).not.toContain(
+        'onEntryErrorChange',
+      );
+      consoleError.mockRestore();
+    });
+  });
+});
+
+describe('DateInput rejected entries', () => {
+  const INVALID = 'Invalid date';
+  const NONEXISTENT = 'Enter a real date';
+
+  afterEach(() => {
+    __resetLiveRegionsForTest();
+  });
+
+  /** Lets queued live-region writes land, so a repeat would show. */
+  const settle = async () => {
+    await new Promise(resolve => setTimeout(resolve, 50));
+  };
+
+  function statusText(container: HTMLElement) {
+    return container.querySelector('.astryx-field-status')?.textContent ?? '';
+  }
+
+  it.each(['blur', 'Enter'])(
+    'shows nothing for unreadable text while typing, and every signal together on %s',
+    async commit => {
+      const announced = recordAssertiveAnnouncements();
+      const {container} = render(
+        <DateInput label="Due" value="2026-01-25" onChange={() => {}} />,
+      );
+      const input = screen.getByRole('combobox');
+      for (const text of ['-', 'to', 'tomorrowish']) {
+        fireEvent.change(input, {target: {value: text}});
+        expect(input).not.toHaveAttribute('aria-invalid');
+        expect(statusText(container)).toBe('');
+        expect(within(container).getByRole('alert')).toHaveTextContent('');
+      }
+
+      if (commit === 'blur') {
+        fireEvent.blur(input);
+      } else {
+        fireEvent.keyDown(input, {key: 'Enter'});
+      }
+      expect(input).toHaveValue('tomorrowish');
+      expect(input).toHaveAttribute('aria-invalid', 'true');
+      expect(statusText(container)).toBe(INVALID);
+      const descriptions = (input.getAttribute('aria-describedby') ?? '')
+        .split(' ')
+        .map(id => document.getElementById(id)?.textContent);
+      expect(descriptions).toContain(INVALID);
+      await waitFor(() => {
+        expect(announced).toEqual([INVALID]);
+      });
+      await settle();
+      expect(announced).toEqual([INVALID]);
+    },
+  );
+
+  it.each([
+    ['warning', {type: 'warning', message: 'Busy week'}],
+    ['success', {type: 'success', message: 'Looks good'}],
+    ['error', {type: 'error', message: 'HOST MESSAGE'}],
+  ] as const)(
+    'shows kept unreadable text in place of a %s status',
+    (_type, status) => {
+      const {container} = render(
+        <DateInput label="Due" status={status} onChange={() => {}} />,
+      );
+      const input = screen.getByRole('combobox');
+      fireEvent.change(input, {target: {value: 'tomorrowish'}});
+      expect(statusText(container)).toBe(status.message);
+      fireEvent.blur(input);
+      expect(statusText(container)).toBe(INVALID);
+    },
+  );
+
+  it('keeps a shown rejection through an edit that leaves the text wrong, and announces a changed message once', async () => {
+    const announced = recordAssertiveAnnouncements();
+    const {container} = render(<DateInput label="Due" onChange={() => {}} />);
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: 'tomorrowish'}});
+    fireEvent.blur(input);
+    await waitFor(() => {
+      expect(announced).toEqual([INVALID]);
+    });
+
+    for (const text of ['1', '1/5/20', 'tomorrow']) {
+      fireEvent.change(input, {target: {value: text}});
+      expect(statusText(container)).toBe(INVALID);
+      expect(input).toHaveAttribute('aria-invalid', 'true');
+    }
+    fireEvent.change(input, {target: {value: '02/31/2026'}});
+    expect(statusText(container)).toBe(NONEXISTENT);
+    // Another date the calendar lacks keeps the same message.
+    fireEvent.change(input, {target: {value: '02/30/202'}});
+    fireEvent.change(input, {target: {value: '02/30/2026'}});
+    expect(statusText(container)).toBe(NONEXISTENT);
+    await settle();
+    expect(announced).toEqual([INVALID, NONEXISTENT]);
+
+    fireEvent.change(input, {target: {value: '02/28/2026'}});
+    expect(statusText(container)).toBe('');
+    expect(input).not.toHaveAttribute('aria-invalid');
+  });
+
+  it('keeps a complete date rejection while an edit leaves the text unfinished', () => {
+    const {container} = render(<DateInput label="Due" onChange={() => {}} />);
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: '02/31/2026'}});
+    fireEvent.change(input, {target: {value: '02/31/202'}});
+    expect(statusText(container)).toBe(NONEXISTENT);
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+
+    fireEvent.change(input, {target: {value: ''}});
+    expect(statusText(container)).toBe('');
+    expect(input).not.toHaveAttribute('aria-invalid');
+  });
+
+  it('clears a kept rejection when a calendar pick replaces the text', () => {
+    const {container} = render(
+      <DateInput label="Due" value="2026-03-20" onChange={() => {}} />,
+    );
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: 'tomorrowish'}});
+    fireEvent.blur(input);
+    fireEvent.click(getButton('Open calendar'));
+    fireEvent.click(getButton(/March 15, 2026/));
+    expect(statusText(container)).toBe('');
+    expect(input).not.toHaveAttribute('aria-invalid');
+  });
+
+  it.each([
+    ['unreadable', 'blur', 'tomorrowish', INVALID],
+    ['unreadable', 'Enter', 'tomorrowish', INVALID],
+    ['nonexistent', 'blur', '02/31/2026', NONEXISTENT],
+    ['nonexistent', 'Enter', '02/31/2026', NONEXISTENT],
+  ])(
+    'keeps %s text and its message when the caller restores its value at the %s that keeps it',
+    (_kind, commit, text, message) => {
+      const {container} = render(
+        <RestoringDateInput initialValue="2026-01-25" nextValue="2026-03-20" />,
+      );
+      const input = screen.getByRole('combobox');
+      fireEvent.focus(input);
+      fireEvent.change(input, {target: {value: '02/14/2026'}});
+      expect(screen.getByTestId('value')).toHaveTextContent('2026-02-14');
+      fireEvent.change(input, {target: {value: text}});
+
+      if (commit === 'blur') {
+        fireEvent.blur(input);
+      } else {
+        fireEvent.keyDown(input, {key: 'Enter'});
+      }
+      expect(screen.getByTestId('value')).toHaveTextContent('2026-01-25');
+      expect(input).toHaveValue(text);
+      expect(input).toHaveAttribute('aria-invalid', 'true');
+      expect(statusText(container)).toBe(message);
+
+      fireEvent.click(getButton('Replace'));
+      expect(input).toHaveValue('March 20, 2026');
+      expect(input).not.toHaveAttribute('aria-invalid');
+      expect(statusText(container)).toBe('');
+    },
+  );
+
+  it('keeps text that Enter kept when the caller restores its value at the next blur, and reports nothing', () => {
+    const onEntryErrorChange = vi.fn();
+    const {container} = render(
+      <RestoringDateInput
+        initialValue="2026-01-25"
+        nextValue="2026-03-20"
+        restoresOnEnter={false}
+        onEntryErrorChange={onEntryErrorChange}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    fireEvent.focus(input);
+    fireEvent.change(input, {target: {value: '02/14/2026'}});
+    fireEvent.change(input, {target: {value: 'tomorrowish'}});
+    fireEvent.keyDown(input, {key: 'Enter'});
+    expect(screen.getByTestId('value')).toHaveTextContent('2026-02-14');
+
+    fireEvent.blur(input);
+    expect(screen.getByTestId('value')).toHaveTextContent('2026-01-25');
+    expect(input).toHaveValue('tomorrowish');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(statusText(container)).toBe(INVALID);
+    expect(onEntryErrorChange.mock.calls).toEqual([
+      [{kind: 'unreadable', text: 'tomorrowish'}],
+    ]);
+  });
+
+  it('reports a retyped date again after the caller restores its value at the blur that keeps the text', () => {
+    render(
+      <RestoringDateInput initialValue="2026-01-25" nextValue="2026-03-20" />,
+    );
+    const input = screen.getByRole('combobox');
+    fireEvent.focus(input);
+    fireEvent.change(input, {target: {value: '02/14/2026'}});
+    fireEvent.change(input, {target: {value: 'tomorrowish'}});
+    fireEvent.blur(input);
+    expect(screen.getByTestId('value')).toHaveTextContent('2026-01-25');
+
+    fireEvent.focus(input);
+    fireEvent.change(input, {target: {value: '02/14/2026'}});
+    expect(screen.getByTestId('value')).toHaveTextContent('2026-02-14');
+    expect(input).not.toHaveAttribute('aria-invalid');
+  });
+
+  it('hides a kept rejection while disabled or busy, and shows it again once editable', () => {
+    const field = (props: Partial<DateInputProps>) => (
+      <DateInput label="Due" onChange={() => {}} {...props} />
+    );
+    const {container, rerender} = render(field({}));
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: 'tomorrowish'}});
+    fireEvent.blur(input);
+
+    for (const lock of [{isDisabled: true}, {isLoading: true}]) {
+      rerender(field(lock));
+      expect(input).toHaveValue('tomorrowish');
+      expect(statusText(container)).toBe('');
+      expect(input).not.toHaveAttribute('aria-invalid');
+      rerender(field({}));
+      expect(statusText(container)).toBe(INVALID);
+      expect(input).toHaveAttribute('aria-invalid', 'true');
+    }
+  });
+
+  it('announces kept unreadable text through the field alert inside an InputGroup', () => {
+    const {container} = render(
+      <InputGroup label="Availability">
+        <InputGroupText>Starts</InputGroupText>
+        <DateInput label="Date" isLabelHidden onChange={() => {}} />
+      </InputGroup>,
+    );
+    const input = screen.getByRole('combobox');
+    const alert = within(container).getByRole('alert');
+    fireEvent.change(input, {target: {value: 'tomorrowish'}});
+    expect(alert).toHaveTextContent('');
+    fireEvent.blur(input);
+    expect(alert).toHaveTextContent(INVALID);
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  describe('in a form', () => {
+    // `name` reaches the input untyped, as other input attributes do.
+    const named = {name: 'due'} as Partial<DateInputProps>;
+    const formField = (value?: ISODateString) => (
+      <form aria-label="Form">
+        <DateInput label="Due" value={value} onChange={() => {}} {...named} />
+      </form>
+    );
+    function renderForm(value?: ISODateString) {
+      const view = render(formField(value));
+      const form = screen.getByRole<HTMLFormElement>('form');
+      return {...view, form, input: screen.getByRole('combobox')};
+    }
+    const posted = (form: HTMLFormElement) => new FormData(form).getAll('due');
+
+    it('posts the committed date from a hidden input while Enter or blur keeps unreadable text', () => {
+      const {form, input, rerender} = renderForm('2026-01-25');
+      fireEvent.change(input, {target: {value: 'tomorrowish'}});
+      expect(posted(form)).toEqual(['tomorrowish']);
+
+      fireEvent.blur(input);
+      expect(input).not.toHaveAttribute('name');
+      expect(posted(form)).toEqual(['January 25, 2026']);
+
+      fireEvent.change(input, {target: {value: 'tomorrowis'}});
+      expect(input).toHaveAttribute('name', 'due');
+      expect(posted(form)).toEqual(['tomorrowis']);
+
+      fireEvent.keyDown(input, {key: 'Enter'});
+      expect(posted(form)).toEqual(['January 25, 2026']);
+      rerender(formField('2026-02-01'));
+      expect(input).toHaveAttribute('name', 'due');
+      expect(posted(form)).toEqual(['February 1, 2026']);
+    });
+
+    it.each([
+      ['incomplete', '1/5/2'],
+      ['nonexistent', '02/31/2026'],
+    ])('posts kept %s text from the text input', (_kind, text) => {
+      const {form, input} = renderForm('2026-01-25');
+      fireEvent.change(input, {target: {value: text}});
+      fireEvent.blur(input);
+      expect(input).toHaveAttribute('name', 'due');
+      expect(posted(form)).toEqual([text]);
+    });
+
+    it('posts the restored date from a hidden input when the caller restores its value at the blur that keeps unreadable text', () => {
+      render(
+        <form aria-label="Form">
+          <RestoringDateInput
+            initialValue="2026-01-25"
+            nextValue="2026-03-20"
+            {...named}
+          />
+        </form>,
+      );
+      const form = screen.getByRole<HTMLFormElement>('form');
+      const input = screen.getByRole('combobox');
+      fireEvent.focus(input);
+      fireEvent.change(input, {target: {value: '02/14/2026'}});
+      fireEvent.change(input, {target: {value: 'tomorrowish'}});
+      fireEvent.blur(input);
+      expect(input).toHaveValue('tomorrowish');
+      expect(input).not.toHaveAttribute('name');
+      expect(posted(form)).toEqual(['January 25, 2026']);
+    });
+
+    it('lets the next Enter submit after Enter keeps unreadable text', () => {
+      const {input} = renderForm('2026-01-25');
+      fireEvent.change(input, {target: {value: 'tomorrowish'}});
+      // The first Enter commits the text and holds the submission back. The
+      // next one keeps its default, which submits the form.
+      expect(fireEvent.keyDown(input, {key: 'Enter'})).toBe(false);
+      expect(fireEvent.keyDown(input, {key: 'Enter'})).toBe(true);
+    });
+  });
+});
+
+describe('DateInput entryErrorBehavior', () => {
+  const INVALID = 'Invalid date';
+  const NONEXISTENT = 'Enter a real date';
+  const OUT_OF_RANGE = 'Enter a date on or before December 31, 2026';
+
+  afterEach(() => {
+    __resetLiveRegionsForTest();
+  });
+
+  /** Lets queued live-region writes land, so a repeat would show. */
+  const settle = async () => {
+    await new Promise(resolve => setTimeout(resolve, 50));
+  };
+
+  /** Every signal of the field's own rejection, at one moment. */
+  function signals(container: HTMLElement, input: HTMLElement) {
+    return {
+      status:
+        container.querySelector('.astryx-field-status')?.textContent ?? '',
+      isInvalid: input.getAttribute('aria-invalid') === 'true',
+      isStyledInvalid: /\.inputInvalid\b/.test(input.className),
+    };
+  }
+
+  /** Types `text` one character at a time. */
+  function typeEachPrefix(input: HTMLElement, text: string, check: () => void) {
+    for (let end = 1; end <= text.length; end++) {
+      fireEvent.change(input, {target: {value: text.slice(0, end)}});
+      check();
+    }
+  }
+
+  it.each([
+    ['nonexistent', 'blur', '02/31/2026', NONEXISTENT],
+    ['nonexistent', 'Enter', '02/31/2026', NONEXISTENT],
+    ['outOfRange', 'blur', '01/05/2027', OUT_OF_RANGE],
+    ['outOfRange', 'Enter', '01/05/2027', OUT_OF_RANGE],
+    ['unreadable', 'blur', 'tomorrowish', INVALID],
+  ] as const)(
+    'under blur-or-enter, shows no %s signal while typing, and every signal together, reported and announced once, at %s',
+    async (kind, commit, text, message) => {
+      const announced = recordAssertiveAnnouncements();
+      const onEntryErrorChange = vi.fn();
+      const {container} = render(
+        <DateInput
+          label="Due"
+          max="2026-12-31"
+          onChange={() => {}}
+          entryErrorBehavior="blur-or-enter"
+          onEntryErrorChange={onEntryErrorChange}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      const clean = signals(container, input);
+      typeEachPrefix(input, text, () => {
+        expect(signals(container, input)).toEqual(clean);
+        expect(within(container).getByRole('alert')).toHaveTextContent('');
+      });
+      expect(onEntryErrorChange).not.toHaveBeenCalled();
+      expect(announced).toEqual([]);
+
+      if (commit === 'blur') {
+        fireEvent.blur(input);
+      } else {
+        fireEvent.keyDown(input, {key: 'Enter'});
+      }
+      const shown = signals(container, input);
+      expect(shown.status).toBe(message);
+      expect(shown.isInvalid).toBe(true);
+      expect(shown.isStyledInvalid).toBe(true);
+      expect(onEntryErrorChange).toHaveBeenCalledOnce();
+      expect(onEntryErrorChange.mock.lastCall?.[0]).toMatchObject({kind, text});
+      await waitFor(() => {
+        expect(announced).toEqual([message]);
+      });
+      await settle();
+      expect(announced).toEqual([message]);
+    },
+  );
+
+  it.each([undefined, 'complete'] as const)(
+    'with entryErrorBehavior %s, shows and reports a complete nonexistent date while typing',
+    behavior => {
+      const onEntryErrorChange = vi.fn();
+      const {container} = render(
+        <DateInput
+          label="Due"
+          onChange={() => {}}
+          entryErrorBehavior={behavior}
+          onEntryErrorChange={onEntryErrorChange}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      fireEvent.change(input, {target: {value: '02/31/2026'}});
+      expect(signals(container, input)).toMatchObject({
+        status: NONEXISTENT,
+        isInvalid: true,
+      });
+      expect(onEntryErrorChange).toHaveBeenCalledExactlyOnceWith({
+        kind: 'nonexistent',
+        text: '02/31/2026',
+      });
+    },
+  );
+
+  it.each([
+    ['a date', '02/28/2026'],
+    ['empty text', ''],
+  ])(
+    'under blur-or-enter, clears a revealed rejection and reports null at once for an edit to %s',
+    (_edit, text) => {
+      const onEntryErrorChange = vi.fn();
+      const {container} = render(
+        <DateInput
+          label="Due"
+          onChange={() => {}}
+          entryErrorBehavior="blur-or-enter"
+          onEntryErrorChange={onEntryErrorChange}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      const clean = signals(container, input);
+      fireEvent.change(input, {target: {value: '02/31/2026'}});
+      fireEvent.blur(input);
+      fireEvent.change(input, {target: {value: text}});
+      expect(signals(container, input)).toEqual(clean);
+      expect(onEntryErrorChange).toHaveBeenCalledTimes(2);
+      expect(onEntryErrorChange).toHaveBeenLastCalledWith(null);
+    },
+  );
+
+  it('under blur-or-enter, keeps a revealed rejection through edits that stay wrong, without a new report or announcement, until the next commit', async () => {
+    const announced = recordAssertiveAnnouncements();
+    const onEntryErrorChange = vi.fn();
+    const {container} = render(
+      <DateInput
+        label="Due"
+        max="2026-12-31"
+        onChange={() => {}}
+        entryErrorBehavior="blur-or-enter"
+        onEntryErrorChange={onEntryErrorChange}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: '02/31/2026'}});
+    fireEvent.keyDown(input, {key: 'Enter'});
+    await waitFor(() => {
+      expect(announced).toEqual([NONEXISTENT]);
+    });
+
+    for (const text of ['02/31/202', 'tomorrow', '01/05/2027']) {
+      fireEvent.change(input, {target: {value: text}});
+      expect(signals(container, input)).toMatchObject({
+        status: NONEXISTENT,
+        isInvalid: true,
+      });
+    }
+    expect(onEntryErrorChange).toHaveBeenCalledOnce();
+    await settle();
+    expect(announced).toEqual([NONEXISTENT]);
+
+    fireEvent.blur(input);
+    expect(signals(container, input).status).toBe(OUT_OF_RANGE);
+    expect(onEntryErrorChange).toHaveBeenLastCalledWith({
+      kind: 'outOfRange',
+      text: '01/05/2027',
+      date: '2027-01-05',
+    });
+    await waitFor(() => {
+      expect(announced).toEqual([NONEXISTENT, OUT_OF_RANGE]);
+    });
+  });
+
+  it('under blur-or-enter, a calendar pick clears a revealed rejection', () => {
+    const {container} = render(
+      <DateInput
+        label="Due"
+        value="2026-03-20"
+        onChange={() => {}}
+        entryErrorBehavior="blur-or-enter"
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    const clean = signals(container, input);
+    fireEvent.change(input, {target: {value: '02/31/2026'}});
+    fireEvent.blur(input);
+    fireEvent.click(getButton('Open calendar'));
+    fireEvent.click(getButton(/March 15, 2026/));
+    expect(signals(container, input)).toEqual(clean);
+  });
+
+  it('under blur-or-enter, ignores Enter and blur while disabled or busy, and shows a revealed rejection again once editable', () => {
+    const field = (props: Partial<DateInputProps>) => (
+      <DateInput
+        label="Due"
+        onChange={() => {}}
+        entryErrorBehavior="blur-or-enter"
+        {...props}
+      />
+    );
+    const {container, rerender} = render(field({}));
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: '02/31/2026'}});
+    for (const lock of [{isDisabled: true}, {isLoading: true}]) {
+      rerender(field(lock));
+      fireEvent.keyDown(input, {key: 'Enter'});
+      fireEvent.blur(input);
+      expect(signals(container, input).isInvalid).toBe(false);
+      rerender(field({}));
+      expect(signals(container, input).isInvalid).toBe(false);
+    }
+    fireEvent.blur(input);
+    rerender(field({isDisabled: true}));
+    expect(signals(container, input).status).toBe('');
+    rerender(field({}));
+    expect(signals(container, input)).toMatchObject({
+      status: NONEXISTENT,
+      isInvalid: true,
+    });
   });
 });

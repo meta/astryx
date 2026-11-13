@@ -33,11 +33,13 @@ import {
 
 const storybook = withStorybook(test);
 
-type Story = 'with-zoom' | 'gallery-with-zoom' | 'default';
+type Story =
+  'with-zoom' | 'gallery-with-zoom' | 'gallery-with-captions' | 'default';
 
 const TRIGGER: Record<Story, string> = {
   'with-zoom': 'Open with zoom',
   'gallery-with-zoom': 'Open gallery with zoom',
+  'gallery-with-captions': 'Open gallery with captions',
   default: 'Open lightbox',
 };
 
@@ -89,10 +91,9 @@ async function openDesktop(
   await page.getByRole('button', {name: TRIGGER[story]}).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
-  const img =
-    story === 'gallery-with-zoom'
-      ? dialog.locator('[data-current] img')
-      : dialog.getByRole('img').first();
+  const img = story.startsWith('gallery')
+    ? dialog.locator('[data-current] img')
+    : dialog.getByRole('img').first();
   await expect
     .poll(async () => img.evaluate(el => (el as HTMLImageElement).naturalWidth))
     .toBe(3000);
@@ -164,6 +165,38 @@ async function timedPointer(page: Page, pointerType: 'mouse' | 'pen') {
     });
   };
 }
+
+test('a click on "more" opens a long caption in full, and the viewer stays open', async ({
+  browser,
+}) => {
+  const {context, page, dialog} = await openDesktop(
+    browser,
+    'gallery-with-captions',
+  );
+  try {
+    await dialog.getByRole('button', {name: 'more'}).click();
+    const less = dialog.getByRole('button', {name: 'less'});
+    await expect(less).toHaveAttribute('aria-expanded', 'true');
+    const id = await less.getAttribute('aria-controls');
+    await expect(page.locator(`[id="${id}"]`)).toBeVisible();
+    await less.click();
+    await expect(dialog.getByRole('button', {name: 'more'})).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    // Back in the band: the same caption, without the open caption's backing.
+    await expect
+      .poll(async () =>
+        page
+          .locator(`[id="${id}"]`)
+          .evaluate(caption => getComputedStyle(caption).position),
+      )
+      .toBe('static');
+    await expect(dialog).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});
 
 test('a mouse drag down leaves a fitted photo and the viewer in place, as on main', async ({
   browser,

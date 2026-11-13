@@ -473,19 +473,19 @@ export const Interactive: Story = {
         isSelected
         onClick={() => {}}
         startContent={<Icon icon={InboxIcon} />}
-        endContent={<Icon icon={ChevronRightIcon} />}
+        endContent={<Icon icon={ChevronRightIcon} xstyle={rtlStyles.mirror} />}
       />
       <ListItem
         label="Sent"
         onClick={() => {}}
         startContent={<Icon icon={PaperAirplaneIcon} />}
-        endContent={<Icon icon={ChevronRightIcon} />}
+        endContent={<Icon icon={ChevronRightIcon} xstyle={rtlStyles.mirror} />}
       />
       <ListItem
         label="Drafts"
         onClick={() => {}}
         startContent={<Icon icon={DocumentIcon} />}
-        endContent={<Icon icon={ChevronRightIcon} />}
+        endContent={<Icon icon={ChevronRightIcon} xstyle={rtlStyles.mirror} />}
       />
     </List>
   ),

@@ -76,6 +76,69 @@ describe('icon-sets check', () => {
     expect(check?.message).toContain('"@acme/lines/lines" as backup');
   });
 
+  it('passes with a variant the main set declares, and says each icon draws that look', async () => {
+    const check = await iconCheckOf({
+      packages: [{}, {name: '@acme/lines'}],
+      config: {
+        experimental: {iconSet: ['glyphs', 'lines'], iconVariant: 'solid'},
+      },
+    });
+    expect(check).toMatchObject({status: 'pass'});
+    expect(check?.message).toContain(
+      'Each icon draws its "solid" look where its set has one.',
+    );
+  });
+
+  it('fails a variant the main set does not declare, naming its variants and the command that picks one', async () => {
+    const check = await iconCheckOf({
+      packages: [{}, {name: '@acme/lines'}],
+      config: {
+        experimental: {iconSet: ['glyphs', 'lines'], iconVariant: 'filled'},
+      },
+    });
+    expect(check).toEqual({
+      id: 'icon-sets',
+      label: 'Icon sets',
+      status: 'fail',
+      message:
+        'experimental.iconVariant names "filled", but the main set glyphs declares no such variant. Its variants: outline, solid.',
+      fix: 'Pick one of its variants: `astryx experimental icon use glyphs --backup lines --variant <variant>`.',
+    });
+  });
+
+  it('an unlisted set fails with a fix that keeps the look', async () => {
+    const check = await iconCheckOf({
+      packages: [{}, {name: '@acme/lines'}],
+      config: {experimental: {iconSet: 'glyphs', iconVariant: 'solid'}},
+    });
+    expect(check).toMatchObject({status: 'fail'});
+    expect(check?.fix).toContain(
+      '`astryx experimental icon use glyphs --backup lines --variant solid`',
+    );
+  });
+
+  it('fails a variant for a main set with one look, with the command that removes it', async () => {
+    const {variants, default: _default, ...data} = glyphsData();
+    const check = await iconCheckOf({
+      packages: [
+        {
+          data: {
+            ...data,
+            module: '@acme/glyphs',
+            icons: data.icons.map(({variants: _variants, ...each}) => each),
+          },
+        },
+      ],
+      config: {experimental: {iconSet: 'glyphs', iconVariant: 'solid'}},
+    });
+    expect(check).toMatchObject({
+      status: 'fail',
+      message:
+        'experimental.iconVariant names "solid", but the main set glyphs declares no variants: it draws one look.',
+      fix: 'Remove experimental.iconVariant: run `astryx experimental icon use glyphs`.',
+    });
+  });
+
   it('a backup that is not installed fails', async () => {
     const check = await iconCheckOf({
       config: {experimental: {iconSet: ['glyphs', 'nope']}},
@@ -196,6 +259,16 @@ describe('icon-placeholders check', () => {
     );
     expect(check?.fix).toContain(
       'replace each use of the placeholder (`MissingIcon`)',
+    );
+  });
+
+  it("keeps the project's look in the fix that adds a backup", async () => {
+    const check = await placeholderCheckOf(
+      {experimental: {iconSet: 'glyphs', iconVariant: 'solid'}},
+      {'src/page.tsx': PAGE},
+    );
+    expect(check?.fix).toContain(
+      '`astryx experimental icon use glyphs --backup <set> --variant solid`',
     );
   });
 

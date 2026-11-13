@@ -13,7 +13,7 @@
  */
 
 import postcss from 'postcss';
-import selectorParser from 'postcss-selector-parser';
+import {selectorParser as loadSelectorParser} from '../../foundation/runtime/lazy-dependencies.mjs';
 
 export const CODEMOD_PARSE_ERROR = 'ERR_CODEMOD_PARSE';
 
@@ -65,7 +65,7 @@ export function parseCss(source, options) {
 export function processSelector(selector, callback) {
   let root;
   try {
-    root = selectorParser().astSync(selector, {lossless: true});
+    root = loadSelectorParser()().astSync(selector, {lossless: true});
   } catch (err) {
     throw markParseError(err);
   }

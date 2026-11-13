@@ -122,6 +122,10 @@ const STORIES = {
     id: 'core-lightbox--gallery-with-zoom',
     trigger: 'Open gallery with zoom',
   },
+  captions: {
+    id: 'core-lightbox--gallery-with-captions',
+    trigger: 'Open gallery with captions',
+  },
   // Its parent asks before closing; Playwright dismisses the confirm, so the
   // parent keeps the viewer open.
   confirm: {
@@ -148,7 +152,7 @@ async function openViewer(
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   const photo =
-    story === 'gallery'
+    story === 'gallery' || story === 'captions'
       ? dialog.locator('[data-current] img')
       : dialog.locator('img').first();
   await expect
@@ -461,6 +465,37 @@ test("a zoomed photo's vertical drag pans it and never dismisses", async ({
   expect(await v.backdropAlpha()).toBeCloseTo(1, 2);
 });
 
+test("a drag down fades a gallery's caption band with the controls", async ({
+  page,
+}) => {
+  // The band carries the caption's backing. It fades in the caption's place,
+  // once, so no dark strip stays over the fading backdrop.
+  const v = await openViewer(page, 'captions');
+  const caption = v.dialog.locator('[data-current] [data-lightbox-caption]');
+  const band = caption.locator('xpath=..');
+  let compared = false;
+  await v.driver.play(pullDown(v.centre, 100), {
+    onEvent: async step => {
+      if (
+        compared ||
+        step.type !== 'touchMove' ||
+        step.changed[0].y - v.centre.y < 70
+      ) {
+        return;
+      }
+      compared = true;
+      await frames(page, 1);
+      const controls = await v.closeAlpha();
+      expect(controls).toBeLessThan(0.95);
+      const opacity = async (locator: Locator) =>
+        locator.evaluate(el => Number(getComputedStyle(el).opacity));
+      expect(await opacity(band)).toBeCloseTo(controls, 3);
+      expect(await opacity(caption)).toBe(1);
+    },
+  });
+  expect(compared).toBe(true);
+});
+
 test('a gallery photo dismisses with a drag down', async ({page}) => {
   const v = await openViewer(page, 'gallery');
   await v.driver.play(pullDown(v.centre, 120));
@@ -761,8 +796,10 @@ test('a caller that keeps the viewer open gets the photo, the backdrop and the c
 });
 
 test('a photo dragged to dismiss draws above its caption', async ({page}) => {
-  // Without zoom the caption sits right under the photo. So the drag carries
-  // the photo over it while the caption still shows, faded.
+  // The caption sits in its band under the photo's row. Held sideways, a
+  // landscape photo fills the row's height, so the drag carries it over the
+  // caption at once, while the caption still shows.
+  await page.setViewportSize({width: 874, height: 402});
   const v = await openViewer(page);
   const caption = v.dialog.locator('[data-lightbox-caption]');
   await expect(caption).toBeVisible();
@@ -875,11 +912,11 @@ for (const story of ['zoom', 'gallery'] as const) {
   });
 }
 
-test('a caption comes back under the photo once a drag to close springs back', async ({
+test('a caption stays in its band through a drag to close that springs back', async ({
   page,
 }) => {
-  // A 3:1 panorama leaves the stage free space below the fitted photo, so
-  // the caption moves up under it.
+  // A 3:1 panorama leaves free space between the fitted photo and the
+  // caption's band. The band keeps its place through the drag.
   await page.route('https://picsum.photos/**', async route =>
     route.fulfill({
       contentType: 'image/svg+xml',
@@ -904,15 +941,15 @@ test('a caption comes back under the photo once a drag to close springs back', a
     .poll(async () => img.evaluate(el => (el as HTMLImageElement).naturalWidth))
     .toBe(3000);
   const caption = dialog.getByText('A winding path through the forest');
-  const gap = async () => {
-    const photo = await img.boundingBox();
+  const place = async () => {
     const below = await caption.boundingBox();
-    if (photo == null || below == null) {
-      throw new Error('no photo or caption');
+    if (below == null) {
+      throw new Error('no caption');
     }
-    return Math.round(below.y - (photo.y + photo.height));
+    return {x: Math.round(below.x), y: Math.round(below.y)};
   };
-  await expect.poll(gap).toBe(0);
+  await expect(caption).toBeVisible();
+  const before = await place();
   const box = await img.boundingBox();
   if (box == null) {
     throw new Error('no photo');
@@ -930,7 +967,7 @@ test('a caption comes back under the photo once a drag to close springs back', a
       ),
   );
   await expect(dialog).toBeVisible();
-  await expect.poll(gap).toBe(0);
+  await expect.poll(place).toEqual(before);
 });
 
 test("while the controls fade with a drag, a tap on Close still reaches it, above a gallery's pages", async ({

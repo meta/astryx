@@ -6,14 +6,14 @@
  * @file useTruncation.ts
  * @input Uses React hooks, sharedResizeObserver, sharedMutationObserver
  * @output Exports useTruncation hook for detecting text overflow
- * @position Hook; consumed by Text.tsx, Heading.tsx
+ * @position Hook; consumed by Text.tsx, Heading.tsx and Lightbox.tsx
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Text/Text.doc.mjs
  */
 
 import {useCallback, useRef, useState, type RefCallback} from 'react';
-import {isResizeObserved, observeResize} from '../utils/sharedResizeObserver';
+import {observeResizeAfterLayout} from '../utils/sharedResizeObserver';
 import {observeContent} from '../utils/sharedMutationObserver';
 
 export interface UseTruncationOptions {
@@ -22,6 +22,12 @@ export interface UseTruncationOptions {
    * 0 = no truncation, hook returns isTruncated: false
    */
   maxLines: number;
+
+  /**
+   * Pass true while the text is shown in full; the hook keeps reporting
+   * whether it is cut off when clamped.
+   */
+  isExpanded?: boolean;
 }
 
 export interface UseTruncationReturn {
@@ -69,12 +75,16 @@ export interface UseTruncationReturn {
 export function useTruncation(
   options: UseTruncationOptions,
 ): UseTruncationReturn {
-  const {maxLines} = options;
+  const {maxLines, isExpanded = false} = options;
   const [isTruncated, setIsTruncated] = useState(false);
   const [fullText, setFullText] = useState('');
   const elementRef = useRef<HTMLElement | null>(null);
   const unobserveRef = useRef<(() => void) | null>(null);
   const unobserveContentRef = useRef<(() => void) | null>(null);
+  // The last measured answer, which the text keeps while it is expanded.
+  const answerRef = useRef({isTruncated: false, fullText: ''});
+  // The text an expanded element kept its answer for when it went.
+  const keptForRef = useRef<HTMLElement | null>(null);
 
   const checkTruncation = useCallback(
     (element: HTMLElement) => {
@@ -84,12 +94,15 @@ export function useTruncation(
       }
 
       // Capture full text content
-      setFullText(element.textContent ?? '');
+      answerRef.current.fullText = element.textContent ?? '';
+      setFullText(answerRef.current.fullText);
 
       // Check for overflow
       if (maxLines === 1) {
         // Single-line: check horizontal overflow
-        setIsTruncated(element.scrollWidth > element.offsetWidth);
+        answerRef.current.isTruncated =
+          element.scrollWidth > element.offsetWidth;
+        setIsTruncated(answerRef.current.isTruncated);
       } else {
         // Multi-line: use Range to measure actual content height.
         // When -webkit-line-clamp is active, browsers may report
@@ -105,7 +118,8 @@ export function useTruncation(
         } catch {
           // Fallback to scrollHeight (e.g. jsdom in tests)
         }
-        setIsTruncated(contentHeight > element.offsetHeight);
+        answerRef.current.isTruncated = contentHeight > element.offsetHeight;
+        setIsTruncated(answerRef.current.isTruncated);
       }
     },
     [maxLines],
@@ -120,39 +134,43 @@ export function useTruncation(
       unobserveContentRef.current?.();
       unobserveContentRef.current = null;
 
+      const previous = elementRef.current;
       elementRef.current = element;
 
-      if (element && maxLines > 0) {
-        // Observe via the shared singleton, if available. The call that
-        // observeResize makes on registration runs inside React's commit, so
-        // it measures nothing. The observer's first notification measures a
-        // new element. The browser sends it after its own layout, so mounting
-        // text forces no layout pass. An element another subscriber already
-        // observes gets no new first notification, so a microtask after the
-        // commit measures it. The truncated state only decides whether to
-        // compose the tooltip, so nothing paints differently.
-        if (typeof ResizeObserver !== 'undefined') {
-          let registered = false;
-          const wasObserved = isResizeObserved(element);
-          const unobserve = observeResize(element, () => {
-            if (registered) {
-              checkTruncation(element);
-            }
-          });
-          registered = true;
-          unobserveRef.current = unobserve;
-          // Skipped when this registration has ended by then (measuring
-          // turned off, or the element replaced, in the same task).
-          if (wasObserved) {
-            queueMicrotask(() => {
-              if (unobserveRef.current === unobserve) {
-                checkTruncation(element);
-              }
-            });
-          }
+      // Shown in full, the text keeps the answer it had when clamped.
+      if (isExpanded) {
+        if (element != null) {
+          setIsTruncated(answerRef.current.isTruncated);
+          setFullText(answerRef.current.fullText);
         } else {
+          keptForRef.current = previous;
+        }
+        return;
+      }
+
+      // A kept answer is about the text it measured. Other text starts from
+      // none, as it does after its old element goes.
+      const keptFor = keptForRef.current;
+      keptForRef.current = null;
+      if (keptFor != null && element !== keptFor) {
+        answerRef.current = {isTruncated: false, fullText: ''};
+        setIsTruncated(false);
+        setFullText('');
+      }
+
+      if (element && maxLines > 0) {
+        // Observe via the shared singleton, if available. The observer's
+        // first notification measures a new element. The browser sends it
+        // after its own layout, so mounting text forces no layout pass. The
+        // truncated state only decides whether to compose the tooltip, so
+        // nothing paints differently.
+        const unobserve = observeResizeAfterLayout(element, () => {
+          checkTruncation(element);
+        });
+        if (unobserve == null) {
           checkTruncation(element);
         }
+        unobserveRef.current = unobserve;
         // New text in a box that keeps its size fires no resize, so the
         // captured text and truncated state would otherwise stay stale.
         unobserveContentRef.current = observeContent(element, () => {
@@ -163,7 +181,7 @@ export function useTruncation(
         setFullText('');
       }
     },
-    [maxLines, checkTruncation],
+    [maxLines, isExpanded, checkTruncation],
   );
 
   return {
