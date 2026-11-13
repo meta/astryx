@@ -58,7 +58,7 @@ const top = async q => {
 
 const T = 120_000;
 
-describe('hunt68 F24e-5: lighter or darker fills', () => {
+describe('hunt68 lighter or darker fills', () => {
   it(
     'a button starts from its fill at rest, not the pressed overlay',
     async () => {
@@ -78,7 +78,7 @@ describe('hunt68 F24e-5: lighter or darker fills', () => {
   });
 });
 
-describe('hunt68 F24e-8: except', () => {
+describe('hunt68 except', () => {
   it(
     'the excepted dialog keeps its shadow',
     async () => {
@@ -128,7 +128,7 @@ describe('hunt68 F24e-8: except', () => {
   );
 });
 
-describe('hunt68 F24e-6/18, R26-D/J: parts named in words', () => {
+describe('hunt68 parts named in words', () => {
   it.each(
     /** @type {Array<[string, RegExp]>} */ ([
       ['dialog header gray', /--on dialog-header$/],
@@ -175,7 +175,7 @@ describe('hunt68 F24e-6/18, R26-D/J: parts named in words', () => {
   );
 });
 
-describe('hunt68 F24e-7: comparisons', () => {
+describe('hunt68 comparisons', () => {
   it(
     'as round as: the subject only takes the other part value',
     async () => {
@@ -196,7 +196,7 @@ describe('hunt68 F24e-7: comparisons', () => {
 
 describe('hunt68: lists, levels, stacks, sides', () => {
   it(
-    'F24e-9 each clause keeps its own variant',
+    'each clause keeps its own variant',
     async () => {
       const r = await top('make primary buttons red and the secondary blue');
       expect(r.all).toMatch(/--when variant:secondary/);
@@ -204,7 +204,7 @@ describe('hunt68: lists, levels, stacks, sides', () => {
     T,
   );
   it(
-    'F24e-11 a bare size in a text list',
+    'a bare size in a text list',
     async () => {
       const r = await top('make buttons bold, uppercase and 14px');
       expect(r.all).toMatch(/font-size 14px --on button/);
@@ -212,7 +212,7 @@ describe('hunt68: lists, levels, stacks, sides', () => {
     T,
   );
   it(
-    'F24e-13 every heading level from its own size',
+    'every heading level from its own size',
     async () => {
       const r = await top('make headings 20% bigger');
       expect(r.all).toMatch(/--text-heading-1-size/);
@@ -221,7 +221,7 @@ describe('hunt68: lists, levels, stacks, sides', () => {
     T,
   );
   it(
-    'F24e-14 a font stack whole on the part',
+    'a font stack whole on the part',
     async () => {
       const r = await top('card font Inter, sans-serif');
       expect(r.all).toBe("set q font-family 'Inter, sans-serif' --on card");
@@ -229,7 +229,7 @@ describe('hunt68: lists, levels, stacks, sides', () => {
     T,
   );
   it(
-    'F24e-12 card text lighter and dialog text twice as big',
+    'card text lighter and dialog text twice as big',
     async () => {
       expect((await top('make the card text lighter')).all).toMatch(
         /color .+ --on card/,
@@ -241,7 +241,7 @@ describe('hunt68: lists, levels, stacks, sides', () => {
     T,
   );
   it(
-    'R26-I padding sides',
+    'padding sides',
     async () => {
       expect((await top('padding top 12px on cards')).all).toBe(
         'set q padding-top 12px --on card',
@@ -266,7 +266,7 @@ describe('hunt68: a second part with an ask of its own', () => {
   );
 });
 
-describe('hunt68 F24e-21: a theme name near the typed one', () => {
+describe('hunt68 a theme name near the typed one', () => {
   it(
     'suggests the same question with the right name',
     () => {

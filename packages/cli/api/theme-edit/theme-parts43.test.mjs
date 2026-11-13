@@ -70,7 +70,7 @@ const needBases = ctx => {
   return true;
 };
 
-describe('one-mode backgrounds on parts whose variants have their own (F24-5)', () => {
+describe('one-mode backgrounds on parts whose variants have their own', () => {
   /** @param {string} slug @param {string} sel */
   const bgOf = (slug, sel) =>
     /background-color: ([^;]+);/.exec(ruleOf(slug, sel))?.[1];
@@ -161,7 +161,7 @@ describe('one-mode backgrounds on parts whose variants have their own (F24-5)', 
   }, 240_000);
 });
 
-describe('a whole-button hover on butter (F24-6)', () => {
+describe('a whole-button hover on butter', () => {
   it('reaches every variant, the ones with their own hover or resting color included', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('h6', {cwd, like: 'butter'});
@@ -180,7 +180,7 @@ describe('a whole-button hover on butter (F24-6)', () => {
   }, 240_000);
 });
 
-describe('a longhand after a shorthand the base holds (F24-10)', () => {
+describe('a longhand after a shorthand the base holds', () => {
   it('wins on butter: padding-inline after padding, border-color after border', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('l10', {cwd, like: 'butter'});
@@ -212,7 +212,7 @@ describe('a longhand after a shorthand the base holds (F24-10)', () => {
   }, 240_000);
 });
 
-describe('cards inside variant cards (F24-4, N20-2b)', () => {
+describe('cards inside variant cards', () => {
   it("keeps the plain card's side inside a variant card: the reset comes before its direction rules", async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('c4', {cwd, like: 'neutral'});
@@ -231,7 +231,7 @@ describe('cards inside variant cards (F24-4, N20-2b)', () => {
     expect(dir).toBeGreaterThan(reset);
   }, 240_000);
 
-  it("resets the own source's variant sides inside it, and the pair variable on the variant (N20-2b)", async ctx => {
+  it("resets the own source's variant sides inside it, and the pair variable on the variant", async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('c4o', {cwd, like: 'neutral'});
     ownSource(
@@ -261,7 +261,7 @@ describe('cards inside variant cards (F24-4, N20-2b)', () => {
   }, 240_000);
 });
 
-describe('the spacing dial around kept sizes (F24-1, F24-2, F24-9)', () => {
+describe('the spacing dial around kept sizes', () => {
   it('reads a kept size in rem or calc as px', () => {
     expect(sizePx('34px')).toBe(34);
     expect(sizePx('2.125rem')).toBe(34);
@@ -345,7 +345,7 @@ describe('the spacing dial around kept sizes (F24-1, F24-2, F24-9)', () => {
   }, 240_000);
 });
 
-describe('runs and notes (F24-3, F24-8, N23-5)', () => {
+describe('runs and notes', () => {
   it('offers the per-mode color step that works, and never a currentcolor gradient', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('r3', {cwd, like: 'neutral'});

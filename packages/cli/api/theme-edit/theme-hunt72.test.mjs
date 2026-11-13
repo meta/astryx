@@ -94,7 +94,7 @@ async function refusal(run) {
 const names = (/** @type {any} */ e) =>
   (e.suggestions ?? []).map((/** @type {any} */ x) => x.name);
 
-describe('CC-3: with several editor themes, the see line names the theme', () => {
+describe('with several editor themes, the see line names the theme', () => {
   it('suggests preview add --theme <t>', async () => {
     await themeEditNew('u', {cwd, like: 'neutral'});
     const r = await themeEditSet('u', 'corners', 'pill', {cwd});
@@ -102,7 +102,7 @@ describe('CC-3: with several editor themes, the see line names the theme', () =>
   }, 240_000);
 });
 
-describe('CC-6: preview remove given a file', () => {
+describe('preview remove given a file', () => {
   it('names the preview folder the file is in', async () => {
     await themeEditPreviewAdd(undefined, {cwd, theme: 't'});
     const err = await refusal(() =>
@@ -123,7 +123,7 @@ describe('CC-6: preview remove given a file', () => {
   });
 });
 
-describe('CC-10: a route changed by hand', () => {
+describe('a route changed by hand', () => {
   it('previewStale and see say why and what to do', async () => {
     const page = path.join(cwd, 'src/app/theme-preview/page.tsx');
     const kept = fs.readFileSync(page, 'utf8');
@@ -145,7 +145,7 @@ describe('CC-10: a route changed by hand', () => {
   }, 240_000);
 });
 
-describe('CC-8: a preview moved where Next does not serve it', () => {
+describe('a preview moved where Next does not serve it', () => {
   it('see and list hand out no URL', async () => {
     const from = path.join(cwd, 'src/app/theme-preview');
     const to = path.join(cwd, 'src/app/_private/tp');
@@ -163,7 +163,7 @@ describe('CC-8: a preview moved where Next does not serve it', () => {
   }, 240_000);
 });
 
-describe('CC-1: preview.html is a folder', () => {
+describe('preview.html is a folder', () => {
   it('says it could not be written, never that it could not be rendered', async () => {
     const f = path.join(cwd, 'themes/t/preview.html');
     fs.rmSync(f, {force: true});
@@ -179,7 +179,7 @@ describe('CC-1: preview.html is a folder', () => {
   }, 240_000);
 });
 
-describe('CC-4 and CC-9: pictures', () => {
+describe('pictures', () => {
   it('a picture of yours in the way: see says what blocks --png', async () => {
     const own = path.join(cwd, 'themes/t/preview.png');
     fs.writeFileSync(own, 'mine');
@@ -215,7 +215,7 @@ describe('CC-4 and CC-9: pictures', () => {
   }, 240_000);
 });
 
-describe('CC-7: run from a subfolder', () => {
+describe('run from a subfolder', () => {
   it('see names files by paths that work from there', async () => {
     const r = await themeEditSet('t', 'corners', 'round', {
       cwd: path.join(cwd, 'src'),
@@ -225,7 +225,7 @@ describe('CC-7: run from a subfolder', () => {
   }, 240_000);
 });
 
-describe('CC-5: the show help on pictures', () => {
+describe('the show help on pictures', () => {
   it('says show may bring the app copy up to date after a hand edit', () => {
     const png = showDoc.options.find(
       (/** @type {any} */ o) => o.flag === '--png',
@@ -236,7 +236,7 @@ describe('CC-5: the show help on pictures', () => {
   });
 });
 
-describe('R26-M: a dial value labeled with another setting', () => {
+describe('a dial value labeled with another setting', () => {
   it.each([
     ['accent', 'neutral: #64748b', 'neutral'],
     ['accent', '--color-accent: #64748b', '--color-accent'],
@@ -252,7 +252,7 @@ describe('R26-M: a dial value labeled with another setting', () => {
   }, 240_000);
 });
 
-describe('FINAL-24 R02: the normaliser', () => {
+describe('the normaliser', () => {
   it.each([
     ['\u201DInter\u201C', '"Inter"'],
     ['\u201EInter\u201C', '"Inter"'],
@@ -260,7 +260,7 @@ describe('FINAL-24 R02: the normaliser', () => {
     ['\u300EInter\u300F', '"Inter"'],
     ['url("a.png?x=1;y:2")', 'url("a.png?x=1;y:2")'],
     ['"Foo; Bar: X", serif', '"Foo; Bar: X", serif'],
-  ])('N71/N59 %j reads as %j', (typed, want) => {
+  ])('%j reads as %j', (typed, want) => {
     expect(normalValueText(typed)).toBe(want);
   });
 
@@ -271,7 +271,7 @@ describe('FINAL-24 R02: the normaliser', () => {
     ['content', "'it\\'s'"],
     ['content', '"\\""'],
     ['content', '"a (b"'],
-  ])('N72/N74 %s %j is kept whole', (thing, value) => {
+  ])('%s %j is kept whole', (thing, value) => {
     expect(normalizeEntry(thing, value).value).toBe(value);
     expect(withoutDebris(value)).toBe(value);
   });
@@ -284,7 +284,7 @@ describe('FINAL-24 R02: the normaliser', () => {
     ['buttons', 'soft,', 'soft'],
     ['accent', '"#e11d48",', '#e11d48'],
     ['accent', '#e11d48 !important', '#e11d48'],
-  ])('N75 saved %s %j is cleaned to %j', (dial, raw, want) => {
+  ])('saved %s %j is cleaned to %j', (dial, raw, want) => {
     expect(cleanDialValue(dial, raw)).toBe(want);
   });
 
@@ -294,24 +294,24 @@ describe('FINAL-24 R02: the normaliser', () => {
     ['{"light":"red","dark":"blue"}', {light: 'red', dark: 'blue'}],
     ['red / blue', {light: 'red', dark: 'blue'}],
     ['red, blue', {light: 'red', dark: 'blue'}],
-  ])('N79 %j is a pair', (typed, want) => {
+  ])('%j is a pair', (typed, want) => {
     expect(colorPair(typed)).toEqual(want);
     expect(normalizeEntry('--color-accent', typed).value).toBe(typed);
   });
 
-  it('N79 rgb() with a slash is no pair', () => {
+  it('rgb() with a slash is no pair', () => {
     expect(colorPair('rgb(1 2 3 / 50%)')).toBeNull();
   });
 
-  it('N78 a font stack as a JSON string is the stack', () => {
+  it('a font stack as a JSON string is the stack', () => {
     expect(
       normalizeEntry('--font-family-body', '"\\"Open Sans\\", serif"').value,
     ).toBe('"Open Sans", serif');
   });
 });
 
-describe('FINAL-24 R02: set end to end', () => {
-  it('N79 a token offers light-dark() and the two --mode lines', async () => {
+describe('set end to end', () => {
+  it('a token offers light-dark() and the two --mode lines', async () => {
     const err = await refusal(() =>
       themeEditSet('t', '--color-accent', 'light: red; dark: blue', {cwd}),
     );
@@ -324,7 +324,7 @@ describe('FINAL-24 R02: set end to end', () => {
     );
   });
 
-  it('N79 the accent dial takes one color, and the token takes the pair', async () => {
+  it('the accent dial takes one color, and the token takes the pair', async () => {
     const err = await refusal(() =>
       themeEditSet('t', 'accent', 'red / blue', {cwd}),
     );
@@ -332,7 +332,7 @@ describe('FINAL-24 R02: set end to end', () => {
     expect(names(err)[0]).toMatch(/ set t accent red$/);
   });
 
-  it('N78 a JSON object of two settings gives one line each', async () => {
+  it('a JSON object of two settings gives one line each', async () => {
     const err = await refusal(() =>
       themeEditSet('t', '{"accent":"#e11d48","corners":"pill"}', '', {cwd}),
     );
@@ -345,7 +345,7 @@ describe('FINAL-24 R02: set end to end', () => {
   it.each([
     ['night', 'dark'],
     ['day', 'light'],
-  ])('N77 --mode %s is %s', async (mode, want) => {
+  ])('--mode %s is %s', async (mode, want) => {
     const err = await refusal(() =>
       themeEditSet('t', '--color-accent', 'red', {cwd, mode}),
     );
@@ -356,7 +356,7 @@ describe('FINAL-24 R02: set end to end', () => {
     ['0.5', / set t vibrancy 50$/],
     ['"50"', / set t vibrancy 50$/],
   ])(
-    'N80 vibrancy %j',
+    'vibrancy %j',
     async (value, want) => {
       await themeEditSet('t', 'accent', '#e11d48', {cwd});
       const err = await refusal(() =>

@@ -42,7 +42,7 @@ describe('hunt73', () => {
     ['base', '"butter"'],
     ['mode', '"dark-only"'],
   ])(
-    'N76: a saved %s entry is offered only lines that unlock the theme',
+    'a saved %s entry is offered only lines that unlock the theme',
     async (thing, value) => {
       const slug = `n76-${thing}`;
       await themeEditNew(slug, {cwd});

@@ -2,7 +2,7 @@
 
 /**
  * @file The sixty-ninth pass over `astryx experimental theme editor how`
- * (FINAL-24 amounts): one amount parser for every way an amount is said,
+ * one amount parser for every way an amount is said,
  * never read as a length or with a second dial step; fractional pixels
  * kept; a part's line height and opacity scaled the right way; whole-theme
  * radius and border width amounts exact; a width amount with no width says
@@ -76,11 +76,11 @@ describe('hunt69: how amounts', () => {
     ['+50%', 1.5],
     ['-25%', 0.75],
     ['cut it by a third', 2 / 3],
-  ])('F24e-1: exactFactor(%s) = %s', (words, f) => {
+  ])('exactFactor(%s) = %s', (words, f) => {
     expect(exactFactor(words)).toBeCloseTo(f, 5);
   });
 
-  it('F24e-1/2: an amount is never a length, and no second dial step', async () => {
+  it('an amount is never a length, and no second dial step', async () => {
     for (const [q, want] of [
       ['make card padding 4 times', /set t padding 48px --on card/],
       ['card padding 2× bigger', /set t padding 24px --on card/],
@@ -96,7 +96,7 @@ describe('hunt69: how amounts', () => {
     }
   }, 240_000);
 
-  it('F24e-10: fractional pixels are kept', async () => {
+  it('fractional pixels are kept', async () => {
     expect(await how('half the border width on buttons')).toMatch(
       /border-width 0\.5px --on button/,
     );
@@ -108,7 +108,7 @@ describe('hunt69: how amounts', () => {
     );
   }, 240_000);
 
-  it('F24e-15: a part line height goes the asked way, by the asked factor', async () => {
+  it('a part line height goes the asked way, by the asked factor', async () => {
     expect(await how('less line height on cards')).toMatch(
       /line-height 1\.08 --on card/,
     );
@@ -120,7 +120,7 @@ describe('hunt69: how amounts', () => {
     );
   }, 240_000);
 
-  it('F24e-16: whole-theme radius amounts are exact token values; steps say so', async () => {
+  it('whole-theme radius amounts are exact token values; steps say so', async () => {
     const out = await how('double --radius-element');
     expect(out).toMatch(/set t --radius-element \d/);
     expect(out).not.toMatch(/corners more/);
@@ -129,25 +129,25 @@ describe('hunt69: how amounts', () => {
     );
   }, 240_000);
 
-  it('F24e-17: more transparent lowers the opacity and leaves the fill', async () => {
+  it('more transparent lowers the opacity and leaves the fill', async () => {
     const out = await how('make cards 50% more transparent');
     expect(out).toMatch(/set t opacity 0\.4 --on card/);
     expect(out).not.toMatch(/background transparent/);
   }, 240_000);
 
-  it('F24e-19: a width amount with no width says so, never a 720px cap', async () => {
+  it('a width amount with no width says so, never a 720px cap', async () => {
     const out = await how('make menus 20% wider');
     expect(out).toMatch(/no width of its own to scale/);
     expect(out).not.toMatch(/720px/);
   }, 240_000);
 
-  it('F24e-20: an own side padding is scaled with the rest', async () => {
+  it('an own side padding is scaled with the rest', async () => {
     expect(await how('double the card padding', 's')).toMatch(
       /set s padding '\S+ 40px' --on card/,
     );
   }, 240_000);
 
-  it('F24e-3: a px move keeps the state and starts from its value', async () => {
+  it('a px move keeps the state and starts from its value', async () => {
     expect(await how('make button corners 2px rounder on hover')).toMatch(
       /set t border-radius 10px --on button --state hover/,
     );
@@ -156,7 +156,7 @@ describe('hunt69: how amounts', () => {
     );
   }, 240_000);
 
-  it('F24e-4: whole-theme border width amounts scale the token', async () => {
+  it('whole-theme border width amounts scale the token', async () => {
     expect(await how('double the border width everywhere')).toMatch(
       /set t --border-width 6px/,
     );
@@ -165,7 +165,7 @@ describe('hunt69: how amounts', () => {
     );
   }, 240_000);
 
-  it('R26-E: a corner percent with an amount is an exact length, never a % radius', async () => {
+  it('a corner percent with an amount is an exact length, never a % radius', async () => {
     for (const q of [
       'card corners 50% of now',
       'card corners 50% smaller',
@@ -177,13 +177,13 @@ describe('hunt69: how amounts', () => {
     }
   }, 240_000);
 
-  it('R26-K: a corner amount with no radius to read says it is a step', async () => {
+  it('a corner amount with no radius to read says it is a step', async () => {
     expect(await how('halve the corner radius on the popover', 's')).toMatch(
       /one step, not an exact amount/,
     );
   }, 240_000);
 
-  it('R26-B: zero words remove the asked thing, on the asked state', async () => {
+  it('zero words remove the asked thing, on the asked state', async () => {
     expect(await how('no inner spacing on cards', 's')).toMatch(
       /set s padding 0px --on card/,
     );
@@ -196,13 +196,13 @@ describe('hunt69: how amounts', () => {
     expect(
       await how('no inner spacing on text-input when disabled', 's'),
     ).toMatch(/padding 0px --on text-input --state disabled/);
-    // A group member named in words is that member (hunt68 F24e-18).
+    // A group member named in words is that member.
     expect(await how('more padding on text inputs on hover', 's')).toMatch(
       /--on text-input --state hover/,
     );
   }, 240_000);
 
-  it('R25-A: font size and line height amounts on parts with no size of their own', async () => {
+  it('font size and line height amounts on parts with no size of their own', async () => {
     expect(await how('double the font size on avatars', 's')).toMatch(
       /set s font-size \S+ --on avatar/,
     );

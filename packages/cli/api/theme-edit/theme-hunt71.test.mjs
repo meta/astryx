@@ -39,7 +39,7 @@ afterAll(() => {
 });
 
 describe('hunt71', () => {
-  it('E3: a path typed for a new name names the theme it ends in', async () => {
+  it('a path typed for a new name names the theme it ends in', async () => {
     const fresh = await refusal(() => themeEditNew('themes/brand', {cwd}));
     expect(fresh.run[0]).toMatch(/ new brand$/);
     await themeEditNew('t', {cwd});
@@ -50,7 +50,7 @@ describe('hunt71', () => {
     }
   }, 240_000);
 
-  it('E4: undo with unreadable settings and no history names a command that works', async () => {
+  it('undo with unreadable settings and no history names a command that works', async () => {
     await themeEditNew('d4', {cwd});
     fs.writeFileSync(path.join(cwd, 'themes/d4/d4.settings.json'), '');
     fs.rmSync(path.join(cwd, 'themes/d4/d4.history.json'), {force: true});
@@ -59,7 +59,7 @@ describe('hunt71', () => {
     expect(r.run.join(' ')).toMatch(/ new d4/);
   }, 240_000);
 
-  it('E5: a folder holding only desktop.ini is empty', async () => {
+  it('a folder holding only desktop.ini is empty', async () => {
     fs.mkdirSync(path.join(cwd, 'themes/e5'), {recursive: true});
     fs.writeFileSync(
       path.join(cwd, 'themes/e5/desktop.ini'),
@@ -71,7 +71,7 @@ describe('hunt71', () => {
     );
   }, 240_000);
 
-  it('E9: a typo or camelCase of a theme name offers the theme meant', async () => {
+  it('a typo or camelCase of a theme name offers the theme meant', async () => {
     await themeEditNew('brand', {cwd});
     await themeEditNew('brand-dark', {cwd});
     const typo = await refusal(() =>
@@ -86,7 +86,7 @@ describe('hunt71', () => {
       themeEditSet('brandDark', 'corners', 'pill', {cwd}),
     );
     expect(camel.run[0]).toMatch(/ set brand-dark corners pill$/);
-    // CC-2: themePark is theme-park, never a new themepark.
+    // themePark is theme-park, never a new themepark.
     await themeEditNew('theme-park', {cwd});
     const park = await refusal(() =>
       themeEditSet('themePark', 'corners', 'pill', {cwd}),
@@ -108,7 +108,7 @@ describe('hunt71', () => {
     expect(said(again)).toMatch(/given mode="light"/);
   }, 240_000);
 
-  it('E8: undo --help says --mode removes a setting saved for one mode', () => {
+  it('undo --help says --mode removes a setting saved for one mode', () => {
     const mode = /** @type {any} */ (undoDoc).options.find(
       (/** @type {any} */ o) => o.flag === '--mode <mode>',
     );
@@ -116,7 +116,7 @@ describe('hunt71', () => {
     expect(mode.description).toContain('removes a setting saved for one mode');
   });
 
-  it('E10: a stop after the save says the change is saved and how to run the rest', () => {
+  it('a stop after the save says the change is saved and how to run the rest', () => {
     const write = vi
       .spyOn(process.stderr, 'write')
       .mockImplementation(() => true);
@@ -135,7 +135,7 @@ describe('hunt71', () => {
     expect(line).toMatch(/change to t is saved and built.*show t runs them/);
   });
 
-  it('R26-C: a damaged mode and a bad value: the fix for either one works', async () => {
+  it('a damaged mode and a bad value: the fix for either one works', async () => {
     await themeEditNew('c26', {cwd});
     await themeEditSet('c26', 'corners', 'pill', {cwd});
     const file = path.join(cwd, 'themes/c26/c26.settings.json');
@@ -161,7 +161,7 @@ describe('hunt71', () => {
     await themeEditUndo('c26', {cwd, thing: 'corners'});
   }, 240_000);
 
-  it('R26-L: an entry with no source is damage new keeps aside, as the refusal says', async () => {
+  it('an entry with no source is damage new keeps aside, as the refusal says', async () => {
     await themeEditNew('l26', {cwd});
     const file = path.join(cwd, 'themes/l26/l26.settings.json');
     const j = JSON.parse(fs.readFileSync(file, 'utf8'));
