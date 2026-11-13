@@ -3972,8 +3972,18 @@
       "aliases": []
     },
     {
+      "name": "example-use-table-columns-virtualization-wide-table",
+      "path": "examples/use-table-columns-virtualization/wide-table",
+      "aliases": []
+    },
+    {
       "name": "example-use-table-grouped-rows-collapsible-groups",
       "path": "examples/use-table-grouped-rows/collapsible-groups",
+      "aliases": []
+    },
+    {
+      "name": "example-use-table-infinite-scroll-load-more-products",
+      "path": "examples/use-table-infinite-scroll/load-more-products",
       "aliases": []
     },
     {
@@ -4024,6 +4034,11 @@
     {
       "name": "example-use-table-tree-data-tree-table",
       "path": "examples/use-table-tree-data/tree-table",
+      "aliases": []
+    },
+    {
+      "name": "example-use-theme-name-active-theme",
+      "path": "examples/use-theme-name/active-theme",
       "aliases": []
     },
     {
@@ -4387,6 +4402,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-table-columns-virtualization",
+      "path": "hooks/use-table-columns-virtualization",
+      "aliases": []
+    },
+    {
       "name": "hook-use-table-filter-state",
       "path": "hooks/use-table-filter-state",
       "aliases": []
@@ -4399,6 +4419,11 @@
     {
       "name": "hook-use-table-grouped-rows",
       "path": "hooks/use-table-grouped-rows",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-infinite-scroll",
+      "path": "hooks/use-table-infinite-scroll",
       "aliases": []
     },
     {
@@ -4464,6 +4489,11 @@
     {
       "name": "hook-use-theme",
       "path": "hooks/use-theme",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-theme-name",
+      "path": "hooks/use-theme-name",
       "aliases": []
     },
     {
