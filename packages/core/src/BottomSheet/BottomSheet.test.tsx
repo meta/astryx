@@ -19,7 +19,15 @@ import {
   onTestFinished,
 } from 'vitest';
 import {act, cleanup, render, screen, fireEvent} from '@testing-library/react';
-import {Profiler, createRef, useState, type ReactNode} from 'react';
+import {
+  Profiler,
+  Suspense,
+  createRef,
+  startTransition,
+  use,
+  useState,
+  type ReactNode,
+} from 'react';
 import {BottomSheet} from './BottomSheet';
 import {BottomSheetEscapeContext} from './bottomSheetEscape';
 import {resetBottomSheetStackForTests} from './bottomSheetStack';
@@ -319,30 +327,32 @@ function getHandle(): HTMLElement {
 
 // Drive a pointer drag on the grab handle. jsdom PointerEvents don't carry
 // clientY, so dispatch plain events with the coords the handlers read.
+// One clock for the drags: each event comes 16 ms after the one before, so
+// a drag's release velocity follows its events' own timestamps.
+let dragTime = 0;
+
 function drag(
   handle: HTMLElement,
   points: {y: number}[],
   pointerType: 'mouse' | 'touch' | 'pen' = 'mouse',
 ) {
   const [down, ...rest] = points;
-  fireEvent.pointerDown(handle, {
-    pointerId: 1,
-    clientY: down.y,
-    button: 0,
-    isPrimary: true,
-    pointerType,
-  });
+  const at = (y: number) => {
+    dragTime += 16;
+    return {time: dragTime, y, pointerType};
+  };
+  fireTimedPointer(handle, 'pointerdown', at(down.y));
   for (const p of rest) {
-    fireEvent.pointerMove(handle, {pointerId: 1, clientY: p.y, pointerType});
+    fireTimedPointer(handle, 'pointermove', at(p.y));
   }
   const last = points[points.length - 1];
-  fireEvent.pointerUp(handle, {pointerId: 1, clientY: last.y, pointerType});
+  fireTimedPointer(handle, 'pointerup', at(last.y));
 }
 
 function fireTimedPointer(
   target: Element,
   type: 'pointerdown' | 'pointermove' | 'pointerup',
-  {time, y}: {time: number; y: number},
+  {time, y, pointerType}: {time: number; y: number; pointerType?: string},
 ) {
   const event = new Event(type, {bubbles: true, cancelable: true});
   Object.defineProperties(event, {
@@ -352,6 +362,9 @@ function fireTimedPointer(
     pointerId: {value: 1},
     timeStamp: {value: time},
   });
+  if (pointerType != null) {
+    Object.defineProperty(event, 'pointerType', {value: pointerType});
+  }
   return fireEvent(target, event);
 }
 
@@ -961,6 +974,61 @@ describe('BottomSheet', () => {
       } finally {
         elsewhere.remove();
         target.remove();
+      }
+    });
+
+    it('returns focus to the committed finalFocusRef when it unmounts after React discards a render with another', async () => {
+      // A transition that suspends for good: React renders it, then keeps the
+      // committed tree and never commits that render.
+      const forever = new Promise<never>(() => {});
+      function Forever(): null {
+        use(forever);
+        return null;
+      }
+      const target = document.createElement('button');
+      const discardedTarget = document.createElement('button');
+      document.body.append(target, discardedTarget);
+      const finalFocusRef = {current: target as HTMLElement | null};
+      const discardedFinalFocusRef = {
+        current: discardedTarget as HTMLElement | null,
+      };
+      const page = (
+        focusRef: {current: HTMLElement | null} | null,
+        isPending = false,
+      ) => (
+        <Suspense fallback={null}>
+          {focusRef == null ? null : (
+            <BottomSheet
+              isOpen
+              onOpenChange={() => {}}
+              finalFocusRef={focusRef}
+              label="Filters">
+              <button type="button">Inside</button>
+            </BottomSheet>
+          )}
+          {isPending ? <Forever /> : null}
+        </Suspense>
+      );
+      try {
+        const {rerender} = render(page(finalFocusRef));
+        act(() =>
+          screen.getByRole('button', {name: 'Inside', hidden: true}).focus(),
+        );
+        await act(async () => {
+          startTransition(() => {
+            rerender(page(discardedFinalFocusRef, true));
+          });
+        });
+
+        // The page removes the open sheet; its removal returns focus.
+        rerender(page(null));
+        await act(async () => {});
+
+        expect(document.activeElement).not.toBe(discardedTarget);
+        expect(document.activeElement).toBe(target);
+      } finally {
+        target.remove();
+        discardedTarget.remove();
       }
     });
 
@@ -3738,8 +3806,9 @@ describe('BottomSheet', () => {
         expect(body.scrollTop).toBe(248);
       });
 
-      // A field the sheet cannot see: one in an open shadow host or in a frame.
-      // Focus on it leaves `document.activeElement` on its holder.
+      // A field behind a holder: one inside an open shadow root, or in a frame.
+      // Focus on it leaves `document.activeElement` on the holder. The sheet
+      // reads into the open root, and a frame can hold a field it cannot read.
       const hiddenFields = [
         ['an open shadow host', 'shadow host'],
         ['a frame', 'frame'],
@@ -3766,6 +3835,53 @@ describe('BottomSheet', () => {
         };
         return {...sheet, focusHiddenField};
       }
+
+      it('rides the content down when focus moves from a field to a plain button inside an open shadow host, as a blur does', async () => {
+        const {body, input, report, drawnTop} = renderIOSSheet({
+          picker: <div title="Editor" />,
+        });
+        const host = screen.getByTitle('Editor');
+        const button = host
+          .attachShadow({mode: 'open'})
+          .appendChild(document.createElement('button'));
+        act(() => input.focus());
+        report(500);
+        act(() => button.focus());
+        expect(document.activeElement).toBe(host);
+        await nextFrame();
+        expect(drawnTop(performance.now() + 450)).toBeCloseTo(0, 0);
+        expect(keyboardInsetOf(body)).toBe(348);
+        expect(body.scrollTop).toBe(248);
+      });
+
+      it('rides the content down from the blur once focus settles on a plain button inside an open shadow host', async () => {
+        const {body, input, report, drawnTop} = renderIOSSheet({
+          picker: <div title="Editor" />,
+        });
+        const host = screen.getByTitle('Editor');
+        const button = host
+          .attachShadow({mode: 'open'})
+          .appendChild(document.createElement('button'));
+        act(() => input.focus());
+        report(500);
+        // The browser runs the blur's frame after focus settles on the button.
+        const frames: FrameRequestCallback[] = [];
+        vi.mocked(requestAnimationFrame).mockImplementation(callback => {
+          frames.push(callback);
+          return frames.length;
+        });
+        act(() => button.focus());
+        expect(document.activeElement).toBe(host);
+        vi.mocked(requestAnimationFrame).mockImplementation(callback => {
+          callback(0);
+          return 1;
+        });
+        act(() => frames.splice(0).forEach(frame => frame(0)));
+        await nextFrame();
+        expect(drawnTop(performance.now() + 450)).toBeCloseTo(0, 0);
+        expect(keyboardInsetOf(body)).toBe(348);
+        expect(body.scrollTop).toBe(248);
+      });
 
       it.each(hiddenFields)(
         'starts no ride when focus moves from a field into %s, whose own field can keep the keyboard up',
@@ -4874,6 +4990,31 @@ describe('BottomSheet', () => {
     });
   });
 
+  describe('scrim property isolation', () => {
+    // A drag writes the scrim's opacity on the dialog for each move, and only
+    // the dialog's backdrop reads it. An inherited custom property restyles
+    // every element under the one it changes on. jsdom reports the declared
+    // `initial`. A browser computes no value, which the interaction proof
+    // BottomSheetDragRestyle covers.
+    it("declares the dialog's scrim properties `initial` on the sheet panel", () => {
+      render(
+        <BottomSheet isOpen onOpenChange={() => {}} label="Filters">
+          Content
+        </BottomSheet>,
+      );
+      const dialog = screen.getByRole('dialog', {hidden: true});
+      dialog.style.setProperty('--_sheet-scrim-opacity', '0.5');
+      dialog.style.setProperty('--_sheet-scrim-duration', '120ms');
+      const computed = window.getComputedStyle(getSheet());
+      expect(computed.getPropertyValue('--_sheet-scrim-opacity')).toBe(
+        'initial',
+      );
+      expect(computed.getPropertyValue('--_sheet-scrim-duration')).toBe(
+        'initial',
+      );
+    });
+  });
+
   describe('container padding isolation', () => {
     it('resets container padding custom properties to 0px on the sheet panel element', () => {
       render(
@@ -4976,5 +5117,66 @@ describe('BottomSheet focus region (Dialog DEC-2)', () => {
     const only = screen.getByRole('button', {name: 'Only'});
     only.focus();
     expect(fireEvent.keyDown(only, {key: 'Tab'})).toBe(true);
+  });
+});
+
+// A same-name native radio group is one Tab stop: its checked radio, or its
+// first when none is checked. Medium is checked and is neither first nor last.
+function SizeRadios({name}: {name: string}) {
+  return (
+    <fieldset>
+      <legend>Size</legend>
+      <input type="radio" name={name} value="s" aria-label="Small" />
+      <input
+        type="radio"
+        name={name}
+        value="m"
+        aria-label="Medium"
+        defaultChecked
+      />
+      <input type="radio" name={name} value="l" aria-label="Large" />
+    </fieldset>
+  );
+}
+
+function expectRadioGroupEndsTheCycle() {
+  const medium = screen.getByRole('radio', {name: 'Medium', hidden: true});
+  const first = screen.getByRole('button', {name: 'First', hidden: true});
+  medium.focus();
+  expect(fireEvent.keyDown(medium, {key: 'Tab'})).toBe(false);
+  expect(first).toHaveFocus();
+  expect(fireEvent.keyDown(first, {key: 'Tab', shiftKey: true})).toBe(false);
+  expect(medium).toHaveFocus();
+}
+
+function expectRadioGroupStartsTheCycle() {
+  const medium = screen.getByRole('radio', {name: 'Medium', hidden: true});
+  const last = screen.getByRole('button', {name: 'Last', hidden: true});
+  medium.focus();
+  expect(fireEvent.keyDown(medium, {key: 'Tab', shiftKey: true})).toBe(false);
+  expect(last).toHaveFocus();
+  expect(fireEvent.keyDown(last, {key: 'Tab'})).toBe(false);
+  expect(medium).toHaveFocus();
+}
+
+describe('BottomSheet focus region: a radio group is one Tab stop', () => {
+  it('wraps Tab from the checked radio of a group that ends the sheet', () => {
+    render(
+      <BottomSheet isOpen onOpenChange={() => {}} label="Filters">
+        <button type="button">First</button>
+        <SizeRadios name="size" />
+      </BottomSheet>,
+    );
+    expectRadioGroupEndsTheCycle();
+  });
+
+  it('wraps Shift+Tab from the checked radio of a group that starts the sheet', () => {
+    render(
+      <BottomSheet isOpen onOpenChange={() => {}} label="Filters">
+        <SizeRadios name="size" />
+        <button type="button">Last</button>
+      </BottomSheet>,
+    );
+    expectRadioGroupStartsTheCycle();
   });
 });

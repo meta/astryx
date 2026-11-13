@@ -34,7 +34,7 @@ import {
   type MultiSelectorHandle,
   type MultiSelectorChange,
 } from './MultiSelector';
-import {useRef, useState} from 'react';
+import {Suspense, startTransition, use, useRef, useState} from 'react';
 import {createPortal} from 'react-dom';
 import {Dialog} from '../Dialog/Dialog';
 import {Icon} from '../Icon';
@@ -3448,14 +3448,19 @@ describe('MultiSelector search affordances', () => {
     await user.type(search, 'ap');
     expect(search).toHaveFocus();
 
-    // Forward-tab lands on the clear (✕) button and the popup stays open, so
-    // the affordance is keyboard-reachable rather than being skipped when the
-    // input's Tab dismisses the popup.
-    await user.tab();
+    // The clear (✕) button is the next Tab stop after the input, the focus
+    // region leaves the input's Tab to the browser, and the popup stays open
+    // when focus moves there, so the affordance is keyboard-reachable rather
+    // than skipped by the input's Tab dismissing the popup.
     const clear = screen.getByRole('button', {
       name: 'Clear Search options',
       hidden: true,
     });
+    expect(
+      search.compareDocumentPosition(clear) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(fireEvent.keyDown(search, {key: 'Tab'})).toBe(true);
+    act(() => clear.focus());
     expect(clear).toHaveFocus();
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
   });
@@ -3933,6 +3938,48 @@ describe('MultiSelector trigger render prop', () => {
     });
     expect(onOpenChange).toHaveBeenLastCalledWith(false);
     expect(onOpenChange).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports the close to the committed onOpenChange after React discards a render with another', async () => {
+    // A transition that suspends for good: React renders it, then keeps the
+    // committed tree and never commits that render.
+    const forever = new Promise<never>(() => {});
+    function Forever(): null {
+      use(forever);
+      return null;
+    }
+    const handleRef = {current: null as MultiSelectorHandle | null};
+    const field = (
+      onOpenChange: (isOpen: boolean) => void,
+      isPending = false,
+    ) => (
+      <Suspense fallback={null}>
+        <MultiSelector
+          label="Labels"
+          options={OPTIONS}
+          value={[]}
+          onChange={() => {}}
+          handleRef={handleRef}
+          onOpenChange={onOpenChange}
+        />
+        {isPending ? <Forever /> : null}
+      </Suspense>
+    );
+    const onOpenChange = vi.fn();
+    const discardedOnOpenChange = vi.fn();
+    const {rerender} = render(field(onOpenChange));
+    act(() => handleRef.current?.open());
+    expect(onOpenChange).toHaveBeenLastCalledWith(true);
+    await act(async () => {
+      startTransition(() => {
+        rerender(field(discardedOnOpenChange, true));
+      });
+    });
+
+    act(() => handleRef.current?.close());
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenLastCalledWith(false));
+    expect(discardedOnOpenChange).not.toHaveBeenCalled();
   });
 
   it('the handle does not open a disabled selector', () => {

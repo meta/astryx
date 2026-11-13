@@ -146,7 +146,7 @@ function extractSkeleton(source) {
 
     // Match a JSX opening tag, e.g. `<Section` or the legacy `<XDSSection`.
     // The `XDS` prefix is optional (templates author bare names post
-    // un-prefix migration P2380608025). `tagName` is the full authored name
+    // un-prefix migration). `tagName` is the full authored name
     // (used for the self-closing lookahead); `comp` is the bare display name.
     const openMatch = t.match(/^<((XDS)?([A-Z]\w+))/);
     if (openMatch && !t.startsWith('</')) {

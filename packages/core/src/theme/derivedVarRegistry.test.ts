@@ -137,6 +137,11 @@ const STRUCTURAL_VARS = new Set([
   // Also beside it: how far above the viewport's bottom a layer ends while the
   // keyboard is up. Runtime geometry, never authored by a theme.
   '--_layer-keyboard-inset-block-end',
+  // A sheet's scrim opacity and fade time. The sheet writes both on its
+  // dialog for the backdrop, and its panel resets them so the content does
+  // not inherit them. Runtime state, never authored by a theme.
+  '--_sheet-scrim-opacity',
+  '--_sheet-scrim-duration',
 ]);
 
 /**
@@ -309,6 +314,21 @@ const PRIVATE_SYSTEM_VARS = new Set([
   // `break-word` fallback. scripts/text-overflow-wrap-anywhere.test.mjs
   // keeps every such container setting it.
   '--_astryx-text-overflow-wrap',
+  // List FR5 and the container-padding record's corner geometry: a bleeding
+  // List passes its first and last rows the container corner they take.
+  '--_list-corner-start-start',
+  '--_list-corner-start-end',
+  '--_list-corner-end-start',
+  '--_list-corner-end-end',
+  // Table FR19 and the container-padding record's block-edge geometry: a
+  // windowed Table includes the parent padding that it bleeds across.
+  '--_table-bleed-block-start',
+  '--_table-bleed-block-end',
+  // The container-padding record's corner geometry: a rounded Card, Dialog,
+  // or BottomSheet hands its block-edge radius to the shared corner
+  // publication beside container().
+  '--_container-corner-block-start',
+  '--_container-corner-block-end',
 ]);
 
 const CROSS_COMPONENT_VARS: Record<string, string[]> = {
@@ -357,7 +377,6 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   // generated at all — `inset` and `content` on a pseudo-element are not
   // properties a theme author sets on the component.
   '--_thumbnail-hit-inset',
-  '--_input-clear-hit-inset',
   '--_power-search-sheet-hit-inset',
   // The border width a host draws where its touch hit layer reaches past,
   // such as a divided ListItem's divider (0 on the last row).
@@ -375,13 +394,16 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   // by whatever paints it. A theme sets `--color-overlay-pressed`, not this.
   '--_press-paint',
   '--_press-paint-image',
-  // A checkbox row's touch press image, which an indicator that paints its
-  // own press inherits. The row writes it from the press paint above.
+  // A checkbox row's press image, which an indicator that paints its own
+  // press inherits. The row writes it from the press paint above.
   '--_indicator-press-image',
+  // Transparent while the controller paints a checkbox row's press, so that
+  // indicator skips its `:active` fill. The row's own press arms write it. A
+  // theme author never sets it.
+  '--_indicator-active-press',
   // A CheckboxList row's own press paint, handed to its checkbox's box:
   // written by the row's own press arms, never a value a theme author sets.
   '--_checkbox-row-press-paint',
-  '--_input-clear-hit-content',
   '--_power-search-sheet-hit-content',
   // Placement and swipe lifecycle values are private Toast behavior. A theme
   // author controls the surface transform/opacity as a whole, not these values.

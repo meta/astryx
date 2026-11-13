@@ -4,6 +4,9 @@
 
 export const docs = {
   name: 'NumberInput',
+  playground: {
+    defaults: {label: 'Count', value: 3},
+  },
   displayName: 'Number Input',
   category: 'Form Controls',
   keywords: [

@@ -14,6 +14,7 @@
  */
 
 import {
+  use,
   useCallback,
   useEffect,
   useRef,
@@ -21,6 +22,7 @@ import {
   type ReactNode,
   type RefCallback,
 } from 'react';
+import {TooltipPresentInterestContext} from './tooltipPresentInterest';
 import {createTriggerFocusGate, isFocusOnTrigger} from '../utils/triggerFocus';
 import * as stylex from '@stylexjs/stylex';
 import {
@@ -148,7 +150,8 @@ export interface TooltipOptions {
   /**
    * Controlled open state. When provided, overrides hover/focus triggers:
    * - `true`: force-show the tooltip (hover/focus hide is suppressed)
-   * - `false`: force-hide the tooltip
+   * - `false`: force-hide the tooltip. Focus that would show it calls
+   *   `onShow` and shows nothing.
    * - `undefined`: uncontrolled — hover/focus triggers manage visibility
    *
    * A controlled tooltip still takes Escape when it is the top-most layer, and
@@ -165,7 +168,8 @@ export interface TooltipOptions {
   isDefaultOpen?: boolean;
 
   /**
-   * Callback fired when tooltip is shown.
+   * Callback fired when tooltip is shown. Under `isOpen={false}`, it reports
+   * focus that would show the tooltip.
    * Wrap in useCallback for stable identity.
    */
   onShow?: () => void;
@@ -311,6 +315,8 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   const showTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
+  // Set only by a Core component that mounts the tooltip on interaction.
+  const presentInterest = use(TooltipPresentInterestContext);
   // Whether the tooltip is enabled now, for a show that runs after a render
   // (a pending hover show) and for the trigger ref callback.
   const isEnabledRef = useRef(isEnabled);
@@ -394,6 +400,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     handlePointerDown: handleTouchPointerDown,
     clearTapOpen,
     armOutsideDismiss,
+    answerTap,
   } = useTouchTriggerInternal(
     {
       touchTrigger,
@@ -406,6 +413,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       hide: hideFromTouch,
     },
     handleReleaseInLayer,
+    true,
   );
 
   const isHeldOpen = useCallback(() => {
@@ -568,6 +576,13 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
         return;
       }
       clearTimeouts();
+      // Held closed, the focus reports through onShow and shows nothing. The
+      // caller decides.
+      const latest = latestRef.current;
+      if (latest.isOpen === false) {
+        latest.onShow?.();
+        return;
+      }
       showLayer();
     },
     [
@@ -683,6 +698,8 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     hideNow,
     showNow,
     opensOnFocus,
+    presentInterest,
+    answerTap,
   });
   handlersRef.current = {
     handleMouseEnter,
@@ -698,6 +715,8 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     hideNow,
     showNow,
     opensOnFocus,
+    presentInterest,
+    answerTap,
   };
 
   // Removes the attached trigger's listeners (the trigger ref callback's
@@ -773,6 +792,30 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       latest().opensOnFocus(focused, el)
     ) {
       latest().showNow();
+    }
+
+    // This tooltip mounted after the interaction that wants it. It answers
+    // that interaction once, by the same rules as its listeners.
+    const state = latest().presentInterest?.current;
+    const interest = state == null || state.isRead ? null : state.interest;
+    const tapEvent = state?.tapEvent ?? null;
+    if (state != null) {
+      state.isRead = true;
+    }
+    if (isEnabledRef.current && latest().isOpen === undefined) {
+      if (interest === 'hover') {
+        latest().handleMouseEnter();
+      } else if (interest === 'tap') {
+        latest().answerTap(tapEvent);
+      } else if (
+        interest === 'focus' &&
+        latest().focusTrigger !== 'never' &&
+        focused instanceof HTMLElement &&
+        el.contains(focused) &&
+        latest().opensOnFocus(focused, el)
+      ) {
+        latest().showNow();
+      }
     }
 
     const detach = () => {

@@ -16,6 +16,7 @@
 import {useCallback, useEffect, useRef, useState, type RefObject} from 'react';
 import {flushSync} from 'react-dom';
 import {useAttachment} from '../hooks/useAttachment';
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import {useMediaQuery} from '../hooks/useMediaQuery';
 import {
   animatorFor,
@@ -23,10 +24,12 @@ import {
   type MotionHandle,
 } from '../motion/animator';
 import {KEYBOARD_SPRING} from '../motion/uikit/springs';
+import {deepActiveElement} from '../utils/flatTree';
 import {subscribeInput} from '../utils/inputStream';
 import {layoutViewportHeight} from '../utils/layoutViewport';
 import {isDocument, isNode} from '../utils/nodeType';
 import {observeResize} from '../utils/sharedResizeObserver';
+import {sharedState} from '../utils/sharedRealm';
 import {TOUCH_QUERY} from '../utils/touchPresentation';
 import {
   KEYBOARD_EPSILON,
@@ -117,11 +120,17 @@ function getObstructionTop(): number {
 // agent.
 // From then on, a sheet there reveals its field at once, in the report's own
 // frame.
-let revealsAtReport = new WeakSet<Window>();
+const reveals = sharedState(
+  'keyboard/use-mobile-keyboard/reveals-at-report',
+  1,
+  () => ({
+    atReport: new WeakSet<Window>(),
+  }),
+);
 
 /** Forgets every window's recorded reveal, for tests. */
 export function __resetRevealsAtReportForTest(): void {
-  revealsAtReport = new WeakSet<Window>();
+  reveals.atReport = new WeakSet<Window>();
 }
 
 // How far the body runs under the keyboard's top, CSS px. The keyboard's top
@@ -140,10 +149,11 @@ function isVisualViewportRecovered(): boolean {
   return getKeyboardHeight(window) <= 0.5;
 }
 
-// Whether focus on `target` may keep the keyboard up. A control that brings
-// one up does, and so can a frame, an open shadow host or a custom element,
-// through its own field.
-function mayKeepKeyboard(target: Element | null): boolean {
+// Whether the focused control may keep the keyboard up, read inside open
+// shadow roots. A frame or a custom element can hold a field the page cannot
+// see. An open shadow host that has focus itself also counts.
+function mayKeepKeyboard(): boolean {
+  const target = deepActiveElement(document);
   return target != null && (bringsUpKeyboard(target) || hidesField(target));
 }
 
@@ -177,12 +187,12 @@ export function useMobileKeyboard(
   const [keyboardInset, setKeyboardInset] = useState(0);
   const hasKeyboardLayoutRef = useRef(false);
   const retainKeyboardLayoutRef = useRef(false);
-  const isEnabledRef = useRef(isEnabled);
-  const isExpandedRef = useRef(isExpanded);
-  const isOpenRef = useRef(isOpen);
-  isEnabledRef.current = isEnabled;
-  isExpandedRef.current = isExpanded;
-  isOpenRef.current = isOpen;
+  // The committed options, which the listeners and the dismissal read. They
+  // are current before any layout effect, where an earlier sibling can move
+  // focus.
+  const isEnabledRef = useCommittedRef(isEnabled);
+  const isExpandedRef = useCommittedRef(isExpanded);
+  const isOpenRef = useCommittedRef(isOpen);
   // Touch-only work, the ride and the reveal-pan watch, attaches only under a
   // coarse primary pointer (the touch query). Under a fine one, the hook
   // registers no touch listener.
@@ -211,7 +221,7 @@ export function useMobileKeyboard(
         focusTarget.focus({preventScroll: true});
       }
     },
-    [targetRef],
+    [isEnabledRef, targetRef],
   );
 
   // Syncs the on-screen keyboard with closing: a target that closes blurs its
@@ -536,14 +546,14 @@ export function useMobileKeyboard(
             const settle = keepDrawnPlace();
             applyKeyboardGeometry(keyboardGeometry);
             settle();
-            // Focus left for a control that brings up no keyboard, so the
-            // keyboard goes down now. A select's picker takes the keyboard's
-            // place instead. A frame, an open shadow host or a custom element
-            // can hold a field that keeps it up.
+            // Focus left for a control that brings up no keyboard, inside an
+            // open shadow root too, so the keyboard goes down now. A select's
+            // picker takes the keyboard's place instead. A frame or a custom
+            // element can hold a field the page cannot see, which keeps it up.
             if (
               isExpandedRef.current &&
               hasKeyboardLayoutRef.current &&
-              !mayKeepKeyboard(document.activeElement)
+              !mayKeepKeyboard()
             ) {
               holdThroughUnguidedHide();
             }
@@ -608,7 +618,7 @@ export function useMobileKeyboard(
 
         scrollControlIntoSafeArea(
           focusedControl,
-          overlap > 0 && !revealsAtReport.has(window),
+          overlap > 0 && !reveals.atReport.has(window),
           overlap > 0 ? showOnSlide(atReport) : null,
         );
       };
@@ -691,9 +701,9 @@ export function useMobileKeyboard(
       // inset drops and the scroll goes back with the translate in one commit.
       // So nothing moves then. A ride not yet landed goes on from there at the
       // same speed. A control that takes focus first and brings up a keyboard
-      // or a picker keeps that space covered, so the content rides back up.
-      // Focus moving into a frame, an open shadow host or a custom element
-      // does too: a field there can keep the keyboard.
+      // or a picker keeps that space covered, so the content rides back up. A
+      // field inside an open shadow root does too, and so can a frame or a
+      // custom element, whose field the page cannot see.
       const holdThroughUnguidedHide = () => {
         const animator = unguidedAnimator();
         if (animator == null || heldHide != null) {
@@ -714,7 +724,7 @@ export function useMobileKeyboard(
             if (
               active instanceof HTMLElement &&
               body.contains(active) &&
-              mayKeepKeyboard(active)
+              mayKeepKeyboard()
             ) {
               hold.release();
               void rideKeyboardSpring(animator, 0);
@@ -966,7 +976,7 @@ export function useMobileKeyboard(
           return;
         }
         if (revealPan?.isRevealPan(event.height) === true) {
-          revealsAtReport.add(window);
+          reveals.atReport.add(window);
           cancelAnimationFrame(animationFrame);
           // A smooth reveal still under way lands the field where it is going.
           // Another scroll on top of it would overshoot in Firefox, which keeps

@@ -20,8 +20,22 @@ import {inspectPackageExport} from './package-exports.mjs';
 import {themeImportPackage} from './theme-discovery.mjs';
 import {isLocalThemeOwner, projectPath} from '../config/theme-state.mjs';
 import {formatCliCommand} from '../env/package-manager.mjs';
+import {installCommandFor} from './template-needs.mjs';
 
-export class ThemeImportError extends Error {}
+export class ThemeImportError extends Error {
+  /**
+   * @param {string} message
+   * @param {{cause?: unknown, suggestions?: Array<{name: string, reason: string}>}} [options]
+   */
+  constructor(message, options = {}) {
+    super(
+      message,
+      options.cause === undefined ? undefined : {cause: options.cause},
+    );
+    /** Commands that move past the refusal. */
+    this.suggestions = options.suggestions ?? [];
+  }
+}
 
 /** @param {string} file */
 function readPackage(file) {
@@ -133,8 +147,22 @@ function resolvePackageTheme(theme, cwd, ownerThemeCount) {
     /** @type {any} */ (theme).packageDir ??
     findInstalledPackage(cwd, importPackage);
   if (!packageDir) {
+    // The app imports a theme from its package, bundled themes included, so
+    // the package is installed in the app before the theme is added.
+    const {installCommand} = installCommandFor([importPackage], cwd);
+    const add = formatCliCommand(`theme add ${theme.slug}`, cwd);
+    const install = installCommand ?? `npm install ${importPackage}`;
     throw new ThemeImportError(
-      `Theme package "${importPackage}" is not installed. Run \`npm install ${importPackage}\` (or yarn/pnpm/bun), then run \`${formatCliCommand(`theme add ${theme.slug}`, cwd)}\`.`,
+      `Theme package "${importPackage}" is not installed. The app imports ${theme.slug} from it, so install it, then add the theme: \`${install}\`, then \`${add}\`.`,
+      {
+        suggestions: [
+          {
+            name: install,
+            reason: `install ${importPackage}, which the app imports`,
+          },
+          {name: add, reason: 'add the theme once it is installed'},
+        ],
+      },
     );
   }
   const pkg = readPackage(path.join(packageDir, 'package.json'));

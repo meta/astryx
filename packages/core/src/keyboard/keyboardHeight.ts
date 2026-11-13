@@ -7,9 +7,9 @@
  * @input The visual viewport, the window's input stream (focus, blur,
  *   resize, scroll and touch), and the layout viewport's height
  * @output The on-screen keyboard module: measureKeyboardHeight,
- *   isKeyboardMeasurable, subscribeKeyboardHeight, getKeyboardHeight,
- *   isTextEntryControl, findTextEntryControl, refuseFocusReveal and
- *   watchRevealPan
+ *   isKeyboardMeasurable, hasVirtualKeyboard, subscribeKeyboardHeight,
+ *   getKeyboardHeight, isTextEntryControl, findTextEntryControl,
+ *   refuseFocusReveal and watchRevealPan
  * @position Core's one source for the on-screen keyboard. It is internal to
  *   core and never exported from the package.
  *
@@ -17,14 +17,25 @@
  */
 
 import {armClickGuard} from '../utils/clickGuard';
+import {matchesMediaQuery} from '../utils/coarsePointer';
 import {subscribeInput} from '../utils/inputStream';
-import {isNode} from '../utils/nodeType';
+import {isElement, isHTMLElement, isNode} from '../utils/nodeType';
 import {layoutViewportHeight} from '../utils/layoutViewport';
 import {PRESS_SLOP_PX} from '../utils/pressGesture';
 import {caretAt} from '../utils/selectionLock';
+import {sharedWeakMap} from '../utils/sharedRealm';
 
 // A shortfall smaller than this is rounding, not a keyboard.
 export const KEYBOARD_EPSILON = 1;
+// Android's Remove animations setting, which makes Chrome report a hide in
+// steps.
+const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+// How long a step of a hide waits for the next report. It is longer than
+// Gboard's whole hide (hideMs).
+const HIDE_STEP_WAIT_MS = 300;
+// How long a hide's steps wait in all, from the first. A toolbar's moves
+// while a lower keyboard stays up cannot hold the layout longer.
+const HIDE_STEP_LIMIT_MS = 1000;
 const NON_TEXT_INPUT_TYPES = new Set([
   'button',
   'checkbox',
@@ -97,7 +108,10 @@ interface KeyboardStore {
   detachFocus: (() => void) | null;
 }
 
-const stores = new WeakMap<Window, KeyboardStore>();
+const stores = sharedWeakMap<Window, KeyboardStore>(
+  'keyboard/keyboard-height/stores',
+  1,
+);
 
 function storeOf(win: Window): KeyboardStore {
   let store = stores.get(win);
@@ -114,19 +128,73 @@ function storeOf(win: Window): KeyboardStore {
   return store;
 }
 
+/**
+ * Whether `win` has the VirtualKeyboard API, as Chrome on Android does. The
+ * keyboard layout guide reads Chrome's profile there (keyboardProfileOf).
+ */
+export function hasVirtualKeyboard(win: Window): boolean {
+  return 'virtualKeyboard' in win.navigator;
+}
+
+// Whether a report of `height` is one step of a hide. Under Remove
+// animations, Chrome on Android reports a hide as several lower keyboards
+// that are still up, before the report of none.
+function isHideStep(win: Window, shown: number, height: number): boolean {
+  return (
+    height > KEYBOARD_EPSILON &&
+    height < shown - KEYBOARD_EPSILON &&
+    hasVirtualKeyboard(win) &&
+    matchesMediaQuery(win, REDUCED_MOTION_QUERY)
+  );
+}
+
 function attach(win: Window, store: KeyboardStore): () => void {
   const viewport = win.visualViewport;
   store.height = measureKeyboardHeight(win);
-  const onViewport = (event: Event) => {
-    store.height = measureKeyboardHeight(win);
-    const report: KeyboardHeightEvent = {
-      type: 'viewport',
-      height: store.height,
-      timeStamp: event.timeStamp,
-    };
+  // Set while a step of a hide waits. The store keeps the height it reported,
+  // so every reader lays out once, when the keyboard comes to rest.
+  let stepTimer: ReturnType<typeof setTimeout> | null = null;
+  let stepHeight = 0;
+  let stepLimit = 0;
+  const deliver = (height: number, timeStamp: number) => {
+    store.height = height;
+    const report: KeyboardHeightEvent = {type: 'viewport', height, timeStamp};
     for (const listener of [...store.listeners]) {
       listener(report);
     }
+  };
+  const onViewport = (event: Event) => {
+    const height = measureKeyboardHeight(win);
+    if (isHideStep(win, store.height, height)) {
+      // A pan reports the same step again, and leaves the wait as it is.
+      if (
+        stepTimer != null &&
+        Math.abs(height - stepHeight) < KEYBOARD_EPSILON
+      ) {
+        return;
+      }
+      const now = win.performance.now();
+      if (stepTimer == null) {
+        stepLimit = now + HIDE_STEP_LIMIT_MS;
+      } else {
+        clearTimeout(stepTimer);
+      }
+      stepHeight = height;
+      // The report of none, a report back up, or a quiet spell ends the wait.
+      stepTimer = setTimeout(
+        () => {
+          stepTimer = null;
+          deliver(measureKeyboardHeight(win), win.performance.now());
+        },
+        Math.min(HIDE_STEP_WAIT_MS, stepLimit - now),
+      );
+      return;
+    }
+    if (stepTimer != null) {
+      clearTimeout(stepTimer);
+      stepTimer = null;
+    }
+    deliver(height, event.timeStamp);
   };
   viewport?.addEventListener('resize', onViewport);
   viewport?.addEventListener('scroll', onViewport);
@@ -138,6 +206,10 @@ function attach(win: Window, store: KeyboardStore): () => void {
     }
   });
   return () => {
+    if (stepTimer != null) {
+      clearTimeout(stepTimer);
+      stepTimer = null;
+    }
     viewport?.removeEventListener('resize', onViewport);
     viewport?.removeEventListener('scroll', onViewport);
     stopResize();
@@ -234,28 +306,26 @@ export function getKeyboardHeight(win: Window): number {
 export function isTextEntryControl(
   element: Element | null,
 ): element is HTMLElement {
-  if (
-    element instanceof HTMLElement &&
-    element.getAttribute('inputmode') === 'none'
-  ) {
+  // Reads the kind by name, so an element of another window (a same-origin
+  // iframe, a Picture-in-Picture window) passes too.
+  if (!isHTMLElement(element) || element.getAttribute('inputmode') === 'none') {
     return false;
   }
-  if (element instanceof HTMLTextAreaElement) {
-    return !element.disabled && !element.readOnly;
+  if (element.localName === 'textarea') {
+    const textArea = element as HTMLTextAreaElement;
+    return !textArea.disabled && !textArea.readOnly;
   }
-  if (element instanceof HTMLInputElement) {
+  if (element.localName === 'input') {
+    const input = element as HTMLInputElement;
     return (
-      !element.disabled &&
-      !element.readOnly &&
+      !input.disabled &&
+      !input.readOnly &&
       !NON_TEXT_INPUT_TYPES.has(
-        (element.getAttribute('type') ?? 'text').toLowerCase(),
+        (input.getAttribute('type') ?? 'text').toLowerCase(),
       )
     );
   }
-  return (
-    element instanceof HTMLElement &&
-    element.matches('[contenteditable]:not([contenteditable="false"])')
-  );
+  return element.matches('[contenteditable]:not([contenteditable="false"])');
 }
 
 /** The text-entry control inside `container` that `target` is or labels. */
@@ -263,7 +333,7 @@ export function findTextEntryControl(
   target: EventTarget | null,
   container: HTMLElement,
 ): HTMLElement | null {
-  if (!(target instanceof Element)) {
+  if (!isElement(target)) {
     return null;
   }
 
@@ -275,7 +345,7 @@ export function findTextEntryControl(
   }
 
   const label = target.closest('label');
-  const control = label instanceof HTMLLabelElement ? label.control : null;
+  const control = isHTMLElement(label) ? label.control : null;
   return container.contains(control) && isTextEntryControl(control)
     ? control
     : null;
@@ -294,13 +364,13 @@ export interface RefuseFocusRevealOptions {
 // One shared `blur` subscription per document serves every caller of
 // refuseFocusReveal in it, so listeners do not grow with the number of
 // instances. The first caller adds it, and the last removes it.
-const focusTakeovers = new WeakMap<
+const focusTakeovers = sharedWeakMap<
   Document,
   {
     stop: () => void;
     callers: Set<(event: FocusEvent) => void>;
   }
->();
+>('keyboard/keyboard-height/focus-takeovers', 1);
 
 /**
  * Delivers the focus moves `claim` accepts with `preventScroll`, so the
@@ -417,10 +487,10 @@ export interface RevealPanWatch {
 // One shared touch subscription per document serves every reveal-pan watch
 // in it, so no instance adds a listener. The first watch adds it, and the
 // last removes it.
-const touchStartWatches = new WeakMap<
+const touchStartWatches = sharedWeakMap<
   Document,
   {stop: () => void; watches: Set<() => void>}
->();
+>('keyboard/keyboard-height/touch-start-watches', 1);
 
 function watchTouchStarts(doc: Document, onTouchStart: () => void): () => void {
   let shared = touchStartWatches.get(doc);

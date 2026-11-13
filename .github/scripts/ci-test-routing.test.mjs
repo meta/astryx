@@ -229,28 +229,30 @@ describe.each(Object.entries(WORKFLOWS))(
           ].join('\n'),
         );
         expect(share.env.SCOPED).toBe(
-          "${{ github.event_name == 'pull_request' && steps.scope.outputs.full_suite == 'false' }}",
+          "${{ github.event_name == 'pull_request' && steps.scope.outputs.vitest_full_suite == 'false' }}",
         );
-        // The Node lane runs the same scoped share, guards included.
+        // The Node lane runs its scoped tests and guards in one run, so its
+        // duration legs balance both lists together.
         const node = workflow.jobs['test-node'].steps.find(
           step => step.name === 'Run this shard of the Node tests',
         );
         expect(node.run.trim()).toBe(
           [
             'if [ "$SCOPED" = true ]; then',
-            `  .github/scripts/run-named.sh "Tests the change reaches" -- pnpm test:node --changed=HEAD^1 --passWithNoTests ${SHARD_ARG}`,
-            '  # Tests no module graph relates to the change run too: guards',
-            '  # that read sources, and tests that load a changed package from',
-            '  # its build (by name or its dist/).',
-            '  # The list goes through a file so a failing lister fails the step.',
-            '  # The guard run leaves out the tests the run above already ran, so',
-            '  # no test runs twice. Every leg splits the same reduced list, so a',
-            '  # leg that cannot list them fails rather than split a different one.',
-            '  .github/scripts/run-named.sh "List the tests the first run ran" -- pnpm exec vitest list --project node --changed=HEAD^1 --filesOnly --passWithNoTests --json="$RUNNER_TEMP/already-run.json"',
-            '  .github/scripts/run-named.sh "List the tests that read source files" --stdout "$RUNNER_TEMP/fs-guards.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --already-run "$RUNNER_TEMP/already-run.json"',
-            '  mapfile -t GUARDS < "$RUNNER_TEMP/fs-guards.txt"',
-            '  if [ "${#GUARDS[@]}" -gt 0 ]; then',
-            `    .github/scripts/run-named.sh "Tests that read source files" -- pnpm test:node --passWithNoTests ${SHARD_ARG} "\${GUARDS[@]}"`,
+            '  # One run covers the tests the change reaches and the tests no',
+            '  # module graph relates to it: guards that read sources, and tests',
+            '  # that load a changed package from its build (by name or its',
+            '  # dist/). In one run the legs balance both lists by recorded',
+            '  # time, so a slow changed test does not land on top of a full',
+            '  # share of guards.',
+            '  # The lists go through files so a failing lister fails the step.',
+            '  # Every leg splits the same list, so a leg that cannot list the',
+            '  # tests fails rather than split a different one.',
+            '  .github/scripts/run-named.sh "List the tests the change reaches" -- pnpm exec vitest list --project node --changed=HEAD^1 --filesOnly --passWithNoTests --json="$RUNNER_TEMP/reached.json"',
+            '  .github/scripts/run-named.sh "List the tests to run" --stdout "$RUNNER_TEMP/node-tests.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --reached "$RUNNER_TEMP/reached.json"',
+            '  mapfile -t TESTS < "$RUNNER_TEMP/node-tests.txt"',
+            '  if [ "${#TESTS[@]}" -gt 0 ]; then',
+            `    .github/scripts/run-named.sh "Tests the change reaches and tests that read source files" -- pnpm test:node --passWithNoTests ${SHARD_ARG} "\${TESTS[@]}"`,
             '  fi',
             'else',
             `  pnpm test:node ${SHARD_ARG}`,
@@ -402,6 +404,29 @@ describe.each(Object.entries(WORKFLOWS))(
   },
 );
 
+describe('Vitest scoping for shared infrastructure the module graph reaches (spec:AST-030 FR13)', () => {
+  const workflow = load('ci.yml');
+  const scopedEnv = (job, name) =>
+    workflow.jobs[job].steps.find(step => step.name === name).env.SCOPED;
+
+  it('scopes the UI and Node Vitest lanes by vitest_full_suite', () => {
+    for (const [job, name] of [
+      ['test-ui', 'Run this shard of the UI tests'],
+      ['test-node', 'Run this shard of the Node tests'],
+    ]) {
+      expect(scopedEnv(job, name)).toBe(
+        "${{ github.event_name == 'pull_request' && steps.scope.outputs.vitest_full_suite == 'false' }}",
+      );
+    }
+  });
+
+  it('keeps every other owner on full_suite', () => {
+    const text = read('.github/workflows/ci.yml');
+    expect(text.match(/outputs\.vitest_full_suite/g)).toHaveLength(2);
+    expect(text).toContain("steps.scope.outputs.full_suite == 'false'");
+  });
+});
+
 describe('ci.yml pr-a11y browser specs', () => {
   const steps = load('ci.yml').jobs['pr-a11y-specs'].steps;
   const run = steps.find(
@@ -422,31 +447,45 @@ describe('ci.yml pr-a11y browser specs', () => {
   });
 
   it("runs the merge commit's runner against the PR head", () => {
+    const count = steps.find(
+      step => step.name === "Count this run's accessibility legs",
+    );
     expect(run.if).toBe(
-      "(!cancelled()) && steps.scope.outputs.has_components == 'true'",
+      "(!cancelled()) && steps.scope.outputs.has_components == 'true' && steps.legs.outputs.runs == 'true'",
     );
     // The merge commit the steps come from, not the PR's recorded base, which
-    // can lag main and predate the runner.
-    expect(run.env.WORKFLOW_SHA).toBe('${{ github.sha }}');
+    // can lag main and predate the runner. The count step selects; the run
+    // step runs that leg's share with the same runner.
+    for (const step of [count, run]) {
+      expect(step.env.WORKFLOW_SHA).toBe('${{ github.sha }}');
+      expect(step.env.PR_TITLE).toBe('${{ github.event.pull_request.title }}');
+    }
     // The base comes from the merge commit's first parent, not the event.
-    expect(run.env.BASE_SHA).toBeUndefined();
-    expect(run.run).toContain('BASE_SHA=$(git rev-parse "$WORKFLOW_SHA^1")');
-    expect(run.env.PR_TITLE).toBe('${{ github.event.pull_request.title }}');
+    expect(count.env.BASE_SHA).toBeUndefined();
+    expect(count.run).toContain('BASE_SHA=$(git rev-parse "$WORKFLOW_SHA^1")');
+    expect(count.run).toContain(
+      'git show "$WORKFLOW_SHA:.github/scripts/a11y-pr-contracts.mjs" > "$runner"',
+    );
+    expect(count.run).toContain(
+      '--share-out "$RUNNER_TEMP/a11y-leg-share.json"',
+    );
     expect(run.run).toContain(
       'git show "$WORKFLOW_SHA:.github/scripts/a11y-pr-contracts.mjs" > "$runner"',
     );
-    expect(run.run).toContain('node "$runner"');
+    expect(run.run).toContain(
+      'node "$runner" --share "$RUNNER_TEMP/a11y-leg-share.json"',
+    );
     expect(
       JSON.parse(read('package.json')).scripts['test:a11y-contract:pr'],
     ).toBe('node .github/scripts/a11y-pr-contracts.mjs');
   });
 
-  it('uploads every spec receipt in one head-bound artifact', () => {
+  it('uploads every spec receipt in one head-bound artifact per leg', () => {
     expect(upload.if).toBe(
-      "(!cancelled()) && steps.scope.outputs.has_components == 'true'",
+      "(!cancelled()) && steps.scope.outputs.has_components == 'true' && steps.legs.outputs.runs == 'true'",
     );
     expect(upload.with.name).toBe(
-      'pr-a11y-evidence-${{ needs.build-storybook.outputs.short_hash }}',
+      'pr-a11y-evidence-${{ needs.build-storybook.outputs.short_hash }}-${{ matrix.leg }}',
     );
     for (const dir of [
       'pr-a11y-evidence/',
@@ -480,6 +519,7 @@ describe('ci.yml RTL package sharding', () => {
     );
     expect(readers.map(([name]) => name).sort()).toEqual(
       [
+        'a11y-dependent-audits-plan',
         'pr-a11y-guards',
         'pr-a11y-specs',
         'pr-component-a11y-contracts',
@@ -489,6 +529,7 @@ describe('ci.yml RTL package sharding', () => {
         'pr-rtl-shard',
         'pr-touched-components',
         'pr-visual',
+        'release-specs-plan',
         'visual-scout',
       ].sort(),
     );
@@ -724,8 +765,10 @@ describe('full component typechecks', () => {
     name => {
       const {typecheck, 'typecheck:docs': docs} = scriptsOf(`packages/${name}`);
       expect(docs).toBe('tsc --project tsconfig.docs.json');
+      // Core's project runs in several programs (scripts/typecheck-sharded.mjs);
+      // each covers its whole tsconfig.json.
       expect(typecheck).toMatch(
-        /^tsc (--project tsconfig\.json )?--noEmit && pnpm typecheck:docs$/,
+        /^(tsc (--project tsconfig\.json )?--noEmit|node \.\.\/\.\.\/scripts\/typecheck-sharded\.mjs --project tsconfig\.json --shards \d+) && pnpm typecheck:docs$/,
       );
     },
   );
@@ -844,14 +887,16 @@ describe('ci.yml interaction proofs', () => {
       'admission',
       'heavy-ci',
       'build-storybook',
+      'interaction-legs',
     ]);
     const checkout = job.steps.find(
       candidate =>
         candidate.uses?.startsWith('actions/checkout@') &&
         candidate.with?.path === undefined,
     );
+    // Main's nightly full run checks the commit it runs on.
     expect(checkout?.with?.ref).toBe(
-      '${{ github.event.pull_request.head.sha }}',
+      '${{ github.event.pull_request.head.sha || github.sha }}',
     );
     const run = step('Run interaction proofs').run;
     expect(run).toContain('--config playwright.interaction.config.ts');

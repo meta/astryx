@@ -4,7 +4,7 @@
 
 /**
  * @file TopNavRenderContext.ts
- * @input React createContext, use
+ * @input createSharedContext, use
  * @output Exports TopNavRenderContext and useTopNavRenderMode hook
  * @position Internal context for controlling TopNav rendering mode
  *
@@ -15,12 +15,16 @@
  * - 'drawer': nav items as vertical list elements (mobile drawer)
  */
 
-import {createContext, use} from 'react';
+import {use} from 'react';
+import {createSharedContext} from '../utils/sharedContext';
 
 export type TopNavRenderMode = 'default' | 'mobile-bar' | 'drawer';
 
-export const TopNavRenderContext =
-  createContext<TopNavRenderMode>('default');
+export const TopNavRenderContext = createSharedContext<TopNavRenderMode>(
+  'TopNavRenderContext',
+  1,
+  'default',
+);
 TopNavRenderContext.displayName = 'TopNavRenderContext';
 
 /**
