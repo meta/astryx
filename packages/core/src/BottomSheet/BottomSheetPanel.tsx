@@ -71,7 +71,7 @@ import {
   type BottomSheetSnapPoint,
 } from './snapOffsets';
 import {animatorFor, SETTLE_THRESHOLD} from '../motion/animator';
-import {resolveSettleMs} from '../motion/resolveMotion';
+import {resolveMoveTiming} from '../motion/resolveMotion';
 import {springs} from '../motion/uikit/springs';
 import {useMobileKeyboard} from '../keyboard/useMobileKeyboard';
 import {
@@ -130,6 +130,15 @@ function hasStyles(xstyle: unknown): boolean {
     : xstyle != null && typeof xstyle === 'object';
 }
 
+/**
+ * The scrim's fade under a touch drag's close: the close's duration in ms,
+ * and its progress as CSS easing, so the fade follows the sheet.
+ */
+export interface ScrimFade {
+  readonly durationMs: number;
+  readonly easing: string;
+}
+
 function supportsWebAnimations(): boolean {
   return (
     typeof Element !== 'undefined' &&
@@ -138,16 +147,29 @@ function supportsWebAnimations(): boolean {
 }
 
 /**
- * How long a drag's close plays, in ms. It is the close spring's move from
- * where the finger left the sheet, timed as the shared animator times it.
+ * How a drag's close plays: the close spring's move from where the finger
+ * left the sheet, timed as the shared animator times it, and its progress
+ * toward the point where the sheet leaves view. The sheet's surface reaches
+ * below the screen (the reserve), so it leaves view before the close ends,
+ * and the scrim is clear when it does.
  */
-function dragExitMs(element: Element, exit: SheetDragExit): number {
-  return resolveSettleMs(element, springs.sheetDismissSwipe, {
-    from: 0,
-    to: exit.distance,
-    velocity: exit.velocity,
-    epsilon: SETTLE_THRESHOLD.y,
-  });
+function dragExitFade(element: Element, exit: SheetDragExit): ScrimFade {
+  const viewportHeight = element.ownerDocument.defaultView?.innerHeight ?? 0;
+  const shown = Math.max(
+    0,
+    viewportHeight - element.getBoundingClientRect().top,
+  );
+  return resolveMoveTiming(
+    element,
+    springs.sheetDismissSwipe,
+    {
+      from: 0,
+      to: exit.distance,
+      velocity: exit.velocity,
+      epsilon: SETTLE_THRESHOLD.y,
+    },
+    Math.min(exit.distance, shown),
+  );
 }
 
 /** The running fade that clears the scrim behind `panel`, if any. */
@@ -372,6 +394,7 @@ const styles = stylex.create({
     // inheritance, so the restyle stops here.
     '--_sheet-scrim-opacity': 'initial',
     '--_sheet-scrim-duration': 'initial',
+    '--_sheet-scrim-easing': 'initial',
   },
   // A sheet present on page load opens where it rests (spec:AST-013 FR13):
   // the collapse reduced motion uses, so the transition still ends.
@@ -586,12 +609,12 @@ interface BottomSheetPanelProps extends BaseProps<HTMLDivElement> {
   onDismiss: () => void;
   onScrimOpacity: (opacity: number) => void;
   /**
-   * The scrim's fade under a touch drag's close, in milliseconds, or null
-   * once that close ends or a reopen takes the sheet back. `panel` is the
-   * sheet's element: the commit that starts the close can detach the host's
-   * dialog ref while this runs.
+   * The scrim's fade under a touch drag's close, or null once that close
+   * ends or a reopen takes the sheet back. `panel` is the sheet's element:
+   * the commit that starts the close can detach the host's dialog ref while
+   * this runs.
    */
-  onScrimFadeDuration?: (panel: HTMLElement, ms: number | null) => void;
+  onScrimFade?: (panel: HTMLElement, fade: ScrimFade | null) => void;
   onElementChange?: (element: HTMLDivElement | null) => void;
   /**
    * A ref for the grab handle's element. The handle stays mounted with the
@@ -774,7 +797,7 @@ export function BottomSheetPanel({
   isPageScrollLocked = false,
   onDismiss,
   onScrimOpacity,
-  onScrimFadeDuration,
+  onScrimFade,
   onElementChange,
   handleRef,
   onMotionStart,
@@ -787,7 +810,7 @@ export function BottomSheetPanel({
   >(null);
   const onMotionStartRef = useCommittedRef(onMotionStart);
   const onMotionCompleteRef = useCommittedRef(onMotionComplete);
-  const onScrimFadeDurationRef = useCommittedRef(onScrimFadeDuration);
+  const onScrimFadeRef = useCommittedRef(onScrimFade);
   const startedMotionRef = useRef<BottomSheetPanelMotion | null>(null);
   const pendingMotionCompleteRef = useRef<BottomSheetPanelMotion | null>(null);
 
@@ -991,14 +1014,14 @@ export function BottomSheetPanel({
       return;
     }
     // The host's current callback hears the fade end, as it heard its start.
-    const reportFade = (durationMs: number | null) => {
-      onScrimFadeDurationRef.current?.(element, durationMs);
+    const reportFade = (fade: ScrimFade | null) => {
+      onScrimFadeRef.current?.(element, fade);
     };
-    reportFade(dragExitMs(element, playedDragExit));
+    reportFade(dragExitFade(element, playedDragExit));
     return () => {
       reportFade(null);
     };
-  }, [onScrimFadeDurationRef, playedDragExit]);
+  }, [onScrimFadeRef, playedDragExit]);
   // Syncs the motion with the panel's CSS transition, or a drag's exit with
   // the shared animator. The motion completes when that one ends.
   useLayoutEffect(() => {
@@ -1057,7 +1080,7 @@ export function BottomSheetPanel({
       });
       void exit.finished.then(() => {
         isFinished = true;
-        onScrimFadeDurationRef.current?.(element, null);
+        onScrimFadeRef.current?.(element, null);
         if (isCurrent) {
           complete();
         }
@@ -1090,7 +1113,7 @@ export function BottomSheetPanel({
     playedDragExit,
     isReactivatedEntrance,
     onMotionCompleteRef,
-    onScrimFadeDurationRef,
+    onScrimFadeRef,
   ]);
   // The snap is transform-only; the layout height reconciles when it lands.
   // waitForTransition — the same helper the motion states use — resolves that
