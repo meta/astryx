@@ -1,6 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {useState} from 'react';
+import {
+  useCallback,
+  useState,
+  type ComponentProps,
+  type SyntheticEvent,
+} from 'react';
+import {createPortal} from 'react-dom';
 import type {Meta, StoryObj} from '@storybook/react';
 import {Lightbox, useLightbox} from '@astryxdesign/core/Lightbox';
 
@@ -264,6 +270,83 @@ export const GalleryWithCenteredParagraphCaptionFixture: Story = {
     ],
   },
   render: GalleryWithCaptions.render,
+};
+
+const FRAME_DOCUMENT = '<!doctype html><html><head></head><body></body></html>';
+
+/** Copy the page's style sheets into the frame, as an app does. */
+function adoptPageStyles(target: Document) {
+  for (const sheet of Array.from(document.styleSheets)) {
+    if (
+      sheet.href != null &&
+      new URL(sheet.href).origin !== window.location.origin
+    ) {
+      continue;
+    }
+    const style = target.createElement('style');
+    style.textContent = Array.from(sheet.cssRules, rule => rule.cssText).join(
+      '\n',
+    );
+    target.head.append(style);
+  }
+}
+
+function CaptionGallery({
+  media,
+}: Pick<ComponentProps<typeof Lightbox>, 'media'>) {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <>
+      <button onClick={() => setIsOpen(true)}>
+        Open gallery with captions
+      </button>
+      <Lightbox
+        isOpen={isOpen}
+        onOpenChange={setIsOpen}
+        media={media}
+        hasZoom
+      />
+    </>
+  );
+}
+
+/**
+ * The gallery with captions in a same-origin iframe that fills the page, so its
+ * elements come from a second document, as in a Picture-in-Picture window.
+ */
+export const GalleryWithCaptionsInFrameFixture: Story = {
+  tags: ['!autodocs', 'no-visual'],
+  args: GalleryWithCaptions.args,
+  render: function GalleryInFrame({media}) {
+    const [body, setBody] = useState<HTMLElement | null>(null);
+    const handleLoad = useCallback(
+      (event: SyntheticEvent<HTMLIFrameElement>) => {
+        const frameDocument = event.currentTarget.contentDocument;
+        if (frameDocument != null) {
+          adoptPageStyles(frameDocument);
+          setBody(frameDocument.body);
+        }
+      },
+      [],
+    );
+    return (
+      <>
+        <iframe
+          title="Second document"
+          srcDoc={FRAME_DOCUMENT}
+          onLoad={handleLoad}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            border: 0,
+          }}
+        />
+        {body != null && createPortal(<CaptionGallery media={media} />, body)}
+      </>
+    );
+  },
 };
 
 /**

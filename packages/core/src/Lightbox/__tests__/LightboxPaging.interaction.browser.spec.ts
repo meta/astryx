@@ -2151,7 +2151,18 @@ for (const {name, story} of CAPTION_STORIES) {
   });
 }
 
-for (const {name, story} of CAPTION_STORIES) {
+// The plain caption again, in a same-origin iframe's document, whose elements
+// are not this window's, as in a Picture-in-Picture window.
+const FIT_CASES = [
+  ...CAPTION_STORIES.map(caption => ({...caption, isInFrame: false})),
+  {
+    name: 'a plain caption in a second document',
+    story: 'core-lightbox--gallery-with-captions-in-frame-fixture',
+    isInFrame: true,
+  },
+];
+
+for (const {name, story, isInFrame} of FIT_CASES) {
   test(`an open caption that widens to one line fewer gives "less" a line of its own only where it does not fit beside the last line (${name})`, async ({
     page,
   }) => {
@@ -2165,10 +2176,11 @@ for (const {name, story} of CAPTION_STORIES) {
     const narrow = {width: 360, height: 874};
     await page.setViewportSize(narrow);
     await openStory(page, storybook(), story);
-    await page
+    const root = isInFrame ? page.frameLocator('iframe') : page;
+    await root
       .getByRole('button', {name: 'Open gallery with captions'})
       .click();
-    const dialog = page.getByRole('dialog');
+    const dialog = root.getByRole('dialog');
     await dialog.getByRole('button', {name: 'more'}).click();
     await expect(dialog.getByRole('button', {name: 'less'})).toBeVisible();
     await frames(page, 4);
@@ -2208,6 +2220,13 @@ for (const {name, story} of CAPTION_STORIES) {
                 (textBottom - lineHeight / 2),
             ) <=
             lineHeight / 2,
+          // The place keeps the end of the line that "less" is on clear.
+          isOnPlace:
+            Math.abs(
+              (toggleBox.top + toggleBox.bottom) / 2 -
+                (place.getBoundingClientRect().bottom - lineHeight / 2),
+            ) <=
+            lineHeight / 2,
           lastLineEnd: Math.max(...lastLine.map(rect => rect.right)),
           lastLineStart: Math.min(...lastLine.map(rect => rect.left)),
           toggleLeft: toggleBox.left,
@@ -2228,6 +2247,10 @@ for (const {name, story} of CAPTION_STORIES) {
       await page.setViewportSize({width, height: narrow.height});
       await frames(page, 3);
       const facts = await read();
+      // At every width, "less" sits on the line its place keeps clear.
+      if (!facts.isOnPlace) {
+        misplaced.push(`${width} px: ${JSON.stringify(facts)}`);
+      }
       if (facts.lines < narrowLines - 1) {
         break;
       }
