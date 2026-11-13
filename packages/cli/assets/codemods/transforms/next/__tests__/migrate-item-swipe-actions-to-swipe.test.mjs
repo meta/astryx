@@ -157,6 +157,27 @@ function Rows({extra}) {
     expect(unproven).toContain('spreads props that may carry them');
   });
 
+  it("reports nothing on a row that spreads what an array literal's map callback takes, when every element gives it an object literal with no swipe props", async () => {
+    const source = `import {Item} from '@astryxdesign/core/Item';
+const rows = (
+  [
+    ['Rest', {}],
+    ['Selected', {isSelected: true}],
+  ] as const
+).map(([label, state]) => <Item key={label} {...state} label={label} />);
+const items = [{label: 'A'}, {label: 'B', isDisabled: true}].map(props => (
+  <Item key={props.label} {...props} />
+));`;
+    expect(await applyTransform(source)).toBe(source);
+    const unproven =
+      await applyTransform(`import {Item} from '@astryxdesign/core/Item';
+const rows = [
+  ['Rest', {}],
+  ['Mail', {swipeActions: mailActions}],
+].map(([label, state]) => <Item key={label} {...state} label={label} />);`);
+    expect(unproven).toContain('spreads props that may carry them');
+  });
+
   it('defines the swipe in useMemo when a handler reads the component state, with a useState setter left out of its dependencies', async () => {
     const raw = await applyTransform(`import {useState} from 'react';
 import {ListItem} from '@astryxdesign/core/List';

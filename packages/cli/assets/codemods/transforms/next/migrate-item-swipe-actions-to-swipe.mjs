@@ -886,7 +886,8 @@ function ensureUseMemo(j, root) {
 
 /**
  * Whether a spread provably carries no swipe prop: it spreads a `const` bound
- * to an object literal with no spread and no swipe key.
+ * to such an object literal, or what an array literal's `map` callback takes
+ * when every element gives it one.
  * @param {any} spread @param {any} rowPath
  */
 function carriesNoSwipeProps(spread, rowPath) {
@@ -896,22 +897,77 @@ function carriesNoSwipeProps(spread, rowPath) {
   }
   const bindings =
     rowPath.scope?.lookup(argument.name)?.getBindings()[argument.name] ?? [];
-  const declarator = bindings[0]?.parent?.node;
-  const declaration = bindings[0]?.parent?.parent?.node;
-  const init = unwrap(declarator?.init);
+  if (bindings.length !== 1) {
+    return false;
+  }
+  const declarator = bindings[0].parent?.node;
+  if (declarator?.type !== 'VariableDeclarator') {
+    return mappedValuesHaveNoSwipeKey(bindings[0]);
+  }
   return (
-    bindings.length === 1 &&
-    declarator?.type === 'VariableDeclarator' &&
     declarator.id === bindings[0].node &&
-    declaration?.kind === 'const' &&
-    init?.type === 'ObjectExpression' &&
-    init.properties.every((/** @type {any} */ p) => {
+    bindings[0].parent.parent?.node?.kind === 'const' &&
+    hasNoSwipeKey(declarator.init)
+  );
+}
+
+/**
+ * Whether a node is an object literal with no spread and no swipe key.
+ * @param {any} node
+ */
+function hasNoSwipeKey(node) {
+  const object = unwrap(node);
+  return (
+    object?.type === 'ObjectExpression' &&
+    object.properties.every((/** @type {any} */ p) => {
       const key =
         keyOf(p) ??
         (p.type === 'ObjectMethod' && !p.computed ? p.key?.name : null);
       return key != null && !SWIPE_PROPS.has(key);
     })
   );
+}
+
+/**
+ * Whether a `map` callback's first parameter, or one place in its array
+ * pattern, is such an object literal in every element of the array literal it
+ * maps.
+ * @param {any} binding
+ */
+function mappedValuesHaveNoSwipeKey(binding) {
+  const pattern = binding.parent?.node;
+  const place =
+    pattern?.type === 'ArrayPattern'
+      ? pattern.elements.indexOf(binding.node)
+      : -1;
+  const param = place >= 0 ? binding.parent : binding;
+  const callback = param.parent?.node;
+  const call = param.parent?.parent?.node;
+  const callee = call?.callee;
+  const array = unwrap(callee?.object);
+  if (
+    !['ArrowFunctionExpression', 'FunctionExpression'].includes(
+      callback?.type,
+    ) ||
+    callback.params[0] !== param.node ||
+    call?.type !== 'CallExpression' ||
+    call.arguments[0] !== callback ||
+    callee?.type !== 'MemberExpression' ||
+    callee.computed ||
+    callee.property?.name !== 'map' ||
+    array?.type !== 'ArrayExpression'
+  ) {
+    return false;
+  }
+  return array.elements.every((/** @type {any} */ element) => {
+    if (place < 0) {
+      return hasNoSwipeKey(element);
+    }
+    const entry = unwrap(element);
+    return (
+      entry?.type === 'ArrayExpression' && hasNoSwipeKey(entry.elements[place])
+    );
+  });
 }
 
 /**
