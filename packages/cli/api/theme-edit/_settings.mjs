@@ -4244,11 +4244,11 @@ export function compileTheme(ctx, data, base) {
     }
   }
   emitPadding();
-  orderBlocks();
   for (const r of fixedToViewport) {
     delete r.backgroundAttachment;
     r.backgroundAttachment = 'fixed';
   }
+  orderBlocks();
   // Core gives headings the body font when a theme sets only the body's:
   // a font for the body alone keeps the base theme's heading font.
   if (theme.typography?.body && !theme.typography.heading) {

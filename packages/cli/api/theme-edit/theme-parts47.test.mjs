@@ -229,6 +229,56 @@ describe('headings', () => {
 });
 
 describe('the page background', () => {
+  it('writes the fixed attachment after the page gradient and paints both modes on the shell regions', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('p2', {cwd, like: 'neutral'});
+    await themeEditSet(
+      'p2',
+      'background',
+      'linear-gradient(180deg, #ff0000, #0000ff)',
+      {cwd, on: 'app-shell'},
+    );
+    // The attachment comes after the shorthand, so the shorthand does not
+    // reset it.
+    for (const sel of ['.astryx-app-shell', '.astryx-app-shell-header']) {
+      const rule = ruleOf('p2', sel);
+      expect(rule, sel).toMatch(
+        /background: linear-gradient[^;]*;[\s\S]*background-attachment: fixed/,
+      );
+    }
+    // The two per-mode commands how suggests reach the header and side nav
+    // in both modes.
+    await themeEditNew('p3', {cwd, like: 'neutral'});
+    const how = await themeEditHow('a gradient on the page background', {
+      cwd,
+      theme: 'p3',
+    });
+    const lines = JSON.stringify(how.data).match(
+      /set p3 background-image '[^']+' --on app-shell --mode (light|dark)/g,
+    );
+    expect(lines?.length).toBe(2);
+    for (const mode of /** @type {const} */ (['light', 'dark'])) {
+      const value = /** @type {string} */ (
+        /** @type {string[]} */ (lines)
+          .find(l => l.endsWith(mode))
+          ?.match(/'([^']+)'/)?.[1]
+      );
+      await themeEditSet('p3', 'background-image', value, {
+        cwd,
+        on: 'app-shell',
+        mode,
+      });
+    }
+    for (const sel of [
+      '.astryx-app-shell-header',
+      '.astryx-app-shell-sidenav',
+    ]) {
+      const rule = ruleOf('p3', sel);
+      expect(rule, sel).toMatch(/#f5f7fa/);
+      expect(rule, sel).toMatch(/#14171c/);
+    }
+  }, 240_000);
+
   it('shows a background on app-shell in every AppShell variant', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('p1', {cwd, like: 'neutral'});
