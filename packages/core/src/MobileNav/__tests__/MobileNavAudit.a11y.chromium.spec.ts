@@ -90,11 +90,15 @@ async function pageSensors(page: Page) {
 /** The dialog, its drawer box, its backdrop paint, and where focus is. */
 async function drawerState(page: Page) {
   return page.evaluate(() => {
-    const dialog = document.querySelector('dialog.astryx-mobile-nav');
+    const dialog = document.querySelector<HTMLDialogElement>(
+      'dialog.astryx-mobile-nav',
+    );
     if (dialog == null) {
       return null;
     }
-    const drawer = dialog.querySelector(':scope div[tabindex="-1"]');
+    const drawer = dialog.querySelector<HTMLElement>(
+      ':scope div[tabindex="-1"]',
+    );
     const rect = drawer?.getBoundingClientRect();
     const backdrop = getComputedStyle(dialog, '::backdrop');
     const active = document.activeElement as HTMLElement | null;
