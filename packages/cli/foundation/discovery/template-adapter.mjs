@@ -24,10 +24,10 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {createRequire} from 'node:module';
 import {readDocView} from '../doc-compiler/read.mjs';
 import {importDocModule} from '../doc-compiler/import.mjs';
-import {CLI_ROOT, discoverExternalPackages} from '../fs/paths.mjs';
+import {readStore, storedKey} from '../doc-compiler/stored-docs.mjs';
+import {CLI_ROOT, discoverExternalPackages, realDir} from '../fs/paths.mjs';
 import {listDirEntries} from '../fs/listing-cache.mjs';
 import {CORE_PROVIDER_ID} from '../identity/providers.mjs';
 import {Project} from '../config/project.mjs';
@@ -37,9 +37,12 @@ import {
   programPath,
   traverseTemplateSource,
   writtenNames,
+  TEMPLATE_COMPONENTS_FILE,
 } from './template-source-tree.mjs';
-
-const require = createRequire(import.meta.url);
+import {persistedGather} from '../fs/gather-cache.mjs';
+import {EXACT_CODEC} from '../fs/exact-codec.mjs';
+import {hostedRun} from '../runtime/package-root.mjs';
+import {babelParser} from '../runtime/lazy-dependencies.mjs';
 
 /** Identity used for core (built-in) templates in package-scoped listings. */
 const CORE_PACKAGE = CORE_PROVIDER_ID;
@@ -357,10 +360,41 @@ export function stripTemplateAssetRefs(source) {
  * @returns {{source: string, demoMediaReplaced: number}}
  */
 export function replaceDemoMedia(source, {videoPlaceholder = ''} = {}) {
+  const {source: output, replaced} = mapFixtureRefs(source, ({kind}) =>
+    kind === 'video' ? videoPlaceholder : PLACEHOLDER_IMAGE,
+  );
+  return {source: output, demoMediaReplaced: replaced};
+}
+
+/**
+ * One Astryx template fixture reference in template source.
+ * @typedef {object} FixtureRef
+ * @property {string} reference - The whole reference, query and fragment
+ *   included.
+ * @property {'image' | 'video'} kind - What the suffix of its last path
+ *   segment names.
+ * @property {boolean} isValue - Whether the reference is a whole quoted or
+ *   `url()` value. False for a mention in text.
+ */
+
+/**
+ * Replace each Astryx template fixture reference with what `map` returns for
+ * it. This is the one scanner for fixture references: a copy replaces them
+ * with placeholders ({@link replaceDemoMedia}), and the docsite's preview
+ * build points them at its image optimizer. It finds and refuses references
+ * as {@link stripTemplateAssetRefs} describes.
+ *
+ * @param {string} source - Template source code.
+ * @param {(ref: FixtureRef) => string | null} map - The replacement text, or
+ *   null to keep the reference as written.
+ * @returns {{source: string, replaced: number}} `replaced` counts the
+ *   references that `map` replaced.
+ */
+export function mapFixtureRefs(source, map) {
   const needle = `/${FIXTURE_SEGMENT}`;
   let output = '';
   let copied = 0;
-  let demoMediaReplaced = 0;
+  let replaced = 0;
   /** @type {Array<[number, number]> | undefined} */
   let comments;
   let at = source.indexOf(needle);
@@ -372,7 +406,7 @@ export function replaceDemoMedia(source, {videoPlaceholder = ''} = {}) {
     /** @type {{text: string, end: number} | null} */
     let edit;
     try {
-      edit = fixtureEdit(source, start, at, end, videoPlaceholder);
+      edit = fixtureEdit(source, start, at, end, map);
     } catch (err) {
       comments ??= commentRanges(source);
       if (!comments.some(([from, to]) => from <= at && at < to)) throw err;
@@ -381,11 +415,11 @@ export function replaceDemoMedia(source, {videoPlaceholder = ''} = {}) {
     if (edit) {
       output += source.slice(copied, start) + edit.text;
       copied = edit.end;
-      demoMediaReplaced += 1;
+      replaced += 1;
     }
     at = source.indexOf(needle, end);
   }
-  return {source: output + source.slice(copied), demoMediaReplaced};
+  return {source: output + source.slice(copied), replaced};
 }
 
 /**
@@ -910,15 +944,15 @@ function fixtureSegments(reference) {
 /**
  * The replacement for the fixture reference in the URL token [start, end),
  * which contains FIXTURE_SEGMENT's path at `at`; null when the token is not a
- * fixture reference or is a prose mention.
+ * fixture reference, is a prose mention, or `map` keeps it.
  * @param {string} source
  * @param {number} start
  * @param {number} at
  * @param {number} end
- * @param {string} videoPlaceholder
+ * @param {(ref: FixtureRef) => string | null} map
  * @returns {{text: string, end: number} | null}
  */
-function fixtureEdit(source, start, at, end, videoPlaceholder) {
+function fixtureEdit(source, start, at, end, map) {
   const token = source.slice(start, end);
   if (ABSOLUTE_URL.test(token)) return null;
   if (!token.startsWith('/')) {
@@ -986,11 +1020,17 @@ function fixtureEdit(source, start, at, end, videoPlaceholder) {
     .extname(segments[segments.length - 1])
     .slice(1)
     .toLowerCase();
-  if (VIDEO_EXTENSIONS.has(ext)) {
-    return {text: videoPlaceholder, end: referenceEnd};
-  }
-  if (IMAGE_EXTENSIONS.has(ext)) {
-    return {text: PLACEHOLDER_IMAGE, end: referenceEnd};
+  /** @type {FixtureRef['kind'] | null} */
+  let kind = null;
+  if (VIDEO_EXTENSIONS.has(ext)) kind = 'video';
+  else if (IMAGE_EXTENSIONS.has(ext)) kind = 'image';
+  if (kind) {
+    const text = map({
+      reference: source.slice(start, referenceEnd),
+      kind,
+      isValue: whole,
+    });
+    return text === null ? null : {text, end: referenceEnd};
   }
   if (whole || ext) {
     throw new Error(
@@ -1031,19 +1071,6 @@ function expressionUse(source, open, close) {
   return null;
 }
 
-/** @type {typeof import('@babel/parser') | undefined} */
-let babelParser;
-
-/**
- * The template source parser, loaded on first use so listing templates
- * never pays for it.
- * @returns {typeof import('@babel/parser')}
- */
-function templateSourceParser() {
-  babelParser ??= require('@babel/parser');
-  return /** @type {typeof import('@babel/parser')} */ (babelParser);
-}
-
 /**
  * The [start, end) range of every comment in `source`, or none when it does
  * not parse as TSX.
@@ -1052,7 +1079,7 @@ function templateSourceParser() {
  */
 function commentRanges(source) {
   try {
-    const {comments} = templateSourceParser().parse(source, {
+    const {comments} = babelParser().parse(source, {
       sourceType: 'module',
       plugins: ['jsx', 'typescript'],
     });
@@ -1530,6 +1557,18 @@ export async function discoverAllUnresolved(cwd = process.cwd()) {
   );
 }
 
+/** Template discovery's records, kept exactly, with the shape they need. */
+const TEMPLATE_SOURCES_CODEC = {
+  ...EXACT_CODEC,
+  valid: (/** @type {any} */ value) =>
+    value != null &&
+    Array.isArray(value.templates) &&
+    Array.isArray(value.errors) &&
+    value.templates.every(
+      (/** @type {any} */ t) => t != null && typeof t.name === 'string',
+    ),
+};
+
 /**
  * Resolve replacement declarations while retaining package-addressable entries
  * that are shadowed or rejected in the default discovery view.
@@ -1537,6 +1576,31 @@ export async function discoverAllUnresolved(cwd = process.cwd()) {
  * @returns {Promise<{templates: DiscoveredTemplate[], errors: Array<TemplateDiscoveryError | TemplateReplacementError>}>}
  */
 async function resolveAllSources(cwd = process.cwd()) {
+  // A function of the files discovery reads, which the kept gather stamps:
+  // a later run with every one unchanged reads the records back.
+  return /** @type {Awaited<ReturnType<typeof resolveAllSourcesNow>>} */ (
+    await persistedGather(
+      // The folder, and the copy of the CLI that answers with the
+      // integrations a host approves: outside a project the integrations
+      // beside the answering copy load too.
+      [
+        'template-sources',
+        realDir(cwd),
+        CLI_ROOT,
+        hostedRun()?.integrations ?? [],
+      ],
+      () => resolveAllSourcesNow(cwd),
+      TEMPLATE_SOURCES_CODEC,
+    )
+  );
+}
+
+/**
+ * resolveAllSources, worked out now.
+ * @param {string} cwd
+ * @returns {Promise<{templates: DiscoveredTemplate[], errors: Array<TemplateDiscoveryError | TemplateReplacementError>}>}
+ */
+async function resolveAllSourcesNow(cwd) {
   const discovered = await discoverAllSources(cwd);
   const replacementErrors = discovered.errors.filter(
     error => error.replacementTarget != null,
@@ -2040,7 +2104,7 @@ function topLevelBindings(src) {
   const astryxImports = new Map();
   let program;
   try {
-    program = templateSourceParser().parse(src, {
+    program = babelParser().parse(src, {
       sourceType: 'module',
       plugins: ['jsx', 'typescript'],
       errorRecovery: true,
@@ -2096,11 +2160,27 @@ export function extractComponents(pagePath) {
 /**
  * The components a template source composes. A surface that returns rewritten
  * source lists the components of that source, so a component the rewrite
- * removed is not listed.
+ * removed is not listed. A template Astryx ships answers from its stored list
+ * (TEMPLATE_COMPONENTS_FILE), which holds what parsing it returns; any other
+ * source, such as an integration's template, is parsed.
  * @param {string} src
  * @returns {string[]}
  */
 export function componentsInSource(src) {
+  const known = readStore(TEMPLATE_COMPONENTS_FILE).get(storedKey(src));
+  if (known) return [...known];
+  return parsedComponents(src);
+}
+
+export {TEMPLATE_COMPONENTS_FILE} from './template-source-tree.mjs';
+
+/**
+ * The components a template source composes, read from its syntax tree (see
+ * componentsInSource).
+ * @param {string} src
+ * @returns {string[]}
+ */
+export function parsedComponents(src) {
   // Match JSX opening tags, e.g. `<Section` or the legacy `<XDSSection`.
   // Templates author bare component names post un-prefix migration,
   // so the `XDS` prefix is optional. Anchoring on the `<`

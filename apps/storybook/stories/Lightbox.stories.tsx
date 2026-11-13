@@ -176,11 +176,28 @@ export const GalleryWithZoom: Story = {
 };
 
 /**
- * A gallery whose captions differ in length: the photo keeps one box
- * whichever pages, and so whichever captions, are rendered.
+ * A gallery whose captions differ in length. The first runs long, so two
+ * lines cut it short and "more" shows it all. The next runs about two lines,
+ * one has none, and the last is short. The photo keeps one box on every page.
  */
 export const GalleryWithCaptions: Story = {
-  render: () => {
+  args: {
+    media: [
+      {
+        ...GALLERY_MEDIA[0],
+        caption:
+          'A winding path through the forest, past the old mill and down to the river, where the trail turns back toward the village. In autumn the beeches along it turn copper, and on a clear morning you can see the church spire from the bridge before the path climbs the last hill home.',
+      },
+      {
+        ...GALLERY_MEDIA[1],
+        caption:
+          'Morning fog lifting off the lake, seen from the old stone bridge',
+      },
+      GALLERY_MEDIA[3],
+      {...GALLERY_MEDIA[2], caption: 'Golden hour'},
+    ],
+  },
+  render: ({media}) => {
     const [isOpen, setIsOpen] = useState(false);
     return (
       <>
@@ -190,16 +207,7 @@ export const GalleryWithCaptions: Story = {
         <Lightbox
           isOpen={isOpen}
           onOpenChange={setIsOpen}
-          media={[
-            {
-              ...GALLERY_MEDIA[0],
-              caption:
-                'A winding path through the forest, past the old mill and down to the river, where the trail turns back toward the village',
-            },
-            GALLERY_MEDIA[1],
-            GALLERY_MEDIA[3],
-            {...GALLERY_MEDIA[2], caption: 'Golden hour'},
-          ]}
+          media={media}
           hasZoom
         />
       </>

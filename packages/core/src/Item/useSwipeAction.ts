@@ -10,12 +10,14 @@
  *   imports it, loaded on demand); tested through Item.test.tsx
  *
  * A native-list swipe: drag a row sideways and the side's panel is uncovered.
- * Under `reveal` a release past half the panel leaves the row resting open
- * with every entry tappable, and a long drag or a fling fires the outermost
- * entry; under `commit` a release past the commit point slides the row out
- * and fires the outermost entry, and nothing rests. After an entry fires the
- * row springs back, or holds out when the entry has `hasRemoval`. A release
- * short of the threshold springs back under both.
+ * Under `reveal`, a release past half the panel or a fling leaves the row
+ * resting open, with every entry tappable. A long drag fires the outermost
+ * entry. Under `commit`, a release past the commit point slides the row out
+ * and fires the outermost entry, and nothing rests. Speed alone never fires
+ * an entry. On a side with two or more entries, only a drag that starts on a
+ * resting open row fires one. After an entry fires the row springs back, or
+ * holds out when the entry has `hasRemoval`. A release short of the threshold
+ * springs back under both.
  *
  * Touch only, by pointer type rather than by breakpoint: a mouse has the
  * row's own controls and a keyboard has the verb already; the gesture is an
@@ -77,7 +79,7 @@ const COMMIT_FRACTION = 0.5;
 const REST_FRACTION = 0.5;
 /** Travel past the commit point moves the row this much per pixel of finger. */
 const OVERSHOOT_RESISTANCE = 0.35;
-/** A release at this speed commits from FLING_MIN_PX, short of the commit point. */
+/** Under `reveal`, a release at this speed opens the row from FLING_MIN_PX. */
 const FLING_VELOCITY_PX_PER_MS = 0.6;
 const FLING_MIN_PX = 44;
 /** How far past the row's edge a slide-out travels. */
@@ -105,16 +107,20 @@ export interface SwipeState {
   phase: SwipePhase;
   /** The side whose panel is uncovered, or will be. */
   side: SwipeSide;
-  /** Past the commit point: letting go now fires the outermost entry. */
-  isArmed: boolean;
+  /** From the commit point until the row is home or held out. */
+  isCovering: boolean;
 }
 
 export interface UseSwipeActionOptions {
   /** Off: the handlers do nothing and no row moves. */
   isEnabled: boolean;
   behavior: SwipeBehavior;
-  /** Which sides have entries. A drag toward a side without any is not claimed. */
-  sides: {leading: boolean; trailing: boolean};
+  /**
+   * How many entries each side has. A drag toward a side without any is not
+   * claimed. A side with two or more fires an entry only from a drag that
+   * starts on a resting open row.
+   */
+  sides: {leading: number; trailing: number};
   /** The natural width of a side's panel, read when a drag begins. */
   measurePanel: (side: SwipeSide) => number;
   /**
@@ -169,9 +175,17 @@ interface DragState {
   /** Logical travel toward the side, before resistance. */
   travel: number;
   inlineSign: 1 | -1;
+  /** The row rested open when the finger landed. */
+  fromRest: boolean;
+  /** Past the commit point, this drag fires the outermost entry. */
+  canConfirm: boolean;
 }
 
-const IDLE_STATE: SwipeState = {isArmed: false, phase: 'idle', side: 'leading'};
+const IDLE_STATE: SwipeState = {
+  isCovering: false,
+  phase: 'idle',
+  side: 'leading',
+};
 
 /** The logical sign of a side: +1 toward the inline end, -1 toward the start. */
 function signOf(side: SwipeSide): number {
@@ -365,10 +379,11 @@ export function useSwipeAction({
       travel: number,
       phase: 'idle' | 'resting' | 'held',
       afterSlide?: () => boolean,
+      covers = false,
     ) => {
       cancelPendingPaint();
       const duration = reducedMotionRef.current ? 0 : SWIPE_SETTLE_MS;
-      setState({isArmed: false, phase: 'settling', side});
+      setState({isCovering: covers, phase: 'settling', side});
       writeDuration(duration);
       writeTravel(travel);
       if (settleTimerRef.current != null) {
@@ -385,7 +400,9 @@ export function useSwipeAction({
         if (phase === 'idle') {
           clearInlineProperties();
         }
-        setState(phase === 'idle' ? IDLE_STATE : {isArmed: false, phase, side});
+        setState(
+          phase === 'idle' ? IDLE_STATE : {isCovering: covers, phase, side},
+        );
       }, duration);
     },
     [cancelPendingPaint, clearInlineProperties, writeDuration, writeTravel],
@@ -393,21 +410,28 @@ export function useSwipeAction({
 
   /**
    * The outermost entry fires. Under both models the row first travels to
-   * its slide-out, fires, then holds out (`hasRemoval`) or springs back.
+   * its slide-out, fires, then holds out (`hasRemoval`) or springs back. The
+   * entry covers the panel all the way, so no frame shows the others.
    */
   const slideOutAndFire = useCallback(
     (side: SwipeSide, inlineSign: 1 | -1) => {
       const root = rootRef.current;
       const width = root?.clientWidth ?? 0;
       const out = signOf(side) * inlineSign * (width + SLIDE_OUT_OVERSHOOT_PX);
-      settle(side, out, 'held', () => {
-        const holdsOut = fireOutermostRef.current(side);
-        if (holdsOut) {
-          return false;
-        }
-        settle(side, 0, 'idle');
-        return true;
-      });
+      settle(
+        side,
+        out,
+        'held',
+        () => {
+          const holdsOut = fireOutermostRef.current(side);
+          if (holdsOut) {
+            return false;
+          }
+          settle(side, 0, 'idle', undefined, true);
+          return true;
+        },
+        true,
+      );
     },
     [rootRef, settle],
   );
@@ -537,6 +561,8 @@ export function useSwipeAction({
         startX: event.clientX,
         startY: event.clientY,
         travel: 0,
+        fromRest: current.phase === 'resting',
+        canConfirm: false,
       };
       dragRef.current = drag;
       watchForPinch(drag);
@@ -583,6 +609,7 @@ export function useSwipeAction({
         }
         drag.claimed = true;
         drag.side = side;
+        drag.canConfirm = sidesRef.current[side] < 2 || drag.fromRest;
         drag.panelWidth = measurePanelRef.current(side);
         const width = rootRef.current?.clientWidth ?? 0;
         drag.commitPx = Math.max(
@@ -596,7 +623,7 @@ export function useSwipeAction({
           );
         }
         writeDuration(0);
-        setState({isArmed: false, phase: 'dragging', side});
+        setState({isCovering: false, phase: 'dragging', side});
         try {
           rootRef.current?.setPointerCapture(event.pointerId);
         } catch {
@@ -611,9 +638,9 @@ export function useSwipeAction({
         raw <= drag.commitPx
           ? raw
           : drag.commitPx + (raw - drag.commitPx) * OVERSHOOT_RESISTANCE;
-      const isArmed = raw >= drag.commitPx;
-      if (isArmed !== drag.travel >= drag.commitPx) {
-        setState({isArmed, phase: 'dragging', side: drag.side});
+      const isArmed = drag.canConfirm && raw >= drag.commitPx;
+      if (isArmed !== (drag.canConfirm && drag.travel >= drag.commitPx)) {
+        setState({isCovering: isArmed, phase: 'dragging', side: drag.side});
       }
       drag.travel = raw;
       drag.prevX = drag.lastX;
@@ -653,13 +680,13 @@ export function useSwipeAction({
         (signOf(side) * inlineSign * (drag.lastX - drag.prevX)) / elapsed;
       const flung =
         velocity >= FLING_VELOCITY_PX_PER_MS && drag.travel >= FLING_MIN_PX;
-      if (drag.travel >= drag.commitPx || flung) {
+      if (drag.canConfirm && drag.travel >= drag.commitPx) {
         slideOutAndFire(side, inlineSign);
         return;
       }
       if (
         behaviorRef.current === 'reveal' &&
-        drag.travel >= drag.panelWidth * REST_FRACTION
+        (flung || drag.travel >= drag.panelWidth * REST_FRACTION)
       ) {
         settle(side, restTravel, 'resting');
         return;

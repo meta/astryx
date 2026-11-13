@@ -2,6 +2,13 @@
 
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {renderHook, act} from '@testing-library/react';
+import {
+  Suspense,
+  createElement,
+  startTransition,
+  use,
+  type ReactNode,
+} from 'react';
 import {snapToGraphemeBoundary, useStreamingText} from './useStreamingText';
 
 describe('useStreamingText', () => {
@@ -120,6 +127,78 @@ describe('useStreamingText', () => {
     // Clear text (new message)
     rerender({text: '', streaming: true});
     expect(result.current).toBe('');
+  });
+
+  describe('with a render React discards', () => {
+    // A transition that suspends for good: React renders the new props, then
+    // keeps the committed tree and never commits that render.
+    const forever = new Promise<never>(() => {});
+    function Forever(): null {
+      use(forever);
+      return null;
+    }
+    let isPending = false;
+    function Discardable({children}: {children: ReactNode}) {
+      return createElement(
+        Suspense,
+        {fallback: null},
+        children,
+        isPending ? createElement(Forever) : null,
+      );
+    }
+    let frame = 0;
+    function nextFrame() {
+      const cb = rafCallbacks.pop();
+      frame += 1;
+      if (cb) {
+        act(() => cb(performance.now() + frame * 20));
+      }
+    }
+    async function discard(update: () => void) {
+      isPending = true;
+      await act(async () => {
+        startTransition(update);
+      });
+      isPending = false;
+    }
+
+    it('keeps revealing from where it stood when the discarded render clears the text', async () => {
+      const text = 'A streamed answer, revealed ten code units per tick.';
+      const {result, rerender} = renderHook(
+        ({text, streaming}) => useStreamingText(text, streaming),
+        {initialProps: {text, streaming: true}, wrapper: Discardable},
+      );
+      nextFrame();
+      nextFrame();
+      const shown = result.current.length;
+      expect(shown).toBeGreaterThan(10);
+
+      await discard(() => rerender({text: '', streaming: true}));
+      // The committed stream goes on: its next chunk, then a frame.
+      rerender({text: `${text} More.`, streaming: true});
+      nextFrame();
+
+      expect(result.current.length).toBeGreaterThan(shown);
+    });
+
+    it('keeps revealing at its pace when the discarded render ends the stream', async () => {
+      const text = 'A streamed answer, revealed ten code units per tick.';
+      const {result, rerender} = renderHook(
+        ({text, streaming}) => useStreamingText(text, streaming),
+        {initialProps: {text, streaming: true}, wrapper: Discardable},
+      );
+      nextFrame();
+      const shown = result.current.length;
+      expect(shown).toBeGreaterThan(0);
+      expect(shown).toBeLessThan(text.length);
+
+      await discard(() => rerender({text, streaming: false}));
+      rerender({text: `${text} More.`, streaming: true});
+      nextFrame();
+
+      // One tick's worth further on, not the whole text at once.
+      expect(result.current.length).toBeLessThanOrEqual(shown * 2);
+    });
   });
 
   it('progressively reveals text through animation frames', () => {
