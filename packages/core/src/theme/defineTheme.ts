@@ -877,7 +877,7 @@ export function defineTheme<
     base?.__adaptations,
     input.adaptations,
   );
-  const __adaptationRules = resolveThemeAdaptationRules(
+  const resolvedAdaptationRules = resolveThemeAdaptationRules(
     input.name,
     __adaptations,
     __axes,
@@ -885,6 +885,34 @@ export function defineTheme<
     localTokenContract?.localTokens,
     components,
   );
+  // A rule inherited from the base re-resolves the base's typography (a
+  // phone rule sets the type tokens again). A token this theme sets itself
+  // wins over what it inherits on every screen, so an inherited rule writes
+  // it only where the rule authored it by name.
+  const inheritedRuleCount = base?.__adaptations?.rules.length ?? 0;
+  const ownTokenNames = Object.keys(input.tokens ?? {});
+  const __adaptationRules =
+    resolvedAdaptationRules && ownTokenNames.length > 0
+      ? resolvedAdaptationRules.map((rule, index) => {
+          if (index >= inheritedRuleCount) {
+            return rule;
+          }
+          const authored = __adaptations.rules[index]?.value.tokens ?? {};
+          const dropped = ownTokenNames.filter(
+            name =>
+              Object.prototype.hasOwnProperty.call(rule.tokens, name) &&
+              !Object.prototype.hasOwnProperty.call(authored, name),
+          );
+          if (dropped.length === 0) {
+            return rule;
+          }
+          const kept = {...rule.tokens};
+          for (const name of dropped) {
+            delete kept[name];
+          }
+          return {...rule, tokens: kept};
+        })
+      : resolvedAdaptationRules;
 
   // Icons — input entries override base entries by key. The base's entries
   // include its function entries, which its node-valued `icons` does not.

@@ -1798,3 +1798,65 @@ describe('CSS cascade placement', () => {
     expect(theme.__adaptationRules?.[0].tokens['--spacing-4']).toBe('12px');
   });
 });
+
+describe('an extending theme keeps its own tokens on every screen', () => {
+  const base = defineTheme({
+    name: 'phone-base',
+    typography: {
+      body: {family: 'Inter'},
+      heading: {family: 'Inter'},
+      scale: {base: 16, ratio: 1.2},
+    },
+    adaptations: {
+      rules: [
+        {
+          when: {pointer: 'coarse'},
+          value: {typography: {scale: {base: 17, ratio: 1.2}}},
+        },
+      ],
+    },
+  });
+
+  it('the base phone rule sets the family tokens again (control)', () => {
+    expect(base.__adaptationRules![0].tokens['--font-family-body']).toMatch(
+      /Inter/,
+    );
+  });
+
+  it('drops an inherited rule write of a token the child sets itself', () => {
+    const child = defineTheme({
+      name: 'phone-child',
+      extends: base,
+      tokens: {'--font-family-body': 'Georgia, serif'},
+    });
+    const rule = child.__adaptationRules![0];
+    expect(rule.tokens['--font-family-body']).toBeUndefined();
+    // What the child does not set still follows the inherited rule.
+    expect(rule.tokens['--font-family-heading']).toMatch(/Inter/);
+    const {prose, component} = generateAdaptationCSS(child);
+    const phone = `${prose}${component}`;
+    expect(phone).not.toMatch(/--font-family-body:/);
+  });
+
+  it('keeps a token the inherited rule authored by name', () => {
+    const authored = defineTheme({
+      name: 'phone-authored',
+      adaptations: {
+        rules: [
+          {
+            when: {pointer: 'coarse'},
+            value: {tokens: {'--font-family-body': 'Verdana'}},
+          },
+        ],
+      },
+    });
+    const child = defineTheme({
+      name: 'phone-authored-child',
+      extends: authored,
+      tokens: {'--font-family-body': 'Georgia, serif'},
+    });
+    expect(child.__adaptationRules![0].tokens['--font-family-body']).toBe(
+      'Verdana',
+    );
+  });
+});
