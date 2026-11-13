@@ -132,7 +132,7 @@ export function effectiveTemplateDiscovery(templates) {
  * @property {TemplateSlotInfo[]} [slots] a page's named places where blocks
  *   go, in reading order, as its doc declares them
  * @property {string[]} [fits] the kinds of place a block goes in, best first,
- *   as its doc declares them; empty for a reference block
+ *   as its doc declares them; empty for a block that goes in no slot
  * @property {string} filePath
  * @property {string} docPath
  * @property {string} [package]

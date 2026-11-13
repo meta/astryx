@@ -108,8 +108,9 @@ export interface BlockTemplateDoc extends BaseTemplateDoc {
   /** The kinds of place this block goes in, best first: the page slots it
    *  fills (`'toolbar'`, `'metrics'`, …) or the context it works in
    *  (`'overlay'` opens from a trigger, `'inline'` goes inside another
-   *  piece). An empty list says the block is a reference: it shows a
-   *  component's options side by side and is not put into a page as it is.
+   *  piece). An empty list says the block goes in no slot: it lays out
+   *  a component's options side by side, or it frames a whole app or page,
+   *  which a page template starts instead.
    *  Decide it from what the block renders. `astryx build` uses it to name
    *  the slot of the start template each block goes in. Integration
    *  templates need `@astryxdesign/cli` 0.7.17 or later: earlier CLIs reject
@@ -162,7 +163,7 @@ export type TemplateSlotKind =
   | 'header'
   /** Controls that act on the content next to them. */
   | 'toolbar'
-  /** The page body. Every block that goes in a page fits it; a page names its parts with section kinds where it can. */
+  /** The page body. Every block that goes in a page fits it, and a page names its parts with section kinds where it can. */
   | 'main'
   /** A side region next to the main content. */
   | 'panel'
@@ -296,20 +297,31 @@ export type TemplateCategory =
 
 export type TemplateDoc = PageTemplateDoc | BlockTemplateDoc;
 
+/** A slot kind in an integration's template: a TemplateSlotKind, or a kind
+ *  a later release adds, which this release loads and skips. */
+export type IntegrationTemplateSlotKind = TemplateSlotKind | (string & {});
+
+/** A slot in an integration's page template. */
+export interface IntegrationTemplateSlot extends Omit<TemplateSlot, 'kind'> {
+  kind: IntegrationTemplateSlotKind;
+}
+
 /** A page template an integration package ships, with its own `category`. */
 export interface IntegrationPageTemplateDoc extends Omit<
   PageTemplateDoc,
-  'category'
+  'category' | 'slots'
 > {
   category?: string;
+  slots?: IntegrationTemplateSlot[];
 }
 
 /** A block template an integration package ships, with its own `category`. */
 export interface IntegrationBlockTemplateDoc extends Omit<
   BlockTemplateDoc,
-  'category'
+  'category' | 'fits'
 > {
   category?: string;
+  fits?: IntegrationTemplateSlotKind[];
 }
 
 /** The doc-type for an integration package's template metadata: TemplateDoc,

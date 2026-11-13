@@ -40,7 +40,7 @@
  * @property {string[]} [alsoShowcaseFor] - Additional component pages that reuse this showcase.
  * @property {boolean} [isShowcase] - Whether a block is the component's primary showcase.
  * @property {TemplateSlotEntry[]} [slots] - A page's named places where blocks go, in reading order, as its doc declares them.
- * @property {string[]} [fits] - The kinds of place a block goes in, best first, as its doc declares them; empty for a reference block, which shows a component's options and is not placed in a page as it is.
+ * @property {string[]} [fits] - The kinds of place a block goes in, best first, as its doc declares them; empty for a block that goes in no slot (one that lays out a component's options, or frames a whole app or page).
  * @property {boolean} isReady
  * @property {boolean} [scaffold]
  */
@@ -68,7 +68,7 @@
  * @property {number} data.demoContentReplaced Astryx docs-only demo content elements (such as a playing card's face in a motion example) replaced in the returned source with a `<Text>Card content</Text>` placeholder. Put your own content there. 0 when the template carried none.
  * @property {TemplateIconsReport} [data.icons] Experimental, present only when the project sets `experimental.iconSet`: how the template's icons follow the project's icon set, each icon `mapped` (source and target), a `placeholder`, or `kept`, the sets used with their licenses, and the icon-set state. It may change or be removed in a patch release.
  * @property {TemplateSlotEntry[]} [data.slots] A page's named places where blocks go, in reading order; present when its doc declares them.
- * @property {string[]} [data.fits] The kinds of place a block goes in, best first; present when its doc declares them, and empty for a reference block.
+ * @property {string[]} [data.fits] The kinds of place a block goes in, best first; present when its doc declares them, and empty for a block that goes in no slot.
  */
 
 /**
@@ -82,7 +82,7 @@
  * @property {string[]} data.components
  * @property {string} data.skeleton
  * @property {TemplateSlotEntry[]} [data.slots] A page's named places where blocks go, in reading order; present when its doc declares them.
- * @property {string[]} [data.fits] The kinds of place a block goes in, best first; present when its doc declares them, and empty for a reference block.
+ * @property {string[]} [data.fits] The kinds of place a block goes in, best first; present when its doc declares them, and empty for a block that goes in no slot.
  */
 
 /**

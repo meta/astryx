@@ -170,6 +170,8 @@ export type {
   TemplateCategory,
   TemplateSlot,
   TemplateSlotKind,
+  IntegrationTemplateSlot,
+  IntegrationTemplateSlotKind,
   // schema
   SchemaFieldDoc,
   // command

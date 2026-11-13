@@ -49,7 +49,7 @@ export const SLOT_KINDS = Object.freeze([
     kind: 'main',
     group: 'region',
     summary:
-      'The page body. Every block that goes in a page fits it; a page names its parts with section kinds where it can.',
+      'The page body. Every block that goes in a page fits it, and a page names its parts with section kinds where it can.',
   },
   {
     kind: 'panel',

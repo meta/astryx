@@ -380,8 +380,8 @@ export function registerTemplate(program) {
 
 /**
  * A template's placement in one line: a page's slots (`slots: kpis
- * (metrics), …`) or a block's fit (`fits: toolbar, header`; a reference block
- * declares none). Null when the template declares neither.
+ * (metrics), …`) or a block's fit (`fits: toolbar, header`; `fits: none` for a
+ * block that goes in no slot). Null when the template declares neither.
  * @param {{name: string, kind: string}[] | undefined} slots
  * @param {string[] | undefined} fits
  * @returns {string | null}
@@ -393,7 +393,7 @@ function placementLine(slots, fits) {
   if (fits) {
     return fits.length > 0
       ? `fits: ${fits.join(', ')}`
-      : "fits: none (a reference: it shows the component's options and is not placed in a page as it is)";
+      : 'fits: none (it goes in no slot: it lays out a component\'s options, or frames a whole page)';
   }
   return null;
 }

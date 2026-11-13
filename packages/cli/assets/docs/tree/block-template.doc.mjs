@@ -103,7 +103,7 @@ export default {
             'Decide from what the block renders and what a builder uses it for, not from the component name alone.',
             'Give a whole part of a page body its section kind, and a region of the page its region kind. Use main only for a block that fills a whole page body.',
             'A block that opens above the page from a trigger fits overlay, even when the block also shows the trigger. A small piece that goes inside another piece fits inline; a single control goes with the section it serves.',
-            "Use an empty list (`fits: []`) for a reference that lays out a component's options side by side, and for a block that frames a whole app or page, which a page template starts instead.",
+            "Use an empty list (`fits: []`) for a block that goes in no slot: one that lays out a component's options side by side, or one that frames a whole app or page.",
           ],
         },
       ],

@@ -83,7 +83,7 @@ export async function loadPageTemplates(cwd) {
  * @property {string} displayName Human-facing name.
  * @property {string} description What the block is.
  * @property {string} command `astryx template <id> --type block`, as search prints it.
- * @property {string[]} [fits] The kinds of place the block goes in, best first, as its doc declares them; empty for a reference block, absent when it declares none.
+ * @property {string[]} [fits] The kinds of place the block goes in, best first, as its doc declares them; empty for a block that goes in no slot, absent when it declares none.
  */
 
 /**

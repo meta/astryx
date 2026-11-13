@@ -147,7 +147,7 @@ export const doc = {
       name: 'fits',
       type: 'TemplateSlotKind[]',
       description:
-        "Block templates only: the kinds of place the block goes in, best first, decided from what the block renders. An empty list marks a reference block, one that shows a component's options and is not put into a page as it is. Integration templates need @astryxdesign/cli 0.7.17 or later: earlier CLIs reject the field and drop that template.",
+        "Block templates only: the kinds of place the block goes in, best first, decided from what the block renders. An empty list says the block goes in no slot: it lays out a component's options side by side, or it frames a whole app or page, which a page template starts instead. Integration templates need @astryxdesign/cli 0.7.17 or later: earlier CLIs reject the field and drop that template.",
     },
   ],
   examples: [
