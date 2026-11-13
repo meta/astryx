@@ -19,7 +19,7 @@ import * as path from 'node:path';
 import {CLI_ROOT} from '../fs/paths.mjs';
 import {onceComputed, oncePerListing} from '../fs/listing-cache.mjs';
 import {readStore} from '../doc-compiler/stored-docs.mjs';
-import {inputState} from './stored-self-audit.mjs';
+import {inputsUnchanged} from './stored-self-audit.mjs';
 
 /** Where the stored component list is written at `prepack`. */
 export const COMPONENT_LIST_FILE = path.join(
@@ -27,6 +27,13 @@ export const COMPONENT_LIST_FILE = path.join(
   'assets',
   'component-list.generated.json',
 );
+
+/**
+ * Folder entries an install adds beside Core's own files: only `node_modules`.
+ * Every other name counts, so a file added anywhere the list reads misses the
+ * store.
+ */
+export const CORE_FOLDER_SKIP = /^node_modules$/;
 
 /**
  * @typedef {object} StoredComponentList
@@ -58,12 +65,9 @@ export function storedComponentList(coreDir) {
     ) {
       return null;
     }
-    for (const [rel, state] of Object.entries(entry.inputs)) {
-      if (inputState(path.join(coreDir, ...rel.split('/'))) !== state) {
-        return null;
-      }
-    }
-    return {groups: entry.groups, imports: entry.imports};
+    return inputsUnchanged(coreDir, entry.inputs, CORE_FOLDER_SKIP)
+      ? {groups: entry.groups, imports: entry.imports}
+      : null;
   });
 }
 

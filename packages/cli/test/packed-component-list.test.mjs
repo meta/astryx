@@ -140,6 +140,16 @@ describe('the stored component list', () => {
       fs.writeFileSync(doc, text);
     }
     expect(storeAnswers()).toBe(true);
+    // A file whose name a packer would drop elsewhere (a notice, a readme)
+    // still counts in Core's folders.
+    const notice = path.join(core, 'src', 'Button', 'Notice.tsx');
+    fs.writeFileSync(notice, 'export function Notice() { return null; }\n');
+    try {
+      expect(storeAnswers()).toBe(false);
+    } finally {
+      fs.rmSync(notice, {force: true});
+    }
+    expect(storeAnswers()).toBe(true);
     // A new component folder misses it too.
     const added = path.join(core, 'src', 'Gizmo');
     fs.mkdirSync(added);

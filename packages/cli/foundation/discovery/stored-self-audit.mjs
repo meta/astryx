@@ -50,16 +50,18 @@ const PACKAGE_FIELDS = [
 /**
  * A file's or folder's state as an audit read it: a file by its content
  * (package.json by its packer-stable fields), a folder by the names it holds
- * (but PACKING_NAMES), `-` when absent.
+ * (but the names `skip` matches: PACKING_NAMES unless given), `-` when
+ * absent.
  * @param {string} file
+ * @param {RegExp} [skip] - Folder entries a packer or installer adds or drops.
  * @returns {string}
  */
-export function inputState(file) {
+export function inputState(file, skip = PACKING_NAMES) {
   try {
     if (fs.statSync(file).isDirectory()) {
       const names = fs
         .readdirSync(file)
-        .filter(name => !PACKING_NAMES.test(name))
+        .filter(name => !skip.test(name))
         .sort();
       return `dir:${storedKey(names.join('\n'))}`;
     }
@@ -110,10 +112,21 @@ export function storedSelfAudit(name) {
   /** @type {{inputs: Record<string, string>, value: unknown} | undefined} */
   const entry = readStore(SELF_AUDIT_FILE).get(name);
   if (!entry) return undefined;
-  for (const [rel, state] of Object.entries(entry.inputs)) {
-    if (inputState(path.join(CLI_ROOT, ...rel.split('/'))) !== state) {
-      return undefined;
+  return inputsUnchanged(CLI_ROOT, entry.inputs) ? entry.value : undefined;
+}
+
+/**
+ * Whether every recorded input under `root` is in its recorded state.
+ * @param {string} root
+ * @param {Record<string, string>} inputs - State by path under `root`.
+ * @param {RegExp} [skip] - As for {@link inputState}.
+ * @returns {boolean}
+ */
+export function inputsUnchanged(root, inputs, skip = PACKING_NAMES) {
+  for (const [rel, state] of Object.entries(inputs)) {
+    if (inputState(path.join(root, ...rel.split('/')), skip) !== state) {
+      return false;
     }
   }
-  return entry.value;
+  return true;
 }

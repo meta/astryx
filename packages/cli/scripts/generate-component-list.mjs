@@ -19,42 +19,21 @@ import * as path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {isDeepStrictEqual} from 'node:util';
 import {CLI_ROOT} from '../foundation/fs/paths.mjs';
-import {COMPONENT_LIST_FILE} from '../foundation/discovery/stored-component-list.mjs';
+import {
+  COMPONENT_LIST_FILE,
+  CORE_FOLDER_SKIP,
+} from '../foundation/discovery/stored-component-list.mjs';
+import {copyPublishedFiles} from './published-files.mjs';
 
 /** Core's package folder in the repository. */
 const CORE_DIR = path.resolve(CLI_ROOT, '..', 'core');
-
-/**
- * The files Core publishes, by path in the package.
- * @returns {string[]}
- */
-function publishedCoreFiles() {
-  const result = spawnSync(
-    process.platform === 'win32' ? 'npm.cmd' : 'npm',
-    ['pack', '--dry-run', '--json', '--ignore-scripts'],
-    {
-      cwd: CORE_DIR,
-      encoding: 'utf8',
-      maxBuffer: 64 * 1024 * 1024,
-      shell: process.platform === 'win32',
-    },
-  );
-  if (result.status !== 0) {
-    throw new Error(`npm pack --dry-run failed: ${result.stderr}`);
-  }
-  const [{files}] = JSON.parse(result.stdout);
-  return files.map((/** @type {{path: string}} */ f) => f.path);
-}
 
 /**
  * Copy exactly the files Core publishes into `dest`, as an install holds them.
  * @param {string} dest
  */
 export function copyPublishedCore(dest) {
-  for (const file of publishedCoreFiles()) {
-    fs.mkdirSync(path.dirname(path.join(dest, file)), {recursive: true});
-    fs.copyFileSync(path.join(CORE_DIR, file), path.join(dest, file));
-  }
+  copyPublishedFiles(CORE_DIR, dest);
 }
 
 /**
@@ -83,7 +62,7 @@ const inputs = {};
 for (const file of [...seen.keys()].sort()) {
   const rel = path.relative(core, file);
   if (rel.startsWith('..') || path.isAbsolute(rel)) continue;
-  inputs[rel.split(path.sep).join('/') || '.'] = inputState(file);
+  inputs[rel.split(path.sep).join('/') || '.'] = inputState(file, ${CORE_FOLDER_SKIP});
 }
 process.stdout.write(JSON.stringify({inputs, ...value}));`;
 }
