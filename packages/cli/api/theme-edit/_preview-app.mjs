@@ -1324,7 +1324,7 @@ export function appWiring(ctx, slug, data) {
   return [
     ...(blocker
       ? [
-          `${blocker} is not the editor's, so the editor does not write the theme's app copy in src/themes/${slug}/ (and theme add does not take it); the steps by hand:`,
+          `the app copy in src/themes/${slug}/ was not updated: ${blocker}; the steps by hand:`,
         ]
       : []),
     `in ${where}, import the theme and its stylesheets: import {Theme} from '@astryxdesign/core/theme'; import {${name}} from '${ti.module.replace(/\.js$/, '')}'; ${ti.css.map(c => `import '${c}';`).join(' ')}`,

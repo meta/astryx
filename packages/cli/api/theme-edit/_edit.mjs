@@ -9,6 +9,7 @@
  * @position api/theme-edit — imported only by _adapter.mjs
  */
 
+import {THEME_SLUG_RE} from '../../foundation/discovery/theme-discovery.mjs';
 import * as fs from 'node:fs';
 import {coversProperty} from './_css.mjs';
 import * as path from 'node:path';
@@ -83,6 +84,7 @@ import {
   refuseLinks,
   usableNewName,
   FOLDER_JUNK,
+  folderIsEmpty,
   dialValueFits,
   holdAfterBuild,
 } from './_settings.mjs';
@@ -111,6 +113,7 @@ import {
   renderSheet,
   previewIsCurrent,
   takeFirstAppCopy,
+  appCopyStale,
   writeAppCopy,
 } from './_preview.mjs';
 import {appWiring, refreshPreviewRoute, seeLine} from './_preview-app.mjs';
@@ -360,6 +363,16 @@ export async function themeEditNew(name, options = {}) {
       },
     );
   }
+  // A name the theme commands' own discovery skips ("a--b", "b-") would
+  // make an app copy no `theme add`, `theme list` or doctor takes.
+  if (!THEME_SLUG_RE.test(name)) {
+    const cleaned = name.replace(/-{2,}/g, '-').replace(/-+$/, '');
+    refuse(
+      E.ERR_INVALID_ARGUMENT,
+      `"${name}" is not a theme name the theme commands take: a dash only between letters or digits (no two in a row, none at the end), so its app copy in src/themes/ would be skipped by theme add, theme list and doctor.${dropped}`,
+      {run: [again(usableNewName(cwd, cleaned))]},
+    );
+  }
   // A built-in theme's name would collide with the theme of that name the
   // app may also use.
   if (LIKE.includes(name))
@@ -426,7 +439,8 @@ export async function themeEditNew(name, options = {}) {
   const holdsOther =
     fs.existsSync(f.dir) &&
     !left &&
-    fs.readdirSync(f.dir).some(n => !FOLDER_JUNK.has(n));
+    // Empty folders (an empty tokens/) hold nothing of anyone's.
+    !folderIsEmpty(f.dir);
   if (holdsOther)
     refuse(
       E.ERR_FILE_EXISTS,
@@ -855,6 +869,8 @@ async function previewAndRoute(ctx, slug, data, png, focus = 'overview') {
     ),
     // The first time the theme's app copy is written, its files are named.
     ...(wrote ? {appCopy: {wrote}} : {}),
+    // A copy a file of yours kept from being written: said, never a quiet ok.
+    ...appCopyStale(ctx.project.cwd, slug),
   };
 }
 
@@ -903,6 +919,23 @@ function refuseStoredTokens(ctx, slug, data, skip) {
   const found = bad.length === 1 ? bad[0] : null;
   // A clean value is offered only when set takes it, so the line works.
   const takes = (/** @type {typeof found} */ b) => {
+    if (!b?.fix) return true;
+    // A value whose only fault was curly quotes around it: without them,
+    // when set takes that (`“#e11d48”` is #e11d48).
+    const bare = /^(["'])(.*)\1$/.exec(b.fix)?.[2];
+    if (
+      bare &&
+      b.setting.source === 'token' &&
+      !/font|content/.test(b.setting.thing)
+    ) {
+      const was = b.fix;
+      b.fix = bare;
+      if (takesOne(b)) return true;
+      b.fix = was;
+    }
+    return takesOne(b);
+  };
+  const takesOne = (/** @type {typeof found} */ b) => {
     if (!b?.fix) return true;
     try {
       checkSetting(
@@ -1045,9 +1078,23 @@ async function change(sub, slug, thing, value, options) {
   try {
     return await changeOnce(sub, slug, thing, value, options, seen, typedThing);
   } catch (e) {
-    // A theme name one letter off an existing theme: the same command with
-    // that name comes first, before making a theme of the typo.
-    if (e instanceof AstryxError && e.code === E.ERR_UNKNOWN_THEME) {
+    // A theme name one letter off an existing theme, or typed in other
+    // letters or as a path (T, ./t, themes/t): the same command with that
+    // name comes first, never a bare look at the theme that drops the change.
+    const named =
+      e instanceof AstryxError &&
+      (e.code === E.ERR_UNKNOWN_THEME ||
+        (e.code === E.ERR_INVALID_ARGUMENT &&
+          (e.suggestions ?? []).some(
+            x =>
+              x.reason === 'did you mean' &&
+              slugOk(x.name) &&
+              x.name !== slug &&
+              fs.existsSync(
+                themeFiles(options.cwd ?? process.cwd(), x.name).settings,
+              ),
+          )));
+    if (named) {
       const near = (e.suggestions ?? []).find(x => x.reason === 'did you mean');
       if (near && slugOk(near.name)) {
         const flags = [
@@ -1067,7 +1114,9 @@ async function change(sub, slug, thing, value, options) {
             name: `${P} ${sub} ${near.name}${words.length ? ` ${words.join(' ')}` : ''}`,
             reason: `do this instead: ${near.name} is a theme here`,
           },
-          ...(e.suggestions ?? []).filter(x => x !== near),
+          ...(e.suggestions ?? []).filter(
+            x => x !== near && x.name !== `${P} show ${near.name}`,
+          ),
         ];
       }
       throw e;
@@ -1377,6 +1426,15 @@ async function changeOnce(
               ]
             : []),
           ...otherModeNotes(data),
+          // Back to both modes: a mode the app's <Theme> was given for the
+          // one-mode theme pins it still.
+          ...(s.thing === 'mode' &&
+          data.mode === 'both' &&
+          (before === 'light-only' || before === 'dark-only')
+            ? [
+                `if the app's <Theme> was given mode="${before === 'light-only' ? 'light' : 'dark'}" for ${slug}, take it out: with it the app stays ${before === 'light-only' ? 'light' : 'dark'}, whatever the system asks for`,
+              ]
+            : []),
           // Core has no mode inside a theme: the app's <Theme> is given it.
           ...(s.thing === 'mode' &&
           (data.mode === 'light-only' || data.mode === 'dark-only')
@@ -1773,7 +1831,7 @@ async function changeOnce(
             )
             .join(
               ', ',
-            )}${ownPartHits.length > 3 ? ` and ${ownPartHits.length - 3} more` : ''}, and your own source wins over the settings, so this does not show there; change it in ${slug}.theme.ts${ownHitDirect ? `, or take this back with \`${P} undo ${slug} ${undoArgs(s)}\`` : ''}`,
+            )}${ownPartHits.length > 3 ? ` and ${ownPartHits.length - 3} more` : ''}, and your own source wins over the settings, so this does not show ${/^padding(-|$)/.test(s.thing) && ownPartHits.every(h => /^padding-/.test(h.prop)) ? 'on the sides that sets; its other sides take this setting' : 'there'}; change it in ${slug}.theme.ts${ownHitDirect ? `, or take this back with \`${P} undo ${slug} ${undoArgs(s)}\`` : ''}`,
         ]
       : []),
     ...(ownOverToken
@@ -2443,6 +2501,7 @@ export async function themeEditShow(theme, options = {}) {
         const wrote = takeFirstAppCopy(cwd, theme);
         return wrote ? {appCopy: {wrote}} : {};
       })(),
+      ...appCopyStale(cwd, theme),
       colorFiles: pal ? colorFiles(theme) : null,
     },
   };
