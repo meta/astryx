@@ -50,6 +50,9 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     const plain = row().message;
     expect(plain).toContain(path.join(tmp, CACHE_NAME));
     expect(plain).not.toContain("Plug'n'Play");
+    // Every kind of entry the folder holds is named, the docs not-found
+    // hint's name summaries (kept-tree.mjs) included.
+    expect(plain).toContain("the docs not-found hint's name summaries");
     const pnp = path.join(work, 'as-pnp.cjs');
     fs.writeFileSync(pnp, "process.versions.pnp = '3';\n");
     const underPnp = row({NODE_OPTIONS: `--require ${pnp}`}).message;
