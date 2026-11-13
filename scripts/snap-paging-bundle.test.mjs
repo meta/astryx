@@ -30,7 +30,7 @@ const esbuild = require('esbuild');
  */
 const PAGER_CODE = new RegExp(
   `^packages/core/src/(${[
-    'hooks/usePager\\.ts',
+    'hooks/(usePager|pagerIndex)\\.ts',
     'SnapPaging/SnapPaging\\.ts',
     'gestures/',
     'motion/(animator|paging|presentation|projection|motionQueries|reducedMotionPlan|resolveMotion|resolveSnapPoint|roleValue|rubberBand|settleThreshold|spring|themeTempo)\\.ts',
