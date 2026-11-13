@@ -274,20 +274,9 @@ export function registerComponent(program) {
             row =>
               row.status === 'found' && row.result.type === 'component.detail',
           ));
-      let themeData = null;
-      if (printsTheme) {
-        try {
-          themeData = await resolveTheme(process.cwd());
-        } catch (error) {
-          const message =
-            error instanceof Error
-              ? error.message.split('\n', 1)[0]?.trim() || error.name
-              : String(error);
-          return cliError(`Could not load the recorded theme: ${message}`, {
-            code: ERROR_CODES.ERR_THEME_LOAD,
-          });
-        }
-      }
+      // component() already loaded the theme for these reads and reported
+      // a load failure as ERR_THEME_LOAD.
+      const themeData = printsTheme ? await resolveTheme(process.cwd()) : null;
 
       // Footer shared by the compact + names list views (prose → text()).
       const listFooter = text(

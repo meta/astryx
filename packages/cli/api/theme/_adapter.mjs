@@ -1639,9 +1639,9 @@ export async function resolveActiveTheme(
     return resolvedThemeData(loaded.module, loaded.specifier, onWarning);
   }
 
-  // No generated module: keep the released package-field lookup byte-for-byte in
-  // behavior. It reads only cwd/package.json, resolves relative paths from cwd,
-  // and resolves bare packages from the CLI installation.
+  // No generated module: the released package-field lookup reads only
+  // cwd/package.json, resolves relative paths from cwd, and resolves bare
+  // packages from the CLI installation.
   let specifier = null;
   const pkgPath = path.join(cwd, 'package.json');
   if (fs.existsSync(pkgPath)) {
