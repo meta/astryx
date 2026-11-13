@@ -176,6 +176,10 @@ describe('themeBuildFamily()', () => {
     expect(css).not.toContain('@scope (:where([data-astryx-theme="ocean-calm-deep"]))');
     // prettier-ignore
     const js = fs.readFileSync(path.join(first, 'themes', `${FAMILY_KEY}.js`), 'utf8'), dts = fs.readFileSync(path.join(first, 'themes', `${FAMILY_KEY}.d.ts`), 'utf8');
+    // A family module holds several themes, so it exports and declares no
+    // themeVariants.
+    expect(js).not.toContain('themeVariants');
+    expect(dts).not.toContain('themeVariants');
     const dependencies = executableDependencies(js);
     expect(dependencies).not.toContain('<non-static>');
     expect(

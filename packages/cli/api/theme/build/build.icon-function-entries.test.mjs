@@ -197,7 +197,8 @@ ${pairs
   const built = ${load(built)};
   const runtime = ${load(runtime)};
   const mod = await import(${JSON.stringify(built.split('#')[0])});
-  const reexports = Object.entries(mod).filter(([name]) => name !== ${JSON.stringify(built.split('#')[1])});
+  // \`themeVariants\` is a public export of every single-theme module.
+  const reexports = Object.entries(mod).filter(([name]) => name !== ${JSON.stringify(built.split('#')[1])} && name !== 'themeVariants');
   result[${JSON.stringify(label)}] = {
     built: describe(built),
     runtime: describe(runtime),
