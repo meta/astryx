@@ -3,7 +3,6 @@
 'use client';
 
 import type {ComponentProps} from 'react';
-import {AppShell} from '@astryxdesign/core/AppShell';
 import {SideNav, SideNavItem, SideNavSection} from '@astryxdesign/core/SideNav';
 
 function HomeIcon(props: ComponentProps<'svg'>) {
@@ -81,28 +80,15 @@ function CogIcon(props: ComponentProps<'svg'>) {
 
 export default function SideNavSectionShowcase() {
   return (
-    <AppShell
-      contentPadding={6}
-      style={{width: '100%', height: '100%', minHeight: 0}}
-      mobileNav={{breakpoint: 'none'}}
-      sideNav={
-        <SideNav>
-          <SideNavSection title="Overview">
-            <SideNavItem
-              label="Dashboard"
-              icon={HomeIcon}
-              isSelected
-              href="#"
-            />
-            <SideNavItem label="Analytics" icon={ChartIcon} href="#" />
-          </SideNavSection>
-          <SideNavSection title="Account">
-            <SideNavItem label="Profile" icon={UserIcon} href="#" />
-            <SideNavItem label="Settings" icon={CogIcon} href="#" />
-          </SideNavSection>
-        </SideNav>
-      }>
-      {null}
-    </AppShell>
+    <SideNav>
+      <SideNavSection title="Overview">
+        <SideNavItem label="Dashboard" icon={HomeIcon} isSelected href="#" />
+        <SideNavItem label="Analytics" icon={ChartIcon} href="#" />
+      </SideNavSection>
+      <SideNavSection title="Account">
+        <SideNavItem label="Profile" icon={UserIcon} href="#" />
+        <SideNavItem label="Settings" icon={CogIcon} href="#" />
+      </SideNavSection>
+    </SideNav>
   );
 }

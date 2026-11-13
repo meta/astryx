@@ -17,6 +17,5 @@ export const doc = {
     'SideNavItem',
     'SideNavSection',
     'SideNavHeading',
-    'AppShell',
   ],
 };

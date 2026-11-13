@@ -3,7 +3,6 @@
 'use client';
 
 import type {ComponentProps} from 'react';
-import {AppShell} from '@astryxdesign/core/AppShell';
 import {SideNav, SideNavItem} from '@astryxdesign/core/SideNav';
 import {Badge} from '@astryxdesign/core/Badge';
 
@@ -65,24 +64,16 @@ function CogIcon(props: ComponentProps<'svg'>) {
 
 export default function SideNavItemShowcase() {
   return (
-    <AppShell
-      contentPadding={6}
-      style={{width: '100%', height: '100%', minHeight: 0}}
-      mobileNav={{breakpoint: 'none'}}
-      sideNav={
-        <SideNav>
-          <SideNavItem
-            label="Inbox"
-            icon={InboxIcon}
-            isSelected
-            href="#"
-            endContent={<Badge label="12" />}
-          />
-          <SideNavItem label="Documents" icon={DocumentIcon} href="#" />
-          <SideNavItem label="Settings" icon={CogIcon} href="#" isDisabled />
-        </SideNav>
-      }>
-      {null}
-    </AppShell>
+    <SideNav>
+      <SideNavItem
+        label="Inbox"
+        icon={InboxIcon}
+        isSelected
+        href="#"
+        endContent={<Badge label="12" />}
+      />
+      <SideNavItem label="Documents" icon={DocumentIcon} href="#" />
+      <SideNavItem label="Settings" icon={CogIcon} href="#" isDisabled />
+    </SideNav>
   );
 }

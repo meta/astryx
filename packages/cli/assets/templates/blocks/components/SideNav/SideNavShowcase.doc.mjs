@@ -9,5 +9,5 @@ export const doc = {
   isReady: true,
   aspectRatio: 16 / 9,
   isShowcase: true,
-  componentsUsed: ['SideNav', 'AppShell'],
+  componentsUsed: ['SideNav'],
 };

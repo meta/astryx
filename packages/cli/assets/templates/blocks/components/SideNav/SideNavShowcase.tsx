@@ -3,7 +3,6 @@
 'use client';
 
 import type {ComponentProps} from 'react';
-import {AppShell} from '@astryxdesign/core/AppShell';
 import {
   SideNav,
   SideNavHeading,
@@ -120,51 +119,31 @@ function LifebuoyIcon(props: ComponentProps<'svg'>) {
 
 export default function SideNavShowcase() {
   return (
-    <AppShell
-      contentPadding={6}
-      style={{width: '100%', height: '100%', minHeight: 0}}
-      mobileNav={{breakpoint: 'none'}}
-      sideNav={
-        <SideNav
-          header={<SideNavHeading heading="My App" headingHref="/" />}
-          footer={
-            <SideNavSection title="Support" isHeaderHidden>
-              <SideNavItem
-                label="Help & docs"
-                icon={LifebuoyIcon}
-                href="/help"
-              />
-              <SideNavItem
-                label="Settings"
-                icon={Cog6ToothIcon}
-                href="/settings"
-              />
-            </SideNavSection>
-          }>
-          <SideNavSection title="Main">
-            <SideNavItem
-              label="Dashboard"
-              icon={HomeIcon}
-              isSelected
-              href="/dashboard"
-            />
-            <SideNavItem label="Projects" icon={FolderIcon} href="/projects" />
-            <SideNavItem
-              label="Analytics"
-              icon={ChartBarIcon}
-              href="/analytics"
-            />
-          </SideNavSection>
-          <SideNavSection title="Documents">
-            <SideNavItem
-              label="All Documents"
-              icon={DocumentTextIcon}
-              href="/documents"
-            />
-          </SideNavSection>
-        </SideNav>
+    <SideNav
+      header={<SideNavHeading heading="My App" headingHref="/" />}
+      footer={
+        <SideNavSection title="Support" isHeaderHidden>
+          <SideNavItem label="Help & docs" icon={LifebuoyIcon} href="/help" />
+          <SideNavItem label="Settings" icon={Cog6ToothIcon} href="/settings" />
+        </SideNavSection>
       }>
-      {null}
-    </AppShell>
+      <SideNavSection title="Main">
+        <SideNavItem
+          label="Dashboard"
+          icon={HomeIcon}
+          isSelected
+          href="/dashboard"
+        />
+        <SideNavItem label="Projects" icon={FolderIcon} href="/projects" />
+        <SideNavItem label="Analytics" icon={ChartBarIcon} href="/analytics" />
+      </SideNavSection>
+      <SideNavSection title="Documents">
+        <SideNavItem
+          label="All Documents"
+          icon={DocumentTextIcon}
+          href="/documents"
+        />
+      </SideNavSection>
+    </SideNav>
   );
 }

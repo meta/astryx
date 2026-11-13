@@ -3,7 +3,6 @@
 'use client';
 
 import type {ComponentProps} from 'react';
-import {AppShell} from '@astryxdesign/core/AppShell';
 import {
   SideNav,
   SideNavCollapseButton,
@@ -48,22 +47,14 @@ function FolderIcon(props: ComponentProps<'svg'>) {
 
 export default function SideNavCollapseButtonShowcase() {
   return (
-    <AppShell
-      contentPadding={6}
-      style={{width: '100%', height: '100%', minHeight: 0}}
-      mobileNav={{breakpoint: 'none'}}
-      sideNav={
-        <SideNav
-          collapsible={{hasButton: false}}
-          header={<SideNavHeading heading="Workspace" />}
-          footerIcons={<SideNavCollapseButton />}>
-          <SideNavSection title="Main">
-            <SideNavItem label="Home" icon={HomeIcon} isSelected href="#" />
-            <SideNavItem label="Projects" icon={FolderIcon} href="#" />
-          </SideNavSection>
-        </SideNav>
-      }>
-      {null}
-    </AppShell>
+    <SideNav
+      collapsible={{hasButton: false}}
+      header={<SideNavHeading heading="Workspace" />}
+      footerIcons={<SideNavCollapseButton />}>
+      <SideNavSection title="Main">
+        <SideNavItem label="Home" icon={HomeIcon} isSelected href="#" />
+        <SideNavItem label="Projects" icon={FolderIcon} href="#" />
+      </SideNavSection>
+    </SideNav>
   );
 }

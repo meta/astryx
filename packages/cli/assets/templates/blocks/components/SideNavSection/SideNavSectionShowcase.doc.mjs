@@ -11,5 +11,5 @@ export const doc = {
   isReady: true,
   isShowcase: true,
   aspectRatio: 4 / 3,
-  componentsUsed: ['SideNav', 'SideNavSection', 'SideNavItem', 'AppShell'],
+  componentsUsed: ['SideNav', 'SideNavSection', 'SideNavItem'],
 };
