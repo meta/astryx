@@ -257,42 +257,43 @@ test.describe('under a finger', () => {
     ).toBe(true);
     const more = dialog.getByRole('button', {name: 'more'});
     await expect(more).toBeVisible();
-    // The shared hit area writes the toggle's insets once it measures it.
-    await expect
-      .poll(async () =>
-        more.evaluate(
-          element =>
-            parseFloat(
-              element.style.getPropertyValue('--astryx-hit-inset-bottom'),
-            ) || 0,
-        ),
-      )
-      .toBeGreaterThan(0);
+    // Where no other target is near, the toggle's band grows it toward 44 px
+    // on each axis, centred on it (internal/touchHitArea.stylex.ts). A tap
+    // 1 px inside each edge of that square reaches the toggle.
     const facts = await more.evaluate(element => {
       const box = element.getBoundingClientRect();
-      const inset = (side: string) =>
-        parseFloat(
-          element.style.getPropertyValue(`--astryx-hit-inset-${side}`) || '0',
-        );
-      const middle = box.left + box.width / 2;
+      const growX = Math.max(0, (44 - box.width) / 2);
+      const growY = Math.max(0, (44 - box.height) / 2);
+      const square = {
+        left: box.left - growX,
+        right: box.right + growX,
+        top: box.top - growY,
+        bottom: box.bottom + growY,
+      };
+      const middleX = box.left + box.width / 2;
+      const middleY = box.top + box.height / 2;
       const takes = (x: number, y: number) => {
         const hit = element.ownerDocument.elementFromPoint(x, y);
         return hit != null && element.contains(hit);
       };
-      const right = inset('right');
-      const bottom = inset('bottom');
       return {
-        width: box.width + inset('left') + right,
-        height: box.height + inset('top') + bottom,
-        above: takes(middle, box.top - 4),
-        below: takes(middle, box.bottom + bottom / 2),
-        beside: takes(box.right + right / 2, box.top + box.height / 2),
+        edges: {
+          top: takes(middleX, square.top + 1),
+          bottom: takes(middleX, square.bottom - 1),
+          left: takes(square.left + 1, middleY),
+          right: takes(square.right - 1, middleY),
+        },
+        above: takes(middleX, box.top - 4),
+        below: takes(middleX, box.bottom + growY / 2),
+        beside: takes(box.right + growX / 2, middleY),
       };
     });
-    // No other target is near, so the target grows to the full 44 × 44 px
-    // on each axis, the line above included.
-    expect(facts.width).toBeGreaterThanOrEqual(44 - 0.5);
-    expect(facts.height).toBeGreaterThanOrEqual(44 - 0.5);
+    expect(facts.edges).toEqual({
+      top: true,
+      bottom: true,
+      left: true,
+      right: true,
+    });
     expect(facts.above).toBe(true);
     expect(facts.below).toBe(true);
     expect(facts.beside).toBe(true);
