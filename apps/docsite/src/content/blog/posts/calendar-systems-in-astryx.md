@@ -119,7 +119,7 @@ The issue was opened on a Friday, and calendar support shipped in 0.7.9 the foll
 ## Caveats
 
 - **Safari needs the polyfill** until it ships `Temporal`. Without it, calendars other than Gregorian, Buddhist, Minguo, and Japanese show Gregorian dates.
-- **Chinese and Dangi months can differ by a day between runtimes.** Their months start on new moons, and runtimes compute those from different astronomical data. Between 1900 and 2100, native `Temporal` and the older `Intl` data in Safari and Node 24 disagree on nine Chinese and four Dangi month starts, such as the first month of the 2027 Chinese calendar year (February 6 versus February 7). A polyfill doesn't fix it, because drop-in polyfills read that same older data. Within one browser everything agrees; the [guide](/docs/calendars#lunisolar-calendars) covers a server and a browser on different runtimes.
+- **Chinese and Dangi months can differ by a day between runtimes.** Their months start on new moons, and runtimes compute those from different astronomical data. Between 1900 and 2100, native `Temporal` and the older `Intl` data in Node 24 disagree on nine Chinese and four Dangi month starts, such as the first month of the 2027 Chinese calendar year (February 6 versus February 7). Safari uses the same kind of data, so expect the same there. A polyfill doesn't fix it, because drop-in polyfills read that same older data. Within one browser everything agrees; the [guide](/docs/calendars#lunisolar-calendars) covers a server and a browser on different runtimes.
 - **Dates before 1900 are best effort.** Typed entry and eras are tested from 1900 through 2100, and we'll go further when someone needs it.
 
 ## What's next
