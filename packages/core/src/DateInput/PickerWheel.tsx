@@ -44,7 +44,7 @@ import {
   typeScaleVars,
 } from '../theme/tokens.stylex';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
-import {mod, nearestLoopCopy} from '../hooks/usePager';
+import {mod, nearestLoopCopy} from '../hooks/pagerIndex';
 import {lockSelection} from '../gestures/selectionLock';
 import {dateInputTouchGeometry, dateInputTouchSizes} from './tokens.stylex';
 import {useOwnScrollGesture} from './useOwnScrollGesture';

@@ -350,14 +350,16 @@ those contracts.
   targets; it gathers the touch runtime, so the loader names a single chunk.
   `motion/settleThreshold.ts` holds `SETTLE_THRESHOLD` apart from the
   animator, so a component that reads the threshold statically does not pull
-  in the deferred runtime. `hooks/actionGroupNeighbours.ts` holds the
-  action-group target helpers apart from the tracking runtime, so a group's
-  static code finds its neighbours without loading gesture code. Gap: these
-  modules still import the shared touch modules statically, so a page that
-  renders them carries the touch runtime in its first load: `hooks/usePager`,
-  Lightbox (`useZoomCore`, `useZoomStage`), Resizable (`resizablePane`),
-  Slider (`sliderTouchController`), SnapPaging, Chat (`useChatKeyboard`), and
-  the date and time fields' wheels (`motion/reducedMotion`). Each follow-up
+  in the deferred runtime. `hooks/pagerIndex.ts` holds a looping pager's index
+  arithmetic apart from the pager, so the date and time wheels read it without
+  loading the pager. `hooks/actionGroupNeighbours.ts` holds the action-group
+  target helpers apart from the tracking runtime, so a group's static code
+  finds its neighbours without loading gesture code. Gap: these modules still
+  import the shared touch modules statically, so a page that renders them
+  carries the touch runtime in its first load: Lightbox (`useZoomCore`,
+  `useZoomStage`), Resizable (`resizablePane`), Slider
+  (`sliderTouchController`), SnapPaging, Chat (`useChatKeyboard`), and the
+  date and time fields' wheels (`motion/reducedMotion`). Each follow-up
   removes its own names. A surface
   revealed by interaction that a component loads with `import()` under
   `architecture:component-import-boundaries` INV1 imports these modules

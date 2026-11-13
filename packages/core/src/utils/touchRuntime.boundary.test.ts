@@ -51,7 +51,10 @@ function staticImports(file: string): string[] {
 }
 
 /** Each touch module the entry reaches, with the chain that brings it. */
-function touchChains(entry: string): string[] {
+function touchChains(
+  entry: string,
+  targets: ReadonlyArray<string> = TOUCH_MODULES,
+): string[] {
   const start = join(coreSrc, entry);
   const parent = new Map<string, string | null>([[start, null]]);
   const queue = [start];
@@ -59,7 +62,7 @@ function touchChains(entry: string): string[] {
   while (queue.length > 0) {
     const file = queue.shift()!;
     const name = relative(coreSrc, file);
-    if (TOUCH_MODULES.includes(name)) {
+    if (targets.includes(name)) {
       const chain: string[] = [];
       for (let at: string | null = file; at != null; at = parent.get(at)!) {
         chain.unshift(relative(coreSrc, at));
@@ -107,6 +110,15 @@ describe('architecture:react-component-runtime INV13 shared touch loader', () =>
     'ToggleButton/index.ts',
   ])('%s reaches no touch module statically', entry => {
     expect(touchChains(entry)).toEqual([]);
+  });
+
+  it.each([
+    'Lightbox/index.ts',
+    'DateInput/index.ts',
+    'TimeInput/index.ts',
+    'DateTimeInput/index.ts',
+  ])('%s reaches no pager statically', entry => {
+    expect(touchChains(entry, ['hooks/usePager.ts'])).toEqual([]);
   });
 
   it('loads the runtime module only from the loader, through import()', () => {
