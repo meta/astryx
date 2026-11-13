@@ -18,10 +18,12 @@ const EDGES = ['block-start', 'block-end', 'inline-start', 'inline-end'];
 // Surfaces that keep the same gutter by convention but are not anchor-mode
 // layers (spec:AST-059 non-goals), plus the module itself. AppShell reads the
 // device's insets for the page shell itself (its header and the end of its
-// content), not as a layer gutter.
+// content), not as a layer gutter. Lightbox's caption band reads the bottom
+// inset of its full-screen viewer.
 const GUTTER_OWNERS = new Set([
   'Layer/layerViewportInset.stylex.ts',
   'AppShell/AppShell.tsx',
+  'Lightbox/Lightbox.tsx',
   'Dialog/Dialog.tsx',
   'Toast/ToastViewport.tsx',
   'BottomSheet/BottomSheetPanel.tsx',

@@ -55,6 +55,18 @@ function legs(job, event = 'workflow_dispatch') {
     .reduce((product, list) => product * list.length, 1);
 }
 
+/** The most browser-spec legs pr-a11y-plan plans for a pull request. */
+function planLegsMax() {
+  const run = ci.jobs['pr-a11y-plan'].steps.find(
+    step => step.id === 'legs',
+  ).run;
+  return Number(
+    /--count-legs \$\{\{ github\.event_name == 'workflow_dispatch' && 1 \|\| (\d+) \}\}/.exec(
+      run,
+    )[1],
+  );
+}
+
 describe('where runs wait', () => {
   const admission = ci.jobs.admission;
   const wait = stepOf(admission);
@@ -536,8 +548,13 @@ describe('peaks', () => {
       'ci:run-visual': pull('visual-scout') + pull('pr-visual'),
       'ci:run-rtl':
         pull('pr-rtl-shard') + pull('pr-rtl-merge') + pull('pr-rtl'),
+      // The plan starts at most its pull-request leg count of browser-spec
+      // legs.
       'ci:run-a11y':
-        pull('pr-a11y-guards') + pull('pr-a11y-specs') + pull('pr-a11y'),
+        pull('pr-a11y-guards') +
+        pull('pr-a11y-plan') +
+        planLegsMax() +
+        pull('pr-a11y'),
     });
   });
 });

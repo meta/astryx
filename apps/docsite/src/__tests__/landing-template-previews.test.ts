@@ -6,12 +6,15 @@ import path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
   PREVIEW_IMAGE_WIDTH,
+  fontStylesheetOf,
+  previewDocument,
   previewMarkup,
   previewPageSource,
   stagePreviewPage,
   stageThemesStorePage,
   themesStorePageSource,
 } from '../../scripts/generate-landing-template-previews.mjs';
+import {previewColorModeFragment} from '../app/(site)/_landing/templatePreviewColorMode';
 import templateRows from '../app/(site)/_landing/landingTemplateRows.json';
 
 const docsiteDir = path.resolve(__dirname, '../..');
@@ -43,10 +46,86 @@ describe('previewPageSource', () => {
     expect(source).toContain('<Theme theme={neutralTheme} mode="system">');
   });
 
-  it('keeps the preview-viewport wrapper of the live template previews', () => {
+  it('renders the template directly inside the theme, as the frame shows it', () => {
     expect(previewPageSource('./template/page')).toContain(
-      '<div className="preview-viewport">\n        <Page />\n      </div>',
+      '<Theme theme={neutralTheme} mode="system">\n      <Page />\n    </Theme>',
     );
+  });
+});
+
+describe('fontStylesheetOf', () => {
+  it('reads the stylesheet URL from the theme fonts file', () => {
+    expect(
+      fontStylesheetOf(
+        "/* Fonts */\n@import url('https://fonts.example/css2?family=Figtree');\n",
+      ),
+    ).toBe('https://fonts.example/css2?family=Figtree');
+    expect(fontStylesheetOf('body { margin: 0 }')).toBeNull();
+  });
+});
+
+describe('previewDocument', () => {
+  const html = previewDocument(RENDERED, {
+    fontStylesheet: 'https://fonts.example/css2?family=Figtree',
+  });
+
+  it('drops the embedded source, so the file carries no script', () => {
+    expect(html).not.toContain('<script');
+    expect(html).not.toContain('x-astryx-source');
+  });
+
+  it('keeps the image URLs of the rendered page', () => {
+    expect(html).toContain(
+      '<img src="/_next/image?url=%2Ftemplate-assets%2Flight-product-1.png&amp;w=640&amp;q=75" alt=""/>',
+    );
+  });
+
+  it('loads the theme fonts and stays out of search results', () => {
+    expect(html).toContain(
+      '<meta name="robots" content="noindex"><link rel="stylesheet" href="https://fonts.example/css2?family=Figtree"><style>',
+    );
+  });
+
+  it('adds no font stylesheet when the theme names none', () => {
+    expect(previewDocument(RENDERED, {fontStylesheet: null})).toContain(
+      '<meta name="robots" content="noindex"><style>',
+    );
+  });
+
+  it('fills the frame and never scrolls', () => {
+    expect(html).toContain('html,body{height:100%;overflow:hidden}');
+    expect(html).toContain(
+      'body>[data-astryx-theme]>:first-child{height:100%!important;min-height:100%!important}',
+    );
+  });
+
+  it('takes its color mode from the URL fragment', () => {
+    expect(html).toContain(
+      '<body><a id="light" hidden></a><a id="dark" hidden></a><div data-astryx-theme="neutral"><img',
+    );
+    expect(html).toContain(
+      ':root:has(#dark:target),:root:has(#dark:target) [data-astryx-theme]{color-scheme:dark!important}',
+    );
+    expect(html).toContain(
+      ':root:has(#light:target),:root:has(#light:target) [data-astryx-theme]{color-scheme:light!important}',
+    );
+  });
+});
+
+describe('previewColorModeFragment', () => {
+  it('adds nothing while the site follows the OS', () => {
+    expect(previewColorModeFragment('light', 'light')).toBe('');
+    expect(previewColorModeFragment('dark', 'dark')).toBe('');
+  });
+
+  it('adds nothing on the server and through hydration, whatever the OS scheme reads as', () => {
+    expect(previewColorModeFragment('system', 'light')).toBe('');
+    expect(previewColorModeFragment('system', 'dark')).toBe('');
+  });
+
+  it('names the mode that a visitor set against the OS', () => {
+    expect(previewColorModeFragment('dark', 'light')).toBe('#dark');
+    expect(previewColorModeFragment('light', 'dark')).toBe('#light');
   });
 });
 
