@@ -1532,6 +1532,20 @@ async function change(sub, slug, thing, value, options) {
         `the pasted text also held "${dropped}", which this did not set${m ? `: ${P} set ${slug} ${quoteCommandArgument(m[1].trim())} ${quoteCommandArgument(m[2].trim())}${flags ? ` ${flags}` : ''} sets it` : ''}`,
       ];
     }
+    // A mode or base entry in the settings list does nothing: said after
+    // every change, with the undo that removes it.
+    if (seen.ctx && r.data.theme) {
+      /** @type {import('./_settings.mjs').ThemeData | null} */
+      let now = null;
+      try {
+        now = loadTheme(seen.ctx.project.cwd, r.data.theme);
+      } catch {
+        now = null;
+      }
+      const left = now ? misplacedNotes(r.data.theme, now) : [];
+      if (left.length)
+        /** @type {any} */ (r.data).notes = [...left, ...(r.data.notes ?? [])];
+    }
     return r;
   } catch (e) {
     // A theme name one letter off an existing theme, or typed in other
@@ -1579,12 +1593,16 @@ async function change(sub, slug, thing, value, options) {
     }
     // Every `set` the refusal suggests is checked as `set` checks it, and
     // carries the value typed (cleaned), never a stock value.
-    throw carryTyped(
-      vetSuggestions(e, seen.ctx, slug, seen.data),
-      sub,
-      slug,
-      typedThing,
-      typedValue,
+    throw misplacedFirst(
+      carryTyped(
+        vetSuggestions(e, seen.ctx, slug, seen.data),
+        sub,
+        slug,
+        typedThing,
+        typedValue,
+      ),
+      seen.data?.name ?? slug,
+      seen.data,
     );
   }
 }
@@ -2728,6 +2746,50 @@ function unsetColorNotes(data, base, slug) {
 }
 
 /**
+ * Whether a settings entry is a mode or base a hand edit put in the list:
+ * it does nothing there (the theme's mode and base are its own fields).
+ * @param {{thing: string}} s
+ */
+const misplaced = s => s.thing === 'mode' || s.thing === 'base';
+
+/**
+ * The note for each misplaced entry: listed here only, never as a
+ * setting, with the undo that removes it first.
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {string[]}
+ */
+function misplacedNotes(slug, data) {
+  return data.settings
+    .filter(misplaced)
+    .map(
+      x =>
+        `misplaced: the settings list holds ${x.thing} = ${x.value}, which does nothing there (the theme's ${x.thing} is ${x.thing === 'mode' ? data.mode : (data.like ?? 'none')}); \`${P} undo ${slug} ${x.thing}\` removes it, and \`${P} set ${slug} ${x.thing} <value>\` sets the theme's ${x.thing}`,
+    );
+}
+
+/**
+ * A refusal for a theme with misplaced entries, its suggestions led by the
+ * undo that removes each.
+ * @param {unknown} e
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData | undefined} data
+ */
+function misplacedFirst(e, slug, data) {
+  if (!(e instanceof AstryxError) || !data) return e;
+  const undos = data.settings.filter(misplaced).map(x => ({
+    name: `${P} undo ${slug} ${x.thing}`,
+    reason: `removes the ${x.thing} entry that does nothing in the settings list`,
+  }));
+  if (!undos.length) return e;
+  e.suggestions = [
+    ...undos,
+    ...(e.suggestions ?? []).filter(x => !undos.some(u => u.name === x.name)),
+  ];
+  return e;
+}
+
+/**
  * Every setting of a theme, key resolved values, problems it caused, the
  * sample page and the theme-building page with every component.
  * @experimental
@@ -2970,29 +3032,32 @@ export async function themeEditShow(theme, options = {}) {
         const looksBase = await baseResolved(ctx.project, data.like).catch(
           () => null,
         );
-        return data.settings.map(s => {
-          let masked = maskedSettings(data, ctx).get(s);
-          // A look dial (buttons, surfaces) under an exact property on a
-          // part it writes: named, as corners under border-radius is.
-          if (!masked && looksBase && s.source === 'dial' && !s.on) {
-            const writes = dialWrites(ctx, data, s, looksBase);
-            const exact = writes.size
-              ? data.settings.find(
-                  x =>
-                    x.source === 'property' &&
-                    x.on &&
-                    !x.when &&
-                    !x.state &&
-                    partsOf(ctx, x).some(t => writes.has(`${t}\0${x.thing}`)),
-                )
-              : undefined;
-            if (exact)
-              masked = `${describe(exact)} is an exact property and wins over ${s.thing} on ${exact.on}`;
-          }
-          return {...s, parts: partsOf(ctx, s), ...(masked ? {masked} : {})};
-        });
+        return data.settings
+          .filter(s => !misplaced(s))
+          .map(s => {
+            let masked = maskedSettings(data, ctx).get(s);
+            // A look dial (buttons, surfaces) under an exact property on a
+            // part it writes: named, as corners under border-radius is.
+            if (!masked && looksBase && s.source === 'dial' && !s.on) {
+              const writes = dialWrites(ctx, data, s, looksBase);
+              const exact = writes.size
+                ? data.settings.find(
+                    x =>
+                      x.source === 'property' &&
+                      x.on &&
+                      !x.when &&
+                      !x.state &&
+                      partsOf(ctx, x).some(t => writes.has(`${t}\0${x.thing}`)),
+                  )
+                : undefined;
+              if (exact)
+                masked = `${describe(exact)} is an exact property and wins over ${s.thing} on ${exact.on}`;
+            }
+            return {...s, parts: partsOf(ctx, s), ...(masked ? {masked} : {})};
+          });
       })(),
       notes: [
+        ...misplacedNotes(theme, data),
         ...(noReact
           ? [
               `react and react-dom cannot be found from this app, so the pages and pictures were not made again and the checks that render components were skipped; install them (${installLine(cwd, ['react', 'react-dom'])}), then run show again`,
@@ -3034,14 +3099,6 @@ export async function themeEditShow(theme, options = {}) {
         ),
         ...ownOverNotes,
         ...ownPhoneNotes(cwd, theme, data),
-        // A mode or base entry a hand edit put in the settings list does
-        // nothing: the theme's mode and base are its own fields.
-        ...data.settings
-          .filter(x => x.thing === 'mode' || x.thing === 'base')
-          .map(
-            x =>
-              `the settings list holds ${x.thing} = ${x.value}, which does nothing there (the theme's ${x.thing} is ${x.thing === 'mode' ? data.mode : (data.like ?? 'none')}); \`${P} undo ${theme} ${x.thing}\` removes it, and \`${P} set ${theme} ${x.thing} <value>\` sets the theme's ${x.thing}`,
-          ),
       ],
       // A size, number or font is the same in both modes: one value.
       resolved: Object.fromEntries(

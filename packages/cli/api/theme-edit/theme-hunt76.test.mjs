@@ -174,7 +174,7 @@ describe('the editor checks what it is given', () => {
     fs.writeFileSync(file, JSON.stringify(j, null, 2));
     const r = await themeEditShow('ms', {cwd});
     expect(r.data.notes.join(' ')).toMatch(
-      /settings list holds mode = dark-only, which does nothing there.*undo ms mode/,
+      /misplaced: the settings list holds mode = dark-only, which does nothing there.*undo ms mode/,
     );
   }, 240_000);
 
