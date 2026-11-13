@@ -1321,6 +1321,28 @@ export class Project {
   }
 
   /**
+   * The passes that find every integration issue: template and component
+   * replacement validity (over Core plus every integration), then each
+   * integration's own checks.
+   */
+  async #runIssuePasses() {
+    // Template replacement validity depends on the combined Core +
+    // integration catalog. Resolve it first so issue results never depend
+    // on which discovery method the caller happened to invoke earlier. Only
+    // an integration's own templates can replace one, so with none, Core's
+    // templates stay unread.
+    if (this.#loadedIntegrations.some(hasTemplatesRoot)) {
+      await this.templates();
+    }
+    // Component replacement validity likewise depends on Core plus every
+    // integration's components.
+    await this.componentReplacements();
+    for (const integration of this.#loadedIntegrations) {
+      await this.#collectIssues(integration);
+    }
+  }
+
+  /**
    * The accumulated integration issues (deduped by package, code, message).
    * When called directly, also validates any configured integration not yet
    * visited by a discovery call, so the returned set is complete on demand.
@@ -1332,20 +1354,34 @@ export class Project {
     // templates and components declare no replacement. A project with no
     // integration skips them.
     if (this.#loadedIntegrations.length > 0) {
-      // Template replacement validity depends on the combined Core +
-      // integration catalog. Resolve it first so issue results never depend
-      // on which discovery method the caller happened to invoke earlier. Only
-      // an integration's own templates can replace one, so with none, Core's
-      // templates stay unread.
-      if (this.#loadedIntegrations.some(hasTemplatesRoot)) {
-        await this.templates();
-      }
-      // Component replacement validity likewise depends on Core plus every
-      // integration's components.
-      await this.componentReplacements();
-      for (const integration of this.#loadedIntegrations) {
-        await this.#collectIssues(integration);
-      }
+      // A function of the files the passes read and of the issues already
+      // found (which the key holds): the kept gather stamps the files, so a
+      // later run with every one unchanged reads the whole list back and
+      // skips the passes, discovery included.
+      const before = this.#issues.map(i => ({...i}));
+      const all = await persistedGather(
+        [
+          'project-issues',
+          this.#cwd,
+          // The Core the replacement pass reads: a carried Core for everyday
+          // commands, the project's own for doctor.
+          this.#core,
+          this.coreDir() ?? null,
+          this.#loadedIntegrations.map(
+            integration => integration.__packageDir ?? integration.name ?? null,
+          ),
+          Boolean(this.#config.experimental?.iconSet),
+          before,
+        ],
+        async () => {
+          await this.#runIssuePasses();
+          return this.#issues.map(i => ({...i}));
+        },
+        ISSUES_CODEC,
+      );
+      this.#issues = all.map((/** @type {ProjectIntegrationIssue} */ i) => ({
+        ...i,
+      }));
     }
     // Return a stable copy so callers can't mutate internal state.
     return this.#issues.map(i => ({...i}));

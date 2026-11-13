@@ -2,6 +2,7 @@
 
 import {describe, expect, it} from 'vitest';
 import {
+  LAYER_ENTER_GAP_PROPERTY,
   LAYER_ENTER_ORIGIN_PROPERTY,
   LAYER_ENTER_X_PROPERTY,
   LAYER_ENTER_Y_PROPERTY,
@@ -27,6 +28,7 @@ describe('layerEntranceSide', () => {
       y: -1,
       originX: 100,
       originY: 0,
+      gap: 4,
     });
   });
 
@@ -36,15 +38,17 @@ describe('layerEntranceSide', () => {
       y: 1,
       originX: 50,
       originY: 150,
+      gap: 4,
     });
   });
 
-  it('starts a layer to the right one step left, even over a few pixels of its trigger', () => {
+  it('gives a layer to the right over a few pixels of its trigger a side and no room', () => {
     expect(layerEntranceSide(box(396, 400, 160, 200), trigger)).toEqual({
       x: -1,
       y: 0,
       originX: 0,
       originY: 16,
+      gap: 0,
     });
   });
 
@@ -54,6 +58,7 @@ describe('layerEntranceSide', () => {
       y: 0,
       originX: 160,
       originY: 116,
+      gap: 4,
     });
   });
 
@@ -73,7 +78,35 @@ describe('layerEntranceSide', () => {
       y: 0,
       originX: 75,
       originY: 30,
+      gap: 0,
     });
+  });
+
+  it('caps the step at the room between a layer and its trigger', () => {
+    // A tall tooltip 4 px beside its trigger: an 8 px step would start it
+    // over the trigger.
+    expect(layerEntranceSide(box(404, 200, 240, 400), trigger)).toMatchObject({
+      x: -1,
+      gap: 4,
+    });
+    expect(layerEntranceSide(box(420, 400, 160, 200), trigger)).toMatchObject({
+      x: -1,
+      gap: 20,
+    });
+  });
+
+  it('gives a layer flush against its trigger no room, and a point anchor no gap', () => {
+    expect(layerEntranceSide(box(250, 432, 200, 150), trigger)).toMatchObject({
+      y: -1,
+      gap: 0,
+    });
+    // A menu at the pointer: its cursor anchor is a point.
+    expect(
+      layerEntranceSide(box(316, 416, 160, 200), box(316, 416, 0, 0)),
+    ).toMatchObject({gap: null});
+    expect(
+      layerEntranceSide(box(316, 417, 160, 200), box(316, 416, 1, 1)),
+    ).toMatchObject({gap: null});
   });
 
   it('gives nothing for a layer without size', () => {
@@ -117,12 +150,26 @@ describe('readLayerEntranceSide and writeLayerEntranceSide', () => {
     expect(layer.style.getPropertyValue(LAYER_ENTER_ORIGIN_PROPERTY)).toBe(
       '50px 150px',
     );
+    expect(layer.style.getPropertyValue(LAYER_ENTER_GAP_PROPERTY)).toBe('4px');
+
+    // Flush against a sized anchor, the layer takes no step.
+    writeLayerEntranceSide(layer, {...side!, gap: 0});
+    expect(layer.style.getPropertyValue(LAYER_ENTER_GAP_PROPERTY)).toBe('0px');
+    // Room that floors to 0 px is no room.
+    writeLayerEntranceSide(layer, {...side!, gap: 0.0004});
+    expect(layer.style.getPropertyValue(LAYER_ENTER_GAP_PROPERTY)).toBe('0px');
+    // At a point, as a menu at the pointer, the layer takes the whole step.
+    writeLayerEntranceSide(layer, {...side!, gap: null});
+    expect(layer.style.getPropertyValue(LAYER_ENTER_GAP_PROPERTY)).toBe(
+      'initial',
+    );
 
     writeLayerEntranceSide(layer, null);
     for (const property of [
       LAYER_ENTER_X_PROPERTY,
       LAYER_ENTER_Y_PROPERTY,
       LAYER_ENTER_ORIGIN_PROPERTY,
+      LAYER_ENTER_GAP_PROPERTY,
     ]) {
       expect(layer.style.getPropertyValue(property)).toBe('initial');
     }

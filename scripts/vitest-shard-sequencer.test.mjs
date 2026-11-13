@@ -20,11 +20,10 @@ const slowest = [...files].sort((a, b) => recorded[b] - recorded[a]);
 
 describe('duration-balanced Node legs', () => {
   it('balances a slow changed test with the guards when one run lists both', () => {
-    // A scoped run with one slow changed test (packed-gather-cache) and a
-    // set of slow guards. Split as two runs, leg 1 takes the changed test
+    // A scoped run whose one changed test is the slowest recorded file, with
+    // a set of slow guards. Split as two runs, leg 1 takes the changed test
     // on top of a full share of the guards; split as one run, it does not.
-    const changed = ['packages/cli/test/packed-gather-cache.test.mjs'];
-    expect(recorded[changed[0]]).toBeGreaterThan(300);
+    const changed = [slowest[0]];
     const guards = Object.entries(recorded)
       .filter(([file]) => file !== changed[0])
       .sort((a, b) => b[1] - a[1])
