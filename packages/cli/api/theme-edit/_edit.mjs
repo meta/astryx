@@ -121,6 +121,7 @@ import {
   takeFirstAppCopy,
   appCopyBehind,
   appCopyStale,
+  copyFontsCss,
   writeAppCopy,
 } from './_preview.mjs';
 import {appWiring, refreshPreviewRoute, seeLine} from './_preview-app.mjs';
@@ -2738,7 +2739,10 @@ async function changeOnce(
   const f0 = themeFiles(cwd, slug);
   // A change that changed nothing still writes back an app copy file that
   // is gone or not the current build.
-  if (r.unchanged && appCopyBehind(cwd, slug)) writeAppCopy(ctx, slug, data);
+  // Its font stylesheet follows the fonts the theme loads now (a font
+  // package installed or removed since).
+  if (r.unchanged && appCopyBehind(cwd, slug, copyFontsCss(ctx, slug, data)))
+    writeAppCopy(ctx, slug, data);
   const p =
     r.unchanged &&
     !png &&

@@ -1552,6 +1552,23 @@ export {APP_COPY_MARK} from './_marks.mjs';
 import {APP_COPY_MARK, appCopyMark} from './_marks.mjs';
 
 /**
+ * The font stylesheets a theme's app copy imports, from the fonts the theme
+ * loads now (an installed font package, the base theme's fonts).
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {string[]}
+ */
+export function copyFontsCss(ctx, slug, data) {
+  return themeImports(
+    ctx,
+    slug,
+    data,
+    path.join(ctx.project.cwd, 'src', 'themes', slug),
+  ).css.slice(1);
+}
+
+/**
  * The app's copy of an editor theme: a standard local theme in
  * src/themes/<theme>/ (a descriptor, a source that re-exports the built
  * module, the built module, its stylesheet and font stylesheet), the shape
@@ -1567,16 +1584,7 @@ import {APP_COPY_MARK, appCopyMark} from './_marks.mjs';
  * @returns {string | null}
  */
 export function writeAppCopy(ctx, slug, data) {
-  return writeAppCopyAt(
-    ctx.project.cwd,
-    slug,
-    themeImports(
-      ctx,
-      slug,
-      data,
-      path.join(ctx.project.cwd, 'src', 'themes', slug),
-    ).css.slice(1),
-  );
+  return writeAppCopyAt(ctx.project.cwd, slug, copyFontsCss(ctx, slug, data));
 }
 
 /**
@@ -1636,12 +1644,14 @@ function appCopyFiles(cwd, slug, fontsCss) {
  * whose content is not what the editor would write now.
  * @param {string} cwd
  * @param {string} slug
+ * @param {string[] | null} [fontsCss] the font stylesheets the copy should
+ *   import now (null: the copy's own)
  * @returns {string | null}
  */
-export function appCopyBehind(cwd, slug) {
+export function appCopyBehind(cwd, slug, fontsCss = null) {
   const stale = appCopyStale(cwd, slug).appCopyStale;
   if (stale) return stale;
-  const files = appCopyFiles(cwd, slug, null);
+  const files = appCopyFiles(cwd, slug, fontsCss);
   if (!files) return null;
   const dir = path.join(cwd, 'src', 'themes', slug);
   if (!fs.existsSync(dir))
@@ -1654,7 +1664,10 @@ export function appCopyBehind(cwd, slug) {
     } catch {
       return `src/themes/${slug}/${n} is missing from the app copy`;
     }
-    if (now !== text)
+    // Line endings as a checkout writes them (CRLF on Windows) are the
+    // same content, as the outputs check reads them.
+    const lf = (/** @type {string} */ x) => x.replace(/\r\n/g, '\n');
+    if (lf(now) !== lf(text))
       return `src/themes/${slug}/${n} is not the current build of themes/${slug}/`;
   }
   return null;
