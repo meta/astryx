@@ -1517,7 +1517,6 @@ export function Selector<T extends SelectorOptionType>(
     surface.isOpen && !isLoading && filteredItems.length === 0;
   useAnnounceRenderedText(emptyStateRef, isPanelEmpty, searchQuery);
 
-  // Calculate offset to position selected item over trigger.
   const {marginBlockStart: rawMarginBlockStart, isPositioned: rawIsPositioned} =
     useSelectedItemOverlayMargin({
       isOpen: popover.isOpen && shouldOverlaySelectedItem,

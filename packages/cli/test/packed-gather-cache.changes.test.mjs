@@ -22,6 +22,8 @@ import {
   makeProject,
   run,
   keptTmp,
+  allInodes,
+  expectWarmHit,
   freshTmp,
   entries,
   templatesEntries,
@@ -65,10 +67,14 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     'is not used by another project, another CLI, or another environment',
     async () => {
       const tmp = keptTmp('other');
-      await expectSameAsFresh(tmp);
+      // The second query reads the first's catalog back: the warm path hits.
+      expect(await expectSameAsFresh(tmp)).toEqual(['miss', 'hit']);
       const other = makeProject();
       try {
-        await expectSameAsFresh(tmp, {cwd: other.dir});
+        expect(await expectSameAsFresh(tmp, {cwd: other.dir})).toEqual([
+          'miss',
+          'hit',
+        ]);
         expect(entries(tmp).size).toBe(2);
       } finally {
         fs.rmSync(other.dir, {recursive: true, force: true});
@@ -95,7 +101,9 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     /** @type {string[]} */
     const made = [];
     try {
-      await expectSameAsFresh(tmp);
+      const first = await expectSameAsFresh(tmp);
+      // Where the CLI keeps catalogs, the warm path hits.
+      if (hasModuleHooks) expect(first).toEqual(['miss', 'hit']);
       // A package.json, then a config file, in the folder above.
       for (const [name, text] of [
         ['package.json', JSON.stringify({name: 'parent'})],
@@ -212,6 +220,13 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
       const at = (/** @type {string} */ value, /** @type {string} */ where) =>
         run(ask, {tmp: where, cwd: other.dir, env: {ASTRYX_TEST_ROOT: value}});
       expect(at('a', tmp)).toEqual(at('a', freshTmp()));
+      // The warm path hits while the variable keeps its value.
+      if (hasModuleHooks) {
+        expectWarmHit(tmp, [ask], {
+          cwd: other.dir,
+          env: {ASTRYX_TEST_ROOT: 'a'},
+        });
+      }
       const b = at('b', tmp);
       expect(b.stdout).toContain('Grand totals');
       expect(b).toEqual(at('b', freshTmp()));
@@ -261,6 +276,13 @@ process.stdout.write(answer);
       };
       fs.writeFileSync(input, '1');
       expect(at('a')).toBe('a:1');
+      // Nothing changed: both gathers are read back, nothing written again.
+      if (hasModuleHooks) {
+        const warm = allInodes(tmp);
+        expect(warm.size).toBe(2);
+        expect(at('a')).toBe('a:1');
+        expect(allInodes(tmp)).toEqual(warm);
+      }
       // Only the outer input changes: the outer gathers again while the
       // inner is read back.
       fs.writeFileSync(input, '2');
@@ -271,6 +293,84 @@ process.stdout.write(answer);
       fs.rmSync(dir, {recursive: true, force: true});
     }
   }, 60_000);
+  describe('a contribution added to a folder a nested kept entry listed', () => {
+    /** What to add to each root so the integration's checks report it. */
+    const broken = {
+      themes: (/** @type {string} */ root) => {
+        fs.mkdirSync(path.join(root, 'broken'), {recursive: true});
+        fs.writeFileSync(
+          path.join(root, 'broken', 'brokenTheme.doc.mjs'),
+          "export default {type: 'theme', name: 'broken', displayName: 'Broken', description: 'Broken.', maintained: true};\n",
+        );
+        fs.writeFileSync(
+          path.join(root, 'broken', 'brokenTheme.ts'),
+          "export const brokenTheme = {name: 'broken', tokens: {}};\n",
+        );
+      },
+      templates: (/** @type {string} */ root) =>
+        fs.writeFileSync(
+          path.join(root, 'broken.doc.mjs'),
+          "export default {type: 'page'};\n",
+        ),
+      components: (/** @type {string} */ root) =>
+        fs.writeFileSync(
+          path.join(root, 'Broken.doc.mjs'),
+          "export default {type: 'component'};\n",
+        ),
+      docs: (/** @type {string} */ root) =>
+        fs.writeFileSync(
+          path.join(root, 'broken.doc.mjs'),
+          "export const docs = {type: 'generic'};\n",
+        ),
+    };
+    const commands = [
+      ['component', 'Button'],
+      ['template', '--list'],
+      ['theme', 'list'],
+      ['search', 'running', 'totals'],
+    ];
+    for (const [root, add] of Object.entries(broken)) {
+      for (const ask of commands) {
+        // theme list discovers integration themes afresh on every call, so
+        // that pair shows nothing about kept entries.
+        if (root === 'themes' && ask[1] === 'list') continue;
+        it.skipIf(!hasModuleHooks)(
+          `shows a broken entry added to ${root} on the next ${ask.join(' ')}`,
+          () => {
+            const tmp = keptTmp(`nested-${root}-${ask[0]}`);
+            const other = makeProject();
+            try {
+              fs.writeFileSync(
+                path.join(other.widgets, 'astryx.integration.mjs'),
+                "export default {themes: './themes', templates: './templates', components: './components', docs: './docs'};\n",
+              );
+              for (const dir of ['themes', 'templates', 'components', 'docs']) {
+                fs.mkdirSync(path.join(other.widgets, dir), {recursive: true});
+              }
+              const at = (/** @type {string} */ where) =>
+                run(ask, {tmp: where, cwd: other.dir, json: false});
+              at(tmp);
+              at(tmp);
+              // The warm path hits: nothing is written again.
+              const [before] = expectWarmHit(tmp, [ask], {
+                cwd: other.dir,
+                json: false,
+              });
+              add(path.join(other.widgets, root));
+              const after = at(tmp);
+              // The broken entry changes the answer, so equal to fresh shows it.
+              expect(after).not.toEqual(before);
+              expect(after).toEqual(at(freshTmp()));
+            } finally {
+              fs.rmSync(other.dir, {recursive: true, force: true});
+            }
+          },
+          120_000,
+        );
+      }
+    }
+  });
+
   it('sees a template added or renamed after template discovery was kept inside search', () => {
     const tmp = keptTmp('nested-listing');
     const other = makeProject();

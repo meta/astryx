@@ -17,9 +17,12 @@
  *   integration's contribution-check results and the whole list (with the
  *   template and component replacement passes), which `component`,
  *   `template`, `theme`, `discover` and `search` report, by template
- *   discovery (foundation/discovery/template-adapter.mjs) for its records,
+ *   discovery (foundation/discovery/template-adapter.mjs) for its records, by theme discovery
+ *   (foundation/discovery/theme-discovery.mjs) for each integration's themes,
  *   and by `doctor` (api/doctor/_adapter.mjs) for its file-only docs checks,
- *   in a run that records modules and variables to its end. Gathers are kept only once the folder exists: the first such run
+ *   in a run that records modules and variables to its end. The commands
+ *   whose runs keep these entries are `search`, `build`, `component`,
+ *   `template`, `theme`, `discover`, `docs` and `doctor`. Gathers are kept only once the folder exists: the first such run
  *   on a machine just makes it, so a one-off run pays nothing to store one. Only a published CLI stores anything:
  *   its build id (clients/cli/build-id.generated.json, written at `prepack`)
  *   names its exact code, so a checkout, whose code may change between runs
@@ -63,6 +66,7 @@ const INTEGRATION_COMMANDS = new Set([
   'template',
   'theme',
   'discover',
+  'docs',
 ]);
 
 /** The run's commands whose gathers are kept. */
@@ -73,6 +77,7 @@ const KEPT_COMMANDS = new Set([
   'template',
   'theme',
   'discover',
+  'docs',
   // The project check alone (no subcommand): its docs checks are kept.
   'doctor',
 ]);
@@ -250,7 +255,7 @@ export async function recordRunFor(argv, fn) {
     return fn();
   }
   // Gathers are kept only once the folder exists: the first recorded run on a
-  // machine (search, build, component, template, theme or discover) just makes
+  // machine (search, build, component, template, theme, discover or docs) just makes
   // it, so a one-off run never pays to store one.
   const dir = cacheDirPath();
   if (!withoutRecording(() => fs.existsSync(dir))) {
@@ -548,8 +553,9 @@ function staleReason(stamps, env) {
  * @param {unknown[]} key - What else decides the gather: its folder (a real
  *   path) and options.
  * @param {() => Promise<T>} load
- * @param {{encode: (value: T) => E, decode: (stored: E) => T}} codec - A
- *   plain-JSON form of the value and back.
+ * @param {{encode: (value: T) => E, decode: (stored: E) => T, valid?: (value: T) => boolean}} codec - A
+ *   plain-JSON form of the value and back, and optionally the shape a decoded
+ *   value must have to be used (anything else is a miss).
  * @param {(value: T) => boolean} [keep] whether a fresh gather may be
  *   stored: one that depends on something its stamps cannot see (a retry
  *   that waits on time) is used for this run only
@@ -573,7 +579,7 @@ export async function persistedGather(key, load, codec, keep = () => true) {
  * @template T, E
  * @param {unknown[]} key
  * @param {() => Promise<T>} load
- * @param {{encode: (value: T) => E, decode: (stored: E) => T}} codec
+ * @param {{encode: (value: T) => E, decode: (stored: E) => T, valid?: (value: T) => boolean}} codec
  * @param {(value: T) => boolean} keep
  * @returns {Promise<T>}
  */
@@ -607,8 +613,11 @@ async function gatherAt(key, load, codec, keep) {
       reason = 'an entry for other inputs';
     } else {
       const stale = staleReason(stored.stamps, stored.env);
-      if (stale == null) {
-        const value = codec.decode(stored.value);
+      const value = stale == null ? readBack(stored, codec) : undefined;
+      if (stale == null && value === undefined) {
+        // Gathered again below, and stored over the bad entry.
+        reason = 'a malformed value';
+      } else if (stale == null) {
         recordStates(stored.stamps);
         // A gather around this one depends on what this one read, the
         // environment included: a hit hands its variables on, as a fresh
@@ -627,8 +636,9 @@ async function gatherAt(key, load, codec, keep) {
           // An entry that cannot be touched is evicted sooner; nothing more.
         }
         return value;
+      } else {
+        reason = stale;
       }
-      reason = stale;
     }
   } catch (error) {
     if (/** @type {any} */ (error)?.code !== 'ENOENT')
@@ -686,7 +696,7 @@ function codeStamp(code, inputs) {
  * @template T, E
  * @param {unknown[]} key - Everything the value is computed from.
  * @param {() => T} compute
- * @param {{encode: (value: T) => E, decode: (stored: E) => T}} codec
+ * @param {{encode: (value: T) => E, decode: (stored: E) => T, valid?: (value: T) => boolean}} codec
  * @param {string[]} [inputs] - Files the computation reads, by path.
  * @returns {T}
  */
@@ -702,12 +712,13 @@ export function persistedDerived(key, compute, codec, inputs = []) {
     const stored = JSON.parse(
       withoutRecording(() => fs.readFileSync(file, 'utf-8')),
     );
-    if (
+    const value =
       stored?.format === FORMAT &&
       stored.derived === true &&
       stored.key === entry
-    ) {
-      const value = codec.decode(stored.value);
+        ? readBack(stored, codec)
+        : undefined;
+    if (value !== undefined) {
       try {
         const now = new Date();
         withoutRecording(() => fs.utimesSync(file, now, now));
@@ -742,6 +753,25 @@ export function persistedDerived(key, compute, codec, inputs = []) {
 }
 
 /**
+ * A stored entry's value, decoded, or undefined when it has none, its decode
+ * throws, or the decoded value fails the codec's shape check (`valid`): such
+ * an entry is a miss, worked out again and stored over.
+ * @param {any} stored
+ * @param {{decode: (stored: any) => any, valid?: (value: any) => boolean}} codec
+ * @returns {any}
+ */
+function readBack(stored, codec) {
+  if (!Object.hasOwn(stored, 'value') || stored.value == null) return undefined;
+  try {
+    const value = codec.decode(stored.value);
+    if (value == null) return undefined;
+    return !codec.valid || codec.valid(value) ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Store a fresh gather with what the run read, unless its plain form does not
  * read back as the same value. Silent on any failure.
  * @template T, E
@@ -749,7 +779,7 @@ export function persistedDerived(key, compute, codec, inputs = []) {
  * @param {string} file
  * @param {string} entry - The entry's key (entryKey).
  * @param {T} value
- * @param {{encode: (value: T) => E, decode: (stored: E) => T}} codec
+ * @param {{encode: (value: T) => E, decode: (stored: E) => T, valid?: (value: T) => boolean}} codec
  */
 function store(dir, file, entry, value, codec) {
   if (!run) return;

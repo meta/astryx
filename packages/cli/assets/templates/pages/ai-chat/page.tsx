@@ -39,6 +39,7 @@ import {DropdownMenu} from '@astryxdesign/core/DropdownMenu';
 import {MoreMenu} from '@astryxdesign/core/MoreMenu';
 import {Toolbar} from '@astryxdesign/core/Toolbar';
 import {useResizable, ResizeHandle} from '@astryxdesign/core/Resizable';
+import {rtlStyles} from '@astryxdesign/core/utils';
 
 import {
   DocumentTextIcon,
@@ -268,7 +269,12 @@ function ArtifactCard({onOpen}: {onOpen: () => void}) {
             </Text>
           </VStack>
         </StackItem>
-        <Icon icon={ChevronRightIcon} size="sm" color="secondary" />
+        <Icon
+          icon={ChevronRightIcon}
+          size="sm"
+          color="secondary"
+          xstyle={rtlStyles.mirror}
+        />
       </HStack>
     </ClickableCard>
   );

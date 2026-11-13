@@ -53,6 +53,7 @@
  * @property {{code: string, cause: string} | null} notChecked - Set when the change is saved but the components could not be rendered, so it was not checked and has no preview: the cause, such as two copies of React.
  * @property {string} [sheetStale] - Set when sheet.html (the sheet of every component, made by `show`) shows the theme as it was before this change: it says so at its top until `show` makes it again.
  * @property {string[]} [previewStale] - Files of the in-app theme preview that were not written again and still show the theme as it was: changed by hand, or a preview folder where a stopped preview change waits for the next preview command.
+ * @property {{wrote: string[]}} [appCopy] - Only the first time the theme's app copy is written (src/themes/<theme>/, a standard local theme `astryx theme add <theme>` takes, written again after every build): the files written.
  */
 
 /**
@@ -60,7 +61,7 @@
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditNewResponse
  * @property {'themeEdit.new'} type
- * @property {{theme: string, like: string | null, files: {settings: string, source: string, css: string, module: string}, settings: string[], notes: string[], problems: string[]} & ThemeEditPreviewFields} data - `settings`: the dial settings it started with; `notes`: font loading.
+ * @property {{theme: string, like: string | null, files: {settings: string, source: string, css: string, module: string}, settings: string[], notes: string[], problems: string[], wiring: string[]} & ThemeEditPreviewFields} data - `settings`: the dial settings it started with; `notes`: font loading; `wiring`: the steps that put the theme into this app (`theme add <theme>` for its app copy in src/themes/<theme>/, else the root file, its imports and the Theme around the app; what builds it).
  */
 
 /**
@@ -97,6 +98,7 @@
  * @property {{code: string, cause: string} | null} notChecked - Saved but not checked: see ThemeEditPreviewFields.
  * @property {string[]} [previewStale] - In-app preview files changed by hand: see ThemeEditPreviewFields.
  * @property {string} [sheetStale] - Set when sheet.html shows the theme as it was before this change: see ThemeEditPreviewFields.
+ * @property {{wrote: string[]}} [appCopy] - Only the first time the theme's app copy is written: see ThemeEditPreviewFields.
  */
 
 /**
@@ -132,6 +134,8 @@
  * @property {string[]} data.pictures
  * @property {string | null} data.pictureProblem
  * @property {{config: string, module: string, receipt: string} | null} data.colorFiles - The generated color files: the input (in the shape `theme palette generate` reads), the module the theme imports, and the receipt; null when the theme sets no color.
+ * @property {{wrote: string[]}} [data.appCopy] - Only the first time the theme's app copy is written: the files written in src/themes/<theme>/.
+ * @property {string[]} data.wiring - The steps that put the theme into this app: the root file, its imports, the Theme around the app, and what builds it (`theme add <theme>`, for the app copy the editor writes in src/themes/<theme>/; the imports by hand when a folder of yours is there).
  */
 
 /**

@@ -79,12 +79,12 @@ import {
   printBatchTrailer,
   printCompactTrailer,
   setEditorFolderListener,
-  setPrivateVarErrorListener,
   themeBuildFamily,
   themeBuildForReport,
   themeBuildWithHandOff,
   themeSourceFiles,
   themeSourceGuesses,
+  buildSuggestion,
   writeDeferredBuildOutputs,
 } from '../../../api/theme/build/build.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
@@ -118,7 +118,7 @@ import {doc as themePaletteGenerateFn} from '../../../api/theme/themePaletteGene
  * @property {string} group - The group's command path: `theme` or `experimental theme`.
  * @property {string} build - The build subcommand's name: `build` or `compile`.
  * @property {(err: import('../../../api/error.mjs').AstryxError, cwd: string) => import('../../../api/error.mjs').AstryxError | null} [explain] - A clearer refusal for this group, or null.
- * @property {(files: string[], options: {cwd: string, check?: boolean, family?: boolean}) => Promise<import('../../../api/error.mjs').AstryxError | null>} [preflight] - A refusal before a build starts, or null.
+ * @property {(files: string[], options: {cwd: string, check?: boolean, family?: boolean, iconsSpecifier?: string, out?: string}) => Promise<import('../../../api/error.mjs').AstryxError | null>} [preflight] - A refusal before a build starts, or null.
  * @property {(files: string[], options: {cwd: string}) => Promise<() => Promise<void>>} [hold] - Locks held while a build or check runs; resolves to their release.
  * @property {(file: string, cwd: string) => {name: string, reason: string} | null} [missingSource] - For a source file that is not there, this group's way to write it again, or null.
  * @property {(options: {targetPath?: string, overwrite?: boolean, cwd?: string}) => import('../../../api/theme/theme.type.mjs').ThemeTemplateResponse} [template] - This group's template write, in place of `themeTemplate`.
@@ -978,14 +978,29 @@ function registerThemeCommands(theme, program, docs, words) {
               ? [
                   {
                     // The pattern stays unquoted: the shell expands it.
-                    name: `${getCliInvocation(process.cwd())} ${words.group} ${words.build} ${entry.file.replace(/['"]/g, '')}`,
+                    // The caller's mode follows it, quoted, and a family
+                    // run stays one.
+                    name: buildSuggestion(
+                      entry.file,
+                      options,
+                      process.cwd(),
+                      words,
+                      {
+                        glob: true,
+                        family: Boolean(options.family),
+                        ...(options.family && options.familyKey
+                          ? {familyKey: String(options.familyKey)}
+                          : {}),
+                      },
+                    ),
                     reason:
                       'globs are expanded by your shell; pass the pattern unquoted, or list the files',
                   },
                 ]
               : guesses.length > 0
                 ? guesses.map(guess => ({
-                    name: `${getCliInvocation(process.cwd())} ${words.group} ${words.build} ${quoteCommandArgument(guess)}`,
+                    // The same build of that source: a --check stays a check.
+                    name: buildSuggestion(guess, options, process.cwd(), words),
                     reason: 'a theme source that exists',
                   }))
                 : [
@@ -1087,6 +1102,9 @@ function registerThemeCommands(theme, program, docs, words) {
                     ...(options.out && files.length === 1
                       ? ['--out', options.out]
                       : []),
+                    ...(options.iconsSpecifier
+                      ? ['--icons-specifier', options.iconsSpecifier]
+                      : []),
                     ...(options.check ? ['--check'] : []),
                   ],
                   'build each theme on its own',
@@ -1177,15 +1195,13 @@ function registerThemeCommands(theme, program, docs, words) {
           );
         });
       }
-      let privateVarError = false;
-      setPrivateVarErrorListener(() => {
-        privateVarError = true;
-      });
 
       const refused = await words.preflight?.(files, {
         cwd: process.cwd(),
         check: options.check,
         family: Boolean(options.family),
+        iconsSpecifier: options.iconsSpecifier,
+        out: options.out,
       });
       if (refused) return themeError(refused, words, buildFallback);
 
@@ -1203,13 +1219,12 @@ function registerThemeCommands(theme, program, docs, words) {
           );
           if (json) jsonOut(result);
           if (
-            privateVarError ||
-            (result.type === 'theme.build.check' &&
-              !(
-                /** @type {import('../../../api/theme/theme.type.mjs').ThemeBuildCheckResponse} */ (
-                  result
-                ).data.upToDate
-              ))
+            result.type === 'theme.build.check' &&
+            !(
+              /** @type {import('../../../api/theme/theme.type.mjs').ThemeBuildCheckResponse} */ (
+                result
+              ).data.upToDate
+            )
           ) {
             process.exitCode = 1;
           }
@@ -1401,10 +1416,8 @@ function registerThemeCommands(theme, program, docs, words) {
         );
       }
 
-      // Private-variable diagnostics are build failures even though the released
-      // output and generated files stay unchanged. Stale --check output is also
-      // a failure after its receipt has been emitted.
-      if (privateVarError || (options.check && stale)) {
+      // Stale --check output is a failure after its receipt has been emitted.
+      if (options.check && stale) {
         process.exitCode = 1;
       }
 
