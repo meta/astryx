@@ -50,6 +50,14 @@ export interface ListReorderOptions {
   /** Whether the item with `key` moves; every item does without it. */
   readonly isReorderable?: (key: Key) => boolean;
   /**
+   * How each row's handle shows (createReorderable's `handle`): whether it
+   * always shows, and the row edge it sits at.
+   */
+  readonly handle?: {
+    readonly isAlwaysVisible?: boolean;
+    readonly placement?: 'start' | 'end';
+  };
+  /**
    * An adapted object's (internal/reorder `adaptReorderable`): the owner's
    * options, which the owner's `start` finds this list by, while the moves go
    * through these.
@@ -84,11 +92,20 @@ export interface ListReorderHandleProps {
    */
   readonly rowAlign?: ItemAlign;
   /**
-   * The handle takes its place in the row instead of hanging before the
-   * text: after a list marker, and in a row that reaches its container's
-   * padding edge (List `edge` `'outset'` or `'bleed'`).
+   * The handle takes its place in the row instead of hanging outside it.
+   * It does so at the start after a list marker, which it would cover. It
+   * also does so in a row that reaches its container's padding edge (List
+   * `edge` `'outset'` or `'bleed'`), where nothing past the row keeps it.
    */
   readonly isInRow?: boolean;
+  /**
+   * Whether the handle always shows, in a place of its own in the row. Its
+   * collection resolves it: the reorderable's `handle.isAlwaysVisible`, else
+   * the collection's own default.
+   */
+  readonly isAlwaysVisible?: boolean;
+  /** The row edge the handle sits at: the reorderable's `handle.placement`. */
+  readonly placement?: 'start' | 'end';
 }
 
 /**

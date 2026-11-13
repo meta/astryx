@@ -85,12 +85,14 @@ Consumer migration instructions belong in consumer docs and release notes.
 - Reflecting the resolved alignment on the `item` theme target.
 - Reflecting highlighted, selected, and disabled state on the `item` theme target.
 - The forwarding rule for rows that compose Item and expose `align`.
-- The leading seam, `ItemLeadingContext`, internal to Core: a row component
-  that composes Item passes one control through it, and Item renders that
-  control before its slots, unwrapped. So the control adds one element to
-  the row. Item resets the seam for what it renders, so a nested Item never
-  renders its parent's control. ListItem passes its reorder handle through
-  it (`spec:AST-103` FR5).
+- The leading and trailing seams, `ItemLeadingContext` and
+  `ItemTrailingContext`, internal to Core: a row component that composes
+  Item passes one control through one of them. Item renders that control
+  before its slots or after them, unwrapped, so the control adds one element
+  to the row. Item resets both seams for what it renders, so a nested Item
+  never renders its parent's control. ListItem passes its reorder handle
+  through the seam at the edge its `handle.placement` names (`spec:AST-103`
+  FR5).
 
 **Does not own / non-goals**
 

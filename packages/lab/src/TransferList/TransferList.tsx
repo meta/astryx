@@ -156,25 +156,44 @@ export interface TransferListProps<T extends string = string> extends Omit<
 }
 
 const styles = stylex.create({
-  // Core List's reorder handle starts its row. Where it shows only on hover
-  // or focus, it hangs 30 px before the row's label. The panel clips. So in
-  // a reorderable selection, the panel's heading and rows start 20 px
-  // further in, and the labels stay under the heading. Under a coarse
-  // pointer the handle always shows in its row: 28 px and the row's 8 px
-  // gap. A row without a handle then starts its label past it. So every
-  // label sits in one column. SYNC: core List/ListReorderHandle.tsx
-  // HANDLE_SIZE and REORDER_HANDLE_HANG.
-  orderingInset: {
+  // Core List's reorder handle sits at its row's start or end (the owner's
+  // `handle.placement`). Where it shows only on hover or focus, it hangs
+  // 30 px outside the row's content. The panel clips. So in a reorderable
+  // selection, the panel's heading and rows move in 20 px on that side, and
+  // the labels stay under the heading. Where the handle shows in its row, it
+  // takes 28 px and the row's 8 px gap: always, or under a coarse pointer. A
+  // row without a handle then clears it. So every label and every Remove
+  // keeps its column. SYNC: core List/ListReorderHandle.tsx HANDLE_SIZE and
+  // REORDER_HANDLE_HANG.
+  hangRoomAtStart: {
     paddingInlineStart: {
       default: `calc(${spacingVars['--spacing-3']} + 20px)`,
       '@media (any-pointer: coarse)': spacingVars['--spacing-3'],
     },
   },
-  clearsHandle: {
+  hangRoomAtEnd: {
+    paddingInlineEnd: {
+      default: `calc(${spacingVars['--spacing-3']} + 20px)`,
+      '@media (any-pointer: coarse)': spacingVars['--spacing-3'],
+    },
+  },
+  clearsHandleAtStart: {
     paddingInlineStart: {
       default: `calc(${spacingVars['--spacing-3']} + 20px)`,
       '@media (any-pointer: coarse)': `calc(${spacingVars['--spacing-3']} + 28px + ${spacingVars['--spacing-2']})`,
     },
+  },
+  clearsShownHandleAtStart: {
+    paddingInlineStart: `calc(${spacingVars['--spacing-3']} + 28px + ${spacingVars['--spacing-2']})`,
+  },
+  clearsHandleAtEnd: {
+    marginInlineEnd: {
+      default: 0,
+      '@media (any-pointer: coarse)': `calc(28px + ${spacingVars['--spacing-2']})`,
+    },
+  },
+  clearsShownHandleAtEnd: {
+    marginInlineEnd: `calc(28px + ${spacingVars['--spacing-2']})`,
   },
   root: {
     display: 'flex',
@@ -354,30 +373,36 @@ interface DisabledHandleTooltipProps {
   rootRef: RefObject<HTMLElement | null>;
   value: string;
   content: string;
+  /** The handle ends its row (the owner's `handle.placement` is `'end'`). */
+  isAtEnd: boolean;
 }
 
 /**
  * The tooltip and description of a disabled list's reorder handle, which say
  * why the row does not move. Core List renders the handle. So the tooltip
  * finds it in its row when it attaches. It takes the row's first toggle
- * button: the handle comes before the row's own content.
+ * button, or its last when the handle ends the row: the handle comes before
+ * or after the row's own content.
  */
 function DisabledHandleTooltip({
   rootRef,
   value,
   content,
+  isAtEnd,
 }: DisabledHandleTooltipProps) {
   const anchorRef = useMemo(
     () => ({
       get current() {
-        return (
-          rootRef.current?.querySelector<HTMLElement>(
-            `[data-transfer-list-row="${CSS.escape(value)}"] button[aria-pressed]`,
-          ) ?? null
+        const toggles = rootRef.current?.querySelectorAll<HTMLElement>(
+          `[data-transfer-list-row="${CSS.escape(value)}"] button[aria-pressed]`,
         );
+        if (toggles == null || toggles.length === 0) {
+          return null;
+        }
+        return isAtEnd ? toggles[toggles.length - 1] : toggles[0];
       },
     }),
-    [rootRef, value],
+    [rootRef, value, isAtEnd],
   );
   return <Tooltip anchorRef={anchorRef} content={content} />;
 }
@@ -629,6 +654,15 @@ export function TransferList<T extends string = string>({
     (optionValue: T) => owner?.isReorderable?.(optionValue) ?? true,
     [owner],
   );
+  const isHandleAtEnd = owner?.handle?.placement === 'end';
+  // An ordering list is read for its order, so its handles show by default.
+  const isHandleAlwaysVisible = owner?.handle?.isAlwaysVisible ?? true;
+  const hangRoom =
+    keepsHandleRoom && !isHandleAlwaysVisible
+      ? isHandleAtEnd
+        ? styles.hangRoomAtEnd
+        : styles.hangRoomAtStart
+      : null;
   const reorderSelected = useCallback(
     ({key, to: toIndex}: ReorderMove) => {
       const shown = selectedOptions.map(option => option.value);
@@ -718,7 +752,17 @@ export function TransferList<T extends string = string>({
         tooltip={isTransferDisabled ? disabledReason : undefined}
         data-transfer-list-action="selected"
         onClick={() => removeOption(option, index)}
-        xstyle={isDisabled && styles.removeInDisabledRow}
+        // A row without a handle keeps its Remove in the movable rows'
+        // column, clear of where their handles sit.
+        xstyle={[
+          keepsHandleRoom &&
+            isHandleAtEnd &&
+            (!isOrdering || !canMove(option.value)) &&
+            (isHandleAlwaysVisible
+              ? styles.clearsShownHandleAtEnd
+              : styles.clearsHandleAtEnd),
+          isDisabled && styles.removeInDisabledRow,
+        ]}
       />
     );
     if (!isDisabled || !isOrdering || !canMove(option.value)) {
@@ -729,6 +773,7 @@ export function TransferList<T extends string = string>({
         {remove}
         <DisabledHandleTooltip
           rootRef={rootRef}
+          isAtEnd={isHandleAtEnd}
           value={option.value}
           content={t('@astryx.transferList.reorderDisabled', {
             label: option.label,
@@ -767,14 +812,18 @@ export function TransferList<T extends string = string>({
           isDisabled={isDisabled}
           xstyle={[
             styles.item,
+            hangRoom,
             // A row that keeps its place has no handle: its label keeps the
             // movable rows' column, clear of where their handles sit.
-            // While a search pauses reordering, every row keeps that column,
-            // so nothing moves as the query changes.
+            // While a search pauses reordering, no row has a handle, and
+            // every row clears its place. So nothing moves as the query
+            // changes.
             keepsHandleRoom &&
-              (isOrdering && canMove(option.value)
-                ? styles.orderingInset
-                : styles.clearsHandle),
+              !isHandleAtEnd &&
+              (!isOrdering || !canMove(option.value)) &&
+              (isHandleAlwaysVisible
+                ? styles.clearsShownHandleAtStart
+                : styles.clearsHandleAtStart),
             isDisabled && styles.disabledItem,
           ]}
           data-transfer-list-row={option.value}
@@ -864,11 +913,7 @@ export function TransferList<T extends string = string>({
             themeProps('transfer-list-panel', {side: 'selected'}),
             stylex.props(focusOutlineStyles.focusVisible, styles.panel),
           )}>
-          <div
-            {...stylex.props(
-              styles.panelHeader,
-              keepsHandleRoom && styles.orderingInset,
-            )}>
+          <div {...stylex.props(styles.panelHeader, hangRoom)}>
             <Text id={selectedHeadingId} type="label" color="secondary">
               {selectedLabel}
             </Text>

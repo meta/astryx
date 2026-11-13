@@ -261,7 +261,7 @@ test.describe('a disabled list', () => {
     deviceScaleFactor: 1,
   });
 
-  test('dims a disabled row once: its label, Remove and revealed handle at half opacity', async ({
+  test('dims a disabled row once: its label, Remove and handle at half opacity', async ({
     page,
   }) => {
     await page.goto(
@@ -292,11 +292,35 @@ test.describe('a disabled list', () => {
     await expect
       .poll(() => seen('[data-transfer-list-action="selected"]'))
       .toBe(0.5);
-    // At rest the handle is hidden. A disabled row does not reveal it on
-    // hover; keyboard focus on it does.
-    await expect.poll(() => seen(handle)).toBe(0);
-    await row.locator(handle).focus();
+    // TransferList's handles always show: a disabled row's at half opacity.
     await expect.poll(() => seen(handle)).toBe(0.5);
+  });
+
+  test('a disabled row whose handle shows on hover keeps it hidden on hover, and shows it at half opacity on keyboard focus', async ({
+    page,
+  }) => {
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=a11y-transferlist--disabled&viewMode=story&args=isHandleAlwaysVisible:!false`,
+    );
+    await page.getByRole('switch', {name: 'Disable the list'}).click();
+    const row = page.locator('[data-transfer-list-row="owner"]');
+    const handle = row.locator('button[data-astryx-list-reorder]');
+    const seen = () =>
+      handle.evaluate(element => {
+        let opacity = 1;
+        for (
+          let node: Element | null = element;
+          node != null && !node.matches('[data-transfer-list-row]');
+          node = node.parentElement
+        ) {
+          opacity *= Number(getComputedStyle(node).opacity);
+        }
+        return Math.round(opacity * 100) / 100;
+      });
+    await row.hover();
+    await expect.poll(seen).toBe(0);
+    await handle.focus();
+    await expect.poll(seen).toBe(0.5);
   });
 
   test('keeps each reorder handle focusable and disabled, with the focus where it was', async ({

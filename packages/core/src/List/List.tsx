@@ -92,15 +92,17 @@ export interface ListProps extends BaseProps<
 
   /**
    * Makes the rows reorderable, with the object `createReorderable` makes.
-   * Each ListItem with an `itemKey` gets a reorder handle at its start, shown
-   * while the row is hovered or holds the focus. It hangs 30px before the
-   * row's text, so the text keeps its place. The list takes that room from
-   * its container's padding, and where the padding is narrower its rows move
-   * in by the difference. Under a coarse pointer, under `edge` `'outset'` or
-   * `'bleed'`, and after a list marker, it sits inside the row. One the
-   * object's `isReorderable` rejects keeps its place. Each committed move
-   * calls its `onReorder` once with the row's key and its index after the
-   * move. Apply it by rendering the rows in their new order. A drop on the
+   * Each ListItem with an `itemKey` gets a reorder handle, at its start
+   * unless the object's `handle.placement` is `'end'`. It always shows, in a
+   * place of its own in the row. With `handle.isAlwaysVisible: false`, it
+   * shows while the row is hovered or holds the focus. It then hangs 30px
+   * outside the row's text, so the text keeps its place. The list takes that
+   * room from its container's padding. Where the padding is narrower, its
+   * rows move in by the difference. Under a coarse pointer, under `edge`
+   * `'outset'` or `'bleed'`, and after a list marker, it then sits inside
+   * the row. One the object's `isReorderable` rejects keeps its place. Each
+   * committed move calls its `onReorder` once with the row's key and its
+   * index after the move. Apply it by rendering the rows in their new order. A drop on the
    * starting place, a cancel, or a move the order does not take changes
    * nothing.
    *
@@ -208,6 +210,9 @@ const FLUSH_ROOM = `${REORDER_GUTTER}px`;
 const PADDED_REACH = `min(${PADDED_ROOM}, var(--container-padding-inline-start, ${PADDED_ROOM}))`;
 const SPACIOUS_REACH = `min(${SPACIOUS_ROOM}, var(--container-padding-inline-start, ${SPACIOUS_ROOM}))`;
 const FLUSH_REACH = `min(${FLUSH_ROOM}, var(--container-padding-inline-start, ${FLUSH_ROOM}))`;
+const PADDED_REACH_END = `min(${PADDED_ROOM}, var(--container-padding-inline-end, ${PADDED_ROOM}))`;
+const SPACIOUS_REACH_END = `min(${SPACIOUS_ROOM}, var(--container-padding-inline-end, ${SPACIOUS_ROOM}))`;
+const FLUSH_REACH_END = `min(${FLUSH_ROOM}, var(--container-padding-inline-end, ${FLUSH_ROOM}))`;
 
 const styles = stylex.create({
   root: {
@@ -233,10 +238,10 @@ const styles = stylex.create({
     isolation: {default: null, '@media (pointer: coarse)': 'isolate'},
   },
   // Where a reorderable list's handles show only on hover or focus, they hang
-  // before their rows' text. The list pads that room before its rows, and
-  // reaches out into its container's padding by as much of it as the padding
-  // holds. So its inline clip keeps the handles, a clipping container never
-  // cuts them, and the rows move in only by the room the padding lacks.
+  // outside their rows' text. The list pads that room on the handles' side,
+  // and reaches out into its container's padding by as much of it as the
+  // padding holds. So its inline clip keeps the handles, a clipping container
+  // never cuts them, and the rows move in only by the room the padding lacks.
   // Outside a container that sets its padding, the list reaches the whole
   // room. Under a coarse pointer the handles sit in their rows.
   reorderGutterPadded: {
@@ -265,6 +270,36 @@ const styles = stylex.create({
       '@media (any-pointer: coarse)': 0,
     },
     paddingInlineStart: {
+      default: FLUSH_ROOM,
+      '@media (any-pointer: coarse)': 0,
+    },
+  },
+  reorderGutterPaddedAtEnd: {
+    marginInlineEnd: {
+      default: `calc(-1 * ${PADDED_REACH_END})`,
+      '@media (any-pointer: coarse)': 0,
+    },
+    paddingInlineEnd: {
+      default: PADDED_ROOM,
+      '@media (any-pointer: coarse)': 0,
+    },
+  },
+  reorderGutterSpaciousAtEnd: {
+    marginInlineEnd: {
+      default: `calc(-1 * ${SPACIOUS_REACH_END})`,
+      '@media (any-pointer: coarse)': 0,
+    },
+    paddingInlineEnd: {
+      default: SPACIOUS_ROOM,
+      '@media (any-pointer: coarse)': 0,
+    },
+  },
+  reorderGutterFlushAtEnd: {
+    marginInlineEnd: {
+      default: `calc(-1 * ${FLUSH_REACH_END})`,
+      '@media (any-pointer: coarse)': 0,
+    },
+    paddingInlineEnd: {
       default: FLUSH_ROOM,
       '@media (any-pointer: coarse)': 0,
     },
@@ -349,6 +384,20 @@ const styles = stylex.create({
     marginBottom: spacingVars['--spacing-2'],
   },
 });
+
+/** The room a list keeps for handles that hang at its rows' start. */
+const reorderGutters = {
+  padded: styles.reorderGutterPadded,
+  spacious: styles.reorderGutterSpacious,
+  flush: styles.reorderGutterFlush,
+};
+
+/** The room a list keeps for handles that hang at its rows' end. */
+const reorderGuttersAtEnd = {
+  padded: styles.reorderGutterPaddedAtEnd,
+  spacious: styles.reorderGutterSpaciousAtEnd,
+  flush: styles.reorderGutterFlushAtEnd,
+};
 
 const dynamicStyles = stylex.create({
   counterStart: (value: number) => ({
@@ -440,6 +489,19 @@ export function List({
   const edge: ListEdge =
     edgeProp ?? (edgeCompensation === 'inline' ? 'outset' : 'padded');
   const reachesContainerPadding = edge === 'outset' || edge === 'bleed';
+  // Handles that show only on hover or focus hang outside their rows, and
+  // the list keeps their room. Rows that reach the container's padding keep
+  // their handles in the rows (ListItem), so the list keeps none.
+  const gutterRoom =
+    edge === 'flush' ? 'flush' : density === 'spacious' ? 'spacious' : 'padded';
+  const reorderGutter =
+    reorderSession != null &&
+    reorderOptions?.handle?.isAlwaysVisible === false &&
+    !reachesContainerPadding
+      ? (reorderOptions.handle.placement === 'end'
+          ? reorderGuttersAtEnd
+          : reorderGutters)[gutterRoom]
+      : null;
 
   const contextValue = useMemo(
     () => ({
@@ -496,15 +558,7 @@ export function List({
           isOrdered && styles.numberColumns,
           hasDividers && styles.withDividers,
           reachesContainerPadding && styles.reachesContainerPadding,
-          // Rows that reach the container's padding keep their handles in
-          // the rows (ListItem), so the list needs no room for them.
-          reorderSession != null &&
-            !reachesContainerPadding &&
-            (edge === 'flush'
-              ? styles.reorderGutterFlush
-              : density === 'spacious'
-                ? styles.reorderGutterSpacious
-                : styles.reorderGutterPadded),
+          reorderGutter,
           edge === 'bleed' && header == null && styles.bleedCorners,
           listStyle !== 'none' &&
             (start != null && start !== 1

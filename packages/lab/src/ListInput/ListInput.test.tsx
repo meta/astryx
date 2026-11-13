@@ -842,6 +842,44 @@ describe('ListInput', () => {
     expect(handle).not.toHaveAttribute('tabindex', '-1');
   });
 
+  it("puts the handle after Remove, in Remove's cell, when the owner's object places handles at the end", () => {
+    const reveal = revealClasses();
+    const {container} = renderListInput({
+      reorderable: createReorderable({
+        onReorder: () => {},
+        handle: {placement: 'end'},
+      }),
+    });
+    const row = container.querySelector<HTMLElement>('[data-list-input-row]');
+    const handle = screen.getByRole('button', {name: 'Reorder guest 1'});
+    const remove = screen.getByRole('button', {name: 'Remove guest 1'});
+    expect(within(row!).getAllByRole('button')).toEqual([remove, handle]);
+    expect(handle.parentElement).toBe(remove.parentElement);
+    // ListInput's handles fade with their record unless the object says
+    // otherwise.
+    expect(classTokens(handle)).toEqual(expect.arrayContaining(reveal.fade));
+  });
+
+  it("always shows the handle, and Remove beside it, when the owner's object says so at the end", () => {
+    const reveal = revealClasses();
+    const {container} = renderListInput({
+      reorderable: createReorderable({
+        onReorder: () => {},
+        handle: {placement: 'end', isAlwaysVisible: true},
+      }),
+    });
+    const handle = screen.getByRole('button', {name: 'Reorder guest 1'});
+    const cell = handle.parentElement;
+    expect(container.querySelector('[data-list-input-row]')).toContainElement(
+      cell,
+    );
+    expect(classTokens(handle)).not.toEqual(
+      expect.arrayContaining(reveal.fade),
+    );
+    // The cell they share does not fade either.
+    expect(classTokens(cell)).not.toEqual(expect.arrayContaining(reveal.grip));
+  });
+
   it('reveals Remove on hover or focus, with or without reordering', () => {
     const reveal = revealClasses();
     for (const reorderable of [undefined, reorderableFor()]) {

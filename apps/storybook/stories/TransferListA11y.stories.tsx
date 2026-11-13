@@ -30,8 +30,9 @@ const OPTIONS: ReadonlyArray<TransferListOption<string>> = [
   {value: 'priority', label: 'Priority'},
 ];
 
-export const Disabled: StoryObj = {
-  render: function DisabledStory() {
+export const Disabled: StoryObj<{isHandleAlwaysVisible: boolean}> = {
+  args: {isHandleAlwaysVisible: true},
+  render: function DisabledStory({isHandleAlwaysVisible}) {
     const [value, setValue] = useState<readonly string[]>([
       'name',
       'owner',
@@ -47,8 +48,9 @@ export const Disabled: StoryObj = {
               next.splice(to, 0, key);
               return next;
             }),
+          handle: {isAlwaysVisible: isHandleAlwaysVisible},
         }),
-      [],
+      [isHandleAlwaysVisible],
     );
     return (
       <>
