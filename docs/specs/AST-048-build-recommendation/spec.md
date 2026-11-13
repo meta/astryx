@@ -77,7 +77,11 @@ own ranking and output, and template owners own what each template is.
   app shell (FR2) when it gives no page. The blocks and components in the kit
   carry the part itself. A request that changes a page the builder already has
   starts from the app shell (FR2): the page is the builder's to keep (FR9), and
-  no template scaffolds it.
+  no template scaffolds it. One exception: when the start would be the app
+  shell, search matched no template directly, and build's fixed shell-start
+  decision reads the request as a whole page, the start is the best-ranked
+  page template even when the request reads as a part. A request with an edit
+  phrase keeps the app shell.
 - **FR4 — Never an unready start.** A template marked not ready MUST NOT be the
   start or an alternative. When search matches one directly, the start's
   reason MUST name it and say the start is the closest ready template or the
