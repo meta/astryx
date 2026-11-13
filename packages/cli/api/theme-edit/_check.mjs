@@ -3863,9 +3863,22 @@ export function fontFileReason(value) {
  * @param {string} v
  */
 export function normalValueText(v) {
-  return v
-    .replace(/[\u200B-\u200D\u2060\uFEFF]/g, '')
-    .replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, ' ');
+  // Curly quotes (a word processor's, a phone's) are the straight ones CSS
+  // reads.
+  const straight = v
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"');
+  // A quoted CSS string (`content: "a\u00A0b"`) keeps what is inside it.
+  return straight
+    .split(/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/)
+    .map((part, i) =>
+      i % 2
+        ? part
+        : part
+            .replace(/[\u200B-\u200D\u2060\uFEFF]/g, '')
+            .replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, ' '),
+    )
+    .join('');
 }
 
 /**
@@ -3897,8 +3910,12 @@ export function normalizeEntry(thing, value) {
     t = t.replace(/\s*[:=]+$/, '');
     pasted = true;
   }
-  // An em or en dash where a token's two dashes go.
-  t = t.replace(/^[\u2014\u2013]+/, '--');
+  // Dash-like characters where a token's two dashes go (an em or en dash,
+  // a non-breaking hyphen, a minus sign, a full-width hyphen, alone or
+  // mixed with hyphens): `--`.
+  t = t.replace(/^[-\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]+/, run =>
+    /[^-]/.test(run) ? '--' : run,
+  );
   // A token typed as a var() reference.
   const ref = /^var\(\s*(--[a-z0-9-]+)\s*\)$/i.exec(t);
   if (ref) t = ref[1];

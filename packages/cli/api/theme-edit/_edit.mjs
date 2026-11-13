@@ -865,7 +865,31 @@ export async function themeEditSet(theme, thing, value, options = {}) {
 function refuseStoredTokens(ctx, slug, data, skip) {
   const bad = storedProblems(ctx, slug, data, skip);
   if (!bad.length) return;
-  const one = bad.length === 1 ? bad[0] : null;
+  const found = bad.length === 1 ? bad[0] : null;
+  // A clean value is offered only when set takes it, so the line works.
+  const takes = (/** @type {typeof found} */ b) => {
+    if (!b?.fix) return true;
+    try {
+      checkSetting(
+        ctx,
+        slug,
+        {...data, settings: data.settings.filter(x => x !== b.setting)},
+        b.setting.thing,
+        b.fix,
+        {
+          on: b.setting.on,
+          when: b.setting.when,
+          state: b.setting.state,
+          mode: b.setting.mode,
+        },
+        false,
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const one = found && takes(found) ? found : null;
   refuse(
     E.ERR_THEME_INVALID,
     `themes/${slug}/${slug}.settings.json: ${bad
@@ -971,6 +995,9 @@ function extremeSteps(res) {
  * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditChangeResponse>}
  */
 async function change(sub, slug, thing, value, options) {
+  // As typed: an undo of a saved entry written in a form the cleanup below
+  // repairs (`Corners`, `var(--radius-page)`) removes that exact entry.
+  const typedThing = thing;
   // How it was typed, put right before anything reads it (a pasted
   // declaration, a dash, a var(), invisible spaces).
   if (typeof thing === 'string') {
@@ -981,7 +1008,7 @@ async function change(sub, slug, thing, value, options) {
   /** @type {{ctx?: import('./_settings.mjs').Ctx, data?: import('./_settings.mjs').ThemeData}} */
   const seen = {};
   try {
-    return await changeOnce(sub, slug, thing, value, options, seen);
+    return await changeOnce(sub, slug, thing, value, options, seen, typedThing);
   } catch (e) {
     // A theme name one letter off an existing theme: the same command with
     // that name comes first, before making a theme of the typo.
@@ -1025,13 +1052,22 @@ async function change(sub, slug, thing, value, options) {
  *   the context and the theme as loaded, for checking a refusal's suggestions
  * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditChangeResponse>}
  */
-async function changeOnce(sub, slug, thing, value, options, seen) {
+async function changeOnce(
+  sub,
+  slug,
+  thing,
+  value,
+  options,
+  seen,
+  typedThing = thing,
+) {
   const {cwd = process.cwd(), png = false} = options;
   requireProject(cwd);
   // The setting this command changes or removes may be the bad one; any
   // other bad setting still refuses (or is left out when this fixes one).
   const target = /** @type {Partial<import('./_settings.mjs').Setting>} */ ({
-    thing,
+    // An undo may name a saved entry exactly as written.
+    thing: sub === 'undo' ? typedThing : thing,
     on: options.on,
     when: options.when,
     state: options.state,
@@ -1088,10 +1124,63 @@ async function changeOnce(sub, slug, thing, value, options, seen) {
   /** @type {import('./_settings.mjs').Ctx} */ (ctx).base = base;
   seen.ctx = ctx;
   seen.data = structuredClone(data);
+  // The saved entry an undo names exactly as written (thing and scope, in
+  // their own letters), when the editor would read it as another setting
+  // or refuse it: that entry is removed, never a valid neighbor the
+  // cleaned name also matches.
+  const exactIdx =
+    sub === 'undo'
+      ? data.settings.findIndex(
+          x =>
+            x.thing === typedThing &&
+            (x.on ?? null) === (flags.on ?? null) &&
+            (x.when ?? null) === (flags.when ?? null) &&
+            (x.state ?? null) === (flags.state ?? null) &&
+            (x.mode ?? null) === (flags.mode ?? null) &&
+            Boolean(x.only) === Boolean(flags.only),
+        )
+      : -1;
+  let rawIdx = -1;
+  if (exactIdx >= 0) {
+    // Only an entry the editor would not save as written: one it refuses,
+    // or reads as another name, part or state.
+    const entry = data.settings[exactIdx];
+    let read = null;
+    try {
+      read = checkSetting(
+        ctx,
+        slug,
+        data,
+        normalizeEntry(entry.thing, '').thing,
+        undefined,
+        {
+          on: entry.on,
+          when: entry.when,
+          state: entry.state,
+          mode: entry.mode,
+          only: entry.only,
+        },
+        true,
+      );
+    } catch {
+      // Refused as written.
+    }
+    if (
+      !read ||
+      read.thing !== entry.thing ||
+      (read.on ?? null) !== (entry.on ?? null) ||
+      (read.state ?? null) !== (entry.state ?? null) ||
+      (read.when ?? null) !== (entry.when ?? null)
+    )
+      rawIdx = exactIdx;
+  }
   /** @type {import('./_settings.mjs').Setting} */
   let s;
   try {
-    s = checkSetting(ctx, slug, data, thing, value, flags, sub === 'undo');
+    s =
+      rawIdx >= 0
+        ? data.settings[rawIdx]
+        : checkSetting(ctx, slug, data, thing, value, flags, sub === 'undo');
   } catch (e) {
     // A stored setting this Core no longer knows (a renamed part or
     // property, or a hand edit) can still be removed.
@@ -1286,7 +1375,8 @@ async function changeOnce(sub, slug, thing, value, options, seen) {
     };
   }
   const k = keyOf(s);
-  const prevIdx = data.settings.findIndex(x => keyOf(x) === k);
+  const prevIdx =
+    rawIdx >= 0 ? rawIdx : data.settings.findIndex(x => keyOf(x) === k);
   /** @type {string | null} */
   let vibrancyGone = null;
   const prev = prevIdx >= 0 ? data.settings[prevIdx] : null;
