@@ -70,10 +70,8 @@ describe('MetadataListItem side by side', () => {
     );
 
     const label = screen.getByTestId('item-label');
-    const iconSlot = screen.getByTestId('icon').parentElement;
-    expect(iconSlot?.parentElement).toBe(label);
-    expect(label.firstElementChild).toBe(iconSlot);
-    expect(label.lastChild?.textContent).toBe('Created');
+    expect(label).toContainElement(screen.getByTestId('icon'));
+    expect(label.textContent).toBe('*Created');
   });
 
   it('renders a dt and dd pair outside a MetadataList', () => {

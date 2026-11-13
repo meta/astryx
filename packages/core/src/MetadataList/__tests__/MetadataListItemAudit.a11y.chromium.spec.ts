@@ -130,7 +130,7 @@ async function entries(page: Page) {
         wrapperGap: wrapper ? getComputedStyle(wrapper).rowGap : null,
         target: (wrapper ?? dt).classList.contains('astryx-metadata-list-item'),
         ddTarget: dd?.classList.contains('astryx-metadata-list-item') ?? false,
-        iconFirst: icon != null && dt.firstElementChild === icon,
+        iconFirst: icon != null && dt.firstChild === icon,
         hasIcon: icon != null,
         term: box(dt.getBoundingClientRect()),
         definition: dd ? box(dd.getBoundingClientRect()) : null,
@@ -365,10 +365,13 @@ for (const mode of ['light', 'dark'] as const) {
     viewport: SMALL,
     run: async (page, check, frame) => {
       const list = await entries(page);
+      check(list.length === 3, `${list.length} entries`);
       for (const entry of list) {
         check(
-          entry.definition != null && entry.term.left >= entry.definition.right,
-          `${entry.label} label is not at the inline start (right) of its value`,
+          entry.definition != null &&
+            entry.term.left >= entry.definition.right &&
+            Math.abs(entry.term.top - entry.definition.top) <= 4,
+          `${entry.label} label is not at the inline start (right) of its value on the same row`,
         );
       }
       await frame('rest', {list});
@@ -406,7 +409,7 @@ for (const mode of ['light', 'dark'] as const) {
     viewport: SMALL,
     run: async (page, check, frame) => {
       const list = await entries(page);
-      check(list.length > 0, 'no entries');
+      check(list.length === 4, `${list.length} entries`);
       for (const entry of list) {
         check(entry.dtParent === 'DIV', `${entry.label} has no wrapper`);
         check(
@@ -450,15 +453,33 @@ for (const mode of ['light', 'dark'] as const) {
     viewport: SMALL,
     run: async (page, check, frame) => {
       const list = await entries(page);
+      check(list.length === 4, `${list.length} entries`);
       for (const entry of list) {
         check(entry.dtParent === 'DIV', `${entry.label} is not stacked`);
+        check(
+          entry.wrapperParent === 'dl',
+          `${entry.label} wrapper is not a dl child`,
+        );
         check(entry.target, `${entry.label} wrapper has no item target`);
         check(
-          entry.definition != null && entry.definition.top >= entry.term.bottom,
-          `${entry.label} value is not below its label`,
+          entry.wrapperGap === `${STACKED_GAP_PX}px`,
+          `${entry.label} wrapper gap ${entry.wrapperGap}`,
+        );
+        check(
+          entry.definition != null &&
+            Math.abs(
+              entry.definition.top - entry.term.bottom - STACKED_GAP_PX,
+            ) <= 0.5,
+          `${entry.label} value is not ${STACKED_GAP_PX}px below its label`,
         );
       }
-      await frame('rest', {list});
+      const roles = await axPairs(page);
+      check(
+        roles.length === list.length * 2 &&
+          roles.every((role, i) => role === (i % 2 ? 'definition' : 'term')),
+        `accessibility tree roles: ${roles.join(',')}`,
+      );
+      await frame('rest', {list, roles});
     },
   });
 
@@ -476,6 +497,7 @@ for (const mode of ['light', 'dark'] as const) {
         () => document.documentElement.scrollWidth - innerWidth,
       );
       check(overflow <= 0, `page scrolls sideways by ${overflow}px`);
+      check(list.length === 3, `${list.length} entries`);
       for (const entry of list) {
         check(
           entry.definition != null &&
