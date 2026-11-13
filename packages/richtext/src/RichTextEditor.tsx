@@ -77,6 +77,7 @@ import {TablePlugin} from '@lexical/react/LexicalTablePlugin';
 import {HorizontalRuleExtension} from '@lexical/extension';
 import {TextSemanticsExtension} from './textSemantics';
 import {TableColumnFloorPlugin} from './TableColumnFloorPlugin';
+import {TablePastePlugin} from './TablePastePlugin';
 import {CodeBackspacePlugin} from './CodeBackspacePlugin';
 import {CodeBlockHeaderPlugin} from './CodeBlockHeaderPlugin';
 import {CodePastePlugin} from './CodePastePlugin';
@@ -730,6 +731,7 @@ export const RichTextEditor = function RichTextEditor({
                 hasHorizontalScroll
               />
               <TableColumnFloorPlugin />
+              <TablePastePlugin />
               <CodeBlockHeaderPlugin codeLanguages={codeLanguages} />
               <CodeSyntaxPlugin codeLanguages={codeLanguages} />
               {/* Backspace at the very start of a code block makes it a

@@ -15,7 +15,7 @@
  */
 
 import {$createLinkNode} from '@lexical/link';
-import {describe, it, expect, vi, beforeAll, afterAll} from 'vitest';
+import {describe, it, expect, vi, beforeAll} from 'vitest';
 import {
   render,
   screen,
@@ -1598,9 +1598,21 @@ describe('linkUtils', () => {
       expect(sanitizeUrl('example.com')).toBe('https://example.com/');
     });
 
+    it('defaults a scheme-less host with a port to https', () => {
+      expect(sanitizeUrl('example.com:8080')).toBe('https://example.com:8080/');
+      expect(sanitizeUrl('example.com:8080/docs?q=1')).toBe(
+        'https://example.com:8080/docs?q=1',
+      );
+      expect(sanitizeUrl('www.example.com:8080')).toBe(
+        'https://www.example.com:8080/',
+      );
+      expect(sanitizeUrl('localhost:3000')).toBe('https://localhost:3000/');
+    });
+
     it('preserves mailto and tel schemes', () => {
       expect(sanitizeUrl('mailto:a@b.com')).toBe('mailto:a@b.com');
       expect(sanitizeUrl('tel:+15551234')).toBe('tel:+15551234');
+      expect(sanitizeUrl('tel:911')).toBe('tel:911');
     });
 
     it('rejects javascript: and other unsafe schemes as about:blank', () => {
@@ -1620,6 +1632,9 @@ describe('linkUtils', () => {
       expect(validateUrl('https://example.com')).toBe(true);
       expect(validateUrl('example.com')).toBe(true);
       expect(validateUrl('mailto:a@b.com')).toBe(true);
+      expect(validateUrl('example.com:8080')).toBe(true);
+      expect(validateUrl('localhost:3000')).toBe(true);
+      expect(validateUrl('tel:911')).toBe(true);
     });
 
     it('rejects unsafe schemes and empty input', () => {
@@ -1990,6 +2005,25 @@ describe('RichTextEditorAutoLinkPlugin', () => {
     expect(emailMatch).not.toBeNull();
     expect(emailMatch?.url).toBe('mailto:a@b.com');
     expect(emailMatch?.attributes).toEqual(NEW_TAB_LINK_ATTRIBUTES);
+  });
+
+  it.each([
+    ['first.last+tag@sub.example.co.uk', 'first.last+tag@sub.example.co.uk'],
+    ['"john doe"@example.com', '"john doe"@example.com'],
+    ['user@[192.168.0.1]', 'user@[192.168.0.1]'],
+    ['(a@b.com)', 'a@b.com'],
+  ])('matches the email in %s', (text, email) => {
+    expect(DEFAULT_LINK_MATCHERS[1](text)?.text).toBe(email);
+  });
+
+  it.each([
+    ['a long word', 'a'.repeat(100_000)],
+    ['a run of quotes', '"'.repeat(100_000)],
+    ['dotted atoms', 'a.'.repeat(50_000)],
+  ])('scans %s without an email in linear time', (_, text) => {
+    const start = performance.now();
+    expect(DEFAULT_LINK_MATCHERS[1](text)).toBeNull();
+    expect(performance.now() - start).toBeLessThan(500);
   });
 
   it('auto-links a typed URL as an AutoLinkNode', async () => {

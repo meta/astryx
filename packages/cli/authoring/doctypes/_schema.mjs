@@ -20,6 +20,7 @@ import {z} from 'zod';
 /** @typedef {import('./reference/type.js').ReferenceDoc} ReferenceDoc */
 /** @typedef {import('./component/type.js').SingleComponentDoc} SingleComponentDoc */
 /** @typedef {import('./base/type.js').ComponentPropDoc} ComponentPropDoc */
+/** @typedef {import('./base/type.js').ExampleKind} ExampleKind */
 /** @typedef {import('./hook/type.js').HookDoc} HookDoc */
 /** @typedef {import('./function/type.js').FunctionDoc} FunctionDoc */
 /** @typedef {import('./schema/type.js').SchemaDoc} SchemaDoc */
@@ -290,6 +291,43 @@ const ReturnSchema = z
   })
   .passthrough();
 
+/** Every example kind, in the order the docs list them. */
+const EXAMPLE_KINDS = /** @type {const} */ (['demo', 'setup']);
+
+/**
+ * An example's `kind`. The message names both values and what each one does,
+ * because an author who misspells it needs to pick again.
+ */
+const ExampleKindSchema = z.enum(EXAMPLE_KINDS, {
+  error: issue =>
+    `unknown example kind ${JSON.stringify(issue.input)}; use 'demo' (may render as a live preview) or 'setup' (code only)`,
+});
+
+/**
+ * One component example as it loads. Only `kind` is checked: the rest passes
+ * through unchecked, as component examples always have.
+ */
+const ComponentExampleSchema = z
+  .object({kind: ExampleKindSchema.optional()})
+  .passthrough();
+
+/**
+ * The example fields of any doc, checked before the permissive legacy union so
+ * a bad `kind` fails with its own message, not as a union mismatch.
+ */
+export const DocExampleKindsSchema = z
+  .object({
+    examples: z.array(ComponentExampleSchema).optional(),
+    components: z
+      .array(
+        z
+          .object({examples: z.array(ComponentExampleSchema).optional()})
+          .passthrough(),
+      )
+      .optional(),
+  })
+  .passthrough();
+
 const BaseDocFields = {
   ...AuthoredDocGraphFields,
   name: z.string().min(1, 'name is required'),
@@ -323,7 +361,7 @@ const ComponentBaseSchema = z
     type: z.literal('component'),
     theming: z.unknown().optional(),
     playground: z.unknown().optional(),
-    examples: z.array(z.unknown()).optional(),
+    examples: z.array(ComponentExampleSchema).optional(),
     replaces: z.string().min(1).optional(),
     deprecated: ComponentDeprecationSchema.optional(),
   })
@@ -335,7 +373,10 @@ const ComponentBaseSchema = z
  * is checked here; the rest passes through, as on an unstamped doc.
  */
 const ComponentGroupEntrySchema = z
-  .object({name: z.string().min(1, 'component name is required')})
+  .object({
+    name: z.string().min(1, 'component name is required'),
+    examples: z.array(ComponentExampleSchema).optional(),
+  })
   .passthrough();
 
 /**
@@ -361,16 +402,18 @@ export const ComponentDocKindSchema = ComponentBaseSchema.extend({
 /**
  * A stamped component doc as it loads. The loader accepts what the unstamped
  * format always accepted, so stamping an existing doc never breaks it:
- * `displayName` may be missing, `category` is any string, `usage`, `theming`,
- * `playground` and `examples` pass through unchecked, and a doc has `props`,
- * `components`, or both; each `components` entry needs only a `name`. Every
+ * `displayName` may be missing, `category` is any string, `usage`, `theming`
+ * and `playground` pass through unchecked, an example is checked only for its
+ * `kind`, and a doc has `props`, `components`, or both; each `components` entry
+ * needs only a `name`. Every
  * other field matches the published type.
  *
  * @typedef {Omit<SingleComponentDoc,
  *     'type' | 'displayName' | 'category' | 'usage' | 'theming' | 'examples' | 'playground' | 'props'>
  *   & {type: 'component', displayName?: string, category?: string, usage?: unknown,
- *     theming?: unknown, examples?: unknown[], playground?: unknown,
- *     props?: ComponentPropDoc[], components?: Array<{name: string}>}} LoadedComponentDoc
+ *     theming?: unknown, examples?: Array<{kind?: ExampleKind}>, playground?: unknown,
+ *     props?: ComponentPropDoc[],
+ *     components?: Array<{name: string, examples?: Array<{kind?: ExampleKind}>}>}} LoadedComponentDoc
  */
 /**
  * @typedef {import('../_shared/contract.js').Expect<
@@ -397,6 +440,18 @@ export const FunctionDocKindSchema = z
     type: z.literal('function'),
     params: z.array(ParamSchema),
     returns: z.array(FunctionReturnSchema),
+    examples: z
+      .array(
+        z
+          .object({
+            label: z.string().optional(),
+            code: z.string(),
+            result: z.string().optional(),
+            kind: ExampleKindSchema.optional(),
+          })
+          .passthrough(),
+      )
+      .optional(),
   })
   .passthrough();
 
