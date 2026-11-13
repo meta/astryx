@@ -236,7 +236,7 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     120_000,
   );
 
-  it('records nothing for component, template, theme or discover in a project with no integration', () => {
+  it('records nothing for component, template, theme, discover or docs in a project with no integration', () => {
     const tmp = keptTmp('no-integration');
     // A project with Core and nothing else: no config, no manifest, no
     // dependency that ships one.
@@ -276,6 +276,7 @@ Module._resolveFilename = function (request, parent, isMain, options) {
         ['component', 'Button'],
         ['theme', 'list'],
         ['discover'],
+        ['docs'],
       ]) {
         // Stdout and status: a once-a-day notice may go to stderr.
         const answer = (

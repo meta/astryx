@@ -16,11 +16,13 @@
  *   (foundation/config/project.mjs) for its integration issues: each
  *   integration's contribution-check results and the whole list (with the
  *   template and component replacement passes), which `component`,
- *   `template`, `theme`, `discover`, `docs` and `search` report, by template
+ *   `template`, `theme`, `discover` and `search` report, by template
  *   discovery (foundation/discovery/template-adapter.mjs) for its records, by theme discovery
  *   (foundation/discovery/theme-discovery.mjs) for each integration's themes,
  *   and by `doctor` (api/doctor/_adapter.mjs) for its file-only docs checks,
- *   in a run that records modules and variables to its end. Gathers are kept only once the folder exists: the first such run
+ *   in a run that records modules and variables to its end. The commands
+ *   whose runs keep these entries are `search`, `build`, `component`,
+ *   `template`, `theme`, `discover`, `docs` and `doctor`. Gathers are kept only once the folder exists: the first such run
  *   on a machine just makes it, so a one-off run pays nothing to store one. Only a published CLI stores anything:
  *   its build id (clients/cli/build-id.generated.json, written at `prepack`)
  *   names its exact code, so a checkout, whose code may change between runs
@@ -253,7 +255,7 @@ export async function recordRunFor(argv, fn) {
     return fn();
   }
   // Gathers are kept only once the folder exists: the first recorded run on a
-  // machine (search, build, component, template, theme or discover) just makes
+  // machine (search, build, component, template, theme, discover or docs) just makes
   // it, so a one-off run never pays to store one.
   const dir = cacheDirPath();
   if (!withoutRecording(() => fs.existsSync(dir))) {
