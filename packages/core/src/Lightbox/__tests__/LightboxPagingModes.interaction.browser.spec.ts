@@ -619,7 +619,7 @@ test('without zoom, a mouse press beside the photo that is released on it closes
   }
 });
 
-test('without zoom, a mouse click beside a photo narrower than its caption leaves the gallery open, as on main', async ({
+test('without zoom, a mouse click beside a photo narrower than its caption, level with it, closes the gallery', async ({
   browser,
 }) => {
   const context = await browser.newContext({
@@ -671,9 +671,10 @@ test('without zoom, a mouse click beside a photo narrower than its caption leave
         );
       }, beside),
     ).toBe(true);
+    // The caption's band sits under the photo, so this point is the
+    // backdrop's.
     await page.mouse.click(beside.x, beside.y);
-    await frames(page, 40);
-    await expect(dialog).toBeVisible();
+    await expect(dialog).toBeHidden();
   } finally {
     await context.close();
   }

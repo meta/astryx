@@ -11,8 +11,11 @@
  *   integrations installed beside the running CLI load, spec AST-081 FR12),
  *   so no configured, self-resolved, autolinked or computer-level integration
  *   can load.
- * @position Read by foundation/fs/gather-cache.mjs: `component`, `template`,
- *   `theme` and `discover` record a run only for what is worth keeping where
+ * @position Read by clients/cli/index.mjs, which loads the project before
+ *   help and before each command only where an integration can load (to read
+ *   the commands integrations declare), and by foundation/fs/gather-cache.mjs:
+ *   `component`, `template`, `theme`, `discover` and `docs` record a run only
+ *   for what is worth keeping where
  *   an integration can load (its kept check results, and template
  *   discovery's records), so a project with none skips the recorder entirely. A true
  *   answer only means the run records, so a check that says true too often

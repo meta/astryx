@@ -32,11 +32,15 @@ import {
   resolveRecordedTheme,
   resolveThemeModule,
   SOURCE_EXTENSIONS,
+  isPrivateVarRefusal,
   missingThemePackage,
   packageInstallCommand,
   themeBuild,
   themeRecordOwner,
   validateThemePrivateInputs,
+  GENERATED_MARKER,
+  APP_COPY_MARK,
+  EDITOR_GENERATED_MARK,
 } from './_adapter.mjs';
 import {
   getCliInvocation,
@@ -216,6 +220,123 @@ function sourceImportEvidence(root, generatedModule) {
 }
 
 /**
+ * Whether the file's leading comment says the CLI generated it: a theme
+ * build, or a file of the theme editor (its settings module, its app copy).
+ * @param {string} source
+ */
+function generatedThemeFile(source) {
+  const leading =
+    /^\s*(?:\/\*[\s\S]*?\*\/|(?:\/\/[^\n]*(?:\n|$)\s*)+)/.exec(source)?.[0] ??
+    '';
+  return [GENERATED_MARKER, EDITOR_GENERATED_MARK, APP_COPY_MARK].some(m =>
+    leading.includes(m),
+  );
+}
+
+/**
+ * The specifiers a file imports only to extend a theme: every binding of
+ * the import is used solely as the `extends` value of a `defineTheme({...})`
+ * call. Any other use of a binding (a switcher, a render, a re-export) keeps
+ * the import, and so does a second import of the same specifier.
+ * @param {any} ast
+ * @returns {Set<string>}
+ */
+function extendOnlySpecifiers(ast) {
+  /** @type {Map<string, string>} binding -> specifier */
+  const bindings = new Map();
+  /** @type {Map<string, number>} */
+  const importsOf = new Map();
+  for (const node of ast.program?.body ?? []) {
+    if (node.type !== 'ImportDeclaration' || node.importKind === 'type')
+      continue;
+    const from = node.source.value;
+    importsOf.set(from, (importsOf.get(from) ?? 0) + 1);
+    for (const s of node.specifiers ?? []) bindings.set(s.local.name, from);
+  }
+  /** @type {Map<string, {extends: number, other: number}>} */
+  const uses = new Map();
+  /**
+   * @param {any} node
+   * @param {any} parent
+   * @param {any} grand
+   * @param {any} great
+   */
+  const visit = (node, parent, grand, great) => {
+    if (node == null || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      for (const n of node) visit(n, parent, grand, great);
+      return;
+    }
+    if (
+      node.type === 'Identifier' &&
+      bindings.has(node.name) &&
+      ![
+        'ImportSpecifier',
+        'ImportDefaultSpecifier',
+        'ImportNamespaceSpecifier',
+      ].includes(parent?.type) &&
+      !(
+        parent?.type === 'ObjectProperty' &&
+        parent.key === node &&
+        !parent.computed &&
+        parent.value !== node
+      )
+    ) {
+      const u = uses.get(node.name) ?? {extends: 0, other: 0};
+      // The `extends` of a `defineTheme({...})` call, as the check reads a
+      // theme's base everywhere else.
+      const asExtends = definedThemeBase(great) === node;
+      if (asExtends) u.extends++;
+      else u.other++;
+      uses.set(node.name, u);
+    }
+    if (typeof node.type !== 'string') return;
+    for (const [key, child] of Object.entries(node)) {
+      if (['loc', 'start', 'end', 'extra'].includes(key)) continue;
+      visit(child, node, parent, grand);
+    }
+  };
+  visit(ast.program, null, null, null);
+  // Every other way the file loads a module (`import()`, `require()`,
+  // `export … from`): a specifier loaded so is not only extended.
+  /** @type {Set<string>} */
+  const loadedOtherwise = new Set();
+  walkAst(ast.program, node => {
+    if (
+      ['ExportNamedDeclaration', 'ExportAllDeclaration'].includes(node.type) &&
+      typeof node.source?.value === 'string'
+    )
+      loadedOtherwise.add(node.source.value);
+    if (
+      node.type === 'ImportExpression' &&
+      typeof node.source?.value === 'string'
+    )
+      loadedOtherwise.add(node.source.value);
+    if (
+      node.type === 'CallExpression' &&
+      (node.callee?.type === 'Import' || node.callee?.name === 'require') &&
+      typeof node.arguments?.[0]?.value === 'string'
+    )
+      loadedOtherwise.add(node.arguments[0].value);
+  });
+  /** @type {Map<string, boolean>} */
+  const only = new Map();
+  for (const [name, from] of bindings) {
+    const u = uses.get(name) ?? {extends: 0, other: 0};
+    const ok = u.extends > 0 && u.other === 0;
+    only.set(from, (only.get(from) ?? true) && ok);
+  }
+  return new Set(
+    [...only]
+      .filter(
+        ([from, ok]) =>
+          ok && importsOf.get(from) === 1 && !loadedOtherwise.has(from),
+      )
+      .map(([from]) => from),
+  );
+}
+
+/**
  * Find a source file that imports one added built module without its paired CSS.
  * @param {string} root
  * @param {string} generatedModule
@@ -235,6 +356,10 @@ function themeImportPairEvidence(root, generatedModule, themes) {
     } catch {
       continue;
     }
+    // A file the CLI generates (a theme build, the editor's files) only
+    // extends another theme's module, never renders it. The app's theme
+    // module stays checked.
+    if (file !== generatedModule && generatedThemeFile(source)) continue;
     const candidates = themes.filter(theme =>
       source.includes(
         theme.source === 'local'
@@ -246,6 +371,11 @@ function themeImportPairEvidence(root, generatedModule, themes) {
     let specifiers;
     try {
       specifiers = moduleSpecifiers(source);
+      // An import used only as a theme's `extends` (a theme source) does not
+      // render that theme: its stylesheet is not asked for.
+      if (file !== generatedModule)
+        for (const from of extendOnlySpecifiers(parseModule(source)))
+          specifiers.delete(from);
     } catch {
       unproven.push(relative(root, file));
       continue;
@@ -572,6 +702,9 @@ export async function themeImportWiring(cwd) {
     } catch {
       continue;
     }
+    // A file the CLI generates (a theme build, the editor's files) imports
+    // its base to extend it, never to render it: it wires nothing.
+    if (generatedThemeFile(source)) continue;
     const shown = relative(projectDir, file);
     const candidates = themes.filter(
       theme =>
@@ -588,6 +721,11 @@ export async function themeImportWiring(cwd) {
           path.extname(file) === '.css'
             ? doctorStylesheetImports(source)
             : moduleSpecifiers(source, {runtimeOnly: true});
+        // An import used only as a theme's `extends` (a theme source such
+        // as the editor's) renders nothing.
+        if (path.extname(file) !== '.css')
+          for (const from of extendOnlySpecifiers(parseModule(source)))
+            specifiers.delete(from);
       } catch {
         specifiers = new Set();
       }
@@ -1085,6 +1223,9 @@ export async function checkAppThemes(cwd) {
     });
   } else {
     const stale = [];
+    /** Local themes the build refused for a private var: not checked. */
+    /** @type {string[]} */
+    const refused = [];
     /** @type {Map<string, string[]>} theme slugs by the package they import and the app lacks */
     const missingPackages = new Map();
     const previousSilent = logger.silent;
@@ -1111,6 +1252,12 @@ export async function checkAppThemes(cwd) {
             stale.push(theme.slug);
           }
         } catch (error) {
+          // A theme that sets a private var is the "Private theme
+          // variables" check's to report, not a stale output.
+          if (isPrivateVarRefusal(error)) {
+            refused.push(theme.slug);
+            continue;
+          }
           const missing = missingThemePackage(error);
           if (missing) {
             missingPackages.set(missing, [
@@ -1151,7 +1298,7 @@ export async function checkAppThemes(cwd) {
               .map(([pkg, slugs]) => `${pkg} (${slugs.join(', ')})`)
               .join(
                 '; ',
-              )}.${stale.length > 0 ? ` Local theme outputs are also missing or stale: ${stale.join(', ')}.` : ''}`,
+              )}.${stale.length > 0 ? ` Local theme outputs are also missing or stale: ${stale.join(', ')}.` : ''}${refused.length > 0 ? ` Not checked (a private theme variable; see theme-private-variables): ${refused.join(', ')}.` : ''}`,
             fix: [
               install?.installCommand ??
                 install?.noCommandReason ??
@@ -1164,15 +1311,25 @@ export async function checkAppThemes(cwd) {
               id: 'theme-local-builds',
               label: 'Local theme build freshness',
               status: 'fail',
-              message: `Local theme outputs are missing or stale: ${stale.join(', ')}.`,
+              message: `Local theme outputs are missing or stale: ${stale.join(', ')}.${refused.length > 0 ? ` Not checked (a private theme variable; see theme-private-variables): ${refused.join(', ')}.` : ''}`,
               fix: refresh.join(' '),
             }
-          : {
-              id: 'theme-local-builds',
-              label: 'Local theme build freshness',
-              status: 'pass',
-              message: 'Every added local theme output matches its source.',
-            },
+          : refused.length > 0
+            ? {
+                // Not a pass: the build refused these, so their outputs
+                // were never compared with their sources.
+                id: 'theme-local-builds',
+                label: 'Local theme build freshness',
+                status: 'info',
+                message: `Not checked: ${refused.join(', ')} ${refused.length === 1 ? 'sets' : 'set'} a private theme variable, so the build refuses ${refused.length === 1 ? 'it' : 'them'} and ${refused.length === 1 ? 'its' : 'their'} outputs were not compared with ${refused.length === 1 ? 'its source' : 'their sources'}.`,
+                fix: 'Follow the fix on the theme-private-variables check, then run doctor again.',
+              }
+            : {
+                id: 'theme-local-builds',
+                label: 'Local theme build freshness',
+                status: 'pass',
+                message: 'Every added local theme output matches its source.',
+              },
     );
   }
 

@@ -20,6 +20,7 @@ import {
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Pagination, generatePageRange} from './Pagination';
+import {FormLayout} from '../FormLayout/FormLayout';
 import {InternationalizationProvider} from '../i18n';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 
@@ -860,6 +861,28 @@ describe('Pagination', () => {
       const box = screen.getByRole('spinbutton', {name: 'Go to page'});
       expect(box).toHaveAttribute('aria-valuemin', '1');
       expect(box).toHaveAttribute('aria-valuemax', '10');
+    });
+
+    it('keeps its page box at commit timing inside a blur-or-enter FormLayout: nothing while typing, the rejection at Enter', () => {
+      render(
+        <FormLayout defaultEntryErrorBehavior="blur-or-enter">
+          <Pagination
+            page={3}
+            onChange={() => {}}
+            totalItems={100}
+            pageSize={10}
+            variant="input"
+          />
+        </FormLayout>,
+      );
+      const box = screen.getByRole('spinbutton', {name: 'Go to page'});
+      fireEvent.focus(box);
+      fireEvent.change(box, {target: {value: '2.5'}});
+      expect(box).not.toHaveAttribute('aria-invalid');
+      fireEvent.keyDown(box, {key: 'Enter'});
+      expect(box).toHaveAttribute('aria-invalid', 'true');
+      fireEvent.change(box, {target: {value: '2'}});
+      expect(box).not.toHaveAttribute('aria-invalid');
     });
 
     it('commits a typed page on Enter and clamps an over-range entry', async () => {

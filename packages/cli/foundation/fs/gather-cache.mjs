@@ -20,7 +20,9 @@
  *   discovery (foundation/discovery/template-adapter.mjs) for its records, by theme discovery
  *   (foundation/discovery/theme-discovery.mjs) for each integration's themes,
  *   and by `doctor` (api/doctor/_adapter.mjs) for its file-only docs checks,
- *   in a run that records modules and variables to its end. Gathers are kept only once the folder exists: the first such run
+ *   in a run that records modules and variables to its end. The commands
+ *   whose runs keep these entries are `search`, `build`, `component`,
+ *   `template`, `theme`, `discover`, `docs` and `doctor`. Gathers are kept only once the folder exists: the first such run
  *   on a machine just makes it, so a one-off run pays nothing to store one. Only a published CLI stores anything:
  *   its build id (clients/cli/build-id.generated.json, written at `prepack`)
  *   names its exact code, so a checkout, whose code may change between runs
@@ -64,6 +66,7 @@ const INTEGRATION_COMMANDS = new Set([
   'template',
   'theme',
   'discover',
+  'docs',
 ]);
 
 /** The run's commands whose gathers are kept. */
@@ -74,6 +77,7 @@ const KEPT_COMMANDS = new Set([
   'template',
   'theme',
   'discover',
+  'docs',
   // The project check alone (no subcommand): its docs checks are kept.
   'doctor',
 ]);
@@ -251,7 +255,7 @@ export async function recordRunFor(argv, fn) {
     return fn();
   }
   // Gathers are kept only once the folder exists: the first recorded run on a
-  // machine (search, build, component, template, theme or discover) just makes
+  // machine (search, build, component, template, theme, discover or docs) just makes
   // it, so a one-off run never pays to store one.
   const dir = cacheDirPath();
   if (!withoutRecording(() => fs.existsSync(dir))) {

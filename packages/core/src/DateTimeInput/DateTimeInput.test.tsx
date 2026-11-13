@@ -3916,3 +3916,187 @@ describe('DateTimeInput date segment rejected entries', () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe('DateTimeInput entryErrorBehavior', () => {
+  const VALUE = '2026-03-15T10:00' as ISODateTimeString;
+  const MIN = '2026-03-15T09:00' as ISODateTimeString;
+  const INVALID_TIME = 'Invalid time';
+  const NONEXISTENT = 'Enter a real date';
+  const recorders: (() => void)[] = [];
+  afterEach(() => {
+    recorders.splice(0).forEach(stop => stop());
+  });
+
+  /** Records each text that the shared assertive live region shows. */
+  function recordAssertive(): string[] {
+    const texts: string[] = [];
+    const observer = new MutationObserver(() => {
+      const text =
+        document.querySelector('[data-astryx-live-region="assertive"]')
+          ?.textContent ?? '';
+      if (text && text !== texts.at(-1)) {
+        texts.push(text);
+      }
+    });
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+    recorders.push(() => observer.disconnect());
+    return texts;
+  }
+
+  async function expectAnnounced(texts: string[], expected: string[]) {
+    await waitFor(() => {
+      expect(texts).toEqual(expected);
+    });
+    await act(async () => new Promise(resolve => setTimeout(resolve, 50)));
+    expect(texts).toEqual(expected);
+  }
+
+  /** Every signal of a segment's own rejection, at one moment. */
+  function signals(container: HTMLElement, input: HTMLElement) {
+    return {
+      status:
+        container.querySelector('.astryx-field-status')?.textContent ?? '',
+      isInvalid: input.getAttribute('aria-invalid') === 'true',
+      isStyledInvalid: /\.inputInvalid\b/.test(input.className),
+    };
+  }
+
+  function field(props: Partial<DateTimeInputProps> = {}) {
+    return (
+      <DateTimeInput
+        label="Meeting"
+        value={VALUE}
+        min={MIN}
+        hourFormat="12h"
+        onChange={() => {}}
+        {...props}
+      />
+    );
+  }
+
+  function commitBy(input: HTMLElement, commit: 'blur' | 'Enter') {
+    if (commit === 'blur') {
+      fireEvent.blur(input);
+    } else {
+      fireEvent.keyDown(input, {key: 'Enter'});
+    }
+  }
+
+  it.each(['blur', 'Enter'] as const)(
+    'under blur-or-enter, shows no sign of a complete time before the minimum while typing, and every sign together, announced once, at %s',
+    async commit => {
+      const announced = recordAssertive();
+      const {container} = render(field({entryErrorBehavior: 'blur-or-enter'}));
+      const timeInput = screen.getByLabelText('Meeting time');
+      const clean = signals(container, timeInput);
+      for (const text of ['8', '8:3', '8:30', '8:30 A', '8:30 AM']) {
+        fireEvent.change(timeInput, {target: {value: text}});
+        expect(signals(container, timeInput)).toEqual(clean);
+      }
+      expect(announced).toEqual([]);
+
+      commitBy(timeInput, commit);
+      const shown = signals(container, timeInput);
+      expect(shown.status).toBe(INVALID_TIME);
+      expect(shown.isInvalid).toBe(true);
+      expect(shown.isStyledInvalid).toBe(true);
+      await expectAnnounced(announced, [INVALID_TIME]);
+
+      // An edit that stays wrong keeps it; an accepted time clears it at once.
+      fireEvent.change(timeInput, {target: {value: '8:15 AM'}});
+      expect(signals(container, timeInput).status).toBe(INVALID_TIME);
+      fireEvent.change(timeInput, {target: {value: '11:15 AM'}});
+      expect(signals(container, timeInput)).toEqual(clean);
+      await expectAnnounced(announced, [INVALID_TIME]);
+    },
+  );
+
+  it.each([undefined, 'complete'] as const)(
+    'with entryErrorBehavior %s, shows a complete time before the minimum and a nonexistent date while typing',
+    behavior => {
+      const {container} = render(field({entryErrorBehavior: behavior}));
+      const timeInput = screen.getByLabelText('Meeting time');
+      fireEvent.change(timeInput, {target: {value: '8:30 AM'}});
+      expect(signals(container, timeInput)).toMatchObject({
+        status: INVALID_TIME,
+        isInvalid: true,
+      });
+      const dateInput = screen.getByRole('combobox');
+      fireEvent.change(dateInput, {target: {value: '02/31/2026'}});
+      expect(signals(container, dateInput)).toMatchObject({
+        status: NONEXISTENT,
+        isInvalid: true,
+      });
+    },
+  );
+
+  it.each(['blur', 'Enter'] as const)(
+    'under blur-or-enter, holds a nonexistent date and its onEntryErrorChange report until %s, and reports null at once when it clears',
+    async commit => {
+      const announced = recordAssertive();
+      const onEntryErrorChange = vi.fn();
+      const {container} = render(
+        field({entryErrorBehavior: 'blur-or-enter', onEntryErrorChange}),
+      );
+      const dateInput = screen.getByRole('combobox');
+      const clean = signals(container, dateInput);
+      for (const text of ['02/3', '02/31/202', '02/31/2026']) {
+        fireEvent.change(dateInput, {target: {value: text}});
+        expect(signals(container, dateInput)).toEqual(clean);
+      }
+      expect(onEntryErrorChange).not.toHaveBeenCalled();
+
+      commitBy(dateInput, commit);
+      expect(signals(container, dateInput)).toMatchObject({
+        status: NONEXISTENT,
+        isInvalid: true,
+      });
+      expect(onEntryErrorChange).toHaveBeenCalledExactlyOnceWith({
+        kind: 'nonexistent',
+        text: '02/31/2026',
+      });
+      await expectAnnounced(announced, [NONEXISTENT]);
+
+      fireEvent.change(dateInput, {target: {value: '03/20/2026'}});
+      expect(signals(container, dateInput)).toEqual(clean);
+      expect(onEntryErrorChange).toHaveBeenLastCalledWith(null);
+    },
+  );
+
+  it.each(['blur', 'Enter'] as const)(
+    'under blur-or-enter, holds a native time before the minimum until %s, keeps it through a still-wrong edit, and clears it at once',
+    async commit => {
+      const announced = recordAssertive();
+      const {container} = render(
+        field({entryErrorBehavior: 'blur-or-enter', presentation: 'native'}),
+      );
+      const nativeTime =
+        container.querySelector<HTMLInputElement>('input[type="time"]');
+      if (nativeTime == null) {
+        throw new Error('no native time control');
+      }
+      fireEvent.focus(nativeTime);
+      const clean = signals(container, nativeTime);
+      fireEvent.change(nativeTime, {target: {value: '08:00'}});
+      expect(signals(container, nativeTime)).toEqual(clean);
+
+      commitBy(nativeTime, commit);
+      const shown = signals(container, nativeTime);
+      expect(shown.status).toBe(INVALID_TIME);
+      expect(shown.isInvalid).toBe(true);
+      expect(shown.isStyledInvalid).toBe(true);
+      await expectAnnounced(announced, [INVALID_TIME]);
+
+      fireEvent.focus(nativeTime);
+      fireEvent.change(nativeTime, {target: {value: '08:30'}});
+      expect(signals(container, nativeTime).status).toBe(INVALID_TIME);
+      fireEvent.change(nativeTime, {target: {value: '10:30'}});
+      expect(signals(container, nativeTime)).toEqual(clean);
+      await expectAnnounced(announced, [INVALID_TIME]);
+    },
+  );
+});
