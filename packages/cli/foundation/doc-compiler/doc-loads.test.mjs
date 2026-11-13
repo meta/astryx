@@ -74,7 +74,7 @@ const RUNNERS = {
   },
   'api/theme-edit/_preview.mjs': {
     runs: 'a Playwright the project has installed, or a Chrome found on the machine, to picture a preview only with --png',
-    sites: ['child_process.spawnSync', 'import(<computed>)'],
+    sites: ['child_process.spawn', 'import(<computed>)'],
   },
   'api/theme-edit/_project.mjs': {
     runs: "the project's installed Core theme module and a built-in theme it builds on, to check and resolve tokens",
