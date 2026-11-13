@@ -102,6 +102,21 @@ import {
   cssFamily,
   familySpaces,
 } from './_settings.mjs';
+import {
+  familiesOf,
+  familyPieces,
+  normalValueText,
+  normalizeEntry,
+  withoutDebris,
+} from './_normal.mjs';
+
+export {
+  familiesOf,
+  familyPieces,
+  normalValueText,
+  normalizeEntry,
+  withoutDebris,
+};
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 
 export {lengthPx};
@@ -235,8 +250,16 @@ function matchingParen(text, open) {
  * @returns {number | null}
  */
 function textSizePx(v) {
+  // Paste debris around the size (quotes, `!important`, a trailing `;` or
+  // `,`) is not part of it.
+  const bare = withoutDebris(
+    String(v)
+      .replace(/^\s*(["'])(.*)\1\s*$/, '$2')
+      .replace(/\s*!\s*important\s*/i, '')
+      .replace(/[;,]+\s*$/, ''),
+  );
   const m = /^\+?(\d*\.?\d+(?:e[+-]?\d+)?)(px|rem|em|pt|%)?$/i.exec(
-    typedPlain(v)
+    typedPlain(bare)
       .replace(/(\d)\.(?=[a-z%]*$)/i, '$1')
       .replace(/\s+/g, '')
       .replace(/^(\d+),(\d+)/, '$1.$2'),
@@ -344,13 +367,12 @@ function valueMeant(type, value) {
   if (type === 'font' || type === 'font-family') {
     // A comma left out between families (`"Open Sans" serif`), read with
     // css-tree.
+    // The stack read as families (a trailing comma, a stack wrapped in one
+    // more pair of quotes), each quoted as CSS needs it.
+    const fams = familiesOf(p);
+    if (fams?.length) out.push(fams.map(f => cssFamily(f, true)).join(', '));
     const listed = familyListMeant(p);
-    if (listed) out.push(listed);
-    // Each family quoted as CSS needs it, only when no family holds a
-    // quote inside (the pieces are whole names).
-    const pieces = p.split(',').map(f => f.trim().replace(/^["']|["']$/g, ''));
-    if (!listed && pieces.every(f => !/["'\\]/.test(f)))
-      out.push(pieces.map(f => cssFamily(f, true)).join(', '));
+    if (listed && !fams?.length) out.push(listed);
   }
   return [...new Set(out)].filter(x => x && x !== value.trim());
 }
@@ -649,12 +671,38 @@ export function storedProblems(ctx, slug, data, skip = '') {
   for (const s of data.settings) {
     if (replaced(s) || typeof s.value !== 'string') continue;
     const clean = normalValueText(s.value);
-    if (clean !== s.value)
+    if (clean !== s.value) {
+      // Name what is wrong: invisible spaces, or quotes around the value
+      // CSS does not read (a curly quote inside a quoted string is fine,
+      // and is left as it is).
+      const spaces =
+        clean.replace(/["']/g, '') !==
+        s.value.replace(
+          /[\u2018-\u201F\u00AB\u00BB\u2039\u203A\uFF02\uFF07`"']/g,
+          '',
+        );
+      const quotes =
+        /[\u2018-\u201F\u00AB\u00BB\u2039\u203A\uFF02\uFF07`]/.test(s.value) &&
+        clean.replace(
+          /[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000\u200B-\u200D\u2060\uFEFF]/g,
+          '',
+        ) !==
+          s.value.replace(
+            /[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000\u200B-\u200D\u2060\uFEFF]/g,
+            '',
+          );
+      const why = [
+        spaces &&
+          'a no-break, thin or zero-width space, which the browser does not read as a space',
+        quotes &&
+          'curly or other quotes around a value, where CSS reads only straight ones',
+      ].filter(Boolean);
       found.push({
         setting: s,
-        why: `${s.thing} holds a no-break, thin or zero-width space, which the browser does not read as a space`,
+        why: `${s.thing} holds ${why.join(', and ') || 'characters the browser does not read as written'}`,
         fix: clean,
       });
+    }
   }
   for (const s of data.settings) {
     if (s.source !== 'token' || s.thing === skipThing || !(s.thing in TOKENS))
@@ -792,6 +840,18 @@ function checkTypedValue(
           `${P} set ${slug} ${name} ${quoteCommandArgument(exampleOf(type, name))}`,
         ],
       });
+    // An empty family (`""`, a trailing comma) or one quoted name holding
+    // commas is a broken stack: the browser drops the fallback after it.
+    const pieces = familyPieces(value);
+    if (
+      pieces &&
+      (pieces.some(f => !f.name) ||
+        pieces.some(f => f.quoted && f.name.includes(',')))
+    )
+      bad(
+        'a font family list with a name for each family',
+        exampleOf(type, name),
+      );
   }
   if (!isSafeValue(value))
     refuse(
@@ -1628,18 +1688,32 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       .toLowerCase();
   if (flags.only) s.only = true;
   if (flags.mode) {
-    const mode = flags.mode.toLowerCase();
-    if (mode !== 'light' && mode !== 'dark')
+    // Read as any value is: invisible or no-break spaces, quotes around
+    // it, a trailing colon (`'dark '`, `“dark”`, `dark:`).
+    const mode = withoutDebris(normalValueText(String(flags.mode)))
+      .trim()
+      .replace(/^(["'])(.*)\1$/, '$2')
+      .replace(/:+$/, '')
+      .trim()
+      .toLowerCase();
+    if (mode !== 'light' && mode !== 'dark') {
+      const near = nearest(mode, ['light', 'dark']);
       refuse(
         E.ERR_THEME_BAD_VALUE,
         `--mode takes light or dark, not "${flags.mode}".`,
         {
-          didYouMean: nearest(mode, ['light', 'dark']),
-          // The same setting for both modes runs as printed; the mode it
-          // probably meant is the did-you-mean.
-          run: [setLine(slug, thing, v, {...s, mode: undefined}, unset)],
+          didYouMean: near,
+          // The mode it is nearest keeps --mode; only with none near is the
+          // same setting for both modes offered.
+          run: [
+            ...(near.length === 1
+              ? [setLine(slug, thing, v, {...s, mode: near[0]}, unset)]
+              : []),
+            setLine(slug, thing, v, {...s, mode: undefined}, unset),
+          ],
         },
       );
+    }
     s.mode = mode;
   }
   const onFlag = s.on ? ` --on ${s.on}` : '';
@@ -3846,74 +3920,6 @@ export function fontFileReason(value) {
   return hit
     ? `"${hit}" is a font file or a link, not a font family name. A theme names a family (such as Inter); load the file with @font-face in your app's CSS, or install a font package, then set the family it defines.`
     : null;
-}
-
-/**
- * A value with every Unicode space (no-break, thin, ideographic…) as a plain
- * space and zero-width and format characters dropped, for every value type:
- * the browser reads only a plain space as one.
- * @param {string} v
- */
-export function normalValueText(v) {
-  // Curly quotes (a word processor's, a phone's) are the straight ones CSS
-  // reads.
-  const straight = v
-    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
-    .replace(/[\u201C\u201D\u201E\u201F]/g, '"');
-  // A quoted CSS string (`content: "a\u00A0b"`) keeps what is inside it.
-  return straight
-    .split(/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/)
-    .map((part, i) =>
-      i % 2
-        ? part
-        : part
-            .replace(/[\u200B-\u200D\u2060\uFEFF]/g, '')
-            .replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, ' '),
-    )
-    .join('');
-}
-
-/**
- * The thing and value a setting was typed as, put right before any check: a
- * declaration pasted whole or split (`accent: #e11d48`, `--color-accent=red`,
- * `font:inter`, `accent:` with the value next), a token typed with an em or
- * en dash (`—color-accent`) or as `var(--color-accent)`, and the value's
- * Unicode spaces. A thing it cannot read is left as typed.
- * @param {string} thing
- * @param {string | undefined} value
- * @returns {{thing: string, value: string | undefined}}
- */
-export function normalizeEntry(thing, value) {
-  let t = normalValueText(String(thing ?? '')).trim();
-  let v = value == null ? value : normalValueText(String(value));
-  // A pasted declaration (the whole of it in the thing, or the thing with
-  // its colon and the value next): its `;` and `!important` go with it.
-  let pasted = false;
-  if (v == null || v.trim() === '') {
-    const m = /^(\S+?)\s*[:=]\s*(.+?)\s*;?\s*$/.exec(t);
-    if (m && !/^https?$/i.test(m[1])) {
-      t = m[1];
-      v = m[2];
-      pasted = true;
-    }
-  }
-  // A thing ending in its colon or equals sign, the value given next.
-  if (/\s*[:=]+$/.test(t)) {
-    t = t.replace(/\s*[:=]+$/, '');
-    pasted = true;
-  }
-  // Dash-like characters where a token's two dashes go (an em or en dash,
-  // a non-breaking hyphen, a minus sign, a full-width hyphen, alone or
-  // mixed with hyphens): `--`.
-  t = t.replace(/^[-\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]+/, run =>
-    /[^-]/.test(run) ? '--' : run,
-  );
-  // A token typed as a var() reference.
-  const ref = /^var\(\s*(--[a-z0-9-]+)\s*\)$/i.exec(t);
-  if (ref) t = ref[1];
-  if (pasted && typeof v === 'string')
-    v = v.replace(/\s*!\s*important\s*;?\s*$/i, '').replace(/;+\s*$/, '');
-  return {thing: t, value: v};
 }
 
 /**
