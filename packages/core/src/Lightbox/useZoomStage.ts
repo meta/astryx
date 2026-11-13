@@ -221,7 +221,6 @@ export function useZoomStage(
     write,
     setTarget,
     setZoomed,
-    setAtFit,
     settleTo,
     isMoving,
     isAtEdgeOf,
@@ -713,20 +712,12 @@ export function useZoomStage(
         {spring: settle},
         {touchRelease: fingerRef.current.dismiss},
       );
-      // Back in its box: the stage clips again, unless another drag began,
-      // and the photo is at its fitted size again once both springs land.
-      void Promise.all([position.finished, size.finished]).then(
-        ([moved, sized]) => {
-          if (dismissRef.current == null && !leavingRef.current) {
-            options.stageRef.current?.removeAttribute(
-              ZOOM_DISMISSING_ATTRIBUTE,
-            );
-            if (moved && sized) {
-              setAtFit(true);
-            }
-          }
-        },
-      );
+      // Back in its box: the stage clips again, unless another drag began.
+      void Promise.all([position.finished, size.finished]).then(() => {
+        if (dismissRef.current == null && !leavingRef.current) {
+          options.stageRef.current?.removeAttribute(ZOOM_DISMISSING_ATTRIBUTE);
+        }
+      });
     },
     {isEnabled: options.dismiss?.isEnabled === true, manageStyle: false},
   );
@@ -753,10 +744,9 @@ export function useZoomStage(
         animator.stop();
         animator.set({x: 0, y: 0, scale: 1, opacity: 1});
         setTarget(IDENTITY);
-        setAtFit(true);
         stageRef.current?.removeAttribute(ZOOM_DISMISSING_ATTRIBUTE);
       },
     }),
-    [animator, api, setAtFit, setTarget, stageRef],
+    [animator, api, setTarget, stageRef],
   );
 }

@@ -39,11 +39,16 @@ import {
 } from '../../foundation/agent-docs/computer-agent-text.mjs';
 import {computerAgentTextSettings} from '../../foundation/env/user-settings.mjs';
 import * as fs from 'node:fs';
+import {createRequire} from 'node:module';
 import {placeholderUses} from '../../foundation/discovery/template-icons.mjs';
 export {placeholderFixes} from '../../foundation/discovery/template-icons.mjs';
-export {unlistedIconSets} from '../../foundation/discovery/icon-set-discovery.mjs';
+export {
+  iconUseCommand,
+  unlistedIconSets,
+} from '../../foundation/discovery/icon-set-discovery.mjs';
 import {elementPropOrigins} from '../../foundation/discovery/module-exports.mjs';
 import {cssImports} from '../../foundation/render/embedded-imports.mjs';
+import {satisfiesRange} from '../../foundation/env/semver.mjs';
 import * as path from 'node:path';
 import {
   persistedGather,
@@ -72,12 +77,16 @@ export {
   resolveThemeModule,
 } from '../../foundation/config/theme-state.mjs';
 export {
+  fileMark,
+  generatedSourceCommand,
+  isPrivateVarRefusal,
   missingThemePackage,
   themeBuild,
   validateThemePrivateInputs,
 } from '../theme/build/build.mjs';
 export {installCommandFor as packageInstallCommand} from '../../foundation/discovery/template-needs.mjs';
 export {resolveRecordedTheme} from '../theme/theme.mjs';
+export {themeIdentifier} from '../theme/_fork.mjs';
 export {collectUnloadedFonts} from '../theme/build/font-warning.mjs';
 
 // What the authoring-docs check reads (./_authoring-audit.mjs), reached only
@@ -92,6 +101,14 @@ export {
 const CHECK_CODEC = {
   encode: (/** @type {any} */ check) => check,
   decode: (/** @type {any} */ check) => check,
+  /** A check record: its id, label, status and message. */
+  valid: (/** @type {any} */ check) =>
+    check != null &&
+    typeof check === 'object' &&
+    typeof check.id === 'string' &&
+    typeof check.label === 'string' &&
+    typeof check.status === 'string' &&
+    typeof check.message === 'string',
 };
 
 /**
@@ -289,6 +306,70 @@ export function doctorElementPropOrigins(file, element) {
  */
 export function doctorStylesheetImports(css) {
   return new Set(cssImports(css));
+}
+
+/**
+ * The file a local stylesheet `@import` names, from the stylesheet that
+ * imports it: a relative path, or a package's file as Node resolves it
+ * (`@fontsource/inter/index.css`). Null for a URL (http, https, `//`) or an
+ * import that does not resolve.
+ * @param {string} specifier
+ * @param {string} fromFile
+ * @returns {string | null}
+ */
+export function doctorStylesheetImportFile(specifier, fromFile) {
+  if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(specifier)) return null;
+  const isFile = (/** @type {string} */ f) => {
+    try {
+      return fs.statSync(f).isFile();
+    } catch {
+      return false;
+    }
+  };
+  // A bare name is a file beside the stylesheet first (`@import
+  // "faces.css"`, as a browser reads it), then a package.
+  const beside = path.resolve(path.dirname(fromFile), specifier);
+  if (isFile(beside)) return beside;
+  if (/^\.{1,2}\//.test(specifier)) return null;
+  try {
+    // Packages resolve from where the stylesheet really is (a linked
+    // install, as pnpm makes, keeps its own dependencies there).
+    let real = fromFile;
+    try {
+      real = fs.realpathSync(fromFile);
+    } catch {
+      real = fromFile;
+    }
+    const file = createRequire(real).resolve(specifier);
+    return isFile(file) ? file : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The `@astryxdesign/core` range a package's peerDependencies declare, and
+ * whether it accepts `coreVersion` (spec:AST-017/FR12). The one rule every
+ * doctor check uses to compare a package with the installed Core:
+ * `theme-core-peers` for added theme packages, `integration-core-range` for
+ * every other loaded integration.
+ * @param {{peerDependencies?: Record<string, unknown>} | null | undefined} pkg
+ * @param {string | null | undefined} coreVersion
+ * Any declared string is judged by `satisfiesRange`, so an empty range
+ * accepts every Core; only a missing range is `null`.
+ * @returns {{range: string | null, accepts: boolean}}
+ */
+export function corePeerRange(pkg, coreVersion) {
+  const raw = pkg?.peerDependencies?.['@astryxdesign/core'];
+  const range = typeof raw === 'string' ? raw.trim() : null;
+  return {
+    range,
+    accepts:
+      range !== null &&
+      typeof coreVersion === 'string' &&
+      coreVersion !== '' &&
+      satisfiesRange(coreVersion, range),
+  };
 }
 
 /** @param {string} projectDir */

@@ -79,12 +79,13 @@ import {
   printBatchTrailer,
   printCompactTrailer,
   setEditorFolderListener,
-  setPrivateVarErrorListener,
   themeBuildFamily,
   themeBuildForReport,
   themeBuildWithHandOff,
   themeSourceFiles,
   themeSourceGuesses,
+  buildSuggestion,
+  generatedSourceCommand,
   writeDeferredBuildOutputs,
 } from '../../../api/theme/build/build.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
@@ -118,8 +119,10 @@ import {doc as themePaletteGenerateFn} from '../../../api/theme/themePaletteGene
  * @property {string} group - The group's command path: `theme` or `experimental theme`.
  * @property {string} build - The build subcommand's name: `build` or `compile`.
  * @property {(err: import('../../../api/error.mjs').AstryxError, cwd: string) => import('../../../api/error.mjs').AstryxError | null} [explain] - A clearer refusal for this group, or null.
- * @property {(files: string[], options: {cwd: string, check?: boolean, family?: boolean}) => Promise<import('../../../api/error.mjs').AstryxError | null>} [preflight] - A refusal before a build starts, or null.
+ * @property {(files: string[], options: {cwd: string, check?: boolean, family?: boolean, iconsSpecifier?: string, out?: string}) => Promise<import('../../../api/error.mjs').AstryxError | null>} [preflight] - A refusal before a build starts, or null.
  * @property {(files: string[], options: {cwd: string}) => Promise<() => Promise<void>>} [hold] - Locks held while a build or check runs; resolves to their release.
+ * @property {(file: string, cwd: string, opts: {check: boolean}) => Record<string, unknown> | null} [extraData] - Fields a group adds to a build's result data (the editor's `appCopyStale`).
+ * @property {(file: string, cwd: string) => ((family: string) => boolean) | null} [loadedFonts] - Font families the app loads for a theme file that the file itself cannot say, so the build does not name them as unloaded.
  * @property {(file: string, cwd: string) => {name: string, reason: string} | null} [missingSource] - For a source file that is not there, this group's way to write it again, or null.
  * @property {(options: {targetPath?: string, overwrite?: boolean, cwd?: string}) => import('../../../api/theme/theme.type.mjs').ThemeTemplateResponse} [template] - This group's template write, in place of `themeTemplate`.
  */
@@ -670,11 +673,27 @@ function printThemeApp(result) {
 }
 
 /**
+ * The base the experimental theme editor can start an ejected theme from,
+ * by the editor's own check: the theme's slug when it is a built-in base the
+ * editor knows (LIKE) and its package is installed where the command runs
+ * (baseInstalled), else neutral. Loaded only for an eject.
+ * @param {{slug?: string | null}} data
+ * @param {string} cwd
+ * @returns {Promise<string>}
+ */
+export async function editorBaseFor(data, cwd) {
+  if (!data.slug) return 'neutral';
+  const {editorBaseIn} = await import('../../../api/theme-edit/_adapter.mjs');
+  return editorBaseIn(data.slug, cwd);
+}
+
+/**
  * Print every field in a source-fork receipt.
  * @param {import('../../../api/theme/theme.type.mjs').ThemeEjectResponse} result
  * @param {ThemeCommandWords} [words]
+ * @param {string} [like] the base the theme editor line starts from
  */
-function printThemeEject(result, words = THEME_WORDS) {
+function printThemeEject(result, words = THEME_WORDS, like = 'neutral') {
   const {data} = result;
   emit(
     section('Ejected theme'),
@@ -703,6 +722,12 @@ function printThemeEject(result, words = THEME_WORDS) {
       : []),
     text(
       `This is a local fork. Build it with ${buildStep(getCliInvocation(), words, path.join(data.outputDir, data.entry))}.`,
+    ),
+    // One theme-only line (AST-017 FR27): the editor builds only on an
+    // Astryx theme package, so a theme from another package starts from
+    // neutral.
+    text(
+      `To make or change a theme: the experimental theme editor, ${getCliInvocation()} experimental theme editor new <name> --like ${like}.`,
     ),
   );
 }
@@ -924,6 +949,10 @@ function registerPaletteCommands(
         text(
           'Review and edit the candidate before adopting it as theme-owned palette data.',
         ),
+        // One theme-only line (AST-017 FR27).
+        text(
+          `To make or change a theme: the experimental theme editor makes the palettes from one color, ${getCliInvocation(process.cwd())} experimental theme editor set <name> accent <color>.`,
+        ),
       );
       return NO_RESULT_SET;
     },
@@ -970,6 +999,28 @@ function registerThemeCommands(theme, program, docs, words) {
         const rewrite = looksGlobby
           ? null
           : (words.missingSource?.(entry.file, process.cwd()) ?? null);
+        // A file another command generates, gone from a folder whose other
+        // files carry that command's mark: that command writes it again; a
+        // blank theme template is no way back.
+        const by =
+          rewrite || looksGlobby
+            ? null
+            : generatedSourceCommand(entry.filePath);
+        if (by)
+          return cliError(
+            `File not found: ${entry.filePath}. It is a generated file: the files beside it are written by ${by}, so rebuild it with the command that made it.`,
+            {
+              code: ERROR_CODES.ERR_FILE_NOT_FOUND,
+              suggestions: /^astryx(\s|$)/.test(by)
+                ? [
+                    {
+                      name: `${getCliInvocation(process.cwd())} ${by.replace(/^astryx\s*/, '')}`.trim(),
+                      reason: 'the command that writes these files',
+                    },
+                  ]
+                : [],
+            },
+          );
         return cliError(`File not found: ${entry.filePath}`, {
           code: ERROR_CODES.ERR_FILE_NOT_FOUND,
           suggestions: rewrite
@@ -978,14 +1029,29 @@ function registerThemeCommands(theme, program, docs, words) {
               ? [
                   {
                     // The pattern stays unquoted: the shell expands it.
-                    name: `${getCliInvocation(process.cwd())} ${words.group} ${words.build} ${entry.file.replace(/['"]/g, '')}`,
+                    // The caller's mode follows it, quoted, and a family
+                    // run stays one.
+                    name: buildSuggestion(
+                      entry.file,
+                      options,
+                      process.cwd(),
+                      words,
+                      {
+                        glob: true,
+                        family: Boolean(options.family),
+                        ...(options.family && options.familyKey
+                          ? {familyKey: String(options.familyKey)}
+                          : {}),
+                      },
+                    ),
                     reason:
                       'globs are expanded by your shell; pass the pattern unquoted, or list the files',
                   },
                 ]
               : guesses.length > 0
                 ? guesses.map(guess => ({
-                    name: `${getCliInvocation(process.cwd())} ${words.group} ${words.build} ${quoteCommandArgument(guess)}`,
+                    // The same build of that source: a --check stays a check.
+                    name: buildSuggestion(guess, options, process.cwd(), words),
                     reason: 'a theme source that exists',
                   }))
                 : [
@@ -1087,6 +1153,9 @@ function registerThemeCommands(theme, program, docs, words) {
                     ...(options.out && files.length === 1
                       ? ['--out', options.out]
                       : []),
+                    ...(options.iconsSpecifier
+                      ? ['--icons-specifier', options.iconsSpecifier]
+                      : []),
                     ...(options.check ? ['--check'] : []),
                   ],
                   'build each theme on its own',
@@ -1177,15 +1246,13 @@ function registerThemeCommands(theme, program, docs, words) {
           );
         });
       }
-      let privateVarError = false;
-      setPrivateVarErrorListener(() => {
-        privateVarError = true;
-      });
 
       const refused = await words.preflight?.(files, {
         cwd: process.cwd(),
         check: options.check,
         family: Boolean(options.family),
+        iconsSpecifier: options.iconsSpecifier,
+        out: options.out,
       });
       if (refused) return themeError(refused, words, buildFallback);
 
@@ -1203,13 +1270,12 @@ function registerThemeCommands(theme, program, docs, words) {
           );
           if (json) jsonOut(result);
           if (
-            privateVarError ||
-            (result.type === 'theme.build.check' &&
-              !(
-                /** @type {import('../../../api/theme/theme.type.mjs').ThemeBuildCheckResponse} */ (
-                  result
-                ).data.upToDate
-              ))
+            result.type === 'theme.build.check' &&
+            !(
+              /** @type {import('../../../api/theme/theme.type.mjs').ThemeBuildCheckResponse} */ (
+                result
+              ).data.upToDate
+            )
           ) {
             process.exitCode = 1;
           }
@@ -1267,6 +1333,37 @@ function registerThemeCommands(theme, program, docs, words) {
         const writes = [];
         const log = logger.log;
         const warn = logger.warn;
+        // A group may know fonts the app loads that the theme file cannot
+        // say (the editor's app copy stylesheet): those are not named as
+        // unloaded, in the notices, the trailer or the full help.
+        const loads = words.loadedFonts?.(entry.file, process.cwd()) ?? null;
+        /** @param {string} msg */
+        const namesOnlyLoaded = msg => {
+          // The families the notice names: on its first line, after the
+          // theme's own name.
+          const line =
+            msg
+              .split('\n')
+              .find(l => /not load/.test(l))
+              ?.replace(/^.*?(names fonts it does not load:|Font )/, '') ?? '';
+          const fonts = [...line.matchAll(/"([^"]+)"/g)].map(m => m[1]);
+          return (
+            Boolean(loads) && fonts.length > 0 && fonts.every(f => loads?.(f))
+          );
+        };
+        if (loads && !deferred) {
+          logger.log = (/** @type {string | undefined} */ message) => {
+            if (
+              typeof message === 'string' &&
+              /names fonts it does not load|named by this theme but not loaded/.test(
+                message,
+              ) &&
+              namesOnlyLoaded(message)
+            )
+              return;
+            log.call(logger, message);
+          };
+        }
         if (deferred) {
           logger.log = (/** @type {string | undefined} */ message) => {
             lines.push(() => log.call(logger, message));
@@ -1297,6 +1394,19 @@ function registerThemeCommands(theme, program, docs, words) {
               handOff,
             );
             result = built.receipt;
+            if (loads && built.trailer) {
+              const named = (/** @type {string} */ msg) =>
+                built.trailer?.unloadedFonts.some(
+                  (/** @type {string} */ f) =>
+                    loads(f) && msg.includes(`"${f}"`),
+                ) ?? false;
+              built.trailer.fontNotices = built.trailer.fontNotices.filter(
+                (/** @type {string} */ m) => !named(m),
+              );
+              built.trailer.unloadedFonts = built.trailer.unloadedFonts.filter(
+                (/** @type {string} */ f) => !loads(f),
+              );
+            }
             if (built.trailer) trailers.push(built.trailer);
             if (compact && result?.type === 'theme.build') {
               const {outputs, sizeKB, tokenCount, componentCount} = result.data;
@@ -1319,6 +1429,20 @@ function registerThemeCommands(theme, program, docs, words) {
           }
           logger.log = log;
           logger.warn = warn;
+          const data = /** @type {any} */ (result)?.data;
+          if (loads && data && Array.isArray(data.notices))
+            data.notices = data.notices.filter(
+              (/** @type {string} */ m) =>
+                !(
+                  /named by this theme but not loaded/.test(m) &&
+                  namesOnlyLoaded(m)
+                ),
+            );
+          // A group may add to a build's result (the editor's app copy note).
+          const extra = words.extraData?.(entry.file, process.cwd(), {
+            check: Boolean(options.check),
+          });
+          if (extra && result?.data) Object.assign(result.data, extra);
           results.push({file: entry.file, receipt: result ?? null});
           if (deferred) built.push({writes, lines});
           if (
@@ -1401,10 +1525,8 @@ function registerThemeCommands(theme, program, docs, words) {
         );
       }
 
-      // Private-variable diagnostics are build failures even though the released
-      // output and generated files stay unchanged. Stale --check output is also
-      // a failure after its receipt has been emitted.
-      if (privateVarError || (options.check && stale)) {
+      // Stale --check output is a failure after its receipt has been emitted.
+      if (options.check && stale) {
         process.exitCode = 1;
       }
 
@@ -1603,7 +1725,12 @@ function registerThemeCommands(theme, program, docs, words) {
       }
       await warnOnThemeIntegrationIssues(json);
       if (json) jsonOut(result);
-      else printThemeEject(result, words);
+      else
+        printThemeEject(
+          result,
+          words,
+          await editorBaseFor(result.data, process.cwd()),
+        );
       return NO_RESULT_SET;
     },
   });

@@ -580,6 +580,61 @@ for (const [photo, fill] of [
   });
 }
 
+for (const [story, trigger] of [
+  ['core-lightbox--with-caption', 'Open with caption'],
+  ['core-lightbox--zoom-with-caption', 'Open zoom with caption'],
+] as const) {
+  for (const theme of SHIPPED_THEMES) {
+    test(`in light mode, a single photo's caption keeps 4.5:1 on its backing over a white page and photo (${story}, ${theme})`, async ({
+      page,
+    }) => {
+      await page.route('https://picsum.photos/**', async route =>
+        route.fulfill({
+          contentType: 'image/svg+xml',
+          body: '<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800"><rect width="1200" height="800" fill="#ffffff"/></svg>',
+        }),
+      );
+      await page.goto(
+        `${storybook()}/iframe.html?id=${story}&viewMode=story&globals=astryxTheme:${theme};colorMode:light`,
+      );
+      await page.locator('#storybook-root > *').first().waitFor();
+      // The page behind the viewer is white, the lightest it can be.
+      await page.addStyleTag({
+        content:
+          'html, body, #storybook-root { background: #ffffff !important; }',
+      });
+      await frames(page, 2);
+      const driver = await touchDriver(page);
+      const opener = await page
+        .getByRole('button', {name: trigger})
+        .boundingBox();
+      if (opener == null) {
+        throw new Error('no trigger');
+      }
+      await driver.tap({
+        x: opener.x + opener.width / 2,
+        y: opener.y + opener.height / 2,
+      });
+      const dialog = page.getByRole('dialog');
+      await expect(dialog).toBeVisible();
+      await expect
+        .poll(async () =>
+          dialog
+            .locator('img')
+            .first()
+            .evaluate(img => (img as HTMLImageElement).naturalWidth),
+        )
+        .toBe(1200);
+      // The caption is the viewer's description.
+      const captionId = await dialog.getAttribute('aria-describedby');
+      const caption = page.locator(`[id="${captionId}"]`);
+      await expect(caption).toBeVisible();
+      const {value} = await captionContrast(page, caption);
+      expect(value).toBeGreaterThanOrEqual(4.5);
+    });
+  }
+}
+
 // A light page's overlay is the lightest backdrop under the caption's band.
 for (const theme of SHIPPED_THEMES) {
   test(`in light mode, a gallery's caption keeps 4.5:1 in its band (${theme})`, async ({

@@ -658,12 +658,7 @@
   "packages/core/src/Markdown/plugins/sourceLines.ts": [
     "module:Markdown/sourceLines"
   ],
-  "packages/core/src/MobileNav/MobileNav.tsx": [
-    "#4290",
-    "#4290",
-    "#4290",
-    "#5701"
-  ],
+  "packages/core/src/MobileNav/MobileNav.tsx": ["#4290", "#4290", "#5701"],
   "packages/core/src/MultiSelector/MultiSelector.tsx": [
     "AR1",
     "AR2",
@@ -1048,8 +1043,6 @@
     "FR1",
     "FR1",
     "FR1",
-    "FR1",
-    "FR2",
     "FR2",
     "FR2",
     "FR2",
@@ -1067,8 +1060,6 @@
     "spec:AST-043",
     "spec:AST-043",
     "spec:AST-043",
-    "spec:AST-085",
-    "spec:AST-085",
     "spec:AST-085",
     "spec:AST-085",
     "spec:AST-086"

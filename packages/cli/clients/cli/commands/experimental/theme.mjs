@@ -49,6 +49,8 @@ import {
   dialValueFits,
   newFlagList,
   editorCompileProblem,
+  editorBuildExtra,
+  editorLoadedFonts,
   editorThemeHold,
   editorThemeRefusal,
   editorMissingSource,
@@ -887,6 +889,7 @@ export function registerExperimentalTheme(group, program) {
             `[ok] made theme "${r.data.theme}"${r.data.like ? ` on top of ${r.data.like}` : ''}`,
             ...project(/** @type {any} */ (r.data)),
             `Tip: ${EDITOR} set ${r.data.theme} <thing> <value>, or ${HOW} "<what you want>"`,
+            `Look at it after each change (this changes nothing in your app): ${EDITOR} show ${r.data.theme} --png writes themes/${r.data.theme}/preview.png and sheet.png from real components; open the PNGs and check them against the request`,
           ],
         ),
     }),
@@ -908,7 +911,9 @@ export function registerExperimentalTheme(group, program) {
         // or `--color-accent:#e11d48`) is the token and its value; with no
         // value otherwise, the missing-argument error the parser gives.
         if (!value.length) {
-          const pasted = /^(--[a-z0-9-]+)\s*:\s*(.+?);?\s*$/i.exec(thing);
+          // Any thing, a token or a dial, with `:` or `=` (`accent: red`,
+          // `--color-accent=#e11d48`).
+          const pasted = /^(\S+?)\s*[:=]\s*(.+?);?\s*$/.exec(thing);
           if (!pasted)
             return missingSetValue(
               editor.commands.find(c => c.name() === 'set'),
@@ -1125,7 +1130,11 @@ export function registerExperimentalTheme(group, program) {
               : [
                   ...project(/** @type {any} */ (r.data)),
                   // A folder add refuses has a note that says why instead.
-                  ...(r.data.notes.some(n => n.includes(' refuses this folder'))
+                  ...(r.data.notes.some(
+                    n =>
+                      n.includes(' refuses this folder') ||
+                      n.startsWith('no preview here; '),
+                  )
                     ? []
                     : [
                         `Tip: ${PREFIX} preview add${o.path == null ? '' : ` --path ${quoteCommandArgument(String(o.path))}`}`,
@@ -1299,6 +1308,8 @@ export function registerExperimentalTheme(group, program) {
       missingSource: editorMissingSource,
       template: editorThemeTemplate,
       hold: editorThemeHold,
+      loadedFonts: editorLoadedFonts,
+      extraData: editorBuildExtra,
     },
   );
 }

@@ -30,6 +30,7 @@ import {
   derivedEntries,
   entries,
   templatesEntries,
+  themeEntries,
   QUERIES,
   hasModuleHooks,
 } from '../test-utils/packed-gather-cache-fixture.mjs';
@@ -49,6 +50,9 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     const plain = row().message;
     expect(plain).toContain(path.join(tmp, CACHE_NAME));
     expect(plain).not.toContain("Plug'n'Play");
+    // Every kind of entry the folder holds is named, the docs not-found
+    // hint's name summaries (kept-tree.mjs) included.
+    expect(plain).toContain("the docs not-found hint's name summaries");
     const pnp = path.join(work, 'as-pnp.cjs');
     fs.writeFileSync(pnp, "process.versions.pnp = '3';\n");
     const underPnp = row({NODE_OPTIONS: `--require ${pnp}`}).message;
@@ -235,7 +239,7 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     120_000,
   );
 
-  it('records nothing for component, template, theme or discover in a project with no integration', () => {
+  it('records nothing for component, template, theme, discover or docs in a project with no integration', () => {
     const tmp = keptTmp('no-integration');
     // A project with Core and nothing else: no config, no manifest, no
     // dependency that ships one.
@@ -275,6 +279,7 @@ Module._resolveFilename = function (request, parent, isMain, options) {
         ['component', 'Button'],
         ['theme', 'list'],
         ['discover'],
+        ['docs'],
       ]) {
         // Stdout and status: a once-a-day notice may go to stderr.
         const answer = (
@@ -610,8 +615,11 @@ Module._resolveFilename = function (request, parent, isMain, options) {
       const fresh = run(ask, {tmp: freshTmp(), cwd: other.dir, json: false});
       expect(run(ask, {tmp, cwd: other.dir, json: false})).toEqual(fresh);
       const kept = templatesEntries(tmp);
-      expect(kept.size).toBe(1);
-      // Read back, not discovered again: the same file, and the same answer.
+      // Node 22.13 has no synchronous module hooks, so the supported fallback
+      // gathers fresh and keeps no template records.
+      expect(kept.size).toBe(hasModuleHooks ? 1 : 0);
+      // With hooks this reads back the same file; without them it gathers
+      // fresh. Either path must return the same answer.
       expect(run(ask, {tmp, cwd: other.dir, json: false})).toEqual(fresh);
       expect(templatesEntries(tmp)).toEqual(kept);
       write('Grand totals, tallied by week.');
@@ -666,8 +674,8 @@ Module._resolveFilename = function (request, parent, isMain, options) {
       expect(other.stdout).not.toContain('zqledger');
       run(ask, {tmp, cwd: outside, json: false});
       run(ask, {tmp, cwd: outside, json: false});
-      // The first copy kept its template records.
-      expect(templatesEntries(tmp).size).toBe(1);
+      // Only runtimes with synchronous hooks keep template records.
+      expect(templatesEntries(tmp).size).toBe(hasModuleHooks ? 1 : 0);
       expect(run(ask, {tmp, cwd: outside, cli: second})).toEqual(other);
       expect(run(ask, {tmp, cwd: outside})).toEqual(first);
     } finally {
@@ -676,6 +684,215 @@ Module._resolveFilename = function (request, parent, isMain, options) {
       fs.rmSync(outside, {recursive: true, force: true});
     }
   }, 120_000);
+
+  it('reports an installed dependency whose manifest fails to load as its issue', () => {
+    const tmp = keptTmp('unloadable');
+    const other = makeProject();
+    try {
+      // No config: the dependency is linked because it ships a manifest,
+      // which imports a package the install lacks.
+      fs.rmSync(path.join(other.dir, 'astryx.config.mjs'));
+      fs.writeFileSync(
+        path.join(other.dir, 'package.json'),
+        JSON.stringify({
+          name: 'consumer',
+          dependencies: {'@acme/widgets': '1.0.0'},
+        }),
+      );
+      // The package declares what its manifest imports: an install without
+      // it is broken, which reinstalling fixes.
+      fs.writeFileSync(
+        path.join(other.widgets, 'package.json'),
+        JSON.stringify({
+          name: '@acme/widgets',
+          version: '1.0.0',
+          dependencies: {'astryx-test-missing-package': '1.0.0'},
+        }),
+      );
+      const manifest = path.join(other.widgets, 'astryx.integration.mjs');
+      fs.writeFileSync(
+        manifest,
+        "import 'astryx-test-missing-package';\nexport default { templates: './templates' };\n",
+      );
+      fs.mkdirSync(path.join(other.widgets, 'templates'), {recursive: true});
+      const list = run(['template', '--list'], {
+        tmp,
+        cwd: other.dir,
+        json: false,
+      });
+      expect(list.status).toBe(0);
+      expect(list.stderr).toContain('@acme/widgets has 1 integration issue');
+      const check = JSON.parse(
+        run(['doctor'], {tmp, cwd: other.dir}).stdout,
+      ).data.checks.find(
+        (/** @type {{id: string}} */ c) => c.id === 'integration-issues',
+      );
+      expect(check.status).toBe('warn');
+      expect(check.message).toContain('@acme/widgets');
+      expect(check.message).toContain('astryx-test-missing-package');
+      // A theme lookup in that package is still an unknown theme.
+      expect(
+        JSON.parse(
+          run(['theme', 'add', 'tally', '--package', '@acme/widgets'], {
+            tmp,
+            cwd: other.dir,
+          }).stdout,
+        ).code,
+      ).toBe('ERR_UNKNOWN_THEME');
+      // Kept, it says the same; once the missing package is installed (the
+      // reinstall that repairs it), it says nothing.
+      expect(
+        run(['template', '--list'], {tmp, cwd: other.dir, json: false}),
+      ).toEqual(list);
+      const installed = path.join(
+        other.dir,
+        'node_modules',
+        'astryx-test-missing-package',
+      );
+      fs.mkdirSync(installed, {recursive: true});
+      fs.writeFileSync(
+        path.join(installed, 'package.json'),
+        JSON.stringify({
+          name: 'astryx-test-missing-package',
+          version: '1.0.0',
+          type: 'module',
+          exports: './index.mjs',
+        }),
+      );
+      fs.writeFileSync(path.join(installed, 'index.mjs'), 'export {};\n');
+      const fixed = run(['template', '--list'], {
+        tmp,
+        cwd: other.dir,
+        json: false,
+      });
+      expect(fixed.stderr).not.toContain('integration issue');
+    } finally {
+      fs.rmSync(other.dir, {recursive: true, force: true});
+    }
+  }, 120_000);
+
+  it("keeps an integration's themes, and finds an edit to a theme or a module it imports", () => {
+    const tmp = keptTmp('themes');
+    const other = makeProject();
+    try {
+      fs.writeFileSync(
+        path.join(other.widgets, 'astryx.integration.mjs'),
+        `export default { themes: './themes' };\n`,
+      );
+      // A package that ships the theme's built files as its exports.
+      const version = JSON.parse(
+        fs.readFileSync(
+          path.join(REPO_ROOT, 'packages', 'cli', 'package.json'),
+          'utf8',
+        ),
+      ).version;
+      fs.writeFileSync(
+        path.join(other.widgets, 'package.json'),
+        JSON.stringify({
+          name: '@acme/widgets',
+          version: '1.0.0',
+          type: 'module',
+          peerDependencies: {'@astryxdesign/core': `^${version}`},
+          exports: {
+            './themes/tally': './dist/tally.js',
+            './themes/tally.css': './dist/tally.css',
+          },
+        }),
+      );
+      fs.mkdirSync(path.join(other.widgets, 'dist'));
+      fs.writeFileSync(
+        path.join(other.widgets, 'dist', 'tally.js'),
+        "export const tallyTheme = {name: 'tally', tokens: {}};\n",
+      );
+      fs.writeFileSync(
+        path.join(other.widgets, 'dist', 'tally.css'),
+        '[data-astryx-theme="tally"] { --color-text: black; }\n',
+      );
+      const theme = path.join(other.widgets, 'themes', 'tally');
+      fs.mkdirSync(theme, {recursive: true});
+      const describe = (/** @type {string} */ text) =>
+        fs.writeFileSync(
+          path.join(theme, 'tallyTheme.doc.mjs'),
+          `/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {type: 'theme', name: 'tally', displayName: 'Tally', description: '${text}', maintained: true};\n`,
+        );
+      describe('Tally theme for ledgers.');
+      fs.writeFileSync(
+        path.join(theme, 'tallyTheme.ts'),
+        "import {tokens} from './tokens';\nexport const tallyTheme = {name: 'tally', tokens};\n",
+      );
+      const tokens = (/** @type {string} */ source) =>
+        fs.writeFileSync(path.join(theme, 'tokens.ts'), source);
+      tokens('export const tokens = {};\n');
+      const ask = ['theme', 'list'];
+      const fresh = () => run(ask, {tmp: freshTmp(), cwd: other.dir});
+      const kept = () => run(ask, {tmp, cwd: other.dir});
+      const first = fresh();
+      expect(first.stdout).toContain('Tally theme for ledgers.');
+      expect(kept()).toEqual(first);
+      // Runtimes with synchronous hooks keep one entry; older supported Node
+      // versions gather fresh on each run and keep none.
+      const keptThemes = themeEntries(tmp);
+      expect(keptThemes.size).toBe(hasModuleHooks ? 1 : 0);
+      expect(kept()).toEqual(first);
+      expect(themeEntries(tmp)).toEqual(keptThemes);
+      // An in-place edit to the theme's doc shows on the next run, which
+      // discovers the themes again.
+      describe('Tally theme, edited.');
+      const edited = kept();
+      expect(edited.stdout).toContain('Tally theme, edited.');
+      expect(edited).toEqual(fresh());
+      if (hasModuleHooks) {
+        expect(themeEntries(tmp)).not.toEqual(keptThemes);
+      } else {
+        expect(themeEntries(tmp).size).toBe(0);
+      }
+      // So does an edit to a module the theme imports that breaks it.
+      tokens("export {tokens} from './missing';\n");
+      const broken = kept();
+      expect(broken).toEqual(fresh());
+      expect(broken).not.toEqual(edited);
+    } finally {
+      fs.rmSync(other.dir, {recursive: true, force: true});
+    }
+  }, 180_000);
+
+  it('lets docs read the kept checks, and shows a topic edit on the very next call', () => {
+    const tmp = keptTmp('docs');
+    const other = makeProject();
+    try {
+      fs.writeFileSync(
+        path.join(other.widgets, 'astryx.integration.mjs'),
+        `export default { docs: './docs' };\n`,
+      );
+      fs.mkdirSync(path.join(other.widgets, 'docs'));
+      const topic = (/** @type {string} */ text) =>
+        fs.writeFileSync(
+          path.join(other.widgets, 'docs', 'deploying.doc.mjs'),
+          `export const docs = {type: 'generic', name: 'deploying', title: 'Deploying', description: 'How to deploy.', sections: [{title: 'Overview', content: [{type: 'prose', text: '${text}'}]}]};\n`,
+        );
+      topic('Ship it on Tuesdays.');
+      const ask = ['docs', 'deploying'];
+      const first = run(ask, {tmp: freshTmp(), cwd: other.dir});
+      expect(first.stdout).toContain('Ship it on Tuesdays.');
+      expect(run(ask, {tmp, cwd: other.dir})).toEqual(first);
+      // docs keeps the integration's check results only when module reads can be recorded.
+      const kept = issuesEntries(tmp);
+      if (hasModuleHooks) {
+        expect(kept.size).toBeGreaterThan(0);
+      } else {
+        expect(kept.size).toBe(0);
+      }
+      expect(run(ask, {tmp, cwd: other.dir})).toEqual(first);
+      expect(issuesEntries(tmp)).toEqual(kept);
+      // An in-place edit to the topic shows on the very next call.
+      topic('Ship it on Thursdays.');
+      const edited = run(ask, {tmp, cwd: other.dir});
+      expect(edited.stdout).toContain('Ship it on Thursdays.');
+      expect(edited).toEqual(run(ask, {tmp: freshTmp(), cwd: other.dir}));
+    } finally {
+      fs.rmSync(other.dir, {recursive: true, force: true});
+    }
+  }, 180_000);
 
   it('is skipped silently when its folder cannot be used', () => {
     fs.mkdirSync(path.join(work, 'tmp'), {recursive: true});

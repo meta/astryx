@@ -268,7 +268,7 @@ const QUESTIONS = [
     {
       parts: ['card'],
       top: /--on card --mode dark$/,
-      adds: /card\.base\.background=light-dark\(/,
+      adds: /card\.variant:default\.backgroundColor=light-dark\(/,
     },
   ],
   [
@@ -1148,7 +1148,7 @@ const QUESTIONS_2 = [
     'in dark mode, cards should be #1c1c1e',
     {
       top: /^set q background '#1c1c1e' --on card --mode dark$/,
-      adds: /card\.base\.background=light-dark\(/,
+      adds: /card\.variant:default\.backgroundColor=light-dark\(/,
     },
   ],
   [
@@ -1461,7 +1461,7 @@ describe('how answers pass-2 questions', () => {
       ],
       [
         'in dark mode, cards should be #1c1c1e',
-        /card[^{]*\{[^}]*background:\s*light-dark\(.*#1c1c1e/,
+        /card[^{]*\{[^}]*background-color:\s*light-dark\(.*#1c1c1e/,
       ],
       ['button padding 12px 20px', /button[^{]*\{[^}]*padding:\s*12px 20px/],
       [
@@ -2343,7 +2343,11 @@ const QUESTIONS_G = [
     'Times New Roman for headings, lol',
     {top: /^set q font 'Times New Roman' --on heading$/},
   ],
-  ['code blocks should use Menlo', {top: /^set q font Menlo --on code$/}],
+  // Code blocks are Core's code-block part (hunt68).
+  [
+    'code blocks should use Menlo',
+    {top: /^set q font-family Menlo --on code-block$/},
+  ],
   ['Fira Code for monospace', {top: /^set q font 'Fira Code' --on code$/}],
   // part words: a catalog part, or say there is none
   ['menu rounder', {top: /^set q corners more --on dropdown-menu$/}],
@@ -2618,7 +2622,8 @@ const QUESTIONS_H = [
   ['halve the spacing', {top: /^set q spacing less$/}],
   [
     'cut the border radius in half on inputs',
-    {top: /^set q corners less --on inputs$/},
+    // Half the radius inputs have now (hunt61), not a dial step.
+    {top: /^set q border-radius \d*\.?\d+(px|rem) --on inputs$/},
   ],
   [
     'corners: 0.5 rem',
@@ -3116,7 +3121,8 @@ const QUESTIONS_J = [
   ],
   [
     'buttons twice as round as inputs',
-    {top: /^set q corners more --on button$/},
+    // Twice the inputs' radius, on buttons only (hunt68).
+    {top: /^set q border-radius \d*\.?\d+(px|rem) --on button$/},
   ],
   [
     'focus ring the same color as the danger color',

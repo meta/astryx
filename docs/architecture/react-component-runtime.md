@@ -345,13 +345,14 @@ those contracts.
   page still has it once the page settles. Nothing loads them on demand or on
   an interaction. Until the shared touch runtime has loaded, SegmentedControl
   and Switch work by taps, clicks and keys, with no drag tracking and no slide
-  or spring; a bottom sheet still drags, and a drag that closes it takes the
-  stylesheet exit instead of the spring. A gesture in that window does not
-  start the load. The bundler keeps one copy per page however many components
-  use them. If the runtime's chunk fails to load, the page stays as it is
-  before the load: components work by taps, clicks and keys, and no gesture
-  retries the load. `utils/touchRuntimeModules.tsx` is the one module the
-  loader's `import()` targets; it gathers the touch runtime, so the loader
+  or spring, and a tap under a finger or under Reduce Motion changes them at
+  once, with no cross-fade; a bottom sheet still drags, and a drag that closes
+  it takes the stylesheet exit instead of the spring. A gesture in that window
+  does not start the load. The bundler keeps one copy per page however many
+  components use them. If the runtime's chunk fails to load, the page stays as
+  it is before the load: components work by taps, clicks and keys, and no
+  gesture retries the load. `utils/touchRuntimeModules.tsx` is the one module
+  the loader's `import()` targets; it gathers the touch runtime, so the loader
   names a single chunk. `motion/settleThreshold.ts` holds `SETTLE_THRESHOLD`
   apart from the animator, so a component that reads the threshold statically
   does not pull in the deferred runtime. Gap: these modules still import the
@@ -368,11 +369,11 @@ those contracts.
   component lazy-loading its own touch code (`spec:AST-080` DEC-5). A touch
   behavior that a caller opts into and that carries a large resource cost
   comes through a public constructor whose module statically imports the
-  modules that behavior runs on; the component imports none of those, so
-  only an app that imports the constructor ships them
+  modules that behavior runs on; the component imports none of those, so only
+  an app that imports the constructor ships them
   (`architecture:public-component-api` INV19). `Item`'s swipe actions come
-  from `createSwipe` (`spec:AST-057` FR10): `Item` and `ListItem` import
-  none of the swipe modules — the gesture core, the animator, the panels'
+  from `createSwipe` (`spec:AST-057` FR10): `Item` and `ListItem` import none
+  of the swipe modules — the gesture core, the animator, the panels'
   rendering, and the row's gesture code — while `Item` keeps using the touch
   modules for its other jobs, such as press feedback. The only swipe code in
   `Item` is its deprecated path, serving its deprecated `swipeActions` and
@@ -380,9 +381,9 @@ those contracts.
   DEP-0017, CLN-0025): the released loader, the one `import()` of swipe code;
   the released row style; the role gate and the `commit` warning; the bridge
   the loaded layer fills, the click guard, and the event forwarders into that
-  bridge; and the coexistence diagnostic. There is no
-  install call, no public entry, and no public installed check; tests reset
-  the modules through an internal hook only. A component's own touch logic is
+  bridge; and the coexistence diagnostic. There is no install call, no public
+  entry, and no public installed check; tests reset the modules through an
+  internal hook only. A component's own touch logic is
   small glue in its own build over these modules. The gesture host attaches for
   every pointer, with no touch-only query; under a fine pointer only a component that
   uses a gesture listens (`spec:AST-094` FR19, FR24, FR43). The gesture host, press feedback, page hold, finger-scroll watch and click guard hear document-wide input through one capture-phase listener per event type on the window, present while a subscriber needs it. They run in subscription order, before any document or element listener; it is passive unless a subscriber cancels the event. The modules are not public exports and are not
@@ -599,7 +600,10 @@ contracts.
   reads: "Stores values only. Refs to DOM nodes are not attached yet when this
   runs." Internal: never in `hooks/index.ts` or the package entry; Lab imports
   both from `@astryxdesign/core/internal/committed-ref`, as it reaches other
-  Core internals.
+  Core internals. Lab imports `createSharedContext`, its one export, from
+  `@astryxdesign/core/internal/shared-context`, so a Lab component's context
+  reaches a swizzled copy's provider under one shared key (`spec:AST-110`
+  FR3).
 
 ## Deciding specs
 

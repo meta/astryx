@@ -9,6 +9,7 @@
 
 import {describe, it, expect, vi, beforeAll, afterAll} from 'vitest';
 import {render, screen, fireEvent, act} from '@testing-library/react';
+import {FormLayout} from '../FormLayout/FormLayout';
 import {PowerSearchValueEditor} from './PowerSearchValueEditor';
 import type {
   FilterValueEntityList,
@@ -751,4 +752,25 @@ describe('EnumListEditor', () => {
     expect(screen.getAllByRole('option', {hidden: true})).toHaveLength(12);
     expect(screen.getByText('Option 11')).toBeInTheDocument();
   });
+});
+
+describe('date editors inside a FormLayout', () => {
+  it.each([true, false])(
+    'keep their own entry error timing under a blur-or-enter form default (date only: %s)',
+    isDateOnly => {
+      render(
+        <FormLayout defaultEntryErrorBehavior="blur-or-enter">
+          <PowerSearchValueEditor
+            operatorValue={{type: 'date_absolute', isDateOnly}}
+            filterValue={undefined}
+            onChange={() => {}}
+            config={stubConfig}
+          />
+        </FormLayout>,
+      );
+      const input = screen.getByRole('combobox');
+      fireEvent.change(input, {target: {value: '02/31/2026'}});
+      expect(input).toHaveAttribute('aria-invalid', 'true');
+    },
+  );
 });
