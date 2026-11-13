@@ -601,6 +601,15 @@ export function exactFactor(text) {
       : 1 + Number(by[1]) / 100;
     return f > 0 ? f : null;
   }
+  // "3 times bigger", "1.5 times as big", "2 times smaller".
+  const nTimes =
+    /\b(\d*\.?\d+)(?:px)?\s*(?:times|x)\s+(bigger|larger|more|wider|taller|thicker|as|smaller|less|thinner|narrower)\b/.exec(
+      t,
+    );
+  if (nTimes && Number(nTimes[1]) > 0 && Number(nTimes[1]) <= 10)
+    return /^(smaller|less|thinner|narrower)$/.test(nTimes[2])
+      ? 1 / Number(nTimes[1])
+      : Number(nTimes[1]);
   const times = /\bx\s?(\d*\.?\d+)\b/.exec(t);
   if (times && Number(times[1]) > 0 && Number(times[1]) <= 4)
     return Number(times[1]);
@@ -650,14 +659,19 @@ const OVERRIDES = [
   ],
   [/\b(nav(igation)? (links?|items?))\b/, {on: 'top-nav-item'}],
   [/\b((dropdown |context )?menus?)\b/, {on: 'dropdown-menu'}],
-  [/\bfooters?\b/, {on: 'layout-footer'}],
+  // A part's own header or footer ("dialog header", "card footer") is that
+  // part's, never the app's top bar or footer.
+  [
+    /(?<!\b(?:dialog|modal|card|drawer|sheet|popover|panel|section|table|menu)s? )\bfooters?\b/,
+    {on: 'layout-footer'},
+  ],
   [/\b(side ?nav|sidebar|side ?panel)\b/, {on: 'side-nav'}],
   [
     /\b(app (name|title)|logo|site title|product name)\b/,
     {on: 'top-nav-heading'},
   ],
   [
-    /\b(header|top ?bar|title ?bar|nav ?bar|app ?bar|masthead)\b/,
+    /(?<!\b(?:dialog|modal|card|drawer|sheet|popover|panel|section|table|menu)s? )\b(header|top ?bar|title ?bar|nav ?bar|app ?bar|masthead)\b/,
     {on: 'app-shell-header'},
   ],
   [/\b(page|app background|whole background|body background)\b/, {on: 'page'}],
@@ -777,10 +791,18 @@ function partLexicon(ctx) {
         .flatMap(key => [key, `${key}s`]),
     ]),
   ];
+  // Every group the editor knows, by its own name ("checks", "inputs"),
+  // read from its groups table: set --on <group> takes the same words.
+  /** @type {Array<[RegExp, PartRef]>} */
+  const groups = Object.keys(FAMILIES).map(name => [
+    new RegExp(`\\b${name.replace(/s$/, '')}s?\\b`),
+    {on: name},
+  ]);
   const lex = {
     parts: [
       ...OVERRIDES,
       ...derived,
+      ...groups,
       // "smaller labels on form fields": a field's label.
       /** @type {[RegExp, PartRef]} */ ([
         /(?<!\b(?:button|tab|badge|chip|nav|menu|link|checkbox|switch|radio)s? )\b(field |form |input )?labels?\b/,
@@ -1166,7 +1188,10 @@ function clausesOf(q, partWords) {
       // A typed clamp() or calc() is a length, kept whole.
       lengths: [
         ...(text.match(/\b(?:clamp|calc|min|max)\([^)]*\)/g) ?? []),
-        ...lengthsIn(text),
+        // "3 times bigger": the 3 is an amount, never a length.
+        ...lengthsIn(
+          text.replace(/\b\d*\.?\d+(?:px)?\s*(?:times|x)\s+(?=\w)/g, ' '),
+        ),
       ],
       state,
       mode,
@@ -3530,6 +3555,17 @@ export function draftAnswer(ctx, env, question) {
         /^(padding|gap|row-gap|column-gap)$/.test(named.prop) &&
         /^\d*\.?\d+%$/.test(String(named.value).trim())
       ) &&
+      // "padding 3 times bigger", "25% darker": an amount of what is there,
+      // never the number as a value.
+      !(
+        exactFactor(c.text) &&
+        (/^\d*\.?\d+%?$/.test(String(named.value).trim()) ||
+          /\b\d*\.?\d+(px)?\s*(times|x)\s/.test(c.text))
+      ) &&
+      !(
+        /^\d*\.?\d+%$/.test(String(named.value).trim()) &&
+        /\b(darker|lighter|brighter|bigger|smaller|larger)\b/.test(c.text)
+      ) &&
       // A divider's thickness and color are its border tokens.
       !c.parts.some(p => p.on === 'divider') &&
       c.parts.length &&
@@ -3729,14 +3765,16 @@ export function draftAnswer(ctx, env, question) {
     if (st.on && st.on !== p.on && !(FAMILIES[st.on] ?? []).includes(one(p.on)))
       return null;
     if (st.thing === 'corners') {
-      const read = C.partReads(one(p.on), 'corners').find(r =>
-        r.when.includes(''),
-      );
+      // What the part has now: its own setting, else the token it reads
+      // (its plain rule first, else any rule's), never another token.
+      const reads = C.partReads(one(p.on), 'corners');
+      const read = reads.find(r => r.when.includes('')) ?? reads[0];
       return set(
         'border-radius',
-        read
-          ? current(read.token) || `var(${read.token})`
-          : current('--radius-element'),
+        partValue(p.on, 'border-radius') ??
+          (read
+            ? current(read.token) || `var(${read.token})`
+            : current('--radius-element')),
         flags,
       );
     }
@@ -3819,6 +3857,26 @@ export function draftAnswer(ctx, env, question) {
     const where = on
       ? ` on ${on}${f.when ? ` (${f.when.replace(':', ' ')})` : ''}${f.state ? ` when ${f.state}` : ''}`
       : ' for the whole theme';
+    /**
+     * What a part has now for a property in this clause's state or variant
+     * ("on hover"): that scope's own setting, else the plain one.
+     */
+    const nowIn = (/** @type {string} */ part, /** @type {string} */ prop) => {
+      if (f.state || f.when) {
+        const scoped = [...env.data.settings]
+          .reverse()
+          .find(
+            st =>
+              st.thing === prop &&
+              st.on === part &&
+              (st.state ?? null) === (f.state ?? null) &&
+              (st.when ?? null) === (f.when ?? null) &&
+              !st.mode,
+          );
+        if (scoped) return scoped.value;
+      }
+      return partValue(part, prop);
+    };
     const undo = (/** @type {string[]} */ things) =>
       existing(things, on).map(s => [
         /** @type {Step} */ ({
@@ -4116,6 +4174,55 @@ export function draftAnswer(ctx, env, question) {
     }
     if (p?.role === 'body' && a !== 'leading')
       return wholeTheme({...c, parts: []}, a);
+    // An exact amount ("half", "double", "a third", "3 times", "25%
+    // bigger") of a part's scalar value: that factor of what the part has
+    // now (its own setting, else the token it reads), never a step.
+    {
+      const amount = on && !compared.get(c) ? exactFactor(c.text) : null;
+      const borderWidth =
+        a === 'border' &&
+        /\b(border[- ]width|thick(er|ness)?|thin(ner)?)\b/.test(c.text);
+      const prop = !amount
+        ? null
+        : borderWidth
+          ? 'border-width'
+          : a === 'fontsize'
+            ? 'font-size'
+            : a === 'leading'
+              ? 'line-height'
+              : a === 'tracking'
+                ? 'letter-spacing'
+                : a === 'opacity'
+                  ? 'opacity'
+                  : a === 'size' && /\b(width|wider|narrower)\b/.test(c.text)
+                    ? 'max-width'
+                    : null;
+      if (prop && on && amount) {
+        const part = /** @type {string} */ (on);
+        const group = C.groupOfProp(prop);
+        const read = group
+          ? C.partReads(one(part), group).find(r =>
+              r.props.some(x => x === prop || x.startsWith(`${prop}-`)),
+            )
+          : null;
+        const now =
+          nowIn(part, prop) ??
+          (prop === 'max-width' ? nowIn(part, 'width') : null) ??
+          (read?.token ? current(read.token) : null);
+        const n = Number(now);
+        const value =
+          now == null
+            ? null
+            : /^\d*\.?\d+$/.test(String(now).trim())
+              ? String(Number((n * amount).toFixed(3)))
+              : scaled(String(now), amount);
+        if (value)
+          return {
+            text: `${prop}${where}: ${value} (now ${now})`,
+            options: [[set(prop, value, f)]],
+          };
+      }
+    }
     switch (a) {
       case 'underline': {
         if (!on) return null;
@@ -4158,10 +4265,12 @@ export function draftAnswer(ctx, env, question) {
       case 'corners': {
         const tall = tallIn(c.text);
         const tied = radiusIn(c.text);
-        const typedPx =
-          (tied && /^-?\d*\.?\d+$/.test(tied) ? `${tied}px` : tied) ??
-          c.lengths.find(l => l !== tall) ??
-          null;
+        // "1.5 times bigger": an amount, never a radius.
+        const typedPx = /\b\d*\.?\d+(px)?\s*(times|x)\s/.test(c.text)
+          ? null
+          : ((tied && /^-?\d*\.?\d+$/.test(tied) ? `${tied}px` : tied) ??
+            c.lengths.find(l => l !== tall) ??
+            null);
         // A radius of 0 is square.
         const px = typedPx && parseFloat(typedPx) === 0 ? null : typedPx;
         const zero = Boolean(typedPx) && !px;
@@ -4172,14 +4281,18 @@ export function draftAnswer(ctx, env, question) {
         const cornerFactor =
           !typedPx &&
           on &&
-          !/\b(as|than)\s+(the\s+)?\w+\s*$|\bas \w+ as\b/.test(c.text)
+          // "half as round" is an amount; "as round as buttons" compares.
+          !compared.get(c) &&
+          !/\b(as|than)\s+(the\s+)?\w+\s*$|\bas \w+ as\b/.test(
+            c.text.replace(/\bas (round|rounded|sharp|curved)\s*$/, ''),
+          )
             ? exactFactor(c.text)
             : null;
         if (cornerFactor) {
           const part = /** @type {string} */ (on);
           const read = C.partReads(one(part), 'corners')[0];
           const now =
-            partValue(part, 'border-radius') ??
+            nowIn(part, 'border-radius') ??
             (read?.token ? current(read.token) : null);
           const value = now ? scaled(now, cornerFactor) : null;
           if (value)
@@ -4440,7 +4553,13 @@ export function draftAnswer(ctx, env, question) {
             : /\bthin(ner)?\b/.test(c.text) || c.dir === 'less'
               ? '1px'
               : null);
-        const style = /\b(dashed|dotted|double)\b/.exec(c.text)?.[1] ?? null;
+        // "double the border width" is an amount, not the double style.
+        const style =
+          /\b(dashed|dotted)\b/.exec(c.text)?.[1] ??
+          (/\bdouble\b/.test(c.text) &&
+          !/\bdouble (the |its |their )?(border|width|thickness)\b/.test(c.text)
+            ? 'double'
+            : null);
         const side = /\b(top|bottom|left|right)\b/.exec(c.text)?.[1];
         const prop = side ? `border-${side}` : 'border';
         const own = C.MAP[one(on)]?.own ?? {};
@@ -4483,7 +4602,10 @@ export function draftAnswer(ctx, env, question) {
           c.lengths.find(l => /%$/.test(l)) ??
           /\b(\d{1,3}(?:\.\d+)?)\s?%/.exec(c.text)?.[0] ??
           null;
-        const px = c.lengths.find(l => !/%$/.test(l));
+        // "3 times bigger": the 3 is an amount, not a length.
+        const px = exactFactor(c.text)
+          ? null
+          : c.lengths.find(l => !/%$/.test(l));
         const gap = /\b(gaps?|between)\b/.test(c.text);
         const value =
           /\b(dense|compact)\b/.test(c.text) && !c.dir
@@ -4524,7 +4646,7 @@ export function draftAnswer(ctx, env, question) {
          * @param {string} part
          */
         const padNow = part => {
-          const own = partValue(part, gap ? 'gap' : 'padding');
+          const own = nowIn(part, gap ? 'gap' : 'padding');
           if (own) return own;
           // The part's plain rule in the theme as built (the base theme's
           // card padding), its tokens read in this theme.
@@ -4585,6 +4707,13 @@ export function draftAnswer(ctx, env, question) {
           return {
             text: `padding${where}: ${stepped} (now ${exactPad}; a step, since your exact padding there wins over the spacing dial: give an amount, such as double or 24px, for an exact one)`,
             options: [[set('padding', stepped, f)]],
+          };
+        // An amount with nothing there now to take it of: a step its way,
+        // said to be a step.
+        if (padFactor && !c.dir && padFactor !== 1)
+          return {
+            text: `room inside ${on}: spacing ${padFactor < 1 ? 'less' : 'more'} (one step, not an exact amount: ${on} has no ${gap ? 'gap' : 'padding'} this can read; give a value, such as 8px, for one)`,
+            options: [[set('spacing', padFactor < 1 ? 'less' : 'more', {on})]],
           };
         if (!value)
           return {
@@ -4976,7 +5105,11 @@ export function draftAnswer(ctx, env, question) {
           tallIn(c.text) ??
           (/\b(taller|shorter|height|bigger|larger|tap targets?|touch targets?)\b/.test(
             c.text,
-          ) && !/\b(wider|narrower|width)\b/.test(c.text)
+          ) &&
+          !(
+            /\b(wider|narrower|width)\b/.test(c.text) &&
+            !/\bborder[- ]width\b/.test(c.text)
+          )
             ? c.lengths[0]
             : null);
         if (tall)
@@ -4998,7 +5131,10 @@ export function draftAnswer(ctx, env, question) {
               ],
             ],
           };
-        if (/\b(wider|narrower|width)\b/.test(c.text)) {
+        if (
+          /\b(wider|narrower|width)\b/.test(c.text) &&
+          !/\bborder[- ]width\b/.test(c.text)
+        ) {
           const w =
             c.lengths[0] ??
             (/\bnarrower\b/.test(c.text) || c.dir === 'less'
