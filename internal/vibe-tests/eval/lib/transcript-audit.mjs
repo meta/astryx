@@ -117,13 +117,13 @@ const OPTION_SPECS = {
     file: ['f', 'file'],
   },
   rg: {
-    short: 'efgtTABCmjMrE',
+    short: 'efgtTABCdmjMrE',
     attached: '',
-    long: ['regexp', 'file', 'glob', 'iglob', 'type', 'type-not', 'type-add', 'after-context', 'before-context', 'context', 'max-count', 'max-depth', 'threads', 'max-filesize', 'sort', 'sortr', 'replace', 'encoding', 'engine', 'colors', 'context-separator', 'field-match-separator', 'path-separator', 'ignore-file', 'pre', 'pre-glob'],
+    long: ['regexp', 'file', 'glob', 'iglob', 'type', 'type-not', 'type-add', 'type-clear', 'after-context', 'before-context', 'context', 'max-count', 'max-depth', 'max-columns', 'threads', 'max-filesize', 'sort', 'sortr', 'replace', 'encoding', 'engine', 'color', 'colors', 'context-separator', 'field-context-separator', 'field-match-separator', 'path-separator', 'ignore-file', 'pre', 'pre-glob', 'dfa-size-limit', 'regex-size-limit', 'hostname-bin', 'hyperlink-format', 'generate'],
     script: ['e', 'regexp'],
-    file: ['f', 'file'],
+    file: ['f', 'file', 'files', 'type-list'],
   },
-  ag: {short: 'GgABCmp', attached: '', long: ['ignore', 'ignore-dir', 'file-search-regex', 'after', 'before', 'context', 'max-count', 'depth', 'path-to-ignore'], script: [], file: []},
+  ag: {short: 'GgABCmp', attached: '', long: ['ignore', 'ignore-dir', 'file-search-regex', 'after', 'before', 'context', 'max-count', 'depth', 'path-to-ignore'], script: ['g', 'G', 'file-search-regex'], file: []},
   ack: {short: 'ABCm', attached: '', long: ['type', 'ignore-dir', 'ignore-file', 'after-context', 'before-context', 'context', 'max-count', 'match'], script: ['match'], file: []},
 };
 
@@ -167,11 +167,12 @@ function shellWords(text) {
 function scriptWords(words, spec) {
   const scripts = [];
   let fromFile = false;
+  let positional = null;
   for (let index = 0; index < words.length; index++) {
     const word = words[index].text;
     if (word === '--') {
-      if (scripts.length === 0 && !fromFile && words[index + 1]) scripts.push(words[index + 1]);
-      return scripts;
+      positional ??= words[index + 1] ?? null;
+      break;
     }
     const long = /^--([\w-]+)(=)?/.exec(word);
     if (long) {
@@ -194,9 +195,10 @@ function scriptWords(words, spec) {
       }
       continue;
     }
-    if (scripts.length === 0 && !fromFile) scripts.push(words[index]);
-    return scripts;
+    // Options can follow operands, so keep reading for a pattern option.
+    positional ??= words[index];
   }
+  if (scripts.length === 0 && !fromFile && positional) scripts.push(positional);
   return scripts;
 }
 

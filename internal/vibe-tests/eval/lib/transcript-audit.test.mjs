@@ -159,6 +159,9 @@ describe('reads the review found unaudited', () => {
     `echo x | xargs sed -f fix.sed "/home/agent/my notes/a.txt"`,
     `echo x | xargs grep --file=pats.txt "/repo/my dir/x.probe.mjs"`,
     `echo x | xargs grep -e"getByRole" "/repo/my dir/x.probe.mjs"`,
+    `echo x | xargs grep "/repo/my dir/x.probe.mjs" -e getByRole`,
+    `echo x | xargs rg --files "/repo/my dir"`,
+    `echo x | xargs ag -g probe "/repo/my dir"`,
   ])('fails %j', command => {
     expect(audit(command).violations.length).toBeGreaterThan(0);
   });
@@ -202,6 +205,9 @@ describe('reads the review found unaudited', () => {
     `grep -e"from '../lib" -rn src`,
     `grep -rn --regexp="from '../lib" src`,
     `sed -i.bak "s|'../lib/utils'|'@/lib/utils'|" src/App.tsx`,
+    `rg -d 2 "from '../lib" src`,
+    `rg --max-columns 200 "from '../lib" src`,
+    `rg --color never "from '../lib" src`,
   ])('passes %j', command => {
     expect(audit(command).violations).toEqual([]);
   });
