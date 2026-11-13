@@ -328,10 +328,11 @@ export function MediaPlayer({
     }
     const target = event.target as HTMLElement;
     // A menu or a popover inside the player, such as the speed menu, keeps
-    // its own keys.
+    // its own keys. A layer that holds the whole player does not.
+    const layer = target.closest('[role="menu"], [popover]');
     if (
       isEditableTarget(target) ||
-      target.closest('[role="menu"], [popover]')
+      (layer != null && !layer.contains(event.currentTarget))
     ) {
       return;
     }

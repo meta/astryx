@@ -169,6 +169,25 @@ describe('MediaPlayer', () => {
     expect(playback.getPlaybackRate()).toBe(1.25);
   });
 
+  it('runs its shortcuts when the whole player sits inside a popover', async () => {
+    const user = userEvent.setup();
+    const {container} = render(
+      <div popover="manual">
+        <MediaPlayer label="Clip in a popover">
+          <MediaPlayerElement kind="video" src="/clip.mp4" />
+        </MediaPlayer>
+      </div>,
+    );
+    const playback = fakePlayback(container.querySelector('video')!);
+    act(() =>
+      screen
+        .getByRole('group', {name: 'Clip in a popover', hidden: true})
+        .focus(),
+    );
+    await user.keyboard('k');
+    expect(playback.play).toHaveBeenCalledTimes(1);
+  });
+
   it('leaves shortcut keys alone while a person types in a field inside the player', async () => {
     const user = userEvent.setup();
     const {container} = render(
