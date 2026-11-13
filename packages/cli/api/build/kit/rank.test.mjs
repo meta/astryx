@@ -329,6 +329,12 @@ describe('ideaKind: a part of a page, told by the components the system ships', 
     expect(kind('show existing users in a settings page')).toBe('page');
   });
 
+  it('takes an idea that opens with a change to something the builder has as an edit', () => {
+    expect(kind('update the current dashboard with drilldowns')).toBe('edit');
+    expect(kind('add a chart to the existing page')).toBe('edit');
+    expect(kind('a dashboard of current incidents')).toBe('page');
+  });
+
   it('does not take a request for a new page as an edit', () => {
     expect(
       kind('a new settings page based on the existing settings page'),

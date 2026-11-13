@@ -22,6 +22,7 @@
  * date filter") reads as the builder's own page.
  */
 
+import {loadEditHeads} from '../_adapter.mjs';
 import {stem} from '../../search/search.mjs';
 import {
   HEAD_END,
@@ -50,6 +51,20 @@ const PAGE_PIECES = 3;
  * names one (see `changesExistingPage`).
  */
 const EXISTING = /\bexisting\b/i;
+
+/**
+ * The words that mark a page or part the builder already has, anywhere in an
+ * idea that opens with a change word (see `opensAChange`).
+ */
+const REFERENCE =
+  /(?:^|\b(?:the|this|that|my|our|your|its|their|to|into|in|on|onto)\s+)(?:existing|current)\b/i;
+
+/**
+ * The words an idea opens with when it changes or adds to something rather
+ * than asks for a whole page ("update", "add", "fix"). The list is data in
+ * `edit.heads.json` beside this module.
+ */
+const CHANGE_HEADS = new Set(loadEditHeads());
 
 /**
  * The word that marks an idea asking for a new page ("a new dashboard", "as a
@@ -106,6 +121,7 @@ function changesExistingPage(text, familyWords, components) {
   const componentWords = new Set(components.flatMap(nameTerms));
   const phrases = text.toLowerCase().split(PHRASE_END);
   if (asksNewPage(phrases, familyWords)) return false;
+  if (opensAChange(text)) return true;
   return phrases.some(phrase => {
     const at = phrase.search(EXISTING);
     return (
@@ -115,6 +131,19 @@ function changesExistingPage(text, familyWords, components) {
       )
     );
   });
+}
+
+/**
+ * Whether an idea opens with a change word and names something the builder
+ * already has: "update the current dashboard with drilldowns", "add a chart
+ * to the existing page". The reference alone does not make a change: "a
+ * dashboard of current incidents" asks for a page.
+ * @param {string} text
+ * @returns {boolean}
+ */
+function opensAChange(text) {
+  const first = text.toLowerCase().match(/[a-z0-9']+/)?.[0] ?? '';
+  return CHANGE_HEADS.has(first) && REFERENCE.test(text);
 }
 
 /**

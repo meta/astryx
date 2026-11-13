@@ -188,6 +188,34 @@ export function loadShellWeights() {
   return shellWeights ?? null;
 }
 
+/** @type {string[] | undefined} */
+let editHeads;
+
+/**
+ * The words that open an idea that changes something the builder has
+ * (kit/edit.heads.json), read once. Empty when the file is missing or
+ * unreadable.
+ * @returns {string[]}
+ */
+export function loadEditHeads() {
+  if (editHeads === undefined) {
+    try {
+      const heads = JSON.parse(
+        fs.readFileSync(
+          new URL('./kit/edit.heads.json', import.meta.url),
+          'utf8',
+        ),
+      ).heads;
+      editHeads = Array.isArray(heads)
+        ? heads.filter(h => typeof h === 'string')
+        : [];
+    } catch {
+      editHeads = [];
+    }
+  }
+  return editHeads;
+}
+
 /** @type {import('../../foundation/route/route.mjs').ClassifierWeights | undefined} */
 let treeWeights;
 
