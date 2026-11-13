@@ -60,6 +60,7 @@ import {
 } from './template-source-tree.mjs';
 import {definitionsByIcon} from './icon-set-discovery.mjs';
 import {astryxDefinitionsByName} from './icon-definition-discovery.mjs';
+import {generatedOrigins} from './icon-set-writer.mjs';
 
 /** @typedef {import('./icon-set-discovery.mjs').DiscoveredIconSet} DiscoveredIconSet */
 /** @typedef {import('./icon-set-discovery.mjs').IconSetChoice} IconSetChoice */
@@ -498,6 +499,39 @@ function hasLook(icon, set, variant) {
 }
 
 /**
+ * The icon of a set whose export re-exports a library export, read from the
+ * set's generated module: the same artwork, in one of the set's looks.
+ * @param {DiscoveredIconSet} set
+ * @param {string} module the library module the template imports from
+ * @param {string} imported the export it imports
+ * @param {Map<DiscoveredIconSet, Map<string, string>>} read each set's
+ *   exports by the library export they re-export, read once per mapping
+ * @returns {IconSetIcon | undefined}
+ */
+function wrappedIcon(set, module, imported, read) {
+  let byOrigin = read.get(set);
+  if (!byOrigin) {
+    byOrigin = new Map();
+    if (set.packageDir && set.data.generated) {
+      const origins = generatedOrigins(set.packageDir, set.data.generated);
+      for (const [exported, origin] of origins) {
+        if (!origin.adapt) {
+          byOrigin.set(`${origin.module}\0${origin.source}`, exported);
+        }
+      }
+    }
+    read.set(set, byOrigin);
+  }
+  const exported = byOrigin.get(`${module}\0${imported}`);
+  if (!exported) return undefined;
+  return set.data.icons.find(
+    icon =>
+      icon.export === exported ||
+      (icon.variants ?? []).some(each => each.export === exported),
+  );
+}
+
+/**
  * Whether a module is one of Astryx's own packages (`@astryxdesign/core`,
  * its subpaths, and every other `@astryxdesign/` package).
  * @param {string} module
@@ -872,6 +906,8 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
   const main = choice.configured ?? target.name;
   /** The look every icon draws, when the project names one. */
   const lookVariant = choice.variant;
+  /** @type {Map<DiscoveredIconSet, Map<string, string>>} */
+  const wrappedRead = new Map();
   /** @param {SourceIcon} record the look a mapped icon asks for */
   const askedLook = record => lookVariant ?? record.variant;
 
@@ -1000,20 +1036,27 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
       // the project chose. The main set's own library keeps its icons as
       // written; another set's library keeps an icon that no set maps. With
       // a project variant, an icon from the main set's library maps to the
-      // main set's icon, so it draws that look; it keeps its import only
-      // when the main set has no icon for it.
+      // main set's icon, so it draws that look: the icon its `map` names, or
+      // else the icon that re-exports the same library export when that icon
+      // draws the look. Otherwise it keeps its import.
       const wrapper = targets.find(each => wrapsModule(each, module));
       if (wrapper === target && !lookVariant) {
         wrapped.set(specifier, wrapper);
         continue;
       }
-      /** @type {{set: DiscoveredIconSet, match: ReturnType<typeof matchIcon>}} */
+      /** @type {{set: DiscoveredIconSet, match: {icon: IconSetIcon, by: 'match' | 'definition' | 'variant'} | null}} */
       let found = {set: target, match: null};
       for (const each of wrapper === target ? [target] : targets) {
         const match = matchIcon(record, each);
         if (match) {
           found = {set: each, match};
           break;
+        }
+      }
+      if (!found.match && wrapper === target && lookVariant) {
+        const icon = wrappedIcon(target, module, record.export, wrappedRead);
+        if (icon && hasLook(icon, target, lookVariant)) {
+          found = {set: target, match: {icon, by: 'variant'}};
         }
       }
       if (!found.match && wrapper) {

@@ -9,7 +9,10 @@
  * move to that look; a missing look never moves an icon to a backup.
  */
 
-import {describe, expect, it} from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import {afterAll, describe, expect, it} from 'vitest';
 import {mapTemplateIcons} from './template-icons.mjs';
 import {glyphsData} from '../../test-utils/icon-set-fixture.mjs';
 
@@ -193,6 +196,77 @@ describe("a project variant and the main set's own library", () => {
       DECLARED,
     );
     expect(source).toBe(SOURCE);
+  });
+
+  describe('an icon the main set re-exports but does not map', () => {
+    const packageDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'astryx-wrapped-look-'),
+    );
+    afterAll(() => fs.rmSync(packageDir, {recursive: true, force: true}));
+    fs.writeFileSync(
+      path.join(packageDir, 'wrapper.generated.js'),
+      [
+        "export {CloseGlyph as CloseIcon} from '@acme/library';",
+        "export {CloseGlyph as CloseSolidIcon} from '@acme/library/solid';",
+        "export {BinGlyph as BinIcon} from '@acme/library';",
+        "export {BinGlyph as BinSolidIcon} from '@acme/library/solid';",
+        "export {FrameGlyph as FrameIcon} from '@acme/library';",
+        '',
+      ].join('\n'),
+    );
+    const READ = /** @type {any} */ ({
+      ...WRAPPER,
+      packageDir,
+      data: {
+        ...WRAPPER.data,
+        generated: './wrapper.generated.js',
+        icons: [
+          ...WRAPPER.data.icons,
+          {
+            id: 'bin',
+            export: 'BinIcon',
+            words: ['bin'],
+            variants: [{variant: 'solid', export: 'BinSolidIcon'}],
+          },
+          {id: 'frame', export: 'FrameIcon', words: ['frame']},
+        ],
+      },
+    });
+    const TEMPLATE = [
+      "import {BinGlyph, FrameGlyph} from '@acme/library';",
+      '',
+      'export const A = () => <><BinGlyph /><FrameGlyph /></>;',
+      '',
+    ].join('\n');
+
+    it("moves it to that icon's export in the project's look, and keeps one that lacks the look", () => {
+      const {source, icons} = mapTemplateIcons(
+        TEMPLATE,
+        {sets: [READ, BRAND], choice: chosen([READ, BRAND], 'solid')},
+        {BinGlyph: 'delete', FrameGlyph: 'frame'},
+      );
+      expect(source).toContain("import {BinSolidIcon} from '@acme/wrapper';");
+      expect(source).toContain("import {FrameGlyph} from '@acme/library';");
+      expect(source).toContain('<><BinSolidIcon /><FrameGlyph /></>');
+      expect(
+        icons?.mapped.map(each => [
+          each.source.export,
+          each.target.export,
+          each.by,
+          each.variant,
+        ]),
+      ).toEqual([['BinGlyph', 'BinSolidIcon', 'variant', undefined]]);
+      expect(icons?.kept.map(each => each.export)).toEqual(['FrameGlyph']);
+    });
+
+    it('without a variant keeps it as written', () => {
+      const {source} = mapTemplateIcons(
+        TEMPLATE,
+        {sets: [READ, BRAND], choice: chosen([READ, BRAND])},
+        {BinGlyph: 'delete', FrameGlyph: 'frame'},
+      );
+      expect(source).toBe(TEMPLATE);
+    });
   });
 });
 
