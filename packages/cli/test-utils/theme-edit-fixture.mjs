@@ -59,6 +59,7 @@ export function appPackages(opts = {}) {
     type: 'module',
     ...(opts.packageManager ? {packageManager: opts.packageManager} : {}),
     dependencies: {
+      '@astryxdesign/core': '*',
       '@heroicons/react': '*',
       ...(opts.stylex ? {'@stylexjs/stylex': '*'} : {}),
       'lucide-react': '*',

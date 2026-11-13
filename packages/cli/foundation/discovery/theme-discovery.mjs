@@ -169,9 +169,11 @@ class ThemeRuntimeExportError extends Error {}
  * Every string specifier a module imports, re-exports, or imports dynamically.
  * @param {string} file
  * @param {any} jscodeshift
+ * @param {{withRequire?: boolean}} [options] `withRequire`: also
+ *   `require('./x')` and TypeScript `import x = require('./x')`
  * @returns {string[]}
  */
-function moduleSpecifiers(file, jscodeshift) {
+function moduleSpecifiers(file, jscodeshift, {withRequire = false} = {}) {
   const parser = /\.(?:ts|tsx|mts|cts)$/u.test(file) ? 'tsx' : 'babel';
   const j = jscodeshift.withParser(parser);
   const root = j(fs.readFileSync(file, 'utf-8'));
@@ -207,6 +209,23 @@ function moduleSpecifiers(file, jscodeshift) {
       specifiers.push(importPath.node.source.value);
     }
   });
+  if (withRequire) {
+    // CommonJS `require('./x')` and TypeScript `import x = require('./x')`.
+    root.find(j.CallExpression).forEach((/** @type {any} */ callPath) => {
+      const {callee, arguments: args} = callPath.node;
+      if (
+        callee?.type === 'Identifier' &&
+        callee.name === 'require' &&
+        typeof args?.[0]?.value === 'string'
+      )
+        specifiers.push(args[0].value);
+    });
+    root.find(j.TSImportEqualsDeclaration).forEach((/** @type {any} */ p) => {
+      const ref = p.node.moduleReference;
+      const value = ref?.expression?.value ?? ref?.argument?.value;
+      if (typeof value === 'string') specifiers.push(value);
+    });
+  }
 
   return specifiers;
 }
@@ -214,10 +233,12 @@ function moduleSpecifiers(file, jscodeshift) {
 /**
  * Every module a theme source file imports or re-exports, as written.
  * @param {string} file
+ * @param {{withRequire?: boolean}} [options] `withRequire`: also
+ *   `require('./x')` and TypeScript `import x = require('./x')`.
  * @returns {string[]}
  */
-export function themeFileImports(file) {
-  return moduleSpecifiers(file, sourceParser());
+export function themeFileImports(file, options = {}) {
+  return moduleSpecifiers(file, sourceParser(), options);
 }
 
 /**

@@ -461,29 +461,77 @@ describe('themeBuild() — check mode', () => {
     expect(fs.readFileSync(path.join(tmpDir, 'chk.css'), 'utf8')).toBe(before);
   });
 
-  it('accepts released outputs that do not have a CSS type stub', async () => {
-    const themeFile = path.join(tmpDir, 'released.mjs');
+  it('warns about a missing CSS type stub, which the check names as checked, without failing', async () => {
+    const themeFile = path.join(tmpDir, 'nostub.mjs');
     fs.writeFileSync(
       themeFile,
-      `export default { name: 'released', tokens: { '--color-bg': '#0a0a0a' } };\n`,
+      `export default { name: 'nostub', tokens: { '--color-bg': '#0a0a0a' } };\n`,
     );
-    await themeBuild('released.mjs', {}, {cwd: tmpDir});
-    fs.rmSync(path.join(tmpDir, 'released.css.d.ts'));
+    await themeBuild('nostub.mjs', {}, {cwd: tmpDir});
+    fs.rmSync(path.join(tmpDir, 'nostub.css.d.ts'));
 
-    const result = await themeBuild(
-      'released.mjs',
-      {check: true},
-      {cwd: tmpDir},
-    );
+    /** @type {string[]} */
+    const warnings = [];
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(message => {
+      warnings.push(String(message));
+    });
+    let result;
+    try {
+      result = await themeBuild('nostub.mjs', {check: true}, {cwd: tmpDir});
+    } finally {
+      warn.mockRestore();
+    }
 
     expect(result?.data.upToDate).toBe(true);
     expect(result?.data.stale).toEqual([]);
+    expect(/** @type {any} */ (result)?.data?.code).toBeUndefined();
+    // Every output the build writes is checked, the stub too.
     expect(result?.data.checked).toEqual([
-      'released.css',
-      'released.js',
-      'released.d.ts',
+      'nostub.css',
+      'nostub.css.d.ts',
+      'nostub.js',
+      'nostub.d.ts',
     ]);
-    expect(fs.existsSync(path.join(tmpDir, 'released.css.d.ts'))).toBe(false);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('nostub.css.d.ts');
+    expect(fs.existsSync(path.join(tmpDir, 'nostub.css.d.ts'))).toBe(false);
+  });
+
+  it('fails on a missing module declaration file, as before', async () => {
+    const themeFile = path.join(tmpDir, 'nodts.mjs');
+    fs.writeFileSync(
+      themeFile,
+      `export default { name: 'nodts', tokens: { '--color-bg': '#0a0a0a' } };\n`,
+    );
+    await themeBuild('nodts.mjs', {}, {cwd: tmpDir});
+    fs.rmSync(path.join(tmpDir, 'nodts.d.ts'));
+
+    const result = await themeBuild('nodts.mjs', {check: true}, {cwd: tmpDir});
+
+    expect(result?.data.upToDate).toBe(false);
+    expect(result?.data.stale).toEqual([
+      {path: 'nodts.d.ts', reason: 'missing'},
+    ]);
+    expect(/** @type {any} */ (result)?.data?.code).toBe('ERR_THEME_STALE');
+  });
+
+  it('still fails on a missing CSS output when the type stub is missing too', async () => {
+    const themeFile = path.join(tmpDir, 'nocss.mjs');
+    fs.writeFileSync(
+      themeFile,
+      `export default { name: 'nocss', tokens: { '--color-bg': '#0a0a0a' } };\n`,
+    );
+    await themeBuild('nocss.mjs', {}, {cwd: tmpDir});
+    fs.rmSync(path.join(tmpDir, 'nocss.css'));
+    fs.rmSync(path.join(tmpDir, 'nocss.css.d.ts'));
+
+    const result = await themeBuild('nocss.mjs', {check: true}, {cwd: tmpDir});
+
+    expect(result?.data.upToDate).toBe(false);
+    expect(result?.data.stale).toEqual([
+      {path: 'nocss.css', reason: 'missing'},
+    ]);
+    expect(/** @type {any} */ (result)?.data?.code).toBe('ERR_THEME_STALE');
   });
 
   it('flags a stale output when the committed CSS content drifts from the source', async () => {
