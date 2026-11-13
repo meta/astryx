@@ -32,7 +32,7 @@ export const doc = {
       flag: '--png',
       param: 'options.png',
       description:
-        'Also take PNG pictures of the previews (light and dark), with no dev server running: it needs a Playwright installed in the project or a Chrome or Chromium found on the machine, and adds a few seconds while the browser starts; without one, the result says how to get it. Each picture carries the editor stamp and is recorded, by name and content, in themes/<theme>/<theme>.pictures.json; a file of yours named like a picture (preview.png, sheet.png) is never written over: no picture is taken, and the result names the file',
+        'Also take PNG pictures of the previews (light and dark), with no dev server running: it needs a Playwright installed in the project or a Chrome or Chromium found on the machine, and adds a few seconds while the browser starts; without one, the result says how to get it. Each picture carries the editor stamp and is recorded, by name and content, in themes/<theme>/<theme>.pictures.json; a file of yours named like a picture (preview.png, sheet.png) is never written over: no picture is taken, and the result names the file. Taking pictures changes nothing in the app, except that show first brings the app copy (src/themes/<theme>/) and an in-app preview up to date after a hand edit to <theme>.theme.ts',
     },
   ],
   examples: [
