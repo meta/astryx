@@ -159,8 +159,20 @@ describe.skipIf(process.platform !== 'linux' || !hasModuleHooks)(
   () => {
     /** @type {{dir: string, widgets: string}} */
     let other;
-    /** A temp folder whose kept entries are all stored and sound. */
+    /**
+     * The temp folder every case runs from, at the path its entries were
+     * stored under (an entry records the cache folder it read, so a copy at
+     * another path would be a stale miss), and a snapshot of its sound
+     * entries, restored before each case.
+     */
     let primed = '';
+    let snapshot = '';
+    const restore = () => {
+      const dir = path.join(primed, CACHE_NAME);
+      fs.rmSync(dir, {recursive: true, force: true});
+      fs.cpSync(snapshot, dir, {recursive: true});
+      fs.chmodSync(dir, 0o700);
+    };
     /** @type {Array<{status: number | null, stdout: string, stderr: string}>} */
     let fresh = [];
     // doctor's cache row names the folder and counts what it holds, which
@@ -184,6 +196,8 @@ describe.skipIf(process.platform !== 'linux' || !hasModuleHooks)(
       primed = keptTmp('malformed-primed');
       all(primed);
       all(primed);
+      snapshot = path.join(primed, '..', 'malformed-snapshot');
+      fs.cpSync(path.join(primed, CACHE_NAME), snapshot, {recursive: true});
       fresh = all(freshTmp());
     }, 300_000);
 
@@ -191,8 +205,12 @@ describe.skipIf(process.platform !== 'linux' || !hasModuleHooks)(
       if (other) fs.rmSync(other.dir, {recursive: true, force: true});
     });
 
-    it('keeps every kind of entry', () => {
+    it('keeps every kind of entry, and a restored folder hits', () => {
+      restore();
       const dir = path.join(primed, CACHE_NAME);
+      const warm = keptInodes(primed);
+      expect(all(primed)).toEqual(fresh);
+      expect(keptInodes(primed)).toEqual(warm);
       // The catalog, its table and block catalog, the integration's checks,
       // the issue list, the template records, the integration's theme
       // records and doctor's docs checks.
@@ -218,10 +236,9 @@ describe.skipIf(process.platform !== 'linux' || !hasModuleHooks)(
 
     for (const [name, damage] of Object.entries(BREAKS)) {
       it(`is a miss, and is stored over, for ${name}`, () => {
-        const tmp = keptTmp(`malformed-${name.replace(/\W+/g, '-')}`);
-        fs.cpSync(primed, tmp, {recursive: true, force: true});
+        restore();
+        const tmp = primed;
         const dir = path.join(tmp, CACHE_NAME);
-        fs.chmodSync(dir, 0o700);
         const kept = [...keptInodes(tmp).keys()];
         expect(kept.length).toBeGreaterThan(0);
         for (const file of kept) {
