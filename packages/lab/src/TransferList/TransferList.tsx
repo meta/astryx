@@ -156,12 +156,24 @@ export interface TransferListProps<T extends string = string> extends Omit<
 }
 
 const styles = stylex.create({
-  // Core List's reorder handle is a small control, 28 px for every pointer,
-  // at the start of its row, before the row's gap. A finger's 44 px target is
-  // its invisible hit layer. A row without one starts its label where the
-  // other rows' labels start, so every label sits in one column.
+  // Core List's reorder handle starts its row. Where it shows only on hover
+  // or focus, it hangs 30 px before the row's label. The panel clips, so
+  // while the selected options reorder, the panel's heading and rows start
+  // 20 px further in, and the labels stay under the heading. Under a coarse
+  // pointer the handle always shows, inside its row (28 px and the row's
+  // 8 px gap). A row without a handle then starts its label past it, so every
+  // label sits in one column.
+  orderingInset: {
+    paddingInlineStart: {
+      default: `calc(${spacingVars['--spacing-3']} + 20px)`,
+      '@media (any-pointer: coarse)': spacingVars['--spacing-3'],
+    },
+  },
   clearsHandle: {
-    paddingInlineStart: `calc(${spacingVars['--spacing-3']} + 28px + ${spacingVars['--spacing-2']})`,
+    paddingInlineStart: {
+      default: `calc(${spacingVars['--spacing-3']} + 20px)`,
+      '@media (any-pointer: coarse)': `calc(${spacingVars['--spacing-3']} + 28px + ${spacingVars['--spacing-2']})`,
+    },
   },
   root: {
     display: 'flex',
@@ -755,7 +767,10 @@ export function TransferList<T extends string = string>({
             styles.item,
             // A row that keeps its place has no handle: its label keeps the
             // movable rows' column, clear of where their handles sit.
-            isOrdering && !canMove(option.value) && styles.clearsHandle,
+            isOrdering &&
+              (canMove(option.value)
+                ? styles.orderingInset
+                : styles.clearsHandle),
             isDisabled && styles.disabledItem,
           ]}
           data-transfer-list-row={option.value}
@@ -845,7 +860,11 @@ export function TransferList<T extends string = string>({
             themeProps('transfer-list-panel', {side: 'selected'}),
             stylex.props(focusOutlineStyles.focusVisible, styles.panel),
           )}>
-          <div {...stylex.props(styles.panelHeader)}>
+          <div
+            {...stylex.props(
+              styles.panelHeader,
+              isOrdering && styles.orderingInset,
+            )}>
             <Text id={selectedHeadingId} type="label" color="secondary">
               {selectedLabel}
             </Text>

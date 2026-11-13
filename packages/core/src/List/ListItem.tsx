@@ -483,6 +483,7 @@ export function ListItem({
   const rowLabel = restProps['aria-label'];
   const rowLabelledBy = restProps['aria-labelledby'];
   const rowAlign = hasHandle ? (align ?? 'center') : undefined;
+  const isAfterMarker = (ctx?.listStyle ?? 'none') !== 'none';
   const Handle = reorder?.session.Handle;
   const reorderHandle = useMemo(
     () =>
@@ -494,11 +495,13 @@ export function ListItem({
           rowLabel={rowLabel}
           rowLabelledBy={rowLabelledBy}
           rowAlign={rowAlign}
+          isAfterMarker={isAfterMarker}
         />
       ) : null,
     [
       Handle,
       hasHandle,
+      isAfterMarker,
       isDisabled,
       itemKey,
       label,

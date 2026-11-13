@@ -93,8 +93,10 @@ export interface ListProps extends BaseProps<
   /**
    * Makes the rows reorderable, with the object `createReorderable` makes.
    * Each ListItem with an `itemKey` gets a reorder handle at its start, shown
-   * while the row is hovered or holds the focus. One the object's
-   * `isReorderable` rejects keeps its place. Each committed move
+   * while the row is hovered or holds the focus. It hangs before the row's
+   * text, so the text keeps its place: leave about 24px of room before the
+   * list. Under a coarse pointer it always shows, inside the row. One the
+   * object's `isReorderable` rejects keeps its place. Each committed move
    * calls its `onReorder` once with the row's key and its index after the
    * move. Apply it by rendering the rows in their new order. A drop on the
    * starting place, a cancel, or a move the order does not take changes
@@ -190,6 +192,12 @@ export interface ListProps extends BaseProps<
 // Styles
 // =============================================================================
 
+/**
+ * The room a reorderable list keeps before its rows for their hanging
+ * handles, px. SYNC: List/ListReorderHandle.tsx REORDER_HANDLE_HANG.
+ */
+const REORDER_GUTTER = 30;
+
 const styles = stylex.create({
   root: {
     display: 'flex',
@@ -212,6 +220,31 @@ const styles = stylex.create({
     // They stay below a page-level sticky header at the same z-index. With a
     // mouse nothing rises, so the list keeps its stacking.
     isolation: {default: null, '@media (pointer: coarse)': 'isolate'},
+  },
+  // Where a reorderable list's handles show only on hover or focus, they hang
+  // before their rows' text. The list reaches out toward the start by that
+  // room and pads it back, so its rows keep their places and its inline clip
+  // keeps the handles. Under a coarse pointer the handles sit in their rows.
+  reorderGutter: {
+    marginInlineStart: {
+      default: -REORDER_GUTTER,
+      '@media (any-pointer: coarse)': 0,
+    },
+    paddingInlineStart: {
+      default: REORDER_GUTTER,
+      '@media (any-pointer: coarse)': 0,
+    },
+  },
+  reorderGutterReachingPadding: {
+    marginInlineStart: {
+      default: `calc(-1 * var(--container-padding-inline-start, 0px) - ${REORDER_GUTTER}px)`,
+      '@media (any-pointer: coarse)':
+        'calc(-1 * var(--container-padding-inline-start, 0px))',
+    },
+    paddingInlineStart: {
+      default: REORDER_GUTTER,
+      '@media (any-pointer: coarse)': 0,
+    },
   },
   // A list under an `animatedLayout` handle isolates for every pointer. A row
   // that slides across others rides above them with a mouse too, and it must
@@ -440,6 +473,10 @@ export function List({
           isOrdered && styles.numberColumns,
           hasDividers && styles.withDividers,
           reachesContainerPadding && styles.reachesContainerPadding,
+          reorderSession != null &&
+            (reachesContainerPadding
+              ? styles.reorderGutterReachingPadding
+              : styles.reorderGutter),
           edge === 'bleed' && header == null && styles.bleedCorners,
           listStyle !== 'none' &&
             (start != null && start !== 1
