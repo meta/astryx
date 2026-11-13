@@ -77,11 +77,38 @@ describe('the recorded-time check for the test files a change touches', () => {
     expect(drifted({[file]: 390}, {[file]: 300}, [file])).toEqual([]);
   });
 
-  it(`takes the leg factor as 1 with fewer than ${MIN_PEERS} recorded peers`, () => {
+  it(`states that a leg with fewer than ${MIN_PEERS} unchanged recorded files has no baseline, and uses 1`, () => {
     const {recorded, measured} = leg(MIN_PEERS - 1, 40, 3);
-    expect(legFactor(measured, recorded, new Set())).toBe(1);
+    expect(legFactor(measured, recorded, new Set())).toEqual({
+      factor: 1,
+      peers: MIN_PEERS - 1,
+      baseline: false,
+    });
     const more = leg(MIN_PEERS, 40, 3);
-    expect(legFactor(more.measured, more.recorded, new Set())).toBe(3);
+    expect(legFactor(more.measured, more.recorded, new Set())).toEqual({
+      factor: 3,
+      peers: MIN_PEERS,
+      baseline: true,
+    });
+  });
+
+  it('has no baseline when every file in the leg is changed', () => {
+    const {recorded, measured} = leg(8, 40, 3);
+    expect(
+      legFactor(measured, recorded, new Set(Object.keys(measured))),
+    ).toMatchObject({
+      factor: 1,
+      baseline: false,
+    });
+  });
+
+  it('never lets a fast runner tighten the bar below 1.5 times the record', () => {
+    const {recorded, measured} = leg(8, 40, 0.5);
+    expect(legFactor(measured, recorded, new Set())).toMatchObject({factor: 1});
+    // 1.4 times its record on a leg running at half its record still passes.
+    recorded[CHANGES] = 200;
+    measured[CHANGES] = 280;
+    expect(drifted(measured, recorded, [CHANGES])).toEqual([]);
   });
 
   it('skips a changed file with no recorded time (the legs count it as the median)', () => {

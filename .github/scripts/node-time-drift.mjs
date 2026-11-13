@@ -9,8 +9,10 @@
  *
  * The legs balance by `scripts/vitest-node-durations.json`. A loaded runner
  * slows every file, so a file is compared with its own leg: the leg factor is
- * the median of measured ÷ recorded over the files the change does not touch
- * (1 when fewer than MIN_PEERS have a record). A changed file fails when it ran
+ * the median of measured ÷ recorded over the files the change does not touch,
+ * never below 1, so a fast runner does not tighten the bar. With fewer than
+ * MIN_PEERS such files there is no baseline in the leg: the factor is 1, and
+ * the output says so. A changed file fails when it ran
  * more than RATIO times its record × the leg factor, and more than MARGIN_S
  * seconds over that. A file with no recorded time counts as the median and is
  * not checked. The failure names the one entry to update and its value.
@@ -44,16 +46,23 @@ function median(values) {
 
 /**
  * How much slower than its record this leg ran: the median measured ÷
- * recorded over the files the change does not touch, or 1 with too few.
+ * recorded over the files the change does not touch, never below 1. With
+ * fewer than MIN_PEERS such files there is no baseline, and the factor is 1.
  * @param {Record<string, number>} measured
  * @param {Record<string, number>} recorded
  * @param {Set<string>} touched
+ * @returns {{factor: number, peers: number, baseline: boolean}}
  */
 export function legFactor(measured, recorded, touched) {
   const ratios = Object.entries(measured)
     .filter(([file]) => !touched.has(file) && recorded[file] > 0)
     .map(([file, seconds]) => seconds / recorded[file]);
-  return ratios.length >= MIN_PEERS ? median(ratios) : 1;
+  const baseline = ratios.length >= MIN_PEERS;
+  return {
+    factor: baseline ? Math.max(1, median(ratios)) : 1,
+    peers: ratios.length,
+    baseline,
+  };
 }
 
 /**
@@ -66,7 +75,7 @@ export function legFactor(measured, recorded, touched) {
  */
 export function drifted(measured, recorded, changed) {
   const touched = new Set(changed);
-  const factor = legFactor(measured, recorded, touched);
+  const {factor} = legFactor(measured, recorded, touched);
   return Object.entries(measured)
     .filter(([file]) => touched.has(file) && typeof recorded[file] === 'number')
     .filter(([file, seconds]) => {
@@ -111,6 +120,11 @@ function main(args) {
   )
     .split('\n')
     .filter(Boolean);
+  const leg = legFactor(measured, recorded, new Set(changed));
+  if (!leg.baseline)
+    console.log(
+      `No baseline in this leg: ${leg.peers} unchanged test file(s) with a recorded time, fewer than ${MIN_PEERS}, so the leg factor is 1 and changed files are judged against their recorded times as they are.`,
+    );
   const late = drifted(measured, recorded, changed);
   for (const {
     file,
