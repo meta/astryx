@@ -536,11 +536,10 @@ export function weighStart(
     if (!stays) return listed;
     // A tie in the ranker is no preference: every table that names "table"
     // scores the same, and the alphabet must not choose the page. Among the
-    // family's templates the ranker ties with this one, the most typical of
-    // the family starts: the one whose descriptor's words its siblings share
-    // the most. Only the templates' own descriptors decide, never the tables,
-    // so a template the tables do not list wins or loses its ties exactly as
-    // one they list would.
+    // family's templates the ranker ties with this unlisted one, the template
+    // whose own descriptor best matches the idea starts (`fullerOfTie`), then
+    // the one most typical of the family. Only the templates' descriptors
+    // decide this tie, never the tables.
     return fullerOfTie(kept, idea, ranked, cands, catalog);
   }
   const top = best(() => true);

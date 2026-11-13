@@ -173,6 +173,22 @@ describe('weighStart', () => {
       );
       expect(start).toBe('list-alpha');
     });
+
+    it('falls back to the most typical tied template when no descriptor tells them apart', () => {
+      const typical = [
+        {...page('list-alpha', 5, 'Lists'), typical: 0.2},
+        {...page('list-pane', 5, 'Lists'), typical: 0.8},
+        ...RANKED,
+      ];
+      const start = weighStart(
+        'a list of orders',
+        typical,
+        typical[0],
+        catalog,
+        {weights: WEIGHTS},
+      );
+      expect(start).toBe('list-pane');
+    });
   });
 
   describe('a template the tables do not list (cold start)', () => {

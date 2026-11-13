@@ -101,19 +101,23 @@ export async function loadTemplates(cwd) {
   }
   const pages = templates
     .filter(t => t.type === 'page' && t.isReady !== false)
-    .map(t => ({
-      name: t.dirName,
-      displayName: t.displayName || t.name,
-      description: t.description || '',
-      package: t.package ?? '@astryxdesign/core',
-      category: t.category || '',
-      keywords: t.keywords ?? [],
-      filePath: t.filePath,
-      ...componentsOf(t.filePath),
-      // The id `template()` resolves back to this entry: an active replacement
-      // owns the Core id it names, so that id selects it, not its own.
-      command: `astryx template ${t.replaces ?? t.dirName} --type page`,
-    }));
+    .map(t =>
+      withComponents(
+        {
+          name: t.dirName,
+          displayName: t.displayName || t.name,
+          description: t.description || '',
+          package: t.package ?? '@astryxdesign/core',
+          category: t.category || '',
+          keywords: t.keywords ?? [],
+          filePath: t.filePath,
+          // The id `template()` resolves back to this entry: an active
+          // replacement owns the Core id it names, so that id selects it.
+          command: `astryx template ${t.replaces ?? t.dirName} --type page`,
+        },
+        t.filePath,
+      ),
+    );
   const blocks = templates
     .filter(t => t.type === 'block')
     .map(t => ({
@@ -367,23 +371,29 @@ export function requireBuildCoreDir(cwd) {
 }
 
 /**
- * A lazy `components` property: the page's source is read and parsed only when
- * a caller reads it, once.
+ * Adds a lazy, non-enumerable `components` getter to a page entry: the page's
+ * source is read and parsed only when a caller reads it, once, so loading the
+ * catalog stays cheap and the entry's own fields are unchanged.
+ * @template {object} T
+ * @param {T} entry
  * @param {string | undefined} filePath
+ * @returns {T & {readonly components: string[]}}
  */
-function componentsOf(filePath) {
+function withComponents(entry, filePath) {
   /** @type {string[] | undefined} */
   let components;
-  return {
-    get components() {
-      if (components === undefined) {
-        try {
-          components = filePath ? extractComponents(filePath) : [];
-        } catch {
-          components = [];
+  return /** @type {T & {readonly components: string[]}} */ (
+    Object.defineProperty(entry, 'components', {
+      get() {
+        if (components === undefined) {
+          try {
+            components = filePath ? extractComponents(filePath) : [];
+          } catch {
+            components = [];
+          }
         }
-      }
-      return components;
-    },
-  };
+        return components;
+      },
+    })
+  );
 }
