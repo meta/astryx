@@ -907,7 +907,7 @@ describe('Pagination', () => {
       expect(onChange).toHaveBeenCalledWith(5);
     });
 
-    it('reverts to the current page on an invalid or empty entry', async () => {
+    it('keeps an invalid entry with its message and reverts an empty one', async () => {
       const user = userEvent.setup();
       const onChange = vi.fn();
       render(
@@ -920,19 +920,32 @@ describe('Pagination', () => {
         />,
       );
       const box = screen.getByRole('spinbutton', {name: 'Go to page'});
-      // A number input rejects non-numeric characters, so an invalid entry
-      // never navigates and reverts to the committed page on blur.
+      // An invalid entry never navigates. Blur keeps it with its message.
       await user.clear(box);
       await user.type(box, 'abc');
       await user.tab();
       expect(onChange).not.toHaveBeenCalled();
-      expect(box).toHaveValue('3');
+      expect(box).toHaveValue('abc');
+      expect(box).toHaveAttribute('aria-invalid', 'true');
+      // The message sits on the status icon, not in a box under the bar, and
+      // the box widens to hold the icon beside the text.
+      expect(document.querySelector('.astryx-field-status')).toBeNull();
+      expect(
+        screen.getByRole('button', {name: 'Error details'}),
+      ).toBeInTheDocument();
+      const describedBy = box.getAttribute('aria-describedby')!.split(' ');
+      expect(
+        describedBy.map(id => document.getElementById(id)?.textContent),
+      ).toContain('Invalid number');
+      const field = box.closest<HTMLElement>('[style*="calc("]');
+      expect(field).not.toBeNull();
 
       // Emptying the box and blurring reverts to the committed page too.
       await user.clear(box);
       await user.tab();
       expect(onChange).not.toHaveBeenCalled();
       expect(box).toHaveValue('3');
+      expect(box.closest('[style*="calc("]')).toBeNull();
     });
 
     it('announces the committed page to screen readers', async () => {

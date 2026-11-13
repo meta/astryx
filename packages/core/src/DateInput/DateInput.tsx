@@ -335,9 +335,9 @@ export interface DateInputProps extends Omit<
    * When set, displays a colored border and status icon.
    * If message is provided, displays below the input.
    *
-   * For a typed date the field rejects, and for unfinished text that Enter or
-   * blur keeps, the field shows its own error message in place of `status`.
-   * Unreadable text is announced, not shown. With `onEntryErrorChange`, an
+   * For a date the field rejects, typed or picked in the native control, and
+   * for unreadable or unfinished text that Enter or blur keeps, the field
+   * shows its own error message in place of `status`. With `onEntryErrorChange`, an
    * `error` status with a message shows instead, and the field's own message
    * applies only without one. A `warning` or `success` status never replaces
    * a rejection.
@@ -623,6 +623,11 @@ function PointerDateField({
     onKeyDown: onKeyDownProp,
     ...controlProps
   } = rest;
+  // Form attributes pass through untyped, as other input attributes do.
+  const formControl = controlProps as typeof controlProps & {
+    name?: string;
+    form?: string;
+  };
   const t = useComponentTranslator();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder =
@@ -701,6 +706,7 @@ function PointerDateField({
     displayValue,
     formatHint,
     isPending,
+    hiddenFormValue,
     isInvalid,
     fieldStatus,
     alertMessage,
@@ -981,6 +987,7 @@ function PointerDateField({
       </button>
       <input
         {...controlProps}
+        name={hiddenFormValue === null ? formControl.name : undefined}
         ref={useMergedRefs(ref, inputRef)}
         id={id}
         type="text"
@@ -1020,6 +1027,14 @@ function PointerDateField({
           isInvalid && styles.inputInvalid,
         )}
       />
+      {hiddenFormValue !== null && formControl.name != null && (
+        <input
+          type="hidden"
+          name={formControl.name}
+          form={formControl.form}
+          value={hiddenFormValue}
+        />
+      )}
       {/*
           Announces the rejection message that the field status does not
           announce. The field status announces the rest.
@@ -1165,13 +1180,20 @@ export function DateInput(props: DateInputProps) {
     presentation: _presentation,
     nativePicker: _nativePicker,
     calendar: _calendar,
-    // Only the pointer field takes typed text.
+    // Only the pointer field takes typed text. The native field reads only
+    // whether the callback is set.
     onEntryErrorChange,
     ...rest
   } = props;
   switch (surface) {
     case 'native':
-      return <NativeDateField {...rest} isDisabled={isDisabled} />;
+      return (
+        <NativeDateField
+          {...rest}
+          isDisabled={isDisabled}
+          onEntryErrorChange={onEntryErrorChange}
+        />
+      );
     case 'sheet':
       return (
         <TouchDateField
