@@ -22,7 +22,9 @@ export default function UseSpeechRecognitionHookUsage() {
     : speech.isListening
       ? 'Listening'
       : 'Ready';
-  const transcript = speech.interimTranscript || said || 'No transcript yet';
+  const transcript =
+    [said, speech.interimTranscript].filter(Boolean).join(' ') ||
+    'No transcript yet';
 
   return (
     <VStack gap={3} align="start">

@@ -3,7 +3,8 @@
 
 /**
  * The useSpeechRecognition example reports that the browser cannot listen,
- * and shows the empty transcript.
+ * shows the empty transcript, and keeps each finished phrase beside the words
+ * still being recognized.
  */
 
 import {act} from 'react';
@@ -51,7 +52,7 @@ describe('useSpeechRecognition example', () => {
     expect(container.textContent).toContain('No transcript yet');
   });
 
-  it('keeps a finished phrase after recognition ends that result', () => {
+  it('keeps a finished phrase while the next one is recognized', () => {
     class Recognition {
       lang = '';
       continuous = false;
@@ -73,15 +74,17 @@ describe('useSpeechRecognition example', () => {
         this.onend?.();
       }
     }
-    let latest: Recognition | null = null;
-    (
-      window as unknown as {SpeechRecognition: new () => Recognition}
-    ).SpeechRecognition = class extends Recognition {
-      constructor() {
-        super();
-        latest = this;
-      }
-    };
+    const created: Recognition[] = [];
+    vi.stubGlobal(
+      'SpeechRecognition',
+      class extends Recognition {
+        constructor() {
+          super();
+          created.push(this);
+        }
+      },
+    );
+    const latest = () => created[created.length - 1];
     act(() => {
       root?.unmount();
       root = createRoot(container);
@@ -92,7 +95,7 @@ describe('useSpeechRecognition example', () => {
     );
     act(() => button?.click());
     act(() => {
-      latest?.onresult?.({
+      latest()?.onresult?.({
         resultIndex: 0,
         results: {
           length: 1,
@@ -101,5 +104,16 @@ describe('useSpeechRecognition example', () => {
       });
     });
     expect(container.textContent).toContain('hello');
+    act(() => {
+      latest()?.onresult?.({
+        resultIndex: 1,
+        results: {
+          length: 2,
+          0: {isFinal: true, length: 1, 0: {transcript: 'hello'}},
+          1: {isFinal: false, length: 1, 0: {transcript: 'wor'}},
+        },
+      });
+    });
+    expect(container.textContent).toContain('hello wor');
   });
 });
