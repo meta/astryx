@@ -4,6 +4,7 @@ import {
   useCallback,
   useState,
   type ComponentProps,
+  type ReactNode,
   type SyntheticEvent,
 } from 'react';
 import {createPortal} from 'react-dom';
@@ -330,6 +331,117 @@ export const GalleryWithBlockImageCaptionFixture: Story = {
       GALLERY_MEDIA[1],
     ],
   },
+  render: GalleryWithCaptions.render,
+};
+
+// The long caption up to its last word, for the fixtures that wrap that word.
+const LONG_CAPTION_HEAD =
+  'A winding path through the forest, past the old mill and down to the river, where the trail turns back toward the village. In autumn the beeches along it turn copper, and on a clear morning you can see the church spire from the bridge before the path climbs the last hill';
+
+/** The gallery's args, with `caption` as its first, long caption. */
+function longCaptionArgs(caption: ReactNode): Story['args'] {
+  return {media: [{...GALLERY_MEDIA[0], caption}, GALLERY_MEDIA[1]]};
+}
+
+/**
+ * The long caption ending in an inline element with end padding and an end
+ * border, which take room on the last line.
+ */
+export const GalleryWithPaddedEndCaptionFixture: Story = {
+  tags: ['!autodocs', 'no-visual'],
+  args: longCaptionArgs(
+    <>
+      {LONG_CAPTION_HEAD}{' '}
+      <span
+        style={{
+          paddingInlineEnd: 12,
+          borderInlineEnd: '12px solid transparent',
+        }}>
+        home.
+      </span>
+    </>,
+  ),
+  render: GalleryWithCaptions.render,
+};
+
+/**
+ * The long caption ending in an inline element with an end margin, which
+ * takes room on the last line.
+ */
+export const GalleryWithMarginEndCaptionFixture: Story = {
+  tags: ['!autodocs', 'no-visual'],
+  args: longCaptionArgs(
+    <>
+      {LONG_CAPTION_HEAD} <span style={{marginInlineEnd: 24}}>home.</span>
+    </>,
+  ),
+  render: GalleryWithCaptions.render,
+};
+
+/**
+ * The long caption ending in an inline element with generated content before
+ * and after it, as a link with an icon has.
+ */
+export const GalleryWithGeneratedContentCaptionFixture: Story = {
+  tags: ['!autodocs', 'no-visual'],
+  args: longCaptionArgs(
+    <>
+      <style>
+        {
+          '.lightbox-caption-fixture-icons::before, .lightbox-caption-fixture-icons::after { content: ""; display: inline-block; inline-size: 12px; block-size: 1em; }'
+        }
+      </style>
+      {LONG_CAPTION_HEAD}{' '}
+      <span className="lightbox-caption-fixture-icons">home.</span>
+    </>,
+  ),
+  render: GalleryWithCaptions.render,
+};
+
+/**
+ * The long caption ending in an inline-block element, which lays out as one
+ * box.
+ */
+export const GalleryWithInlineBlockCaptionFixture: Story = {
+  tags: ['!autodocs', 'no-visual'],
+  args: longCaptionArgs(
+    <>
+      {LONG_CAPTION_HEAD}{' '}
+      <span style={{display: 'inline-block', paddingInline: 6}}>home.</span>
+    </>,
+  ),
+  render: GalleryWithCaptions.render,
+};
+
+/**
+ * The paragraph caption with start padding, which narrows its lines.
+ */
+export const GalleryWithPaddedParagraphCaptionFixture: Story = {
+  tags: ['!autodocs', 'no-visual'],
+  args: longCaptionArgs(
+    <p style={{paddingInlineStart: 64}}>{LONG_CAPTION_HEAD} home.</p>,
+  ),
+  render: GalleryWithCaptions.render,
+};
+
+/**
+ * The paragraph caption, aligned to its end, as a caller may set it, ending in
+ * end padding and an end border.
+ */
+export const GalleryWithEndAlignedParagraphCaptionFixture: Story = {
+  tags: ['!autodocs', 'no-visual'],
+  args: longCaptionArgs(
+    <p style={{textAlign: 'end'}}>
+      {LONG_CAPTION_HEAD}{' '}
+      <span
+        style={{
+          paddingInlineEnd: 12,
+          borderInlineEnd: '12px solid transparent',
+        }}>
+        home.
+      </span>
+    </p>,
+  ),
   render: GalleryWithCaptions.render,
 };
 

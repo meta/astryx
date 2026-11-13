@@ -2152,10 +2152,16 @@ for (const {name, story} of CAPTION_STORIES) {
 }
 
 // The plain caption again, in a same-origin iframe's document, whose elements
-// are not this window's, as in a Picture-in-Picture window. Last, captions
-// ending in an inline image and in a block image.
-const FIT_CASES = [
-  ...CAPTION_STORIES.map(caption => ({...caption, isInFrame: false})),
+// are not this window's, as in a Picture-in-Picture window. Then captions whose
+// last line holds more than text, a padded paragraph, an end-aligned one, and
+// two captions right to left, where the place sits at the left.
+const FIT_CASES: {
+  name: string;
+  story: string;
+  isInFrame?: boolean;
+  isRtl?: boolean;
+}[] = [
+  ...CAPTION_STORIES,
   {
     name: 'a plain caption in a second document',
     story: 'core-lightbox--gallery-with-captions-in-frame-fixture',
@@ -2164,16 +2170,48 @@ const FIT_CASES = [
   {
     name: 'a caption ending in an image',
     story: 'core-lightbox--gallery-with-image-caption-fixture',
-    isInFrame: false,
   },
   {
     name: 'a caption ending in a block image',
     story: 'core-lightbox--gallery-with-block-image-caption-fixture',
-    isInFrame: false,
+  },
+  {
+    name: 'a caption ending in end padding and an end border',
+    story: 'core-lightbox--gallery-with-padded-end-caption-fixture',
+  },
+  {
+    name: 'a caption ending in an end margin',
+    story: 'core-lightbox--gallery-with-margin-end-caption-fixture',
+  },
+  {
+    name: 'a caption ending in generated content',
+    story: 'core-lightbox--gallery-with-generated-content-caption-fixture',
+  },
+  {
+    name: 'a caption ending in an inline-block element',
+    story: 'core-lightbox--gallery-with-inline-block-caption-fixture',
+  },
+  {
+    name: 'a paragraph caption with start padding',
+    story: 'core-lightbox--gallery-with-padded-paragraph-caption-fixture',
+  },
+  {
+    name: 'an end-aligned paragraph caption ending in end padding',
+    story: 'core-lightbox--gallery-with-end-aligned-paragraph-caption-fixture',
+  },
+  {
+    name: 'a plain caption, right to left',
+    story: 'core-lightbox--gallery-with-captions',
+    isRtl: true,
+  },
+  {
+    name: 'a paragraph caption with start padding, right to left',
+    story: 'core-lightbox--gallery-with-padded-paragraph-caption-fixture',
+    isRtl: true,
   },
 ];
 
-for (const {name, story, isInFrame} of FIT_CASES) {
+for (const {name, story, isInFrame = false, isRtl = false} of FIT_CASES) {
   test(`an open caption that widens to one line fewer gives "less" a line of its own only where it does not fit beside the last line (${name})`, async ({
     page,
   }) => {
@@ -2186,7 +2224,17 @@ for (const {name, story, isInFrame} of FIT_CASES) {
     });
     const narrow = {width: 360, height: 874};
     await page.setViewportSize(narrow);
-    await openStory(page, storybook(), story);
+    if (isRtl) {
+      // Storybook's direction global sets the story's `dir` (and its
+      // providers'); openStory has no globals.
+      await page.goto(
+        `${storybook()}/iframe.html?id=${story}&viewMode=story&globals=direction:rtl`,
+      );
+      await page.locator('#storybook-root > *').first().waitFor();
+      await frames(page, 2);
+    } else {
+      await openStory(page, storybook(), story);
+    }
     const root = isInFrame ? page.frameLocator('iframe') : page;
     await root
       .getByRole('button', {name: 'Open gallery with captions'})
@@ -2195,6 +2243,9 @@ for (const {name, story, isInFrame} of FIT_CASES) {
     await dialog.getByRole('button', {name: 'more'}).click();
     await expect(dialog.getByRole('button', {name: 'less'})).toBeVisible();
     await frames(page, 4);
+    expect(await dialog.evaluate(el => getComputedStyle(el).direction)).toBe(
+      isRtl ? 'rtl' : 'ltr',
+    );
     const read = async () =>
       dialog.evaluate(element => {
         const caption = element.querySelector(
@@ -2205,54 +2256,43 @@ for (const {name, story, isInFrame} of FIT_CASES) {
         const place = flow.firstElementChild as HTMLElement;
         const toggle = caption.querySelector('button') as HTMLElement;
         const lineHeight = parseFloat(getComputedStyle(text).lineHeight);
-        // The flow's lines, from its text and its images: a block's box spans
-        // the caption.
-        const words: DOMRect[] = [];
-        const walker = document.createTreeWalker(flow, NodeFilter.SHOW_TEXT);
-        for (
-          let node = walker.nextNode();
-          node != null;
-          node = walker.nextNode()
-        ) {
-          const range = document.createRange();
-          range.selectNodeContents(node);
-          words.push(...[...range.getClientRects()].filter(r => r.width > 0));
-        }
-        for (const image of flow.querySelectorAll('img, svg, video, canvas')) {
-          const box = image.getBoundingClientRect();
-          if (box.width > 0) {
-            words.push(box);
-          }
-        }
-        const textBottom = Math.max(...words.map(rect => rect.bottom));
-        const lastLine = words.filter(
-          rect => rect.bottom > textBottom - lineHeight / 2,
-        );
+        // Every line of the caption is a line of the flow, whatever it holds:
+        // text, images or generated content. The place floats outside it.
+        const flowBox = flow.getBoundingClientRect();
         const toggleBox = toggle.getBoundingClientRect();
-        const placeStyle = getComputedStyle(place);
+        const toggleMiddle = (toggleBox.top + toggleBox.bottom) / 2;
+        const placeBottom = place.getBoundingClientRect().bottom;
+        // The open caption keeps its last line in place and grows upward, so
+        // only the flow's own height compares two layouts.
+        const flowLines = () =>
+          Math.round(flow.getBoundingClientRect().height / lineHeight);
+        const shownLines = flowLines();
+        // Layout itself says whether "less" fits: lay out the text alone, then
+        // with the place shown beside its last line. A place that fits there
+        // moves no word to a new line.
+        const {display, webkitBoxOrient, webkitLineClamp} = place.style;
+        place.style.display = 'none';
+        const lines = flowLines();
+        place.style.display = '-webkit-box';
+        place.style.webkitBoxOrient = 'vertical';
+        place.style.webkitLineClamp = String(lines);
+        const besideLines = flowLines();
+        place.style.display = display;
+        place.style.webkitBoxOrient = webkitBoxOrient;
+        place.style.webkitLineClamp = webkitLineClamp;
         return {
-          lines: Math.round(flow.getBoundingClientRect().height / lineHeight),
+          lines,
           isBeside:
-            Math.abs(
-              (toggleBox.top + toggleBox.bottom) / 2 -
-                (textBottom - lineHeight / 2),
-            ) <=
+            Math.abs(toggleMiddle - (flowBox.bottom - lineHeight / 2)) <=
             lineHeight / 2,
           // The place keeps the end of the line that "less" is on clear.
           isOnPlace:
-            Math.abs(
-              (toggleBox.top + toggleBox.bottom) / 2 -
-                (place.getBoundingClientRect().bottom - lineHeight / 2),
-            ) <=
+            Math.abs(toggleMiddle - (placeBottom - lineHeight / 2)) <=
             lineHeight / 2,
-          lastLineEnd: Math.max(...lastLine.map(rect => rect.right)),
-          lastLineStart: Math.min(...lastLine.map(rect => rect.left)),
+          fits: besideLines === lines,
+          // Beside the last line or below it, the place moves no word.
+          isPushing: shownLines > lines,
           toggleLeft: toggleBox.left,
-          needed:
-            place.getBoundingClientRect().width +
-            parseFloat(placeStyle.marginLeft) +
-            parseFloat(placeStyle.marginRight),
-          flowWidth: flow.getBoundingClientRect().width,
         };
       });
     const {lines: narrowLines} = await read();
@@ -2265,8 +2305,9 @@ for (const {name, story, isInFrame} of FIT_CASES) {
       await page.setViewportSize({width, height: narrow.height});
       await frames(page, 3);
       const facts = await read();
-      // At every width, "less" sits on the line its place keeps clear.
-      if (!facts.isOnPlace) {
+      // At every width, "less" sits on the line its place keeps clear, and
+      // the place moves no word of the text.
+      if (!facts.isOnPlace || facts.isPushing) {
         misplaced.push(`${width} px: ${JSON.stringify(facts)}`);
       }
       if (facts.lines < narrowLines - 1) {
@@ -2277,12 +2318,7 @@ for (const {name, story, isInFrame} of FIT_CASES) {
         continue;
       }
       checked += 1;
-      // "less" fits where the last line's width and its place fit the
-      // caption's, whatever the line's alignment.
-      const fits =
-        facts.lastLineEnd - facts.lastLineStart + facts.needed <=
-        facts.flowWidth;
-      if (facts.isBeside ? !fits : fits) {
+      if (facts.isBeside !== facts.fits) {
         misplaced.push(`${width} px: ${JSON.stringify(facts)}`);
       }
       await page.setViewportSize(narrow);
