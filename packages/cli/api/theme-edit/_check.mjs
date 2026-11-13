@@ -99,6 +99,7 @@ import {
   baseComponentReads,
   partRuleTokens,
   cssFamily,
+  familySpaces,
 } from './_settings.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 
@@ -3631,18 +3632,8 @@ export function normalValue(thing, value) {
   ).trim();
 }
 
-/**
- * Spacing in a font family name as CSS reads a bare name: every Unicode
- * space (a no-break space, a thin space, a tab) is one space, a run of them
- * one, and zero-width and format characters (zero-width space, joiners,
- * word joiner, byte-order mark) are dropped.
- * @param {string} v
- */
-export function familySpaces(v) {
-  return v
-    .replace(/[\u200B-\u200D\u2060\uFEFF]/g, '')
-    .replace(/[\s\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]+/g, ' ');
-}
+/** @see familySpaces in _settings.mjs, re-exported for the checks. */
+export {familySpaces};
 
 /**
  * The first var() in a value that names no design token and would read

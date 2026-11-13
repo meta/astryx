@@ -1801,10 +1801,7 @@ export function fontOf(value) {
     .map(x => x.trim())
     .filter(Boolean);
   // Runs of spaces or tabs inside a family name are one space.
-  const family = unquote(parts[0] ?? v)
-    .replace(/[\u200B-\u200D\u2060\uFEFF]/g, '')
-    .replace(/[\s\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]+/g, ' ')
-    .trim();
+  const family = familySpaces(unquote(parts[0] ?? v)).trim();
   return {
     family: cssFamily(family),
     fallbacks:
@@ -1813,6 +1810,19 @@ export function fontOf(value) {
         : without(family, ['system-ui', 'sans-serif']),
     pkg: pkgOf(family),
   };
+}
+
+/**
+ * Spacing in a font family name as CSS reads a bare name: every Unicode
+ * space (a no-break space, a thin space, a tab) is one space, a run of them
+ * one, and zero-width and format characters (zero-width space, joiners,
+ * word joiner, byte-order mark) are dropped.
+ * @param {string} v
+ */
+export function familySpaces(v) {
+  return v
+    .replace(/[\u200B-\u200D\u2060\uFEFF]/g, '')
+    .replace(/[\s\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]+/g, ' ');
 }
 
 /**
@@ -1825,9 +1835,7 @@ export function fontOf(value) {
  * @param {boolean} [spaced]
  */
 export function cssFamily(name, spaced = false) {
-  name = name
-    .replace(/[\u200B-\u200D\u2060\uFEFF]/g, '')
-    .replace(/[\s\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]+/g, ' ');
+  name = familySpaces(name);
   const words = name.trim().split(/\s+/);
   const ident = (/** @type {string} */ w) =>
     /^-?(?:[A-Za-z_]|[\u0080-\uffff])(?:[\w-]|[\u0080-\uffff])*$/.test(w) &&
