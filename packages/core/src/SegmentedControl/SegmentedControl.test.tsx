@@ -15,6 +15,7 @@
 import {StrictMode, useState} from 'react';
 import {describe, it, expect, vi, beforeEach} from 'vitest';
 import {
+  act,
   cleanup,
   render,
   screen,
@@ -77,7 +78,7 @@ describe('SegmentedControl', () => {
   it('keeps a clicked later segment selected where nothing has layout, as in a unit test', async () => {
     const user = userEvent.setup();
     function View() {
-      const [value, setValue] = useState('grid');
+      const [value, setValue] = useState('list');
       return (
         <SegmentedControl value={value} onChange={setValue} label="View mode">
           <SegmentedControlItem value="grid" label="Grid" />
