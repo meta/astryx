@@ -1557,6 +1557,18 @@ export async function discoverAllUnresolved(cwd = process.cwd()) {
   );
 }
 
+/** Template discovery's records, kept exactly, with the shape they need. */
+const TEMPLATE_SOURCES_CODEC = {
+  ...EXACT_CODEC,
+  valid: (/** @type {any} */ value) =>
+    value != null &&
+    Array.isArray(value.templates) &&
+    Array.isArray(value.errors) &&
+    value.templates.every(
+      (/** @type {any} */ t) => t != null && typeof t.name === 'string',
+    ),
+};
+
 /**
  * Resolve replacement declarations while retaining package-addressable entries
  * that are shadowed or rejected in the default discovery view.
@@ -1578,7 +1590,7 @@ async function resolveAllSources(cwd = process.cwd()) {
         hostedRun()?.integrations ?? [],
       ],
       () => resolveAllSourcesNow(cwd),
-      EXACT_CODEC,
+      TEMPLATE_SOURCES_CODEC,
     )
   );
 }
