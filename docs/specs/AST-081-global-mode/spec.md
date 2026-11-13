@@ -392,8 +392,9 @@ works on is `spec:AST-040` FR9's.
     `docs` and `doctor` keep in `astryx/catalogs` (search's catalogs, each
     integration's contribution-check results, template discovery's records,
     the component list, integrations' theme records, the docs not-found hint's
-    name summaries of folder trees, and doctor's file-only docs checks, which
-    doctor keeps only while the folder exists), a folder only the user can
+    name summaries of folder trees, and doctor's file-only docs checks and
+    theme-wiring scan, which doctor keeps only while the folder exists), a
+    folder only the user can
     reach (made `0700`, used only while it is a real folder the user owns
     and others cannot open, never where the system has no user ids), each
     kept value used only while every input its gather read is unchanged; a

@@ -76,25 +76,27 @@ export function mdCell(value) {
   return String(value ?? '').replace(/\|/g, '\\|');
 }
 
-/** @param {import('@astryxdesign/cli/authoring').ComponentPropDoc[]} [props] @returns {string} */
-function formatPropsTable(props) {
+/**
+ * Render props as a list, one prop per line: name, type, default, the
+ * required and experimental markers, then the description. A list item needs
+ * no cell escaping, so a union type keeps its pipes as written.
+ * @param {import('@astryxdesign/cli/authoring').ComponentPropDoc[]} [props]
+ * @returns {string}
+ */
+function formatPropsList(props) {
   if (!props || props.length === 0) return '';
-  /** @type {string[]} */
-  const lines = [];
-  lines.push('| Prop | Type | Default | Description |');
-  lines.push('|---|---|---|---|');
-  for (const p of props) {
-    const def = p.default ? `\`${mdCell(p.default)}\`` : '-';
-    const req = p.required ? ' **(required)**' : '';
-    // The text projection of the prop doc's `stability` field: an
-    // experimental prop is outside the stable compatibility promise.
-    const stability =
-      p.stability === 'experimental' ? ' **(experimental)**' : '';
-    lines.push(
-      `| \`${mdCell(p.name)}\` | \`${mdCell(p.type)}\` | ${def} | ${mdCell(p.description)}${req}${stability} |`,
-    );
-  }
-  return lines.join('\n');
+  return props
+    .map(p => {
+      const def = p.default ? ` = \`${p.default}\`` : '';
+      const req = p.required ? ' **(required)**' : '';
+      // The text projection of the prop doc's `stability` field: an
+      // experimental prop is outside the stable compatibility promise.
+      const stability =
+        p.stability === 'experimental' ? ' **(experimental)**' : '';
+      const description = p.description ?? '';
+      return `- \`${p.name}\`: \`${p.type ?? ''}\`${def}${req}${stability}${description ? ` - ${description}` : ''}`;
+    })
+    .join('\n');
 }
 
 /**
@@ -130,14 +132,71 @@ function formatSubComponent(comp) {
     out.push(comp.description + '\n');
   }
   out.push(...formatAccessibility(comp.usage?.accessibility, '####'));
-  const table = formatPropsTable(comp.props);
-  if (table) {
-    out.push(table + '\n');
+  const list = formatPropsList(comp.props);
+  if (list) {
+    out.push(list + '\n');
   } else {
     out.push(
       `See \`${getCliInvocation()} component ${comp.name}\` for props and usage.\n`,
     );
   }
+  return out;
+}
+
+/**
+ * Whether a sub-component entry is only a name: its description, props and
+ * examples live in its own doc, which `component <Name>` prints.
+ * @param {any} comp
+ * @returns {boolean}
+ */
+function isBareReference(comp) {
+  return (
+    !comp.description &&
+    !comp.props?.length &&
+    !comp.usage?.accessibility?.length &&
+    !comp.examples?.length
+  );
+}
+
+/**
+ * Render the sub-components under "## Components", in order. Consecutive bare
+ * references share one line that names the command reading each, so a family
+ * of twenty parts costs one line instead of twenty headings.
+ * @param {any[]} components
+ * @param {string} [exampleHashes] - heading level for inline examples; none when omitted
+ * @returns {string[]}
+ */
+function formatSubComponents(components, exampleHashes) {
+  /** @type {string[]} */
+  const out = [];
+  /** @type {string[]} */
+  let names = [];
+  const flush = () => {
+    if (names.length === 1) {
+      out.push(
+        `See \`${getCliInvocation()} component ${names[0]}\` for its props and usage.\n`,
+      );
+    } else if (names.length > 1) {
+      out.push(
+        `Read each with \`${getCliInvocation()} component <Name>\`: ${names.join(', ')}.\n`,
+      );
+    }
+    names = [];
+  };
+  for (const comp of components) {
+    if (isBareReference(comp)) {
+      names.push(comp.name);
+      continue;
+    }
+    flush();
+    out.push(...formatSubComponent(comp));
+    if (exampleHashes && comp.examples?.length) {
+      for (const ex of comp.examples) {
+        out.push(...formatExample(ex, exampleHashes));
+      }
+    }
+  }
+  flush();
   return out;
 }
 
@@ -314,20 +373,13 @@ export function formatFull(docs, options = {}) {
   // Single component props
   if ('props' in docs) {
     sections.push('## Props\n');
-    sections.push(formatPropsTable(docs.props) + '\n');
+    sections.push(formatPropsList(docs.props) + '\n');
   }
 
   // Multi-component
   if ('components' in docs) {
     sections.push('## Components\n');
-    for (const comp of docs.components) {
-      sections.push(...formatSubComponent(comp));
-      if (comp.examples?.length) {
-        for (const ex of comp.examples) {
-          sections.push(...formatExample(ex, '####'));
-        }
-      }
-    }
+    sections.push(...formatSubComponents(docs.components, '####'));
   }
 
   if (docs.examples?.length) {
@@ -517,13 +569,11 @@ export function formatCompact(docs, componentName, importHint) {
   // Props
   if ('props' in docs) {
     sections.push('## Props\n');
-    sections.push(formatPropsTable(docs.props) + '\n');
+    sections.push(formatPropsList(docs.props) + '\n');
   }
 
   if ('components' in docs) {
-    for (const comp of docs.components) {
-      sections.push(...formatSubComponent(comp));
-    }
+    sections.push(...formatSubComponents(docs.components));
   }
 
   // Limited examples (max 3)
@@ -743,7 +793,7 @@ export function formatBrief(docs, componentName, importHint, options = {}) {
  */
 export function formatProps(docs, componentName) {
   if ('props' in docs) {
-    return `## Props\n\n${formatPropsTable(docs.props)}\n`;
+    return `## Props\n\n${formatPropsList(docs.props)}\n`;
   }
 
   if ('components' in docs) {
@@ -751,7 +801,7 @@ export function formatProps(docs, componentName) {
     const sections = [];
     for (const comp of docs.components) {
       sections.push(`### ${comp.name} Props\n`);
-      sections.push(formatPropsTable(comp.props) + '\n');
+      sections.push(formatPropsList(comp.props) + '\n');
     }
     return sections.join('\n');
   }

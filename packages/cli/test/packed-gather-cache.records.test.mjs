@@ -532,6 +532,114 @@ Module._resolveFilename = function (request, parent, isMain, options) {
     240_000,
   );
 
+  it.skipIf(!hasModuleHooks)(
+    "keeps doctor's theme-wiring scan, and an edit to the app's import or the theme module shows on the very next run",
+    () => {
+      const tmp = keptTmp('theme-wiring');
+      const other = makeProject();
+      try {
+        const version = JSON.parse(
+          fs.readFileSync(path.join(packed, 'package.json'), 'utf8'),
+        ).version;
+        const theme = path.join(
+          other.dir,
+          'node_modules',
+          '@astryxdesign',
+          'theme-neutral',
+        );
+        fs.mkdirSync(path.join(theme, 'dist'), {recursive: true});
+        fs.writeFileSync(
+          path.join(theme, 'package.json'),
+          JSON.stringify({
+            name: '@astryxdesign/theme-neutral',
+            version,
+            type: 'module',
+            exports: {
+              '.': './dist/index.js',
+              './built': './dist/neutral.js',
+              './theme.css': './dist/theme.css',
+            },
+          }),
+        );
+        const themeModule = path.join(theme, 'dist', 'neutral.js');
+        fs.writeFileSync(
+          themeModule,
+          `export const neutralTheme = {name: 'neutral', tokens: {}};\n`,
+        );
+        fs.writeFileSync(
+          path.join(theme, 'dist', 'index.js'),
+          `export {neutralTheme} from './neutral.js';\n`,
+        );
+        fs.writeFileSync(
+          path.join(theme, 'dist', 'theme.css'),
+          `[data-astryx-theme="neutral"] { --color-text: black; }\n`,
+        );
+        const themes = (/** @type {string} */ at) => {
+          const result = run(['doctor'], {tmp: at, cwd: other.dir});
+          return JSON.parse(result.stdout).data.checks.find(
+            (/** @type {{id: string}} */ c) => c.id === 'themes',
+          );
+        };
+        const wiringEntries = () =>
+          fs
+            .readdirSync(path.join(tmp, CACHE_NAME))
+            .filter(name =>
+              Array.isArray(
+                JSON.parse(
+                  fs.readFileSync(path.join(tmp, CACHE_NAME, name), 'utf8'),
+                ).value?.wired,
+              ),
+            );
+        // Nothing wired yet: kept, then read back, as a fresh run answers.
+        const unwired = themes(freshTmp());
+        expect(themes(tmp)).toEqual(unwired);
+        expect(wiringEntries()).toHaveLength(1);
+        expect(themes(tmp)).toEqual(unwired);
+        // The app passes the package's theme to Core's Theme: the very next
+        // run sees it.
+        fs.mkdirSync(path.join(other.dir, 'app'), {recursive: true});
+        fs.writeFileSync(
+          path.join(other.dir, 'app', 'providers.tsx'),
+          [
+            "import {Theme} from '@astryxdesign/core/theme';",
+            "import {neutralTheme} from '@astryxdesign/theme-neutral/built';",
+            'export const Providers = ({children}: any) => (',
+            '  <Theme theme={neutralTheme}>{children}</Theme>',
+            ');',
+            '',
+          ].join('\n'),
+        );
+        const wired = themes(tmp);
+        expect(wired).not.toEqual(unwired);
+        expect(wired).toEqual(themes(freshTmp()));
+        expect(themes(tmp)).toEqual(wired);
+        // An edit to the theme module alone scans again, as a fresh run does.
+        const keptEntry = path.join(tmp, CACHE_NAME, wiringEntries()[0]);
+        const before = fs.statSync(keptEntry).ino;
+        fs.writeFileSync(
+          themeModule,
+          `export const neutralTheme = {name: 'neutral', tokens: {color: {}}};\n`,
+        );
+        expect(themes(tmp)).toEqual(themes(freshTmp()));
+        const rescanned = fs.statSync(keptEntry).ino;
+        expect(rescanned).not.toBe(before);
+        // The package no longer exports the built theme the app imports: the
+        // very next run scans again and reports it, as a fresh run does.
+        const pkgFile = path.join(theme, 'package.json');
+        const pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf8'));
+        delete pkg.exports['./built'];
+        fs.writeFileSync(pkgFile, JSON.stringify(pkg));
+        const dropped = themes(tmp);
+        expect(dropped).not.toEqual(wired);
+        expect(dropped).toEqual(themes(freshTmp()));
+        expect(fs.statSync(keptEntry).ino).not.toBe(rescanned);
+      } finally {
+        fs.rmSync(other.dir, {recursive: true, force: true});
+      }
+    },
+    240_000,
+  );
+
   it('leaves a missing cache folder missing when doctor runs', () => {
     const tmp = freshTmp();
     run(['doctor'], {tmp});
