@@ -19,6 +19,8 @@
 
 import {useCallback, useEffect, useRef} from 'react';
 import type {FocusEvent, ReactNode, RefObject} from 'react';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {useCommittedRef, useCommittedRefInto} from '../hooks/useCommittedRef';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '../Button';
 import {Icon} from '../Icon';
@@ -44,6 +46,9 @@ import type {
   ToastContentRenderFn,
 } from './types';
 import {pickDataAttributes, themeProps} from '../utils/themeProps';
+import {useTouchPresentation} from '../utils/touchPresentation';
+import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
+import {useToastBannerSwipe} from './useToastBannerSwipe';
 import {useToastGesture, type ToastGestureDirection} from './useToastGesture';
 import {
   registerEnglishFallback,
@@ -91,12 +96,28 @@ const styles = stylex.create({
     lineHeight: typeScaleDefaults['--text-body-leading'],
     transform:
       'translateY(var(--_toast-swipe-y, 0px)) scale(var(--_toast-swipe-scale, 1))',
-    transitionProperty: 'opacity, transform',
+    // Under reduced motion, under a finger (a coarse primary pointer) the
+    // toast cross-fades in place (opacity only). Any other pointer changes it
+    // at once.
+    transitionProperty: {
+      default: 'opacity, transform',
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        'opacity',
+      '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+        'none',
+    },
     transitionDuration: {
       default: durationVars['--duration-fast'],
-      '@media (prefers-reduced-motion: reduce)': '0.01ms',
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        reducedMotionFadeConsts.duration,
+      '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+        '0s',
     },
-    transitionTimingFunction: easeVars['--ease-standard'],
+    transitionTimingFunction: {
+      default: easeVars['--ease-standard'],
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        reducedMotionFadeConsts.easing,
+    },
   },
   // A card enters from its edge only when it first renders. A move between
   // modal outlets renders it again, and it must not enter again.
@@ -182,6 +203,16 @@ interface ToastSurfaceProps extends ToastProps {
    * starting style, so a move between modal outlets starts no transition.
    */
   hasEntryStarted?: boolean;
+  /**
+   * Called when the card starts to retract past its edge (under a finger):
+   * its row must not clip it.
+   */
+  onRetract?: () => void;
+  /**
+   * Called when the retract an outside dismissal started (`isExiting`, an
+   * app's dismiss) ends: the row may collapse now.
+   */
+  onRetractEnd?: () => void;
 }
 
 /**
@@ -226,6 +257,8 @@ export function ToastSurface({
   announce,
   isRenderedBodyAnnouncement = false,
   hasEntryStarted = false,
+  onRetract,
+  onRetractEnd,
   ...rest
 }: ToastSurfaceProps) {
   const t = useComponentTranslator();
@@ -248,6 +281,12 @@ export function ToastSurface({
   // would restart — and un-pause — this toast's timer on unrelated renders.
   const onDismissRef = useRef(onDismiss);
   onDismissRef.current = onDismiss;
+  // Every dismissal from the toast itself goes through here. The function
+  // needs the retract, so it is stored below, and the callbacks above read
+  // it when they run.
+  const requestDismissRef = useRef<(reason: ToastDismissReason) => void>(
+    () => {},
+  );
 
   const startTimer = useCallback(() => {
     if (!isAutoHide || pauseSourcesRef.current.size > 0) {
@@ -258,7 +297,7 @@ export function ToastSurface({
     }
     startTimeRef.current = Date.now();
     timerRef.current = setTimeout(() => {
-      onDismissRef.current('auto');
+      requestDismissRef.current('auto');
     }, remainingRef.current);
   }, [isAutoHide]);
 
@@ -384,11 +423,16 @@ export function ToastSurface({
     [resumeTimer],
   );
   const dismissFromGesture = useCallback(() => {
-    onDismissRef.current('manual');
+    requestDismissRef.current('manual');
   }, []);
+  // Under a finger (a coarse primary pointer: one touch model on every touch
+  // device) the swipe and the exit follow the notification banner. With a
+  // fine pointer (a pen, or a touch screen on a laptop driven by its
+  // trackpad) the swipe is Toast's own.
+  const {isTouch: isNotification} = useTouchPresentation();
   const {rootRef, bindings: gestureBindings} = useToastGesture({
     direction: gestureDirection,
-    enabled: !isExiting,
+    enabled: !isExiting && !isNotification,
     canPauseTimer: isAutoHide,
     isTimerPaused: isGesturePausing,
     pauseTimer: pauseForGesture,
@@ -397,6 +441,80 @@ export function ToastSurface({
     shouldIgnoreTarget: isInteractiveTarget,
   });
   cardRootRef.current = rootRef;
+  const onRetractRef = useCommittedRef(onRetract);
+  const handleRetract = useCallback(() => {
+    onRetractRef.current?.();
+  }, [onRetractRef]);
+  const {retract, rest: restCard} = useToastBannerSwipe({
+    rootRef,
+    isNotification,
+    direction: gestureDirection,
+    canPauseTimer: isAutoHide,
+    isTimerPaused: isGesturePausing,
+    pauseTimer: pauseForGesture,
+    resumeTimer: resumeForGesture,
+    dismiss: dismissFromGesture,
+    onRetract: handleRetract,
+    shouldIgnoreTarget: isInteractiveTarget,
+  });
+  // Under a finger the card leaves as the banner does: it retracts past its
+  // edge first, then the toast is dismissed (once, whoever asked). Otherwise
+  // the dismissal is immediate and the exit is Toast's fade.
+  const isDismissingRef = useRef(false);
+  const isExitingRef = useCommittedRef(isExiting);
+  const onRetractEndRef = useCommittedRef(onRetractEnd);
+  const requestDismiss = (reason: ToastDismissReason) => {
+    if (!isNotification) {
+      onDismissRef.current(reason);
+      return;
+    }
+    if (isDismissingRef.current) {
+      return;
+    }
+    isDismissingRef.current = true;
+    const retracting = retract();
+    // A viewport's row holds the card until the retract ends (onRetractEnd).
+    // So the viewport hears the dismissal now, and a toast with the same
+    // uniqueID opens a new row. A standalone Toast reports it once the card
+    // is gone, so its owner can unmount it then.
+    const isHosted = onRetractEndRef.current != null;
+    if (isHosted) {
+      onDismissRef.current(reason);
+    }
+    void retracting.then(() => {
+      if (!isHosted) {
+        onDismissRef.current(reason);
+      }
+      // A standalone Toast that its owner keeps on screen after onDismiss
+      // comes back to rest, as it does with a fine pointer. It is still
+      // mounted and not exiting two frames later. In a viewport the row is
+      // leaving by then.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          // Still in the document (React detaches the ref on unmount) and
+          // not leaving.
+          if (rootRef.current?.isConnected === true && !isExitingRef.current) {
+            isDismissingRef.current = false;
+            restCard();
+          }
+        });
+      });
+    });
+  };
+  useCommittedRefInto(requestDismissRef, requestDismiss);
+  // A dismissal from outside (the viewport, an app's `dismiss()`) reaches
+  // this surface only as `isExiting`, with no event of its own here. This
+  // effect keeps the card's compositor animation in step with it by starting
+  // the retract. That animation is an external system: the Web Animations on
+  // the card's element. When the retract ends, the row may collapse
+  // (`onRetractEnd`).
+  useIsomorphicLayoutEffect(() => {
+    if (isNotification && isExiting) {
+      void retract().then(() => {
+        onRetractEndRef.current?.();
+      });
+    }
+  }, [isNotification, isExiting, retract, onRetractEndRef]);
 
   // The viewport announces a plain-text body when it dispatches the toast.
   // This reads a component body or a custom layout after commit. A body is
@@ -416,8 +534,8 @@ export function ToastSurface({
   );
 
   const handleDismiss = useCallback(() => {
-    onDismiss('manual');
-  }, [onDismiss]);
+    requestDismissRef.current('manual');
+  }, []);
 
   // The surface is *usually* dark in light mode and light in dark mode, but a
   // theme can define --color-background-inverted as anything — so the mode is
@@ -443,7 +561,7 @@ export function ToastSurface({
           styles.root,
           !hasEntryStarted && styles.entering,
           isError ? styles.variantError : styles.variantDefault,
-          isExiting && styles.exiting,
+          isExiting && !isNotification && styles.exiting,
         ),
       )}>
       <MediaTheme mode="auto" fallback={fallbackMediaMode}>

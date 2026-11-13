@@ -6,7 +6,7 @@
  * @output Re-exports `springs` and one constant per spring
  *   (`SHEET_PRESENT_SPRING`, …), and the `scroll`, `timing`, `navigation`,
  *   `picker`, `popover`, `progressBar`, `segmentedControl`, `datePicker`,
- *   `sheet`, `slider`, `switchControl` and `zoomMedia` domains. It also
+ *   `sheet`, `slider`, `switchControl`, `toast` and `zoomMedia` domains. It also
  *   re-exports a table's reorder (`reorder`), the gesture thresholds (one
  *   `UIKIT_*` group per recognizer and their union `UIKIT_GESTURES`), and the
  *   haptic tables
@@ -90,4 +90,5 @@ export {
 } from './springs';
 export {switchControl} from './switch';
 export {registerTimingTable, timing} from './timing';
+export {toast} from './toast';
 export {registerZoomMediaTable, zoomMedia} from './zoomMedia';
