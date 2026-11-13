@@ -72,6 +72,7 @@ import {
 } from '../../foundation/env/package-manager.mjs';
 import {sha256} from '../../foundation/render/source-block.mjs';
 import {findNodeModulesPackage} from '../../foundation/fs/paths.mjs';
+import {normalizeEntry} from './_check.mjs';
 
 const E = ERROR_CODES;
 
@@ -514,7 +515,7 @@ function readNextConfig(cwd) {
         const v = str(n);
         return v == null
           ? null
-          : (v.replace(/^\.?\//, '').split('/')[0] ?? null);
+          : v.replace(/^(\.\/)+/, '').replace(/\/+$/, '') || null;
       }),
     };
   }
@@ -568,9 +569,15 @@ function reservedFolder(cwd, dir) {
     return 'node_modules/ belongs to the package manager, which replaces it';
   if (segs[0] === 'public')
     return 'Next serves every file in public/ as it is, at the site root, so anyone could download it';
+  // The build folders by their real path: a distDir with a subfolder
+  // (src/.next-build) covers that folder only, not the rest of src/.
   const built = [
     ...new Set(['.next', 'out', readNextConfig(cwd).distDir]),
-  ].find(d => d && segs[0] === d);
+  ].find(d => {
+    if (typeof d !== 'string' || !d.trim()) return false;
+    const at = path.resolve(cwd, d);
+    return at !== cwd && (dir === at || dir.startsWith(at + path.sep));
+  });
   if (built)
     return `${built}/ is where Next writes its build, and the next build empties it`;
   const odd = segs.find(seg => windowsReserved(seg) || /^\.+$/.test(seg));
@@ -2948,7 +2955,10 @@ async function routeTheme(cwd, dir, data, opts = {}) {
   if (!data.theme) return null;
   const t = loadTheme(cwd, data.theme);
   const ctx = await context(cwd);
-  const unbuilt = !fs.existsSync(themeFiles(cwd, data.theme).js);
+  // The same rule `preview app` uses: any output missing, or a build that
+  // does not match the settings, is built again (judged by content).
+  const stale = staleBuild(cwd, data.theme, t);
+  const unbuilt = stale != null;
   if (unbuilt && opts.build !== false) await buildTheme(ctx, data.theme, t);
   const ti = themeImports(ctx, data.theme, t, dir);
   return {
@@ -2985,16 +2995,21 @@ async function themeLocked(options, slug, fn) {
 async function buildWorn(cwd, theme, options, notes) {
   if (!theme?.unbuilt) return;
   const slug = theme.name;
+  /** @type {string | null} */
+  let why = null;
   const build = async () => {
-    if (fs.existsSync(themeFiles(cwd, slug).js)) return;
-    await buildTheme(await context(cwd), slug, loadTheme(cwd, slug));
+    const t = loadTheme(cwd, slug);
+    why = staleBuild(cwd, slug, t);
+    if (!why) return;
+    await buildTheme(await context(cwd), slug, t);
   };
   await (typeof options?.lockTheme === 'function'
     ? options.lockTheme(slug, build)
     : build());
-  notes.push(
-    `built ${shown(cwd, themeFiles(cwd, slug).dir)}/ first: its build was missing`,
-  );
+  if (why)
+    notes.push(
+      `built ${shown(cwd, themeFiles(cwd, slug).dir)}/ first: its build was not current (${why})`,
+    );
 }
 
 /** The Colors page: its id and file, relative to the route folder. */
@@ -3903,6 +3918,20 @@ async function reportingRecovery(fn) {
 }
 
 /**
+ * A --theme value as the editor reads a pasted entry: `theme: t`,
+ * `--theme=t` and the like name the theme t.
+ * @param {string | undefined} v
+ * @returns {string | undefined}
+ */
+function themeArg(v) {
+  if (typeof v !== 'string') return v;
+  const {thing, value} = normalizeEntry(v, undefined);
+  return /^-*theme$/i.test(thing) && value?.trim()
+    ? value.trim().replace(/^['"]|['"]$/g, '')
+    : v;
+}
+
+/**
  * {@link themeEditPreviewAdd}, with the note of a recovery in `box`.
  * @param {string | undefined} description
  * @param {import('./theme-edit.type.mjs').ThemeEditPreviewAddOptions} options
@@ -3910,6 +3939,7 @@ async function reportingRecovery(fn) {
  * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditPreviewAddResponse>}
  */
 async function addPreview(description, options, box) {
+  options = {...options, theme: themeArg(options.theme)};
   const {cwd = process.cwd()} = options;
   if (isOutsideProject(cwd))
     refuse(
@@ -4409,6 +4439,7 @@ export async function themeEditPreviewApp(dir, options = {}) {
       'Name the folder for the new app: a new or empty folder inside the current one.',
       {run: [`${PREVIEW} app theme-app`]},
     );
+  options = {...options, theme: themeArg(options.theme)};
   const slug = options.theme ?? null;
   const theme =
     slug == null
@@ -4781,6 +4812,39 @@ export async function themeEditPreviewRemove(page, options = {}) {
 }
 
 /**
+ * The preview folders in the app: every folder under the routes folders
+ * (app/, src/app/) holding a theme-preview.json, a few levels deep.
+ * @param {string} cwd
+ * @returns {string[]}
+ */
+function previewsIn(cwd) {
+  /** @type {string[]} */
+  const out = [];
+  /** @param {string} dir @param {number} depth */
+  const walk = (dir, depth) => {
+    if (depth > 6 || out.length >= 20) return;
+    if (fs.existsSync(path.join(dir, PREVIEW_DATA))) out.push(dir);
+    /** @type {fs.Dirent[]} */
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, {withFileTypes: true});
+    } catch {
+      return;
+    }
+    for (const e of entries)
+      if (
+        e.isDirectory() &&
+        e.name !== 'node_modules' &&
+        !e.name.startsWith('.')
+      )
+        walk(path.join(dir, e.name), depth + 1);
+  };
+  for (const r of [path.join(cwd, 'app'), path.join(cwd, 'src', 'app')])
+    if (fs.existsSync(r)) walk(r, 0);
+  return out.sort();
+}
+
+/**
  * {@link themeEditPreviewRemove}, with the note of a recovery in `box`.
  * @param {string | undefined} page
  * @param {import('./theme-edit.type.mjs').ThemeEditPreviewListOptions} options
@@ -4821,26 +4885,40 @@ async function removePreview(page, options, box) {
   if (!data) {
     // A folder that holds the app takes no preview: the way on is the
     // preview elsewhere, or a new one in its own folder.
-    /** @type {string | null} */
-    let other = null;
-    if (holdsApp(cwd, at.dir))
-      try {
-        const d = previewDir(cwd, undefined, {optional: true, retry})?.dir;
-        if (d && d !== at.dir && fs.existsSync(path.join(d, PREVIEW_DATA)))
-          other = d;
-      } catch {
-        // Several previews, or none: add is the way on.
-      }
+    // The previews there are, each with its remove; `add` there only
+    // when add would take the folder.
+    const others = previewsIn(cwd).filter(d => d !== at.dir);
+    /** @type {string | undefined} */
+    let usual;
+    try {
+      usual = previewDir(cwd, undefined, {optional: true, retry})?.dir;
+    } catch {
+      // Several previews, or none.
+    }
+    const pageArg = page != null ? ` ${quoteCommandArgument(page)}` : '';
+    let addable = true;
+    try {
+      previewDir(cwd, options.path, {write: true, retry});
+    } catch {
+      addable = false;
+    }
     refuse(
       E.ERR_NOT_FOUND,
-      `There is no theme preview in ${shownDir(cwd, at.dir)}/ (no ${PREVIEW_DATA}).`,
+      `There is no theme preview in ${shownDir(cwd, at.dir)}/ (no ${PREVIEW_DATA}).${others.length ? ` ${others.length > 1 ? 'The previews here are in' : 'The preview here is in'} ${others.map(d => `${shownDir(cwd, d)}/`).join(', ')}.` : ''}`,
       {
         run: [
-          holdsApp(cwd, at.dir)
-            ? other
-              ? `${PREVIEW} remove${page != null ? ` ${quoteCommandArgument(page)}` : ''}  # the preview in ${shownDir(cwd, other)}/`
-              : `${PREVIEW} add`
-            : `${PREVIEW} add${pf}`,
+          ...others.slice(0, 3).map(
+            d =>
+              // The usual preview folder needs no --path.
+              `${PREVIEW} remove${pageArg}${d === usual ? '' : ` --path ${quoteCommandArgument(shownDir(cwd, d))}`}`,
+          ),
+          ...(others.length
+            ? []
+            : [
+                addable && !holdsApp(cwd, at.dir)
+                  ? `${PREVIEW} add${pf}`
+                  : `${PREVIEW} add`,
+              ]),
         ],
       },
     );
