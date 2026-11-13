@@ -667,6 +667,34 @@ describe('retained focused column', () => {
   });
 });
 
+describe('column range changes', () => {
+  it('builds only the cells of columns that enter the window', async () => {
+    const viewport = controlledViewport();
+    const built: string[] = [];
+    // Each body cell runs every plugin's cell transform when it is built.
+    const recorder: TablePlugin<Item> = {
+      rowModel: 'flat',
+      transformBodyCell: (props, column) => {
+        built.push(column.key);
+        return props;
+      },
+    };
+    const {container} = render(<Fixture extraPlugins={{recorder}} />);
+    await settle();
+    await viewport.scrollTo(200);
+    const before = mountedKeys(container);
+    built.length = 0;
+    // One more column enters at the inline end.
+    await viewport.scrollTo(300);
+    const after = mountedKeys(container);
+    const entering = after.filter(key => !before.includes(key));
+    expect(entering.length).toBeGreaterThan(0);
+    expect(after.length).toBeGreaterThan(entering.length);
+    expect([...new Set(built)].sort()).toEqual([...entering].sort());
+    expect(built).toHaveLength(entering.length * ROW_COUNT);
+  });
+});
+
 describe('first-visible-column anchor', () => {
   // 2050px into a run of 100px columns: c20 is first visible, half shown.
   async function mountAt(
