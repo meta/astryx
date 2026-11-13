@@ -2039,3 +2039,76 @@ describe('themeBuild() — the --out path it suggests', () => {
     );
   });
 });
+
+describe('themeBuild() — the former hand-off keys are ignored', () => {
+  const run = async (/** @type {Record<string, unknown>} */ extra) => {
+    for (const f of fs.readdirSync(tmpDir))
+      if (f !== 'hidden.mjs')
+        fs.rmSync(path.join(tmpDir, f), {recursive: true, force: true});
+    const {result, warnings} = await withWarnings(() =>
+      themeBuild('hidden.mjs', /** @type {any} */ ({...extra}), {cwd: tmpDir}),
+    );
+    const files = Object.fromEntries(
+      fs
+        .readdirSync(tmpDir)
+        .filter(f => f !== 'hidden.mjs')
+        .sort()
+        .map(f => [f, fs.readFileSync(path.join(tmpDir, f), 'utf8')]),
+    );
+    return {result: JSON.stringify(result), warnings, files};
+  };
+
+  it.each([
+    ['__prepareFamily', true],
+    ['__familyLoader', {}],
+    ['__familyInterception', {}],
+    ['__writeRoot', path.join(os.tmpdir(), 'astryx-no-such-root')],
+    ['__claimedOutputs', new Map([['hidden.css', 'other.mjs']])],
+    ['__deferredWrites', []],
+    ['__commandWords', {group: 'zzz', build: 'yyy'}],
+  ])('%s changes nothing', async (key, value) => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'hidden.mjs'),
+      `export default { name: 'hidden', tokens: { '--color-bg': '#0a0a0a' } };\n`,
+    );
+    const plain = await run({});
+    expect(Object.keys(plain.files).length).toBeGreaterThan(0);
+    // Claimed outputs are keyed by absolute path when honored.
+    const v =
+      key === '__claimedOutputs'
+        ? new Map([[path.join(tmpDir, 'hidden.css'), 'other.mjs']])
+        : value;
+    const withKey = await run({[key]: v});
+    expect(withKey).toEqual(plain);
+  });
+
+  it('__commandWords does not change the --check rebuild line', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'hidden.mjs'),
+      `export default { name: 'hidden', tokens: { '--color-bg': '#0a0a0a' } };\n`,
+    );
+    const lines = [];
+    const silent = logger.silent;
+    const {warn, log, error} = logger;
+    logger.setSilent(false);
+    logger.warn =
+      logger.log =
+      logger.error =
+        (/** @type {string} */ l) => void lines.push(l);
+    try {
+      await themeBuild(
+        'hidden.mjs',
+        /** @type {any} */ ({
+          check: true,
+          __commandWords: {group: 'zzz', build: 'yyy'},
+        }),
+        {cwd: tmpDir},
+      );
+    } finally {
+      Object.assign(logger, {warn, log, error});
+      logger.setSilent(silent);
+    }
+    expect(lines.join('\n')).toMatch(/Rebuild with: .*theme build/);
+    expect(lines.join('\n')).not.toContain('zzz');
+  });
+});

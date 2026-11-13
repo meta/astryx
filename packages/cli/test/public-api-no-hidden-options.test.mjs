@@ -11,8 +11,10 @@
  * of an exported object or class), and fails on a `__`-prefixed property of
  * any parameter type. A `__` field that Core declares on a theme it resolves
  * (`__onDark`, `__onLight`, ...) is data a theme carries, not an option, and
- * is the one thing allowed. A second check keeps the CLI's own code from
- * reading an `options.__*` hand-off again.
+ * is the one thing allowed. A second check reads every CLI source file's
+ * AST and fails on a `__` option read from an `options`/`opts` parameter in
+ * any spelling (`.__x`, `['__x']`, destructured) or destructured in a
+ * parameter itself.
  *
  * @position packages/cli/test — package-surface guard; not shipped
  */
@@ -159,6 +161,113 @@ function sourceFiles(dir) {
   });
 }
 
+/**
+ * Every place a source file reads a `__`-prefixed option, found in its AST:
+ * from a parameter named `options` or `opts` (`.__x`, `?.__x`, `['__x']`,
+ * destructured in a declaration or an assignment), and a `__` property in a
+ * parameter's own destructuring pattern. Every function counts, exported or
+ * not, so a hand-off cannot hide one call deeper.
+ * @param {string} file
+ * @param {string} code
+ * @returns {string[]}
+ */
+function scanSource(file, code) {
+  const source = ts.createSourceFile(
+    file,
+    code,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.JS,
+  );
+  /** @type {string[]} */
+  const hits = [];
+  /** @param {any} node @param {string} what */
+  const hit = (node, what) => {
+    const {line} = source.getLineAndCharacterOfPosition(node.getStart());
+    hits.push(`${file}:${line + 1} ${what}`);
+  };
+  const OPTION_NAMES = new Set(['options', 'opts']);
+  /** @param {any} n */
+  const isOptions = n => ts.isIdentifier(n) && OPTION_NAMES.has(n.text);
+  /** @param {any} n */
+  const propName = n =>
+    n && (ts.isIdentifier(n) || ts.isStringLiteral(n)) ? n.text : null;
+  /** A `__` key in an object binding or assignment pattern. @param {any} pattern */
+  const hiddenKeys = pattern => {
+    /** @type {string[]} */
+    const keys = [];
+    if (ts.isObjectBindingPattern(pattern)) {
+      for (const el of pattern.elements) {
+        const key = propName(el.propertyName) ?? propName(el.name);
+        if (key && HIDDEN.test(key)) keys.push(key);
+      }
+    } else if (ts.isObjectLiteralExpression(pattern)) {
+      for (const p of pattern.properties) {
+        const key = propName(p.name);
+        if (key && HIDDEN.test(key)) keys.push(key);
+      }
+    }
+    return keys;
+  };
+  /** @param {any} node */
+  const visit = node => {
+    if (
+      (ts.isPropertyAccessExpression(node) ||
+        ts.isPropertyAccessChain?.(node)) &&
+      isOptions(node.expression) &&
+      HIDDEN.test(node.name.text)
+    )
+      hit(node, `${node.expression.text}.${node.name.text}`);
+    if (
+      ts.isElementAccessExpression(node) &&
+      isOptions(node.expression) &&
+      ts.isStringLiteral(node.argumentExpression) &&
+      HIDDEN.test(node.argumentExpression.text)
+    )
+      hit(node, `${node.expression.text}['${node.argumentExpression.text}']`);
+    if (
+      ts.isVariableDeclaration(node) &&
+      node.initializer &&
+      isOptions(node.initializer)
+    )
+      for (const key of hiddenKeys(node.name))
+        hit(node, `{${key}} = ${node.initializer.text}`);
+    if (
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+      isOptions(node.right)
+    ) {
+      const left = ts.isParenthesizedExpression(node.left)
+        ? node.left.expression
+        : node.left;
+      for (const key of hiddenKeys(left))
+        hit(node, `{${key}} = ${node.right.text}`);
+    }
+    if (ts.isParameter(node))
+      for (const key of hiddenKeys(node.name)) hit(node, `parameter {${key}}`);
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return hits;
+}
+
+/** Every hidden option read in the CLI's own source. */
+function hiddenOptionReads() {
+  /** @type {string[]} */
+  const hits = [];
+  for (const dir of ['api', 'clients', 'foundation', 'host', 'authoring']) {
+    for (const file of sourceFiles(path.join(CLI_ROOT, dir))) {
+      hits.push(
+        ...scanSource(
+          path.relative(CLI_ROOT, file),
+          fs.readFileSync(file, 'utf8'),
+        ),
+      );
+    }
+  }
+  return hits;
+}
+
 describe('public API functions take no hidden options', () => {
   it('no exported function has a `__`-prefixed option', () => {
     const {found, functions} = hiddenOptions();
@@ -167,20 +276,31 @@ describe('public API functions take no hidden options', () => {
     expect(found).toEqual([]);
   }, 60_000);
 
-  it('no CLI code reads an `options.__*` hand-off', () => {
-    const read = /\b(?:options|opts)\??\.__[a-zA-Z]\w*/g;
-    /** @type {string[]} */
-    const hits = [];
-    for (const dir of ['api', 'clients', 'foundation', 'host', 'authoring']) {
-      for (const file of sourceFiles(path.join(CLI_ROOT, dir))) {
-        const lines = fs.readFileSync(file, 'utf8').split('\n');
-        lines.forEach((line, i) => {
-          for (const match of line.matchAll(read)) {
-            hits.push(`${path.relative(CLI_ROOT, file)}:${i + 1} ${match[0]}`);
-          }
-        });
-      }
-    }
+  it('no CLI code reads a `__`-prefixed option, by any spelling', () => {
+    const hits = hiddenOptionReads();
     expect(hits).toEqual([]);
+  });
+
+  it('the read scan catches every spelling of a hidden option', () => {
+    // Each line plants one spelling the scan must name.
+    const planted = [
+      'export function a(file, options = {}) { return options.__x; }',
+      'export function b(file, options) { return options?.__x; }',
+      "export function c(file, opts) { return opts['__x']; }",
+      'export function d(file, options) { const {out, __writeRoot} = options; return out; }',
+      'export function e(file, options) { const {__x: y} = options; return y; }',
+      'export function f(file, {out, __x} = {}) { return out; }',
+      'export function g(file, options) { let w; ({__x: w} = options); return w; }',
+    ];
+    for (const code of planted) {
+      expect(scanSource('planted.mjs', code), code).not.toEqual([]);
+    }
+    // A theme's own `__` fields read from the theme are not options.
+    expect(
+      scanSource(
+        'theme.mjs',
+        'export function h(theme, options) { return theme.__icons ?? options.out; }',
+      ),
+    ).toEqual([]);
   });
 });
