@@ -465,15 +465,22 @@ export function useTypedDateField({
     reportEntryError(null);
   }, [reportEntryError]);
 
-  // A value from outside drops typed text. Adjusted during render, so it
-  // takes no extra commit; state, so a render React discards takes its
-  // adjustment with it.
-  const [prevValue, setPrevValue] = useState(value);
-  if (value !== prevValue) {
-    setPrevValue(value);
-    if (value !== lastFiredDate) {
+  // A value from outside drops typed text, except a value that changes at the
+  // Enter or blur that keeps rejected text: a caller that restores its own
+  // value there must not erase the entry. Adjusted during render, so it takes
+  // no extra commit; state, so a render React discards takes its adjustment
+  // with it.
+  const [rendered, setRendered] = useState({value, isRejectionCommitted});
+  if (
+    rendered.value !== value ||
+    rendered.isRejectionCommitted !== isRejectionCommitted
+  ) {
+    setRendered({value, isRejectionCommitted});
+    if (rendered.value !== value && value !== lastFiredDate) {
       setFiredEpoch(epoch => epoch + 1);
-      if (pendingInput !== null) {
+      const isKeptByThisCommit =
+        isRejectionCommitted && !rendered.isRejectionCommitted;
+      if (pendingInput !== null && !isKeptByThisCommit) {
         setPendingInput(null);
         setIsRejectionCommitted(false);
         setKeptText(null);
@@ -694,10 +701,17 @@ export function useNativeDateRejection({
     held: ISODateString | null;
     shown: ISODateString | null;
   }>(NO_REFUSAL);
-  const [prevValue, setPrevValue] = useState(value);
-  if (value !== prevValue) {
-    setPrevValue(value);
-    if (refusal !== NO_REFUSAL) {
+  // A new value ends the rejection, except a value that changes at the Enter
+  // or blur that shows it: a caller that restores its own value there must
+  // not hide the rejection.
+  const [rendered, setRendered] = useState({value, shown: refusal.shown});
+  if (rendered.value !== value || rendered.shown !== refusal.shown) {
+    setRendered({value, shown: refusal.shown});
+    if (
+      rendered.value !== value &&
+      rendered.shown === refusal.shown &&
+      refusal !== NO_REFUSAL
+    ) {
       setRefusal(NO_REFUSAL);
     }
   }

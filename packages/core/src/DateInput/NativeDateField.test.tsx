@@ -32,6 +32,7 @@ import {
   Suspense,
   startTransition,
   use,
+  useState,
   type ReactElement,
   type ReactNode,
 } from 'react';
@@ -985,6 +986,76 @@ describe('DateInput native rejected entries', () => {
     expect(statusText(container)).toBe('');
     expect(input).not.toHaveAttribute('aria-invalid');
     expect(onChange).toHaveBeenCalledExactlyOnceWith(next || undefined);
+  });
+
+  it('ends a shown rejection when a later new value replaces it', () => {
+    stubPointer(true);
+    const field = (value: ISODateString) => (
+      <DateInput
+        label="Date"
+        min="2026-03-10"
+        max="2026-03-20"
+        value={value}
+        onChange={() => {}}
+      />
+    );
+    const {container, rerender} = render(field('2026-03-15'));
+    const input = getInput();
+    fireEvent.focus(input);
+    fireEvent.change(input, {target: {value: '2026-03-25'}});
+    fireEvent.blur(input);
+    expect(statusText(container)).toBe(RANGE_MESSAGE);
+
+    rerender(field('2026-03-18'));
+    expect(input).not.toHaveAttribute('aria-invalid');
+    expect(statusText(container)).toBe('');
+  });
+
+  it('keeps a refused date shown when the caller restores its value at the blur that shows it', () => {
+    stubPointer(true);
+    function RestoringDateInput() {
+      const [value, setValue] = useState<ISODateString | undefined>(
+        '2026-03-15',
+      );
+      const [editStartValue, setEditStartValue] = useState(value);
+      return (
+        <>
+          <DateInput
+            label="Date"
+            min="2026-03-10"
+            max="2026-03-20"
+            value={value}
+            onChange={setValue}
+            onFocus={() => setEditStartValue(value)}
+            onBlur={() => {
+              if (value !== editStartValue) {
+                setValue(editStartValue);
+              }
+            }}
+          />
+          <output data-testid="value">{value ?? ''}</output>
+          <button type="button" onClick={() => setValue('2026-03-18')}>
+            Replace
+          </button>
+        </>
+      );
+    }
+    const {container} = render(<RestoringDateInput />);
+    const input = getInput();
+    fireEvent.focus(input);
+    fireEvent.change(input, {target: {value: '2026-03-12'}});
+    expect(screen.getByTestId('value')).toHaveTextContent('2026-03-12');
+    fireEvent.change(input, {target: {value: '2026-03-25'}});
+
+    fireEvent.blur(input);
+    expect(screen.getByTestId('value')).toHaveTextContent('2026-03-15');
+    expect(input).toHaveValue('2026-03-15');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(statusText(container)).toBe(RANGE_MESSAGE);
+
+    fireEvent.click(screen.getByRole('button', {name: 'Replace'}));
+    expect(input).not.toHaveAttribute('aria-invalid');
+    expect(statusText(container)).toBe('');
   });
 
   it('hides a shown rejection while disabled, and shows it again once editable', () => {
