@@ -341,12 +341,16 @@ those contracts.
   page still has it once the page settles. Nothing loads them on demand or on
   an interaction. Until they have loaded, a component that uses them works by
   taps, clicks and keys, with no drag tracking and no spring. The bundler
-  keeps one copy per page however many components use them. Gap: these modules
-  still import the shared touch modules statically, so a page that renders
-  them carries the touch runtime in its first load: Toast (`useToastGesture`),
-  Popover (`popoverSurfaceMotion`), `hooks/useActionGroupTracking`,
-  `hooks/usePager`, Lightbox (`useZoomCore`, `useZoomStage`), and Resizable
-  (`resizablePane`). A surface
+  keeps one copy per page however many components use them.
+  `utils/touchRuntimeModules.tsx` is the one module the loader's `import()`
+  targets; it gathers the touch runtime, so the loader names a single chunk.
+  `motion/settleThreshold.ts` holds `SETTLE_THRESHOLD` apart from the
+  animator, so a component that reads the threshold statically does not pull
+  in the deferred runtime. Gap: these modules still import the shared touch
+  modules statically, so a page that renders them carries the touch runtime in
+  its first load: Toast (`useToastGesture`), Popover (`popoverSurfaceMotion`),
+  `hooks/useActionGroupTracking`, `hooks/usePager`, Lightbox (`useZoomCore`,
+  `useZoomStage`), and Resizable (`resizablePane`). A surface
   revealed by interaction that a component loads with `import()` under
   `architecture:component-import-boundaries` INV1 imports these modules
   statically too; the bundler still keeps one copy per page. That `import()`
