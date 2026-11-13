@@ -109,6 +109,7 @@ import {
 import {
   renderPreview,
   renderSheet,
+  previewIsCurrent,
   takeFirstAppCopy,
   writeAppCopy,
 } from './_preview.mjs';
@@ -839,7 +840,19 @@ async function previewAndRoute(ctx, slug, data, png, focus = 'overview') {
     ...p,
     previewStale: await keepPreviewRoute(ctx, slug),
     // How to see the change: the page about it, at its own URL.
-    see: seeLine(ctx.project.cwd, slug, focus, p.notChecked ?? null),
+    // A page not written this time (preview null) still shows the theme
+    // as it was; checks that failed with the page written do not.
+    see: seeLine(
+      ctx.project.cwd,
+      slug,
+      focus,
+      p.preview == null
+        ? (p.notChecked ?? {
+            code: 'ERR_THEME_NOT_CHECKED',
+            cause: 'no preview was rendered',
+          })
+        : null,
+    ),
     // The first time the theme's app copy is written, its files are named.
     ...(wrote ? {appCopy: {wrote}} : {}),
   };
@@ -2001,10 +2014,15 @@ async function changeOnce(
     notes.push(
       'text below the base size keeps its standard sizes, so small text stays readable',
     );
-  // A change that changed nothing writes nothing, the preview included.
+  // A change that changed nothing writes nothing, the preview included,
+  // once preview.html was rendered from the theme as it is now (a retry
+  // after a render that failed renders it).
   const f0 = themeFiles(cwd, slug);
   const p =
-    r.unchanged && !png && fs.existsSync(f0.preview)
+    r.unchanged &&
+    !png &&
+    fs.existsSync(f0.preview) &&
+    previewIsCurrent(ctx, slug, data)
       ? {
           preview: shown(cwd, f0.preview),
           pictures: [],

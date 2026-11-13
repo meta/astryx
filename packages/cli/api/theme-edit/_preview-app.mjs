@@ -35,6 +35,7 @@ import {
   shown,
   staleBuild,
   themeFiles,
+  unlabeledThemeName,
   usableNewName,
   windowsReserved,
 } from './_settings.mjs';
@@ -72,7 +73,6 @@ import {
 } from '../../foundation/env/package-manager.mjs';
 import {sha256} from '../../foundation/render/source-block.mjs';
 import {findNodeModulesPackage} from '../../foundation/fs/paths.mjs';
-import {normalizeEntry} from './_check.mjs';
 
 const E = ERROR_CODES;
 
@@ -4028,11 +4028,7 @@ async function reportingRecovery(fn) {
  * @returns {string | undefined}
  */
 function themeArg(v) {
-  if (typeof v !== 'string') return v;
-  const {thing, value} = normalizeEntry(v, undefined);
-  return /^-*(theme|name|slug)$/i.test(thing) && value?.trim()
-    ? value.trim().replace(/^['"]|['"]$/g, '')
-    : v;
+  return typeof v === 'string' ? unlabeledThemeName(v) : v;
 }
 
 /**

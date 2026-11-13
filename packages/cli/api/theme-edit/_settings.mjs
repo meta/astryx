@@ -532,6 +532,21 @@ export function refuse(code, message, extra = {}) {
 }
 
 /**
+ * A theme name without a pasted label: `theme: t`, `name=t`, `--theme t`
+ * and `slug: "t"` name t; quotes and backticks around it go. Case is kept.
+ * The one reader of such labels, for --theme and every editor command.
+ * @param {unknown} s
+ * @returns {string}
+ */
+export function unlabeledThemeName(s) {
+  return String(s ?? '')
+    .trim()
+    .replace(/^-*(?:theme|name|slug)(?:\s*[:=]\s*|\s+)(?=\S)/i, '')
+    .replace(/^['"`]+|['"`]+$/g, '')
+    .trim();
+}
+
+/**
  * A theme name as typed, read the way the editor reads it: a path to its
  * folder or a file in it (t.theme.ts, Brand.settings.json), in any case,
  * or a pasted label (`theme: t`, `name: t`), names the theme. The result may still need slugFor.
@@ -540,12 +555,8 @@ export function refuse(code, message, extra = {}) {
  */
 export function typedThemeName(s) {
   return (
-    String(s ?? '')
-      .trim()
+    unlabeledThemeName(s)
       .toLowerCase()
-      // A pasted label (`theme: t`, `name=t`, `slug: "t"`) names the theme t.
-      .replace(/^-*(?:theme|name|slug)\s*[:=]\s*/, '')
-      .replace(/^['"`]+|['"`]+$/g, '')
       // ./t and .\t name the theme t.
       .replace(/^(\.[\\/])+/, '')
       .replace(/^.*themes[\\/]/, '')
