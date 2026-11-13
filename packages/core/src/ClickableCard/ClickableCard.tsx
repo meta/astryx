@@ -263,16 +263,11 @@ export interface ClickableCardProps extends BaseProps {
   href?: string;
 
   /**
-   * Link target for href navigation.
+   * Link target for href navigation. `"_blank"` also sets
+   * `rel="noopener noreferrer"`.
    * @default '_self'
    */
   target?: string;
-
-  /**
-   * HTML rel attribute for the link. When `target="_blank"`,
-   * `noopener noreferrer` is added automatically (matching Link and Item).
-   */
-  rel?: string;
 
   /**
    * Set to true to disable the card.
@@ -360,7 +355,6 @@ export function ClickableCard({
   onPointerDown: onPointerDownProp,
   href,
   target,
-  rel,
   isDisabled = false,
   children,
   padding,
@@ -414,7 +408,10 @@ export function ClickableCard({
   );
 
   const LinkComponent = useLinkComponent();
-  const {target: computedTarget, rel: computedRel} = computeTargetAndRel(target, rel);
+  const {target: computedTarget, rel: computedRel} = computeTargetAndRel(
+    target,
+    undefined,
+  );
 
   const {onClick, onMouseUp, onPointerDown} = useClickableContainer({
     containerRef,

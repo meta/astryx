@@ -6,40 +6,123 @@ export const docs = {
   displayName: 'Clickable Card',
   group: 'Card',
   category: 'Container',
-  keywords: ['card', 'clickable', 'interactive', 'navigation', 'action', 'link'],
+  keywords: [
+    'card',
+    'clickable',
+    'interactive',
+    'navigation',
+    'action',
+    'link',
+  ],
   usage: {
-    description: 'An interactive card for navigation or action targets. Nested interactive elements work independently.',
+    description:
+      'An interactive card for navigation or action targets. Nested interactive elements work independently.',
     bestPractices: [
-      {guidance: true, description: 'Use for cards that navigate to a detail page or trigger a single action.'},
-      {guidance: true, description: 'Nest buttons or links freely inside; they handle their own events.'},
-      {guidance: false, description: 'Use for toggling selection; use SelectableCard for that.'},
-      {guidance: false, description: 'Use with a transparent variant and no padding only to borrow the press model for a surface that owns its own box. Compose the chrome-free recipe in the useClickableContainer docs instead: it adds no Card styles to the page.'},
+      {
+        guidance: true,
+        description:
+          'Use for cards that navigate to a detail page or trigger a single action.',
+      },
+      {
+        guidance: true,
+        description:
+          'Nest buttons or links freely inside; they handle their own events.',
+      },
+      {
+        guidance: false,
+        description: 'Use for toggling selection; use SelectableCard for that.',
+      },
+      {
+        guidance: false,
+        description:
+          'Use with a transparent variant and no padding only to borrow the press model for a surface that owns its own box. Compose the chrome-free recipe in the useClickableContainer docs instead: it adds no Card styles to the page.',
+      },
     ],
     anatomy: [
-      {name: 'Container', required: true, description: 'Interactive div with hover/focus/active states.'},
-      {name: 'Content', required: true, description: 'Children, which may include nested interactive elements.'},
+      {
+        name: 'Container',
+        required: true,
+        description: 'Interactive div with hover/focus/active states.',
+      },
+      {
+        name: 'Content',
+        required: true,
+        description: 'Children, which may include nested interactive elements.',
+      },
     ],
   },
   props: [
-    {name: 'label', type: 'string', description: 'Accessibility label.', required: true},
-    {name: 'onClick', type: '(event: MouseEvent) => void', description: 'Click handler: fires on card surface only.'},
-    {name: 'href', type: 'string', description: 'Navigation URL. Plain, new-tab, Cmd/Ctrl-click, and middle-click activation all follow the shared navigation rule described on the Link `href` prop.'},
-    {name: 'target', type: 'string', description: 'Link target.', default: "'_self'"},
-    {name: 'isDisabled', type: 'boolean', description: 'Disables the card and removes a link destination; the card keeps its tab stop and is announced as disabled.', default: 'false'},
+    {
+      name: 'label',
+      type: 'string',
+      description: 'Accessibility label.',
+      required: true,
+    },
+    {
+      name: 'onClick',
+      type: '(event: MouseEvent) => void',
+      description: 'Click handler: fires on card surface only.',
+    },
+    {
+      name: 'href',
+      type: 'string',
+      description:
+        'Navigation URL. Plain, new-tab, Cmd/Ctrl-click, and middle-click activation all follow the shared navigation rule described on the Link `href` prop.',
+    },
+    {
+      name: 'target',
+      type: 'string',
+      description: 'Link target. "_blank" also sets rel="noopener noreferrer".',
+      default: "'_self'",
+    },
+    {
+      name: 'isDisabled',
+      type: 'boolean',
+      description:
+        'Disables the card and removes a link destination; the card keeps its tab stop and is announced as disabled.',
+      default: 'false',
+    },
     {name: 'children', type: 'ReactNode', description: 'Card content.'},
-    {name: 'padding', type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10', description: 'Inner padding.', default: '4'},
-    {name: 'variant', type: "'default' | 'transparent' | 'muted' | 'blue' | 'cyan' | 'gray' | 'green' | 'orange' | 'pink' | 'purple' | 'red' | 'teal' | 'yellow'", description: 'Background color variant.', default: "'default'"},
-    {name: 'elevation', type: "'none' | 'low' | 'med' | 'high'", description: 'Resting shadow depth. Often raised to signal the whole card is clickable.', default: "'none'"},
+    {
+      name: 'padding',
+      type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10',
+      description: 'Inner padding.',
+      default: '4',
+    },
+    {
+      name: 'variant',
+      type: "'default' | 'transparent' | 'muted' | 'blue' | 'cyan' | 'gray' | 'green' | 'orange' | 'pink' | 'purple' | 'red' | 'teal' | 'yellow'",
+      description: 'Background color variant.',
+      default: "'default'",
+    },
+    {
+      name: 'elevation',
+      type: "'none' | 'low' | 'med' | 'high'",
+      description:
+        'Resting shadow depth. Often raised to signal the whole card is clickable.',
+      default: "'none'",
+    },
     {name: 'width', type: 'SizeValue', description: 'Card width.'},
     {name: 'height', type: 'SizeValue', description: 'Card height.'},
     {name: 'maxWidth', type: 'SizeValue', description: 'Maximum card width.'},
-    {name: 'xstyle', type: 'StyleXStyles', description: 'StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value, not an inline style object like style={{}}.'},
+    {
+      name: 'xstyle',
+      type: 'StyleXStyles',
+      description:
+        'StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value, not an inline style object like style={{}}.',
+    },
   ],
   theming: {
     container: true,
     targets: [{className: 'astryx-clickable-card', visualProps: ['variant']}],
     vars: [
-      {name: '--_press-overlay', description: 'Colour of the ::after interaction overlay for the hover and mouse states: transparent at rest, the hover overlay token on hover (hover-capable pointers), the pressed overlay token while a mouse holds `:active`. A press the touch press controller paints (`data-astryx-press`) is the overlay\'s image instead, at the press\'s strength, and the colour yields to it. Set on the card element by its own interaction arms.', default: 'transparent', private: true},
+      {
+        name: '--_press-overlay',
+        description:
+          "Colour of the ::after interaction overlay for the hover and mouse states: transparent at rest, the hover overlay token on hover (hover-capable pointers), the pressed overlay token while a mouse holds `:active`. A press the touch press controller paints (`data-astryx-press`) is the overlay's image instead, at the press's strength, and the colour yields to it. Set on the card element by its own interaction arms.",
+        default: 'transparent',
+        private: true,
+      },
     ],
   },
   playground: {
@@ -51,8 +134,17 @@ export const docs = {
         __element: 'XDSVStack',
         props: {gap: 1},
         children: [
-          {__element: 'XDSHeading', props: {level: 3}, children: 'Wireless Headphones'},
-          {__element: 'XDSText', props: {type: 'body'}, children: 'Noise-cancelling over-ear headphones with 30-hour battery life.'},
+          {
+            __element: 'XDSHeading',
+            props: {level: 3},
+            children: 'Wireless Headphones',
+          },
+          {
+            __element: 'XDSText',
+            props: {type: 'body'},
+            children:
+              'Noise-cancelling over-ear headphones with 30-hour battery life.',
+          },
         ],
       },
     },
@@ -61,14 +153,31 @@ export const docs = {
 
 /** @type {import('@astryxdesign/cli/authoring').ComponentTranslationDoc} */
 export const docsDense = {
-  description: 'Interactive card for navigation/action targets. Nested interactive elements work independently.',
+  description:
+    'Interactive card for navigation/action targets. Nested interactive elements work independently.',
   usage: {
-    description: 'Interactive card for navigation/action targets. Nested interactive elements work independently.',
+    description:
+      'Interactive card for navigation/action targets. Nested interactive elements work independently.',
     bestPractices: [
-      {guidance: true, description: 'Use for cards navigating to detail page or triggering single action.'},
-      {guidance: true, description: 'Nest buttons/links freely inside; they handle own events.'},
-      {guidance: false, description: 'Use for toggling selection; use SelectableCard instead.'},
-      {guidance: false, description: 'Use w/ transparent variant + no padding only to borrow press model for surface owning its own box; compose chrome-free recipe in useClickableContainer docs instead (no Card styles).'},
+      {
+        guidance: true,
+        description:
+          'Use for cards navigating to detail page or triggering single action.',
+      },
+      {
+        guidance: true,
+        description:
+          'Nest buttons/links freely inside; they handle own events.',
+      },
+      {
+        guidance: false,
+        description: 'Use for toggling selection; use SelectableCard instead.',
+      },
+      {
+        guidance: false,
+        description:
+          'Use w/ transparent variant + no padding only to borrow press model for surface owning its own box; compose chrome-free recipe in useClickableContainer docs instead (no Card styles).',
+      },
     ],
   },
   propDescriptions: {
@@ -79,7 +188,8 @@ export const docsDense = {
     isDisabled: 'disables card, removes link destination, keeps tab stop',
     padding: 'inner padding',
     variant: 'background color variant',
-    elevation: 'resting shadow depth: none|low|med|high; often raised to signal clickability',
+    elevation:
+      'resting shadow depth: none|low|med|high; often raised to signal clickability',
     width: 'card width',
     height: 'card height',
     maxWidth: 'max card width',

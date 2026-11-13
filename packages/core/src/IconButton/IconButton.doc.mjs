@@ -130,7 +130,7 @@ export const docs = {
       name: 'rel',
       type: 'string',
       description:
-        'HTML rel attribute when rendered as a link (e.g. "noopener noreferrer").',
+        'HTML rel attribute when rendered as a link. With target="_blank", noopener noreferrer is added beside your own tokens.',
     },
   ],
 
@@ -249,7 +249,8 @@ export const docsDense = {
       'resting shadow depth: none|low|med|high; raise for a floating action button (FAB)',
     isLoading:
       'shows loading spinner, blocks re-activation but stays focusable (aria-disabled, not native disabled)',
-    isDisabled: 'disables button; uses aria-disabled instead of native disabled',
+    isDisabled:
+      'disables button; uses aria-disabled instead of native disabled',
     tooltip:
       'tooltip on hover + keyboard focus; also describes the button unless it repeats the accessible name',
     onClick: 'standard click handler',
