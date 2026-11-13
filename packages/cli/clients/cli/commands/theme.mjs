@@ -988,7 +988,8 @@ function registerThemeCommands(theme, program, docs, words) {
                       words,
                       {
                         glob: true,
-                        ...(options.family
+                        family: Boolean(options.family),
+                        ...(options.family && options.familyKey
                           ? {familyKey: String(options.familyKey)}
                           : {}),
                       },

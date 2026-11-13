@@ -211,4 +211,30 @@ describe('the glob and --family refusals keep the mode', () => {
       / theme build --family themes\/\*\.mjs --family-key fam --check$/,
     );
   });
+
+  it('a quoted glob in a keyless family run names no key and no --out', async () => {
+    const r = await runCli(
+      [
+        '--json',
+        'theme',
+        'build',
+        '--family',
+        'themes/*.mjs',
+        '--out',
+        'o.css',
+        '--check',
+      ],
+      {cwd: app},
+    );
+    expect(r.status).toBe(1);
+    const names = JSON.parse(r.stdout)
+      .suggestions.map(s => s.name)
+      .join('\n');
+    expect(names).not.toContain('undefined');
+    expect(names).not.toContain('--out');
+    expect(names).toMatch(/ theme build --family themes\/\*\.mjs --check$/m);
+    expect(fs.existsSync(path.join(app, 'themes', 'undefined.css'))).toBe(
+      false,
+    );
+  });
 });

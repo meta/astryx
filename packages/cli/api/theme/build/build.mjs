@@ -1168,8 +1168,9 @@ export function setPrivateVarErrorListener(listener) {
 
 /**
  * How a suggested build writes its source: `glob` leaves a pattern as typed
- * (unquoted, so the shell expands it); `familyKey` makes it a --family run.
- * @typedef {{glob?: boolean, familyKey?: string}} SuggestionShape
+ * (unquoted, so the shell expands it); `family` makes it a --family run,
+ * and `familyKey` names its key (a family run never takes --out).
+ * @typedef {{glob?: boolean, family?: boolean, familyKey?: string}} SuggestionShape
  */
 
 /**
@@ -1196,11 +1197,14 @@ export function buildSuggestion(source, mode, cwd, words, shape = {}) {
         ...(words ? words.group.split(' ') : ['theme']),
         words?.build ?? 'build',
       ]),
-      ...(shape.familyKey ? ['--family'] : []),
+      ...(shape.family || shape.familyKey ? ['--family'] : []),
       src,
       ...quoted([
         ...(shape.familyKey ? ['--family-key', shape.familyKey] : []),
-        ...(mode.out ? ['--out', mode.out] : []),
+        // A family run refuses --out.
+        ...(mode.out && !shape.family && !shape.familyKey
+          ? ['--out', mode.out]
+          : []),
         ...(mode.iconsSpecifier
           ? ['--icons-specifier', mode.iconsSpecifier]
           : []),
