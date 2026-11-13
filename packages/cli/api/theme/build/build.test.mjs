@@ -31,6 +31,7 @@ import {
 import {logger} from '../../logger.mjs';
 import {
   themeBuild,
+  themeBuildWithHandOff,
   themeSourceFiles,
   validateComponentOverridesAgainstRegistry,
   validateThemePrivateInputs,
@@ -461,29 +462,77 @@ describe('themeBuild() — check mode', () => {
     expect(fs.readFileSync(path.join(tmpDir, 'chk.css'), 'utf8')).toBe(before);
   });
 
-  it('accepts released outputs that do not have a CSS type stub', async () => {
-    const themeFile = path.join(tmpDir, 'released.mjs');
+  it('warns about a missing CSS type stub, which the check names as checked, without failing', async () => {
+    const themeFile = path.join(tmpDir, 'nostub.mjs');
     fs.writeFileSync(
       themeFile,
-      `export default { name: 'released', tokens: { '--color-bg': '#0a0a0a' } };\n`,
+      `export default { name: 'nostub', tokens: { '--color-bg': '#0a0a0a' } };\n`,
     );
-    await themeBuild('released.mjs', {}, {cwd: tmpDir});
-    fs.rmSync(path.join(tmpDir, 'released.css.d.ts'));
+    await themeBuild('nostub.mjs', {}, {cwd: tmpDir});
+    fs.rmSync(path.join(tmpDir, 'nostub.css.d.ts'));
 
-    const result = await themeBuild(
-      'released.mjs',
-      {check: true},
-      {cwd: tmpDir},
-    );
+    /** @type {string[]} */
+    const warnings = [];
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(message => {
+      warnings.push(String(message));
+    });
+    let result;
+    try {
+      result = await themeBuild('nostub.mjs', {check: true}, {cwd: tmpDir});
+    } finally {
+      warn.mockRestore();
+    }
 
     expect(result?.data.upToDate).toBe(true);
     expect(result?.data.stale).toEqual([]);
+    expect(/** @type {any} */ (result)?.data?.code).toBeUndefined();
+    // Every output the build writes is checked, the stub too.
     expect(result?.data.checked).toEqual([
-      'released.css',
-      'released.js',
-      'released.d.ts',
+      'nostub.css',
+      'nostub.css.d.ts',
+      'nostub.js',
+      'nostub.d.ts',
     ]);
-    expect(fs.existsSync(path.join(tmpDir, 'released.css.d.ts'))).toBe(false);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('nostub.css.d.ts');
+    expect(fs.existsSync(path.join(tmpDir, 'nostub.css.d.ts'))).toBe(false);
+  });
+
+  it('fails on a missing module declaration file, as before', async () => {
+    const themeFile = path.join(tmpDir, 'nodts.mjs');
+    fs.writeFileSync(
+      themeFile,
+      `export default { name: 'nodts', tokens: { '--color-bg': '#0a0a0a' } };\n`,
+    );
+    await themeBuild('nodts.mjs', {}, {cwd: tmpDir});
+    fs.rmSync(path.join(tmpDir, 'nodts.d.ts'));
+
+    const result = await themeBuild('nodts.mjs', {check: true}, {cwd: tmpDir});
+
+    expect(result?.data.upToDate).toBe(false);
+    expect(result?.data.stale).toEqual([
+      {path: 'nodts.d.ts', reason: 'missing'},
+    ]);
+    expect(/** @type {any} */ (result)?.data?.code).toBe('ERR_THEME_STALE');
+  });
+
+  it('still fails on a missing CSS output when the type stub is missing too', async () => {
+    const themeFile = path.join(tmpDir, 'nocss.mjs');
+    fs.writeFileSync(
+      themeFile,
+      `export default { name: 'nocss', tokens: { '--color-bg': '#0a0a0a' } };\n`,
+    );
+    await themeBuild('nocss.mjs', {}, {cwd: tmpDir});
+    fs.rmSync(path.join(tmpDir, 'nocss.css'));
+    fs.rmSync(path.join(tmpDir, 'nocss.css.d.ts'));
+
+    const result = await themeBuild('nocss.mjs', {check: true}, {cwd: tmpDir});
+
+    expect(result?.data.upToDate).toBe(false);
+    expect(result?.data.stale).toEqual([
+      {path: 'nocss.css', reason: 'missing'},
+    ]);
+    expect(/** @type {any} */ (result)?.data?.code).toBe('ERR_THEME_STALE');
   });
 
   it('flags a stale output when the committed CSS content drifts from the source', async () => {
@@ -1407,8 +1456,8 @@ describe('themeBuild() — outputs it may replace', () => {
   });
 
   it.each([
-    ['o/x.scss', './o/x.scss', 'o/x.css'],
-    ['o/y', './o/y', 'o/y.css'],
+    ['o/x.scss', '../o/x.scss', 'o/x.css'],
+    ['o/y', '../o/y', 'o/y.css'],
   ])(
     'builds an --out of %s with a warning, and imports the stylesheet by its name',
     async (out, cssImport, suggested) => {
@@ -1771,14 +1820,38 @@ describe('themeBuild() — outputs it may replace', () => {
   it('refuses a second theme that would replace outputs written earlier in the run', async () => {
     fs.writeFileSync(path.join(tmpDir, 'ocean2.mjs'), theme);
     const claimed = new Map();
-    await themeBuild('ocean.mjs', {__claimedOutputs: claimed}, {cwd: tmpDir});
+    await themeBuildWithHandOff(
+      'ocean.mjs',
+      {},
+      {cwd: tmpDir},
+      {claimedOutputs: claimed},
+    );
     const first = fs.readFileSync(path.join(tmpDir, 'ocean.css'), 'utf-8');
     await expect(
-      themeBuild('ocean2.mjs', {__claimedOutputs: claimed}, {cwd: tmpDir}),
+      themeBuildWithHandOff(
+        'ocean2.mjs',
+        {},
+        {cwd: tmpDir},
+        {claimedOutputs: claimed},
+      ),
     ).rejects.toMatchObject({code: 'ERR_THEME_INVALID'});
     expect(fs.readFileSync(path.join(tmpDir, 'ocean.css'), 'utf-8')).toBe(
       first,
     );
+  });
+
+  it('takes no hand-off through the public options', async () => {
+    const deferred = /** @type {any[]} */ ([]);
+    await themeBuild(
+      'ocean.mjs',
+      /** @type {any} */ ({
+        __deferredWrites: deferred,
+        deferredWrites: deferred,
+      }),
+      {cwd: tmpDir},
+    );
+    expect(deferred).toEqual([]);
+    expect(fs.existsSync(path.join(tmpDir, 'ocean.css'))).toBe(true);
   });
 });
 
@@ -1964,5 +2037,78 @@ describe('themeBuild() — the --out path it suggests', () => {
     expect(fs.readFileSync(path.join(dist, 'o.txt-2.css'), 'utf8')).toBe(
       'body {}\n',
     );
+  });
+});
+
+describe('themeBuild() — the former hand-off keys are ignored', () => {
+  const run = async (/** @type {Record<string, unknown>} */ extra) => {
+    for (const f of fs.readdirSync(tmpDir))
+      if (f !== 'hidden.mjs')
+        fs.rmSync(path.join(tmpDir, f), {recursive: true, force: true});
+    const {result, warnings} = await withWarnings(() =>
+      themeBuild('hidden.mjs', /** @type {any} */ ({...extra}), {cwd: tmpDir}),
+    );
+    const files = Object.fromEntries(
+      fs
+        .readdirSync(tmpDir)
+        .filter(f => f !== 'hidden.mjs')
+        .sort()
+        .map(f => [f, fs.readFileSync(path.join(tmpDir, f), 'utf8')]),
+    );
+    return {result: JSON.stringify(result), warnings, files};
+  };
+
+  it.each([
+    ['__prepareFamily', true],
+    ['__familyLoader', {}],
+    ['__familyInterception', {}],
+    ['__writeRoot', path.join(os.tmpdir(), 'astryx-no-such-root')],
+    ['__claimedOutputs', new Map([['hidden.css', 'other.mjs']])],
+    ['__deferredWrites', []],
+    ['__commandWords', {group: 'zzz', build: 'yyy'}],
+  ])('%s changes nothing', async (key, value) => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'hidden.mjs'),
+      `export default { name: 'hidden', tokens: { '--color-bg': '#0a0a0a' } };\n`,
+    );
+    const plain = await run({});
+    expect(Object.keys(plain.files).length).toBeGreaterThan(0);
+    // Claimed outputs are keyed by absolute path when honored.
+    const v =
+      key === '__claimedOutputs'
+        ? new Map([[path.join(tmpDir, 'hidden.css'), 'other.mjs']])
+        : value;
+    const withKey = await run({[key]: v});
+    expect(withKey).toEqual(plain);
+  });
+
+  it('__commandWords does not change the --check rebuild line', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'hidden.mjs'),
+      `export default { name: 'hidden', tokens: { '--color-bg': '#0a0a0a' } };\n`,
+    );
+    const lines = [];
+    const silent = logger.silent;
+    const {warn, log, error} = logger;
+    logger.setSilent(false);
+    logger.warn =
+      logger.log =
+      logger.error =
+        (/** @type {string} */ l) => void lines.push(l);
+    try {
+      await themeBuild(
+        'hidden.mjs',
+        /** @type {any} */ ({
+          check: true,
+          __commandWords: {group: 'zzz', build: 'yyy'},
+        }),
+        {cwd: tmpDir},
+      );
+    } finally {
+      Object.assign(logger, {warn, log, error});
+      logger.setSilent(silent);
+    }
+    expect(lines.join('\n')).toMatch(/Rebuild with: .*theme build/);
+    expect(lines.join('\n')).not.toContain('zzz');
   });
 });

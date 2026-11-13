@@ -115,7 +115,11 @@ interface TableAppearanceProps<T extends Record<string, unknown>> extends Omit<
 export interface TableProps<
   T extends Record<string, unknown>,
 > extends TableAppearanceProps<T> {
-  /** Fixed-height opt-in. Requires data and explicit idKey; invalid combinations fall back with diagnostics. */
+  /**
+   * Windowing opt-in: a rows or columns capability, or a list with at most one
+   * of each. Requires data and explicit idKey; invalid combinations fall back
+   * with diagnostics.
+   */
   virtualization?: BaseTableProps<T>['virtualization'];
 }
 
