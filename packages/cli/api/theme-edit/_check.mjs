@@ -3310,7 +3310,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
     // (a composer's or a menu's padding in its corners): one length is all
     // that works there, whether a length, a variable, or calc(), min(),
     // max() or clamp() giving one.
-    if (s.on && ctx.derived) {
+    if (s.on && ctx.derived && !WRAPPED_PARTS[s.on]) {
       const inCalc = calcVars(ctx.project);
       const hit = partsOf(ctx, s).find(t =>
         (ctx.derived?.[t] ?? []).some(
@@ -3343,6 +3343,15 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         !/radius/.test(prop);
       const side = /^padding-/.test(prop);
       const density = prop === 'padding' && /^density:/.test(s.when ?? '');
+      // Core reads the box's padding only from a variable of its own, which
+      // a theme may not write, and a padding property would pad the
+      // transparent wrapper too.
+      if (prop === 'padding' && !density)
+        refuse(
+          E.ERR_THEME_NO_EFFECT,
+          `${s.on}'s theme class is on a transparent wrapper; ${wrapped.box} inside it reads its padding from a variable of Core's own, which a theme cannot set, and a padding on the wrapper would add a gap outside the box. Its padding follows the theme's spacing.`,
+          {run: [`${HOW} ${s.on}`]},
+        );
       if (surface || side || density)
         refuse(
           E.ERR_THEME_BAD_VALUE,
@@ -3357,9 +3366,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
                   `${P} set ${slug} --color-background-popover ${quoteCommandArgument('#ffffff')}`,
                   `${HOW} ${s.on}`,
                 ]
-              : [
-                  `${P} set ${slug} padding ${quoteCommandArgument(v)} --on ${s.on}`,
-                ],
+              : [`${HOW} ${s.on}`],
           },
         );
     }

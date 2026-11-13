@@ -3113,12 +3113,12 @@ describe('parts34', () => {
     return at < 0 ? '' : css.slice(at, css.indexOf('}', at));
   };
 
-  it('pads the composer box through its variable, and refuses what paints its wrapper', async () => {
-    await themeEditSet('p', 'padding', '5px', {cwd, on: 'chat-composer'});
-    const box = blockOf('.astryx-chat-composer');
-    expect(box).toMatch(/--_chat-composer-padding:\s*5px/);
-    expect(box).not.toMatch(/(^|[;{\s])padding:\s*5px/);
-    await themeEditUndo('p', {cwd, thing: 'padding', on: 'chat-composer'});
+  it("refuses a composer padding (parts39: only Core's private variable reaches the box), and what paints its wrapper", async () => {
+    const pad = await refusal(() =>
+      themeEditSet('p', 'padding', '5px', {cwd, on: 'chat-composer'}),
+    );
+    expect(pad.code).toBe('ERR_THEME_NO_EFFECT');
+    expect(pad.run[0]).toMatch(/how chat-composer$/);
     for (const [prop, value, when] of [
       ['background', '#f3f4f6'],
       ['box-shadow', 'none'],
@@ -3370,8 +3370,10 @@ describe('parts35: one padding model', () => {
     await themeEditUndo('p', {cwd, thing: 'padding', on: 'clickable-card'});
   });
 
-  it('takes one length as the chat composer padding, a variable or math too', async () => {
-    for (const value of ['4px 8px', '0', 'inherit', '50%', '12'])
+  it('refuses every chat composer padding (parts39), whatever its value', async () => {
+    // The box reads its padding only from a variable of Core's own, which a
+    // theme cannot set; a padding property would pad the wrapper.
+    for (const value of ['4px', '4px 8px', 'var(--spacing-3)', 'max(4px, 1vw)'])
       expect(
         (
           await refusal(() =>
@@ -3379,30 +3381,7 @@ describe('parts35: one padding model', () => {
           )
         ).code,
         value,
-      ).toBe('ERR_THEME_BAD_VALUE');
-    const twelve = await refusal(() =>
-      themeEditSet('p', 'padding', '12', {cwd, on: 'chat-composer'}),
-    );
-    expect(twelve.run[0]).toMatch(/padding 12px --on chat-composer$/);
-    for (const value of [
-      'var(--spacing-3)',
-      'calc(var(--spacing-2) + 2px)',
-      'max(4px, 1vw)',
-      'clamp(4px, 1vw, 12px)',
-      'min(8px, var(--spacing-3))',
-    ]) {
-      await themeEditSet('p', 'padding', value, {cwd, on: 'chat-composer'});
-      await themeEditUndo('p', {cwd, thing: 'padding', on: 'chat-composer'});
-    }
-    const keeps = await refusal(() =>
-      themeEditSet('p', 'padding', 'var(--spacing-2) var(--spacing-3)', {
-        cwd,
-        on: 'chat-composer',
-      }),
-    );
-    expect(keeps.run[0]).toMatch(
-      /padding 'var\(--spacing-2\)' --on chat-composer$/,
-    );
+      ).toBe('ERR_THEME_NO_EFFECT');
   });
 });
 
@@ -3455,7 +3434,6 @@ describe('parts36', () => {
     for (const [prop, on] of [
       ['padding', 'segmented-control'],
       ['padding', 'dropdown-menu'],
-      ['padding', 'chat-composer'],
       ['padding-inline', 'item'],
     ])
       expect(
@@ -3473,17 +3451,24 @@ describe('parts36', () => {
       'calc(var(--spacing-2) + 2px)',
       'max(4px, 1vw)',
     ]) {
-      await themeEditSet('p', 'padding', value, {cwd, on: 'chat-composer'});
-      await themeEditUndo('p', {cwd, thing: 'padding', on: 'chat-composer'});
+      await themeEditSet('p', 'padding', value, {
+        cwd,
+        on: 'segmented-control',
+      });
+      await themeEditUndo('p', {
+        cwd,
+        thing: 'padding',
+        on: 'segmented-control',
+      });
     }
     const keeps = await refusal(() =>
       themeEditSet('p', 'padding', 'var(--spacing-2) var(--spacing-3)', {
         cwd,
-        on: 'chat-composer',
+        on: 'segmented-control',
       }),
     );
     expect(keeps.run[0]).toMatch(
-      /padding 'var\(--spacing-2\)' --on chat-composer$/,
+      /padding 'var\(--spacing-2\)' --on segmented-control$/,
     );
   });
 

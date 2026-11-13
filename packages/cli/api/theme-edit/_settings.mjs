@@ -2279,12 +2279,15 @@ export function compileTheme(ctx, data, base) {
     const v = down?.length ? four(down) : null;
     const corner = (/** @type {number} */ i) =>
       v && v[i] !== h[i] ? `${h[i]} ${v[i]}` : h[i];
+    // The whole radius as one value first, which Core turns into the
+    // part's inner-corner variable itself (a theme writes no private
+    // variable), then each corner, which the box shows.
     return {
+      borderRadius: h[0],
       borderTopLeftRadius: corner(0),
       borderTopRightRadius: corner(1),
       borderBottomRightRadius: corner(2),
       borderBottomLeftRadius: corner(3),
-      ...Object.fromEntries(vars.map(name => [name, h[0]])),
     };
   };
   /**
@@ -2357,7 +2360,10 @@ export function compileTheme(ctx, data, base) {
     const name = (ctx.derived?.[target] ?? []).find(
       d => d.property === 'padding' && d.vars?.length,
     )?.vars?.[0];
-    return name ? {[name]: String(s.value).trim()} : null;
+    // The box reads only Core's own variable, which a theme may not write,
+    // and a padding property would pad the wrapper: nothing is written (a
+    // saved one is refused, as set refuses it).
+    return name ? {} : null;
   };
   /**
    * The prefix of the padding variables a part's box reads, for a part whose
@@ -3003,10 +3009,14 @@ export function compileTheme(ctx, data, base) {
           }
         }
         // A part's own corner radii replace a single radius a group or an
-        // earlier setting left in the same block, which Core would copy into
-        // the content's radius after the editor's own.
-        if (sides && 'borderTopLeftRadius' in sides)
-          delete block(s, t).borderRadius;
+        // earlier setting left in the same block, in their own order: the
+        // whole radius (which Core turns into the content's radius) before
+        // the corners, which the box shows.
+        if (sides && 'borderTopLeftRadius' in sides) {
+          const b = block(s, t);
+          for (const k of Object.keys(sides)) delete b[k];
+          Object.assign(b, sides);
+        }
       }
     }
   }
