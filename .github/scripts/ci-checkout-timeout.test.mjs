@@ -1,10 +1,11 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * Every checkout step in ci.yml has its own 5-minute bound. A checkout that
- * hangs in the git service then fails by name in minutes, instead of using up
- * the job's whole time before any code runs. The bound is for the tool alone:
- * it lowers no test budget.
+ * Each checkout step in ci.yml has its own time bound: 8 minutes, above the
+ * slowest checkout that still succeeded in recent runs (445 s), or the bound
+ * its job names. A checkout that hangs in the git service then fails by name,
+ * instead of using up the job's whole time before any code runs. The bound is
+ * for the tool alone: it lowers no test budget.
  */
 
 import fs from 'node:fs';
@@ -42,12 +43,12 @@ describe('ci.yml checkout steps', () => {
     expect(checkouts.length).toBeGreaterThan(0);
   });
 
-  it('each stop after 5 minutes, or the bound their job names', () => {
+  it('each stop after 8 minutes, or the bound their job names', () => {
     const wrong = checkouts
       .filter(({job, step}) =>
         UNBOUNDED.has(job)
           ? step['timeout-minutes'] !== undefined
-          : step['timeout-minutes'] !== (BOUND[job] ?? 5),
+          : step['timeout-minutes'] !== (BOUND[job] ?? 8),
       )
       .map(({where}) => where);
     expect(wrong).toEqual([]);
