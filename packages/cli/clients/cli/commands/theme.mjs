@@ -670,6 +670,19 @@ function printThemeApp(result) {
 }
 
 /**
+ * The base the experimental theme editor can start an ejected theme from:
+ * its own slug when it is an Astryx theme package (the editor builds only on
+ * those), else neutral.
+ * @param {{slug?: string | null, package?: string | null}} data
+ * @returns {string}
+ */
+export function editorBaseFor(data) {
+  return data.slug && data.package === `@astryxdesign/theme-${data.slug}`
+    ? data.slug
+    : 'neutral';
+}
+
+/**
  * Print every field in a source-fork receipt.
  * @param {import('../../../api/theme/theme.type.mjs').ThemeEjectResponse} result
  * @param {ThemeCommandWords} [words]
@@ -702,7 +715,13 @@ function printThemeEject(result, words = THEME_WORDS) {
         ]
       : []),
     text(
-      `This is a local fork. Build it with ${buildStep(getCliInvocation(), words, path.join(data.outputDir, data.entry))}. To change a theme without hand-editing source, use the experimental theme editor: ${getCliInvocation()} experimental theme editor new <name> --like ${data.slug ?? 'neutral'}.`,
+      `This is a local fork. Build it with ${buildStep(getCliInvocation(), words, path.join(data.outputDir, data.entry))}.`,
+    ),
+    // One theme-only line (AST-017 FR27): the editor builds only on an
+    // Astryx theme package, so a theme from another package starts from
+    // neutral.
+    text(
+      `To make or change a theme: the experimental theme editor, ${getCliInvocation()} experimental theme editor new <name> --like ${editorBaseFor(data)}.`,
     ),
   );
 }
@@ -922,7 +941,11 @@ function registerPaletteCommands(
           ? [text(`[ok] Wrote ${result.data.preview}`)]
           : []),
         text(
-          'Review and edit the candidate before adopting it as theme-owned palette data. The experimental theme editor generates palettes from one color for you: astryx experimental theme editor set <name> accent <color>.',
+          'Review and edit the candidate before adopting it as theme-owned palette data.',
+        ),
+        // One theme-only line (AST-017 FR27).
+        text(
+          `To make or change a theme: the experimental theme editor makes the palettes from one color, ${getCliInvocation(process.cwd())} experimental theme editor set <name> accent <color>.`,
         ),
       );
       return NO_RESULT_SET;
