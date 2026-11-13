@@ -200,9 +200,11 @@ export const WrappedLines: Story = {
 export const LongUnbrokenLabel: Story = {
   tags: ['!autodocs'],
   render: () => (
-    <div style={{display: 'grid', gap: 16, width: 200}}>
+    // A block column, as a chat or comment column is: a grid or flex item
+    // would grow to the URL's length before the Link could wrap.
+    <div style={{width: 200}}>
       {(['anchor', 'button', 'external'] as const).map(form => (
-        <p key={form} data-long-label={form} style={{margin: 0}}>
+        <p key={form} data-long-label={form} style={{margin: '0 0 16px'}}>
           <Link
             href={form === 'button' ? undefined : 'https://example.com/a'}
             onClick={form === 'button' ? () => {} : undefined}
