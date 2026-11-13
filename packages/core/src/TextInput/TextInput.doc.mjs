@@ -4,6 +4,9 @@
 
 export const docs = {
   name: 'TextInput',
+  playground: {
+    defaults: {label: 'Name', value: 'Jordan'},
+  },
   displayName: 'Text Input',
   category: 'Form Controls',
   keywords: ["textinput","textfield","input","search","clearable","prefix","suffix","adornment","validation"],

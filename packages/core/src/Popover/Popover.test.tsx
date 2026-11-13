@@ -85,9 +85,6 @@ describe('usePopover public return type', () => {
     const hasKeepOpenProps: 'keepOpenProps' extends keyof UsePopoverReturn
       ? true
       : false = false;
-    const hasDismissalGuard: 'wasJustDismissed' extends keyof UsePopoverReturn
-      ? true
-      : false = false;
     type PublicToggleParameters = Parameters<UsePopoverReturn['toggle']>;
     const publicToggleTakesNoOptions: PublicToggleParameters extends []
       ? true
@@ -99,7 +96,6 @@ describe('usePopover public return type', () => {
       ? true
       : false = false;
     expect(hasKeepOpenProps).toBe(false);
-    expect(hasDismissalGuard).toBe(false);
     expect(publicToggleTakesNoOptions).toBe(true);
     expect(hasInternalFocusTarget).toBe(false);
   });
@@ -952,6 +948,32 @@ describe('Popover', () => {
       } finally {
         vi.unstubAllGlobals();
       }
+    });
+
+    it('focuses the first content control in document order, a field before its buttons', () => {
+      render(
+        <Popover
+          content={
+            <div>
+              <input aria-label="URL" />
+              <button type="button">Apply</button>
+              <button type="button">Cancel</button>
+            </div>
+          }
+          label="Link">
+          <button type="button">Open link</button>
+        </Popover>,
+      );
+
+      act(() => {
+        fireEvent.click(screen.getByRole('button', {name: 'Open link'}), {
+          detail: 1,
+        });
+      });
+
+      expect(
+        screen.getByRole('textbox', {name: 'URL', hidden: true}),
+      ).toHaveFocus();
     });
 
     it('still focuses the content when the opening handler swaps it in', async () => {

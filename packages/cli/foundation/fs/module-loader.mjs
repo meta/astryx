@@ -24,9 +24,9 @@ import {AsyncLocalStorage} from 'node:async_hooks';
 import {createRequire} from 'node:module';
 import {pathToFileURL} from 'node:url';
 import * as fs from 'node:fs';
-import {createJiti} from 'jiti';
 import {findPresentFiles} from './present-files.mjs';
 import {importUrl} from './import-url.mjs';
+import {jitiCacheOptions} from './jiti-cache.mjs';
 
 export {findPresentFiles};
 
@@ -34,9 +34,16 @@ export {findPresentFiles};
 let jitiInstance;
 let freshImportNonce = 0;
 const requireFromHere = createRequire(import.meta.url);
+
+/**
+ * jiti, loaded on first use: only TypeScript files and built theme modules
+ * need it, so a run that reads neither never loads it.
+ * @type {typeof import('jiti').createJiti}
+ */
+const createJiti = (...args) => requireFromHere('jiti').createJiti(...args);
 function getJiti() {
   if (!jitiInstance) {
-    jitiInstance = createJiti(import.meta.url);
+    jitiInstance = createJiti(import.meta.url, jitiCacheOptions());
   }
   return jitiInstance;
 }
@@ -195,6 +202,7 @@ function isMissingPackageExport(error) {
 export async function importThemeArtifact(specifier, cwd) {
   let themeModule = path.join(cwd, 'package.json');
   const loader = createJiti(path.join(cwd, 'package.json'), {
+    ...jitiCacheOptions(),
     moduleCache: false,
     jsx: true,
     interopDefault: true,
@@ -226,7 +234,10 @@ export async function importThemeArtifact(specifier, cwd) {
  */
 async function importModule(file, fresh) {
   if (fresh && file.endsWith('.ts')) {
-    return await createJiti(import.meta.url, {moduleCache: false}).import(file);
+    return await createJiti(import.meta.url, {
+      ...jitiCacheOptions(),
+      moduleCache: false,
+    }).import(file);
   }
   if (file.endsWith('.ts')) {
     return await getJiti().import(file);

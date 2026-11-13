@@ -31,6 +31,8 @@ import {
   resolveRecordedTheme,
   resolveThemeModule,
   SOURCE_EXTENSIONS,
+  missingThemePackage,
+  packageInstallCommand,
   themeBuild,
   themeRecordOwner,
   validateThemePrivateInputs,
@@ -1083,6 +1085,8 @@ export async function checkAppThemes(cwd) {
     });
   } else {
     const stale = [];
+    /** @type {Map<string, string[]>} theme slugs by the package they import and the app lacks */
+    const missingPackages = new Map();
     const previousSilent = logger.silent;
     logger.setSilent(true);
     try {
@@ -1106,38 +1110,69 @@ export async function checkAppThemes(cwd) {
           ) {
             stale.push(theme.slug);
           }
-        } catch {
-          stale.push(theme.slug);
+        } catch (error) {
+          const missing = missingThemePackage(error);
+          if (missing) {
+            missingPackages.set(missing, [
+              ...(missingPackages.get(missing) ?? []),
+              theme.slug,
+            ]);
+          } else {
+            stale.push(theme.slug);
+          }
         }
       }
     } finally {
       logger.setSilent(previousSilent);
     }
+    const packages = [...missingPackages.keys()];
+    const install =
+      packages.length > 0
+        ? packageInstallCommand(packages, state.projectDir)
+        : null;
+    const refresh = stale.map(slug =>
+      refreshThemeCommand(
+        state.projectDir,
+        run,
+        available,
+        slug,
+        state.themes[slug],
+      ),
+    );
     checks.push(
-      stale.length > 0
+      packages.length > 0
         ? {
             id: 'theme-local-builds',
             label: 'Local theme build freshness',
             status: 'fail',
-            message: `Local theme outputs are missing or stale: ${stale.join(', ')}.`,
-            fix: stale
-              .map(slug =>
-                refreshThemeCommand(
-                  state.projectDir,
-                  run,
-                  available,
-                  slug,
-                  state.themes[slug],
-                ),
-              )
-              .join(' '),
+            message: `Local themes import packages the app does not have installed, so they cannot build: ${[
+              ...missingPackages,
+            ]
+              .map(([pkg, slugs]) => `${pkg} (${slugs.join(', ')})`)
+              .join(
+                '; ',
+              )}.${stale.length > 0 ? ` Local theme outputs are also missing or stale: ${stale.join(', ')}.` : ''}`,
+            fix: [
+              install?.installCommand ??
+                install?.noCommandReason ??
+                `Install ${packages.join(', ')}.`,
+              ...refresh,
+            ].join(' '),
           }
-        : {
-            id: 'theme-local-builds',
-            label: 'Local theme build freshness',
-            status: 'pass',
-            message: 'Every added local theme output matches its source.',
-          },
+        : stale.length > 0
+          ? {
+              id: 'theme-local-builds',
+              label: 'Local theme build freshness',
+              status: 'fail',
+              message: `Local theme outputs are missing or stale: ${stale.join(', ')}.`,
+              fix: refresh.join(' '),
+            }
+          : {
+              id: 'theme-local-builds',
+              label: 'Local theme build freshness',
+              status: 'pass',
+              message: 'Every added local theme output matches its source.',
+            },
     );
   }
 

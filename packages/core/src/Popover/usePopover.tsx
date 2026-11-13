@@ -486,9 +486,17 @@ function usePopoverImplementation(
   // Set when the layer reports it has shown, so `show` can tell a popover
   // that opened within the call from one whose content mounts later.
   const hasShownRef = useRef(false);
+  // Initial focus for the show in progress. It runs when the layer reports
+  // the show: within `show` when the layer opens at once, or inside the
+  // release's click when the layer holds the show for a press's release.
+  // Either way the focus lands within the event that opened the popover.
+  const focusOnShowRef = useRef<(() => void) | null>(null);
   const handleLayerShow = useCallback(() => {
     hasShownRef.current = true;
     onShow?.();
+    const focusOnShow = focusOnShowRef.current;
+    focusOnShowRef.current = null;
+    focusOnShow?.();
   }, [onShow]);
 
   // Core layer for popover positioning
@@ -593,30 +601,30 @@ function usePopoverImplementation(
       const opener = getOpenerRef.current?.() ?? activeElement;
       openerRef.current =
         opener != null && !contentRef.current?.contains(opener) ? opener : null;
-      layer.show();
-      // When the content is already mounted, the layer shows it within this
-      // call, so initial focus lands within the event that opened it: iOS
-      // raises its keyboard only for a focus made while the tap is still
-      // being handled. The frame in the effect above stays for content that
-      // mounts later.
-      // Only a content control already rendered takes focus here; content
+      const focusWithinEvent = () => {
+        const container = contentRef.current;
+        if (
+          hasShownRef.current &&
+          hasAutoFocus &&
+          !skipAutoFocusRef.current &&
+          container != null &&
+          !container.contains(container.ownerDocument.activeElement) &&
+          focusFirstContentControl(container)
+        ) {
+          // Initial focus is done. The effect's frame stays only as a fallback
+          // for focus lost to the page (content swapped in the same handler
+          // unmounts the control just focused); it must not move focus the
+          // user has since moved elsewhere.
+          hasFocusedInGestureRef.current = true;
+        }
+      };
+      // iOS raises its keyboard only for a focus made while the tap is still
+      // being handled, so initial focus runs when the layer reports the show.
+      // Only a content control already rendered takes focus there; content
       // that renders on open (and the dialog-surface fallback) waits for the
       // effect's frame.
-      const container = contentRef.current;
-      if (
-        hasShownRef.current &&
-        hasAutoFocus &&
-        !skipAutoFocusRef.current &&
-        container != null &&
-        !container.contains(container.ownerDocument.activeElement) &&
-        focusFirstContentControl(container)
-      ) {
-        // Initial focus is done. The effect's frame stays only as a fallback
-        // for focus lost to the page (content swapped in the same handler
-        // unmounts the control just focused); it must not move focus the user
-        // has since moved elsewhere.
-        hasFocusedInGestureRef.current = true;
-      }
+      focusOnShowRef.current = focusWithinEvent;
+      layer.show();
     },
     [layer, hasAutoFocus, contentRef],
   );

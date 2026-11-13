@@ -220,6 +220,11 @@ export const doc = {
         'A theme file could not be loaded / parsed into a defineTheme result.',
     },
     {
+      value: 'ERR_THEME_STALE',
+      description:
+        '`theme build --check` found stale or missing outputs: exit 1, in the check result (`code`), not an error.',
+    },
+    {
       value: 'ERR_PALETTE_GENERATION',
       description:
         'A palette generation request or one of its constraints was invalid.',
@@ -332,7 +337,7 @@ export const doc = {
       value: 'ERR_RENDER_FAILED',
       stability: 'experimental',
       description:
-        'The page threw while rendering, or Node crashed while it rendered the page. Nothing was written. Raised only by the experimental render command.',
+        "The page threw while rendering, or Node crashed while it rendered the page. Raised by the experimental render command, which then writes nothing, and by the experimental theme editor when it cannot render a theme's pages (two copies of React, a component that throws, or a render past its time limit; the theme it built is kept, and the refusal says so). A React that is not installed is ERR_RENDER_MISSING_DEPENDENCY.",
     },
     {
       value: 'ERR_RENDER_NOT_ASTRYX',
@@ -399,6 +404,12 @@ export const doc = {
       stability: 'experimental',
       description:
         "Not an error and never an exit code: the change is saved, but the components could not be rendered, so it was not checked against what they read and has no preview. The result carries it in `notChecked` with the cause, such as two copies of React (the app's and the one Core resolves). Reported only by the experimental theme command.",
+    },
+    {
+      value: 'ERR_THEME_BUSY',
+      stability: 'experimental',
+      description:
+        'Another command is changing the same theme (or the same preview) and did not finish within 30 seconds. Commands on one theme run one after the other; nothing was changed. Run the command again. Raised only by the experimental theme command.',
     },
     {
       value: 'ERR_THEME_UNKNOWN_THING',

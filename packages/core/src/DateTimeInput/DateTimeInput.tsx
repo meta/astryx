@@ -5,7 +5,7 @@
 /**
  * @file DateTimeInput.tsx
  * @input Uses React, Field, Calendar, NativeDateSegment, NativeTimeSegment, TouchDateTimeField, usePopover, useAnnounce, time parsing utilities, StyleX intrinsic flex layout
- * @output Exports DateTimeInput component, DateTimeInputProps, and native picker type; cleared values keep the pointer Calendar controlled-empty
+ * @output Exports DateTimeInput component, DateTimeInputProps, DateInputEntryError, and native picker type; cleared values keep the pointer Calendar controlled-empty; typed date rejections reach onEntryErrorChange
  * @position Core implementation; consumed by index.ts, tested by DateTimeInput.test.tsx
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -88,7 +88,11 @@ import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {joinAriaIDs} from '../utils/inputAria';
 import type {CalendarSystem} from '../utils/calendarSystem';
 import {isRenderable} from '../utils/isRenderable';
-import {useTypedDateField} from '../DateInput/useTypedDate';
+import {
+  type DateInputEntryError,
+  useNativeDateRejection,
+  useTypedDateField,
+} from '../DateInput/useTypedDate';
 
 import {
   useFieldInputStyling,
@@ -126,6 +130,7 @@ import {
 import english from '../i18n/generated-english/DateTimeInput/DateTimeInput.generated';
 
 registerEnglishFallback(english);
+export type {DateInputEntryError} from '../DateInput/useTypedDate';
 export type ISODateTimeString = string & {
   readonly __brand: 'ISODateTimeString';
 };
@@ -497,8 +502,35 @@ export interface DateTimeInputProps extends Omit<
 
   /**
    * Status indicator for the input.
+   *
+   * For a date the date segment rejects, typed or picked in the native
+   * control, and for unreadable or unfinished date text that Enter or blur
+   * keeps, the field shows its own error message in place of `status`. With
+   * `onEntryErrorChange`, an `error` status with a message shows instead, and
+   * the field's own message applies only without one. A `warning` or
+   * `success` status never replaces a rejection.
    */
   status?: InputStatus;
+
+  /**
+   * Called each time the date segment's rejection of typed text changes, with
+   * `null` when the rejection ends. `kind` is `'unreadable'`, `'incomplete'`,
+   * `'nonexistent'` (a date the calendar does not have), `'outOfRange'`
+   * (before the date of `min` or after the date of `max`), or `'unavailable'`
+   * (a day `dateConstraints` rules out). `text` is the typed text, and `date`
+   * is the Gregorian ISO date the text names, for `'outOfRange'` and
+   * `'unavailable'`.
+   *
+   * It also runs when a new `min`, `max`, `dateConstraints`, or `value`, a
+   * calendar pick, disabling the field, or Enter or blur changes the
+   * rejection, and never twice for the same rejection. It reports `null` when
+   * the typed field leaves while its rejection stands, as when a presentation
+   * or pointer change shows the native or touch picker. Passing it lets an
+   * `error` `status` word the rejection (see `status`). A rejection that
+   * starts under an unchanged error message announces that message once. The
+   * native and touch pickers take no typed text, so they report no rejection.
+   */
+  onEntryErrorChange?: (error: DateInputEntryError | null) => void;
 
   /**
    * Width of the field. Numbers are treated as pixels, strings are used as-is
@@ -660,6 +692,7 @@ function PointerDateTimeField({
   timeLabel,
   size: sizeProp,
   status,
+  onEntryErrorChange,
   labelTooltip,
   numberOfMonths = 1,
   weekStartsOn,
@@ -691,6 +724,11 @@ function PointerDateTimeField({
     onKeyDown: onKeyDownProp,
     ...controlProps
   } = rest;
+  // Form attributes pass through untyped, as other input attributes do.
+  const formControl = controlProps as typeof controlProps & {
+    name?: string;
+    form?: string;
+  };
   const t = useComponentTranslator();
   const locale = useLocale();
   const usesNativePicker = nativeMode !== 'off';
@@ -804,9 +842,13 @@ function PointerDateTimeField({
   const [nativeTimeDraft, setNativeTimeDraft] = useState<
     ISOTimeString | undefined
   >(undefined);
-  const previousNativeValueRef = useRef(optimisticValue);
-  if (optimisticValue !== previousNativeValueRef.current) {
-    previousNativeValueRef.current = optimisticValue;
+  // The value the draft was held against. It is state: a ref written here
+  // would keep a value from a render React discards, and drop the draft on
+  // the next render.
+  const [previousNativeValue, setPreviousNativeValue] =
+    useState(optimisticValue);
+  if (optimisticValue !== previousNativeValue) {
+    setPreviousNativeValue(optimisticValue);
     if (nativeTimeDraft !== undefined) {
       setNativeTimeDraft(undefined);
     }
@@ -1007,8 +1049,9 @@ function PointerDateTimeField({
     displayValue: dateDisplayValue,
     formatHint: dateFormatHint,
     isPending: isDatePending,
+    hiddenFormValue,
     isInvalid: isDateInvalid,
-    fieldStatus,
+    fieldStatus: typedFieldStatus,
     alertMessage: dateAlertMessage,
     handleChange: handleTypedDateInput,
     commit: commitDatePendingInput,
@@ -1027,11 +1070,30 @@ function PointerDateTimeField({
     onChange: handleTypedDateChange,
     onClear: clearTypedDate,
     onTypedDate: navigateToTypedDate,
-    isDisabled: isEffectivelyDisabled,
+    // The native date control takes no typed text, so kept typed text and its
+    // rejection wait for the typed field.
+    isDisabled: isEffectivelyDisabled || usesNativePicker,
     status,
     isStatusAnnounced: true,
+    onEntryErrorChange,
     hasPlaceholder: placeholderFromProps != null,
   });
+
+  const nativeDateRejection = useNativeDateRejection({
+    source: 'DateTimeInput',
+    format: 'date_long',
+    min: calendarMin,
+    max: calendarMax,
+    isDateDisabled,
+    value: valueParts.date,
+    isLocked: isEffectivelyDisabled || isBusy,
+    status,
+    hasEntryErrorCallback: onEntryErrorChange != null,
+    isStatusAnnounced: true,
+  });
+  const fieldStatus = usesNativePicker
+    ? nativeDateRejection.fieldStatus
+    : typedFieldStatus;
 
   // The detached message box carries its own glyph, so the helper shows no
   // on-field icon.
@@ -1738,7 +1800,8 @@ function PointerDateTimeField({
               isFocusableDisabled
               isEffectivelyRequired={isEffectivelyRequired}
               isBusy={isBusy}
-              statusType={status?.type}
+              statusType={fieldStatus?.type}
+              rejection={nativeDateRejection}
               ariaDescribedBy={ariaDescribedBy}
               controlProps={{
                 ...controlProps,
@@ -1788,6 +1851,7 @@ function PointerDateTimeField({
               </button>
               <input
                 {...controlProps}
+                name={hiddenFormValue === null ? formControl.name : undefined}
                 ref={mergedDateInputRef}
                 id={dateInputId}
                 type="text"
@@ -1825,9 +1889,17 @@ function PointerDateTimeField({
                   isDateInvalid && styles.inputInvalid,
                 )}
               />
+              {hiddenFormValue !== null && formControl.name != null && (
+                <input
+                  type="hidden"
+                  name={formControl.name}
+                  form={formControl.form}
+                  value={hiddenFormValue}
+                />
+              )}
               {/*
-            Announces a typed date rejection that the field status does not
-            announce. The field status announces the rest.
+            Announces the date rejection message that the field status does
+            not announce. The field status announces the rest.
           */}
               <VisuallyHidden as="div" role="alert" aria-live="assertive">
                 {dateAlertMessage}
@@ -2110,9 +2182,12 @@ export function DateTimeInput(props: DateTimeInputProps) {
     case 'native':
       // Only `adaptive-native` on a coarse pointer resolves here (FR2).
       return <PointerDateTimeField {...rest} nativeMode="adaptive" />;
-    case 'sheet':
+    case 'sheet': {
+      // The sheet takes no typed text.
+      const {onEntryErrorChange: _onEntryErrorChange, ...sheetProps} = rest;
       // Month indexes depend on the calendar. A new calendar remounts the sheet.
-      return <TouchDateTimeField key={calendar} {...rest} />;
+      return <TouchDateTimeField key={calendar} {...sheetProps} />;
+    }
     case 'desktop':
       return <PointerDateTimeField {...rest} />;
   }
