@@ -115,8 +115,9 @@ const CHECK_CODEC = {
  * A doctor check that reads only files, kept between runs through the kept
  * gather (foundation/fs/gather-cache.mjs): a later `doctor` with every file,
  * folder, module and environment variable it read unchanged reads the check
- * back. Only the docs checks go through here; a check that depends on the
- * time, the network or anything else the stamps do not see never does.
+ * back. Only the docs checks and the theme-wiring scan go through here; a
+ * check that depends on the time, the network or anything else the stamps do
+ * not see never does.
  * @template T
  * @param {{name: string, cwd: string, coreDir: string | null}} where - The
  *   check, the project folder, and the Core folder the project loads.

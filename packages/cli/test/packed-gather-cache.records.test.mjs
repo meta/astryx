@@ -605,14 +605,26 @@ Module._resolveFilename = function (request, parent, isMain, options) {
         expect(wired).not.toEqual(unwired);
         expect(wired).toEqual(themes(freshTmp()));
         expect(themes(tmp)).toEqual(wired);
-        // The theme module no longer declares the theme the app imports: the
-        // very next run sees that too.
+        // An edit to the theme module alone scans again, as a fresh run does.
+        const keptEntry = path.join(tmp, CACHE_NAME, wiringEntries()[0]);
+        const before = fs.statSync(keptEntry).ino;
         fs.writeFileSync(
           themeModule,
-          `export const otherTheme = {name: 'neutral', tokens: {}};\nexport const neutralTheme = otherTheme;\n`,
+          `export const neutralTheme = {name: 'neutral', tokens: {color: {}}};\n`,
         );
-        const moved = themes(tmp);
-        expect(moved).toEqual(themes(freshTmp()));
+        expect(themes(tmp)).toEqual(themes(freshTmp()));
+        const rescanned = fs.statSync(keptEntry).ino;
+        expect(rescanned).not.toBe(before);
+        // The package no longer exports the built theme the app imports: the
+        // very next run scans again and reports it, as a fresh run does.
+        const pkgFile = path.join(theme, 'package.json');
+        const pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf8'));
+        delete pkg.exports['./built'];
+        fs.writeFileSync(pkgFile, JSON.stringify(pkg));
+        const dropped = themes(tmp);
+        expect(dropped).not.toEqual(wired);
+        expect(dropped).toEqual(themes(freshTmp()));
+        expect(fs.statSync(keptEntry).ino).not.toBe(rescanned);
       } finally {
         fs.rmSync(other.dir, {recursive: true, force: true});
       }
