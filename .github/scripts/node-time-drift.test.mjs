@@ -83,12 +83,14 @@ describe('the recorded-time check for the test files a change touches', () => {
       factor: 1,
       peers: MIN_PEERS - 1,
       baseline: false,
+      median: undefined,
     });
     const more = leg(MIN_PEERS, 40, 3);
     expect(legFactor(more.measured, more.recorded, new Set())).toEqual({
       factor: 3,
       peers: MIN_PEERS,
       baseline: true,
+      median: 3,
     });
   });
 
@@ -109,6 +111,19 @@ describe('the recorded-time check for the test files a change touches', () => {
     recorded[CHANGES] = 200;
     measured[CHANGES] = 280;
     expect(drifted(measured, recorded, [CHANGES])).toEqual([]);
+  });
+
+  it('reads a leg whose untouched files run at their record as unslowed, on one clock', () => {
+    // Real untouched files are mostly short; on the record's clock (no
+    // import) they run at their record. The changed file's drift then fails.
+    const {recorded, measured} = leg(40, 0.5, 1);
+    recorded[CHANGES] = 207.8;
+    measured[CHANGES] = 337.9;
+    expect(legFactor(measured, recorded, new Set([CHANGES]))).toMatchObject({
+      factor: 1,
+      baseline: true,
+    });
+    expect(drifted(measured, recorded, [CHANGES])).toHaveLength(1);
   });
 
   it('skips a changed file with no recorded time (the legs count it as the median)', () => {

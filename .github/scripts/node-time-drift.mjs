@@ -128,15 +128,18 @@ function main(args) {
       `No baseline in this leg: ${leg.peers} unchanged test file(s) with a recorded time, fewer than ${MIN_PEERS}, so the leg factor is 1 and changed files are judged against their recorded times as they are.`,
     );
   const late = drifted(measured, recorded, changed);
-  for (const {
-    file,
-    recorded: before,
-    measured: now,
-    factor,
-    suggested,
-  } of late) {
+  const legSays = !leg.baseline
+    ? 'this leg has no baseline, so its factor is 1'
+    : /** @type {number} */ (leg.median) < 1
+      ? `this leg ran ${Math.round(/** @type {number} */ (leg.median) * 100) / 100}× its record overall, counted as 1`
+      : `this leg ran ${Math.round(leg.factor * 100) / 100}× its record overall`;
+  const value =
+    leg.factor > 1
+      ? "its time with the leg's slowdown taken out"
+      : 'its measured time';
+  for (const {file, recorded: before, measured: now, suggested} of late) {
     console.log(
-      `::error file=${file},title=Recorded Node test time is stale::${file} ran ${now} s; ${RECORD} records ${before} s, and this leg ran ${factor}× its record overall. This change touches the file, so set only its entry in ${RECORD}: "${file}": ${suggested} (its time with the leg's slowdown taken out). Leave every other entry as it is.`,
+      `::error file=${file},title=Recorded Node test time is stale::${file} ran ${now} s; ${RECORD} records ${before} s, and ${legSays}. This change touches the file, so set only its entry in ${RECORD}: "${file}": ${suggested} (${value}). Leave every other entry as it is.`,
     );
   }
   if (late.length === 0)
