@@ -213,6 +213,14 @@ Consumer migration instructions belong in consumer docs and release notes.
 | ListItem row paint | Stops at the content (`flush`), reaches past it by the row inset (`padded`, `outset`), or reaches the host edge (`bleed`).                                                              | `component:List/DEC-3`   | Supporting surface | FR3–FR6            |
 | Row content        | The row's first content (its marker, start content, or label) sits inside the row inset (`padded`) or on the host content line when the host inset allows (`flush`, `outset`, `bleed`). | `component:List/DEC-3`   | Prominent          | FR2–FR5            |
 
+### Design decisions
+
+<!-- design-decisions:v1 -->
+
+| ID  | Decision                                                                                                                                                                                                                                                                     | Intent or reason                                                                                                               | Applies to                                                   | Allowed variation                                                                                                                     |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| DD1 | The reorder handle is its grip alone: the `list-reorder-handle` icon at the `sm` size, in the secondary icon color, with no hover fill. Under a fine pointer, its target is a square of 24 px round the grip, and reorder mode's fill and the focus ring sit in that target. | The handle reads as a quiet grip beside the row's content, not as a button, and its target still meets the WCAG 2.5.8 minimum. | The reorder handle of a reorderable row (`spec:AST-103` FR5) | A theme replaces the grip through its icon slot and its color through the icon color tokens. A coarse pointer keeps its 44 px target. |
+
 ## Family and system relationships
 
 - `architecture:container-padding` owns host publication, eligibility,

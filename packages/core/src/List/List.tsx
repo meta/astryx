@@ -95,8 +95,8 @@ export interface ListProps extends BaseProps<
    * Each ListItem with an `itemKey` gets a reorder handle, at its start
    * unless the object's `handle.placement` is `'end'`. It always shows, in a
    * place of its own in the row. With `handle.isAlwaysVisible: false`, it
-   * shows while the row is hovered or holds the focus. It then hangs 30px
-   * outside the row's text, so the text keeps its place. The list takes that
+   * shows while the row is hovered or holds the focus. It then hangs outside
+   * the row's text, its target 28px out, so the text keeps its place. The list takes that
    * room from its container's padding. Where the padding is narrower, its
    * rows move in by the difference. Under a coarse pointer, under `edge`
    * `'outset'` or `'bleed'`, and after a list marker, it then sits inside
@@ -197,10 +197,12 @@ export interface ListProps extends BaseProps<
 // =============================================================================
 
 /**
- * The room a hanging handle needs before the text of a row with no inline
- * inset, px. SYNC: List/ListReorderHandle.tsx REORDER_HANDLE_HANG.
+ * The room a hanging handle needs beside the text of a row with no inline
+ * inset, px. It is the hang, then the handle's target past it, which holds
+ * its focus ring. SYNC: List/ListReorderHandle.tsx REORDER_HANDLE_HANG and
+ * TARGET_REACH.
  */
-const REORDER_GUTTER = 30;
+const REORDER_GUTTER = 28;
 /** A padded row's own inset holds part of that room. SYNC: Item/Item.tsx. */
 const PADDED_ROOM = `calc(${REORDER_GUTTER}px - ${spacingVars['--spacing-2']})`;
 const SPACIOUS_ROOM = `calc(${REORDER_GUTTER}px - ${spacingVars['--spacing-3']})`;

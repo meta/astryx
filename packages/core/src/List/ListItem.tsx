@@ -191,11 +191,18 @@ const BLEED_START =
   'max(var(--container-padding-inline-start, 0px), var(--_item-inset-inline))';
 const BLEED_END =
   'max(var(--container-padding-inline-end, 0px), var(--_item-inset-inline))';
-// The same padding with a handle's room: its side and the row's gap after it.
-// SYNC: List/ListReorderHandle.tsx HANDLE_SIZE.
-const INSET_ROOM = `calc(${INSET} + 28px + ${spacingVars['--spacing-2']})`;
-const BLEED_START_ROOM = `calc(${BLEED_START} + 28px + ${spacingVars['--spacing-2']})`;
-const BLEED_END_ROOM = `calc(${BLEED_END} + 28px + ${spacingVars['--spacing-2']})`;
+// How far a handle in its row steps in from the row's padding, where its
+// inset is under the target's 4 px reach. SYNC: List/ListReorderHandle.tsx
+// EDGE_GUARD.
+const EDGE_GUARD = 'max(0px, calc(4px - var(--_item-inset-inline, 4px)))';
+// The handle's place in its row: the edge guard, its side (16 px, its grip
+// alone) and the row's gap after it. SYNC: List/ListReorderHandle.tsx
+// HANDLE_SIZE.
+const HANDLE_ROOM = `calc(${EDGE_GUARD} + 16px + ${spacingVars['--spacing-2']})`;
+// Each padding with that room.
+const INSET_ROOM = `calc(${INSET} + ${HANDLE_ROOM})`;
+const BLEED_START_ROOM = `calc(${BLEED_START} + ${HANDLE_ROOM})`;
+const BLEED_END_ROOM = `calc(${BLEED_END} + ${HANDLE_ROOM})`;
 const COARSE = '@media (any-pointer: coarse)';
 
 // After a list marker, a row that stays put keeps its neighbours' handle
@@ -203,7 +210,7 @@ const COARSE = '@media (any-pointer: coarse)';
 // their place there whether or not they show.
 const markerRoomStyles = stylex.create({
   room: {
-    '--_item-marker-room': `calc(28px + ${spacingVars['--spacing-2']})`,
+    '--_item-marker-room': HANDLE_ROOM,
   },
 });
 

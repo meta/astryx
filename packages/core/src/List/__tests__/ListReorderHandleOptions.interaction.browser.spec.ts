@@ -208,6 +208,81 @@ test.describe('after a list marker', () => {
   });
 });
 
+test.describe('the target', () => {
+  test.use({hasTouch: false, isMobile: false});
+
+  test('the handle is its 16 px grip, and a mouse hits it anywhere in the 24 px square round the grip (WCAG 2.5.8)', async ({
+    page,
+  }) => {
+    await openOptions(page, storybook(), true, 'start');
+    const handle = page.getByRole('button', {
+      name: 'Reorder Sent',
+      exact: true,
+    });
+    const box = await handle.boundingBox();
+    if (box == null) {
+      throw new Error('no handle');
+    }
+    expect(box.width).toBeCloseTo(16, 0);
+    expect(box.height).toBeCloseTo(16, 0);
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    // Whether each point lands on this handle.
+    const lands = async (points: [number, number][]) =>
+      handle.evaluate(
+        (element, at) =>
+          at.map(
+            ([px, py]) =>
+              document
+                .elementFromPoint(px, py)
+                ?.closest('button[data-astryx-list-reorder]') === element,
+          ),
+        points,
+      );
+    expect(
+      await lands([
+        [cx - 11.5, cy],
+        [cx + 11.5, cy],
+        [cx, cy - 11.5],
+        [cx, cy + 11.5],
+        [cx - 11.5, cy - 11.5],
+        [cx + 11.5, cy + 11.5],
+      ]),
+    ).toEqual(Array(6).fill(true));
+    // Just past the target, the row's own content.
+    expect(await lands([[cx + 12.5, cy]])).toEqual([false]);
+  });
+
+  test('in reorder mode the fill sits under the grip, in forced colors too', async ({
+    page,
+  }) => {
+    await openOptions(page, storybook(), true, 'start');
+    const handle = page.getByRole('button', {
+      name: 'Reorder Sent',
+      exact: true,
+    });
+    await handle.focus();
+    await page.keyboard.press('Enter');
+    await expect(handle).toHaveAttribute('aria-pressed', 'true');
+    const setGripShown = async (shown: boolean) =>
+      handle.evaluate((element, isShown) => {
+        const grip = element.querySelector('svg');
+        if (grip != null) {
+          grip.style.visibility = isShown ? '' : 'hidden';
+        }
+      }, shown);
+    for (const forcedColors of ['none', 'active'] as const) {
+      await page.emulateMedia({forcedColors});
+      const withGrip = await handle.screenshot({animations: 'disabled'});
+      await setGripShown(false);
+      const withoutGrip = await handle.screenshot({animations: 'disabled'});
+      await setGripShown(true);
+      // A grip under the fill would leave the two pictures the same.
+      expect(withGrip.equals(withoutGrip), forcedColors).toBe(false);
+    }
+  });
+});
+
 test.describe('with a finger', () => {
   test('a handle that shows on hover always shows on a touch screen, inside its row', async ({
     page,
