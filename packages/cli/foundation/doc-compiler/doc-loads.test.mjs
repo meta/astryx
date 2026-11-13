@@ -92,7 +92,7 @@ const RUNNERS = {
       'createJiti ×5',
       'import(<computed>) ×2',
       'require(<computed>)',
-      'withEmptyStylesheets ×3',
+      'withEmptyStylesheets ×5',
     ],
   },
   'api/theme/build/core-interception.mjs': {

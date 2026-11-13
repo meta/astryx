@@ -7,12 +7,12 @@
  * user-authored module (`.ts` via jiti, `.mjs`/`.js` via native dynamic
  * import) and (b) find conventional files by basename in a fixed
  * load-precedence order. Generated theme artifacts also use a dedicated jiti
- * path that resolves extensionless JSX/TSX registry imports. A theme module
- * load, of a built artifact or of theme source, loads the stylesheets its
- * modules import as empty modules. These helpers centralize that behavior so
- * callers stay in lockstep. A module's stdout writes go to stderr
- * while it loads, so project code that prints cannot corrupt a `--json`
- * envelope.
+ * path that resolves extensionless JSX/TSX registry imports. On Node 22.15 and
+ * later, a theme module load, of a built artifact or of theme source, loads
+ * the stylesheets its modules import as empty modules. These helpers
+ * centralize that behavior so callers stay in lockstep. A module's stdout
+ * writes go to stderr while it loads, so project code that prints cannot
+ * corrupt a `--json` envelope.
  *
  * `loadModuleWithParser` builds on these primitives to provide the single
  * load/validation boundary shared by config, integration, codemod, and

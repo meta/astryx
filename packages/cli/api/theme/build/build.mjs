@@ -2708,9 +2708,9 @@ function isSyncLoaderLimitation(error) {
  * source export and old-Core adaptation checks keep treating that path as
  * degraded/fail-closed.
  *
- * On every path, a stylesheet that a module in the theme's graph imports loads
- * as an empty module (`withEmptyStylesheets`): a base theme's module can import
- * its own stylesheet for the app's bundler.
+ * On Node 22.15 and later, on every path, a stylesheet that a module in the
+ * theme's graph imports loads as an empty module (`withEmptyStylesheets`): a
+ * base theme's module can import its own stylesheet for the app's bundler.
  *
  * @param {string} filePath
  * @param {import('./core-interception.mjs').CoreInterception} [interception]
@@ -5082,7 +5082,7 @@ function planFamilySources(files, cwd) {
 // prettier-ignore
 async function preloadFamilySource(filePath, loader, interception) {
   const patch = interception.patchCommonJs(filePath);
-  try { try { loader(filePath); } catch (error) { if (!isSyncLoaderLimitation(error)) throw error; await loader.evalModule(fs.readFileSync(filePath, 'utf8'), {id: filePath, filename: filePath, ext: path.extname(filePath), cache: loader.cache, async: true, forceTranspile: true}); } }
+  try { try { await withEmptyStylesheets(async () => loader(filePath)); } catch (error) { if (!isSyncLoaderLimitation(error)) throw error; await withEmptyStylesheets(() => loader.evalModule(fs.readFileSync(filePath, 'utf8'), {id: filePath, filename: filePath, ext: path.extname(filePath), cache: loader.cache, async: true, forceTranspile: true})); } }
   finally { patch.undo(); }
 }
 
