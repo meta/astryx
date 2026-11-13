@@ -65,4 +65,25 @@ describe('editor compile refusals keep the mode', () => {
     });
     expect(r?.suggestions?.[0]?.name).toMatch(TAIL);
   }, 240_000);
+
+  it('--out is kept: the settings file names the same output, a subfolder rebases it onto the root', async () => {
+    const r = await editorCompileProblem(['themes/g/g.settings.ts'], {
+      cwd,
+      check: true,
+      out: 'dist/g.css',
+    });
+    expect(r?.suggestions?.[0]?.name).toMatch(
+      / experimental theme compile themes\/g\/g\.theme\.ts --out dist\/g\.css --check$/,
+    );
+    const sub = path.join(cwd, 'src');
+    fs.mkdirSync(sub, {recursive: true});
+    const s = await editorCompileProblem(['../themes/g/g.theme.ts'], {
+      cwd: sub,
+      check: true,
+      out: '../dist/g.css',
+    });
+    expect(s?.suggestions?.[0]?.name).toMatch(
+      /^cd \.\. && .* experimental theme compile themes\/g\/g\.theme\.ts --out dist\/g\.css --check$/,
+    );
+  }, 240_000);
 });

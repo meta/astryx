@@ -1167,6 +1167,12 @@ export function setPrivateVarErrorListener(listener) {
  */
 
 /**
+ * How a suggested build writes its source: `glob` leaves a pattern as typed
+ * (unquoted, so the shell expands it); `familyKey` makes it a --family run.
+ * @typedef {{glob?: boolean, familyKey?: string}} SuggestionShape
+ */
+
+/**
  * The `theme build` command for `source` with the caller's mode flags, so a
  * suggestion never turns a check into a write or moves the outputs.
  * @param {string} source as the user types it, from cwd
@@ -1174,23 +1180,33 @@ export function setPrivateVarErrorListener(listener) {
  * @param {string} cwd
  * @param {{group: string, build: string}} [words] the command's own words
  *   (`experimental theme compile`), else `theme build`
+ * @param {SuggestionShape} [shape]
  * @returns {string}
  */
-export function buildSuggestion(source, mode, cwd, words) {
+export function buildSuggestion(source, mode, cwd, words, shape = {}) {
+  /** @param {string[]} ws quoted for the shell the command runs in (PowerShell too) */
+  const quoted = ws => ws.map(w => quoteCommandArgument(w));
+  // A glob stays as typed: the shell expands it.
+  const src = shape.glob
+    ? source.replace(/['"]/g, '')
+    : quoteCommandArgument(source);
   return formatCliCommand(
     [
-      ...(words ? words.group.split(' ') : ['theme']),
-      words?.build ?? 'build',
-      source,
-      ...(mode.out ? ['--out', mode.out] : []),
-      ...(mode.iconsSpecifier
-        ? ['--icons-specifier', mode.iconsSpecifier]
-        : []),
-      ...(mode.check ? ['--check'] : []),
-    ]
-      // Quoted for the shell the command runs in (PowerShell too).
-      .map(w => quoteCommandArgument(w))
-      .join(' '),
+      ...quoted([
+        ...(words ? words.group.split(' ') : ['theme']),
+        words?.build ?? 'build',
+      ]),
+      ...(shape.familyKey ? ['--family'] : []),
+      src,
+      ...quoted([
+        ...(shape.familyKey ? ['--family-key', shape.familyKey] : []),
+        ...(mode.out ? ['--out', mode.out] : []),
+        ...(mode.iconsSpecifier
+          ? ['--icons-specifier', mode.iconsSpecifier]
+          : []),
+        ...(mode.check ? ['--check'] : []),
+      ]),
+    ].join(' '),
     cwd,
   );
 }

@@ -190,4 +190,25 @@ describe('the glob and --family refusals keep the mode', () => {
     const [first] = JSON.parse(r.stdout).suggestions;
     expect(first.name).toMatch(/--icons-specifier \.\/icons\.mjs --check$/);
   });
+
+  it('a quoted glob in a family run keeps --family and --family-key', async () => {
+    const r = await runCli(
+      [
+        '--json',
+        'theme',
+        'build',
+        '--family',
+        'themes/*.mjs',
+        '--family-key',
+        'fam',
+        '--check',
+      ],
+      {cwd: app},
+    );
+    expect(r.status).toBe(1);
+    const [first] = JSON.parse(r.stdout).suggestions;
+    expect(first.name).toMatch(
+      / theme build --family themes\/\*\.mjs --family-key fam --check$/,
+    );
+  });
 });

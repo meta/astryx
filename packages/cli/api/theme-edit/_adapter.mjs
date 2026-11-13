@@ -32,6 +32,7 @@
  */
 
 import {writeThemeTemplate} from '../theme/template/template.mjs';
+import {buildSuggestion} from '../theme/build/build.mjs';
 import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -698,23 +699,35 @@ export function editorThemeRefusal(err, cwd) {
  * take an editor theme, and `--check` checks an editor theme by the editor's
  * own rules (waiting for a change in progress).
  * @param {string[]} files
- * @param {{cwd: string, check?: boolean, family?: boolean, iconsSpecifier?: string}} options
- *   `check` and `iconsSpecifier` are kept in every compile a refusal
+ * @param {{cwd: string, check?: boolean, family?: boolean, iconsSpecifier?: string, out?: string}} options
+ *   `check`, `out` and `iconsSpecifier` are kept in every compile a refusal
  *   suggests
  * @returns {Promise<AstryxError | null>}
  */
 export async function editorCompileProblem(
   files,
-  {cwd, check, family, iconsSpecifier},
+  {cwd, check, family, iconsSpecifier, out},
 ) {
   const cwdRoot = projectRoot(cwd);
-  // The caller's mode, after the source: a check stays a check.
-  const tail = [
-    ...(iconsSpecifier ? ['--icons-specifier', iconsSpecifier] : []),
-    ...(check ? ['--check'] : []),
-  ]
-    .map(w => ` ${quoteCommandArgument(w)}`)
-    .join('');
+  const COMPILE = {group: 'experimental theme', build: 'compile'};
+  /**
+   * The compile of `source` (from `from`) with the caller's mode: a check
+   * stays a check, and --out names the same file from there.
+   * @param {string} source @param {string} from
+   */
+  const compileLine = (source, from) =>
+    buildSuggestion(
+      source,
+      {
+        check,
+        iconsSpecifier,
+        out: out
+          ? path.relative(from, path.resolve(cwd, out)) || out
+          : undefined,
+      },
+      from,
+      COMPILE,
+    );
   for (const file of files) {
     const at = editorThemeAt(cwdRoot, path.resolve(cwd, file));
     if (!at || !editorOwnFile(at.slug, file)) continue;
@@ -728,7 +741,7 @@ export async function editorCompileProblem(
         `${slug} is a theme the editor made; compile it from the app root (${path.relative(cwd, root) || '.'}), where the editor builds it.`,
         [
           {
-            name: `cd ${quoteCommandArgument(path.relative(cwd, root) || '.')} && ${runLine(root, `experimental theme compile ${source}${tail}`)}`,
+            name: `cd ${quoteCommandArgument(path.relative(cwd, root) || '.')} && ${compileLine(source, root)}`,
             reason: 'do this instead',
           },
         ],
@@ -739,9 +752,9 @@ export async function editorCompileProblem(
         `${file} is the editor's own settings for ${slug}, not a theme source; compile the theme source.`,
         [
           {
-            name: runLine(
+            name: compileLine(
+              path.relative(cwd, path.join(root, source)) || source,
               cwd,
-              `experimental theme compile ${quoteCommandArgument(path.relative(cwd, path.join(root, source)) || source)}${tail}`,
             ),
             reason: 'do this instead',
           },
@@ -753,9 +766,9 @@ export async function editorCompileProblem(
         `${slug} is a theme the editor made; --family builds package theme families, not editor themes. Compile it on its own.`,
         [
           {
-            name: runLine(
+            name: compileLine(
+              path.relative(cwd, path.join(root, source)) || source,
               cwd,
-              `experimental theme compile ${quoteCommandArgument(path.relative(cwd, path.join(root, source)) || source)}${tail}`,
             ),
             reason: 'do this instead',
           },
