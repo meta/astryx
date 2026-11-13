@@ -10,9 +10,10 @@
  * @position api/theme-edit — imported only by _adapter.mjs
  */
 
-import {createHash} from 'node:crypto';
+import {parse as parseModule} from '@babel/parser';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
@@ -20,7 +21,8 @@ import {
   assertWithin,
   PathSafetyError,
 } from '../../foundation/fs/path-safety.mjs';
-import {baseResolved, openProject} from './_project.mjs';
+import {baseResolved, installLine, openProject} from './_project.mjs';
+import {P, wordTable} from './_tables.mjs';
 import {
   buildTheme,
   editedThemes,
@@ -32,8 +34,11 @@ import {
   shown,
   staleBuild,
   themeFiles,
+  usableNewName,
+  windowsReserved,
 } from './_settings.mjs';
 import {
+  baseFontsCss,
   colorsPageSource,
   componentsPageSource,
   overviewPageSource,
@@ -41,10 +46,13 @@ import {
   themeImports,
 } from './_preview.mjs';
 import {
+  isEditorTemp,
+  PALETTE_STAND_IN,
   paletteFiles,
   paletteMapping,
   tempFor,
   writeWhole,
+  refuseIfLockLost,
 } from './_palette.mjs';
 import {build} from '../build/build.mjs';
 import {search} from '../search/search.mjs';
@@ -56,10 +64,9 @@ import {
 import {detectStylingSystem} from '../../foundation/agent-docs/agent-docs.mjs';
 import {requireProject, context} from './_context.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
-import {
-  detectPackageManager,
-  quoteCommandArgument,
-} from '../../foundation/env/package-manager.mjs';
+import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
+import {sha256} from '../../foundation/render/source-block.mjs';
+import {findNodeModulesPackage} from '../../foundation/fs/paths.mjs';
 
 const E = ERROR_CODES;
 
@@ -81,7 +88,9 @@ const MAX_WORDS = 40;
 
 /**
  * @typedef {{id: string, label: string, file: string}} PreviewPage
- * @typedef {{version: 1, theme: string | null, pages: PreviewPage[], files: string[], hashes?: Record<string, string>}} PreviewData
+ * @typedef {{version: 1, theme: string | null, pages: PreviewPage[], files: string[], hashes?: Record<string, string>, parents?: number}} PreviewData
+ * `parents`: how many folders over the preview folder its first add made,
+ * which remove takes away again when they are empty.
  *   `hashes`: a short hash of each file as the preview wrote it, so a file
  *   changed by hand is never replaced or deleted
  * @typedef {(path: string | null) => string} Retry the command again, with
@@ -132,10 +141,417 @@ function checkFolderName(where, what, retry) {
 }
 
 /**
+ * Whether a stylesheet comes in through the files the root layout imports,
+ * followed through relative and `@/` imports (a root `styles/globals.css`,
+ * as create-next-app writes it), a few levels deep.
+ * @param {string} cwd
+ * @param {string} app the routes folder
+ * @param {RegExp} sheet
+ */
+function layoutImportsSheet(cwd, app, sheet, dir = app) {
+  // Every layout over the preview: the routes folder's, and one in a route
+  // group or [param] folder on the way.
+  /** @type {string[]} */
+  const starts = [];
+  for (let at = dir; ; at = path.dirname(at)) {
+    for (const x of ['tsx', 'ts', 'jsx', 'js'])
+      if (fs.existsSync(path.join(at, `layout.${x}`)))
+        starts.push(path.join(at, `layout.${x}`));
+    if (at === app || !at.startsWith(app + path.sep)) break;
+  }
+  if (!starts.length) return false;
+  const aliases = tsconfigAliases(cwd);
+  const seen = new Set();
+  /** @param {string} file @param {number} depth @returns {boolean} */
+  const reads = (file, depth) => {
+    if (seen.has(file) || depth > 4) return false;
+    seen.add(file);
+    /** @type {string} */
+    let text;
+    try {
+      text = fs.readFileSync(file, 'utf8');
+    } catch {
+      return false;
+    }
+    if (sheet.test(text)) return true;
+    for (const m of text.matchAll(
+      /(?:import|@import)\s*(?:[^'"]*from\s*)?(?:url\()?['"]([^'"]+)['"]/g,
+    )) {
+      const spec = m[1];
+      // An alias the tsconfig sets; else `@/` is the src folder or the
+      // project root.
+      const alias = aliases.find(a => spec.startsWith(a.prefix));
+      const bases = alias
+        ? alias.to.map(t => path.join(t, spec.slice(alias.prefix.length)))
+        : spec.startsWith('@/')
+          ? [
+              path.join(cwd, 'src', spec.slice(2)),
+              path.join(cwd, spec.slice(2)),
+            ]
+          : spec.startsWith('.')
+            ? [path.resolve(path.dirname(file), spec)]
+            : [];
+      const hit = bases
+        .flatMap(b =>
+          ['', '.css', '.scss', '.ts', '.tsx', '.js', '.jsx'].map(x => b + x),
+        )
+        .find(f => fs.existsSync(f) && fs.statSync(f).isFile());
+      if (hit && reads(hit, depth + 1)) return true;
+    }
+    return false;
+  };
+  return starts.some(start => reads(start, 0));
+}
+
+/**
+ * The import aliases the app's tsconfig `paths` set (`~/*`, `#app/*`), each
+ * with the folders it stands for.
+ * @param {string} cwd
+ * @returns {Array<{prefix: string, to: string[]}>}
+ */
+function tsconfigAliases(cwd) {
+  const o = appCompilerOptions(cwd);
+  const paths = o && typeof o.paths === 'object' && o.paths ? o.paths : {};
+  const baseUrl = path.resolve(
+    cwd,
+    typeof o?.baseUrl === 'string' ? o.baseUrl : '.',
+  );
+  return Object.entries(/** @type {Record<string, unknown>} */ (paths)).flatMap(
+    ([key, targets]) =>
+      key.endsWith('/*') && Array.isArray(targets)
+        ? [
+            {
+              prefix: key.slice(0, -1),
+              to: targets
+                .filter(t => typeof t === 'string' && t.endsWith('/*'))
+                .map(t => path.resolve(baseUrl, String(t).slice(0, -2))),
+            },
+          ]
+        : [],
+  );
+}
+
+/**
+ * A note when the app never imports Core's stylesheet, or null: without
+ * it, components render unstyled, and some show nothing. Read from the
+ * files of the routes folder and src/ (best effort).
+ * @param {string} cwd
+ * @param {{dir: string, app: string | null}} at
+ * @returns {string | null}
+ */
+function coreStylesheetMissing(cwd, at) {
+  if (!at.app) return null;
+  const SHEET = /@astryxdesign\/core\/astryx\.css/;
+  let seen = 0;
+  /** @param {string} folder @returns {boolean} */
+  const imports = folder => {
+    /** @type {fs.Dirent[]} */
+    let entries;
+    try {
+      entries = fs.readdirSync(folder, {withFileTypes: true});
+    } catch {
+      return false;
+    }
+    for (const e of entries) {
+      const full = path.join(folder, e.name);
+      if (e.isDirectory()) {
+        if (
+          e.name === 'node_modules' ||
+          e.name.startsWith('.') ||
+          full === at.dir
+        )
+          continue;
+        if (imports(full)) return true;
+      } else if (
+        /\.(tsx|ts|jsx|js|mjs|css|scss)$/.test(e.name) &&
+        ++seen < 2000
+      )
+        try {
+          if (SHEET.test(fs.readFileSync(full, 'utf8'))) return true;
+        } catch {
+          // Unreadable: skip it.
+        }
+    }
+    return false;
+  };
+  const src = path.join(cwd, 'src');
+  if (
+    imports(at.app) ||
+    (at.app.startsWith(src + path.sep) ? false : imports(src)) ||
+    layoutImportsSheet(cwd, at.app, SHEET, at.dir)
+  )
+    return null;
+  const layout = ['tsx', 'ts', 'jsx', 'js']
+    .map(x => path.join(at.app ?? '', `layout.${x}`))
+    .find(f => fs.existsSync(f));
+  return `the app does not import Core's stylesheet, so the preview's components render unstyled and some show nothing; add import '@astryxdesign/core/astryx.css'; to ${layout ? shown(cwd, layout) : "the app's root layout"}`;
+}
+
+/**
+ * What next.config sets, read from its syntax tree: `pageExtensions`,
+ * `basePath` and `distDir`, each a literal value, `undefined` when it is
+ * not set, or `null` when it is set in a way only running the config tells
+ * (a spread, a function config, a value from code). Comments say nothing.
+ * @param {string} cwd
+ * @returns {{file: string | null, pageExtensions: string[] | null | undefined, basePath: string | null | undefined, distDir: string | null | undefined}}
+ */
+function readNextConfig(cwd) {
+  const none = {
+    file: null,
+    pageExtensions: undefined,
+    basePath: undefined,
+    distDir: undefined,
+  };
+  // The order Next loads them in; it refuses next.config.cjs.
+  for (const name of [
+    'next.config.js',
+    'next.config.mjs',
+    'next.config.ts',
+    'next.config.mts',
+  ]) {
+    /** @type {string} */
+    let text;
+    try {
+      text = fs.readFileSync(path.join(cwd, name), 'utf8');
+    } catch {
+      continue;
+    }
+    const unknown = {
+      file: name,
+      pageExtensions: null,
+      basePath: null,
+      distDir: null,
+    };
+    /** @type {any} */
+    let file;
+    try {
+      file = parseModule(text, {
+        sourceType: 'unambiguous',
+        plugins: ['typescript'],
+        errorRecovery: true,
+      });
+    } catch {
+      return unknown;
+    }
+    const body = /** @type {any[]} */ (file.program.body);
+    /** Top-level constants, by name. @type {Map<string, any>} */
+    const consts = new Map();
+    for (const st of body)
+      if (st.type === 'VariableDeclaration' && st.kind === 'const')
+        for (const d of st.declarations)
+          if (d.id?.type === 'Identifier' && d.init)
+            consts.set(d.id.name, d.init);
+    /** @param {any} n @param {number} depth @returns {any} */
+    const resolve = (n, depth = 0) => {
+      while (
+        n &&
+        /^TS(As|Satisfies|NonNull)Expression$|^ParenthesizedExpression$/.test(
+          n.type,
+        )
+      )
+        n = n.expression;
+      if (n?.type === 'Identifier' && depth < 4 && consts.has(n.name))
+        return resolve(consts.get(n.name), depth + 1);
+      return n;
+    };
+    /** The config object: exported, or passed to a wrapper such as withX(config). @param {any} n @returns {any} */
+    const configOf = n => {
+      n = resolve(n);
+      if (n?.type === 'ObjectExpression') return n;
+      if (n?.type === 'CallExpression')
+        for (const a of n.arguments) {
+          const o = configOf(a);
+          if (o) return o;
+        }
+      return null;
+    };
+    /** @type {any} */
+    let exported = null;
+    for (const st of body) {
+      if (st.type === 'ExportDefaultDeclaration') exported = st.declaration;
+      // export {config as default}
+      if (st.type === 'ExportNamedDeclaration' && !st.source)
+        for (const sp of st.specifiers ?? [])
+          if ((sp.exported?.name ?? sp.exported?.value) === 'default')
+            exported = sp.local;
+      if (
+        st.type === 'ExpressionStatement' &&
+        st.expression.type === 'AssignmentExpression' &&
+        st.expression.left.type === 'MemberExpression' &&
+        st.expression.left.object?.name === 'module' &&
+        st.expression.left.property?.name === 'exports'
+      )
+        exported = st.expression.right;
+    }
+    const config = exported && configOf(exported);
+    if (!config) return exported ? unknown : none;
+    const wrapped = resolve(exported)?.type === 'CallExpression';
+    // Changes to the config after it is made: `config.key = value` sets a
+    // key (the last one counts), and anything else (Object.assign, a
+    // computed key) makes every key unknown.
+    const names = new Set(
+      [...consts]
+        .filter(([, init]) => resolve(init) === config)
+        .map(([n]) => n),
+    );
+    /** @type {Map<string, any>} */
+    const later = new Map();
+    let changed = false;
+    // Only a statement at the top of the file surely runs: a key set inside
+    // an `if` or a function, or deleted, is known only by running it.
+    const UNSURE = Symbol('unsure');
+    const topLevel = new Set(
+      body
+        .filter(st => st.type === 'ExpressionStatement')
+        .map(st => st.expression),
+    );
+    /** @param {any} n */
+    const visit = n => {
+      if (!n || typeof n !== 'object') return;
+      if (Array.isArray(n)) return n.forEach(visit);
+      if (
+        n.type === 'AssignmentExpression' &&
+        n.left?.type === 'MemberExpression' &&
+        names.has(n.left.object?.name)
+      ) {
+        if (n.left.computed) changed = true;
+        else
+          later.set(
+            n.left.property.name,
+            topLevel.has(n) && n.operator === '=' ? n.right : UNSURE,
+          );
+      }
+      if (
+        n.type === 'UnaryExpression' &&
+        n.operator === 'delete' &&
+        n.argument?.type === 'MemberExpression' &&
+        names.has(n.argument.object?.name)
+      ) {
+        if (n.argument.computed) changed = true;
+        else later.set(n.argument.property.name, UNSURE);
+      }
+      if (
+        n.type === 'CallExpression' &&
+        n.arguments?.some(
+          (/** @type {any} */ a) =>
+            a.type === 'Identifier' && names.has(a.name),
+        ) &&
+        n.callee?.type === 'MemberExpression' &&
+        n.callee.object?.name === 'Object'
+      )
+        changed = true;
+      for (const [k, v] of Object.entries(n))
+        if (k !== 'loc' && k !== 'start' && k !== 'end') visit(v);
+    };
+    visit(body);
+    if (changed) return unknown;
+    // The config's keys in order, with a spread of a constant object read
+    // in place; a spread of anything else may set any key (`null`).
+    /** @type {Array<{key: string, value: any} | null>} */
+    const entries = [];
+    /** @param {any} obj @param {number} depth */
+    const flatten = (obj, depth) => {
+      for (const x of obj.properties) {
+        if (x.type === 'SpreadElement') {
+          const inner = resolve(x.argument);
+          if (inner?.type === 'ObjectExpression' && depth < 4)
+            flatten(inner, depth + 1);
+          else entries.push(null);
+        } else if (
+          (x.type === 'ObjectProperty' || x.type === 'ObjectMethod') &&
+          !x.computed
+        )
+          entries.push({key: x.key.name ?? x.key.value, value: x.value});
+        else entries.push(null);
+      }
+    };
+    flatten(config, 0);
+    /** The entry that sets a key last: a later assignment, else the last key; null when an unreadable spread may; undefined when nothing does. @param {string} key */
+    const prop = key => {
+      if (later.has(key))
+        return later.get(key) === UNSURE ? null : {key, value: later.get(key)};
+      for (let i = entries.length - 1; i >= 0; i--) {
+        const e = entries[i];
+        if (e === null) return null;
+        if (e.key === key) return e;
+      }
+      return undefined;
+    };
+    /** @param {any} n @returns {string | null} */
+    const str = n => {
+      n = resolve(n);
+      if (n?.type === 'StringLiteral') return n.value;
+      if (n?.type === 'TemplateLiteral' && !n.expressions.length)
+        return n.quasis[0].value.cooked;
+      return null;
+    };
+    /** @param {string} key @param {(n: any) => any} read */
+    const value = (key, read) => {
+      const p = prop(key);
+      return p ? read(p.value) : p;
+    };
+    return {
+      file: name,
+      pageExtensions: value('pageExtensions', n => {
+        n = resolve(n);
+        if (n?.type !== 'ArrayExpression') return null;
+        const out = n.elements.map((/** @type {any} */ e) => str(e));
+        return out.every((/** @type {any} */ e) => e != null) ? out : null;
+      }),
+      // A wrapper such as withX(config) may add a basePath of its own.
+      basePath: wrapped
+        ? null
+        : value('basePath', n => {
+            const v = str(n);
+            return v == null ? null : v.replace(/\/+$/, '');
+          }),
+      distDir: value('distDir', n => {
+        const v = str(n);
+        return v == null
+          ? null
+          : (v.replace(/^\.?\//, '').split('/')[0] ?? null);
+      }),
+    };
+  }
+  return none;
+}
+
+/**
+ * The `basePath` next.config sets: '' when it sets none, null when only
+ * running the config tells. Every URL of the app starts with it.
+ * @param {string} cwd
+ * @returns {string | null}
+ */
+function nextBasePath(cwd) {
+  const v = readNextConfig(cwd).basePath;
+  return v === undefined ? '' : v;
+}
+
+/**
+ * Notes on next.config values the preview depends on that only running
+ * the config tells: the page extensions (the route is page.tsx) and the
+ * base path of its URL.
+ * @param {string} cwd
+ * @returns {string[]}
+ */
+function nextConfigNotes(cwd) {
+  const c = readNextConfig(cwd);
+  /** @type {string[]} */
+  const notes = [];
+  if (c.pageExtensions === null)
+    notes.push(
+      `${c.file} sets pageExtensions in a way only running it tells; the preview's route is page.tsx, so "tsx" must be in it`,
+    );
+  return notes;
+}
+
+/**
  * Why a folder is no place for files this command writes, or null: themes
  * live in themes/ (and a preview app's whole tree would ship with the
- * theme), packages in node_modules/, and Next serves every file under a
- * Pages Router folder (`pages/` or `src/pages/`) as a page.
+ * theme), packages in node_modules/, Next empties its build folder
+ * (`.next/`, `out/` or the `distDir` next.config names) on every build,
+ * and Next serves every file under a Pages Router folder (`pages/` or
+ * `src/pages/`) as a page.
  * @param {string} cwd
  * @param {string} dir
  */
@@ -147,16 +563,146 @@ function reservedFolder(cwd, dir) {
     return 'node_modules/ belongs to the package manager, which replaces it';
   if (segs[0] === 'public')
     return 'Next serves every file in public/ as it is, at the site root, so anyone could download it';
-  const odd = segs.find(
-    seg =>
-      /^(con|prn|aux|nul|com\d|lpt\d)(\..*)?$/i.test(seg) || /^\.+$/.test(seg),
-  );
+  const built = [
+    ...new Set(['.next', 'out', readNextConfig(cwd).distDir]),
+  ].find(d => d && segs[0] === d);
+  if (built)
+    return `${built}/ is where Next writes its build, and the next build empties it`;
+  const odd = segs.find(seg => windowsReserved(seg) || /^\.+$/.test(seg));
   if (odd)
     return `${odd} is a name Windows does not allow for a folder, so the project could not be checked out there`;
   if (segs[0] === 'pages' || (segs[0] === 'src' && segs[1] === 'pages'))
     return 'Next serves every file under the Pages Router folder (pages/ or src/pages/) as a public page; this preview needs the App Router (app/ or src/app/)';
   return null;
 }
+
+/**
+ * The app's tsconfig.json compiler options (comments and trailing commas
+ * allowed), or null when there is none.
+ * @param {string} cwd
+ * @returns {Record<string, unknown> | null}
+ */
+function appCompilerOptions(cwd) {
+  /** @type {string} */
+  let text;
+  try {
+    text = fs.readFileSync(path.join(cwd, 'tsconfig.json'), 'utf8');
+  } catch {
+    return null;
+  }
+  try {
+    const json = text
+      .replace(
+        /("(?:[^"\\]|\\.)*")|\/\*[\s\S]*?\*\/|\/\/.*$/gm,
+        (m, str) => str ?? '',
+      )
+      .replace(/,(\s*[}\]])/g, '$1');
+    const o = JSON.parse(json)?.compilerOptions;
+    return o && typeof o === 'object' ? o : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Notes on what the preview's TypeScript files need from the app: an app
+ * with no TypeScript gets the install line (Next sets it up on the next
+ * build otherwise), and an app whose tsconfig turns on
+ * `noUncheckedIndexedAccess` is told which template pages were written as
+ * their template ships them, which may not pass it.
+ * @param {string} cwd
+ * @param {string} dir
+ * @param {string[]} added page ids added by this command
+ * @returns {string[]}
+ */
+function typeScriptNotes(cwd, dir, added) {
+  const options = appCompilerOptions(cwd);
+  if (!options) {
+    const hasTs = (() => {
+      try {
+        return Boolean(
+          createRequire(path.join(cwd, 'package.json')).resolve('typescript'),
+        );
+      } catch {
+        return false;
+      }
+    })();
+    return hasTs
+      ? []
+      : [
+          `the app has no TypeScript, and the preview's files are .tsx, so the next build sets it up; to do it now: ${installLine(cwd, ['typescript', '@types/react', '@types/node']).replace(/ (add|install) /, ' $1 -D ')}`,
+        ];
+  }
+  const templates = added.filter(
+    id => !['overview', 'components', COLORS_PAGE.id].includes(id),
+  );
+  if (options.noUncheckedIndexedAccess !== true || !templates.length) return [];
+  const files = templates.map(id =>
+    shown(cwd, path.join(dir, PAGES_DIR, `${id}.tsx`)),
+  );
+  return [
+    `the app's tsconfig.json turns on noUncheckedIndexedAccess, and ${files.join(', ')} ${files.length > 1 ? 'are' : 'is'} written as the page template ships, which may not pass it; if the build stops there, fix the reported lines or remove the page with ${PREVIEW} remove ${templates[0]}`,
+  ];
+}
+
+/**
+ * Why a file cannot be read (its error code), or null when it can.
+ * @param {string} file
+ * @returns {string | null}
+ */
+function unreadable(file) {
+  try {
+    fs.closeSync(fs.openSync(file, 'r'));
+    return null;
+  } catch (e) {
+    const code = /** @type {any} */ (e)?.code;
+    return code === 'ENOENT' ? null : (code ?? 'error');
+  }
+}
+
+/**
+ * Whether a folder beside `dir` has its name in another case.
+ * @param {string} dir
+ */
+function twinBeside(dir) {
+  const name = path.basename(dir);
+  try {
+    return fs
+      .readdirSync(path.dirname(dir))
+      .some(n => n !== name && n.toLowerCase() === name.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A folder beside `dir`, or beside one of its parents, whose name differs
+ * only in case, or null.
+ * @param {string} dir
+ * @returns {string | null}
+ */
+function sameCaseSibling(dir) {
+  for (let at = dir; path.dirname(at) !== at; at = path.dirname(at)) {
+    const parent = path.dirname(at);
+    const name = path.basename(at);
+    /** @type {string[]} */
+    let names;
+    try {
+      names = fs.readdirSync(parent);
+    } catch {
+      continue;
+    }
+    const twin = names.find(
+      n => n !== name && n.toLowerCase() === name.toLowerCase(),
+    );
+    if (twin) return path.join(parent, twin);
+    if (fs.existsSync(path.join(parent, 'package.json'))) break;
+  }
+  return null;
+}
+
+/** An intercepting route folder: `(.)x`, `(..)x`, `(..)(..)x`, `(...)x`. */
+const INTERCEPT = /^\((\.{1,3})\)/;
 
 /**
  * Why Next does not serve a folder inside the routes folder at its own
@@ -169,7 +715,9 @@ function unroutedSegment(app, dir) {
   const seg = path
     .relative(app, dir)
     .split(path.sep)
-    .find(x => /^[_@[]/.test(x));
+    .find(x => /^[_@[]/.test(x) || INTERCEPT.test(x));
+  if (seg && INTERCEPT.test(seg))
+    return `Next reads the folder ${seg} as an intercepting route ((.), (..) and (...) folders show another route's page), not a URL of its own, and a page there breaks the app`;
   return seg
     ? `Next does not serve the folder ${seg} at a URL of its own (_private folders are never routed, @slot and [param] folders are not plain URL segments)`
     : null;
@@ -187,35 +735,16 @@ const urlSegments = (app, dir) =>
     .split(path.sep)
     .filter(seg => seg && !/^\(.*\)$/.test(seg));
 
-/**
- * The `pageExtensions` next.config sets, read as text (best effort), or
- * null when it sets none.
- * @param {string} cwd
- * @returns {string[] | null}
- */
-function pageExtensions(cwd) {
-  for (const name of [
-    'next.config.mjs',
-    'next.config.js',
-    'next.config.ts',
-    'next.config.cjs',
-  ]) {
-    /** @type {string} */
-    let text;
-    try {
-      text = fs.readFileSync(path.join(cwd, name), 'utf8');
-    } catch {
-      continue;
-    }
-    const m = /pageExtensions\s*:\s*\[([^\]]*)\]/.exec(text);
-    return m ? [...m[1].matchAll(/['"`]([^'"`]+)['"`]/g)].map(x => x[1]) : null;
-  }
-  return null;
-}
+/** An optional catch-all route folder, `[[...slug]]`: it also serves its parent folder's URL (a required `[...slug]` does not). */
+const CATCH_ALL = /^\[\[\.\.\.[^\]]+\]\]$/;
+
+/** A file Next serves a URL from: a page or a route handler. */
+const ROUTE_FILE = /^(page\.(tsx|ts|jsx|js|mdx)|route\.(tsx|ts|jsx|js))$/;
 
 /**
- * A page of the app that Next serves at the same URL as `dir`, which would
- * stop the whole app from building, or null.
+ * A page or route handler of the app that Next serves at the same URL as
+ * `dir`, or null: beside the preview, Next refuses to build (a route and a
+ * page), or the preview takes that URL from it.
  * @param {string} cwd
  * @param {string} app the routes folder
  * @param {string} dir
@@ -238,15 +767,32 @@ function sameUrlPage(cwd, app, dir) {
           continue;
         const hit = walk(full);
         if (hit) return hit;
-      } else if (
-        folder !== dir &&
-        /^page\.(tsx|ts|jsx|js|mdx)$/.test(e.name) &&
-        urlSegments(app, folder).join('/') === url
-      )
-        return full;
+      } else if (ROUTE_FILE.test(e.name) && servesUrl(folder)) return full;
     }
     return null;
   };
+  /** A folder served at the URL, or at the URLs under it through a catch-all. @param {string} folder */
+  const servesUrl = folder => {
+    const segs = urlSegments(app, folder);
+    return (
+      segs.join('/') === url ||
+      (CATCH_ALL.test(segs.at(-1) ?? '') && segs.slice(0, -1).join('/') === url)
+    );
+  };
+  // The preview's own folder: a route handler, a page other than the
+  // page.tsx the preview writes, or a catch-all route in it.
+  try {
+    for (const e of fs.readdirSync(dir, {withFileTypes: true})) {
+      if (!e.isDirectory()) {
+        if (ROUTE_FILE.test(e.name) && e.name !== 'page.tsx')
+          return path.join(dir, e.name);
+      } else if (CATCH_ALL.test(e.name))
+        for (const name of fs.readdirSync(path.join(dir, e.name)))
+          if (ROUTE_FILE.test(name)) return path.join(dir, e.name, name);
+    }
+  } catch {
+    // No folder yet.
+  }
   const inApp = walk(app);
   if (inApp) return inApp;
   for (const pages of [path.join(cwd, 'pages'), path.join(cwd, 'src', 'pages')])
@@ -270,15 +816,21 @@ function sameUrlPage(cwd, app, dir) {
 function nestedRootLayouts(app) {
   const LAYOUT = /^layout\.(tsx|ts|jsx|js)$/;
   if (fs.readdirSync(app).some(f => LAYOUT.test(f))) return [];
-  return fs
-    .readdirSync(app, {withFileTypes: true})
-    .filter(
-      e =>
-        e.isDirectory() &&
-        fs.readdirSync(path.join(app, e.name)).some(f => LAYOUT.test(f)),
-    )
-    .map(e => path.join(app, e.name))
-    .sort();
+  /** @type {string[]} */
+  const out = [];
+  /** A folder with a layout counts; a route group without one is looked into. @param {string} dir @param {boolean} top */
+  const look = (dir, top) => {
+    for (const e of fs.readdirSync(dir, {withFileTypes: true})) {
+      if (!e.isDirectory()) continue;
+      const sub = path.join(dir, e.name);
+      const group = /^\(.+\)$/.test(e.name);
+      if (!top && !group) continue;
+      if (fs.readdirSync(sub).some(f => LAYOUT.test(f))) out.push(sub);
+      else if (group) look(sub, false);
+    }
+  };
+  look(app, true);
+  return out.sort();
 }
 
 /**
@@ -362,6 +914,75 @@ function checkPlacement(cwd, dir, where, retry) {
       `${where} is no place for the preview: ${why}.`,
       {run: [fallback]},
     );
+  // A folder name that is not a plain URL segment (a space, an accent,
+  // ?, #, %) is not served at the URL it seems to have. The characters a
+  // URL path takes as they are (RFC 3986 unreserved and sub-delims, @, ~)
+  // are served.
+  const PLAIN = /^[A-Za-z0-9._~!$&'()+,;=@-]+$/;
+  const segs = app ? path.relative(app, dir).split(path.sep) : [];
+  const odd = segs.filter(
+    seg => seg && !/^\(.+\)$|^\[.+\]$/.test(seg) && !PLAIN.test(seg),
+  );
+  if (app && odd.length) {
+    const slug = (/** @type {string} */ seg) =>
+      seg
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^A-Za-z0-9._-]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .toLowerCase() || 'theme-preview';
+    // Every odd segment slugged, then the first free folder from it.
+    const base = path.join(
+      app,
+      ...segs.map(seg => (odd.includes(seg) ? slug(seg) : seg)),
+    );
+    let fixed = base;
+    for (
+      let n = 2;
+      fs.existsSync(fixed) || twinBeside(fixed) || sameUrlPage(cwd, app, fixed);
+      n++
+    )
+      fixed = `${base}-${n}`;
+    refuse(
+      E.ERR_INVALID_ARGUMENT,
+      `${where} is no place for the preview: Next does not serve the folder "${odd[0]}" at the URL its name seems to give (a space, a letter outside A-Z, %, # or ? are no plain URL segment).`,
+      {run: [retry(shown(cwd, fixed))]},
+    );
+  }
+  // A folder whose name differs from a folder beside it only in case is the
+  // same folder on macOS and Windows: one of them is lost in a checkout.
+  const twin = sameCaseSibling(dir);
+  if (twin) {
+    // A twin of a folder on the way: the same path through the folder that
+    // is there. A twin of the folder itself: the first free name beside it.
+    const base = path.dirname(twin);
+    const rel = path.relative(base, dir).split(path.sep);
+    // Both spellings are folders already: no path through either is free,
+    // so the way on is a new folder beside them.
+    const bothThere = rel.length > 1 && fs.existsSync(path.join(base, rel[0]));
+    let free = path.join(twin, ...rel.slice(1));
+    if (rel.length === 1 || bothThere) {
+      const start = rel.length === 1 ? dir : path.join(base, 'theme-preview');
+      free = start;
+      for (let n = 2; fs.existsSync(free) || twinBeside(free); n++)
+        free = `${start}-${n}`;
+    }
+    const existing = fs.existsSync(path.join(dir, PREVIEW_DATA));
+    refuse(
+      E.ERR_INVALID_ARGUMENT,
+      `${where} is no place for the preview: ${shownDir(cwd, twin)}/ differs from it only in case, and on macOS and Windows they are one folder, so the project could not be checked out there.${existing ? ` The preview already there can still be removed.` : ''}`,
+      {
+        run: [
+          retry(shown(cwd, free)),
+          ...(existing
+            ? [
+                `${PREVIEW} remove --path ${quoteCommandArgument(shownDir(cwd, dir))}`,
+              ]
+            : []),
+        ],
+      },
+    );
+  }
   if (!app) return;
   if (served && app !== served)
     refuse(
@@ -375,13 +996,43 @@ function checkPlacement(cwd, dir, where, retry) {
           : [fallback],
       },
     );
-  const exts = pageExtensions(cwd);
-  if (exts && !exts.includes('tsx'))
+  const exts = readNextConfig(cwd).pageExtensions;
+  if (exts && !exts.includes('tsx')) {
+    let free = 'theme-app';
+    for (let n = 2; fs.existsSync(path.join(cwd, free)); n++)
+      free = `theme-app-${n}`;
     refuse(
       E.ERR_INVALID_ARGUMENT,
       `next.config sets pageExtensions to ${exts.join(', ')}, so Next does not serve page.tsx, the route file the preview writes.`,
-      {fix: 'add "tsx" to pageExtensions to use the preview in this app'},
+      {
+        fix: 'add "tsx" to pageExtensions to use the preview in this app',
+        run: [
+          `${retry(shown(cwd, dir))}  # once "tsx" is in pageExtensions`,
+          `${PREVIEW} app ${free}  # or a new app of its own, with the preview`,
+        ],
+      },
     );
+  }
+  if (
+    (app && !served) ||
+    (served &&
+      !rootLayouts.length &&
+      !fs.readdirSync(served).some(f => /^layout\.(tsx|ts|jsx|js)$/.test(f)))
+  ) {
+    let free = 'theme-app';
+    for (let n = 2; fs.existsSync(path.join(cwd, free)); n++)
+      free = `theme-app-${n}`;
+    refuse(
+      E.ERR_INVALID_ARGUMENT,
+      `${shown(cwd, served ?? app)}/ has no root layout (no layout.tsx in it or in a route group)${served ? '' : ' and is not there yet'}, so Next cannot build a page in ${where}.`,
+      {
+        fix: `add a root layout to ${shown(cwd, served ?? app)}/ to use the preview in this app`,
+        run: [
+          `${PREVIEW} app ${free}  # a new app with its own root layout and the preview`,
+        ],
+      },
+    );
+  }
   if (rootLayouts.length && !rootLayout)
     refuse(
       E.ERR_INVALID_ARGUMENT,
@@ -394,11 +1045,15 @@ function checkPlacement(cwd, dir, where, retry) {
     );
   const clash = sameUrlPage(cwd, app, dir);
   if (clash) {
-    let free = `${dir}-2`;
-    for (let n = 3; fs.existsSync(free); n++) free = `${dir}-${n}`;
+    // The first free name from the base name, whose URL no other page
+    // serves either.
+    const base = dir.replace(/-\d+$/, '');
+    let free = `${base}-2`;
+    for (let n = 3; fs.existsSync(free) || sameUrlPage(cwd, app, free); n++)
+      free = `${base}-${n}`;
     refuse(
       E.ERR_FILE_EXISTS,
-      `${shown(cwd, clash)} already serves /${urlSegments(app, dir).join('/')}, so a preview in ${where} would stop the app from building.`,
+      `${shown(cwd, clash)} already serves /${urlSegments(app, dir).join('/')} or the URLs under it, so a preview in ${where} would stop the app from building, or take that URL from it.`,
       {run: [retry(shown(cwd, free))]},
     );
   }
@@ -445,6 +1100,52 @@ function previewDir(cwd, where, opts = {}) {
         );
       throw e;
     }
+    // A file on the way, or a path longer than the system takes, would
+    // fail every command on it with a system error.
+    const blocker = (() => {
+      for (
+        let at = path.dirname(dir);
+        at.startsWith(cwd + path.sep);
+        at = path.dirname(at)
+      )
+        try {
+          if (!fs.statSync(at).isDirectory()) return at;
+        } catch {
+          // Not there yet: made with the folder.
+        }
+      return null;
+    })();
+    if (blocker)
+      refuse(
+        E.ERR_INVALID_ARGUMENT,
+        `--path ${where} goes through ${shown(cwd, blocker)}, which is a file, so no folder can be made there.`,
+        {
+          run: [
+            retry(
+              shown(cwd, path.join(path.dirname(blocker), 'theme-preview')),
+            ),
+          ],
+        },
+      );
+    // A folder name is at most 255 bytes on every common file system; the
+    // whole path, with the preview's own files below it, is kept under
+    // 3,500 bytes.
+    const longName = path
+      .relative(cwd, dir)
+      .split(path.sep)
+      .find(seg => Buffer.byteLength(seg) > 255);
+    if (longName)
+      refuse(
+        E.ERR_INVALID_ARGUMENT,
+        `--path ${where} has a folder name longer than 255 bytes, the most a file system takes for one name.`,
+        {run: [retry(null)]},
+      );
+    if (Buffer.byteLength(dir) > 3500)
+      refuse(
+        E.ERR_INVALID_ARGUMENT,
+        `--path ${where} is longer than 3,500 bytes, with the preview's files in it.`,
+        {run: [retry(null)]},
+      );
     if (opts.write) checkPlacement(cwd, dir, `--path ${where}`, retry);
     return {dir, app: appOf(dir)};
   }
@@ -457,6 +1158,7 @@ function previewDir(cwd, where, opts = {}) {
       ...new Set(editedThemes(cwd).flatMap(t => recordedPreviews(cwd, t))),
     ].filter(d => fs.existsSync(path.join(d, PREVIEW_DATA)));
     if (recorded.length === 1) {
+      inProjectOrRefuse(cwd, recorded[0], retry);
       if (opts.write)
         checkPlacement(cwd, recorded[0], shownDir(cwd, recorded[0]), retry);
       return {dir: recorded[0], app: appOf(recorded[0])};
@@ -483,19 +1185,127 @@ function previewDir(cwd, where, opts = {}) {
     served && !known ? (nestedRootLayouts(served)[0] ?? null) : null;
   const dir = known ?? (served && path.join(nested ?? served, 'theme-preview'));
   if (!dir && opts.optional) return /** @type {any} */ (null);
-  if (!dir)
+  if (!dir) {
+    // A workspace root: the Next apps below it, each with a --path into
+    // its routes folder.
+    const apps = nextAppsUnder(cwd);
     refuse(
       E.ERR_NOT_FOUND,
-      'No app routes folder here (app/ or src/app/), so there is no app to put the preview in.',
+      apps.length
+        ? `No app routes folder here (app/ or src/app/); the Next ${apps.length > 1 ? 'apps' : 'app'} below ${apps.length > 1 ? 'are' : 'is'} ${apps.map(a => `${shown(cwd, a.root)}/`).join(', ')}.`
+        : 'No app routes folder here (app/ or src/app/), so there is no app to put the preview in.',
       {
         run: [
-          `${PREVIEW} add --path app/theme-preview  # an app routes folder beside the app's own`,
+          ...apps
+            .slice(0, 3)
+            .map(
+              a =>
+                `${PREVIEW} add --path ${quoteCommandArgument(shown(cwd, path.join(a.routes, 'theme-preview')))}`,
+            ),
           `${PREVIEW} app theme-app  # a new starter app with the preview in it`,
         ],
       },
     );
+  }
+  inProjectOrRefuse(cwd, dir, retry);
   if (opts.write) checkPlacement(cwd, dir, `${shownDir(cwd, dir)}/`, retry);
   return {dir, app: appOf(dir)};
+}
+
+/**
+ * The Next apps in folders below `cwd` (a few levels, node_modules left
+ * out): each folder with a package.json that depends on `next` and a routes
+ * folder with a root layout.
+ * @param {string} cwd
+ * @returns {Array<{root: string, routes: string}>}
+ */
+function nextAppsUnder(cwd) {
+  /** @type {Array<{root: string, routes: string}>} */
+  const out = [];
+  /** @param {string} dir @param {number} depth */
+  const walk = (dir, depth) => {
+    if (depth > 3 || out.length >= 10) return;
+    /** @type {fs.Dirent[]} */
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, {withFileTypes: true});
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (
+        !e.isDirectory() ||
+        e.name === 'node_modules' ||
+        e.name.startsWith('.')
+      )
+        continue;
+      const sub = path.join(dir, e.name);
+      const routes = nextRoutesOf(sub);
+      if (routes) out.push({root: sub, routes});
+      else walk(sub, depth + 1);
+    }
+  };
+  walk(cwd, 1);
+  return out.sort((a, b) => a.root.localeCompare(b.root));
+}
+
+/**
+ * The routes folder of a Next app in `dir` (app/, else src/app/, with a
+ * root layout), when its package.json depends on `next`; else null.
+ * @param {string} dir
+ * @returns {string | null}
+ */
+function nextRoutesOf(dir) {
+  try {
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(dir, 'package.json'), 'utf8'),
+    );
+    if (!['dependencies', 'devDependencies'].some(k => pkg?.[k]?.next))
+      return null;
+  } catch {
+    return null;
+  }
+  return (
+    [path.join(dir, 'app'), path.join(dir, 'src', 'app')].find(
+      r =>
+        fs.existsSync(r) &&
+        fs.readdirSync(r).some(f => /^layout\.(tsx|ts|jsx|js)$/.test(f)),
+    ) ?? null
+  );
+}
+
+/**
+ * Refuse a preview folder that reaches outside the project through a link,
+ * as `--path` refuses one: every file the preview writes would land there.
+ * @param {string} cwd
+ * @param {string} dir
+ * @param {Retry} retry
+ */
+function inProjectOrRefuse(cwd, dir, retry) {
+  /** @param {string} d */
+  const within = d => {
+    try {
+      assertWithin(d, cwd, {allowAbsolute: true, label: 'the preview folder'});
+      return true;
+    } catch (e) {
+      if (e instanceof PathSafetyError) return false;
+      throw e;
+    }
+  };
+  if (within(dir)) return;
+  let free = `${dir}-2`;
+  for (let n = 3; fs.existsSync(free); n++) free = `${dir}-${n}`;
+  refuse(
+    E.ERR_PATH_TRAVERSAL,
+    `${shownDir(cwd, dir)}/ leads outside the project through a link; the preview stays inside the folder you run the command from.`,
+    {
+      run: [
+        within(path.dirname(dir))
+          ? retry(shown(cwd, free))
+          : `${PREVIEW} app theme-app  # a new app of its own, inside this folder`,
+      ],
+    },
+  );
 }
 
 const CLI_PACKAGE = path.resolve(
@@ -509,25 +1319,37 @@ const STARTER = path.join(CLI_PACKAGE, 'assets', 'preview-app');
  * @param {string} file absolute
  * @param {string} root absolute
  * @param {string} what what the path is, for the refusal
+ * @param {{cwd?: string, pf?: string}} [opts] `cwd`: paths in the refusal
+ *   are shown from it; `pf`: the caller's --path flag, for the suggestion
  * @returns {string}
  */
-function confined(file, root, what) {
+function confined(file, root, what, opts = {}) {
   try {
     return assertWithin(file, root, {allowAbsolute: true, label: what});
   } catch (e) {
     if (e instanceof PathSafetyError) {
-      /** @type {string | null} */
+      // The link that leads out: the file itself, or a folder on its way.
+      /** @type {{at: string, to: string} | null} */
       let link = null;
-      try {
-        if (fs.lstatSync(file).isSymbolicLink()) link = fs.readlinkSync(file);
-      } catch {
-        // Not there: the path itself leads out.
-      }
+      for (
+        let at = file;
+        at.startsWith(root + path.sep) && !link;
+        at = path.dirname(at)
+      )
+        try {
+          if (fs.lstatSync(at).isSymbolicLink())
+            link = {at, to: fs.readlinkSync(at)};
+        } catch {
+          // Not there: look at its folder.
+        }
+      const at = (/** @type {string} */ f) =>
+        opts.cwd ? shown(opts.cwd, f) || '.' : f;
       refuse(
         E.ERR_PATH_TRAVERSAL,
         link == null
-          ? `${what} ${file} is outside ${root}.`
-          : `${what} ${file}, which is a link to ${link}, outside ${root}.`,
+          ? `${what} names ${at(file)}, which is outside ${at(root)}.`
+          : `${at(link.at)} is a link to ${link.to}, outside ${at(root)}; the preview never writes through a link.`,
+        {run: [`${PREVIEW} list${opts.pf ?? ''}`]},
       );
     }
     throw e;
@@ -612,7 +1434,11 @@ function planStarterApp(cwd, where, extra, dependencies, slug = null) {
     reservedFolder(cwd, root) ??
     (routes.some(r => root === r || root.startsWith(r + path.sep))
       ? "it is inside this app's routes folder, where Next would serve the new app's files as pages of this one"
-      : null);
+      : null) ??
+    (t =>
+      t
+        ? `${shownDir(cwd, t)}/ differs from it only in case, and on macOS and Windows they are one folder`
+        : null)(sameCaseSibling(root));
   if (why) {
     let free = 'theme-app';
     for (let n = 2; fs.existsSync(path.join(cwd, free)); n++)
@@ -809,6 +1635,11 @@ function previewProblem(d) {
     return '"theme" is not a theme name or null';
   if (!Array.isArray(d.pages)) return '"pages" is not a list';
   if (!Array.isArray(d.files)) return '"files" is not a list';
+  if (
+    d.parents !== undefined &&
+    !(Number.isInteger(d.parents) && d.parents >= 0 && d.parents <= 20)
+  )
+    return '"parents" is not a small whole number';
   const ids = new Set();
   for (const p of d.pages) {
     if (!p || typeof p !== 'object' || Array.isArray(p))
@@ -835,6 +1666,8 @@ function previewProblem(d) {
       f.split('/').some(x => x === '' || x === '.')
     )
       return `"files" holds ${JSON.stringify(f)}, which is not a file path relative to the folder`;
+    else if (f.split('/').includes('..'))
+      return `"files" holds ${JSON.stringify(f)}, which leads outside the folder (${OUTSIDE_FIX})`;
   if (
     d.hashes != null &&
     (typeof d.hashes !== 'object' ||
@@ -887,15 +1720,21 @@ function holdsApp(cwd, dir) {
   );
 }
 
+/** What a record entry that leads outside the folder takes. */
+const OUTSIDE_FIX = `${PREVIEW} remove drops it and deletes nothing outside`;
+
 /**
  * The preview's data, null when the folder has none; a refusal when the
  * file is there but unreadable or of the wrong shape.
  * @param {string} cwd
  * @param {string} dir
  * @param {string} [pf] the caller's --path flag, for the refusal
+ * @param {{dropped?: string[]}} [opts] `dropped`: entries of "files" that
+ *   lead outside the folder are taken out and collected here, as `remove`
+ *   does
  * @returns {PreviewData | null}
  */
-function readPreview(cwd, dir, pf = '') {
+function readPreview(cwd, dir, pf = '', opts = {}) {
   /** @type {string} */
   let text;
   try {
@@ -920,6 +1759,14 @@ function readPreview(cwd, dir, pf = '') {
       pf,
     );
   }
+  // `remove` drops an entry that leads outside the folder, and deletes
+  // nothing there.
+  if (opts.dropped && data && Array.isArray(data.files)) {
+    const outside = (/** @type {unknown} */ f) =>
+      typeof f === 'string' && f.split('/').includes('..');
+    for (const f of data.files) if (outside(f)) opts.dropped.push(f);
+    data.files = data.files.filter((/** @type {unknown} */ f) => !outside(f));
+  }
   const problem = previewProblem(data);
   if (problem) damagedPreview(cwd, dir, problem, pf);
   data.files = [...new Set(data.files)];
@@ -927,8 +1774,7 @@ function readPreview(cwd, dir, pf = '') {
 }
 
 /** A short hash of a file's text. @param {string | Buffer} text */
-const digest = text =>
-  createHash('sha256').update(text).digest('hex').slice(0, 16);
+const digest = text => sha256(Buffer.from(text)).slice(0, 16);
 
 /**
  * A file's text as a formatter could have left it: white space outside
@@ -1029,7 +1875,145 @@ function formatterNeutral(text) {
  * change by hand while an edit inside a string does.
  * @param {string | Buffer} text
  */
-const contentHash = text => `v2:${digest(formatterNeutral(String(text)))}`;
+const formatterHash = text => `v2:${digest(formatterNeutral(String(text)))}`;
+
+/** Fields of a syntax tree node that say where or how it was written. */
+const LAYOUT = new Set([
+  'start',
+  'end',
+  'loc',
+  'range',
+  'extra',
+  'leadingComments',
+  'trailingComments',
+  'innerComments',
+  'comments',
+  'tokens',
+  'errors',
+]);
+
+/**
+ * The text a run of JSX text renders, as JSX reads it: lines trimmed where
+ * they meet a line break, blank lines dropped, the rest joined by a space.
+ * @param {string} value
+ */
+function jsxText(value) {
+  const lines = value.split(/\r\n|\n|\r/);
+  let last = 0;
+  lines.forEach((l, i) => {
+    if (/[^ \t]/.test(l)) last = i;
+  });
+  let out = '';
+  lines.forEach((line, i) => {
+    let t = line.replace(/\t/g, ' ');
+    if (i !== 0) t = t.replace(/^ +/, '');
+    if (i !== lines.length - 1) t = t.replace(/ +$/, '');
+    if (t) out += i === last ? t : `${t} `;
+  });
+  return out;
+}
+
+/**
+ * JSX children as they render: text and string expressions (`{" "}`) are
+ * one run of text, and runs that render nothing are dropped, so a
+ * formatter's line breaks and `{" "}` change nothing.
+ * @param {any[]} children
+ * @param {(node: any) => any} walk
+ */
+function jsxChildren(children, walk) {
+  /** @type {any[]} */
+  const out = [];
+  for (const c of children ?? []) {
+    const text =
+      c.type === 'JSXText'
+        ? jsxText(c.value)
+        : c.type === 'JSXExpressionContainer' &&
+            c.expression?.type === 'StringLiteral'
+          ? c.expression.value
+          : null;
+    if (text == null) out.push(walk(c));
+    else if (out.at(-1)?.type === 'Text') out.at(-1).value += text;
+    else out.push({type: 'Text', value: text});
+  }
+  return out.filter(c => !(c.type === 'Text' && c.value === ''));
+}
+
+/**
+ * A file's code in a form no formatter changes: its syntax tree, without
+ * positions, parentheses, quote kinds, trailing commas or semicolons, with
+ * object keys written the same quoted or bare, white space in JSX text
+ * collapsed, and its comments by text. Null when it does not parse.
+ * @param {string} text
+ * @returns {string | null}
+ */
+function canonicalCode(text) {
+  /** @type {any} */
+  let file;
+  try {
+    file = parseModule(text, {
+      sourceType: 'module',
+      plugins: ['jsx', 'typescript'],
+      errorRecovery: false,
+    });
+  } catch {
+    return null;
+  }
+  /** @param {any} node @returns {any} */
+  const walk = node => {
+    if (Array.isArray(node)) return node.map(walk);
+    if (!node || typeof node !== 'object') return node;
+    /** @type {Record<string, any>} */
+    const out = {};
+    for (const [k, v] of Object.entries(node)) {
+      if (LAYOUT.has(k)) continue;
+      out[k] = walk(v);
+    }
+    // A key written "a" or a is the same key.
+    if (
+      (node.type === 'ObjectProperty' ||
+        node.type === 'ObjectMethod' ||
+        node.type === 'TSPropertySignature' ||
+        node.type === 'ClassProperty') &&
+      !node.computed &&
+      node.key?.type === 'StringLiteral' &&
+      /^[A-Za-z_$][\w$]*$/.test(node.key.value)
+    )
+      out.key = {type: 'Identifier', name: node.key.value};
+    if (node.type === 'JSXElement' || node.type === 'JSXFragment')
+      out.children = jsxChildren(node.children, walk);
+    return out;
+  };
+  const comments = (file.comments ?? []).map((/** @type {any} */ c) =>
+    c.value.replace(/\s+/g, ' ').trim(),
+  );
+  return JSON.stringify([walk(file.program), comments]);
+}
+
+/**
+ * The hash recorded for a file the preview writes, of its code in a form no
+ * formatter changes ({@link canonicalCode}), so prettier or eslint --fix
+ * with any options does not count as a change by hand, while an edit to
+ * code, a string or a comment does. A file that does not parse falls back
+ * to the text form ({@link formatterNeutral}).
+ * @param {string | Buffer} text
+ */
+const contentHash = text => {
+  const code = canonicalCode(String(text));
+  return code == null ? formatterHash(text) : `v3:${digest(code)}`;
+};
+
+/**
+ * Whether a file's text matches a recorded hash of any kind a release
+ * wrote: v3 (syntax tree), v2 (text outside strings), or older.
+ * @param {string | Buffer} text
+ * @param {string} h
+ */
+const sameAsRecorded = (text, h) =>
+  h.startsWith('v3:')
+    ? contentHash(text) === h
+    : h.startsWith('v2:')
+      ? formatterHash(text) === h
+      : oldContentHash(text) === h || digest(text) === h;
 
 /**
  * The normalized hash of an earlier release (white space, semicolons,
@@ -1057,7 +2041,8 @@ function editedByHand(dir, data, rel) {
   if (!was) return false;
   try {
     const text = fs.readFileSync(path.join(dir, rel));
-    if (was.startsWith('v2:')) return contentHash(text) !== was;
+    if (was.startsWith('v2:') || was.startsWith('v3:'))
+      return !sameAsRecorded(text, was);
     // Older records hold the exact or the earlier normalized hash.
     return oldContentHash(text) !== was && digest(text) !== was;
   } catch {
@@ -1141,6 +2126,9 @@ function checkWrite(cwd, dir, data, w, elsewhere) {
             run: [elsewhere],
           },
     );
+  // A file another command wrote while this one was stopped is not a hand
+  // edit: say the lock was taken.
+  refuseIfLockLost();
   if (editedByHand(dir, data, w.rel))
     refuse(
       E.ERR_FILE_EXISTS,
@@ -1345,6 +2333,63 @@ function commitStep(step) {
 }
 
 /**
+ * Page files in the preview folder that theme-preview.json does not list:
+ * a stopped change can leave one behind when its step record is damaged.
+ * @param {string} dir
+ * @returns {string[]} paths relative to the preview folder
+ */
+function unrecordedPages(dir) {
+  /** @type {string[]} */
+  let listed = [];
+  try {
+    const files = JSON.parse(
+      fs.readFileSync(path.join(dir, PREVIEW_DATA), 'utf8'),
+    )?.files;
+    if (Array.isArray(files)) listed = files.map(String);
+  } catch {
+    // No record, or a damaged one: every page file is unrecorded.
+  }
+  /** @type {string[]} */
+  const out = [];
+  for (const sub of [PAGES_DIR, LEGACY_PAGES_DIR]) {
+    /** @type {string[]} */
+    let names;
+    try {
+      names = fs.readdirSync(path.join(dir, sub));
+    } catch {
+      continue;
+    }
+    for (const name of names.sort()) {
+      const rel = `${sub}/${name}`;
+      if (name.endsWith('.tsx') && !listed.includes(rel)) out.push(rel);
+    }
+  }
+  return out;
+}
+
+/**
+ * Whether a step record names a path that leads out of the preview folder
+ * (a hand edit, a damaged file): such a record is not followed.
+ * @param {string} dir
+ * @param {any} p
+ */
+function pendingEscapes(dir, p) {
+  const rels = [
+    ...(Array.isArray(p?.temps) ? p.temps : []),
+    ...(Array.isArray(p?.record?.files) ? p.record.files : []),
+    ...(Array.isArray(p?.old?.files) ? p.old.files : []),
+  ].filter(x => typeof x === 'string');
+  return rels.some(rel => {
+    try {
+      assertWithin(path.join(dir, rel), dir, {allowAbsolute: true});
+      return false;
+    } catch {
+      return true;
+    }
+  });
+}
+
+/**
  * Finish a preview change that was stopped part way (a kill), from the
  * step record it left: its leftover temp files go; each file it was writing
  * keeps the hash of what is on disk when that is the new or the old text,
@@ -1361,13 +2406,11 @@ function recoverPreview(cwd, dir) {
   const pendingFile = path.join(dir, PENDING);
   /** @type {any} */
   let p;
-  try {
-    p = JSON.parse(fs.readFileSync(pendingFile, 'utf8'));
-  } catch (e) {
-    if (/** @type {any} */ (e)?.code === 'ENOENT') return null;
-    // Unreadable: the change is treated as never started. Its temp files
-    // are found by the names only the editor makes, when their process is
-    // gone.
+  // Unreadable, or naming a path outside the folder: the change is
+  // treated as never started.
+  const abandon = () => {
+    // Its temp files are found by the names only the editor makes, when
+    // their process is gone.
     for (const sub of ['', PAGES_DIR, LEGACY_PAGES_DIR]) {
       /** @type {string[]} */
       let names;
@@ -1383,8 +2426,18 @@ function recoverPreview(cwd, dir) {
       }
     }
     fs.rmSync(pendingFile, {force: true});
-    return `removed ${shown(cwd, pendingFile)}, a damaged step record of a preview change that was stopped`;
+    const strays = unrecordedPages(dir).map(rel =>
+      shown(cwd, path.join(dir, rel)),
+    );
+    return `removed ${shown(cwd, pendingFile)}, a damaged step record of a preview change that was stopped${strays.length ? `; ${strays.join(', ')} ${strays.length > 1 ? 'are' : 'is'} in no preview record and may be from that change, so ${strays.length > 1 ? 'they stay' : 'it stays'} until you remove ${strays.length > 1 ? 'them' : 'it'}` : ''}`;
+  };
+  try {
+    p = JSON.parse(fs.readFileSync(pendingFile, 'utf8'));
+  } catch (e) {
+    if (/** @type {any} */ (e)?.code === 'ENOENT') return null;
+    return abandon();
   }
+  if (pendingEscapes(dir, p)) return abandon();
   const inside = (/** @type {string} */ rel) =>
     confined(path.join(dir, rel), dir, PENDING);
   for (const t of Array.isArray(p?.temps) ? p.temps : [])
@@ -1477,7 +2530,7 @@ function recoverPreview(cwd, dir) {
   );
   fs.rmSync(pendingFile, {force: true});
   tidyPageFolders(dir);
-  return `finished a preview change that was stopped part way (${shown(cwd, dir) || '.'}/${PENDING})${left.length ? `; kept ${left.join(', ')}, which changed after the change began: delete ${left.length > 1 ? 'them' : 'it'} yourself if ${left.length > 1 ? 'they are' : 'it is'} the preview's` : ''}`;
+  return `finished a preview change that was stopped part way (${shown(cwd, dir) || '.'}/${PENDING})${left.length ? `; kept ${left.join(', ')}: ${left.length > 1 ? 'they' : 'it'} changed after the change began, so ${left.length > 1 ? 'they' : 'it'} may hold your changes and ${left.length > 1 ? 'stay' : 'stays'} until you remove ${left.length > 1 ? 'them' : 'it'}` : ''}`;
 }
 
 /**
@@ -1487,12 +2540,7 @@ function recoverPreview(cwd, dir) {
  * @param {string | undefined} h
  */
 function hashMatches(text, h) {
-  return (
-    !!h &&
-    (h.startsWith('v2:')
-      ? contentHash(text) === h
-      : oldContentHash(text) === h || digest(text) === h)
-  );
+  return !!h && sameAsRecorded(text, h);
 }
 
 /**
@@ -1675,11 +2723,11 @@ async function buildWorn(cwd, theme, options, notes) {
 }
 
 /** The Colors page: its id and file, relative to the route folder. */
-const COLORS_PAGE = {
+const COLORS_PAGE = wordTable({
   id: 'colors',
   label: 'Colors',
   file: `${PAGES_DIR}/colors`,
-};
+});
 
 /**
  * The Colors page source of a theme, and whether the theme has generated
@@ -1787,6 +2835,38 @@ async function routeWrites(cwd, dir, data, theme, opts = {}) {
 }
 
 /**
+ * The theme's palette module, written as an empty stand-in when the theme
+ * has no generated colors left and a kept Colors page still imports it.
+ * Null when the module is there.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {string | null} the module, as shown
+ */
+function paletteStandIn(cwd, slug) {
+  const file = path.join(cwd, paletteFiles(slug).palette);
+  if (fs.existsSync(file)) return null;
+  fs.mkdirSync(path.dirname(file), {recursive: true});
+  writeWhole(
+    file,
+    `${PALETTE_STAND_IN}\nexport const palette = {} as const;\n`,
+  );
+  return shown(cwd, file);
+}
+
+/**
+ * The --path a preview command needs for a preview folder: none for the
+ * default one.
+ * @param {string} cwd
+ * @param {string} dir
+ */
+function dirFlag(cwd, dir) {
+  const fallback = previewDir(cwd, undefined, {optional: true})?.dir;
+  return fallback === dir
+    ? ''
+    : ` --path ${quoteCommandArgument(shownDir(cwd, dir))}`;
+}
+
+/**
  * Rewrite the in-app preview routes of a theme when their imports changed, so
  * a font package installed after `set` loads on the next change or `show`,
  * and its Colors page, so it names the shades the tokens use now.
@@ -1833,11 +2913,28 @@ export async function refreshPreviewRoute(cwd, slug) {
       if (fs.existsSync(file) && fs.readFileSync(file, 'utf8') === w.text)
         return false;
       if (editedByHand(dir, data, w.rel)) {
-        stale.push(shown(cwd, file));
+        const standIn =
+          w.rel === `${COLORS_PAGE.file}.tsx` &&
+          fs.readFileSync(file, 'utf8').includes(`${slug}.palette`) &&
+          paletteStandIn(cwd, slug);
+        stale.push(
+          standIn
+            ? `${shown(cwd, file)} (changed by hand, so it is kept; the theme has no generated colors now, so ${standIn}, which the page imports, holds an empty stand-in that keeps the app building. Give the page another name if you want to keep your changes, then run ${PREVIEW} add)`
+            : shown(cwd, file),
+        );
         return false;
       }
       return true;
     });
+    // A theme that has generated colors now, under a preview with no
+    // Colors page: the next add adds it.
+    if (
+      !data.pages.some(p => p.id === COLORS_PAGE.id) &&
+      (await colorsPage(cwd, dir, slug)).colors
+    )
+      stale.push(
+        `${shownDir(cwd, dir)}/ (${slug} has generated colors now; ${PREVIEW} add${dirFlag(cwd, dir)} adds its Colors page)`,
+      );
     if (!writes.length) continue;
     commitPreview(cwd, dir, data, writes, [], `${EDITOR} show ${slug}`);
     changed = true;
@@ -1915,7 +3012,8 @@ function openLine(cwd, at) {
           : encodeURIComponent(seg),
       )
       .join('/');
-    return `open /${url} in the running app${params.length ? `, with a value for ${params.join(', ')}` : ''}`;
+    const base = nextBasePath(cwd);
+    return `open ${base ?? ''}/${url} in the running app${params.length ? `, with a value for ${params.join(', ')}` : ''}${base == null ? ', after the basePath next.config sets from code (it goes in front)' : ''}`;
   }
   const routes = ['app', path.join('src', 'app')].filter(r =>
     fs.existsSync(path.join(cwd, r)),
@@ -1981,7 +3079,61 @@ async function rankedPages(words, cwd, notes, flags) {
       String(r.reason ?? '').replace(/^matches \d+\/\d+ terms: /, ''),
     ]),
   );
+  // A description that is a template's id or display name names it.
+  const plain = (/** @type {string} */ x) =>
+    x
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+  const exact = listed.find(
+    t => plain(t.id) === plain(words) || plain(t.name ?? '') === plain(words),
+  )?.id;
+  if (exact && frames.has(exact))
+    refuse(
+      E.ERR_INVALID_ARGUMENT,
+      `${exact} is an app frame, not a page, so a description does not add it; name it with --template to add it as a page anyway.`,
+      {run: [`${PREVIEW} add --template ${exact}${flags}`]},
+    );
+  // Build's page ranking, when build picked no page itself (it fell back to
+  // a frame): its pages the description names (by name, keyword or docs,
+  // or a word of it in the page's id), best score first; on a tie, a page whose id holds a word of the
+  // description goes first.
+  const said = plain(words)
+    .split(' ')
+    .filter(w => w.length > 2);
+  const byId = (/** @type {string} */ id) =>
+    said.some(w => id.split('-').includes(w)) ? 1 : 0;
+  const fellBack =
+    !start || (start.basis === 'fallback' && frames.has(start.name));
+  const ranked = (fellBack ? [...(kit.data.pages ?? [])] : [])
+    .map((r, i) => ({
+      name: r.name,
+      score: Number(r.score) || 0,
+      reason: String(r.reason ?? ''),
+      i,
+    }))
+    .filter(
+      r =>
+        listed.some(t => t.id === r.name) &&
+        (/^(exact name|name|keyword|docs mention|description mentions)\b/.test(
+          r.reason,
+        ) ||
+          r.score >= 100 ||
+          byId(r.name)),
+    )
+    .sort(
+      (a, b) => b.score - a.score || byId(b.name) - byId(a.name) || a.i - b.i,
+    )
+    .map(r => r.name);
+  for (const r of kit.data.pages ?? [])
+    if (!matchedWords.has(r.name))
+      matchedWords.set(
+        r.name,
+        String(r.reason ?? '').replace(/^matches \d+\/\d+ terms: /, ''),
+      );
   const names = [
+    ...(exact ? [exact] : []),
+    ...ranked,
     ...(start ? [start.name, ...start.alternatives.map(a => a.name)] : []),
     ...found.map((/** @type {any} */ r) => r.name),
   ].filter((n, i, a) => a.indexOf(n) === i);
@@ -2014,6 +3166,8 @@ async function rankedPages(words, cwd, notes, flags) {
   const named = APP_PAGES.some(([re]) => re.test(words.toLowerCase()));
   const unrelated =
     !named &&
+    !exact &&
+    !ranked.some(n => !frames.has(n)) &&
     (!pages.length ||
       (start &&
         start.basis === 'fallback' &&
@@ -2099,7 +3253,7 @@ async function rankedPages(words, cwd, notes, flags) {
       displayName: label(name),
       why: reason
         ? `${reason}${words ? `; it covers ${words}` : ''}. ${shape}`
-        : i === 0 && closest
+        : i === 0 && closest && name !== exact
           ? `the closest page, not exactly the one described${words ? `: it covers ${words}` : ''}; the rest of the description is not on it. ${shape}`
           : `${i === 0 ? 'the best match' : 'the next match'}${words ? `: it covers ${words}` : ''}. ${shape}`,
     };
@@ -2164,32 +3318,18 @@ async function pageTemplates(cwd) {
  * @param {string} pkg
  */
 function installed(cwd, pkg) {
-  for (let dir = cwd; ; dir = path.dirname(dir)) {
-    if (fs.existsSync(path.join(dir, 'node_modules', pkg, 'package.json')))
-      return true;
-    if (path.dirname(dir) === dir) return false;
-  }
+  return findNodeModulesPackage(cwd, pkg) != null;
 }
 
 /**
- * The package-manager command that adds packages to the app.
+ * The folder of the nearest package.json over `dir`, up to `cwd`.
  * @param {string} cwd
- * @param {string[]} pkgs
+ * @param {string} dir
  */
-function addCommandOf(cwd, pkgs) {
-  const pm = packageManagerOf(cwd);
-  return `${pm === 'npm' ? 'npm install' : `${pm} add`} ${pkgs.join(' ')}`;
-}
-
-/**
- * The package manager the app uses, as every command finds it (workspaces,
- * the packageManager field, lock files); npm when nothing says (the finder
- * gives `npx` then, which is not a package manager).
- * @param {string} cwd
- */
-function packageManagerOf(cwd) {
-  const pm = detectPackageManager(cwd);
-  return pm === 'npx' ? 'npm' : pm;
+function appRootOf(cwd, dir) {
+  for (let at = dir; at.startsWith(cwd + path.sep); at = path.dirname(at))
+    if (fs.existsSync(path.join(at, 'package.json'))) return at;
+  return cwd;
 }
 
 /**
@@ -2232,7 +3372,7 @@ function pageNeeds(cwd, source) {
     ...(needs.installCommand
       ? [[needs.installCommand, ...undeclared].join(' ')]
       : undeclared.length
-        ? [addCommandOf(cwd, undeclared)]
+        ? [installLine(cwd, undeclared)]
         : []),
     ...(notInstalled.length ? [installCommandOf(cwd)] : []),
   ];
@@ -2249,7 +3389,8 @@ function pageNeeds(cwd, source) {
 
 /** The command that installs what the package.json names. @param {string} cwd */
 function installCommandOf(cwd) {
-  return `${packageManagerOf(cwd)} install`;
+  // The package manager `installLine` names, with its install verb.
+  return installLine(cwd, []).trim().replace(/ add$/, ' install');
 }
 
 /**
@@ -2286,10 +3427,10 @@ function wornTheme(cwd, slug, again, without) {
             again(null),
             ...(missing
               ? [
-                  `${addCommandOf(cwd, [`@astryxdesign/theme-${name}`])}  # then a theme of your own can start from it`,
+                  `${installLine(cwd, [`@astryxdesign/theme-${name}`])}  # then a theme of your own can start from it`,
                 ]
               : []),
-            `${EDITOR} new my-${name} --like ${name}  # a theme of your own that starts from it`,
+            `${EDITOR} new ${usableNewName(cwd, `my-${name}`)} --like ${name}  # a theme of your own that starts from it`,
           ],
         },
       );
@@ -2477,6 +3618,25 @@ async function addPreview(description, options, box) {
     options.theme != null
       ? ` --theme ${quoteCommandArgument(options.theme)}`
       : '';
+  // A default page's id (overview, components, colors), as `remove` takes
+  // it, asks for the default pages back: the same as a bare add.
+  const DEFAULT_IDS = ['overview', 'components', COLORS_PAGE.id];
+  const isDefault = (/** @type {unknown} */ v) =>
+    typeof v === 'string' && DEFAULT_IDS.includes(v.trim().toLowerCase());
+  // Beside another page asked for, it is refused below (drop one).
+  const blank = (/** @type {unknown} */ v) => v == null || !String(v).trim();
+  const askedId = [description, options.template]
+    .find(isDefault)
+    ?.trim()
+    .toLowerCase();
+  const again =
+    askedId != null &&
+    (blank(description) || isDefault(description)) &&
+    (blank(options.template) || isDefault(options.template));
+  if (again) {
+    description = undefined;
+    options = {...options, template: undefined};
+  }
   const said = (description ?? '').trim();
   const named =
     options.template == null ? null : String(options.template).trim();
@@ -2547,10 +3707,25 @@ async function addPreview(description, options, box) {
   const at = previewDir(cwd, options.path, {write: true, retry});
   const recovered = recoverPreview(cwd, at.dir);
   if (recovered) notes.push(recovered);
+  const unstyled = coreStylesheetMissing(cwd, at);
+  if (unstyled) notes.push(unstyled);
+  notes.push(...nextConfigNotes(cwd));
   box.note = recovered;
   const existing = readPreview(cwd, at.dir, pf);
   /** @type {PreviewData} */
   const data = existing ?? {version: 1, theme: null, pages: [], files: []};
+  // The folders over a new preview folder that are not there yet: the first
+  // add makes them, and remove takes them away again when they are empty.
+  if (!existing) {
+    let made = 0;
+    for (
+      let up = path.dirname(at.dir);
+      up.startsWith((at.app ?? cwd) + path.sep) && !fs.existsSync(up);
+      up = path.dirname(up)
+    )
+      made++;
+    if (made) data.parents = made;
+  }
   const wore = data.theme;
   const againWith = (/** @type {string | null} */ t) =>
     `${PREVIEW} add${said ? ` ${quoteCommandArgument(said)}` : ''}${named != null ? ` --template ${quoteCommandArgument(named)}` : ''}${t == null ? '' : ` --theme ${t}`}${pf}`;
@@ -2583,13 +3758,22 @@ async function addPreview(description, options, box) {
       `the preview now wears ${data.theme ?? "the app's own theme"} (was ${wore ?? "the app's own theme"}), so its pages are written again`,
     );
   const project = await openProject(cwd);
+  // Whether the preview has, or gets with a bare add, a Colors page.
+  const hasColors = async () =>
+    data.pages.some(p => p.id === COLORS_PAGE.id) ||
+    (data.theme != null &&
+      fs.existsSync(themeFiles(cwd, data.theme).dir) &&
+      (await colorsPage(cwd, at.dir, data.theme)).colors);
   /** @param {string} id */
   const defaultPage = async id =>
     id === 'overview'
       ? {
           id,
           label: 'Overview',
-          text: overviewPageSource(project, {theme: data.theme}),
+          text: overviewPageSource(project, {
+            theme: data.theme,
+            colors: await hasColors(),
+          }),
         }
       : {
           id,
@@ -2633,7 +3817,9 @@ async function addPreview(description, options, box) {
           await template(pick.name, {cwd, type: 'page'})
         );
       const source = shownTemplate.data.source;
-      const needs = pageNeeds(cwd, source);
+      // Packages are the app's: the nearest package.json over the preview
+      // (in a workspace, the app's own, not the root's).
+      const needs = pageNeeds(appRootOf(cwd, at.dir), source);
       // A StyleX page calls stylex.create when its module loads, so without
       // a StyleX compiler it breaks the whole route.
       const needsCompiler = needs.stylexCompiler;
@@ -2709,7 +3895,13 @@ async function addPreview(description, options, box) {
     writes.set(rel, w);
     if (!data.files.includes(rel)) data.files.push(rel);
     const had = data.pages.find(x => x.id === page.id);
-    if (!had) {
+    // A recorded page whose file is gone is added back, not refreshed.
+    if (!had || !fs.existsSync(path.join(at.dir, rel))) {
+      if (had) {
+        had.label = page.label;
+        added.push(page.id);
+        continue;
+      }
       data.pages.push({
         id: page.id,
         label: page.label,
@@ -2771,6 +3963,19 @@ async function addPreview(description, options, box) {
     writes.set(w.rel, w);
     if (!data.files.includes(w.rel)) data.files.push(w.rel);
   }
+  // Every recorded page this command writes again is named, the Colors page
+  // the route writes included.
+  for (const p of data.pages)
+    if (
+      writes.has(`${p.file}.tsx`) &&
+      !added.includes(p.id) &&
+      !refreshed.includes(p.id) &&
+      !rewrote.includes(p.id) &&
+      fs.existsSync(path.join(at.dir, `${p.file}.tsx`)) &&
+      fs.readFileSync(path.join(at.dir, `${p.file}.tsx`), 'utf8') !==
+        writes.get(`${p.file}.tsx`)?.text
+    )
+      refreshed.push(p.id);
   await buildWorn(cwd, theme, options, notes);
   commitPreview(
     cwd,
@@ -2794,6 +3999,33 @@ async function addPreview(description, options, box) {
   const worn = data.theme;
   if (worn)
     await themeLocked(options, worn, () => recordPreview(cwd, worn, at.dir));
+  // A font the theme names whose package the app lacks shows as the next
+  // font in the stack.
+  if (data.theme && fs.existsSync(themeFiles(cwd, data.theme).dir))
+    try {
+      const ctx = await context(cwd);
+      for (const f of fontPackages(ctx, loadTheme(cwd, data.theme)))
+        if (!f.installed)
+          notes.push(
+            `${f.family} is not installed, so the preview shows the next font in the stack in its place; install it: ${installLine(cwd, [f.pkg])}`,
+          );
+    } catch {
+      // A theme that does not load is reported where it is used.
+    }
+  if (again)
+    notes.push(
+      `a default page's id brings back the default pages that are missing, as ${PREVIEW} add does`,
+    );
+  notes.push(...typeScriptNotes(cwd, at.dir, added));
+  if (
+    askedId === COLORS_PAGE.id &&
+    !data.pages.some(p => p.id === COLORS_PAGE.id)
+  )
+    notes.push(
+      data.theme
+        ? `the Colors page shows a theme's generated colors, and ${data.theme} has none yet; it appears once it does: ${EDITOR} set ${data.theme} accent <color>`
+        : `the Colors page shows a theme's generated colors, and the preview wears the app's own theme; it appears with an editor theme that has colors: ${PREVIEW} add --theme <theme>`,
+    );
   return {
     type: 'themeEdit.previewAdd',
     data: {
@@ -2860,31 +4092,22 @@ export async function themeEditPreviewApp(dir, options = {}) {
   if (slug != null && theme) {
     const from = themeFiles(cwd, slug);
     const ctx = await context(cwd);
-    const mtime = (/** @type {string} */ f) => {
-      try {
-        return fs.statSync(f).mtimeMs;
-      } catch {
-        return -1;
-      }
-    };
-    const built = Math.min(mtime(from.js), mtime(from.css));
-    // The editor writes the settings a moment after the build, so only a
-    // settings file clearly newer than the build means the build is stale.
-    // Without the theme's lock (it cannot be taken), a change may be in
-    // progress: nothing is built, and only a build that matches its
+    // The build is judged by its content (staleBuild), never by file
+    // times. Without the theme's lock (it cannot be taken), a change may be
+    // in progress: nothing is built, and only a build that matches its
     // settings is copied.
+    const why = staleBuild(cwd, slug, theme);
     if (/** @type {any} */ (options).readOnly) {
-      const why = staleBuild(cwd, slug, theme);
       if (why)
         refuse(
           E.ERR_THEME_BUSY,
           `The lock for ${slug} could not be taken, and its build is not current (${why}), so it is not copied. Nothing was changed.`,
-          {run: [`astryx experimental theme editor show ${slug}`]},
+          {run: [`${P} show ${slug}`]},
         );
-    } else if (built < 0 || mtime(from.settings) > built + 2000) {
+    } else if (why) {
       await buildTheme(ctx, slug, theme);
       notes.push(
-        `built ${shown(cwd, from.dir)}/ first: its build was ${built < 0 ? 'missing' : 'older than its settings'}, and the app gets a current copy`,
+        `built ${shown(cwd, from.dir)}/ first: its build was not current (${why}), and the app gets a current copy`,
       );
     }
     const to = themeFiles('', slug);
@@ -2909,7 +4132,12 @@ export async function themeEditPreviewApp(dir, options = {}) {
       })) {
         const sub = path.join(rel, entry.name);
         if (entry.isDirectory()) copyDir(sub);
-        else if (entry.isFile() && !(rel === '' && skip.has(entry.name)))
+        else if (
+          entry.isFile() &&
+          !(rel === '' && skip.has(entry.name)) &&
+          // A temp file a stopped command left is no part of the theme.
+          !isEditorTemp(entry.name)
+        )
           themeCopy.push({
             rel: path.join(to.dir, sub),
             text: fs.readFileSync(path.join(from.dir, sub)),
@@ -2933,7 +4161,11 @@ export async function themeEditPreviewApp(dir, options = {}) {
     routeTheme = {
       name: slug,
       module: fromRoute(to.js),
-      css: [fromRoute(to.css), ...fonts.map(x => `${x.pkg}/index.css`)],
+      css: [
+        fromRoute(to.css),
+        ...baseFontsCss(ctx, theme),
+        ...fonts.map(x => `${x.pkg}/index.css`),
+      ],
       mode: themeImports(ctx, slug, theme, path.join(cwd, routeDir)).mode,
     };
     // The app's theme folder sits where this project's does, so the Colors
@@ -2947,7 +4179,14 @@ export async function themeEditPreviewApp(dir, options = {}) {
   const preview = [];
   /** @type {Array<[string, string, string]>} */
   const pages = [
-    ['overview', 'Overview', overviewPageSource(project, {theme: slug})],
+    [
+      'overview',
+      'Overview',
+      overviewPageSource(project, {
+        theme: slug,
+        colors: colorsSource != null,
+      }),
+    ],
     [
       'components',
       'Components',
@@ -3014,7 +4253,8 @@ export async function themeEditPreviewApp(dir, options = {}) {
       pages: data.pages.map(x => x.id),
       files,
       notes,
-      open: `cd ${quoteCommandArgument(folder)} && npm install && npm run dev, then open /theme-preview`,
+      // A folder named like a flag (`-`, `-k`) is a path to cd only with ./.
+      open: `cd ${quoteCommandArgument(folder.startsWith('-') ? `./${folder}` : folder)} && npm install && npm run dev, then open /theme-preview`,
     },
   };
 }
@@ -3039,6 +4279,29 @@ function readVersion(project, pkg) {
 }
 
 /**
+ * Why the in-app preview's record is damaged, with how to fix it, or null
+ * (no preview, or a sound one). For answers that would suggest a preview
+ * command, which the damage refuses.
+ * @param {string} cwd
+ * @returns {string | null}
+ */
+export function previewRecordProblem(cwd) {
+  try {
+    const at = previewDir(cwd, undefined, {
+      optional: true,
+      retry: () => `${PREVIEW} add`,
+    });
+    if (at) readPreview(cwd, at.dir);
+    return null;
+  } catch (e) {
+    const err = /** @type {any} */ (e);
+    if (err?.code !== E.ERR_THEME_INVALID) return null;
+    const fix = err.fix;
+    return `${String(err.message).replace(/ Nothing was changed\.$/, '')}${fix ? ` To fix it: ${fix}.` : ''}`;
+  }
+}
+
+/**
  * The pages of the in-app theme preview. With no preview, and with no
  * routes folder for one, the list is empty; a damaged theme-preview.json is
  * refused, naming the file.
@@ -3059,7 +4322,24 @@ export async function themeEditPreviewList(options = {}) {
   const data = at && readPreview(cwd, at.dir, pf);
   /** @type {string[]} */
   const notes = [];
-  if (data?.theme && !fs.existsSync(themeFiles(cwd, data.theme).dir)) {
+  const themeMissing = Boolean(
+    data?.theme && !fs.existsSync(themeFiles(cwd, data.theme).dir),
+  );
+  if (at && fs.existsSync(path.join(at.dir, PENDING)))
+    notes.push(
+      `a preview change was stopped part way, so this list may be out of date; ${PREVIEW} add${pf} finishes it`,
+    );
+  // A page whose file is gone breaks the route, which still imports it.
+  const missing = new Set(
+    (data?.pages ?? [])
+      .filter(p => at && !fs.existsSync(path.join(at.dir, `${p.file}.tsx`)))
+      .map(p => p.id),
+  );
+  if (at && missing.size)
+    notes.push(
+      `${[...missing].join(', ')} ${missing.size > 1 ? 'are' : 'is'} listed, but ${missing.size > 1 ? 'their files are' : 'its file is'} gone, so the route does not build; ${PREVIEW} add${pf} writes ${missing.size > 1 ? 'them' : 'it'} again`,
+    );
+  if (data?.theme && themeMissing) {
     const themes = editedThemes(cwd);
     notes.push(
       `the preview wears ${data.theme}, which is gone, so its route does not build; ${PREVIEW} add${pf} switches it to ${themes.length === 1 ? themes[0] : "the app's own theme"}`,
@@ -3070,7 +4350,12 @@ export async function themeEditPreviewList(options = {}) {
     data: {
       folder: at && data ? shownDir(cwd, at.dir) : null,
       theme: data?.theme ?? null,
-      pages: (data?.pages ?? []).map(x => ({id: x.id, label: x.label})),
+      themeMissing,
+      pages: (data?.pages ?? []).map(x => ({
+        id: x.id,
+        label: x.label,
+        ...(missing.has(x.id) ? {missing: true} : {}),
+      })),
       notes,
     },
   };
@@ -3105,9 +4390,29 @@ async function removePreview(page, options, box) {
   const retry = (/** @type {string | null} */ p) =>
     `${PREVIEW} remove${page != null ? ` ${quoteCommandArgument(page)}` : ''}${p == null ? '' : ` --path ${quoteCommandArgument(p)}`}`;
   const at = previewDir(cwd, options.path, {retry});
+  // The pages a stopped change was removing, read before it is finished.
+  /** @type {string[]} */
+  let removing = [];
+  try {
+    const pend = JSON.parse(
+      fs.readFileSync(path.join(at.dir, PENDING), 'utf8'),
+    );
+    const ids = (/** @type {any} */ r) =>
+      Array.isArray(r?.pages)
+        ? r.pages.map((/** @type {any} */ x) => String(x?.id))
+        : [];
+    const after = ids(pend?.record);
+    removing = ids(pend?.old).filter(
+      (/** @type {string} */ id) => !after.includes(id),
+    );
+  } catch {
+    // No stopped change, or a damaged one.
+  }
   const recovered = recoverPreview(cwd, at.dir);
   box.note = recovered;
-  const data = readPreview(cwd, at.dir, pf);
+  /** @type {string[]} */
+  const dropped = [];
+  const data = readPreview(cwd, at.dir, pf, {dropped});
   if (!data) {
     // A folder that holds the app takes no preview: the way on is the
     // preview elsewhere, or a new one in its own folder.
@@ -3139,11 +4444,15 @@ async function removePreview(page, options, box) {
   // theme-preview.json is a file anyone can edit: every path in it must
   // stay in the route folder before anything is removed.
   const inside = (/** @type {string} */ rel) =>
-    confined(path.join(at.dir, rel), at.dir, `${PREVIEW_DATA} names`);
+    confined(path.join(at.dir, rel), at.dir, PREVIEW_DATA, {cwd, pf});
   for (const rel of data.files) inside(rel);
   for (const p of data.pages) inside(`${p.file}.tsx`);
   /** @type {string[]} */
   const notes = recovered ? [recovered] : [];
+  if (dropped.length)
+    notes.push(
+      `dropped ${dropped.map(f => JSON.stringify(f)).join(', ')} from ${PREVIEW_DATA}: ${dropped.length > 1 ? 'they lead' : 'it leads'} outside the folder, so nothing there was deleted`,
+    );
   /** @type {string[]} */
   const kept = [];
   /** @type {string[]} */
@@ -3156,6 +4465,28 @@ async function removePreview(page, options, box) {
     one =
       data.pages.find(x => x.id === key) ??
       data.pages.find(x => x.id.toLowerCase() === key.toLowerCase());
+    // The same remove run again after it was stopped: the change just
+    // finished removed the page.
+    if (
+      !one &&
+      recovered &&
+      removing.some(id => id.toLowerCase() === key.toLowerCase())
+    )
+      return {
+        type: 'themeEdit.previewRemove',
+        data: {
+          folder,
+          removed: [],
+          kept: [],
+          missing: [],
+          rewritten: [],
+          notes: [
+            ...notes,
+            `${key} is no longer in the preview: the change that was stopped removed it`,
+          ],
+          pages: data.pages.map(x => x.id),
+        },
+      };
     if (!one)
       refuse(E.ERR_NOT_FOUND, `The preview has no page "${page}".`, {
         didYouMean: nearest(
@@ -3180,12 +4511,19 @@ async function removePreview(page, options, box) {
         `${name} was not written by the preview, so it is kept; only its nav item is gone`,
       );
     } else if (!fs.existsSync(inside(rel))) missing.push(name);
-    else if (verdict !== 'delete') {
+    else if (unreadable(inside(rel))) {
+      kept.push(name);
+      notes.push(
+        `${name} could not be read (${unreadable(inside(rel))}), so it is left in place and stays in ${PREVIEW_DATA}; fix its permissions, then run ${PREVIEW} remove${pf} again`,
+      );
+    } else if (verdict !== 'delete') {
       kept.push(name);
       notes.push(keptNote(name, verdict));
     } else deletes.push(rel);
     data.pages = data.pages.filter(x => x !== target);
-    data.files = data.files.filter(f => f !== rel);
+    // A file left in place because it could not be read stays recorded.
+    if (!unreadable(inside(rel)))
+      data.files = data.files.filter(f => f !== rel);
     const wore = data.theme;
     /** @type {string | null} */
     let gone = null;
@@ -3285,6 +4623,7 @@ async function removePreview(page, options, box) {
   // The whole preview: every entry is checked before the first delete. A
   // route changed by hand would be kept and still import the pages, so it
   // stops the remove instead.
+  refuseIfLockLost();
   if (data.files.includes('page.tsx') && editedByHand(at.dir, data, 'page.tsx'))
     refuse(
       E.ERR_FILE_EXISTS,
@@ -3331,6 +4670,14 @@ async function removePreview(page, options, box) {
       );
       continue;
     }
+    const cannot = unreadable(file);
+    if (cannot) {
+      kept.push(shown(cwd, file));
+      notes.push(
+        `${shown(cwd, file)} could not be read (${cannot}), so it is left in place; fix its permissions, then run ${PREVIEW} remove${pf} again`,
+      );
+      continue;
+    }
     plan.push({file, before: fs.readFileSync(file)});
   }
   // theme-preview.json goes last, so an interrupted remove can run again.
@@ -3359,13 +4706,29 @@ async function removePreview(page, options, box) {
       );
     }
   tidyPageFolders(at.dir);
+  // Files the record does not list stay: the preview never deletes what it
+  // has no record of writing. Each is named, so the folder left is no
+  // surprise.
+  for (const rel of unrecordedPages(at.dir)) {
+    const name = shown(cwd, path.join(at.dir, rel));
+    if (kept.includes(name)) continue;
+    kept.push(name);
+    notes.push(
+      `${name} is kept: the preview has no record of writing it, so it may hold your work`,
+    );
+  }
   try {
     fs.rmdirSync(at.dir);
-    // Route group folders, such as (tools)/, that only held the preview.
+    // The folders the first add made over it, and route group folders,
+    // such as (tools)/, that only held the preview; never one with
+    // anything else in it.
+    let made = data.parents ?? 0;
     for (
       let up = path.dirname(at.dir);
-      /^\(.+\)$/.test(path.basename(up)) && at.app && up.startsWith(at.app);
-      up = path.dirname(up)
+      (made > 0 || /^\(.+\)$/.test(path.basename(up))) &&
+      at.app &&
+      up.startsWith(at.app + path.sep);
+      up = path.dirname(up), made--
     )
       fs.rmdirSync(up);
   } catch {

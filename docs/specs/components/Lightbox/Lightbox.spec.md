@@ -94,7 +94,7 @@ the requirement it misses and the person it affects.
 - **Fine-pointer gestures (FR11).** FR11's drag paging (FR7) and drag to
   close (FR8) are not built for a mouse, a pen or a trackpad: a drag on a
   fitted photo does nothing.
-  On a desktop, a click in the viewer outside the photo and the caption band closes it.
+  On a desktop, a click in the viewer outside the photo and a band holding a caption closes it.
   Implementation gap: beside a photo scaled down to fit, a click within the band as wide as the photo's natural width stays open.
   With zoom, a double-click on a caption zooms the photo, and a mouse does not select the caption's text, for one photo or a gallery.
 - **Double-click listener (FR14).** A mouse's or a pen's double-click reaches

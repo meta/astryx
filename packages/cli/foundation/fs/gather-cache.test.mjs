@@ -14,6 +14,72 @@ const identity = {
   decode: (/** @type {any} */ v) => v,
 };
 
+describe('what a recorded run keeps of the environment', () => {
+  const name = `ASTRYX_GATHER_ENV_PATTERN_${process.pid}`;
+  /**
+   * Run `read` in a recorded run with `name` set, and say what was kept for
+   * it: its value, whether it is set, and the whole list of names.
+   * @param {(env: NodeJS.ProcessEnv) => unknown} read
+   */
+  async function keptFor(read) {
+    process.env[name] = 'secret';
+    try {
+      return await recordRun(async () => {
+        read(process.env);
+        const env = /** @type {NonNullable<ReturnType<typeof recordedRun>>} */ (
+          recordedRun()
+        ).env;
+        return {
+          value: env.has(name),
+          set: env.has(`\0set:${name}`),
+          names: env.has('\0names'),
+        };
+      });
+    } finally {
+      delete process.env[name];
+    }
+  }
+
+  it('keeps only the names for Object.keys and for..in', async () => {
+    expect(await keptFor(env => Object.keys(env))).toEqual({
+      value: false,
+      set: true,
+      names: true,
+    });
+    expect(
+      await keptFor(env => {
+        for (const _ in env);
+      }),
+    ).toMatchObject({value: false, names: true});
+  });
+
+  it('keeps only whether a variable is set for `in` and Object.hasOwn', async () => {
+    expect(await keptFor(env => name in env)).toEqual({
+      value: false,
+      set: true,
+      names: false,
+    });
+    expect(await keptFor(env => Object.hasOwn(env, name))).toEqual({
+      value: false,
+      set: true,
+      names: false,
+    });
+  });
+
+  it('keeps the value for every read that goes through [[Get]]', async () => {
+    for (const read of [
+      (/** @type {NodeJS.ProcessEnv} */ env) => env[name],
+      (/** @type {NodeJS.ProcessEnv} */ env) => Object.entries(env),
+      (/** @type {NodeJS.ProcessEnv} */ env) => Object.values(env),
+      (/** @type {NodeJS.ProcessEnv} */ env) => ({...env}),
+      (/** @type {NodeJS.ProcessEnv} */ env) => Object.assign({}, env),
+      (/** @type {NodeJS.ProcessEnv} */ env) => JSON.stringify(env),
+    ]) {
+      expect(await keptFor(read)).toMatchObject({value: true});
+    }
+  });
+});
+
 describe('a recorded run', () => {
   it('gives every reader of process.env what the real one gives, then puts it back', async () => {
     const real = process.env;
@@ -69,6 +135,40 @@ describe('a recorded run', () => {
     });
     expect(process.env).toBe(real);
     expect(recordedRun()).toBe(null);
+  });
+
+  it('keeps recording after a gather nested inside another, until the outer one ends', async () => {
+    const real = process.env;
+    const name = `ASTRYX_GATHER_CACHE_NESTED_${process.pid}`;
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gather-cache-nested-'));
+    const late = path.join(dir, 'late.cjs');
+    fs.writeFileSync(late, 'module.exports = 1;\n');
+    try {
+      await recordRun(async () => {
+        const run = /** @type {NonNullable<ReturnType<typeof recordedRun>>} */ (
+          recordedRun()
+        );
+        await persistedGather(
+          ['outer'],
+          async () => {
+            await persistedGather(['inner'], async () => 'inner', identity);
+            // Still the outer gather: its env reads and module loads count.
+            expect(process.env).not.toBe(real);
+            void process.env[name];
+            expect(run.env.has(name)).toBe(true);
+            withoutRecording(() => createRequire(import.meta.url)(late));
+            expect(run.reads.has(late)).toBe(true);
+            return 'outer';
+          },
+          identity,
+        );
+        // The outer gather is done: the real environment again.
+        expect(process.env).toBe(real);
+      });
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+    expect(process.env).toBe(real);
   });
 
   it('notes the modules a gather loads while it is armed', async () => {

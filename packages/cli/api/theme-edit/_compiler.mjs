@@ -85,6 +85,8 @@ export function makeCompiler(project, parts) {
   }
   /** @param {string} tok */
   const typeOf = tok => TYPE[tok] ?? 'other';
+  /** Whether Core defines the token. @param {string} tok */
+  const isToken = tok => Object.hasOwn(TYPE, tok);
 
   /** @param {string} p */
   const groupOfProp = p =>
@@ -276,7 +278,23 @@ export function makeCompiler(project, parts) {
       void fed;
       return null;
     }
-    const reads = g ? partReads(target, g) : [];
+    // Only a token of the same kind takes the value: a weight never goes to
+    // a line height, a line height never to a weight.
+    // Font tokens share a type across kinds (a weight and a leading are
+    // both numbers), so the kind is read from the name.
+    const kindOf = (/** @type {string} */ t) =>
+      /family/.test(t)
+        ? 'family'
+        : /weight/.test(t)
+          ? 'weight'
+          : /leading|line-height/.test(t)
+            ? 'leading'
+            : /tracking|letter-spacing/.test(t)
+              ? 'tracking'
+              : typeOf(t);
+    const reads = g
+      ? partReads(target, g).filter(r => kindOf(r.token) === kindOf(token))
+      : [];
     const v = quoteCommandArgument(value);
     /** @type {string[]} */
     const run = [];
@@ -389,12 +407,14 @@ export function makeCompiler(project, parts) {
    * @param {{parseColor: (v: unknown) => [number, number, number] | null, ratio: (a: number[], b: number[]) => number, alphaOf: (v: unknown) => number, compositeOver: (over: [number, number, number], alpha: number, under: [number, number, number]) => [number, number, number], page: (mode: string) => string | null | undefined}} helpers
    *   `page` is the page color in a mode: a see-through background is drawn
    *   over it, and see-through text over that background, before measuring.
+   * @param {TextPair[]} [extra] more pairs to measure (a part's variants)
    */
   function contrast(
     value,
     baseValue,
     modes,
     {parseColor, ratio, alphaOf, compositeOver, page},
+    extra = [],
   ) {
     /**
      * The opaque colors the eye sees for a pair, or null with no fixed color.
@@ -417,7 +437,7 @@ export function makeCompiler(project, parts) {
     const seen = new Set();
     /** @type {Set<string>} */
     const unchecked = new Set();
-    for (const p of parts.pairs) {
+    for (const p of [...parts.pairs, ...extra]) {
       if (
         p.fg.target !== p.bg.target &&
         p.bg.target &&
@@ -455,9 +475,17 @@ export function makeCompiler(project, parts) {
           mode: m,
           ratio: Number(r.toFixed(2)),
           sample: p.sample,
-          fg: p.fg.tokens[0] ?? String(fg),
+          // A side the theme changed is named by the value it set, not the
+          // token the part reads without it.
+          fg:
+            fg !== baseValue(p, 'fg', m)
+              ? String(fg)
+              : (p.fg.tokens[0] ?? String(fg)),
           bgPart: p.bg.target,
-          bg: p.bg.tokens[0] ?? String(bg),
+          bg:
+            bg !== baseValue(p, 'bg', m)
+              ? String(bg)
+              : (p.bg.tokens[0] ?? String(bg)),
         });
       }
     }
@@ -502,9 +530,35 @@ export function makeCompiler(project, parts) {
     return false;
   }
 
+  /** @type {Map<string, string[]>} */
+  const propsCache = new Map();
+  /**
+   * The CSS properties anything in the catalog reads a token in.
+   * @param {string} tok
+   */
+  const propsReading = tok => {
+    let r = propsCache.get(tok);
+    if (!r) {
+      /** @type {Set<string>} */
+      const out = new Set();
+      for (const t of Object.values(MAP)) {
+        for (const [prop, v] of Object.entries(t.own ?? {}))
+          if (tok in v.tokens) out.add(prop);
+        for (const [k, v] of Object.entries(t.inside ?? {}))
+          if (k === tok)
+            for (const p of /** @type {string[]} */ (v)) out.add(p);
+      }
+      r = [...out];
+      propsCache.set(tok, r);
+    }
+    return r;
+  };
+
   return {
     MAP,
     typeOf,
+    isToken,
+    propsReading,
     feeds,
     fmtFeeds,
     showsCorners,
