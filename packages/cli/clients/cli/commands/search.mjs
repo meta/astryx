@@ -32,6 +32,7 @@ import {cliError} from '../lib/cli-error.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
 import {search as searchApi} from '../../../api/search/search.mjs';
 import {Project} from '../../../foundation/config/project.mjs';
+import {firstSentence} from '../../../foundation/text/string-utils.mjs';
 import {warnOnIntegrationIssues} from '../../../foundation/integrations/integration-warnings.mjs';
 import {doc as searchCommand} from './search.doc.mjs';
 import {doc as searchFn} from '../../../api/search/search.doc.mjs';
@@ -183,6 +184,10 @@ export function registerSearch(program) {
             command: formatCliCommand,
             parent: formatCliCommand,
             deprecated: formatDeprecation,
+            // A result's whole description is its doc's job: the text view
+            // keeps the first sentence, and the result's command prints the
+            // rest. --verbose and --json keep it whole.
+            ...(options.verbose ? {} : {description: firstSentence}),
           },
         }),
         ...note,
