@@ -61,7 +61,10 @@ export function readDurations(file = DURATIONS) {
 /** Seconds per Node test file from Vitest's default reporter lines. */
 export function recordDurations(text) {
   const seconds = {};
-  for (const line of text.replace(/\x1b\[[0-9;]*m/g, '').split('\n')) {
+  // Colour codes arrive as escape bytes, or, in `gh run view --log` output,
+  // spelled out as `^[[…m`.
+  const plain = text.replace(/(?:\x1b|\^\[)\[[0-9;]*m/g, '');
+  for (const line of plain.split('\n')) {
     const match =
       /[✓❯×]\s+\|?node\|?\s+(\S+\.(?:test|spec)\.[cm]?[jt]sx?)\s+\(\d+ tests?[^)]*\)\s+(\d+(?:\.\d+)?)(ms|s)\s*$/.exec(
         line,
@@ -71,6 +74,36 @@ export function recordDurations(text) {
     seconds[match[1]] = Math.round(value * 10) / 10;
   }
   return seconds;
+}
+
+const SWIZZLE_PROOF = /(^|\/)swizzle-proof\.\d+\.test\.mjs$/;
+
+/**
+ * The record after a run. The run's times replace those files' times; files
+ * the run did not reach keep their earlier times; a swizzle-proof slice keeps
+ * the largest time seen; a file that no longer exists leaves the record.
+ * @param {Record<string, number>} current
+ * @param {Record<string, number>} recorded
+ * @param {(file: string) => boolean} [exists]
+ * @returns {Record<string, number>}
+ */
+export function mergeRecord(
+  current,
+  recorded,
+  exists = file => fs.existsSync(path.join(ROOT, file)),
+) {
+  const merged = {...current};
+  for (const [file, seconds] of Object.entries(recorded)) {
+    merged[file] =
+      SWIZZLE_PROOF.test(file) && typeof current[file] === 'number'
+        ? Math.max(current[file], seconds)
+        : seconds;
+  }
+  return Object.fromEntries(
+    Object.entries(merged)
+      .filter(([file]) => exists(file))
+      .sort(([a], [b]) => a.localeCompare(b)),
+  );
 }
 
 export default class DurationShardSequencer extends BaseSequencer {
@@ -150,9 +183,7 @@ if (
       {
         ...current,
         source: 'recorded Node leg logs',
-        seconds: Object.fromEntries(
-          Object.entries(seconds).sort(([a], [b]) => a.localeCompare(b)),
-        ),
+        seconds: mergeRecord(current.seconds ?? {}, seconds),
       },
       null,
       2,

@@ -223,9 +223,8 @@ Bookmarks sheet.
 Done (UIKit lab, iOS 26.2 simulator, Oct 23–24 2026; in the segmented control's
 own table, `uikit/segmented.ts`, tagged `measured:`): M-SG02 (the selection
 spring and the drag clamp; the tracking spring is the shared
-`springs.fingerTracking`; the lift was measured too and is not in the table,
-since a pressed thumb's lift is a theme's) and M-SG03 (the tap's frames,
-fitted per frame).
+`springs.fingerTracking`; the lift's growth and spring are in the table too,
+as `liftGrowth` and `lift`) and M-SG03 (the tap's frames, fitted per frame).
 
 ## Sheets (UISheetPresentationController)
 

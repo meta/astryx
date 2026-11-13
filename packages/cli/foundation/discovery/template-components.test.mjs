@@ -4,11 +4,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {describe, expect, it} from 'vitest';
 import {CLI_ROOT} from '../fs/paths.mjs';
-import {
-  componentsInSource,
-  parsedComponents,
-  sourceKey,
-} from './template-adapter.mjs';
+import {componentsInSource, parsedComponents} from './template-adapter.mjs';
+import {storedKey} from '../doc-compiler/stored-docs.mjs';
+import {parsedSpecifiers} from './template-needs.mjs';
 import {templateComponentsText} from '../../scripts/generate-template-components.mjs';
 
 // The file is written at `prepack`, so a checkout has none. Its text is read
@@ -25,7 +23,11 @@ describe('stored template component lists', () => {
       const file = path.join(dir, name, 'page.tsx');
       if (!fs.existsSync(file)) continue;
       const source = fs.readFileSync(file, 'utf-8');
-      expect(stored[sourceKey(source)], name).toEqual(parsedComponents(source));
+      expect(stored[storedKey(source)], name).toEqual(parsedComponents(source));
+      // And the module specifiers it imports, as build's setup notes read them.
+      expect(stored[`imports:${storedKey(source)}`], name).toEqual(
+        parsedSpecifiers(source),
+      );
       checked++;
     }
     expect(checked).toBeGreaterThan(20);
@@ -41,14 +43,14 @@ describe('stored template component lists', () => {
       'page.tsx',
     );
     const source = fs.readFileSync(file, 'utf-8');
-    expect(stored[sourceKey(source)]).toEqual(parsedComponents(source));
+    expect(stored[storedKey(source)]).toEqual(parsedComponents(source));
     expect(componentsInSource(source)).toEqual(parsedComponents(source));
   });
 
   it('parse a source that is not shipped, such as an integration template', () => {
     const source =
       "import {Card as Panel} from '@astryxdesign/core';\nfunction Local() { return null; }\nexport default () => <Panel><Local /><Badge /></Panel>;\n";
-    expect(stored[sourceKey(source)]).toBeUndefined();
+    expect(stored[storedKey(source)]).toBeUndefined();
     expect(componentsInSource(source)).toEqual(['Badge', 'Card']);
   });
 
