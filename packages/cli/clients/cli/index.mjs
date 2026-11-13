@@ -20,6 +20,7 @@ import {formatCliCommand, getCliInvocation, quoteCommandArgument} from '../../fo
 import {hasRecordedProject, recordDeclaredCliCommands} from '../../foundation/env/cli-command.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {mayHaveIntegrations} from '../../foundation/integrations/may-have-integrations.mjs';
+import {loadParsers} from '../../foundation/runtime/lazy-parsers.mjs';
 import {findConfigPath} from '../../foundation/config/config-path.mjs';
 import {API_VERSION, setJsonMode} from '../../foundation/response/json.mjs';
 import {answeredBy, runChoice} from '../../foundation/release/run-context.mjs';
@@ -938,6 +939,11 @@ export async function createProgram({argv} = {}) {
   const loads = argv == null ? null : commandsForArgs(program, argv);
   const listed = argv != null && printsRootHelp(argv) ? storedCommandList() : null;
   if (listed) listStoredCommands(program, listed);
+  // Where an integration can load, its manifest is always checked, so the
+  // parsers (zod and the authored-value schemas) load now, beside the
+  // command's modules, as when the CLI imported them at startup. Elsewhere
+  // they load on first use (foundation/runtime/lazy-parsers.mjs).
+  const parsers = !listed && mayHaveIntegrations(process.cwd()) ? loadParsers() : null;
   for (const cmd of listed ? [] : commands) {
     if (loads != null && !loads.has(cmd.name)) continue;
     try {
@@ -965,6 +971,7 @@ export async function createProgram({argv} = {}) {
       markReportsResult(stub);
     }
   }
+  await parsers;
 
   // Install the JSON shim AFTER all commands are registered so we can
   // patch outputHelp on every command (root + subcommands). The shim

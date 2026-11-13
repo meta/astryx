@@ -106,7 +106,15 @@ export const parseCodemod = (...args) => codemods().parseCodemod(...args);
  * loaded.
  * @returns {Promise<void>}
  */
-export async function loadParsers() {
+export function loadParsers() {
+  return (parsersLoading ??= importParsers());
+}
+
+/** Every parser module's import, once started. @type {Promise<void> | undefined} */
+let parsersLoading;
+
+/** @returns {Promise<void>} */
+async function importParsers() {
   const [
     doctypesModule,
     templatesModule,
