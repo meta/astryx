@@ -5,7 +5,7 @@
  * The useIndicatorFocusRing example backs a CheckboxIndicator with a visually
  * hidden native checkbox input: keyboard focus matching :focus-visible paints
  * the outline onto the indicator element inside containerRef and clears it on
- * blur, pointer focus stays quiet, and disabling the control skips the ring.
+ * blur, and pointer focus stays quiet.
  */
 
 import {act} from 'react';
