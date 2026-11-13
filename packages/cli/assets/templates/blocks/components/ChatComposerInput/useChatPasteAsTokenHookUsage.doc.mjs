@@ -7,7 +7,7 @@ export const doc = {
   name: 'useChatPasteAsToken — Long paste',
   displayName: 'useChatPasteAsToken — Long paste',
   description:
-    'A composer whose pasteAsToken comes from useChatPasteAsToken with a threshold of 40 and a Pasted note label. A paste longer than 40 characters becomes that token. A shorter paste stays inline.',
+    'A composer whose pasteAsToken comes from useChatPasteAsToken with a threshold of 40 and a Pasted note label. A paste of 41 to 200 characters becomes that token. A shorter paste stays inline.',
   isReady: true,
   aspectRatio: 4 / 3,
   componentsUsed: ['ChatComposerInput'],
