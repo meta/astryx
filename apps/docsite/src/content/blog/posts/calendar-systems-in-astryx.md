@@ -1,6 +1,6 @@
 ---
 title: 'What year is it? Bringing other calendars to Astryx'
-description: "Supporting the calendars most Western developers never think about: Persian, Hebrew, Japanese, and others that many people live by now work in Astryx's date components."
+description: "Supporting the calendars Western developers rarely think about: Persian, Hebrew, Japanese, and others that many people live by now work in Astryx's date components."
 date: '2026-11-12'
 type: 'engineering'
 draft: false
@@ -124,6 +124,6 @@ The issue was opened on a Friday, and calendar support shipped in 0.7.9 the foll
 
 ## What's next
 
-A locale's `-u-ca-` keyword starts selecting the calendar in 0.8.0. Early feedback on typed entry ([#10366](https://github.com/meta/astryx/issues/10366), [#10367](https://github.com/meta/astryx/issues/10367)) is already making error messages plainer ("Enter a real date") and letting apps word their own.
+A locale's `-u-ca-` keyword selecting the calendar is planned for 0.8.0. Early feedback on typed entry ([#10366](https://github.com/meta/astryx/issues/10366), [#10367](https://github.com/meta/astryx/issues/10367)) is already making error messages plainer ("Enter a real date") and letting apps word their own.
 
 If one of these calendars is the one you live by and something looks off, please [open an issue](https://github.com/meta/astryx/issues); that's how this whole thing started. The [calendars guide](/docs/calendars) covers setup, including the polyfill and server rendering.
