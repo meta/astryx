@@ -28,6 +28,7 @@ import {componentKeywords} from '../search/search.mjs';
 import {findCoreDir, requireCoreDir} from '../../foundation/fs/paths.mjs';
 import {persistedDerived} from '../../foundation/fs/gather-cache.mjs';
 import {analyzeTemplateNeeds} from '../../foundation/discovery/template-needs.mjs';
+import {extractComponents} from '../../foundation/discovery/template-adapter.mjs';
 
 /**
  * Runs one build with a single directory listing per path: the kit resolves
@@ -47,6 +48,7 @@ export {withListingCache} from '../../foundation/fs/listing-cache.mjs';
  * @property {string} category The template's own `Family - Variant` label; empty when it declares none.
  * @property {string[]} keywords The ideas the page serves, as its own descriptor names them; empty when it declares none.
  * @property {string} filePath Absolute path to the template source file on disk.
+ * @property {string[]} components The components its page composes, read from its source on first use; empty when the source cannot be read.
  */
 
 /**
@@ -107,6 +109,7 @@ export async function loadTemplates(cwd) {
       category: t.category || '',
       keywords: t.keywords ?? [],
       filePath: t.filePath,
+      ...componentsOf(t.filePath),
       // The id `template()` resolves back to this entry: an active replacement
       // owns the Core id it names, so that id selects it, not its own.
       command: `astryx template ${t.replaces ?? t.dirName} --type page`,
@@ -361,4 +364,26 @@ export function templateSetupNotes(template, cwd) {
  */
 export function requireBuildCoreDir(cwd) {
   return requireCoreDir(cwd);
+}
+
+/**
+ * A lazy `components` property: the page's source is read and parsed only when
+ * a caller reads it, once.
+ * @param {string | undefined} filePath
+ */
+function componentsOf(filePath) {
+  /** @type {string[] | undefined} */
+  let components;
+  return {
+    get components() {
+      if (components === undefined) {
+        try {
+          components = filePath ? extractComponents(filePath) : [];
+        } catch {
+          components = [];
+        }
+      }
+      return components;
+    },
+  };
 }
