@@ -701,6 +701,150 @@ function sharedAsk(q, partWords) {
   );
 }
 
+/**
+ * The family of change a step makes, or null when it is none of the
+ * families the answer check knows (a dial of its own kind, a font, …).
+ * @param {string} thing
+ * @param {string} [value]
+ * @returns {'color' | 'radius' | 'space' | 'border' | 'weight' | 'opacity' | 'shadow' | 'fontsize' | null}
+ */
+export function thingFamily(thing, value = '') {
+  if (/^(corners|border(-[a-z]+)*-radius|--radius-[a-z-]+)$/.test(thing))
+    return 'radius';
+  if (
+    /^(color|background(-color)?|border(-[a-z]+)?-color|outline-color|fill|stroke|filter|accent|danger|success|warning|info|neutral|--color-[a-z0-9-]+|--focus-outline-color)$/.test(
+      thing,
+    )
+  )
+    return thing === 'filter' && !/brightness/.test(value) ? null : 'color';
+  if (
+    /^(padding(-[a-z]+)?|gap|row-gap|column-gap|margin(-[a-z]+)?|spacing|density|min-height|height|width|max-width|min-width|--spacing-[a-z0-9-]+|--size-[a-z0-9-]+)$/.test(
+      thing,
+    )
+  )
+    return 'space';
+  if (
+    /^(border(-(top|bottom|left|right|block|inline))?(-width)?|--border-width|--focus-outline-width|outline(-width)?)$/.test(
+      thing,
+    )
+  )
+    return 'border';
+  if (
+    /^(font-weight|headings|--text-[a-z0-9-]+-weight|--font-weight-[a-z]+)$/.test(
+      thing,
+    )
+  )
+    return 'weight';
+  if (thing === 'opacity') return 'opacity';
+  if (/^(box-shadow|surfaces|--shadow-[a-z]+)$/.test(thing)) return 'shadow';
+  if (
+    /^(font-size|text-size|type|--font-size-[a-z]+|--text-[a-z0-9-]+-size)$/.test(
+      thing,
+    )
+  )
+    return 'fontsize';
+  return null;
+}
+
+/** The families each kind of ask may change. @type {Record<string, string[]>} */
+const ASPECT_FAMILIES = {
+  background: ['color', 'opacity'],
+  text: ['color'],
+  corners: ['radius'],
+  spacing: ['space'],
+  size: ['space', 'fontsize', 'border', 'radius'],
+  border: ['border', 'color'],
+  weight: ['weight'],
+  opacity: ['opacity', 'color'],
+  shadow: ['shadow', 'border', 'color'],
+  fontsize: ['fontsize'],
+};
+
+/**
+ * A length or number as px for comparing (rem and em at 16px), or null.
+ * @param {string | null | undefined} v
+ */
+function asNumber(v) {
+  const first = String(v ?? '')
+    .trim()
+    .split(/\s+/)[0];
+  const m = /^(-?\d*\.?\d+)(px|rem|em)?$/.exec(first);
+  if (!m) return null;
+  return Number(m[1]) * (m[2] === 'rem' || m[2] === 'em' ? 16 : 1);
+}
+
+/**
+ * Whether a step fits what its clause asks: the family of change the
+ * words name, the direction they give (from the value there now), and
+ * none or 0 for a removal. `{ok: false, why}` names what does not fit.
+ * @param {{thing: string, value?: string, verb?: string, mode?: string}} step
+ * @param {{aspects: string[], dir: 'more' | 'less' | null, zero: boolean, lighter: boolean | null, typed?: string[], opacityDir?: 'more' | 'less' | null}} intent
+ * @param {string | null} now the value the step's property has there now
+ * @returns {{ok: true} | {ok: false, why: 'family' | 'direction' | 'zero'}}
+ */
+export function stepFits(step, intent, now) {
+  if (step.verb && step.verb !== 'set') return {ok: true};
+  const family = thingFamily(step.thing, step.value);
+  // A value the question gives is as asked.
+  const typedValue = String(step.value ?? '')
+    .trim()
+    .toLowerCase();
+  if ((intent.typed ?? []).some(t => t.toLowerCase() === typedValue))
+    return {ok: true};
+  // The family: only when every kind of ask the clause names is known.
+  const known = intent.aspects.length
+    ? intent.aspects.every(a => ASPECT_FAMILIES[a])
+    : false;
+  if (family && known) {
+    const allowed = new Set(intent.aspects.flatMap(a => ASPECT_FAMILIES[a]));
+    if (!allowed.has(family)) return {ok: false, why: 'family'};
+  }
+  const value = String(step.value ?? '').trim();
+  // A removal reaches none, 0 or transparent.
+  if (
+    intent.zero &&
+    family &&
+    ['radius', 'space', 'border', 'shadow', 'opacity'].includes(family)
+  ) {
+    if (family === 'shadow')
+      return /^(none|0)$/.test(value) ? {ok: true} : {ok: false, why: 'zero'};
+    // A dial's own word for none ("square", "flat") is none too.
+    const n = asNumber(value);
+    return n != null && n !== 0 ? {ok: false, why: 'zero'} : {ok: true};
+  }
+  // The direction, from the value there now.
+  if (family === 'color') {
+    if (intent.lighter == null || step.mode === 'dark') return {ok: true};
+    if (/^#[0-9a-f]{8}$/i.test(value)) return {ok: true};
+    const a = parseColor(value);
+    const b = now ? parseColor(now) : null;
+    if (!a || !b) return {ok: true};
+    const lum = (/** @type {number[]} */ c) =>
+      c[0] * 0.299 + c[1] * 0.587 + c[2] * 0.114;
+    if (Math.abs(lum(a) - lum(b)) < 0.5) return {ok: true};
+    return intent.lighter === lum(a) > lum(b)
+      ? {ok: true}
+      : {ok: false, why: 'direction'};
+  }
+  // Opacity goes the other way of "transparent"; checked only when the
+  // words say which.
+  const dir = family === 'opacity' ? (intent.opacityDir ?? null) : intent.dir;
+  if (
+    !dir ||
+    !family ||
+    !['radius', 'space', 'border', 'weight', 'opacity', 'fontsize'].includes(
+      family,
+    )
+  )
+    return {ok: true};
+  const after = asNumber(value);
+  const before = asNumber(now);
+  if (after == null || before == null || after === before) return {ok: true};
+  return (dir === 'more') === after > before
+    ? {ok: true}
+    : {ok: false, why: 'direction'};
+}
+
 /** A keep step for a part the change does not reach. */
 const UNTOUCHED = /** @type {const} */ ('untouched');
 
@@ -3568,6 +3712,93 @@ export function draftAnswer(ctx, env, question) {
   /** @param {Draft} input */
   const push = input => {
     const d = withMode(input, clauseNow);
+    // The answer check: every step fits the family of change, the
+    // direction and the removal its clause asks for; one that does not is
+    // dropped, and the answer says plainly what it could not work out.
+    const c0 = clauseNow;
+    if (c0 && !c0.except) {
+      const comparing =
+        /\b(than|as \w+ as|same|match(?:es|ing)?|equal(?:ly)?|like the)\b/.test(
+          c0.text,
+        );
+      const intent = {
+        typed: [...c0.colors, ...c0.lengths],
+        // A thing the words name counts as asked for too ("shadow opacity").
+        aspects: [
+          ...c0.aspects,
+          ...(/\bshadows?\b/.test(c0.text) ? ['shadow'] : []),
+          ...(/\b(corners?|radius)\b/.test(c0.text) ? ['corners'] : []),
+          ...(/\bborders?\b/.test(c0.text) ? ['border'] : []),
+          ...(/\b(padding|gap|spacing)\b/.test(c0.text) ? ['spacing'] : []),
+        ],
+        opacityDir:
+          /\bmore (transparent|translucent|see-through)\b|\bless opaque\b/.test(
+            c0.text,
+          )
+            ? /** @type {'less'} */ ('less')
+            : /\bless (transparent|translucent)\b|\bmore opaque\b/.test(c0.text)
+              ? /** @type {'more'} */ ('more')
+              : null,
+        dir: comparing ? null : c0.dir,
+        zero:
+          !comparing &&
+          Boolean(c0.neg) &&
+          /\b(no|remove|without|zero|none|get rid of|drop)\b/.test(c0.text) &&
+          !/\b(not too|isn'?t|aren'?t|subtle|thinner|smaller|less)\b/.test(
+            c0.text,
+          ),
+        lighter:
+          comparing || /\bcontrast\b/.test(c0.text)
+            ? null
+            : /\b(lighter|lighten|brighter|paler)\b/.test(c0.text)
+              ? true
+              : /\b(darker|darken|deeper)\b/.test(c0.text)
+                ? false
+                : null,
+      };
+      /** @type {string[]} */
+      const dropped = [];
+      d.options = d.options.map(o =>
+        o.filter(st => {
+          const prop =
+            st.thing === 'corners'
+              ? 'border-radius'
+              : st.thing === 'background'
+                ? 'background-color'
+                : st.thing;
+          // (A state or variant value is not what partPropNow reads.)
+          const now =
+            st.state || st.when
+              ? null
+              : st.verb === 'set' && st.on && !/^--/.test(st.thing)
+                ? safeNow(st.on, prop)
+                : st.verb === 'set' && /^--/.test(st.thing)
+                  ? String(
+                      current(
+                        st.thing,
+                        st.mode === 'dark' ? 'dark' : 'light',
+                      ) || '',
+                    ) || null
+                  : null;
+          const fit = stepFits(st, intent, now);
+          if (fit.ok) return true;
+          dropped.push(
+            fit.why === 'family'
+              ? `couldn't work out a change of that kind for ${st.on ?? 'the theme'} (${st.thing} is not what "${c0.text.trim()}" asks to change)`
+              : fit.why === 'zero'
+                ? `couldn't work out the amount for ${st.on ?? 'the theme'}: "${c0.text.trim()}" asks for none, and ${st.thing} ${st.value} is not none`
+                : `couldn't work out the amount for ${st.on ?? 'the theme'}: ${st.thing} ${st.value} moves the other way from ${now}`,
+          );
+          return false;
+        }),
+      );
+      if (dropped.length) {
+        const kept = d.options.some(o => o.length);
+        d.text = kept
+          ? `${d.text}; ${[...new Set(dropped)].join('; ')}`
+          : [...new Set(dropped)].join('; ');
+      }
+    }
     // A step given twice in one option runs once.
     const options = d.options
       .map(o =>
@@ -4711,6 +4942,22 @@ export function draftAnswer(ctx, env, question) {
         text,
       )?.[1];
     return axis;
+  }
+
+  /**
+   * A part's value now for the answer check, or null when it cannot be
+   * read (never a reason to stop an answer).
+   * @param {string} part
+   * @param {string} prop
+   */
+  function safeNow(part, prop) {
+    try {
+      return C.MAP[one(part)] || FAMILIES[part]
+        ? partPropNow(part, prop)
+        : null;
+    } catch {
+      return null;
+    }
   }
 
   /**
