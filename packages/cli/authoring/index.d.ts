@@ -123,6 +123,7 @@ export type {
   ComponentTranslationDoc,
   ComponentPropDoc,
   ComponentExampleDoc,
+  ExampleKind,
   ComponentAnatomyElement,
   ComponentAccessibilityRequirement,
   ComponentAccessibilityThemeStatus,

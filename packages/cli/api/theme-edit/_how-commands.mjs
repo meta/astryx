@@ -36,6 +36,7 @@ export const EXAMPLE_THEME = 'my-theme';
  * @property {string} [when]
  * @property {string} [state]
  * @property {string} [mode]
+ * @property {boolean} [only] the one member of a group, not the group
  */
 
 /**
@@ -223,7 +224,7 @@ function apply(ctx, slug, d, st) {
     d,
     st.thing,
     st.value,
-    {on: st.on, when: st.when, state: st.state, mode: st.mode},
+    {on: st.on, when: st.when, state: st.state, mode: st.mode, only: st.only},
     unset,
   );
   if (!unset && s.thing === 'mode') {
@@ -266,6 +267,7 @@ export function render(st, slug) {
     ...(st.when ? ['--when', st.when] : []),
     ...(st.state ? ['--state', st.state] : []),
     ...(st.mode ? ['--mode', st.mode] : []),
+    ...(st.only ? ['--only'] : []),
   ].join(' ');
 }
 

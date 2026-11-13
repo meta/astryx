@@ -205,6 +205,9 @@ export default defineConfig({
           // the other tests read at the same time; it names the themes that
           // are not built instead (.github/scripts/visual-gate/lib/sources.mjs).
           env: {ASTRYX_VISUAL_GATE_READ_ONLY: '1'},
+          // A fixture project resolves packages only from its own folders, never
+          // through the NODE_PATH pnpm's bin shim gives the worker.
+          setupFiles: ['./vitest.setup.node.mjs'],
           // Prebuilt and plain-data modules load as Node loads them for the
           // CLI, not through Vite's transform, which would otherwise inline
           // every file: Core's built bundle (the workspace link resolves it

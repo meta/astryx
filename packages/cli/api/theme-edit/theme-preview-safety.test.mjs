@@ -10,6 +10,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {createRequire} from 'node:module';
 import {createHash} from 'node:crypto';
 import {
   afterAll,
@@ -30,7 +31,7 @@ import {
   themeEditPreviewRemove,
   themeEditShow,
 } from './theme-edit.mjs';
-import {stopPreviewCommitAt} from './_preview-app.mjs';
+import {setImporterScanMax, stopPreviewCommitAt} from './_preview-app.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
 import {
   makeLinkedFixture,
@@ -213,12 +214,12 @@ describe('where the pages go', () => {
     expect(tree()).toBe(before);
   }, 120_000);
 
-  it('opens a route group folder at its real URL, encoded', async () => {
+  it('opens a route group folder at its real URL', async () => {
     const group = await themeEditPreviewAdd(undefined, {
       cwd,
-      path: 'src/app/(tools)/my preview',
+      path: 'src/app/(tools)/my-preview',
     });
-    expect(group.data.open).toBe('open /my%20preview in the running app');
+    expect(group.data.open).toBe('open /my-preview in the running app');
   }, 120_000);
 
   it('finds a preview recorded with --path when no --path is given', async () => {
@@ -317,11 +318,17 @@ describe('preview remove', () => {
     fs.rmSync(path.join(cwd, 'themes/gone'), {recursive: true});
     const r = await themeEditPreviewRemove('overview', {cwd});
     expect(r.data.notes.join(' ')).toContain('wore gone, which is gone');
-    expect(r.data.pages).toEqual(['components', 'colors']);
+    // The Colors page showed the gone theme's colors, so it goes too.
+    expect(r.data.pages).toEqual(['components']);
+    expect(r.data.notes.join(' ')).toContain(
+      'removed the Colors page: it showed the colors of gone, which is gone',
+    );
     const route = read(`${ROUTE}/page.tsx`);
     expect(route).not.toContain('themes/gone');
-    expect(route).toContain('"./_pages/colors"');
-    expect(read(`${ROUTE}/_pages/colors.tsx`)).not.toContain('themes/gone');
+    expect(route).not.toContain('"./_pages/colors"');
+    expect(fs.existsSync(path.join(cwd, ROUTE, '_pages/colors.tsx'))).toBe(
+      false,
+    );
     expect(r.data.rewritten).toContain(`${ROUTE}/page.tsx`);
   }, 120_000);
 
@@ -440,7 +447,9 @@ describe('preview add', () => {
     expect(typo.run[0]).toBe(
       'astryx experimental theme preview add --template dashboard',
     );
-    expect(typo.run.at(-1)).toBe('astryx template --list --type page');
+    // The way this app runs the CLI, as JSON shows it too.
+    expect(typo.run.at(-1)).toMatch(/ template --list --type page$/);
+    expect(typo.run.at(-1)).not.toBe('astryx template --list --type page');
   }, 60_000);
 
   it('never replaces a page changed by hand, and adopts an identical page it did not record', async () => {
@@ -566,8 +575,12 @@ describe('preview add', () => {
     const r = await refusal(() =>
       themeEditPreviewAdd('zzzz', {cwd, path: "src/app/$(id)'x"}),
     );
+    // $ ( ) ' make a folder Next serves; nothing in it reaches a shell
+    // unquoted.
     expect(r.code).toBe('ERR_NOT_FOUND');
-    expect(r.run.at(-1)).toBe('astryx template --list --type page');
+    // The way this app runs the CLI, as JSON shows it too.
+    expect(r.run.at(-1)).toMatch(/ template --list --type page$/);
+    expect(r.run.at(-1)).not.toBe('astryx template --list --type page');
     for (const cmd of r.run.slice(0, -1))
       expect(cmd).toContain(`--path 'src/app/$(id)'\\''x'`);
     expect(r.run.join(' ')).not.toContain('shell-top-nav');
@@ -1978,26 +1991,27 @@ describe('final pass 5', () => {
     );
   }, 240_000);
 
-  it('brings the default pages back for a default page id', async () => {
+  it('adds back just the default page its id names, and refuses one already there', async () => {
     await themeEditPreviewAdd(undefined, {
       cwd,
       theme: 'sea',
       path: 'src/app/dp',
     });
     await themeEditPreviewRemove('overview', {cwd, path: 'src/app/dp'});
-    for (const r of [
-      await themeEditPreviewAdd('overview', {cwd, path: 'src/app/dp'}),
-      await themeEditPreviewAdd(undefined, {
+    const r = await themeEditPreviewAdd('overview', {cwd, path: 'src/app/dp'});
+    expect(r.data.added).toEqual(['overview']);
+    expect(r.data.pages).toContain('overview');
+    const there = await refusal(() =>
+      themeEditPreviewAdd(undefined, {
         cwd,
         path: 'src/app/dp',
         template: 'Components',
       }),
-    ]) {
-      expect(r.data.pages).toContain('overview');
-      expect(r.data.notes.join(' ')).toContain(
-        "a default page's id brings back the default pages",
-      );
-    }
+    );
+    expect(there.code).toBe('ERR_FILE_EXISTS');
+    expect(there.message).toContain(
+      'The components page is already in the preview',
+    );
     rm('src/app/dp');
   }, 120_000);
 
@@ -2018,14 +2032,14 @@ describe('final pass 5', () => {
         expect(r.code, d).toBe('ERR_INVALID_ARGUMENT');
         expect(r.message, d).toContain('drop one of them');
       }
-      const colors = await themeEditPreviewAdd('colors', {
-        cwd,
-        path: 'src/app/m1',
-      });
-      expect(colors.data.pages).not.toContain('colors');
-      expect(colors.data.notes.join(' ')).toContain(
-        'sea has none yet; it appears once it does: astryx experimental theme editor set sea accent <color>',
+      const colors = await refusal(() =>
+        themeEditPreviewAdd('colors', {cwd, path: 'src/app/m1'}),
       );
+      expect(colors.code).toBe('ERR_NOT_FOUND');
+      expect(colors.message).toContain(
+        'There is no Colors page to add: sea has no generated colors yet',
+      );
+      expect(colors.run[0]).toContain('editor set sea accent');
     } finally {
       rm('src/app/m1');
     }
@@ -2108,4 +2122,717 @@ describe('final pass 5', () => {
       }
     }
   }, 180_000);
+
+  it('refuses a folder name that is no plain URL segment, or Windows does not allow', async () => {
+    for (const [where, fixed] of [
+      ['src/app/a b', 'src/app/a-b'],
+      ['src/app/ünï', 'src/app/uni'],
+      ['src/app/a#b', 'src/app/a-b'],
+    ]) {
+      const r = await refusal(() =>
+        themeEditPreviewAdd(undefined, {cwd, path: where}),
+      );
+      expect(r.code, where).toBe('ERR_INVALID_ARGUMENT');
+      expect(r.run[0], where).toContain(`--path ${fixed}`);
+      expect(exists(where), where).toBe(false);
+    }
+    for (const dir of ['q?', 'x.', 'x /y', 'com¹'])
+      expect(
+        (await refusal(() => themeEditPreviewApp(dir, {cwd}))).message,
+        dir,
+      ).toContain('Windows does not allow');
+  });
+
+  it('suggests a free folder whose URL no route group serves either', async () => {
+    write('src/app/(m)/tp/page.tsx', 'export default 1;\n');
+    write('src/app/(m)/tp-2/page.tsx', 'export default 1;\n');
+    try {
+      const r = await refusal(() =>
+        themeEditPreviewAdd(undefined, {cwd, path: 'src/app/tp'}),
+      );
+      expect(r.run[0]).toContain('--path src/app/tp-3');
+      const again = await refusal(() =>
+        themeEditPreviewAdd(undefined, {cwd, path: 'src/app/tp-2'}),
+      );
+      expect(again.run[0]).toContain('--path src/app/tp-3');
+    } finally {
+      rm('src/app/(m)');
+    }
+  });
+
+  it('suggests a free slugged folder, serves what Next serves, and refuses a case twin', async () => {
+    fs.mkdirSync(path.join(cwd, 'src/app/a-b'), {recursive: true});
+    try {
+      const taken = await refusal(() =>
+        themeEditPreviewAdd(undefined, {cwd, path: 'src/app/a b'}),
+      );
+      expect(taken.run[0]).toContain('--path src/app/a-b-2');
+    } finally {
+      rm('src/app/a-b');
+    }
+    const both = await refusal(() =>
+      themeEditPreviewAdd(undefined, {cwd, path: 'src/app/é/á'}),
+    );
+    expect(both.run[0]).toContain('--path src/app/e/a');
+    const sub = await themeEditPreviewAdd(undefined, {
+      cwd,
+      path: 'src/app/a+b~c!(x)@y',
+    });
+    expect(sub.data.folder).toBe('src/app/a+b~c!(x)@y');
+    rm('src/app/a+b~c!(x)@y');
+    write('src/app/Foo/page.tsx', 'export default 1;\n');
+    try {
+      const twin = await refusal(() =>
+        themeEditPreviewAdd(undefined, {cwd, path: 'src/app/foo'}),
+      );
+      expect(twin.code).toBe('ERR_INVALID_ARGUMENT');
+      expect(twin.message).toContain('differs from it only in case');
+      expect(twin.run[0]).toContain('--path src/app/foo-2');
+      expect(exists('src/app/foo')).toBe(false);
+    } finally {
+      rm('src/app/Foo');
+    }
+  }, 120_000);
+
+  it('names what TypeScript the app needs: none installed, or a strict flag the templates may not pass', async () => {
+    const hasTs = (() => {
+      try {
+        createRequire(path.join(cwd, 'package.json')).resolve('typescript');
+        return true;
+      } catch {
+        return false;
+      }
+    })();
+    const plain = await themeEditPreviewAdd(undefined, {
+      cwd,
+      path: 'src/app/ts1',
+    });
+    const note = plain.data.notes.join(' ');
+    if (hasTs) expect(note).not.toContain('the app has no TypeScript');
+    else expect(note).toContain('the app has no TypeScript');
+    rm('src/app/ts1');
+    write(
+      'tsconfig.json',
+      '{\n  // strict, as create-t3-app writes it\n  "compilerOptions": {"strict": true, "noUncheckedIndexedAccess": true,},\n}\n',
+    );
+    try {
+      const r = await themeEditPreviewAdd(undefined, {
+        cwd,
+        path: 'src/app/ts2',
+        template: 'login',
+      });
+      expect(r.data.notes.join(' ')).toContain(
+        "the app's tsconfig.json turns on noUncheckedIndexedAccess, and src/app/ts2/_pages/login.tsx is written as the page template ships",
+      );
+      expect(r.data.notes.join(' ')).not.toContain('the app has no TypeScript');
+    } finally {
+      rm('tsconfig.json');
+      rm('src/app/ts2');
+    }
+  }, 120_000);
+
+  it('refuses a path through a file or too long, a case twin outside the routes folder, and a repeated flag', async () => {
+    for (const where of ['src/app/layout.tsx/k']) {
+      const r = await refusal(() =>
+        themeEditPreviewAdd(undefined, {cwd, path: where}),
+      );
+      expect(r.code, where).toBe('ERR_INVALID_ARGUMENT');
+      expect(r.message, where).toContain('src/app/layout.tsx, which is a file');
+      const rem = await refusal(() =>
+        themeEditPreviewRemove(undefined, {cwd, path: where}),
+      );
+      expect(rem.code, where).toBe('ERR_INVALID_ARGUMENT');
+    }
+    const long = `src/app/${Array.from({length: 17}, () => 'b'.repeat(250)).join('/')}`;
+    for (const call of [
+      () => themeEditPreviewAdd(undefined, {cwd, path: long}),
+      () => themeEditPreviewRemove(undefined, {cwd, path: long}),
+      () => themeEditPreviewList({cwd, path: long}),
+    ])
+      expect((await refusal(call)).message).toContain(
+        'longer than 3,500 bytes',
+      );
+    // One folder name past 255 bytes is refused by name length.
+    const wide = `src/app/${'c'.repeat(256)}`;
+    expect(
+      (await refusal(() => themeEditPreviewAdd(undefined, {cwd, path: wide})))
+        .message,
+    ).toContain('longer than 255 bytes');
+    const app = await refusal(() => themeEditPreviewApp('SRC', {cwd}));
+    expect(app.message).toContain('differs from it only in case');
+    const add = await refusal(() =>
+      themeEditPreviewAdd(undefined, {cwd, path: 'SRC/app/y'}),
+    );
+    expect(add.message).toContain('differs from it only in case');
+    // The way on goes through the folder that is there.
+    expect(add.run[0]).toContain('--path src/app/y');
+    const twice = await cli([
+      'remove',
+      '--path',
+      'src/app/p1',
+      '--path',
+      'src/app/p2',
+    ]);
+    expect(twice.status).toBe(1);
+    expect(twice.stdout).toContain(
+      '--path was given twice (src/app/p1, src/app/p2)',
+    );
+  }, 120_000);
+
+  it('leaves an unreadable page in place on remove, and says so', async () => {
+    await themeEditPreviewAdd(undefined, {
+      cwd,
+      theme: 'sea',
+      path: 'src/app/ur',
+    });
+    const file = path.join(cwd, 'src/app/ur/_pages/overview.tsx');
+    fs.chmodSync(file, 0o000);
+    try {
+      if (process.getuid?.() === 0) return; // root reads every file
+      const r = await themeEditPreviewRemove('overview', {
+        cwd,
+        path: 'src/app/ur',
+      });
+      expect(r.data.removed).toEqual([]);
+      expect(r.data.kept).toContain('src/app/ur/_pages/overview.tsx');
+      expect(r.data.notes.join(' ')).toContain(
+        'could not be read (EACCES), so it is left in place',
+      );
+      expect(read('src/app/ur/theme-preview.json')).toContain(
+        '_pages/overview.tsx',
+      );
+    } finally {
+      fs.chmodSync(file, 0o644);
+      rm('src/app/ur');
+    }
+  }, 120_000);
+
+  it('suggests a free folder when both spellings of a folder are there, and remove for a preview there', async () => {
+    fs.mkdirSync(path.join(cwd, 'src/app/blog'), {recursive: true});
+    fs.mkdirSync(path.join(cwd, 'src/app/Blog'), {recursive: true});
+    try {
+      for (const where of ['src/app/blog/tp', 'src/app/Blog/tp']) {
+        const r = await refusal(() =>
+          themeEditPreviewAdd(undefined, {cwd, path: where}),
+        );
+        expect(r.run[0], where).toContain('--path src/app/theme-preview');
+      }
+      write('src/app/blog/tp/theme-preview.json', '{}');
+      const r = await refusal(() =>
+        themeEditPreviewAdd(undefined, {cwd, path: 'src/app/blog/tp'}),
+      );
+      expect(r.message).toContain(
+        'The preview already there can still be removed',
+      );
+      expect(r.run).toContain(
+        'astryx experimental theme preview remove --path src/app/blog/tp',
+      );
+    } finally {
+      rm('src/app/blog');
+      rm('src/app/Blog');
+    }
+  });
+
+  it('calls a record entry that leads outside damaged, and remove drops it, deleting nothing there', async () => {
+    await themeEditPreviewAdd(undefined, {
+      cwd,
+      theme: 'sea',
+      path: 'src/app/p',
+    });
+    try {
+      const file = 'src/app/p/theme-preview.json';
+      const data = JSON.parse(read(file));
+      data.files.push('../layout.tsx');
+      write(file, JSON.stringify(data));
+      for (const call of [
+        () => themeEditPreviewList({cwd, path: 'src/app/p'}),
+        () =>
+          themeEditPreviewAdd(undefined, {
+            cwd,
+            path: 'src/app/p',
+            template: 'login',
+          }),
+      ]) {
+        const r = await refusal(call);
+        expect(r.code).toBe('ERR_THEME_INVALID');
+        expect(r.message).toContain(
+          '"files" holds "../layout.tsx", which leads outside the folder',
+        );
+      }
+      const r = await themeEditPreviewRemove(undefined, {
+        cwd,
+        path: 'src/app/p',
+      });
+      expect(r.data.notes.join(' ')).toContain(
+        'dropped "../layout.tsx" from theme-preview.json: it leads outside the folder, so nothing there was deleted',
+      );
+      expect(exists('src/app/layout.tsx')).toBe(true);
+    } finally {
+      rm('src/app/p');
+    }
+  }, 120_000);
+
+  it('refuses an intercepting route folder, and lists a missing page in words in text', async () => {
+    for (const where of [
+      'src/app/(.)tp',
+      'src/app/(..)up',
+      'src/app/(...)tp',
+      'src/app/x/(..)(..)tp',
+    ]) {
+      const r = await refusal(() =>
+        themeEditPreviewAdd(undefined, {cwd, path: where}),
+      );
+      expect(r.code, where).toBe('ERR_INVALID_ARGUMENT');
+      expect(r.message, where).toContain('as an intercepting route');
+      expect(exists(where), where).toBe(false);
+    }
+    await themeEditPreviewAdd(undefined, {
+      cwd,
+      theme: 'sea',
+      path: 'src/app/lm',
+    });
+    try {
+      rm('src/app/lm/_pages/components.tsx');
+      const text = await runCli(
+        ['experimental', 'theme', 'preview', 'list', '--path', 'src/app/lm'],
+        {cwd},
+      );
+      expect(text.stdout).toMatch(/components\s+Components - missing/);
+      expect(text.stdout).not.toContain('- true');
+    } finally {
+      rm('src/app/lm');
+    }
+  }, 120_000);
+
+  it('imports the base fonts sheet only while the theme still uses a family it loads, and names every page it writes again', async () => {
+    const pkg = path.join(
+      path.dirname(cwd),
+      'node_modules/@astryxdesign/theme-neutral',
+    );
+    const pkgFile = path.join(pkg, 'package.json');
+    const before = fs.readFileSync(pkgFile, 'utf8');
+    const json = JSON.parse(before);
+    fs.writeFileSync(
+      pkgFile,
+      JSON.stringify({
+        ...json,
+        exports: {...json.exports, './fonts.css': './fonts.css'},
+      }),
+    );
+    fs.writeFileSync(
+      path.join(pkg, 'fonts.css'),
+      "@import url('https://fonts.googleapis.com/css2?family=Figtree:wght@400;700&display=swap');\n",
+    );
+    await themeEditNew('fz', {cwd, like: 'neutral'});
+    try {
+      const route = 'src/app/fz/page.tsx';
+      // The build names Figtree, which the sheet loads.
+      await themeEditSet('fz', 'font', 'Figtree', {cwd, on: 'code'});
+      await themeEditPreviewAdd(undefined, {
+        cwd,
+        theme: 'fz',
+        path: 'src/app/fz',
+      });
+      expect(read(route)).toContain('@astryxdesign/theme-neutral/fonts.css');
+      // Once no family the sheet loads is named, it is left out.
+      await themeEditSet('fz', 'font', 'system', {cwd, on: 'code'});
+      await themeEditPreviewAdd(undefined, {cwd, path: 'src/app/fz'});
+      expect(read(route)).not.toContain(
+        '@astryxdesign/theme-neutral/fonts.css',
+      );
+      // A switch to a theme with colors rewrites the Colors page, and says so.
+      await themeEditSet('brand', 'accent', '#7c3aed', {cwd});
+      await themeEditPreviewAdd(undefined, {
+        cwd,
+        theme: 'brand',
+        path: 'src/app/fz',
+      });
+      const sea = await themeEditPreviewAdd(undefined, {
+        cwd,
+        theme: 'sea',
+        path: 'src/app/fz',
+      });
+      const back = await themeEditPreviewAdd(undefined, {
+        cwd,
+        theme: 'brand',
+        path: 'src/app/fz',
+      });
+      expect([...back.data.added, ...back.data.refreshed]).toContain('colors');
+      expect(sea.data.pages).toBeDefined();
+    } finally {
+      fs.writeFileSync(pkgFile, before);
+      fs.rmSync(path.join(pkg, 'fonts.css'), {force: true});
+      rm('src/app/fz');
+      rm('themes/fz');
+    }
+  }, 240_000);
+
+  it("takes build's ranked page for a short description, and a template's id or name exactly", async () => {
+    for (const [words, page] of [
+      ['checkout', 'checkout-wizard'],
+      ['a hero section', 'centered-hero'],
+      ['checkout flow', 'checkout-wizard'],
+      ['login-sso', 'login-sso'],
+      ['Checkout Form', 'payment-form'],
+    ]) {
+      const where = `src/app/r-${page}`;
+      try {
+        const r = await themeEditPreviewAdd(words, {cwd, path: where});
+        expect(r.data.added, words).toContain(page);
+      } finally {
+        rm(where);
+      }
+    }
+  }, 240_000);
+
+  it("finds Core's stylesheet through the root layout's imports, and names a font package the app lacks", async () => {
+    const layout = read('src/app/layout.tsx');
+    write('styles/globals.css', "@import '@astryxdesign/core/astryx.css';\n");
+    write(
+      'src/app/layout.tsx',
+      "import '../../styles/globals.css';\nexport default function RootLayout({children}) { return children; }\n",
+    );
+    await themeEditNew('fi', {cwd, like: 'neutral'});
+    try {
+      await themeEditSet('fi', 'font', 'Inter', {cwd});
+      const r = await themeEditPreviewAdd(undefined, {
+        cwd,
+        theme: 'fi',
+        path: 'src/app/fi',
+      });
+      const notes = r.data.notes.join(' ');
+      expect(notes).not.toContain("does not import Core's stylesheet");
+      if (
+        !exists('node_modules/@fontsource/inter') &&
+        !exists('../node_modules/@fontsource/inter')
+      )
+        expect(notes).toContain(
+          'Inter is not installed, so the preview shows the next font in the stack',
+        );
+      expect(read('src/app/fi/_pages/overview.tsx')).toContain(
+        '(not installed here)',
+      );
+    } finally {
+      write('src/app/layout.tsx', layout);
+      rm('styles');
+      rm('src/app/fi');
+      rm('themes/fi');
+    }
+  }, 180_000);
+
+  it("refuses an app frame's exact name clearly, and calls an exact page the one named", async () => {
+    for (const words of ['blank', 'shell-top-nav']) {
+      const r = await refusal(() =>
+        themeEditPreviewAdd(words, {cwd, path: 'src/app/v5'}),
+      );
+      expect(r.code, words).toBe('ERR_INVALID_ARGUMENT');
+      expect(r.message, words).toContain('is an app frame, not a page');
+      expect(r.run[0], words).toContain(`--template ${words}`);
+    }
+    try {
+      const r = await themeEditPreviewAdd('login-sso', {
+        cwd,
+        path: 'src/app/v1',
+      });
+      expect(r.data.added).toEqual(['login-sso']);
+      expect(JSON.stringify(r.data.matched)).not.toContain(
+        'not exactly the one described',
+      );
+    } finally {
+      rm('src/app/v1');
+    }
+  }, 120_000);
+
+  it("finds Core's stylesheet through a route-group root layout and a tsconfig alias", async () => {
+    const layout = read('src/app/layout.tsx');
+    rm('src/app/layout.tsx');
+    write('lib/sheet.css', "@import '@astryxdesign/core/astryx.css';\n");
+    write(
+      'tsconfig.json',
+      '{"compilerOptions": {"paths": {"~/*": ["./*"]}}}\n',
+    );
+    write(
+      'src/app/(site)/layout.tsx',
+      "import '~/lib/sheet.css';\nexport default function L({children}) { return children; }\n",
+    );
+    try {
+      const r = await themeEditPreviewAdd(undefined, {
+        cwd,
+        path: 'src/app/(site)/v3',
+      });
+      expect(r.data.notes.join(' ')).not.toContain(
+        "does not import Core's stylesheet",
+      );
+    } finally {
+      rm('src/app/(site)');
+      rm('lib');
+      rm('tsconfig.json');
+      write('src/app/layout.tsx', layout);
+    }
+  }, 120_000);
+
+  it('shows open overlays without focus, points to Colors only when it is there, and reads fonts again live', async () => {
+    await themeEditNew('nc', {cwd, like: 'neutral'});
+    try {
+      await themeEditPreviewAdd(undefined, {
+        cwd,
+        theme: 'nc',
+        path: 'src/app/w',
+      });
+      const overview = read('src/app/w/_pages/overview.tsx');
+      expect(overview).toContain('hasAutoFocus={false}');
+      expect(read('src/app/w/_pages/components.tsx')).toMatch(
+        /<C\.Popover [\s\S]*?hasAutoFocus=\{false\}/,
+      );
+      expect(overview).toContain('MutationObserver');
+      expect(overview).toContain("'loadingdone'");
+      expect(exists('src/app/w/_pages/colors.tsx')).toBe(false);
+      expect(overview).not.toContain('Every shade');
+      const set = await themeEditSet('nc', 'accent', 'teal', {cwd});
+      expect(set.data.previewStale.join(' ')).toContain(
+        'nc has generated colors now; astryx experimental theme preview add --path src/app/w adds its Colors page',
+      );
+      await themeEditPreviewAdd(undefined, {cwd, path: 'src/app/w'});
+      expect(exists('src/app/w/_pages/colors.tsx')).toBe(true);
+      expect(read('src/app/w/_pages/overview.tsx')).toContain('Every shade');
+    } finally {
+      rm('src/app/w');
+      rm('themes/nc');
+    }
+  }, 240_000);
+
+  it('remove takes away the empty folders the first add made, never one that was there', async () => {
+    await themeEditPreviewAdd(undefined, {
+      cwd,
+      path: 'src/app/design/review/tp',
+    });
+    expect(
+      JSON.parse(read('src/app/design/review/tp/theme-preview.json')).parents,
+    ).toBe(2);
+    await themeEditPreviewRemove(undefined, {
+      cwd,
+      path: 'src/app/design/review/tp',
+    });
+    expect(exists('src/app/design')).toBe(false);
+    fs.mkdirSync(path.join(cwd, 'src/app/kept'), {recursive: true});
+    try {
+      await themeEditPreviewAdd(undefined, {cwd, path: 'src/app/kept/x/tp'});
+      await themeEditPreviewRemove(undefined, {cwd, path: 'src/app/kept/x/tp'});
+      expect(exists('src/app/kept/x')).toBe(false);
+      expect(exists('src/app/kept')).toBe(true);
+    } finally {
+      rm('src/app/kept');
+    }
+  }, 240_000);
+
+  it("shows a dialog part inside an inline dialog, names an open popover, and drops a gone theme's Colors page", async () => {
+    await themeEditNew('gt', {
+      cwd,
+      like: 'neutral',
+      settings: {accent: 'teal'},
+    });
+    try {
+      await themeEditPreviewAdd(undefined, {
+        cwd,
+        theme: 'gt',
+        path: 'src/app/x1',
+      });
+      const components = read('src/app/x1/_pages/components.tsx');
+      expect(components).toMatch(
+        /<C\.Dialog [^>]*isOpen[^>]*isInline[^>]*>\s*<C\.DialogHeader/,
+      );
+      expect(components).toMatch(/<C\.Popover [\s\S]*?label="Popover example"/);
+      expect(exists('src/app/x1/_pages/colors.tsx')).toBe(true);
+      rm('themes/gt');
+      const r = await themeEditPreviewAdd(undefined, {cwd, path: 'src/app/x1'});
+      expect(r.data.notes.join(' ')).toContain(
+        'removed the Colors page: it showed the colors of gt, which is gone',
+      );
+      expect(exists('src/app/x1/_pages/colors.tsx')).toBe(false);
+      expect(read('src/app/x1/page.tsx')).not.toContain('_pages/colors');
+    } finally {
+      rm('src/app/x1');
+      rm('themes/gt');
+    }
+  }, 240_000);
+
+  it('remove refuses while a file of yours imports the pages, list names a folder add refuses, and made parents go anywhere', async () => {
+    await themeEditPreviewAdd(undefined, {cwd, path: 'src/app/x3'});
+    try {
+      write('src/app/x3/page.tsx', `${read('src/app/x3/page.tsx')}\n// mine\n`);
+      const edited = await refusal(() =>
+        themeEditPreviewRemove(undefined, {cwd, path: 'src/app/x3'}),
+      );
+      expect(edited.message + JSON.stringify(edited)).toContain(
+        'move src/app/x3/page.tsx out of src/app/x3/',
+      );
+      fs.renameSync(
+        path.join(cwd, 'src/app/x3/page.tsx'),
+        path.join(cwd, 'src/app/x3/copy.tsx'),
+      );
+      const r = await refusal(() =>
+        themeEditPreviewRemove(undefined, {cwd, path: 'src/app/x3'}),
+      );
+      expect(r.message).toContain(
+        'src/app/x3/copy.tsx imports the preview pages',
+      );
+      expect(exists('src/app/x3/_pages/overview.tsx')).toBe(true);
+    } finally {
+      rm('src/app/x3');
+    }
+    const list = await themeEditPreviewList({cwd, path: 'src/app/_hidden/tp'});
+    expect(list.data.notes.join(' ')).toContain(
+      'preview add --path src/app/_hidden/tp refuses this folder',
+    );
+    await themeEditPreviewAdd(undefined, {cwd, path: 'design/deep/tp'});
+    await themeEditPreviewRemove(undefined, {cwd, path: 'design/deep/tp'});
+    expect(exists('design')).toBe(false);
+  }, 240_000);
+
+  it('names the page template list the way this app runs the CLI, in JSON as in text', async () => {
+    const {formatCliCommand} =
+      await import('../../foundation/env/package-manager.mjs');
+    const want = formatCliCommand('template --list --type page', cwd);
+    const r = await runCli(
+      [
+        '--json',
+        'experimental',
+        'theme',
+        'preview',
+        'add',
+        '--template',
+        'nope',
+      ],
+      {cwd},
+    );
+    const out = JSON.parse(r.stdout);
+    const names = (out.suggestions ?? out.error?.suggestions ?? []).map(
+      (/** @type {any} */ x) => x.name,
+    );
+    const list = names.find((/** @type {string} */ n) =>
+      n.endsWith('template --list --type page'),
+    );
+    expect(list).toBe(want);
+    expect(list).not.toBe('astryx template --list --type page');
+  }, 120_000);
+
+  it("keeps a page the app's own code imports, for a page and for the whole preview", async () => {
+    await themeEditPreviewAdd(undefined, {cwd, path: 'src/app/r22'});
+    write(
+      'src/app/report/page.tsx',
+      "import Overview from '../r22/_pages/overview';\nexport default function R() { return <Overview />; }\n",
+    );
+    try {
+      const one = await refusal(() =>
+        themeEditPreviewRemove('overview', {cwd, path: 'src/app/r22'}),
+      );
+      expect(one.code).toBe('ERR_FILE_EXISTS');
+      expect(one.message).toContain(
+        'src/app/report/page.tsx imports the overview page',
+      );
+      expect(exists('src/app/r22/_pages/overview.tsx')).toBe(true);
+      const all = await refusal(() =>
+        themeEditPreviewRemove(undefined, {cwd, path: 'src/app/r22'}),
+      );
+      expect(all.message).toContain(
+        'src/app/report/page.tsx imports the preview pages',
+      );
+      expect(exists('src/app/r22/_pages/overview.tsx')).toBe(true);
+      // A page nothing imports still goes.
+      const r = await themeEditPreviewRemove('components', {
+        cwd,
+        path: 'src/app/r22',
+      });
+      expect(r.data.pages).not.toContain('components');
+    } finally {
+      rm('src/app/report');
+      rm('src/app/r22');
+    }
+  }, 180_000);
+
+  it('keeps pages any project file imports, anywhere and however written, and the route a file re-exports', async () => {
+    await themeEditPreviewAdd(undefined, {cwd, path: 'src/app/z1'});
+    write(
+      'components/lazy.tsx',
+      'export const Lazy = () => import(`../src/app/z1/_pages/components`);\n',
+    );
+    try {
+      const one = await refusal(() =>
+        themeEditPreviewRemove('components', {cwd, path: 'src/app/z1'}),
+      );
+      expect(one.message).toContain(
+        'components/lazy.tsx imports the components page',
+      );
+      rm('components');
+      write('src/app/again/page.tsx', "export {default} from '../z1/page';\n");
+      const all = await refusal(() =>
+        themeEditPreviewRemove(undefined, {cwd, path: 'src/app/z1'}),
+      );
+      expect(all.message).toContain(
+        'src/app/again/page.tsx imports the preview pages',
+      );
+      rm('src/app/again');
+      // Past the files it reads, nothing is removed, and the refusal says so.
+      setImporterScanMax(1);
+      try {
+        const big = await refusal(() =>
+          themeEditPreviewRemove(undefined, {cwd, path: 'src/app/z1'}),
+        );
+        expect(big.message).toContain('too many to check');
+        expect(exists('src/app/z1/page.tsx')).toBe(true);
+      } finally {
+        setImporterScanMax(null);
+      }
+      // A temp file a killed command left goes with the full remove.
+      write('src/app/z1/.page.tsx.astryx-999999-abc123.tmp', 'x');
+      await themeEditPreviewRemove(undefined, {cwd, path: 'src/app/z1'});
+      expect(exists('src/app/z1')).toBe(false);
+    } finally {
+      rm('components');
+      rm('src/app/again');
+      rm('src/app/z1');
+    }
+  }, 240_000);
+
+  it('adds exactly a default page named with --template, or says it is there, and tells a hand-edited route to move out', async () => {
+    await themeEditPreviewAdd(undefined, {cwd, path: 'src/app/z4'});
+    try {
+      await themeEditPreviewRemove('overview', {cwd, path: 'src/app/z4'});
+      await themeEditPreviewRemove('components', {
+        cwd,
+        path: 'src/app/z4',
+      }).catch(() => null);
+      const r = await themeEditPreviewAdd(undefined, {
+        cwd,
+        template: 'overview',
+        path: 'src/app/z4',
+      });
+      expect(r.data.added).toEqual(['overview']);
+      const again = await refusal(() =>
+        themeEditPreviewAdd(undefined, {
+          cwd,
+          template: 'overview',
+          path: 'src/app/z4',
+        }),
+      );
+      expect(again.code).toBe('ERR_FILE_EXISTS');
+      expect(again.message).toContain(
+        'The overview page is already in the preview',
+      );
+      await themeEditPreviewAdd(undefined, {
+        cwd,
+        template: 'login',
+        path: 'src/app/z4',
+      });
+      write('src/app/z4/page.tsx', `${read('src/app/z4/page.tsx')}\n// mine\n`);
+      const edited = await refusal(() =>
+        themeEditPreviewRemove('login', {cwd, path: 'src/app/z4'}),
+      );
+      expect(edited.message + JSON.stringify(edited)).toContain(
+        'move src/app/z4/page.tsx out of src/app/z4/',
+      );
+    } finally {
+      rm('src/app/z4');
+    }
+  }, 240_000);
 });

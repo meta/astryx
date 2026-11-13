@@ -18,7 +18,10 @@ import {
   makeLinkedFixture,
   removeLinkedFixture,
 } from '../../test-utils/linked-fixture.mjs';
-import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
+import {
+  FIXTURE_PACKAGES,
+  writeFixtureBaseTheme,
+} from '../../test-utils/base-theme-fixture.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
 
 vi.mock('./_preview.mjs', async importOriginal =>
@@ -216,6 +219,47 @@ describe('corrected new commands keep every option', () => {
     },
     120_000,
   );
+});
+
+describe('a guessed base', () => {
+  it('is the nearest installed base, and the corrected new keeps every option', async () => {
+    const withBase = makeLinkedFixture(
+      'astryx-theme-hunt16-base-',
+      FIXTURE_PACKAGES,
+    );
+    try {
+      writeFixtureBaseTheme(withBase, 'neutral');
+      const r = await runCli(
+        [
+          '--json',
+          'experimental',
+          'theme',
+          'editor',
+          'new',
+          'y',
+          '--like',
+          'neutralx',
+          '--accent',
+          'red',
+          '--mode',
+          'dark-only',
+        ],
+        withBase,
+      );
+      expect(r.status).toBe(1);
+      const names = JSON.parse(r.stdout).suggestions.map(
+        (/** @type {any} */ x) => x.name,
+      );
+      expect(
+        names.some((/** @type {string} */ n) =>
+          / new y --like neutral --accent red --mode dark-only$/.test(n),
+        ),
+        names.join('\n'),
+      ).toBe(true);
+    } finally {
+      removeLinkedFixture(withBase);
+    }
+  }, 120_000);
 });
 
 describe('how changes by an amount from the theme it reads', () => {
