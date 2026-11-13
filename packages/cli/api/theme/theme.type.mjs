@@ -38,7 +38,8 @@
  * astryx --json theme build <file> --check
  * @typedef {object} ThemeBuildCheckResponse
  * @property {'theme.build.check'} type
- * @property {{name: string, upToDate: boolean, stale: Array<{path: string, reason: 'missing' | 'outdated'}>, checked: string[]}} data
+ * @property {{name: string, upToDate: boolean, stale: Array<{path: string, reason: 'missing' | 'outdated'}>, checked: string[], code?: 'ERR_THEME_STALE'}} data
+ *   `code` is set when the outputs are stale or missing (exit 1).
  */
 
 /**
@@ -79,7 +80,7 @@
  * @typedef {object} ThemeListResponse
  * @property {'theme.list'} type
  * @property {ThemeListEntry[]} data
- * @property {{unmigratedCopies: ThemeUnmigratedCopy[]}} [meta] descriptor-less released copies that are not listed as themes
+ * @property {{unmigratedCopies: ThemeUnmigratedCopy[], skippedThemes?: Array<{slug: string, path: string, reason: string}>}} [meta] descriptor-less released copies that are not listed as themes; local theme folders left out because they are broken
  */
 
 /**
@@ -99,7 +100,10 @@
  * @property {'theme.app'} type
  * @property {string} [package] npm package that owns the theme `theme add`
  *   added. Omitted for a local theme, and for remove and use.
- * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean}}} data
+ * `notes` is present only when the command did more than its change says:
+ * it chose between a local and a package theme with one slug, replaced a
+ * recorded owner, or dropped a recorded theme whose source is gone.
+ * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean}, notes?: string[]}} data
  */
 
 /**
@@ -109,7 +113,10 @@
  * `maintained` describes the selected source theme. The ejected descriptor is
  * always written with `maintained: false` because the app owns the fork.
  * `package` is the source selector; bundled themes retain `@astryxdesign/cli`.
- * @property {{slug: string, displayName: string, maintained: boolean, package: string, outputDir: string, entry: string, exportName: string, files: string[]}} data
+ * `missingPackages` names the packages the fork imports that the app does not
+ * declare (empty when none); `installCommand` installs them, and is null when
+ * none are missing or the package manager is undetermined.
+ * @property {{slug: string, displayName: string, maintained: boolean, package: string, outputDir: string, entry: string, exportName: string, files: string[], missingPackages: string[], installCommand: string | null}} data
  */
 
 /**
@@ -118,7 +125,11 @@
  * re-run, and an edited template is the consumer's file to keep.
  * @typedef {object} ThemeTemplateResponse
  * @property {'theme.template'} type
- * @property {{path: string, written: boolean, reason: 'exists' | null}} data
+ * @property {{path: string, written: boolean, reason: 'exists' | null, overwritable?: boolean, alternative?: string | null}} data
+ *   When the file was left as is, `overwritable` says whether `--overwrite`
+ *   would replace it (a copy of the template or a theme source, outside a
+ *   theme the editor made), and `alternative` is a free path for the template
+ *   when it would not.
  */
 
 /**

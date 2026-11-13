@@ -8,10 +8,6 @@
     "data-astryx-dictation-interim"
   ],
   "packages/core/src/Chat/useTriggerMenu.tsx": ["data-astryx-trigger-anchor"],
-  "packages/core/src/CheckboxInput/CheckboxInput.tsx": [
-    "data-astryx-press",
-    "data-astryx-press"
-  ],
   "packages/core/src/ClickableCard/ClickableCard.tsx": [
     "data-astryx-press",
     "data-astryx-press"
@@ -59,10 +55,6 @@
   "packages/core/src/Popover/usePopover.tsx": [
     "data-astryx-popover-fallback-close",
     "data-astryx-popover-fallback-close"
-  ],
-  "packages/core/src/RadioList/RadioListItem.tsx": [
-    "data-astryx-press",
-    "data-astryx-press"
   ],
   "packages/core/src/SelectableCard/SelectableCard.tsx": [
     "data-astryx-press",
@@ -114,9 +106,6 @@
   "packages/core/src/theme/Theme.tsx": [
     "data-astryx-id",
     "data-astryx-id",
-    "data-astryx-id",
-    "data-astryx-id",
-    "data-astryx-theme-prose",
     "data-astryx-theme-prose"
   ],
   "packages/core/src/theme/syntax/SyntaxTheme.tsx": [

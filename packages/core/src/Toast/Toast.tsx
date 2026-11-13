@@ -43,7 +43,7 @@ import type {
   ToastDismissReason,
   ToastContentRenderFn,
 } from './types';
-import {themeProps} from '../utils/themeProps';
+import {pickDataAttributes, themeProps} from '../utils/themeProps';
 import {useToastGesture, type ToastGestureDirection} from './useToastGesture';
 import {
   registerEnglishFallback,
@@ -226,6 +226,7 @@ export function ToastSurface({
   announce,
   isRenderedBodyAnnouncement = false,
   hasEntryStarted = false,
+  ...rest
 }: ToastSurfaceProps) {
   const t = useComponentTranslator();
   const isError = type === 'error';
@@ -426,6 +427,7 @@ export function ToastSurface({
 
   return (
     <div
+      {...pickDataAttributes(rest)}
       ref={rootRef}
       role={isLiveRegion ? (isError ? 'alert' : 'status') : undefined}
       aria-live={isLiveRegion ? (isError ? 'assertive' : 'polite') : undefined}
