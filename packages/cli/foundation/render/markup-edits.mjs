@@ -45,8 +45,11 @@ export function textRuns(markup) {
   return runs;
 }
 
-/** @param {string} text */
-const clip = text => (text.length > MAX_TEXT ? `${text.slice(0, MAX_TEXT - 3)}...` : text);
+/**
+ * A piece of text as a change shows it: cut to MAX_TEXT characters.
+ * @param {string} text
+ */
+export const clip = text => (text.length > MAX_TEXT ? `${text.slice(0, MAX_TEXT - 3)}...` : text);
 
 /**
  * @typedef {object} TextEdit

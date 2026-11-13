@@ -19,7 +19,6 @@ import {
 } from '../../foundation/render/render-page.mjs';
 import {
   RENDER_FORMAT,
-  packageName,
   readSourceBlock,
   recordedText,
   renderedHeadOf,
@@ -27,7 +26,8 @@ import {
   sha256,
 } from '../../foundation/render/source-block.mjs';
 import {decode} from '../../foundation/render/html-reader.mjs';
-import {locate, textEdits, textRuns} from '../../foundation/render/markup-edits.mjs';
+import {clip, locate, textEdits, textRuns} from '../../foundation/render/markup-edits.mjs';
+import {isPackageName} from '../../foundation/identity/provider-identity.mjs';
 import {cliCommand} from '../../foundation/render/file-header.mjs';
 import {shellArg} from '../../foundation/text/shell-arg.mjs';
 import {isValidSemver} from '../../foundation/env/semver.mjs';
@@ -409,7 +409,7 @@ function packagesOf(source) {
   const recorded = source.packages;
   if (!recorded || typeof recorded !== 'object' || Array.isArray(recorded)) return null;
   return Object.entries(recorded)
-    .filter(([name, version]) => packageName(name) && isValidSemver(version))
+    .filter(([name, version]) => isPackageName(name) && isValidSemver(version))
     .map(([name, version]) => `${name}@${version}`);
 }
 
@@ -437,7 +437,7 @@ function pageChanges(source, html, modules) {
   if (!markupEdited && !titleEdited && !stylesEdited) return {edited: false, ...styles};
   const {edits, more} = markupEdited ? textEdits(text?.runs ?? [], textRuns(now ?? '')) : {edits: [], more: 0};
   // A title that changed with the heading it comes from is one change, not two.
-  const titleEdit = {was: /** @type {string} */ (text?.title), now: titleNow};
+  const titleEdit = {was: clip(/** @type {string} */ (text?.title)), now: titleNow === null ? null : clip(titleNow)};
   const titleAgain = edits.some(edit => edit.was === titleEdit.was && edit.now === titleEdit.now);
   const all = [...(titleEdited && !titleAgain ? [titleEdit] : []), ...edits];
   return {

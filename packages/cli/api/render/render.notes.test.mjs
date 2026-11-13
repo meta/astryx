@@ -300,6 +300,26 @@ describe('render --reverse says what changed after the render', () => {
     expect(refused?.suggestions?.[0]?.name).toMatch(/^--out 'restored(-\d+)?\/a; touch pwned\/page\.tsx'$/);
   });
 
+  it('reads a title that looks like tags as text: an untouched file is not edited, and old readers find the block', async () => {
+    const title = '<style>x</style><title>y</title> & "q"';
+    await render('src/report.tsx', {cwd: dir, out: 'tags.html', title});
+    const tags = read('tags.html');
+    const note = tags.slice(tags.indexOf('<!--'), tags.indexOf('-->') + 3);
+    expect(note).not.toMatch(/<style|<title|<script/i);
+    expect(note).toContain('The page was rendered with --title; step 1 prints the command with it.');
+    // The block a released CLI finds: the last opening tag, up to the next closing one.
+    const released = [...tags.matchAll(/<script\s+type=["']application\/x-astryx-source["'][^>]*>([\s\S]*?)<\/script>/gi)].at(-1);
+    expect(() => JSON.parse(released?.[1] ?? '')).not.toThrow();
+    const back = /** @type {any} */ (await render('tags.html', {cwd: dir, reverse: true, out: 'tags-back/report.tsx'}));
+    expect(back.data).toMatchObject({edited: false, stylesEdited: false, title});
+    const {stdout} = await runCli(['experimental', 'render', '--reverse', 'tags.html', '--out', 'tags-back-2/report.tsx'], dir);
+    expect(stdout).toContain(`--out tags.html --title '<style>x</style><title>y</title> & "q"'`);
+    // A long title edit is clipped like any other.
+    put('long-title.html', tags.replace(/<title>[^<]*<\/title>/, `<title>${'w'.repeat(400)}</title>`));
+    const long = /** @type {any} */ (await render('long-title.html', {cwd: dir, reverse: true, out: 'long-back/report.tsx'}));
+    expect(long.data.edits[0].now).toHaveLength(300);
+  });
+
   it('keeps every path in the note relative to the project: no folder above it, user or host name', () => {
     expect(html).not.toContain(path.dirname(dir));
     expect(html).not.toContain(os.homedir());

@@ -58,7 +58,10 @@ export function headerNote(facts) {
   const more = facts.files.length > MAX_LISTED ? `, and ${facts.files.length - MAX_LISTED} more` : '';
   const versions = Object.entries(facts.packages).map(([name, version]) => `${name} ${version}`);
   const core = facts.packages['@astryxdesign/core'];
-  const title = facts.title === undefined ? '' : ` --title ${shellArg(facts.title)}`;
+  // A title with < or > stays out of the note, which other tools read as
+  // HTML; step 1 prints the command with it.
+  const quotable = facts.title !== undefined && !/[<>]/.test(facts.title);
+  const title = quotable ? ` --title ${shellArg(/** @type {string} */ (facts.title))}` : '';
   const lines = [
     `Rendered by Astryx: astryx experimental render, @astryxdesign/cli ${facts.cli ?? '(version unknown)'}, render format ${facts.format}.`,
     'This is one static file. It runs no script and loads nothing from the network.',
@@ -78,6 +81,7 @@ export function headerNote(facts) {
     '  3. Render again. A render replaces a file that a render wrote. Step 1 prints this',
     '     command with the folder it wrote:',
     `       ${run} experimental render ${shellArg(facts.restored)} --out ${file}${title}`,
+    ...(facts.title !== undefined && !quotable ? ['     The page was rendered with --title; step 1 prints the command with it.'] : []),
     `If you have the project, edit ${facts.page} there instead, and render it in the same way.`,
     "Inside a project, the project's own CLI answers these commands. A project CLI older than",
     `${facts.cli ?? 'the one that rendered this file'} writes the page without this note; to keep the note, update that CLI first:`,
@@ -101,7 +105,7 @@ export function headerNote(facts) {
     'The source is in the script block at the end of this file. Keep it: without it,',
     'step 1 can rebuild only the text and the layout from the markup.',
   ];
-  return `<!--\n${lines.map(line => (line ? `  ${commentSafe(line)}` : '')).join('\n')}\n-->`;
+  return `<!--\n${lines.map(line => (line ? `  ${commentSafe(line)}` : '')).join('\n')}\n-->`.replace(/<(?=\/?script)/gi, '&lt;');
 }
 
 /**

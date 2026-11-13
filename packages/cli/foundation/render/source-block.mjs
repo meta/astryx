@@ -51,12 +51,6 @@ export const RENDER_FORMAT = 1;
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 
 /**
- * Whether a received name is an npm package name.
- * @param {string} name
- */
-export const packageName = name => /^(?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*$/.test(name);
-
-/**
  * The data block for a page's files.
  * @param {string} entry the page's file name
  * @param {{path: string, bytes: Buffer}[]} files the page first
@@ -87,17 +81,22 @@ export function sourceBlock(entry, files, record = {}) {
 }
 
 /**
- * Every embedded-source block in a file, in order.
+ * Every embedded-source block in a file's body, in order, with its index in
+ * the whole file. The note in <head> may quote a title with any text, so the
+ * search starts at <body>.
  * @param {string} html
  */
-const blocksIn = html => [
-  ...html.matchAll(
-    new RegExp(
-      `<script\\s+type=["']${SOURCE_TYPE.replace(/[/+.-]/g, c => `\\${c}`)}["'][^>]*>([\\s\\S]*?)</script>`,
-      'gi',
+const blocksIn = html => {
+  const start = Math.max(0, html.search(/<body\b/i));
+  return [
+    ...html.slice(start).matchAll(
+      new RegExp(
+        `<script\\s+type=["']${SOURCE_TYPE.replace(/[/+.-]/g, c => `\\${c}`)}["'][^>]*>([\\s\\S]*?)</script>`,
+        'gi',
+      ),
     ),
-  ),
-];
+  ].map(m => Object.assign(m, {index: (m.index ?? 0) + start}));
+};
 
 /**
  * Read the embedded source from a rendered file.
@@ -110,7 +109,7 @@ export function readSourceBlock(html) {
   const m = blocksIn(html).at(-1);
   if (!m) {
     // An opening tag with no block after it: the file ends inside the block.
-    return html.includes(`<script type="${SOURCE_TYPE}">`)
+    return html.slice(Math.max(0, html.search(/<body\b/i))).includes(`<script type="${SOURCE_TYPE}">`)
       ? {found: true, damaged: 'its embedded source is cut short: the file ends inside it'}
       : {found: false};
   }
@@ -178,7 +177,8 @@ export function renderedMarkupOf(html) {
  */
 export function renderedHeadOf(html) {
   const body = html.search(/<body\b/i);
-  const head = body < 0 ? html : html.slice(0, body);
+  // The note is a comment and may quote a title that looks like a tag.
+  const head = (body < 0 ? html : html.slice(0, body)).replace(/<!--[\s\S]*?-->/g, '');
   return {
     title: /<title>([\s\S]*?)<\/title>/.exec(head)?.[1] ?? null,
     style: /<style>[\s\S]*?<\/style>/.exec(head)?.[0] ?? null,
