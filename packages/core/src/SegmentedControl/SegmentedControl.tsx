@@ -336,7 +336,8 @@ export function SegmentedControl({
   const trackRef = useRef<HTMLDivElement | null>(null);
   // Every pointer's press is tracked. A drag from the selected segment
   // carries the lens, and the lift commits the segment nearest the pointer.
-  // A lift outside the control commits nothing. The motion and the tracking
+  // A lift off the control commits the segment under the pointer's
+  // horizontal position. The motion and the tracking
   // come with the shared touch runtime, which loads after first paint. Until
   // then a tap or a click selects, and the selection moves at once.
   const touchRuntime = useTouchRuntime();
