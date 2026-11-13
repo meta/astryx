@@ -136,10 +136,9 @@ and remains available through explicit Core package selection.
   formatters.** `emit` accepts a renderer-produced `Block` and nothing else, so
   a stray string cannot reach stdout. Output is plain ASCII: no colour, no TTY
   detection, no width wrapping, byte-for-byte identical printed or piped. A
-  projection may shorten a prose field to its first sentence, and may leave out
-  a field that another printed field already states; a command's `--verbose`,
-  where it has one, prints such a field whole, and `--json` carries every
-  field.
+  projection may shorten a prose field to its first sentence; a command's
+  `--verbose`, where it has one, prints such a field whole, and `--json` carries
+  every field.
 - **INV5 — Text field names mirror JSON keys one to one.** The two views cannot
   drift, and every field stays greppable.
 - **INV6 — One command, one file.** A command is
