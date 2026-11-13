@@ -13,7 +13,7 @@
 import {parse as parseModule} from '@babel/parser';
 import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
-import {coversProperty, longhandsOf} from './_css.mjs';
+import {coversProperty, cssNumber, longhandsOf} from './_css.mjs';
 import postcss from 'postcss';
 import {createRequire} from 'node:module';
 import * as path from 'node:path';
@@ -2388,7 +2388,10 @@ export function compileTheme(ctx, data, base) {
     /** @type {Map<string, Map<string, Set<string>>>} */
     const narrow = new Map();
     /** A side as CSS reads it inside calc(): a bare 0 is no length. @param {string} v */
-    const length = v => (/^[+-]?(0+\.?0*|\.0+)$/.test(v) ? '0px' : v);
+    const length = v => {
+      const n = cssNumber(v);
+      return n && n.unit === '' && n.value === 0 ? '0px' : v;
+    };
     for (const {target, s, list} of padQueue.values()) {
       const prefix = /** @type {string} */ (padVars(target));
       const owner = prefix.slice('--astryx-'.length, -'-padding'.length);
@@ -2450,13 +2453,31 @@ export function compileTheme(ctx, data, base) {
           if (b != null) rtl[`${prefix}-${k}`] = b;
         }
       }
-      // Four equal sides on the part's own base are its whole padding, the
-      // one variable Core reads after a padding a parent passes down (a
-      // nested section keeps following its parent's); a narrower selector
-      // writes the sides, which out-rank the base's.
-      const vals = Object.values(plain);
-      if (!scoped && vals.length === 4 && vals.every(v => v === vals[0]))
-        plain = {[prefix]: vals[0]};
+      // On the part's own base, a side that is the same in both
+      // directions is written as its logical padding property, which Core
+      // lowers to the variables together with the base theme's and the own
+      // source's padding in the same block: the later wins by key, and four
+      // equal sides come out as the whole padding (a nested section keeps
+      // following its parent's), whatever sides the base theme set.
+      // Only the plain rule: a variant's or a state's rule written that way
+      // would come out as the whole padding alone, which the base's own side
+      // variables out-rank.
+      const lowered = target === owner && !s.when && !s.state;
+      if (lowered)
+        plain = Object.fromEntries(
+          Object.entries(plain).map(([k, v]) => [
+            camel(`padding-${k.slice(prefix.length + 1)}`),
+            v,
+          ]),
+        );
+      // A part drawn by another (a clickable card) writes its sides for each
+      // direction too, so a direction rule the card's own base has never
+      // out-ranks it.
+      if (target !== owner)
+        for (const [k, v] of Object.entries(plain)) {
+          ltr[k] ??= v;
+          rtl[k] ??= v;
+        }
       if (scoped) {
         const sel = narrowSelector(target, s);
         if (sel) {
@@ -2489,16 +2510,79 @@ export function compileTheme(ctx, data, base) {
     // which comes later and so wins).
     for (const [owner, bySel] of narrow) {
       const b = ((theme.components[owner] ??= {}).base ??= {});
+      // The variables Core writes on the part's own rule, from the base
+      // theme's, the settings' and the own source's padding there: the
+      // reset leaves those alone, so the part's own value always holds.
+      const own = basePaddingVars(owner, b);
       for (const [sel, names] of bySel) {
         /** @type {Record<string, string>} */
         const reset = {};
-        for (const name of names) if (!(name in b)) reset[name] = 'initial';
+        for (const name of names)
+          if (!(name in b) && !own.has(name)) reset[name] = 'initial';
         if (Object.keys(reset).length) {
           const key = `:where(${sel} *)`;
           b[key] = {...(b[key] ?? {}), ...reset};
         }
       }
     }
+  };
+  /**
+   * The padding variables Core writes on a part's plain rule, as Core lowers
+   * the padding properties there (the base theme's, then the settings',
+   * then the own source's, later keys winning): the whole padding when the
+   * four sides are equal, else each side given (an inline pair as one).
+   * @param {string} owner @param {Record<string, any>} mine
+   * @returns {Set<string>}
+   */
+  const basePaddingVars = (owner, mine) => {
+    const prefix = `--astryx-${owner}-padding`;
+    /** @type {Array<[string, string]>} */
+    const keys = [];
+    const fromBase = /** @type {any} */ (base).components?.[owner]?.base ?? {};
+    for (const [k, v] of Object.entries(fromBase))
+      if (typeof v === 'string') keys.push([k, v]);
+    for (const [k, v] of Object.entries(mine))
+      if (typeof v === 'string') keys.push([k, v]);
+    try {
+      for (const [k, v] of ownPartTokens(ctx.project.cwd, data.name, owner))
+        if (v != null && !k.startsWith('--')) keys.push([camel(k), v]);
+    } catch {
+      // No own source.
+    }
+    /** @type {Record<string, string | undefined>} */
+    const r = {};
+    for (const [k, v] of keys) {
+      const w = splitTop(v.trim(), ' ');
+      if (k === 'padding') {
+        r.bs = w[0];
+        r.in = w[1] ?? w[0];
+        r.be = w[2] ?? w[0];
+        delete r.is;
+        delete r.ie;
+      } else if (k === 'paddingBlock') {
+        r.bs = w[0];
+        r.be = w[1] ?? w[0];
+      } else if (k === 'paddingInline') {
+        if (w.length > 1) [r.is, r.ie] = w;
+        else r.in = w[0];
+      } else if (k === 'paddingTop' || k === 'paddingBlockStart') r.bs = v;
+      else if (k === 'paddingBottom' || k === 'paddingBlockEnd') r.be = v;
+      else if (k === 'paddingInlineStart') r.is = v;
+      else if (k === 'paddingInlineEnd') r.ie = v;
+    }
+    const out = new Set(Object.keys(mine).filter(k => k.startsWith(prefix)));
+    const is = r.is ?? r.in;
+    const ie = r.ie ?? r.in;
+    if (is != null && is === ie && r.bs === is && r.be === is) out.add(prefix);
+    else {
+      if (r.is != null || r.ie != null) {
+        if (is != null) out.add(`${prefix}-inline-start`);
+        if (ie != null) out.add(`${prefix}-inline-end`);
+      } else if (r.in != null) out.add(`${prefix}-inline`);
+      if (r.bs != null) out.add(`${prefix}-block-start`);
+      if (r.be != null) out.add(`${prefix}-block-end`);
+    }
+    return out;
   };
   /**
    * The selector a narrower padding scope is written with (a clickable

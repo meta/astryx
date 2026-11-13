@@ -3582,3 +3582,63 @@ describe('parts37', () => {
     });
   });
 });
+
+describe('parts38', () => {
+  /** @param {string} selector */
+  const ruleOf = selector => {
+    const css = read('p.css');
+    const i = css.indexOf(`${selector} {`);
+    return i < 0 ? '' : css.slice(i, css.indexOf('}', i));
+  };
+
+  it("writes a card padding so Core lowers it with the base theme's: the later wins", async () => {
+    // The base theme (neutral here, as every bundled theme) gives the card
+    // padding var(--spacing-3); the editor's padding must replace it.
+    await themeEditSet('p', 'padding', '20px', {cwd, on: 'card'});
+    const rule = ruleOf('.astryx-card');
+    expect(rule).toMatch(/--astryx-card-padding:\s*20px/);
+    expect(rule).not.toMatch(/--astryx-card-padding:\s*var\(--spacing-3\)/);
+    await themeEditUndo('p', {cwd, thing: 'padding', on: 'card'});
+  });
+
+  it('lets a clickable card win over a card physical side in each direction', async () => {
+    await themeEditSet('p', 'padding-left', '30px', {cwd, on: 'card'});
+    await themeEditSet('p', 'padding', '7px', {cwd, on: 'clickable-card'});
+    const css = read('p.css');
+    for (const dir of ['ltr', 'rtl']) {
+      const card = css.indexOf(`.astryx-card:dir(${dir}) {`);
+      const clickable = css.indexOf(`.astryx-clickable-card:dir(${dir}) {`);
+      expect(clickable, dir).toBeGreaterThan(card);
+      expect(ruleOf(`.astryx-clickable-card:dir(${dir})`), dir).toMatch(
+        /--astryx-card-padding-inline-start:\s*7px/,
+      );
+    }
+    await themeEditUndo('p', {cwd, thing: 'padding', on: 'clickable-card'});
+    await themeEditUndo('p', {cwd, thing: 'padding-left', on: 'card'});
+  });
+
+  it('writes a zero with an exponent as 0px, and names the default initial means', async () => {
+    await themeEditSet('p', 'padding', '0e0', {cwd, on: 'drawer'});
+    expect(ruleOf('.astryx-drawer')).toMatch(/--astryx-drawer-padding:\s*0px/);
+    await themeEditUndo('p', {cwd, thing: 'padding', on: 'drawer'});
+    const r = await themeEditSet('p', 'padding', 'initial', {cwd, on: 'card'});
+    expect(r.data.notes.join(' ')).toMatch(
+      /initial means card's own default padding from Core/,
+    );
+    await themeEditUndo('p', {cwd, thing: 'padding', on: 'card'});
+  });
+
+  it('refuses a hand-edited padding on another part when this command sets padding too', async () => {
+    await themeEditNew('h38', {cwd});
+    await themeEditSet('h38', 'padding', '3px', {cwd, on: 'segmented-control'});
+    const file = path.join(cwd, 'themes', 'h38', 'h38.settings.json');
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    data.settings[data.settings.length - 1].value = '2px 6px';
+    fs.writeFileSync(file, JSON.stringify(data, null, 2));
+    const r = await refusal(() =>
+      themeEditSet('h38', 'padding', '4px', {cwd, on: 'card'}),
+    );
+    expect(r.message).toContain('2px 6px');
+    fs.rmSync(path.join(cwd, 'themes', 'h38'), {recursive: true, force: true});
+  });
+});

@@ -842,7 +842,7 @@ export async function themeEditSet(theme, thing, value, options = {}) {
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
- * @param {string} [skip]
+ * @param {string | {thing: string, on?: string, when?: string, state?: string, mode?: string}} [skip]
  */
 function refuseStoredTokens(ctx, slug, data, skip) {
   const bad = storedProblems(ctx, slug, data, skip);
@@ -986,7 +986,14 @@ async function changeOnce(sub, slug, thing, value, options, seen) {
   const ctx = await context(cwd);
   // An undo of one setting only removes it, so it never waits on the
   // others being fixed.
-  if (sub !== 'undo') refuseStoredTokens(ctx, slug, data, thing);
+  if (sub !== 'undo')
+    refuseStoredTokens(ctx, slug, data, {
+      thing,
+      on: options.on,
+      when: options.when,
+      state: options.state,
+      mode: options.mode,
+    });
   const flags = {
     on: options.on,
     when: options.when,

@@ -506,6 +506,39 @@ async function buildPartData(project) {
   };
 }
 
+/**
+ * The value Core falls back to where its stylesheet reads a variable
+ * (`var(--astryx-card-padding, var(--spacing-4))` gives `var(--spacing-4)`),
+ * or null when it gives none.
+ * @param {any} project
+ * @param {string} name
+ * @returns {string | null}
+ */
+export function coreFallback(project, name) {
+  /** @type {string} */
+  let css;
+  try {
+    css = fs.readFileSync(
+      project.req.resolve('@astryxdesign/core/astryx.css'),
+      'utf8',
+    );
+  } catch {
+    return null;
+  }
+  const at = css.indexOf(`var(${name},`);
+  if (at < 0) return null;
+  let depth = 0;
+  const from = at + `var(${name},`.length;
+  for (let j = from; j < css.length; j++) {
+    if (css[j] === '(') depth++;
+    else if (css[j] === ')') {
+      if (depth === 0) return css.slice(from, j).trim();
+      depth--;
+    }
+  }
+  return null;
+}
+
 /** @type {Map<string, Set<string>>} */
 const calcCache = new Map();
 

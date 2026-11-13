@@ -33,7 +33,7 @@ import {
   propertyGrammar,
   takesPercentage,
 } from './_css.mjs';
-import {calcVars, multipliedTokens} from './_parts.mjs';
+import {calcVars, coreFallback, multipliedTokens} from './_parts.mjs';
 import {
   AUTO_SPREAD,
   COLOR_PROP_PARTS,
@@ -60,6 +60,7 @@ import {
   familyOf,
   wordTable,
   WRAPPED_PARTS,
+  CARD_LIKE,
 } from './_tables.mjs';
 import {
   COLOR_NAMES,
@@ -507,10 +508,22 @@ const COLOR_DIAL_WORDS = (() => {
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
- * @param {string} [skip]
+ * @param {string | {thing: string, on?: string, when?: string, state?: string, mode?: string}} [skip]
  * @returns {Array<{setting: import('./_settings.mjs').Setting, why: string, scope?: boolean}>} every saved setting the editor no longer accepts
  */
 export function storedProblems(ctx, slug, data, skip = '') {
+  // The setting the command replaces (its thing in the same scope); a
+  // setting of the same thing elsewhere is still checked.
+  const skipThing = typeof skip === 'string' ? skip : skip.thing;
+  /** @param {import('./_settings.mjs').Setting} s */
+  const replaced = s =>
+    typeof skip === 'string'
+      ? s.thing === skip
+      : s.thing === skip.thing &&
+        (s.on ?? '') === (skip.on ?? '') &&
+        (s.when ?? '') === (skip.when ?? '') &&
+        (s.state ?? '') === (skip.state ?? '') &&
+        (s.mode ?? '') === (skip.mode ?? '');
   /** @type {Array<{setting: import('./_settings.mjs').Setting, why: string, scope?: boolean}>} */
   const found = [];
   const TOKENS = ctx.project.core.tokenDefaults;
@@ -528,7 +541,7 @@ export function storedProblems(ctx, slug, data, skip = '') {
     ...PALETTE_DIALS,
   ];
   for (const s of data.settings) {
-    if (s.thing === skip) continue;
+    if (s.thing === skipThing) continue;
     /** @param {string} why */
     const scope = why => ({setting: s, why, scope: true});
     const problem = (() => {
@@ -589,7 +602,7 @@ export function storedProblems(ctx, slug, data, skip = '') {
   // a hand edit set would refuse is reported, never built, as compile does.
   const scoped = new Set(found.map(f => f.setting));
   for (const s of data.settings) {
-    if (s.thing === skip || scoped.has(s)) continue;
+    if (replaced(s) || scoped.has(s)) continue;
     if (!(
       s.source === 'property' ||
       (s.source === 'dial' && s.thing === 'font')
@@ -616,7 +629,7 @@ export function storedProblems(ctx, slug, data, skip = '') {
     }
   }
   for (const s of data.settings) {
-    if (s.source !== 'token' || s.thing === skip || !(s.thing in TOKENS))
+    if (s.source !== 'token' || s.thing === skipThing || !(s.thing in TOKENS))
       continue;
     // A var() a hand edit put in that names no design token reads nothing,
     // as set refuses it.
@@ -3168,6 +3181,27 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
     s.source = 'property';
     s.thing = prop;
     if (unset) return s;
+    // initial and unset leave a part's padding variables without a value:
+    // the part takes Core's own default, which the result names.
+    if (/^padding/.test(prop) && /^(initial|unset)$/i.test(v.trim()) && s.on) {
+      const owner = (ctx.derived?.[s.on] ?? []).some(
+        d => d.property === 'padding' && d.expand,
+      )
+        ? s.on
+        : CARD_LIKE.includes(s.on)
+          ? 'card'
+          : null;
+      const fallback = owner
+        ? coreFallback(ctx.project, `--astryx-${owner}-padding`)
+        : null;
+      if (fallback) {
+        const token = /^var\((--[a-z0-9-]+)\)$/i.exec(fallback)?.[1];
+        const px = token
+          ? lengthPx(String(ctx.project.core.tokenDefaults?.[token] ?? ''))
+          : lengthPx(fallback);
+        s.note = `${v.trim()} means ${s.on}'s own default padding from Core: ${fallback}${px != null ? ` (${px}px)` : ''}`;
+      }
+    }
     // A part whose Core box reads this property's variable inside calc()
     // (a composer's or a menu's padding in its corners): one length is all
     // that works there, whether a length, a variable, or calc(), min(),
