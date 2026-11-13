@@ -26,7 +26,7 @@ export const doc = {
     'replacement on) answers to the Core name in detail, batch, and list views; use ' +
     '--package @astryxdesign/core for the original. With --json, a detail result, each ' +
     "batch row's detail, and a list result carry data.theme: the configured theme's name and the custom values it adds " +
-    'by component and prop (null without a theme), the same values the text marks with *.',
+    'by component (null without a theme), the same values the text marks with *.',
   fn: 'component',
   args: [
     {

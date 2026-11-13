@@ -26,7 +26,7 @@ export const doc = {
     'turns replacement on) answers to the Core name in detail, batch, and list ' +
     "results; use options.package '@astryxdesign/core' for the original. A detail result, " +
     "each batch row's detail, and a list result carry data.theme: the configured theme's name and the custom " +
-    'values it adds by component and prop (null without a theme), the values the ' +
+    'values it adds by component (null without a theme), the values the ' +
     "command's text output marks with *." +
     " In global mode: with `cwd` outside a project, components from integrations installed next to this CLI package globally resolve too; inside a project, only the project's own integrations count. See {@link namespace:global} and {@link generic:computer-integrations}.",
   importPath: '@astryxdesign/cli/api',
@@ -120,7 +120,7 @@ export const doc = {
     {
       type: 'component.list',
       description:
-        "The catalog grouped by component group. data.detail is the level ('names' | 'compact' | 'full') and data.components is the grouped map: names entries with name, package, and an optional canonical import for integration and legacy package components; brief entries; or full ComponentDoc entries.",
+        "The catalog grouped by component group. data.detail is the level ('names' | 'compact' | 'full') and data.components is the grouped map: names entries with name, package, and an optional canonical import for integration and legacy package components; brief entries; or full ComponentDoc entries. data.theme is the configured theme as {name, values}, where values lists the custom values it adds per component, or null without a theme.",
     },
     {
       type: 'component.batch',
@@ -130,7 +130,7 @@ export const doc = {
     {
       type: 'component.detail',
       description:
-        "One component's authored ComponentDoc plus ownership metadata (owner package, import specifier, whether source is available). When the name is a sub-component documented in a parent's doc, the payload is scoped to it and parentDoc names that parent.",
+        "One component's authored ComponentDoc plus ownership metadata (owner package, import specifier, whether source is available). When the name is a sub-component documented in a parent's doc, the payload is scoped to it and parentDoc names that parent. data.theme is the configured theme as {name, values}, where values lists the custom values it adds per component, or null without a theme.",
     },
     {
       type: 'component.detail.props',

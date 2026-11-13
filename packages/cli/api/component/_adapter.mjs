@@ -933,7 +933,7 @@ async function listingParent(block, coreDir, cwd) {
 
 /**
  * The configured theme's custom values for a component read: its name and,
- * by component key and prop, the values it adds. `null` when no theme is
+ * by component key, the values it adds. `null` when no theme is
  * configured or the configured theme is not found. A JSON read stays silent,
  * so this prints no warning.
  *
