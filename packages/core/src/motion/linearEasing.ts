@@ -3,12 +3,18 @@
 /**
  * @file linearEasing.ts
  * @input A duration and the fraction of a move done at each time
- * @output Exports `linearEasing`: that curve as CSS `linear()` easing text
+ * @output Exports `linearEasing`, that curve as CSS `linear()` easing text,
+ *   and `sampleCount`, how many samples cover a duration at 60 per second
  * @position Pure math under the motion helpers; no DOM, no React
  */
 
-/** Easing stops per second of the sampled curve: one per frame at 60 Hz. */
+/** Samples per second of a sampled curve: one per frame at 60 Hz. */
 const SAMPLES_PER_SECOND = 60;
+
+/** How many samples cover `durationMs`, both ends included: at least 2. */
+export function sampleCount(durationMs: number): number {
+  return Math.max(2, Math.ceil((durationMs / 1000) * SAMPLES_PER_SECOND) + 1);
+}
 
 /**
  * The curve `done` traces over `durationMs` as CSS `linear()` easing text,
@@ -19,10 +25,7 @@ export function linearEasing(
   durationMs: number,
   done: (t: number) => number,
 ): string {
-  const count = Math.max(
-    2,
-    Math.ceil((durationMs / 1000) * SAMPLES_PER_SECOND) + 1,
-  );
+  const count = sampleCount(durationMs);
   const stops: string[] = [];
   for (let i = 0; i < count; i++) {
     const value = done((i / (count - 1)) * durationMs);

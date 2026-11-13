@@ -116,8 +116,10 @@ test("a touch drag's close and its scrim's fade start together", async ({
     await driver.play(drag({x, y}, {x, y: y + 60}, {durationMs: 40}), {
       pacing: 'spacing',
     });
+    // Only a close clears the scrim: a flick that settles back starts a
+    // sheet motion but no fade.
     const isClosing = await expect
-      .poll(async () => Number.isFinite((await read()).close), {
+      .poll(async () => Number.isFinite((await read()).fade), {
         timeout: 3000,
       })
       .toBe(true)

@@ -82,7 +82,7 @@
  */
 
 import {LATE_START_MS} from './frameBlock';
-import {linearEasing} from './linearEasing';
+import {linearEasing, sampleCount} from './linearEasing';
 import {
   sharedKey,
   sharedMap,
@@ -118,8 +118,6 @@ import {
 const MIN_SHIFT_PX = 0.5;
 /** The touch cross-fade's cap (`design:reduced-motion` DR2). */
 const CROSS_FADE_CAP_MS = 200;
-/** Keyframes per second the motion is sampled at. */
-const SAMPLES_PER_SECOND = 60;
 
 // ---------------------------------------------------------------------------
 // Motion
@@ -245,10 +243,6 @@ function layoutMotion(area: Element): LayoutMotion {
   }
   const progress = releaseGlideFor(area) ?? glideProgress(area);
   return progress == null ? {kind: 'instant'} : {kind: 'glide', progress};
-}
-
-function sampleCount(durationMs: number): number {
-  return Math.max(2, Math.ceil((durationMs / 1000) * SAMPLES_PER_SECOND) + 1);
 }
 
 /** Linear keyframes over `durationMs`, one per frame, from `frame(t ms)`. */
