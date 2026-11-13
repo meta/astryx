@@ -1272,7 +1272,13 @@ export function previewRouteSource({
     "import {TopNav} from '@astryxdesign/core/TopNav';",
     ...(theme
       ? [
-          "import {SegmentedControl, SegmentedControlItem} from '@astryxdesign/core/SegmentedControl';",
+          // The mode switch only for a theme with both modes: an import the
+          // route does not draw fails an app with noUnusedLocals.
+          ...(mode.length
+            ? [
+                "import {SegmentedControl, SegmentedControlItem} from '@astryxdesign/core/SegmentedControl';",
+              ]
+            : []),
           "import {Theme} from '@astryxdesign/core/theme';",
           `import {${camelName(theme.name)}Theme as theme} from ${JSON.stringify(theme.module.replace(/\.js$/, ''))};`,
           ...theme.css.map(c => `import ${JSON.stringify(c)};`),

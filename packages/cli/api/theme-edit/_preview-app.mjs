@@ -3813,7 +3813,16 @@ async function addPreview(description, options, box) {
   const wore = data.theme;
   const againWith = (/** @type {string | null} */ t) =>
     `${PREVIEW} add${said ? ` ${quoteCommandArgument(said)}` : ''}${named != null ? ` --template ${quoteCommandArgument(named)}` : ''}${t == null ? '' : ` --theme ${t}`}${pf}`;
-  const without = "leave out --theme and the pages wear the app's own theme";
+  // What leaving out --theme does here, exactly: the theme the preview
+  // wears keeps, else the one editor theme there is, else the app's own.
+  const without = (() => {
+    if (data.theme && fs.existsSync(themeFiles(cwd, data.theme).dir))
+      return `leave out --theme and the preview keeps wearing ${data.theme}`;
+    const themes = editedThemes(cwd);
+    return themes.length === 1
+      ? `leave out --theme and the pages wear ${themes[0]}, the one theme under themes/`
+      : "leave out --theme and the pages wear the app's own theme";
+  })();
   if (options.theme != null) {
     wornTheme(cwd, options.theme, againWith, without);
     data.theme = options.theme;
