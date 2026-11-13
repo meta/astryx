@@ -1837,6 +1837,26 @@ describe('AppShell hiddenRegions', () => {
     restoreAnimations();
   });
 
+  it('puts back the scroll offsets a paused region had when it shows again', () => {
+    const {rerender} = render(<Shell />);
+    const nav = screen.getByText('Count 0').closest('nav') as HTMLElement;
+    // jsdom does not scroll: the nav keeps the offset it is given until the
+    // pause drops it, as `display: none` does in a browser.
+    let offset = 74;
+    Object.defineProperty(nav, 'scrollTop', {
+      configurable: true,
+      get: () => offset,
+      set: (value: number) => {
+        offset = value;
+      },
+    });
+    rerender(<Shell hiddenRegions={['sideNav']} />);
+    expect(isPausedInActivity(nav)).toBe(true);
+    offset = 0;
+    rerender(<Shell />);
+    expect(offset).toBe(74);
+  });
+
   it('starts a region that mounts hidden paused, and runs it when it shows', () => {
     const log: string[] = [];
     const {rerender} = render(
