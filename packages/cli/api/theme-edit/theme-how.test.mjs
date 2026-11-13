@@ -2231,7 +2231,7 @@ const QUESTIONS_G = [
     'the modal needs 24px padding',
     {
       top: /^set q padding 24px --on dialog$/,
-      adds: /dialog\.base\.padding=24px/,
+      adds: /dialog\.base\.--astryx-dialog-padding[a-z-]*=24px/,
     },
   ],
   ['modal rounder', {top: /^set q corners more --on dialog$/}],
@@ -2288,7 +2288,7 @@ const QUESTIONS_G = [
     {
       top: /^set q padding 'clamp\(12px, 2vw, 24px\)' --on card$/,
       // Core splits padding at every space: each side is written whole.
-      adds: /card\.base\.padding(BlockStart|InlineEnd|BlockEnd|InlineStart)=clamp\(12px, 2vw, 24px\)/,
+      adds: /card\.base\.--astryx-card-padding[a-z-]*=clamp\(12px, 2vw, 24px\)/,
     },
   ],
   [

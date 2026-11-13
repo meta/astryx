@@ -190,12 +190,16 @@ export function catalogVariants(project, name, cap, opts = {}) {
   const info = project.components[name];
   const demo = demoProps(project, name);
   if (!demo) return [];
-  if (info.opens && opts.shown)
-    return [
-      {label: '', props: 'isOpen' in demo ? demo : {...demo, isOpen: true}},
-    ];
-  const base =
-    info.opens && !('isOpen' in demo) ? {...demo, isOpen: true} : demo;
+  // An overlay shown open never takes focus: on a page of many, each would
+  // pull the page to itself as it opens.
+  /** @param {Record<string, unknown>} d @returns {Record<string, unknown>} */
+  const opened = d => ({
+    ...d,
+    ...('isOpen' in d ? {} : {isOpen: true}),
+    ...(info.props?.hasAutoFocus ? {hasAutoFocus: false} : {}),
+  });
+  if (info.opens && opts.shown) return [{label: '', props: opened(demo)}];
+  const base = info.opens ? opened(demo) : demo;
   const values = info.targets[0]?.values ?? {};
   const variants = [{label: '', props: base}];
   for (const p of ['variant', 'status', 'color'])

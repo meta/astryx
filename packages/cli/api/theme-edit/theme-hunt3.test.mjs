@@ -332,6 +332,16 @@ describe('builds that stay the same', () => {
 
   it('the preview route imports a b-2 theme by its module name', async () => {
     await themeEditNew('b-2', {cwd});
+    // A Next app's routes folder has a root layout; the preview goes under it.
+    const layout = path.join(cwd, 'src/app/layout.tsx');
+    const madeLayout = !fs.existsSync(layout);
+    if (madeLayout) {
+      fs.mkdirSync(path.dirname(layout), {recursive: true});
+      fs.writeFileSync(
+        layout,
+        "import '@astryxdesign/core/astryx.css';\nexport default function RootLayout({children}) { return children; }\n",
+      );
+    }
     await themeEditPreviewAdd(undefined, {
       cwd,
       path: 'src/app/b2',
@@ -346,6 +356,8 @@ describe('builds that stay the same', () => {
     expect(route).toContain('b2Theme as theme');
     expect(route).not.toContain('b-2Theme');
     fs.rmSync(path.join(cwd, 'src/app/b2'), {recursive: true, force: true});
+    if (madeLayout)
+      fs.rmSync(path.join(cwd, 'src/app'), {recursive: true, force: true});
     drop('b-2');
   }, 240_000);
 

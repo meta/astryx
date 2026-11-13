@@ -1695,6 +1695,14 @@
     "defaultMessage": "Zoomed out",
     "description": "Polite screen-reader announcement after zooming back out of a Lightbox image. Pairs with `lightbox.zoomedIn`."
   },
+  "@astryx.lightbox.captionMore": {
+    "defaultMessage": "more",
+    "description": "Visible label of the button after a gallery caption that two lines cut short in a Lightbox. It opens the full caption over the photo. Pairs with `lightbox.captionLess`."
+  },
+  "@astryx.lightbox.captionLess": {
+    "defaultMessage": "less",
+    "description": "Visible label of the same button while a Lightbox gallery's full caption is open over the photo. It closes the full caption. Pairs with `lightbox.captionMore`."
+  },
   "@astryx.metadataList.showMore": {
     "defaultMessage": "Show more",
     "description": "Button label under a MetadataList that reveals items hidden beyond the configured maximum. Toggles with `metadataList.showLess` — keep the pair parallel in your language."
@@ -1741,7 +1749,7 @@
   },
   "@astryx.numberInput.invalidNumber": {
     "defaultMessage": "Invalid number",
-    "description": "Screen-reader-only live-region alert in NumberInput when the typed text is not a valid number for the field. The field silently reverts on blur, so this is the only rejection feedback a screen-reader user gets."
+    "description": "Error in NumberInput, shown as the field's error status and announced, when Enter or blur meets typed text the field cannot commit: text that is not a number, a number with a fraction in a whole-number field, or any number while the field's minimum is above its maximum. The typed text stays in the field."
   },
   "@astryx.selector.clearLabel": {
     "defaultMessage": "Clear {label}",
@@ -2574,6 +2582,118 @@
   "@astryx.infoTip.label": {
     "defaultMessage": "More information",
     "description": "Default accessible name of an InfoTip, the small info-icon button whose press reveals help about the label, value, or metric beside it."
+  },
+  "@astryx.mediaPlayer.play": {
+    "defaultMessage": "Play",
+    "description": "Accessible name and tooltip of the button that starts playback in a lab media player (video or audio)."
+  },
+  "@astryx.mediaPlayer.pause": {
+    "defaultMessage": "Pause",
+    "description": "Accessible name and tooltip of the button that pauses playback in a lab media player."
+  },
+  "@astryx.mediaPlayer.replay": {
+    "defaultMessage": "Replay",
+    "description": "Accessible name and tooltip of the play button in a lab media player after the media has ended; pressing it plays from the start."
+  },
+  "@astryx.mediaPlayer.skipBack": {
+    "defaultMessage": "Back {seconds, plural, one {# second} other {# seconds}}",
+    "description": "Accessible name and tooltip of the button that moves playback back in a lab media player. `seconds` is how far it moves, e.g. 15."
+  },
+  "@astryx.mediaPlayer.skipForward": {
+    "defaultMessage": "Forward {seconds, plural, one {# second} other {# seconds}}",
+    "description": "Accessible name and tooltip of the button that moves playback forward in a lab media player. `seconds` is how far it moves, e.g. 30."
+  },
+  "@astryx.mediaPlayer.mute": {
+    "defaultMessage": "Mute",
+    "description": "Accessible name and tooltip of the button that silences a lab media player."
+  },
+  "@astryx.mediaPlayer.unmute": {
+    "defaultMessage": "Unmute",
+    "description": "Accessible name and tooltip of the button that turns sound back on in a lab media player."
+  },
+  "@astryx.mediaPlayer.volume": {
+    "defaultMessage": "Volume",
+    "description": "Accessible name of the volume slider in a lab media player."
+  },
+  "@astryx.mediaPlayer.seek": {
+    "defaultMessage": "Seek",
+    "description": "Accessible name of the timeline slider in a lab media player; moving it changes the playback position."
+  },
+  "@astryx.mediaPlayer.timeValue": {
+    "defaultMessage": "{current} of {duration}",
+    "description": "Spoken value of the timeline slider in a lab media player. `current` is the playback position and `duration` the total length, both already written as words, e.g. \"1 minute, 5 seconds\"."
+  },
+  "@astryx.mediaPlayer.timeValueContext": {
+    "defaultMessage": "{value}, {context}",
+    "description": "Spoken value of the timeline slider in a lab media player when the position is inside a chapter or at a marker. `value` is the spoken time, e.g. \"1 minute, 5 seconds of 3 minutes\", and `context` is the chapter title or the marker label, e.g. \"Pollen\"."
+  },
+  "@astryx.mediaPlayer.previousTrack": {
+    "defaultMessage": "Previous track",
+    "description": "Name and tooltip of the button in a lab audio player that goes to the previous track or episode in the product's queue."
+  },
+  "@astryx.mediaPlayer.nextTrack": {
+    "defaultMessage": "Next track",
+    "description": "Name and tooltip of the button in a lab audio player that goes to the next track or episode in the product's queue."
+  },
+  "@astryx.mediaPlayer.live": {
+    "defaultMessage": "Live",
+    "description": "Shown instead of the playback time in a lab media player when the media is a live stream."
+  },
+  "@astryx.mediaPlayer.captions": {
+    "defaultMessage": "Captions",
+    "description": "Accessible name and tooltip of the toggle button that turns captions on and off in a lab video player."
+  },
+  "@astryx.mediaPlayer.enterFullscreen": {
+    "defaultMessage": "Full screen",
+    "description": "Accessible name and tooltip of the button that shows a lab video player over the whole screen."
+  },
+  "@astryx.mediaPlayer.exitFullscreen": {
+    "defaultMessage": "Exit full screen",
+    "description": "Accessible name and tooltip of the button that leaves full screen in a lab video player."
+  },
+  "@astryx.mediaPlayer.playbackSpeed": {
+    "defaultMessage": "Playback speed",
+    "description": "Tooltip of the button that opens the playback speed menu of a lab media player, and the name of the list of speeds in that menu."
+  },
+  "@astryx.mediaPlayer.playbackSpeedValue": {
+    "defaultMessage": "Playback speed, {rate}×",
+    "description": "Accessible name of the button that opens the playback speed menu of a lab media player. {rate} is the current speed as a number, such as 1.5; × means times normal speed."
+  },
+  "@astryx.mediaPlayer.playbackRate": {
+    "defaultMessage": "{rate}×",
+    "description": "Visible label of the playback speed menu button in a lab media player, and of each speed in its menu. `rate` is the speed, already formatted as a number, e.g. \"1.5\"; × means times normal speed."
+  },
+  "@astryx.mediaPlayer.error": {
+    "defaultMessage": "This media can't be played.",
+    "description": "Message a lab media player shows when the browser cannot play its video or audio; a Try again button follows."
+  },
+  "@astryx.mediaPlayer.retry": {
+    "defaultMessage": "Try again",
+    "description": "Label of the button that loads the media again after a lab media player failed to play it."
+  },
+  "@astryx.mediaPlayer.announceMuted": {
+    "defaultMessage": "Muted",
+    "description": "Screen reader announcement after a keyboard shortcut silences a lab media player."
+  },
+  "@astryx.mediaPlayer.announceUnmuted": {
+    "defaultMessage": "Unmuted",
+    "description": "Screen reader announcement after a keyboard shortcut turns sound back on in a lab media player."
+  },
+  "@astryx.mediaPlayer.announceCaptionsOn": {
+    "defaultMessage": "Captions on",
+    "description": "Screen reader announcement after a keyboard shortcut turns captions on in a lab video player."
+  },
+  "@astryx.mediaPlayer.announceCaptionsOff": {
+    "defaultMessage": "Captions off",
+    "description": "Screen reader announcement after a keyboard shortcut turns captions off in a lab video player."
+  },
+  "@astryx.mediaPlayer.announceVolume": {
+    "defaultMessage": "Volume {percent}",
+    "description": "Screen reader announcement after a keyboard shortcut changes the volume of a lab media player. `percent` is already formatted, e.g. \"40%\"."
+  },
+  "@astryx.mediaPlayer.announceSpeed": {
+    "defaultMessage": "Speed {rate}×",
+    "description": "Screen reader announcement after a keyboard shortcut changes how fast a lab media player plays. `rate` is already formatted, e.g. \"1.5\"; × means times normal speed."
   },
   "@astryx.navigationStack.back": {
     "defaultMessage": "Back",

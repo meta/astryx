@@ -40,10 +40,8 @@ import {themeCacheRoot} from './_project.mjs';
 import * as preview from './_preview-app.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
-import {
-  findAstryxProject,
-  findPackageRoot,
-} from '../../foundation/fs/paths.mjs';
+import {findPackageRoot} from '../../foundation/fs/paths.mjs';
+import {coreApp} from './_context.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {withFolderLock} from '../../foundation/release/folder-lock.mjs';
 import {
@@ -136,7 +134,9 @@ export function dialValueFits(dial, value) {
  */
 export function projectRoot(cwd) {
   const start = path.resolve(cwd);
-  const project = findAstryxProject(start);
+  // One rule: the nearest folder at or above cwd whose package.json lists
+  // @astryxdesign/core.
+  const project = coreApp(start);
   const pkg = findPackageRoot(start);
   const inReach = (/** @type {string} */ dir) =>
     project ? !path.relative(project, dir).startsWith('..') : true;
@@ -146,13 +146,19 @@ export function projectRoot(cwd) {
     let json;
     try {
       json = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
-    } catch {
+    } catch (e) {
+      // Name the file and what the parser says is wrong, with its place.
+      const rel = path.relative(start, file) || 'package.json';
+      const why = String(/** @type {Error} */ (e).message ?? '').replace(
+        /^Unexpected token.*?, /,
+        '',
+      );
       throw new AstryxError(
-        `${path.relative(start, file) || 'package.json'} is not valid JSON, so the app it belongs to is unknown. Fix it, then run the command again. Nothing was written.`,
+        `${rel} is not valid JSON (${why}), so the app it belongs to is unknown. Fix it, then run the command again. Nothing was written.`,
         [
           {
-            name: runLine(start, 'doctor'),
-            reason: 'names the file and what is wrong in it',
+            name: `\${EDITOR:-vi} ${quoteCommandArgument(rel)}`,
+            reason: 'open the file and fix it',
           },
         ],
         ERROR_CODES.ERR_PROJECT_REQUIRED,
@@ -899,6 +905,23 @@ export async function editorThemeHold(files, {cwd}) {
     });
   }
   return releaseAll;
+}
+
+/**
+ * For `compile` of a file that is not there: when it is an editor theme's
+ * own source (`themes/<t>/<t>.theme.ts` beside its settings), the command
+ * that writes it again; null otherwise.
+ * @param {string} file the path as given
+ * @param {string} cwd
+ * @returns {{name: string, reason: string} | null}
+ */
+export function editorMissingSource(file, cwd) {
+  const at = editorThemeAt(projectRoot(cwd), path.resolve(cwd, file));
+  if (!at || path.basename(file) !== `${at.slug}.theme.ts`) return null;
+  return {
+    name: runLine(cwd, `experimental theme editor show ${at.slug}`),
+    reason: `the editor writes ${at.slug}.theme.ts again from its settings`,
+  };
 }
 
 /**

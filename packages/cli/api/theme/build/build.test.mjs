@@ -31,6 +31,7 @@ import {
 import {logger} from '../../logger.mjs';
 import {
   themeBuild,
+  themeBuildWithHandOff,
   themeSourceFiles,
   validateComponentOverridesAgainstRegistry,
   validateThemePrivateInputs,
@@ -1819,14 +1820,38 @@ describe('themeBuild() — outputs it may replace', () => {
   it('refuses a second theme that would replace outputs written earlier in the run', async () => {
     fs.writeFileSync(path.join(tmpDir, 'ocean2.mjs'), theme);
     const claimed = new Map();
-    await themeBuild('ocean.mjs', {__claimedOutputs: claimed}, {cwd: tmpDir});
+    await themeBuildWithHandOff(
+      'ocean.mjs',
+      {},
+      {cwd: tmpDir},
+      {claimedOutputs: claimed},
+    );
     const first = fs.readFileSync(path.join(tmpDir, 'ocean.css'), 'utf-8');
     await expect(
-      themeBuild('ocean2.mjs', {__claimedOutputs: claimed}, {cwd: tmpDir}),
+      themeBuildWithHandOff(
+        'ocean2.mjs',
+        {},
+        {cwd: tmpDir},
+        {claimedOutputs: claimed},
+      ),
     ).rejects.toMatchObject({code: 'ERR_THEME_INVALID'});
     expect(fs.readFileSync(path.join(tmpDir, 'ocean.css'), 'utf-8')).toBe(
       first,
     );
+  });
+
+  it('takes no hand-off through the public options', async () => {
+    const deferred = /** @type {any[]} */ ([]);
+    await themeBuild(
+      'ocean.mjs',
+      /** @type {any} */ ({
+        __deferredWrites: deferred,
+        deferredWrites: deferred,
+      }),
+      {cwd: tmpDir},
+    );
+    expect(deferred).toEqual([]);
+    expect(fs.existsSync(path.join(tmpDir, 'ocean.css'))).toBe(true);
   });
 });
 
@@ -2012,5 +2037,78 @@ describe('themeBuild() — the --out path it suggests', () => {
     expect(fs.readFileSync(path.join(dist, 'o.txt-2.css'), 'utf8')).toBe(
       'body {}\n',
     );
+  });
+});
+
+describe('themeBuild() — the former hand-off keys are ignored', () => {
+  const run = async (/** @type {Record<string, unknown>} */ extra) => {
+    for (const f of fs.readdirSync(tmpDir))
+      if (f !== 'hidden.mjs')
+        fs.rmSync(path.join(tmpDir, f), {recursive: true, force: true});
+    const {result, warnings} = await withWarnings(() =>
+      themeBuild('hidden.mjs', /** @type {any} */ ({...extra}), {cwd: tmpDir}),
+    );
+    const files = Object.fromEntries(
+      fs
+        .readdirSync(tmpDir)
+        .filter(f => f !== 'hidden.mjs')
+        .sort()
+        .map(f => [f, fs.readFileSync(path.join(tmpDir, f), 'utf8')]),
+    );
+    return {result: JSON.stringify(result), warnings, files};
+  };
+
+  it.each([
+    ['__prepareFamily', true],
+    ['__familyLoader', {}],
+    ['__familyInterception', {}],
+    ['__writeRoot', path.join(os.tmpdir(), 'astryx-no-such-root')],
+    ['__claimedOutputs', new Map([['hidden.css', 'other.mjs']])],
+    ['__deferredWrites', []],
+    ['__commandWords', {group: 'zzz', build: 'yyy'}],
+  ])('%s changes nothing', async (key, value) => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'hidden.mjs'),
+      `export default { name: 'hidden', tokens: { '--color-bg': '#0a0a0a' } };\n`,
+    );
+    const plain = await run({});
+    expect(Object.keys(plain.files).length).toBeGreaterThan(0);
+    // Claimed outputs are keyed by absolute path when honored.
+    const v =
+      key === '__claimedOutputs'
+        ? new Map([[path.join(tmpDir, 'hidden.css'), 'other.mjs']])
+        : value;
+    const withKey = await run({[key]: v});
+    expect(withKey).toEqual(plain);
+  });
+
+  it('__commandWords does not change the --check rebuild line', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'hidden.mjs'),
+      `export default { name: 'hidden', tokens: { '--color-bg': '#0a0a0a' } };\n`,
+    );
+    const lines = [];
+    const silent = logger.silent;
+    const {warn, log, error} = logger;
+    logger.setSilent(false);
+    logger.warn =
+      logger.log =
+      logger.error =
+        (/** @type {string} */ l) => void lines.push(l);
+    try {
+      await themeBuild(
+        'hidden.mjs',
+        /** @type {any} */ ({
+          check: true,
+          __commandWords: {group: 'zzz', build: 'yyy'},
+        }),
+        {cwd: tmpDir},
+      );
+    } finally {
+      Object.assign(logger, {warn, log, error});
+      logger.setSilent(silent);
+    }
+    expect(lines.join('\n')).toMatch(/Rebuild with: .*theme build/);
+    expect(lines.join('\n')).not.toContain('zzz');
   });
 });
