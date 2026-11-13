@@ -191,6 +191,10 @@ async function answer(subject, options, cwd) {
   // "½rem": a fraction is a number before anything reads the question.
   const t = (subject ?? '')
     .trim()
+    // "corners:", "var(--radius-element)": a setting pasted as written is
+    // a lookup of it.
+    .replace(/^([a-z][a-z -]*):\s*$/i, '$1')
+    .replace(/^var\(\s*(--[a-z0-9-]+)\s*\)$/i, '$1')
     // A lone "½" with no unit after it is a share of now ("card padding
     // ½"), never 0.5px.
     .replace(
@@ -538,8 +542,10 @@ async function answer(subject, options, cwd) {
       results: tool,
       ...unknown,
     };
-  // a question about what something is gets the lookup, not a change.
+  // a question about what something is gets the lookup, not a change; a
+  // question about a part's value now gets the value (draftAnswer).
   if (
+    !valueAsked(t) &&
     (/^\s*(what|which|where)\b.*\b(variables?|tokens?|do|does|means?|controls?|for)\b|^\s*what('s| is) the (css )?(variable|token|property)/i.test(
       t,
     ) ||
@@ -629,8 +635,28 @@ function finish(env, drafts) {
   /** @type {Array<{text: string, commands: string[], sequence?: boolean, refused?: Array<{command: string, why: string}>}>} */
   const out = [];
   for (const d of drafts) {
+    // The measured check: an option whose built result does not do what
+    // the question asks is left out, with a plain line saying why.
+    /** @type {string[]} */
+    const unmet = [];
+    if (d.intent && typeof env.measure === 'function') {
+      const intent = d.intent;
+      d.options = d.options.filter(o => {
+        const why = env.measure(o, intent);
+        if (why) unmet.push(why);
+        return !why;
+      });
+      if (unmet.length && !d.options.length)
+        d.text = `couldn't work out a command that does "${d.text}" as asked: ${[...new Set(unmet)].join('; ')}`;
+      else if (unmet.length)
+        d.text = `${d.text} (left out: ${[...new Set(unmet)].join('; ')})`;
+    }
     const {commands, refused} = checked(env, d.options);
     const lookups = d.lookup ? [d.lookup] : [];
+    if (!commands.length && !d.options.length && unmet.length) {
+      out.push({text: d.text, commands: lookups});
+      continue;
+    }
     if (!commands.length && d.options.length && !lookups.length) {
       out.push({
         text: `${d.text}: no command does it on ${env.slug}${refused[0] ? `: ${refused[0].why}` : ''}`,
