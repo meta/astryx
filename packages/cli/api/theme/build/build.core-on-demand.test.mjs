@@ -6,10 +6,10 @@
  * The CLI loads the theme build module for every command, and Core's root
  * entry pulls in all of Core and React. So a command that builds no theme must
  * not ask for either, or `astryx --version` pays for them whenever a Core is
- * installed. A resolve hook in a real subprocess records every request for
- * Core or React and the module that made it, whether or not the request
- * resolves. It also records whether Core's root entry ran: a build loads the
- * root only for a theme that imports it.
+ * installed. An ESM resolve hook in a real subprocess records every request
+ * for Core or React and the module that made it, whether or not the request
+ * resolves. It and a CommonJS load probe record whether Core's root entry
+ * ran: a build loads the root only for a theme that imports it.
  */
 
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
@@ -62,7 +62,24 @@ beforeAll(() => {
   register = path.join(dir, 'register.mjs');
   fs.writeFileSync(
     register,
-    `import {register} from 'node:module';\nregister(${JSON.stringify(pathToFileURL(hooks).href)});\n`,
+    [
+      "import Module, {register} from 'node:module';",
+      "import {appendFileSync} from 'node:fs';",
+      `const LOG = ${JSON.stringify(log)};`,
+      `const ROOT = ${JSON.stringify(fileURLToPath(import.meta.resolve('@astryxdesign/core')))};`,
+      `const ROOT_RAN = ${JSON.stringify(ROOT_RAN)};`,
+      // Node 22.13's async ESM hooks do not observe require(esm).
+      'const load = Module._load;',
+      'Module._load = function(specifier, ...args) {',
+      '  const result = load.call(this, specifier, ...args);',
+      '  if (specifier === ROOT) {',
+      "    appendFileSync(LOG, JSON.stringify({specifier: ROOT_RAN, parent: ROOT}) + '\\n');",
+      '  }',
+      '  return result;',
+      '};',
+      `register(${JSON.stringify(pathToFileURL(hooks).href)});`,
+      '',
+    ].join('\n'),
   );
   // A plain theme object: the file itself never imports Core, so a request for
   // Core can only come from the build.
