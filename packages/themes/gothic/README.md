@@ -2,7 +2,7 @@
 
 **Dark-only** atmospheric gothic theme for Astryx — deep blue-gray surfaces, distressed display heading, and pastel categorical accents that glow against the dark page like illuminated panels. Uses Manufacturing Consent for headings, Fustat for body text, and [Lucide](https://lucide.dev) icons.
 
-> Gothic is a single-mode theme: it always renders dark, regardless of the user's system color preference. For best browser-chrome integration (scrollbars, native form controls), pass `mode="dark"` to your `XDSTheme` provider.
+> Gothic is a single-mode theme: it always renders dark, regardless of the user's system color preference. For best browser-chrome integration (scrollbars, native form controls), pass `mode="dark"` to your `Theme` provider.
 
 ## Install
 
@@ -12,17 +12,17 @@ npm install @astryxdesign/theme-gothic
 
 ## Usage
 
-Wrap your app with `XDSTheme` and pass the theme:
+Wrap your app with `Theme` and pass the theme:
 
 ```tsx
-import {XDSTheme} from '@astryxdesign/core/theme';
+import {Theme} from '@astryxdesign/core/theme';
 import {gothicTheme} from '@astryxdesign/theme-gothic/built';
 
 function App() {
   return (
-    <XDSTheme theme={gothicTheme} mode="dark">
+    <Theme theme={gothicTheme} mode="dark">
       {/* your app */}
-    </XDSTheme>
+    </Theme>
   );
 }
 ```
