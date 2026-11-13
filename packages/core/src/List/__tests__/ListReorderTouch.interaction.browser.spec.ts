@@ -707,6 +707,50 @@ test('a flush row keeps its handle inside the list', async ({page}) => {
   );
 });
 
+for (const [story, edge] of [
+  ['core-list--reorderable', 'padded'],
+  ['core-list--reorder-flush', 'flush'],
+] as const) {
+  test(`a ${edge} row's handle keeps a finger's 44 px target across its centre, inside the list`, async ({
+    page,
+  }) => {
+    await openStory(page, storybook(), story);
+    test.skip(
+      !(await isTouch(page)),
+      'the 44 px target applies under (pointer: coarse)',
+    );
+    const handle = page.getByRole('button', {name: 'Reorder Inbox'});
+    await expect(handle).toBeVisible();
+    // The hit area's observers settle its reach after layout.
+    await page.waitForTimeout(300);
+    // The span across the handle's centre that lands on it, a half pixel at
+    // a time, from the list's start edge.
+    const span = await handle.evaluate(element => {
+      const box = element.getBoundingClientRect();
+      const list = element.closest('ul, ol')?.getBoundingClientRect();
+      const y = box.top + box.height / 2;
+      const from = Math.max(0, (list?.left ?? 0) - 10);
+      let first = Number.NaN;
+      let last = Number.NaN;
+      for (let x = from; x < box.right + 40; x += 0.5) {
+        const hit = document
+          .elementFromPoint(x, y)
+          ?.closest('button[data-astryx-list-reorder]');
+        if (hit === element) {
+          if (Number.isNaN(first)) {
+            first = x;
+          }
+          last = x;
+        }
+      }
+      return {first, last, listLeft: list?.left ?? 0};
+    });
+    const detail = JSON.stringify(span);
+    expect(span.last - span.first + 0.5, detail).toBeGreaterThanOrEqual(44);
+    expect(span.first, detail).toBeGreaterThanOrEqual(span.listLeft - 0.5);
+  });
+}
+
 /** The dragged row's preview, which follows the finger. */
 const PREVIEW = '[data-astryx-reorder-preview]';
 
