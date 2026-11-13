@@ -449,8 +449,67 @@ function extractDigits(text: string, group: string): string {
 }
 
 /**
+ * A grouping separator belongs this many digits from the right of the
+ * integer: the primary size, then every secondary size after that. Same
+ * offsets `insertGroupSeparators` writes, and the same sizes `readUnder`
+ * requires of a well-formed group.
+ */
+function isGroupSeparatorOffset(
+  digitsFromRight: number,
+  primaryGroupSize: number,
+  secondaryGroupSize: number,
+): boolean {
+  if (digitsFromRight < primaryGroupSize || secondaryGroupSize <= 0) {
+    return false;
+  }
+  return (digitsFromRight - primaryGroupSize) % secondaryGroupSize === 0;
+}
+
+/**
+ * True when at least one group character in `run` sits on a grouping
+ * boundary for `totalDigits`. A separator off those boundaries is a
+ * decimal or a malformed group, not a thousands mark.
+ */
+function hasSeparatorAtGroupingOffset(
+  run: string,
+  group: string,
+  totalDigits: number,
+  primaryGroupSize: number,
+  secondaryGroupSize: number,
+): boolean {
+  if (group === '' || totalDigits <= primaryGroupSize) {
+    return false;
+  }
+  let digitsSeen = 0;
+  let i = 0;
+  while (i < run.length) {
+    if (isAsciiDigit(run[i])) {
+      digitsSeen++;
+      i++;
+      continue;
+    }
+    if (run.startsWith(group, i)) {
+      const fromRight = totalDigits - digitsSeen;
+      if (
+        digitsSeen > 0 &&
+        fromRight > 0 &&
+        isGroupSeparatorOffset(fromRight, primaryGroupSize, secondaryGroupSize)
+      ) {
+        return true;
+      }
+      i += group.length;
+      continue;
+    }
+    break;
+  }
+  return false;
+}
+
+/**
  * Group separators belong only in the integer run. A sign, a decimal mark, or
- * any other character stays where the person typed it.
+ * any other character stays where the person typed it. A group character that
+ * is not on a grouping boundary stays too: it may be a decimal (de-DE `1.5`)
+ * or a malformed group (en-US `1,23`).
  */
 export function groupEditableDraft(
   text: string,
@@ -483,6 +542,24 @@ export function groupEditableDraft(
   const run = text.slice(runStart, runEnd);
   const digits = extractDigits(run, group);
   if (digits === '') {
+    return {text, caret: clampedCaret};
+  }
+
+  // Strip group characters only when at least one of them is already in a
+  // valid grouping position. Otherwise leave the typed text alone so a
+  // decimal (de-DE / vi-VN `1.5`) or a malformed group (en-US `1,23`) is
+  // not folded into the digits.
+  if (
+    group !== '' &&
+    run.includes(group) &&
+    !hasSeparatorAtGroupingOffset(
+      run,
+      group,
+      digits.length,
+      primaryGroupSize,
+      secondaryGroupSize,
+    )
+  ) {
     return {text, caret: clampedCaret};
   }
 

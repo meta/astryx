@@ -286,6 +286,35 @@ describe('groupEditableDraft', () => {
       caret: 10,
     });
   });
+
+  it('leaves a group character that is not in a valid grouping position', () => {
+    for (const locale of ['vi-VN', 'de-DE']) {
+      const draft = groupEditableDraft('1.5', 3, locale);
+      expect(draft).toEqual({text: '1.5', caret: 3});
+      expect(parseLocaleNumber(draft.text, locale)).toBe(1.5);
+
+      const pi = groupEditableDraft('3.14159', 7, locale);
+      expect(pi.text).toBe('3.14159');
+      expect(pi.text).not.toBe('314159');
+      expect(pi.caret).toBe(7);
+      expect(parseLocaleNumber(pi.text, locale)).toBe(3.14159);
+    }
+
+    const malformed = groupEditableDraft('1,23', 4, 'en-US');
+    expect(malformed).toEqual({text: '1,23', caret: 4});
+    expect(parseLocaleNumber(malformed.text, 'en-US')).toBeNull();
+  });
+
+  it('regroups a well-formed ungrouped integer', () => {
+    expect(groupEditableDraft('1234567', 7, 'en-US')).toEqual({
+      text: '1,234,567',
+      caret: 9,
+    });
+    expect(groupEditableDraft('1234567', 7, 'vi-VN')).toEqual({
+      text: '1.234.567',
+      caret: 9,
+    });
+  });
 });
 
 describe('deleteDigitAcrossGroupSeparator', () => {

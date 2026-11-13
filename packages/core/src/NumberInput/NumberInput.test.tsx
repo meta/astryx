@@ -676,6 +676,20 @@ describe('NumberInput', () => {
       expect(input).toHaveValue('1,500.5');
     });
 
+    it('rejects a malformed en-US group instead of folding it into digits', () => {
+      const onChange = vi.fn();
+      render(<GroupedField locale="en-US" value={null} onChange={onChange} />);
+      const input = screen.getByRole('spinbutton');
+      fireEvent.focus(input);
+      fireEvent.input(input, {target: {value: '1,23'}});
+      expect(input).toHaveValue('1,23');
+
+      fireEvent.blur(input);
+      expect(input).toHaveValue('1,23');
+      expect(onChange).not.toHaveBeenCalled();
+      expect(screen.getByText('Invalid number')).toBeInTheDocument();
+    });
+
     it('selects the grouped editable text when Tab swaps a currency format', async () => {
       const user = userEvent.setup();
       render(
