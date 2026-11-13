@@ -73,6 +73,16 @@ write(
   'src/Pill/pillTouch.ts',
   "import {host} from '../gestures/GestureHost';\nexport const touch = host;\n",
 );
+// A string that looks like a comment opener must not hide the re-export.
+write(
+  'src/utils/accept.ts',
+  "const accept = 'image/*';\nconst docs = 'https://example.com';\nexport {animatorFor} from '../motion/animator';\nexport const kinds = [accept, docs];\n",
+);
+write('src/Upload/index.ts', "export {Upload} from './Upload';\n");
+write(
+  'src/Upload/Upload.tsx',
+  "import {kinds} from '../utils/accept';\nexport const Upload = () => kinds;\n",
+);
 write('src/Paging/index.ts', "export {usePaging} from './usePaging';\n");
 write(
   'src/Paging/usePaging.ts',
@@ -139,6 +149,13 @@ ruleTester.run('no-static-touch-runtime', rule, {
       code: fs.readFileSync(file('Panel/Panel.tsx'), 'utf8'),
       options,
       errors: [runtimeError('../utils/ride', 'utils/ride.ts')],
+    },
+    {
+      name: "a shared module whose re-export follows a string like 'image/*'",
+      filename: file('Upload/Upload.tsx'),
+      code: fs.readFileSync(file('Upload/Upload.tsx'), 'utf8'),
+      options,
+      errors: [runtimeError('../utils/accept', 'utils/accept.ts')],
     },
     {
       name: 'a component re-exporting a touch module',

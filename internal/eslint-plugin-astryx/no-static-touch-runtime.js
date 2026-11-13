@@ -29,6 +29,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import ts from 'typescript';
 
 /** Where the repo config turns the rule on. */
 export const scope = {
@@ -79,39 +80,65 @@ function sourceFiles(directory) {
   return out;
 }
 
-/** The source without comments, so prose cannot add or hide an edge. */
-function code(source) {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
-}
-
-/** Whether an import clause brings only types, which the compiler erases. */
-function isTypeOnlyClause(clause) {
-  const trimmed = clause.trim();
-  if (/^type\b/.test(trimmed)) {
+/** Whether an import or export brings only types, which the compiler erases. */
+function isTypeOnly(statement) {
+  if (ts.isImportDeclaration(statement)) {
+    const clause = statement.importClause;
+    if (clause == null) {
+      return false;
+    }
+    if (clause.isTypeOnly) {
+      return true;
+    }
+    const bindings = clause.namedBindings;
+    return (
+      clause.name == null &&
+      bindings != null &&
+      ts.isNamedImports(bindings) &&
+      bindings.elements.length > 0 &&
+      bindings.elements.every(element => element.isTypeOnly)
+    );
+  }
+  if (statement.isTypeOnly) {
     return true;
   }
-  const braces = trimmed.match(/^\{([\s\S]*)\}$/);
-  if (braces == null) {
-    return false;
-  }
-  const names = braces[1]
-    .split(',')
-    .map(name => name.trim())
-    .filter(Boolean);
-  return names.length > 0 && names.every(name => /^type\s/.test(name));
+  const exported = statement.exportClause;
+  return (
+    exported != null &&
+    ts.isNamedExports(exported) &&
+    exported.elements.length > 0 &&
+    exported.elements.every(element => element.isTypeOnly)
+  );
 }
 
-/** The relative modules a file imports or re-exports statically. */
+/**
+ * The relative modules a file imports or re-exports statically. It reads a
+ * real parse, so a string such as `'image/*'` cannot hide an import.
+ */
 export function staticImports(file) {
-  const body = code(fs.readFileSync(file, 'utf8'));
+  const source = ts.createSourceFile(
+    file,
+    fs.readFileSync(file, 'utf8'),
+    ts.ScriptTarget.Latest,
+    false,
+    file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
   const out = [];
-  const pattern =
-    /^\s*(import|export)\s+([^'";]*?)\s*from\s+['"]([^'"]+)['"]|^\s*import\s+['"]([^'"]+)['"]/gm;
-  for (const match of body.matchAll(pattern)) {
-    const specifier = match[3] ?? match[4];
-    if (match[3] != null && isTypeOnlyClause(match[2])) {
+  for (const statement of source.statements) {
+    if (!(
+      ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement)
+    )) {
       continue;
     }
+    const specifierNode = statement.moduleSpecifier;
+    if (
+      specifierNode == null ||
+      !ts.isStringLiteral(specifierNode) ||
+      isTypeOnly(statement)
+    ) {
+      continue;
+    }
+    const specifier = specifierNode.text;
     const resolved = resolveRelative(file, specifier);
     if (resolved != null) {
       out.push({specifier, file: resolved});
@@ -141,6 +168,21 @@ export function resolveRelative(importer, specifier) {
 }
 
 const cache = new Map();
+/** How long a graph is reused before the files are checked for changes. */
+const REVALIDATE_MS = 1000;
+
+/** The files' paths and change times, so an edit in any file is seen. */
+function signature(files) {
+  return files
+    .map(file => {
+      try {
+        return `${file}:${fs.statSync(file).mtimeMs}`;
+      } catch {
+        return `${file}:gone`;
+      }
+    })
+    .join('\n');
+}
 
 /**
  * Each import where a component file reaches a shared module that reaches
@@ -149,11 +191,17 @@ const cache = new Map();
 export function touchRuntimeImports(srcRoot, optInFolders = []) {
   const key = `${srcRoot}\0${optInFolders.join(',')}`;
   const cached = cache.get(key);
-  if (cached != null) {
-    return cached;
+  const now = Date.now();
+  if (cached != null && now - cached.checkedAt < REVALIDATE_MS) {
+    return cached.found;
+  }
+  const files = sourceFiles(srcRoot);
+  const currentSignature = signature(files);
+  if (cached != null && cached.signature === currentSignature) {
+    cached.checkedAt = now;
+    return cached.found;
   }
   const rel = file => path.relative(srcRoot, file).split(path.sep).join('/');
-  const files = sourceFiles(srcRoot);
   const edges = new Map(files.map(file => [file, staticImports(file)]));
   // Every module that reaches a touch module statically.
   const importers = new Map();
@@ -177,6 +225,8 @@ export function touchRuntimeImports(srcRoot, optInFolders = []) {
       }
     }
   }
+  // A component is a capitalised top-level folder. One with no index, such
+  // as a folder of shared parts, is walked only when an entry imports it.
   const isComponentFile = file => {
     const folder = rel(file).split('/')[0];
     return (
@@ -206,7 +256,7 @@ export function touchRuntimeImports(srcRoot, optInFolders = []) {
       }
     }
   }
-  cache.set(key, found);
+  cache.set(key, {found, signature: currentSignature, checkedAt: now});
   return found;
 }
 

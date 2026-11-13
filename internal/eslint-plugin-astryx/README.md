@@ -233,6 +233,13 @@ the loader, and never add one. `no-static-touch-runtime.test.mjs` fails when an
 import reaches the runtime without an entry, and when an entry no longer does,
 so the list only shrinks.
 
+The rule reads other files: a change in a shared module can make a component
+file fail without the component changing. ESLint's `--cache` skips unchanged
+files, so `pnpm lint` can miss such a result locally; run
+`eslint --no-cache` on the component, or rely on pull request CI, which lints
+without a cache. An editor's ESLint server sees a change in any Core file
+within a second.
+
 ### `@astryx/no-raw-private-attribute`
 
 Reports a private `data-astryx-*` attribute written by hand outside its owner
