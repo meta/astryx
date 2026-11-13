@@ -29,6 +29,7 @@ import {
   issuesEntries,
   derivedEntries,
   entries,
+  templatesEntries,
   QUERIES,
   hasModuleHooks,
 } from '../test-utils/packed-gather-cache-fixture.mjs';
@@ -587,6 +588,94 @@ Module._resolveFilename = function (request, parent, isMain, options) {
     },
     120_000,
   );
+
+  it('keeps template discovery, and discovers again after a template edit', async () => {
+    const tmp = keptTmp('templates');
+    const other = makeProject();
+    try {
+      const templates = path.join(other.widgets, 'templates');
+      fs.mkdirSync(templates, {recursive: true});
+      const doc = path.join(templates, 'tally.doc.mjs');
+      const write = (/** @type {string} */ description) =>
+        fs.writeFileSync(
+          doc,
+          `export default {type: 'page', name: 'tally', description: '${description}', category: 'Widget - Tally'};\n`,
+        );
+      write('Running totals, tallied by team.');
+      fs.writeFileSync(
+        path.join(templates, 'tally.tsx'),
+        `export default function Page() { return null; }\n`,
+      );
+      const ask = ['template', '--list'];
+      const fresh = run(ask, {tmp: freshTmp(), cwd: other.dir, json: false});
+      expect(run(ask, {tmp, cwd: other.dir, json: false})).toEqual(fresh);
+      const kept = templatesEntries(tmp);
+      expect(kept.size).toBe(1);
+      // Read back, not discovered again: the same file, and the same answer.
+      expect(run(ask, {tmp, cwd: other.dir, json: false})).toEqual(fresh);
+      expect(templatesEntries(tmp)).toEqual(kept);
+      write('Grand totals, tallied by week.');
+      const [again, edited] = await Promise.all([
+        runAsync(ask, {tmp, cwd: other.dir, json: false}),
+        runAsync(ask, {tmp: freshTmp(), cwd: other.dir, json: false}),
+      ]);
+      expect(edited.stdout).toContain('Grand totals');
+      expect(again).toEqual(edited);
+    } finally {
+      fs.rmSync(other.dir, {recursive: true, force: true});
+    }
+  }, 120_000);
+
+  it('keeps template records apart for two copies of one build, outside a project', () => {
+    const tmp = keptTmp('two-copies');
+    // A second copy of the same build, in an install of its own, and an
+    // integration beside the first copy only.
+    const second = path.join(
+      work,
+      'install-2',
+      'node_modules',
+      '@astryxdesign',
+      'cli',
+    );
+    fs.cpSync(packed, second, {recursive: true, verbatimSymlinks: true});
+    const beside = path.join(work, 'install', 'node_modules', '@acme', 'tally');
+    const outside = fs.mkdtempSync(path.join(work, 'outside-'));
+    try {
+      fs.mkdirSync(path.join(beside, 'templates'), {recursive: true});
+      fs.writeFileSync(
+        path.join(beside, 'package.json'),
+        JSON.stringify({name: '@acme/tally', version: '1.0.0'}),
+      );
+      fs.writeFileSync(
+        path.join(beside, 'astryx.integration.mjs'),
+        `export default { templates: './templates' };\n`,
+      );
+      fs.writeFileSync(
+        path.join(beside, 'templates', 'zqledger.doc.mjs'),
+        `export default {type: 'page', name: 'zqledger', description: 'Running totals, tallied by team.', category: 'Widget - Tally'};\n`,
+      );
+      fs.writeFileSync(
+        path.join(beside, 'templates', 'zqledger.tsx'),
+        `export default function Page() { return null; }\n`,
+      );
+      const ask = ['template', '--list'];
+      const first = run(ask, {tmp: freshTmp(), cwd: outside});
+      const other = run(ask, {tmp: freshTmp(), cwd: outside, cli: second});
+      // Only the first copy sees the integration beside it.
+      expect(first.stdout).toContain('zqledger');
+      expect(other.stdout).not.toContain('zqledger');
+      run(ask, {tmp, cwd: outside, json: false});
+      run(ask, {tmp, cwd: outside, json: false});
+      // The first copy kept its template records.
+      expect(templatesEntries(tmp).size).toBe(1);
+      expect(run(ask, {tmp, cwd: outside, cli: second})).toEqual(other);
+      expect(run(ask, {tmp, cwd: outside})).toEqual(first);
+    } finally {
+      fs.rmSync(beside, {recursive: true, force: true});
+      fs.rmSync(path.join(work, 'install-2'), {recursive: true, force: true});
+      fs.rmSync(outside, {recursive: true, force: true});
+    }
+  }, 120_000);
 
   it('is skipped silently when its folder cannot be used', () => {
     fs.mkdirSync(path.join(work, 'tmp'), {recursive: true});
