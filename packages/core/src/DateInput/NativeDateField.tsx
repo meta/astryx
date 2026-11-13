@@ -56,7 +56,7 @@ import {Icon} from '../Icon';
 import {useLocale} from '../i18n';
 import {useInputGroup} from '../InputGroup';
 import {useFieldInputStyling} from '../Field/fieldParts';
-import {isInputInvalid, joinAriaIDs} from '../utils/inputAria';
+import {joinAriaIDs} from '../utils/inputAria';
 import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useSize} from '../SizeContext';
 import {Spinner} from '../Spinner';
@@ -355,7 +355,7 @@ export function NativeDateField({
       isInGroup: !!inputGroup,
     });
 
-  const {ariaLabelledBy, ariaDescribedBy} = getInputARIA(
+  const {ariaLabelledBy, ariaDescribedBy, isInvalid} = getInputARIA(
     inputLabelID,
     [
       description ? descriptionID : null,
@@ -365,6 +365,7 @@ export function NativeDateField({
       ariaDescribedByProp,
     ],
     inputGroup,
+    status?.type,
   );
 
   // A date the picker produced that `dateConstraints` refuses, held so the
@@ -673,11 +674,7 @@ export function NativeDateField({
           }
           aria-describedby={ariaDescribedBy}
           aria-required={isEffectivelyRequired ? 'true' : undefined}
-          aria-invalid={
-            isInputInvalid(status?.type, inputGroup) || !isInputValid
-              ? 'true'
-              : undefined
-          }
+          aria-invalid={isInvalid || !isInputValid ? 'true' : undefined}
           aria-busy={isBusy || undefined}
           {...stylex.props(
             styles.input,

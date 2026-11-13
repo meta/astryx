@@ -60,7 +60,7 @@ import {
   getInputARIA,
 } from '../utils';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
-import {isInputInvalid, joinAriaIDs} from '../utils/inputAria';
+import {joinAriaIDs} from '../utils/inputAria';
 import {
   useFieldInputStyling,
   type FieldInputBaseProps,
@@ -523,7 +523,7 @@ function TimeField({
       isInGroup: !!inputGroup,
     });
 
-  const {ariaLabelledBy, ariaDescribedBy} = getInputARIA(
+  const {ariaLabelledBy, ariaDescribedBy, isInvalid} = getInputARIA(
     inputLabelID,
     [
       description ? descriptionID : null,
@@ -535,6 +535,7 @@ function TimeField({
       ariaDescribedByProp,
     ],
     inputGroup,
+    status?.type,
   );
   // A caller aria-labelledby names the control together with the field's own
   // label (the Field label standalone, the group and input labels in a group).
@@ -865,11 +866,7 @@ function TimeField({
             data-autofocus={hasAutoFocus || undefined}
             aria-describedby={ariaDescribedBy}
             aria-required={isEffectivelyRequired ? 'true' : undefined}
-            aria-invalid={
-              isInputInvalid(status?.type, inputGroup) || !isInputValid
-                ? 'true'
-                : undefined
-            }
+            aria-invalid={isInvalid || !isInputValid ? 'true' : undefined}
             aria-busy={isBusy || undefined}
             aria-labelledby={controlLabelledBy}
             {...stylex.props(

@@ -50,7 +50,7 @@ import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {Spinner} from '../Spinner/Spinner';
 import {useTooltip} from '../Tooltip/useTooltip';
 import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
-import {getInputARIA, isInputInvalid} from '../utils/inputAria';
+import {getInputARIA} from '../utils/inputAria';
 import {isImeKeyEvent} from '../utils/ime';
 import {
   textEntryTraitAttributes,
@@ -415,7 +415,7 @@ export function TextInput({
       isInGroup: !!inputGroup,
     });
 
-  const {ariaLabelledBy, ariaDescribedBy} = getInputARIA(
+  const {ariaLabelledBy, ariaDescribedBy, isInvalid} = getInputARIA(
     inputLabelID,
     [
       description ? descriptionID : null,
@@ -430,6 +430,7 @@ export function TextInput({
       showsDisabledMessage ? disabledMessageTooltip.describedBy : null,
     ],
     inputGroup,
+    status?.type,
   );
   // A caller aria-labelledby names the input together with the field's own
   // label (the Field label standalone, the group and input labels in a group).
@@ -574,9 +575,7 @@ export function TextInput({
           undefined
         }
         aria-required={isEffectivelyRequired ? 'true' : undefined}
-        aria-invalid={
-          isInputInvalid(status?.type, inputGroup) ? 'true' : undefined
-        }
+        aria-invalid={isInvalid ? 'true' : undefined}
         aria-busy={isBusy || undefined}
         aria-labelledby={inputLabelledBy}
         {...stylex.props(styles.input, isDisabled && styles.inputDisabled)}

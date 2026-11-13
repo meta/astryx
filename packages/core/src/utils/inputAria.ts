@@ -23,6 +23,8 @@ export interface InputARIA {
   ariaLabelledBy?: string;
   /** Value for aria-describedby on the input. */
   ariaDescribedBy?: string;
+  /** Whether the input presents as invalid: its own error or the group's. */
+  isInvalid: boolean;
 }
 
 type AriaID = string | null | undefined | false;
@@ -42,36 +44,31 @@ export function joinAriaIDs(...values: AriaID[]): string | undefined {
 }
 
 /**
- * Builds ARIA label/description wiring for an input.
+ * Builds ARIA label/description wiring for an input and resolves its invalid
+ * state.
  *
  * Standalone inputs keep their normal native label association. Grouped inputs
  * are named by the visible InputGroup label plus their own input label, and
  * inherit group description/status text in addition to input-local text.
+ *
+ * `statusType` is the input's own status type, resolved as the caller sees it.
+ * The returned `isInvalid` marks the input invalid for an error of its own or
+ * of the surrounding InputGroup; warning, success, and no status never do,
+ * matching each input's own error-only mapping. Caller-passed `aria-invalid`
+ * values are not handled here: components that forward one keep their own
+ * precedence.
  */
 export function getInputARIA(
   labelID: string,
   describedByIDs: AriaID[] = [],
   inputGroup?: InputARIAInputGroup | null,
+  statusType?: InputStatusType,
 ): InputARIA {
   return {
     ariaLabelledBy: inputGroup
       ? joinAriaIDs(inputGroup.labelID, labelID)
       : undefined,
     ariaDescribedBy: joinAriaIDs(inputGroup?.describedByIDs, ...describedByIDs),
+    isInvalid: statusType === 'error' || inputGroup?.statusType === 'error',
   };
-}
-
-/**
- * Resolves the invalid state an input presents.
- *
- * An error from the input's own status or from a surrounding InputGroup marks
- * the input invalid; warning, success, and no status never do, matching each
- * input's own error-only mapping. Caller-passed `aria-invalid` values are not
- * handled here: components that forward one keep their own precedence.
- */
-export function isInputInvalid(
-  statusType: InputStatusType | undefined,
-  inputGroup?: InputARIAInputGroup | null,
-): boolean {
-  return statusType === 'error' || inputGroup?.statusType === 'error';
 }

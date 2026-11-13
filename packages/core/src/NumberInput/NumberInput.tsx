@@ -55,7 +55,7 @@ import {Icon, renderIconSlot, type IconType} from '../Icon';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {useTooltip} from '../Tooltip';
 import {getInputARIA} from '../utils';
-import {isInputInvalid, joinAriaIDs} from '../utils/inputAria';
+import {joinAriaIDs} from '../utils/inputAria';
 import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
@@ -689,7 +689,7 @@ export function NumberInput({
       isInGroup: !!inputGroup,
     });
 
-  const {ariaLabelledBy, ariaDescribedBy} = getInputARIA(
+  const {ariaLabelledBy, ariaDescribedBy, isInvalid} = getInputARIA(
     inputLabelID,
     [
       description ? descriptionID : null,
@@ -705,6 +705,7 @@ export function NumberInput({
       showsDisabledMessage ? disabledMessageTooltip.describedBy : null,
     ],
     inputGroup,
+    status?.type,
   );
   // A caller aria-labelledby names the input together with the field's own
   // label (the Field label standalone, the group and input labels in a group).
@@ -1246,11 +1247,7 @@ export function NumberInput({
           undefined
         }
         aria-required={isEffectivelyRequired ? 'true' : undefined}
-        aria-invalid={
-          isInputInvalid(status?.type, inputGroup) || !isInputValid
-            ? 'true'
-            : undefined
-        }
+        aria-invalid={isInvalid || !isInputValid ? 'true' : undefined}
         aria-labelledby={inputLabelledBy}
         {...stylex.props(
           styles.input,

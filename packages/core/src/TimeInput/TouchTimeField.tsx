@@ -40,7 +40,7 @@ import {
 } from '../Field';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
 import {useFieldInputStyling} from '../Field/fieldParts';
-import {isInputInvalid, joinAriaIDs} from '../utils/inputAria';
+import {joinAriaIDs} from '../utils/inputAria';
 import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
@@ -245,7 +245,7 @@ export function TouchTimeField({
   });
   const {statusIcon, describedBy: statusTooltipDescribedBy} =
     useInputStatusIcon({status, statusVariant, isInGroup: !!inputGroup});
-  const {ariaLabelledBy, ariaDescribedBy} = getInputARIA(
+  const {ariaLabelledBy, ariaDescribedBy, isInvalid} = getInputARIA(
     inputLabelID,
     [
       description ? descriptionID : null,
@@ -255,6 +255,7 @@ export function TouchTimeField({
       ariaDescribedByProp,
     ],
     inputGroup,
+    status?.type,
   );
 
   const fireChange = useCallback(
@@ -429,9 +430,7 @@ export function TouchTimeField({
         aria-disabled={isEffectivelyDisabled ? 'true' : undefined}
         aria-describedby={ariaDescribedBy}
         aria-required={isEffectivelyRequired ? 'true' : undefined}
-        aria-invalid={
-          isInputInvalid(status?.type, inputGroup) ? 'true' : undefined
-        }
+        aria-invalid={isInvalid ? 'true' : undefined}
         aria-busy={isBusy || undefined}
         aria-expanded={isSheetOpen}
         aria-haspopup="dialog"

@@ -800,6 +800,52 @@ describe('InputGroup', () => {
     );
   });
 
+  it('marks a grouped Tokenizer invalid from its own error status', () => {
+    render(
+      <InputGroup label="Recipients">
+        <InputGroupText>To</InputGroupText>
+        <Tokenizer
+          label="People"
+          isLabelHidden
+          searchSource={fruitSource}
+          value={[]}
+          onChange={() => {}}
+          status={{type: 'error', message: 'Pick at least one person'}}
+        />
+      </InputGroup>,
+    );
+
+    // The caller's own error reaches the invalid state even grouped, where
+    // the presentation drops the local status.
+    expect(
+      screen.getByRole('combobox', {name: 'Recipients People'}),
+    ).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('marks a grouped Tokenizer invalid on a group error even with a warning of its own', () => {
+    render(
+      <InputGroup
+        label="Recipients"
+        status={{type: 'error', message: 'Recipients are required'}}>
+        <InputGroupText>To</InputGroupText>
+        <Tokenizer
+          label="People"
+          isLabelHidden
+          searchSource={fruitSource}
+          value={[]}
+          onChange={() => {}}
+          status={{type: 'warning', message: 'List looks long'}}
+        />
+      </InputGroup>,
+    );
+
+    // A member's own warning never confers validity: the group error is what
+    // the field is invalid for.
+    expect(
+      screen.getByRole('combobox', {name: 'Recipients People'}),
+    ).toHaveAttribute('aria-invalid', 'true');
+  });
+
   it('takes the invalid state from the nearest enclosing group', () => {
     render(
       <InputGroup
