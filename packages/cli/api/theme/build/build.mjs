@@ -1061,23 +1061,7 @@ function assertThemeSourceFile(filePath, cwd, mode = {}) {
     const familyKey = /Command: .*--family-key (\S+)/.exec(sourceHead)?.[1];
     const build =
       sources.length > 1 && familyKey
-        ? formatCliCommand(
-            [
-              'theme',
-              'build',
-              '--family',
-              ...sources,
-              '--family-key',
-              familyKey,
-              ...(mode.iconsSpecifier
-                ? ['--icons-specifier', mode.iconsSpecifier]
-                : []),
-              ...(mode.check ? ['--check'] : []),
-            ]
-              .map(w => quoteCommandArgument(w))
-              .join(' '),
-            cwd,
-          )
+        ? buildSuggestion(sources, mode, cwd, undefined, {familyKey})
         : sources.length > 0
           ? buildSuggestion(sources[0], mode, cwd)
           : null;
@@ -1176,7 +1160,8 @@ export function setPrivateVarErrorListener(listener) {
 /**
  * The `theme build` command for `source` with the caller's mode flags, so a
  * suggestion never turns a check into a write or moves the outputs.
- * @param {string} source as the user types it, from cwd
+ * @param {string | string[]} source as the user types it, from cwd; several
+ *   for a family (with `shape.familyKey`)
  * @param {BuildMode} mode
  * @param {string} cwd
  * @param {{group: string, build: string}} [words] the command's own words
@@ -1188,9 +1173,11 @@ export function buildSuggestion(source, mode, cwd, words, shape = {}) {
   /** @param {string[]} ws quoted for the shell the command runs in (PowerShell too) */
   const quoted = ws => ws.map(w => quoteCommandArgument(w));
   // A glob stays as typed: the shell expands it.
-  const src = shape.glob
-    ? source.replace(/['"]/g, '')
-    : quoteCommandArgument(source);
+  const src = (Array.isArray(source) ? source : [source])
+    .map(one =>
+      shape.glob ? one.replace(/['"]/g, '') : quoteCommandArgument(one),
+    )
+    .join(' ');
   return formatCliCommand(
     [
       ...quoted([
