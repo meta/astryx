@@ -1527,6 +1527,7 @@ function chromeBinary() {
 /** The first line of every file the editor writes into a theme's app copy. */
 export {APP_COPY_MARK} from './_marks.mjs';
 import {APP_COPY_MARK, appCopyMark} from './_marks.mjs';
+import {builtColorMode} from '../../foundation/discovery/theme-imports.mjs';
 
 /**
  * The app's copy of an editor theme: a standard local theme in
@@ -1594,9 +1595,13 @@ function appCopyFiles(cwd, slug, fontsCss) {
     if (fs.existsSync(from))
       built[`${slug}${ext}`] = asBuilt(fs.readFileSync(from, 'utf8'));
   }
+  // A light-only or dark-only theme's build exports its one color mode
+  // (`colorModes`); the copy's source re-exports it, so a build of the copy
+  // writes it too and `theme add` reads it.
+  const oneMode = builtColorMode(f.js).mode;
   const files = {
     [`${name}.doc.mjs`]: `${head('//', '')}\n/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {\n  type: 'theme',\n  name: ${JSON.stringify(slug)},\n  displayName: ${JSON.stringify(slug)},\n  description: ${JSON.stringify(`The ${slug} theme, made with the theme editor (themes/${slug}/).`)},\n  maintained: false,\n};\n`,
-    [`${name}.ts`]: `${head('//', '')}export {${name}} from './${slug}';\n`,
+    [`${name}.ts`]: `${head('//', '')}export {${name}${oneMode ? ', colorModes' : ''}} from './${slug}';\n`,
     ...built,
     // Always there, so the app theme module's import of it holds when the
     // theme's fonts change (none: a comment only).
