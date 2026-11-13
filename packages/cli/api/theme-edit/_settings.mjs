@@ -2404,6 +2404,9 @@ export function compileTheme(ctx, data, base) {
       return n && n.unit === '' && n.value === 0 ? '0px' : v;
     };
     for (const {target, s, list} of padQueue.values()) {
+      // The own source's padding on the same rule wins over the editor's:
+      // nothing is written there (the result says so).
+      if (ownPads(target, s)) continue;
       const prefix = /** @type {string} */ (padVars(target));
       const owner = prefix.slice('--astryx-'.length, -'-padding'.length);
       const scoped = target !== owner || s.when != null || s.state != null;
@@ -2414,7 +2417,9 @@ export function compileTheme(ctx, data, base) {
         const raw = String(x.value).trim();
         // initial and unset leave the variable without a value, so the part
         // takes Core's own default for it.
-        const value = /^(initial|unset)$/i.test(raw) ? 'initial' : raw;
+        const value = /^(initial|unset|inherit|revert|revert-layer)$/i.test(raw)
+          ? 'initial'
+          : raw;
         const w = splitTop(value, ' ').map(y => length(y.trim()));
         const one = length(value);
         for (const dir of /** @type {const} */ (['ltr', 'rtl'])) {
@@ -2596,6 +2601,26 @@ export function compileTheme(ctx, data, base) {
     return out;
   };
   /**
+   * Whether the theme's own source sets a padding on a part's rule for a
+   * scope (its plain rule, a variant, a state).
+   * @param {string} target @param {Setting} s
+   */
+  const ownPads = (target, s) => {
+    try {
+      return [
+        ...ownPartTokens(
+          ctx.project.cwd,
+          data.name,
+          target,
+          s.when ?? 'base',
+          s.state ? `:${s.state}` : null,
+        ).keys(),
+      ].some(k => /^padding(-|$)/.test(k));
+    } catch {
+      return false;
+    }
+  };
+  /**
    * The selector a narrower padding scope is written with (a clickable
    * card's class, a variant's attribute, a state's pseudo-class), or null
    * for a state Core writes as a block of its own.
@@ -2619,8 +2644,10 @@ export function compileTheme(ctx, data, base) {
     const dirFirst = b => {
       const keys = Object.keys(b);
       const plain = keys.filter(k => !k.startsWith(':'));
-      const dirs = keys.filter(k => /^:dir\(/.test(k));
-      const rest = keys.filter(k => k.startsWith(':') && !/^:dir\(/.test(k));
+      const dirs = keys.filter(k => /^:(where\()?dir\(/.test(k));
+      const rest = keys.filter(
+        k => k.startsWith(':') && !/^:(where\()?dir\(/.test(k),
+      );
       return Object.fromEntries(
         [...plain, ...dirs, ...rest].map(k => [
           k,
@@ -2664,6 +2691,10 @@ export function compileTheme(ctx, data, base) {
    */
   const dirBlock = (s, target, dir) => {
     const tg = ctx.project.target.get(target);
+    // On the plain rule, a direction's rule keeps the plain rule's weight
+    // (:where), so any variant, the own source's included, out-ranks it as
+    // it out-ranks the plain rule.
+    if (!s.state && !s.when) return [block(s, target), `:where(${dir})`];
     if (!s.state || tg?.states.includes(s.state))
       return [block(s, target), dir];
     const parent = block({...s, state: undefined}, target);

@@ -1702,6 +1702,31 @@ async function changeOnce(
           !ownPartHits.some(h => h.target === target && h.prop === prop)
         )
           ownPartHits.push({target, key: s.when ?? 'base', prop, value});
+  // A padding the own source sets on a rule wins over every padding setting
+  // there (the editor writes none), whichever sides each names.
+  if (
+    sub === 'set' &&
+    s.source === 'property' &&
+    s.on &&
+    /^padding(-|$)/.test(s.thing)
+  )
+    for (const target of partsOf(ctx, s)) {
+      const state = s.state ? `:${s.state}` : null;
+      for (const [prop, value] of ownPartTokens(
+        cwd,
+        slug,
+        target,
+        s.when ?? 'base',
+        state,
+      ))
+        if (
+          /^padding(-|$)/.test(prop) &&
+          !ownPartHits.some(h => h.target === target && h.prop === prop)
+        ) {
+          ownPartHits.push({target, key: s.when ?? 'base', state, prop, value});
+          break;
+        }
+    }
   // A direct setting on exactly the rule the own source sets: its undo
   // takes it back (anything else the file wins over either way).
   const ownHitDirect =
@@ -2725,9 +2750,16 @@ function ownOverSettingNotes(cwd, slug, data) {
     if (!parts.has(key))
       parts.set(key, ownPartTokens(cwd, slug, x.on, x.when ?? 'base', state));
     const own = /** @type {Map<string, string | null>} */ (parts.get(key));
-    if (own.has(x.thing))
+    // A padding the own source sets on the rule wins over every padding
+    // setting there, whichever sides each names.
+    const shown = own.has(x.thing)
+      ? x.thing
+      : /^padding(-|$)/.test(x.thing)
+        ? [...own.keys()].find(k => /^padding(-|$)/.test(k))
+        : undefined;
+    if (shown)
       out.push(
-        `${describe(x)}: ${slug}.theme.ts sets ${x.thing} on ${x.on}${state ? ` ${state}` : ''}${x.when ? ` when ${x.when}` : ''} itself${own.get(x.thing) != null ? ` (${own.get(x.thing)})` : ''}, so this setting does not show there`,
+        `${describe(x)}: ${slug}.theme.ts sets ${shown} on ${x.on}${state ? ` ${state}` : ''}${x.when ? ` when ${x.when}` : ''} itself${own.get(shown) != null ? ` (${own.get(shown)})` : ''}, so this setting does not show there`,
       );
   }
   return out;
