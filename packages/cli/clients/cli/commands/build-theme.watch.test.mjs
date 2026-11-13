@@ -27,11 +27,18 @@ import {execFileSync, spawn} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath, pathToFileURL} from 'node:url';
 import {ensureCoreBuilt} from './ensure-core-built.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLI_BIN = path.resolve(__dirname, '../bin/astryx.mjs');
+// Each build child (never the watcher) waits 1.5 s before it builds, so every
+// rebuild is slow, as on a loaded machine.
+const SLOW_BUILDS = {
+  NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import ${
+    pathToFileURL(path.join(__dirname, 'build-theme.watch.slow-build.mjs')).href
+  }`.trim(),
+};
 
 function runCli(args, cwd) {
   try {
@@ -91,6 +98,61 @@ function waitForOutput(
     };
     child.stdout.on('data', check);
     child.stderr.on('data', check);
+    child.once('exit', exited);
+    check();
+  });
+}
+
+/**
+ * Resolves once `file` holds `color`, the edit the test just saved. A rebuild
+ * that finishes (a new "Watching" line) without it means the watcher missed
+ * that save, so the save is made again; a rebuild still running is not
+ * doubled. A count of rebuilds is no signal here: a rebuild that started
+ * before the save also prints "Watching".
+ * @param {import('node:child_process').ChildProcess} child
+ * @param {() => string} read
+ * @param {{file: string, source: string, content: string, color: string}} edit
+ */
+function waitForBuiltColor(child, read, {file, source, content, color}) {
+  const watching = () => (read().match(/Watching /g) ?? []).length;
+  let seen = watching();
+  const built = () => {
+    try {
+      return fs.readFileSync(file, 'utf-8').includes(color);
+    } catch {
+      return false;
+    }
+  };
+  return new Promise((resolve, reject) => {
+    const check = () => {
+      if (built()) {
+        cleanup();
+        resolve(undefined);
+        return;
+      }
+      const now = watching();
+      if (now > seen) {
+        seen = now;
+        fs.writeFileSync(source, content);
+      }
+    };
+    const exited = (/** @type {number | null} */ code) => {
+      cleanup();
+      reject(
+        new Error(
+          `the watcher exited (${code}) before ${file} held ${color}:\n${read()}`,
+        ),
+      );
+    };
+    const timer = setInterval(check, 250);
+    const cleanup = () => {
+      clearInterval(timer);
+      child.stdout?.off('data', check);
+      child.stderr?.off('data', check);
+      child.off('exit', exited);
+    };
+    child.stdout?.on('data', check);
+    child.stderr?.on('data', check);
     child.once('exit', exited);
     check();
   });
@@ -400,79 +462,73 @@ describe('theme build --watch', () => {
     }
   }, 30_000);
 
-  it('prints the --out editor-folder warning once per session, not on every rebuild', async () => {
-    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app"}\n');
-    const editor = path.join(tmpDir, 'themes', 'g');
-    fs.mkdirSync(editor, {recursive: true});
-    fs.writeFileSync(
-      path.join(editor, 'g.settings.json'),
-      JSON.stringify({like: 'neutral', settings: []}),
-    );
-    const source = path.join(tmpDir, 'other.mjs');
-    const version = (/** @type {string} */ color) =>
-      `export default { name: 'other', tokens: { '--color-bg': '${color}' } };\n`;
-    fs.writeFileSync(source, version('#ffffff'));
-
-    const child = spawn(
-      process.execPath,
-      [
-        CLI_BIN,
-        'theme',
-        'build',
-        'other.mjs',
-        '--out',
-        'themes/g/a.css',
-        '--watch',
-      ],
-      {cwd: tmpDir, env: {...process.env, FORCE_COLOR: '0'}},
-    );
-    onTestFinished(() => {
-      child.kill('SIGKILL');
-    });
-    let out = '';
-    let stderr = '';
-    child.stdout.on('data', d => (out += d.toString()));
-    child.stderr.on('data', d => {
-      stderr += d.toString();
-      out += d.toString();
-    });
-
-    try {
-      await waitForOutput(child, () => out, 'Watching other\\.mjs');
-      // Two rebuilds, each writing into the editor folder again.
-      for (const [n, color] of /** @type {const} */ ([
-        [2, '#010203'],
-        [3, '#040506'],
-      ])) {
-        const changed = version(color);
-        fs.writeFileSync(source, changed);
-        await waitForOutput(child, () => out, 'Watching other\\.mjs', {
-          count: n,
-          onPoll: () => {
-            try {
-              if (
-                !fs
-                  .readFileSync(path.join(editor, 'a.css'), 'utf-8')
-                  .includes(color)
-              )
-                fs.writeFileSync(source, changed);
-            } catch {
-              // The temporary folder is gone at teardown.
-            }
-          },
-        });
-      }
-      expect(fs.readFileSync(path.join(editor, 'a.css'), 'utf-8')).toContain(
-        '#040506',
+  it.each([
+    ['', {}],
+    [', with every rebuild slow', SLOW_BUILDS],
+  ])(
+    'prints the --out editor-folder warning once per session, not on every rebuild%s',
+    async (_slow, slowEnv) => {
+      fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app"}\n');
+      const editor = path.join(tmpDir, 'themes', 'g');
+      fs.mkdirSync(editor, {recursive: true});
+      fs.writeFileSync(
+        path.join(editor, 'g.settings.json'),
+        JSON.stringify({like: 'neutral', settings: []}),
       );
-      expect(
-        out.match(/rebuilding other\.mjs/g)?.length,
-      ).toBeGreaterThanOrEqual(2);
-      expect(stderr.match(/theme editor made/g)).toHaveLength(1);
-    } finally {
-      child.kill('SIGINT');
-    }
-  }, 60_000);
+      const source = path.join(tmpDir, 'other.mjs');
+      const version = (/** @type {string} */ color) =>
+        `export default { name: 'other', tokens: { '--color-bg': '${color}' } };\n`;
+      fs.writeFileSync(source, version('#ffffff'));
+
+      const child = spawn(
+        process.execPath,
+        [
+          CLI_BIN,
+          'theme',
+          'build',
+          'other.mjs',
+          '--out',
+          'themes/g/a.css',
+          '--watch',
+        ],
+        {cwd: tmpDir, env: {...process.env, ...slowEnv, FORCE_COLOR: '0'}},
+      );
+      onTestFinished(() => {
+        child.kill('SIGKILL');
+      });
+      let out = '';
+      let stderr = '';
+      child.stdout.on('data', d => (out += d.toString()));
+      child.stderr.on('data', d => {
+        stderr += d.toString();
+        out += d.toString();
+      });
+
+      try {
+        await waitForOutput(child, () => out, 'Watching other\\.mjs');
+        // Two rebuilds, each writing into the editor folder again.
+        for (const color of ['#010203', '#040506']) {
+          fs.writeFileSync(source, version(color));
+          await waitForBuiltColor(child, () => out, {
+            file: path.join(editor, 'a.css'),
+            source,
+            content: version(color),
+            color,
+          });
+        }
+        expect(fs.readFileSync(path.join(editor, 'a.css'), 'utf-8')).toContain(
+          '#040506',
+        );
+        expect(
+          out.match(/rebuilding other\.mjs/g)?.length,
+        ).toBeGreaterThanOrEqual(2);
+        expect(stderr.match(/theme editor made/g)).toHaveLength(1);
+      } finally {
+        child.kill('SIGINT');
+      }
+    },
+    60_000,
+  );
 
   it('prints the editor-theme warning once per session, not on every rebuild', async () => {
     fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app"}\n');
@@ -503,26 +559,13 @@ describe('theme build --watch', () => {
     });
     try {
       await waitForOutput(child, () => out, 'Watching');
-      for (const [n, color] of /** @type {const} */ ([
-        [2, '#010203'],
-        [3, '#040506'],
-      ])) {
-        const changed = version(color);
-        fs.writeFileSync(source, changed);
-        await waitForOutput(child, () => out, 'Watching', {
-          count: n,
-          onPoll: () => {
-            try {
-              if (
-                !fs
-                  .readFileSync(path.join(editor, 'g.css'), 'utf-8')
-                  .includes(color)
-              )
-                fs.writeFileSync(source, changed);
-            } catch {
-              // The temporary folder is gone at teardown.
-            }
-          },
+      for (const color of ['#010203', '#040506']) {
+        fs.writeFileSync(source, version(color));
+        await waitForBuiltColor(child, () => out, {
+          file: path.join(editor, 'g.css'),
+          source,
+          content: version(color),
+          color,
         });
       }
       expect(stderr.match(/is a theme the theme editor made/g)).toHaveLength(1);
