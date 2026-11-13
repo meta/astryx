@@ -28,7 +28,7 @@ import {
 import {PALETTE_DIALS, isGraySeed, seedOf} from './_palette.mjs';
 import {focusStateOf, partRuleTokens} from './_settings.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
-import {cssProperties, keywordsOf, matchValue} from './_css.mjs';
+import {cssProperties, keywordsOf, matchValue, splitTop} from './_css.mjs';
 
 /** @typedef {import('./_how-commands.mjs').Step} Step */
 
@@ -5549,12 +5549,23 @@ export function draftAnswer(ctx, env, question) {
         const padNow0 = part => {
           // The part's plain rule in the theme as built (the base theme's
           // card padding), its tokens read in this theme.
-          const rule = partRuleTokens(
+          const ruleMap = partRuleTokens(
             ctx.project.cwd,
             env.slug,
             env.data.like,
             one(part),
-          ).get(gap ? 'gap' : 'padding');
+          );
+          const rule = ruleMap.get(gap ? 'gap' : 'padding');
+          /** A rule value with its tokens read in this theme. @param {unknown} x */
+          const inTheme = x =>
+            String(x).replace(
+              /var\(\s*(--[a-z0-9-]+)\s*(?:,[^)]*)?\)/gi,
+              (m, t) => current(t) || m,
+            );
+          // The base theme's own block and inline padding on the part (butter
+          // writes those, not the shorthand), each side as built.
+          const ruleBlock = gap ? null : ruleMap.get('padding-block');
+          const ruleInline = gap ? null : ruleMap.get('padding-inline');
           if (rule) {
             const resolved = String(rule).replace(
               /var\(\s*(--[a-z0-9-]+)\s*(?:,[^)]*)?\)/gi,
@@ -5577,8 +5588,13 @@ export function draftAnswer(ctx, env, question) {
               sideTok(/^padding-(block(-end)?|bottom)$/),
               sideTok(/^padding-(inline(-start)?|left)$/),
             ];
-            if (toks.some(Boolean)) {
+            if (toks.some(Boolean) || ruleBlock || ruleInline) {
+              const [bw, iw] = [ruleBlock, ruleInline].map(x =>
+                x ? splitTop(inTheme(x).trim(), ' ') : null,
+              );
               const box = toks.map(tk => (tk ? current(tk) || '0px' : '0px'));
+              if (bw) [box[0], box[2]] = [bw[0], bw[1] ?? bw[0]];
+              if (iw) [box[3], box[1]] = [iw[0], iw[1] ?? iw[0]];
               return box[0] === box[2] && box[1] === box[3]
                 ? box[0] === box[1]
                   ? box[0]

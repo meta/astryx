@@ -723,7 +723,7 @@ describe('hunt2: order and scope', () => {
     fs.rmSync(path.join(cwd, 'themes/o1'), {recursive: true, force: true});
   }, 240_000);
 
-  it('a setting for both modes replaces the one-mode ones; one mode on a part with variants is refused', async () => {
+  it('a setting for both modes replaces the one-mode ones; one mode on a part with variants goes to each variant', async () => {
     await themeEditNew('o2', {cwd});
     await themeEditSet('o2', '--color-background-surface', '#ff0000', {
       cwd,
@@ -741,17 +741,14 @@ describe('hunt2: order and scope', () => {
     expect(
       JSON.parse(read('themes/o2/o2.settings.json')).settings,
     ).toHaveLength(1);
-    expect(
-      (
-        await refusal(() =>
-          themeEditSet('o2', 'background-color', '#00ff00', {
-            cwd,
-            on: 'button',
-            mode: 'light',
-          }),
-        )
-      ).code,
-    ).toBe('ERR_THEME_NO_MODE');
+    await themeEditSet('o2', 'background-color', '#00ff00', {
+      cwd,
+      on: 'button',
+      mode: 'light',
+    });
+    expect(read('themes/o2/o2.css')).toMatch(
+      /\.astryx-button\[data-variant="[a-z]+"\] \{[^}]*background-color: light-dark\(#00ff00, /,
+    );
     fs.rmSync(path.join(cwd, 'themes/o2'), {recursive: true, force: true});
   }, 240_000);
 

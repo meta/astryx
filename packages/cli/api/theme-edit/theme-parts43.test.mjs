@@ -429,6 +429,25 @@ describe('a whole-button hover on butter', () => {
   }, 240_000);
 });
 
+describe('a whole-part hover the own source sets itself', () => {
+  it('is not repeated on the variants either, so the note that it does not show holds on every variant', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('h6o', {cwd, like: 'neutral'});
+    ownSource(
+      'h6o',
+      "components: {button: {base: {':hover': {backgroundColor: 'red'}}}},",
+    );
+    await themeEditShow('h6o', {cwd});
+    const r = await themeEditSet('h6o', 'background-color', 'blue', {
+      cwd,
+      on: 'button',
+      state: 'hover',
+    });
+    expect(r.data.notes.join(' ')).toMatch(/so this does not show there/);
+    expect(cssOf('h6o')).not.toMatch(/background-color: blue/);
+  }, 240_000);
+});
+
 describe('a longhand after a shorthand the base holds', () => {
   it('wins on butter: padding-inline after padding, border-color after border', async ctx => {
     if (needBases(ctx)) return;

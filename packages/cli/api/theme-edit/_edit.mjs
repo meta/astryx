@@ -1874,6 +1874,19 @@ async function changeOnce(
         !x.when &&
         x.thing === `--font-family-${s.on}`,
     );
+  // A whole-theme spacing dial keeps a part's own exact control size too,
+  // on that part.
+  if (sub === 'set' && s.source === 'dial' && s.thing === 'spacing' && !s.on)
+    exactWins.push(
+      ...data.settings.filter(
+        x =>
+          x.source === 'token' &&
+          !!x.on &&
+          !x.when &&
+          !x.state &&
+          /^--size-element-/.test(x.thing),
+      ),
+    );
   // A spacing dial on a part keeps the exact spacing and sizes there too:
   // the whole theme's, and the part's own.
   if (sub === 'set' && s.source === 'dial' && s.thing === 'spacing' && s.on)

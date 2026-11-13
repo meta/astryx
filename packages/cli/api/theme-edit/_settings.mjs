@@ -2197,10 +2197,35 @@ function keepShades(pal, kept) {
  * A size in px: px, rem (16px each), or a calc() of those added and
  * subtracted; null for anything else.
  * @param {string} v
+ * @param {Record<string, string>} [vars] values for the tokens a var() may name
  * @returns {number | null}
  */
-export function sizePx(v) {
+export function sizePx(v, vars = {}) {
   let t = String(v).trim();
+  // A token the dial or the theme gives a value (var(--spacing-12)),
+  // through that value; a clamp() at its preferred value held to its
+  // bounds, or its upper bound when the preferred one is no length;
+  // min() and max() of the lengths they hold.
+  const fn = /^(var|clamp|min|max)\((.*)\)$/is.exec(t);
+  if (fn) {
+    const args = splitTop(fn[2], ',').map(x => x.trim());
+    if (fn[1].toLowerCase() === 'var') {
+      const own = vars[args[0]];
+      if (own != null) return sizePx(own, vars);
+      return args[1] != null ? sizePx(args.slice(1).join(','), vars) : null;
+    }
+    const n = args.map(x => sizePx(x, vars));
+    if (fn[1].toLowerCase() === 'clamp') {
+      const [lo, mid, hi] = n;
+      if (lo == null || hi == null) return null;
+      return mid == null ? hi : Math.min(hi, Math.max(lo, mid));
+    }
+    const known = /** @type {number[]} */ (n.filter(x => x != null));
+    if (!known.length) return null;
+    return fn[1].toLowerCase() === 'min'
+      ? Math.min(...known)
+      : Math.max(...known);
+  }
   const calc = /^calc\((.*)\)$/is.exec(t);
   if (calc) t = calc[1].trim();
   const terms = t.match(/[+-]?\s*[\d.]+(?:px|rem)\b|\S+/g) ?? [];
@@ -2221,6 +2246,67 @@ export function sizePx(v) {
     sign = 1;
   }
   return terms.length ? sum : null;
+}
+
+/**
+ * Spacing steps scaled with the spacing dial, kept in order around the
+ * steps the theme keeps exact: each the plain scaled value unless it would
+ * meet or pass a kept one; those are spread evenly between the kept one and
+ * the nearest step that keeps its place. A step with no room below a kept
+ * one takes the value of the one below it.
+ * @param {Array<[string, number]>} steps token name and the base value, in px
+ * @param {number} f the rung's factor
+ * @param {Record<string, number>} kept exact steps the theme keeps, in px
+ * @param {string[]} [noRoom] filled with the steps left no room
+ * @returns {Array<[string, number]>} every step's new value in px, kept ones as kept
+ */
+export function spacingSteps(steps, f, kept, noRoom = []) {
+  const px = [...steps].sort((a, b) => a[1] - b[1]);
+  const n = px.map(([k, v]) => (k in kept ? kept[k] : v * f));
+  const isKept = (/** @type {number} */ i) => px[i][0] in kept;
+  px.forEach(([, base], k) => {
+    if (!isKept(k)) return;
+    // The steps below that would meet or pass it are spread evenly between
+    // the last one that does not and it.
+    let j0 = k;
+    while (
+      j0 > 0 &&
+      !isKept(j0 - 1) &&
+      n[j0 - 1] >= n[k] &&
+      px[j0 - 1][1] < base
+    )
+      j0--;
+    if (j0 < k) {
+      const lo = j0 > 0 ? n[j0 - 1] : 0;
+      if (lo >= n[k])
+        for (let j = j0; j < k; j++) {
+          n[j] = lo;
+          noRoom.push(px[j][0]);
+        }
+      else
+        for (let j = j0; j < k; j++)
+          n[j] = lo + ((n[k] - lo) * (j - j0 + 1)) / (k - j0 + 1);
+    }
+    // The steps above that would meet or fall under it, likewise up to the
+    // next one that does not (or above it by their own scaled steps).
+    let j1 = k;
+    while (
+      j1 < n.length - 1 &&
+      !isKept(j1 + 1) &&
+      n[j1 + 1] <= n[k] &&
+      px[j1 + 1][1] > base
+    )
+      j1++;
+    if (j1 > k) {
+      const hi = j1 < n.length - 1 ? n[j1 + 1] : null;
+      for (let j = k + 1; j <= j1; j++)
+        n[j] =
+          hi == null
+            ? n[k] + (px[j][1] - base) * f
+            : n[k] + ((hi - n[k]) * (j - k)) / (j1 - k + 1);
+    }
+  });
+  return px.map(([k], i) => [k, n[i]]);
 }
 
 /**
@@ -3087,15 +3173,16 @@ export function compileTheme(ctx, data, base) {
    * theme sets none of its own: the base theme's rule for that variant (in
    * the state, else at rest), else Core's, else transparent for a
    * background Core never paints; null for a text color Core never sets.
-   * @param {string} target @param {'background-color' | 'color'} css
+   * @param {string} target @param {string} css a color longhand, kebab-case
    * @param {string} name the variant @param {string} [state]
    * @param {boolean} [stateOnly] the state's own value only, never the resting one
    * @returns {string | null}
    */
   const exactVariantValue = (target, css, name, state, stateOnly = false) => {
     const when = `variant:${name}`;
-    const props =
-      css === 'color' ? ['color'] : ['backgroundColor', 'background'];
+    const kebabs =
+      css === 'background-color' ? ['background-color', 'background'] : [css];
+    const props = kebabs.map(camel);
     const steps = state
       ? stateOnly
         ? [state]
@@ -3111,9 +3198,7 @@ export function compileTheme(ctx, data, base) {
       return attrs.split(',').includes(`variant=${name}`) ? cond : null;
     };
     for (const st of steps)
-      for (const p of css === 'color'
-        ? ['color']
-        : ['background-color', 'background']) {
+      for (const p of kebabs) {
         const at = ctx.C.MAP[target]?.at?.[p];
         for (const [k, val] of Object.entries(at ?? {})) {
           const cond = keyOf(k);
@@ -3121,7 +3206,17 @@ export function compileTheme(ctx, data, base) {
           if (st ? cond.includes(`:${st}`) : cond === '') return val;
         }
       }
-    return css === 'color' || stateOnly ? null : 'transparent';
+    if (stateOnly) return null;
+    return css === 'background-color'
+      ? 'transparent'
+      : css === 'color'
+        ? null
+        : 'currentcolor';
+  };
+  /** The family a color property belongs to: background is background-color. @param {string} p */
+  const colorFamily = p => {
+    const k = kebab(p);
+    return k === 'background' ? 'background-color' : k;
   };
   /** @param {Setting} s @param {string} target @param {string} prop @param {string} v */
   const putComp = (s, target, prop, v) => {
@@ -3139,7 +3234,9 @@ export function compileTheme(ctx, data, base) {
       // unset there (the base theme's, else Core's), so no variant takes
       // another's and the other mode stays as it was. The part's own rule
       // is left alone.
-      const css = kebab(prop) === 'color' ? 'color' : 'background-color';
+      // The property itself (a border color stays a border color); the
+      // background shorthand is written as its color.
+      const css = colorFamily(prop);
       const other = mode === 'light' ? 2 : 1;
       // What the part's own rule holds of it (an earlier setting for both
       // modes): the other half each variant keeps, before its unset value.
@@ -3210,7 +3307,7 @@ export function compileTheme(ctx, data, base) {
             y =>
               y.on === s.on &&
               y.state === 'hover' &&
-              kebab(y.thing) === kebab(s.thing),
+              colorFamily(y.thing) === colorFamily(s.thing),
           )
         ) {
           const hover = exactVariantValue(target, css, name, 'hover', true);
@@ -3463,22 +3560,68 @@ export function compileTheme(ctx, data, base) {
               for (const t of parts) block(s, t)[k] = nv;
           } else putTok(k, nv);
         };
-        for (const [k, core] of Object.entries(
-          /** @type {Record<string, string>} */ (TOKENS),
-        )) {
-          const v = base.light[k] ?? core;
-          if (/^--spacing-/.test(k) && /rem$/.test(v))
-            put(k, `${Number((parseFloat(v) * f).toFixed(3))}rem`);
+        // The spacing steps, in order around the exact steps the theme
+        // keeps (a whole-theme one or the own source's: they win over the
+        // dial).
+        /** @type {Record<string, string>} */
+        const dialVars = {};
+        {
+          /** @type {Array<[string, number]>} */
+          const steps = [];
+          for (const [k, core] of Object.entries(
+            /** @type {Record<string, string>} */ (TOKENS),
+          )) {
+            const v = base.light[k] ?? core;
+            if (/^--spacing-/.test(k) && /rem$/.test(v))
+              steps.push([k, parseFloat(v) * 16]);
+          }
+          /** @type {Record<string, number>} */
+          const keptSteps = {};
+          for (const [k, v] of keptTokens(null))
+            if (/^--spacing-/.test(k)) {
+              const n = sizePx(v);
+              if (n != null) keptSteps[k] = n;
+            }
+          /** @type {string[]} */
+          const noRoom = [];
+          for (const [k, n] of spacingSteps(steps, f, keptSteps, noRoom)) {
+            const nv = `${Number((n / 16).toFixed(3))}rem`;
+            dialVars[k] = k in keptSteps ? String(keptTokens(null).get(k)) : nv;
+            if (!(k in keptSteps)) put(k, nv);
+          }
+          for (const k of noRoom)
+            (ctx.sizeNotes ??= []).push(
+              `${k} has no room between the exact spacing steps kept around it, so it takes the value of the one below it`,
+            );
         }
         // An exact size the theme keeps (it wins over the dial) is a fixed
         // point the others stay in order around: a whole-theme one, one of
         // the theme's own source, and on a part the part's own, in any
-        // unit that comes to a length.
-        for (const t of parts.length ? parts : [null]) {
+        // unit that comes to a length (a spacing token through the value
+        // this dial gives it). A whole-theme dial also keeps each part's
+        // own exact sizes in order on that part.
+        const sizeParts = parts.length
+          ? parts
+          : [
+              null,
+              ...new Set(
+                data.settings
+                  .filter(
+                    x =>
+                      x.source === 'token' &&
+                      /^--size-element-/.test(x.thing) &&
+                      x.on &&
+                      !x.when &&
+                      !x.state,
+                  )
+                  .flatMap(x => partsOf(ctx, x)),
+              ),
+            ];
+        for (const t of sizeParts) {
           /** @type {Record<string, number>} */
           const kept = {};
           for (const [k, v] of keptSizes(t)) {
-            const n = sizePx(v);
+            const n = sizePx(v, dialVars);
             if (n != null) kept[k] = n;
           }
           /** @type {string[]} */
@@ -4616,6 +4759,22 @@ export async function buildTheme(ctx, slug, data) {
     forgetWritten(cwd, slug, pictures);
   });
   let receipt = await step(() => runBuild(ctx, slug));
+  // A state setting on the plain part that the own source's same state
+  // rule wins over is not repeated on the variants either: the own source
+  // wins on every variant, as the result says.
+  /** @type {Map<string, Map<string, string | null>>} */
+  const ownStates = new Map();
+  /** @param {string} target @param {string} state @param {string} prop */
+  const ownHolds = (target, state, prop) => {
+    const k = `${target} ${state}`;
+    const own =
+      ownStates.get(k) ?? ownPartTokens(cwd, slug, target, 'base', state);
+    ownStates.set(k, own);
+    const css = kebab(prop);
+    return [...own.keys()].some(
+      o => o === css || coversProperty(o, css) || coversProperty(css, o),
+    );
+  };
   const found = findOverrides(fs.readFileSync(f.css, 'utf8'), theme).filter(
     x =>
       // By property: a variant whose rule the settings give this property
@@ -4639,7 +4798,7 @@ export async function buildTheme(ctx, slug, data) {
         ];
         const held = (x.state ? baseRule?.[x.state] : baseRule)?.[k];
         return held != null && sidesOf(kebab(k), String(v)) == null;
-      }),
+      }) && !(x.state && ownHolds(x.target, x.state, x.prop)),
   );
   /** @type {string[]} */
   const lifted = [];

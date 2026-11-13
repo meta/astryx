@@ -3600,62 +3600,9 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       }
       s.note = `text, heading and link inside ${s.on} keep the color their color prop gives; set --color-text-primary for those`;
     }
-    // One mode on a part whose variants each read their own value: the
-    // other mode cannot keep each variant's value in one rule.
-    // With a state, the other mode would take one variant's value for
-    // every variant, so any part whose variants read their own value needs
-    // the variant named.
-    // Per-variant colors only: a value that is not a color is refused for
-    // --mode below, with the reason that holds.
-    if (
-      s.mode &&
-      !s.when &&
-      (COLOR_PROPS.test(prop) || (prop === 'background' && isColorValue(v)))
-    ) {
-      const g = C.groupOfProp(
-        prop === 'background' ? 'background-color' : prop,
-      );
-      for (const t of partsOf(ctx, s)) {
-        const reads = g
-          ? C.partReads(t, g).filter(r => r.props.includes(prop))
-          : [];
-        const variantsOf = (
-          /** @type {(w: string) => string | undefined} */ pick,
-        ) => [
-          ...new Set(
-            reads
-              .flatMap(r => r.when)
-              .map(pick)
-              .filter(Boolean),
-          ),
-        ];
-        // Resting reads keyed by the variant alone, and reads in the state.
-        const rest = variantsOf(w => /^variant=([\w-]+)$/.exec(w)?.[1]);
-        const inState = s.state
-          ? variantsOf(w =>
-              w.includes(`:${s.state}`)
-                ? /(?:^|,)variant=([\w-]+)/.exec(w)?.[1]
-                : undefined,
-            )
-          : [];
-        // A state that does not change this property shows each variant's
-        // resting value, so that is what the other mode must keep.
-        const variants = inState.length ? inState : rest;
-        const perVariant = inState.length
-          ? true
-          : rest.length > 0 && !reads.some(r => r.when.includes(''));
-        if (reads.length && variants.length && perVariant)
-          refuse(
-            E.ERR_THEME_NO_MODE,
-            `Each variant of ${t} has its own ${prop}${s.state ? ` when ${s.state}` : ''}, so one mode cannot be set for all of them at once: the other mode would take one variant's color for every variant. Name the variant.`,
-            {
-              run: [
-                `${P} set ${slug} ${prop} ${quoteCommandArgument(v)} --on ${s.on} --when variant:${variants[0]}${s.state ? ` --state ${s.state}` : ''} --mode ${s.mode}`,
-              ],
-            },
-          );
-      }
-    }
+    // One mode on a part whose variants each read their own color is
+    // written to each variant's rule with that variant's own other half
+    // (compileTheme), so it needs no variant named.
     if (!isSafeValue(v))
       refuse(
         E.ERR_THEME_BAD_VALUE,
