@@ -26,7 +26,7 @@ import {
   wordTable,
 } from './_tables.mjs';
 import {PALETTE_DIALS, isGraySeed, seedOf} from './_palette.mjs';
-import {focusStateOf} from './_settings.mjs';
+import {focusStateOf, partRuleTokens} from './_settings.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {cssProperties, keywordsOf, matchValue} from './_css.mjs';
 
@@ -554,6 +554,20 @@ function scaled(v, f) {
 }
 
 /**
+ * Scale each side of a box value (`4px 8px` by 2 is `8px 16px`); a 0 side
+ * stays 0. Null when a side is not a length this scales.
+ * @param {string} v @param {number} f
+ */
+function scaledBox(v, f) {
+  const sides = String(v ?? '')
+    .trim()
+    .split(/\s+/);
+  if (!sides.length || sides.length > 4) return null;
+  const out = sides.map(x => (/^0(px|rem|em)?$/.test(x) ? x : scaled(x, f)));
+  return out.every(Boolean) ? out.join(' ') : null;
+}
+
+/**
  * The part a clause measures against ("cards twice the padding of
  * buttons": buttons), by clause.
  * @type {WeakMap<object, string>}
@@ -576,6 +590,17 @@ export function exactFactor(text) {
   if (/\ba quarter\b/.test(t)) return 0.25;
   const pct = /\b(\d{1,3})\s?%\s*(?:strength|of|as)\b/.exec(t);
   if (pct && Number(pct[1]) > 0) return Number(pct[1]) / 100;
+  // "50% bigger", "20% less": a change by that share.
+  const by =
+    /\b(\d{1,3})\s?%\s*(bigger|larger|more|wider|taller|smaller|less|tighter|narrower)\b/.exec(
+      t,
+    );
+  if (by && Number(by[1]) > 0) {
+    const f = /^(smaller|less|tighter|narrower)$/.test(by[2])
+      ? 1 - Number(by[1]) / 100
+      : 1 + Number(by[1]) / 100;
+    return f > 0 ? f : null;
+  }
   const times = /\bx\s?(\d*\.?\d+)\b/.exec(t);
   if (times && Number(times[1]) > 0 && Number(times[1]) <= 4)
     return Number(times[1]);
@@ -3498,6 +3523,13 @@ export function draftAnswer(ctx, env, question) {
     if (
       named &&
       !named.bad &&
+      // A percent padding or gap is an amount of the one there now ("50%
+      // bigger", "150%"), answered below: a CSS percent padding is half the
+      // container's width.
+      !(
+        /^(padding|gap|row-gap|column-gap)$/.test(named.prop) &&
+        /^\d*\.?\d+%$/.test(String(named.value).trim())
+      ) &&
       // A divider's thickness and color are its border tokens.
       !c.parts.some(p => p.on === 'divider') &&
       c.parts.length &&
@@ -4445,7 +4477,13 @@ export function draftAnswer(ctx, env, question) {
         };
       }
       case 'spacing': {
-        const px = c.lengths[0];
+        // A percent is an amount of the padding there now ("50% bigger",
+        // "150%"), never a CSS percent padding (half the container's width).
+        const pctLength =
+          c.lengths.find(l => /%$/.test(l)) ??
+          /\b(\d{1,3}(?:\.\d+)?)\s?%/.exec(c.text)?.[0] ??
+          null;
+        const px = c.lengths.find(l => !/%$/.test(l));
         const gap = /\b(gaps?|between)\b/.test(c.text);
         const value =
           /\b(dense|compact)\b/.test(c.text) && !c.dir
@@ -4475,14 +4513,48 @@ export function draftAnswer(ctx, env, question) {
         // "double the padding on cards": an exact amount of the padding the
         // part has now, when the theme sets one; else the dial's step, and
         // the answer says the amount is a step.
-        const padFactor = exactFactor(c.text);
+        const padFactor =
+          exactFactor(c.text) ??
+          (pctLength && Number.parseFloat(pctLength) > 0
+            ? Number.parseFloat(pctLength) / 100
+            : null);
+        /**
+         * The padding (or gap) a part has now: its own setting, else the
+         * token it reads, resolved in this theme.
+         * @param {string} part
+         */
+        const padNow = part => {
+          const own = partValue(part, gap ? 'gap' : 'padding');
+          if (own) return own;
+          // The part's plain rule in the theme as built (the base theme's
+          // card padding), its tokens read in this theme.
+          const rule = partRuleTokens(
+            ctx.project.cwd,
+            env.slug,
+            env.data.like,
+            one(part),
+          ).get(gap ? 'gap' : 'padding');
+          if (rule) {
+            const resolved = String(rule).replace(
+              /var\(\s*(--[a-z0-9-]+)\s*(?:,[^)]*)?\)/gi,
+              (_, t) => current(t) || _,
+            );
+            if (scaledBox(resolved, 1)) return resolved;
+          }
+          const reads = C.partReads(one(part), 'spacing').filter(r =>
+            r.props.some(p => (gap ? /gap/ : /^padding/).test(p)),
+          );
+          const read =
+            reads.find(r => /^--spacing-/.test(r.token)) ?? reads[0] ?? null;
+          return read?.token ? current(read.token) : null;
+        };
         // A comparison ("twice the padding of buttons"): the amount is of
         // the other part's padding, when the theme sets one; else a step,
         // and the answer says so.
         const versus = compared.get(c) ?? null;
         if (padFactor && versus) {
-          const now = partValue(versus, gap ? 'gap' : 'padding');
-          const exact = now ? scaled(now, padFactor) : null;
+          const now = padNow(versus);
+          const exact = now ? scaledBox(now, padFactor) : null;
           return exact
             ? {
                 text: `${gap ? 'the gap' : 'padding'}${where}: ${exact} (${versus} has ${now})`,
@@ -4494,21 +4566,33 @@ export function draftAnswer(ctx, env, question) {
               };
         }
         if (padFactor) {
-          const now = partValue(on, gap ? 'gap' : 'padding');
-          const value = now ? scaled(now, padFactor) : null;
+          const now = padNow(on);
+          const value = now ? scaledBox(now, padFactor) : null;
           if (value)
             return {
               text: `${gap ? 'the gap' : 'padding'}${where}: ${value} (now ${now})`,
               options: [[set(gap ? 'gap' : 'padding', value, f)]],
             };
         }
+        // No amount, and the part has an exact padding of its own: the dial
+        // does not move it (an exact setting wins), so a step of that
+        // padding, said to be a step.
+        const exactPad = !gap && value ? partValue(on, 'padding') : null;
+        const stepped = exactPad
+          ? scaledBox(exactPad, value === 'less' ? 0.8 : 1.25)
+          : null;
+        if (stepped)
+          return {
+            text: `padding${where}: ${stepped} (now ${exactPad}; a step, since your exact padding there wins over the spacing dial: give an amount, such as double or 24px, for an exact one)`,
+            options: [[set('padding', stepped, f)]],
+          };
         if (!value)
           return {
             text: `no padding${where}`,
             options: [[set('padding', '0px', f)]],
           };
         return {
-          text: `room inside ${on}: spacing ${value} (padding, gaps and heights inside it)`,
+          text: `room inside ${on}: spacing ${value} (padding, gaps and heights inside it; one step${padFactor ? ', not an exact amount: give a value, such as 24px, for one' : ''})`,
           options: [[set('spacing', value, {on})]],
         };
       }
