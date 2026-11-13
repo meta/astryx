@@ -5,15 +5,12 @@
 /**
  * @file ListReorderTouch.ts
  * @input The gesture system's long press and host, the reorder claim values
- *   (motion/uikit/reorder.ts), the row motion (utils/rowMotion.ts) and the
- *   selection lock (utils/selectionLock.ts)
+ *   (motion/uikit/reorder.ts) and the selection lock (utils/selectionLock.ts)
  * @output The List reorder's touch layer. `attachTouchHold` is the list's one
- *   hold, which picks up a row from its handle under a finger. `touchMotion`
- *   moves the rows under a finger. It plays the shared settle role, the
- *   drop's glide at the release's velocity, the way home, and the
- *   continuation across the commit
+ *   hold, which picks up a row from its handle under a finger
  * @position Imported by List/listReorderEngine.tsx alone: what the reorder
- *   runs only under a finger sits behind this one import
+ *   runs only under a finger sits behind this one import. The rows' glide,
+ *   which every pointer's drop plays, is List/listReorderGlide.ts
  *
  * UIKit's reorder control (iOS 26.2, measured): a finger held still on it for
  * the scroll view's content-touch delay (150 ms) claims the drag. A flick that
@@ -34,22 +31,8 @@
 import {getGestureHost} from '../gestures/GestureHost';
 import {LongPressGestureRecognizer} from '../gestures/LongPressGestureRecognizer';
 import type {PointerKind} from '../gestures/types';
-import {resolveMotion} from '../motion/resolveMotion';
-import {
-  durationBounceOf,
-  toSpring,
-  type DurationBounce,
-  type SpringDescription,
-} from '../motion/spring';
 import {reorder} from '../motion/uikit/reorder';
-import {registerSpringsTable, springs} from '../motion/uikit/springs';
 import {subscribeInput} from '../utils/inputStream';
-import {
-  animateRow,
-  animatorFor,
-  motionOf,
-  releaseMotion,
-} from '../utils/rowMotion';
 import {lockSelection, locksSelectionFor} from '../utils/selectionLock';
 
 /**
@@ -137,83 +120,3 @@ function lockSelectionWhileHeld(
     held.clear();
   };
 }
-
-/** Releases a row's offset once its motion arrives. */
-function releaseOnArrival(element: HTMLElement, arrived: Promise<boolean>) {
-  void arrived.then(done => {
-    if (done) {
-      releaseMotion(element, 'translate');
-    }
-  });
-}
-
-/** UIKit's motion for the rows of a reorder under a finger. */
-export const touchMotion = {
-  /**
-   * The rows' glide to their new places once a move commits: a drop or a
-   * reorder mode move. It is coordinated layout movement, so it plays the
-   * shared settle role, `springs.settle`, as useAnimatedLayout does. The role
-   * is read once when the glide starts. Registers the springs table first.
-   */
-  glideBase(list: HTMLElement): DurationBounce {
-    registerSpringsTable();
-    return durationBounceOf(toSpring(resolveMotion(list, springs.settle)));
-  },
-
-  /**
-   * The dropped row glides from where its preview was, `shift` from its new
-   * place, to that place on `spring`. It starts at the release's y
-   * `velocity` in px/s. Its offset goes once it arrives.
-   */
-  glide(
-    element: HTMLElement,
-    shift: number,
-    spring: SpringDescription,
-    at: number,
-    velocity: number,
-  ): void {
-    animatorFor(element).rebase({y: shift}, {at});
-    releaseOnArrival(
-      element,
-      animateRow(element, {y: 0}, spring, {at, velocity: {y: velocity}})
-        .finished,
-    );
-  },
-  /**
-   * A row goes back to its place on `spring` (the dragged row from rest),
-   * and its offset goes once it arrives.
-   */
-  home(
-    element: HTMLElement,
-    spring: SpringDescription,
-    at: number,
-    fromRest: boolean,
-  ): void {
-    releaseOnArrival(
-      element,
-      animateRow(element, {y: 0}, spring, {
-        at,
-        velocity: fromRest ? {y: 0} : undefined,
-      }).finished,
-    );
-  },
-  /**
-   * The layout moved a row by `shift`: a commit put it in its new place. Its
-   * running spring, or `spring` from rest, goes on to the new place from
-   * where it is shown. The spring and velocity stay, and the target moves
-   * with the layout. So the curve on screen continues: springs are memoryless.
-   */
-  follow(
-    element: HTMLElement,
-    shift: number,
-    spring: SpringDescription,
-    at: number,
-  ): void {
-    const running = motionOf(element, 'y')?.spring ?? spring;
-    animatorFor(element).rebase({y: shift}, {at});
-    releaseOnArrival(
-      element,
-      animateRow(element, {y: 0}, running, {at}).finished,
-    );
-  },
-};

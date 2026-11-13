@@ -11,7 +11,7 @@
  *   the identity inline values once it rests. `motionNow` is the motion
  *   clock
  * @position Internal utility for List's reorder (List/listReorderEngine.tsx
- *   and List/ListReorderTouch.ts). Every motion goes through the motion
+ *   and List/listReorderGlide.ts). Every motion goes through the motion
  *   foundation's shared per-element `animatorFor`, so a drop and a slide
  *   never drive one row through two animators.
  *
@@ -20,7 +20,7 @@
  * home. A row moved again mid-motion keeps its velocity.
  *
  * SYNC: When modified, update List/listReorderEngine.tsx and
- * List/ListReorderTouch.ts.
+ * List/listReorderGlide.ts.
  */
 
 import {

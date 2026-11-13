@@ -60,7 +60,7 @@ import {animatorFor} from '../../motion/animator';
 import {motionRole} from '../../motion/roles';
 import {getGestureHost} from '../../gestures/GestureHost';
 import {pointerQuery} from '../../gestures/__tests__/pointerQuery';
-import {touchMotion} from '../ListReorderTouch';
+import {reorderGlide} from '../listReorderGlide';
 
 function moveKey<T extends Key>(
   items: ReadonlyArray<T>,
@@ -1546,12 +1546,12 @@ describe('List reorderable', () => {
     stubPrimaryPointer(true);
     const events: string[] = [];
     const glide = vi
-      .spyOn(touchMotion, 'glide')
+      .spyOn(reorderGlide, 'glide')
       .mockImplementation(() => events.push('write'));
     const follow = vi
-      .spyOn(touchMotion, 'follow')
+      .spyOn(reorderGlide, 'follow')
       .mockImplementation(() => events.push('write'));
-    const spring = vi.spyOn(touchMotion, 'glideBase');
+    const spring = vi.spyOn(reorderGlide, 'glideBase');
     try {
       render(<ReorderableRows initial={['A', 'B', 'C', 'D']} />);
       const list = screen.getByRole('list');
@@ -1574,10 +1574,38 @@ describe('List reorderable', () => {
     }
   });
 
+  it('glides a mouse drop into place where the primary pointer is fine, as under a finger', () => {
+    stubPrimaryPointer(false);
+    const glide = vi.spyOn(reorderGlide, 'glide');
+    const follow = vi.spyOn(reorderGlide, 'follow');
+    const spring = vi.spyOn(reorderGlide, 'glideBase');
+    try {
+      render(<ReorderableRows initial={['A', 'B', 'C', 'D']} />);
+      const list = screen.getByRole('list');
+      layOut(list);
+      const handle = handleOf('A');
+      mouseDrag(handle, 322, 322 + 70);
+      act(() => {
+        fireEvent.pointerUp(handle, {...MOUSE, clientY: 322 + 70});
+      });
+      expect(labels()).toEqual(['B', 'C', 'A', 'D']);
+      // The dropped row glides from where its preview was, and the two rows
+      // it passed from their old places, on one read of the settle role.
+      expect(glide).toHaveBeenCalledTimes(1);
+      expect(glide.mock.calls[0]?.[0]).toBe(list.querySelectorAll('li')[2]);
+      expect(follow).toHaveBeenCalledTimes(2);
+      expect(spring).toHaveBeenCalledTimes(1);
+    } finally {
+      glide.mockRestore();
+      follow.mockRestore();
+      spring.mockRestore();
+    }
+  });
+
   it("reads a key move's glide spring once, however many rows slide", async () => {
     stubPrimaryPointer(true);
-    const follow = vi.spyOn(touchMotion, 'follow');
-    const spring = vi.spyOn(touchMotion, 'glideBase');
+    const follow = vi.spyOn(reorderGlide, 'follow');
+    const spring = vi.spyOn(reorderGlide, 'glideBase');
     try {
       const user = userEvent.setup();
       render(<ReorderableRows initial={['A', 'B', 'C', 'D']} />);
@@ -1596,7 +1624,7 @@ describe('List reorderable', () => {
 
   it("plays a committed move's glide on the shared settle role, springs.settle (spec:AST-105 FR4)", async () => {
     stubPrimaryPointer(true);
-    const glide = vi.spyOn(touchMotion, 'glideBase');
+    const glide = vi.spyOn(reorderGlide, 'glideBase');
     const user = userEvent.setup();
     render(<ReorderableRows initial={['A', 'B', 'C']} />);
     const list = screen.getByRole('list');
@@ -1612,8 +1640,8 @@ describe('List reorderable', () => {
 
   it('sends a still-gliding row home on the shared settle role, keeping its velocity (spec:AST-094 FR4, FR6)', async () => {
     stubPrimaryPointer(true);
-    const home = vi.spyOn(touchMotion, 'home');
-    const spring = vi.spyOn(touchMotion, 'glideBase');
+    const home = vi.spyOn(reorderGlide, 'home');
+    const spring = vi.spyOn(reorderGlide, 'glideBase');
     const user = userEvent.setup();
     render(<ReorderableRows initial={['A', 'B', 'C']} />);
     const list = screen.getByRole('list');

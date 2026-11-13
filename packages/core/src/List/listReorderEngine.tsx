@@ -33,8 +33,11 @@
  * position. UIKit's edit-mode reorder (iOS 26.2, measured) supplies the
  * clocks. They are the hold, the rows' glide to their new places after the
  * drop, and autoscroll. Autoscroll is a 20 ms timer whose step grows with how
- * far the preview's edge is past the scroll edge. With a mouse (the theme's
- * presentation) or Reduce Motion, the rows jump to their new places.
+ * far the preview's edge is past the scroll edge. A drop's rows glide with
+ * every pointer. Under Reduce Motion the animator puts them in place at once,
+ * or cross-fades them where the primary pointer is coarse. With a mouse (the
+ * theme's presentation), a cancelled drag and reorder mode's moves put the
+ * rows in place at once.
  *
  * HOW IT RUNS. Everything after the drag begins is imperative: no React
  * render and no layout read until the drop, but one. After a scroll the
@@ -137,7 +140,8 @@ import {
   reorderListStyle,
   reorderRowStyle,
 } from './ListReorderHandle';
-import {attachTouchHold, touchMotion} from './ListReorderTouch';
+import {attachTouchHold} from './ListReorderTouch';
+import {reorderGlide} from './listReorderGlide';
 import type {
   ListReorderContextValue,
   ListReorderEngine,
@@ -511,6 +515,11 @@ interface DragSession {
   readonly list: HTMLElement;
   /** The rows in order at the begin. */
   readonly rows: ReadonlyArray<HTMLElement>;
+  /**
+   * The background the preview paints for a row without its own, or null.
+   * The dragged row wears it while it glides from the drop.
+   */
+  readonly background: string | null;
   /** Their layout tops at the begin, for the commit's rebase. */
   readonly tops: ReadonlyArray<number>;
   readonly geometry: ReorderGeometry;
@@ -586,6 +595,8 @@ interface PendingDrop {
    * The release's y velocity, px/s: the dragged row's glide starts at it.
    */
   readonly velocity: number;
+  /** The preview's background, which the dragged row wears as it glides. */
+  readonly background: string | null;
   readonly restore: RowRestore;
 }
 
@@ -797,7 +808,11 @@ export class ListReorderController implements ListReorderSession {
     this.presentation = options.presentation;
   }
 
-  private get animates(): boolean {
+  /**
+   * Under a finger's presentation, a cancelled drag and reorder mode's moves
+   * glide too. A drop glides under every pointer.
+   */
+  private get glidesEveryMove(): boolean {
     return this.presentation === 'uikit';
   }
 
@@ -1472,6 +1487,7 @@ export class ListReorderController implements ListReorderSession {
     const session: DragSession = {
       list,
       rows,
+      background,
       tops,
       geometry,
       dragged,
@@ -1799,6 +1815,7 @@ export class ListReorderController implements ListReorderSession {
       dragged,
       droppedTop,
       velocity,
+      background: session.background,
       restore: session.restore,
     };
     options.onReorder({key, to: position});
@@ -1861,7 +1878,9 @@ export class ListReorderController implements ListReorderSession {
     );
     // The spring is read once, before the first write.
     const spring =
-      this.animates && away.length > 0 ? touchMotion.glideBase(list) : null;
+      this.glidesEveryMove && away.length > 0
+        ? reorderGlide.glideBase(list)
+        : null;
     for (const element of away) {
       if (spring == null) {
         animatorFor(element).set({y: 0});
@@ -1870,7 +1889,7 @@ export class ListReorderController implements ListReorderSession {
       }
       // A row still in a drop's or a key move's glide goes on home. It plays
       // the shared settle role from where it is shown, at the speed it has.
-      touchMotion.home(element, spring, at, false);
+      reorderGlide.home(element, spring, at, false);
     }
     clearReordering(list);
     this.restWhenDone(rows[dragged], restore);
@@ -1896,15 +1915,22 @@ export class ListReorderController implements ListReorderSession {
     );
   }
 
-  /** Clears the dragged row's stacking once its motion has come to rest. */
+  /**
+   * Clears the dragged row's stacking and background once its rows' motion
+   * has come to rest.
+   */
   private restWhenDone(element: HTMLElement, restore: RowRestore): void {
     const settle = () => {
       if (this.session?.rows[this.session.dragged] === element) {
         return;
       }
-      const running = motionOf(element, 'y');
+      const running =
+        motionOf(element, 'y') ??
+        restore.rows
+          .map(row => motionOf(row, 'y'))
+          .find(motion => motion != null);
       if (running != null) {
-        // The drop's spring, or the rebase that continues it.
+        // The drop's springs, or the rebase that continues them.
         void running.handle.finished.then(settle);
         return;
       }
@@ -2016,7 +2042,7 @@ export class ListReorderController implements ListReorderSession {
         : 0,
     );
     const spring = shifts.some(shift => Math.abs(shift) >= MIN_MOVE_PX)
-      ? touchMotion.glideBase(list)
+      ? reorderGlide.glideBase(list)
       : null;
     return () => {
       for (const [index, element] of move.rows.entries()) {
@@ -2026,7 +2052,7 @@ export class ListReorderController implements ListReorderSession {
         }
         // A row still sliding from the previous move goes on from where it
         // is shown, as a drop's rows do.
-        touchMotion.follow(element, shift, spring, at);
+        reorderGlide.follow(element, shift, spring, at);
       }
       clearReordering(list);
     };
@@ -2053,15 +2079,24 @@ export class ListReorderController implements ListReorderSession {
       };
     });
     // A row at rest where the drop leaves it settles there. A row the layout
-    // moved glides from its old place.
+    // moved glides from its old place, with every pointer.
     const settles = (row: {shift: number; value: number; moving: boolean}) =>
       Math.abs(row.value + row.shift) < MIN_MOVE_PX && !row.moving;
     const glides = (row: {shift: number; value: number; moving: boolean}) =>
       !settles(row) && Math.abs(row.shift) >= MIN_MOVE_PX;
-    const spring =
-      this.animates && rows.some(row => row != null && glides(row))
-        ? touchMotion.glideBase(list)
-        : null;
+    const spring = rows.some(row => row != null && glides(row))
+      ? reorderGlide.glideBase(list)
+      : null;
+    // While the drop's rows glide, the dragged row rides above the rows it
+    // passed, on the preview's background, so their content never shows
+    // through it. It is itself again once they all rest (restWhenDone).
+    const dropped = rows[pending.dragged]?.element;
+    if (spring != null && dropped != null) {
+      dropped.style.zIndex = '1';
+      if (pending.background != null) {
+        dropped.style.backgroundColor = pending.background;
+      }
+    }
     for (const row of rows) {
       if (row == null) {
         continue;
@@ -2077,12 +2112,12 @@ export class ListReorderController implements ListReorderSession {
       if (spring != null && index === pending.dragged) {
         // The dragged row glides from where its preview was dropped into its
         // new layout place, starting at the release's velocity.
-        touchMotion.glide(element, shift, spring, at, pending.velocity);
+        reorderGlide.glide(element, shift, spring, at, pending.velocity);
       } else if (spring != null) {
         // Every other row's place after the drop is its new layout place. So
         // its running glide goes on to 0 from the shifted value. Otherwise the
         // glide starts from rest.
-        touchMotion.follow(element, shift, spring, at);
+        reorderGlide.follow(element, shift, spring, at);
       } else {
         settleAtRest(element, value, moving);
       }
@@ -2245,7 +2280,7 @@ export class ListReorderController implements ListReorderSession {
       kept: this.placeIn(rows, index),
       politeness: undefined,
     });
-    if (this.animates) {
+    if (this.glidesEveryMove) {
       this.committedMove = {
         list,
         rows,
@@ -2405,8 +2440,9 @@ function ListReorderHost({reorder}: {reorder: ListReorderContextValue}) {
   const controller = reorder.session as ListReorderController;
   const announce = useAnnounce();
   const t = useComponentTranslator();
-  // UIKit's motion under a finger (one touch model on every touch device);
-  // with a mouse, rows take their places at once.
+  // UIKit's presentation under a finger (one touch model on every touch
+  // device): a cancelled drag and reorder mode's moves glide. With a mouse
+  // they take their places at once. A drop glides under every pointer.
   const isTouch = useTouchPresentation().isTouch;
   // Syncs the reorder session, which lives outside React, with this render's
   // options, strings and presentation.
