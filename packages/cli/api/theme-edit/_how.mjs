@@ -669,10 +669,24 @@ function finish(env, drafts) {
       unmetOf.set(d, unmet);
     }
   for (const d of drafts) {
-    if (!d.intent && dropped.size)
+    if (!d.intent && dropped.size) {
       d.options = d.options
         .map(o => o.filter(st => !dropped.has(key(st)) || kept.has(key(st))))
         .filter(o => o.length);
+      // A joined answer left holding what another answer already says is
+      // that answer: it is not given twice (and never as "all of it").
+      const same = (/** @type {import('./_how-commands.mjs').Step[]} */ o) =>
+        drafts.some(
+          x =>
+            x !== d &&
+            x.options.some(
+              y =>
+                y.length === o.length &&
+                y.every((st, i) => key(st) === key(o[i])),
+            ),
+        );
+      if (d.options.length && d.options.every(same)) continue;
+    }
     // The measured check: an option whose built result does not do what
     // the question asks is left out, with a plain line saying why.
     const unmet = unmetOf.get(d) ?? [];

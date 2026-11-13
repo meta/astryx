@@ -484,6 +484,34 @@ describe('"like" and "as" compare only in comparison forms', () => {
 
 describe('the answer that joins every clause is measured too', () => {
   it(
+    'a joined answer left with one clause is not given again as "all of it"',
+    async () => {
+      const {data} = await themeEditHow(
+        'make form controls like inputs and checkboxes rounder',
+        {cwd, theme: 'q'},
+      );
+      expect(
+        (data.results ?? []).some(r => /^all of it, in order/.test(r.text)),
+      ).toBe(false);
+    },
+    T,
+  );
+  it(
+    'components like dialogs and drawers rounder changes both',
+    async () => {
+      const {commands} = await answer(
+        'make components like dialogs and drawers rounder',
+      );
+      expect(commands).toEqual(
+        expect.arrayContaining([
+          'set q corners more --on dialog',
+          'set q corners more --on drawer',
+        ]),
+      );
+    },
+    T,
+  );
+  it(
     'never brings back a step the check left out',
     async () => {
       const {commands} = await answer(
