@@ -431,6 +431,11 @@ const TRACK_FADE_FROM_RIGHT = `linear-gradient(to left, transparent ${TOKEN_ROW_
 // Kept in sync with useEndLaneReserve: wrapperWithTokens reads the custom
 // property directly, to keep token rows and the input short of the lane.
 const END_LANE_RESERVE_VAR = '--_tokenizer-end-lane-reserve';
+// The input's text inset after the last token.
+const INPUT_TEXT_INSET = `calc(${spacingVars['--spacing-2']} - ${spacingVars['--spacing-1']} + 1px)`;
+// The part of that inset an empty, focused input keeps as content width, so
+// its caret has room to draw.
+const INPUT_CARET_ROOM = '2px';
 
 const styles = stylex.create({
   wrapper: {
@@ -513,7 +518,10 @@ const styles = stylex.create({
     // blank row. Typing restores the full editing width, which may wrap.
     minWidth: {
       default: '40px',
-      ':placeholder-shown': 0,
+      ':placeholder-shown:is(:not(:focus), :read-only)': 0,
+      // Empty and focused, the input has the size of its inset. In a field with
+      // no spare room on the row, a zero-width content box hides the caret.
+      ':placeholder-shown:focus:not(:read-only)': INPUT_TEXT_INSET,
     },
     flex: {
       default: '1 1 40px',
@@ -527,8 +535,9 @@ const styles = stylex.create({
     // Restore normal text inset when input follows tokens, since the
     // wrapper padding is reduced for border concentricity.
     paddingInlineStart: {
-      default: `calc(${spacingVars['--spacing-2']} - ${spacingVars['--spacing-1']} + 1px)`,
+      default: INPUT_TEXT_INSET,
       ':placeholder-shown:is(:not(:focus), :read-only)': 0,
+      ':placeholder-shown:focus:not(:read-only)': `calc(${INPUT_TEXT_INSET} - ${INPUT_CARET_ROOM})`,
     },
     // wrapperWithTokens already keeps the in-flow input short of the lane.
     paddingInlineEnd: 0,
