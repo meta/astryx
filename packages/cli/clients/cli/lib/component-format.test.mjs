@@ -1,7 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect} from 'vitest';
-import {formatBrief, formatCompact, formatFull} from './component-format.mjs';
+import {
+  formatBrief,
+  formatCompact,
+  formatFull,
+  formatProps,
+} from './component-format.mjs';
 
 describe('component accessibility guidance', () => {
   const docs = {
@@ -221,7 +226,8 @@ describe('prop lists keep union types whole', () => {
         {
           name: 'mobileNav',
           type: 'ReactNode',
-          description: "Config. breakpoint is 'sm' | 'md' | 'lg' | 'none'.",
+          description:
+            "Collapses below breakpoint 'sm' | 'md' | 'lg' | 'none'.",
         },
       ],
     };
@@ -230,7 +236,7 @@ describe('prop lists keep union types whole', () => {
       .find(l => l.startsWith('- `mobileNav`'));
 
     expect(line).toBe(
-      "- `mobileNav`: `ReactNode` - Config. breakpoint is 'sm' | 'md' | 'lg' | 'none'.",
+      "- `mobileNav`: `ReactNode` - Collapses below breakpoint 'sm' | 'md' | 'lg' | 'none'.",
     );
   });
 });
@@ -373,5 +379,46 @@ describe('example kind', () => {
     const out = formatBrief(docs, 'Widget');
     expect(out).toContain('<Widget label="Hi" />');
     expect(out).not.toContain('createWidgetStore');
+  });
+});
+
+describe('prop descriptions in a component read', () => {
+  const docs = {
+    name: 'Notice',
+    description: 'A notice.',
+    props: [
+      {
+        name: 'collapsible',
+        type: 'boolean',
+        default: 'true',
+        description:
+          'Whether the details collapse. On by default; `false` keeps them always visible.',
+      },
+      {name: 'title', type: 'string', description: 'The main message.'},
+    ],
+  };
+
+  it('prints the first sentence and says where the whole text is', () => {
+    const out = formatFull(docs);
+
+    expect(out).toContain(
+      '- `collapsible`: `boolean` = `true` - Whether the details collapse.\n',
+    );
+    expect(out).toContain('- `title`: `string` - The main message.');
+    expect(out).toMatch(
+      /Each description's first sentence; `.* component Notice --props` prints them whole\./,
+    );
+  });
+
+  it('prints every description whole in the --props view', () => {
+    expect(formatProps(docs, 'Notice')).toContain(
+      '- `collapsible`: `boolean` = `true` - Whether the details collapse. On by default; `false` keeps them always visible.',
+    );
+  });
+
+  it('prints no pointer when no description was shortened', () => {
+    const short = {...docs, props: [docs.props[1]]};
+
+    expect(formatFull(short)).not.toContain('first sentence');
   });
 });

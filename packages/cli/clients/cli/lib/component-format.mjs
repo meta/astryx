@@ -11,6 +11,7 @@ import {
 } from '../../../foundation/discovery/component-discovery.mjs';
 import {loadDocs} from '../../../foundation/discovery/component-loader.mjs';
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
+import {firstSentence} from '../../../foundation/text/string-utils.mjs';
 
 /**
  * Derive the `defineTheme` component-override key from a theming target.
@@ -79,11 +80,14 @@ export function mdCell(value) {
 /**
  * Render props as a list, one prop per line: name, type, default, the
  * required and experimental markers, then the description. A list item needs
- * no cell escaping, so a union type keeps its pipes as written.
+ * no cell escaping, so a union type keeps its pipes as written. A component
+ * read prints each description's first sentence; the `--props` view prints it
+ * whole.
  * @param {import('@astryxdesign/cli/authoring').ComponentPropDoc[]} [props]
+ * @param {{whole?: boolean}} [options]
  * @returns {string}
  */
-function formatPropsList(props) {
+function formatPropsList(props, {whole = false} = {}) {
   if (!props || props.length === 0) return '';
   return props
     .map(p => {
@@ -93,10 +97,32 @@ function formatPropsList(props) {
       // experimental prop is outside the stable compatibility promise.
       const stability =
         p.stability === 'experimental' ? ' **(experimental)**' : '';
-      const description = p.description ?? '';
+      const full = p.description ?? '';
+      const description = whole ? full : firstSentence(full);
       return `- \`${p.name}\`: \`${p.type ?? ''}\`${def}${req}${stability}${description ? ` - ${description}` : ''}`;
     })
     .join('\n');
+}
+
+/**
+ * The line that says where whole prop descriptions are, printed only when a
+ * description was shortened.
+ * @param {import('@astryxdesign/cli/authoring').ComponentPropDoc[] | undefined} props
+ * @param {string} name
+ * @returns {string[]}
+ */
+function wholePropsPointer(props, name) {
+  const shortened = (props ?? []).some(
+    p =>
+      p.description &&
+      firstSentence(p.description) !==
+        p.description.replace(/\s+/g, ' ').trim(),
+  );
+  return shortened
+    ? [
+        `Each description's first sentence; \`${getCliInvocation()} component ${name} --props\` prints them whole.\n`,
+      ]
+    : [];
 }
 
 /**
@@ -134,6 +160,7 @@ function formatSubComponent(comp) {
   out.push(...formatAccessibility(comp.usage?.accessibility, '####'));
   const list = formatPropsList(comp.props);
   if (list) {
+    out.push(...wholePropsPointer(comp.props, comp.name));
     out.push(list + '\n');
   } else {
     out.push(
@@ -373,6 +400,7 @@ export function formatFull(docs, options = {}) {
   // Single component props
   if ('props' in docs) {
     sections.push('## Props\n');
+    sections.push(...wholePropsPointer(docs.props, docs.name));
     sections.push(formatPropsList(docs.props) + '\n');
   }
 
@@ -569,6 +597,7 @@ export function formatCompact(docs, componentName, importHint) {
   // Props
   if ('props' in docs) {
     sections.push('## Props\n');
+    sections.push(...wholePropsPointer(docs.props, docs.name));
     sections.push(formatPropsList(docs.props) + '\n');
   }
 
@@ -793,7 +822,7 @@ export function formatBrief(docs, componentName, importHint, options = {}) {
  */
 export function formatProps(docs, componentName) {
   if ('props' in docs) {
-    return `## Props\n\n${formatPropsList(docs.props)}\n`;
+    return `## Props\n\n${formatPropsList(docs.props, {whole: true})}\n`;
   }
 
   if ('components' in docs) {
@@ -801,7 +830,7 @@ export function formatProps(docs, componentName) {
     const sections = [];
     for (const comp of docs.components) {
       sections.push(`### ${comp.name} Props\n`);
-      sections.push(formatPropsList(comp.props) + '\n');
+      sections.push(formatPropsList(comp.props, {whole: true}) + '\n');
     }
     return sections.join('\n');
   }
