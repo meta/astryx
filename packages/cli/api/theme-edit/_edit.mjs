@@ -114,6 +114,7 @@ import {
   renderSheet,
   previewIsCurrent,
   takeFirstAppCopy,
+  appCopyBehind,
   appCopyStale,
   writeAppCopy,
 } from './_preview.mjs';
@@ -2195,6 +2196,9 @@ async function changeOnce(
   // once preview.html was rendered from the theme as it is now (a retry
   // after a render that failed renders it).
   const f0 = themeFiles(cwd, slug);
+  // A change that changed nothing still writes back an app copy file that
+  // is gone or not the current build.
+  if (r.unchanged && appCopyBehind(cwd, slug)) writeAppCopy(ctx, slug, data);
   const p =
     r.unchanged &&
     !png &&

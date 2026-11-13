@@ -49,6 +49,7 @@ import {
   dialValueFits,
   newFlagList,
   editorCompileProblem,
+  editorBuildExtra,
   editorLoadedFonts,
   editorThemeHold,
   editorThemeRefusal,
@@ -1308,6 +1309,7 @@ export function registerExperimentalTheme(group, program) {
       template: editorThemeTemplate,
       hold: editorThemeHold,
       loadedFonts: editorLoadedFonts,
+      extraData: editorBuildExtra,
     },
   );
 }
