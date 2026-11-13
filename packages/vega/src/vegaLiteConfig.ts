@@ -202,35 +202,63 @@ const mergeVegaLiteConfig = mergeConfig as unknown as (
 ) => VegaLiteConfig;
 
 /** The theme's per-axis blocks. Vega-Lite applies each one over `axis`. */
-const PER_AXIS_KEYS = [
-  'axisX',
-  'axisY',
-  'axisXQuantitative',
-  'axisYQuantitative',
-] as const;
+/**
+ * For each per-axis block the theme sets, the axis blocks that Vega-Lite
+ * resolves before it for the same axes. Vega-Lite resolves `axis`, then the
+ * orient blocks, then `axisX` and `axisY`, then the type blocks such as
+ * `axisQuantitative`, then the channel-and-type blocks such as
+ * `axisYQuantitative`. The orient blocks are matched as by default: x at
+ * the bottom or top, y at the left or right.
+ */
+const EARLIER_AXIS_BLOCKS = {
+  axisX: ['axis', 'axisBottom', 'axisTop'],
+  axisY: ['axis', 'axisLeft', 'axisRight'],
+  axisXQuantitative: [
+    'axis',
+    'axisBottom',
+    'axisTop',
+    'axisX',
+    'axisQuantitative',
+  ],
+  axisYQuantitative: [
+    'axis',
+    'axisLeft',
+    'axisRight',
+    'axisY',
+    'axisQuantitative',
+  ],
+} as const;
 
 /**
- * The theme config without each per-axis value that a later generic `axis`
- * block sets. Vega-Lite applies `axisX` and the other per-axis blocks over
- * `axis`, so a themed `axisX.grid` would otherwise outrank a caller's
- * `axis.grid`.
+ * The theme config without each per-axis value that the caller or the spec
+ * sets in an axis block Vega-Lite resolves earlier for the same axes. The
+ * later theme block would otherwise outrank it: a themed
+ * `axisYQuantitative.grid` would win over a caller's `axisY.grid`.
  */
 function withoutOverriddenAxisValues(
   theme: VegaLiteConfig,
   overrides: ReadonlyArray<VegaLiteConfig | undefined>,
 ): VegaLiteConfig {
-  const setKeys = new Set(
-    overrides.flatMap(config => Object.keys(config?.axis ?? {})),
-  );
-  if (setKeys.size === 0) {
-    return theme;
-  }
   const result: Record<string, unknown> = {...theme};
-  for (const key of PER_AXIS_KEYS) {
-    const block = theme[key];
-    if (block) {
+  for (const [key, earlier] of Object.entries(EARLIER_AXIS_BLOCKS)) {
+    const block = theme[key as keyof typeof EARLIER_AXIS_BLOCKS];
+    if (!block) {
+      continue;
+    }
+    const setProps = new Set(
+      overrides.flatMap(config =>
+        earlier.flatMap(name =>
+          Object.keys(
+            (config as Record<string, object | undefined> | undefined)?.[
+              name
+            ] ?? {},
+          ),
+        ),
+      ),
+    );
+    if (setProps.size > 0) {
       result[key] = Object.fromEntries(
-        Object.entries(block).filter(([prop]) => !setKeys.has(prop)),
+        Object.entries(block).filter(([prop]) => !setProps.has(prop)),
       );
     }
   }

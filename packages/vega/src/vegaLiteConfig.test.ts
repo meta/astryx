@@ -203,6 +203,34 @@ describe('theme, caller and spec config through Vega-Lite', () => {
     expect(orients).toContain('bottom');
   });
 
+  it("lets the caller's channel-level axis key outrank the theme's channel-and-type value", () => {
+    const orients = gridOrients(
+      compile(spec, withAstryxConfig(echo, {config: {axisY: {grid: false}}})),
+    );
+    expect(orients).not.toContain('left');
+  });
+
+  it("lets the spec's inline channel-level axis key outrank the theme's channel-and-type value", () => {
+    const inline = {...spec, config: {axisY: {grid: false}}} as TopLevelSpec;
+    const orients = gridOrients(
+      compile(
+        inline,
+        withAstryxConfig(echo, undefined, {axisY: {grid: false}}),
+      ),
+    );
+    expect(orients).not.toContain('left');
+  });
+
+  it("lets the caller's type-level axis key outrank the theme's channel-and-type value", () => {
+    const orients = gridOrients(
+      compile(
+        spec,
+        withAstryxConfig(echo, {config: {axisQuantitative: {grid: false}}}),
+      ),
+    );
+    expect(orients).not.toContain('left');
+  });
+
   it('keeps the theme per-axis value for a key no override sets', () => {
     const options = withAstryxConfig(echo, {
       config: {axis: {labelFontSize: 14}},

@@ -48,7 +48,7 @@ README.
 
 ## Compatibility and migration
 
-- Released default preserved: `no` for a Vega-Lite spec, which now compiles with the theme config as its base (FR1).
+- Released default preserved: `no` for a Vega-Lite spec, which compiles with the theme config as its base (FR1).
 - Compatibility class: behavioral, canary-only.
 - Controlled/uncontrolled behavior: not applicable.
 - Migration decision: none. A builder who wants a key without the theme sets it in `compileOptions.config` or in the spec.
