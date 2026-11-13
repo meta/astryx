@@ -8,7 +8,8 @@ import * as util from 'node:util';
 import {afterEach, beforeAll, describe, expect, it, vi} from 'vitest';
 import {CLI_ROOT} from '../fs/paths.mjs';
 import {importDocModule} from './import.mjs';
-import {storedKey, STORED_DOCS_FILE} from './stored-docs.mjs';
+import {storedKey, storedParseKey, STORED_DOCS_FILE} from './stored-docs.mjs';
+import {parseReadableDoc} from './parse-readable.mjs';
 import {storedDocsText} from '../../scripts/generate-stored-docs.mjs';
 import {
   descriptorStoreKey,
@@ -190,6 +191,36 @@ describe('stored doc exports', () => {
       readStaticDescriptorValue(copy, 'add', 'IconDefinitionDoc', {data: true}),
     ).toEqual(read);
     expect(parses.count).toBe(1);
+  });
+
+  it('hold, for each stored parse, exactly what parsing the doc gives, key order included', async () => {
+    const {parseDoc} = await import('../../authoring/doctypes/parse.mjs');
+    let checked = 0;
+    for (const [key, value] of Object.entries(stored)) {
+      if (!key.startsWith('parsed:')) continue;
+      const [, name, docKey] = key.split(':');
+      const exports = /** @type {Record<string, unknown>} */ (stored[docKey]);
+      expect(exports, key).toBeDefined();
+      const parsed = parseDoc(structuredClone(exports[name]), key);
+      expect(JSON.stringify(value), key).toBe(JSON.stringify(parsed));
+      checked++;
+    }
+    expect(checked).toBeGreaterThan(100);
+  });
+
+  it('answer the parse of a shipped doc from the store, as a fresh value', async () => {
+    const mod = /** @type {any} */ (await importDocModule(GUIDE));
+    const name = mod.docs ? 'docs' : 'default';
+    const key = storedParseKey(
+      storedKey(fs.readFileSync(GUIDE, 'utf-8')),
+      name,
+    );
+    expect(stored[key]).toBeDefined();
+    const read = parseReadableDoc(mod[name], 'guide');
+    expect(JSON.stringify(read)).toBe(JSON.stringify(stored[key]));
+    // A parse gives a new value each time, never the shared export.
+    expect(read).not.toBe(mod[name]);
+    expect(parseReadableDoc(mod[name], 'guide')).not.toBe(read);
   });
 
   it('import a doc that is not shipped, as before', async () => {
