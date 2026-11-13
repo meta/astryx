@@ -177,12 +177,12 @@ one pending load per module, caches a success, and resets after a failure.
 
 ### Allowlist
 
-| Crossing (base module → module it imports statically)             | Entries that reach it                          | Cost, gzip                                          | Invariant  | Row leaves when                                                          |
-| ----------------------------------------------------------------- | ---------------------------------------------- | --------------------------------------------------- | ---------- | ------------------------------------------------------------------------ |
-| `Text/TruncationTooltip` → `Layer/useTouchTrigger`                | Text, Heading, Button, IconButton, Link, Table | 4.6 KB (Text, Heading); 4.2 KB (Button, IconButton) | INV1, INV8 | the truncation tooltip's eager code carries no touch tap recognizer      |
-| `Link/Link` → `Tooltip`                                           | Link                                           | 17.6 KB                                             | INV1       | Link's tooltip layer code is lazy                                        |
-| `Table/tableContextMenu` → `ContextMenu`                          | Table                                          | 78.2 KB                                             | INV1       | cells without actions reach no menu module                               |
-| `Table/BaseTable` → `Table/plugins/virtualization/useTableWindow` | Table                                          | 3.0 KB                                              | INV7       | a Table that never windows reaches neither the controller nor its engine |
+| Crossing (base module → module it imports statically)             | Entries that reach it                          | Cost, gzip             | Invariant  | Row leaves when                                                          |
+| ----------------------------------------------------------------- | ---------------------------------------------- | ---------------------- | ---------- | ------------------------------------------------------------------------ |
+| `Text/TruncationTooltip` → `Layer/useTouchTrigger`                | Text, Heading, Button, IconButton, Link, Table | 4.6 KB (Text, Heading) | INV1, INV8 | the truncation tooltip's eager code carries no touch tap recognizer      |
+| `Link/Link` → `Tooltip`                                           | Link                                           | 17.6 KB                | INV1       | Link's tooltip layer code is lazy                                        |
+| `Table/tableContextMenu` → `ContextMenu`                          | Table                                          | 78.2 KB                | INV1       | cells without actions reach no menu module                               |
+| `Table/BaseTable` → `Table/plugins/virtualization/useTableWindow` | Table                                          | 3.0 KB                 | INV7       | a Table that never windows reaches neither the controller nor its engine |
 
 Costs are the check's own printout in CI: each crossing's removal from the
 entry with every other crossing kept, in the entry build above. A local run
@@ -205,7 +205,10 @@ same module. Table carries 123.5 KB eager.
   holds only the listed entries.
 - INV1 gap: component imports that are not surfaces reach the tooltip hook
   and the layer runtime through Link or through their own code, such as the
-  status icon of TextInput, TextArea, and CheckboxList.
+  status icon of TextInput, TextArea, and CheckboxList. Measured while Button
+  also reached it, 32 of Core's 95 component imports that are not surfaces
+  carried 17–24 KB of tooltip code, and 52 carried at least 1 KB; these counts
+  are pending a new measurement.
 - INV1 gap: Link's import reaches the Tooltip component and the layer
   runtime, 17.6 KB gzip, with or without a `tooltip` prop.
 - INV1 gap: Table's import reaches the cell context menu, 78.2 KB gzip, for
@@ -215,8 +218,7 @@ same module. Table carries 123.5 KB eager.
   windowing module, 3.0 KB gzip, for a Table that never windows.
 - INV3 gap: no record says how a tooltip's description reaches assistive
   technology before its surface loads, for the triggers whose tooltip is
-  their description, other than Button and IconButton (`component:Button`
-  FR12: hidden text inside the Button).
+  their description.
 - INV6 gap: a menu holding an essential action has no path to that action
   when its module fails to load (`architecture:interaction-modality` INV7).
 - INV9 gap: the check does not measure INV7's wiring allowance. An entry's
@@ -240,10 +242,13 @@ Review against this record when a change:
 - `packages/core/src/utils/moduleLoader.ts` — the shared module loader.
 - `packages/core/src/Text/TruncationTooltip.tsx` — the truncation tooltip's
   intent tracking and load.
-- `packages/core/src/hooks/useDeferredTooltip.tsx` — the intent tracking,
-  hidden description, and load of an optional tooltip on a component's own
-  element (Button); `packages/core/src/Tooltip/DeferredTooltip.tsx` is the
-  surface it loads.
+- `packages/core/src/hooks/useDeferredTooltip.tsx` — the trigger contract of
+  an optional tooltip on a component's own element (Button): the intent
+  listeners, the hidden description, and the loader call. `useTooltip` cannot
+  do this job, because it carries the layer runtime that the hook defers.
+- `packages/core/src/Tooltip/DeferredTooltip.tsx` — the surface that
+  `useDeferredTooltip` loads: it runs `useTooltip` on the trigger and answers
+  the held intent through `Tooltip/tooltipPresentInterest`.
 - `packages/core/src/Tooltip/`, `packages/core/src/HoverCard/`,
   `packages/core/src/Popover/`, `packages/core/src/DropdownMenu/`,
   `packages/core/src/ContextMenu/` — surfaces and their triggers.
