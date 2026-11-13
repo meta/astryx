@@ -194,6 +194,7 @@ interface PendingMutationMotion<T> {
 
 // Core List's reorder handle is 28 px wide for every pointer.
 const REORDER_HANDLE_SIZE = 28;
+const PAST_HANDLE = `calc(${REORDER_HANDLE_SIZE}px + ${spacingVars['--spacing-1']})`;
 
 const styles = stylex.create({
   group: {
@@ -231,9 +232,6 @@ const styles = stylex.create({
       '@container list-input (max-width: 640px)': spacingVars['--spacing-2'],
     },
     minWidth: 0,
-    // Core's reorder handle reaches into a ListItem row's inline inset. A
-    // record has no inset, so the handle and its focus ring end at its edge.
-    '--_item-inset-inline': '0px',
   },
   rowFieldsOnly: {
     gridTemplateColumns: 'minmax(0, 1fr)',
@@ -241,12 +239,35 @@ const styles = stylex.create({
   rowWithRemove: {
     gridTemplateColumns: `minmax(0, 1fr) ${sizeVars['--size-element-md']}`,
   },
-  // Fields, then Remove and the reorder handle in one cell at the row's end
-  // (UIKit's reorder control is the trailing control of an editing row). The
-  // cell's track is fixed, so the Add row, which has no controls, keeps the
-  // fields' width.
-  rowWithRemoveAndHandle: {
-    gridTemplateColumns: `minmax(0, 1fr) calc(${sizeVars['--size-element-md']} + ${spacingVars['--spacing-1']} + ${REORDER_HANDLE_SIZE}px)`,
+  // The reorder handle starts the record, in a track before the first
+  // field's control. A record without a handle keeps the track empty (its
+  // `::before`), so every first field starts in one column.
+  handleControls: {
+    display: 'grid',
+    gridTemplateColumns: `${REORDER_HANDLE_SIZE}px minmax(0, 1fr)`,
+    alignItems: 'center',
+    columnGap: spacingVars['--spacing-1'],
+  },
+  handleControlsWithoutHandle: {
+    '::before': {
+      content: '""',
+    },
+  },
+  // The first column's label and the content under the fields line up with
+  // the field controls, past the handle's track.
+  afterHandle: {
+    paddingInlineStart: PAST_HANDLE,
+  },
+  // A record's status paints its own surface, so its box starts there too.
+  statusAfterHandle: {
+    marginInlineStart: PAST_HANDLE,
+  },
+  // Stacked, every field lines up under the first field's control.
+  stackedAfterHandle: {
+    paddingInlineStart: {
+      default: 0,
+      '@container list-input (max-width: 640px)': PAST_HANDLE,
+    },
   },
   fields: {
     display: {
@@ -310,9 +331,7 @@ const styles = stylex.create({
     display: 'flex',
     alignItems: 'center',
     alignSelf: 'end',
-    // Remove keeps its column in a record that has no reorder handle.
     justifyContent: 'flex-start',
-    columnGap: spacingVars['--spacing-1'],
     minHeight: sizeVars['--size-element-md'],
   },
   removeControlCell: {
@@ -353,8 +372,10 @@ function joinIDs(...ids: Array<string | undefined>): string | undefined {
   return resolved.length > 0 ? resolved.join(' ') : undefined;
 }
 
+// The reorder handle, a toggle button, starts the first cell. Field focus
+// skips it.
 const focusableFieldSelector =
-  '[data-list-input-cell] input, [data-list-input-cell] select, [data-list-input-cell] textarea, [data-list-input-cell] button, [data-list-input-cell] [tabindex]:not([tabindex="-1"])';
+  '[data-list-input-cell] input, [data-list-input-cell] select, [data-list-input-cell] textarea, [data-list-input-cell] button:not([aria-pressed]), [data-list-input-cell] [tabindex]:not([tabindex="-1"]):not([aria-pressed])';
 
 function getScrollableAncestors(element: HTMLElement): HTMLElement[] {
   const scrollRoots: HTMLElement[] = [];
@@ -587,8 +608,8 @@ export function ListInput<T>({
   const prefersReducedMotion = useMediaQuery(
     '(prefers-reduced-motion: reduce)',
   );
-  // Each record row reveals its row actions (Remove and, when reorderable, the
-  // reorder handle) on hover or keyboard focus; touch keeps them visible.
+  // Each record row reveals Remove on hover or keyboard focus, and core's
+  // reorder handle reveals with it; touch keeps them visible.
   const {getContainerProps, getContentRevealProps} = useContainerReveal();
   // A disabled or loading list keeps its handles focusable but inert.
   const reorderScope = useListReorderScope(
@@ -980,11 +1001,9 @@ export function ListInput<T>({
     );
   };
 
-  const rowLayoutStyle = showReorderHandle
-    ? styles.rowWithRemoveAndHandle
-    : showRemoveColumn
-      ? styles.rowWithRemove
-      : styles.rowFieldsOnly;
+  const rowLayoutStyle = showRemoveColumn
+    ? styles.rowWithRemove
+    : styles.rowFieldsOnly;
   const contentGridStyle = showRemoveColumn
     ? styles.contentBeforeOneControl
     : styles.contentOnly;
@@ -1124,6 +1143,8 @@ export function ListInput<T>({
                                   changeColumnKey ?? column.key,
                                 ),
                             });
+                            const isHandleCell =
+                              showReorderHandle && columnIndex === 0;
                             return (
                               <div
                                 key={column.key}
@@ -1131,6 +1152,9 @@ export function ListInput<T>({
                                 {...stylex.props(
                                   styles.cellContent,
                                   styles.fieldCell,
+                                  showReorderHandle &&
+                                    !isHandleCell &&
+                                    styles.stackedAfterHandle,
                                 )}>
                                 <span
                                   aria-hidden="true"
@@ -1141,10 +1165,31 @@ export function ListInput<T>({
                                     styles.columnLabel,
                                     isRepeatedLabel &&
                                       styles.repeatedColumnLabel,
+                                    isHandleCell && styles.afterHandle,
                                   )}>
                                   {column.header}
                                 </span>
-                                <div {...stylex.props(styles.cellContent)}>
+                                <div
+                                  {...stylex.props(
+                                    styles.cellContent,
+                                    isHandleCell && styles.handleControls,
+                                    isHandleCell &&
+                                      !hasHandle &&
+                                      styles.handleControlsWithoutHandle,
+                                  )}>
+                                  {isHandleCell &&
+                                  Handle != null &&
+                                  hasHandle ? (
+                                    // Named "Reorder guest 2", like Remove.
+                                    <Handle
+                                      label={t('@astryx.listInput.itemName', {
+                                        itemName,
+                                        position: index + 1,
+                                      })}
+                                      itemKey={itemKey}
+                                      isDisabled={isDisabled || isLoading}
+                                    />
+                                  ) : null}
                                   {content}
                                 </div>
                               </div>
@@ -1154,9 +1199,8 @@ export function ListInput<T>({
                         {showRemoveColumn ? (
                           <div
                             {...mergeProps(
-                              // Opacity only: Remove and the reorder handle keep
-                              // their places, so the fields never shift when
-                              // they appear.
+                              // Opacity only: Remove keeps its place, so the
+                              // fields never shift when it appears.
                               getContentRevealProps({isLayoutPreserved: true}),
                               stylex.props(
                                 styles.controlCell,
@@ -1185,17 +1229,6 @@ export function ListInput<T>({
                               data-list-input-remove=""
                               onClick={() => handleRemove(item)}
                             />
-                            {Handle != null && hasHandle ? (
-                              // Named "Reorder guest 2", like Remove.
-                              <Handle
-                                label={t('@astryx.listInput.itemName', {
-                                  itemName,
-                                  position: index + 1,
-                                })}
-                                itemKey={itemKey}
-                                isDisabled={isDisabled || isLoading}
-                              />
-                            ) : null}
                           </div>
                         ) : null}
                         {itemStatus?.message ? (
@@ -1205,7 +1238,11 @@ export function ListInput<T>({
                             message={itemStatus.message}
                             variant="detached"
                             data-list-input-item-status=""
-                            xstyle={[styles.itemStatus, contentGridStyle]}
+                            xstyle={[
+                              styles.itemStatus,
+                              contentGridStyle,
+                              showReorderHandle && styles.statusAfterHandle,
+                            ]}
                           />
                         ) : null}
                       </div>
@@ -1221,7 +1258,11 @@ export function ListInput<T>({
             {...stylex.props(styles.actionRow, rowLayoutStyle)}>
             <div
               data-list-input-add-content=""
-              {...stylex.props(styles.actionContent, contentGridStyle)}>
+              {...stylex.props(
+                styles.actionContent,
+                contentGridStyle,
+                showReorderHandle && styles.afterHandle,
+              )}>
               <Button
                 ref={addButtonRef}
                 label={t('@astryx.listInput.addItem', {itemName})}

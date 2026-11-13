@@ -21,7 +21,7 @@
  * @position Core implementation. Consumed by List, index.ts, tested by List.test.tsx
  *
  * In a reorderable List (`List reorderable`), each row with an `itemKey`
- * that the reorderable object lets move ends with its handle. The handle
+ * that the reorderable object lets move starts with its handle. The handle
  * comes through ListContext's `reorder` with the rest of the reorder
  * machinery (List/listReorderContext.ts). A row without one keeps its place.
  *
@@ -54,7 +54,7 @@ import {Item, servesSwipeActions} from '../Item/Item';
 import {ItemListRowContext} from '../Item/ItemListRowContext';
 import {ItemMarkerColumnsContext} from '../Item/ItemMarkerColumnsContext';
 import {ItemLabelNeededContext} from '../Item/ItemLabelContext';
-import {ItemTrailingContext} from '../Item/ItemTrailingContext';
+import {ItemLeadingContext} from '../Item/ItemLeadingContext';
 import type {ItemAlign, ItemSwipeActions, ItemSwipeBehavior} from '../Item';
 import {themeProps} from '../utils/themeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
@@ -471,20 +471,18 @@ export function ListItem({
   // sticky header. Outside a List nothing bounds a raise, so a row raises
   // nothing there.
   const isInList = ctx != null;
-  // In a reorderable List: a trailing handle, or a row that stays put.
+  // In a reorderable List: a leading handle, or a row that stays put.
   const reorder = ctx?.reorder;
   const hasHandle =
     reorder != null &&
     itemKey != null &&
     (reorder.options.isReorderable?.(itemKey) ?? true);
-  // The handle is the one element reordering adds to a row. With end content
-  // it joins the end slot. Without, it is the row's own child
-  // (ItemTrailingContext), since an end slot of its own would be a second
-  // element.
-  const isHandleInRow = hasHandle && endContent == null;
+  // The handle is the one element reordering adds to a row. It starts the
+  // row's content, unwrapped (ItemLeadingContext): a start slot of its own
+  // would be a second element.
   const rowLabel = restProps['aria-label'];
   const rowLabelledBy = restProps['aria-labelledby'];
-  const rowAlign = isHandleInRow ? (align ?? 'center') : undefined;
+  const rowAlign = hasHandle ? (align ?? 'center') : undefined;
   const Handle = reorder?.session.Handle;
   const reorderHandle = useMemo(
     () =>
@@ -601,16 +599,7 @@ export function ListItem({
       startContent={startContent}
       label={label}
       description={description}
-      endContent={
-        reorderHandle != null && !isHandleInRow ? (
-          <>
-            {endContent}
-            {reorderHandle}
-          </>
-        ) : (
-          endContent
-        )
-      }
+      endContent={endContent}
       onClick={onClick}
       interactiveRef={interactiveRef}
       href={href}
@@ -658,14 +647,14 @@ export function ListItem({
   );
   return (
     <>
-      {/* One shape whether or not the handle is the row's own child, so the
-          row keeps its element when that changes. */}
-      <ItemTrailingContext value={isHandleInRow ? reorderHandle : null}>
+      {/* One shape whether or not the row has a handle, so the row keeps its
+          element when that changes. */}
+      <ItemLeadingContext value={reorderHandle}>
         {/* The handle is named after the row's label. */}
         <ItemLabelNeededContext value={reorderHandle != null}>
           {marked}
         </ItemLabelNeededContext>
-      </ItemTrailingContext>
+      </ItemLeadingContext>
       {reorderName}
     </>
   );
