@@ -253,6 +253,12 @@ describe('copy files are no theme sources', () => {
     );
     expect(out.status).not.toBe(0);
     expect(out.stdout + out.stderr).toContain("in c10's app copy");
+    // The folder form of --out, with and without its slash, too.
+    for (const folder of ['src/themes/c10', 'src/themes/c10/']) {
+      const r = compile('themes/c10/c10.theme.ts', '--out', folder);
+      expect(r.status, folder).not.toBe(0);
+      expect(r.stdout + r.stderr, folder).toContain("in c10's app copy");
+    }
     expect(read('src/themes/c10/c10.css')).toBe(before);
   }, 240_000);
 

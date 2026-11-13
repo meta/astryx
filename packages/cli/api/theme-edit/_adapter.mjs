@@ -815,11 +815,15 @@ export async function editorCompileProblem(
   // An --out into an editor theme's app copy folder: the copy refresh would
   // write the theme's own build over it.
   if (out) {
-    const rel = path.relative(cwdRoot, path.resolve(cwd, out)).split(path.sep);
+    // The copy folder itself (--out's folder form) and anything inside it.
+    const rel = path
+      .relative(cwdRoot, path.resolve(cwd, out))
+      .split(path.sep)
+      .filter(Boolean);
     if (
       rel[0] === 'src' &&
       rel[1] === 'themes' &&
-      rel.length >= 4 &&
+      rel.length >= 3 &&
       fs.existsSync(themeFiles(cwdRoot, rel[2]).settings)
     )
       return new AstryxError(
