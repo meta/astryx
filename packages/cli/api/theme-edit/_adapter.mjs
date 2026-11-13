@@ -379,8 +379,22 @@ const lockName = name =>
  */
 function absolute(result, root, from) {
   if (path.resolve(from) === root) return result;
-  /** A line that names theme files inside it (`see`, a picture note). */
-  const PROSE = new Set(['see', 'pictureProblem']);
+  /**
+   * Lines that name project files inside them: `see`, a picture note, the
+   * in-app preview's stale entries. Every project path in them (a theme
+   * file, an in-app preview folder) is made absolute, one style per line.
+   */
+  const PROSE = new Set(['see', 'pictureProblem', 'previewStale']);
+  /** A project-relative path that names a file or folder there. @param {string} p */
+  const inRoot = p => {
+    const bare = p.replace(/\/+$/, '');
+    return (
+      Boolean(bare) &&
+      !path.isAbsolute(bare) &&
+      !bare.startsWith('.') &&
+      fs.existsSync(path.join(root, bare))
+    );
+  };
   /** @param {any} v @param {string} [key] @returns {any} */
   const map = (v, key) =>
     typeof v === 'string'
@@ -388,8 +402,11 @@ function absolute(result, root, from) {
         ? path.join(root, v)
         : key && PROSE.has(key)
           ? v.replace(
-              /(^|[\s(,])(themes\/[^\s,;)]+)/g,
-              (_, before, file) => `${before}${path.join(root, file)}`,
+              /(^|[\s(,])((?:themes|src|app)\/[^\s,;)]*)/g,
+              (all, before, file) =>
+                /^themes\//.test(file) || inRoot(file)
+                  ? `${before}${path.join(root, file)}`
+                  : all,
             )
           : v
       : Array.isArray(v)

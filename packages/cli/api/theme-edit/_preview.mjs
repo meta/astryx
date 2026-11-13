@@ -15,7 +15,7 @@
 import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {spawnSync} from 'node:child_process';
+import {spawn} from 'node:child_process';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {
   SAMPLE_PAGE,
@@ -1416,7 +1416,7 @@ const camelName = camel;
  * @param {string} html absolute
  * @param {string} png absolute
  * @param {'light' | 'dark'} mode
- * @returns {Promise<{ok: true, file: string, cut?: boolean} | {ok: false, reason: string}>} `cut` when the picture is of the window, not the whole page
+ * @returns {Promise<{ok: true, file: string, cut?: boolean} | {ok: false, reason: string, stopped?: string}>} `cut` when the picture is of the window, not the whole page
  */
 export async function screenshot(project, html, png, mode) {
   /** What was found and why it could not take the picture. @type {string[]} */
@@ -1461,30 +1461,36 @@ export async function screenshot(project, html, png, mode) {
   }
   const chrome = chromeBinary();
   if (chrome) {
-    const r = spawnSync(
-      chrome,
-      [
-        '--headless=new',
-        '--disable-gpu',
-        '--no-sandbox',
-        '--hide-scrollbars',
-        `--screenshot=${png}`,
-        '--window-size=1280,2400',
-        ...(mode === 'dark' ? ['--force-dark-mode'] : []),
-        pathToFileURL(html).href,
-      ],
-      {encoding: 'utf8', timeout: 60_000},
-    );
+    // Run without blocking, so a stop (Ctrl-C, SIGTERM) reaches this
+    // process while the browser runs: the browser is stopped with it, and
+    // the stop is reported as a stop, never as a browser that failed.
+    const r = await runBrowser(chrome, [
+      '--headless=new',
+      '--disable-gpu',
+      '--no-sandbox',
+      '--hide-scrollbars',
+      `--screenshot=${png}`,
+      '--window-size=1280,2400',
+      ...(mode === 'dark' ? ['--force-dark-mode'] : []),
+      pathToFileURL(html).href,
+    ]);
+    if (r.stoppedBy)
+      return {
+        ok: false,
+        stopped: r.stoppedBy,
+        reason: `the pictures were stopped (${r.stoppedBy}) before the browser finished`,
+      };
     // Chrome alone takes the window, not the whole page.
     if (r.status === 0 && fs.existsSync(png))
       return {ok: true, file: shown(project.cwd, png), cut: true};
     failed.push(
       `${chrome}: ${firstLine(
         r.error ??
-          (r.stderr ||
-            (r.signal
-              ? `stopped by ${r.signal}`
-              : `exit ${r.status}, and no picture was written`)),
+          // A browser stopped by a signal says so first: its stderr opens
+          // with unrelated noise (dbus) on Linux.
+          (r.signal
+            ? `stopped by ${r.signal}`
+            : r.stderr || `exit ${r.status}, and no picture was written`),
       )}`,
     );
   }
@@ -1853,4 +1859,48 @@ export function takeFirstAppCopy(cwd, slug) {
   const wrote = FIRST_COPIES.get(key) ?? null;
   FIRST_COPIES.delete(key);
   return wrote;
+}
+
+/**
+ * Run a browser for a picture without blocking this process: a stop that
+ * reaches it (SIGINT, SIGTERM) stops the browser too, and is reported.
+ * Bounded to 60 seconds, as a picture run always was.
+ * @param {string} bin
+ * @param {string[]} args
+ * @returns {Promise<{status: number | null, signal: string | null, stderr: string, error?: Error, stoppedBy?: string}>}
+ */
+function runBrowser(bin, args) {
+  return new Promise(resolve => {
+    /** @type {string | undefined} */
+    let stoppedBy;
+    let stderr = '';
+    const child = spawn(bin, args, {stdio: ['ignore', 'ignore', 'pipe']});
+    child.stderr?.setEncoding('utf8');
+    child.stderr?.on('data', d => {
+      if (stderr.length < 8000) stderr += d;
+    });
+    const timer = setTimeout(() => child.kill('SIGKILL'), 60_000);
+    /** @param {NodeJS.Signals} sig */
+    const onStop = sig => {
+      stoppedBy = sig;
+      child.kill('SIGKILL');
+      // Nothing else listening: the stop ends this process, as it would
+      // have without this listener.
+      if (process.listenerCount(sig) === 0) {
+        process.removeListener('SIGINT', onStop);
+        process.removeListener('SIGTERM', onStop);
+        process.kill(process.pid, sig);
+      }
+    };
+    process.once('SIGINT', onStop);
+    process.once('SIGTERM', onStop);
+    const done = (/** @type {any} */ out) => {
+      clearTimeout(timer);
+      process.removeListener('SIGINT', onStop);
+      process.removeListener('SIGTERM', onStop);
+      resolve({...out, stderr, ...(stoppedBy ? {stoppedBy} : {})});
+    };
+    child.on('error', error => done({status: null, signal: null, error}));
+    child.on('close', (status, signal) => done({status, signal}));
+  });
 }

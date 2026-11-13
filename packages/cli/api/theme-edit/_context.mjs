@@ -434,8 +434,22 @@ export async function pictures(project, shots, modes) {
       for (const n of fs.existsSync(path.dirname(out))
         ? fs.readdirSync(path.dirname(out))
         : [])
-        if (n.startsWith(`.${path.basename(out, '.png')}.part-`))
-          fs.rmSync(path.join(path.dirname(out), n), {force: true});
+        if (n.startsWith(`.${path.basename(out, '.png')}.part-`)) {
+          // Only a file is a part: a folder by that name is left alone.
+          const p = path.join(path.dirname(out), n);
+          try {
+            if (fs.lstatSync(p).isFile()) fs.rmSync(p, {force: true});
+          } catch {
+            // Gone already.
+          }
+        }
+      // A folder (or anything else) where this run's part goes: no
+      // picture, the path named, never a crash after a saved change.
+      if (fs.existsSync(part) && !fs.lstatSync(part).isFile())
+        return {
+          files,
+          problem: `${path.relative(project.cwd, part)} is a folder, where --png writes a picture before moving it into place, so no picture was taken; move it out of ${path.relative(project.cwd, path.dirname(out))}/`,
+        };
       const r = await screenshot(project, html, part, m);
       if (!r.ok) {
         fs.rmSync(part, {force: true});

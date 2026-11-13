@@ -108,6 +108,7 @@ import {
   writeWhole,
   isGraySeed,
   seedOf,
+  isEditorTemp,
 } from './_palette.mjs';
 import {
   renderPreview,
@@ -119,6 +120,8 @@ import {
   writeAppCopy,
 } from './_preview.mjs';
 import {appWiring, refreshPreviewRoute, seeLine} from './_preview-app.mjs';
+/** The preview command, as a person runs it. */
+const PREVIEW_CMD = `${P.replace(/ editor$/, '')} preview`;
 import {baseInstalled, baseResolved, installLine} from './_project.mjs';
 import {reactMissing} from './_parts.mjs';
 import {
@@ -179,9 +182,8 @@ function editorLeftovers(dir, slug, damaged = false) {
     /^(preview(-[a-z]+)?\.(html|png)|sheet(-[a-z-]+)?\.(html|png)|palette\.config\.json)$/.test(
       n,
     ) ||
-    // The editor's temp names: `.<name>.astryx-<pid>-<rand>.tmp`, and the
-    // build's `.<name>.tmp-<id>`.
-    /^\..+\.(astryx-\d+-[a-z0-9]+\.tmp|tmp-[\w-]+)$/.test(n);
+    // The editor's temp names (writes, builds, pictures).
+    isEditorTemp(n);
   for (const e of fs.readdirSync(dir, {withFileTypes: true})) {
     const p = path.join(dir, e.name);
     if (FOLDER_JUNK.has(e.name)) continue;
@@ -904,7 +906,13 @@ async function previewAndRoute(ctx, slug, data, png, focus = 'overview') {
             cause: 'no preview was rendered',
           })
         : null,
-      {pictureProblem: png ? p.pictureProblem : null, stale: previewStale},
+      {
+        // Only a run that took no picture failed: a note on pictures that
+        // were taken (cut to 2400 pixels, adopted) is not a failure.
+        pictureProblem:
+          png && !(p.pictures ?? []).length ? p.pictureProblem : null,
+        stale: previewStale,
+      },
     ),
     // The first time the theme's app copy is written, its files are named.
     ...(wrote ? {appCopy: {wrote}} : {}),
@@ -925,8 +933,17 @@ async function previewAndRoute(ctx, slug, data, png, focus = 'overview') {
 async function keepPreviewRoute(ctx, slug) {
   try {
     return (await refreshPreviewRoute(ctx.project.cwd, slug)).stale;
-  } catch {
-    // A damaged or moved preview.
+  } catch (e) {
+    // A route that could not be written (its permissions, a folder in its
+    // place) does not follow this change: said, never a quiet ok. A
+    // damaged preview record is named by the preview commands themselves.
+    const code = /** @type {any} */ (e)?.code;
+    if (code && /^E[A-Z]+$/.test(code)) {
+      const where = /** @type {any} */ (e)?.path;
+      return [
+        `${where ? path.relative(ctx.project.cwd, where) : 'the in-app preview route'} could not be written (${code}), so the in-app preview does not follow this change; fix its permissions, then ${PREVIEW_CMD} add writes it again`,
+      ];
+    }
     return [];
   }
 }
