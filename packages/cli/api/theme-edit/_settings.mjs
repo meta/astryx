@@ -193,6 +193,9 @@ export function themeFiles(cwd, slug) {
   };
 }
 
+/** Files a system or a tool puts in any folder; a folder of only these is empty. */
+export const FOLDER_JUNK = new Set(['.DS_Store', '.gitkeep', 'Thumbs.db']);
+
 /**
  * Whether a value fits what a dial takes, read from the dial's own list of
  * values: a named rung in any case, or a value of the kind it names (a size,
@@ -704,6 +707,21 @@ export function loadTheme(
         },
       );
     }
+    // An empty theme folder (or one of system files only) holds no theme
+    // yet: `new` makes one there.
+    if (
+      !same &&
+      other &&
+      other[0] === f.dir &&
+      !LIKE.includes(slug) &&
+      fs.lstatSync(f.dir).isDirectory() &&
+      fs.readdirSync(f.dir).every(n => FOLDER_JUNK.has(n))
+    )
+      refuse(
+        ERROR_CODES.ERR_UNKNOWN_THEME,
+        `themes/${slug} is an empty folder: there is no theme ${slug} yet. new makes it there.`,
+        {run: [`${P} new ${slug}`]},
+      );
     if (!same && (other || LIKE.includes(slug)))
       refuse(
         ERROR_CODES.ERR_UNKNOWN_THEME,

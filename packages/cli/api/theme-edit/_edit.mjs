@@ -82,6 +82,7 @@ import {
   freeThemeName,
   refuseLinks,
   usableNewName,
+  FOLDER_JUNK,
   dialValueFits,
 } from './_settings.mjs';
 import {checkSetting, exampleOf, storedProblems} from './_check.mjs';
@@ -126,9 +127,6 @@ const E = ERROR_CODES;
  * @typedef {import('./theme-edit.type.mjs').ThemeEditChangeOptions} ChangeOptions
  */
 /** The marker a `new` writes first and removes last. */
-
-/** Files a system or a tool puts in any folder; a folder of only these is empty. */
-const FOLDER_JUNK = new Set(['.DS_Store', '.gitkeep', 'Thumbs.db']);
 
 /**
  * A folder the editor made but that has no settings: a stopped `new` left
