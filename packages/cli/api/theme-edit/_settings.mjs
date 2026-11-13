@@ -4612,20 +4612,21 @@ export async function buildTheme(ctx, slug, data) {
   let receipt = await step(() => runBuild(ctx, slug));
   const found = findOverrides(fs.readFileSync(f.css, 'utf8'), theme).filter(
     x =>
-      // A variant whose rule the settings already give this property (or
-      // one it covers, such as a one-mode background color written per
-      // variant, which carries the plain value as its other half) needs no
-      // copy of it.
-      !Object.keys(
+      // A variant whose rule the settings already give this property, a
+      // shorthand covering it, or a longhand of it that already carries the
+      // plain value (a one-mode background color written per variant, the
+      // plain color as its other half) needs no copy of it.
+      !Object.entries(
         (x.state
           ? theme.components[x.target][x.key]?.[x.state]
           : theme.components[x.target][x.key]) ?? {},
       ).some(
-        k =>
+        ([k, v]) =>
           !k.startsWith(':') &&
           (k === x.prop ||
             coversProperty(kebab(k), kebab(x.prop)) ||
-            coversProperty(kebab(x.prop), kebab(k))),
+            (coversProperty(kebab(x.prop), kebab(k)) &&
+              String(v).includes(String(x.value)))),
       ),
   );
   /** @type {string[]} */
@@ -4646,6 +4647,16 @@ export async function buildTheme(ctx, slug, data) {
       t[x.key] = x.state
         ? {...own, [x.state]: {[x.prop]: x.value, ...ownState}}
         : {[x.prop]: x.value, ...own};
+      // The variant's own longhands come after the copied shorthand; one
+      // the base theme holds would keep the base's earlier place and lose,
+      // so it is written as its sides.
+      const baseRule = /** @type {any} */ (base).components?.[x.target]?.[
+        x.key
+      ];
+      laterLonghandsAsSides(
+        x.state ? t[x.key][x.state] : t[x.key],
+        x.state ? baseRule?.[x.state] : baseRule,
+      );
       lifted.push(`${x.target} ${x.key}${x.state ?? ''} ${kebab(x.prop)}`);
     }
     await step(() => {

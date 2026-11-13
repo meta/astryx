@@ -221,6 +221,27 @@ describe('one-mode backgrounds on parts whose variants have their own', () => {
       }
     }, 240_000);
 
+  it("keeps a whole-part border's width and style on a variant that sets only its color (butter)", async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('b5', {cwd, like: 'butter'});
+    await themeEditSet('b5', 'border', '3px dashed #ff0000', {
+      cwd,
+      on: 'button',
+    });
+    await themeEditSet('b5', 'border-color', '#0000ff', {
+      cwd,
+      on: 'button',
+      when: 'variant:secondary',
+    });
+    const rule = ruleOf('b5', '.astryx-button[data-variant="secondary"]');
+    const at = rule.indexOf('border: 3px dashed #ff0000');
+    expect(at).toBeGreaterThan(-1);
+    const after = rule.slice(at);
+    expect(after).toMatch(/border-top-color: #0000ff/);
+    expect(after).toMatch(/border-left-color: #0000ff/);
+    expect(after).not.toMatch(/border-(width|style):/);
+  }, 240_000);
+
   it("says once that a variant keeps its own gradient, and that a part's own gradient covers the color", async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('m5n1', {cwd, like: 'neutral'});
