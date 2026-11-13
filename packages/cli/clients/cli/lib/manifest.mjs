@@ -42,6 +42,10 @@ import {fileURLToPath} from 'node:url';
 import {API_VERSION} from '../../../foundation/response/json.mjs';
 import {commandDocsOf} from './define-command.mjs';
 import {doc as manifestDoc} from '../commands/manifest.doc.mjs';
+import {commandAvailable, helpBase} from './base-gate.mjs';
+import {longFlag} from '../../../foundation/bases/requirements.mjs';
+import {coreBase} from '../../../foundation/bases/core.mjs';
+import {answeredBy} from '../../../foundation/release/run-context.mjs';
 
 /**
  * What a run may do beyond the command it was asked for (spec AST-081;
@@ -157,9 +161,10 @@ function docsOf(cmd, name) {
  * @param {import('commander').Command} cmd
  * @param {import('commander').Command} root
  * @param {Set<string>} jsonSupported  fully-qualified names that support --json
+ * @param {import('../../../foundation/bases/resolve.mjs').ActiveBase | null} [base]  the run's base
  * @returns {import('./manifest').ManifestCommand | null}  null for hidden/internal commands
  */
-function describeCommand(cmd, root, jsonSupported) {
+function describeCommand(cmd, root, jsonSupported, base = null) {
   const name = fullName(cmd, root);
   // Skip the auto-generated help command and any hidden/internal commands
   // (e.g. the postinstall shim) — agents never invoke these directly.
@@ -170,7 +175,7 @@ function describeCommand(cmd, root, jsonSupported) {
 
   const subcommands = /** @type {object[]} */ (
     (cmd.commands || [])
-      .map(sub => describeCommand(sub, root, jsonSupported))
+      .map(sub => describeCommand(sub, root, jsonSupported, base))
       .filter(Boolean)
   );
 
@@ -190,6 +195,21 @@ function describeCommand(cmd, root, jsonSupported) {
     options: (cmd.options || []).map(describeOption),
     json: jsonSupported.has(name),
   };
+
+  // The steps the command, its options, and its argument values cannot run
+  // without, and whether the run's base serves the command.
+  if (docs?.doc.requires?.length) entry.requires = [...docs.doc.requires];
+  for (const option of entry.options) {
+    const declared = (docs?.doc.options ?? []).find(
+      o => longFlag(o.flag) === longFlag(option.flag),
+    );
+    if (declared?.requires?.length) option.requires = [...declared.requires];
+  }
+  for (const argument of entry.arguments) {
+    const declared = (docs?.doc.args ?? []).find(a => a.name === argument.name);
+    if (declared?.requires) argument.requires = {...declared.requires};
+  }
+  entry.available = commandAvailable(cmd, base);
 
   const aliases = cmd.aliases ? cmd.aliases() : [];
   if (aliases && aliases.length > 0) entry.aliases = [...aliases];
@@ -302,10 +322,12 @@ export function storedManifest() {
 export function buildManifest(program, opts = {}) {
   const jsonSupported = opts.jsonSupported || new Set();
   const version = opts.version || /** @type {any} */ (program)._version || '';
+  const base = helpBase();
+  const shown = base ?? coreBase();
 
   const commands = /** @type {any[]} */ (
     (program.commands || [])
-      .map(cmd => describeCommand(cmd, program, jsonSupported))
+      .map(cmd => describeCommand(cmd, program, jsonSupported, base))
       .filter(Boolean)
   ).sort((a, b) => a.name.localeCompare(b.name));
 
@@ -318,6 +340,12 @@ export function buildManifest(program, opts = {}) {
     commands,
     jsonSupported: [...jsonSupported].sort(),
     globalMode: GLOBAL_MODE,
+    // The run's base and the steps it serves.
+    base: {
+      name: shown.name,
+      version: shown.core ? answeredBy().core : shown.version,
+      steps: [...shown.steps],
+    },
     // Flat index of every response `type` discriminator the CLI can emit,
     // keyed by command — lets an agent know what to expect back per call.
     responseTypes: Object.fromEntries(

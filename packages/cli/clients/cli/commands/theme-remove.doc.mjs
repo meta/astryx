@@ -15,6 +15,7 @@ export const doc = {
   args: [{name: 'slug', param: 'slug', required: true}],
   examples: [{label: 'Remove an added theme', cli: 'astryx theme remove ocean'}],
   outsideProject: 'refuse',
+  requires: ['themes.appModule'],
   exitCodes: [
     {code: 0, when: 'the module is regenerated without the theme'},
     {code: 1, when: 'the theme is not added, is the default, or state is invalid'},

@@ -10,6 +10,7 @@
  */
 
 import {z} from 'zod';
+import {BASE_STEPS} from '../integration/base-steps.mjs';
 
 /** @typedef {import('./base/type.js').AuthoredDocGraphFields} AuthoredDocGraphFieldsType */
 /** @typedef {import('./base/type.js').AuthoredDocKind} AuthoredDocKind */
@@ -593,6 +594,9 @@ export const SchemaDocKindSchema = z
  * >} _SchemaDocDriftLock
  */
 
+/** A platform step a base serves. */
+const BaseStepSchema = z.enum(BASE_STEPS);
+
 /** New stamped command doc (`type: 'command'`). */
 export const CommandDocKindSchema = z
   .object({
@@ -613,6 +617,7 @@ export const CommandDocKindSchema = z
             description: z.string().optional(),
             required: z.boolean().optional(),
             variadic: z.boolean().optional(),
+            requires: z.record(z.string(), z.array(BaseStepSchema)).optional(),
           })
           .passthrough(),
       )
@@ -629,6 +634,7 @@ export const CommandDocKindSchema = z
               .union([z.string(), z.boolean(), z.array(z.string())])
               .optional(),
             cliOnly: z.boolean().optional(),
+            requires: z.array(BaseStepSchema).optional(),
           })
           .passthrough(),
       )
@@ -650,6 +656,7 @@ export const CommandDocKindSchema = z
       .optional(),
     outsideProject: z.enum(['same', 'refuse', 'own']).optional(),
     replaces: z.array(z.string()).optional(),
+    requires: z.array(BaseStepSchema).optional(),
     related: z.array(z.string()).optional(),
     notes: z.array(ReferenceContentBlockSchema).optional(),
   })

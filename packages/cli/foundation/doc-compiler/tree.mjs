@@ -30,6 +30,7 @@ import {packageSource} from './source.mjs';
 import {renderTokens} from './links.mjs';
 import {createDocId} from '../identity/provider-identity.mjs';
 import {CLI_PROVIDER_ID} from '../identity/providers.mjs';
+import {currentNonCoreBase} from '../bases/state.mjs';
 
 export {routeSegment};
 
@@ -846,12 +847,14 @@ export function cliRootNamespaceNames(dir = TREE_DOCS_DIR) {
  * assets/docs/tree, and, unless left out, every typed self-doc with its
  * `namespace` group. A file that fails to load or parse is a diagnostic, never
  * a thrown error.
- * @param {{selfDocs?: boolean, dir?: string}} [options]
+ * @param {{selfDocs?: boolean, dir?: string, allRoots?: boolean}} [options]
+ *   `allRoots`: every root, as a run on Core reads them, whatever the base
  * @returns {Promise<{namespaces: TreeNamespaceInput[], docs: TreeDocInput[], diagnostics: CompilerDiagnostic[]}>}
  */
 export async function loadTreeInputs({
   selfDocs = true,
   dir = TREE_DOCS_DIR,
+  allRoots = false,
 } = {}) {
   /** @type {TreeNamespaceInput[]} */
   const namespaces = [];
@@ -963,7 +966,54 @@ export async function loadTreeInputs({
       });
     }
   }
+  if (dir === TREE_DOCS_DIR && !allRoots && currentNonCoreBase()) {
+    return {...onlyCliRoots(namespaces, docs), diagnostics};
+  }
   return {namespaces, docs, diagnostics};
+}
+
+/**
+ * The root namespaces whose guides describe the CLI itself. Every other root
+ * describes Core, so its namespaces and guides show only in a run whose base
+ * is Core.
+ */
+const CLI_ROOTS = new Set(['authoring', 'cli', 'global']);
+
+/**
+ * The tree inputs under a root in {@link CLI_ROOTS}. A doc that names no
+ * parent is a CLI self-doc that a namespace adopts by its group, and stays.
+ * @param {TreeNamespaceInput[]} namespaces
+ * @param {TreeDocInput[]} docs
+ * @returns {{namespaces: TreeNamespaceInput[], docs: TreeDocInput[]}}
+ */
+function onlyCliRoots(namespaces, docs) {
+  /** @param {DocPlacement | undefined} placement */
+  const parentOf = placement =>
+    typeof placement?.parent === 'string' &&
+    placement.parent.startsWith('namespace:')
+      ? placement.parent.slice('namespace:'.length)
+      : undefined;
+  /** @type {Map<string, string | undefined>} */
+  const parents = new Map(
+    namespaces.map(ns => [ns.doc.name, parentOf(ns.doc.placement)]),
+  );
+  /** @param {string} name */
+  const rootOf = name => {
+    const seen = new Set();
+    let current = name;
+    while (parents.get(current) && !seen.has(current)) {
+      seen.add(current);
+      current = /** @type {string} */ (parents.get(current));
+    }
+    return current;
+  };
+  return {
+    namespaces: namespaces.filter(ns => CLI_ROOTS.has(rootOf(ns.doc.name))),
+    docs: docs.filter(doc => {
+      const parent = parentOf(doc.placement);
+      return parent == null || CLI_ROOTS.has(rootOf(parent));
+    }),
+  };
 }
 
 /** The discovery group every icon definition doc belongs to. */

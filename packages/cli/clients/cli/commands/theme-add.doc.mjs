@@ -39,6 +39,7 @@ export const doc = {
     },
   ],
   outsideProject: 'own',
+  requires: ['themes.appModule'],
   exitCodes: [
     {code: 0, when: 'the theme is listed or added'},
     {

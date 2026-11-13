@@ -73,6 +73,40 @@ export interface AstryxIntegration {
    *  `astryx doctor` warns. An invalid value is ignored with a warning; the
    *  rest of the manifest still loads. JSON output keeps commands bare. */
   cliCommand?: string;
+  /** Makes this package a base: a component library that stands in for
+   *  Core in a project that uses it. `adapters` maps a capability to the
+   *  module, relative to the package, that performs its platform steps; the
+   *  steps the module exports are the steps the base serves. `base: {}`
+   *  declares a base that serves content only. Core is a base too; the CLI
+   *  holds its declaration. See `astryx docs authoring`. */
+  base?: BaseDeclaration;
+}
+
+/** A capability a base declares one adapter module for. */
+export type BaseCapability =
+  'themes' | 'templates' | 'render' | 'icons' | 'setup';
+
+/** A platform step, named `<capability>.<step>`. The list is closed and
+ *  append-only; a command declares the steps it cannot run without. */
+export type BaseStep =
+  | 'themes.targets'
+  | 'themes.compile'
+  | 'themes.appModule'
+  | 'themes.template'
+  | 'themes.scaffold'
+  | 'themes.checks'
+  | 'templates.skeleton'
+  | 'templates.standalonePage'
+  | 'render.page'
+  | 'render.reverse'
+  | 'icons.appModule'
+  | 'setup.guide';
+
+/** What a base declares in its integration manifest. */
+export interface BaseDeclaration {
+  /** One module path per capability, relative to the package. A capability
+   *  this CLI does not know is ignored, so a newer base still loads. */
+  adapters?: Record<string, string>;
 }
 
 /**

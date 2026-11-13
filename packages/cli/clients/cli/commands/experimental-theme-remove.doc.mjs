@@ -30,6 +30,7 @@ export const doc = {
     },
   ],
   outsideProject: 'refuse',
+  requires: ['themes.appModule'],
   exitCodes: [
     {
       code: 0,

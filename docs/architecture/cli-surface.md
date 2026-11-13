@@ -124,7 +124,10 @@ and remains available through explicit Core package selection.
 - **INV2 — Every `--json` emission is one valid envelope.** Success is
   `{apiVersion, type, data}` plus optional `package` (INV28) and `meta`, which
   carries `answeredBy` on every success (`spec:AST-081` FR5). Failure is
-  `{apiVersion, error, code}` plus optional `suggestions`. There is no third
+  `{apiVersion, error, code}` plus optional `suggestions`, and the
+  `requirement` member on `ERR_BASE_CAPABILITY` (`spec:AST-114` FR8). In a run
+  whose base is not Core, `answeredBy` also names the base (`spec:AST-114`
+  FR2). There is no third
   shape, no partial write, and no raw stack trace: an uncaught throw becomes an
   envelope at the bin error boundary.
 - **INV3 — The code is the contract; the prose is not.** `code` is stable and

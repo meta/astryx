@@ -15,6 +15,7 @@ export const doc = {
   args: [{name: 'slug', param: 'slug', required: true}],
   examples: [{label: 'Choose the default theme', cli: 'astryx theme use ocean'}],
   outsideProject: 'refuse',
+  requires: ['themes.appModule'],
   exitCodes: [
     {code: 0, when: 'the module is regenerated with the selected default'},
     {code: 1, when: 'the theme is not added or state is invalid'},

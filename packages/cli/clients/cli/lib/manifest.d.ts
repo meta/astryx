@@ -23,6 +23,8 @@ export interface ManifestOption {
   default?: unknown;
   /** True for `--no-foo` style negation flags. */
   negate?: boolean;
+  /** Platform steps the option cannot run without. */
+  requires?: string[];
 }
 
 /** A positional argument. */
@@ -31,6 +33,8 @@ export interface ManifestArgument {
   required: boolean;
   variadic: boolean;
   description: string;
+  /** Platform steps a value of the argument cannot run without, by value. */
+  requires?: Record<string, string[]>;
 }
 
 /** A single command (possibly with subcommands). */
@@ -57,6 +61,11 @@ export interface ManifestCommand {
    * else, which its docs state. Absent on a group that only holds subcommands.
    */
   outsideProject?: 'same' | 'refuse' | 'own';
+  /** Platform steps the command cannot run without. Absent when it needs none. */
+  requires?: string[];
+  /** Whether the run's base serves the command. A group is available when any
+   *  of its subcommands is. */
+  available: boolean;
   /** Nested subcommands (e.g. `theme build` under `theme`). */
   subcommands?: ManifestCommand[];
 }
@@ -75,6 +84,8 @@ export interface CLIManifest {
   globalMode: {docs: string; summary: string};
   /** Flat index of response `type` discriminators keyed by command name. */
   responseTypes: Record<string, string[]>;
+  /** The base the run reads, and the platform steps it serves. */
+  base: {name: string; version: string | null; steps: string[]};
 }
 
 /** The `astryx manifest --json` envelope. */

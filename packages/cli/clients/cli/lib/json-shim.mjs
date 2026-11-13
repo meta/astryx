@@ -46,6 +46,7 @@ import {answeredBy} from '../../../foundation/release/run-context.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {setCommand, setOutcome, recordHelp} from '../../../foundation/debug/index.mjs';
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
+import {commandAvailable, helpBase, optionAvailable} from './base-gate.mjs';
 
 /**
  * Fully-qualified name of a command relative to the root program, e.g.
@@ -98,8 +99,9 @@ export function buildHelpEnvelope(cmd) {
     c = c.parent;
   }
 
+  const base = helpBase();
   /** @type {Array<{flags: string, description: string, defaultValue?: unknown, choices?: string[]}>} */
-  const options = cmd.options.map((o) => {
+  const options = cmd.options.filter((o) => optionAvailable(cmd, o, base)).map((o) => {
     /** @type {any} */
     const opt = {flags: o.flags, description: o.description || ''};
     if (o.defaultValue !== undefined) opt.defaultValue = o.defaultValue;
@@ -108,7 +110,7 @@ export function buildHelpEnvelope(cmd) {
   });
 
   const subcommands = cmd.commands
-    .filter((s) => !(/** @type {any} */ (s))._hidden)
+    .filter((s) => !(/** @type {any} */ (s))._hidden && commandAvailable(s, base))
     .map((s) => ({name: s.name(), description: s.description() || ''}));
 
   return {
@@ -135,7 +137,12 @@ export function buildHelpEnvelope(cmd) {
  */
 export function buildHelpErrorEnvelope(cmd) {
   const available = cmd.commands
-    .filter(s => !(/** @type {any} */ (s))._hidden && s.name() !== 'help')
+    .filter(
+      s =>
+        !(/** @type {any} */ (s))._hidden &&
+        s.name() !== 'help' &&
+        commandAvailable(s, helpBase()),
+    )
     .map(s => s.name());
   if (!cmd.parent) {
     // Commander dispatches `help <name>` with ['help', <name>, ...] in args.

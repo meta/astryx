@@ -24,11 +24,18 @@ import {ERROR_CODES} from '../response/error-codes.mjs';
 import {carriedCore, runChoice} from '../release/run-context.mjs';
 import {findDeclaringPackage} from '../release/project.mjs';
 import {hostedRun, recordResolved} from '../runtime/package-root.mjs';
+import {currentNonCoreBase} from '../bases/state.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /** Root of the @astryxdesign/cli package */
 export const CLI_ROOT = path.resolve(__dirname, '..', '..');
+
+/**
+ * A folder with no Core content: an empty `src` and no package.json. A run whose
+ * base is not Core reads it wherever a command reads Core's folder layout.
+ */
+export const NO_CORE_CONTENT_DIR = path.resolve(__dirname, '..', 'bases', 'no-core');
 
 /** The package every Core lookup answers for. */
 const CORE_PACKAGE = '@astryxdesign/core';
@@ -105,6 +112,10 @@ export function unavailableCoreMessage(found, inProject) {
  * @returns {string}
  */
 export function requireCoreDir(startDir = process.cwd()) {
+  // A run whose base is not Core reads a folder with no Core content in
+  // Core's place, so a command finds no Core item and answers from the
+  // base's integrations alone.
+  if (currentNonCoreBase()) return NO_CORE_CONTENT_DIR;
   const found = findProjectCoreDir(startDir) ?? carriedCoreFor(startDir, true);
   if (typeof found === 'string') return noteCore(found, 'project');
   if (found.unavailable) {
@@ -151,6 +162,8 @@ export function findCarriedCoreDir(startDir, {fetch = false} = {}) {
  * @returns {{dir: string | null, unavailable: string | null, version?: string, reason?: string}}
  */
 function carriedCoreFor(startDir, fetch = false) {
+  // A run whose base is not Core never reads Core, so it never fetches one.
+  if (currentNonCoreBase()) return {dir: null, unavailable: null};
   const carried = carriedCore({fetch: false});
   if (!carried.dir && !fetch) return carried;
   if (runChoice(startDir).copy === 'project') {
@@ -169,6 +182,18 @@ function carriedCoreFor(startDir, fetch = false) {
  * @returns {string | null}
  */
 export function findProjectCoreDir(startDir = process.cwd()) {
+  // A run whose base is not Core reads no Core, even one the project installs.
+  if (currentNonCoreBase()) return null;
+  return installedProjectCoreDir(startDir);
+}
+
+/**
+ * The project's installed @astryxdesign/core, whatever base the run reads:
+ * the lookup that decides the run's base.
+ * @param {string} [startDir]
+ * @returns {string | null}
+ */
+export function installedProjectCoreDir(startDir = process.cwd()) {
   const near = findNearbyCoreDir(startDir);
   if (near) return near;
   // A folder deeper than that reach still belongs to the project the walk to

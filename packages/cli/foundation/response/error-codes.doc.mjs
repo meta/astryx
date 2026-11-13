@@ -296,6 +296,23 @@ export const doc = {
         'The command needs a project (an app with Astryx installed, or an integration package) and was run outside one. Nothing was written.',
     },
 
+    // Bases
+    {
+      value: 'ERR_BASE_CAPABILITY',
+      description:
+        "The command, or an option or argument value given to it, needs a step the run's base does not serve. Nothing was written. The envelope's `requirement` names the command, the steps, and the base.",
+    },
+    {
+      value: 'ERR_BASE_NOT_FOUND',
+      description:
+        '`--base` names a package that is not installed where the run can read it, or that is not Core and does not declare `base`. Nothing was done.',
+    },
+    {
+      value: 'ERR_BASE_AMBIGUOUS',
+      description:
+        'The project installs two or more bases and no Core, and the run named none with `--base`. Nothing was done.',
+    },
+
     // Render (experimental: may change or be removed in a patch release)
     {
       value: 'ERR_RENDER_COMPILE',

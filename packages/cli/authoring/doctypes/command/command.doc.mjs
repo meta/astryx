@@ -205,6 +205,12 @@ export const doc = {
         'What the command does outside a project. `same`: the answer it gives in a new project. `refuse`: it writes nothing and fails, naming the app project or integration package it needs. `own`: something else. Every `refuse` and `own` command also carries an `In global mode:` note in its `notes` that tells readers exactly what it does. Every command and subcommand declares one, and `astryx manifest` publishes it; a command that only groups subcommands declares none. The CLI tests run every command in an empty folder and check what it does against this value; `astryx doctor` does not check it.',
     },
     {
+      name: 'requires',
+      type: 'BaseStep[]',
+      description:
+        'Platform steps the command cannot run without, such as `themes.compile`. Declare only a step the command cannot do without; a command that declares none works on every base. An option takes the same field, and an argument takes `{<value>: BaseStep[]}` for a value that needs a step. Help hides what the run\'s base does not serve, a run refuses with `ERR_BASE_CAPABILITY`, and `astryx manifest` publishes `requires` and `available`. A command that only groups subcommands declares none.',
+    },
+    {
       name: 'deprecated',
       type: 'string',
       description: 'Deprecation notice — a DEP-* id and the replacement.',

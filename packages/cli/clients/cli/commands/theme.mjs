@@ -88,6 +88,11 @@ import {
   generatedSourceCommand,
   writeDeferredBuildOutputs,
 } from '../../../api/theme/build/build.mjs';
+import {
+  commandAvailable,
+  exampleAvailable,
+  helpBase,
+} from '../lib/base-gate.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
 import {NO_RESULT_SET, resultSet} from '../../../foundation/debug/index.mjs';
 import {doc as themeGroup} from './theme.doc.mjs';
@@ -825,7 +830,9 @@ export function registerTheme(program) {
         const {message, suggestions} = themeGroupUnknownSubcommand(
           'theme',
           String(extras[0]),
-          (theme.commands || []).map(c => c.name()),
+          (theme.commands || [])
+            .filter(c => commandAvailable(c, helpBase()))
+            .map(c => c.name()),
           theme,
         );
         return cliError(message, {
@@ -843,12 +850,21 @@ export function registerTheme(program) {
   // under `component`. Without this pointer the group reads as a build-tool
   // menu, and the component targets are unreachable from the noun the user
   // started at.
+  // The run's base may not serve `theme targets`; help then leaves that line
+  // out.
+  const overrides = [
+    ['theme targets', `  ${getCliInvocation()} theme targets            Every themeable class, with its props and states\n`],
+    ['component <Name>', `  ${getCliInvocation()} component <Name>         One component's theming table\n`],
+    ['docs theme', `  ${getCliInvocation()} docs theme               How component overrides work\n`],
+  ];
   theme.addHelpText(
     'after',
-    `\nComponent style overrides:\n` +
-      `  ${getCliInvocation()} theme targets            Every themeable class, with its props and states\n` +
-      `  ${getCliInvocation()} component <Name>         One component's theming table\n` +
-      `  ${getCliInvocation()} docs theme               How component overrides work\n`,
+    () =>
+      `\nComponent style overrides:\n` +
+      overrides
+        .filter(([cli]) => exampleAvailable(program, cli, helpBase()))
+        .map(([, line]) => line)
+        .join(''),
   );
 
   registerThemeSubcommands(theme, program, THEME_DOCS, THEME_WORDS);

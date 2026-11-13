@@ -218,7 +218,8 @@ works on is `spec:AST-040` FR9's.
   integrations (FR12), and any integration a programmatic host approves (FR1).
   Outside a project, or in a project with nothing
   installed (FR2's copy that started the run, such as in a fresh clone), every
-  command that needs Core answers from the carried Core: the
+  command that needs Core answers from the carried Core when the run's base is
+  Core (`spec:AST-114` FR2): the
   `@astryxdesign/core` release equal to the answering CLI, beside it, carried by
   its door (FR1), or kept in the per-user cache, where a copy that carries none
   installs it the first time a command needs it. The global copy also installs

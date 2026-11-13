@@ -34,6 +34,7 @@ import {
   storedKey,
   STORED_DOCS_FILE,
 } from '../doc-compiler/stored-docs.mjs';
+import {currentNonCoreBase} from '../bases/state.mjs';
 
 export const BUNDLED_THEME_PACKAGE = '@astryxdesign/cli';
 export const THEMES_DIR = path.join(CLI_ROOT, 'assets', 'templates', 'themes');
@@ -1723,6 +1724,8 @@ let bundledThemeCache = null;
 
 /** @returns {DiscoveredTheme[]} */
 export function discoverBundledThemes() {
+  // Core's content shows only in a run whose base is Core.
+  if (currentNonCoreBase()) return [];
   bundledThemeCache ??= discoverThemeDirectory(
     THEMES_DIR,
     BUNDLED_THEME_PACKAGE,

@@ -11,6 +11,7 @@
 
 import type {AuthoredDocGraphFields} from '../base/type.js';
 import type {ReferenceContentBlock} from '../reference/type.js';
+import type {BaseStep} from '../../integration/type.js';
 
 /** A positional argument. `param` links it to a FunctionDoc param for its description. */
 export interface CommandArgDoc {
@@ -21,6 +22,10 @@ export interface CommandArgDoc {
   description?: string;
   required?: boolean;
   variadic?: boolean;
+  /** Steps a value of this argument cannot run without, by value, such as
+   *  `{theme: ['themes.scaffold']}`. A base that does not serve them hides
+   *  nothing for the argument, and a run given that value refuses. */
+  requires?: Record<string, BaseStep[]>;
 }
 
 /** A flag/option. `param` links it to a FunctionDoc param; `cliOnly` for flags
@@ -38,6 +43,9 @@ export interface CommandOptionDoc {
   default?: string | boolean | string[];
   /** True for CLI-only flags with no function param. */
   cliOnly?: boolean;
+  /** Steps this option cannot run without. Help hides the option on a base
+   *  that does not serve them, and a run that gives it refuses. */
+  requires?: BaseStep[];
 }
 
 /**
@@ -95,6 +103,12 @@ export interface CommandDoc extends AuthoredDocGraphFields {
   exitCodes?: {code: number; when: string}[];
   /** What the command does outside a project: `same`, `refuse`, or `own`. Every command and subcommand declares one, and `astryx manifest` publishes it; a command that only groups subcommands declares none. */
   outsideProject?: CommandOutsideProject;
+  /** Platform steps the command cannot run without. Declare only a step the
+   *  command cannot do without; a command that declares none works on every
+   *  base. Help hides the command on a base that does not serve them, a run
+   *  refuses with `ERR_BASE_CAPABILITY`, and `astryx manifest` publishes it.
+   *  A command that only groups subcommands declares none. */
+  requires?: BaseStep[];
   /** Deprecation notice — a DEP-* id and the replacement. */
   deprecated?: string;
   /** The commands this command is meant to replace, by command path (`theme build`). Help shows them as one line ("Will replace: astryx theme build"), and a later deprecation of those commands reads this list. It marks nothing as deprecated.

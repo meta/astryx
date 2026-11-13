@@ -15,6 +15,7 @@ import {doc as experimentalGroup} from '../experimental.doc.mjs';
 import {registerExperimentalIcon} from './icon.mjs';
 import {registerExperimentalRender} from './render.mjs';
 import {registerExperimentalTheme} from './theme.mjs';
+import {commandAvailable, helpBase} from '../../lib/base-gate.mjs';
 
 /** @param {import('commander').Command} program */
 export function registerExperimental(program) {
@@ -29,7 +30,9 @@ export function registerExperimental(program) {
         const {message, suggestions} = themeGroupUnknownSubcommand(
           'experimental',
           String(extras[0]),
-          (experimental.commands ?? []).map(command => command.name()),
+          (experimental.commands ?? [])
+            .filter(command => commandAvailable(command, helpBase()))
+            .map(command => command.name()),
           experimental,
         );
         return cliError(message, {

@@ -186,6 +186,27 @@ export function defineCommand(parent, doc, {fn, action, hidden} = {}) {
   return cmd;
 }
 
+/** @type {((cmd: import('commander').Command, cli: string) => boolean) | null} */
+let exampleShown_ = null;
+
+/**
+ * Set the test that decides which examples help shows: the run's base hides
+ * an example that names a command or option it does not serve.
+ * @param {(cmd: import('commander').Command, cli: string) => boolean} test
+ */
+export function setHelpExampleFilter(test) {
+  exampleShown_ = test;
+}
+
+/**
+ * @param {import('commander').Command} cmd
+ * @param {string} cli
+ * @returns {boolean}
+ */
+function exampleShown(cmd, cli) {
+  return exampleShown_ == null || exampleShown_(cmd, cli);
+}
+
 /**
  * End `cmd`'s help with what its CommandDoc says: the exit codes, then the
  * examples, then `More:`, the `astryx docs` route that reads the whole command.
@@ -197,7 +218,9 @@ export function addDocHelp(cmd, doc) {
   // Rendered when help is shown, so the run prefix (pnpm exec astryx, yarn
   // astryx, ...) is looked up then, not on every start.
   cmd.addHelpText('after', () => {
-    const examples = (doc.examples ?? []).flatMap(({label, cli}) => [
+    const examples = (doc.examples ?? [])
+      .filter(({cli}) => exampleShown(cmd, cli))
+      .flatMap(({label, cli}) => [
       ...(label ? [`  # ${label}`] : []),
       `  ${formatCliCommand(cli)}`,
     ]);
