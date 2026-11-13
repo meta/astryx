@@ -199,17 +199,36 @@ const REPLACED_ELEMENTS = new Set([
   'object',
 ]);
 
-function isAtomicBox(element: Element, view: Window): boolean {
-  return (
-    REPLACED_ELEMENTS.has(element.localName) ||
-    view.getComputedStyle(element).display.startsWith('inline-')
-  );
+/** A box on a line, and the node it belongs to. */
+interface LineBox {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+  node: Node;
+}
+
+/** The block that holds a node's line: its nearest block ancestor, or the flow. */
+function lineHolder(node: Node, flow: HTMLElement, view: Window): Element {
+  for (
+    let element = node.parentElement;
+    element != null && element !== flow;
+    element = element.parentElement
+  ) {
+    const {display} = view.getComputedStyle(element);
+    if (!display.startsWith('inline') && display !== 'contents') {
+      return element;
+    }
+  }
+  return flow;
 }
 
 /**
  * The current layout has the place below the text, so the text's lines are its
- * own. Text, replaced elements and inline-block boxes count. A paragraph's box
- * spans the caption, so it does not.
+ * own. The last line holds text, replaced elements and inline-block boxes, and
+ * the boxes of inline elements, with their padding, borders and generated
+ * content. Inline-level elements add their margins. The line's room is the
+ * content box of the block that holds it, less the place's side.
  */
 function placeFitsBesideLastLine(flow: HTMLElement): boolean {
   const place = flow.firstElementChild;
@@ -226,13 +245,36 @@ function placeFitsBesideLastLine(flow: HTMLElement): boolean {
   if (typeof range.getClientRects !== 'function') {
     return true;
   }
-  const words: DOMRect[] = [];
-  const keep = (rects: DOMRectList) => {
-    for (const rect of rects) {
-      if (rect.width > 0 && rect.height > 0) {
-        words.push(rect);
+  // Text and one-box elements set the lines. An inline element's boxes add
+  // their padding, borders and generated content to the lines they are on.
+  // An inline-level element's start margin comes before its first box, and
+  // its end margin after its last.
+  const lineBoxes: LineBox[] = [];
+  const inlineBoxes: LineBox[] = [];
+  const keep = (
+    boxes: LineBox[],
+    rects: DOMRectList,
+    node: Node,
+    margins?: CSSStyleDeclaration,
+  ) => {
+    const isRtl = margins?.direction === 'rtl';
+    const marginLeft = margins == null ? 0 : parseFloat(margins.marginLeft);
+    const marginRight = margins == null ? 0 : parseFloat(margins.marginRight);
+    const list = Array.from(rects);
+    list.forEach(({left, right, top, bottom, width, height}, index) => {
+      if (width <= 0 || height <= 0) {
+        return;
       }
-    }
+      const isFirst = index === 0;
+      const isLast = index === list.length - 1;
+      boxes.push({
+        left: (isRtl ? isLast : isFirst) ? left - marginLeft : left,
+        right: (isRtl ? isFirst : isLast) ? right + marginRight : right,
+        top,
+        bottom,
+        node,
+      });
+    });
   };
   const walker = doc.createTreeWalker(
     flow,
@@ -240,31 +282,54 @@ function placeFitsBesideLastLine(flow: HTMLElement): boolean {
   );
   for (let node = walker.nextNode(); node != null; node = walker.nextNode()) {
     if (isElement(node)) {
-      if (isAtomicBox(node, view)) {
-        keep(node.getClientRects());
+      const style = view.getComputedStyle(node);
+      const margins = style.display.startsWith('inline') ? style : undefined;
+      if (
+        REPLACED_ELEMENTS.has(node.localName) ||
+        style.display.startsWith('inline-')
+      ) {
+        keep(lineBoxes, node.getClientRects(), node, margins);
+      } else if (style.display === 'inline') {
+        keep(inlineBoxes, node.getClientRects(), node, margins);
       }
     } else {
       range.selectNodeContents(node);
-      keep(range.getClientRects());
+      keep(lineBoxes, range.getClientRects(), node);
     }
   }
-  if (words.length === 0) {
+  if (lineBoxes.length === 0) {
     return true;
   }
-  const lowest = words.reduce((a, b) => (b.bottom > a.bottom ? b : a));
-  const lastLine = words.filter(
-    rect => (rect.top + rect.bottom) / 2 > lowest.top,
+  const lowest = lineBoxes.reduce((a, b) => (b.bottom > a.bottom ? b : a));
+  const lastLine = [...lineBoxes, ...inlineBoxes].filter(
+    box => (box.top + box.bottom) / 2 > lowest.top,
   );
-  const needed =
-    place.getBoundingClientRect().width +
-    parseFloat(placeStyle.marginLeft) +
-    parseFloat(placeStyle.marginRight);
-  // The place shortens the last line's box, so the line fits where its width
-  // and the place's fit the caption's, whatever its alignment or direction.
+  const holder = lineHolder(lowest.node, flow, view);
+  const holderBox = holder.getBoundingClientRect();
+  const holderStyle = view.getComputedStyle(holder);
+  const contentLeft =
+    holderBox.left +
+    parseFloat(holderStyle.borderLeftWidth) +
+    parseFloat(holderStyle.paddingLeft);
+  const contentRight =
+    holderBox.right -
+    parseFloat(holderStyle.borderRightWidth) -
+    parseFloat(holderStyle.paddingRight);
+  // The place floats at one side of the flow. Its margin box shortens the
+  // line there.
+  const placeBox = place.getBoundingClientRect();
+  const placeLeft = placeBox.left - parseFloat(placeStyle.marginLeft);
+  const placeRight = placeBox.right + parseFloat(placeStyle.marginRight);
+  const flowBox = flow.getBoundingClientRect();
+  const isPlaceAtRight = placeLeft + placeRight > flowBox.left + flowBox.right;
+  const room = isPlaceAtRight
+    ? Math.min(contentRight, placeLeft) - contentLeft
+    : contentRight - Math.max(contentLeft, placeRight);
+  // The line fits where its width fits the room, whatever its alignment.
   const width =
-    Math.max(...lastLine.map(rect => rect.right)) -
-    Math.min(...lastLine.map(rect => rect.left));
-  return width + needed <= flow.getBoundingClientRect().width;
+    Math.max(...lastLine.map(box => box.right)) -
+    Math.min(...lastLine.map(box => box.left));
+  return width <= room;
 }
 
 // The caption's backing: the controls' backing colour, darker, so the caption
