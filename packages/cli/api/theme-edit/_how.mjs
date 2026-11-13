@@ -28,8 +28,14 @@ import {
   familyOf,
 } from './_tables.mjs';
 import {colorsAt, decodePng, mainColors} from './_png.mjs';
-import {baseThemeFile, installLine} from './_project.mjs';
-import {loadTheme, nearest, refuse, themeSourceProblem} from './_settings.mjs';
+import {baseInstalled, installLine} from './_project.mjs';
+import {
+  editedThemes,
+  loadTheme,
+  nearest,
+  refuse,
+  themeSourceProblem,
+} from './_settings.mjs';
 import {ASPECTS, checkSetting} from './_check.mjs';
 import {MODAL} from './_compiler.mjs';
 import {PALETTE_DIALS, mappingRows, paletteFiles} from './_palette.mjs';
@@ -182,7 +188,25 @@ function withPrefix(value, cwd) {
  */
 async function answer(subject, options, cwd) {
   const {list, at = [], count} = options;
-  const t = (subject ?? '').trim();
+  // "½rem": a fraction is a number before anything reads the question.
+  const t = (subject ?? '')
+    .trim()
+    .replace(/(\d*)(?:½|1\u20442)/g, (_, n) => `${n ? Number(n) + 0.5 : '0.5'}`)
+    .replace(
+      /(\d*)(?:¼|1\u20444)/g,
+      (_, n) => `${n ? Number(n) + 0.25 : '0.25'}`,
+    )
+    .replace(
+      /(\d*)(?:¾|3\u20444)/g,
+      (_, n) => `${n ? Number(n) + 0.75 : '0.75'}`,
+    );
+  // "explain spacing", "tell me about the accent": the lookup of what is
+  // named, never a change.
+  const explain =
+    /^(?:explain|describe|tell me about)\s+(?:the |my )?([a-z][a-z -]*?)\s*$/i.exec(
+      t,
+    );
+  if (explain && explain[1] !== t) return answer(explain[1], options, cwd);
   // --theme names a theme whatever the subject, so a bad one is refused
   // for a picture and a list too.
   if (options.theme === '')
@@ -246,6 +270,22 @@ async function answer(subject, options, cwd) {
       },
     );
   }
+  // "how b make buttons pill": a first word typed as its own argument that
+  // names an existing theme, with more words after it, is the theme, as for
+  // set, show and undo. A quoted question ("how 'accent red'") is one
+  // argument: its first word is never a theme.
+  const argv = /** @type {string[] | undefined} */ (options.words);
+  if (
+    !options.theme &&
+    argv &&
+    argv.length >= 2 &&
+    editedThemes(cwd).includes(argv[0])
+  )
+    return answer(
+      argv.slice(1).join(' '),
+      {...options, words: undefined, theme: argv[0]},
+      cwd,
+    );
   const ctx = await context(cwd);
   const {C} = ctx;
   const env = await howTheme(ctx, cwd, options.theme);
@@ -332,14 +372,8 @@ async function answer(subject, options, cwd) {
     const d = DIALS[key];
     // A base is named only when it is installed here; the others are
     // listed with the line that installs them.
-    const installed = (/** @type {string} */ b) => {
-      try {
-        baseThemeFile(ctx.project, b);
-        return true;
-      } catch {
-        return false;
-      }
-    };
+    const installed = (/** @type {string} */ b) =>
+      baseInstalled(ctx.project, b);
     const missing = key === 'base' ? LIKE.filter(b => !installed(b)) : [];
     return {
       kind: 'setting',
@@ -459,7 +493,7 @@ async function answer(subject, options, cwd) {
     };
   }
   // A question about the tool itself gets the command that answers it.
-  const tool = toolAnswer(t, env);
+  const tool = toolAnswer(t, env, ctx.project.target);
   if (tool === 'list') {
     const kind =
       /\b(dials?|tokens?|parts?|groups?|properties|property)\b/i
@@ -650,21 +684,22 @@ function partAnswer(ctx, env, subject, key, unknown, themeFields) {
   const group = familyOf(key);
   // Only the states set takes on this part (it refuses one that never
   // applies there).
+  // Only the states set takes on this part: a state is dropped when the
+  // same change without it passes and with it is refused.
+  const takes = (/** @type {string | undefined} */ st) => {
+    try {
+      checkSetting(ctx, env.slug, env.data, 'opacity', '1', {
+        on: key,
+        ...(st ? {state: st} : {}),
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const plainOk = takes(undefined);
   const states = [...new Set([...target.states, ...COMMON_STATES])].filter(
-    st => {
-      try {
-        checkSetting(ctx, env.slug, env.data, 'opacity', '1', {
-          on: key,
-          state: st,
-        });
-        return true;
-      } catch (e) {
-        return !(
-          /** @type {any} */ (e)?.code === 'ERR_THEME_NO_EFFECT' &&
-          /--state/.test(String(/** @type {any} */ (e)?.message))
-        );
-      }
-    },
+    st => !plainOk || takes(st),
   );
   const reads = Object.fromEntries(
     Object.keys(GROUPS).map(g => [
@@ -845,8 +880,11 @@ function tokenAnswer(ctx, env, subject, key, unknown, themeFields) {
   const {C} = ctx;
   const readers = C.anyReader(key);
   const type = C.typeOf(key);
+  // The theme's own value (its settings applied), else the base theme's.
   const now =
-    env.base.light[key] ?? String(ctx.project.core.tokenDefaults[key]);
+    env.own?.light[key] ??
+    env.base.light[key] ??
+    String(ctx.project.core.tokenDefaults[key]);
   const value = exampleForToken(type, key, now);
   const {commands, refused} = value
     ? checked(env, [
@@ -937,9 +975,10 @@ function colorsAnswer(env, dialCommands) {
  * the caller lists the kind the question names.
  * @param {string} t
  * @param {import('./_how-commands.mjs').HowTheme} env
+ * @param {Map<string, unknown>} targets the parts Core styles
  * @returns {Array<{text: string, commands: string[]}> | 'list' | null}
  */
-function toolAnswer(t, env) {
+function toolAnswer(t, env, targets) {
   const q = t
     .trim()
     .toLowerCase()
@@ -1011,7 +1050,82 @@ function toolAnswer(t, env) {
         commands: [`${P} new ${env.slug}-2 --like ${env.data.like ?? 'none'}`],
       },
     ];
-  if (/\b(version|which cli|what cli)\b/.test(q))
+  // Screen-size, print and device conditions: the editor has none.
+  if (
+    /\bmedia quer|^(on|for) (mobile|phones?|tablets?|desktops?|print)$|^(print|printing|print styles?)$/.test(
+      q,
+    )
+  )
+    return [
+      {
+        text: 'the theme editor has no screen-size, print or device conditions: every setting applies on every screen; a media query needs your own CSS',
+        commands: [`${HOW} --help`],
+      },
+    ];
+  // Questions about what is set now, or the choices: a lookup, never a
+  // write.
+  const asks =
+    /^(how (round|big|small|large|thick|dark|light|bold|wide|tall) (is|are)|what (is|are) the (current|available)|which \w+ (does|do|is|are)|what (font|color|colour|radius|accent) (does|do|is|are)|what (values|options|choices))\b|\b(right now|currently|at the moment)\??$|\bnow\?$/.exec(
+      q,
+    );
+  // "is my theme valid", "how many dials", "list every change".
+  if (
+    /^(is|are) (my|the|this) theme (valid|ok|okay|broken|working)\b|^(check|validate) (my|the) theme\b/.test(
+      q,
+    )
+  )
+    return [
+      {
+        text: `show builds ${env.slug} and says what is wrong with it, if anything`,
+        commands: [`${P} show ${env.slug}`],
+      },
+    ];
+  if (
+    /^how many (dials|settings|tokens|parts)\b|^(list|show) (every|all|each) (dial|setting|token|part)s?\b/.test(
+      q,
+    )
+  )
+    return 'list';
+  if (/^(list|show) (every|all|my) (changes?|edits?|settings)\b/.test(q))
+    return [
+      {
+        text: `show lists every setting ${env.slug} has`,
+        commands: [`${P} show ${env.slug}`],
+      },
+    ];
+  if (
+    asks ||
+    /^which parts (are|does|do)\b/.test(q) ||
+    (/^why (is|are|does|do)\b/.test(q) && !/\bnot\b|n'?t\b/.test(q))
+  ) {
+    // The part or setting the question names gets its own lookup.
+    const named = q
+      .split(/[^a-z-]+/)
+      .find(
+        w =>
+          w.length > 2 &&
+          (targets.has(w) ||
+            targets.has(w.replace(/s$/, '')) ||
+            ['inputs', 'checks'].includes(w)),
+      );
+    const key =
+      named && !targets.has(named) && !['inputs', 'checks'].includes(named)
+        ? named.replace(/s$/, '')
+        : named;
+    return [
+      {
+        text: key
+          ? `how ${key} says what ${key} reads and what sets it; show lists what ${env.slug} sets now`
+          : `show lists what ${env.slug} sets now; how <part> or how <setting> says what a part reads and the values a setting takes`,
+        commands: [...(key ? [`${HOW} ${key}`] : []), `${P} show ${env.slug}`],
+      },
+    ];
+  }
+  if (
+    /\b((astryx|cli) version|version of (the )?(cli|astryx)|which cli|what cli)\b/.test(
+      q,
+    )
+  )
     return [{text: 'the CLI says its version', commands: ['astryx --version']}];
   if (/\bwhere (are|is|do) .*\b(stored|saved|kept|live|files?)\b/.test(q))
     return [
@@ -1070,7 +1184,7 @@ function wholeThemeTokens(ctx, env, aspect) {
   /** @type {string[]} */
   let commands = [];
   for (const tok of toks) {
-    const now = env.base.light[tok] ?? '';
+    const now = env.own?.light[tok] ?? env.base.light[tok] ?? '';
     if (parseFloat(now) >= 999) continue;
     const value = exampleForToken(C.typeOf(tok), tok, now);
     if (!value) continue;
