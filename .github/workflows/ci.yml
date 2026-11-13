@@ -2483,6 +2483,7 @@ jobs:
       - name: Checkout
         if: env.RUNS == 'true'
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
