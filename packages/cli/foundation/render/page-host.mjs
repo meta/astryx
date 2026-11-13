@@ -16,7 +16,8 @@
  *
  * @input argv[2]: JSON {entry, root, served, withoutSegmenter, timeoutMs, stateFile}, where stateFile is a file in the CLI's per-run temporary folder
  * @output one IPC message: the worker's answer, or {hostError, stage}, or
- *   {hostExit, reason, stage, elapsedMs, rssMb, freeMb, stderrTail}
+ *   {hostExit, reason, stage, elapsedMs, rssMb, freeMb, stderrTail}; and its
+ *   state in stateFile (stage, time, memory, and whether it sent its answer)
  * @position foundation/render — started by render-page.mjs
  */
 

@@ -4,13 +4,13 @@ import {describe, expect, it, vi} from 'vitest';
 import {makeAnswer} from './host-answer.mjs';
 import {HOST_EXIT} from './host-exit.mjs';
 
-/** @param {{sendError?: Error | null, throws?: boolean, connected?: boolean}} [options] */
-function host({sendError = null, throws = false, connected = true} = {}) {
+/** @param {{throws?: boolean, connected?: boolean}} [options] */
+function host({throws = false, connected = true} = {}) {
   const phases = /** @type {string[]} */ ([]);
   const exit = vi.fn();
   const send = vi.fn((_message, done) => {
     if (throws) throw new Error('channel closed');
-    done(sendError);
+    done(null);
   });
   const answer = makeAnswer({
     send,

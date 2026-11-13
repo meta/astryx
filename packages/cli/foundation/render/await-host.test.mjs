@@ -11,12 +11,11 @@ import {EventEmitter} from 'node:events';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {afterAll, afterEach, describe, expect, it, vi} from 'vitest';
+import {afterAll, describe, expect, it, vi} from 'vitest';
 import {awaitHost, withHostStateFile} from './render-page.mjs';
 import {HOST_EXIT} from './host-exit.mjs';
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'await-host-test-'));
-afterEach(() => vi.useRealTimers());
 afterAll(() => fs.rmSync(scratch, {recursive: true, force: true}));
 
 function fakeHost() {
