@@ -272,6 +272,67 @@ export const GalleryWithCenteredParagraphCaptionFixture: Story = {
   render: GalleryWithCaptions.render,
 };
 
+const CAPTION_ICON =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Ccircle cx='8' cy='8' r='8' fill='white'/%3E%3C/svg%3E";
+
+/**
+ * The long caption ending in an inline image, as a caller may end one with an
+ * icon.
+ */
+export const GalleryWithImageCaptionFixture: Story = {
+  tags: ['!autodocs', 'no-visual'],
+  args: {
+    media: [
+      {
+        ...GALLERY_MEDIA[0],
+        caption: (
+          <>
+            A winding path through the forest, past the old mill and down to the
+            river, where the trail turns back toward the village. In autumn the
+            beeches along it turn copper, and on a clear morning you can see the
+            church spire from the bridge before the path climbs the last hill
+            home.{' '}
+            <img
+              src={CAPTION_ICON}
+              alt=""
+              width={16}
+              height={16}
+              style={{display: 'inline'}}
+            />
+          </>
+        ),
+      },
+      GALLERY_MEDIA[1],
+    ],
+  },
+  render: GalleryWithCaptions.render,
+};
+
+/**
+ * The long caption ending in a plain image, which the reset makes a block.
+ */
+export const GalleryWithBlockImageCaptionFixture: Story = {
+  tags: ['!autodocs', 'no-visual'],
+  args: {
+    media: [
+      {
+        ...GALLERY_MEDIA[0],
+        caption: (
+          <>
+            A winding path through the forest, past the old mill and down to the
+            river, where the trail turns back toward the village. In autumn the
+            beeches along it turn copper, and on a clear morning you can see the
+            church spire from the bridge before the path climbs the last hill
+            home. <img src={CAPTION_ICON} alt="" width={16} height={16} />
+          </>
+        ),
+      },
+      GALLERY_MEDIA[1],
+    ],
+  },
+  render: GalleryWithCaptions.render,
+};
+
 const FRAME_DOCUMENT = '<!doctype html><html><head></head><body></body></html>';
 
 /** Copy the page's style sheets into the frame, as an app does. */
