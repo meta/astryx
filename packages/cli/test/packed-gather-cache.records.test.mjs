@@ -525,6 +525,14 @@ Module._resolveFilename = function (request, parent, isMain, options) {
         expect(run(read, {tmp, cwd: other.dir})).toEqual(
           run(read, {tmp: freshTmp(), cwd: other.dir}),
         );
+      } finally {
+        fs.rmSync(other.dir, {recursive: true, force: true});
+      }
+    },
+    240_000,
+  );
+
+  it.skipIf(!hasModuleHooks)(
     "keeps doctor's theme-wiring scan, and an edit to the app's import or the theme module shows on the very next run",
     () => {
       const tmp = keptTmp('theme-wiring');
