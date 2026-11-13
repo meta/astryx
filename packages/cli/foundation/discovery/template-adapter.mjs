@@ -42,6 +42,7 @@ import {
 } from './template-source-tree.mjs';
 import {persistedGather} from '../fs/gather-cache.mjs';
 import {hasNameLine, keptTreeSummary, nameLines} from '../fs/kept-tree.mjs';
+import {foldEntryName} from './entry-name-files.mjs';
 import {EXACT_CODEC} from '../fs/exact-codec.mjs';
 import {hostedRun} from '../runtime/package-root.mjs';
 import {babelParser} from '../runtime/lazy-dependencies.mjs';
@@ -1293,14 +1294,10 @@ export function coreTemplateIds(keep = () => true) {
 /** This module's own file: its code decides the kept summaries' shape. */
 const OWN_FILE = fileURLToPath(import.meta.url);
 
-/**
- * A name as a reader may type it: case, spaces and hyphens do not count.
- * @param {string} name
- * @returns {string}
- */
-function foldName(name) {
-  return name.toLowerCase().replace(/[\s-]+/g, '');
-}
+/** The file of foldEntryName, which decides the template-ids summary too. */
+const FOLD_FILE = fileURLToPath(
+  new URL('./entry-name-files.mjs', import.meta.url),
+);
 
 /**
  * Which template files can give an id that folds to `wanted`, read from a
@@ -1320,7 +1317,11 @@ export function templateFilesNaming(integrations, wanted) {
   );
   /** @type {Array<string | string[]>} */
   const [blocks, ...listed] = keptTreeSummary(
-    {kind: 'template-ids', roots: [BLOCKS_DIR, ...roots], code: [OWN_FILE]},
+    {
+      kind: 'template-ids',
+      roots: [BLOCKS_DIR, ...roots],
+      code: [OWN_FILE, FOLD_FILE],
+    },
     trees =>
       trees.map(({folders}, at) => {
         const folded = new Set();
@@ -1334,7 +1335,7 @@ export function templateFilesNaming(integrations, wanted) {
               at === 0
                 ? name.slice(0, -suffix.length)
                 : path.join(rel, name).slice(0, -suffix.length);
-            folded.add(foldName(id.split(path.sep).join('/')));
+            folded.add(foldEntryName(id.split(path.sep).join('/')));
           }
         }
         return nameLines(folded);

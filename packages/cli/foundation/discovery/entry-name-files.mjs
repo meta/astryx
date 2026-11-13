@@ -1,16 +1,18 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Whether a component or hook can carry a name, read from file names
- * and doc text without loading any doc, through a summary kept between runs
- * while those files are unchanged (../fs/kept-tree.mjs).
+ * @file Whether a component or hook can carry a name, read without loading
+ * any doc: from Core's file and folder names, and from integrations' doc file
+ * names and the words in those docs' text. Each is a summary kept between
+ * runs while those folders and docs are unchanged (../fs/kept-tree.mjs).
  *
  * @input  Core's folder or integrations' components folders, and a name
  *   folded as a reader may type it ({@link foldEntryName})
  * @output false only when discovery lists no component or hook there whose
  *   folded name is that name; for Core, the top folders that can hold one
  * @position foundation/discovery: lets the docs not-found error skip
- *   component and hook discovery for a name no file carries
+ *   component and hook discovery for a name no Core file or folder name, and
+ *   no integration doc's file name or text, carries
  */
 
 import * as fs from 'node:fs';

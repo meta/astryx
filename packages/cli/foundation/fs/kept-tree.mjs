@@ -1,38 +1,26 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file A summary of a folder tree's names, kept between runs while no folder
- * in the tree and no file the summary read has changed.
+ * @file A summary of a folder tree's names and of the text of the files it
+ * reads, kept between runs while no folder in the tree and no file the
+ * summary read has changed.
  *
  * @input A root folder, the kind of summary, the modules whose code makes it,
  *   and the function that makes it from the tree's listing.
  * @output The summary: the stored one while every folder and every read file
- *   has the stamp it was stored with, else a new one, which is stored.
+ *   has the stamp it was stored with, else a new one, which is stored. The
+ *   kept gathers' store holds it (gather-cache.mjs persistedSummary), under
+ *   that store's rules.
  * @position Used by the docs not-found hint (foundation/discovery) to check
  *   one name against Core's sources, the CLI's blocks and each integration's
  *   folders without listing every folder on each run.
  */
 
-import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {isPrivateDir} from '../env/private-dir.mjs';
-import {userCacheDir} from '../env/user-dirs.mjs';
-import {fileStamp, withoutRecording} from './read-record.mjs';
-
-/** The stored format; a different one is a miss. */
-const FORMAT = 1;
-
-/** The most summaries the folder holds; the oldest go first past it. */
-const MAX_ENTRIES = 256;
-
-/**
- * How old every stamped time must be before a summary is stored. A file
- * system can store times as coarsely as 2 s, so a change within one tick of
- * the last can leave a stamp as it was.
- */
-const SETTLE_MS = 2000;
+import {persistedSummary} from './gather-cache.mjs';
+import {fileStamp} from './read-record.mjs';
 
 /** The module's own file: its code decides every summary's shape. */
 const OWN_FILE = fileURLToPath(import.meta.url);
@@ -82,95 +70,8 @@ function walkTree(root, skip, stamps) {
   return folders;
 }
 
-/** @type {string | null | undefined} the store folder, once per process */
-let storeDirMemo;
-
-/**
- * The folder summaries live in, or null when it cannot be used: not a real
- * folder, owned by someone else, open to others, or on a system with no user
- * ids (see isPrivateDir). It is made on first use.
- * @returns {string | null}
- */
-function storeDir() {
-  if (storeDirMemo === undefined) storeDirMemo = usableStoreDir();
-  return storeDirMemo;
-}
-
-/** @returns {string | null} */
-function usableStoreDir() {
-  const dir = path.join(userCacheDir(), 'trees');
-  if (isPrivateDir(dir)) return dir;
-  try {
-    makeFolders(dir);
-  } catch {
-    return null;
-  }
-  return isPrivateDir(dir) ? dir : null;
-}
-
-/**
- * Make `dir` and each missing folder above it, one at a time, each closed to
- * others. Node's recursive mkdir can loop without end where a parent cannot
- * be made (under /proc), so each folder is made on its own and any error
- * stops the walk.
- * @param {string} dir
- */
-function makeFolders(dir) {
-  const missing = [];
-  let at = dir;
-  while (!fs.existsSync(at)) {
-    missing.push(at);
-    const up = path.dirname(at);
-    if (up === at) break;
-    at = up;
-  }
-  for (const folder of missing.reverse()) fs.mkdirSync(folder, {mode: 0o700});
-}
-
 /** @type {Map<string, string>} each code file's stamp, once per process */
 const codeStamps = new Map();
-
-/**
- * Whether every stamp in `stamps` was taken longer than {@link SETTLE_MS}
- * ago, by its modification and change times.
- * @param {Array<[number, string, string]>} stamps
- * @returns {boolean}
- */
-function settled(stamps) {
-  const limit = Date.now() - SETTLE_MS;
-  return stamps.every(([, , stamp]) => {
-    if (stamp === '-') return true;
-    const [, mtime, ctime] = stamp.split(':').map(Number);
-    return mtime < limit && ctime < limit;
-  });
-}
-
-/**
- * Delete the oldest summaries until the folder holds at most
- * {@link MAX_ENTRIES}.
- * @param {string} dir
- */
-function evict(dir) {
-  const names = fs.readdirSync(dir).filter(name => name.endsWith('.json'));
-  if (names.length <= MAX_ENTRIES) return;
-  const aged = names
-    .map(name => {
-      try {
-        return {name, mtimeMs: fs.statSync(path.join(dir, name)).mtimeMs};
-      } catch {
-        return null;
-      }
-    })
-    .filter(entry => entry != null)
-    .sort((a, b) => a.mtimeMs - b.mtimeMs);
-  for (const {name} of aged.slice(0, aged.length - MAX_ENTRIES)) {
-    try {
-      fs.unlinkSync(path.join(dir, name));
-    } catch {
-      // Another run removed it.
-    }
-  }
-}
 
 /**
  * Names as one string a lookup can search without parsing a list: each name
@@ -227,77 +128,27 @@ export function keptTreeSummary(
     }
     return [file, stamp];
   });
-  const key = JSON.stringify([
-    FORMAT,
-    kind,
-    resolved,
-    process.platform,
-    codeState,
-  ]);
-  /**
-   * @param {number} at
-   * @param {string} rel
-   */
-  const fullPath = (at, rel) =>
-    rel === '' ? resolved[at] : resolved[at] + path.sep + rel;
-  const dir = withoutRecording(storeDir);
-  const file =
-    dir &&
-    path.join(
-      dir,
-      `${createHash('sha256').update(key).digest('hex').slice(0, 40)}.json`,
-    );
-  if (file) {
-    try {
-      const stored = JSON.parse(
-        withoutRecording(() => fs.readFileSync(file, 'utf8')),
-      );
-      if (
-        stored?.key === key &&
-        Array.isArray(stored.stamps) &&
-        stored.stamps.every(
-          (/** @type {[number, string, string]} */ [at, rel, stamp]) =>
-            fileStamp(fullPath(at, rel)) === stamp,
-        )
-      ) {
-        return stored.value;
+  return persistedSummary(['kept-tree', kind, resolved, codeState], () => {
+    /** @type {[string, string][]} */
+    const stamps = [];
+    const trees = resolved.map(root => {
+      /** @type {Array<[string, string]>} */
+      const own = [];
+      const folders = walkTree(root, skip, own);
+      for (const [rel, stamp] of own) {
+        stamps.push([rel === '' ? root : root + path.sep + rel, stamp]);
       }
-    } catch {
-      // No usable summary: it is made below.
-    }
-  }
-  /** @type {Array<[number, string, string]>} */
-  const stamps = [];
-  const trees = resolved.map((root, at) => {
-    /** @type {Array<[string, string]>} */
-    const own = [];
-    const folders = walkTree(root, skip, own);
-    for (const [rel, stamp] of own) stamps.push([at, rel, stamp]);
-    return {
-      root,
-      folders,
-      /** @param {string} rel */
-      readText: rel => {
-        stamps.push([at, rel, fileStamp(fullPath(at, rel))]);
-        return fs.readFileSync(fullPath(at, rel), 'utf8');
-      },
-    };
-  });
-  const value = summarize(trees);
-  if (file && settled(stamps)) {
-    withoutRecording(() => {
-      try {
-        const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
-        fs.writeFileSync(temp, JSON.stringify({key, stamps, value}), {
-          mode: 0o600,
-          flag: 'wx',
-        });
-        fs.renameSync(temp, file);
-        evict(/** @type {string} */ (dir));
-      } catch {
-        // A summary that cannot be stored is made again next time.
-      }
+      return {
+        root,
+        folders,
+        /** @param {string} rel */
+        readText: rel => {
+          const full = rel === '' ? root : root + path.sep + rel;
+          stamps.push([full, fileStamp(full)]);
+          return fs.readFileSync(full, 'utf8');
+        },
+      };
     });
-  }
-  return value;
+    return {value: summarize(trees), stamps};
+  });
 }
