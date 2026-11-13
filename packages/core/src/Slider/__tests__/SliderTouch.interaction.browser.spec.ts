@@ -598,6 +598,16 @@ test('a slow release does not coast: the value stays where the finger left it', 
     'core-slider--touch-tracking',
     {name: 'Brightness'},
   );
+  // At some track lengths (about 335 px), WebKit takes one long frame when a
+  // touch ends straight out of a slow move. The page does no work in that
+  // frame. The harness reads the frame as a stalled lift. A fixed track
+  // length keeps this test about the release, not about the page's width.
+  await thumb
+    .locator('xpath=ancestor::*[contains(@class, "astryx-slider-control")][1]')
+    .evaluate(element => {
+      (element as HTMLElement).style.flex = '0 0 320px';
+    });
+  await frames(page, 2);
   const at = await center();
   // Past the 10 px threshold, then the last moves at 6 px/s. The projection,
   // 0.4 × 0.0996 s × 6 px/s or about 0.24 px, is under half a step.
