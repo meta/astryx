@@ -348,13 +348,15 @@ those contracts.
   or spring; a bottom sheet still drags, and a drag that closes it takes the
   stylesheet exit instead of the spring. A gesture in that window does not
   start the load. The bundler keeps one copy per page however many components
-  use them. `utils/touchRuntimeModules.tsx` is the one module the loader's
-  `import()` targets; it gathers the touch runtime, so the loader names a
-  single chunk. `motion/settleThreshold.ts` holds `SETTLE_THRESHOLD` apart
-  from the animator, so a component that reads the threshold statically does
-  not pull in the deferred runtime. Gap: these modules still import the shared
-  touch modules statically, so a page that renders them carries the touch
-  runtime in its first load: Toast (`useToastGesture`), Popover
+  use them. If the runtime's chunk fails to load, the page stays as it is
+  before the load: components work by taps, clicks and keys, and no gesture
+  retries the load. `utils/touchRuntimeModules.tsx` is the one module the
+  loader's `import()` targets; it gathers the touch runtime, so the loader
+  names a single chunk. `motion/settleThreshold.ts` holds `SETTLE_THRESHOLD`
+  apart from the animator, so a component that reads the threshold statically
+  does not pull in the deferred runtime. Gap: these modules still import the
+  shared touch modules statically, so a page that renders them carries the
+  touch runtime in its first load: Toast (`useToastGesture`), Popover
   (`popoverSurfaceMotion`), `hooks/useActionGroupTracking`, `hooks/usePager`,
   Lightbox (`useZoomCore`, `useZoomStage`), Resizable (`resizablePane`),
   Slider (`sliderTouchController`), SnapPaging, Chat (`useChatKeyboard`), and
