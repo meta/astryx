@@ -3694,13 +3694,41 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       // A color mixed into the value (a border's) can go per mode on its
       // own; a value with none (a radius) is just set for both modes.
       const hasColor = /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i.test(v);
-      const alt = !hasColor
-        ? null
-        : prop === 'border' || prop.startsWith('border-')
-          ? 'border-color'
-          : prop === 'background'
-            ? 'background-color'
-            : null;
+      // A gradient's colors sit in its image, above any background-color:
+      // no color step can make them differ per mode.
+      const alt =
+        !hasColor || /gradient\(/i.test(v)
+          ? null
+          : prop === 'border' || prop.startsWith('border-')
+            ? 'border-color'
+            : prop === 'background'
+              ? 'background-color'
+              : null;
+      // On a part whose variants each have their own color, the color per
+      // mode is set for one variant at a time (as that refusal says): the
+      // step names the default one, or the first.
+      let altWhen = '';
+      if (alt && !s.when) {
+        const g = C.groupOfProp(alt);
+        const variants = [
+          ...new Set(
+            partsOf(ctx, s).flatMap(t =>
+              (g ? C.partReads(t, g) : [])
+                .filter(r => r.props.includes(alt))
+                .flatMap(r => r.when)
+                .map(w => /^variant=([\w-]+)$/.exec(w)?.[1])
+                .filter(Boolean),
+            ),
+          ),
+        ];
+        const plain = partsOf(ctx, s).some(t =>
+          (g ? C.partReads(t, g) : []).some(
+            r => r.props.includes(alt) && r.when.includes(''),
+          ),
+        );
+        if (variants.length && !plain)
+          altWhen = ` --when variant:${variants.includes('default') ? 'default' : variants[0]}`;
+      }
       refuse(
         E.ERR_THEME_NO_MODE,
         `--mode works on plain colors; ${prop} ${prop === 'box-shadow' || prop === 'border' ? 'mixes a color with sizes' : 'is not a color'}, so it cannot differ between light and dark.`,
@@ -3708,7 +3736,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           run: alt
             ? [
                 `${P} set ${slug} ${prop} ${quoteCommandArgument(v.replace(/#[0-9a-f]{3,8}|rgba?\([^)]*\)/i, 'currentcolor'))} --on ${s.on}${whenFlag}   # the shape, both modes`,
-                `${P} set ${slug} ${alt} ${quoteCommandArgument(/#[0-9a-f]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\)/i.exec(v)?.[0] ?? '#1f2937')} --on ${s.on}${whenFlag} --mode ${s.mode}   # then the color per mode`,
+                `${P} set ${slug} ${alt} ${quoteCommandArgument(/#[0-9a-f]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\)/i.exec(v)?.[0] ?? '#1f2937')} --on ${s.on}${altWhen}${whenFlag} --mode ${s.mode}   # then the color per mode${altWhen ? ', for each variant' : ''}`,
               ]
             : [
                 `${P} set ${slug} ${prop} ${quoteCommandArgument(v)} --on ${s.on}${whenFlag}   # both modes`,

@@ -1688,6 +1688,10 @@ async function changeOnce(
       : [];
   const r = await commitTheme(ctx, slug, data, {history: true});
   const compiledAfter = compileTheme(ctx, data, base);
+  // What the spacing dial said of the sizes it could not keep apart.
+  const sizeNotes =
+    /** @type {{sizeNotes?: string[]}} */ (/** @type {unknown} */ (ctx))
+      .sizeNotes ?? [];
   const styled = styledChanges(compiledBefore, compiledAfter, base);
   const parts = partsOf(ctx, s);
   // Exact whole-theme tokens that win over what this dial writes: the dial
@@ -1712,6 +1716,17 @@ async function changeOnce(
         !x.on &&
         !x.when &&
         x.thing === `--font-family-${s.on}`,
+    );
+  // A spacing dial on a part keeps the exact spacing and sizes there too:
+  // the whole theme's, and the part's own.
+  if (sub === 'set' && s.source === 'dial' && s.thing === 'spacing' && s.on)
+    exactWins = data.settings.filter(
+      x =>
+        x.source === 'token' &&
+        !x.when &&
+        !x.state &&
+        /^--(size-element|spacing)-/.test(x.thing) &&
+        (!x.on || x.on === s.on),
     );
   // The theme's own source wins over an exact setting, as the exact
   // setting does over a dial: an exact token the file also sets is named
@@ -1938,6 +1953,7 @@ async function changeOnce(
           `keeps your exact ${exactWins.map(describe).join(', ')}: an exact setting wins over a dial, so ${exactWins.length > 1 ? 'those do' : 'that does'} not change; this shows after \`${P} undo ${slug} ${exactWins.map(x => undoArgs(x)).join(`\` and \`${P} undo ${slug} `)}\``,
         ]
       : []),
+    ...(sub === 'set' && s.thing === 'spacing' ? sizeNotes : []),
     ...(covers.length
       ? [
           `comes after ${covers.map(describe).join(', ')}, so ${covers.length > 1 ? 'those parts show' : `${covers[0].on} shows`} this value now; set ${covers.length > 1 ? 'one' : 'it'} again to make it win`,
@@ -1983,9 +1999,18 @@ async function changeOnce(
     // An exact property on the same part wins over a dial there.
     ...(exactOver
       ? [
-          ownPartHits.length
-            ? `${describe(exactOver)} is an exact property and wins over ${s.thing} there too; undoing it does not make ${s.thing} show on ${[...new Set(ownPartHits.map(h => h.target))].join(', ')}, where ${slug}.theme.ts wins`
-            : `${describe(exactOver)} is an exact property and wins over ${s.thing} there, so this shows only after \`${P} undo ${slug} ${undoArgs(exactOver)}\``,
+          // The own source holding only some sides or corners there leaves
+          // the dial the others once the exact property is undone.
+          ownPartHits.length &&
+          ownPartHits.every(h =>
+            /(Top|Bottom|Left|Right|Start|End|Block|Inline)/.test(
+              camel(String(h.prop)),
+            ),
+          )
+            ? `${describe(exactOver)} is an exact property and wins over ${s.thing} there, so this shows only after \`${P} undo ${slug} ${undoArgs(exactOver)}\`, and then not on the ${[...new Set(ownPartHits.map(h => kebab(String(h.prop))))].join(', ')} ${slug}.theme.ts sets itself`
+            : ownPartHits.length
+              ? `${describe(exactOver)} is an exact property and wins over ${s.thing} there too; undoing it does not make ${s.thing} show on ${[...new Set(ownPartHits.map(h => h.target))].join(', ')}, where ${slug}.theme.ts wins`
+              : `${describe(exactOver)} is an exact property and wins over ${s.thing} there, so this shows only after \`${P} undo ${slug} ${undoArgs(exactOver)}\``,
         ]
       : []),
     // A whole-theme font under fonts set for each role shows only where no

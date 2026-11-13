@@ -268,7 +268,7 @@ const QUESTIONS = [
     {
       parts: ['card'],
       top: /--on card --mode dark$/,
-      adds: /card\.base\.background=light-dark\(/,
+      adds: /card\.variant:default\.backgroundColor=light-dark\(/,
     },
   ],
   [
@@ -1148,7 +1148,7 @@ const QUESTIONS_2 = [
     'in dark mode, cards should be #1c1c1e',
     {
       top: /^set q background '#1c1c1e' --on card --mode dark$/,
-      adds: /card\.base\.background=light-dark\(/,
+      adds: /card\.variant:default\.backgroundColor=light-dark\(/,
     },
   ],
   [
@@ -1461,7 +1461,7 @@ describe('how answers pass-2 questions', () => {
       ],
       [
         'in dark mode, cards should be #1c1c1e',
-        /card[^{]*\{[^}]*background:\s*light-dark\(.*#1c1c1e/,
+        /card[^{]*\{[^}]*background-color:\s*light-dark\(.*#1c1c1e/,
       ],
       ['button padding 12px 20px', /button[^{]*\{[^}]*padding:\s*12px 20px/],
       [

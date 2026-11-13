@@ -1,0 +1,402 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+/**
+ * Padding, modes and colors against real bundled base themes (parts43): a
+ * one-mode background on parts whose variants each have their own color, a
+ * whole-part hover on a base whose variants have their own hover, a
+ * longhand after a shorthand the base holds, nested cards, the spacing dial
+ * around kept sizes, and the notes and runs that go with them.
+ */
+
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
+import {themeEditNew, themeEditSet, themeEditShow} from './theme-edit.mjs';
+import {controlSizes, sizePx} from './_settings.mjs';
+import {
+  makeLinkedFixture,
+  removeLinkedFixture,
+} from '../../test-utils/linked-fixture.mjs';
+import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
+import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
+import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
+
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    await importOriginal(),
+  ),
+);
+
+/** @type {string} */
+let cwd;
+
+/** Why a bundled theme could not be built here, when it could not. */
+let unbuilt = '';
+
+beforeAll(async () => {
+  cwd = makeLinkedFixture('astryx-theme-parts43-', FIXTURE_PACKAGES);
+  unbuilt = await installRealBaseThemes(cwd, ['butter', 'neutral']);
+}, 300_000);
+
+afterAll(() => {
+  if (cwd) removeLinkedFixture(cwd);
+});
+
+/** @param {string} slug */
+const cssOf = slug =>
+  fs.readFileSync(path.join(cwd, 'themes', slug, `${slug}.css`), 'utf8');
+
+/** @param {string} slug @param {string} selector */
+const ruleOf = (slug, selector) => {
+  const css = cssOf(slug);
+  const i = css.indexOf(`${selector} {`);
+  return i < 0 ? '' : css.slice(i, css.indexOf('}', i));
+};
+
+/** @param {string} slug @param {string} mine one components entry */
+const ownSource = (slug, mine) => {
+  const ts = path.join(cwd, `themes/${slug}/${slug}.theme.ts`);
+  const src = fs.readFileSync(ts, 'utf8');
+  const own = src.replace(/ {2}name: '[^']+',/, m => `${m}\n  ${mine}`);
+  expect(own).not.toBe(src);
+  fs.writeFileSync(ts, own);
+};
+
+/** @param {import('vitest').TestContext} ctx */
+const needBases = ctx => {
+  if (!unbuilt) return false;
+  console.warn(`skipped: ${unbuilt}`);
+  ctx.skip();
+  return true;
+};
+
+describe('one-mode backgrounds on parts whose variants have their own (F24-5)', () => {
+  /** @param {string} slug @param {string} sel */
+  const bgOf = (slug, sel) =>
+    /background-color: ([^;]+);/.exec(ruleOf(slug, sel))?.[1];
+  /** Every hover rule of the button and badge, as written. @param {string} slug */
+  const hoverRules = slug =>
+    (
+      cssOf(slug).match(/\.astryx-(button|badge)[^{]*:hover[^{]*\{[^}]*\}/g) ??
+      []
+    ).join('\n');
+
+  it('keeps every variant exactly as it was in dark for a light-only background, and leaves hover as it was (neutral)', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('m5n', {cwd, like: 'neutral'});
+    await themeEditSet('m5n', 'background', '#eeeeee', {
+      cwd,
+      on: 'button',
+      mode: 'light',
+    });
+    // The base theme's own value (destructive), Core's (primary), and a
+    // variant Core paints nothing on (ghost) stays transparent.
+    expect(bgOf('m5n', '.astryx-button[data-variant="destructive"]')).toBe(
+      'light-dark(#eeeeee, var(--color-error-muted))',
+    );
+    expect(bgOf('m5n', '.astryx-button[data-variant="primary"]')).toBe(
+      'light-dark(#eeeeee, var(--color-accent))',
+    );
+    expect(bgOf('m5n', '.astryx-button[data-variant="ghost"]')).toBe(
+      'light-dark(#eeeeee, transparent)',
+    );
+    // The part's own rule carries no variant's color.
+    expect(ruleOf('m5n', '.astryx-button')).not.toMatch(/#eeeeee/);
+    // No hover rule takes the resting color.
+    expect(hoverRules('m5n')).not.toMatch(/#eeeeee/);
+  }, 240_000);
+
+  it('takes the base dark half of a light-dark() and keeps the base hover (butter)', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('m5b', {cwd, like: 'butter'});
+    await themeEditSet('m5b', 'background', '#eeeeee', {
+      cwd,
+      on: 'button',
+      mode: 'light',
+    });
+    expect(bgOf('m5b', '.astryx-button[data-variant="destructive"]')).toBe(
+      'light-dark(#eeeeee, #ffb09b)',
+    );
+    expect(bgOf('m5b', '.astryx-button[data-variant="secondary"]')).toBe(
+      'light-dark(#eeeeee, transparent)',
+    );
+    // Butter's own secondary hover still shows, in both modes.
+    expect(
+      bgOf(
+        'm5b',
+        '.astryx-button[data-variant="secondary"]:hover:where(:not(:disabled,[aria-disabled="true"]))',
+      ),
+    ).toBe('light-dark(#225bff14, #fdee8c14)');
+    // A hover setting for one mode does the same in the hover rule.
+    await themeEditSet('m5b', 'background', '#dddddd', {
+      cwd,
+      on: 'button',
+      state: 'hover',
+      mode: 'light',
+    });
+    expect(
+      bgOf(
+        'm5b',
+        '.astryx-button[data-variant="secondary"]:hover:where(:not(:disabled,[aria-disabled="true"]))',
+      ),
+    ).toBe('light-dark(#dddddd, #fdee8c14)');
+  }, 240_000);
+
+  it('does the same in a light-only theme, with no --mode', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('m5o', {cwd, like: 'neutral'});
+    await themeEditSet('m5o', 'mode', 'light-only', {cwd});
+    await themeEditSet('m5o', 'background', '#eeeeee', {cwd, on: 'button'});
+    expect(bgOf('m5o', '.astryx-button[data-variant="destructive"]')).toBe(
+      'light-dark(#eeeeee, var(--color-error-muted))',
+    );
+    expect(ruleOf('m5o', '.astryx-button')).not.toMatch(/#eeeeee/);
+    // A badge's text: each variant keeps its own dark text.
+    await themeEditSet('m5o', 'color', '#222222', {cwd, on: 'badge'});
+    expect(
+      /[\s;{]color: ([^;]+);/.exec(
+        ruleOf('m5o', '.astryx-badge[data-variant="red"]'),
+      )?.[1],
+    ).toBe('light-dark(#222222, var(--color-text-red))');
+  }, 240_000);
+});
+
+describe('a whole-button hover on butter (F24-6)', () => {
+  it('reaches every variant, the ones with their own hover or resting color included', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('h6', {cwd, like: 'butter'});
+    await themeEditSet('h6', 'background', '#ee0000', {
+      cwd,
+      on: 'button',
+      state: 'hover',
+    });
+    for (const v of ['secondary', 'destructive'])
+      expect(
+        ruleOf(
+          'h6',
+          `.astryx-button[data-variant="${v}"]:hover:where(:not(:disabled,[aria-disabled="true"]))`,
+        ),
+      ).toMatch(/background: #ee0000/);
+  }, 240_000);
+});
+
+describe('a longhand after a shorthand the base holds (F24-10)', () => {
+  it('wins on butter: padding-inline after padding, border-color after border', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('l10', {cwd, like: 'butter'});
+    await themeEditSet('l10', 'padding', '4px 6px', {cwd, on: 'button'});
+    await themeEditSet('l10', 'padding-inline', '2px', {cwd, on: 'button'});
+    const button = ruleOf('l10', '.astryx-button');
+    const at = (/** @type {string} */ x) => button.indexOf(x);
+    expect(at('padding: 4px 6px')).toBeGreaterThan(-1);
+    expect(at('padding-inline-start: 2px')).toBeGreaterThan(
+      at('padding: 4px 6px'),
+    );
+    expect(at('padding-inline-end: 2px')).toBeGreaterThan(
+      at('padding: 4px 6px'),
+    );
+    await themeEditSet('l10', 'border', '2px solid #ff0000', {
+      cwd,
+      on: 'button',
+      when: 'variant:secondary',
+    });
+    await themeEditSet('l10', 'border-color', '#00aa00', {
+      cwd,
+      on: 'button',
+      when: 'variant:secondary',
+    });
+    const sec = ruleOf('l10', '.astryx-button[data-variant="secondary"]');
+    expect(sec.indexOf('border-top-color: #00aa00')).toBeGreaterThan(
+      sec.indexOf('border: 2px solid #ff0000'),
+    );
+  }, 240_000);
+});
+
+describe('cards inside variant cards (F24-4, N20-2b)', () => {
+  it("keeps the plain card's side inside a variant card: the reset comes before its direction rules", async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('c4', {cwd, like: 'neutral'});
+    await themeEditSet('c4', 'padding-right', '9px', {cwd, on: 'card'});
+    await themeEditSet('c4', 'padding', '10px', {
+      cwd,
+      on: 'card',
+      when: 'variant:muted',
+    });
+    const css = cssOf('c4');
+    const reset = css.indexOf(
+      '.astryx-card:where(.astryx-card[data-variant="muted"] *) {',
+    );
+    const dir = css.indexOf('.astryx-card:where(:dir(ltr)) {');
+    expect(reset).toBeGreaterThan(-1);
+    expect(dir).toBeGreaterThan(reset);
+  }, 240_000);
+
+  it("resets the own source's variant sides inside it, and the pair variable on the variant (N20-2b)", async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('c4o', {cwd, like: 'neutral'});
+    ownSource(
+      'c4o',
+      "components: {card: {'variant:muted': {paddingTop: '30px', paddingInlineStart: '40px'}}},",
+    );
+    await themeEditShow('c4o', {cwd});
+    await themeEditSet('c4o', 'padding', '20px', {cwd, on: 'card'});
+    const nested = ruleOf(
+      'c4o',
+      '.astryx-card:where(.astryx-card[data-variant="muted"] *)',
+    );
+    expect(nested).toMatch(/--astryx-card-padding-block-start:\s*initial/);
+    expect(nested).toMatch(/--astryx-card-padding-inline-start:\s*initial/);
+
+    await themeEditNew('n2b', {cwd, like: 'neutral'});
+    ownSource(
+      'n2b',
+      "components: {card: {'variant:muted': {padding: '30px'}}},",
+    );
+    await themeEditShow('n2b', {cwd});
+    await themeEditSet('n2b', 'padding', '4px 8px', {cwd, on: 'card'});
+    await themeEditSet('n2b', 'padding-left', '5px', {cwd, on: 'card'});
+    const muted = ruleOf('n2b', '.astryx-card[data-variant="muted"]');
+    expect(muted).toMatch(/--astryx-card-padding-inline:\s*initial/);
+    expect(muted).toMatch(/--astryx-card-padding-block:\s*initial/);
+  }, 240_000);
+});
+
+describe('the spacing dial around kept sizes (F24-1, F24-2, F24-9)', () => {
+  it('reads a kept size in rem or calc as px', () => {
+    expect(sizePx('34px')).toBe(34);
+    expect(sizePx('2.125rem')).toBe(34);
+    expect(sizePx('calc(30px + 4px)')).toBe(34);
+    expect(sizePx('calc(2rem - 2px)')).toBe(30);
+    expect(sizePx('var(--x)')).toBeNull();
+    expect(sizePx('1px 2px')).toBeNull();
+  });
+
+  it('keeps a size between two close kept ones in order, and says when there is no room', () => {
+    const sizes = /** @type {Array<[string, string]>} */ ([
+      ['--size-element-sm', '28px'],
+      ['--size-element-md', '32px'],
+      ['--size-element-lg', '40px'],
+    ]);
+    for (const f of [0.85, 1, 1.25]) {
+      /** @type {string[]} */
+      const noRoom = [];
+      const md = controlSizes(
+        sizes,
+        f,
+        {'--size-element-sm': 30, '--size-element-lg': 31},
+        noRoom,
+      );
+      expect(md).toEqual([['--size-element-md', '30.5px']]);
+      expect(noRoom).toEqual([]);
+    }
+    /** @type {string[]} */
+    const noRoom = [];
+    const md = controlSizes(
+      sizes,
+      1,
+      {'--size-element-sm': 30, '--size-element-lg': 30},
+      noRoom,
+    );
+    expect(md).toEqual([['--size-element-md', '30px']]);
+    expect(noRoom).toEqual(['--size-element-md']);
+  });
+
+  it('keeps a rem, calc or own-source size and the part sizes in order (real neutral)', async ctx => {
+    if (needBases(ctx)) return;
+    const lgOf = (/** @type {string} */ slug, sel = ':root') => {
+      const css = cssOf(slug);
+      const i = css.indexOf(`${sel} {`);
+      const rule = i < 0 ? css : css.slice(i, css.indexOf('}', i));
+      return parseFloat(
+        /--size-element-lg:\s*([\d.]+)px/.exec(rule)?.[1] ?? '0',
+      );
+    };
+    for (const v of ['2.125rem', 'calc(30px + 4px)']) {
+      const slug = v.startsWith('calc') ? 'd1c' : 'd1r';
+      await themeEditNew(slug, {cwd, like: 'neutral'});
+      await themeEditSet(slug, '--size-element-md', v, {cwd});
+      await themeEditSet(slug, 'spacing', 'tight', {cwd});
+      expect(cssOf(slug)).toMatch(/--size-element-lg:\s*3[5-9]px/);
+    }
+    await themeEditNew('d1o', {cwd, like: 'neutral'});
+    ownSource('d1o', "tokens: {'--size-element-md': '34px'},");
+    await themeEditShow('d1o', {cwd});
+    await themeEditSet('d1o', 'spacing', 'tight', {cwd});
+    expect(cssOf('d1o')).toMatch(/--size-element-lg:\s*3[5-9]px/);
+
+    await themeEditNew('d2', {cwd, like: 'neutral'});
+    await themeEditSet('d2', '--size-element-md', '34px', {cwd, on: 'card'});
+    const r = await themeEditSet('d2', 'spacing', 'tight', {cwd, on: 'card'});
+    const card = ruleOf('d2', '.astryx-card');
+    expect(card).toMatch(/--size-element-md:\s*34px/);
+    expect(lgOf('d2', '.astryx-card')).toBeGreaterThan(34);
+    expect(r.data.notes.join(' ')).toMatch(
+      /keeps your exact --size-element-md/,
+    );
+
+    await themeEditNew('d2b', {cwd, like: 'neutral'});
+    await themeEditSet('d2b', '--size-element-md', '34px', {cwd});
+    await themeEditSet('d2b', '--spacing-4', '13px', {cwd});
+    await themeEditSet('d2b', 'spacing', 'tight', {cwd, on: 'card'});
+    const inCard = ruleOf('d2b', '.astryx-card');
+    expect(inCard).not.toMatch(/--size-element-md:/);
+    expect(inCard).not.toMatch(/--spacing-4:/);
+    expect(lgOf('d2b', '.astryx-card')).toBeGreaterThan(34);
+  }, 240_000);
+});
+
+describe('runs and notes (F24-3, F24-8, N23-5)', () => {
+  it('offers the per-mode color step that works, and never a currentcolor gradient', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('r3', {cwd, like: 'neutral'});
+    const border = await refusal(() =>
+      themeEditSet('r3', 'border', '2px solid #ff0000', {
+        cwd,
+        on: 'card',
+        mode: 'dark',
+      }),
+    );
+    expect(border.code).toBe('ERR_THEME_NO_MODE');
+    expect(border.run).toContainEqual(
+      expect.stringMatching(
+        /border-color '#ff0000' --on card --when variant:[\w-]+ --mode dark/,
+      ),
+    );
+    const grad = await refusal(() =>
+      themeEditSet('r3', 'background', 'linear-gradient(#ff0000, #0000ff)', {
+        cwd,
+        on: 'card',
+        mode: 'dark',
+      }),
+    );
+    expect(grad.run.join('\n')).not.toMatch(/currentcolor/);
+    expect(grad.run.join('\n')).toMatch(/linear-gradient\(#ff0000, #0000ff\)/);
+  }, 240_000);
+
+  it('says the corners show on the other corners when the own source sets one', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('r8', {cwd, like: 'butter'});
+    ownSource(
+      'r8',
+      "components: {button: {base: {borderStartEndRadius: '2px'}}},",
+    );
+    await themeEditShow('r8', {cwd});
+    await themeEditSet('r8', 'border-radius', '9px', {cwd, on: 'button'});
+    const r = await themeEditSet('r8', 'corners', 'pill', {cwd, on: 'button'});
+    const notes = r.data.notes.join(' ');
+    expect(notes).not.toMatch(/does not make corners show/);
+    expect(notes).toMatch(
+      /shows only after `[^`]*undo r8 border-radius --on button`, and then not on the border-start-end-radius/,
+    );
+  }, 240_000);
+
+  it("tells a one-mode theme's wiring to give <Theme> its mode", async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('r23', {cwd, like: 'neutral'});
+    await themeEditSet('r23', 'mode', 'light-only', {cwd});
+    const r = await themeEditShow('r23', {cwd});
+    expect(/** @type {any} */ (r.data).wiring.join('\n')).toMatch(
+      /mode="light"/,
+    );
+  }, 240_000);
+});
