@@ -1162,7 +1162,8 @@ function DropdownMenuPopover({
   useCommittedRefInto(presentSurfaceRef, () => {
     const surface = popover.contentRef.current;
     // A finger's or a pen's open grows the menu. Under Reduce Motion the
-    // surface motion fades it in and out at its size instead.
+    // animator decides: a fade at full size on a coarse pointer, at once
+    // elsewhere.
     surfaceMotion.present(
       surface,
       buttonRef.current,

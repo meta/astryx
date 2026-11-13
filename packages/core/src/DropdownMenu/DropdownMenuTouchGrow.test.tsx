@@ -431,7 +431,7 @@ describe('DropdownMenu touch grow', () => {
     expect(motion.enter).not.toHaveBeenCalled();
   });
 
-  it("under Reduce Motion a finger's open and close still play the surface motion, which fades the menu in and out at its size", async () => {
+  it("under Reduce Motion a finger's open and close still play the surface motion, which leaves the fade to the animator", async () => {
     vi.stubGlobal(
       'matchMedia',
       vi.fn().mockImplementation((query: string) => ({
