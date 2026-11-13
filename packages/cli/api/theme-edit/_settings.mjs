@@ -595,18 +595,18 @@ export function loadTheme(
     // A path or a capital letter typed for a theme that exists names it.
     // A file name typed for the theme (t.theme.ts, Brand.settings.json)
     // names the theme.
-    // The whole name as typed first ("Theme: Park" may be theme-park),
-    // then without a pasted label.
+    // The name a pasted label gives ("theme: park" is park) when its theme
+    // exists; else the whole name as typed ("Theme Park" is theme-park).
     const whole = slugFor(
       String(slug ?? '')
         .trim()
         .toLowerCase(),
     );
     const plain = typedThemeName(slug);
-    const fixed =
-      whole && fs.existsSync(themeFiles(cwd, whole).settings)
-        ? whole
-        : slugFor(plain);
+    const named = slugFor(plain);
+    const exists = (/** @type {string} */ n) =>
+      Boolean(n) && fs.existsSync(themeFiles(cwd, n).settings);
+    const fixed = !exists(named) && exists(whole) ? whole : named;
     const same = fs.existsSync(themeFiles(cwd, fixed).settings) ? fixed : null;
     // A list where one theme goes (t,u or "t;u"): one theme at a time,
     // each that exists named; never a new theme made of the list. A name

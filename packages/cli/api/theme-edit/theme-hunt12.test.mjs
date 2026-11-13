@@ -84,5 +84,13 @@ describe('a theme name with a space', () => {
     const park = await refusal(() => themeEditUndo('Theme Park', {cwd}));
     expect(park.run[0]).toMatch(/ show theme-park$/);
     expect(park.run.join(' ')).not.toMatch(/ new park/);
+    // With park there too, a pasted label names park, as --theme does.
+    await themeEditNew('park', {cwd});
+    for (const typed of ['theme: park', '--theme park']) {
+      const r2 = await refusal(() => themeEditUndo(typed, {cwd}));
+      expect(r2.run[0], typed).toMatch(/ show park$/);
+    }
+    const both = await refusal(() => themeEditUndo('Theme Park', {cwd}));
+    expect(both.run[0]).toMatch(/ show theme-park$/);
   }, 240_000);
 });
