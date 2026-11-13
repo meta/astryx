@@ -1,8 +1,17 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type MockInstance,
+} from 'vitest';
 import {act, render, screen, fireEvent, waitFor} from '@testing-library/react';
 import {Profiler, StrictMode, useState} from 'react';
+import {createPortal} from 'react-dom';
 import {Lightbox} from './Lightbox';
 import {getFocusableElements} from '../hooks/useFocusTrap';
 import {getGestureHost} from '../gestures/GestureHost';
@@ -858,6 +867,209 @@ describe('Lightbox', () => {
       expect(onOpenChange).toHaveBeenCalledWith(false);
     });
 
+    it('closes on a mouse click in the band between a photo and its caption row', () => {
+      const onOpenChange = vi.fn();
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={onOpenChange}
+          media={media}
+          index={0}
+        />,
+      );
+      const current = document.querySelector('[data-current]')!;
+      const box = current.querySelector('[data-lightbox-page-media]')!;
+      layOutPage(current, {
+        photo: rectAt(100, 100, 400, 200),
+        natural: 400,
+        caption: rectAt(250, 600, 100, 30),
+        viewer: 1000,
+      });
+      // Below the photo and above its caption, the click is the backdrop's.
+      mousePress(box, {x: 300, y: 450});
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+
+    it("shows a 0 caption and none for true, and lays out no other page's caption", () => {
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={() => {}}
+          index={3}
+          media={[
+            {src: '/a.jpg', alt: 'A', caption: 'First'},
+            {src: '/b.jpg', alt: 'B'},
+            {src: '/c.jpg', alt: 'C', caption: true},
+            {src: '/d.jpg', alt: 'D', caption: 0},
+          ]}
+        />,
+      );
+      // The first page is not rendered, so nothing lays out its caption.
+      expect(screen.queryByText('First')).toBeNull();
+      expect(
+        document.querySelector('[data-current] [data-lightbox-caption]'),
+      ).toHaveTextContent('0');
+    });
+
+    it("describes the viewer with the current item's full caption, however long", () => {
+      const long =
+        'A winding path through the forest, past the old mill and down to the river, where the trail turns back toward the village';
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={() => {}}
+          index={0}
+          media={[
+            {src: '/a.jpg', alt: 'A', caption: long},
+            {src: '/b.jpg', alt: 'B', caption: 'Short'},
+          ]}
+        />,
+      );
+      expect(screen.getByRole('dialog')).toHaveAccessibleDescription(long);
+    });
+
+    it('renders as a media surface: the content under MediaTheme dark, the caption and counter as body Text', () => {
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={() => {}}
+          index={0}
+          hasZoom
+          media={[
+            {src: '/a.jpg', alt: 'A', caption: 'Golden hour'},
+            {src: '/b.jpg', alt: 'B'},
+          ]}
+        />,
+      );
+      const dialog = screen.getByRole('dialog');
+      const surface = dialog.querySelector('[data-astryx-media="dark"]');
+      // Inside the dialog, so the backdrop keeps the page's overlay.
+      expect(surface).not.toBeNull();
+      expect(dialog).not.toHaveAttribute('data-astryx-media');
+      const close = screen.getByRole('button', {name: /close/i});
+      expect(surface).toContainElement(close);
+      const caption = dialog.querySelector(
+        '[data-current] [data-lightbox-caption] .astryx-text',
+      );
+      expect(caption).toHaveAttribute('data-type', 'body');
+      expect(caption).toHaveTextContent('Golden hour');
+      const counter = screen.getByText('1 / 2');
+      expect(counter.closest('.astryx-text')).toHaveAttribute(
+        'data-type',
+        'body',
+      );
+      expect(surface).toContainElement(counter);
+    });
+
+    it("renders a single photo's caption as body Text", () => {
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={() => {}}
+          media={{src: '/a.jpg', alt: 'A', caption: 'Golden hour'}}
+        />,
+      );
+      expect(
+        screen.getByText('Golden hour').closest('.astryx-text'),
+      ).toHaveAttribute('data-type', 'body');
+    });
+
+    describe('the ring on the control the opening focuses', () => {
+      const media = [
+        {src: '/a.jpg', alt: 'A'},
+        {src: '/b.jpg', alt: 'B'},
+      ];
+      // As a browser does, showModal() focuses the dialog's first control.
+      const openAndFocusFirstControl = vi.fn(function (
+        this: HTMLDialogElement,
+      ) {
+        this.setAttribute('open', '');
+        this.querySelector<HTMLElement>('button')?.focus();
+      });
+      // The options of the last focus() call on `element`.
+      const lastFocusOptions = (
+        focus: MockInstance<(options?: FocusOptions) => void>,
+        element: Element,
+      ) => {
+        const call = focus.mock.contexts.lastIndexOf(element);
+        expect(call).toBeGreaterThanOrEqual(0);
+        return focus.mock.calls[call]?.[0];
+      };
+
+      it("a tap's opening paints no ring on the focused control; a key's paints one", () => {
+        HTMLDialogElement.prototype.showModal = openAndFocusFirstControl;
+        const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+        const view = (isOpen: boolean) => (
+          <Lightbox
+            isOpen={isOpen}
+            onOpenChange={() => {}}
+            index={0}
+            media={media}
+          />
+        );
+        const {rerender} = render(view(false));
+        fireEvent.pointerDown(document.body);
+        rerender(view(true));
+        const control = document.activeElement!;
+        expect(control.closest('dialog')).not.toBeNull();
+        expect(lastFocusOptions(focus, control)).toEqual({focusVisible: false});
+        rerender(view(false));
+        fireEvent.keyDown(document.body, {key: 'Enter'});
+        focus.mockClear();
+        rerender(view(true));
+        expect(document.activeElement).toBe(control);
+        expect(lastFocusOptions(focus, control)).toBeUndefined();
+        focus.mockRestore();
+      });
+
+      it("a tap in a Picture-in-Picture window's document paints no ring there either", () => {
+        const frame = document.createElement('iframe');
+        document.body.append(frame);
+        const frameDocument = frame.contentDocument!;
+        const frameWindow = frameDocument.defaultView!;
+        // jsdom gives each document its own HTMLDialogElement prototype.
+        frameWindow.HTMLDialogElement.prototype.showModal =
+          openAndFocusFirstControl;
+        frameWindow.HTMLDialogElement.prototype.close =
+          HTMLDialogElement.prototype.close;
+        const focus = vi.spyOn(frameWindow.HTMLElement.prototype, 'focus');
+        const view = (isOpen: boolean) =>
+          createPortal(
+            <Lightbox
+              isOpen={isOpen}
+              onOpenChange={() => {}}
+              index={0}
+              media={media}
+            />,
+            frameDocument.body,
+          );
+        const {rerender, unmount} = render(<>{view(false)}</>);
+        // The window's own last input is a tap, whatever the page's was.
+        fireEvent.keyDown(document.body, {key: 'Enter'});
+        fireEvent.pointerDown(frameDocument.body);
+        rerender(<>{view(true)}</>);
+        const control = frameDocument.activeElement!;
+        expect(control.closest('dialog')).not.toBeNull();
+        expect(lastFocusOptions(focus, control)).toEqual({focusVisible: false});
+        focus.mockRestore();
+        unmount();
+        frame.remove();
+      });
+    });
+
+    it('describes a single photo with its caption', () => {
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={() => {}}
+          media={{src: '/a.jpg', alt: 'A', caption: 'Golden hour'}}
+        />,
+      );
+      expect(screen.getByRole('dialog')).toHaveAccessibleDescription(
+        'Golden hour',
+      );
+    });
+
     it("stays open on a mouse click beside a narrow photo, within its caption's width", () => {
       const onOpenChange = vi.fn();
       render(
@@ -1595,9 +1807,12 @@ describe('Lightbox', () => {
       );
       // The container fills the whole dialog, so a click on the visual
       // backdrop (the dark area around the media) lands on it — not on the
-      // dialog element itself.
+      // dialog element itself. It sits in the media surface, which has no
+      // box of its own.
       const dialog = document.querySelector('dialog')!;
-      const container = dialog.firstElementChild!;
+      const container = dialog.querySelector(
+        '[data-astryx-media="dark"]',
+      )!.firstElementChild!;
       fireEvent.click(container);
       expect(onOpenChange).toHaveBeenCalledWith(false);
     });
@@ -2521,6 +2736,37 @@ describe('Lightbox unmounting while open', () => {
     );
   }
 
+  it('returns focus to the opener without scrolling the page when the viewer closes', () => {
+    function Viewer() {
+      const [isOpen, setIsOpen] = useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => setIsOpen(true)}>
+            View photos
+          </button>
+          <Lightbox
+            isOpen={isOpen}
+            onOpenChange={setIsOpen}
+            media={items}
+            index={0}
+          />
+        </>
+      );
+    }
+    render(<Viewer />);
+    const opener = screen.getByRole('button', {name: 'View photos'});
+    opener.focus();
+    fireEvent.click(opener);
+    const focus = vi.spyOn(opener, 'focus');
+
+    fireEvent.click(screen.getByLabelText('Close'));
+
+    expect(document.activeElement).toBe(opener);
+    expect(focus).toHaveBeenCalledWith(
+      expect.objectContaining({preventScroll: true}),
+    );
+  });
+
   it('returns focus to the opener when the viewer unmounts', async () => {
     render(<Gallery />);
     const opener = screen.getByRole('button', {name: 'View photos'});
@@ -2610,5 +2856,159 @@ describe('Lightbox focus region (Dialog DEC-2)', () => {
       />,
     );
     expectTabWrapsInside(document.querySelector('dialog') as HTMLElement);
+  });
+});
+
+describe("Lightbox gallery caption's toggle", () => {
+  it('follows the caption in reading order, and its place in the last line is hidden from assistive technology', async () => {
+    const caption =
+      'A winding path through the forest, past the old mill and down to the river';
+    // Two lines clamp the caption: its text runs past them.
+    const inCaption = (element: Element) =>
+      element.closest('[data-lightbox-caption]') != null &&
+      element.classList.contains('astryx-text');
+    const scrollHeight = vi
+      .spyOn(HTMLElement.prototype, 'scrollHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return inCaption(this) ? 120 : 0;
+      });
+    const clientHeight = vi
+      .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return inCaption(this) ? 48 : 0;
+      });
+    try {
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={() => {}}
+          index={0}
+          media={[
+            {src: '/a.jpg', alt: 'A', caption},
+            {src: '/b.jpg', alt: 'B'},
+          ]}
+        />,
+      );
+      const toggle = await screen.findByRole('button', {name: 'more'});
+      const text = document.querySelector(
+        '[data-current] [data-lightbox-caption] .astryx-text',
+      ) as HTMLElement;
+      expect(text).toHaveTextContent(caption);
+      expect(text.textContent).toBe(caption);
+      expect(
+        text.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      const place = text.querySelector('[aria-hidden="true"]');
+      expect(place).not.toBeNull();
+      expect(place?.textContent).toBe('');
+      expect(getFocusableElements(text)).toEqual([]);
+    } finally {
+      scrollHeight.mockRestore();
+      clientHeight.mockRestore();
+    }
+  });
+
+  it('measures a new caption again when the caller replaces it', async () => {
+    const long =
+      'A winding path through the forest, past the old mill and down to the river';
+    // Two lines clamp the long caption: its text runs past them.
+    const inLongCaption = (element: Element) =>
+      element.classList.contains('astryx-text') && element.textContent === long;
+    const scrollHeight = vi
+      .spyOn(HTMLElement.prototype, 'scrollHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return inLongCaption(this) ? 120 : 0;
+      });
+    const clientHeight = vi
+      .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return inLongCaption(this) ? 48 : 0;
+      });
+    const view = (caption: string) => (
+      <Lightbox
+        isOpen={true}
+        onOpenChange={() => {}}
+        index={0}
+        media={[
+          {src: '/a.jpg', alt: 'A', caption},
+          {src: '/b.jpg', alt: 'B'},
+        ]}
+      />
+    );
+    try {
+      const {rerender} = render(view('Golden hour'));
+      expect(screen.queryByRole('button', {name: 'more'})).toBeNull();
+      rerender(view(long));
+      await screen.findByRole('button', {name: 'more'});
+      rerender(view('Golden hour'));
+      await waitFor(() =>
+        expect(screen.queryByRole('button', {name: 'more'})).toBeNull(),
+      );
+    } finally {
+      scrollHeight.mockRestore();
+      clientHeight.mockRestore();
+    }
+  });
+
+  it('renders the same caption elements with or without its toggle, clamped or open', async () => {
+    const long =
+      'A winding path through the forest, past the old mill and down to the river';
+    const media = [
+      {src: '/a.jpg', alt: 'A', caption: long},
+      {src: '/b.jpg', alt: 'B', caption: 'Golden hour'},
+    ];
+    const shapeOf = (element: Element): string =>
+      `${element.tagName}(${[...element.children].map(shapeOf).join(',')})`;
+    // The caption's own Text, not the toggle's label inside it.
+    const captionShapes = () =>
+      [...document.querySelectorAll('[data-lightbox-caption] .astryx-text')]
+        .filter(text => text.closest('button') == null)
+        .map(shapeOf);
+    const fits = render(
+      <Lightbox
+        isOpen={true}
+        onOpenChange={() => {}}
+        index={0}
+        media={media}
+      />,
+    );
+    const withoutToggle = captionShapes();
+    fits.unmount();
+    // Two lines clamp the first caption: its text runs past them.
+    const inLongCaption = (element: Element) =>
+      element.classList.contains('astryx-text') && element.textContent === long;
+    const scrollHeight = vi
+      .spyOn(HTMLElement.prototype, 'scrollHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return inLongCaption(this) ? 120 : 0;
+      });
+    const clientHeight = vi
+      .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return inLongCaption(this) ? 48 : 0;
+      });
+    try {
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={() => {}}
+          index={0}
+          media={media}
+        />,
+      );
+      fireEvent.click(await screen.findByRole('button', {name: 'more'}));
+      await screen.findByRole('button', {name: 'less'});
+      const open = captionShapes();
+      fireEvent.click(screen.getByRole('button', {name: 'less'}));
+      await screen.findByRole('button', {name: 'more'});
+      const clamped = captionShapes();
+      expect(withoutToggle).toHaveLength(2);
+      expect(withoutToggle[1]).toBe(withoutToggle[0]);
+      expect(clamped).toEqual(withoutToggle);
+      expect(open).toEqual(withoutToggle);
+    } finally {
+      scrollHeight.mockRestore();
+      clientHeight.mockRestore();
+    }
   });
 });

@@ -25,7 +25,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: '`integration add component` creates the normal doc for one public component. Keep the generated identity and import, then replace its sample text and props with the component\'s real public contract.',
+          text: "`integration add component` creates the normal doc for one public component. Keep the generated identity and import, then replace its sample text and props with the component's real public contract.",
         },
         {
           type: 'code',
@@ -149,9 +149,18 @@ export default {
           code: `examples: [
   {
     label: 'Automatic rotation',
-    code: '<AcmeCarousel slides={slides} interval={5000} />',
+    code: '<AcmeCarousel slides={["/one.jpg", "/two.jpg"]} interval={5000} />',
+  },
+  {
+    label: 'Wrap the app',
+    kind: 'setup',
+    code: '<AcmeCarouselProvider locale={locale}>{children}</AcmeCarouselProvider>',
   },
 ],`,
+        },
+        {
+          type: 'prose',
+          text: "An example's `kind` is `'demo'` by default: it runs on its own, so a docs site may show it as a live preview. Set `kind: 'setup'` for code that cannot run on its own, such as an app setup file, a server route, or a snippet that uses variables defined elsewhere; it is always shown as code only.",
         },
       ],
     },

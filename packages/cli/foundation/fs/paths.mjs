@@ -282,7 +282,7 @@ function realDir(p) {
  *
  * @returns {string|null}
  */
-function homeFolder() {
+export function homeFolder() {
   try {
     const home = os.homedir();
     return home ? realDir(home) : null;
@@ -399,8 +399,22 @@ export function findAstryxProject(startDir) {
  * @returns {string}
  */
 export function findWorkspaceRoot(startDir) {
-  /** @type {string|null} */
-  let nearestPackage = null;
+  return (
+    findDeclaredWorkspaceRoot(startDir) ??
+    findPackageRoot(startDir) ??
+    path.resolve(startDir)
+  );
+}
+
+/**
+ * The nearest directory at or above `startDir` that declares a workspace,
+ * by a `pnpm-workspace.yaml` or a package.json `workspaces` field; null
+ * outside a workspace.
+ *
+ * @param {string} startDir
+ * @returns {string|null}
+ */
+export function findDeclaredWorkspaceRoot(startDir) {
   for (const dir of foldersUpFrom(startDir)) {
     if (
       fs.existsSync(path.join(dir, 'pnpm-workspace.yaml')) ||
@@ -408,14 +422,8 @@ export function findWorkspaceRoot(startDir) {
     ) {
       return dir;
     }
-    if (
-      nearestPackage == null &&
-      fs.existsSync(path.join(dir, 'package.json'))
-    ) {
-      nearestPackage = dir;
-    }
   }
-  return nearestPackage ?? path.resolve(startDir);
+  return null;
 }
 
 /**
