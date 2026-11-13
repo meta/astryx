@@ -91,7 +91,15 @@ describe('a base found only through NODE_PATH', () => {
         {
           cwd: bare,
           encoding: 'utf8',
-          env: {...process.env, NODE_PATH: path.join(store, 'node_modules')},
+          // No package manager runs the CLI here, so it names npm's install.
+          env: {
+            ...Object.fromEntries(
+              Object.entries(process.env).filter(
+                ([key]) => key !== 'npm_config_user_agent',
+              ),
+            ),
+            NODE_PATH: path.join(store, 'node_modules'),
+          },
         },
       );
       expect(r.status, r.stdout + r.stderr).toBe(1);

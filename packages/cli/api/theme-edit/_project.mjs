@@ -21,7 +21,10 @@ import {loadComponentDoc} from '../../foundation/discovery/component-loader.mjs'
 import {collectThemingTargets} from '../../foundation/discovery/theming-targets.mjs';
 import {resolveImportPath} from '../../foundation/discovery/component-discovery.mjs';
 import {detectPackageManager} from '../../foundation/env/package-manager.mjs';
-import {findProjectCoreDir} from '../../foundation/fs/paths.mjs';
+import {
+  findInstalledPackage,
+  findProjectCoreDir,
+} from '../../foundation/fs/paths.mjs';
 
 /**
  * @typedef {object} ThemeProject
@@ -327,27 +330,18 @@ export function importPathOf(project, name) {
  * or not). Null when it is not installed there. The one base resolution:
  * `new`, `set base`, `how` and every suggestion ask this.
  *
- * Only the project's own node_modules folders count, as the app's bundler
- * reads them. NODE_PATH and Node's global folders do not: a base found only
- * there would not build.
+ * Only the packages the project installs count, as the app's bundler reads
+ * them: its node_modules folders, or Plug'n'Play. NODE_PATH and Node's global
+ * folders do not: a base found only there would not build.
  * @param {ThemeProject | string} from
  * @param {string} like
  * @returns {string | null}
  */
 export function baseModule(from, like) {
   const name = `@astryxdesign/theme-${like}`;
-  let dir = typeof from === 'string' ? path.resolve(from) : from.cwd;
-  for (;;) {
-    const pkg = path.join(dir, 'node_modules', name);
-    if (
-      path.basename(dir) !== 'node_modules' &&
-      fs.existsSync(path.join(pkg, 'package.json'))
-    )
-      return builtModule(pkg, name);
-    const up = path.dirname(dir);
-    if (up === dir) return null;
-    dir = up;
-  }
+  const start = typeof from === 'string' ? path.resolve(from) : from.cwd;
+  const pkg = findInstalledPackage(start, name, Infinity);
+  return pkg == null ? null : builtModule(pkg, name);
 }
 
 /**
