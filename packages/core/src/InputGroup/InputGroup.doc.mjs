@@ -78,7 +78,7 @@ export const docs = {
       name: 'status',
       type: "{type: 'warning' | 'error' | 'success', message?: string}",
       description:
-        'Validation status. Its message shows below the group. The group border does not change; a theme can style the row from `data-status`.',
+        'Validation status. Its message shows below the group. The group border does not change; a theme can style the row from `data-status`. An `error` status also marks grouped inputs `aria-invalid`.',
     },
     {
       name: 'labelTooltip',
@@ -124,7 +124,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          "Keep each inner input's label specific; grouped inputs automatically combine the group label with their own label and inherit the group description/status context.",
+          "Keep each inner input's label specific; grouped inputs automatically combine the group label with their own label and inherit the group description/status context. A group error status marks the grouped inputs `aria-invalid`.",
       },
       {
         guidance: true,
@@ -205,7 +205,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          "Keep each inner input's label specific; grouped inputs combine the group label with their own label and inherit group description/status.",
+          "Keep each inner input's label specific; grouped inputs combine the group label with their own label and inherit group description/status. A group error status marks the grouped inputs `aria-invalid`.",
       },
       {
         guidance: true,

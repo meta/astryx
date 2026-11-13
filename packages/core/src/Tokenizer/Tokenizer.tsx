@@ -116,7 +116,7 @@ import type {
   SearchSource,
 } from '../Typeahead/types';
 import {composeEventHandlers, mergeProps} from '../utils';
-import {getInputARIA, joinAriaIDs} from '../utils/inputAria';
+import {getInputARIA, isInputInvalid, joinAriaIDs} from '../utils/inputAria';
 import {isFocusDetached} from '../utils/isFocusDetached';
 import {removeControlOf} from '../privateAttributes/tokenRemove.stylex';
 import {useTapStop} from '../Layer/useTouchTrigger';
@@ -2063,7 +2063,8 @@ export function Tokenizer<T extends SearchableItem>({
                   // (WCAG 4.1.2; spec:AST-020 FR9). Without one, a caller's own
                   // aria-required / aria-invalid still applies.
                   aria-invalid={
-                    localStatus?.type === 'error' || rest['aria-invalid']
+                    isInputInvalid(localStatus?.type, inputGroup) ||
+                    rest['aria-invalid']
                   }
                   __queryEntries={createEntries}
                   debounceMs={debounceMs}

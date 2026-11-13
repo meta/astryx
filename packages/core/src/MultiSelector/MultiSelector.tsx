@@ -76,7 +76,7 @@ import {
 } from '../Selector/utils';
 import {useMultiCombobox} from './hooks';
 import {getInputARIA, isImeKeyEvent, mergeProps} from '../utils';
-import {joinAriaIDs} from '../utils/inputAria';
+import {isInputInvalid, joinAriaIDs} from '../utils/inputAria';
 import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {devWarn, warnOnce} from '../utils/devWarning';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
@@ -2511,7 +2511,9 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       undefined,
     'aria-labelledby': triggerLabelledBy,
     'aria-required': isEffectivelyRequired ? 'true' : undefined,
-    'aria-invalid': status?.type === 'error' ? 'true' : undefined,
+    'aria-invalid': isInputInvalid(status?.type, inputGroup)
+      ? 'true'
+      : undefined,
     'aria-busy': isBusy || undefined,
     // Newly forwarded handlers compose component first: the built-in toggle
     // and keyboard model always run. `onFocus` keeps its existing caller-first

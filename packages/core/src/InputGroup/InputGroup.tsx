@@ -5,7 +5,7 @@
 /**
  * @file InputGroup.tsx
  * @input Uses React, StyleX, theme tokens, InputGroupContext, Field
- * @output Exports InputGroup component with group label/description ARIA wiring
+ * @output Exports InputGroup component with group label/description/status ARIA wiring
  * @position Groups input with prefix/suffix addons; consumed by index.ts
  *
  * Compatible input children consume InputGroup context to remove competing
@@ -172,8 +172,13 @@ export function InputGroup({
       .join(' ') || undefined;
 
   const contextValue = useMemo(
-    () => ({isInGroup: true as const, labelID, describedByIDs}),
-    [labelID, describedByIDs],
+    () => ({
+      isInGroup: true as const,
+      labelID,
+      describedByIDs,
+      statusType: status?.type,
+    }),
+    [labelID, describedByIDs, status?.type],
   );
   const internalContextValue = useMemo(() => ({isDisabled}), [isDisabled]);
 

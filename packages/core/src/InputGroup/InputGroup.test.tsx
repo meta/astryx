@@ -660,4 +660,163 @@ describe('InputGroup', () => {
     expect(screen.getByRole('group')).toHaveAttribute('data-size', 'lg');
     expect(textInput()).toHaveAttribute('data-size', 'sm');
   });
+
+  it('marks grouped inputs aria-invalid when the group status is an error', () => {
+    render(
+      <InputGroup
+        label="Price"
+        status={{type: 'error', message: 'Price is required'}}>
+        <InputGroupText>$</InputGroupText>
+        <TextInput label="Amount" isLabelHidden value="" onChange={() => {}} />
+      </InputGroup>,
+    );
+
+    // The group's error status marks each grouped input invalid, so screen
+    // readers announce the field itself as invalid, not only the detached
+    // message via aria-describedby.
+    expect(screen.getByRole('textbox', {name: 'Price Amount'})).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    );
+  });
+
+  it('does not mark grouped inputs aria-invalid for warning, success, or no status', () => {
+    const cases = [
+      {status: {type: 'warning', message: 'Price looks high'} as const},
+      {status: {type: 'success', message: 'Price accepted'} as const},
+      {status: undefined},
+    ];
+    for (const {status} of cases) {
+      const {unmount} = render(
+        <InputGroup label="Price" status={status}>
+          <TextInput
+            label="Amount"
+            isLabelHidden
+            value=""
+            onChange={() => {}}
+          />
+        </InputGroup>,
+      );
+      expect(
+        screen.getByRole('textbox', {name: 'Price Amount'}),
+      ).not.toHaveAttribute('aria-invalid');
+      unmount();
+    }
+  });
+
+  it('marks every admitted input invalid on a group error and leaves addons unmarked', () => {
+    const onChange = () => {};
+    render(
+      <InputGroup
+        label="Group"
+        status={{type: 'error', message: 'Fix the group'}}>
+        <TextInput label="Text" value="" onChange={onChange} />
+        <NumberInput label="Amount" value={null} onChange={onChange} />
+        <Selector label="Single fruit" options={['Apple', 'Banana']} />
+        <MultiSelector
+          label="Multiple fruits"
+          options={['Apple', 'Banana']}
+          value={[]}
+          onChange={onChange}
+        />
+        <DateInput label="Date" presentation="popover" onChange={onChange} />
+        <TimeInput label="Time" presentation="text-input" onChange={onChange} />
+        <Typeahead
+          label="Fruit"
+          value={null}
+          searchSource={fruitSource}
+          onChange={onChange}
+        />
+        <Tokenizer
+          label="People"
+          value={[]}
+          searchSource={fruitSource}
+          onChange={onChange}
+        />
+        <Button label="Save" tooltip="Save" />
+      </InputGroup>,
+    );
+
+    for (const name of [
+      'Group Text',
+      'Group Amount',
+      'Group Single fruit',
+      'Group Multiple fruits',
+      'Group Date',
+      'Group Time',
+      'Group Fruit',
+      'Group People',
+    ]) {
+      expect(screen.getByLabelText(name)).toHaveAttribute(
+        'aria-invalid',
+        'true',
+      );
+    }
+    // Buttons are addons: they join the row geometry, never the invalid state.
+    expect(screen.getByRole('button', {name: 'Save'})).not.toHaveAttribute(
+      'aria-invalid',
+    );
+  });
+
+  it('marks a grouped input invalid from the group error even when its own status is not an error', () => {
+    render(
+      <InputGroup
+        label="Price"
+        status={{type: 'error', message: 'Price is required'}}>
+        <TextInput
+          label="Amount"
+          isLabelHidden
+          value=""
+          onChange={() => {}}
+          status={{type: 'success', message: 'Format looks good'}}
+        />
+      </InputGroup>,
+    );
+
+    expect(screen.getByRole('textbox', {name: 'Price Amount'})).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    );
+  });
+
+  it('keeps an own error marking when the group status is not an error', () => {
+    render(
+      <InputGroup
+        label="Price"
+        status={{type: 'success', message: 'Group checks passed'}}>
+        <TextInput
+          label="Amount"
+          isLabelHidden
+          value=""
+          onChange={() => {}}
+          status={{type: 'error', message: 'Amount is required'}}
+        />
+      </InputGroup>,
+    );
+
+    expect(screen.getByRole('textbox', {name: 'Price Amount'})).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    );
+  });
+
+  it('takes the invalid state from the nearest enclosing group', () => {
+    render(
+      <InputGroup
+        label="Outer"
+        status={{type: 'error', message: 'Outer is invalid'}}>
+        <InputGroup
+          label="Inner"
+          status={{type: 'success', message: 'Inner checks passed'}}>
+          <TextInput label="Text" value="" onChange={() => {}} />
+        </InputGroup>
+      </InputGroup>,
+    );
+
+    // The inner group owns the status its members see, mirroring how the
+    // nearest provider supplies the label and description ids.
+    expect(
+      screen.getByRole('textbox', {name: 'Inner Text'}),
+    ).not.toHaveAttribute('aria-invalid');
+  });
 });

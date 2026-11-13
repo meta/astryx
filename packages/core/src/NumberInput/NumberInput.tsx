@@ -55,7 +55,7 @@ import {Icon, renderIconSlot, type IconType} from '../Icon';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {useTooltip} from '../Tooltip';
 import {getInputARIA} from '../utils';
-import {joinAriaIDs} from '../utils/inputAria';
+import {isInputInvalid, joinAriaIDs} from '../utils/inputAria';
 import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
@@ -1247,7 +1247,9 @@ export function NumberInput({
         }
         aria-required={isEffectivelyRequired ? 'true' : undefined}
         aria-invalid={
-          status?.type === 'error' || !isInputValid ? 'true' : undefined
+          isInputInvalid(status?.type, inputGroup) || !isInputValid
+            ? 'true'
+            : undefined
         }
         aria-labelledby={inputLabelledBy}
         {...stylex.props(

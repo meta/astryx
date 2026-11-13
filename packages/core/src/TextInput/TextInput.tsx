@@ -50,7 +50,7 @@ import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {Spinner} from '../Spinner/Spinner';
 import {useTooltip} from '../Tooltip/useTooltip';
 import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
-import {getInputARIA} from '../utils/inputAria';
+import {getInputARIA, isInputInvalid} from '../utils/inputAria';
 import {isImeKeyEvent} from '../utils/ime';
 import {
   textEntryTraitAttributes,
@@ -574,7 +574,9 @@ export function TextInput({
           undefined
         }
         aria-required={isEffectivelyRequired ? 'true' : undefined}
-        aria-invalid={status?.type === 'error' ? 'true' : undefined}
+        aria-invalid={
+          isInputInvalid(status?.type, inputGroup) ? 'true' : undefined
+        }
         aria-busy={isBusy || undefined}
         aria-labelledby={inputLabelledBy}
         {...stylex.props(styles.input, isDisabled && styles.inputDisabled)}

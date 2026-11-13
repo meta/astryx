@@ -7,11 +7,15 @@
  * @position Internal utility; used by inputs that compose labels/descriptions
  */
 
+import type {InputStatusType} from '../Field/types';
+
 export interface InputARIAInputGroup {
   /** ID of the visible InputGroup label. */
   labelID: string;
   /** Space-separated IDs for InputGroup description/status text. */
   describedByIDs?: string;
+  /** Status type the InputGroup owns, when it has one. */
+  statusType?: InputStatusType;
 }
 
 export interface InputARIA {
@@ -55,4 +59,19 @@ export function getInputARIA(
       : undefined,
     ariaDescribedBy: joinAriaIDs(inputGroup?.describedByIDs, ...describedByIDs),
   };
+}
+
+/**
+ * Resolves the invalid state an input presents.
+ *
+ * An error from the input's own status or from a surrounding InputGroup marks
+ * the input invalid; warning, success, and no status never do, matching each
+ * input's own error-only mapping. Caller-passed `aria-invalid` values are not
+ * handled here: components that forward one keep their own precedence.
+ */
+export function isInputInvalid(
+  statusType: InputStatusType | undefined,
+  inputGroup?: InputARIAInputGroup | null,
+): boolean {
+  return statusType === 'error' || inputGroup?.statusType === 'error';
 }

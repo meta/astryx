@@ -83,7 +83,7 @@ import {IconButton} from '../IconButton';
 import {useLocale} from '../i18n';
 import {useInputGroup} from '../InputGroup';
 import {useFieldInputStyling} from '../Field/fieldParts';
-import {joinAriaIDs} from '../utils/inputAria';
+import {isInputInvalid, joinAriaIDs} from '../utils/inputAria';
 import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useSize} from '../SizeContext';
 import {Spinner} from '../Spinner';
@@ -1411,7 +1411,9 @@ export function TouchDateField({
         }
         aria-describedby={ariaDescribedBy}
         aria-required={isEffectivelyRequired ? 'true' : undefined}
-        aria-invalid={status?.type === 'error' ? 'true' : undefined}
+        aria-invalid={
+          isInputInvalid(status?.type, inputGroup) ? 'true' : undefined
+        }
         aria-busy={isBusy || undefined}
         aria-expanded={isSheetOpen}
         aria-haspopup="dialog"

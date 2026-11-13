@@ -40,7 +40,7 @@ import {
 } from '../Field';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
 import {useFieldInputStyling} from '../Field/fieldParts';
-import {joinAriaIDs} from '../utils/inputAria';
+import {isInputInvalid, joinAriaIDs} from '../utils/inputAria';
 import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
@@ -429,7 +429,9 @@ export function TouchTimeField({
         aria-disabled={isEffectivelyDisabled ? 'true' : undefined}
         aria-describedby={ariaDescribedBy}
         aria-required={isEffectivelyRequired ? 'true' : undefined}
-        aria-invalid={status?.type === 'error' ? 'true' : undefined}
+        aria-invalid={
+          isInputInvalid(status?.type, inputGroup) ? 'true' : undefined
+        }
         aria-busy={isBusy || undefined}
         aria-expanded={isSheetOpen}
         aria-haspopup="dialog"

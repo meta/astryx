@@ -60,7 +60,7 @@ import {
   getInputARIA,
 } from '../utils';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
-import {joinAriaIDs} from '../utils/inputAria';
+import {isInputInvalid, joinAriaIDs} from '../utils/inputAria';
 import {
   useFieldInputStyling,
   type FieldInputBaseProps,
@@ -866,7 +866,9 @@ function TimeField({
             aria-describedby={ariaDescribedBy}
             aria-required={isEffectivelyRequired ? 'true' : undefined}
             aria-invalid={
-              status?.type === 'error' || !isInputValid ? 'true' : undefined
+              isInputInvalid(status?.type, inputGroup) || !isInputValid
+                ? 'true'
+                : undefined
             }
             aria-busy={isBusy || undefined}
             aria-labelledby={controlLabelledBy}

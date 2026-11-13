@@ -195,7 +195,7 @@ export type {
 } from '../Field';
 export type {DateInputEntryError} from './useTypedDate';
 import {mergeProps, isFocusDetached} from '../utils';
-import {joinAriaIDs} from '../utils/inputAria';
+import {isInputInvalid, joinAriaIDs} from '../utils/inputAria';
 import {
   useFieldInputStyling,
   type FieldInputBaseProps,
@@ -1006,7 +1006,9 @@ function PointerDateField({
         aria-describedby={ariaDescribedBy}
         aria-required={isEffectivelyRequired ? 'true' : undefined}
         aria-invalid={
-          fieldStatus?.type === 'error' || isInvalid ? 'true' : undefined
+          isInputInvalid(fieldStatus?.type, inputGroup) || isInvalid
+            ? 'true'
+            : undefined
         }
         aria-busy={isBusy || undefined}
         aria-expanded={popover.isOpen}

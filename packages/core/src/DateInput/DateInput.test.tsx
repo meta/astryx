@@ -1435,7 +1435,9 @@ describe('DateInput', () => {
         'aria-describedby',
         group.getAttribute('aria-describedby'),
       );
-      expect(input).not.toHaveAttribute('aria-invalid');
+      // A group error status marks the grouped input invalid, alongside the
+      // detached message the input already describes.
+      expect(input).toHaveAttribute('aria-invalid', 'true');
       expect(screen.getByText('Date is required')).toBeInTheDocument();
     });
 

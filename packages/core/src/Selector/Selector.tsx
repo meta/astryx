@@ -81,7 +81,7 @@ import {useResolvedOptionality} from '../hooks/useResolvedRequired';
 import {SelectorOption} from './SelectorOption';
 import {SelectorRowLayoutContext} from './SelectorRowLayoutContext';
 import {getInputARIA, isImeKeyEvent, mergeProps} from '../utils';
-import {joinAriaIDs} from '../utils/inputAria';
+import {isInputInvalid, joinAriaIDs} from '../utils/inputAria';
 import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {warnOnce} from '../utils/devWarning';
 import {useSize} from '../SizeContext/SizeContext';
@@ -2262,7 +2262,9 @@ export function Selector<T extends SelectorOptionType>(
       : triggerLabelledBy,
     'aria-required':
       isEffectivelyRequired && !isSearchTrigger ? 'true' : undefined,
-    'aria-invalid': status?.type === 'error' ? 'true' : undefined,
+    'aria-invalid': isInputInvalid(status?.type, inputGroup)
+      ? 'true'
+      : undefined,
     'aria-busy': isBusy || undefined,
     // The built-in keyboard model runs first; a caller handler sees the keys
     // it leaves uncancelled. A caller `onClick` arrives through `rest` and
