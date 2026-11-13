@@ -336,6 +336,41 @@ export function entries(tmp) {
   return out;
 }
 
+/**
+ * Every gather entry in a temp folder's cache folder, by name, with its
+ * inode: a hit leaves every one in place, a miss writes one anew.
+ * @param {string} tmp
+ * @returns {Map<string, number>}
+ */
+export function allInodes(tmp) {
+  const dir = path.join(tmp, CACHE_NAME);
+  if (!fs.existsSync(dir)) return new Map();
+  return new Map(
+    fs
+      .readdirSync(dir)
+      .filter(name => name.startsWith('gather-'))
+      .map(name => [name, fs.statSync(path.join(dir, name)).ino]),
+  );
+}
+
+/**
+ * Run `asks` warm from `tmp` and check that they hit: no entry is written
+ * again. A stale test proves nothing unless its warm path hit before the edit.
+ * Needs module hooks: without them the CLI keeps nothing.
+ * @param {string} tmp
+ * @param {string[][]} asks
+ * @param {{cwd?: string, env?: Record<string, string>, json?: boolean}} [options]
+ * @returns {{status: number | null, stdout: string, stderr: string}[]} the
+ *   warm answers
+ */
+export function expectWarmHit(tmp, asks, options = {}) {
+  const warm = allInodes(tmp);
+  expect(warm.size).toBeGreaterThan(0);
+  const answers = asks.map(ask => run(ask, {tmp, ...options}));
+  expect(allInodes(tmp)).toEqual(warm);
+  return answers;
+}
+
 export const QUERIES = [
   ['search', 'running totals'],
   // Build reads the same kept catalog: a hit after the search's miss.

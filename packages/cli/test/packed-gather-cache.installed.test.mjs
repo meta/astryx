@@ -25,6 +25,7 @@ import {
   entries,
   QUERIES,
   expectSameAsFresh,
+  expectWarmHit,
   hasModuleHooks,
 } from '../test-utils/packed-gather-cache-fixture.mjs';
 
@@ -136,6 +137,8 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
           `export default function Page() { return null; }\n`,
         );
         run(QUERIES[0], {tmp, cwd: project});
+        // The warm path hits before anything is copied.
+        expectWarmHit(tmp, [QUERIES[0]], {cwd: project});
         const [mine] = [...entries(tmp).keys()];
         run(QUERIES[0], {tmp, cwd: other.dir});
         const [theirs] = [...entries(tmp).keys()].filter(name => name !== mine);
@@ -163,6 +166,7 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     );
     for (const ask of asks) run(ask, {tmp});
     const before = asks.map(ask => run(ask, {tmp}).stdout);
+    if (hasModuleHooks) expectWarmHit(tmp, asks);
     const file = path.join(packed, 'api', 'search', '_entries.mjs');
     const source = fs.readFileSync(file, 'utf8');
     const edited = source.replace(
@@ -190,6 +194,7 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     const ask = ['search', 'color picker'];
     run(ask, {tmp});
     const was = run(ask, {tmp}).stdout;
+    if (hasModuleHooks) expectWarmHit(tmp, [ask]);
     const cardsFile = path.join(packed, 'api', 'search', '_cards.json');
     const cardsText = fs.readFileSync(cardsFile, 'utf8');
     const cards = Object.fromEntries(
@@ -220,6 +225,7 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     ];
     for (const ask of asks) run(ask, {tmp});
     const before = asks.map(ask => run(ask, {tmp}).stdout);
+    if (hasModuleHooks) expectWarmHit(tmp, asks);
     const file = path.join(
       packed,
       'api',
@@ -251,6 +257,7 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
     // on the restored weights, so only the stopword edit can miss.
     for (const ask of asks) run(ask, {tmp});
     const seeded = asks.map(ask => run(ask, {tmp}).stdout);
+    if (hasModuleHooks) expectWarmHit(tmp, asks);
     const query = path.join(packed, 'api', 'search', '_query.mjs');
     const querySource = fs.readFileSync(query, 'utf8');
     const editedQuery = querySource.replace(
