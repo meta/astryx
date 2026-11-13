@@ -191,7 +191,7 @@
  * @property {number} recoverAtStop First stop back on the standard recipe;
  * must be a requested stop after `throughStop`.
  * @property {Record<string, number>} [familyMultipliers] Edge multipliers,
- * from 0 to 1, by family id, in place of `edgeMultiplier`.
+ * from 0 to 1, by chromatic family id, in place of `edgeMultiplier`.
  */
 
 /**

@@ -665,10 +665,10 @@ function assertMultiplier(value, label) {
  * a field the taper does not read fails instead of changing nothing.
  * @param {unknown} taper
  * @param {number[]} stops
- * @param {Set<string>} familyIds
+ * @param {NormalizedFamily[]} families
  * @returns {NormalizedRequest['darkChromaTaper']}
  */
-function normalizeDarkChromaTaper(taper, stops, familyIds) {
+function normalizeDarkChromaTaper(taper, stops, families) {
   if (taper == null) return undefined;
   if (typeof taper !== 'object' || Array.isArray(taper)) {
     throw new Error('darkChromaTaper must be an object.');
@@ -711,9 +711,15 @@ function normalizeDarkChromaTaper(taper, stops, familyIds) {
   /** @type {Record<string, number>} */
   const multipliers = {};
   for (const [id, value] of Object.entries(familyMultipliers ?? {})) {
-    if (!familyIds.has(id)) {
+    const family = families.find(candidate => candidate.id === id);
+    if (!family) {
       throw new Error(
         `darkChromaTaper.familyMultipliers names unknown family ${id}.`,
+      );
+    }
+    if (family.kind === 'neutral') {
+      throw new Error(
+        `darkChromaTaper.familyMultipliers names neutral family ${id}; the taper changes only chromatic families.`,
       );
     }
     multipliers[id] = assertMultiplier(
@@ -838,7 +844,7 @@ export function normalizeGenerationRequest(input) {
   const darkChromaTaper = normalizeDarkChromaTaper(
     input.darkChromaTaper,
     stops,
-    ids,
+    normalizedFamilies,
   );
   /** @type {NormalizedRequest} */
   const request = {

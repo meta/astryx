@@ -473,6 +473,9 @@ describe('astryx-oklch-v1 palette generator', () => {
       expect(request({...taper, familyMultipliers: {green: 0.5}})).toThrow(
         'darkChromaTaper.familyMultipliers names unknown family green.',
       );
+      expect(request({...taper, familyMultipliers: {neutral: 0.5}})).toThrow(
+        'darkChromaTaper.familyMultipliers names neutral family neutral; the taper changes only chromatic families.',
+      );
       expect(request({...taper, familyMultipliers: {blue: -1}})).toThrow(
         'darkChromaTaper.familyMultipliers.blue must be a number from 0 to 1.',
       );
