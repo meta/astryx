@@ -6,9 +6,10 @@
  *   story in Chromium, with the touch runtime's chunk held back and then let
  *   through
  * @output Browser evidence for the window before the shared touch runtime
- *   loads: a press that leaves a SegmentedControl selects nothing, before and
- *   after the load, and a bottom sheet dragged closed before the load leaves
- *   the screen instead of staying where the finger let go
+ *   loads: a press that leaves a SegmentedControl selects nothing before the
+ *   load, and a click selects after it; a finger's vetoed tap selects
+ *   nothing; and a bottom sheet dragged closed before the load leaves the
+ *   screen instead of staying where the finger let go
  * @position `architecture:react-component-runtime` INV13 and
  *   `spec:AST-080` DEC-5; the loader's timing is in touchRuntime.test.tsx
  */
@@ -187,10 +188,19 @@ test.describe('a bottom sheet before the touch runtime loads', () => {
     });
     // The sheet goes on past where the finger let go, and the dialog closes.
     const releasedTop = y + 240 - 12;
+    // The page reads the panel, so a read after the dialog closes does not
+    // wait on a locator that no longer matches.
     await expect
       .poll(
-        async () => (await sheet.boundingBox())?.y ?? Number.POSITIVE_INFINITY,
-        {timeout: 1500},
+        async () =>
+          page.evaluate(() => {
+            const panel = document.querySelector('.astryx-bottom-sheet');
+            return panel?.isConnected === true &&
+              panel.getClientRects().length > 0
+              ? panel.getBoundingClientRect().top
+              : Number.POSITIVE_INFINITY;
+          }),
+        {timeout: 1500, intervals: [16]},
       )
       .toBeGreaterThan(releasedTop + 100);
     await expect(dialog).toBeHidden({timeout: 1500});
