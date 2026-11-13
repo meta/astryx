@@ -185,6 +185,44 @@ export interface LightboxProps extends BaseProps<HTMLDialogElement> {
 /** Set on the stage while a mouse or a pen hovers over the fitted photo. */
 const OVER_PHOTO_ATTRIBUTE = 'data-lightbox-over-photo';
 
+/**
+ * Whether the toggle's place fits at the end of the caption text's last line.
+ * It reads the current layout, where the place ends below the text, so the
+ * text's lines are its own. The decision leans to a line of its own, as a
+ * place that does not quite fit gives.
+ */
+function placeFitsBesideLastLine(flow: HTMLElement): boolean {
+  const place = flow.firstElementChild;
+  const view = flow.ownerDocument.defaultView ?? window;
+  if (!(place instanceof HTMLElement)) {
+    return true;
+  }
+  const placeStyle = view.getComputedStyle(place);
+  if (placeStyle.display === 'none') {
+    return true;
+  }
+  const needed =
+    place.getBoundingClientRect().width +
+    parseFloat(placeStyle.marginLeft) +
+    parseFloat(placeStyle.marginRight);
+  const range = flow.ownerDocument.createRange();
+  range.setStartAfter(place);
+  range.setEnd(flow, flow.childNodes.length);
+  const rects =
+    typeof range.getClientRects === 'function'
+      ? [...range.getClientRects()].filter(r => r.width > 0 && r.height > 0)
+      : [];
+  if (rects.length === 0) {
+    return true;
+  }
+  const lowest = rects.reduce((a, b) => (b.bottom > a.bottom ? b : a));
+  const lastLine = rects.filter(r => (r.top + r.bottom) / 2 > lowest.top);
+  const box = flow.getBoundingClientRect();
+  return view.getComputedStyle(flow).direction === 'rtl'
+    ? Math.min(...lastLine.map(r => r.left)) - needed >= box.left + 0.5
+    : Math.max(...lastLine.map(r => r.right)) + needed <= box.right - 0.5;
+}
+
 // The caption's backing: the controls' backing colour, darker, so the caption
 // keeps 4.5:1 over any photo or backdrop behind it (WCAG 2.2 1.4.3).
 const CAPTION_BACKING = `color-mix(in srgb, ${colorVars['--color-on-light']} 90%, transparent)`;
@@ -992,22 +1030,26 @@ export function Lightbox({
         const textLines = Math.round(
           flow.getBoundingClientRect().height / line,
         );
-        if (textLines < lineCount) {
+        // A toggle that does not fit beside the text's last line takes a line
+        // of its own. That decides the count only when the caption shows one
+        // line more than its text.
+        const lines =
+          lineCount === textLines + 1 && !placeFitsBesideLastLine(flow)
+            ? lineCount
+            : textLines;
+        if (lines < lineCount) {
           // Fewer lines shrink the caption. Inside this delivery that is a
-          // resize loop, so they wait for the next frame. A toggle that no
-          // longer fits beside the last line then takes a line of its own.
+          // resize loop, so they wait for the next frame. The caption's
+          // delivery in that frame reads the result.
           const frame = view.requestAnimationFrame(() => {
             cancelCaptionShrinkRef.current = null;
             if (bandCaptionRef.current !== caption) {
               return;
             }
-            // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the smaller count must lay out before the caption is read again in this frame
+            // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the smaller count commits before this frame's layout
             flushSync(() => {
-              setCaptionShownLines(textLines);
+              setCaptionShownLines(lines);
             });
-            setCaptionShownLines(
-              Math.max(textLines, linesOf(caption.clientHeight)),
-            );
           });
           cancelCaptionShrinkRef.current = () => {
             view.cancelAnimationFrame(frame);
