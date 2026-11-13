@@ -3623,6 +3623,89 @@ jobs:
           path: ${{ runner.temp }}/webkit-weekly-verdict.json
           retention-days: 90
 
+  # The weekly run's WebKit accessibility contracts: the `.a11y.browser.spec.ts`
+  # files in playwright.config.ts's `webkit` project (spec:AST-030 DEC-24).
+  # Report-only: the specs cannot fail this job, and webkit-weekly-verdict does
+  # not read it, so a red holds no release. The report lists each failure with
+  # a command that runs it again, for the fix loop.
+  webkit-weekly-a11y:
+    needs: [webkit-weekly-request, build-storybook]
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.operation == 'webkit-weekly' && !cancelled() && needs.webkit-weekly-request.result == 'success' && needs.build-storybook.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The WebKit interaction legs' image: WebKit and its system libraries are
+    # already installed.
+    container:
+      image: mcr.microsoft.com/playwright:v1.61.1-noble
+      options: --ipc=host
+    defaults:
+      run:
+        shell: bash
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        timeout-minutes: 8
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Trust the checkout in the container
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Setup Node and pnpm
+        uses: ./.github/actions/setup
+        with:
+          install: 'false'
+
+      - name: Download Storybook artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: storybook-${{ needs.build-storybook.outputs.short_hash }}
+          path: apps/storybook/dist
+
+      - name: Install Playwright WebKit
+        run: pnpm install --frozen-lockfile && npx playwright install webkit
+
+      # Report-only: a failing spec leaves this step red and the job green.
+      # llvmpipe's threads are capped at the container's CPU share, as in the
+      # WebKit interaction legs.
+      - name: Run the WebKit accessibility contracts
+        id: specs
+        continue-on-error: true
+        env:
+          A11Y_CONTRACT_WORKERS: '4'
+          PLAYWRIGHT_JSON_OUTPUT_NAME: webkit-a11y.json
+        run: |
+          LP_NUM_THREADS="$(nproc)"
+          if [ -r /sys/fs/cgroup/cpu.max ]; then
+            read -r quota period < /sys/fs/cgroup/cpu.max
+            if [ "$quota" != max ]; then
+              share=$(( (quota + period - 1) / period ))
+              if [ "$share" -lt "$LP_NUM_THREADS" ]; then LP_NUM_THREADS="$share"; fi
+            fi
+          fi
+          export LP_NUM_THREADS
+          pnpm exec playwright test --config playwright.config.ts --project webkit --reporter list,json --output webkit-a11y-output
+
+      - name: Report the WebKit accessibility results
+        if: always()
+        run: |
+          node .github/scripts/webkit-a11y-report.mjs webkit-a11y.json webkit-a11y-report
+          cat webkit-a11y-report/report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the WebKit accessibility report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: webkit-weekly-a11y-report
+          path: |
+            webkit-a11y-report
+            webkit-a11y-output
+          if-no-files-found: ignore
+          retention-days: 90
+
   # Build package test owner. The plugin's production CSS partition is a Build
   # integration contract: source inspection cannot prove which declaration
   # paints after Vite emits the final bundle. The `test-build` name makes that

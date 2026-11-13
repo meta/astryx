@@ -6,8 +6,8 @@
  * as a fresh run, and the bad entry is stored over, so it cannot stick.
  * Covers every kind of kept entry the commands below store: search's catalog,
  * its entry table, build's block catalog, each integration's check results,
- * the project's issue list, template discovery's records and doctor's docs
- * checks.
+ * the project's issue list, template discovery's records, each
+ * integration's theme records and doctor's docs checks.
  */
 
 import {describe, expect, it} from 'vitest';
@@ -95,6 +95,7 @@ const ASKS = [
   ['template', '--list'],
   ['component', 'Button'],
   ['doctor'],
+  ['theme', 'list'],
 ];
 
 describe.skipIf(process.platform !== 'linux' || !hasModuleHooks)(
@@ -115,6 +116,42 @@ describe.skipIf(process.platform !== 'linux' || !hasModuleHooks)(
             path.join(templates, 'ledger.tsx'),
             `export default function Page() { return null; }\n`,
           );
+          // A theme the integration ships, so its theme records are kept too.
+          fs.writeFileSync(
+            path.join(other.widgets, 'package.json'),
+            JSON.stringify({
+              name: '@acme/widgets',
+              version: '1.0.0',
+              type: 'module',
+              exports: {
+                './themes/tally': './dist/tally.js',
+                './themes/tally.css': './dist/tally.css',
+              },
+            }),
+          );
+          fs.writeFileSync(
+            path.join(other.widgets, 'astryx.integration.mjs'),
+            "export default { templates: './templates', themes: './themes' };\n",
+          );
+          fs.mkdirSync(path.join(other.widgets, 'dist'));
+          fs.writeFileSync(
+            path.join(other.widgets, 'dist', 'tally.js'),
+            "export const tallyTheme = {name: 'tally', tokens: {}};\n",
+          );
+          fs.writeFileSync(
+            path.join(other.widgets, 'dist', 'tally.css'),
+            '[data-astryx-theme="tally"] { --color-text: black; }\n',
+          );
+          const theme = path.join(other.widgets, 'themes', 'tally');
+          fs.mkdirSync(theme, {recursive: true});
+          fs.writeFileSync(
+            path.join(theme, 'tallyTheme.doc.mjs'),
+            "/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {type: 'theme', name: 'tally', displayName: 'Tally', description: 'Tally theme for ledgers.', maintained: true};\n",
+          );
+          fs.writeFileSync(
+            path.join(theme, 'tallyTheme.ts'),
+            "export const tallyTheme = {name: 'tally', tokens: {}};\n",
+          );
           // doctor's cache row names the folder and counts what it holds,
           // which differ between two cache folders: the rest must match.
           const all = (/** @type {string} */ where) =>
@@ -133,8 +170,8 @@ describe.skipIf(process.platform !== 'linux' || !hasModuleHooks)(
           const dir = path.join(tmp, CACHE_NAME);
           const kept = [...keptInodes(tmp).keys()];
           // Every kind is kept: the catalog, its table and block catalog, the
-          // integration's checks, the issue list, the template records and
-          // doctor's docs checks.
+          // integration's checks, the issue list, the template records, the
+          // integration's theme records and doctor's docs checks.
           expect(
             new Set(kept.map(file => kindOf(path.join(dir, file)))),
           ).toEqual(
@@ -145,6 +182,7 @@ describe.skipIf(process.platform !== 'linux' || !hasModuleHooks)(
               'integration-issues',
               'project-issues',
               'template-sources',
+              'integration-themes',
               'doctor-check',
             ]),
           );

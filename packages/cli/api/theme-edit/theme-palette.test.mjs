@@ -759,17 +759,18 @@ describe('every color decision is generator config', () => {
     );
   });
 
-  it('writes one mode for a one-mode theme and keeps the author fields the dials do not own', () => {
+  it('writes both modes for a one-mode theme too and keeps the author fields the dials do not own', () => {
+    // A one-mode theme keeps both halves: its mode is the one the app's
+    // <Theme> is given, and a region Core draws in the other mode (a toast,
+    // a lightbox) reads the other half.
     const light = plan([{thing: 'accent', value: '#60a5fa'}], {
       mode: 'light-only',
     });
-    expect(light.config.modeStrategy).toBe('light-only');
+    expect(light.config.modeStrategy).toBe('light-and-dark');
     expect(
       Object.keys(/** @type {any} */ (light.candidate.palette.accent)),
-    ).not.toContain('dark');
-    expect(light.pal.tokens['--color-accent'].dark).toEqual(
-      light.pal.tokens['--color-accent'].light,
-    );
+    ).toContain('dark');
+    expect(light.pal.tokens['--color-accent'].dark.color).toBeTruthy();
     const authored = {
       modeStrategy: 'light-only',
       neutralProfile: 'warm-v1',
@@ -1742,14 +1743,17 @@ describe('chaos round 4', () => {
       ).toBe('ERR_THEME_BAD_VALUE');
   });
 
-  it('lists what the dropped mode loses when a theme becomes one-mode', async () => {
+  it('keeps both halves when a theme becomes one-mode, and says where its mode goes', async () => {
+    // The theme's colors stay as they were; its mode is the one the app's
+    // <Theme> is given.
     await themeEditNew('m', {cwd});
     await themeEditSet('m', 'accent', '#0d9488', {cwd});
     const dark = await themeEditSet('m', 'mode', 'dark-only', {cwd});
-    expect(dark.data.changedTokens.some(x => /\(light\): /.test(x))).toBe(true);
+    expect(dark.data.changedTokens).toEqual([]);
+    expect(dark.data.notes.join(' ')).toContain('mode="dark"');
     await themeEditUndo('m', {cwd, thing: 'mode'});
     const light = await themeEditSet('m', 'mode', 'light-only', {cwd});
-    expect(light.data.changedTokens.some(x => /\(dark\): /.test(x))).toBe(true);
+    expect(light.data.notes.join(' ')).toContain('mode="light"');
     fs.rmSync(path.join(cwd, 'themes', 'm'), {recursive: true, force: true});
   });
 
@@ -1833,7 +1837,7 @@ describe('a palette an earlier editor wrote', () => {
       fs
         .readFileSync(ts, 'utf8')
         .replace(
-          /"--color-accent": palette\.accent\.dark\[[\d.]+\],/,
+          /"--color-accent": \[\s*palette\.accent\.light\[[\d.]+\],\s*palette\.accent\.dark\[[\d.]+\],?\s*\],/,
           '"--color-accent": [palette.accent.light[50], palette.accent.dark[70]],',
         )
         .replace(/^\/\/ Module [0-9a-f]{16}\.\n/m, ''),
@@ -3109,12 +3113,12 @@ describe('parts34', () => {
     return at < 0 ? '' : css.slice(at, css.indexOf('}', at));
   };
 
-  it('pads the composer box through its variable, and refuses what paints its wrapper', async () => {
-    await themeEditSet('p', 'padding', '5px', {cwd, on: 'chat-composer'});
-    const box = blockOf('.astryx-chat-composer');
-    expect(box).toMatch(/--_chat-composer-padding:\s*5px/);
-    expect(box).not.toMatch(/(^|[;{\s])padding:\s*5px/);
-    await themeEditUndo('p', {cwd, thing: 'padding', on: 'chat-composer'});
+  it("refuses a composer padding (parts39: only Core's private variable reaches the box), and what paints its wrapper", async () => {
+    const pad = await refusal(() =>
+      themeEditSet('p', 'padding', '5px', {cwd, on: 'chat-composer'}),
+    );
+    expect(pad.code).toBe('ERR_THEME_NO_EFFECT');
+    expect(pad.run[0]).toMatch(/how chat-composer$/);
     for (const [prop, value, when] of [
       ['background', '#f3f4f6'],
       ['box-shadow', 'none'],
@@ -3366,8 +3370,10 @@ describe('parts35: one padding model', () => {
     await themeEditUndo('p', {cwd, thing: 'padding', on: 'clickable-card'});
   });
 
-  it('takes one length as the chat composer padding, a variable or math too', async () => {
-    for (const value of ['4px 8px', '0', 'inherit', '50%', '12'])
+  it('refuses every chat composer padding (parts39), whatever its value', async () => {
+    // The box reads its padding only from a variable of Core's own, which a
+    // theme cannot set; a padding property would pad the wrapper.
+    for (const value of ['4px', '4px 8px', 'var(--spacing-3)', 'max(4px, 1vw)'])
       expect(
         (
           await refusal(() =>
@@ -3375,30 +3381,7 @@ describe('parts35: one padding model', () => {
           )
         ).code,
         value,
-      ).toBe('ERR_THEME_BAD_VALUE');
-    const twelve = await refusal(() =>
-      themeEditSet('p', 'padding', '12', {cwd, on: 'chat-composer'}),
-    );
-    expect(twelve.run[0]).toMatch(/padding 12px --on chat-composer$/);
-    for (const value of [
-      'var(--spacing-3)',
-      'calc(var(--spacing-2) + 2px)',
-      'max(4px, 1vw)',
-      'clamp(4px, 1vw, 12px)',
-      'min(8px, var(--spacing-3))',
-    ]) {
-      await themeEditSet('p', 'padding', value, {cwd, on: 'chat-composer'});
-      await themeEditUndo('p', {cwd, thing: 'padding', on: 'chat-composer'});
-    }
-    const keeps = await refusal(() =>
-      themeEditSet('p', 'padding', 'var(--spacing-2) var(--spacing-3)', {
-        cwd,
-        on: 'chat-composer',
-      }),
-    );
-    expect(keeps.run[0]).toMatch(
-      /padding 'var\(--spacing-2\)' --on chat-composer$/,
-    );
+      ).toBe('ERR_THEME_NO_EFFECT');
   });
 });
 
@@ -3451,7 +3434,6 @@ describe('parts36', () => {
     for (const [prop, on] of [
       ['padding', 'segmented-control'],
       ['padding', 'dropdown-menu'],
-      ['padding', 'chat-composer'],
       ['padding-inline', 'item'],
     ])
       expect(
@@ -3469,17 +3451,24 @@ describe('parts36', () => {
       'calc(var(--spacing-2) + 2px)',
       'max(4px, 1vw)',
     ]) {
-      await themeEditSet('p', 'padding', value, {cwd, on: 'chat-composer'});
-      await themeEditUndo('p', {cwd, thing: 'padding', on: 'chat-composer'});
+      await themeEditSet('p', 'padding', value, {
+        cwd,
+        on: 'segmented-control',
+      });
+      await themeEditUndo('p', {
+        cwd,
+        thing: 'padding',
+        on: 'segmented-control',
+      });
     }
     const keeps = await refusal(() =>
       themeEditSet('p', 'padding', 'var(--spacing-2) var(--spacing-3)', {
         cwd,
-        on: 'chat-composer',
+        on: 'segmented-control',
       }),
     );
     expect(keeps.run[0]).toMatch(
-      /padding 'var\(--spacing-2\)' --on chat-composer$/,
+      /padding 'var\(--spacing-2\)' --on segmented-control$/,
     );
   });
 
