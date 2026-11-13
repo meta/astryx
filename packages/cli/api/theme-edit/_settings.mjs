@@ -3496,6 +3496,39 @@ export function compileTheme(ctx, data, base) {
   /** @param {Setting} s @param {string} target @param {string} prop @param {string} v */
   const putComp = (s, target, prop, v) => {
     const b = block(s, target);
+    // A gradient background for one mode: each layer's colors are painted
+    // in that mode only (transparent in the other), beside the layers for
+    // the other mode, which keep theirs; a background for both modes held
+    // before keeps showing in the other mode.
+    if (
+      s.mode &&
+      /^background(-image)?$/.test(kebab(prop)) &&
+      /gradient\(/i.test(v)
+    ) {
+      const key =
+        kebab(prop) === 'background' ? 'background' : 'backgroundImage';
+      const mine = maskLayers(v, s.mode);
+      const otherMode = s.mode === 'light' ? 'dark' : 'light';
+      /** @type {string[]} */
+      let kept = [];
+      for (const k of ['background', 'backgroundImage']) {
+        const held = b[k];
+        if (typeof held !== 'string') continue;
+        const layers = splitTop(held, ',').map(x => x.trim());
+        const masked = layers.filter(x => modeOfLayer(x) != null);
+        kept.push(
+          ...(masked.length
+            ? layers.filter(x => modeOfLayer(x) === otherMode)
+            : maskLayers(held, otherMode)),
+        );
+        delete b[k];
+      }
+      b[key] = [
+        ...(s.mode === 'light' ? mine : kept),
+        ...(s.mode === 'light' ? kept : mine),
+      ].join(', ');
+      return;
+    }
     // A color set in a one-mode theme fills its mode's half only (as a
     // setting for that mode does), so a region Core draws in the other mode
     // reads the other half.
@@ -3999,6 +4032,19 @@ export function compileTheme(ctx, data, base) {
       else putTok(s.thing, s.value, s.mode);
     } else if (s.source === 'property') {
       for (const t of parts) {
+        // A heading takes its color from its color prop, which reads the
+        // text color tokens after part styles: the color goes into those
+        // tokens on the heading (a named color prop's own token for
+        // --when color:<name>), so it shows there and nowhere else.
+        if (t === 'heading' && kebab(s.thing) === 'color') {
+          const named = /^color:([\w-]+)$/.exec(s.when ?? '')?.[1];
+          const scope = named ? {...s, when: undefined} : s;
+          for (const tok of named
+            ? [`--color-text-${named}`]
+            : ['--color-text-primary', '--color-text-secondary'])
+            putComp(scope, t, tok, s.value);
+          continue;
+        }
         // A padding on a part whose box reads Core's padding variables is
         // resolved with the rest of that part's padding, below.
         if (padVars(t) && /^padding(-|$)/.test(kebab(s.thing))) {
@@ -4235,6 +4281,71 @@ function coversSide(a, b) {
   if (coversProperty(a, b)) return true;
   const root = b.replace(/-(inline|block)(-start|-end)?(?=-|$)/, '');
   return root !== b && (a === root || coversProperty(a, root));
+}
+
+/**
+ * A background's layers with each color painted in one mode only: a color
+ * stop becomes light-dark(<color>, transparent) for light (the reverse for
+ * dark), and a layer that is a color alone becomes a gradient of it, so
+ * every layer is an image the other mode does not show.
+ * @param {string} value
+ * @param {'light' | 'dark'} mode
+ * @returns {string[]}
+ */
+export function maskLayers(value, mode) {
+  /** @param {string} c */
+  const wrap = c =>
+    mode === 'light'
+      ? `light-dark(${c}, transparent)`
+      : `light-dark(transparent, ${c})`;
+  /** @param {string} w */
+  const isColor = w =>
+    !/^light-dark\(/i.test(w) &&
+    (isColorValue(w) || /^var\(\s*--color-/i.test(w));
+  return splitTop(value, ',')
+    .map(x => x.trim())
+    .filter(Boolean)
+    .map(layer => {
+      const fn = /^((?:repeating-)?(?:linear|radial|conic)-gradient)\(/i.exec(
+        layer,
+      );
+      if (!fn)
+        return isColor(layer)
+          ? `linear-gradient(${wrap(layer)}, ${wrap(layer)})`
+          : layer;
+      // The gradient's own arguments, up to its closing bracket; what
+      // follows (position, size, repeat) stays as it is.
+      let depth = 0;
+      let end = fn[0].length - 1;
+      for (let i = end; i < layer.length; i++) {
+        if (layer[i] === '(') depth++;
+        if (layer[i] === ')' && --depth === 0) {
+          end = i;
+          break;
+        }
+      }
+      const args = splitTop(layer.slice(fn[0].length, end), ',').map(arg =>
+        splitTop(arg.trim(), ' ')
+          .map(w => (isColor(w.trim()) ? wrap(w.trim()) : w.trim()))
+          .join(' '),
+      );
+      return `${fn[1]}(${args.join(', ')})${layer.slice(end + 1)}`;
+    });
+}
+
+/**
+ * The mode a layer maskLayers wrote is painted in, or null for a layer
+ * painted in both.
+ * @param {string} layer
+ * @returns {'light' | 'dark' | null}
+ */
+function modeOfLayer(layer) {
+  if (/light-dark\(\s*transparent\s*,/i.test(layer)) return 'dark';
+  if (
+    /light-dark\([^()]*(?:\([^()]*\)[^()]*)*,\s*transparent\s*\)/i.test(layer)
+  )
+    return 'light';
+  return null;
 }
 
 /** A side word in a longhand's name, in the order a box value lists sides. */

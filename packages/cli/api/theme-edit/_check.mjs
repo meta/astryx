@@ -2494,6 +2494,20 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
               : byWord && (TARGET.has(byWord) || FAMILIES[byWord])
                 ? byWord
                 : null;
+      // The page (the body behind every part) is painted by the app shell.
+      if (
+        !named &&
+        /^(page|body|app|background|page-background)$/i.test(s.on) &&
+        TARGET.has('app-shell')
+      )
+        refuse(
+          E.ERR_THEME_UNKNOWN_PART,
+          `"${s.on}" is not a part name; the page behind your parts is painted by app-shell.`,
+          {
+            didYouMean: ['app-shell'],
+            run: [setLine(slug, thing, v, {...s, on: 'app-shell'}, unset)],
+          },
+        );
       if (named)
         refuse(
           E.ERR_THEME_UNKNOWN_PART,
@@ -4094,6 +4108,8 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         s.note = `no part reads ${thing} itself, but ${fed.slice(0, 4).join(', ')} ${fed.length > 1 ? 'are' : 'is'} built from it, so the change shows wherever ${fed.length > 1 ? 'those are' : 'that is'} used${fed.some(k => k.startsWith('--color-syntax-')) ? ' (such as diff rows in code blocks)' : ''}`;
       else if (r && data.like && baseReads(ctx, data.like, thing))
         s.note = `the ${data.like} theme's own part styles read ${thing}, so the change shows where they use it`;
+      else if (r && coreStylesRead(ctx, thing))
+        s.note = `Core's stylesheet reads ${thing} outside the parts the editor renders (such as the page behind them, the app shell), so the change shows where it is used`;
       else if (r && dialWrites(thing))
         s.note = `no part of this Core reads ${thing}, and no token it feeds is read, so it changes nothing you see now; it is set as asked because a dial writes it too`;
       // The editor's record of what parts read comes from one render of
@@ -4269,7 +4285,14 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
     }
     // Text, headings and links take their color from the color prop.
     const textParts = COLOR_PROP_PARTS;
+    // A heading's color is written as the text color tokens its color prop
+    // reads, on the heading alone (compileTheme), so it shows.
+    const headingColor =
+      prop === 'color' &&
+      partsOf(ctx, s).length > 0 &&
+      partsOf(ctx, s).every(t => t === 'heading');
     if (
+      !headingColor &&
       (prop === 'color' || prop === '-webkit-text-fill-color') &&
       partsOf(ctx, s).some(t => textParts.includes(t))
     ) {
@@ -4376,7 +4399,14 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
     if (
       s.mode &&
       !COLOR_PROPS.test(prop) &&
-      !(prop === 'background' && isColorValue(v))
+      !(prop === 'background' && isColorValue(v)) &&
+      // A gradient background (no image file) goes per mode: its colors
+      // are each painted in that mode only (compileTheme).
+      !(
+        /^background(-image)?$/.test(prop) &&
+        /gradient\(/i.test(v) &&
+        !/url\(/i.test(v)
+      )
     ) {
       // A color mixed into the value (a border's) can go per mode on its
       // own; a value with none (a radius) is just set for both modes.
@@ -4736,4 +4766,32 @@ export function fontFileReason(value) {
 function unquoteArg(word) {
   const m = /^'(.*)'$/s.exec(word.trim());
   return m ? m[1].replace(/'\\''/g, "'") : word.trim();
+}
+
+/** Core's stylesheet text, by project folder. @type {Map<string, string>} */
+const coreStyles = new Map();
+
+/**
+ * Whether Core's own stylesheet reads a token anywhere (a part the editor
+ * does not render, such as the app shell behind the page, included).
+ * @param {any} ctx
+ * @param {string} token
+ */
+function coreStylesRead(ctx, token) {
+  const cwd = String(ctx?.project?.cwd ?? '');
+  let css = coreStyles.get(cwd);
+  if (css == null) {
+    try {
+      css = fs.readFileSync(
+        ctx.project.req.resolve('@astryxdesign/core/astryx.css'),
+        'utf8',
+      );
+    } catch {
+      css = '';
+    }
+    coreStyles.set(cwd, css);
+  }
+  return new RegExp(`var\\(\\s*${token.replace(/[-]/g, '\\-')}\\s*[,)]`).test(
+    css,
+  );
 }

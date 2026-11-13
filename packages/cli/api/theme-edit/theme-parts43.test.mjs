@@ -614,7 +614,7 @@ describe('the spacing dial around kept sizes', () => {
 });
 
 describe('runs and notes', () => {
-  it('offers the per-mode color step that works, and never a currentcolor gradient', async ctx => {
+  it('offers the per-mode color step that works, and paints a gradient in its mode only', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('r3', {cwd, like: 'neutral'});
     const border = await refusal(() =>
@@ -630,15 +630,15 @@ describe('runs and notes', () => {
         /border-color '#ff0000' --on card --when variant:[\w-]+ --mode dark/,
       ),
     );
-    const grad = await refusal(() =>
-      themeEditSet('r3', 'background', 'linear-gradient(#ff0000, #0000ff)', {
-        cwd,
-        on: 'card',
-        mode: 'dark',
-      }),
+    await themeEditSet(
+      'r3',
+      'background',
+      'linear-gradient(#ff0000, #0000ff)',
+      {cwd, on: 'card', mode: 'dark'},
     );
-    expect(grad.run.join('\n')).not.toMatch(/currentcolor/);
-    expect(grad.run.join('\n')).toMatch(/linear-gradient\(#ff0000, #0000ff\)/);
+    expect(ruleOf('r3', '.astryx-card')).toContain(
+      'linear-gradient(light-dark(transparent, #ff0000), light-dark(transparent, #0000ff))',
+    );
   }, 240_000);
 
   it('says the corners show on the other corners when the own source sets one', async ctx => {

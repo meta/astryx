@@ -6154,8 +6154,28 @@ export function draftAnswer(ctx, env, question) {
     if (on === 'page') {
       const color = colorFor(c, 'fill');
       // "the page background lighter": the whole-theme answer, per mode.
+      if (!color && a === 'background' && c.dir) return answerFor(c, null, a);
+      // "page background", "a gradient on the page": the token for a color,
+      // and the app shell (the part that paints the page) for a color or
+      // a gradient, with example values to change.
       if (!color)
-        return a === 'background' && c.dir ? answerFor(c, null, a) : null;
+        return {
+          text: `the page background: --color-background-body for a color; background on app-shell (the part that paints the page) for a color or a gradient`,
+          options: [
+            ...(/\bgradient\b/.test(c.text)
+              ? []
+              : [[set('--color-background-body', '#f5f7fa', modeOf(c))]]),
+            [
+              set(
+                'background',
+                /\bgradient\b/.test(c.text)
+                  ? 'linear-gradient(180deg, var(--color-background-body), var(--color-background-surface))'
+                  : '#f5f7fa',
+                {on: 'app-shell'},
+              ),
+            ],
+          ],
+        };
       return {
         text: `the page background: --color-background-body${c.mode && modal ? ` in ${c.mode} mode` : ''}`,
         options: [
