@@ -17,7 +17,7 @@ import * as path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {themeEditHow, themeEditNew} from './theme-edit.mjs';
-import {shiftKeepAlpha} from './_how-question.mjs';
+import {exactFactor, shiftKeepAlpha} from './_how-question.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -252,6 +252,51 @@ describe('hunt68: lists, levels, stacks, sides', () => {
     },
     T,
   );
+});
+
+describe('padding sides are read outside part names', () => {
+  it(
+    'code block padding is all sides of the code block',
+    async () => {
+      expect((await top('code block padding 12px')).all).toBe(
+        'set q padding 12px --on code-block',
+      );
+    },
+    T,
+  );
+  it(
+    'top nav padding is all sides of the top nav',
+    async () => {
+      expect((await top('top nav padding 20px')).all).toBe(
+        'set q padding 20px --on top-nav',
+      );
+    },
+    T,
+  );
+});
+
+describe('bigger or smaller than another part', () => {
+  it(
+    'is a step past the other part value, never a copy',
+    async () => {
+      const r = await top(
+        'I would like card padding bigger than button padding',
+      );
+      expect(r.all).toMatch(/^set q padding \S+ --on card$/);
+      expect(r.text).toContain("a step past button's");
+      const under = await top('card padding smaller than button padding');
+      expect(under.text).toContain("a step under button's");
+    },
+    T,
+  );
+});
+
+describe('a dimension pair is a size', () => {
+  it('16 x 16 is not sixteen times', () => {
+    expect(exactFactor('icons 16 x 16')).toBeNull();
+    expect(exactFactor('24x24px icons')).toBeNull();
+    expect(exactFactor('2x bigger')).toBe(2);
+  });
 });
 
 describe('hunt68: a second part with an ask of its own', () => {

@@ -790,6 +790,8 @@ export function exactFactor(text) {
     );
   if (factor && Number(factor[1]) >= 0 && Number(factor[1]) <= 10)
     return Number(factor[1]);
+  // "16 x 16", "24x24px": a size, never a factor.
+  if (/\b\d*\.?\d+(?:px|rem|em)?\s*[x×]\s*\d*\.?\d+\b/.test(t)) return null;
   // "3 times bigger", "2 times smaller", "4 times", "2x", "1.5x", "x2".
   const nTimes =
     /\b(\d*\.?\d+)(?:px)?\s*(?:times|x)\b(?:\s+(bigger|larger|more|wider|taller|thicker|as|smaller|less|thinner|narrower))?/.exec(
@@ -3605,7 +3607,7 @@ export function draftAnswer(ctx, env, question) {
     // of that property now, written out; the other part is not changed.
     {
       const measure =
-        /\bas (round(?:ed)?|tall|high|bold|big|large) as\b|\bsame (corners?|radius|roundness|padding|height|font size|text size|weight) as\b|\b(?:match(?:es|ing)?|like)\b[^.]*?\b(corners?|radius|padding|height)\b|\b(corners?|radius|padding|height)\b[^.]*?\b(?:the )?same as\b/.exec(
+        /\bas (round(?:ed)?|tall|high|bold|big|large) as\b|\bsame (corners?|radius|roundness|padding|height|font size|text size|weight) as\b|\b(?:match(?:es|ing)?|(?<!\b(?:i'?d|i|would|we'?d|you'?d)\s)like)\b[^.]*?\b(corners?|radius|padding|height)\b|\b(corners?|radius|padding|height)\b[^.]*?\b(?:bigger|larger|more|smaller|less|tighter|rounder|squarer) than\b|\b(corners?|radius|padding|height)\b[^.]*?\b(?:the )?same as\b/.exec(
           c.text,
         );
       const word = measure ? (measure.slice(1).find(Boolean) ?? '') : '';
@@ -3645,16 +3647,32 @@ export function draftAnswer(ctx, env, question) {
         // "twice as round as inputs": that amount of the other part's;
         // else the other part's own value, or the token it reads (so the
         // copy follows it).
-        const factor = exactFactor(c.text);
+        // "card padding bigger than button padding": a step past the other
+        // part's value, never a copy of it.
+        const past =
+          /\b(bigger|larger|more|rounder|smaller|less|tighter|squarer) than\b/.exec(
+            c.text,
+          )?.[1];
+        const pastFactor = past
+          ? /^(smaller|less|tighter|squarer)$/.test(past)
+            ? 0.8
+            : 1.25
+          : null;
+        const factor = exactFactor(c.text) ?? pastFactor;
         const value =
           now && factor
             ? scaledBox(now, factor)
-            : partPropNow(sourceOn, prop, true);
+            : past
+              ? null
+              : partPropNow(sourceOn, prop, true);
         if (value) {
           seenPart(subjectOn);
           seenPart(sourceOn);
           const d = {
-            text: `${subjectOn} takes ${factor ? `${factor} times ` : ''}${sourceOn}'s ${prop}: ${value} (${sourceOn} has ${now} now and is not changed)`,
+            text:
+              past && !exactFactor(c.text)
+                ? `${subjectOn} ${prop} a step ${pastFactor && pastFactor > 1 ? 'past' : 'under'} ${sourceOn}'s: ${value} (${sourceOn} has ${now} now and is not changed)`
+                : `${subjectOn} takes ${factor ? `${factor} times ` : ''}${sourceOn}'s ${prop}: ${value} (${sourceOn} has ${now} now and is not changed)`,
             options: [[set(prop, value, {on: subjectOn})]],
           };
           push(d);
@@ -4051,12 +4069,7 @@ export function draftAnswer(ctx, env, question) {
       c.parts.every(p => TARGET.has(one(p.on)) || FAMILIES[p.on])
     ) {
       // "horizontal padding 20px", "padding top 12px": only those sides.
-      const side =
-        named.prop === 'padding'
-          ? /\b(left|right|top|bottom|horizontal(?:ly)?|vertical(?:ly)?|inline|block|sides)\b/.exec(
-              c.text,
-            )?.[1]
-          : null;
+      const side = named.prop === 'padding' ? sideIn(c) : null;
       const prop = !side
         ? named.prop
         : /^(left|right|top|bottom)$/.test(side)
@@ -4311,6 +4324,23 @@ export function draftAnswer(ctx, env, question) {
       reads[0];
     if (!read) return null;
     return live ? `var(${read.token})` : resolvedValue(read.token);
+  }
+
+  /**
+   * The side word of a padding ask ("top", "horizontal", "block"), read with
+   * the clause's part names taken out ("code block", "top nav" are parts,
+   * not sides).
+   * @param {Clause} c
+   * @returns {string | undefined}
+   */
+  function sideIn(c) {
+    const ons = new Set(c.parts.map(x => x.on));
+    const text = lex.parts
+      .filter(([, x]) => ons.has(x.on))
+      .reduce((t, [re]) => t.replace(new RegExp(re.source, 'g'), ' '), c.text);
+    return /\b(left|right|top|bottom|horizontal(?:ly)?|vertical(?:ly)?|inline|block|sides)\b/.exec(
+      text,
+    )?.[1];
   }
 
   /**
@@ -5412,11 +5442,7 @@ export function draftAnswer(ctx, env, question) {
             : null;
         // "padding top 12px", "more padding on the left", "horizontal
         // padding 20px": only those sides.
-        const sideWord = gap
-          ? null
-          : /\b(left|right|top|bottom|horizontal(?:ly)?|vertical(?:ly)?|inline|block|sides)\b/.exec(
-              c.text,
-            )?.[1];
+        const sideWord = gap ? null : sideIn(c);
         if (sideWord) {
           const sideProp = /^(left|right|top|bottom)$/.test(sideWord)
             ? `padding-${sideWord}`
