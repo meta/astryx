@@ -8,27 +8,125 @@
 - `astryx experimental theme editor`: the app copy in `src/themes/<theme>/` is written exactly as `theme build` of its source writes it (the build header names that source), so `theme build --check` and `astryx doctor` read it as current, and a stable rebuild of it leaves it the editor's (the next change writes it again). A change that fails after its build no longer leaves the refused build in the app copy: the copy is written only once the change is saved. ([#11468](https://github.com/meta/astryx/pull/11468))
 - `astryx experimental theme editor show`: a show that is refused (or fails to render) leaves the app copy in `src/themes/<theme>/` as it was; the copy is written once show succeeds. System files such as .DS_Store in the copy folder no longer stop the copy; a file of yours there does, and `wiring` then gives the steps by hand, naming that file. ([#11468](https://github.com/meta/astryx/pull/11468))
 - `astryx experimental theme editor`: CSS read with the current specifications' grammar. ([#11378](https://github.com/meta/astryx/pull/11378))
+
+  - The editor also reads the current specifications' grammar from `@csstools/css-syntax-patches-for-csstree` (a new dependency, pinned). It adds about 0.1 MB unpacked to the install (one 79 KB JSON file, no dependencies of its own), and loads only when the editor checks a CSS value; no other command loads it, and startup is unchanged. A property MDN marks obsolete but the specifications still define, as browsers ship it, is taken: `font-stretch`, so the font shorthand split names a command that works.
+  - A negative number the current grammar ranges at 0 or more is refused on a part (`line-height -1`, `gap -2px`), with the positive value as the suggestion.
+  - A `color-mix()` share outside 0% to 100% is refused for tokens, part colors and the color dials, and the mix with the share at its limit is suggested.
+  - A font size or weight given alone to `font` on a part (`small`, `1rem`, `700`) is suggested as `font-size` or `font-weight`, never as a family.
+  - A relative color that keeps its channels (`rgb(from red r g b)`) and `light-dark()` with the same color twice are read as that color. A `color-mix()` in a space the editor does not mix in, or a relative color that changes its channels, says so and suggests the nearest color it can work out.
+
 - `astryx experimental theme editor`: more refusals and notes that are true. ([#11378](https://github.com/meta/astryx/pull/11378))
+
+  - A negative percentage the current CSS grammar ranges at 0 or more is refused on a part (`line-height -50%`, `gap -10%`).
+  - A `color-mix()` share may be written as any CSS percentage (`5e1%`, `+50%`, `calc(50%)`).
+  - Line-height tokens (`--text-*-leading`) take a number with no unit, as Core multiplies them by a text size; `1.5em` and `150%` suggest `1.5`.
+  - `headings` in other letters or as a weight number suggests the word meant (`BOLD` is bold), and a weight number the nearest weight rung (`800` and `900` are heavy), never a lighter one.
+  - A whole-theme font under fonts set for body and headings says which role fonts it sits under and how to clear them.
+  - A font one of the editor's own presets leads with (Comic Sans MS) gets no "must load" note.
+  - `text-size more` or `less` at the end of the dial's range suggests the base font size token, never a size the dial refuses.
+  - A CSS font value on a part made of keywords (`italic bold`, `bold 1rem`) is split into its longhands, never a family; after the size, the rest is the family, as CSS reads it (`1rem bold` is size 1rem with the family bold).
+
 - `astryx experimental theme editor`: number tokens read as CSS reads them. ([#11378](https://github.com/meta/astryx/pull/11378))
+
+  - Only the tokens Core's stylesheet multiplies by a size inside calc() (the line heights) refuse a unit; weight tokens take the font-weight keywords again (`bold`, `normal`), so a theme saved with one stays editable.
+  - Numbers are read as the browser reads them: `1.5e0`, `+1.5`, `15E-1` and `1.5EM` are numbers, and a `color-mix()` share like `50.%` is refused.
+  - A CSS font value on a part with a size and line height (`1rem/1.5`) or a size written as math (`calc(1rem + 2px)`) is split into its longhands; a part named twice (`bold bold`) is refused, never written as a family.
+
 - `astryx experimental theme editor`: weights on phones, and values read as CSS reads them. ([#11419](https://github.com/meta/astryx/pull/11419))
+
+  - Heading and text weights (the `headings` weight dial, `--text-*-weight` tokens) now apply on phones too: they are written into the phone rules the base theme sets, as font families are.
+  - A token set to `var(--x, <fallback>)` checks the fallback as the token's own kind.
+  - Size tokens and color channels read numbers as CSS does: `1.px` and `rgb(255. 0 0)` are refused (with `1px` suggested where that is all), and `+4px` and `4e+1px` are taken.
+  - `vibrancy` suggests the value meant (`MORE` is more, `70%` and `7e1` are 70), and no value when the theme has no color to saturate.
+  - The `headings` result lists its weights in words, not `[object Object]`.
+  - The whole-theme and role `font` take a family alone: a size, a weight or a whole CSS font value is refused with the family, and the base size or headings command where it applies.
+
 - `astryx experimental theme editor set`: when a part does not read the token named, the suggestions name only tokens of the same kind (a weight goes to a weight token, never to a size or a line height). A `var()` fallback is checked wherever it sits (inside `calc()`, `max()`, `color-mix()`), and an empty fallback on a typed token is refused. A size token given a bare number suggests that number in px (`16` → `16px`), and `text-size 20px`, `2e1`, `+20` and `1.25rem` suggest `text-size 20`. ([#11419](https://github.com/meta/astryx/pull/11419))
 - `astryx experimental theme editor`: fallbacks, saved font dials and size suggestions. ([#11419](https://github.com/meta/astryx/pull/11419))
+
+  - A part value's `var()` fallbacks are checked against the property (`padding 'var(--nope, red)'` is refused), as token fallbacks are.
+  - A saved `font` dial that `set` would refuse (a CSS keyword such as `inherit`, a size, a whole CSS font value) is reported with the commands that fix it, and never built.
+  - A size one slip from a valid one suggests that size: `16 px` and `16pxx` suggest `16px`, `1,5rem` suggests `1.5rem`. `text-size` suggests the nearest size it takes: `20 px` and `125%` are 20, and a size past either end is that end.
+
 - `astryx experimental theme editor`: `font math` is accepted as the CSS generic family it is; the generic families are read from the CSS grammar. With an exact `--font-size-base` set, `how 'bigger text'` steps that token (14px to 17.5px) instead of offering a `text-size` the token would mask. A color dial edited by hand to a see-through, system or variable color (`#2563ebcc`, `transparent`, `Canvas`, `var(--x)`) is refused by name with the undo that removes it, instead of building a gray accent. A value typed with full-width characters, a trailing dot or a CSS comment (`１８`, `18.`, `＃2563eb`, `#2563eb /* brand */`) is suggested as the value meant. `set` refuses a `var()` loop that closes through a token in the theme's own `<theme>.theme.ts`. `show` notes each token the theme's own source sets that a whole-theme dial also writes. ([#11419](https://github.com/meta/astryx/pull/11419))
 - `astryx experimental theme editor`: suggestions keep the value meant, and fractional text sizes say how they build. ([#11419](https://github.com/meta/astryx/pull/11419))
+
+  - An exact token refused only for how its value was typed (a trailing `;`, a comment, quotes around it, full-width `＃`) suggests that same value, not a stock one.
+  - A font name that needs quotes (`Font Awesome 6 Free`) on a font token or a part's `font-family` is suggested quoted, as the font dial writes it.
+  - A fractional `text-size` (`15.5`) is saved as the whole pixel the type scale builds, and the result says so.
+
 - `astryx experimental theme editor how`: mode phrases, questions about what is set, the focus ring, and changes by an amount. ([#11378](https://github.com/meta/astryx/pull/11378))
+
+  - "The same accent in light and dark" sets both modes, and a trailing "and dark mode only" still makes the theme dark-only.
+  - A step that cannot move (badges already fully round) says so, with no command that would be refused.
+  - Questions about what is set now or the choices ("how round are the cards now?", "what are the available corner values") get `show` and the lookup, never a change.
+  - "Remove the focus outline" sets its width to 0 and says what that costs; "outline offset" and "focus ring offset" set `--focus-outline-offset`.
+  - "Decrease the radius by 2px" moves the corners from the theme's own radius now (its corners setting applied); a change by an amount on a part points to its current value instead of setting the amount.
+  - "Caret color" sets `caret-color`; placeholder text and the selection highlight say they have no setting.
+  - Screen-size, print and device conditions ("below 600px", "on tablets", "the print version") say the editor has no such conditions, instead of reading "600px" as a radius or "tablets" as tables.
+  - "Text less black" lightens the text.
+  - Each item of a list keeps its own values: "headings 32px bold, body 16px regular, captions 12px" sets the headings and the body as asked, with no contradiction, and "captions" (no part) takes nothing from its neighbors.
+
 - `astryx experimental theme editor how`: a negated mode, the CSS cursor, device words beside an ask, and labels. ([#11378](https://github.com/meta/astryx/pull/11378))
+
+  - "Don't touch dark mode, make the accent orange" changes light mode only.
+  - `cursor: pointer` sets the CSS cursor; only "caret" or "cursor color" is the text cursor's color.
+  - A device or print word ("cramped on mobile", "when printing") no longer drops the ask: the rest is answered, with a note that the editor has no such conditions.
+  - A question about one part's state or group ("which parts are in the inputs group", "how round are the cards now?") gets that part's lookup as well as `show`.
+  - "Not so round" is one step less; "avoid pure black text" picks a near-black; "flat cards, not flat buttons" changes only the cards.
+  - `NaNpx` and `Infinitypx` are refused as not numbers; `1e3px` is 1000px.
+  - Labels are the field label part (a checkbox's or switch's own label when named); "visited links" says a link has no visited state set can name.
+  - Tailwind `border-2` is a 2px border width and `rounded-full` a pill; `.btn-primary { … }` is the primary button only.
+  - "Remove all my changes" takes back every setting; a question in a script how cannot read gets no guess.
+
 - `astryx experimental theme editor how`: "2px rounder" is a change from the corners now, and "all corners like the buttons" copies the buttons' radius. ([#11378](https://github.com/meta/astryx/pull/11378))
+
+  - An amount with a comparative ("2px rounder", "2px sharper", "8px larger") is a change from the value now: the theme's corners move from its own current radius (its settings applied, not the base theme's), and a part's corners move from the radius token it reads. Anywhere else ("4px wider") how says set takes the new value instead of setting the amount.
+  - "All corners like the buttons" sets every other radius token to the one buttons read.
+
 - `astryx experimental theme editor how`: a negated dark mode, undo of what is set, typed times and transforms, and the right targets. ([#11419](https://github.com/meta/astryx/pull/11419))
+
+  - "Except in dark mode", "but not in dark mode" and "leave dark mode alone" change light mode only; "not pure black" is a near-black and "not pure white" a near-white.
+  - "Undo the corners" on a theme that sets no corners says there is nothing to undo.
+  - "animation-duration 0s" is 0ms; "translateY(-2px) on hover" is a transform on hover; "shrink headings by 20%" says set takes the new value; "fade in tooltips" says the tooltip has no motion of its own.
+  - "Why are my buttons black" is a lookup, never a change; "is my theme valid", "how many dials" and "list every change" get the command that answers them.
+  - "radius sm/lg", "setRadius(4)" and "½rem" are read as values; "#22c55e in light, #4ade80 in dark" sets the accent for each mode; two-word CSS color names ("midnight blue") are the CSS color.
+  - "Text on the accent is hard to read" sets the on-accent text color that reads in each mode; "5 lines tall text box" sets the text area's height in lines; "dropdown shadow" is the dropdown's menu; "checkboxes green" is the checked fill.
+
 - `astryx experimental theme editor how`: an amount in rem or em with a comparative ("0.5rem rounder") is a change from the value now, counted at a 16px root, and "tighter", "roomier", "looser", "bolder" and "heavier" read as comparatives too. Where how cannot work out the new value, it says to set the value now plus or minus the amount. ([#11419](https://github.com/meta/astryx/pull/11419))
 - `astryx experimental theme editor how`: a confidence gate, and dislikes, take-backs and dark-mode selectors read. ([#11419](https://github.com/meta/astryx/pull/11419))
+
+  - When a question is a question ("is the card too round?"), says "tell me" or "but not too", or asks to "stop" something, how gives the lookup and asks for the change in words instead of guessing a write; "explain X" is the lookup of X.
+  - "I hate the shadows", "skip …" and "not a fan of …" ask for none of it when that is the whole ask.
+  - A change on one member of a group ("the text area") carries `--only`, so it does not reach the whole group.
+  - "3 pixels sharper", "take 2px off" and "remove 4px from" move the value down from where it is.
+  - "darkmode", `html.dark .card {…}` and `@media (prefers-color-scheme: dark) {…}` scope the change to dark mode.
+  - "Take back the shadow change" and "shadows like before" undo only what the theme sets, else say there is nothing to take back.
+  - "Pointer cursor on hover" sets the cursor; "opened accordion title" is the open state; "squre" and "eckiger" are square; "cards look flat" adds depth; "darker while being clicked" is the pressed state.
+
 - `astryx experimental theme editor how`: every change by an amount or a direction starts from the theme itself, not the base theme. A darker or lighter color starts from the theme's own color in each mode, and says when it is already as dark or as light as it goes; a bigger text size on a part starts from the size the theme set there; a part's corners moved by an amount start from the radius the theme set on it. Token lookups show the theme's own value. ([#11419](https://github.com/meta/astryx/pull/11419))
 - `astryx experimental theme editor how`: the confidence gate works per clause, and a one-mode change never removes a mode. ([#11419](https://github.com/meta/astryx/pull/11419))
+
+  - A clause that is a question, a "tell me", a "stop …" or a "don't touch …" holds back only itself: "stop making the buttons so round, make them square" makes them square, "don't explain, just set the accent to crimson" sets crimson, "don't touch spacing, just make text larger" changes only the text. A whole question ("can the cards be rounder?", "are buttons too round?!") gets the lookup; "can you make …" is an ask.
+  - Questions without a question mark ("are my corners too round", "does it use a shadow on cards") are lookups; suggestions ("why not square buttons", "what about a teal accent", "is there a way to …") are asks. Sarcasm ("yeah, because …", "just what I wanted", "…, nice") gets no write.
+  - "Enough with X", "quit with X", "nobody asked for X", "who needs X", "loathe X", "X 👎" and "❌ X" ask for none of X; "I hate it" after a description leaves the description as the ask.
+  - "Too airy" is tighter, "headings too thin" bolder, "not bright enough" brighter.
+  - "Keep the dark mode accent, change only light to violet" sets the light accent; a light-only or dark-only theme only when the ask is about the theme's modes.
+  - "Links not underlined until hover" removes the underline and adds it on hover.
+
 - `astryx experimental theme editor how`: "bolder" or "a bit lighter" headings move one rung from the headings rung the theme sets (and say so when there is no rung further), and "a bit bigger" text moves a numeric text size by the dial's own step. `how <theme> <question>` takes a first word that names an existing theme as the theme, as `set`, `show` and `undo` do. ([#11419](https://github.com/meta/astryx/pull/11419))
 - `astryx experimental theme editor how`: a write only for a direct ask. A clause that is a condition ("if the corners are round, …", "unless …"), an indirect question ("I wonder if …", "is 4px a good radius", "would #333 work", "should corners be 6px or 8px"), a double negative ("don't not round …") or a check ("can you check if …", "just checking: …") gets the lookup and a request to say it as an ask, not a guessed change. Politeness ("if you can, …") is not a condition. "Can the buttons be rounder?" and "can I get a serif font?" are asks; a question followed by an ask ("whats the padding on cards make it 12", "do badges have borders? remove them either way") answers the ask, with "it" or "them" read as what the question named; "dark page #0b0b0f" sets the dark page. ([#11419](https://github.com/meta/astryx/pull/11419))
 - `astryx experimental theme editor how`: "more muted", "pastel", "duller" and "subdued" lower vibrancy and "less muted" raises it (a token name such as `--color-background-muted` is never read as the word); "less light" or "less thin" headings are one rung bolder, "less heavy" one rung lighter, "less tight" wider letter spacing; a weight question lists only the weight tokens a part reads; "too dark" asks for lighter and "too light" for darker; "no big gaps" is less spacing; sarcasm anywhere in a question ("great, even more shadows, just what I wanted", "…, nice") holds back every clause. ([#11419](https://github.com/meta/astryx/pull/11419))
 - `astryx experimental theme editor how`: a write for a clause that reads as an ask: an imperative, a thing with a value, a style word with a part, a wish about a named thing, or a description of the look wanted ("the page is white"). A tag question ("cards have a shadow, right?"), a hypothetical ("imagine …", "consider …"), a condition ("whenever …", "once …", "should the cards …"), sarcasm or a double negative gets the lookup instead. "nuke", "zero out", "sharpen", "flatten", `X++` / `X--` and `X: off` say which way to go; "dark.page=#…" and "dark mode only: accent #…" set dark mode. ([#11419](https://github.com/meta/astryx/pull/11419))
 - `astryx experimental theme editor how`: "show me …" and "give me …" are lookups. "decrease", "shrink", "trim", "minimize" and "scale down" mean less. "Only when dark mode is on" and "except in dark mode" keep their mode. Removal words in other languages and 🚫 remove; "X are heavy" lightens; "don't touch the buttons" and "leave the corners" never write the excluded part. Inline list numbers ("1. … 2. …") are breaks, a color asked for a part in a long note stays with that part, and "tooltips darker" stays a color. ([#11419](https://github.com/meta/astryx/pull/11419))
 - `astryx experimental theme`: the thirteenth pass of fixes. ([#11378](https://github.com/meta/astryx/pull/11378))
+
+  - `undo` leaves out what this Core refuses in the step it goes back to. A saved setting that names no design token or CSS property, or a property with no part, is reported.
+  - `show` builds an own change to `<name>.theme.ts`, and names a theme source that no longer builds. Its colors say where the theme source wins over the generated shade.
+  - A setting covered by a later one that spreads over its part is named in `set` and `show`.
+  - `corners 2e1px` and `+4px` are sizes. A state is refused for padding on a part whose padding Core sets from the plain value only. `--state disabled` also matches a wrapper whose input inside is the one disabled. `how <part>` lists the states `set` takes there.
+  - `new` suggestions keep every option given; `--like` twice is refused. More suggestions run as printed in JSON. The merge snippet's paths start from the generated themes module's folder. The help names `experimental theme compile` to build an editor theme again.
+
 - `astryx experimental theme editor`: corners set for a state (`corners pill --on button --state hover`) are accepted, and the result names the part's derived radius variable, which Core sets from the plain value only. Padding that a part expands into container spacing is refused with a state, judged on the part named (`--only` keeps it to one member of a group). `focus-within` is taken on a part that holds content. A one-mode value that is not a color is refused for that reason first. ([#11378](https://github.com/meta/astryx/pull/11378))
   `show` leaves every file in place when the theme source does not build, and names a token value that is not text. A theme named by a path or in capitals (`use ./themes/t`, `use T`) gets the editor-theme answer.
 - `astryx experimental theme`: `show` builds a change in a module the theme source imports, and an unreadable build with a broken source line says what to put back. `compile` of an editor theme from a subfolder names the run from the app root. `--state disabled` reaches the inner control only on form controls styled on a wrapper, never a whole button group. A step back writes the same color files. ([#11378](https://github.com/meta/astryx/pull/11378))
@@ -44,6 +142,13 @@
   When `themes` in the app is a file (or a link to one), every editor command refuses, saying to rename or move it, instead of failing with a raw error.
 
 - `astryx experimental theme`: template overwrite on any disk, and undo answers that are true. ([#11419](https://github.com/meta/astryx/pull/11419))
+
+  - `experimental theme template … --overwrite` never replaces a theme editor file under another spelling of its name (`themes/t/T.theme.ts` on a case-insensitive disk, or through a link).
+  - `undo <theme> mode` or `base` on a theme with no saved change says so, instead of claiming its history does not reach back; after every step is undone it says the value was never changed.
+  - `undo <theme> headings <word>` with only the other half set names the half that is set.
+  - A mistyped `base` suggests only a base this project has installed, and says when the name is a theme made here (which cannot be a base).
+  - `undo <thing> <value>` matches the saved value in either quote style and with any spacing around `/`.
+
 - `astryx experimental theme editor`: a mistyped `--like` or `base` suggests only a base the app has installed, and with none near, `base none` and the installed bases. `undo <theme> base` or `mode` after a change and its reverse says it is back at the value the theme was made with. `new` refuses an option it does not take with its help, like the other editor commands. A theme folder copied or renamed by hand names the files to rename. A padding (or other) shorthand set after its sides on a part removes them, as its note says, and `undo` brings them back. A hand-edited part property value its CSS grammar refuses is named, like a dial's. `show` builds again when an output is missing or was edited by hand, as `compile --check` finds them. ([#11419](https://github.com/meta/astryx/pull/11419))
   When your own `<theme>.theme.ts` does not parse, `set`, `undo` and `show` refuse before writing or removing anything (the palette files under `tokens/` stay), with `cat` of the file; a failed change that removed the `tokens/` folder puts it back. A build temp file left by a command stopped mid-build is swept after ten minutes.
 - `astryx experimental theme editor show` renders its preview pages again only when what they show changed (the CLI, Core, the page or the theme's build): a show with nothing new takes about a second. A built output that cannot be read, or a folder in its place, is refused by name with a command to inspect it, in `show` and `compile` alike. Every file the editor's build writes counts when show checks the build, the generated color references too, and a hand edit inside the generated settings module is built over from the settings (and `compile` refuses it). A check of the outputs that cannot run is no longer read as a match. A theme busy with another command suggests this same command again, once the other ends. ([#11419](https://github.com/meta/astryx/pull/11419))
@@ -80,20 +185,82 @@
 - `astryx experimental theme editor how`: a focus ring request keeps its scope ("focus ring on inputs only" sets the ring's tokens `--on inputs`, the other parts keep theirs), and an exact amount ("half", "double", "twice", "50% strength", "x0.5") is worked out from the theme's own value: the ring's width, a part's corner radius or its padding when the theme sets one. An amount alone after a comma ("…, at half strength") belongs to the ask before it. A comparison ("cards with twice the padding of buttons") is of the other part's value, when the theme sets one; otherwise the answer is a step and says so. The answer names the value it starts from and, for "strength", that it reads it as the ring's width. ([#11490](https://github.com/meta/astryx/pull/11490))
 - `astryx experimental theme editor how`: "header(s)" or "title(s)" with a text word (bolder, bigger, font, weight, size, serif) means the headings' type, and with a surface word (background, bar, border, sticky, height) the app header part; a part that owns its header ("table header") keeps it. "just" and "only" keep the scope they name ("just the headers bolder" changes the headings, never the body text). ([#11490](https://github.com/meta/astryx/pull/11490))
 - `astryx experimental theme editor`: a `dark-only` or `light-only` theme keeps both halves of its colors, and its mode is the one the app's `<Theme>` is given. ([#11468](https://github.com/meta/astryx/pull/11468))
+
+  - The theme's colors keep their light and dark values, so a toast, a lightbox or an overlay Core draws in the other mode stays readable; the generated settings module carries only names Core's types take, so the app type-checks.
+  - `set <theme> mode dark-only` (or `light-only`) says to give the app's `<Theme>` `mode="dark"` (or `"light"`), and the wiring after `theme add` says where it goes; the preview passes it already.
+  - Settings for the other mode stay out of a one-mode theme and are named, as before.
+
 - `astryx experimental theme editor new` ends with how to look at the theme after each change: `editor show <name> --png` writes `themes/<name>/preview.png` and `sheet.png` from real components and changes nothing in the app; open the pictures and check them against what was asked. ([#11500](https://github.com/meta/astryx/pull/11500))
 - `astryx experimental theme editor` reads the page-wide tokens of your own `<theme>.theme.ts` however they are written (inline, a const, a spread, `as const` or `satisfies`), from the `defineTheme` the build loads, never a sibling theme in the same file; a value it cannot read in the file comes from the build. The `experimental theme template --overwrite` and `compile --out` help match what they do. ([#11419](https://github.com/meta/astryx/pull/11419))
 - `astryx experimental theme editor`: shorthands by what they set, and part values Core can carry. ([#11419](https://github.com/meta/astryx/pull/11419))
+
+  - A shorthand set after its longhands replaces only the longhands it really sets, read from MDN's data (`overflow` keeps `overflow-wrap`, `transform` keeps `transform-origin`, `flex` keeps `flex-direction`), and a part's `background` keeps reaching its variants when `background-blend-mode` comes later.
+  - A group's shorthand replaces its members' longhands as a part's does, so the later setting wins either way.
+  - On a part whose padding Core writes one variable per side (card), a variant's padding after a side set for every variant is refused, with the commands that work: it would not show.
+  - `--on cards`, `dialogs`, `tabs` and other plurals name the part, with the set command.
+  - Word hints keep the value given: `shadow none` is `box-shadow none`, `rounded 8px` is `corners 8px`, `bold false` is `font-weight normal`.
+
 - `astryx experimental theme editor`: card padding and radius written exactly. ([#11419](https://github.com/meta/astryx/pull/11419))
+
+  - On a part whose padding Core writes one variable per side (card and the other containers), the editor writes each side itself, split as CSS splits a shorthand: `calc(4px + 2px) 8px`, `clamp(12px, 2vw, 24px)` and four different sides reach the part as typed.
+  - A variant's padding after a side set for every variant now shows: the editor writes the variant's side variables too, instead of refusing it.
+  - A card radius of more than one value (`12px 12px 0 0`, `10px / 20px`) gives each corner its own radius; the content that reaches the card's edges takes one radius, the first corner's, and the result says so.
+
 - `astryx experimental theme editor`: variant values win over lifted base values, and card padding keywords written exactly. ([#11419](https://github.com/meta/astryx/pull/11419))
+
+  - A part's base value lifted onto a variant (so Core's own variant rule does not hide it) now goes before the variant's own declarations, so a longhand or shorthand set for the variant wins (`border-color` for the destructive button after a base `border`).
+
 - `astryx experimental theme editor`: padding sides and inner radii that win as written. ([#11419](https://github.com/meta/astryx/pull/11419))
+
+  - A later part padding replaces a side its group set.
+  - A part's own multi-value radius keeps the content's radius it gives over a single radius from a group, a dial or the base theme's lifted onto a variant.
+
 - `astryx experimental theme editor`: the chat composer's box is reached as it is drawn. ([#11419](https://github.com/meta/astryx/pull/11419))
+
+  - `padding` on chat-composer goes to the padding of the visible composer box, with no gap outside it. Background, border, shadow, a side padding or a padding for one density, which would land on the composer's transparent wrapper, are refused with the reason.
+
 - `astryx experimental theme editor`: one padding model for parts whose box reads Core's padding variables. ([#11440](https://github.com/meta/astryx/pull/11440))
+
+  - On card, clickable-card, selectable-card, dialog, drawer, bottom-sheet, section and number-input, each part's padding is worked out per variant and per state from every padding setting in the order made, side by side for each text direction (a physical left is the start in a left-to-right box and the end in a right-to-left one; so is the `padding` shorthand's left), and written to the variables the box reads. The later setting wins in both directions, a variant or a state out-ranks the base, and the content that reaches the box's edges stays in line.
+  - A clickable or selectable card is padded as a card.
+  - A part's base rules come before its variants', and its rules for a direction before its states', whatever order the settings were made in.
+  - `padding` on chat-composer takes one length, as Core reads it inside calc(): a length, a variable such as `var(--spacing-3)` (Core's own default), or `calc()`, `min()`, `max()` or `clamp()` giving one. Several values, a bare number or a percentage is refused with one that works.
+
 - `astryx experimental theme editor`: padding that stays where it is set, and one length wherever Core reads it inside calc(). ([#11453](https://github.com/meta/astryx/pull/11453))
+
+  - Padding set on a clickable or selectable card, or on a card's variant or state, no longer reaches plain cards nested inside it: each side the narrower rule writes is reset on a plain card inside it, so Core's own fallback holds, and the narrower rule writes each side rather than the whole padding.
+  - Every part whose padding Core reads inside calc() (found from Core's own stylesheet: chat-composer, dropdown-menu, context-menu, segmented-control, and an item's inline padding) takes one length there, as chat-composer does, also through a group (`--on menus`).
+  - A padding with `--state` on a card, dialog or a group of containers is now taken: the padding model writes the state's own sides.
+
 - `astryx experimental theme editor`: nested sections that follow their parent, and lengths Core can calculate with. ([#11453](https://github.com/meta/astryx/pull/11453))
+
+  - A section padding the same on every side is written as the section's whole padding, which Core reads after the padding a parent section passes down, so nested sections keep following their parent.
+  - A padding of `0` is written as `0px` on parts where Core calculates with it (card, section, dialog, drawer, bottom-sheet); `initial` and `unset` leave the padding to Core's own default.
+  - A hand edit to the settings file that `set` would refuse is reported by the next `set` with the command that removes it, as `compile` does, instead of being built.
+
 - `astryx experimental theme editor`: a part's padding replaces the base theme's, and every padding writes a length Core can calculate with. ([#11453](https://github.com/meta/astryx/pull/11453))
+
+  - A padding on a card, section, dialog, drawer, bottom-sheet or number-input replaces the base theme's padding there, whichever sides the base theme set: the editor writes it as padding properties Core works out together with the base theme's, where the later one wins.
+  - A clickable or selectable card's padding wins over a card's left or right padding in each text direction.
+  - A plain part nested in a narrower one is reset only on the sides its own rule leaves unset, so a padding in your own theme source on that part still applies.
+  - A zero written any way (`0e0`, `0.0`) is written as `0px`; `initial` and `unset` name the part's own default padding from Core.
+  - A hand-edited padding on one part is reported when a `set` changes padding on another part too.
+
 - `astryx experimental theme editor`: what the editor builds, `compile --check` takes. ([#11468](https://github.com/meta/astryx/pull/11468))
+
+  - Two to four corner radii on card, button, dialog, avatar, banner, popover and the other parts with an inner-corner radius are written as CSS properties Core reads (the whole radius, which Core turns into the content's radius, then each corner), never as a private variable, so `compile` and `compile --check` pass.
+  - A padding on chat-composer is refused with the reason: the box inside its transparent wrapper reads its padding only from a variable of Core's own, which a theme cannot set, and a padding on the wrapper would add a gap outside the box.
+
 - `astryx experimental theme editor`: a padding in your own theme source wins over the editor's on the same part, whatever sides each names. ([#11490](https://github.com/meta/astryx/pull/11490))
+
+  - A padding your `<theme>.theme.ts` sets on a part's plain rule, a variant or a state wins over an editor padding there (`padding 20px --on card` under your own card padding of 6px shows 6px), and the result says so, also right after an edit to that file, before any build.
+  - An editor padding on a part's plain rule that differs by text direction keeps the plain rule's weight, so any variant, your own included, out-ranks it.
+  - `padding inherit` (and `revert`) on parts whose padding Core keeps in its own variables is taken like `initial` and `unset`, and the result names the default it means.
+
 - `astryx experimental theme editor`: the spacing dial keeps the small, medium and large control sizes apart and in order at every step. ([#11490](https://github.com/meta/astryx/pull/11490))
+
+  - A denser spacing still makes controls shorter by the plain scale, but no size meets the one below it: one that would keeps its own step, scaled, above it, and none goes under 24px (`spacing tight` on Neutral gives 24px, 27px and 30px, where small and medium both ended at 24px). The dial's help says control heights follow it.
+
 - `astryx experimental theme editor`: every picture `--png` takes carries the editor's stamp (a PNG text chunk naming the theme), so it is known as the editor's even without its record; a picture an earlier version took, with no record yet, is taken over when it is the editor's 1280-pixel window, and the result says so once. Only links among the files the editor reads or writes are refused, each named with where it points; a link to a file of yours (notes, a mockup) is left alone. A `new` refused for its name leaves out of its suggestion a vibrancy that would change nothing (no color given), and says so. The `--png` help of new, set, show and undo names the picture record and when no picture is taken. ([#11453](https://github.com/meta/astryx/pull/11453))
 - `astryx experimental theme preview`: the route and pages it writes type-check with `noUncheckedIndexedAccess`, `noImplicitOverride` and `noUnusedLocals`. `add --path` refuses a folder name that is no plain URL segment (a space, an accent, `#`, `%`), suggesting a slugged one. Folder names Windows does not allow are refused in full: reserved characters, a trailing dot or space, and `COM¹`-style device names. The free folder a URL conflict suggests is one whose URL no other page serves. `preview app` leaves out a temp file a stopped command left in the theme folder. ([#11419](https://github.com/meta/astryx/pull/11419))
 - `astryx experimental theme preview`: in the preview's nav, only a plain left click switches the page in place; a Ctrl/Cmd, Shift, Alt or middle click opens the page's URL as a link does. The `see` line after an editor change now leads with a look that changes nothing in the app (the editor's own `preview.html`, current after every change it renders, and `--png`), then the in-app preview page when there is one; adding the preview to the app comes last, as an option. ([#11490](https://github.com/meta/astryx/pull/11490))
@@ -116,7 +283,17 @@
 - `astryx experimental theme preview`: the base theme's fonts stylesheet is imported only while the theme's build still names a family it loads, so a theme on `font system` or its own fonts fetches nothing it does not use. `preview add` names every page it writes again, the Colors page included, when the preview switches theme. ([#11419](https://github.com/meta/astryx/pull/11419))
 - `astryx experimental theme preview`: `add --path` refuses an intercepting route folder (`(.)x`, `(..)x`, `(..)(..)x`, `(...)x`), where a page breaks the whole app. The preview loads the fonts stylesheet of the theme it is built on (Figtree for neutral), and so does the `preview app` starter, so the Overview shows the family it names. `preview list` text marks a page whose file is gone as missing, matching `--json`. ([#11419](https://github.com/meta/astryx/pull/11419))
 - `astryx experimental theme`: padding sides by direction, a failed show leaves the folder as it was, and `how` reads "not dark enough". ([#11419](https://github.com/meta/astryx/pull/11419))
+
+  - On dropdown-menu, context-menu and segmented-control, one logical padding side is written for each direction (the left in a left-to-right box, the right in a right-to-left one), so it changes that side only; under a state it is one rule per direction (`:hover:dir(ltr)`), and a later padding or physical side replaces it.
+  - `show` whose render fails puts back every output it touched, removing one it made new and restoring the palette files in `tokens/`.
+  - `how "not dark enough"` / `"not light enough"` asks for darker or lighter, not for one mode.
+
 - `astryx experimental theme editor`: a card's physical padding side beside others, a failed show beside your own folders, and the busy-lock suggestion from the API. ([#11419](https://github.com/meta/astryx/pull/11419))
+
+  - A card `padding-left` or `padding-right` set beside another side, as a keyword (`initial`) or as math (`calc()`), reaches that side.
+  - `show` whose render fails leaves a folder you put in `tokens/` alone.
+  - When another command holds the theme, the suggestion to run again names the call's own command with every option it got (`--only`, `--like` and each dial of `new`, `--png`), never the arguments of the process the API runs in; a preview command waiting on another names `preview list`.
+
 - `astryx experimental theme editor`: every `set` a refusal suggests is now checked the way `set` checks it, without writing anything, and a suggestion `set` would refuse is left out. Suggestions carry what was asked instead of a fixed example. `headings light --on heading` offers `headings light` and weight 300 on one level. `text-size large --on card` offers that size on the card. A number token reads the number meant (`700px` is 700, `1,5` is 1.5, `calc(1rem+2px)` gets its spaces). A word dial given a number offers its own words, or the nearest `type` preset for a scale ratio. An invalid color is never copied into the text color token. A color property refuses a `var()` fallback inside `color-mix()` that is not a color. `how "more washed out colors"` lowers vibrancy. ([#11419](https://github.com/meta/astryx/pull/11419))
 - Icon sets: a project picks one look for every icon. `astryx experimental icon use <main> --variant <variant>` writes `experimental.iconVariant` beside `experimental.iconSet`, in one write, and refuses a variant the main set does not declare; without `--variant` it removes the key. Each set in the list draws its variant of that name, or its default look when it declares none, and the receipt (`icon.use`) adds `variant`, `previousVariant`, `looks`, and `themeMap`. A copied template imports each icon in that look where its set has it, reports the look as `icons.variant`, and moves an icon a template imports from the main set's own library, or from a listed set in another look (`by: 'variant'`), to that look. A set's generated module also writes a theme map for each other look an icon draws (`themeIconsFilled`), and `integration check` holds it to `map`. `astryx doctor` fails when the main set does not declare the variant, and `experimental icon --list` shows the variant and each set's look. A CLI before 0.7.16 refuses an astryx.config that sets `experimental.iconVariant`, so `use` warns when the project's CLI range admits one. An icon-set package whose generated module an earlier CLI wrote, and whose icons draw a look other than the default, fails `integration check` until it runs `experimental icon add --variant <variant> --from <module> --all` again; the finding names that run. Projects that do not set `experimental.iconSet` see no change. ([#11499](https://github.com/meta/astryx/pull/11499))
 - `astryx experimental theme editor` counts a base theme as installed only when the project installs it, in its `node_modules` folders or through Yarn Plug'n'Play, as the app's bundler sees it. A theme found only through `NODE_PATH` or Node's global folders is no longer taken as installed: `new` and `set base` offer to install it instead of writing a theme the app could not build. ([#11444](https://github.com/meta/astryx/pull/11444))
@@ -174,128 +351,6 @@
 - MetadataList's guidance now says that assistive technology reads each label with its value, and that the title does not name the list or add a heading. Its prop docs now list `className` and `style`, and the `label` docs say that `position: 'start'` places a label at the inline start of its value, not on the left. ([#11391](https://github.com/meta/astryx/pull/11391))
 - `astryx docs styling/tokens-and-setup` has a Next.js with webpack section. It shows `experimental.optimizePackageImports: ['@astryxdesign/core']` in `next.config.mjs` and recommends a component entry, such as `@astryxdesign/core/Button`, in Server Components. Without either, a webpack build ships every Astryx client component to a page whose Server Component imports from the package root. The theme preview starter app that `astryx experimental theme preview app` copies has the same setting. No API changes. ([#11305](https://github.com/meta/astryx/pull/11305))
 - A new example block shows `useTableColumnsVirtualization`: a 121-column Table with a pinned first column that mounts only the columns near its horizontal scroll position. ([#11014](https://github.com/meta/astryx/pull/11014))
-
-#### Other Changes
-
-- The editor also reads the current specifications' grammar from `@csstools/css-syntax-patches-for-csstree` (a new dependency, pinned). It adds about 0.1 MB unpacked to the install (one 79 KB JSON file, no dependencies of its own), and loads only when the editor checks a CSS value; no other command loads it, and startup is unchanged. A property MDN marks obsolete but the specifications still define, as browsers ship it, is taken: `font-stretch`, so the font shorthand split names a command that works.
-- A negative number the current grammar ranges at 0 or more is refused on a part (`line-height -1`, `gap -2px`), with the positive value as the suggestion.
-- A `color-mix()` share outside 0% to 100% is refused for tokens, part colors and the color dials, and the mix with the share at its limit is suggested.
-- A font size or weight given alone to `font` on a part (`small`, `1rem`, `700`) is suggested as `font-size` or `font-weight`, never as a family.
-- A relative color that keeps its channels (`rgb(from red r g b)`) and `light-dark()` with the same color twice are read as that color. A `color-mix()` in a space the editor does not mix in, or a relative color that changes its channels, says so and suggests the nearest color it can work out.
-- A negative percentage the current CSS grammar ranges at 0 or more is refused on a part (`line-height -50%`, `gap -10%`).
-- A `color-mix()` share may be written as any CSS percentage (`5e1%`, `+50%`, `calc(50%)`).
-- Line-height tokens (`--text-*-leading`) take a number with no unit, as Core multiplies them by a text size; `1.5em` and `150%` suggest `1.5`.
-- `headings` in other letters or as a weight number suggests the word meant (`BOLD` is bold), and a weight number the nearest weight rung (`800` and `900` are heavy), never a lighter one.
-- A whole-theme font under fonts set for body and headings says which role fonts it sits under and how to clear them.
-- A font one of the editor's own presets leads with (Comic Sans MS) gets no "must load" note.
-- `text-size more` or `less` at the end of the dial's range suggests the base font size token, never a size the dial refuses.
-- A CSS font value on a part made of keywords (`italic bold`, `bold 1rem`) is split into its longhands, never a family; after the size, the rest is the family, as CSS reads it (`1rem bold` is size 1rem with the family bold).
-- Only the tokens Core's stylesheet multiplies by a size inside calc() (the line heights) refuse a unit; weight tokens take the font-weight keywords again (`bold`, `normal`), so a theme saved with one stays editable.
-- Numbers are read as the browser reads them: `1.5e0`, `+1.5`, `15E-1` and `1.5EM` are numbers, and a `color-mix()` share like `50.%` is refused.
-- A CSS font value on a part with a size and line height (`1rem/1.5`) or a size written as math (`calc(1rem + 2px)`) is split into its longhands; a part named twice (`bold bold`) is refused, never written as a family.
-- Heading and text weights (the `headings` weight dial, `--text-*-weight` tokens) now apply on phones too: they are written into the phone rules the base theme sets, as font families are.
-- A token set to `var(--x, <fallback>)` checks the fallback as the token's own kind.
-- Size tokens and color channels read numbers as CSS does: `1.px` and `rgb(255. 0 0)` are refused (with `1px` suggested where that is all), and `+4px` and `4e+1px` are taken.
-- `vibrancy` suggests the value meant (`MORE` is more, `70%` and `7e1` are 70), and no value when the theme has no color to saturate.
-- The `headings` result lists its weights in words, not `[object Object]`.
-- The whole-theme and role `font` take a family alone: a size, a weight or a whole CSS font value is refused with the family, and the base size or headings command where it applies.
-- A part value's `var()` fallbacks are checked against the property (`padding 'var(--nope, red)'` is refused), as token fallbacks are.
-- A saved `font` dial that `set` would refuse (a CSS keyword such as `inherit`, a size, a whole CSS font value) is reported with the commands that fix it, and never built.
-- A size one slip from a valid one suggests that size: `16 px` and `16pxx` suggest `16px`, `1,5rem` suggests `1.5rem`. `text-size` suggests the nearest size it takes: `20 px` and `125%` are 20, and a size past either end is that end.
-- An exact token refused only for how its value was typed (a trailing `;`, a comment, quotes around it, full-width `＃`) suggests that same value, not a stock one.
-- A font name that needs quotes (`Font Awesome 6 Free`) on a font token or a part's `font-family` is suggested quoted, as the font dial writes it.
-- A fractional `text-size` (`15.5`) is saved as the whole pixel the type scale builds, and the result says so.
-- "The same accent in light and dark" sets both modes, and a trailing "and dark mode only" still makes the theme dark-only.
-- A step that cannot move (badges already fully round) says so, with no command that would be refused.
-- Questions about what is set now or the choices ("how round are the cards now?", "what are the available corner values") get `show` and the lookup, never a change.
-- "Remove the focus outline" sets its width to 0 and says what that costs; "outline offset" and "focus ring offset" set `--focus-outline-offset`.
-- "Decrease the radius by 2px" moves the corners from the theme's own radius now (its corners setting applied); a change by an amount on a part points to its current value instead of setting the amount.
-- "Caret color" sets `caret-color`; placeholder text and the selection highlight say they have no setting.
-- Screen-size, print and device conditions ("below 600px", "on tablets", "the print version") say the editor has no such conditions, instead of reading "600px" as a radius or "tablets" as tables.
-- "Text less black" lightens the text.
-- Each item of a list keeps its own values: "headings 32px bold, body 16px regular, captions 12px" sets the headings and the body as asked, with no contradiction, and "captions" (no part) takes nothing from its neighbors.
-- "Don't touch dark mode, make the accent orange" changes light mode only.
-- `cursor: pointer` sets the CSS cursor; only "caret" or "cursor color" is the text cursor's color.
-- A device or print word ("cramped on mobile", "when printing") no longer drops the ask: the rest is answered, with a note that the editor has no such conditions.
-- A question about one part's state or group ("which parts are in the inputs group", "how round are the cards now?") gets that part's lookup as well as `show`.
-- "Not so round" is one step less; "avoid pure black text" picks a near-black; "flat cards, not flat buttons" changes only the cards.
-- `NaNpx` and `Infinitypx` are refused as not numbers; `1e3px` is 1000px.
-- Labels are the field label part (a checkbox's or switch's own label when named); "visited links" says a link has no visited state set can name.
-- Tailwind `border-2` is a 2px border width and `rounded-full` a pill; `.btn-primary { … }` is the primary button only.
-- "Remove all my changes" takes back every setting; a question in a script how cannot read gets no guess.
-- An amount with a comparative ("2px rounder", "2px sharper", "8px larger") is a change from the value now: the theme's corners move from its own current radius (its settings applied, not the base theme's), and a part's corners move from the radius token it reads. Anywhere else ("4px wider") how says set takes the new value instead of setting the amount.
-- "All corners like the buttons" sets every other radius token to the one buttons read.
-- "Except in dark mode", "but not in dark mode" and "leave dark mode alone" change light mode only; "not pure black" is a near-black and "not pure white" a near-white.
-- "Undo the corners" on a theme that sets no corners says there is nothing to undo.
-- "animation-duration 0s" is 0ms; "translateY(-2px) on hover" is a transform on hover; "shrink headings by 20%" says set takes the new value; "fade in tooltips" says the tooltip has no motion of its own.
-- "Why are my buttons black" is a lookup, never a change; "is my theme valid", "how many dials" and "list every change" get the command that answers them.
-- "radius sm/lg", "setRadius(4)" and "½rem" are read as values; "#22c55e in light, #4ade80 in dark" sets the accent for each mode; two-word CSS color names ("midnight blue") are the CSS color.
-- "Text on the accent is hard to read" sets the on-accent text color that reads in each mode; "5 lines tall text box" sets the text area's height in lines; "dropdown shadow" is the dropdown's menu; "checkboxes green" is the checked fill.
-- When a question is a question ("is the card too round?"), says "tell me" or "but not too", or asks to "stop" something, how gives the lookup and asks for the change in words instead of guessing a write; "explain X" is the lookup of X.
-- "I hate the shadows", "skip …" and "not a fan of …" ask for none of it when that is the whole ask.
-- A change on one member of a group ("the text area") carries `--only`, so it does not reach the whole group.
-- "3 pixels sharper", "take 2px off" and "remove 4px from" move the value down from where it is.
-- "darkmode", `html.dark .card {…}` and `@media (prefers-color-scheme: dark) {…}` scope the change to dark mode.
-- "Take back the shadow change" and "shadows like before" undo only what the theme sets, else say there is nothing to take back.
-- "Pointer cursor on hover" sets the cursor; "opened accordion title" is the open state; "squre" and "eckiger" are square; "cards look flat" adds depth; "darker while being clicked" is the pressed state.
-- A clause that is a question, a "tell me", a "stop …" or a "don't touch …" holds back only itself: "stop making the buttons so round, make them square" makes them square, "don't explain, just set the accent to crimson" sets crimson, "don't touch spacing, just make text larger" changes only the text. A whole question ("can the cards be rounder?", "are buttons too round?!") gets the lookup; "can you make …" is an ask.
-- Questions without a question mark ("are my corners too round", "does it use a shadow on cards") are lookups; suggestions ("why not square buttons", "what about a teal accent", "is there a way to …") are asks. Sarcasm ("yeah, because …", "just what I wanted", "…, nice") gets no write.
-- "Enough with X", "quit with X", "nobody asked for X", "who needs X", "loathe X", "X 👎" and "❌ X" ask for none of X; "I hate it" after a description leaves the description as the ask.
-- "Too airy" is tighter, "headings too thin" bolder, "not bright enough" brighter.
-- "Keep the dark mode accent, change only light to violet" sets the light accent; a light-only or dark-only theme only when the ask is about the theme's modes.
-- "Links not underlined until hover" removes the underline and adds it on hover.
-- `undo` leaves out what this Core refuses in the step it goes back to. A saved setting that names no design token or CSS property, or a property with no part, is reported.
-- `show` builds an own change to `<name>.theme.ts`, and names a theme source that no longer builds. Its colors say where the theme source wins over the generated shade.
-- A setting covered by a later one that spreads over its part is named in `set` and `show`.
-- `corners 2e1px` and `+4px` are sizes. A state is refused for padding on a part whose padding Core sets from the plain value only. `--state disabled` also matches a wrapper whose input inside is the one disabled. `how <part>` lists the states `set` takes there.
-- `new` suggestions keep every option given; `--like` twice is refused. More suggestions run as printed in JSON. The merge snippet's paths start from the generated themes module's folder. The help names `experimental theme compile` to build an editor theme again.
-- `experimental theme template … --overwrite` never replaces a theme editor file under another spelling of its name (`themes/t/T.theme.ts` on a case-insensitive disk, or through a link).
-- `undo <theme> mode` or `base` on a theme with no saved change says so, instead of claiming its history does not reach back; after every step is undone it says the value was never changed.
-- `undo <theme> headings <word>` with only the other half set names the half that is set.
-- A mistyped `base` suggests only a base this project has installed, and says when the name is a theme made here (which cannot be a base).
-- `undo <thing> <value>` matches the saved value in either quote style and with any spacing around `/`.
-- The theme's colors keep their light and dark values, so a toast, a lightbox or an overlay Core draws in the other mode stays readable; the generated settings module carries only names Core's types take, so the app type-checks.
-- `set <theme> mode dark-only` (or `light-only`) says to give the app's `<Theme>` `mode="dark"` (or `"light"`), and the wiring after `theme add` says where it goes; the preview passes it already.
-- Settings for the other mode stay out of a one-mode theme and are named, as before.
-- A shorthand set after its longhands replaces only the longhands it really sets, read from MDN's data (`overflow` keeps `overflow-wrap`, `transform` keeps `transform-origin`, `flex` keeps `flex-direction`), and a part's `background` keeps reaching its variants when `background-blend-mode` comes later.
-- A group's shorthand replaces its members' longhands as a part's does, so the later setting wins either way.
-- On a part whose padding Core writes one variable per side (card), a variant's padding after a side set for every variant is refused, with the commands that work: it would not show.
-- `--on cards`, `dialogs`, `tabs` and other plurals name the part, with the set command.
-- Word hints keep the value given: `shadow none` is `box-shadow none`, `rounded 8px` is `corners 8px`, `bold false` is `font-weight normal`.
-- On a part whose padding Core writes one variable per side (card and the other containers), the editor writes each side itself, split as CSS splits a shorthand: `calc(4px + 2px) 8px`, `clamp(12px, 2vw, 24px)` and four different sides reach the part as typed.
-- A variant's padding after a side set for every variant now shows: the editor writes the variant's side variables too, instead of refusing it.
-- A card radius of more than one value (`12px 12px 0 0`, `10px / 20px`) gives each corner its own radius; the content that reaches the card's edges takes one radius, the first corner's, and the result says so.
-- A part's base value lifted onto a variant (so Core's own variant rule does not hide it) now goes before the variant's own declarations, so a longhand or shorthand set for the variant wins (`border-color` for the destructive button after a base `border`).
-- A later part padding replaces a side its group set.
-- A part's own multi-value radius keeps the content's radius it gives over a single radius from a group, a dial or the base theme's lifted onto a variant.
-- `padding` on chat-composer goes to the padding of the visible composer box, with no gap outside it. Background, border, shadow, a side padding or a padding for one density, which would land on the composer's transparent wrapper, are refused with the reason.
-- On card, clickable-card, selectable-card, dialog, drawer, bottom-sheet, section and number-input, each part's padding is worked out per variant and per state from every padding setting in the order made, side by side for each text direction (a physical left is the start in a left-to-right box and the end in a right-to-left one; so is the `padding` shorthand's left), and written to the variables the box reads. The later setting wins in both directions, a variant or a state out-ranks the base, and the content that reaches the box's edges stays in line.
-- A clickable or selectable card is padded as a card.
-- A part's base rules come before its variants', and its rules for a direction before its states', whatever order the settings were made in.
-- `padding` on chat-composer takes one length, as Core reads it inside calc(): a length, a variable such as `var(--spacing-3)` (Core's own default), or `calc()`, `min()`, `max()` or `clamp()` giving one. Several values, a bare number or a percentage is refused with one that works.
-- Padding set on a clickable or selectable card, or on a card's variant or state, no longer reaches plain cards nested inside it: each side the narrower rule writes is reset on a plain card inside it, so Core's own fallback holds, and the narrower rule writes each side rather than the whole padding.
-- Every part whose padding Core reads inside calc() (found from Core's own stylesheet: chat-composer, dropdown-menu, context-menu, segmented-control, and an item's inline padding) takes one length there, as chat-composer does, also through a group (`--on menus`).
-- A padding with `--state` on a card, dialog or a group of containers is now taken: the padding model writes the state's own sides.
-- A section padding the same on every side is written as the section's whole padding, which Core reads after the padding a parent section passes down, so nested sections keep following their parent.
-- A padding of `0` is written as `0px` on parts where Core calculates with it (card, section, dialog, drawer, bottom-sheet); `initial` and `unset` leave the padding to Core's own default.
-- A hand edit to the settings file that `set` would refuse is reported by the next `set` with the command that removes it, as `compile` does, instead of being built.
-- A padding on a card, section, dialog, drawer, bottom-sheet or number-input replaces the base theme's padding there, whichever sides the base theme set: the editor writes it as padding properties Core works out together with the base theme's, where the later one wins.
-- A clickable or selectable card's padding wins over a card's left or right padding in each text direction.
-- A plain part nested in a narrower one is reset only on the sides its own rule leaves unset, so a padding in your own theme source on that part still applies.
-- A zero written any way (`0e0`, `0.0`) is written as `0px`; `initial` and `unset` name the part's own default padding from Core.
-- A hand-edited padding on one part is reported when a `set` changes padding on another part too.
-- Two to four corner radii on card, button, dialog, avatar, banner, popover and the other parts with an inner-corner radius are written as CSS properties Core reads (the whole radius, which Core turns into the content's radius, then each corner), never as a private variable, so `compile` and `compile --check` pass.
-- A padding on chat-composer is refused with the reason: the box inside its transparent wrapper reads its padding only from a variable of Core's own, which a theme cannot set, and a padding on the wrapper would add a gap outside the box.
-- A padding your `<theme>.theme.ts` sets on a part's plain rule, a variant or a state wins over an editor padding there (`padding 20px --on card` under your own card padding of 6px shows 6px), and the result says so, also right after an edit to that file, before any build.
-- An editor padding on a part's plain rule that differs by text direction keeps the plain rule's weight, so any variant, your own included, out-ranks it.
-- `padding inherit` (and `revert`) on parts whose padding Core keeps in its own variables is taken like `initial` and `unset`, and the result names the default it means.
-- A denser spacing still makes controls shorter by the plain scale, but no size meets the one below it: one that would keeps its own step, scaled, above it, and none goes under 24px (`spacing tight` on Neutral gives 24px, 27px and 30px, where small and medium both ended at 24px). The dial's help says control heights follow it.
-- On dropdown-menu, context-menu and segmented-control, one logical padding side is written for each direction (the left in a left-to-right box, the right in a right-to-left one), so it changes that side only; under a state it is one rule per direction (`:hover:dir(ltr)`), and a later padding or physical side replaces it.
-- `show` whose render fails puts back every output it touched, removing one it made new and restoring the palette files in `tokens/`.
-- `how "not dark enough"` / `"not light enough"` asks for darker or lighter, not for one mode.
-- A card `padding-left` or `padding-right` set beside another side, as a keyword (`initial`) or as math (`calc()`), reaches that side.
-- `show` whose render fails leaves a folder you put in `tokens/` alone.
-- When another command holds the theme, the suggestion to run again names the call's own command with every option it got (`--only`, `--like` and each dial of `new`, `--png`), never the arguments of the process the API runs in; a preview command waiting on another names `preview list`.
 
 #### Contributors
 
