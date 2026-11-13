@@ -84,28 +84,36 @@ import type {
 registerEnglishFallback(english);
 
 /**
- * The handle's side, for every pointer: a small control's size. A finger's
- * 44 px target is an invisible coarse-only hit layer, clamped so it never
- * takes from a neighbour (utils/hitArea.ts), not a bigger handle.
+ * The handle is its grip alone, the `sm` icon: 16 px, its share of its row.
+ * SYNC: List/ListItem.tsx, Lab ListInput and TransferList (REORDER_HANDLE_SIZE).
  */
-const HANDLE_SIZE = 28;
-/** The grip's side, the `sm` icon size: the handle's share of its row's height. */
-const GRIP_SIZE = '1rem';
+const HANDLE_SIZE = 16;
+/**
+ * The handle's target with a fine pointer, px: an invisible square around the
+ * grip, the WCAG 2.5.8 minimum. A finger's 44 px target is a coarse-only hit
+ * layer, clamped so it never takes from a neighbour (utils/hitArea.ts).
+ */
+const TARGET_SIZE = 24;
+/** How far the target reaches past the grip on each side, px. */
+const TARGET_REACH = (TARGET_SIZE - HANDLE_SIZE) / 2;
 /**
  * How far a hanging handle sits outside its row's content, px: its own side
- * and a small clearance. The grip's edge then sits 8 px from the content.
+ * and a clearance. The grip's edge then sits 8 px from the content.
  * SYNC: List/List.tsx REORDER_GUTTER.
  */
-const REORDER_HANDLE_HANG = HANDLE_SIZE + 2;
+const REORDER_HANDLE_HANG = HANDLE_SIZE + 8;
 /** The hanging handle's inner margin: it gives back the row's gap. */
 const HANG_GIVE_BACK = `calc(${REORDER_HANDLE_HANG - HANDLE_SIZE}px - ${spacingVars['--spacing-2']})`;
+/**
+ * A handle in its row steps in from a row edge closer than its target's
+ * reach, as a flush row's is, so the list never clips its target or ring.
+ */
+const EDGE_GUARD = `max(0px, calc(${TARGET_REACH}px - var(--_item-inset-inline, ${TARGET_REACH}px)))`;
 
 const styles = stylex.create({
   handle: {
-    // Centred on its row, with the grip in its middle. It takes only the
-    // grip's height in the row's layout (the negative block margins). So a
-    // compact row stays compact. The handle and its focus ring reach past
-    // that into the row's padding, never past it.
+    // Centred on its row: the grip alone, so a compact row stays compact.
+    // Its target, fill and focus ring reach past it into the row's padding.
     position: 'relative',
     alignSelf: 'center',
     display: 'flex',
@@ -114,24 +122,23 @@ const styles = stylex.create({
     flexShrink: 0,
     width: HANDLE_SIZE,
     height: HANDLE_SIZE,
-    marginBlock: `calc((${GRIP_SIZE} - ${HANDLE_SIZE}px) / 2)`,
     padding: 0,
     borderWidth: 0,
     borderRadius: 4,
-    // The ring sits inside the handle, so a flush row's list never clips it.
+    backgroundColor: 'transparent',
+    // The ring's outer edge is the target's edge, not the grip's: room for
+    // it inside the row and clear of the label.
     outlineOffset: {
       default: '0',
-      ':focus-visible': `calc(-1 * ${focusVars['--focus-outline-width']})`,
+      ':focus-visible': `calc(${TARGET_REACH}px - ${focusVars['--focus-outline-width']})`,
     },
-    // A bare glyph: no hover or press fill of its own. Only reorder mode
-    // fills it, as a pressed toggle button; in forced colors, the system's
-    // highlight.
-    backgroundColor: {
-      default: 'transparent',
-      ':is([aria-pressed="true"])': {
-        default: colorVars['--color-overlay-pressed'],
-        '@media (forced-colors: active)': 'Highlight',
-      },
+    // The target: an invisible square round the grip, square so a pointer
+    // hits it to its corners. Only reorder mode fills it, as a pressed toggle
+    // button (`pressed`).
+    '::before': {
+      content: '""',
+      position: 'absolute',
+      inset: -TARGET_REACH,
     },
     forcedColorAdjust: {
       default: null,
@@ -160,6 +167,17 @@ const styles = stylex.create({
       '@media (pointer: coarse)': 'transparent',
     },
   },
+  // Reorder mode's fill, in the target; in forced colors, the system's
+  // highlight.
+  pressed: {
+    '::before': {
+      borderRadius: 4,
+      backgroundColor: {
+        default: colorVars['--color-overlay-pressed'],
+        '@media (forced-colors: active)': 'Highlight',
+      },
+    },
+  },
   // Where it shows only on hover or focus (no coarse pointer), it hangs
   // outside the row's content and takes no width, so the content keeps its
   // place. The inner margin gives back the row's gap. Under a coarse pointer
@@ -168,7 +186,7 @@ const styles = stylex.create({
   hangAtStart: {
     marginInlineStart: {
       default: -REORDER_HANDLE_HANG,
-      '@media (any-pointer: coarse)': 0,
+      '@media (any-pointer: coarse)': EDGE_GUARD,
     },
     marginInlineEnd: {
       default: HANG_GIVE_BACK,
@@ -182,13 +200,17 @@ const styles = stylex.create({
     },
     marginInlineEnd: {
       default: -REORDER_HANDLE_HANG,
-      '@media (any-pointer: coarse)': 0,
+      '@media (any-pointer: coarse)': EDGE_GUARD,
     },
   },
-  // In its place at the row's end, the handle ends the row, as an end slot
-  // would.
+  // In its place at the row's start or end. At the end it ends the row, as
+  // an end slot would.
+  inRowAtStart: {
+    marginInlineStart: EDGE_GUARD,
+  },
   inRowAtEnd: {
     marginInlineStart: 'auto',
+    marginInlineEnd: EDGE_GUARD,
   },
   // Presses on the grip land on the handle.
   grip: {
@@ -439,11 +461,14 @@ export function ListReorderHandle({
           : [revealStyles.revealLayoutPreserved, styles.reveal],
         reorderingHandleStyles.cursor,
         touchHitAreaStyles.layer,
-        isAlwaysVisible
-          ? isAtEnd && styles.inRowAtEnd
+        isPressed && styles.pressed,
+        isAlwaysVisible || isAfterMarker
+          ? isAtEnd
+            ? styles.inRowAtEnd
+            : styles.inRowAtStart
           : isAtEnd
             ? styles.hangAtEnd
-            : !isAfterMarker && styles.hangAtStart,
+            : styles.hangAtStart,
         rowAlign === 'start' && styles.inRowStart,
         rowAlign === 'first-line' && styles.inRowFirstLine,
       )}>

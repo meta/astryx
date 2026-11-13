@@ -185,16 +185,19 @@ export interface ListItemProps extends BaseProps<HTMLLIElement> {
 // =============================================================================
 
 // A row's inline padding before a handle's room: its inset, or for `bleed`
-// the container's padding when that is larger (styles.edgeBleed).
+// the container's padding when that is larger (styles.edgeBleed). A handle
+// in its row keeps at least 4 px from the row's edge (its target's reach).
 const INSET = 'var(--_item-inset-inline)';
+const HANDLE_INSET = 'max(var(--_item-inset-inline), 4px)';
 const BLEED_START =
   'max(var(--container-padding-inline-start, 0px), var(--_item-inset-inline))';
 const BLEED_END =
   'max(var(--container-padding-inline-end, 0px), var(--_item-inset-inline))';
-// The same padding with a handle's room: its side and the row's gap after it.
-const INSET_ROOM = `calc(${INSET} + 28px + ${spacingVars['--spacing-2']})`;
-const BLEED_START_ROOM = `calc(${BLEED_START} + 28px + ${spacingVars['--spacing-2']})`;
-const BLEED_END_ROOM = `calc(${BLEED_END} + 28px + ${spacingVars['--spacing-2']})`;
+// The same padding with a handle's room: its side (16 px, its grip alone)
+// and the row's gap after it. SYNC: List/ListReorderHandle.tsx HANDLE_SIZE.
+const INSET_ROOM = `calc(${HANDLE_INSET} + 16px + ${spacingVars['--spacing-2']})`;
+const BLEED_START_ROOM = `calc(max(${BLEED_START}, 4px) + 16px + ${spacingVars['--spacing-2']})`;
+const BLEED_END_ROOM = `calc(max(${BLEED_END}, 4px) + 16px + ${spacingVars['--spacing-2']})`;
 const COARSE = '@media (any-pointer: coarse)';
 
 // The room a row that stays put keeps where its neighbours' handles sit in

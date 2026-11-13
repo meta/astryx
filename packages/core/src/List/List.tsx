@@ -195,8 +195,9 @@ export interface ListProps extends BaseProps<
 // =============================================================================
 
 /**
- * The room a reorderable list keeps before its rows for their hanging
- * handles, px. SYNC: List/ListReorderHandle.tsx REORDER_HANDLE_HANG.
+ * The room a reorderable list keeps beside its rows for their hanging
+ * handles, px: the hang, then the handle's target and focus ring past it.
+ * SYNC: List/ListReorderHandle.tsx REORDER_HANDLE_HANG and TARGET_REACH.
  */
 const REORDER_GUTTER = 30;
 
