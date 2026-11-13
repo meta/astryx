@@ -104,6 +104,7 @@ import {
 } from './_settings.mjs';
 import {isColorToken} from './_compiler.mjs';
 import {
+  trimInsideQuotes,
   colorPair,
   otherSettingLabel,
   familiesOf,
@@ -675,7 +676,11 @@ export function storedProblems(ctx, slug, data, skip = '') {
   // it.
   for (const s of data.settings) {
     if (replaced(s) || typeof s.value !== 'string') continue;
-    const clean = normalValueText(s.value);
+    // Read as typed input is (a font family's quotes trimmed too), so the
+    // line offered is the value set would save.
+    const clean = /font/i.test(s.thing)
+      ? trimInsideQuotes(normalValueText(s.value))
+      : normalValueText(s.value);
     if (clean !== s.value) {
       // Name what is wrong: invisible spaces, or quotes around the value
       // CSS does not read (a curly quote inside a quoted string is fine,
