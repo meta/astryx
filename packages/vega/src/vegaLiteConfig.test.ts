@@ -307,6 +307,49 @@ describe('theme, caller and spec config through Vega-Lite', () => {
     expect(config.axisRight?.gridWidth).toBe(2);
   });
 
+  it("keeps the caller's channel-level key on every axis of a dual-axis chart", () => {
+    const dual = {
+      $schema: 'https://vega.github.io/schema/vega-lite/v6.json',
+      data: {
+        values: [
+          {a: 1, b: 1, c: 5},
+          {a: 2, b: 3, c: 2},
+        ],
+      },
+      layer: [
+        {
+          mark: 'line',
+          encoding: {
+            x: {field: 'a', type: 'quantitative'},
+            y: {field: 'b', type: 'quantitative'},
+          },
+        },
+        {
+          mark: 'line',
+          encoding: {
+            x: {field: 'a', type: 'quantitative'},
+            y: {field: 'c', type: 'quantitative', axis: {orient: 'right'}},
+          },
+        },
+      ],
+      resolve: {scale: {y: 'independent'}},
+    } as TopLevelSpec;
+    const compiled = compile(
+      dual,
+      withAstryxConfig(
+        echo,
+        {config: {axisY: {domain: true}, axisRight: {domain: true}}},
+        dual,
+      ),
+    );
+    const config = compiled.spec.config as Record<
+      string,
+      Record<string, unknown> | undefined
+    >;
+    expect(config.axisLeft?.domain).not.toBe(false);
+    expect(config.axisRight?.domain).toBe(true);
+  });
+
   it('skips inline data when it reads the drawn axes', () => {
     const many = {
       ...spec,

@@ -316,11 +316,12 @@ function withoutOverriddenAxisValues(
     if (!block) {
       continue;
     }
+    // Vega ranks the orient blocks above `axisX` and `axisY`, so a value
+    // moved to an orient block would outrank a key set there.
     const everywhere = new Set([
       ...setIn('axis'),
-      ...(isQuantitative
-        ? [...setIn(CHANNEL_BLOCK[channel]), ...setIn('axisQuantitative')]
-        : []),
+      ...setIn(CHANNEL_BLOCK[channel]),
+      ...(isQuantitative ? setIn('axisQuantitative') : []),
     ]);
     const orients = [...drawn[channel].entries()].filter(
       ([, types]) => !isQuantitative || types.has('quantitative'),
