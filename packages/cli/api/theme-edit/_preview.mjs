@@ -31,7 +31,15 @@ import {
   renderGenerated,
 } from './_parts.mjs';
 import {OVERVIEW_SECTIONS} from './_overview.mjs';
-import {camel, fontPackages, modesOf, themeFiles, shown} from './_settings.mjs';
+import {
+  FOLDER_JUNK,
+  folderIsEmpty,
+  camel,
+  fontPackages,
+  modesOf,
+  themeFiles,
+  shown,
+} from './_settings.mjs';
 import {writeWhole} from './_palette.mjs';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
 import {importPathOf, installLine} from './_project.mjs';
@@ -1469,4 +1477,174 @@ function chromeBinary() {
     }
   }
   return null;
+}
+
+/** The first line of every file the editor writes into a theme's app copy. */
+export const APP_COPY_MARK = 'Written by `astryx experimental theme editor`';
+
+/**
+ * The app's copy of an editor theme: a standard local theme in
+ * src/themes/<theme>/ (a descriptor, a source that re-exports the built
+ * module, the built module, its stylesheet and font stylesheet), the shape
+ * `astryx theme add <theme>` reads, so the theme goes into the app with the
+ * stable theme commands. It is written again after every build of the
+ * theme, never edited by hand. A folder there that is not the editor's own
+ * copy is left alone: returns null then, else the folder.
+ * The built module and stylesheet are written whole: a local theme's source
+ * may import only files inside its own folder.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {string | null}
+ */
+export function writeAppCopy(ctx, slug, data) {
+  return writeAppCopyAt(
+    ctx.project.cwd,
+    slug,
+    themeImports(
+      ctx,
+      slug,
+      data,
+      path.join(ctx.project.cwd, 'src', 'themes', slug),
+    ).css.slice(1),
+  );
+}
+
+/**
+ * {@link writeAppCopy} with the font stylesheets given, or null to keep the
+ * copy's own (a compile, which changes no setting).
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {string[] | null} fontsCss
+ * @returns {string | null}
+ */
+export function writeAppCopyAt(cwd, slug, fontsCss) {
+  const f = themeFiles(cwd, slug);
+  const dir = path.join(cwd, 'src', 'themes', slug);
+  const name = `${camel(slug)}Theme`;
+  const first = !fs.existsSync(path.join(dir, `${name}.doc.mjs`));
+  if (!fs.existsSync(f.js) || !fs.existsSync(f.css)) return null;
+  // The copy's source, as the stable build's header names it.
+  const source = `src/themes/${slug}/${name}.ts`;
+  // Only the editor's own copy is written over.
+  if (appCopyBlocker(cwd, slug) !== null) return null;
+  const head = (/** @type {string} */ open, /** @type {string} */ close) =>
+    `${open} ${APP_COPY_MARK} after every build of themes/${slug}/; do not edit it here. Change the theme with the editor. ${close}\n`;
+  const keptFonts = path.join(dir, `${slug}.fonts.css`);
+  const fonts =
+    fontsCss ??
+    (fs.existsSync(keptFonts)
+      ? [
+          ...fs.readFileSync(keptFonts, 'utf8').matchAll(/@import "([^"]+)";/g),
+        ].map(m => m[1])
+      : []);
+  // A built file as `theme build` of the copy's source writes it: the
+  // editor's build of the same theme, with the header naming that source.
+  const asBuilt = (/** @type {string} */ text) =>
+    text
+      .replace(/^( \* Source: ).*$/m, `$1${source}`)
+      .replace(/^( \* Command: ).*$/m, `$1astryx theme build ${source}`);
+  /** @type {Record<string, string>} */
+  const built = {};
+  for (const ext of APP_COPY_BUILT) {
+    const from = path.join(f.dir, `${slug}${ext}`);
+    if (fs.existsSync(from))
+      built[`${slug}${ext}`] = asBuilt(fs.readFileSync(from, 'utf8'));
+  }
+  const files = {
+    [`${name}.doc.mjs`]: `${head('//', '')}\n/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {\n  type: 'theme',\n  name: ${JSON.stringify(slug)},\n  displayName: ${JSON.stringify(slug)},\n  description: ${JSON.stringify(`The ${slug} theme, made with the theme editor (themes/${slug}/).`)},\n  maintained: false,\n};\n`,
+    [`${name}.ts`]: `${head('//', '')}export {${name}} from './${slug}';\n`,
+    ...built,
+    ...(fonts.length
+      ? {
+          [`${slug}.fonts.css`]: `${head('/*', '*/')}${fonts.map(c => `@import ${JSON.stringify(c)};`).join('\n')}\n`,
+        }
+      : {}),
+  };
+  fs.mkdirSync(dir, {recursive: true});
+  for (const [n, text] of Object.entries(files)) {
+    const file = path.join(dir, n);
+    if (fs.existsSync(file) && fs.readFileSync(file, 'utf8') === text) continue;
+    writeWhole(file, text);
+  }
+  // A file an earlier copy had (a font stylesheet no longer needed) goes;
+  // system files stay.
+  for (const n of fs.readdirSync(dir))
+    if (!(n in files) && !FOLDER_JUNK.has(n))
+      fs.rmSync(path.join(dir, n), {force: true});
+  // The first write is named in the command's result; later ones are not.
+  if (first)
+    FIRST_COPIES.set(
+      `${path.resolve(cwd)}\0${slug}`,
+      Object.keys(files)
+        .sort()
+        .map(n =>
+          path.relative(cwd, path.join(dir, n)).split(path.sep).join('/'),
+        ),
+    );
+  return dir;
+}
+
+/**
+ * Why the editor will not write a theme's app copy, or null when it will:
+ * the folder is not there yet, or its descriptor carries the editor's mark
+ * and it holds only the copy's own files (system files such as .DS_Store
+ * aside). Otherwise the name of what is in the way (a file of yours), or
+ * the folder itself when it is not the editor's copy. Built bytes are not
+ * compared, so a stable rebuild of the copy leaves it the editor's. The one
+ * test the copy's writer and `wiring` both use.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {string | null}
+ */
+export function appCopyBlocker(cwd, slug) {
+  const dir = path.join(cwd, 'src', 'themes', slug);
+  const name = `${camel(slug)}Theme`;
+  const rel = path.relative(cwd, dir).split(path.sep).join('/');
+  if (folderIsEmpty(dir)) return null;
+  /** @type {string[]} */
+  let names;
+  try {
+    names = fs.readdirSync(dir);
+  } catch {
+    return rel;
+  }
+  /** @type {boolean} */
+  let marked;
+  try {
+    marked = fs
+      .readFileSync(path.join(dir, `${name}.doc.mjs`), 'utf8')
+      .includes(APP_COPY_MARK);
+  } catch {
+    marked = false;
+  }
+  if (!marked) return rel;
+  const own = new Set([
+    `${name}.doc.mjs`,
+    `${name}.ts`,
+    `${slug}.fonts.css`,
+    ...APP_COPY_BUILT.map(ext => `${slug}${ext}`),
+  ]);
+  const other = names.find(n => !own.has(n) && !FOLDER_JUNK.has(n));
+  return other ? `${rel}/${other}` : null;
+}
+
+/** The build outputs of a theme, by their ending after `<theme>`. */
+const APP_COPY_BUILT = ['.css', '.css.d.ts', '.js', '.d.ts', '.variants.d.ts'];
+
+/** App copies written for the first time in this process, by app and theme. @type {Map<string, string[]>} */
+const FIRST_COPIES = new Map();
+
+/**
+ * The files of a theme's app copy when this command wrote it for the first
+ * time (then forgotten, so one result names them), else null.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {string[] | null}
+ */
+export function takeFirstAppCopy(cwd, slug) {
+  const key = `${path.resolve(cwd)}\0${slug}`;
+  const wrote = FIRST_COPIES.get(key) ?? null;
+  FIRST_COPIES.delete(key);
+  return wrote;
 }

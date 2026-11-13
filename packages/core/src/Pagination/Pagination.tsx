@@ -772,6 +772,7 @@ export function Pagination({
           <NumberInput
             label={goToPageLabel}
             isLabelHidden
+            entryErrorBehavior="complete"
             value={inputCommittedValue}
             onChange={handleInputCommit}
             min={1}

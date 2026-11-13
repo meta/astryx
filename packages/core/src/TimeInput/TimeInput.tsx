@@ -4,9 +4,9 @@
 
 /**
  * @file TimeInput.tsx
- * @input Uses React, Field, NativeTimeSegment, useTypedTime, InputGroupContext, pointer media queries, and shared time utilities
- * @output Exports TimeInput, TimeInputProps, TimeInputNativePicker, and
- *   TimeInputEntryError
+ * @input Uses React, Field, NativeTimeSegment, useTypedTime, useEntryErrorBehavior, InputGroupContext, pointer media queries, and shared time utilities
+ * @output Exports TimeInput, TimeInputProps, TimeInputNativePicker,
+ *   TimeInputEntryError, and EntryErrorBehavior
  * @position Core implementation; consumed by index.ts, tested by TimeInput.test.tsx
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -33,6 +33,8 @@ import {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
+import {useEntryErrorBehavior} from '../Field/useEntryErrorBehavior';
+import type {EntryErrorBehavior} from '../FormLayout/FormLayoutContext';
 import {
   colorVars,
   sizeVars,
@@ -175,6 +177,7 @@ export type {
   InputStatusType as TimeInputStatusType,
 } from '../Field';
 export type {TimeInputEntryError} from './useTypedTime';
+export type {EntryErrorBehavior} from '../FormLayout/FormLayoutContext';
 
 export interface TimeInputProps extends Omit<
   FieldInputBaseProps<HTMLInputElement>,
@@ -379,10 +382,9 @@ export interface TimeInputProps extends Omit<
    * the typed text, and `value` is the ISO time the text names, for
    * `'outOfRange'`.
    *
-   * A rejection shows once the typed time is complete, or at Enter or blur.
-   * The callback also runs when a new `min`, `max`, or `value`, or disabling
-   * the field, changes the rejection, and never twice for the same
-   * rejection. It reports `null` when the field unmounts while its rejection
+   * A rejection shows when `entryErrorBehavior` shows it. The callback also
+   * runs when a new `min`, `max`, or `value`, or disabling the field, changes
+   * the rejection, and never twice for the same rejection. It reports `null` when the field unmounts while its rejection
    * stands. The native and bottom-sheet surfaces take no typed text, so they
    * report no rejection.
    *
@@ -405,6 +407,26 @@ export interface TimeInputProps extends Omit<
    * ```
    */
   onEntryErrorChange?: (error: TimeInputEntryError | null) => void;
+
+  /**
+   * When the field shows its own entry error: a typed time that it rejects,
+   * which `onEntryErrorChange` reports, or a native edit outside `min` or
+   * `max`. It sets when the error shows, not when validation runs, so it is
+   * not React Aria's `validationBehavior` (native versus ARIA validation). It
+   * does not change a caller's `status`.
+   *
+   * - `'complete'` — a complete typed time outside `min` or `max` shows at
+   *   once, as does a native edit outside them. Other rejected text shows at
+   *   Enter or blur.
+   * - `'blur-or-enter'` — every rejection waits for Enter or blur. The
+   *   message, `aria-invalid`, the invalid styling, the announcement, and the
+   *   `onEntryErrorChange` report then appear together. An edit that the
+   *   field accepts or empties clears the error at once. An edit that leaves
+   *   the entry wrong keeps the shown error until the next Enter or blur.
+   *
+   * @default the nearest FormLayout's `defaultEntryErrorBehavior`, else `'complete'`
+   */
+  entryErrorBehavior?: EntryErrorBehavior;
 
   /**
    * How the status message is placed relative to the input.
@@ -464,6 +486,7 @@ function TimeField({
   size: sizeProp,
   status,
   onEntryErrorChange,
+  entryErrorBehavior,
   statusVariant = 'attached',
   labelTooltip,
   width,
@@ -563,6 +586,7 @@ function TimeField({
     isEnabled: showsDisabledMessage,
   });
 
+  const resolvedEntryErrorBehavior = useEntryErrorBehavior(entryErrorBehavior);
   const typedTime = useTypedTime({
     value,
     hourFormat,
@@ -579,6 +603,7 @@ function TimeField({
       !inputGroup || (status?.type === 'error' && !!status.message),
     status,
     onEntryErrorChange,
+    entryErrorBehavior: resolvedEntryErrorBehavior,
   });
   const {pendingInput} = typedTime;
   const fieldStatus = inputGroup ? status : typedTime.fieldStatus;
@@ -855,6 +880,7 @@ function TimeField({
           ariaDescribedBy={ariaDescribedBy}
           isRejected={typedTime.isSurfaceRejectionShown}
           onRejectedChange={typedTime.setSurfaceRejected}
+          onCommit={typedTime.commitSurface}
           alertMessage={typedTime.alertMessage}
           controlProps={{
             ...restControlProps,
@@ -1043,7 +1069,11 @@ export function TimeInput(props: TimeInputProps) {
       );
     case 'sheet': {
       // The sheet takes no typed text.
-      const {onEntryErrorChange: _onEntryErrorChange, ...sheetProps} = rest;
+      const {
+        onEntryErrorChange: _onEntryErrorChange,
+        entryErrorBehavior: _entryErrorBehavior,
+        ...sheetProps
+      } = rest;
       return <TouchTimeField {...sheetProps} isDisabled={isDisabled} />;
     }
     case 'text-input':

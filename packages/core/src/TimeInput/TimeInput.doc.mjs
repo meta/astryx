@@ -253,7 +253,15 @@ export const docs = {
       name: 'onEntryErrorChange',
       type: "(error: {kind: 'unreadable' | 'outOfRange', text: string, value?: ISOTimeString} | null) => void",
       description:
-        "Called each time the field's rejection of typed text changes, and with null when the rejection ends. kind is 'unreadable' (text that is not a time) or 'outOfRange' (a time before min or after max); text is the typed text; value is the ISO time the text names, for 'outOfRange'. A rejection shows once the typed time is complete (in 12-hour text, with its day period unless the hour reads 0 or 13–23), or at Enter or blur; rejected text stays in the field. It also runs when a new min, max, or value, or disabling the field, changes the rejection, never twice for the same rejection, and with null when the field unmounts while a rejection stands. The native and bottom-sheet surfaces take no typed text, so they never report.",
+        "Called each time the field's rejection of typed text changes, and with null when the rejection ends. kind is 'unreadable' (text that is not a time) or 'outOfRange' (a time before min or after max); text is the typed text; value is the ISO time the text names, for 'outOfRange'. Under entryErrorBehavior 'complete', a rejection shows once the typed time is complete (in 12-hour text, with its day period unless the hour reads 0 or 13–23), or at Enter or blur; under 'blur-or-enter', only at Enter or blur. Rejected text stays in the field. It also runs when a new min, max, or value, or disabling the field, changes the rejection, never twice for the same rejection, and with null when the field unmounts while a rejection stands. The native and bottom-sheet surfaces take no typed text, so they never report.",
+    },
+    {
+      name: 'entryErrorBehavior',
+      type: "'complete' | 'blur-or-enter'",
+      description:
+        "When the field shows its own entry error: a typed time it rejects, as onEntryErrorChange reports it, or a native edit outside min or max. It sets when the error shows, not when validation runs, so it is not React Aria's validationBehavior (native versus ARIA validation), and it never changes a caller status. 'complete' shows a complete typed time outside min or max, and a native edit outside them, at once, and other rejected text at Enter or blur. 'blur-or-enter' holds every rejection until Enter or blur: the message, aria-invalid, the invalid styling, the announcement, and the onEntryErrorChange report then appear together. Under both values, an edit the field accepts or empties clears the error at once; under 'blur-or-enter', an edit that leaves the entry wrong keeps the shown error until the next Enter or blur. The field's own value wins over the nearest FormLayout's defaultEntryErrorBehavior.",
+      default:
+        "the nearest FormLayout's defaultEntryErrorBehavior, else 'complete'",
     },
     {
       name: 'statusVariant',
@@ -441,7 +449,15 @@ export const docsZh = {
       name: 'onEntryErrorChange',
       type: "(error: {kind: 'unreadable' | 'outOfRange', text: string, value?: ISOTimeString} | null) => void",
       description:
-        "每当字段对输入文本的拒绝发生变化时调用，拒绝结束时传入 null。kind 为 'unreadable'（不是时间的文本）或 'outOfRange'（早于 min 或晚于 max 的时间）；text 为输入的文本；value 为文本所指的 ISO 时间，用于 'outOfRange'。输入的时间完整后（12 小时制文本需带上午/下午，除非小时为 0 或 13–23），或按 Enter、失焦时，拒绝才会显示；被拒绝的文本保留在字段中。新的 min、max 或 value，或禁用字段改变拒绝时也会调用；同一拒绝不会重复调用；拒绝仍存在时字段卸载会传入 null。原生和底部面板界面不接受输入文本，因此不会报告。",
+        "每当字段对输入文本的拒绝发生变化时调用，拒绝结束时传入 null。kind 为 'unreadable'（不是时间的文本）或 'outOfRange'（早于 min 或晚于 max 的时间）；text 为输入的文本；value 为文本所指的 ISO 时间，用于 'outOfRange'。在 entryErrorBehavior 为 'complete' 时，输入的时间完整后（12 小时制文本需带上午/下午，除非小时为 0 或 13–23），或按 Enter、失焦时，拒绝才会显示；为 'blur-or-enter' 时仅在按 Enter 或失焦时显示；被拒绝的文本保留在字段中。新的 min、max 或 value，或禁用字段改变拒绝时也会调用；同一拒绝不会重复调用；拒绝仍存在时字段卸载会传入 null。原生和底部面板界面不接受输入文本，因此不会报告。",
+    },
+    {
+      name: 'entryErrorBehavior',
+      type: "'complete' | 'blur-or-enter'",
+      description:
+        "字段何时显示自身的输入错误：即字段拒绝的输入时间（也就是 onEntryErrorChange 报告的拒绝），或超出 min 或 max 的原生编辑。它设定错误何时显示，而不是何时校验，因此不同于 React Aria 的 validationBehavior（原生校验与 ARIA 校验之分），也不会改变调用方的 status。'complete' 立即显示完整输入但超出 min 或 max 的时间，以及超出范围的原生编辑；其他被拒绝的文本在按 Enter 或失焦时显示。'blur-or-enter' 将每个拒绝保留到按 Enter 或失焦：届时消息、aria-invalid、无效样式、播报和 onEntryErrorChange 报告一起出现。两种取值下，字段接受的编辑或清空输入的编辑都会立即清除错误；在 'blur-or-enter' 下，输入仍然错误的编辑会保留已显示的错误，直到下一次按 Enter 或失焦。字段自身的取值优先于最近的 FormLayout 的 defaultEntryErrorBehavior。",
+      default:
+        "最近的 FormLayout 的 defaultEntryErrorBehavior，否则为 'complete'",
     },
     {
       name: 'statusVariant',
@@ -649,7 +665,9 @@ export const docsDense = {
     status:
       'Colored border+icon. Message rendered below input. A rejected typed time or native edit outside min/max shows its own error instead; an error status w/ message wins (rejection still announced); warning/success never hide a rejection.',
     onEntryErrorChange:
-      "(error|null) on each typed-rejection change: kind 'unreadable'|'outOfRange' (min/max), text, value (ISO time, outOfRange); shows when the typed time is complete (12h: day period unless hour 0/13-23) or at Enter/blur, text kept; also on new min/max/value, disable; never twice for one rejection; null on unmount mid-rejection; never on native/sheet",
+      "(error|null) on each typed-rejection change: kind 'unreadable'|'outOfRange' (min/max), text, value (ISO time, outOfRange); shows when the typed time is complete (12h: day period unless hour 0/13-23) or at Enter/blur under complete, only at Enter/blur under blur-or-enter, text kept; also on new min/max/value, disable; never twice for one rejection; null on unmount mid-rejection; never on native/sheet",
+    entryErrorBehavior:
+      "'complete'|'blur-or-enter': when the field's own rejection shows (not when validation runs; not React Aria validationBehavior; never changes status). complete: complete out-of-range typed time and native out-of-range edit at once, other text at Enter/blur. blur-or-enter: message, aria-invalid, styling, announcement and onEntryErrorChange report all wait for Enter/blur. Accepted or emptied entry clears at once; still-wrong edit keeps a shown error (blur-or-enter). Default: nearest FormLayout defaultEntryErrorBehavior, else complete",
     statusVariant:
       'How status message is placed: attached overlaps below input; detached floats below w/ spacing; tooltip hides the box and shows it on the status icon.',
     labelTooltip: 'Tooltip as info icon at label row end.',
