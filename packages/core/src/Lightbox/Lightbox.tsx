@@ -54,6 +54,7 @@ import {useScrollLock} from '../hooks/useScrollLock';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useAttachment} from '../hooks/useAttachment';
 import {observeResizeAfterLayout} from '../utils/sharedResizeObserver';
+import {isHTMLElement} from '../utils/nodeType';
 import {useTouchHitArea} from '../utils/touchHitArea';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {usePressTracker} from '../gestures/usePressTracker';
@@ -193,7 +194,7 @@ function placeFitsBesideLastLine(flow: HTMLElement): boolean {
   const place = flow.firstElementChild;
   const doc = flow.ownerDocument;
   const view = doc.defaultView ?? window;
-  if (!(place instanceof HTMLElement)) {
+  if (!isHTMLElement(place)) {
     return true;
   }
   const placeStyle = view.getComputedStyle(place);
