@@ -23,7 +23,6 @@ import {TextInput} from '@astryxdesign/core/TextInput';
 import {TreeList} from '@astryxdesign/core/TreeList';
 import type {TreeListItemData} from '@astryxdesign/core/TreeList';
 import {
-  ClockIcon,
   FolderIcon,
   DocumentTextIcon,
   MagnifyingGlassIcon,
@@ -49,6 +48,14 @@ const styles: Record<string, CSSProperties> = {
   },
   metadataCompact: {
     gap: 'var(--spacing-1) var(--spacing-3)',
+  },
+  historyTimelineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: '50%',
+    backgroundColor: 'var(--color-border-emphasized)',
+    marginTop: 6,
+    flexShrink: 0,
   },
   editorArea: {
     overflow: 'auto',
@@ -452,10 +459,8 @@ export default function ResizableWorkspacePage() {
                                           </Text>
                                         }
                                         startContent={
-                                          <Icon
-                                            icon={ClockIcon}
-                                            size="xsm"
-                                            color="secondary"
+                                          <span
+                                            style={styles.historyTimelineDot}
                                           />
                                         }
                                       />
