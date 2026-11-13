@@ -12,7 +12,15 @@
  */
 
 import type {ReactElement} from 'react';
-import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import {cleanup, render, screen} from '@testing-library/react';
 import {ChatComposer} from '../../Chat/ChatComposer';
 import {DateInput} from '../../DateInput/DateInput';
@@ -48,6 +56,16 @@ class NoResizeObserver {
   unobserve() {}
   disconnect() {}
 }
+
+// Under a coarse pointer, PowerSearch and Tokenizer's sheet load their sheet's
+// chunk without waiting for it. Loaded here first, the chunk is never still
+// loading when the test environment closes.
+beforeAll(async () => {
+  await Promise.all([
+    import('../../PowerSearch/PowerSearchBottomSheet'),
+    import('../../Tokenizer/TokenizerBottomSheet'),
+  ]);
+});
 
 beforeEach(() => {
   vi.spyOn(window, 'matchMedia').mockImplementation(coarse);
@@ -262,9 +280,23 @@ describe('the field-frame mark under a coarse pointer (spec:AST-094 FR42)', () =
     expect(markedBoxes()).toBe(0);
   });
 
-  it('holds its entry inside each marked frame, or forwards its own click', () => {
-    render(<TextInput label="Name" value="" onChange={noop} />);
-    const entry = screen.getByRole('textbox', {name: 'Name'});
-    expect(entry.closest(MARK)).not.toBeNull();
+  it('holds each text entry inside its marked frame', () => {
+    render(
+      <>
+        <TextInput label="Name" value="" onChange={noop} />
+        <Typeahead
+          label="Fruit"
+          searchSource={{search: () => [], bootstrap: () => []}}
+          value={null}
+          onChange={noop}
+        />
+      </>,
+    );
+    for (const entry of [
+      screen.getByRole('textbox', {name: 'Name'}),
+      screen.getByRole('combobox', {name: 'Fruit'}),
+    ]) {
+      expect(entry.closest(MARK)).not.toBeNull();
+    }
   });
 });

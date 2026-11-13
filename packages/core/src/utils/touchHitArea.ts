@@ -66,9 +66,9 @@ const ENTRY = `:is(textarea, select, [contenteditable="true"], input:not([type])
   .join()})`;
 
 /**
- * The entry a tap on a marked field box gives the tap to: its entry nearest
- * the finger, or the box itself when it holds none, as a field's description
- * or a file input's drop zone, whose own click forwards the tap.
+ * The element that takes a tap on a marked field box: its entry nearest the
+ * finger. A box with no entry, such as a description or a drop zone, takes
+ * the tap itself, and its own click forwards it.
  */
 function entryOf(frame: Element, x: number, y: number): Element {
   let entry = frame;
@@ -154,9 +154,9 @@ function activate(target: HTMLElement): void {
 }
 
 /**
- * Checks each tap on `host`, by a finger, a pen or a mouse, while the band
- * exists, until the returned function runs. The
- * press reads nothing, so a scroll it starts never waits. At the click,
+ * Checks each tap on `host` until the returned function runs: a finger's, a
+ * pen's or a mouse's, while the band exists. The press reads nothing, so a
+ * scroll it starts never waits. At the click,
  * `targetUnderFinger` may send the tap on; a keyboard or assistive-technology
  * click (detail 0) goes through.
  */

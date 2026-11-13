@@ -143,7 +143,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 - **PR1 — No resource of its own.** InfoTip adds no document listener,
   observer, timer, or layer beyond its button's click and pointer-down
   handlers; Tooltip's are the only others it brings. Its touch band (AR1) is
-  CSS, and reads layout only at a finger's tap on it.
+  CSS, and reads layout only at a tap on it, by a finger, a pen or a mouse
+  while the band exists.
 
 ## Accessibility contract
 

@@ -2453,7 +2453,7 @@ function ListReorderHost({reorder}: {reorder: ListReorderContextValue}) {
 const hintStyles = stylex.create({
   // A glyph or Done: the hint's text, with nothing of a button's own, the
   // same size under every pointer. A finger's 44 px target is the shared
-  // touch hit layer, which stops short of a neighbouring target.
+  // touch band, and a box under the finger wins over it.
   button: {
     position: 'relative',
     display: 'inline-flex',
