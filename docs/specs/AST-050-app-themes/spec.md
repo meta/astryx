@@ -212,7 +212,10 @@ described.
   `.css`, and the import it prints names the file as
   written. `theme build --watch` rebuilds when the source or any local file it
   imports changes. `--check` and `integration verify` treat CRLF and LF line
-  endings as the same text. An import MUST fail and name the build command
+  endings as the same text. They also ignore the package-manager command
+  named in a built module's single `built by` doc comment, so a theme built
+  with one package manager and checked with another is not stale; source, CLI
+  and Core provenance still compare verbatim. An import MUST fail and name the build command
   when the built module or stylesheet is missing. When a local theme and a
   package theme share a slug, an import adds the local theme unless `--package`
   names the package, and `theme list` shows both with their owners. The copying
