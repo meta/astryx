@@ -22,7 +22,12 @@ import {
 import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {useState} from 'react';
-import {Tokenizer, type TokenizerChange} from './Tokenizer';
+import {
+  Tokenizer,
+  type TokenizerChange,
+  type TokenizerHandle,
+} from './Tokenizer';
+import {Typeahead} from '../Typeahead/Typeahead';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import type {SearchSource, SearchableItem} from '../Typeahead/types';
 
@@ -327,6 +332,47 @@ describe('Tokenizer isLoading', () => {
     stop();
 
     expect(written.filter(text => text === 'Loading')).toHaveLength(1);
+  });
+
+  it("leaves a field in its menu idle: no aria-busy on that field's own combobox", async () => {
+    const handle: {current: TokenizerHandle | null} = {current: null};
+    render(
+      <Tokenizer
+        label="Members"
+        searchSource={userSource}
+        value={[alice]}
+        onChange={() => {}}
+        isLoading
+        hasEntriesOnFocus
+        handleRef={instance => {
+          handle.current = instance;
+        }}
+        menu={{
+          role: 'dialog',
+          label: 'Pick a lead',
+          render: () => (
+            <Typeahead
+              label="Lead"
+              searchSource={userSource}
+              value={null}
+              onChange={() => {}}
+            />
+          ),
+        }}
+      />,
+    );
+    expect(screen.getByRole('combobox', {name: 'Members'})).toHaveAttribute(
+      'aria-busy',
+      'true',
+    );
+    await act(async () => {
+      handle.current?.open();
+    });
+    const lead = await screen.findByRole('combobox', {
+      name: 'Lead',
+      hidden: true,
+    });
+    expect(lead).not.toHaveAttribute('aria-busy');
   });
 
   it('sets aria-busy on the sheet trigger, with no Spinner (FR17)', () => {

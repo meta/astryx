@@ -35,7 +35,11 @@ import React, {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {BaseTypeaheadFocusContext} from './BaseTypeaheadFocusContext';
-import {useBusyIndicatorLane, useIsInputBusy} from './busyIndicatorLane';
+import {
+  InputBusyProvider,
+  useBusyIndicatorLane,
+  useIsInputBusy,
+} from './busyIndicatorLane';
 import {useTrailingKeyDown} from './trailingKeyDown';
 import {
   CommittedChoicesKeyContext,
@@ -2477,10 +2481,10 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         </span>
       )}
       {popover.render(
-        // The committed values belong to this field. A field rendered in its
-        // menu has its own values, so it does not read them.
+        // The committed values and the busy value belong to this field. A
+        // field rendered in its menu has its own, so it reads neither.
         <CommittedChoicesKeyContext value={undefined}>
-          {menuContent}
+          <InputBusyProvider value={false}>{menuContent}</InputBusyProvider>
         </CommittedChoicesKeyContext>,
         {
           placement: 'below',
