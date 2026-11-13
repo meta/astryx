@@ -38,7 +38,7 @@ import * as path from 'node:path';
 import {LOCAL_THEME_ROOT} from './theme-state.mjs';
 import {loadModuleWithParser} from '../fs/module-loader.mjs';
 import {findConfigPath} from './config-path.mjs';
-import {parseConfig} from '../../authoring/config/parse.mjs';
+import {parseConfig} from '../runtime/lazy-parsers.mjs';
 import {
   loadIntegrations,
   loadLocalIntegration,

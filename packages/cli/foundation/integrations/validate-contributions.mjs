@@ -27,7 +27,7 @@ import {spawnSync} from 'node:child_process';
 import {builtinModules, createRequire} from 'node:module';
 import {isValidSemver} from '../env/semver.mjs';
 import {findProjectCoreDir} from '../fs/paths.mjs';
-import {KNOWN_INTEGRATION_KEYS} from '../../authoring/integration/schema.mjs';
+import {knownIntegrationKeys} from '../runtime/lazy-parsers.mjs';
 import {
   contributionFiles,
   findSourceOnlyCandidates,
@@ -198,7 +198,7 @@ export function nearestKnownKey(key) {
   const limit = lower.length <= 4 ? 1 : 2;
   /** @type {string[]} */
   const close = [];
-  for (const known of KNOWN_INTEGRATION_KEYS) {
+  for (const known of knownIntegrationKeys()) {
     const distance = editDistance(lower, known.toLowerCase());
     if (distance <= limit) close.push(known);
   }

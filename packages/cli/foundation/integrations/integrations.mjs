@@ -30,13 +30,15 @@ import {
   parseCliCommandField,
   parseIntegrationBase,
   unknownIntegrationKeys,
-} from '../../authoring/integration/schema.mjs';
+} from '../runtime/lazy-parsers.mjs';
 import {importUserModule, findPresentFiles} from '../fs/module-loader.mjs';
 import {findManifestPaths, MANIFEST_BASENAMES} from './manifest-paths.mjs';
 
 export {findManifestPaths, MANIFEST_BASENAMES};
-import {parseGapReportHandler} from '../../authoring/gap-report/parse.mjs';
-import {parseDiscoverSource} from '../../authoring/discover/parse.mjs';
+import {
+  parseGapReportHandler,
+  parseDiscoverSource,
+} from '../runtime/lazy-parsers.mjs';
 import {resolveProviders} from './provider-resolution.mjs';
 
 /**
@@ -107,7 +109,6 @@ import {resolveProviders} from './provider-resolution.mjs';
  * @property {string} [__discoverError] isolated discover-source validation error.
  */
 
-
 /**
  * Normalize a package-owned provider ID without rejecting legacy unnamed local
  * packages at this compatibility boundary.
@@ -152,7 +153,6 @@ export function markProviderConflicts(integrations) {
   ).integrations;
 }
 
-
 /**
  * Parse the optional named gap-report handler without making it part of the
  * default manifest schema. A malformed handler is isolated from every other
@@ -187,7 +187,9 @@ function parseGapReportHandlerExport(value, label) {
 function parseDiscoverSourceExport(value, label) {
   if (value === undefined) return {};
   try {
-    return {source: parseDiscoverSource(value, `${label} named export "discover"`)};
+    return {
+      source: parseDiscoverSource(value, `${label} named export "discover"`),
+    };
   } catch (error) {
     return {error: error instanceof Error ? error.message : String(error)};
   }
@@ -218,7 +220,8 @@ export async function loadManifest(
 ) {
   const mod = await importUserModule(file, {fresh});
   const raw = mod?.default;
-  if (raw === undefined) throw new Error(noDefaultExportMessage(file, label, mod));
+  if (raw === undefined)
+    throw new Error(noDefaultExportMessage(file, label, mod));
   const baseManifest = parseIntegrationBase(raw, label);
   const gapReport = parseGapReportHandlerExport(mod?.gapReport, label);
   const discover = parseDiscoverSourceExport(mod?.discover, label);

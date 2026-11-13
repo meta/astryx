@@ -10,7 +10,7 @@
  *   an unsupported type, with the message they have always printed.
  */
 
-import {parseDoc} from '../../authoring/doctypes/parse.mjs';
+import {parseDoc} from '../runtime/lazy-parsers.mjs';
 
 /**
  * @param {unknown} input

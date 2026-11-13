@@ -485,6 +485,21 @@ const RUNNERS = {
       'require(postcss-selector-parser)',
     ],
   },
+  'foundation/runtime/lazy-parsers.mjs': {
+    runs: "authoring/'s parser modules, which build zod schemas when they load, each on first use rather than when a module that may parse is imported",
+    sites: [
+      'require(../../authoring/codemod/parse.mjs)',
+      'require(../../authoring/config/parse.mjs)',
+      'require(../../authoring/discover/parse.mjs)',
+      'require(../../authoring/doctypes/icon-definition/parse.mjs)',
+      'require(../../authoring/doctypes/icon-set/parse.mjs)',
+      'require(../../authoring/doctypes/parse.mjs)',
+      'require(../../authoring/doctypes/template/parse.mjs)',
+      'require(../../authoring/doctypes/theme/parse.mjs)',
+      'require(../../authoring/gap-report/parse.mjs)',
+      'require(../../authoring/integration/schema.mjs)',
+    ],
+  },
   'host/index.mjs': {
     runs: "another release's host entry, from one of the host's package sets, when that release answers a hosted run",
     sites: ['import(<computed>)'],

@@ -16,7 +16,7 @@
  */
 
 import * as path from 'node:path';
-import {parseIconDefinition} from '../../authoring/doctypes/icon-definition/parse.mjs';
+import {parseIconDefinition} from '../runtime/lazy-parsers.mjs';
 import {CLI_ROOT} from '../fs/paths.mjs';
 import {listDirEntries} from '../fs/listing-cache.mjs';
 import {readStaticDescriptorValue} from './theme-discovery.mjs';

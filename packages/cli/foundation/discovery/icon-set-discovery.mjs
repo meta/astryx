@@ -19,10 +19,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {
-  parseIconSet,
-  parseIconSetData,
-} from '../../authoring/doctypes/icon-set/parse.mjs';
+import {parseIconSet, parseIconSetData} from '../runtime/lazy-parsers.mjs';
 import {assertWithin} from '../fs/path-safety.mjs';
 import {findInstalledPackage} from '../fs/paths.mjs';
 import {inspectPackageExport} from './package-exports.mjs';

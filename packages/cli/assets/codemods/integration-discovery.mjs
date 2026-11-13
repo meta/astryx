@@ -26,7 +26,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {loadModuleWithParser} from '../../foundation/fs/module-loader.mjs';
-import {parseCodemod} from '../../authoring/codemod/parse.mjs';
+import {parseCodemod} from '../../foundation/runtime/lazy-parsers.mjs';
 import {semverCompare} from '../../foundation/env/semver.mjs';
 
 /** File extensions recognized as codemod modules. */

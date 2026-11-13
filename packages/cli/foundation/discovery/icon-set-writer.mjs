@@ -26,7 +26,7 @@ import * as path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {AsyncLocalStorage} from 'node:async_hooks';
 import {babelParse as parse} from '../runtime/lazy-dependencies.mjs';
-import {parseIconSetData} from '../../authoring/doctypes/icon-set/parse.mjs';
+import {parseIconSetData} from '../runtime/lazy-parsers.mjs';
 import {ICON_NAMES} from '../../authoring/doctypes/icon-set/icon-names.mjs';
 import {assertWithin} from '../fs/path-safety.mjs';
 import {findLocalIntegrationManifestOrNull} from '../integrations/manifest-writer.mjs';

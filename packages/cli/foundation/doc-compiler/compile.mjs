@@ -21,9 +21,11 @@
  *   feeds. Internal to the CLI: the public way in is the docs API.
  */
 
-import {parseTemplate} from '../../authoring/doctypes/template/parse.mjs';
-import {parseTheme} from '../../authoring/doctypes/theme/parse.mjs';
-import {parseIconDefinition} from '../../authoring/doctypes/icon-definition/parse.mjs';
+import {
+  parseTemplate,
+  parseTheme,
+  parseIconDefinition,
+} from '../runtime/lazy-parsers.mjs';
 import {
   mergeTopic,
   problemsInTopic,
@@ -153,7 +155,10 @@ function markProvider(doc, provider) {
   return {
     ...doc,
     sections: doc.sections.map((/** @type {any} */ section) =>
-      withSourceTitle({...section, [SECTION_PROVIDER]: provider}, sourceTitle(section)),
+      withSourceTitle(
+        {...section, [SECTION_PROVIDER]: provider},
+        sourceTitle(section),
+      ),
     ),
   };
 }
