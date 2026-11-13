@@ -19,7 +19,9 @@
  *   module loads, never as a parse that quietly finds nothing. The `Project`
  *   seam and the agent docs reach this loader through component discovery,
  *   so on such an install every command except `help`, `--version`, `blog`
- *   and `manifest` stops at load and names the missing package.
+ *   and `manifest` stops at load; a run with no options names the missing
+ *   package (an option the failed command does not declare is rejected as
+ *   unknown first).
  */
 
 import {createRequire} from 'node:module';
