@@ -4,14 +4,23 @@
 
 /**
  * @file useTableColumnWindow.ts
- * @input Admitted column pitches, pinned run sizes, the seed and shared inline geometry
- * @output Stable column and spacer segments in full-table column positions
+ * @input Admitted column pitches and keys, pinned run sizes, the seed and shared inline geometry
+ * @output Stable column and spacer segments in full-table column positions;
+ *   it keeps the focused cell's column mounted
  * @position Table's column adapter over the private list-windowing module
  *   (`virtualization/useInlineListWindow`); it maps the windowed run between
  *   the pinned runs and owns no observer. Only the column hook's import
  *   reaches it.
  */
-import {useMemo, useState, type RefObject} from 'react';
+import {
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+  type FocusEvent,
+  type RefObject,
+  type SyntheticEvent,
+} from 'react';
 import {useIsomorphicLayoutEffect} from '../../../hooks/useIsomorphicLayoutEffect';
 import {useDevWarningPerMessage} from '../../../hooks/useDevWarning';
 import {isPositiveFinite} from '../../../virtualization/listWindow';
@@ -19,7 +28,10 @@ import {
   useInlineListWindow,
   type InlineListWindowGeometrySource,
 } from '../../../virtualization/useInlineListWindow';
-import type {TableColumnSegment} from '../../tableColumnWindowing';
+import type {
+  TableColumnFocusProps,
+  TableColumnSegment,
+} from '../../tableColumnWindowing';
 
 export interface UseTableColumnWindowOptions {
   initialViewportWidth: number;
@@ -30,15 +42,20 @@ export interface UseTableColumnWindowOptions {
   startCount: number;
   /** Columns in the pinned end run, through the last column. */
   endCount: number;
+  /** Column keys in full-table order: focus and the anchor follow keys. */
+  columnKeys: ReadonlyArray<string>;
   /** Whether the body has data rows; an empty-state cell is not a column. */
   hasRows: boolean;
   table: RefObject<HTMLTableElement | null>;
+  viewport: RefObject<HTMLDivElement | null>;
   geometry: InlineListWindowGeometrySource;
 }
 export interface TableColumnWindowResult {
   segments: ReadonlyArray<TableColumnSegment>;
   /** True while at least one column is not mounted. */
   isWindowed: boolean;
+  /** The table's focus handlers, while column windowing is admitted. */
+  focusProps: TableColumnFocusProps | undefined;
 }
 
 const OVERSCAN = 2;
@@ -58,14 +75,44 @@ function getColumnViolation(table: HTMLTableElement): string | undefined {
   return undefined;
 }
 
+/**
+ * The cell that holds `target`, and its full-table column index. A windowed
+ * cell carries its position; an unwindowed row has no spacers, so there the
+ * cell index is the column index.
+ */
+function getFocusedCell(
+  table: HTMLTableElement,
+  target: EventTarget,
+): {cell: HTMLTableCellElement; index: number} | undefined {
+  const view = table.ownerDocument.defaultView;
+  if (view == null || !(target instanceof view.Element)) {
+    return undefined;
+  }
+  const cell = target.closest('td, th');
+  if (
+    !(cell instanceof view.HTMLTableCellElement) ||
+    !table.contains(cell) ||
+    cell.getAttribute('aria-hidden') === 'true'
+  ) {
+    return undefined;
+  }
+  const position = cell.getAttribute('aria-colindex');
+  return {
+    cell,
+    index: position == null ? cell.cellIndex : Number(position) - 1,
+  };
+}
+
 export function useTableColumnWindow({
   initialViewportWidth,
   isAdmitted,
   widths,
   startCount,
   endCount,
+  columnKeys,
   hasRows,
   table,
+  viewport,
   geometry,
 }: UseTableColumnWindowOptions): TableColumnWindowResult {
   const columnCount = widths.length;
@@ -88,6 +135,7 @@ export function useTableColumnWindow({
     !isRejected &&
     isPositiveFinite(initialViewportWidth) &&
     runEnd > runStart &&
+    columnKeys.length === columnCount &&
     widths.every(width => Number.isFinite(width) && width >= 0);
   // Prefix offsets of the windowed run, and the pinned run sizes.
   const layout = useMemo(() => {
@@ -105,8 +153,14 @@ export function useTableColumnWindow({
     }
     return {offsets, pinnedStart, pinnedEnd};
   }, [widths, runStart, runEnd, columnCount]);
+  // Key work runs when the columns change, never on a scroll.
+  const runKeys = useMemo(
+    () => columnKeys.slice(runStart, runEnd),
+    [columnKeys, runStart, runEnd],
+  );
   // The pinned runs always mount and cover the viewport's edges.
   const run = useInlineListWindow({
+    keys: runKeys,
     offsets: layout.offsets,
     insetStart: layout.pinnedStart,
     insetEnd: layout.pinnedEnd,
@@ -114,6 +168,8 @@ export function useTableColumnWindow({
     overscan: OVERSCAN,
     canWindow,
     geometry,
+    viewport,
+    focusContainer: table,
   });
   const isWindowed = run.isWindowed;
 
@@ -164,5 +220,75 @@ export function useTableColumnWindow({
     }
   }, [isWindowed, hasRows, segments, table, widths, initialViewportWidth]);
 
-  return useMemo(() => ({segments, isWindowed}), [segments, isWindowed]);
+  // React focus events reach the table also from a layer that one of its
+  // cells renders in a portal, such as a cell menu. Such focus belongs to
+  // the cell that opened the layer: the last cell that took focus, a press
+  // or a context menu. The hook keeps the opener's column key, so a column
+  // change while the layer holds focus keeps the right column. A pinned column
+  // always mounts, so it needs no retention. Focus that moves inside the
+  // table keeps the column until it lands on another cell.
+  const {onItemFocus, onItemBlur} = run;
+  const openerKeyRef = useRef<string | undefined>(undefined);
+  const onOpenerInput = useCallback(
+    (event: SyntheticEvent<HTMLTableElement>) => {
+      const opener = getFocusedCell(event.currentTarget, event.target);
+      if (opener !== undefined) {
+        openerKeyRef.current = columnKeys[opener.index];
+      }
+    },
+    [columnKeys],
+  );
+  const onFocus = useCallback(
+    (event: FocusEvent<HTMLTableElement>) => {
+      const element = event.currentTarget;
+      const focused = getFocusedCell(element, event.target);
+      const key =
+        focused !== undefined
+          ? columnKeys[focused.index]
+          : element.contains(event.target)
+            ? undefined
+            : openerKeyRef.current;
+      if (key === undefined) {
+        return;
+      }
+      openerKeyRef.current = key;
+      const index = columnKeys.indexOf(key);
+      if (index >= runStart && index < runEnd) {
+        onItemFocus(key, focused?.cell ?? event.target);
+      } else {
+        onItemBlur();
+      }
+    },
+    [columnKeys, runStart, runEnd, onItemFocus, onItemBlur],
+  );
+  const onBlur = useCallback(
+    (event: FocusEvent<HTMLTableElement>) => {
+      const leavesDocument =
+        event.relatedTarget == null &&
+        !event.currentTarget.ownerDocument.hasFocus();
+      if (
+        !leavesDocument &&
+        !event.currentTarget.contains(event.relatedTarget)
+      ) {
+        onItemBlur();
+      }
+    },
+    [onItemBlur],
+  );
+
+  return useMemo(
+    () => ({
+      segments,
+      isWindowed,
+      focusProps: canWindow
+        ? {
+            onFocus,
+            onBlur,
+            onPointerDown: onOpenerInput,
+            onContextMenu: onOpenerInput,
+          }
+        : undefined,
+    }),
+    [segments, isWindowed, canWindow, onFocus, onBlur, onOpenerInput],
+  );
 }
