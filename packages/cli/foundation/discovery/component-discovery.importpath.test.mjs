@@ -9,6 +9,10 @@
  */
 
 import {describe, it, expect} from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import {withListingCache} from '../fs/listing-cache.mjs';
 import {
   findComponentSource,
   resolveImportPath,
@@ -54,6 +58,66 @@ describe('resolveImportPath reproduces authored hook importPaths', () => {
   it('never falls back to the bare package root for a .ts hook', () => {
     for (const [name] of cases) {
       expect(resolveImportPath(coreDir, name)).not.toBe('@astryxdesign/core');
+    }
+  });
+});
+
+describe('findComponentSource inside an operation', () => {
+  const coreDir = findCoreDir();
+
+  it('finds every Core component and hook as outside one', () => {
+    /** @type {Set<string>} */
+    const names = new Set();
+    /** @param {string} dir */
+    const visit = dir => {
+      for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
+        if (entry.isDirectory()) {
+          visit(path.join(dir, entry.name));
+          // A folder's name is also a lookup: nested folders are found by it.
+          names.add(entry.name);
+          continue;
+        }
+        const stem = /^(?:XDS)?(.+)\.tsx?$/.exec(entry.name)?.[1];
+        if (stem) names.add(stem);
+      }
+    };
+    visit(path.join(coreDir, 'src'));
+    const sorted = [...names].sort();
+    expect(sorted.length).toBeGreaterThan(200);
+    const outside = sorted.map(name => findComponentSource(coreDir, name));
+    const inside = withListingCache(() =>
+      sorted.map(name => findComponentSource(coreDir, name)),
+    );
+    expect(inside).toEqual(outside);
+  });
+
+  it('takes the first parent folder in listing order that holds the name', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'nested-source-'));
+    try {
+      for (const parent of ['Alpha', 'Beta']) {
+        fs.mkdirSync(path.join(root, 'src', parent, 'Panel'), {
+          recursive: true,
+        });
+        fs.writeFileSync(
+          path.join(root, 'src', parent, 'Panel', 'Panel.tsx'),
+          'export function Panel() {}\n',
+        );
+      }
+      const outside = findComponentSource(root, 'Panel');
+      expect(withListingCache(() => findComponentSource(root, 'Panel'))).toBe(
+        outside,
+      );
+      expect(outside).toBe(
+        path.join(
+          root,
+          'src',
+          fs.readdirSync(path.join(root, 'src'))[0],
+          'Panel',
+          'Panel.tsx',
+        ),
+      );
+    } finally {
+      fs.rmSync(root, {recursive: true, force: true});
     }
   });
 });
