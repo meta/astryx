@@ -25,6 +25,7 @@ import {baseResolved, installLine, openProject} from './_project.mjs';
 import {P, wordTable} from './_tables.mjs';
 import {
   buildTheme,
+  camel,
   editedThemes,
   fontPackages,
   loadTheme,
@@ -1250,6 +1251,45 @@ function nextAppsUnder(cwd) {
   };
   walk(cwd, 1);
   return out.sort((a, b) => a.root.localeCompare(b.root));
+}
+
+/**
+ * How to use an editor theme in this app, step by step: the file of the
+ * app's root (a Next app's root layout, else the file that renders the
+ * app), the imports the preview route uses for the same theme (its module,
+ * its stylesheet and the font stylesheets), the Theme around the app, and
+ * what builds it. `astryx theme add` takes theme packages only, so this is
+ * the way an editor theme goes into the app.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {string[]}
+ */
+export function appWiring(ctx, slug, data) {
+  const cwd = ctx.project.cwd;
+  const routes = nextRoutesOf(cwd);
+  const layout = routes
+    ? fs.readdirSync(routes).find(f => /^layout\.(tsx|ts|jsx|js)$/.test(f))
+    : undefined;
+  const file = routes && layout ? path.join(routes, layout) : null;
+  const ti = themeImports(ctx, slug, data, file ? path.dirname(file) : cwd);
+  const name = `${camel(slug)}Theme`;
+  const where = file
+    ? `${shown(cwd, file)} (the app's root layout)`
+    : "the file that renders your app's root (paths below are from the app folder)";
+  const appModule = ['src/astryx-themes.ts', 'astryx-themes.ts'].find(m =>
+    fs.existsSync(path.join(cwd, m)),
+  );
+  return [
+    `in ${where}, import the theme and its stylesheets: import {Theme} from '@astryxdesign/core/theme'; import {${name}} from '${ti.module.replace(/\.js$/, '')}'; ${ti.css.map(c => `import '${c}';`).join(' ')}`,
+    `wrap the app in it: <Theme theme={${name}}${ti.mode === 'system' ? '' : ` mode="${ti.mode}"`}>{children}</Theme>`,
+    ...(appModule
+      ? [
+          `${appModule} (written by theme add and use) stays as it is: to keep its themes too, merge them in your own file ({...themes, ${JSON.stringify(slug)}: ${name}}), never in ${appModule}, which add, use and remove write again`,
+        ]
+      : []),
+    `every set and undo builds ${shown(cwd, themeFiles(cwd, slug).js)} and ${shown(cwd, themeFiles(cwd, slug).css)} again, so the app takes each change; after editing ${shown(cwd, themeFiles(cwd, slug).ts)} by hand, ${P.replace(/ editor$/, '')} compile ${shown(cwd, themeFiles(cwd, slug).ts)} builds it again`,
+  ];
 }
 
 /**

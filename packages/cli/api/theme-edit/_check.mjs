@@ -3110,8 +3110,15 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           ),
           also: r0.also,
         });
-      } else if (hard.length)
-        s.note = `the editor's render of ${hard.map(([t]) => t).join(', ')} did not read ${thing} (each part is rendered once, with its default props, so a variant that reads it may be missed); it is set as asked`;
+      } else if (hard.length) {
+        // Some members read it and take the change; name them, and say
+        // what the others read instead (from the check's own message).
+        const readers = recorded.filter(([, r]) => !r).map(([t]) => t);
+        const instead = /reads: ([^.]+)\./.exec(
+          String(/** @type {any} */ (hard[0][1])?.message ?? ''),
+        )?.[1];
+        s.note = `${readers.length ? `${readers.join(', ')} read ${thing} and take this change; ` : ''}the editor's render of ${hard.map(([t]) => t).join(', ')} did not read it${instead ? ` (${hard[0][0]} reads ${instead})` : ''}, so those stay as they were; each part is rendered once, with its default props, so a variant that reads it may be missed`;
+      }
       if (!s.note && recorded.length) {
         const fed = C.feeds(recorded[0][0], thing);
         if (fed.length) s.note = `feeds ${C.fmtFeeds(fed, recorded[0][0])}`;

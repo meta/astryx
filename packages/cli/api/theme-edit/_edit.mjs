@@ -101,7 +101,7 @@ import {
   seedOf,
 } from './_palette.mjs';
 import {renderPreview, renderSheet} from './_preview.mjs';
-import {refreshPreviewRoute} from './_preview-app.mjs';
+import {appWiring, refreshPreviewRoute} from './_preview-app.mjs';
 import {baseInstalled, baseResolved, installLine} from './_project.mjs';
 import {reactMissing} from './_parts.mjs';
 import {
@@ -592,6 +592,8 @@ export async function themeEditNew(name, options = {}) {
       notes,
       problems: r.problems,
       ...p,
+      // How to use the theme in this app (theme add takes packages only).
+      wiring: appWiring(ctx, name, data),
     },
   };
 }
@@ -2231,6 +2233,8 @@ export async function themeEditShow(theme, options = {}) {
       skipped: sheet.skipped,
       pictures: shots.files,
       pictureProblem: shots.problem,
+      // How to use the theme in this app (theme add takes packages only).
+      wiring: appWiring(ctx, theme, data),
       colorFiles: pal ? colorFiles(theme) : null,
     },
   };
