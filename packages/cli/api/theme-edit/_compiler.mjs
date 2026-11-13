@@ -85,6 +85,8 @@ export function makeCompiler(project, parts) {
   }
   /** @param {string} tok */
   const typeOf = tok => TYPE[tok] ?? 'other';
+  /** Whether Core defines the token. @param {string} tok */
+  const isToken = tok => Object.hasOwn(TYPE, tok);
 
   /** @param {string} p */
   const groupOfProp = p =>
@@ -276,7 +278,23 @@ export function makeCompiler(project, parts) {
       void fed;
       return null;
     }
-    const reads = g ? partReads(target, g) : [];
+    // Only a token of the same kind takes the value: a weight never goes to
+    // a line height, a line height never to a weight.
+    // Font tokens share a type across kinds (a weight and a leading are
+    // both numbers), so the kind is read from the name.
+    const kindOf = (/** @type {string} */ t) =>
+      /family/.test(t)
+        ? 'family'
+        : /weight/.test(t)
+          ? 'weight'
+          : /leading|line-height/.test(t)
+            ? 'leading'
+            : /tracking|letter-spacing/.test(t)
+              ? 'tracking'
+              : typeOf(t);
+    const reads = g
+      ? partReads(target, g).filter(r => kindOf(r.token) === kindOf(token))
+      : [];
     const v = quoteCommandArgument(value);
     /** @type {string[]} */
     const run = [];
@@ -539,6 +557,7 @@ export function makeCompiler(project, parts) {
   return {
     MAP,
     typeOf,
+    isToken,
     propsReading,
     feeds,
     fmtFeeds,

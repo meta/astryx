@@ -45,6 +45,7 @@ import {API_VERSION, isJsonMode, toErrorEnvelope} from '../../../foundation/resp
 import {answeredBy} from '../../../foundation/release/run-context.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {setCommand, setOutcome, recordHelp} from '../../../foundation/debug/index.mjs';
+import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
 
 /**
  * Fully-qualified name of a command relative to the root program, e.g.
@@ -290,12 +291,73 @@ const REJECTED_COMMAND = Symbol.for('astryx.jsonShim.rejectedCommand');
  * @returns {import('../../../foundation/response/base').Suggestion[] | undefined}
  */
 function usageSuggestion(err, code) {
-  if (code !== 'commander.optionMissingArgument') return undefined;
   const cmd = /** @type {any} */ (err)?.[REJECTED_COMMAND];
   if (!cmd) return undefined;
   const parts = [];
   for (let node = cmd; node; node = node.parent) parts.unshift(node.name());
+  // The theme editor names what is missing with its usage and its help, as
+  // the project runs the CLI.
+  if (
+    code === 'commander.missingArgument' &&
+    parts.slice(1, 4).join(' ') === 'experimental theme editor'
+  )
+    return editorMissingSuggestions(cmd);
+  if (code !== 'commander.optionMissingArgument') return undefined;
   return [{name: `${parts.join(' ')} ${cmd.usage()}`.trim(), reason: 'usage'}];
+}
+
+/**
+ * The theme editor's message for a missing argument: what the command takes
+ * and the words it was given, in order.
+ * @param {unknown} err
+ * @param {string} message Commander's message
+ */
+function editorMissingMessage(err, message) {
+  const cmd = /** @type {any} */ (err)?.[REJECTED_COMMAND];
+  const wants = (cmd?.registeredArguments ?? [])
+    .filter((/** @type {any} */ a) => a.required)
+    .map((/** @type {any} */ a) => a.name());
+  return editorMissingArgument(
+    cmd,
+    wants,
+    /'([^']+)'/.exec(message)?.[1],
+  ).message;
+}
+
+/**
+ * The theme editor's usage and help suggestions for a missing argument, as
+ * the project runs the CLI.
+ * @param {any} cmd
+ * @returns {Array<{name: string, reason: string}>}
+ */
+function editorMissingSuggestions(cmd) {
+  const parts = [];
+  for (let node = cmd; node; node = node.parent) parts.unshift(node.name());
+  const words = parts.slice(1).join(' ');
+  const invocation = getCliInvocation(process.cwd());
+  return [
+    {name: `${invocation} ${words} ${cmd.usage()}`.trim(), reason: 'usage'},
+    {name: `${invocation} ${words} --help`, reason: 'what each argument is'},
+  ];
+}
+
+/**
+ * The theme editor's missing-argument report: what the command takes, the
+ * words it was given and what each was read as, and its usage and help.
+ * The parser's error uses it, and so does a command that checks its own
+ * arguments (set, whose value may come inside a pasted declaration).
+ * @param {any} cmd the Commander command
+ * @param {string[]} wants the argument names it takes, in order
+ * @param {string | undefined} missing the argument that is missing
+ * @returns {{message: string, suggestions: Array<{name: string, reason: string}>}}
+ */
+export function editorMissingArgument(cmd, wants, missing) {
+  const given = /** @type {string[]} */ (cmd?.args ?? []);
+  const shown = wants.map(w => `<${w}>`);
+  return {
+    message: `${cmd.name()} takes ${shown.join(' ')}, and ${given.length ? `was given ${given.length} (${given.join(' ')}), read as ${shown.slice(0, given.length).join(' ')}` : 'was given none'}: ${missing ? `<${missing}>` : 'an argument'} is missing.`,
+    suggestions: editorMissingSuggestions(cmd),
+  };
 }
 
 /** Marks a command whose `command`/`addCommand` already self-install the shim. */
@@ -469,8 +531,14 @@ export function handleCommanderError(err) {
 
   // Real error paths. Strip Commander's "error: " prefix once: in the envelope
   // the key is already `error`, and in text mode the Astryx prefix replaces it.
-  const cleaned = message.replace(/^error:\s*/i, '');
   const suggestions = usageSuggestion(err, code);
+  // In the theme editor a missing argument names what was given: in
+  // `set corners small` the first word is read as the theme, so "value" alone
+  // would name the wrong thing.
+  const cleaned =
+    suggestions?.length === 2
+      ? editorMissingMessage(err, message)
+      : message.replace(/^error:\s*/i, '');
   if (jsonActive()) {
     emitJsonError(
       cleaned,
@@ -482,6 +550,8 @@ export function handleCommanderError(err) {
     // same as every other CLI error — the `Error: …` line cliError prints.
     process.stderr.write(`Error: ${cleaned}\n`);
     if (suggestions) process.stderr.write(`Usage: ${suggestions[0].name}\n`);
+    if (suggestions?.[1])
+      process.stderr.write(`Run: ${suggestions[1].name}\n`);
   }
   process.exit(exitCode || 1);
 }

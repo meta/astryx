@@ -27,6 +27,7 @@ import {sourceBlock} from './source-block.mjs';
 import {embeddedPathProblem} from './embedded-files.mjs';
 import {resolveServed} from './served-packages.mjs';
 import {CHART_CSS} from './charts.mjs';
+import {HOST_EXIT} from './host-exit.mjs';
 
 /** How long one page may take to render before it is stopped. */
 export const RENDER_TIMEOUT_MS = 60_000;
@@ -274,6 +275,40 @@ function crashError(how, {crashed, withoutSegmenter}) {
 }
 
 /**
+ * The error for a page that ended without an answer, with why: the stage it
+ * reported last, how long it ran, the memory left, and its last stderr line.
+ * @param {any} message the host's {hostExit, reason, stage, elapsedMs, rssMb, freeMb, stderrTail}
+ */
+function noAnswerError({hostExit, reason, stage, elapsedMs, rssMb, freeMb, stderrTail}) {
+  const detail = {reason, exit: hostExit, stage, elapsedMs, rssMb, freeMb, ...(stderrTail ? {stderrTail} : {})};
+  const where = stage ? ` while ${stage}` : '';
+  const seconds = Math.round((elapsedMs ?? 0) / 1000);
+  if (reason === 'host-timeout') {
+    return new RenderError('ERR_RENDER_TIMEOUT', `The page's process stopped at its own time limit${where}, after ${seconds} seconds, before this process read an answer.`, detail);
+  }
+  const last = stderrTail ? ` Its last output: ${String(stderrTail).split('\n').at(-1)}` : '';
+  return new RenderError(
+    'ERR_RENDER_FAILED',
+    `The page stopped rendering without an answer (exit ${hostExit})${where}, after ${seconds} seconds, with ${freeMb} MB of memory free.${last}`,
+    detail,
+  );
+}
+
+/** The error for a host process that ended, without a signal, before it answered. */
+function hostEndError(/** @type {number | null} */ code) {
+  if (code === HOST_EXIT.disconnected) {
+    return new RenderError('ERR_RENDER_FAILED', "The page's process lost its channel to this process and stopped without an answer.", {reason: 'disconnected', exit: code});
+  }
+  if (code === HOST_EXIT.noChannel) {
+    return new RenderError('ERR_RENDER_FAILED', "The page's process had no channel left to send its answer on.", {reason: 'no-channel', exit: code});
+  }
+  if (code === HOST_EXIT.timeout) {
+    return new RenderError('ERR_RENDER_TIMEOUT', "The page's process stopped at its own time limit before this process read an answer.", {reason: 'host-timeout', exit: code});
+  }
+  return new RenderError('ERR_RENDER_FAILED', `The page's process ended without an answer (exit ${code}).`, {reason: 'host-ended', exit: code});
+}
+
+/**
  * Run the page in a host process (page-host.mjs), stopping it after
  * `timeoutMs`. The host runs the page in a worker thread, and it exits when
  * this process goes away.
@@ -325,7 +360,7 @@ function runWorker(input, timeoutMs) {
               : new RenderError('ERR_RENDER_FAILED', `The page could not be rendered: ${text.split('\n')[0]}`),
           );
         } else if (message?.hostExit !== undefined) {
-          reject(new RenderError('ERR_RENDER_FAILED', `The page stopped rendering without an answer (exit ${message.hostExit}).`));
+          reject(noAnswerError(message));
         } else {
           resolve(message);
         }
@@ -339,7 +374,7 @@ function runWorker(input, timeoutMs) {
         const crash = crashOf(code, signal);
         if (crash) resolve({crashed: crash});
         else if (signal) reject(crashError(signal, {crashed: false, withoutSegmenter: input.withoutSegmenter}));
-        else reject(new RenderError('ERR_RENDER_FAILED', `The page stopped rendering without an answer (exit ${code}).`));
+        else reject(hostEndError(code));
       });
     });
   });

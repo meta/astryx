@@ -164,6 +164,30 @@ export function loadWeights() {
   return weights ?? null;
 }
 
+/** @type {{threshold: number, weights: Record<string, number>} | null | undefined} */
+let shellWeights;
+
+/**
+ * The fixed word table of the shell-start check (kit/shell.weights.json), read
+ * once. Null when the file is missing or unreadable.
+ * @returns {{threshold: number, weights: Record<string, number>} | null}
+ */
+export function loadShellWeights() {
+  if (shellWeights === undefined) {
+    try {
+      shellWeights = JSON.parse(
+        fs.readFileSync(
+          new URL('./kit/shell.weights.json', import.meta.url),
+          'utf8',
+        ),
+      );
+    } catch {
+      shellWeights = null;
+    }
+  }
+  return shellWeights ?? null;
+}
+
 /** @type {import('../../foundation/route/route.mjs').ClassifierWeights | undefined} */
 let treeWeights;
 

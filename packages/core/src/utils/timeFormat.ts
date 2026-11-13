@@ -3,7 +3,8 @@
 /**
  * @file timeFormat.ts
  * @input An ISO time or typed text, plus the provider's BCP 47 locale
- * @output Exports resolveHourFormat, formatLocaleTime, and parseLocaleTime
+ * @output Exports resolveHourFormat, formatLocaleTime, parseLocaleTime, and
+ *   isLocaleTimeComplete
  * @position Internal shared helper for TimeInput and DateTimeInput; not part
  *   of the public surface
  *
@@ -244,15 +245,11 @@ export function formatLocaleTime(
 }
 
 /**
- * Parses typed text into an ISO time, accepting the locale's digits,
- * separator, and day-period words as well as everything `parseTimeInput`
- * accepts. Returns null when no reading fits.
+ * Typed text in the English-tolerant parser's form: ASCII digits, `:`
+ * between the parts, and the locale's day period, if any, written as a
+ * trailing "am" or "pm". Returns null for empty text.
  */
-export function parseLocaleTime(
-  input: string,
-  locale: Locale,
-  includeSeconds: boolean = false,
-): ISOTimeString | null {
+function readLocaleTime(input: string, locale: Locale): string | null {
   if (!input) {
     return null;
   }
@@ -302,5 +299,53 @@ export function parseLocaleTime(
   if (isPM !== null) {
     text = `${text} ${isPM ? 'pm' : 'am'}`;
   }
-  return parseTimeInput(text, includeSeconds);
+  return text;
+}
+
+/**
+ * Parses typed text into an ISO time, accepting the locale's digits,
+ * separator, and day-period words as well as everything `parseTimeInput`
+ * accepts. Returns null when no reading fits.
+ */
+export function parseLocaleTime(
+  input: string,
+  locale: Locale,
+  includeSeconds: boolean = false,
+): ISOTimeString | null {
+  const text = readLocaleTime(input, locale);
+  return text === null ? null : parseTimeInput(text, includeSeconds);
+}
+
+// The day period as `parseTimeInput` reads it.
+const DAY_PERIOD = /\s*[ap]\.?m?\.?\s*$/;
+const CLOCK_PARTS = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/;
+const COMPACT_PARTS = /^(\d{2})(\d{2})(\d{2})?$/;
+
+/**
+ * Whether typed text holds every part of a time: the hour, both minute
+ * digits, both second digits when the field shows seconds, and, in a
+ * 12-hour field, a day period unless the hour reads as 0 or 13 through 23.
+ * Text that holds every part can still name no time ("25:99").
+ */
+export function isLocaleTimeComplete(
+  input: string,
+  locale: Locale,
+  hourFormat: HourFormat,
+  includeSeconds: boolean = false,
+): boolean {
+  const text = readLocaleTime(input, locale);
+  if (text === null) {
+    return false;
+  }
+  const hasDayPeriod = DAY_PERIOD.test(text);
+  const digits = text.replace(DAY_PERIOD, '').trim();
+  const parts = CLOCK_PARTS.exec(digits) ?? COMPACT_PARTS.exec(digits);
+  if (parts === null || (includeSeconds && parts[3] === undefined)) {
+    return false;
+  }
+  if (hourFormat === '24h' || hasDayPeriod) {
+    return true;
+  }
+  const hour = Number(parts[1]);
+  return hour === 0 || (hour >= 13 && hour <= 23);
 }

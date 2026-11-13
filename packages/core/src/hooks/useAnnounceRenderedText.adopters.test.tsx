@@ -76,6 +76,7 @@ const {PowerSearch} = await import('../PowerSearch/PowerSearch');
 const {Spinner} = await import('../Spinner');
 const {createStaticSource} = await import('../Typeahead/createStaticSource');
 const {InfoTip} = await import('../InfoTip/InfoTip');
+const {ToastSurface} = await import('../Toast/Toast');
 // Tokenizer and PowerSearch load their sheets on demand. This file loads
 // both sheet modules before any test runs, so the sheet cases' waits and
 // time limits cover the open, not the module's load.
@@ -120,6 +121,27 @@ async function expectDelegated(text: string) {
 
 /** Each adopter, shown in the state where its own content appears. */
 const ADOPTERS: Record<string, () => Promise<void>> = {
+  'Toast/Toast.tsx': async () => {
+    // A body whose text only a component renders, read after commit.
+    function UploadSummary() {
+      return <>Upload complete</>;
+    }
+    render(
+      <ToastSurface
+        type="info"
+        body={<UploadSummary />}
+        isAutoHide={false}
+        autoHideDuration={0}
+        onDismiss={() => {}}
+        gestureDirection={1}
+        isLiveRegion={false}
+        isRenderedBodyAnnouncement
+        announce={announce}
+        timerKey="upload"
+      />,
+    );
+    await expectDelegated('Upload complete');
+  },
   'Spinner/Spinner.tsx': async () => {
     const {rerender} = render(<Spinner />);
     await expectDelegated('Loading');
