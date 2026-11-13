@@ -349,7 +349,8 @@ those contracts.
   stylesheet exit instead of the spring; a toast does not swipe (its close
   button and timer still dismiss it), and a popover presents as under a fine
   pointer; each action in AlertDialog, ButtonGroup and ToggleButtonGroup keeps
-  its own press, with no slide between actions. A gesture in that window does
+  its own press, with no slide between actions; Lightbox pages by its buttons
+  and arrow keys at once, with no drag or slide. A gesture in that window does
   not start the load. The bundler keeps one copy per page however many
   components use them. `utils/touchRuntimeModules.tsx` is the one module the
   loader's `import()` targets; it gathers the touch runtime, so the loader
