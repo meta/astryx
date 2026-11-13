@@ -1625,7 +1625,7 @@ jobs:
         # here by name, instead of skipping main's size records and API
         # surface without a word.
         run: |
-          sha=$(.github/scripts/merge-base.sh "$BASE_REF" 'the size comparisons' 5 || true)
+          sha=$(.github/scripts/merge-base.sh "$BASE_REF" 'the size comparisons' 10 || true)
           if [ -z "$sha" ]; then
             echo "::error::Merge base not within 1000 commits of $BASE_REF: merge $BASE_REF into this branch."
             exit 1
