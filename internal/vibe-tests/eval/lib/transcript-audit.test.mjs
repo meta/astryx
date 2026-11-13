@@ -162,6 +162,7 @@ describe('reads the review found unaudited', () => {
     `echo x | xargs grep "/repo/my dir/x.probe.mjs" -e getByRole`,
     `echo x | xargs rg --files "/repo/my dir"`,
     `echo x | xargs ag -g probe "/repo/my dir"`,
+    `echo x | xargs ack -f "/repo/my dir"`,
   ])('fails %j', command => {
     expect(audit(command).violations.length).toBeGreaterThan(0);
   });
@@ -208,6 +209,8 @@ describe('reads the review found unaudited', () => {
     `rg -d 2 "from '../lib" src`,
     `rg --max-columns 200 "from '../lib" src`,
     `rg --color never "from '../lib" src`,
+    `ag -G tsx "from '../lib" src`,
+    `find src -name '*.tsx' -exec sed -i "s|'../lib/utils'|'@/lib/utils'|" {} + -exec echo done {} +`,
   ])('passes %j', command => {
     expect(audit(command).violations).toEqual([]);
   });

@@ -123,8 +123,8 @@ const OPTION_SPECS = {
     script: ['e', 'regexp'],
     file: ['f', 'file', 'files', 'type-list'],
   },
-  ag: {short: 'GgABCmp', attached: '', long: ['ignore', 'ignore-dir', 'file-search-regex', 'after', 'before', 'context', 'max-count', 'depth', 'path-to-ignore'], script: ['g', 'G', 'file-search-regex'], file: []},
-  ack: {short: 'ABCm', attached: '', long: ['type', 'ignore-dir', 'ignore-file', 'after-context', 'before-context', 'context', 'max-count', 'match'], script: ['match'], file: []},
+  ag: {short: 'GgABCmp', attached: '', long: ['ignore', 'ignore-dir', 'file-search-regex', 'after', 'before', 'context', 'max-count', 'depth', 'path-to-ignore'], script: ['g'], file: []},
+  ack: {short: 'ABCm', attached: '', long: ['type', 'ignore-dir', 'ignore-file', 'after-context', 'before-context', 'context', 'max-count', 'match'], script: ['match'], file: ['f', 'g']},
 };
 
 /** Splits a segment at pipes that are outside quotes. */
@@ -185,10 +185,10 @@ function scriptWords(words, spec) {
     if (/^-[^-]/.test(word)) {
       for (let at = 1; at < word.length; at++) {
         const letter = word[at];
+        if (spec.file.includes(letter)) fromFile = true;
         if (spec.attached.includes(letter)) break;
         if (!spec.short.includes(letter)) continue;
         const attached = at + 1 < word.length;
-        if (spec.file.includes(letter)) fromFile = true;
         if (spec.script.includes(letter)) scripts.push(attached ? words[index] : words[index + 1]);
         if (!attached) index++;
         break;
@@ -217,7 +217,13 @@ function textAsText(segment) {
       const command = match[1].startsWith('git') ? 'grep' : match[1].replace(/^[efz](?=grep)/, '');
       const at = lead.length + match.index + match[0].length;
       let rest = stage.slice(at);
-      const scripts = scriptWords(shellWords(rest), OPTION_SPECS[command]).filter(Boolean);
+      let words = shellWords(rest);
+      // A `find -exec` command ends at its `+` or `;` word; later words are find's own.
+      if (/-exec/.test(match[0])) {
+        const end = words.findIndex(word => /^(?:\+|\\?;|';'|";")$/.test(word.text));
+        if (end >= 0) words = words.slice(0, end);
+      }
+      const scripts = scriptWords(words, OPTION_SPECS[command]).filter(Boolean);
       for (const word of scripts.sort((a, b) => b.start - a.start)) {
         const text = word.text.replace(/"[^"]*"|'[^']*'/g, quoted => (/[\s|'"]/.test(quoted.slice(1, -1)) ? '""' : quoted));
         rest = rest.slice(0, word.start) + text + rest.slice(word.end);
