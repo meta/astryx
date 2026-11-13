@@ -10,6 +10,7 @@
  * @position api/theme-edit — storage and compile for the theme commands
  */
 
+import {EDITOR_GENERATED_MARK} from './_marks.mjs';
 import {parse as parseModule} from '@babel/parser';
 import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
@@ -532,16 +533,38 @@ export function refuse(code, message, extra = {}) {
 }
 
 /**
+ * A theme name without a pasted label: `theme: t`, `name=t`, `--theme t`
+ * and `slug: "t"` name t; quotes and backticks around it go. Case is kept.
+ * A space is no label separator without dashes: "Theme Park" stays.
+ * The one reader of such labels, for --theme and every editor command.
+ * @param {unknown} s
+ * @returns {string}
+ */
+export function unlabeledThemeName(s) {
+  return (
+    String(s ?? '')
+      .trim()
+      // A space ends a label only after dashes (`--theme t`): "Theme Park"
+      // is one name.
+      .replace(
+        /^(?:-+(?:theme|name|slug)(?:\s*[:=]\s*|\s+)|(?:theme|name|slug)\s*[:=]\s*)(?=\S)/i,
+        '',
+      )
+      .replace(/^['"`]+|['"`]+$/g, '')
+      .trim()
+  );
+}
+
+/**
  * A theme name as typed, read the way the editor reads it: a path to its
  * folder or a file in it (t.theme.ts, Brand.settings.json), in any case,
- * names the theme. The result may still need slugFor.
+ * or a pasted label (`theme: t`, `name: t`), names the theme. The result may still need slugFor.
  * @param {unknown} s
  * @returns {string}
  */
 export function typedThemeName(s) {
   return (
-    String(s ?? '')
-      .trim()
+    unlabeledThemeName(s)
       .toLowerCase()
       // ./t and .\t name the theme t.
       .replace(/^(\.[\\/])+/, '')
@@ -573,8 +596,18 @@ export function loadTheme(
     // A path or a capital letter typed for a theme that exists names it.
     // A file name typed for the theme (t.theme.ts, Brand.settings.json)
     // names the theme.
+    // The name a pasted label gives ("theme: park" is park) when its theme
+    // exists; else the whole name as typed ("Theme Park" is theme-park).
+    const whole = slugFor(
+      String(slug ?? '')
+        .trim()
+        .toLowerCase(),
+    );
     const plain = typedThemeName(slug);
-    const fixed = slugFor(plain);
+    const named = slugFor(plain);
+    const exists = (/** @type {string} */ n) =>
+      Boolean(n) && fs.existsSync(themeFiles(cwd, n).settings);
+    const fixed = !exists(named) && exists(whole) ? whole : named;
     const same = fs.existsSync(themeFiles(cwd, fixed).settings) ? fixed : null;
     // A list where one theme goes (t,u or "t;u"): one theme at a time,
     // each that exists named; never a new theme made of the list. A name
@@ -1536,7 +1569,17 @@ export function ownPartTokens(cwd, slug, part, scope = 'base', state = null) {
   const stamp = /\/\/ Built with \S+\.theme\.ts ([0-9a-f]{16})\./.exec(
     module,
   )?.[1];
-  if (!stamp || stamp !== themeSourceHash(cwd, slug)) return out;
+  /** @param {string} k */
+  const css = k =>
+    k.startsWith('--')
+      ? k
+      : k.replace(/[A-Z]/g, (/** @type {string} */ c) => `-${c.toLowerCase()}`);
+  // With no build made from the source as it is now (an edit since the last
+  // build), the file is read as written, as ownTokens reads page tokens.
+  if (!stamp || stamp !== themeSourceHash(cwd, slug)) {
+    for (const [k, v] of blockOf(f.ts, at)) out.set(css(k), v);
+    return out;
+  }
   const like = /\/\/ Built on @astryxdesign\/theme-([a-z0-9-]+) /.exec(
     module,
   )?.[1];
@@ -1546,16 +1589,7 @@ export function ownPartTokens(cwd, slug, part, scope = 'base', state = null) {
   const named = namedInOwnSource(cwd, slug);
   for (const [k, v] of blockOf(f.js, at)) {
     const given = settings.has(k) ? settings.get(k) : base.get(k);
-    if (given !== v && named(k))
-      out.set(
-        k.startsWith('--')
-          ? k
-          : k.replace(
-              /[A-Z]/g,
-              (/** @type {string} */ c) => `-${c.toLowerCase()}`,
-            ),
-        v,
-      );
+    if (given !== v && named(k)) out.set(css(k), v);
   }
   return out;
 }
@@ -2068,6 +2102,39 @@ function keepShades(pal, kept) {
 }
 
 /**
+ * Control heights scaled with the spacing dial (a denser theme has shorter
+ * controls), each kept distinct and in order: smallest to largest, a
+ * control never under 24px (the smallest target a pointer can use
+ * comfortably, unless the theme starts below it), each the plain scaled
+ * value unless it would meet the one below, which then keeps its own step
+ * scaled above it.
+ * @param {Array<[string, string]>} sizes token name and the theme's value
+ * @param {number} f the spacing rung's factor
+ * @returns {Array<[string, string]>} the tokens it writes, in px
+ */
+export function controlSizes(sizes, f) {
+  const px = sizes
+    .filter(([, v]) => /^[\d.]+px$/.test(String(v).trim()))
+    .map(([k, v]) => /** @type {[string, number]} */ ([k, parseFloat(v)]))
+    .sort((a, b) => a[1] - b[1]);
+  /** @type {Array<[string, string]>} */
+  const out = [];
+  let prev = null;
+  let prevOwn = null;
+  for (const [k, v] of px) {
+    let n = Math.max(Math.min(24, v), Math.round(v * f));
+    // Only a size that would meet (or pass) the one below moves: the plain
+    // scaled value otherwise.
+    if (prev != null && prevOwn != null && n <= prev)
+      n = prev + Math.max(1, Math.round((v - prevOwn) * f));
+    out.push([k, `${n}px`]);
+    prev = n;
+    prevOwn = v;
+  }
+  return out;
+}
+
+/**
  * The settings, as a `defineTheme` object.
  * @param {Ctx} ctx
  * @param {ThemeData} data
@@ -2404,6 +2471,9 @@ export function compileTheme(ctx, data, base) {
       return n && n.unit === '' && n.value === 0 ? '0px' : v;
     };
     for (const {target, s, list} of padQueue.values()) {
+      // The own source's padding on the same rule wins over the editor's:
+      // nothing is written there (the result says so).
+      if (ownPads(target, s)) continue;
       const prefix = /** @type {string} */ (padVars(target));
       const owner = prefix.slice('--astryx-'.length, -'-padding'.length);
       const scoped = target !== owner || s.when != null || s.state != null;
@@ -2414,7 +2484,9 @@ export function compileTheme(ctx, data, base) {
         const raw = String(x.value).trim();
         // initial and unset leave the variable without a value, so the part
         // takes Core's own default for it.
-        const value = /^(initial|unset)$/i.test(raw) ? 'initial' : raw;
+        const value = /^(initial|unset|inherit|revert|revert-layer)$/i.test(raw)
+          ? 'initial'
+          : raw;
         const w = splitTop(value, ' ').map(y => length(y.trim()));
         const one = length(value);
         for (const dir of /** @type {const} */ (['ltr', 'rtl'])) {
@@ -2596,6 +2668,26 @@ export function compileTheme(ctx, data, base) {
     return out;
   };
   /**
+   * Whether the theme's own source sets a padding on a part's rule for a
+   * scope (its plain rule, a variant, a state).
+   * @param {string} target @param {Setting} s
+   */
+  const ownPads = (target, s) => {
+    try {
+      return [
+        ...ownPartTokens(
+          ctx.project.cwd,
+          data.name,
+          target,
+          s.when ?? 'base',
+          s.state ? `:${s.state}` : null,
+        ).keys(),
+      ].some(k => /^padding(-|$)/.test(k));
+    } catch {
+      return false;
+    }
+  };
+  /**
    * The selector a narrower padding scope is written with (a clickable
    * card's class, a variant's attribute, a state's pseudo-class), or null
    * for a state Core writes as a block of its own.
@@ -2619,8 +2711,10 @@ export function compileTheme(ctx, data, base) {
     const dirFirst = b => {
       const keys = Object.keys(b);
       const plain = keys.filter(k => !k.startsWith(':'));
-      const dirs = keys.filter(k => /^:dir\(/.test(k));
-      const rest = keys.filter(k => k.startsWith(':') && !/^:dir\(/.test(k));
+      const dirs = keys.filter(k => /^:(where\()?dir\(/.test(k));
+      const rest = keys.filter(
+        k => k.startsWith(':') && !/^:(where\()?dir\(/.test(k),
+      );
       return Object.fromEntries(
         [...plain, ...dirs, ...rest].map(k => [
           k,
@@ -2664,6 +2758,10 @@ export function compileTheme(ctx, data, base) {
    */
   const dirBlock = (s, target, dir) => {
     const tg = ctx.project.target.get(target);
+    // On the plain rule, a direction's rule keeps the plain rule's weight
+    // (:where), so any variant, the own source's included, out-ranks it as
+    // it out-ranks the plain rule.
+    if (!s.state && !s.when) return [block(s, target), `:where(${dir})`];
     if (!s.state || tg?.states.includes(s.state))
       return [block(s, target), dir];
     const parent = block({...s, state: undefined}, target);
@@ -2901,21 +2999,25 @@ export function compileTheme(ctx, data, base) {
       } else if (s.thing === 'spacing') {
         const f = SPACING.find(([n]) => n === s.value)?.[1] ?? 1;
         // The rungs scale the spacing the base theme starts from.
+        /** @param {string} k @param {string} nv */
+        const put = (k, nv) => {
+          if (parts.length) for (const t of parts) block(s, t)[k] = nv;
+          else putTok(k, nv);
+        };
         for (const [k, core] of Object.entries(
           /** @type {Record<string, string>} */ (TOKENS),
         )) {
           const v = base.light[k] ?? core;
-          let nv = null;
           if (/^--spacing-/.test(k) && /rem$/.test(v))
-            nv = `${Number((parseFloat(v) * f).toFixed(3))}rem`;
-          // A control never gets smaller than 24px, the smallest target a
-          // pointer can use comfortably.
-          if (/^--size-element-/.test(k) && /px$/.test(v))
-            nv = `${Math.max(Math.min(24, parseFloat(v)), Math.round(parseFloat(v) * f))}px`;
-          if (nv === null) continue;
-          if (parts.length) for (const t of parts) block(s, t)[k] = nv;
-          else putTok(k, nv);
+            put(k, `${Number((parseFloat(v) * f).toFixed(3))}rem`);
         }
+        for (const [k, nv] of controlSizes(
+          Object.keys(/** @type {Record<string, string>} */ (TOKENS))
+            .filter(k => /^--size-element-/.test(k))
+            .map(k => [k, base.light[k] ?? TOKENS[k]]),
+          f,
+        ))
+          put(k, nv);
       }
     } else if (s.source === 'token') {
       if (parts.length) for (const t of parts) putComp(s, t, s.thing, s.value);
@@ -4612,7 +4714,7 @@ export function madeByEditor(file) {
   try {
     return fs
       .readFileSync(file, 'utf8')
-      .startsWith('// Generated by `astryx experimental theme editor`');
+      .startsWith(`// ${EDITOR_GENERATED_MARK}`);
   } catch {
     return false;
   }

@@ -32,7 +32,7 @@ let unbuilt = '';
 
 beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-real-bases-', FIXTURE_PACKAGES);
-  unbuilt = await installRealBaseThemes(cwd, ['butter', 'neutral']);
+  unbuilt = await installRealBaseThemes(cwd, ['butter', 'neutral', 'matcha']);
 }, 300_000);
 
 afterAll(() => {
@@ -114,5 +114,128 @@ describe('padding on real base themes', () => {
       '.astryx-card:where(.astryx-clickable-card:hover *)',
     );
     expect(reset).not.toMatch(/--astryx-card-padding-inline-start/);
+  }, 240_000);
+
+  it("lets the own source's padding on a part win over an editor padding there, base and variant (parts40)", async ctx => {
+    if (unbuilt) {
+      console.warn(`skipped: ${unbuilt}`);
+      return ctx.skip();
+    }
+    await themeEditNew('w', {cwd, like: 'neutral'});
+    const ts = path.join(cwd, 'themes/w/w.theme.ts');
+    const src = fs.readFileSync(ts, 'utf8');
+    const mine =
+      "card: {base: {padding: '6px'}, 'variant:muted': {padding: '5px'}}, section: {base: {padding: '6px'}},";
+    const own = src.includes('components:')
+      ? src.replace('components: {', `components: {\n    ${mine}`)
+      : src.replace(
+          /defineTheme\(\{/,
+          `defineTheme({\n  components: {${mine}},`,
+        );
+    expect(own).not.toBe(src);
+    fs.writeFileSync(ts, own);
+    await themeEditShow('w', {cwd});
+    const card = await themeEditSet('w', 'padding', '20px', {cwd, on: 'card'});
+    expect(card.data.notes.join(' ')).toMatch(
+      /w\.theme\.ts sets padding on card itself/,
+    );
+    expect(ruleOf('w', '.astryx-card')).toMatch(/--astryx-card-padding:\s*6px/);
+    await themeEditSet('w', 'padding-left', '30px', {cwd, on: 'section'});
+    expect(ruleOf('w', '.astryx-section')).toMatch(
+      /--astryx-section-padding:\s*6px/,
+    );
+    expect(
+      fs.readFileSync(path.join(cwd, 'themes/w/w.css'), 'utf8'),
+    ).not.toContain('.astryx-section:where(:dir(ltr))');
+    // An unequal editor padding on a part's plain rule keeps the plain
+    // rule's weight in each direction, so the own variant out-ranks it.
+    await themeEditNew('v', {cwd, like: 'neutral'});
+    const vts = path.join(cwd, 'themes/v/v.theme.ts');
+    const vsrc = fs.readFileSync(vts, 'utf8');
+    const vmine = "card: {'variant:muted': {padding: '5px'}},";
+    fs.writeFileSync(
+      vts,
+      vsrc.includes('components:')
+        ? vsrc.replace('components: {', `components: {\n    ${vmine}`)
+        : vsrc.replace(
+            /defineTheme\(\{/,
+            `defineTheme({\n  components: {${vmine}},`,
+          ),
+    );
+    await themeEditShow('v', {cwd});
+    await themeEditSet('v', 'padding-left', '30px', {cwd, on: 'card'});
+    const css = fs.readFileSync(path.join(cwd, 'themes/v/v.css'), 'utf8');
+    expect(css).toContain('.astryx-card:where(:dir(ltr)) {');
+    expect(css).not.toMatch(/\.astryx-card:dir\(ltr\) \{/);
+    expect(ruleOf('v', '.astryx-card[data-variant="muted"]')).toMatch(
+      /--astryx-card-padding:\s*5px/,
+    );
+  }, 240_000);
+
+  it('keeps control sizes apart and in order at every spacing step, the plain scale unless two would meet (parts41)', async ctx => {
+    if (unbuilt) {
+      console.warn(`skipped: ${unbuilt}`);
+      return ctx.skip();
+    }
+    // Neutral takes Core's 28/32/36px; Matcha sets 36/40/44px. Only tight on
+    // Neutral would make two sizes meet (21px under the 24px floor, 24px).
+    const want = {
+      neutral: {
+        tight: [24, 27, 30],
+        compact: [25, 28, 32],
+        roomy: [32, 36, 41],
+        spacious: [35, 40, 45],
+      },
+      matcha: {
+        tight: [27, 30, 33],
+        compact: [32, 35, 39],
+        roomy: [41, 45, 50],
+        spacious: [45, 50, 55],
+      },
+    };
+    for (const [like, steps] of Object.entries(want)) {
+      const slug = `sp-${like}`;
+      await themeEditNew(slug, {cwd, like});
+      for (const [step, sizes] of Object.entries(steps)) {
+        await themeEditSet(slug, 'spacing', step, {cwd});
+        const css = fs.readFileSync(
+          path.join(cwd, 'themes', slug, `${slug}.css`),
+          'utf8',
+        );
+        const got = ['sm', 'md', 'lg'].map(n =>
+          Number(new RegExp(`--size-element-${n}:\\s*(\\d+)px`).exec(css)?.[1]),
+        );
+        expect(got, `${like} ${step}`).toEqual(sizes);
+      }
+    }
+  }, 240_000);
+
+  it('reads an own-source padding edited since the last build, so the set and its note agree (11490)', async ctx => {
+    if (unbuilt) {
+      console.warn(`skipped: ${unbuilt}`);
+      return ctx.skip();
+    }
+    await themeEditNew('ed', {cwd, like: 'neutral'});
+    const ts = path.join(cwd, 'themes/ed/ed.theme.ts');
+    const src = fs.readFileSync(ts, 'utf8');
+    const mine = "card: {base: {padding: '6px'}},";
+    fs.writeFileSync(
+      ts,
+      src.includes('components:')
+        ? src.replace('components: {', `components: {\n    ${mine}`)
+        : src.replace(
+            /defineTheme\(\{/,
+            `defineTheme({\n  components: {${mine}},`,
+          ),
+    );
+    // No build between the edit and the set.
+    const r = await themeEditSet('ed', 'padding', '20px', {cwd, on: 'card'});
+    expect(r.data.notes.join(' ')).toMatch(
+      /ed\.theme\.ts sets padding on card itself/,
+    );
+    expect(ruleOf('ed', '.astryx-card')).toMatch(
+      /--astryx-card-padding:\s*6px/,
+    );
+    expect(ruleOf('ed', '.astryx-card')).not.toMatch(/20px/);
   }, 240_000);
 });

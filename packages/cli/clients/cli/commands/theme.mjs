@@ -670,11 +670,27 @@ function printThemeApp(result) {
 }
 
 /**
+ * The base the experimental theme editor can start an ejected theme from,
+ * by the editor's own check: the theme's slug when it is a built-in base the
+ * editor knows (LIKE) and its package is installed where the command runs
+ * (baseInstalled), else neutral. Loaded only for an eject.
+ * @param {{slug?: string | null}} data
+ * @param {string} cwd
+ * @returns {Promise<string>}
+ */
+export async function editorBaseFor(data, cwd) {
+  if (!data.slug) return 'neutral';
+  const {editorBaseIn} = await import('../../../api/theme-edit/_adapter.mjs');
+  return editorBaseIn(data.slug, cwd);
+}
+
+/**
  * Print every field in a source-fork receipt.
  * @param {import('../../../api/theme/theme.type.mjs').ThemeEjectResponse} result
  * @param {ThemeCommandWords} [words]
+ * @param {string} [like] the base the theme editor line starts from
  */
-function printThemeEject(result, words = THEME_WORDS) {
+function printThemeEject(result, words = THEME_WORDS, like = 'neutral') {
   const {data} = result;
   emit(
     section('Ejected theme'),
@@ -703,6 +719,12 @@ function printThemeEject(result, words = THEME_WORDS) {
       : []),
     text(
       `This is a local fork. Build it with ${buildStep(getCliInvocation(), words, path.join(data.outputDir, data.entry))}.`,
+    ),
+    // One theme-only line (AST-017 FR27): the editor builds only on an
+    // Astryx theme package, so a theme from another package starts from
+    // neutral.
+    text(
+      `To make or change a theme: the experimental theme editor, ${getCliInvocation()} experimental theme editor new <name> --like ${like}.`,
     ),
   );
 }
@@ -923,6 +945,10 @@ function registerPaletteCommands(
           : []),
         text(
           'Review and edit the candidate before adopting it as theme-owned palette data.',
+        ),
+        // One theme-only line (AST-017 FR27).
+        text(
+          `To make or change a theme: the experimental theme editor makes the palettes from one color, ${getCliInvocation(process.cwd())} experimental theme editor set <name> accent <color>.`,
         ),
       );
       return NO_RESULT_SET;
@@ -1616,7 +1642,12 @@ function registerThemeCommands(theme, program, docs, words) {
       }
       await warnOnThemeIntegrationIssues(json);
       if (json) jsonOut(result);
-      else printThemeEject(result, words);
+      else
+        printThemeEject(
+          result,
+          words,
+          await editorBaseFor(result.data, process.cwd()),
+        );
       return NO_RESULT_SET;
     },
   });

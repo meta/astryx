@@ -2618,7 +2618,8 @@ const QUESTIONS_H = [
   ['halve the spacing', {top: /^set q spacing less$/}],
   [
     'cut the border radius in half on inputs',
-    {top: /^set q corners less --on inputs$/},
+    // Half the radius inputs have now (hunt61), not a dial step.
+    {top: /^set q border-radius \d*\.?\d+(px|rem) --on inputs$/},
   ],
   [
     'corners: 0.5 rem',

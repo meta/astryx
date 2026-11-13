@@ -887,6 +887,7 @@ export function registerExperimentalTheme(group, program) {
             `[ok] made theme "${r.data.theme}"${r.data.like ? ` on top of ${r.data.like}` : ''}`,
             ...project(/** @type {any} */ (r.data)),
             `Tip: ${EDITOR} set ${r.data.theme} <thing> <value>, or ${HOW} "<what you want>"`,
+            `Look at it after each change (this changes nothing in your app): ${EDITOR} show ${r.data.theme} --png writes themes/${r.data.theme}/preview.png and sheet.png from real components; open the PNGs and check them against the request`,
           ],
         ),
     }),
@@ -1127,7 +1128,11 @@ export function registerExperimentalTheme(group, program) {
               : [
                   ...project(/** @type {any} */ (r.data)),
                   // A folder add refuses has a note that says why instead.
-                  ...(r.data.notes.some(n => n.includes(' refuses this folder'))
+                  ...(r.data.notes.some(
+                    n =>
+                      n.includes(' refuses this folder') ||
+                      n.startsWith('no preview here; '),
+                  )
                     ? []
                     : [
                         `Tip: ${PREFIX} preview add${o.path == null ? '' : ` --path ${quoteCommandArgument(String(o.path))}`}`,

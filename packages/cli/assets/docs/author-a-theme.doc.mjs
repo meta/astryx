@@ -7,7 +7,7 @@ export const docs = {
   title: 'Author a theme',
   category: 'guide',
   keywords: ['defineTheme', 'create theme', 'custom theme', 'extends', 'component overrides', 'custom variants', 'adaptations', 'breakpoints', 'theme build', 'theme family', 'tokenVar', 'resolveThemeTokens', 'useTheme', 'palette', 'generate palette', 'seed colors', 'color ramp', 'icon registry'],
-  description: 'Create, customize, and build a theme: defineTheme, palette generation, token overrides, component style overrides, custom variants, responsive adaptations, and production builds.',
+  description: 'Start here: the experimental theme editor makes and changes themes for you (`astryx experimental theme editor new <name> --like neutral`; see the theme doc), checked against what components read. By hand: create, customize, and build a theme: defineTheme, palette generation, token overrides, component style overrides, custom variants, responsive adaptations, and production builds.',
 
   sections: [
     {

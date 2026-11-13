@@ -37,7 +37,7 @@ import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as edit from './_edit.mjs';
-import {themeCacheRoot} from './_project.mjs';
+import {baseInstalled, themeCacheRoot} from './_project.mjs';
 import * as preview from './_preview-app.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
@@ -101,6 +101,17 @@ export async function themeEditHow(subject, options = {}) {
 
 /** The built-in themes a theme can build on (`--like`). */
 export const builtInThemes = () => [...LIKE];
+
+/**
+ * The base the editor can start a theme from in a project: `slug` when it
+ * is a built-in base installed there (the check `new --like` makes), else
+ * neutral.
+ * @param {string | null | undefined} slug
+ * @param {string} cwd
+ * @returns {string}
+ */
+export const editorBaseIn = (slug, cwd) =>
+  slug && LIKE.includes(slug) && baseInstalled(cwd, slug) ? slug : 'neutral';
 
 /** The sections `show --section` takes. */
 export const showSections = () => [...SHOWCASE_GROUPS];
