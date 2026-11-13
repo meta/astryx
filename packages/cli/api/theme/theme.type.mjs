@@ -38,7 +38,8 @@
  * astryx --json theme build <file> --check
  * @typedef {object} ThemeBuildCheckResponse
  * @property {'theme.build.check'} type
- * @property {{name: string, upToDate: boolean, stale: Array<{path: string, reason: 'missing' | 'outdated'}>, checked: string[]}} data
+ * @property {{name: string, upToDate: boolean, stale: Array<{path: string, reason: 'missing' | 'outdated'}>, checked: string[], code?: 'ERR_THEME_STALE'}} data
+ *   `code` is set when the outputs are stale or missing (exit 1).
  */
 
 /**
@@ -124,7 +125,11 @@
  * re-run, and an edited template is the consumer's file to keep.
  * @typedef {object} ThemeTemplateResponse
  * @property {'theme.template'} type
- * @property {{path: string, written: boolean, reason: 'exists' | null}} data
+ * @property {{path: string, written: boolean, reason: 'exists' | null, overwritable?: boolean, alternative?: string | null}} data
+ *   When the file was left as is, `overwritable` says whether `--overwrite`
+ *   would replace it (a copy of the template or a theme source, outside a
+ *   theme the editor made), and `alternative` is a free path for the template
+ *   when it would not.
  */
 
 /**

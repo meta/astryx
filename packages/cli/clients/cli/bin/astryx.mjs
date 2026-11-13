@@ -24,8 +24,12 @@
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {dirname, join} from 'node:path';
 import * as nodeModule from 'node:module';
-import {existsSync, lstatSync, mkdirSync, realpathSync} from 'node:fs';
+import {existsSync, mkdirSync, realpathSync} from 'node:fs';
 import {tmpdir} from 'node:os';
+import {
+  currentUid,
+  isPrivateDir,
+} from '../../../foundation/env/private-dir.mjs';
 
 // Node's compile cache keeps the compiled form of the CLI's modules between
 // runs, so a run skips most of their compiling. It lives in a folder of the
@@ -33,24 +37,19 @@ import {tmpdir} from 'node:os';
 // only once that folder exists, so a machine's first run just makes it and a
 // one-off run never pays to write the cache; and only while it is a real
 // folder the user owns that no one else can reach, since a shared folder
-// could hold planted cache files. Where the system has no user ids
+// could hold planted cache files (foundation/env/private-dir.mjs, the check
+// the kept search catalogs use too). Where the system has no user ids
 // (Windows), ownership cannot be checked, so the cache stays off.
 // NODE_DISABLE_COMPILE_CACHE turns it off. It is best effort: a cache Node
 // cannot read or write is skipped, and nothing about it is printed.
 try {
-  const uid = typeof process.getuid === 'function' ? process.getuid() : null;
+  const uid = currentUid();
   if (!process.env.NODE_DISABLE_COMPILE_CACHE && uid != null) {
     const cacheDir = join(tmpdir(), `node-compile-cache-${uid}`);
     if (!existsSync(cacheDir)) {
       mkdirSync(cacheDir, {mode: 0o700});
-    } else {
-      const stat = lstatSync(cacheDir);
-      const own =
-        stat.isDirectory() &&
-        !stat.isSymbolicLink() &&
-        stat.uid === uid &&
-        (stat.mode & 0o077) === 0;
-      if (own) nodeModule.enableCompileCache?.(cacheDir);
+    } else if (isPrivateDir(cacheDir)) {
+      nodeModule.enableCompileCache?.(cacheDir);
     }
   }
 } catch {
@@ -91,7 +90,12 @@ if (!isNodeVersionSupported(process.versions.node)) {
 // does it load and dispatch the command. See clients/cli/run.mjs,
 // foundation/release/handoff.mjs, and spec AST-081 FR2 and FR9.
 const {runCli} = await importSrc('run.mjs');
-await runCli({
-  cliRoot: join(binDir, '..', '..', '..'),
-  argv: process.argv.slice(2),
-});
+const {recordRunFor} = await importSrc('../../foundation/fs/gather-cache.mjs');
+// A search or build records what it reads, so a later run with the same
+// inputs can reuse its gathered catalog (foundation/fs/gather-cache.mjs).
+await recordRunFor(process.argv.slice(2), () =>
+  runCli({
+    cliRoot: join(binDir, '..', '..', '..'),
+    argv: process.argv.slice(2),
+  }),
+);

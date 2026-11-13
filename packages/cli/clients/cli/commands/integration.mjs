@@ -95,6 +95,14 @@ async function verifyPackage(program) {
         blocks.push(text(`Contributes ${counts.join(', ')}.`));
       }
     }
+    // Information only: it changes neither the exit code nor the result.
+    if (tarball != null && /\.ts$/.test(inventory.manifest ?? '')) {
+      blocks.push(
+        text(
+          `[info] ${inventory.manifest} is TypeScript, which the CLI transpiles on its first read on each machine; ship astryx.integration.mjs to load faster. See \`${formatCliCommand('docs authoring/ship/publishing keep-private-files-out')}\`.`,
+        ),
+      );
+    }
     if (issues.length > 0) {
       blocks.push(
         list(

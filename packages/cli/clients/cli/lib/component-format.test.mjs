@@ -303,3 +303,42 @@ describe('component icon slots', () => {
     );
   });
 });
+
+describe('example kind', () => {
+  const docs = {
+    name: 'Widget',
+    description: 'A widget.',
+    props: [],
+    examples: [
+      {label: 'Wrap the app', kind: 'setup', code: 'createWidgetStore(config)'},
+      {label: 'Basic', code: '<Widget label="Hi" />'},
+    ],
+  };
+
+  it('labels a setup example as code only in full output', () => {
+    const out = formatFull(docs);
+    expect(out).toContain('### Wrap the app (setup, code only)');
+    expect(out).toContain('### Basic\n');
+    expect(out).not.toContain('Basic (setup');
+  });
+
+  it('labels a setup example in compact output', () => {
+    expect(formatCompact(docs, 'Widget')).toContain(
+      '### Wrap the app (setup, code only)',
+    );
+  });
+
+  it('names an unlabeled setup example "Setup"', () => {
+    const out = formatFull({
+      ...docs,
+      examples: [{kind: 'setup', code: 'createWidgetStore(config)'}],
+    });
+    expect(out).toContain('### Setup (setup, code only)');
+  });
+
+  it('shows a demo example, not a setup one, as the brief usage line', () => {
+    const out = formatBrief(docs, 'Widget');
+    expect(out).toContain('<Widget label="Hi" />');
+    expect(out).not.toContain('createWidgetStore');
+  });
+});

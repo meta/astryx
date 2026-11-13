@@ -33,7 +33,7 @@ import {useHoverCard} from '../HoverCard/useHoverCard';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {IconButton} from '../IconButton/IconButton';
 import {ComponentIcon} from '../Icon/ComponentIcon';
-import {useClipboard} from '../hooks/useClipboard';
+import {useClipboardCopy} from '../hooks/useClipboard';
 import {themeProps} from '../utils/themeProps';
 import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
 import {
@@ -132,9 +132,8 @@ const COPY_FEEDBACK_MS = 1500;
  * The per-row copy affordance: a compact ghost `IconButton` that writes the
  * row's value to the clipboard, flips `copy` → `check` for a moment, and
  * announces the copy to a polite live region (a swapped aria-label alone
- * isn't reliably announced). A clipboard rejection is a silent no-op. The
- * clipboard write, copied flag, reset timer, and announcement are owned by
- * `useClipboard` — shared with CodeBlock's built-in copy button.
+ * isn't reliably announced). The error detail of a failed write is never
+ * shown.
  *
  * Kept as its own component so its state/timer/effect only exist for rows that
  * actually opt into copying — read-only rows render no button and carry none
@@ -142,8 +141,14 @@ const COPY_FEEDBACK_MS = 1500;
  */
 function CopyButton({value}: {value: string}) {
   const t = useComponentTranslator();
-  const {copy, isCopied: copied} = useClipboard({
+  const copyFailedLabel = t('@astryx.timestamp.copyFailed');
+  const {
+    copy,
+    isCopied: copied,
+    isFailed: copyFailed,
+  } = useClipboardCopy({
     announce: t('@astryx.timestamp.copied'),
+    announceFailure: copyFailedLabel,
     resetAfterMs: COPY_FEEDBACK_MS,
   });
 
@@ -158,21 +163,27 @@ function CopyButton({value}: {value: string}) {
       icon={
         <ComponentIcon
           slot="timestamp-copy"
-          state={{copied}}
-          fallback={{icon: copied ? 'check' : 'copy', size: 'sm'}}
+          state={{copied: copied && !copyFailed}}
+          fallback={{
+            icon: copyFailed ? 'close' : copied ? 'check' : 'copy',
+            size: 'sm',
+          }}
           color="inherit"
         />
       }
-      // Visible hover/focus hint via Button's built-in tooltip: 'Copy',
-      // flipping to 'Copied' after a successful copy in step with the icon.
-      // The full 'Copy <value>' string stays the aria-label for assistive tech.
-      tooltip={t(
-        copied ? '@astryx.timestamp.copied' : '@astryx.timestamp.copy',
-      )}
+      // The tooltip stays short. At rest the name carries the full value for
+      // assistive technology.
+      tooltip={
+        copyFailed
+          ? copyFailedLabel
+          : t(copied ? '@astryx.timestamp.copied' : '@astryx.timestamp.copy')
+      }
       label={
-        copied
-          ? t('@astryx.timestamp.copied')
-          : t('@astryx.timestamp.copyValue', {value})
+        copyFailed
+          ? copyFailedLabel
+          : copied
+            ? t('@astryx.timestamp.copied')
+            : t('@astryx.timestamp.copyValue', {value})
       }
       onClick={handleCopy}
       {...themeProps('timestamp-copy-button')}

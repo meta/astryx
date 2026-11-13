@@ -54,6 +54,8 @@ export interface TourContextValue {
   onPrevious: () => void;
   /** Dismiss the tour with a reason. */
   onDismiss: (source: TourDismissSource) => void;
+  /** The element that had focus when the tour started, if any. */
+  getOpener: () => HTMLElement | null;
 }
 
 export const TourContext = createContext<TourContextValue | null>(null);

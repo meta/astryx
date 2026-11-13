@@ -54,6 +54,17 @@ function focusedDate(): string | null {
   return document.activeElement?.getAttribute('data-date') ?? null;
 }
 
+/** Each week row's first date, mapped to the week number the row shows. */
+function weekNumbersByRowStart(): Map<string, string> {
+  const rows = document.querySelectorAll('[role="grid"] [role="row"]');
+  return new Map(
+    Array.from(rows, (row): [string, string] => [
+      row.querySelector('button[data-date]')?.getAttribute('data-date') ?? '',
+      row.querySelector('[role="rowheader"]')?.textContent ?? '',
+    ]).filter(([rowStart]) => rowStart !== ''),
+  );
+}
+
 describe('Calendar in the Persian calendar', () => {
   it('lays out Aban 1405 with its calendar day numbers and labels', () => {
     render(<Calendar calendar="persian" focusDate="2026-10-30" />);
@@ -151,6 +162,39 @@ describe('Calendar in the Persian calendar', () => {
     );
     const row = dayButton('2026-10-30').closest('[role="row"]');
     expect(row?.querySelector('[role="rowheader"]')?.textContent).toBe('44');
+  });
+
+  it('numbers Sunday-start rows like the same Gregorian rows', () => {
+    const {unmount} = render(
+      <Calendar
+        calendar="persian"
+        focusDate="2026-10-30"
+        weekStartsOn="sun"
+        hasWeekNumbers
+      />,
+    );
+    const persian = weekNumbersByRowStart();
+    unmount();
+    render(
+      <Calendar
+        focusDate="2026-10-30"
+        weekStartsOn="sun"
+        numberOfMonths={2}
+        hasWeekNumbers
+      />,
+    );
+    const gregorian = weekNumbersByRowStart();
+    expect([...persian]).toEqual([
+      ['2026-10-18', '43'],
+      ['2026-10-25', '44'],
+      ['2026-11-01', '45'],
+      ['2026-11-08', '46'],
+      ['2026-11-15', '47'],
+      ['2026-11-22', '48'],
+    ]);
+    for (const [rowStart, weekNumber] of persian) {
+      expect(gregorian.get(rowStart)).toBe(weekNumber);
+    }
   });
 
   it('writes day numbers and labels in the locale', () => {
