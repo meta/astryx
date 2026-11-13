@@ -1976,159 +1976,272 @@ test("the caption toggle's width comes from its own delivery, never from a read 
   expect(reads).toEqual([]);
 });
 
-test('no caption read follows a write in the same frame callback as an open caption widens to fewer lines', async ({
-  page,
-}) => {
-  // A read after a write in one frame callback forces a layout before the
-  // browser's own. A transform or an opacity changes no layout, so it counts
-  // as no write.
-  await page.addInitScript(() => {
-    const reads: string[] = [];
-    (window as unknown as {__frameReads: string[]}).__frameReads = reads;
-    let isInFrame = false;
-    let hasWritten = false;
-    const nativeFrame = window.requestAnimationFrame.bind(window);
-    window.requestAnimationFrame = callback =>
-      nativeFrame(time => {
-        isInFrame = true;
-        hasWritten = false;
-        try {
-          callback(time);
-        } finally {
-          isInFrame = false;
+const CAPTION_STORIES = [
+  {name: 'a plain caption', story: 'core-lightbox--gallery-with-captions'},
+  {
+    name: 'a paragraph caption',
+    story: 'core-lightbox--gallery-with-paragraph-caption-fixture',
+  },
+];
+
+for (const {name, story} of CAPTION_STORIES) {
+  test(`no caption read follows a write in the same frame callback as an open caption widens to fewer lines (${name})`, async ({
+    page,
+  }) => {
+    // A read after a write in one frame callback forces a layout before the
+    // browser's own. A transform or an opacity changes no layout, so it counts
+    // as no write.
+    await page.addInitScript(() => {
+      const reads: string[] = [];
+      (window as unknown as {__frameReads: string[]}).__frameReads = reads;
+      let isInFrame = false;
+      let hasWritten = false;
+      const nativeFrame = window.requestAnimationFrame.bind(window);
+      window.requestAnimationFrame = callback =>
+        nativeFrame(time => {
+          isInFrame = true;
+          hasWritten = false;
+          try {
+            callback(time);
+          } finally {
+            isInFrame = false;
+          }
+        });
+      const noteWrite = () => {
+        if (isInFrame) {
+          hasWritten = true;
         }
-      });
-    const noteWrite = () => {
-      if (isInFrame) {
-        hasWritten = true;
-      }
-    };
-    const setters: [object, string][] = [
-      [Element.prototype, 'className'],
-      [HTMLElement.prototype, 'hidden'],
-      [Node.prototype, 'textContent'],
-      [CharacterData.prototype, 'data'],
-    ];
-    for (const [proto, name] of setters) {
-      const own = Object.getOwnPropertyDescriptor(proto, name);
-      if (own?.set == null) {
-        continue;
-      }
-      const set = own.set;
-      Object.defineProperty(proto, name, {
-        ...own,
-        set(this: unknown, value: unknown) {
-          noteWrite();
-          set.call(this, value);
-        },
-      });
-    }
-    const compositorOnly = new Set([
-      'translate',
-      'scale',
-      'rotate',
-      'transform',
-      'opacity',
-    ]);
-    const methods: [Record<string, unknown>, string][] = [
-      [Element.prototype as unknown as Record<string, unknown>, 'setAttribute'],
-      [
-        Element.prototype as unknown as Record<string, unknown>,
-        'removeAttribute',
-      ],
-      [
-        CSSStyleDeclaration.prototype as unknown as Record<string, unknown>,
-        'setProperty',
-      ],
-      [
-        CSSStyleDeclaration.prototype as unknown as Record<string, unknown>,
-        'removeProperty',
-      ],
-    ];
-    for (const [proto, name] of methods) {
-      const method = proto[name] as (...args: unknown[]) => string | undefined;
-      proto[name] = function (
-        this: unknown,
-        ...args: unknown[]
-      ): string | undefined {
-        if (
-          !(this instanceof CSSStyleDeclaration) ||
-          !compositorOnly.has(String(args[0]))
-        ) {
-          noteWrite();
-        }
-        return method.apply(this, args);
       };
-    }
-    const note = (name: string, node: unknown) => {
-      const element =
-        node instanceof Element
-          ? node
-          : node instanceof Node
-            ? node.parentElement
-            : null;
-      if (
-        isInFrame &&
-        hasWritten &&
-        element?.closest('[data-lightbox-caption]') != null
-      ) {
-        reads.push(name);
+      const setters: [object, string][] = [
+        [Element.prototype, 'className'],
+        [HTMLElement.prototype, 'hidden'],
+        [Node.prototype, 'textContent'],
+        [CharacterData.prototype, 'data'],
+      ];
+      for (const [proto, name] of setters) {
+        const own = Object.getOwnPropertyDescriptor(proto, name);
+        if (own?.set == null) {
+          continue;
+        }
+        const set = own.set;
+        Object.defineProperty(proto, name, {
+          ...own,
+          set(this: unknown, value: unknown) {
+            noteWrite();
+            set.call(this, value);
+          },
+        });
       }
-    };
-    const getters: [object, string][] = [
-      [HTMLElement.prototype, 'offsetWidth'],
-      [HTMLElement.prototype, 'offsetHeight'],
-      [Element.prototype, 'clientWidth'],
-      [Element.prototype, 'clientHeight'],
-      [Element.prototype, 'scrollWidth'],
-      [Element.prototype, 'scrollHeight'],
-    ];
-    for (const [proto, name] of getters) {
-      const own = Object.getOwnPropertyDescriptor(proto, name);
-      if (own?.get == null) {
+      const compositorOnly = new Set([
+        'translate',
+        'scale',
+        'rotate',
+        'transform',
+        'opacity',
+      ]);
+      const methods: [Record<string, unknown>, string][] = [
+        [
+          Element.prototype as unknown as Record<string, unknown>,
+          'setAttribute',
+        ],
+        [
+          Element.prototype as unknown as Record<string, unknown>,
+          'removeAttribute',
+        ],
+        [
+          CSSStyleDeclaration.prototype as unknown as Record<string, unknown>,
+          'setProperty',
+        ],
+        [
+          CSSStyleDeclaration.prototype as unknown as Record<string, unknown>,
+          'removeProperty',
+        ],
+      ];
+      for (const [proto, name] of methods) {
+        const method = proto[name] as (
+          ...args: unknown[]
+        ) => string | undefined;
+        proto[name] = function (
+          this: unknown,
+          ...args: unknown[]
+        ): string | undefined {
+          if (
+            !(this instanceof CSSStyleDeclaration) ||
+            !compositorOnly.has(String(args[0]))
+          ) {
+            noteWrite();
+          }
+          return method.apply(this, args);
+        };
+      }
+      const note = (name: string, node: unknown) => {
+        const element =
+          node instanceof Element
+            ? node
+            : node instanceof Node
+              ? node.parentElement
+              : null;
+        if (
+          isInFrame &&
+          hasWritten &&
+          element?.closest('[data-lightbox-caption]') != null
+        ) {
+          reads.push(name);
+        }
+      };
+      const getters: [object, string][] = [
+        [HTMLElement.prototype, 'offsetWidth'],
+        [HTMLElement.prototype, 'offsetHeight'],
+        [Element.prototype, 'clientWidth'],
+        [Element.prototype, 'clientHeight'],
+        [Element.prototype, 'scrollWidth'],
+        [Element.prototype, 'scrollHeight'],
+      ];
+      for (const [proto, name] of getters) {
+        const own = Object.getOwnPropertyDescriptor(proto, name);
+        if (own?.get == null) {
+          continue;
+        }
+        const get = own.get as (this: Element) => number;
+        Object.defineProperty(proto, name, {
+          configurable: true,
+          get(this: Element): number {
+            note(name, this);
+            return get.call(this);
+          },
+        });
+      }
+      const rect = Element.prototype.getBoundingClientRect;
+      Element.prototype.getBoundingClientRect = function (this: Element) {
+        note('getBoundingClientRect', this);
+        return rect.call(this);
+      };
+    });
+    await page.route('https://picsum.photos/**', async route => {
+      const id = /\/id\/(\d+)\//.exec(route.request().url())?.[1] ?? '10';
+      await route.fulfill({
+        contentType: 'image/svg+xml',
+        body: photoSvg(COLORS[id] ?? '#888'),
+      });
+    });
+    await page.setViewportSize({width: 402, height: 874});
+    await openStory(page, storybook(), story);
+    await page
+      .getByRole('button', {name: 'Open gallery with captions'})
+      .click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('button', {name: 'more'})).toBeVisible();
+    await frames(page, 2);
+    await dialog.getByRole('button', {name: 'more'}).click();
+    await expect(dialog.getByRole('button', {name: 'less'})).toBeVisible();
+    await frames(page, 4);
+    // A phone turned on its side: the open caption needs fewer lines, which
+    // wait for the next frame.
+    await page.setViewportSize({width: 874, height: 402});
+    await frames(page, 6);
+    await expect(dialog.getByRole('button', {name: 'less'})).toBeVisible();
+    const reads = await page.evaluate(
+      () => (window as unknown as {__frameReads: string[]}).__frameReads,
+    );
+    expect(reads).toEqual([]);
+  });
+}
+
+for (const {name, story} of CAPTION_STORIES) {
+  test(`an open caption that widens to one line fewer gives "less" a line of its own only where it does not fit beside the last line (${name})`, async ({
+    page,
+  }) => {
+    await page.route('https://picsum.photos/**', async route => {
+      const id = /\/id\/(\d+)\//.exec(route.request().url())?.[1] ?? '10';
+      await route.fulfill({
+        contentType: 'image/svg+xml',
+        body: photoSvg(COLORS[id] ?? '#888'),
+      });
+    });
+    const narrow = {width: 360, height: 874};
+    await page.setViewportSize(narrow);
+    await openStory(page, storybook(), story);
+    await page
+      .getByRole('button', {name: 'Open gallery with captions'})
+      .click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('button', {name: 'more'}).click();
+    await expect(dialog.getByRole('button', {name: 'less'})).toBeVisible();
+    await frames(page, 4);
+    const read = async () =>
+      dialog.evaluate(element => {
+        const caption = element.querySelector(
+          '[data-current] [data-lightbox-caption]',
+        ) as HTMLElement;
+        const text = caption.querySelector('.astryx-text') as HTMLElement;
+        const flow = text.firstElementChild as HTMLElement;
+        const place = flow.firstElementChild as HTMLElement;
+        const toggle = caption.querySelector('button') as HTMLElement;
+        const lineHeight = parseFloat(getComputedStyle(text).lineHeight);
+        // The text's own lines, from its text nodes only.
+        const words: DOMRect[] = [];
+        const walker = document.createTreeWalker(flow, NodeFilter.SHOW_TEXT);
+        for (
+          let node = walker.nextNode();
+          node != null;
+          node = walker.nextNode()
+        ) {
+          const range = document.createRange();
+          range.selectNodeContents(node);
+          words.push(...[...range.getClientRects()].filter(r => r.width > 0));
+        }
+        const textBottom = Math.max(...words.map(rect => rect.bottom));
+        const lastLine = words.filter(
+          rect => rect.bottom > textBottom - lineHeight / 2,
+        );
+        const toggleBox = toggle.getBoundingClientRect();
+        const placeStyle = getComputedStyle(place);
+        return {
+          lines: new Set(words.map(rect => Math.round(rect.top))).size,
+          isBeside:
+            Math.abs(
+              (toggleBox.top + toggleBox.bottom) / 2 -
+                (textBottom - lineHeight / 2),
+            ) <=
+            lineHeight / 2,
+          lastLineEnd: Math.max(...lastLine.map(rect => rect.right)),
+          toggleLeft: toggleBox.left,
+          needed:
+            place.getBoundingClientRect().width +
+            parseFloat(placeStyle.marginLeft) +
+            parseFloat(placeStyle.marginRight),
+          flowRight: flow.getBoundingClientRect().right,
+        };
+      });
+    const {lines: narrowLines} = await read();
+    // Each wider width that leaves the text one line fewer than at 360 px,
+    // reached in one step from a width with all the lines. There the count
+    // depends on whether "less" fits beside the last line.
+    const misplaced: string[] = [];
+    let checked = 0;
+    for (let width = narrow.width + 2; width <= 720; width += 2) {
+      await page.setViewportSize({width, height: narrow.height});
+      await frames(page, 3);
+      const facts = await read();
+      if (facts.lines < narrowLines - 1) {
+        break;
+      }
+      // No line fewer yet: this width is as good a start as 360 px.
+      if (facts.lines === narrowLines) {
         continue;
       }
-      const get = own.get as (this: Element) => number;
-      Object.defineProperty(proto, name, {
-        configurable: true,
-        get(this: Element): number {
-          note(name, this);
-          return get.call(this);
-        },
-      });
+      checked += 1;
+      const fits = facts.lastLineEnd + facts.needed <= facts.flowRight;
+      if (facts.isBeside ? !fits : fits) {
+        misplaced.push(`${width} px: ${JSON.stringify(facts)}`);
+      }
+      await page.setViewportSize(narrow);
+      await frames(page, 3);
     }
-    const rect = Element.prototype.getBoundingClientRect;
-    Element.prototype.getBoundingClientRect = function (this: Element) {
-      note('getBoundingClientRect', this);
-      return rect.call(this);
-    };
+    expect(checked).toBeGreaterThan(0);
+    expect(misplaced).toEqual([]);
   });
-  await page.route('https://picsum.photos/**', async route => {
-    const id = /\/id\/(\d+)\//.exec(route.request().url())?.[1] ?? '10';
-    await route.fulfill({
-      contentType: 'image/svg+xml',
-      body: photoSvg(COLORS[id] ?? '#888'),
-    });
-  });
-  await page.setViewportSize({width: 402, height: 874});
-  await openStory(page, storybook(), 'core-lightbox--gallery-with-captions');
-  await page.getByRole('button', {name: 'Open gallery with captions'}).click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog.getByRole('button', {name: 'more'})).toBeVisible();
-  await frames(page, 2);
-  await dialog.getByRole('button', {name: 'more'}).click();
-  await expect(dialog.getByRole('button', {name: 'less'})).toBeVisible();
-  await frames(page, 4);
-  // A phone turned on its side: the open caption needs fewer lines, which
-  // wait for the next frame.
-  await page.setViewportSize({width: 874, height: 402});
-  await frames(page, 6);
-  await expect(dialog.getByRole('button', {name: 'less'})).toBeVisible();
-  const reads = await page.evaluate(
-    () => (window as unknown as {__frameReads: string[]}).__frameReads,
-  );
-  expect(reads).toEqual([]);
-});
+}
 
 test('no caption read follows a write in the same resize delivery, from opening through "more", "less" and paging', async ({
   page,
