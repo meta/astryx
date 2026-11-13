@@ -1374,7 +1374,7 @@ async function changeOnce(sub, slug, thing, value, options, seen) {
       : [];
   const r = await commitTheme(ctx, slug, data, {history: true});
   const compiledAfter = compileTheme(ctx, data, base);
-  const styled = styledChanges(compiledBefore, compiledAfter);
+  const styled = styledChanges(compiledBefore, compiledAfter, base);
   const parts = partsOf(ctx, s);
   // Exact whole-theme tokens that win over what this dial writes: the dial
   // changes them only in a theme without them.

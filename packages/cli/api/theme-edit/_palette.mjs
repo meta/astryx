@@ -2261,6 +2261,37 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
     const found = {};
     for (const ground of new Set(LIFT_PARTS.map(([, , g]) => g))) {
       const {what, parts} = LIFT_GROUNDS[ground];
+      /**
+       * The shade the base theme itself lifts this ground's text to in a
+       * mode, when it gives one: the search starts there, so a change of
+       * color moves it only when that shade no longer reads.
+       * @param {Mode} m
+       * @returns {string | null}
+       */
+      const baseLift = m => {
+        for (const [part, block, g] of LIFT_PARTS) {
+          if (g !== ground) continue;
+          const v = /** @type {any} */ (base)?.components?.[part]?.[block]?.[
+            '--color-text-secondary'
+          ];
+          const pair = Array.isArray(v)
+            ? v
+            : typeof v === 'string'
+              ? /^light-dark\((.*)\)$/s.exec(v.trim())?.[1]
+                ? splitTop(
+                    /** @type {string} */ (
+                      /^light-dark\((.*)\)$/s.exec(v.trim())?.[1]
+                    ),
+                    ',',
+                  )
+                : [v, v]
+              : null;
+          const c = pair?.[m === 'light' ? 0 : 1]?.trim();
+          if (c && parseColor(c))
+            return hex(/** @type {number[]} */ (parseColor(c)));
+        }
+        return null;
+      };
       /** @type {Partial<Record<Mode, StopRef>>} */
       const byMode = {};
       for (const m of modes) {
@@ -2290,8 +2321,9 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
         const keys = Object.keys(g.ramp)
           .map(Number)
           .sort((a, b) => a - b);
+        const from = baseLift(m) ?? text;
         const start = keys.reduce((x, y) =>
-          perceptualDelta(g.ramp[y], text) < perceptualDelta(g.ramp[x], text)
+          perceptualDelta(g.ramp[y], from) < perceptualDelta(g.ramp[x], from)
             ? y
             : x,
         );
@@ -2312,7 +2344,7 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
           ? ref('neutral', m, b.stop)
           : {stop: b.stop, color: g.ramp[b.stop], family: 'literal'};
         const moved =
-          hex(/** @type {number[]} */ (parseColor(g.ramp[b.stop]))) !== text;
+          hex(/** @type {number[]} */ (parseColor(g.ramp[b.stop]))) !== from;
         if (b.r < TEXT || moved)
           checks.push({
             token: '--color-text-secondary',
@@ -2326,7 +2358,7 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
             dials: ['accent', 'neutral'],
             note:
               b.r >= TEXT
-                ? `--color-text-secondary on ${parts} uses ${g.ramp[b.stop]} in ${m}, not ${text}, so it reads at ${round(b.r)}:1 on ${what} and under a hover, as the official theme lifts it`
+                ? `--color-text-secondary on ${parts} uses ${g.ramp[b.stop]} in ${m}, not ${from}, so it stays readable (${round(b.r)}:1) on ${what} and under a hover`
                 : `--color-text-secondary on ${parts} reads at only ${round(b.r)}:1 in ${m} on ${what} even at ${g.ramp[b.stop]}, the most contrasting gray (needs ${TEXT}:1): pick another accent or neutral, or set --color-text-secondary on those parts exactly`,
           });
       }
