@@ -977,22 +977,22 @@ describe("holdInput's dismissal that keeps focus inside (component:BottomSheet F
     release();
   });
 
-  it('lets document listeners hear a key it keeps from the layer, so the interaction modality reads keyboard', () => {
+  it('lets a document listener added before the hold, as the modality tracker is, hear a key it keeps from the layer', () => {
     const {layer, child} = mountLayer();
     onTestFinished(() => layer.remove());
+    const onDocumentKey = vi.fn();
+    document.addEventListener('keydown', onDocumentKey, {capture: true});
+    onTestFinished(() =>
+      document.removeEventListener('keydown', onDocumentKey, {capture: true}),
+    );
     act(() => child.focus());
     const release = holdInput(layer, {
       until: new Promise<never>(() => {}),
       scope: 'layer',
       focus: 'kept-inside',
     });
-    const onDocumentKey = vi.fn();
-    document.addEventListener('keydown', onDocumentKey, {capture: true});
-    onTestFinished(() =>
-      document.removeEventListener('keydown', onDocumentKey, {capture: true}),
-    );
-    const onKey = vi.fn();
-    child.addEventListener('keydown', onKey);
+    const onLayerCapture = vi.fn();
+    layer.addEventListener('keydown', onLayerCapture, {capture: true});
     child.dispatchEvent(
       new KeyboardEvent('keydown', {
         key: 'Escape',
@@ -1001,7 +1001,7 @@ describe("holdInput's dismissal that keeps focus inside (component:BottomSheet F
       }),
     );
     expect(onDocumentKey).toHaveBeenCalledTimes(1);
-    expect(onKey).not.toHaveBeenCalled();
+    expect(onLayerCapture).not.toHaveBeenCalled();
     release();
   });
 

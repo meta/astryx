@@ -560,12 +560,22 @@ function holdKeptInside(layer: Element, until: InputHoldEnd): () => void {
   if (!hasFocusInside()) {
     makeInert();
   } else {
-    // Stopped at the layer in the capture phase, so document listeners, such
-    // as the interaction-modality tracker, still hear the key, and nothing
-    // inside the layer does.
+    // Stopped on the document's capture phase. The interaction-modality
+    // tracker listens there from the first consumer's mount, before any hold,
+    // so it still hears the key. React's root and everything inside the layer
+    // do not, capture handlers included.
+    const isInLayer = (event: Event) => {
+      const target =
+        typeof event.composedPath === 'function'
+          ? event.composedPath()[0]
+          : event.target;
+      return isNode(target) && containsAlongFlatTree(layer, target);
+    };
     const stopActivation = (event: Event) => {
-      event.preventDefault();
-      event.stopImmediatePropagation();
+      if (isInLayer(event)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
     };
     const stopKey = (event: Event) => {
       if (!KEPT_INSIDE_KEYS.has((event as KeyboardEvent).key)) {
@@ -578,9 +588,9 @@ function holdKeptInside(layer: Element, until: InputHoldEnd): () => void {
       ['keyup', stopKey],
     ];
     for (const [type, listener] of captures) {
-      layer.addEventListener(type, listener, {capture: true});
+      doc.addEventListener(type, listener, {capture: true});
       stops.push(() =>
-        layer.removeEventListener(type, listener, {capture: true}),
+        doc.removeEventListener(type, listener, {capture: true}),
       );
     }
     const makeInertIfFocusLeft = () => {
