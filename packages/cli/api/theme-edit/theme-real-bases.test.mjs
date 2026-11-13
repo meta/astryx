@@ -401,13 +401,10 @@ describe('padding on real base themes', () => {
 
     it.runIf(BROWSER_STEP)(
       'renders own and editor sides in each text direction (butter)',
-      async ctx => {
+      async () => {
         // In its browser step a theme that cannot be built is a failure, not a skip.
-        if (unbuilt) {
-          if (BROWSER_STEP)
-            throw new Error(`the base themes could not be built: ${unbuilt}`);
-          return ctx.skip();
-        }
+        if (unbuilt)
+          throw new Error(`the base themes could not be built: ${unbuilt}`);
         await themeEditNew('plr', {cwd, like: 'butter'});
         ownEdit('plr', "button: {base: {paddingInlineStart: '30px'}},");
         await themeEditSet('plr', 'padding-left', '8px', {cwd, on: 'button'});
@@ -431,7 +428,7 @@ describe('padding on real base themes', () => {
           "launching Playwright's Chromium",
         );
         try {
-          const page = await browser.newPage();
+          const page = await within(browser.newPage(), 'opening a page');
           /** @param {'ltr' | 'rtl'} dir */
           const padding = async dir => {
             await within(
@@ -443,12 +440,15 @@ describe('padding on real base themes', () => {
               ),
               `rendering the ${dir} page`,
             );
-            return page.evaluate(() => {
-              const c = getComputedStyle(
-                /** @type {Element} */ (document.getElementById('b')),
-              );
-              return `${c.paddingLeft} ${c.paddingRight}`;
-            });
+            return within(
+              page.evaluate(() => {
+                const c = getComputedStyle(
+                  /** @type {Element} */ (document.getElementById('b')),
+                );
+                return `${c.paddingLeft} ${c.paddingRight}`;
+              }),
+              `reading the ${dir} page's padding`,
+            );
           };
           expect(await padding('ltr')).toBe('30px 4px');
           expect(await padding('rtl')).toBe('8px 30px');
