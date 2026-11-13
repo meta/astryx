@@ -7,8 +7,14 @@
  * @position Colocated tests for the internal focus-swap hook
  */
 
-import {Activity, StrictMode, createRef, type Ref} from 'react';
-import {render, screen} from '@testing-library/react';
+import {
+  Activity,
+  StrictMode,
+  createRef,
+  useImperativeHandle,
+  type Ref,
+} from 'react';
+import {render, renderHook, screen} from '@testing-library/react';
 import {describe, expect, it, vi} from 'vitest';
 import {useFocusAcrossSwap} from './useFocusAcrossSwap';
 
@@ -21,7 +27,7 @@ function DirectExample({
   forwardedRef,
 }: {
   isDisabled: boolean;
-  forwardedRef?: Ref<HTMLElement>;
+  forwardedRef: Ref<HTMLElement>;
 }) {
   const ref = useFocusAcrossSwap(forwardedRef);
   const Element = isDisabled ? 'div' : 'a';
@@ -42,7 +48,6 @@ function ContentExample({
   forwardedRef?: Ref<HTMLSpanElement>;
 }) {
   const ref = useFocusAcrossSwap(forwardedRef, {
-    isDisabled,
     getFocusTarget: getContentOwner,
   });
   return (
@@ -52,87 +57,83 @@ function ContentExample({
   );
 }
 
+function ImperativeRef({target, ref}: {target: object; ref?: Ref<unknown>}) {
+  useImperativeHandle(ref, () => target, [target]);
+  return null;
+}
+
 describe('useFocusAcrossSwap', () => {
-  it('preserves direct-ref focus swaps and clears the forwarded object ref', () => {
-    const ref = createRef<HTMLElement>();
-    const {rerender, unmount} = render(
-      <DirectExample isDisabled={false} forwardedRef={ref} />,
+  it('forwards a DOM-like imperative handle without treating it as a focus target', () => {
+    const target = {nodeType: 1, getRootNode: () => null, focus: () => {}};
+    const forwarded = vi.fn();
+    const {result} = renderHook(() =>
+      useFocusAcrossSwap<HTMLElement>(forwarded),
     );
+    const {unmount} = render(
+      <ImperativeRef ref={result.current} target={target} />,
+    );
+    expect(forwarded).toHaveBeenCalledWith(target);
+    unmount();
+    expect(forwarded).toHaveBeenLastCalledWith(null);
+  });
+
+  it('retains direct-ref focus but honors a caller cleanup handoff', () => {
+    const ref = createRef<HTMLElement>();
+    const notes = createRef<HTMLInputElement>();
+    let handOff = false;
+    const forwardedRef = (node: HTMLElement | null) => {
+      ref.current = node;
+      return () => {
+        ref.current = null;
+        if (handOff) {
+          notes.current?.focus();
+        }
+      };
+    };
+    const fixture = (isDisabled: boolean) => (
+      <>
+        <DirectExample isDisabled={isDisabled} forwardedRef={forwardedRef} />
+        <input ref={notes} aria-label="Notes" />
+      </>
+    );
+    const {rerender, unmount} = render(fixture(false));
     screen.getByRole('button').focus();
-    rerender(<DirectExample isDisabled forwardedRef={ref} />);
-    expect(screen.getByRole('button')).toHaveFocus();
+    rerender(fixture(true));
     expect(ref.current).toBe(screen.getByRole('button'));
-    rerender(<DirectExample isDisabled={false} forwardedRef={ref} />);
-    expect(screen.getByRole('button')).toHaveFocus();
-    expect(ref.current).toBe(screen.getByRole('button'));
+    expect(ref.current).toHaveFocus();
+    handOff = true;
+    rerender(fixture(false));
+    expect(notes.current).toHaveFocus();
     unmount();
     expect(ref.current).toBeNull();
   });
 
-  it('restores the focused owner through its content and releases callback refs', () => {
+  it('restores the owned target across replacements and releases callback refs', () => {
     const release = vi.fn();
-    const ref = vi.fn((node: HTMLSpanElement | null) => {
-      if (node) {
-        return release;
-      }
-    });
+    const ref = vi.fn(() => release);
     const {rerender, unmount} = render(
       <ContentExample isDisabled={false} forwardedRef={ref} />,
     );
     screen.getByRole('button').focus();
-    rerender(<ContentExample isDisabled forwardedRef={ref} />);
+    rerender(
+      <ContentExample isDisabled={false} revision={1} forwardedRef={ref} />,
+    );
+    expect(screen.getByRole('button')).toHaveFocus();
+    rerender(<ContentExample isDisabled revision={1} forwardedRef={ref} />);
     expect(screen.getByRole('button')).toHaveFocus();
     expect(ref).toHaveBeenLastCalledWith(screen.getByText('Owned content'));
-    expect(release).toHaveBeenCalledOnce();
-    rerender(<ContentExample isDisabled={false} forwardedRef={ref} />);
-    expect(screen.getByRole('button')).toHaveFocus();
-    expect(release).toHaveBeenCalledTimes(2);
     unmount();
     expect(release).toHaveBeenCalledTimes(3);
     expect(ref).not.toHaveBeenCalledWith(null);
   });
 
-  it('does not restore owned-content focus for an unrelated replacement', () => {
-    const {rerender} = render(<ContentExample isDisabled={false} />);
-    screen.getByRole('button').focus();
-    rerender(<ContentExample isDisabled={false} revision={1} />);
-    expect(document.activeElement).toBe(document.body);
-    rerender(<ContentExample isDisabled revision={1} />);
-    expect(document.activeElement).toBe(document.body);
-  });
-
-  it('honors a focus handoff during direct-ref cleanup', () => {
-    let handOff = false;
-    const ref = (node: HTMLElement | null) => {
-      if (node) {
-        return () => {
-          if (handOff) {
-            screen.getByRole('textbox').focus();
-          }
-        };
-      }
-    };
-    const fixture = (isDisabled: boolean) => (
-      <>
-        <DirectExample isDisabled={isDisabled} forwardedRef={ref} />
-        <input aria-label="Notes" />
-      </>
-    );
-    const {rerender} = render(fixture(false));
-    screen.getByRole('button').focus();
-    handOff = true;
-    rerender(fixture(true));
-    expect(screen.getByRole('textbox')).toHaveFocus();
-    rerender(fixture(false));
-    expect(screen.getByRole('textbox')).toHaveFocus();
-    handOff = false;
-  });
-
-  it('does not restore owned-content focus when availability changes while hidden', () => {
+  it('does not resurrect owned-content focus after availability changes while hidden', () => {
     const fixture = (isHidden: boolean, isDisabled: boolean) => (
-      <Activity mode={isHidden ? 'hidden' : 'visible'}>
-        <ContentExample isDisabled={isDisabled} />
-      </Activity>
+      <StrictMode>
+        <Activity mode={isHidden ? 'hidden' : 'visible'}>
+          <ContentExample isDisabled={isDisabled} />
+        </Activity>
+      </StrictMode>
     );
     const {rerender} = render(fixture(false, false));
     const control = screen.getByRole('button');
@@ -142,31 +143,7 @@ describe('useFocusAcrossSwap', () => {
     rerender(fixture(true, true));
     rerender(fixture(false, true));
     expect(document.activeElement).toBe(document.body);
+    rerender(fixture(false, true));
+    expect(document.activeElement).toBe(document.body);
   });
-
-  it.each(['direct', 'content'] as const)(
-    'leaves focus on the page after %s refs detach and reattach through Activity',
-    mode => {
-      const fixture = (isHidden: boolean) => (
-        <StrictMode>
-          <Activity mode={isHidden ? 'hidden' : 'visible'}>
-            {mode === 'direct' ? (
-              <DirectExample isDisabled={false} />
-            ) : (
-              <ContentExample isDisabled={false} />
-            )}
-          </Activity>
-        </StrictMode>
-      );
-      const {rerender} = render(fixture(false));
-      const control = screen.getByRole('button');
-      control.focus();
-      rerender(fixture(true));
-      control.blur();
-      rerender(fixture(false));
-      expect(document.activeElement).toBe(document.body);
-      rerender(fixture(false));
-      expect(document.activeElement).toBe(document.body);
-    },
-  );
 });

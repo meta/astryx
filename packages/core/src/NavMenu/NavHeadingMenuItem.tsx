@@ -162,15 +162,14 @@ export function NavHeadingMenuItem({
   // missing destination. A plain anchor keeps the row's element shape.
   // (Mirrors the disabled paths of Link, Tab, and TopNavItem.)
   const Element = href ? (isDisabled ? 'a' : LinkComponent) : 'div';
-  // Observe owned content, not a router's ref. Focus follows the replacement
-  // when availability changes (spec:AST-085 FR4).
+
+  // The element type above changes when `isDisabled` flips, so React replaces
+  // the row; focus follows to the replacement (spec:AST-085 FR4).
   const contentRef = useFocusAcrossSwap<HTMLSpanElement>(undefined, {
-    isDisabled,
     getFocusTarget: getMenuItemFromContent,
   });
 
-  // Filter only this item's consumers, leaving nonactivation keys, parent
-  // routing, and child-owned events intact.
+  // Leave parent routing and caller-owned child events intact.
   const guardActivationKeyCallback = (
     handler: React.KeyboardEventHandler<HTMLElement> | undefined,
   ): React.KeyboardEventHandler<HTMLElement> | undefined => {
