@@ -92,11 +92,13 @@ export interface ListProps extends BaseProps<
 
   /**
    * Makes the rows reorderable, with the object `createReorderable` makes.
-   * Each ListItem with an `itemKey` gets a reorder handle at its start, shown
-   * while the row is hovered or holds the focus. It hangs before the row's
-   * text, so the text keeps its place: leave about 24px of room before the
-   * list. Under a coarse pointer it always shows, inside the row. One the
-   * object's `isReorderable` rejects keeps its place. Each committed move
+   * Each ListItem with an `itemKey` gets a reorder handle, at its start
+   * unless the object's `handle.placement` is `'end'`. It always shows, in a
+   * place of its own in the row. With `handle.isAlwaysVisible: false`, it
+   * shows while the row is hovered or holds the focus and hangs outside the
+   * row's content, so the content keeps its place: leave about 24px of room
+   * on that side of the list. Under a coarse pointer it then shows, inside
+   * the row. One the object's `isReorderable` rejects keeps its place. Each committed move
    * calls its `onReorder` once with the row's key and its index after the
    * move. Apply it by rendering the rows in their new order. A drop on the
    * starting place, a cancel, or a move the order does not take changes
@@ -222,9 +224,10 @@ const styles = stylex.create({
     isolation: {default: null, '@media (pointer: coarse)': 'isolate'},
   },
   // Where a reorderable list's handles show only on hover or focus, they hang
-  // before their rows' text. The list reaches out toward the start by that
-  // room and pads it back, so its rows keep their places and its inline clip
-  // keeps the handles. Under a coarse pointer the handles sit in their rows.
+  // outside their rows' content. The list reaches out toward that edge by
+  // that room and pads it back, so its rows keep their places and its inline
+  // clip keeps the handles. Under a coarse pointer the handles sit in their
+  // rows.
   reorderGutter: {
     marginInlineStart: {
       default: -REORDER_GUTTER,
@@ -242,6 +245,27 @@ const styles = stylex.create({
         'calc(-1 * var(--container-padding-inline-start, 0px))',
     },
     paddingInlineStart: {
+      default: REORDER_GUTTER,
+      '@media (any-pointer: coarse)': 0,
+    },
+  },
+  reorderGutterAtEnd: {
+    marginInlineEnd: {
+      default: -REORDER_GUTTER,
+      '@media (any-pointer: coarse)': 0,
+    },
+    paddingInlineEnd: {
+      default: REORDER_GUTTER,
+      '@media (any-pointer: coarse)': 0,
+    },
+  },
+  reorderGutterAtEndReachingPadding: {
+    marginInlineEnd: {
+      default: `calc(-1 * var(--container-padding-inline-end, 0px) - ${REORDER_GUTTER}px)`,
+      '@media (any-pointer: coarse)':
+        'calc(-1 * var(--container-padding-inline-end, 0px))',
+    },
+    paddingInlineEnd: {
       default: REORDER_GUTTER,
       '@media (any-pointer: coarse)': 0,
     },
@@ -473,10 +497,16 @@ export function List({
           isOrdered && styles.numberColumns,
           hasDividers && styles.withDividers,
           reachesContainerPadding && styles.reachesContainerPadding,
+          // List shows its handles unless the reorderable says otherwise.
           reorderSession != null &&
-            (reachesContainerPadding
-              ? styles.reorderGutterReachingPadding
-              : styles.reorderGutter),
+            reorderOptions?.handle?.isAlwaysVisible === false &&
+            (reorderOptions?.handle?.placement === 'end'
+              ? reachesContainerPadding
+                ? styles.reorderGutterAtEndReachingPadding
+                : styles.reorderGutterAtEnd
+              : reachesContainerPadding
+                ? styles.reorderGutterReachingPadding
+                : styles.reorderGutter),
           edge === 'bleed' && header == null && styles.bleedCorners,
           listStyle !== 'none' &&
             (start != null && start !== 1

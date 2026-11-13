@@ -9,7 +9,7 @@
  * @output `createReorderable`, which makes the object a collection's
  *   `reorderable` prop takes, whose one public method, `start(key)`, enters
  *   reorder mode from the app's own UI. And its types: `Reorderable`,
- *   `ReorderableOptions`, `ReorderMove`
+ *   `ReorderableOptions`, `ReorderHandleOptions`, `ReorderMove`
  * @position Public Core API, exported from the package root.
  *   The machinery ships here, on the object: a collection imports only the
  *   object's type, so one without `reorderable` loads no reorder code
@@ -43,6 +43,27 @@ export interface ReorderMove<
   readonly to: TTo;
 }
 
+/** How each item's reorder handle shows (`ReorderableOptions.handle`). */
+export interface ReorderHandleOptions {
+  /**
+   * Whether the handle always shows. True: the handle takes its own place in
+   * its item, and its grip always shows. False: it shows while its item is
+   * hovered or holds the focus, and always under a coarse pointer. Where it
+   * shows only on hover or focus, it takes no space: it hangs outside the
+   * item's content, at the item's edge, so the content keeps its place. Leave
+   * about 24px of room on that side of the collection. Without it, the
+   * collection decides: List and TransferList always show their handles, and
+   * ListInput shows them on hover or focus.
+   */
+  readonly isAlwaysVisible?: boolean;
+  /**
+   * The edge of each item that the handle sits at: `'start'`, before the
+   * item's content, or `'end'`, after it.
+   * @default 'start'
+   */
+  readonly placement?: 'start' | 'end';
+}
+
 /** What `createReorderable` takes. */
 export interface ReorderableOptions<
   TKey extends string | number = string | number,
@@ -61,6 +82,12 @@ export interface ReorderableOptions<
    * refused. Every item moves without it.
    */
   isReorderable?: (key: TKey) => boolean;
+  /**
+   * How each item's handle shows: whether it always shows, and the edge it
+   * sits at. Without it, the handle starts each item, and the collection
+   * decides whether it always shows.
+   */
+  handle?: ReorderHandleOptions;
 }
 
 declare const reorderableBrand: unique symbol;

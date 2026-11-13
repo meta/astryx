@@ -6,7 +6,7 @@
  * @file Item.tsx
  * @input Uses React, ReactNode, StyleXStyles, theme tokens, useClickableContainer,
  *   the shared press overlays and the compositor press layer, and a row's
- *   leading control (ItemLeadingContext)
+ *   leading or trailing control (ItemLeadingContext, ItemTrailingContext)
  * @output Exports Item component, ItemProps type; publishes the shared inline inset.
  *   Only numbered composing rows keep their start/label/end slots in one flex
  *   group, through Item's private exact-marker scope; other marked rows keep
@@ -59,6 +59,7 @@ import {ItemLabelContext, ItemLabelNeededContext} from './ItemLabelContext';
 import {ItemListRowContext} from './ItemListRowContext';
 import {ItemMarkerColumnsContext} from './ItemMarkerColumnsContext';
 import {ItemLeadingContext} from './ItemLeadingContext';
+import {ItemTrailingContext} from './ItemTrailingContext';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {computeTargetAndRel} from '../Link/computeTargetAndRel';
 import {useLinkComponent} from '../Link/useLinkComponent';
@@ -866,9 +867,10 @@ export function Item({
     onClick?.(e);
   };
 
-  // A control a row adds before the slots, unwrapped (ItemLeadingContext):
-  // a List row's reorder handle.
+  // A control a row adds before or after the slots, unwrapped
+  // (ItemLeadingContext, ItemTrailingContext): a List row's reorder handle.
   const leading = use(ItemLeadingContext);
+  const trailing = use(ItemTrailingContext);
 
   const content = (
     <>
@@ -945,6 +947,7 @@ export function Item({
           {endContent}
         </span>
       )}
+      {trailing}
     </>
   );
 
@@ -1074,27 +1077,29 @@ export function Item({
       role={role}
       onClick={rootOnClick}>
       <ItemLeadingContext value={null}>
-        <ItemDescriptionContext
-          value={hasRenderableDescription ? descriptionID : null}>
-          <ItemLabelContext value={publishedLabelID}>
-            <ItemLabelNeededContext value={false}>
-              <ItemListRowContext value={false}>
-                {isRenderable(marker) && marker}
-                {isRenderable(marker) && columnMarker === marker ? (
-                  <span
-                    {...stylex.props(
-                      styles.markerContent,
-                      align === 'first-line' && styles.markerContentFirstLine,
-                    )}>
-                    {content}
-                  </span>
-                ) : (
-                  content
-                )}
-              </ItemListRowContext>
-            </ItemLabelNeededContext>
-          </ItemLabelContext>
-        </ItemDescriptionContext>
+        <ItemTrailingContext value={null}>
+          <ItemDescriptionContext
+            value={hasRenderableDescription ? descriptionID : null}>
+            <ItemLabelContext value={publishedLabelID}>
+              <ItemLabelNeededContext value={false}>
+                <ItemListRowContext value={false}>
+                  {isRenderable(marker) && marker}
+                  {isRenderable(marker) && columnMarker === marker ? (
+                    <span
+                      {...stylex.props(
+                        styles.markerContent,
+                        align === 'first-line' && styles.markerContentFirstLine,
+                      )}>
+                      {content}
+                    </span>
+                  ) : (
+                    content
+                  )}
+                </ItemListRowContext>
+              </ItemLabelNeededContext>
+            </ItemLabelContext>
+          </ItemDescriptionContext>
+        </ItemTrailingContext>
       </ItemLeadingContext>
       {hasSwipe && (
         // The panels: out-of-flow children of this root, so the DOM is the one

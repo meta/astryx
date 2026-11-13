@@ -10,9 +10,9 @@
  *   still finds its list. Neither loads the reorder engine: it comes with the
  *   owner's object.
  *   It also gives List's reorder session for rows that are not ListItems,
- *   for Lab's ListInput: `useListReorderScope` and `ListReorderScope`. The
- *   handle each row ends with is the session's `Handle`: it comes with the
- *   owner's object, so this entry loads no reorder code
+ *   for Lab's ListInput: `useListReorderScope` and `ListReorderScope`. Each
+ *   row's handle is the session's `Handle`: it comes with the owner's
+ *   object, so this entry loads no reorder code
  * @position `@astryxdesign/core/internal/reorder`: an internal entry reserved
  *   for Core and Lab. It is undocumented, outside the public API and its
  *   compatibility promise, and versioned in lockstep with Core.
@@ -50,6 +50,8 @@ export function adaptReorderable<TKey extends string | number, TTo>(
   const adapted: ReorderableInternals = {
     options: {
       ...(options as unknown as ListReorderOptions),
+      // The owner's handle, unless the adapter names its own.
+      handle: options.handle ?? source.options.handle,
       startedBy: source.options.startedBy ?? source.options,
     },
     [REORDER_ENGINE]: source[REORDER_ENGINE],

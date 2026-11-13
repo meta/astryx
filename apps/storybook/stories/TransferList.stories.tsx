@@ -24,7 +24,10 @@ import type {TransferListOption} from '@astryxdesign/lab';
 import {Theme} from '@astryxdesign/core';
 import {Button} from '@astryxdesign/core/Button';
 import {ComplexSelector} from '@astryxdesign/core/ComplexSelector';
-import {createReorderable} from '@astryxdesign/core';
+import {
+  createReorderable,
+  type ReorderHandleOptions as ReorderHandle,
+} from '@astryxdesign/core';
 import {Divider} from '@astryxdesign/core/Divider';
 import {Heading} from '@astryxdesign/core/Heading';
 import {Icon} from '@astryxdesign/core/Icon';
@@ -174,7 +177,10 @@ const BASIC_OPTIONS: ReadonlyArray<TransferListOption<string>> = [
 function useMoveReorderable<T extends string>(
   setValue: (update: (value: readonly T[]) => readonly T[]) => void,
   isReorderable?: (value: T) => boolean,
+  handle?: ReorderHandle,
 ) {
+  const isAlwaysVisible = handle?.isAlwaysVisible;
+  const placement = handle?.placement;
   return useMemo(
     () =>
       createReorderable<T>({
@@ -185,18 +191,19 @@ function useMoveReorderable<T extends string>(
             return next;
           }),
         isReorderable,
+        handle: {isAlwaysVisible, placement},
       }),
-    [setValue, isReorderable],
+    [setValue, isReorderable, isAlwaysVisible, placement],
   );
 }
 
-function DefaultExample() {
+function DefaultExample({handle}: {handle?: ReorderHandle}) {
   const [value, setValue] = useState<readonly string[]>([
     'name',
     'owner',
     'status',
   ]);
-  const reorderable = useMoveReorderable(setValue);
+  const reorderable = useMoveReorderable(setValue, undefined, handle);
   return (
     <TransferList
       label="Visible fields"
@@ -216,6 +223,23 @@ function DefaultExample() {
 /** The primitive rendered inline, without the selector's popover. */
 export const Default: Story = {
   render: () => <DefaultExample />,
+};
+
+type ReorderHandleArgs = {
+  isAlwaysVisible: boolean;
+  placement: 'start' | 'end';
+};
+
+/** The reorderable's `handle` option: the handle's edge and visibility. */
+export const ReorderHandleOptions: StoryObj<ReorderHandleArgs> = {
+  args: {isAlwaysVisible: true, placement: 'start'},
+  argTypes: {
+    isAlwaysVisible: {control: 'boolean'},
+    placement: {control: 'inline-radio', options: ['start', 'end']},
+  },
+  render: ({isAlwaysVisible, placement}) => (
+    <DefaultExample handle={{isAlwaysVisible, placement}} />
+  ),
 };
 
 const LOCKED_OPTIONS: ReadonlyArray<TransferListOption<string>> = [

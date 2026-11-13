@@ -234,14 +234,18 @@ Consumer migration instructions belong in consumer docs and release notes.
 - `spec:AST-103` owns reordering. List is its first adopter: it
   takes the `reorderable` object, a row's key is its `ListItem`'s `itemKey`
   and its position is its index, and the
-  handle is the one element reordering adds to a row, at its leading edge,
-  before the row's start content (`spec:AST-103` FR5). Where no pointer is
-  coarse, the handle shows while its row is hovered or holds the focus. It
-  then hangs before the row's text and takes no width, so the text keeps its
-  place. A reorderable list reaches out toward the start by that room and
-  pads it back, so the FR9 clip keeps the handles. Under a coarse pointer
-  the handle always shows and takes its place in the row, as it does after
-  a list marker. Hidden, it keeps its tab stop. The reorder
+  handle is the one element reordering adds to a row (`spec:AST-103` FR5),
+  at the row edge its reorderable's `handle.placement` names: its leading
+  edge, before the row's start content, by default, or its trailing edge.
+  The handle always shows and takes its place in the row, and a row that
+  stays put keeps that room, unless `handle.isAlwaysVisible` is `false`.
+  Then, where no pointer is coarse, the handle shows while its row is
+  hovered or holds the focus. It then hangs outside the row's content
+  and takes no width, so the content keeps its place. A reorderable list
+  reaches out toward that edge by that room and pads it back, so the FR9 clip
+  keeps the handles. Under a coarse pointer the handle always shows and takes
+  its place in the row, as it does after a list marker at the leading edge.
+  Hidden, it keeps its tab stop. The reorder
   controller finds a collection's rows
   through a rows reader, which lists them in order and tells whether an
   element is one; List's rows are its element children.
