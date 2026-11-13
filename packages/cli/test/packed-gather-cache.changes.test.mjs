@@ -24,6 +24,7 @@ import {
   keptTmp,
   freshTmp,
   entries,
+  templatesEntries,
   QUERIES,
   expectSameAsFresh,
   hasModuleHooks,
@@ -270,4 +271,64 @@ process.stdout.write(answer);
       fs.rmSync(dir, {recursive: true, force: true});
     }
   }, 60_000);
+  it('sees a template added or renamed after template discovery was kept inside search', () => {
+    const tmp = keptTmp('nested-listing');
+    const other = makeProject();
+    try {
+      const templates = path.join(other.widgets, 'templates');
+      fs.mkdirSync(templates, {recursive: true});
+      /** @param {string} name @param {string} description */
+      const template = (name, description) => {
+        fs.writeFileSync(
+          path.join(templates, `${name}.doc.mjs`),
+          `export default {type: 'block', name: '${name}', description: '${description}', category: 'Widget - Gate'};\n`,
+        );
+        fs.writeFileSync(
+          path.join(templates, `${name}.tsx`),
+          `export default function Block() { return null; }\n`,
+        );
+      };
+      template('gate-fixture', 'Gate fixture block with running totals.');
+      const ask = ['search', 'gate', 'fixture', 'block'];
+      const searchAt = (/** @type {string} */ where) =>
+        run(ask, {tmp: where, cwd: other.dir});
+      // Template discovery is kept by template --list; search then keeps its
+      // catalog with discovery read back inside it.
+      run(['template', '--list'], {tmp, cwd: other.dir, json: false});
+      const kept = templatesEntries(tmp);
+      expect(kept.size).toBe(1);
+      searchAt(tmp);
+      const catalogs = entries(tmp);
+      const inodes = () =>
+        new Map([...entries(tmp)].map(([name, {ino}]) => [name, ino]));
+      const warm = inodes();
+      expect(catalogs.size).toBeGreaterThan(0);
+      // The warm path hits: the same answer from the same files.
+      searchAt(tmp);
+      expect(inodes()).toEqual(warm);
+      expect(templatesEntries(tmp)).toEqual(kept);
+      // A template added: the next search sees it, as a fresh one does.
+      template('gate-fixture-extra', 'Gate fixture extra block for ledgers.');
+      const added = searchAt(tmp);
+      expect(added.stdout).toContain('gate-fixture-extra');
+      expect(added).toEqual(searchAt(freshTmp()));
+      // Renamed: likewise.
+      for (const ext of ['.doc.mjs', '.tsx']) {
+        fs.renameSync(
+          path.join(templates, `gate-fixture-extra${ext}`),
+          path.join(templates, `gate-fixture-renamed${ext}`),
+        );
+      }
+      fs.writeFileSync(
+        path.join(templates, 'gate-fixture-renamed.doc.mjs'),
+        `export default {type: 'block', name: 'gate-fixture-renamed', description: 'Gate fixture extra block for ledgers.', category: 'Widget - Gate'};\n`,
+      );
+      const renamed = searchAt(tmp);
+      expect(renamed.stdout).toContain('gate-fixture-renamed');
+      expect(renamed.stdout).not.toContain('gate-fixture-extra');
+      expect(renamed).toEqual(searchAt(freshTmp()));
+    } finally {
+      fs.rmSync(other.dir, {recursive: true, force: true});
+    }
+  }, 180_000);
 });

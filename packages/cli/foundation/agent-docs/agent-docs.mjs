@@ -35,10 +35,7 @@ import * as path from 'node:path';
 import {findCoreDir, findInstalledPackage, CLI_ROOT} from '../fs/paths.mjs';
 import {assertWithin, PathSafetyError} from '../fs/path-safety.mjs';
 import {createFileProtectionResolver} from '../fs/file-protection.mjs';
-import {
-  docPackageManager,
-  getCliInvocation,
-} from '../env/package-manager.mjs';
+import {docPackageManager, getCliInvocation} from '../env/package-manager.mjs';
 import {renderCommandTokens} from '../doc-compiler/doc-syntax.mjs';
 import {isValidSemver, semverGte} from '../env/semver.mjs';
 import {discoverComponents} from '../discovery/component-discovery.mjs';
@@ -83,8 +80,8 @@ import {
 export {discoverAgentDocs, isAstryxInitialized, isAstryxPromptInReach};
 
 // The folder the docs go to lives in ./agent-docs-target.mjs, with node
-// builtins only. So the per-command setup nudge loads it without this
-// module's discovery and config. Re-exported here for existing importers.
+// builtins and the CLI's paths module only. So the per-command setup nudge
+// loads it without this module's discovery and config. Re-exported here for existing importers.
 export {
   AgentDocsHomeError,
   agentDocsTargetDir,
@@ -97,8 +94,14 @@ const MANAGED_MARKER_TEXT = /(?:ASTRYX|XDS):(START|END)/u;
 
 /** @param {unknown} value @returns {string} */
 function validateIntegrationLabel(value) {
-  if (typeof value !== 'string' || value.length === 0 || value !== value.trim()) {
-    throw new Error('Integration package name is not safe to render in agent docs.');
+  if (
+    typeof value !== 'string' ||
+    value.length === 0 ||
+    value !== value.trim()
+  ) {
+    throw new Error(
+      'Integration package name is not safe to render in agent docs.',
+    );
   }
   for (const character of value) {
     const codePoint = character.codePointAt(0) ?? 0;
@@ -108,11 +111,15 @@ function validateIntegrationLabel(value) {
       codePoint === 0x2028 ||
       codePoint === 0x2029
     ) {
-      throw new Error('Integration package name is not safe to render in agent docs.');
+      throw new Error(
+        'Integration package name is not safe to render in agent docs.',
+      );
     }
   }
   if (MANAGED_MARKER_TEXT.test(value) || value.includes('`')) {
-    throw new Error('Integration package name is not safe to render in agent docs.');
+    throw new Error(
+      'Integration package name is not safe to render in agent docs.',
+    );
   }
   return value;
 }
@@ -130,14 +137,18 @@ function validateIntegrationLabel(value) {
  * @returns {Map<string, Set<string>>} each importing doc and the docs it imports.
  */
 function readAgentDocImports(targetDir, agentDocs, extraTargets = []) {
-  const known = new Set([...agentDocs, ...extraTargets].map(p => path.normalize(p)));
+  const known = new Set(
+    [...agentDocs, ...extraTargets].map(p => path.normalize(p)),
+  );
   /** @type {Map<string, Set<string>>} */
   const imports = new Map();
 
   for (const rel of agentDocs) {
     let content;
     try {
-      content = withoutManagedBlock(fs.readFileSync(path.join(targetDir, rel), 'utf-8'));
+      content = withoutManagedBlock(
+        fs.readFileSync(path.join(targetDir, rel), 'utf-8'),
+      );
     } catch {
       continue;
     }
@@ -237,7 +248,9 @@ function findManagedBlock(content) {
 function withoutManagedBlock(content) {
   try {
     const block = findManagedBlock(content);
-    return block ? content.slice(0, block.start) + content.slice(block.end) : content;
+    return block
+      ? content.slice(0, block.start) + content.slice(block.end)
+      : content;
   } catch {
     return content;
   }
@@ -285,7 +298,9 @@ function isAgentsImportBlock(rel, content) {
   }
   if (block == null) return false;
   const text = content.slice(block.start, block.end);
-  const inner = text.slice(text.indexOf('-->') + 3, text.lastIndexOf('<!--')).trim();
+  const inner = text
+    .slice(text.indexOf('-->') + 3, text.lastIndexOf('<!--'))
+    .trim();
   const match = /^@(\S+)$/.exec(inner);
   if (match == null || path.isAbsolute(match[1])) return false;
   return path.normalize(path.join(path.dirname(rel), match[1])) === AGENTS_MD;
@@ -309,7 +324,9 @@ function findGeminiImports(content) {
   const found = [];
   for (const match of content.matchAll(/(?<=^|[ \t\r\n])@([^ \t\r\n]+)/g)) {
     if (!/^[./A-Za-z]/.test(match[1])) continue;
-    if (code.some(([start, end]) => match.index >= start && match.index < end)) {
+    if (
+      code.some(([start, end]) => match.index >= start && match.index < end)
+    ) {
       continue;
     }
     found.push(match[1]);
@@ -335,7 +352,6 @@ function geminiImportsAgentsMd(targetDir) {
     rel => path.resolve(targetDir, rel) === agents,
   );
 }
-
 
 /**
  * Agent tool presets — maps tool names to their file search paths.
@@ -433,7 +449,11 @@ export function inspectAgentDocs(targetDir, installedVersion, expectedBlock) {
   const staleEntries = files.filter(f => f.stale);
   const staleFiles = staleEntries.map(f => f.path);
   const blockVersions = [
-    ...new Set(staleEntries.map(f => f.blockVersion).filter(/** @returns {v is string} */ (v) => v != null)),
+    ...new Set(
+      staleEntries
+        .map(f => f.blockVersion)
+        .filter(/** @returns {v is string} */ v => v != null),
+    ),
   ];
 
   /** @type {'missing' | 'stale' | 'current'} */
@@ -467,7 +487,9 @@ export function resolveAgentPaths(targetDir, agent) {
     return {inject: [], create: [AGENTS_MD, CLAUDE_DIR_MD]};
   }
 
-  const searchPaths = /** @type {Record<string, string[]>} */ (AGENT_PRESETS)[agent];
+  const searchPaths = /** @type {Record<string, string[]>} */ (AGENT_PRESETS)[
+    agent
+  ];
   if (!searchPaths) {
     return {inject: [], create: [AGENTS_MD]};
   }
@@ -638,7 +660,9 @@ export function generateCompressedIndex(
 
   // Required setup — components ship precompiled CSS; without these imports
   // everything renders unstyled. Theme is optional (a default ships in astryx.css).
-  lines.push('SETUP (once, in app entry e.g. main.tsx) — without these, components render unstyled:');
+  lines.push(
+    'SETUP (once, in app entry e.g. main.tsx) — without these, components render unstyled:',
+  );
   lines.push('  import "@astryxdesign/core/reset.css";');
   lines.push('  import "@astryxdesign/core/astryx.css";');
   lines.push('');
@@ -647,32 +671,46 @@ export function generateCompressedIndex(
   // template it names. build/template/component are covered here, so they are
   // intentionally omitted from the command reference below.
   lines.push(WORKFLOW_TITLE, ...WORKFLOW_STEPS);
-  lines.push('Changing an existing page? Keep it: skip step 2 and add blocks/components inside its sections.');
+  lines.push(
+    'Changing an existing page? Keep it: skip step 2 and add blocks/components inside its sections.',
+  );
   // Only for a project whose recorded releases have `doctor --built`
   // (projectHasBuiltCheck): a newer copy may write this block in a project
   // whose install then brings an older CLI, which rejects the option. The computer-level
   // skill names only entry points every release keeps (AST-081 FR8).
   if (builtCheck) {
-    lines.push("Before you deliver a build, run `astryx doctor --built <dir>`; don't deliver it if it fails.");
+    lines.push(
+      "Before you deliver a build, run `astryx doctor --built <dir>`; don't deliver it if it fails.",
+    );
   }
   lines.push('');
 
   // Rules — the top error-preventers.
   lines.push('RULES:');
   lines.push('- No <div> — components handle all layout and spacing.');
-  lines.push('- Read `astryx docs layout` before changing a template\'s frame.');
-  lines.push('- Dense data = rows (Table, List/Item), not Card-wrapped lists. Badge = counts only.');
+  lines.push("- Read `astryx docs layout` before changing a template's frame.");
+  lines.push(
+    '- Dense data = rows (Table, List/Item), not Card-wrapped lists. Badge = counts only.',
+  );
   // Styling guidance tailored to the project's configured system — never
   // recommend a path that isn't compiled here (xstyle needs the StyleX compiler;
   // utilities need Tailwind). Tokens are always the source of truth.
   if (stylingSystem === 'stylex') {
-    lines.push('- Style with component props first, then the xstyle prop / StyleX tokens. No raw hex/px.');
+    lines.push(
+      '- Style with component props first, then the xstyle prop / StyleX tokens. No raw hex/px.',
+    );
   } else if (stylingSystem === 'tailwind') {
-    lines.push('- Style with component props first, then Tailwind utilities backed by tokens. No raw hex/px.');
+    lines.push(
+      '- Style with component props first, then Tailwind utilities backed by tokens. No raw hex/px.',
+    );
   } else {
-    lines.push("- Style with component props first, then tokens (var(--color-*|--spacing-*|--radius-*)). No raw hex/px. No StyleX/Tailwind compiler here — don't use xstyle/utility classes directly. Some templates use StyleX and need a compiler plugin; see `astryx docs styling-overview`.");
+    lines.push(
+      "- Style with component props first, then tokens (var(--color-*|--spacing-*|--radius-*)). No raw hex/px. No StyleX/Tailwind compiler here — don't use xstyle/utility classes directly. Some templates use StyleX and need a compiler plugin; see `astryx docs styling-overview`.",
+    );
   }
-  lines.push('- Palettes and custom colors go through the theme, never :root overrides. Run `astryx theme add <slug>` to import; `theme eject <slug>` only forks source. See `astryx docs theme`.');
+  lines.push(
+    '- Palettes and custom colors go through the theme, never :root overrides. Run `astryx theme add <slug>` to import; `theme eject <slug>` only forks source. See `astryx docs theme`.',
+  );
   // Self-check — post-generation pass. Validated via vibe tests (internal/vibe-tests/
   // prompt-purity-test): on complex multi-step UIs the rules above alone still leave raw
   // CSS in ~11-13% of runs; a re-read-and-fix pass cuts that ~4x at negligible token cost.
@@ -690,7 +728,9 @@ export function generateCompressedIndex(
 
   // build/template/component are covered in WORKFLOW above and intentionally
   // omitted here. `astryx help` is the full reference.
-  lines.push('`astryx help` lists every command. Key ones beyond the workflow:');
+  lines.push(
+    '`astryx help` lists every command. Key ones beyond the workflow:',
+  );
   lines.push('  search "<query>"   find any component / hook / doc / template');
   lines.push('  discover <words>   integrations you could add');
   const docsDir = path.join(CLI_ROOT, 'assets', 'docs');
@@ -700,7 +740,7 @@ export function generateCompressedIndex(
       ? fs
           .readdirSync(docsDir)
           .map(f => f.match(/^([\w-]+)\.doc\.mjs$/))
-          .filter(/** @returns {m is RegExpMatchArray} */ (m) => m != null)
+          .filter(/** @returns {m is RegExpMatchArray} */ m => m != null)
           .map(m => m[1])
           .concat(cliRootNamespaceNames())
           .sort()
@@ -710,11 +750,17 @@ export function generateCompressedIndex(
     const keyTopics = ['getting-started', 'principles', 'tokens', 'theme'];
     const shown = keyTopics.filter(t => resolvedTopics.includes(t));
     const suffix = resolvedTopics.length > shown.length ? ' …' : '';
-    lines.push(`  docs <topic>       ${shown.join(', ')}${suffix} (\`astryx docs\` lists all)`);
+    lines.push(
+      `  docs <topic>       ${shown.join(', ')}${suffix} (\`astryx docs\` lists all)`,
+    );
   }
   lines.push('  docs cli           commands and API reference');
-  lines.push('  docs authoring     build an integration package, and every field it holds');
-  lines.push('  upgrade --from <old version> --apply   run after a dependency bump');
+  lines.push(
+    '  docs authoring     build an integration package, and every field it holds',
+  );
+  lines.push(
+    '  upgrade --from <old version> --apply   run after a dependency bump',
+  );
   const appendCount = agentDocs.reduce(
     (count, contribution) => count + contribution.append.length,
     0,
@@ -844,7 +890,11 @@ export function getXdsVersion(coreDir) {
  * @param {boolean} [options.onlyReplace] - Only write if Astryx markers already exist (skip files without markers)
  * @returns {boolean} Whether the file was written
  */
-export function injectXdsBlock(filePath, compressedIndex, {createIfMissing = false, header = '', onlyReplace = false} = {}) {
+export function injectXdsBlock(
+  filePath,
+  compressedIndex,
+  {createIfMissing = false, header = '', onlyReplace = false} = {},
+) {
   let content;
 
   if (fs.existsSync(filePath)) {
@@ -858,7 +908,10 @@ export function injectXdsBlock(filePath, compressedIndex, {createIfMissing = fal
         content.slice(0, block.start) +
         compressedIndex +
         content.slice(block.end);
-    } else if (content.includes(MARKER_START) || content.includes(LEGACY_MARKER_START)) {
+    } else if (
+      content.includes(MARKER_START) ||
+      content.includes(LEGACY_MARKER_START)
+    ) {
       // A START with no matching END (e.g. an interrupted previous write). Don't
       // append a second block below the broken one — that leaves two STARTs the
       // tool can never converge. Refuse and ask the user to clean it up.
@@ -873,7 +926,9 @@ export function injectXdsBlock(filePath, compressedIndex, {createIfMissing = fal
       content = content.trimEnd() + '\n\n' + compressedIndex + '\n';
     }
   } else if (createIfMissing) {
-    content = header ? header + '\n\n' + compressedIndex + '\n' : compressedIndex + '\n';
+    content = header
+      ? header + '\n\n' + compressedIndex + '\n'
+      : compressedIndex + '\n';
   } else {
     return false;
   }
@@ -930,7 +985,10 @@ export function injectClaudeMd(targetDir, version) {
  * @param {{deleteIfEmpty?: boolean, deleteIfBlank?: boolean}} [options]
  * @returns {boolean} Whether the Astryx section was found and removed
  */
-export function removeXdsBlock(filePath, {deleteIfEmpty = false, deleteIfBlank = false} = {}) {
+export function removeXdsBlock(
+  filePath,
+  {deleteIfEmpty = false, deleteIfBlank = false} = {},
+) {
   if (!fs.existsSync(filePath)) return false;
 
   let content = fs.readFileSync(filePath, 'utf-8');
@@ -1001,9 +1059,24 @@ function uncommittedHere(targetDir, rel, unreadable) {
  * reports a tracked file); `status -i -n` prints it, or nothing.
  */
 const IGNORED_QUERIES = [
-  {marker: '.git', command: 'git', args: ['check-ignore', '-q', '--'], by: 'exit'},
-  {marker: '.sl', command: 'sl', args: ['status', '-i', '-n', '--'], by: 'output'},
-  {marker: '.hg', command: 'hg', args: ['status', '-i', '-n', '--'], by: 'output'},
+  {
+    marker: '.git',
+    command: 'git',
+    args: ['check-ignore', '-q', '--'],
+    by: 'exit',
+  },
+  {
+    marker: '.sl',
+    command: 'sl',
+    args: ['status', '-i', '-n', '--'],
+    by: 'output',
+  },
+  {
+    marker: '.hg',
+    command: 'hg',
+    args: ['status', '-i', '-n', '--'],
+    by: 'output',
+  },
 ];
 
 /**
@@ -1017,7 +1090,9 @@ const IGNORED_QUERIES = [
  * @returns {boolean | null}
  */
 function untrackedIgnored(root, targetDir, rel) {
-  const query = IGNORED_QUERIES.find(q => fs.existsSync(path.join(root, q.marker)));
+  const query = IGNORED_QUERIES.find(q =>
+    fs.existsSync(path.join(root, q.marker)),
+  );
   if (!query) return null;
   const result = spawnSync(query.command, [...query.args, rel], {
     cwd: targetDir,
@@ -1063,8 +1138,12 @@ function ignoredHere(targetDir, rel, unreadable) {
  * @returns {string | null}
  */
 function repositoryRootOf(dir) {
-  for (let current = path.resolve(dir); ; ) {
-    if (REPOSITORY_MARKERS.some(marker => fs.existsSync(path.join(current, marker)))) {
+  for (let current = path.resolve(dir); ;) {
+    if (
+      REPOSITORY_MARKERS.some(marker =>
+        fs.existsSync(path.join(current, marker)),
+      )
+    ) {
       return current;
     }
     const parent = path.dirname(current);
@@ -1128,7 +1207,9 @@ function rootClaudeHolds(targetDir, block) {
   try {
     const content = fs.readFileSync(path.join(targetDir, CLAUDE_MD), 'utf-8');
     const found = findManagedBlock(content);
-    return found != null && content.slice(found.start, found.end) === block.trim();
+    return (
+      found != null && content.slice(found.start, found.end) === block.trim()
+    );
   } catch {
     return false;
   }
@@ -1142,7 +1223,9 @@ function rootClaudeHolds(targetDir, block) {
 function hasManagedMarker(filePath) {
   try {
     const content = fs.readFileSync(filePath, 'utf-8');
-    return content.includes(MARKER_START) || content.includes(LEGACY_MARKER_START);
+    return (
+      content.includes(MARKER_START) || content.includes(LEGACY_MARKER_START)
+    );
   } catch {
     return false;
   }
@@ -1207,7 +1290,10 @@ function assertRemovableWithin(targetDir, skip = new Set()) {
  * @throws {PathSafetyError} `ERR_PATH_TRAVERSAL` when a file it would change
  *   resolves outside `targetDir`; nothing is changed.
  */
-export function removeAgentDocs(targetDir, {shownFrom = targetDir, skip = new Set()} = {}) {
+export function removeAgentDocs(
+  targetDir,
+  {shownFrom = targetDir, skip = new Set()} = {},
+) {
   assertRemovableWithin(targetDir, skip);
   const allPaths = discoverAgentDocs(targetDir).filter(p => !skip.has(p));
 
@@ -1223,7 +1309,8 @@ export function removeAgentDocs(targetDir, {shownFrom = targetDir, skip = new Se
         fs.unlinkSync(filePath);
       }
       removedFrom.push(p);
-      const shown = path.relative(shownFrom, filePath).split(path.sep).join('/') || p;
+      const shown =
+        path.relative(shownFrom, filePath).split(path.sep).join('/') || p;
       if (!fs.existsSync(filePath)) {
         humanLog(`[ok] Removed empty ${shown}`);
       } else {
@@ -1255,15 +1342,24 @@ export function removeProjectAgentDocs(cwd, {onSkipped} = {}) {
   const rootSkip = below
     ? skipEscaping(
         root,
-        discoverAgentDocs(root).filter(p => hasRemovableBlock(path.join(root, p))),
+        discoverAgentDocs(root).filter(p =>
+          hasRemovableBlock(path.join(root, p)),
+        ),
         (rel, reason) =>
-          onSkipped?.(path.relative(cwd, path.join(root, rel)).split(path.sep).join('/'), reason),
+          onSkipped?.(
+            path.relative(cwd, path.join(root, rel)).split(path.sep).join('/'),
+            reason,
+          ),
       )
     : new Set();
   const dirs = below ? [root, cwd] : [cwd];
-  for (const dir of dirs) assertRemovableWithin(dir, dir === root ? rootSkip : undefined);
+  for (const dir of dirs)
+    assertRemovableWithin(dir, dir === root ? rootSkip : undefined);
   return dirs.flatMap(dir =>
-    removeAgentDocs(dir, {shownFrom: cwd, skip: dir === root ? rootSkip : undefined}).map(rel =>
+    removeAgentDocs(dir, {
+      shownFrom: cwd,
+      skip: dir === root ? rootSkip : undefined,
+    }).map(rel =>
       path.relative(cwd, path.join(dir, rel)).split(path.sep).join('/'),
     ),
   );
@@ -1284,20 +1380,33 @@ export function removeProjectAgentDocs(cwd, {onSkipped} = {}) {
  *   `targetDir` refuses the run
  * @returns {string[]} files written
  */
-function writeEachAgentDoc(targetDir, existing, givenWrappers, compressedIndex, onlyReplace, onSkipped, refuseEscapes = true) {
+function writeEachAgentDoc(
+  targetDir,
+  existing,
+  givenWrappers,
+  compressedIndex,
+  onlyReplace,
+  onSkipped,
+  refuseEscapes = true,
+) {
   /** @param {string} p */
   const marked = p => hasManagedMarker(path.join(targetDir, p));
   // A committed .claude/CLAUDE.md beside an ignored root CLAUDE.md keeps a
   // copy (INV31): one that already holds a block is refreshed where it is,
   // even when it imports another agent file, rather than left stale.
   const keptCopy =
-    givenWrappers.has(CLAUDE_DIR_MD) && marked(CLAUDE_DIR_MD) && claudeDirKeepsCopy(targetDir);
+    givenWrappers.has(CLAUDE_DIR_MD) &&
+    marked(CLAUDE_DIR_MD) &&
+    claudeDirKeepsCopy(targetDir);
   const wrappers = new Map(givenWrappers);
   if (keptCopy) wrappers.delete(CLAUDE_DIR_MD);
   /** @param {string} p */
   const isImport = p => {
     try {
-      return isAgentsImportBlock(p, fs.readFileSync(path.join(targetDir, p), 'utf-8'));
+      return isAgentsImportBlock(
+        p,
+        fs.readFileSync(path.join(targetDir, p), 'utf-8'),
+      );
     } catch {
       return false;
     }
@@ -1328,7 +1437,9 @@ function writeEachAgentDoc(targetDir, existing, givenWrappers, compressedIndex, 
   const written = [];
   for (const p of targets) {
     if (skipped.has(p)) continue;
-    const didWrite = injectXdsBlock(path.join(targetDir, p), compressedIndex, {onlyReplace});
+    const didWrite = injectXdsBlock(path.join(targetDir, p), compressedIndex, {
+      onlyReplace,
+    });
     if (didWrite) written.push(p);
   }
   for (const p of wrappers.keys()) {
@@ -1340,7 +1451,8 @@ function writeEachAgentDoc(targetDir, existing, givenWrappers, compressedIndex, 
     ) {
       continue;
     }
-    if (stripManagedBlock(path.join(targetDir, p), compressedIndex)) written.push(p);
+    if (stripManagedBlock(path.join(targetDir, p), compressedIndex))
+      written.push(p);
   }
   return written;
 }
@@ -1428,7 +1540,15 @@ function planDefaultAgentDocs(targetDir, existing, wrappers, aliases) {
  *   `targetDir` refuses the run
  * @returns {string[]} files written, in {@link AGENT_DOC_PATHS} order
  */
-function writeDefaultAgentDocs(targetDir, existing, wrappers, aliases, compressedIndex, onSkipped, refuseEscapes = true) {
+function writeDefaultAgentDocs(
+  targetDir,
+  existing,
+  wrappers,
+  aliases,
+  compressedIndex,
+  onSkipped,
+  refuseEscapes = true,
+) {
   const plan = planDefaultAgentDocs(targetDir, existing, wrappers, aliases);
   // While root CLAUDE.md is one the project ignores, .claude/CLAUDE.md gets
   // the copy too, first run included: a fresh clone has only that file.
@@ -1461,7 +1581,8 @@ function writeDefaultAgentDocs(targetDir, existing, wrappers, aliases, compresse
     try {
       assertWithin(p, targetDir, {label: 'agent docs path'});
     } catch (err) {
-      if (!(err instanceof PathSafetyError) || (refuseEscapes && legacy(p))) throw err;
+      if (!(err instanceof PathSafetyError) || (refuseEscapes && legacy(p)))
+        throw err;
       plan.delete(p);
       escaped.add(p);
       onSkipped?.(p, err.message);
@@ -1471,7 +1592,10 @@ function writeDefaultAgentDocs(targetDir, existing, wrappers, aliases, compresse
   // GEMINI.md import is not written either.
   if (escaped.has(AGENTS_MD) && plan.get(GEMINI_MD) === 'import') {
     plan.delete(GEMINI_MD);
-    onSkipped?.(GEMINI_MD, 'its import of AGENTS.md would point at a file left as it is');
+    onSkipped?.(
+      GEMINI_MD,
+      'its import of AGENTS.md would point at a file left as it is',
+    );
   }
 
   /** @type {string[]} */
@@ -1692,12 +1816,15 @@ export function installAgentDocs(
     const injectAll = !claudeRoot
       ? inject
       : keepDirCopy
-        ? [...new Set([...inject, CLAUDE_DIR_MD])].filter(p =>
-            p !== CLAUDE_DIR_MD || fs.existsSync(path.join(targetDir, CLAUDE_DIR_MD)),
+        ? [...new Set([...inject, CLAUDE_DIR_MD])].filter(
+            p =>
+              p !== CLAUDE_DIR_MD ||
+              fs.existsSync(path.join(targetDir, CLAUDE_DIR_MD)),
           )
         : inject.filter(p => p !== CLAUDE_DIR_MD);
     const dirHasBlock = hasManagedMarker(path.join(targetDir, CLAUDE_DIR_MD));
-    const strip = claudeRoot && !keepDirCopy && dirHasBlock ? [CLAUDE_DIR_MD] : [];
+    const strip =
+      claudeRoot && !keepDirCopy && dirHasBlock ? [CLAUDE_DIR_MD] : [];
     // A path that escapes the project refuses the run, as in 0.7.0; below the
     // project root, where 0.7.1 wrote nothing, it is skipped and reported. A
     // .claude/CLAUDE.md the preset adds beside an ignored root, which 0.7.1
@@ -1712,8 +1839,14 @@ export function installAgentDocs(
       : skipEscaping(targetDir, [...injectAll, ...create, ...strip], onSkipped);
     const injectHere = injectAll.filter(p => !escaping.has(p));
     const createHere = create.filter(p => !escaping.has(p));
-    const stripHere = escaping.has(CLAUDE_MD) ? [] : strip.filter(p => !escaping.has(p));
-    assertTargetsWithin(targetDir, [...injectHere, ...createHere, ...stripHere]);
+    const stripHere = escaping.has(CLAUDE_MD)
+      ? []
+      : strip.filter(p => !escaping.has(p));
+    assertTargetsWithin(targetDir, [
+      ...injectHere,
+      ...createHere,
+      ...stripHere,
+    ]);
     for (const p of injectHere) {
       injectXdsBlock(path.join(targetDir, p), compressedIndex);
       written.push(p);
@@ -1732,7 +1865,8 @@ export function installAgentDocs(
     }
     for (const p of stripHere) {
       if (!rootClaudeHolds(targetDir, compressedIndex)) continue;
-      if (stripManagedBlock(path.join(targetDir, p), compressedIndex)) written.push(p);
+      if (stripManagedBlock(path.join(targetDir, p), compressedIndex))
+        written.push(p);
     }
     return written;
   }
@@ -1740,7 +1874,9 @@ export function installAgentDocs(
   // Auto-detect. A refresh rewrites each existing block where it is.
   const existing = discoverAgentDocs(targetDir);
   if (onlyReplace) {
-    const wrappers = findAgentDocWrappers(readAgentDocImports(targetDir, existing));
+    const wrappers = findAgentDocWrappers(
+      readAgentDocImports(targetDir, existing),
+    );
     // The Claude file keeps its copy even when it imports AGENTS.md, so a
     // refresh rewrites that block rather than removing it.
     const {agentsAliases} = findSharedAgentDocs(targetDir, existing);
@@ -1751,16 +1887,39 @@ export function installAgentDocs(
     if (claudeCopy != null) wrappers.delete(claudeCopy);
     // A committed .claude/CLAUDE.md kept beside an ignored root CLAUDE.md is
     // refreshed even when it imports AGENTS.md (writeEachAgentDoc).
-    return writeEachAgentDoc(targetDir, existing, wrappers, compressedIndex, true, onSkipped, refuseEscapes);
+    return writeEachAgentDoc(
+      targetDir,
+      existing,
+      wrappers,
+      compressedIndex,
+      true,
+      onSkipped,
+      refuseEscapes,
+    );
   }
   // A wrapper that imports something other than AGENTS.md, or two agent docs
   // that are one file, mean the project chose its own layout: keep the
   // per-file layout then. AGENTS.md under another name is fine.
-  const wrappers = findAgentDocWrappers(readAgentDocImports(targetDir, existing, [AGENTS_MD]));
+  const wrappers = findAgentDocWrappers(
+    readAgentDocImports(targetDir, existing, [AGENTS_MD]),
+  );
   const {agentsAliases, otherShared} = findSharedAgentDocs(targetDir, existing);
-  if (otherShared || [...wrappers.values()].some(targets => !targets.has(AGENTS_MD))) {
-    const ownWrappers = findAgentDocWrappers(readAgentDocImports(targetDir, existing));
-    return writeEachAgentDoc(targetDir, existing, ownWrappers, compressedIndex, false, onSkipped, refuseEscapes);
+  if (
+    otherShared ||
+    [...wrappers.values()].some(targets => !targets.has(AGENTS_MD))
+  ) {
+    const ownWrappers = findAgentDocWrappers(
+      readAgentDocImports(targetDir, existing),
+    );
+    return writeEachAgentDoc(
+      targetDir,
+      existing,
+      ownWrappers,
+      compressedIndex,
+      false,
+      onSkipped,
+      refuseEscapes,
+    );
   }
   return writeDefaultAgentDocs(
     targetDir,
