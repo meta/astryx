@@ -1,5 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y always
+// @pr-a11y scope ^packages/core/src/Lightbox/ ^apps/storybook/stories/Lightbox
 
 /**
  * @file LightboxKeyboard.a11y.browser.spec.ts

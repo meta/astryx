@@ -3962,6 +3962,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-syntax-theme-keyword-color",
+      "path": "examples/use-syntax-theme/keyword-color",
+      "aliases": []
+    },
+    {
       "name": "example-use-table-column-resize-draggable-columns",
       "path": "examples/use-table-column-resize/draggable-columns",
       "aliases": []
@@ -4384,6 +4389,11 @@
     {
       "name": "hook-use-streaming-text",
       "path": "hooks/use-streaming-text",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-syntax-theme",
+      "path": "hooks/use-syntax-theme",
       "aliases": []
     },
     {
