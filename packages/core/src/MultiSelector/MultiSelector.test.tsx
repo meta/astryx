@@ -4074,59 +4074,118 @@ describe('MultiSelector trigger render prop', () => {
 });
 
 describe('MultiSelector renderTrigger — read-only', () => {
-  it("a read-only selector advertises no panel on the caller's control", () => {
-    // spec:AST-011 FR4. A read-only selector has no surface to open, so a
-    // control that says "collapsed, has popup" sends a screen-reader user
-    // to press Enter on something that cannot respond — with nothing to
-    // tell them the value is read-only rather than the control broken.
-    const onOpen = vi.fn();
+  it('exposes a read-only combobox and description without stale surface links', () => {
     render(
       <MultiSelector
-        label="Labels"
-        value={['a']}
+        label="Fruit"
+        options={['Apple', 'Banana']}
+        value={['Apple']}
         onChange={() => {}}
         isReadOnly
-        options={[
-          {value: 'a', label: 'Alpha'},
-          {value: 'b', label: 'Beta'},
-        ]}
+        aria-controls="caller-panel"
+        aria-activedescendant="caller-option"
         renderTrigger={props => (
-          <button type="button" {...props} onClick={onOpen}>
-            Labels
+          <button type="button" {...props} aria-label="Fruit">
+            Apple
           </button>
         )}
       />,
     );
 
-    const trigger = screen.getByRole('button', {name: 'Labels'});
+    const trigger = screen.getByRole('combobox', {name: 'Fruit'});
+    expect(trigger).toHaveTextContent('Apple');
+    expect(trigger).toHaveAccessibleDescription('Read only');
+    expect(trigger).toHaveAttribute('aria-readonly', 'true');
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
     expect(trigger).not.toHaveAttribute('aria-haspopup');
     expect(trigger).not.toHaveAttribute('aria-controls');
-    // Withholding the disclosure attributes stops the control lying about a
-    // panel; this says why it does not open, which the field path conveys
-    // through chrome the caller's control does not have.
-    expect(trigger).toHaveAttribute('aria-readonly', 'true');
+    expect(trigger).not.toHaveAttribute('aria-activedescendant');
   });
 
-  it('still advertises the panel when the selector is not read-only', () => {
+  it('joins the localized read-only description with the caller description in search mode', () => {
+    render(
+      <InternationalizationProvider
+        locale="fr"
+        overrides={{fr: {'@astryx.input.readOnly': 'Lecture seule'}}}>
+        <p id="fruit-hint">From your profile.</p>
+        <MultiSelector
+          label="Fruit"
+          options={['Apple', 'Banana']}
+          value={['Apple']}
+          onChange={() => {}}
+          isReadOnly
+          hasSearch
+          aria-describedby="fruit-hint"
+          renderTrigger={props => (
+            <button type="button" {...props} aria-label="Fruit">
+              Apple
+            </button>
+          )}
+        />
+      </InternationalizationProvider>,
+    );
+
+    const trigger = screen.getByRole('combobox', {name: 'Fruit'});
+    expect(trigger).toHaveAccessibleDescription(
+      'From your profile. Lecture seule',
+    );
+  });
+
+  it('preserves the caller role and description when read-only ends', () => {
+    const selector = (isReadOnly: boolean) => (
+      <>
+        <p id="fruit-hint">From your profile.</p>
+        <MultiSelector
+          label="Fruit"
+          options={['Apple', 'Banana']}
+          value={['Apple']}
+          onChange={() => {}}
+          isReadOnly={isReadOnly}
+          aria-describedby="fruit-hint"
+          aria-activedescendant="caller-option"
+          renderTrigger={props => (
+            <button type="button" role="combobox" {...props} aria-label="Fruit">
+              Apple
+            </button>
+          )}
+        />
+      </>
+    );
+    const {rerender} = render(selector(true));
+    const trigger = screen.getByRole('combobox', {name: 'Fruit'});
+
+    rerender(selector(false));
+
+    expect(screen.getByRole('combobox', {name: 'Fruit'})).toBe(trigger);
+    expect(trigger).not.toHaveAttribute('aria-readonly');
+    expect(trigger).toHaveAccessibleDescription('From your profile.');
+    expect(trigger).toHaveAttribute('aria-haspopup', 'listbox');
+    expect(trigger).toHaveAttribute('aria-controls');
+    expect(trigger).toHaveAttribute('aria-activedescendant', 'caller-option');
+    expect(screen.queryByText('Read only')).not.toBeInTheDocument();
+  });
+
+  it('does not add read-only semantics when disabled takes precedence', () => {
     render(
       <MultiSelector
-        label="Labels"
-        value={[]}
+        label="Fruit"
+        options={['Apple', 'Banana']}
+        value={['Apple']}
         onChange={() => {}}
-        options={[{value: 'a', label: 'Alpha'}]}
+        isReadOnly
+        isDisabled
         renderTrigger={props => (
-          <button type="button" {...props}>
-            Labels
+          <button type="button" {...props} aria-label="Fruit">
+            Apple
           </button>
         )}
       />,
     );
 
-    const trigger = screen.getByRole('button', {name: 'Labels'});
-    expect(trigger).toHaveAttribute('aria-haspopup', 'listbox');
-    expect(trigger).toHaveAttribute('aria-expanded', 'false');
-    expect(trigger).toHaveAttribute('aria-controls');
+    expect(screen.getByRole('button', {name: 'Fruit'})).not.toHaveAttribute(
+      'aria-readonly',
+    );
+    expect(screen.queryByText('Read only')).not.toBeInTheDocument();
   });
 });
 

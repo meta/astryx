@@ -2559,7 +2559,12 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       // Base props reach the caller's control, the primary semantic control
       // in this mode; the selector's own wiring below wins over them.
       ...callerProps,
-      'aria-describedby': ariaDescribedByProp,
+      ...(isEffectivelyReadOnly
+        ? {role: 'combobox', 'aria-activedescendant': undefined}
+        : null),
+      'aria-describedby': isEffectivelyReadOnly
+        ? joinAriaIDs(ariaDescribedByProp, readOnlyDescriptionId)
+        : ariaDescribedByProp,
       // Only a caller value is handed back, so a control that names itself
       // with its own aria-labelledby before spreading keeps it.
       ...(ariaLabelledByProp != null
@@ -2621,6 +2626,11 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     return (
       <>
         {renderTrigger(triggerProps)}
+        {isEffectivelyReadOnly && (
+          <VisuallyHidden id={readOnlyDescriptionId}>
+            {t('@astryx.input.readOnly')}
+          </VisuallyHidden>
+        )}
         {htmlName != null &&
           !isDisabled &&
           value.map(v => (
