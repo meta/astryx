@@ -44,6 +44,7 @@ import {
   componentsPageSource,
   overviewPageSource,
   previewRouteSource,
+  APP_COPY_MARK,
   themeImports,
 } from './_preview.mjs';
 import {
@@ -1254,12 +1255,13 @@ function nextAppsUnder(cwd) {
 }
 
 /**
- * How to use an editor theme in this app, step by step: the file of the
- * app's root (a Next app's root layout, else the file that renders the
- * app), the imports the preview route uses for the same theme (its module,
- * its stylesheet and the font stylesheets), the Theme around the app, and
- * what builds it. `astryx theme add` takes theme packages only, so this is
- * the way an editor theme goes into the app.
+ * How to use an editor theme in this app: `theme add <theme>` for the app
+ * copy the editor writes in src/themes/<theme>/; when a folder of the
+ * user's is there instead, step by step by hand: the file of the app's root
+ * (a Next app's root layout, else the file that renders the app), the
+ * imports the preview route uses for the same theme (its module, its
+ * stylesheet and the font stylesheets) and the Theme around the app. Then
+ * what builds it.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
@@ -1280,6 +1282,20 @@ export function appWiring(ctx, slug, data) {
   const appModule = ['src/astryx-themes.ts', 'astryx-themes.ts'].find(m =>
     fs.existsSync(path.join(cwd, m)),
   );
+  // The app's copy (src/themes/<theme>/, a standard local theme) is what
+  // the stable theme commands add: one command, which prints the one-time
+  // app wiring itself.
+  const copy = path.join(cwd, 'src', 'themes', slug);
+  if (
+    fs.existsSync(path.join(copy, `${name}.doc.mjs`)) &&
+    fs
+      .readFileSync(path.join(copy, `${name}.doc.mjs`), 'utf8')
+      .includes(APP_COPY_MARK)
+  )
+    return [
+      `${formatCliCommand(`theme add ${slug}`, cwd)}: adds the theme's app copy (src/themes/${slug}/, written again after every build) to the app's theme module, and prints the one-time wiring of that module in the app root; ${formatCliCommand(`theme use ${slug}`, cwd)} makes it the default`,
+      `every set and undo builds the theme and its app copy again, so the app takes each change; after editing ${shown(cwd, themeFiles(cwd, slug).ts)} by hand, ${P.replace(/ editor$/, '')} compile ${shown(cwd, themeFiles(cwd, slug).ts)} builds both again`,
+    ];
   return [
     `in ${where}, import the theme and its stylesheets: import {Theme} from '@astryxdesign/core/theme'; import {${name}} from '${ti.module.replace(/\.js$/, '')}'; ${ti.css.map(c => `import '${c}';`).join(' ')}`,
     `wrap the app in it: <Theme theme={${name}}${ti.mode === 'system' ? '' : ` mode="${ti.mode}"`}>{children}</Theme>`,

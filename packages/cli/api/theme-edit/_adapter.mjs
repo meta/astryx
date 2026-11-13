@@ -50,7 +50,7 @@ import {
 } from '../../foundation/env/package-manager.mjs';
 import {LIKE, P} from './_tables.mjs';
 import {setLine} from './_check.mjs';
-import {SHOWCASE_GROUPS} from './_preview.mjs';
+import {SHOWCASE_GROUPS, writeAppCopyAt} from './_preview.mjs';
 import {camel, typedThemeName} from './_settings.mjs';
 import {LOCAL_THEME_ROOT} from '../../foundation/config/theme-state.mjs';
 
@@ -888,6 +888,15 @@ export async function editorThemeHold(files, {cwd}) {
       throw err;
     }
     releases.push(async () => {
+      // A compile that wrote the build refreshes the app's copy too
+      // (src/themes/<theme>/), under the same lock; a check writes nothing.
+      if (!process.argv.includes('--check')) {
+        try {
+          writeAppCopyAt(root, slug, null);
+        } catch {
+          // A theme that does not load keeps its copy as it was.
+        }
+      }
       release();
       await done;
     });

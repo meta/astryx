@@ -1470,3 +1470,103 @@ function chromeBinary() {
   }
   return null;
 }
+
+/** The first line of every file the editor writes into a theme's app copy. */
+export const APP_COPY_MARK = 'Written by `astryx experimental theme editor`';
+
+/**
+ * The app's copy of an editor theme: a standard local theme in
+ * src/themes/<theme>/ (a descriptor, a source that re-exports the built
+ * module, the built module, its stylesheet and font stylesheet), the shape
+ * `astryx theme add <theme>` reads, so the theme goes into the app with the
+ * stable theme commands. It is written again after every build of the
+ * theme, never edited by hand. A folder there that is not the editor's own
+ * copy is left alone: returns null then, else the folder.
+ * The built module and stylesheet are written whole: a local theme's source
+ * may import only files inside its own folder.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {string | null}
+ */
+export function writeAppCopy(ctx, slug, data) {
+  return writeAppCopyAt(
+    ctx.project.cwd,
+    slug,
+    themeImports(
+      ctx,
+      slug,
+      data,
+      path.join(ctx.project.cwd, 'src', 'themes', slug),
+    ).css.slice(1),
+  );
+}
+
+/**
+ * {@link writeAppCopy} with the font stylesheets given, or null to keep the
+ * copy's own (a compile, which changes no setting).
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {string[] | null} fontsCss
+ * @returns {string | null}
+ */
+export function writeAppCopyAt(cwd, slug, fontsCss) {
+  const f = themeFiles(cwd, slug);
+  const dir = path.join(cwd, 'src', 'themes', slug);
+  const name = `${camel(slug)}Theme`;
+  if (!fs.existsSync(f.js) || !fs.existsSync(f.css)) return null;
+  // Only the editor's own copy is written over.
+  if (fs.existsSync(dir)) {
+    /** @type {string[]} */
+    let names;
+    try {
+      names = fs.readdirSync(dir);
+    } catch {
+      return null;
+    }
+    const ours = names.every(n => {
+      try {
+        return fs
+          .readFileSync(path.join(dir, n), 'utf8')
+          .includes(APP_COPY_MARK);
+      } catch {
+        return false;
+      }
+    });
+    if (!ours) return null;
+  }
+  const head = (/** @type {string} */ open, /** @type {string} */ close) =>
+    `${open} ${APP_COPY_MARK} after every build of themes/${slug}/; do not edit it here. Change the theme with the editor. ${close}\n`;
+  const keptFonts = path.join(dir, `${slug}.fonts.css`);
+  const fonts =
+    fontsCss ??
+    (fs.existsSync(keptFonts)
+      ? [
+          ...fs.readFileSync(keptFonts, 'utf8').matchAll(/@import "([^"]+)";/g),
+        ].map(m => m[1])
+      : []);
+  const files = {
+    [`${name}.doc.mjs`]: `${head('//', '')}\n/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {\n  type: 'theme',\n  name: ${JSON.stringify(slug)},\n  displayName: ${JSON.stringify(slug)},\n  description: ${JSON.stringify(`The ${slug} theme, made with the theme editor (themes/${slug}/).`)},\n  maintained: false,\n};\n`,
+    [`${name}.ts`]: `${head('//', '')}export {${name}} from './${slug}';\n`,
+    [`${slug}.js`]: `${head('/*', '*/')}${fs.readFileSync(f.js, 'utf8')}`,
+    [`${slug}.d.ts`]: fs.existsSync(path.join(f.dir, `${slug}.d.ts`))
+      ? `${head('/*', '*/')}${fs.readFileSync(path.join(f.dir, `${slug}.d.ts`), 'utf8')}`
+      : `${head('/*', '*/')}export declare const ${name}: import('@astryxdesign/core/theme').Theme;\n`,
+    [`${slug}.css`]: `${head('/*', '*/')}${fs.readFileSync(f.css, 'utf8')}`,
+    ...(fonts.length
+      ? {
+          [`${slug}.fonts.css`]: `${head('/*', '*/')}${fonts.map(c => `@import ${JSON.stringify(c)};`).join('\n')}\n`,
+        }
+      : {}),
+  };
+  fs.mkdirSync(dir, {recursive: true});
+  for (const [n, text] of Object.entries(files)) {
+    const file = path.join(dir, n);
+    if (fs.existsSync(file) && fs.readFileSync(file, 'utf8') === text) continue;
+    writeWhole(file, text);
+  }
+  // A file an earlier copy had (a font stylesheet no longer needed) goes.
+  for (const n of fs.readdirSync(dir))
+    if (!(n in files)) fs.rmSync(path.join(dir, n), {force: true});
+  return dir;
+}

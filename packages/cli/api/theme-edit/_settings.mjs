@@ -3970,6 +3970,12 @@ export async function buildTheme(ctx, slug, data) {
   ]
     .map(String)
     .filter(w => !/^Font "/.test(w));
+  // The app's copy, a standard local theme `theme add` reads, follows the
+  // build.
+  const {writeAppCopy} = await import('./_preview.mjs');
+  await step(() => {
+    writeAppCopy(ctx, slug, data);
+  });
   return {warnings, lifted, notes};
 }
 

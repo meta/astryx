@@ -35,40 +35,28 @@ afterAll(() => {
 });
 
 describe('hunt54 (A): the wiring for this app', () => {
-  it('outside a Next app: the root file, its imports, the Theme and the build', async () => {
+  it('names theme add for the app copy the editor writes', async () => {
     const r = await themeEditNew('w', {cwd, like: 'neutral'});
     const wiring = /** @type {any} */ (r.data).wiring.join('\n');
-    expect(wiring).toContain("import {wTheme} from './themes/w/w'");
-    expect(wiring).toContain("import './themes/w/w.css'");
-    expect(wiring).toContain('<Theme theme={wTheme}>{children}</Theme>');
+    expect(wiring).toMatch(/ theme add w: adds the theme's app copy/);
     expect(wiring).toContain('experimental theme compile themes/w/w.theme.ts');
   }, 120_000);
 
-  it('in a Next app: paths from its root layout', async () => {
-    const pkg = path.join(cwd, 'package.json');
-    const kept = fs.readFileSync(pkg, 'utf8');
-    fs.writeFileSync(
-      pkg,
-      JSON.stringify({
-        ...JSON.parse(kept),
-        dependencies: {'@astryxdesign/core': '*', next: '*'},
-      }),
-    );
-    fs.mkdirSync(path.join(cwd, 'src/app'), {recursive: true});
-    fs.writeFileSync(
-      path.join(cwd, 'src/app/layout.tsx'),
-      "import '@astryxdesign/core/astryx.css';\nexport default function RootLayout({children}) { return children; }\n",
-    );
+  it('with a src/themes folder of the user by that name, the steps by hand', async () => {
+    fs.mkdirSync(path.join(cwd, 'src/themes/v'), {recursive: true});
+    fs.writeFileSync(path.join(cwd, 'src/themes/v/notes.md'), 'mine');
     try {
-      const r = await themeEditShow('w', {cwd});
+      const r = await themeEditNew('v', {cwd, like: 'neutral'});
       const wiring = /** @type {any} */ (r.data).wiring.join('\n');
-      expect(wiring).toContain("in src/app/layout.tsx (the app's root layout)");
-      expect(wiring).toContain("import {wTheme} from '../../themes/w/w'");
+      expect(wiring).toContain("import {vTheme} from './themes/v/v'");
+      expect(wiring).toContain('<Theme theme={vTheme}>{children}</Theme>');
+      expect(fs.readdirSync(path.join(cwd, 'src/themes/v'))).toEqual([
+        'notes.md',
+      ]);
     } finally {
-      fs.writeFileSync(pkg, kept);
       fs.rmSync(path.join(cwd, 'src'), {recursive: true, force: true});
     }
-  }, 240_000);
+  }, 120_000);
 });
 
 describe('hunt54 (B): a token on a group', () => {

@@ -60,7 +60,7 @@
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditNewResponse
  * @property {'themeEdit.new'} type
- * @property {{theme: string, like: string | null, files: {settings: string, source: string, css: string, module: string}, settings: string[], notes: string[], problems: string[], wiring: string[]} & ThemeEditPreviewFields} data - `settings`: the dial settings it started with; `notes`: font loading; `wiring`: the steps that put the theme into this app (the root file, its imports, the Theme around the app, what builds it).
+ * @property {{theme: string, like: string | null, files: {settings: string, source: string, css: string, module: string}, settings: string[], notes: string[], problems: string[], wiring: string[]} & ThemeEditPreviewFields} data - `settings`: the dial settings it started with; `notes`: font loading; `wiring`: the steps that put the theme into this app (`theme add <theme>` for its app copy in src/themes/<theme>/, else the root file, its imports and the Theme around the app; what builds it).
  */
 
 /**
@@ -132,7 +132,7 @@
  * @property {string[]} data.pictures
  * @property {string | null} data.pictureProblem
  * @property {{config: string, module: string, receipt: string} | null} data.colorFiles - The generated color files: the input (in the shape `theme palette generate` reads), the module the theme imports, and the receipt; null when the theme sets no color.
- * @property {string[]} data.wiring - The steps that put the theme into this app: the root file, its imports, the Theme around the app, and what builds it (`theme add` takes theme packages only).
+ * @property {string[]} data.wiring - The steps that put the theme into this app: the root file, its imports, the Theme around the app, and what builds it (`theme add <theme>`, for the app copy the editor writes in src/themes/<theme>/; the imports by hand when a folder of yours is there).
  */
 
 /**
