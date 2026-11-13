@@ -57,6 +57,18 @@ vi.mock('../runtime/lazy-dependencies.mjs', async importOriginal => {
     },
   };
 });
+// Counts the doc parser's runs: a parse the store answers never runs it.
+const docParses = vi.hoisted(() => ({count: 0}));
+vi.mock('../../authoring/doctypes/parse.mjs', async importOriginal => {
+  const actual = /** @type {any} */ (await importOriginal());
+  return {
+    ...actual,
+    parseDoc: (/** @type {any[]} */ ...args) => {
+      docParses.count++;
+      return actual.parseDoc(...args);
+    },
+  };
+});
 /** @type {Record<string, Record<string, unknown>>} */
 let stored = {};
 beforeAll(async () => {
@@ -216,8 +228,21 @@ describe('stored doc exports', () => {
       name,
     );
     expect(stored[key]).toBeDefined();
+    docParses.count = 0;
     const read = parseReadableDoc(mod[name], 'guide');
+    expect(docParses.count).toBe(0);
     expect(JSON.stringify(read)).toBe(JSON.stringify(stored[key]));
+    // An edited copy is parsed.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'stored-parse-'));
+    tmpDirs.push(dir);
+    const copy = path.join(dir, 'page-template.doc.mjs');
+    fs.writeFileSync(copy, `${fs.readFileSync(GUIDE, 'utf-8')}// edited\n`);
+    const edited = /** @type {any} */ (await importDocModule(copy));
+    docParses.count = 0;
+    expect(JSON.stringify(parseReadableDoc(edited[name], 'guide'))).toBe(
+      JSON.stringify(read),
+    );
+    expect(docParses.count).toBe(1);
     // A parse gives a new value each time, never the shared export.
     expect(read).not.toBe(mod[name]);
     expect(parseReadableDoc(mod[name], 'guide')).not.toBe(read);

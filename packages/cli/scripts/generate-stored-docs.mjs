@@ -207,8 +207,9 @@ export async function storedDocsText() {
     // exactly, key order included. Core's component docs are left out: a read
     // parses one or two of them, so storing them would cost far more bytes
     // than time.
+    // Icon definitions are checked on their static value, never parsed here.
     const parsedHere = file.startsWith(
-      path.join(CLI_ROOT, 'assets') + path.sep,
+      path.join(CLI_ROOT, 'assets', 'docs') + path.sep,
     );
     for (const name of parsedHere ? ['docs', 'default'] : []) {
       if (!data[name] || typeof data[name] !== 'object') continue;
