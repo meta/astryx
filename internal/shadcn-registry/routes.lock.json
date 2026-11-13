@@ -3767,6 +3767,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-chat-paste-as-token-long-paste",
+      "path": "examples/use-chat-paste-as-token/long-paste",
+      "aliases": []
+    },
+    {
       "name": "example-use-clickable-container-clickable-project-card",
       "path": "examples/use-clickable-container/clickable-project-card",
       "aliases": []
@@ -3959,6 +3964,11 @@
     {
       "name": "example-use-snap-paging-onboarding-pages",
       "path": "examples/use-snap-paging/onboarding-pages",
+      "aliases": []
+    },
+    {
+      "name": "example-use-speech-recognition-headless-control",
+      "path": "examples/use-speech-recognition/headless-control",
       "aliases": []
     },
     {
@@ -4164,6 +4174,11 @@
     {
       "name": "hook-use-chat-dictation",
       "path": "hooks/use-chat-dictation",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-chat-paste-as-token",
+      "path": "hooks/use-chat-paste-as-token",
       "aliases": []
     },
     {
@@ -4399,6 +4414,11 @@
     {
       "name": "hook-use-snap-paging",
       "path": "hooks/use-snap-paging",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-speech-recognition",
+      "path": "hooks/use-speech-recognition",
       "aliases": []
     },
     {
