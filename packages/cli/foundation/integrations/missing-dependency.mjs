@@ -7,8 +7,12 @@
  *   find package 'x' imported from /file") or for CommonJS ("Cannot find
  *   module 'x'" with its require stack).
  * @output `missingDeclaredDependency(message)`: the missing package's name
- *   when the package holding the importing file declares it (dependencies,
- *   devDependencies, optionalDependencies or peerDependencies), else null.
+ *   when the package holding the importing file declares it as a package its
+ *   consumers' install must hold (dependencies, or a peerDependencies entry
+ *   not marked optional in peerDependenciesMeta), else null. A dev dependency
+ *   is never installed for a consumer and an optional one may be skipped by
+ *   design, so a manifest that needs either has a packaging bug, which
+ *   reinstalling does not clear.
  * @position Read by the project (foundation/config/project.mjs) to tell an
  *   install the user can repair from a dependency's own packaging bug, which
  *   stays out of the project's issues.
@@ -18,13 +22,23 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-/** The package.json fields that declare a package the code may import. */
-const FIELDS = [
-  'dependencies',
-  'devDependencies',
-  'optionalDependencies',
-  'peerDependencies',
-];
+/**
+ * Whether a package.json declares `name` as a package its consumers' install
+ * must hold: a dependency, or a peer not marked optional.
+ * @param {any} pkg
+ * @param {string} name
+ * @returns {boolean}
+ */
+function requires(pkg, name) {
+  /** @param {unknown} field */
+  const has = field =>
+    field != null && typeof field === 'object' && Object.hasOwn(field, name);
+  if (has(pkg.dependencies)) return true;
+  return (
+    has(pkg.peerDependencies) &&
+    pkg.peerDependenciesMeta?.[name]?.optional !== true
+  );
+}
 
 /**
  * The missing package and the file that imported it, from a load error.
@@ -33,14 +47,15 @@ const FIELDS = [
  */
 function parse(message) {
   const esm =
-    /Cannot find (?:package|module) '([^']+)' imported from (\S+)/.exec(
+    /Cannot find (?:package|module) '([^']+)' imported from ([^\n]+)/.exec(
       message,
     );
   const cjs =
     /Cannot find module '([^']+)'\s*\nRequire stack:\n- ([^\n]+)/.exec(message);
   const hit = esm ?? cjs;
   if (!hit) return null;
-  const [, spec, from] = hit;
+  const [, spec, found] = hit;
+  const from = found.trim();
   if (spec.startsWith('.') || path.isAbsolute(spec) || spec.startsWith('node:'))
     return null;
   const parts = spec.split('/');
@@ -69,14 +84,7 @@ export function missingDeclaredDependency(message) {
       try {
         const pkg = JSON.parse(fs.readFileSync(file, 'utf-8'));
         if (typeof pkg?.name === 'string') {
-          return FIELDS.some(
-            field =>
-              pkg[field] != null &&
-              typeof pkg[field] === 'object' &&
-              Object.hasOwn(pkg[field], found.name),
-          )
-            ? found.name
-            : null;
+          return requires(pkg, found.name) ? found.name : null;
         }
       } catch {
         return null;

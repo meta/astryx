@@ -17,20 +17,29 @@ import {missingDeclaredDependency} from './missing-dependency.mjs';
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'missing-dependency-'));
 afterAll(() => fs.rmSync(dir, {recursive: true, force: true}));
 
-/** @param {string} name @param {Record<string, string>} [deps] */
-function pkg(name, deps = {}) {
+/** @param {string} name @param {Record<string, unknown>} [fields] */
+function pkg(name, fields = {}) {
   const root = path.join(dir, name);
   fs.mkdirSync(path.join(root, 'lib'), {recursive: true});
   fs.writeFileSync(
     path.join(root, 'package.json'),
-    JSON.stringify({name, dependencies: deps, peerDependencies: {}}),
+    JSON.stringify({name, ...fields}),
   );
   return path.join(root, 'lib', 'index.mjs');
 }
 
 describe('missingDeclaredDependency', () => {
-  const declares = pkg('declares', {recast: '1.0.0', '@babel/core': '7.0.0'});
+  const declares = pkg('declares', {
+    dependencies: {recast: '1.0.0', '@babel/core': '7.0.0'},
+  });
   const lacks = pkg('lacks');
+  const spaced = pkg('with space', {dependencies: {recast: '1.0.0'}});
+  const others = pkg('others', {
+    devDependencies: {recast: '1.0.0'},
+    optionalDependencies: {postcss: '8.0.0'},
+    peerDependencies: {jiti: '2.0.0', zod: '4.0.0'},
+    peerDependenciesMeta: {zod: {optional: true}},
+  });
 
   it('names a declared package missing from an ES module import', () => {
     expect(
@@ -51,6 +60,26 @@ describe('missingDeclaredDependency', () => {
         `Cannot find module 'recast/parsers/babel'\nRequire stack:\n- ${declares}`,
       ),
     ).toBe('recast');
+  });
+
+  it('reads an importer whose path has a space', () => {
+    expect(
+      missingDeclaredDependency(
+        `Cannot find package 'recast' imported from ${spaced}`,
+      ),
+    ).toBe('recast');
+  });
+
+  it('counts a peer not marked optional, and no dev, optional or optional-peer package', () => {
+    /** @param {string} name */
+    const missing = name =>
+      missingDeclaredDependency(
+        `Cannot find package '${name}' imported from ${others}`,
+      );
+    expect(missing('jiti')).toBe('jiti');
+    expect(missing('recast')).toBeNull();
+    expect(missing('postcss')).toBeNull();
+    expect(missing('zod')).toBeNull();
   });
 
   it('is null for an undeclared package, a relative path, or another error', () => {
