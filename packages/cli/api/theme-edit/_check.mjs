@@ -98,6 +98,7 @@ import {
   ownSourceTokenValues,
   baseTopTokens,
   baseComponentReads,
+  baseRuleHas,
   partRuleTokens,
   cssFamily,
   familySpaces,
@@ -2126,7 +2127,16 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
     refuse(
       E.ERR_THEME_NO_MODE,
       `This theme is ${data.mode}; --mode is for themes with both modes.`,
-      {run: [`${P} set ${slug} ${thing} ${quoteCommandArgument(v)}${onFlag}`]},
+      {
+        run: [
+          // For the mode the theme does not show, both modes first; the
+          // same setting for the theme's own mode keeps where it applies.
+          ...((data.mode === 'light-only' ? 'light' : 'dark') !== s.mode
+            ? [`${P} set ${slug} mode both`]
+            : []),
+          `${P} set ${slug} ${thing} ${quoteCommandArgument(v)}${onFlag}${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}`,
+        ],
+      },
     );
   if ((s.when || s.state) && !s.on)
     refuse(E.ERR_MISSING_ARGUMENT, '--when and --state need --on <part>.', {
@@ -4104,8 +4114,21 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
     if (
       s.mode &&
       s.state &&
-      !partsOf(ctx, s).every(t =>
-        partDefault(ctx, t, camel(prop), s.when, s.state),
+      !partsOf(ctx, s).every(
+        t =>
+          partDefault(ctx, t, camel(prop), s.when, s.state) ||
+          // The base theme's own value there (in the state, else at rest)
+          // is what the other mode keeps.
+          [`:${s.state}`, null].some(st =>
+            baseRuleHas(
+              ctx.project.cwd,
+              data.like,
+              t,
+              s.when ?? 'base',
+              st,
+              camel(prop),
+            ),
+          ),
       ) &&
       !data.settings.some(
         x =>

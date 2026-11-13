@@ -1690,6 +1690,27 @@ export function partRuleTokens(cwd, slug, like, part) {
 }
 
 /**
+ * Whether the base theme's own source gives a part's rule a property, in a
+ * state (`:hover`) or at rest, read from its module as written.
+ * @param {string} cwd
+ * @param {string | undefined} like
+ * @param {string} part
+ * @param {string} scope `base` or a variant such as `variant:secondary`
+ * @param {string | null} state a state block (`:hover`), or null
+ * @param {string} prop camelCase
+ */
+export function baseRuleHas(cwd, like, part, scope, state, prop) {
+  const file = like ? baseModule(cwd, like) : null;
+  if (!file) return false;
+  try {
+    const at = ['components', part, scope, ...(state ? [state] : [])];
+    return blockOf(file, at).has(prop);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * The tokens and properties a theme's own source sets on a part's plain
  * rule, read from the build as ownTokens reads page-wide ones: what the
  * built rule holds that the settings module and the base theme do not give
@@ -2324,7 +2345,8 @@ export function sizePx(v, vars = {}) {
   }
   const calc = /^calc\((.*)\)$/is.exec(t);
   if (calc) t = calc[1].trim();
-  const terms = t.match(/[+-]?\s*[\d.]+(?:px|rem)\b|\S+/g) ?? [];
+  const terms =
+    t.match(/[+-]?\s*[\d.]+(?:px|rem|em|pt|pc|in|cm|mm|q)\b|\S+/gi) ?? [];
   let sum = 0;
   let sign = 1;
   for (const raw of terms) {
@@ -2334,15 +2356,30 @@ export function sizePx(v, vars = {}) {
       sign = x === '-' ? -1 : 1;
       continue;
     }
-    const m = /^([+-]?)([\d.]+)(px|rem)$/.exec(x);
+    const m = /^([+-]?)([\d.]+)(px|rem|em|pt|pc|in|cm|mm|q)$/i.exec(x);
     if (!m || (!calc && terms.length > 1)) return null;
-    const n = parseFloat(m[2]) * (m[3] === 'rem' ? 16 : 1);
+    // Absolute units by their fixed ratio to px; em and rem against the
+    // 16px a control's text starts from.
+    const n = parseFloat(m[2]) * (PX_PER[m[3].toLowerCase()] ?? 1);
     if (!Number.isFinite(n)) return null;
     sum += (m[1] === '-' ? -1 : 1) * sign * n;
     sign = 1;
   }
   return terms.length ? sum : null;
 }
+
+/** Pixels per unit of each length unit a kept size may be written in. */
+const PX_PER = /** @type {Record<string, number>} */ ({
+  px: 1,
+  rem: 16,
+  em: 16,
+  pt: 96 / 72,
+  pc: 16,
+  in: 96,
+  cm: 96 / 2.54,
+  mm: 96 / 25.4,
+  q: 96 / 101.6,
+});
 
 /**
  * Spacing steps scaled with the spacing dial, kept in order around the
@@ -2539,7 +2576,13 @@ export function compileTheme(ctx, data, base) {
     // half keeps what it had (the base theme's), for the regions Core draws
     // in the other mode.
     const half = mode ?? modeOnly;
-    if (!MODAL.has(ctx.C.typeOf(name)) || !half) {
+    // Only a color has a half per mode (light-dark() takes colors only): a
+    // shadow or any other value in a one-mode theme is written whole.
+    if (
+      !MODAL.has(ctx.C.typeOf(name)) ||
+      !half ||
+      (!mode && !parseColor(String(v).trim()))
+    ) {
       t.light = v;
       t.dark = v;
       return;
@@ -3385,7 +3428,22 @@ export function compileTheme(ctx, data, base) {
         const prev = family
           .map(k => vb[camel(k)])
           .find(y => typeof y === 'string');
-        const from = prev ?? plainHeld ?? x;
+        // In a state, what the state shows now in the other mode: its own
+        // value there, else the resting color a setting gives the variant
+        // or the part (a state that does not change the color shows the
+        // resting one), else the unset value.
+        /** @param {Record<string, any> | undefined} rule */
+        const restOf = rule =>
+          family
+            .map(k => rule?.[camel(k)])
+            .find(y => typeof y === 'string' && !/gradient\(|url\(/i.test(y));
+        const rest = s.state
+          ? (exactVariantValue(target, css, name, s.state, true) ??
+            restOf(theme.components[target]?.[`variant:${name}`]) ??
+            plainHeld ??
+            restOf(theme.components[target]?.base))
+          : plainHeld;
+        const from = prev ?? rest ?? x;
         if (from == null) continue;
         for (const k of family) delete vb[camel(k)];
         const half = halfOf(from, other);
@@ -3417,6 +3475,19 @@ export function compileTheme(ctx, data, base) {
         }
       }
       return;
+    }
+    if (mode && colorFamily(prop) === 'background-color') {
+      // The background shorthand and its color are one property: the one
+      // the rule holds (as a color) gives the other half and is replaced, so
+      // one key carries both modes.
+      const held = ['backgroundColor', 'background'].find(
+        k => typeof b[k] === 'string' && !/gradient\(|url\(/i.test(b[k]),
+      );
+      if (held && held !== camel(prop)) {
+        const was = b[held];
+        delete b[held];
+        b[camel(prop)] ??= was;
+      }
     }
     if (mode) {
       const prev = b[prop];
@@ -3737,6 +3808,55 @@ export function compileTheme(ctx, data, base) {
               `${k}${t ? ` on ${t}` : ''} has no room between the exact sizes kept around it, so it takes the size of the one below it`,
             );
         }
+        // A variant's own exact size is kept in order on that variant too,
+        // with the part's and the theme's kept sizes around it.
+        /** @type {Map<string, {t: string, when: string}>} */
+        const variantScopes = new Map();
+        for (const x of data.settings)
+          if (
+            x.source === 'token' &&
+            /^--size-element-/.test(x.thing) &&
+            x.on &&
+            x.when &&
+            !x.state
+          )
+            for (const t of partsOf(ctx, x))
+              if (!parts.length || parts.includes(t))
+                variantScopes.set(`${t} ${x.when}`, {t, when: x.when});
+        for (const {t, when} of variantScopes.values()) {
+          /** @type {Record<string, number>} */
+          const kept = {};
+          for (const [k, v] of keptSizes(t)) {
+            const n = sizePx(v, dialVars);
+            if (n != null) kept[k] = n;
+          }
+          for (const x of data.settings)
+            if (
+              x.source === 'token' &&
+              /^--size-element-/.test(x.thing) &&
+              x.when === when &&
+              !x.state &&
+              partsOf(ctx, x).includes(t)
+            ) {
+              const n = sizePx(String(x.value), dialVars);
+              if (n != null) kept[x.thing] = n;
+            }
+          /** @type {string[]} */
+          const noRoom = [];
+          for (const [k, nv] of controlSizes(
+            Object.keys(/** @type {Record<string, string>} */ (TOKENS))
+              .filter(k => /^--size-element-/.test(k))
+              .map(k => [k, base.light[k] ?? TOKENS[k]]),
+            f,
+            kept,
+            noRoom,
+          ))
+            block({...s, when}, t)[k] = nv;
+          for (const k of noRoom)
+            (ctx.sizeNotes ??= []).push(
+              `${k} on ${t} when ${when} has no room between the exact sizes kept around it, so it takes the size of the one below it`,
+            );
+        }
       }
     } else if (s.source === 'token') {
       if (parts.length) for (const t of parts) putComp(s, t, s.thing, s.value);
@@ -3908,7 +4028,16 @@ export function compileTheme(ctx, data, base) {
   for (const [k, {light, dark}] of Object.entries(tok)) {
     const l = light ?? base.light[k] ?? TOKENS[k];
     const d = dark ?? base.dark[k] ?? TOKENS[k];
-    theme.tokens[k] = l === d ? l : [l, d];
+    // A pair only for a color: anything else (a shadow) is one value, the
+    // one the theme's mode shows.
+    theme.tokens[k] =
+      l === d
+        ? l
+        : ctx.C.typeOf(k) === 'color' || isColorToken(k)
+          ? [l, d]
+          : modeOnly === 'dark'
+            ? d
+            : l;
   }
   // Base themes set the type tokens again for phones (a coarse pointer
   // below the lg width); an exact font family or weight, and the headings
@@ -4279,8 +4408,43 @@ const liftValue = (lift, only) =>
  * @param {ThemeData} data
  * @param {any} theme
  * @param {import('./_palette.mjs').PaletteMapping | null} pal
+ * @param {string} [cwd]
+ * @param {Record<string, any> | null} [baseParts] the base theme's components, whose state objects each written one starts from
  */
-function settingsSource(slug, data, theme, pal, cwd = '') {
+function settingsSource(slug, data, theme, pal, cwd = '', baseParts = null) {
+  // Core merges a theme's state object (`:hover` in a rule) over the base
+  // theme's whole, one level deep: each one starts as the base theme's own
+  // for that rule, so the properties no setting names keep the base's.
+  if (baseParts) {
+    theme = {...theme, components: {...(theme.components ?? {})}};
+    for (const [target, keys] of Object.entries(theme.components)) {
+      /** @type {Record<string, any>} */
+      const next = {};
+      for (const [key, rule] of Object.entries(
+        /** @type {Record<string, any>} */ (keys),
+      )) {
+        if (!rule || typeof rule !== 'object') {
+          next[key] = rule;
+          continue;
+        }
+        /** @type {Record<string, any>} */
+        const r = {...rule};
+        for (const [k, v] of Object.entries(rule)) {
+          const own = baseParts[target]?.[key]?.[k];
+          if (
+            k.startsWith(':') &&
+            v &&
+            typeof v === 'object' &&
+            own &&
+            typeof own === 'object'
+          )
+            r[k] = {...own, ...v};
+        }
+        next[key] = r;
+      }
+      theme.components[target] = next;
+    }
+  }
   const like = data.like;
   const REF = '@@palette:';
   /** @param {string} family @param {'light' | 'dark'} m @param {import('./_palette.mjs').StopRef} r */
@@ -4828,7 +4992,17 @@ export async function buildTheme(ctx, slug, data) {
     ctx.keepStops,
   );
   await step(() => {
-    writeWhole(f.settingsTs, settingsSource(slug, data, theme, pal, cwd));
+    writeWhole(
+      f.settingsTs,
+      settingsSource(
+        slug,
+        data,
+        theme,
+        pal,
+        cwd,
+        /** @type {any} */ (base).components ?? null,
+      ),
+    );
     syncPaletteRefs(cwd, slug, fs.readFileSync(f.settingsTs, 'utf8'), pal);
     if (!fs.existsSync(f.ts)) writeWhole(f.ts, themeModuleSource(slug));
   });
@@ -4927,7 +5101,17 @@ export async function buildTheme(ctx, slug, data) {
       lifted.push(`${x.target} ${x.key}${x.state ?? ''} ${kebab(x.prop)}`);
     }
     await step(() => {
-      writeWhole(f.settingsTs, settingsSource(slug, data, theme, pal, cwd));
+      writeWhole(
+        f.settingsTs,
+        settingsSource(
+          slug,
+          data,
+          theme,
+          pal,
+          cwd,
+          /** @type {any} */ (base).components ?? null,
+        ),
+      );
       syncPaletteRefs(cwd, slug, fs.readFileSync(f.settingsTs, 'utf8'), pal);
     });
     receipt = await step(() => runBuild(ctx, slug));

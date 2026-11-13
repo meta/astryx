@@ -1996,7 +1996,21 @@ async function changeOnce(
   const covered =
     sub === 'set' && !s.mode && s.source !== 'dial'
       ? data.settings.filter(
-          x => x !== s && x.mode && keyOf({...x, mode: undefined}) === k,
+          x =>
+            x !== s &&
+            x.mode &&
+            (keyOf({...x, mode: undefined}) === k ||
+              // The background shorthand and its color are one property
+              // here: a one-mode one is replaced by either for both modes.
+              (s.source === 'property' &&
+                x.source === 'property' &&
+                x.on === s.on &&
+                x.when === s.when &&
+                x.state === s.state &&
+                [x.thing, s.thing].every(t =>
+                  /^background(-color)?$/.test(kebab(t)),
+                ) &&
+                !/gradient\(|url\(/i.test(String(s.value)))),
         )
       : [];
   data.settings = data.settings.filter(x => !covered.includes(x));
@@ -2079,7 +2093,6 @@ async function changeOnce(
         x =>
           x.source === 'token' &&
           !!x.on &&
-          !x.when &&
           !x.state &&
           /^--size-element-/.test(x.thing),
       ),
