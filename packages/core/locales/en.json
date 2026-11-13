@@ -1217,7 +1217,7 @@
   },
   "@astryx.dateInput.invalidDate": {
     "defaultMessage": "Invalid date",
-    "description": "Screen-reader-only live-region alert in DateInput / DateTimeInput when the typed text cannot be read as a date. Text the field cannot finish, such as a one-digit year, stays on Enter or blur and shows this message as the field status."
+    "description": "Error in DateInput / DateTimeInput, shown below the field and announced, when Enter or blur keeps typed text that cannot be read as a date. Text the field cannot finish, such as a one-digit year, shows it too."
   },
   "@astryx.dateInput.nonexistentDate": {
     "defaultMessage": "{named, select, yes {Enter a real date ({calendar})} other {Enter a real date}}",
@@ -1694,6 +1694,14 @@
   "@astryx.lightbox.zoomedOut": {
     "defaultMessage": "Zoomed out",
     "description": "Polite screen-reader announcement after zooming back out of a Lightbox image. Pairs with `lightbox.zoomedIn`."
+  },
+  "@astryx.lightbox.captionMore": {
+    "defaultMessage": "more",
+    "description": "Visible label of the button after a gallery caption that two lines cut short in a Lightbox. It opens the full caption over the photo. Pairs with `lightbox.captionLess`."
+  },
+  "@astryx.lightbox.captionLess": {
+    "defaultMessage": "less",
+    "description": "Visible label of the same button while a Lightbox gallery's full caption is open over the photo. It closes the full caption. Pairs with `lightbox.captionMore`."
   },
   "@astryx.metadataList.showMore": {
     "defaultMessage": "Show more",
