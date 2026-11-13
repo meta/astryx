@@ -191,6 +191,12 @@ async function answer(subject, options, cwd) {
   // "½rem": a fraction is a number before anything reads the question.
   const t = (subject ?? '')
     .trim()
+    // A lone "½" with no unit after it is a share of now ("card padding
+    // ½"), never 0.5px.
+    .replace(
+      /(\d*)(?:½|1\u20442)(?!\s*(?:rem|px|em|%|x\b|×|times\b))/g,
+      (_, n) => (n ? `${n}½` : ' half '),
+    )
     .replace(/(\d*)(?:½|1\u20442)/g, (_, n) => `${n ? Number(n) + 0.5 : '0.5'}`)
     .replace(
       /(\d*)(?:¼|1\u20444)/g,
@@ -200,6 +206,12 @@ async function answer(subject, options, cwd) {
       /(\d*)(?:¾|3\u20444)/g,
       (_, n) => `${n ? Number(n) + 0.75 : '0.75'}`,
     );
+  // "paddingLeft", "borderRadius": a property as JavaScript spells it is
+  // that CSS property, as set takes it.
+  if (/^[a-z]+(?:[A-Z][a-z]+)+$/.test(t)) {
+    const kebab = t.replace(/[A-Z]/g, ch => `-${ch.toLowerCase()}`);
+    if (cssProperties().has(kebab)) return answer(kebab, options, cwd);
+  }
   // "explain spacing", "tell me about the accent": the lookup of what is
   // named, never a change.
   const explain =

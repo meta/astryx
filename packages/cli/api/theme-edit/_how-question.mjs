@@ -519,11 +519,146 @@ function shift(color, amount) {
 }
 
 /**
+ * Warmer or cooler: mix in a warm (amber) or cool (blue) tint and keep the
+ * color's lightness, so the hue moves and the light/dark does not.
+ * @param {string} color @param {'warm' | 'cool'} way @param {number} amount 0 to 1
+ */
+export function tempShift(color, way, amount) {
+  const rgb = parseColor(color);
+  if (!rgb) return null;
+  const tint = way === 'warm' ? [255, 170, 80] : [80, 150, 255];
+  const mixed = rgb.slice(0, 3).map((x, i) => x + (tint[i] - x) * amount);
+  const lum = (/** @type {number[]} */ v) =>
+    0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+  const k = lum(mixed) > 0 ? lum(rgb) / lum(mixed) : 1;
+  const out = mixed.map(x => Math.max(0, Math.min(255, x * k)));
+  // Clipped at white: pull the brightest channel back so the hue still shows.
+  return hex(out);
+}
+
+/**
+ * The overlay made lighter or darker: only its alpha moves, by the amount
+ * asked (a step is a quarter), and it never turns fully opaque or vanishes.
+ * @param {string} now @param {{text: string, dir: string | null, neg: boolean}} c
+ */
+function overlayAlpha(now, c) {
+  const rgb = parseColor(now);
+  if (!rgb) return null;
+  const m = /^#[0-9a-f]{6}([0-9a-f]{2})$/i.exec(String(now).trim());
+  const fn = /\/\s*([\d.]+%?)\s*\)$/.exec(String(now).trim())?.[1];
+  const a = m
+    ? parseInt(m[1], 16) / 255
+    : fn
+      ? fn.endsWith('%')
+        ? Number.parseFloat(fn) / 100
+        : Number(fn)
+      : 1;
+  const darker =
+    c.dir === 'more' && !c.neg && !/\blight(er|en)?\b/.test(c.text);
+  const amount = colorAmount(c.text, 0.25);
+  const next = Math.max(
+    0.05,
+    Math.min(0.9, darker ? a * (1 + amount) : a * (1 - amount)),
+  );
+  const byte = Math.round(next * 255)
+    .toString(16)
+    .padStart(2, '0');
+  return `${hex(rgb.slice(0, 3))}${byte}`;
+}
+
+/**
+ * A box-shadow with each layer's blur scaled (the third length); offsets,
+ * spread, inset and color stay. Null when no layer has a blur to scale.
+ * @param {string} shadow @param {number} f
+ */
+export function blurScaled(shadow, f) {
+  const layers = String(shadow).split(/,(?![^(]*\))/);
+  let changed = false;
+  const out = layers.map(layer => {
+    // The lengths outside any function (a color's numbers are not
+    // lengths): the third is the blur.
+    let depth = 0;
+    let count = 0;
+    let res = '';
+    const re = /[()]|-?\d*\.?\d+(?:px|rem|em)?(?![\w.%])/g;
+    let last = 0;
+    for (let m = re.exec(layer); m; m = re.exec(layer)) {
+      const tok = m[0];
+      if (tok === '(') depth++;
+      else if (tok === ')') depth--;
+      else if (
+        (depth === 0 && /^-?\d/.test(tok)) ||
+        (depth === 0 && /^-?\./.test(tok))
+      ) {
+        const before = layer[m.index - 1];
+        if (m.index === 0 || /\s/.test(before ?? ' ')) {
+          count++;
+          if (count === 3) {
+            const n = /^(-?\d*\.?\d+)(px|rem|em)?$/.exec(tok);
+            if (n) {
+              const unit = n[2] ?? 'px';
+              const v = Number(n[1]) * f;
+              res +=
+                layer.slice(last, m.index) +
+                `${Number(v.toFixed(unit === 'px' ? 2 : 3))}${unit}`;
+              last = m.index + tok.length;
+              changed = true;
+            }
+          }
+        }
+      }
+    }
+    return res + layer.slice(last);
+  });
+  return changed ? out.join(',') : null;
+}
+
+/**
+ * The share a color amount gives ("30% lighter", "half as dark"): a
+ * number from 0 to 0.9, or the fallback.
+ * @param {string} text @param {number} fallback
+ */
+export function colorAmount(text, fallback) {
+  const pct = /(\d{1,3}(?:\.\d+)?)\s?%/.exec(text);
+  if (pct) return Math.min(0.9, Number(pct[1]) / 100);
+  if (/\b(a (little|bit|touch)|slightly|a tad)\b/.test(text))
+    return fallback / 2;
+  if (/\b(much|a lot|way|far)\b/.test(text)) return Math.min(0.9, fallback * 2);
+  return fallback;
+}
+
+/**
  * {@link shift} that keeps a see-through color see-through: its alpha
  * stays, only its hue moves.
  * @param {string} color @param {number} amount
  */
 export function shiftKeepAlpha(color, amount) {
+  // rgb()/rgba()/hsl()/hwb()/lab()/oklch() with an alpha: the same color as
+  // #rrggbbaa, so its alpha stays too.
+  const fn =
+    /^(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch)\((.*)\)$/i.exec(
+      String(color).trim(),
+    )?.[1] ?? null;
+  if (fn) {
+    const alphaText =
+      /\/\s*([\d.]+%?)\s*$/.exec(fn)?.[1] ??
+      (/^\s*rgba|^\s*hsla/i.test(String(color).trim())
+        ? /,\s*([\d.]+%?)\s*$/.exec(fn)?.[1]
+        : undefined);
+    const rgb = parseColor(color);
+    if (alphaText && rgb) {
+      const a = alphaText.endsWith('%')
+        ? Number.parseFloat(alphaText) / 100
+        : Number(alphaText);
+      if (a >= 0 && a < 1) {
+        const byte = Math.max(0, Math.min(255, Math.round(a * 255)));
+        return shiftKeepAlpha(
+          `${hex(rgb.slice(0, 3))}${byte.toString(16).padStart(2, '0')}`,
+          amount,
+        );
+      }
+    }
+  }
   const m = /^#([0-9a-f]{6})([0-9a-f]{2})$/i.exec(String(color).trim());
   if (!m) return shift(color, amount);
   // A see-through ink: lighter means less of a dark ink (fainter) or more
@@ -845,6 +980,12 @@ export function stepFits(step, intent, now) {
     : {ok: false, why: 'direction'};
 }
 
+/** A step count: "two steps bigger", "3 sizes smaller", "two notches rounder". */
+const STEP_COUNT =
+  /\b(two|three|four|five|2|3|4|5)\s+(?:more\s+)?(?:steps?|sizes?|notches?|levels?)\b/;
+/** @type {Record<string, number>} */
+const WORD_NUMBERS = {two: 2, three: 3, four: 4, five: 5};
+
 /** A keep step for a part the change does not reach. */
 const UNTOUCHED = /** @type {const} */ ('untouched');
 
@@ -889,8 +1030,10 @@ export function exactFactor(text) {
       '1/3': 1 / 3,
       '1/4': 0.25,
     })[w] ?? null;
-  // "half again as big": one and a half.
+  // "half again as big": one and a half; "a third again": four thirds.
   if (/\bhalf again\b/.test(t)) return 1.5;
+  const again = /\b(a third|a quarter|1\/3|1\/4) again\b/.exec(t);
+  if (again) return /third|3/.test(again[1]) ? 4 / 3 : 1.25;
   // "a quarter bigger", "a third smaller", "cut by a third", "reduce by half".
   const share =
     /\b(a half|half|a third|a quarter|1\/2|1\/3|1\/4)\s+(bigger|larger|more|wider|taller|thicker|higher|smaller|less|tighter|narrower|thinner|shorter|lower)\b/.exec(
@@ -1045,10 +1188,16 @@ const OVERRIDES = [
   [/\b((table )?cells?)\b/, {on: 'table-cell'}],
   [/\b(table rows?|rows?|tables?)\b/, {on: 'table-row'}],
   [/\b(badges?|chips?|tags?)\b/, {on: 'badge'}],
-  [/\bh([1-4])\b/, {on: 'heading'}],
+  [/\bh([1-6])\b/, {on: 'heading'}],
   [/\b(headings?|titles?)\b/, {on: 'heading'}],
   [/\b(modals?|popups?)\b/, {on: 'dialog'}],
   [/\bcode\b/, {on: 'code', role: 'code'}],
+  // Small, secondary and supporting text, captions and fine print: the
+  // supporting text style, not the base size.
+  [
+    /\b((?:small|secondary|supporting|helper|hint|caption|muted) (?:text|copy)|fine print|captions?)\b/,
+    {on: 'body', role: 'supporting'},
+  ],
   [/\bbody( text)?\b/, {on: 'body', role: 'body'}],
 ];
 
@@ -1472,7 +1621,7 @@ function clausesOf(q, partWords) {
       const m = re.exec(rest);
       if (!m) continue;
       const p = {...part};
-      if (p.on === 'heading' && /^h[1-4]$/.test(m[0])) p.level = m[1];
+      if (p.on === 'heading' && /^h[1-6]$/.test(m[0])) p.level = m[1];
       // "the error banner": one status of the banner.
       const status =
         /\b(error|danger|warning|success|info)\s+(banners?|alerts?|notices?)\b/.exec(
@@ -1562,21 +1711,26 @@ function clausesOf(q, partWords) {
       /\btoo (big|large|round|rounded|roundy|bubbly|shadowy|bold|heavy|thick|dark|spacious|airy|bright|loud|strong|harsh|aggressive|intense|garish|saturated|much|wide|tall)\b/;
     const tooMore =
       /\btoo (small|cramped|tight|crowded|faded|light|thin|sharp|square|boxy|pointy|subtle|weak|narrow|dim|low|short)\b/;
-    const dir = /\bnot (\w+ ){0,2}enough\b/.test(text)
-      ? 'more'
-      : /\bnot (so|as|that|too) (much|many)\b/.test(text) || tooLess.test(text)
-        ? 'less'
-        : tooMore.test(text)
-          ? 'more'
-          : /\b(less|fewer|smaller|lower|reduce|decrease|shrink|minimi[sz]e|scale down|trim|softer|lighter|lighten|thinner|narrower|shorter|tight(en|er)?|dense(r)?|denser|compact|sharper|squarer|subtler|tone down|dimmer|halve|half|halved|least|minimum|min|minimal|barely|as little)\b|\bcut\b.*\bin half\b|\bx ?0?\.\d+\b|\b(knock|turn|dial|bring|tone)\b.*\bdown\b/.test(
-                text,
-              )
-            ? 'less'
-            : /\b(more|bigger|larger|higher|increase|stronger|thicker|wider|taller|rounder|roomier|airy|spacious|bolder|heavier|darker|darken|loosen|open up|twice|double|a bit|a little|slightly|much)\b/.test(
+    // "half again", "a third again": more by that share, never less.
+    const dir =
+      /\bnot (\w+ ){0,2}enough\b|\b(half|a third|a quarter|1\/2|1\/3|1\/4) again\b/.test(
+        text,
+      )
+        ? 'more'
+        : /\bnot (so|as|that|too) (much|many)\b/.test(text) ||
+            tooLess.test(text)
+          ? 'less'
+          : tooMore.test(text)
+            ? 'more'
+            : /\b(less|fewer|smaller|lower|reduce|decrease|shrink|minimi[sz]e|scale down|trim|softer|lighter|lighten|thinner|narrower|shorter|tight(en|er)?|dense(r)?|denser|compact|sharper|squarer|subtler|tone down|dimmer|halve|half|halved|least|minimum|min|minimal|barely|as little)\b|\bcut\b.*\bin half\b|\bx ?0?\.\d+\b|\b(knock|turn|dial|bring|tone)\b.*\bdown\b/.test(
                   text,
                 )
-              ? 'more'
-              : null;
+              ? 'less'
+              : /\b(more|bigger|larger|higher|increase|stronger|thicker|wider|taller|rounder|roomier|airy|spacious|bolder|heavier|darker|darken|warmer|cooler|loosen|open up|twice|double|a bit|a little|slightly|much)\b/.test(
+                    text,
+                  )
+                ? 'more'
+                : null;
     /** @type {Record<string, string>} */
     const decl = {};
     for (const m of text.matchAll(
@@ -2142,6 +2296,190 @@ export function draftAnswer(ctx, env, question) {
       'make the $1 sharper',
     )
     .replace(/\bzero out (?:the )?([a-z ]+?)(?=$|[,;.])/gi, '$1 0')
+    // Zero, none or no in any position is that property at 0 (or none):
+    // "zero border on cards", "card corners zero", "opacity zero", "remove
+    // the top padding", "padding left zero"; a shadow at 0 is no shadow.
+    .replace(
+      /\b(?:no|remove|get rid of|zero|drop)\s+(?:the\s+|all\s+)?(top|bottom|left|right|horizontal|vertical|side)\s+(padding|margin|spacing)\b/gi,
+      '$1 $2 0',
+    )
+    .replace(
+      /\b(?:no|remove|get rid of|drop)\s+(?:the\s+|all\s+)?(padding|margin)\s+(?:on\s+|at\s+)?(?:the\s+)?(top|bottom|left|right)\b/gi,
+      '$2 $1 0',
+    )
+    .replace(
+      /\bzero\s+(?:the\s+)?((?:border(?:[- ]?(?:width|radius))?|shadows?|drop shadows?|opacity|radius|corners?|corner radius|letter[- ]?spacing|tracking|padding|gaps?|margins?|spacing)\b)/gi,
+      '$1 0',
+    )
+    .replace(/\b(?:to\s+)?zero\b(?![- ](?:state|width|height))/gi, m =>
+      /^to/i.test(m) ? 'to 0' : '0',
+    )
+    .replace(
+      /\b((?:drop )?shadows?)\s+(?:to\s+)?0(?![.\d]|px|rem|\s+\d)/gi,
+      'no $1',
+    )
+    .replace(
+      /\b(padding|margin)[- ](top|bottom|left|right)\s+(?:to\s+)?0(?![.\d])/gi,
+      '$1-$2 0',
+    )
+    // One amount reader: every way of saying a share becomes the forms
+    // exactFactor reads ("N% bigger", "N% of"). "up 20%" is 20% more, never
+    // 20%; "2/3" and "two thirds" are that share of now; "twice as small"
+    // is half.
+    .replace(
+      /\b(?:went |go(?:es)? |goes |going )?up (?:by )?(\d{1,3}(?:\.\d+)?)\s?(?:%|percent\b)/gi,
+      '$1% bigger',
+    )
+    .replace(
+      /\b(?:went |go(?:es)? |goes |going )?down (?:by )?(\d{1,3}(?:\.\d+)?)\s?(?:%|percent\b)/gi,
+      '$1% smaller',
+    )
+    .replace(
+      /\b(increas(?:e|es|ed|ing)|rais(?:e|es|ed|ing)|grow(?:s|n|ing)?|bump(?:ed)?(?: up)?|enlarg(?:e|ed)|boost(?:ed)?|decreas(?:e|es|ed|ing)|reduc(?:e|es|ed|ing)|lower(?:ed)?|shrink(?:s|ing)?|shrunk|cut|trim(?:med)?)\b((?:\s+(?!by\b)[a-z-]+){0,5}?)\s+(?:by\s+)?(\d{1,3}(?:\.\d+)?)\s?(?:%|percent\b)(?!\s*(?:of|as|bigger|smaller|larger|more|less)\b)/gi,
+      (_m, verb, what, n) =>
+        `make${what} ${n}% ${/^(decreas|reduc|lower|shrink|shrunk|cut|trim)/i.test(verb) ? 'smaller' : 'bigger'}`,
+    )
+    // "2 spacing units": that many of the spacing unit token, so it follows
+    // the spacing dial.
+    .replace(
+      /\b(\d{1,2}(?:\.\d+)?|two|three|four|five|six|eight) spacing units?\b/gi,
+      (_m, n) =>
+        `calc(${{two: 2, three: 3, four: 4, five: 5, six: 6, eight: 8}[String(n).toLowerCase()] ?? n} * var(--spacing-1))`,
+    )
+    // See-through amounts are opacity amounts, never no fill: "semi
+    // transparent" and "half transparent" are opacity 0.5, "10% transparent"
+    // is opacity 0.9, "50% opacity" and "80% opaque" are that opacity.
+    .replace(
+      /\b(?:semi|half)[- ]?(?:transparent|see[- ]?through|translucent)\b/gi,
+      'opacity 0.5',
+    )
+    .replace(
+      /\b(\d{1,3}(?:\.\d+)?)\s?(?:%|percent\b)\s*(?:transparent|see[- ]?through|translucent|transparency)\b/gi,
+      (m, n) =>
+        Number(n) <= 100
+          ? `opacity ${Number((1 - Number(n) / 100).toFixed(3))}`
+          : m,
+    )
+    .replace(
+      /\b(backgrounds?|bg|fills?)\s+(?:at\s+)?(\d{1,3}(?:\.\d+)?)\s?(?:%|percent\b)\s*(?:opacity|opaque)\b/gi,
+      (m, layer, n) =>
+        Number(n) <= 100
+          ? `${layer} opacity ${Number((Number(n) / 100).toFixed(3))}`
+          : m,
+    )
+    // "5% gray", "20% blue": that color at that alpha, a fill kept.
+    .replace(
+      /\b(\d{1,3}(?:\.\d+)?)\s?%\s+((?:light |dark )?(?:gr[ae]y|black|white|blue|red|green|yellow|orange|purple|pink|teal|cyan|indigo|violet|brown|navy)|#[0-9a-f]{3,8})\b(?!\s*(?:lighter|darker|more|less|bigger|smaller))/gi,
+      (m, n, color) =>
+        Number(n) <= 100
+          ? `color-mix(in srgb, ${color.replace(/\s+/g, '').replace('grey', 'gray')} ${n}%, transparent)`
+          : m,
+    )
+    .replace(/\bhalf as much again\b/gi, 'half again')
+    // "card padding +4px", "radius -2px": a change by that length.
+    .replace(
+      /(?<!letter[- ]|line[- ])\b(padding|gaps?|radius|corners|font[- ]size|text[- ]size|spacing)\s+([+-])\s?(\d*\.?\d+)(px|rem|em)\b/gi,
+      (_m, what, sign, n, unit) =>
+        `${what} by ${n}${unit} ${sign === '-' ? 'less' : 'more'}`,
+    )
+    // "h1 twice as big as body text", "h3 the same size as h2", "h2 half
+    // the size of h1": the other's size token times the amount, so it
+    // follows that size.
+    .replace(
+      /\b(h[1-6])\s+(?:text\s+)?(?:(?:(twice|double|half|triple|three times|\d*\.?\d+\s?(?:x|times))\s+as\s+(?:big|large)\s+as)|(?:the\s+)?(same)\s+size\s+as|(?:(twice|double|half|triple)\s+the\s+size\s+of))\s+(?:the\s+)?(h[1-6]|body(?:\s+text)?|base\s+text)\b/gi,
+      (m, level, amount, same, amount2, other) => {
+        const f = same ? 1 : exactFactor(String(amount ?? amount2));
+        if (f == null || f <= 0) return m;
+        const tok = /^h/i.test(other)
+          ? `--text-heading-${other.slice(1)}-size`
+          : '--text-body-size';
+        return f === 1
+          ? `${level} font size var(${tok})`
+          : `${level} font size calc(${Number(f.toFixed(3))} * var(${tok}))`;
+      },
+    )
+    // "the nav links bolder and the active one blue": "the active one" is
+    // the same parts in that state.
+    .replace(
+      /\b((?:[a-z]+ )?[a-z]+s)\b([^,;.\n]*?)\band the (active|selected|current|disabled|hovered|focused|checked|open) ones?\b/gi,
+      '$1$2and the $3 $1',
+    )
+    // "the overlay behind dialogs": the overlay; the dialog is where it is.
+    .replace(
+      /\b(overlay|backdrop|scrim)\s+(?:behind|under|beneath|below|for|of|around)\s+(?:the\s+|a\s+)?(?:dialogs?|modals?|drawers?|sheets?)\b/gi,
+      '$1',
+    )
+    // "the shadow sharper": less blur on the shadow, never sharper corners.
+    .replace(
+      /\b((?:drop |box )?shadows?)\s+((?:a (?:bit|little|touch) |slightly |much )?)sharper\b/gi,
+      '$1 $2less blur',
+    )
+    .replace(/\bsharper\s+((?:drop |box )?shadows?)\b/gi, '$1 less blur')
+    // "body text thinner": a thinner stroke, so a lighter weight; never the
+    // border width.
+    .replace(
+      /\b(text|font|type(?:face)?|copy|letters|lettering|writing|headings?|labels?)\s+((?:a (?:bit|little|touch) |slightly |much )?)thinner\b/gi,
+      '$1 weight $2lighter',
+    )
+    // "h1 800": a bare 100-900 after a heading level is its weight.
+    .replace(
+      /\b(h[1-6])\s+([1-9]00)(?:\s+weight)?\b(?!\s*(?:px|rem|em|%|ms)\b)/gi,
+      '$1 weight $2',
+    )
+    // "h1 800 and the other headings 600": "the other headings" are the
+    // levels not named, each with that ask.
+    .replace(
+      /(?:,\s*|\s+)(?:and\s+)?(?:all\s+)?(?:the\s+)?(?:other|rest of the|remaining)\s+(?:heading levels|headings)\b([^,;.\n]*)/gi,
+      (m, rest, at, all) => {
+        const named = new Set(
+          [...String(all).matchAll(/\bh([1-6])\b/gi)].map(x => Number(x[1])),
+        );
+        if (!named.size || !String(rest).trim()) return m;
+        const ask = String(rest)
+          .trim()
+          .replace(/^(?:weight\s+)?([1-9]00)(?:\s+weight)?$/i, 'weight $1');
+        const levels = [1, 2, 3, 4, 5, 6].filter(n => !named.has(n));
+        return levels.length
+          ? `, ${levels.map(n => `h${n} ${ask}`).join(', ')}`
+          : m;
+      },
+    )
+    // "h2 through h4 bold": the ask for each level in the range.
+    .replace(
+      /\b(?:headings?\s+)?h([1-6])\s*(?:through|thru|to|until|-|\u2013)\s*h([1-6])\b([^,;.\n]*)/gi,
+      (m, a, b, rest) => {
+        const [lo, hi] = [Number(a), Number(b)].sort((x, y) => x - y);
+        if (lo === hi || !rest.trim()) return m;
+        return Array.from(
+          {length: hi - lo + 1},
+          (_, i) => `h${lo + i}${rest}`,
+        ).join(', ');
+      },
+    )
+    // No letter spacing is letter spacing 0.
+    .replace(
+      /\b(?:no|remove|without|get rid of|drop)\s+(?:the\s+|all\s+|any\s+)?(?:extra\s+)?(letter[- ]?spacing|tracking)\b/gi,
+      '$1 0',
+    )
+    .replace(
+      /\b(?:twice|two times) as (small|thin|narrow|short|tight)\b/gi,
+      '50% of now',
+    )
+    .replace(
+      /\b(two|three|four|five|2|3|4|5) (thirds|quarters|fourths|fifths)\b(?:\s+of)?/gi,
+      (_m, n, d) => {
+        const num = WORD_NUMBERS[String(n).toLowerCase()] ?? Number(n);
+        /** @type {Record<string, number>} */
+        const DENS = {thirds: 3, quarters: 4, fourths: 4, fifths: 5};
+        const den = DENS[String(d).toLowerCase()] ?? 1;
+        return num < den ? `${Number(((num / den) * 100).toFixed(3))}% of` : _m;
+      },
+    )
+    .replace(/(?<![\d./#-])([1-9])\/([2-9])(?![\d./])(?:\s+of)?/g, (m, n, d) =>
+      Number(n) < Number(d)
+        ? `${Number(((Number(n) / Number(d)) * 100).toFixed(3))}% of`
+        : m,
+    )
     .replace(/\bflatten (?:the )?([a-z]+)/gi, 'make the $1 flat')
     .replace(/\b([a-z][a-z -]*?)\s*\+\+/gi, 'more $1')
     .replace(/\b([a-z][a-z -]*?)\s*--(?![a-z])/gi, 'less $1')
@@ -2525,6 +2863,12 @@ export function draftAnswer(ctx, env, question) {
     // "dropdown shadow": the dropdown's menu, the part that floats.
     .replace(/\bdropdowns? (?=shadows?|elevation)/gi, 'dropdown-menu ')
     // "½rem": a fraction is a number.
+    // A lone "½" with no unit after it is a share of now ("card padding
+    // ½"), never 0.5px.
+    .replace(
+      /(\d*)(?:½|1\u20442)(?!\s*(?:rem|px|em|%|x\b|×|times\b))/g,
+      (_, n) => (n ? `${n}½` : ' half '),
+    )
     .replace(/(\d*)(?:½|1\u20442)/g, (_, n) => `${n ? Number(n) + 0.5 : '0.5'}`)
     .replace(
       /(\d*)(?:¼|1\u20444)/g,
@@ -2805,7 +3149,7 @@ export function draftAnswer(ctx, env, question) {
   // "cramped on mobile": the editor has no media conditions; the rest of
   // the ask is answered, with a note.
   const MEDIA_RE = new RegExp(
-    String.raw`(?<!\bno |\bnot )\b(?:below|above|under|over|wider than|narrower than)\s+(?:\d{3,}px|\d+em)\b|\b(?:screens?|viewports?|windows?) (?:below|above|under|over|less than|more than|wider than|narrower than)\s+\d+(?:px|em|rem)\b|\b(?:on|for) (?:mobile|phones?|tablets?|desktops?|touch(?: screens?)?|small screens?|large screens?|wide screens?|landscape|portrait)\b|\b(?:when )?print(?:ing)?\b|\b(?:the )?print version\b`,
+    String.raw`(?<!\bno |\bnot )\b(?:below|above|under|over|wider than|narrower than)\s+(?:\d{3,}px|\d+em)\b|\b(?:screens?|viewports?|windows?) (?:below|above|under|over|less than|more than|wider than|narrower than)\s+\d+(?:px|em|rem)\b|\b(?:on|for) (?:mobile|phones?|tablets?|desktops?|touch(?: screens?)?|small screens?|large screens?|wide screens?|landscape|portrait)\b|(?<!\bfine )\b(?:when )?print(?:ing)?\b|\b(?:the )?print version\b`,
     'g',
   );
   const media = MEDIA_RE.test(q);
@@ -3808,6 +4152,25 @@ export function draftAnswer(ctx, env, question) {
         ),
       )
       .filter(o => o.length);
+    // "two steps bigger", "3 steps rounder", "two sizes bigger": a dial
+    // step given N times, in order (each step moves from the one before).
+    const stepCount = STEP_COUNT.exec(clauseNow?.text ?? '');
+    const n = stepCount
+      ? (WORD_NUMBERS[stepCount[1]] ?? Number(stepCount[1]))
+      : 1;
+    if (
+      n > 1 &&
+      options.length &&
+      options[0].length === 1 &&
+      options[0][0].verb === 'set' &&
+      (options[0][0].value === 'more' || options[0][0].value === 'less')
+    ) {
+      options[0] = Array.from({length: n}, () => ({...options[0][0]}));
+      d.sequence = true;
+      d.text = d.text.replace(/\bone step\b/, `${n} steps, in order`);
+      if (!/\bsteps, in order\b/.test(d.text))
+        d.text = `${d.text} (${n} steps, in order)`;
+    }
     // The caller reads what was kept.
     // A sub-part Core does not have: the answer is for the whole part.
     const missing = clauseNow?.parts.find(x => x.missing);
@@ -4333,6 +4696,23 @@ export function draftAnswer(ctx, env, question) {
         continue;
       }
     }
+    // "card radius 50%": a percent radius in CSS is a share of the box's
+    // own size (an oval), not of the radius now. With "of now" or a
+    // direction it is a factor (read above); alone it is refused with the
+    // exact command that works.
+    const pctRadius =
+      /\b(?:radius|corners?|rounding)\b(?:\s+(?:to|at|of))?\s+(\d{1,3}(?:\.\d+)?)\s?%(?!\s*(?:of|as|bigger|smaller|larger|more|less|rounder|sharper)\b)/.exec(
+        c.text,
+      );
+    if (pctRadius && !c.dir && exactFactor(c.text) == null && c.parts[0]) {
+      const n = pctRadius[1];
+      push({
+        text: `a ${n}% radius in CSS is a share of the ${c.parts[0].on}'s own width and height (an oval or a circle), not ${n}% of the radius now; for ${n}% of the radius now: ${HOW} '${c.parts[0].on} radius ${n}% of now'; for a pill: ${P} set ${env.slug} corners pill --on ${c.parts[0].on}`,
+        options: [],
+        lookup: `${HOW} '${c.parts[0].on} radius ${n}% of now'`,
+      });
+      continue;
+    }
     // "decrease the radius by 2px", "add 8px to the padding": a change from
     // the value now, never the new value itself.
     // "shrink headings by 20%": a change by a share, from the value now.
@@ -4455,6 +4835,59 @@ export function draftAnswer(ctx, env, question) {
         push(d);
         recordTop(c, d.options[0] ?? []);
         continue;
+      }
+      // Padding, gap or text size moved by a length: the value now plus or
+      // minus it, each side on its own, exact.
+      if (c.parts.length) {
+        const on = c.parts[0].on;
+        const {noState: _ns2, ...pf} = flagsFor(c, c.parts[0]);
+        const prop = /\b(gaps?|between)\b/.test(c.text)
+          ? 'gap'
+          : c.aspects.includes('fontsize') ||
+              /\b(font|text)[- ]size\b/.test(c.text)
+            ? 'font-size'
+            : c.aspects.includes('spacing') || /\bpadding\b/.test(c.text)
+              ? 'padding'
+              : null;
+        const level = /^level:([1-6])$/.exec(pf.when ?? '')?.[1];
+        const now = !prop
+          ? null
+          : prop === 'font-size' && on === 'heading' && level
+            ? (partValue(on, 'font-size') ??
+              current(`--text-heading-${level}-size`))
+            : prop === 'gap'
+              ? (partValue(on, 'gap') ??
+                (() => {
+                  const r = C.partReads(one(on), 'spacing').find(x =>
+                    x.props.some(q => /gap/.test(q)),
+                  );
+                  return r ? current(r.token) : null;
+                })())
+              : prop === 'padding'
+                ? (partValue(on, 'padding') ?? paddingBoxNow(on))
+                : partPropNow(on, prop);
+        /** @param {string} v */
+        const toPx = v => {
+          const m = /^(\d*\.?\d+)(px|rem|em)$/.exec(v);
+          return m ? Number(m[1]) * (m[2] === 'px' ? 1 : 16) : null;
+        };
+        const sides = now ? String(now).trim().split(/\s+/) : [];
+        const moved = sides.map(x => {
+          const px = toPx(x);
+          return px == null
+            ? null
+            : `${Math.max(0, Math.round((px + (down ? -n : n)) * 100) / 100)}px`;
+        });
+        if (prop && sides.length && sides.length <= 4 && moved.every(Boolean)) {
+          const next = moved.join(' ');
+          const d = {
+            text: `${prop}${pf.when || pf.state ? ` on ${on} (${[pf.when, pf.state].filter(Boolean).join(', ')})` : ` on ${on}`} ${down ? 'down' : 'up'} by ${n}px: from ${now} to ${next}`,
+            options: [[set(prop, next, pf)]],
+          };
+          push(d);
+          recordTop(c, d.options[0] ?? []);
+          continue;
+        }
       }
       push({
         text: `set takes the new value, not a change by ${n}px; look up what it is now, then set it ${down ? 'minus' : 'plus'} ${n}px`,
@@ -4842,6 +5275,49 @@ export function draftAnswer(ctx, env, question) {
         (_, t, fb) => String(current(t) || fb || ''),
       );
     return v.trim() || null;
+  }
+
+  /**
+   * A part's padding box now from the base theme's rule, else from the
+   * token Core reads for each side (a button is 8px block, 12px inline).
+   * @param {string} part
+   * @returns {string | null}
+   */
+  function paddingBoxNow(part) {
+    const rule = partRuleTokens(
+      ctx.project.cwd,
+      env.slug,
+      env.data.like,
+      one(part),
+    ).get('padding');
+    if (rule) {
+      const resolved = String(rule).replace(
+        /var\(\s*(--[a-z0-9-]+)\s*(?:,[^)]*)?\)/gi,
+        (m, t) => current(t) || m,
+      );
+      if (scaledBox(resolved, 1)) return resolved;
+    }
+    const reads = C.partReads(one(part), 'spacing').filter(r =>
+      r.props.some(q => /^padding/.test(q)),
+    );
+    /** @param {RegExp} re */
+    const sideTok = re =>
+      reads.find(r => r.props.some(x => re.test(x)))?.token ?? null;
+    const toks = [
+      sideTok(/^padding-(block(-start)?|top)$/),
+      sideTok(/^padding-(inline(-end)?|right)$/),
+      sideTok(/^padding-(block(-end)?|bottom)$/),
+      sideTok(/^padding-(inline(-start)?|left)$/),
+    ];
+    if (toks.some(Boolean)) {
+      const box = toks.map(tk => (tk ? current(tk) || '0px' : '0px'));
+      return box[0] === box[2] && box[1] === box[3]
+        ? box[0] === box[1]
+          ? box[0]
+          : `${box[0]} ${box[1]}`
+        : box.join(' ');
+    }
+    return partPropNow(part, 'padding');
   }
 
   /**
@@ -5395,6 +5871,28 @@ export function draftAnswer(ctx, env, question) {
           text: 'the divider color: --color-border, on the divider only',
           options: [[set('--color-border', color, {on, ...modeOf(c)})]],
         };
+      // "the divider lighter / darker": its color, never its thickness.
+      if (
+        !c.lengths[0] &&
+        /\b(darker|lighter|darken|lighten)\b/.test(c.text) &&
+        !/\b(thick|thin|width)/.test(c.text)
+      ) {
+        const lighter = /\blight(er|en)?\b/.test(c.text);
+        const amount = colorAmount(c.text, 0.2);
+        const steps = perMode(
+          '--color-border',
+          '--color-border',
+          {on},
+          now => shiftKeepAlpha(now, lighter ? amount : -amount),
+          c,
+        );
+        if (steps.length)
+          return {
+            text: `a ${lighter ? 'lighter' : 'darker'} divider: --color-border, on the divider only${modesSaid(steps)}`,
+            options: [steps],
+            sequence: steps.length > 1,
+          };
+      }
       const len =
         c.lengths[0] ??
         (c.dir === 'less'
@@ -5418,13 +5916,13 @@ export function draftAnswer(ctx, env, question) {
               '--color-overlay',
               '--color-overlay',
               {},
-              (now, m) => stronger(now, c.dir === 'more' ? 1.5 : 0.6, m),
+              now => overlayAlpha(now, c),
               c,
             )
           : [];
       if (!steps.length) return null;
       return {
-        text: `the dimmed layer behind dialogs and drawers: --color-overlay${typed ? '' : modesSaid(steps)}`,
+        text: `the dimmed layer behind dialogs and drawers: --color-overlay${typed ? '' : `, its alpha only${modesSaid(steps)}`}`,
         options: [steps],
         sequence: steps.length > 1,
       };
@@ -5465,6 +5963,48 @@ export function draftAnswer(ctx, env, question) {
         text: `body text weight: --text-body-weight (now ${current('--text-body-weight')})`,
         options: [[set('--text-body-weight', v)]],
       };
+    }
+    // Supporting text (small, secondary, captions, fine print): its own
+    // size, weight and color tokens.
+    if (p?.role === 'supporting') {
+      // "the fine print smaller": a size of text is its text size.
+      if (a === 'fontsize' || a === 'size') {
+        const tok = '--text-supporting-size';
+        const now = current(tok);
+        const px = /\b(\d+(?:\.\d+)?)\s?px\b/.exec(c.text)?.[1];
+        const factor =
+          exactFactor(c.text) ??
+          (c.dir === 'less' ? 1 / 1.125 : c.dir ? 1.125 : null);
+        const v = px ? `${px}px` : factor != null ? scaled(now, factor) : null;
+        return v
+          ? {
+              text: `the supporting text size (small and secondary text, captions): ${tok} ${v} (now ${now})`,
+              options: [[set(tok, v)]],
+            }
+          : null;
+      }
+      if (a === 'weight') {
+        const v =
+          weightIn(c) ??
+          (/\b(light(er)?|thin(ner)?)\b/.test(c.text) || c.dir === 'less'
+            ? '300'
+            : '600');
+        return {
+          text: `the supporting text weight: --text-supporting-weight (now ${current('--text-supporting-weight')})`,
+          options: [[set('--text-supporting-weight', v)]],
+        };
+      }
+      if (a === 'text') {
+        const color = colorFor(c, 'text');
+        if (color)
+          return {
+            text: 'the secondary text color: --color-text-secondary',
+            options: [[set('--color-text-secondary', color, modeOf(c))]],
+          };
+      }
+      // Anything else ("secondary text is too low contrast"): as asked of
+      // the whole theme, which reads the secondary text words itself.
+      return wholeTheme({...c, parts: []}, a);
     }
     if (p?.role && (a === 'family' || a === 'fontsize')) {
       if (a === 'family') {
@@ -5903,6 +6443,36 @@ export function draftAnswer(ctx, env, question) {
             text: `no shadow${where}`,
             options: [...undo(['box-shadow']), [set('box-shadow', 'none', f)]],
           };
+        // "a sharper shadow" (read as less blur), "a softer shadow" on a
+        // part: the blur of the shadow it has now, scaled; offsets, spread
+        // and color stay.
+        if (
+          on &&
+          (/\b(less|more) blur\b/.test(c.text) || /\bsofter\b/.test(shadowText))
+        ) {
+          const sharpen = /\bless blur\b/.test(c.text);
+          const tok =
+            C.partReads(one(on), 'shadow').find(r => /^--shadow-/.test(r.token))
+              ?.token ??
+            C.partReads(one(on), 'elevation').find(r =>
+              /^--shadow-/.test(r.token),
+            )?.token ??
+            null;
+          const own = partValue(on, 'box-shadow');
+          const nowShadow = own ?? (tok ? current(tok) : null);
+          const factor = exactFactor(c.text) ?? (sharpen ? 0.5 : 2);
+          const blurred = nowShadow ? blurScaled(nowShadow, factor) : null;
+          if (blurred)
+            return {
+              text: `a ${sharpen ? 'sharper' : 'softer'} shadow${where}: its blur ×${Number(factor.toFixed(2))}, offsets, spread and color kept (now ${nowShadow})`,
+              options: [[set('box-shadow', blurred, f)]],
+            };
+          if (sharpen)
+            return {
+              text: `${on} has no shadow now${tok || own ? ' with a blur' : ''} to make sharper`,
+              options: [],
+            };
+        }
         const design = Object.keys(DESIGN).find(
           d =>
             ['bevel', 'raised', 'sunken'].includes(d) &&
@@ -5925,6 +6495,13 @@ export function draftAnswer(ctx, env, question) {
         const outline =
           /\boutlines?\b/.test(c.text) && !/\bborders?\b/.test(c.text);
         if (!on) {
+          // "the scrollbar thinner": Core has no scrollbar part; the border
+          // width is not it.
+          if (/\bscroll ?bars?\b/.test(c.text))
+            return {
+              text: 'Core has no scrollbar part, so the editor cannot change its width or color; scrollbar-width and scrollbar-color need your own CSS',
+              options: [],
+            };
           const color = colorFor(c, 'fill');
           if (c.neg)
             return {
@@ -6029,6 +6606,48 @@ export function draftAnswer(ctx, env, question) {
             ],
           };
         const color = colorFor(c, 'fill');
+        // "the card border darker", "input borders a bit lighter": the
+        // border's color, from the one the part shows now, never its width.
+        if (
+          !color &&
+          !c.lengths[0] &&
+          /\b(darker|lighter|darken|lighten)\b/.test(c.text) &&
+          !/\b(thick|thin|width|wider)/.test(c.text)
+        ) {
+          const lighter = /\blight(er|en)?\b/.test(c.text);
+          const amount = colorAmount(c.text, 0.2);
+          const ownBorder = partValue(on, 'border-color');
+          if (ownBorder && parseColor(ownBorder)) {
+            const v = shiftKeepAlpha(ownBorder, lighter ? amount : -amount);
+            if (v)
+              return {
+                text: `the border color${where}: ${v} (now ${ownBorder})`,
+                options: [[set('border-color', v, f)]],
+              };
+          }
+          const read =
+            restColorRead(C.partReads(one(on), 'border'), f.when) ??
+            '--color-border';
+          // The token the border reads, on this part only: one value per
+          // mode holds for every variant that reads it.
+          const steps = perMode(
+            read,
+            read,
+            {
+              on,
+              ...(f.state ? {state: f.state} : {}),
+              ...(f.when ? {when: f.when} : {}),
+            },
+            now => shiftKeepAlpha(now, lighter ? amount : -amount),
+            c,
+          );
+          if (steps.length)
+            return {
+              text: `a ${lighter ? 'lighter' : 'darker'} border color${where}: ${read}, on ${on} only${modesSaid(steps)}`,
+              options: [steps],
+              sequence: steps.length > 1,
+            };
+        }
         const width =
           c.lengths[0] ??
           (/\b(thick(er)?)\b/.test(c.text) || c.dir === 'more'
@@ -6110,31 +6729,19 @@ export function draftAnswer(ctx, env, question) {
                 options: [[set('spacing', value)]],
               }
             : null;
-        // "padding top 12px", "more padding on the left", "horizontal
-        // padding 20px": only those sides.
-        const sideWord = gap ? null : sideIn(c);
-        if (sideWord) {
-          const sideProp = /^(left|right|top|bottom)$/.test(sideWord)
-            ? `padding-${sideWord}`
-            : /^(vertical|block)/.test(sideWord)
-              ? 'padding-block'
-              : 'padding-inline';
-          const nowSide =
-            partValue(on, sideProp) ??
-            partPropNow(on, 'padding')?.split(/\s+/)[0] ??
-            null;
-          const factor = exactFactor(c.text) ?? (value === 'less' ? 0.8 : 1.25);
-          const sideValue = px ?? (nowSide ? scaledBox(nowSide, factor) : null);
-          if (sideValue)
-            return {
-              text: `padding on ${sideWord === 'sides' ? 'the sides' : `the ${sideWord}`}${where}: ${sideProp} ${sideValue}${!px && nowSide ? ` (now ${nowSide})` : ''}`,
-              options: [[set(sideProp, sideValue, f)]],
-            };
-        }
-        if (px) {
-          const box = boxIn(c.text) ?? px;
+        // "24x24px", "24 x 16px": a size, width by height, is an exact
+        // value: padding block (the height) then inline (the width).
+        const dims =
+          /\b(\d*\.?\d+)(px|rem|em)?\s*[x\u00d7]\s*(\d*\.?\d+)(px|rem|em)\b/.exec(
+            c.text,
+          );
+        if (dims) {
+          const unit = dims[4];
+          const w = `${Number(dims[1])}${dims[2] ?? unit}`;
+          const h = `${Number(dims[3])}${unit}`;
+          const box = w === h ? w : `${h} ${w}`;
           return {
-            text: `${gap ? 'the gap' : 'padding'}${where}: ${box}`,
+            text: `${gap ? 'the gap' : 'padding'}${where}: ${box}${w === h ? '' : ` (${h} top and bottom, ${w} left and right)`}`,
             options: [[set(gap ? 'gap' : 'padding', box, f)]],
           };
         }
@@ -6258,6 +6865,68 @@ export function draftAnswer(ctx, env, question) {
             reads.find(r => /^--spacing-/.test(r.token)) ?? reads[0] ?? null;
           return read?.token ? current(read.token) : null;
         };
+        // "padding top 12px", "more padding on the left", "horizontal
+        // padding 20px": only those sides.
+        const sideWord = gap ? null : sideIn(c);
+        if (sideWord) {
+          const sideProp = /^(left|right|top|bottom)$/.test(sideWord)
+            ? `padding-${sideWord}`
+            : /^(vertical|block)/.test(sideWord)
+              ? 'padding-block'
+              : 'padding-inline';
+          // Each side's own value now: the side setting, else that side of
+          // the box the part has now (a button is 8px 16px: its left is 16px).
+          const box = String(padNow(on) ?? '')
+            .trim()
+            .split(/\s+/)
+            .filter(Boolean);
+          const sides4 = box.length
+            ? [
+                box[0],
+                box[1] ?? box[0],
+                box[2] ?? box[0],
+                box[3] ?? box[1] ?? box[0],
+              ]
+            : null;
+          const boxSide = sides4
+            ? sideProp === 'padding-top'
+              ? sides4[0]
+              : sideProp === 'padding-right'
+                ? sides4[1]
+                : sideProp === 'padding-bottom'
+                  ? sides4[2]
+                  : sideProp === 'padding-left'
+                    ? sides4[3]
+                    : sideProp === 'padding-block'
+                      ? sides4[0] === sides4[2]
+                        ? sides4[0]
+                        : `${sides4[0]} ${sides4[2]}`
+                      : sides4[3] === sides4[1]
+                        ? sides4[1]
+                        : `${sides4[3]} ${sides4[1]}`
+            : null;
+          const nowSide = partValue(on, sideProp) ?? boxSide ?? null;
+          // No, zero or none on a side: that side 0.
+          if (!value && !px && !exactFactor(c.text))
+            return {
+              text: `no padding on ${sideWord === 'sides' ? 'the sides' : `the ${sideWord}`}${where}`,
+              options: [[set(sideProp, '0px', f)]],
+            };
+          const factor = exactFactor(c.text) ?? (value === 'less' ? 0.8 : 1.25);
+          const sideValue = px ?? (nowSide ? scaledBox(nowSide, factor) : null);
+          if (sideValue)
+            return {
+              text: `padding on ${sideWord === 'sides' ? 'the sides' : `the ${sideWord}`}${where}: ${sideProp} ${sideValue}${!px && nowSide ? ` (now ${nowSide})` : ''}`,
+              options: [[set(sideProp, sideValue, f)]],
+            };
+        }
+        if (px) {
+          const box = boxIn(c.text) ?? px;
+          return {
+            text: `${gap ? 'the gap' : 'padding'}${where}: ${box}`,
+            options: [[set(gap ? 'gap' : 'padding', box, f)]],
+          };
+        }
         // A comparison ("twice the padding of buttons"): the amount is of
         // the other part's padding, when the theme sets one; else a step,
         // and the answer says so.
@@ -6337,7 +7006,10 @@ export function draftAnswer(ctx, env, question) {
         const tight =
           c.dir === 'less' ||
           /\b(tight(en|er)?|narrow(er)?|less|condensed)\b/.test(c.text);
-        const typedTrack = c.lengths.find(l => /em$/.test(l)) ?? c.lengths[0];
+        const typedTrack =
+          c.lengths.find(l => /em$/.test(l)) ??
+          c.lengths[0] ??
+          (/(?:^|\s)0(?![.\d%])/.test(c.text) ? '0' : undefined);
         const value = typedTrack ?? (tight ? '-0.02em' : '0.04em');
         if (!on || on === 'heading')
           return {
@@ -6654,6 +7326,7 @@ export function draftAnswer(ctx, env, question) {
             const tok =
               C.partReads(one(on), 'background').find(r => r.when.includes(''))
                 ?.token ??
+              C.partReads(one(on), 'background')[0]?.token ??
               (FAMILIES.containers.includes(one(on))
                 ? '--color-background-card'
                 : null);
@@ -6696,6 +7369,35 @@ export function draftAnswer(ctx, env, question) {
             text: `opacity${where}: ${typedOpacity}`,
             options: [[set('opacity', typedOpacity, f)]],
           };
+        // "more opaque", "less see-through": opacity up from what the part
+        // has now, never down.
+        if (
+          on &&
+          /\b(more opaque|less (?:transparent|see[- ]?through|translucent)|opaquer)\b/.test(
+            c.text,
+          )
+        ) {
+          const nowOp = Number(partValue(on, 'opacity') ?? 1);
+          return nowOp >= 1 || Number.isNaN(nowOp)
+            ? {
+                text: `${on} is fully opaque now (opacity 1): there is no more opaque to go`,
+                options: [],
+              }
+            : {
+                text: `more opaque${where}: opacity ${Number(Math.min(1, nowOp + (1 - nowOp) / 2).toFixed(2))} (now ${nowOp})`,
+                options: [
+                  [
+                    set(
+                      'opacity',
+                      String(
+                        Number(Math.min(1, nowOp + (1 - nowOp) / 2).toFixed(2)),
+                      ),
+                      f,
+                    ),
+                  ],
+                ],
+              };
+        }
         const pct = /\b(\d{1,3})%/.exec(withoutFunctions(c.text))?.[1];
         if (pct && on)
           return Number(pct) > 100
@@ -6787,6 +7489,72 @@ export function draftAnswer(ctx, env, question) {
           /\b(wider|narrower|width|wide)\b/.test(c.text) &&
           !/\bborder[- ]width\b/.test(c.text)
         ) {
+          // "the sidebar wider", "20% wider": from the width the part has
+          // now (its own setting, else its rule in the base theme), never a
+          // made-up width.
+          if (!c.lengths[0]) {
+            const rule = partRuleTokens(
+              ctx.project.cwd,
+              env.slug,
+              env.data.like,
+              one(on),
+            );
+            /** @param {string} k */
+            const widthNow = k =>
+              partValue(on, k) ??
+              rule.get(k) ??
+              rule.get(
+                k === 'width'
+                  ? 'inline-size'
+                  : k === 'max-width'
+                    ? 'max-inline-size'
+                    : 'min-inline-size',
+              ) ??
+              null;
+            const wProp = ['width', 'max-width', 'min-width'].find(
+              k =>
+                widthNow(k) != null &&
+                scaled(
+                  String(widthNow(k))
+                    .replace(
+                      /var\(\s*(--[a-z0-9-]+)\s*(?:,[^)]*)?\)/gi,
+                      (m, t) => current(t) || m,
+                    )
+                    .trim(),
+                  1,
+                ),
+            );
+            const wNow = wProp ? String(widthNow(wProp)) : null;
+            const wFactor =
+              exactFactor(c.text) ??
+              (/\bnarrower\b/.test(c.text) || c.dir === 'less'
+                ? /\b(a (bit|little|touch)|slightly)\b/.test(c.text)
+                  ? 0.9
+                  : 0.8
+                : /\b(a (bit|little|touch)|slightly)\b/.test(c.text)
+                  ? 1.1
+                  : 1.25);
+            const resolved = wNow
+              ? wNow.replace(
+                  /var\(\s*(--[a-z0-9-]+)\s*(?:,[^)]*)?\)/gi,
+                  (m, t) => current(t) || m,
+                )
+              : null;
+            const wNew = resolved ? scaled(resolved.trim(), wFactor) : null;
+            if (wProp && wNew)
+              return {
+                text: `the width${where}: ${wProp} ${wNew} (now ${resolved})`,
+                options: [[set(wProp, wNew, f)]],
+              };
+            if (
+              /\b(wider|narrower)\b/.test(c.text) ||
+              exactFactor(c.text) != null
+            )
+              return {
+                text: `${on} has no width of its own to scale (it takes the width its content and container give it); give a width, such as max-width 480px`,
+                options: [],
+              };
+          }
           // An amount ("20% wider", "twice as wide") with no width there to
           // take it of: said so, never a made-up cap.
           if (!c.lengths[0] && exactFactor(c.text) != null)
@@ -6966,11 +7734,7 @@ export function draftAnswer(ctx, env, question) {
         // shows now (its own, else the token it reads at rest).
         if (!color && c.dir && /\b(light|dark)(er)?\b/.test(c.text)) {
           const lighter = /\blight(er)?\b/.test(c.text);
-          const amount = /\b(a (little|bit|touch)|slightly|a tad)\b/.test(
-            c.text,
-          )
-            ? 0.1
-            : 0.2;
+          const amount = colorAmount(c.text, 0.2);
           const own = partValue(on, 'color');
           if (own && parseColor(own)) {
             const v = shiftKeepAlpha(own, lighter ? amount : -amount);
@@ -6978,6 +7742,24 @@ export function draftAnswer(ctx, env, question) {
               return {
                 text: `text color${where}: ${v} (now ${own})`,
                 options: [[set('color', v, f)]],
+              };
+          }
+          // A link's color comes from its color prop: the accent text token
+          // it reads, made lighter or darker (it also colors other accent
+          // text).
+          if (on === 'link') {
+            const steps = perMode(
+              '--color-text-accent',
+              '--color-text-accent',
+              f.state ? {on, state: f.state} : {},
+              now => shiftKeepAlpha(now, lighter ? amount : -amount),
+              c,
+            );
+            if (steps.length)
+              return {
+                text: `${lighter ? 'lighter' : 'darker'} links: --color-text-accent, the token a link reads (it also colors other accent text)${modesSaid(steps)}`,
+                options: [steps],
+                sequence: steps.length > 1,
               };
           }
           // A part with no text color of its own shows the main text color.
@@ -7084,6 +7866,23 @@ export function draftAnswer(ctx, env, question) {
               text: `the page background: --color-background-body${c.mode && modal ? ` in ${c.mode} mode` : ''}`,
               options: [[set('--color-background-body', color, modeOf(c))]],
             };
+          const temp = /\b(warm(er)?|cool(er)?)\b/.exec(c.text)?.[1];
+          if (temp) {
+            const way = /^warm/.test(temp) ? 'warm' : 'cool';
+            const steps = perMode(
+              '--color-background-body',
+              '--color-background-body',
+              {},
+              now => tempShift(now, way, colorAmount(c.text, 0.12)),
+              c,
+            );
+            if (steps.length)
+              return {
+                text: `a ${way}er page background: --color-background-body, its hue toward ${way === 'warm' ? 'amber' : 'blue'} at the same lightness${modesSaid(steps)}`,
+                options: [steps],
+                sequence: steps.length > 1,
+              };
+          }
           if (!c.dir) return null;
           const lighter = /\blight(er)?|brighter\b/.test(c.text);
           const steps = perMode(
@@ -7177,6 +7976,31 @@ export function draftAnswer(ctx, env, question) {
         if (!color && c.dir) {
           const lighter = /\blight(er)?\b/.test(c.text);
           const reads = C.partReads(one(on), 'background');
+          // "card background warmer": its hue toward warm or cool, at the
+          // same lightness.
+          const temp = /\b(warm(er)?|cool(er)?)\b/.exec(c.text)?.[1];
+          const tempRead = temp
+            ? (restColorRead(reads, f.when) ??
+              (FAMILIES.containers.includes(one(on))
+                ? '--color-background-card'
+                : null))
+            : null;
+          if (temp && tempRead) {
+            const way = /^warm/.test(temp) ? 'warm' : 'cool';
+            const steps = perMode(
+              tempRead,
+              'background',
+              f,
+              now => tempShift(now, way, colorAmount(c.text, 0.12)),
+              c,
+            );
+            if (steps.length)
+              return {
+                text: `a ${way}er background${where}, from ${tempRead}: its hue toward ${way === 'warm' ? 'amber' : 'blue'} at the same lightness${modesSaid(steps)}`,
+                options: [steps],
+                sequence: steps.length > 1,
+              };
+          }
           // The fill the part shows at rest (its main variant, or the one
           // asked for), never its pressed overlay.
           const read = C.MAP[one(on)]
@@ -7186,12 +8010,8 @@ export function draftAnswer(ctx, env, question) {
                 : null))
             : null;
           // The amount asked ("20% darker", "a bit lighter"), else a step.
-          const pct = /(\d{1,2})\s?%/.exec(c.text);
-          const amount = pct
-            ? Math.min(0.9, Number(pct[1]) / 100)
-            : /\b(a (little|bit|touch)|slightly|a tad)\b/.test(c.text)
-              ? 0.06
-              : 0.12;
+          const pct = /(\d{1,3})\s?%/.exec(c.text);
+          const amount = colorAmount(c.text, 0.12);
           // A fill of the theme's own on the part comes first.
           const ownFill =
             partValue(on, 'background-color') ?? partValue(on, 'background');
@@ -7206,11 +8026,18 @@ export function draftAnswer(ctx, env, question) {
             };
           // A part with no recorded fill: what its color is now is unknown,
           // so a brightness filter makes it darker or lighter from there.
+          // The amount asked holds there too: "20% darker" is brightness 0.8.
           if (!read || f.state)
             return {
-              text: `${lighter ? 'a lighter' : 'a darker'} ${on}${where}: a brightness filter, from whatever color it has now`,
+              text: `${lighter ? 'a lighter' : 'a darker'} ${on}${where}: a brightness filter, from whatever color it has now${pct ? ` (${lighter ? '+' : '-'}${pct[1]}%)` : ''}`,
               options: [
-                [set('filter', `brightness(${lighter ? 1.15 : 0.85})`, f)],
+                [
+                  set(
+                    'filter',
+                    `brightness(${pct ? Number((lighter ? 1 + amount : 1 - amount).toFixed(2)) : lighter ? 1.15 : 0.85})`,
+                    f,
+                  ),
+                ],
               ],
             };
           const steps = perMode(
