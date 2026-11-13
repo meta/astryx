@@ -3857,6 +3857,21 @@ export function ownPairMessage(slug, names) {
 }
 
 /**
+ * What runs after every build of a theme, set by the adapter (the app copy
+ * of the theme): null until it is set.
+ * @type {((ctx: Ctx, slug: string, data: ThemeData) => void) | null}
+ */
+let afterBuild = null;
+
+/**
+ * Set what runs after every build of a theme.
+ * @param {((ctx: Ctx, slug: string, data: ThemeData) => void) | null} fn
+ */
+export function setAfterBuild(fn) {
+  afterBuild = fn;
+}
+
+/**
  * Generate the theme source, build it with the theme build, then repeat any
  * part setting a more specific rule would beat and build again.
  * @param {Ctx} ctx
@@ -3971,11 +3986,11 @@ export async function buildTheme(ctx, slug, data) {
     .map(String)
     .filter(w => !/^Font "/.test(w));
   // The app's copy, a standard local theme `theme add` reads, follows the
-  // build.
-  const {writeAppCopy} = await import('./_preview.mjs');
-  await step(() => {
-    writeAppCopy(ctx, slug, data);
-  });
+  // build (written by the hook the adapter sets: it owns that write).
+  if (afterBuild)
+    await step(() => {
+      afterBuild?.(ctx, slug, data);
+    });
   return {warnings, lifted, notes};
 }
 

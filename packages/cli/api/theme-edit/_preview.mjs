@@ -1514,6 +1514,7 @@ export function writeAppCopyAt(cwd, slug, fontsCss) {
   const f = themeFiles(cwd, slug);
   const dir = path.join(cwd, 'src', 'themes', slug);
   const name = `${camel(slug)}Theme`;
+  const first = !fs.existsSync(path.join(dir, `${name}.doc.mjs`));
   if (!fs.existsSync(f.js) || !fs.existsSync(f.css)) return null;
   // Only the editor's own copy is written over.
   if (fs.existsSync(dir)) {
@@ -1568,5 +1569,32 @@ export function writeAppCopyAt(cwd, slug, fontsCss) {
   // A file an earlier copy had (a font stylesheet no longer needed) goes.
   for (const n of fs.readdirSync(dir))
     if (!(n in files)) fs.rmSync(path.join(dir, n), {force: true});
+  // The first write is named in the command's result; later ones are not.
+  if (first)
+    FIRST_COPIES.set(
+      `${path.resolve(cwd)}\0${slug}`,
+      Object.keys(files)
+        .sort()
+        .map(n =>
+          path.relative(cwd, path.join(dir, n)).split(path.sep).join('/'),
+        ),
+    );
   return dir;
+}
+
+/** App copies written for the first time in this process, by app and theme. @type {Map<string, string[]>} */
+const FIRST_COPIES = new Map();
+
+/**
+ * The files of a theme's app copy when this command wrote it for the first
+ * time (then forgotten, so one result names them), else null.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {string[] | null}
+ */
+export function takeFirstAppCopy(cwd, slug) {
+  const key = `${path.resolve(cwd)}\0${slug}`;
+  const wrote = FIRST_COPIES.get(key) ?? null;
+  FIRST_COPIES.delete(key);
+  return wrote;
 }

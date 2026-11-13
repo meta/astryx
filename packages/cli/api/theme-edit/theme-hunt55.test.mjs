@@ -12,7 +12,12 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
-import {themeEditNew, themeEditSet, themeEditUndo} from './theme-edit.mjs';
+import {
+  themeEditNew,
+  themeEditSet,
+  themeEditShow,
+  themeEditUndo,
+} from './theme-edit.mjs';
 import {themeAdd} from '../theme/theme.mjs';
 import {
   makeLinkedFixture,
@@ -63,5 +68,29 @@ describe('hunt55: the app copy of an editor theme', () => {
     );
     const r = await themeAdd('a', {cwd});
     expect(JSON.stringify(r.data)).toContain('./themes/a/a.js');
+  }, 240_000);
+});
+
+describe('hunt55b: the first write of the app copy is named', () => {
+  it('by new, then quiet; by the first set or show that writes it again', async () => {
+    const made = await themeEditNew('b', {cwd, like: 'neutral'});
+    const first = /** @type {any} */ (made.data).appCopy;
+    expect(first.wrote).toContain('src/themes/b/bTheme.doc.mjs');
+    expect(first.wrote).toContain('src/themes/b/b.css');
+    const again = await themeEditSet('b', 'corners', 'pill', {cwd});
+    expect(/** @type {any} */ (again.data).appCopy).toBeUndefined();
+    // An older theme with no copy yet: its first build names it.
+    fs.rmSync(path.join(cwd, 'src/themes/b'), {recursive: true, force: true});
+    const set = await themeEditSet('b', 'corners', 'round', {cwd});
+    expect(/** @type {any} */ (set.data).appCopy.wrote).toContain(
+      'src/themes/b/bTheme.ts',
+    );
+    fs.rmSync(path.join(cwd, 'src/themes/b'), {recursive: true, force: true});
+    const shown = await themeEditShow('b', {cwd});
+    expect(/** @type {any} */ (shown.data).appCopy.wrote).toContain(
+      'src/themes/b/b.js',
+    );
+    const quiet = await themeEditShow('b', {cwd});
+    expect(/** @type {any} */ (quiet.data).appCopy).toBeUndefined();
   }, 240_000);
 });

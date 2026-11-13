@@ -50,8 +50,17 @@ import {
 } from '../../foundation/env/package-manager.mjs';
 import {LIKE, P} from './_tables.mjs';
 import {setLine} from './_check.mjs';
-import {SHOWCASE_GROUPS, writeAppCopyAt} from './_preview.mjs';
-import {camel, typedThemeName} from './_settings.mjs';
+import {
+  SHOWCASE_GROUPS,
+  takeFirstAppCopy,
+  writeAppCopy,
+  writeAppCopyAt,
+} from './_preview.mjs';
+import {humanWarn} from '../../foundation/response/json.mjs';
+import {camel, setAfterBuild, typedThemeName} from './_settings.mjs';
+
+// Every build of a theme writes its app copy (src/themes/<theme>/).
+setAfterBuild(writeAppCopy);
 import {LOCAL_THEME_ROOT} from '../../foundation/config/theme-state.mjs';
 
 export {parsePoints} from './_how.mjs';
@@ -893,6 +902,13 @@ export async function editorThemeHold(files, {cwd}) {
       if (!process.argv.includes('--check')) {
         try {
           writeAppCopyAt(root, slug, null);
+          // The first write of the app copy is named once (the compile's
+          // own JSON envelope is the stable command's).
+          const wrote = takeFirstAppCopy(root, slug);
+          if (wrote)
+            humanWarn(
+              `wrote ${slug}'s app copy, a local theme \`theme add ${slug}\` takes, written again after every build: ${wrote.join(', ')}`,
+            );
         } catch {
           // A theme that does not load keeps its copy as it was.
         }

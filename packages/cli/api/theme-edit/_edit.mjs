@@ -105,7 +105,12 @@ import {
   isGraySeed,
   seedOf,
 } from './_palette.mjs';
-import {renderPreview, renderSheet} from './_preview.mjs';
+import {
+  renderPreview,
+  renderSheet,
+  takeFirstAppCopy,
+  writeAppCopy,
+} from './_preview.mjs';
 import {appWiring, refreshPreviewRoute} from './_preview-app.mjs';
 import {baseInstalled, baseResolved, installLine} from './_project.mjs';
 import {reactMissing} from './_parts.mjs';
@@ -809,7 +814,13 @@ function unquoteWord(word) {
  */
 async function previewAndRoute(ctx, slug, data, png) {
   const p = await previewAfter(ctx, slug, data, png);
-  return {...p, previewStale: await keepPreviewRoute(ctx, slug)};
+  const wrote = takeFirstAppCopy(ctx.project.cwd, slug);
+  return {
+    ...p,
+    previewStale: await keepPreviewRoute(ctx, slug),
+    // The first time the theme's app copy is written, its files are named.
+    ...(wrote ? {appCopy: {wrote}} : {}),
+  };
 }
 
 /**
@@ -2152,6 +2163,14 @@ export async function themeEditShow(theme, options = {}) {
           modes,
         )
       : {files: [], problem: null};
+  // The app copy follows the build there now, also when the build was
+  // current and only the copy is missing (a theme made before it existed).
+  if (!readOnly)
+    try {
+      writeAppCopy(ctx, theme, data);
+    } catch (e) {
+      if (/** @type {any} */ (e)?.lockLost) throw e;
+    }
   return {
     type: 'themeEdit.show',
     data: {
@@ -2253,6 +2272,11 @@ export async function themeEditShow(theme, options = {}) {
       pictureProblem: shots.problem,
       // How to use the theme in this app (theme add takes packages only).
       wiring: appWiring(ctx, theme, data),
+      ...(() => {
+        // The first time the theme's app copy is written, its files.
+        const wrote = takeFirstAppCopy(cwd, theme);
+        return wrote ? {appCopy: {wrote}} : {};
+      })(),
       colorFiles: pal ? colorFiles(theme) : null,
     },
   };
