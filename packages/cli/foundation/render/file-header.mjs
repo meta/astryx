@@ -80,8 +80,9 @@ export function headerNote(facts) {
     '  3. Render again. A render replaces a file that a render wrote:',
     `       ${run} experimental render ${shellWord(facts.restored)} --out ${file}${title}`,
     `If you have the project, edit ${facts.page} there instead, and render it in the same way.`,
-    "Inside a project, the project's own CLI answers these commands. One older than this file's",
-    `version writes a file without this note, so update it first: npm install --save-dev @astryxdesign/cli@${facts.cli ?? 'latest'}`,
+    "Inside a project, the project's own CLI answers these commands. A project CLI older than",
+    `${facts.cli ?? 'the one that rendered this file'} writes the page without this note; to keep the note, update that CLI first:`,
+    `       npm install --save-dev @astryxdesign/cli@${facts.cli ?? 'latest'}`,
     ...(facts.install.length > 0
       ? [
           'Outside a project, the CLI supplies Astryx, React and StyleX. Install the other packages first:',

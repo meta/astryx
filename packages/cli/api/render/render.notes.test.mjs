@@ -113,7 +113,7 @@ describe('a rendered file describes itself', () => {
     expect(note).toContain(`${run} experimental render report-restored/report.tsx --out report.html`);
     expect(note).toMatch(/npx @astryxdesign\/cli upgrade --from \S+ --path report-restored --apply/);
     expect(note).toContain('edit src/report.tsx there instead');
-    expect(note).toContain(`update it first: npm install --save-dev @astryxdesign/cli@${cliVersion()}`);
+    expect(note).toContain(`to keep the note, update that CLI first:\n         npm install --save-dev @astryxdesign/cli@${cliVersion()}`);
     // The note names no tag a search for the block would also find.
     expect(note).not.toContain('x-astryx-source');
     // The note never ends or nests a comment early.
