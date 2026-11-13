@@ -10,6 +10,7 @@ import {
   ALLOW_LABEL,
   baseVersion,
   changedFiles,
+  formatFiles,
   report,
 } from './codemod-verify.mjs';
 
@@ -173,6 +174,24 @@ describe('consumer paths with shell characters', () => {
       for (const file of changed)
         expect(baseVersion(base, file, {cwd: dir}), file).toBe('base\n');
       expect(baseVersion(base, added, {cwd: dir})).toBeNull();
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
+});
+
+describe('formatting codemod output', () => {
+  it('formats a file whose name a shell would expand, and only that file', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codemod-format-'));
+    try {
+      // Under bash, `a{b,c}.mjs` expands to `ab.mjs ac.mjs`.
+      const file = path.join(dir, 'a{b,c}.mjs');
+      const other = path.join(dir, 'ab.mjs');
+      fs.writeFileSync(file, 'const  x = {a:1}\n');
+      fs.writeFileSync(other, 'const  y = {b:2}\n');
+      formatFiles([file]);
+      expect(fs.readFileSync(file, 'utf8')).toBe('const x = { a: 1 };\n');
+      expect(fs.readFileSync(other, 'utf8')).toBe('const  y = {b:2}\n');
     } finally {
       fs.rmSync(dir, {recursive: true, force: true});
     }

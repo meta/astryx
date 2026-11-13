@@ -21,6 +21,7 @@
 
 import {execFileSync} from 'node:child_process';
 import * as fs from 'node:fs';
+import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {getTransformsBetween} from '../../packages/cli/assets/codemods/registry.mjs';
@@ -67,6 +68,25 @@ export function baseVersion(base, file, options = {}) {
   } catch {
     return null;
   }
+}
+
+/**
+ * Formats files in place with the workspace's Prettier. Node starts
+ * Prettier's own bin, because `npx` starts it again through a shell, which
+ * expands braces and brackets in a path.
+ * @param {string[]} files
+ * @param {{cwd?: string}} [options]
+ */
+export function formatFiles(files, options = {}) {
+  const manifest = createRequire(import.meta.url).resolve(
+    'prettier/package.json',
+  );
+  const {bin} = JSON.parse(fs.readFileSync(manifest, 'utf8'));
+  const script = path.join(
+    path.dirname(manifest),
+    typeof bin === 'string' ? bin : bin.prettier,
+  );
+  run(process.execPath, [script, '--write', ...files], options);
 }
 
 function getChangedFiles() {
@@ -269,7 +289,7 @@ async function main() {
   // (jscodeshift's toSource() may change quotes, spacing, etc.)
   console.log('\nFormatting codemod output with prettier...');
   try {
-    run('npx', ['prettier', '--write', ...codemodModifiedFiles]);
+    formatFiles(codemodModifiedFiles);
   } catch (e) {
     console.log('  ⚠️  Prettier formatting failed, comparing raw output');
   }
@@ -282,7 +302,7 @@ async function main() {
     const tmpFile = file.replace(ext, `.expected${ext}`);
     fs.writeFileSync(tmpFile, prVersions[file]);
     try {
-      run('npx', ['prettier', '--write', tmpFile]);
+      formatFiles([tmpFile]);
       formattedExpected[file] = fs.readFileSync(tmpFile, 'utf-8');
     } catch {
       formattedExpected[file] = prVersions[file];
