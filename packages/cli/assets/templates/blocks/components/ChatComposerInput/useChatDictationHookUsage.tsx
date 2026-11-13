@@ -9,7 +9,7 @@ import {
   useChatDictation,
   type ChatComposerInputHandle,
 } from '@astryxdesign/core/Chat';
-import {VStack} from '@astryxdesign/core/Layout';
+import {HStack, VStack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
 
 export default function UseChatDictationHookUsage() {
@@ -22,15 +22,17 @@ export default function UseChatDictationHookUsage() {
       : 'Ready';
 
   return (
-    <VStack gap={3} align="start" width="100%">
+    <VStack gap={3} width="100%">
       <Text type="body">{status}</Text>
       <ChatComposerInput handleRef={inputRef} label="Message" />
-      <Button
-        label={dictation.isListening ? 'Stop' : 'Start'}
-        variant="secondary"
-        isDisabled={!dictation.isSupported}
-        onClick={dictation.toggle}
-      />
+      <HStack>
+        <Button
+          label={dictation.isListening ? 'Stop' : 'Start'}
+          variant="secondary"
+          isDisabled={!dictation.isSupported}
+          onClick={dictation.toggle}
+        />
+      </HStack>
     </VStack>
   );
 }
