@@ -20,9 +20,9 @@
  */
 
 import {useCallback, useEffect, useRef, type Ref} from 'react';
-import {isFocusLost, ownsFocus} from './focusReturn';
+import {isFocusUnclaimed, ownsFocus} from './focusReturn';
 import {mergeRefs} from './mergeRefs';
-import {isHTMLElement, isShadowRoot} from './nodeType';
+import {isHTMLElement} from './nodeType';
 
 function isNativeTarget(value: unknown): value is HTMLElement {
   // A router ref can hold an instance instead of an HTML element.
@@ -75,14 +75,13 @@ export function useFocusAcrossSwap<T extends HTMLElement>(
       focusedNodeRef.current = null;
       const resolved = getFocusTarget ? getFocusTarget(node) : node;
       const target = isNativeTarget(resolved) ? resolved : null;
-      const root = target?.getRootNode();
       if (
         target?.isConnected &&
         outgoing !== null &&
         outgoing.target !== target &&
         !outgoing.target.isConnected &&
         !wasHidden(outgoing.source) &&
-        isFocusLost(null, isShadowRoot(root) ? root : target.ownerDocument)
+        isFocusUnclaimed(target)
       ) {
         target.focus({preventScroll: true});
       }

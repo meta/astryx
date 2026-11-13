@@ -7,8 +7,10 @@ import {
   focusForLastInputTemporarily,
   releaseTemporaryFocus,
   isFocusLost,
+  isFocusUnclaimed,
   moveFocusLeftBehind,
   noteFocusWithin,
+  prepareFocusReturnOnRemoval,
   returnFocusForLastInput,
 } from './focusReturn';
 import {isFocusDetached} from './isFocusDetached';
@@ -338,6 +340,34 @@ describe('isFocusLost', () => {
     expect(isFocusLost(null)).toBe(false);
   });
 
+  it('returns focus within an unfocused cross-origin document after removal', async () => {
+    const frame = document.createElement('iframe');
+    document.body.append(frame);
+    const doc = frame.contentDocument!;
+    vi.spyOn(doc.defaultView!, 'frameElement', 'get').mockReturnValue(null);
+    const hasFocus = vi.spyOn(doc, 'hasFocus').mockReturnValue(true);
+    const opener = doc.createElement('button');
+    const surface = doc.createElement('div');
+    const inside = doc.createElement('button');
+    surface.append(inside);
+    doc.body.append(opener, surface);
+    inside.focus();
+    const returnOnRemoval = prepareFocusReturnOnRemoval(surface);
+
+    hasFocus.mockReturnValue(false);
+    returnOnRemoval(opener);
+    surface.remove();
+    await Promise.resolve();
+    expect(doc.activeElement).toBe(opener);
+  });
+});
+
+describe('isFocusUnclaimed', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    document.body.innerHTML = '';
+  });
+
   it('reads a shadow root without taking focus from its host or a sibling', () => {
     const host = document.createElement('div');
     host.tabIndex = -1;
@@ -350,12 +380,14 @@ describe('isFocusLost', () => {
     root.append(surface, outside);
 
     inside.focus();
-    expect(isFocusLost(surface)).toBe(true);
+    expect(isFocusUnclaimed(surface)).toBe(false);
     outside.focus();
-    expect(isFocusLost(surface)).toBe(false);
+    expect(isFocusUnclaimed(surface)).toBe(false);
+    outside.blur();
+    expect(isFocusUnclaimed(surface)).toBe(true);
     host.focus();
     expect(root.activeElement).toBeNull();
-    expect(isFocusLost(surface)).toBe(false);
+    expect(isFocusUnclaimed(surface)).toBe(false);
   });
 
   it('preserves focus outside a nested frame even when its document is detached', () => {
@@ -370,11 +402,11 @@ describe('isFocusLost', () => {
     innerDocument.body.append(target);
 
     target.focus();
-    expect(isFocusLost(target)).toBe(true);
+    expect(isFocusUnclaimed(innerDocument)).toBe(false);
     target.remove();
-    expect(isFocusLost(null, innerDocument)).toBe(true);
+    expect(isFocusUnclaimed(innerDocument)).toBe(true);
     outside.focus();
-    expect(isFocusLost(null, innerDocument)).toBe(false);
+    expect(isFocusUnclaimed(innerDocument)).toBe(false);
   });
 
   it('does not repair an unfocused child when its parent frame is inaccessible', () => {
@@ -384,9 +416,9 @@ describe('isFocusLost', () => {
     vi.spyOn(doc.defaultView!, 'frameElement', 'get').mockReturnValue(null);
     const hasFocus = vi.spyOn(doc, 'hasFocus').mockReturnValue(true);
 
-    expect(isFocusLost(null, doc)).toBe(true);
+    expect(isFocusUnclaimed(doc)).toBe(true);
     hasFocus.mockReturnValue(false);
-    expect(isFocusLost(null, doc)).toBe(false);
+    expect(isFocusUnclaimed(doc)).toBe(false);
   });
 });
 

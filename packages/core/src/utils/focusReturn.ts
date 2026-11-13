@@ -54,37 +54,49 @@ export function ownsFocus(element: Element): boolean {
   return owner == null || ownsFocus(owner);
 }
 
-/**
- * True when focus would be lost if `surface` hid now: nothing is focused (see
- * isFocusDetached) or focus sits inside `surface`. Reads its own focus root
- * and enclosing frames, so a focus handoff outside its document wins.
- * Internal: not exported from the utils barrel.
- */
-export function isFocusLost(
-  surface: Element | null,
-  doc?: Document | ShadowRoot,
-): boolean {
-  const root = focusRoot(
-    doc ??
-      (surface?.isConnected ? surface : (surface?.ownerDocument ?? document)),
-  );
-  if (!root) {
-    return false;
-  }
-  const active = root.activeElement;
-  const isWithin = surface != null && surface.contains(active);
-  if ('host' in root) {
-    if (active == null) {
+/** Whether a replacement can take focus without displacing another owner. Internal. */
+export function isFocusUnclaimed(node: Node): boolean {
+  let root = focusRoot(node);
+  let surface: Element | null = null;
+  while (root) {
+    if ('host' in root) {
+      if (root.activeElement != null) {
+        return (
+          surface != null &&
+          surface.contains(root.activeElement) &&
+          ownsFocus(root.host)
+        );
+      }
       // A host fallback can be a caller's chosen focus target.
       // Do not restore focus when that ownership is ambiguous.
-      const parentRoot = focusRoot(root.host);
-      return parentRoot != null && isFocusLost(null, parentRoot);
+      surface = null;
+      root = focusRoot(root.host);
+    } else {
+      if (!isFocusLost(surface, root)) {
+        return false;
+      }
+      const frame = root.defaultView?.frameElement;
+      if (frame == null) {
+        return true;
+      }
+      surface = frame;
+      root = focusRoot(frame);
     }
-    return isWithin && ownsFocus(root.host);
   }
-  const frame = root.defaultView?.frameElement;
+  return false;
+}
+
+/**
+ * True when focus would be lost if `surface` hid now: nothing is focused (see
+ * isFocusDetached) or focus sits inside `surface`. Reads `surface`'s own
+ * document, so a surface in an iframe or Picture-in-Picture window is
+ * answered there. Internal: not exported from the utils barrel.
+ */
+export function isFocusLost(surface: Element | null, doc?: Document): boolean {
+  const ownerDocument = doc ?? surface?.ownerDocument ?? document;
   return (
-    (isFocusDetached(root) || isWithin) && (frame == null || isFocusLost(frame))
+    isFocusDetached(ownerDocument) ||
+    (surface != null && surface.contains(ownerDocument.activeElement))
   );
 }
 
