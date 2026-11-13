@@ -135,7 +135,7 @@ export const docs = {
   usage: {
     anatomy,
     description:
-      'MoreMenu is a three-dot button that opens a list of actions. Use it for secondary actions that don\'t need to be always visible, like in table rows, card headers, or toolbars.',
+      'MoreMenu is a three-dot button that opens a list of actions. Use it for secondary actions that don\'t need to be always visible, like in table rows, card headers, or toolbars. Host `data-*` attributes reach the trigger button; its accessible name, `id`, and menu disclosure attributes stay component-owned.',
     bestPractices: [
       { guidance: true, description: 'Use for overflow or secondary actions; keep primary actions visible outside the menu.' },
       { guidance: true, description: 'Use dividers or sections to group related actions when the menu has many items.' },
@@ -236,7 +236,7 @@ export const docsDense = {
   usage: {
     anatomy,
     description:
-      'MoreMenu is a three-dot button that opens a list of actions. Use it for secondary actions that don\'t need to be always visible, like in table rows, card headers, or toolbars.',
+      'MoreMenu is a three-dot button that opens a list of actions. Use it for secondary actions that don\'t need to be always visible, like in table rows, card headers, or toolbars. Host data-* attrs reach the trigger button; name, id, disclosure attrs stay owned.',
     bestPractices: [
       { guidance: true, description: 'Use for overflow or secondary actions; keep primary actions visible outside the menu.' },
       { guidance: true, description: 'Use dividers or sections to group related actions when the menu has many items.' },

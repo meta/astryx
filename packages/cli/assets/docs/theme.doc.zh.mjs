@@ -3,7 +3,8 @@
 /** @type {import('@astryxdesign/cli/authoring').ReferenceTranslationDoc} */
 
 export const docsZh = {
-  description: '如何使用和创建主题：请参阅"使用主题"了解如何应用主题，参阅"创作主题"了解如何创建和自定义主题。',
+  description:
+    '要创建或修改主题，请使用实验性主题编辑器：`astryx experimental theme editor new <name> --like neutral`，然后使用 `editor set` / `editor how "<你想要的效果>"`，用 `astryx theme add <name>` 接入应用，每次修改后用 `astryx experimental theme editor show <name> --png` 查看（生成真实组件的图片，不改动应用）：看过图片之前，主题修改不算完成。如何使用和创建主题：请参阅"使用主题"了解如何应用主题，参阅"创作主题"了解如何创建和自定义主题。',
   sections: [
     {
       section: 'Wrap your app in a theme',
@@ -21,7 +22,7 @@ export const docsZh = {
       content: [
         {
           type: 'prose',
-          text: '使用 `defineTheme` 进行令牌覆盖、比例配置和组件样式覆盖。新建完整调色板时，请运行 `astryx theme palette generate palette.config.json --out palette.generated.ts`，审核并提交生成的模块和收据，再使用 `import {palette} from \'./palette.generated\';` 导入调色板，让语义令牌引用稳定的色阶，例如 `palette.neutral.light[100]` 和 `palette.neutral.dark[15]`。重新生成已接受的调色板时，所有保留这些引用的映射令牌会一并更新；生成操作不会自动修改主题。完整指南请参阅 {@link generic:author-a-theme}。',
+          text: "使用 `defineTheme` 进行令牌覆盖、比例配置和组件样式覆盖。新建完整调色板时，请运行 `astryx theme palette generate palette.config.json --out palette.generated.ts`，审核并提交生成的模块和收据，再使用 `import {palette} from './palette.generated';` 导入调色板，让语义令牌引用稳定的色阶，例如 `palette.neutral.light[100]` 和 `palette.neutral.dark[15]`。重新生成已接受的调色板时，所有保留这些引用的映射令牌会一并更新；生成操作不会自动修改主题。完整指南请参阅 {@link generic:author-a-theme}。",
         },
       ],
     },
@@ -42,7 +43,7 @@ export const docsZh = {
       content: [
         {
           type: 'prose',
-          text: '在令牌值中使用 [浅色, 深色] 元组来自动切换模式。在 Theme 上使用 mode=\'system\'（默认）来跟随操作系统偏好。完整指南：{@link generic:use-a-theme}。',
+          text: "在令牌值中使用 [浅色, 深色] 元组来自动切换模式。在 Theme 上使用 mode='system'（默认）来跟随操作系统偏好。完整指南：{@link generic:use-a-theme}。",
         },
       ],
     },

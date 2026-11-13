@@ -21,6 +21,7 @@ import {
   serveStorybook,
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
+import {openStory} from '@astryxdesign/interaction-harness';
 
 let storybook: StaticServer;
 test.beforeAll(async () => {
@@ -44,9 +45,10 @@ const sleep = async (ms: number) =>
   new Promise(resolve => setTimeout(resolve, ms));
 
 async function openSheet(page: Page) {
-  await page.goto(
-    `${storybook.origin}/iframe.html?id=core-bottomsheet--text-only&viewMode=story`,
-  );
+  // The story's modules load after the page's load event, and a slow runner
+  // can take longer than the dialog check's 5 s to load them. So the wait is
+  // for Storybook to finish rendering the story, which opens the sheet.
+  await openStory(page, storybook.origin, 'core-bottomsheet--text-only');
   const dialog = page.getByRole('dialog', {name: 'Reading details'});
   await expect(dialog).toBeVisible();
   const sheet = dialog.locator('.astryx-bottom-sheet').first();

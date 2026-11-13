@@ -144,7 +144,12 @@ function installRecorder() {
  */
 export function fileStamp(file) {
   try {
-    const {size, mtimeMs, ctimeMs, ino} = statSyncRaw(file);
+    // An absent path answers without an error: thousands of paths a kept
+    // catalog checks are absent, and building an error costs more than the
+    // stat.
+    const stat = statSyncRaw(file, {throwIfNoEntry: false});
+    if (!stat) return '-';
+    const {size, mtimeMs, ctimeMs, ino} = stat;
     return `${size}:${mtimeMs}:${ctimeMs}:${ino}`;
   } catch {
     return '-';
@@ -162,7 +167,8 @@ const stateOf = fileStamp;
  */
 function probeStamp(file) {
   try {
-    const stat = statSyncRaw(file);
+    const stat = statSyncRaw(file, {throwIfNoEntry: false});
+    if (!stat) return '-';
     if (stat.isDirectory()) return `dir:${stat.ino}`;
     return `${stat.size}:${stat.mtimeMs}:${stat.ctimeMs}:${stat.ino}`;
   } catch {
@@ -227,7 +233,17 @@ export function recordStates(states) {
   const runs = reads.getStore();
   if (!runs) return;
   for (const [file, state] of states) {
-    for (const seen of runs) if (!seen.has(file)) seen.set(file, state);
+    for (const seen of runs) {
+      const had = seen.get(file);
+      // A folder this run only probed, which the kept read listed: the
+      // listing counts, as when this run lists it itself (see `note`).
+      if (
+        had === undefined ||
+        (had.startsWith('dir:') && !state.startsWith('dir:'))
+      ) {
+        seen.set(file, state);
+      }
+    }
   }
 }
 

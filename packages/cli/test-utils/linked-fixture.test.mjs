@@ -24,7 +24,12 @@ describe('makeLinkedFixture', () => {
     const root = path.dirname(dir);
     try {
       expect(path.dirname(root)).toBe(fs.realpathSync(os.tmpdir()));
-      expect(fs.readdirSync(dir)).toEqual([]);
+      // A fixture that links Core holds only the package.json that lists it.
+      expect(fs.readdirSync(dir)).toEqual(['package.json']);
+      expect(
+        JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'))
+          .dependencies,
+      ).toEqual({'@astryxdesign/core': '*'});
       expect(
         JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')),
       ).toEqual({type: 'module'});

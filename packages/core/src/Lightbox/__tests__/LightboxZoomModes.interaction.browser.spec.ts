@@ -176,18 +176,30 @@ test('with a fine pointer (a desktop) the stage fills the viewer, as under a coa
     const img = dialog.getByRole('img', {name: 'Forest path'});
     await decoded(img);
     await frames(page, 2);
-    // The stage and its group stretch to fill the viewer for every pointer. A
-    // click or a drag beside the photo is the stage's, as a finger's is.
+    // The stage and its group stretch to fill the viewer for every pointer.
+    // The zoom button is the stage's one page, the photo's box, and with no
+    // caption it fills the stage. A click or a drag beside the photo is the
+    // stage's, as a finger's is.
     const layout = await stage.evaluate(el => {
-      const own = getComputedStyle(el);
-      const group = getComputedStyle(el.parentElement as HTMLElement);
+      const viewport = el.closest(
+        '[data-lightbox-media] > :first-child',
+      ) as HTMLElement;
+      const own = getComputedStyle(viewport);
+      const group = getComputedStyle(viewport.parentElement as HTMLElement);
+      const v = viewport.getBoundingClientRect();
+      const b = el.getBoundingClientRect();
       return {
         stage: [own.alignSelf, own.flexGrow],
         group: [group.alignSelf, group.flexGrow],
+        button: [
+          Math.round(b.width - v.width),
+          Math.round(b.height - v.height),
+        ],
       };
     });
     expect(layout.stage).toEqual(['stretch', '1']);
     expect(layout.group).toEqual(['stretch', '1']);
+    expect(layout.button).toEqual([0, 0]);
     // The photo fits inside the viewer, as before.
     const imgBox = await img.boundingBox();
     if (imgBox == null) {
@@ -310,7 +322,7 @@ test('with a mouse the zoom-in cursor shows over the fitted photo, not over the 
     if (photo == null) {
       throw new Error('no photo');
     }
-    // The fitted photo leaves dark stage on its left, where a click closes.
+    // The fitted photo leaves dark stage on its left.
     expect(photo.x - stage.x).toBeGreaterThan(20);
     const cursorAt = async (x: number, y: number) => {
       await page.mouse.move(x, y);
@@ -322,6 +334,66 @@ test('with a mouse the zoom-in cursor shows over the fitted photo, not over the 
     expect(await cursorAt(stage.x + 20, y)).toBe('default');
     expect(await cursorAt(photo.x + photo.width / 2, y)).toBe('zoom-in');
     expect(await cursorAt(stage.x + 20, y)).toBe('default');
+    // A click on that dark stage closes the viewer.
+    await page.mouse.click(stage.x + 20, y);
+    await expect(page.getByRole('dialog')).toBeHidden();
+  } finally {
+    await context.close();
+  }
+});
+
+test('with a mouse a gallery page shows the zoom-in cursor over the fitted photo, the arrow beside it and the grab cursor while zoomed', async ({
+  browser,
+}) => {
+  const context = await browser.newContext({
+    viewport: {width: 1280, height: 800},
+    hasTouch: false,
+    isMobile: false,
+  });
+  try {
+    const page = await context.newPage();
+    await routePhoto(page);
+    await openStory(page, storybook(), 'core-lightbox--gallery-with-zoom');
+    await page.getByRole('button', {name: 'Open gallery with zoom'}).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    const img = dialog.getByRole('img', {name: 'Forest path'});
+    await decoded(img);
+    await waitForRest(img);
+    await frames(page, 2);
+    const photo = await img.boundingBox();
+    if (photo == null) {
+      throw new Error('no photo');
+    }
+    // The page shows the cursor of the element under the pointer.
+    const cursorAt = async (x: number, y: number) => {
+      await page.mouse.move(x, y);
+      return page.evaluate(
+        ([px, py]) => {
+          const el = document.elementFromPoint(px, py);
+          return el == null ? null : getComputedStyle(el).cursor;
+        },
+        [x, y],
+      );
+    };
+    const x = photo.x + photo.width / 2;
+    const y = photo.y + photo.height / 2;
+    // The fitted photo leaves dark stage on its left.
+    expect(await cursorAt(photo.x - 20, y)).toBe('default');
+    expect(await cursorAt(x, y)).toBe('zoom-in');
+    expect(await cursorAt(photo.x - 20, y)).toBe('default');
+    // A double-click zooms the photo about the pointer.
+    await page.mouse.dblclick(x, y);
+    await waitForRest(img);
+    expect((await readTransform(img)).scale).toBeGreaterThan(1);
+    expect(await cursorAt(x, y)).toBe('grab');
+    // Back at fit, a click on the dark stage beside the photo closes the
+    // viewer.
+    await page.mouse.dblclick(x, y);
+    await waitForRest(img);
+    expect((await readTransform(img)).scale).toBe(1);
+    await page.mouse.click(photo.x - 20, y);
+    await expect(dialog).toBeHidden();
   } finally {
     await context.close();
   }

@@ -860,12 +860,6 @@ if (args[0] === '--surface') {
       const root = fs.mkdtempSync(path.join(os.tmpdir(), 'api-changes-'));
       try {
         fs.mkdirSync(path.join(root, 'scripts/api-report'), {recursive: true});
-        fs.mkdirSync(path.join(root, '.github/scripts'), {recursive: true});
-        fs.writeFileSync(
-          path.join(root, '.github/scripts/merge-base.sh'),
-          'echo abc123\n',
-        );
-        fs.chmodSync(path.join(root, '.github/scripts/merge-base.sh'), 0o755);
         fs.writeFileSync(
           path.join(root, 'scripts/api-report/cli.mjs'),
           stubCli({supported, surfaceWrites}),
@@ -884,7 +878,8 @@ if (args[0] === '--surface') {
         const out = execFileSync('bash', ['-e', '-c', report.run], {
           cwd: root,
           encoding: 'utf8',
-          env: {...process.env, BASE_REF: 'main'},
+          // The merge base build-storybook's own step found.
+          env: {...process.env, BASE_SHA: 'abc123'},
         });
         expect(JSON.parse(out.trim().split('\n').at(-1))).toEqual([
           '--changes',
