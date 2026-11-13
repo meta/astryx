@@ -55,6 +55,7 @@ import {ItemListRowContext} from '../Item/ItemListRowContext';
 import {ItemMarkerColumnsContext} from '../Item/ItemMarkerColumnsContext';
 import {ItemLabelNeededContext} from '../Item/ItemLabelContext';
 import {ItemLeadingContext} from '../Item/ItemLeadingContext';
+import {ItemTrailingContext} from '../Item/ItemTrailingContext';
 import type {ItemAlign, ItemSwipeActions, ItemSwipeBehavior} from '../Item';
 import {themeProps} from '../utils/themeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
@@ -182,6 +183,40 @@ export interface ListItemProps extends BaseProps<HTMLLIElement> {
 // =============================================================================
 // Styles
 // =============================================================================
+
+// A row's inline padding before a handle's room: its inset, or for `bleed`
+// the container's padding when that is larger (styles.edgeBleed).
+const INSET = 'var(--_item-inset-inline)';
+const BLEED_START =
+  'max(var(--container-padding-inline-start, 0px), var(--_item-inset-inline))';
+const BLEED_END =
+  'max(var(--container-padding-inline-end, 0px), var(--_item-inset-inline))';
+// The same padding with a handle's room: its side and the row's gap after it.
+const INSET_ROOM = `calc(${INSET} + 28px + ${spacingVars['--spacing-2']})`;
+const BLEED_START_ROOM = `calc(${BLEED_START} + 28px + ${spacingVars['--spacing-2']})`;
+const BLEED_END_ROOM = `calc(${BLEED_END} + 28px + ${spacingVars['--spacing-2']})`;
+const COARSE = '@media (any-pointer: coarse)';
+
+// The room a row that stays put keeps where its neighbours' handles sit in
+// their rows: always, or under a coarse pointer when they show on hover.
+const reorderRoomStyles = stylex.create({
+  shownAtStart: {paddingInlineStart: INSET_ROOM},
+  shownAtEnd: {paddingInlineEnd: INSET_ROOM},
+  coarseAtStart: {
+    paddingInlineStart: {default: INSET, [COARSE]: INSET_ROOM},
+  },
+  coarseAtEnd: {
+    paddingInlineEnd: {default: INSET, [COARSE]: INSET_ROOM},
+  },
+  bleedShownAtStart: {paddingInlineStart: BLEED_START_ROOM},
+  bleedShownAtEnd: {paddingInlineEnd: BLEED_END_ROOM},
+  bleedCoarseAtStart: {
+    paddingInlineStart: {default: BLEED_START, [COARSE]: BLEED_START_ROOM},
+  },
+  bleedCoarseAtEnd: {
+    paddingInlineEnd: {default: BLEED_END, [COARSE]: BLEED_END_ROOM},
+  },
+});
 
 const styles = stylex.create({
   numberColumns: {
@@ -471,19 +506,24 @@ export function ListItem({
   // sticky header. Outside a List nothing bounds a raise, so a row raises
   // nothing there.
   const isInList = ctx != null;
-  // In a reorderable List: a leading handle, or a row that stays put.
+  // In a reorderable List: a handle at the row's start or end, or a row that
+  // stays put.
   const reorder = ctx?.reorder;
   const hasHandle =
     reorder != null &&
     itemKey != null &&
     (reorder.options.isReorderable?.(itemKey) ?? true);
-  // The handle is the one element reordering adds to a row. It starts the
-  // row's content, unwrapped (ItemLeadingContext): a start slot of its own
-  // would be a second element.
+  // The handle is the one element reordering adds to a row. It starts or
+  // ends the row's content, unwrapped (ItemLeadingContext,
+  // ItemTrailingContext): a slot of its own would be a second element.
   const rowLabel = restProps['aria-label'];
   const rowLabelledBy = restProps['aria-labelledby'];
   const rowAlign = hasHandle ? (align ?? 'center') : undefined;
-  const isAfterMarker = (ctx?.listStyle ?? 'none') !== 'none';
+  // List shows its handles unless the reorderable says otherwise.
+  const isHandleAlwaysVisible =
+    reorder?.options.handle?.isAlwaysVisible ?? true;
+  const isHandleAtEnd = reorder?.options.handle?.placement === 'end';
+  const isAfterMarker = !isHandleAtEnd && (ctx?.listStyle ?? 'none') !== 'none';
   const Handle = reorder?.session.Handle;
   const reorderHandle = useMemo(
     () =>
@@ -496,6 +536,8 @@ export function ListItem({
           rowLabelledBy={rowLabelledBy}
           rowAlign={rowAlign}
           isAfterMarker={isAfterMarker}
+          isAlwaysVisible={isHandleAlwaysVisible}
+          placement={isHandleAtEnd ? 'end' : 'start'}
         />
       ) : null,
     [
@@ -503,6 +545,8 @@ export function ListItem({
       hasHandle,
       isAfterMarker,
       isDisabled,
+      isHandleAlwaysVisible,
+      isHandleAtEnd,
       itemKey,
       label,
       rowAlign,
@@ -632,6 +676,26 @@ export function ListItem({
           // A focused handle rings itself; the row's focus-within ring stays
           // off for it (two rings, and the list clips the row's sides).
           reorderHandle && reorder?.session.rowStyle,
+          // A row that stays put keeps the column its neighbours' handles
+          // take, so every label lines up.
+          reorder != null &&
+            !hasHandle &&
+            !isAfterMarker &&
+            (edge === 'bleed'
+              ? isHandleAtEnd
+                ? isHandleAlwaysVisible
+                  ? reorderRoomStyles.bleedShownAtEnd
+                  : reorderRoomStyles.bleedCoarseAtEnd
+                : isHandleAlwaysVisible
+                  ? reorderRoomStyles.bleedShownAtStart
+                  : reorderRoomStyles.bleedCoarseAtStart
+              : isHandleAtEnd
+                ? isHandleAlwaysVisible
+                  ? reorderRoomStyles.shownAtEnd
+                  : reorderRoomStyles.coarseAtEnd
+                : isHandleAlwaysVisible
+                  ? reorderRoomStyles.shownAtStart
+                  : reorderRoomStyles.coarseAtStart),
           xstyle,
         ] as StyleXStyles
       }
@@ -652,11 +716,13 @@ export function ListItem({
     <>
       {/* One shape whether or not the row has a handle, so the row keeps its
           element when that changes. */}
-      <ItemLeadingContext value={reorderHandle}>
-        {/* The handle is named after the row's label. */}
-        <ItemLabelNeededContext value={reorderHandle != null}>
-          {marked}
-        </ItemLabelNeededContext>
+      <ItemLeadingContext value={isHandleAtEnd ? null : reorderHandle}>
+        <ItemTrailingContext value={isHandleAtEnd ? reorderHandle : null}>
+          {/* The handle is named after the row's label. */}
+          <ItemLabelNeededContext value={reorderHandle != null}>
+            {marked}
+          </ItemLabelNeededContext>
+        </ItemTrailingContext>
       </ItemLeadingContext>
       {reorderName}
     </>

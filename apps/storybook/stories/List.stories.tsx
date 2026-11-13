@@ -11,7 +11,10 @@ import {useEffect, useMemo, useRef, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {Meta, StoryObj} from '@storybook/react';
 import {List, ListItem} from '@astryxdesign/core/List';
-import {createReorderable} from '@astryxdesign/core';
+import {
+  createReorderable,
+  type ReorderHandleOptions as ReorderHandle,
+} from '@astryxdesign/core';
 import {Avatar} from '@astryxdesign/core/Avatar';
 import {Badge} from '@astryxdesign/core/Badge';
 import {Button} from '@astryxdesign/core/Button';
@@ -931,10 +934,12 @@ function ReorderDemo({
   initial,
   pinned = [],
   edge,
+  handle,
 }: {
   initial: ReadonlyArray<string>;
   pinned?: ReadonlyArray<string>;
   edge?: 'padded' | 'flush';
+  handle?: ReorderHandle;
 }) {
   const [rows, setRows] = useState(initial);
   return (
@@ -944,6 +949,7 @@ function ReorderDemo({
       reorderable={createReorderable({
         onReorder: ({key, to}) => setRows(current => moveKey(current, key, to)),
         isReorderable: key => !pinned.includes(key as string),
+        handle,
       })}>
       {rows.map(label => (
         <ListItem key={label} itemKey={label} label={label} />
@@ -971,6 +977,40 @@ export const Reorderable: Story = {
           'or Enter) to turn on reorder mode for its row: each arrow key, or ' +
           'each move in the hint below the handle, moves it a place, and ' +
           'Escape or Done ends the mode.',
+      },
+    },
+  },
+};
+
+type ReorderHandleArgs = {
+  isAlwaysVisible: boolean;
+  placement: 'start' | 'end';
+};
+
+export const ReorderHandleOptions: StoryObj<ReorderHandleArgs> = {
+  args: {isAlwaysVisible: true, placement: 'start'},
+  argTypes: {
+    isAlwaysVisible: {control: 'boolean'},
+    placement: {control: 'inline-radio', options: ['start', 'end']},
+  },
+  render: ({isAlwaysVisible, placement}) => (
+    <ReorderDemo
+      initial={['Inbox', 'Sent', 'Drafts', 'Archive', 'Spam', 'Trash']}
+      pinned={['Trash']}
+      handle={{isAlwaysVisible, placement}}
+    />
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "`createReorderable`'s `handle` option. `placement` puts each " +
+          "handle at its row's start or end. List's handles always show, " +
+          'each in a place of its own. With `isAlwaysVisible: false`, the ' +
+          'handle shows while its row is hovered or holds the focus, and ' +
+          "hangs outside the row's content, so the content keeps its place; " +
+          'on a touch screen it then shows in the row. Trash stays put, so it ' +
+          'has no handle, and it keeps the handles’ room.',
       },
     },
   },

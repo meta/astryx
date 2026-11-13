@@ -35,6 +35,12 @@ export const docs = {
       description:
         'Whether the item with this key can move. An item it rejects shows no handle and cannot be picked up; one at either end of the collection also bounds the others, so nothing drops beyond it and a keyboard move into it is refused. Every item moves without it.',
     },
+    {
+      name: 'handle',
+      type: "{isAlwaysVisible?: boolean; placement?: 'start' | 'end'}",
+      description:
+        "How each item's handle shows. `placement` is the item edge it sits at: 'start' (default), before the item's content, or 'end', after it. With `isAlwaysVisible: true`, the handle takes its own place in the item and its grip always shows. With `isAlwaysVisible: false`, the handle shows while its item is hovered or holds the focus, and always under a coarse pointer; where it shows only on hover or focus, it takes no space and hangs outside the item's content, so the content keeps its place (leave about 24px of room on that side of the collection). Without it, the collection decides: List and TransferList always show their handles, and ListInput shows them on hover or focus. The same options serve all three.",
+    },
   ],
   returns: [
     {
@@ -64,6 +70,11 @@ export const docs = {
           "Offer reorder mode from your own UI too, such as a row's context menu, with `reorderable.start(item.id)`.",
       },
       {
+        guidance: true,
+        description:
+          'Set `handle: {isAlwaysVisible: false}` where reordering is occasional and rows should stay quiet until hovered; keep handles shown where people must find them at a glance, such as a list whose only purpose is ordering.',
+      },
+      {
         guidance: false,
         description:
           "Use React's `key` as the reorder key, or index-based keys: a move changes every index after it.",
@@ -84,6 +95,8 @@ export const docsDense = {
       '({key, to}) once per committed move; to is the index after the move.',
     isReorderable:
       '(key) => boolean; a rejected row has no handle, and at an end bounds the drop.',
+    handle:
+      "{isAlwaysVisible, placement: 'start' | 'end'}; start by default; List and TransferList show handles, ListInput reveals them on hover.",
   },
   returnDescriptions: {
     reorderable:

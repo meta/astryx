@@ -52,6 +52,7 @@ import {
   type ReorderMove,
 } from '../../reorderable/createReorderable';
 import {DRAG_SLOP} from '../../DateInput/usePointerDragScroll';
+import {useContainerReveal} from '../../hooks/useContainerReveal';
 import {useAnnounce} from '../../hooks/useAnnounce';
 import {LayerDepthProvider} from '../../Layer/LayerDepthContext';
 import {useLayerDismissal} from '../../Layer/useLayerDismissal';
@@ -449,6 +450,61 @@ describe('List reorderable', () => {
     }
   });
 
+  it("puts the handle at the row's end with handle.placement 'end'", () => {
+    render(
+      <List
+        reorderable={createReorderable({
+          onReorder: () => {},
+          handle: {placement: 'end'},
+        })}>
+        <ListItem itemKey="inbox" label="Inbox" endContent={<span>3</span>} />
+        <ListItem itemKey="sent" label="Sent" />
+      </List>,
+    );
+    const inbox = screen.getByText('Inbox').closest('li') as HTMLElement;
+    const sent = screen.getByText('Sent').closest('li') as HTMLElement;
+    // The row's own last child, after its end content.
+    expect(inbox.lastElementChild).toBe(handleOf('Inbox'));
+    expect(handleOf('Inbox').previousElementSibling).toHaveTextContent('3');
+    expect(sent.lastElementChild).toBe(handleOf('Sent'));
+  });
+
+  it('always shows the handle by default; with handle.isAlwaysVisible false it fades with its row', () => {
+    // The reveal's fade, without its opacity: the tokens a shown and a
+    // fading reveal share.
+    const {result} = renderHook(() => useContainerReveal());
+    const tokens = (props: {className?: string}) =>
+      props.className?.split(/\s+/).filter(Boolean) ?? [];
+    const fading = tokens(
+      result.current.getContentRevealProps({isLayoutPreserved: true}),
+    );
+    const shown = tokens(
+      result.current.getContentRevealProps({
+        isLayoutPreserved: true,
+        forceVisibility: 'shown',
+      }),
+    );
+    const fade = fading.filter(token => shown.includes(token));
+    expect(fade.length).toBeGreaterThan(0);
+    const rows = (isAlwaysVisible?: boolean) => (
+      <List
+        reorderable={createReorderable({
+          onReorder: () => {},
+          handle: {isAlwaysVisible},
+        })}>
+        <ListItem itemKey="inbox" label="Inbox" />
+      </List>
+    );
+    const classes = () =>
+      handleOf('Inbox').getAttribute('class')?.split(/\s+/) ?? [];
+    const {rerender} = render(rows());
+    expect(classes()).not.toEqual(expect.arrayContaining(fade));
+    rerender(rows(true));
+    expect(classes()).not.toEqual(expect.arrayContaining(fade));
+    rerender(rows(false));
+    expect(classes()).toEqual(expect.arrayContaining(fade));
+  });
+
   it('keeps a row the object rejects in place: no handle, and nothing added to it', () => {
     const rows = (reorderable?: Reorderable) => (
       <List reorderable={reorderable}>
@@ -469,7 +525,11 @@ describe('List reorderable', () => {
     );
     expect(screen.queryByRole('button', {name: 'Reorder Trash'})).toBeNull();
     expect(handleOf('Inbox')).toBeInTheDocument();
-    expect(trash.outerHTML).toBe(before);
+    // Only its classes change: it keeps the room its neighbours' handles
+    // take, so its label lines up with theirs.
+    const withoutClasses = (html: string) =>
+      html.replace(/ class="[^"]*"/g, '');
+    expect(withoutClasses(trash.outerHTML)).toBe(withoutClasses(before));
   });
 
   it('keeps a row without an item key in place, and warns in development when no row has one', () => {

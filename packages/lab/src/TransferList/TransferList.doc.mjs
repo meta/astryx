@@ -346,7 +346,7 @@ export const docs = {
           name: 'reorderable',
           type: 'Reorderable<T>',
           description:
-            'Makes the selected options reorderable through a handle at the start of each row: pass the object createReorderable makes. Its isReorderable(value) decides which options move (one it rejects at either end of the list also keeps the others from moving past it), and each move goes to its onReorder({key, to}), to being the index of the value in value after the move. Without it, the selected options keep their order.',
+            "Makes the selected options reorderable through a handle on each row: pass the object createReorderable makes. Its handle option places the handle at each row's start (default) or end. The handle always shows unless the option's isAlwaysVisible is false, which shows it on hover or focus. Its isReorderable(value) decides which options move (one it rejects at either end of the list also keeps the others from moving past it), and each move goes to its onReorder({key, to}), to being the index of the value in value after the move. Without it, the selected options keep their order.",
         },
         {
           name: 'hasSelectAll',
