@@ -175,6 +175,108 @@ const cornerPxOf = v =>
 const E = ERROR_CODES;
 
 /**
+ * Why the math in a value's calc() cannot work, or null: each `+`/`-`
+ * needs two sides of one kind (a length with a length or a percentage, a
+ * number with a number), `*` needs a plain number on one side, `/` a plain
+ * number on the right. A var() counts as its fallback; one with none, or a
+ * nested min(), max() or clamp(), is not judged.
+ * @param {string} value
+ * @returns {string | null}
+ */
+export function calcUnitProblem(value) {
+  const text = String(value);
+  const re = /\bcalc\(/gi;
+  let m;
+  while ((m = re.exec(text))) {
+    const open = m.index + m[0].length - 1;
+    const close = matchingParen(text, open);
+    if (close < 0) return null;
+    let expr = text.slice(open + 1, close);
+    // Each var() is its fallback, innermost first.
+    for (let i = 0; i < 20 && /\bvar\(/i.test(expr); i += 1) {
+      const at = expr.search(/\bvar\((?:[^()]|\([^()]*\))*\)/i);
+      const v = /\bvar\(((?:[^()]|\([^()]*\))*)\)/i.exec(expr.slice(at));
+      if (at < 0 || !v) return null;
+      const comma = v[1].indexOf(',');
+      if (comma < 0) return null;
+      expr = `${expr.slice(0, at)}(${v[1].slice(comma + 1).trim()})${expr.slice(at + v[0].length)}`;
+    }
+    if (/[a-z-]+\(/i.test(expr.replace(/\bcalc\(/gi, '('))) continue;
+    const found = expr.match(/\d*\.?\d+(?:e[+-]?\d+)?[a-z%]*|[-+*/()]/gi);
+    if (!found) continue;
+    const tokens = found;
+    let pos = 0;
+    /** @returns {string | null} */
+    const kindOf = (/** @type {string} */ t) => {
+      const u = /[a-z%]*$/i.exec(t)?.[0].toLowerCase() ?? '';
+      if (!u) return 'number';
+      if (u === '%') return 'percent';
+      if (/^(m?s)$/.test(u)) return 'time';
+      if (/^(deg|rad|grad|turn)$/.test(u)) return 'angle';
+      return 'length';
+    };
+    /** @type {string | null} */
+    let why = null;
+    const fail = (/** @type {string} */ w) => {
+      why ??= w;
+      return 'number';
+    };
+    const join = (
+      /** @type {string} */ a,
+      /** @type {string} */ b,
+      /** @type {string} */ op,
+    ) => {
+      if (op === '+' || op === '-') {
+        if (a === b) return a;
+        const lp = new Set([a, b]);
+        if (lp.has('length') && lp.has('percent') && lp.size === 2)
+          return 'length';
+        return fail(`${a} ${op} ${b} adds two kinds of value`);
+      }
+      if (op === '*') {
+        if (a === 'number') return b;
+        if (b === 'number') return a;
+        return fail(`${a} * ${b} multiplies two values with units`);
+      }
+      if (b === 'number') return a;
+      return fail(`${a} / ${b} divides by a value with a unit`);
+    };
+    /** @returns {string} */
+    const factor = () => {
+      const t = tokens[pos++];
+      if (t === '(') {
+        const k = sum();
+        pos++;
+        return k;
+      }
+      if (t === '-' || t === '+') return factor();
+      return t == null ? 'number' : (kindOf(t) ?? 'number');
+    };
+    /** @returns {string} */
+    const product = () => {
+      let k = factor();
+      while (tokens[pos] === '*' || tokens[pos] === '/') {
+        const op = tokens[pos++];
+        k = join(k, factor(), op);
+      }
+      return k;
+    };
+    /** @returns {string} */
+    function sum() {
+      let k = product();
+      while (tokens[pos] === '+' || tokens[pos] === '-') {
+        const op = tokens[pos++];
+        k = join(k, product(), op);
+      }
+      return k;
+    }
+    sum();
+    if (why) return why;
+  }
+  return null;
+}
+
+/**
  * The fallbacks of the var() calls inside a value that is not one var()
  * alone (`calc(var(--x, 4px) * 2)`), in order. A var() with an empty
  * fallback (`var(--x,)`) gives ''.
@@ -785,11 +887,73 @@ const GENERIC_FAMILIES = [
  */
 export function fontListMeant(value) {
   const v = String(value).trim();
+  // A whole list in one pair of quotes or brackets (`"Inter, serif"`,
+  // `「Inter, serif」`): the quotes go around one family, so the list is
+  // what is inside.
+  const wrapped =
+    /^(?:"([^"]*,[^"]*)"|'([^']*,[^']*)'|「([^」]*,[^」]*)」|『([^』]*,[^』]*)』|“([^”]*,[^”]*)”|‘([^’]*,[^’]*)’|«([^»]*,[^»]*)»)$/.exec(
+      v,
+    );
+  if (wrapped) {
+    const inside = wrapped.slice(1).find(x => x != null) ?? '';
+    return {
+      value: (fontListMeant(inside)?.value ?? inside).trim(),
+      why: 'quotes go around one family name, not the whole list',
+    };
+  }
   if (/["']/.test(v)) return null;
+  // Families split by `|`, `;` or ` / ` instead of commas.
+  if (
+    // (A pasted declaration, `font-family: Georgia, serif;`, is read
+    // elsewhere: a colon or a trailing `;` is no separator.)
+    !/:|\.(woff2?|ttf|otf)\b/i.test(v) &&
+    /\S\s*(?:\||;|\s\/\s)\s*\S/.test(v)
+  ) {
+    const list = v
+      .split(/\s*(?:\||;|\s\/\s)\s*/)
+      .map(x => x.trim())
+      .filter(Boolean)
+      .join(', ');
+    if (list && list !== v)
+      return {
+        value: fontListMeant(list)?.value ?? list,
+        why: 'families are separated by commas',
+      };
+  }
   if (/\bsans serif\b/.test(v) && !/\d/.test(v))
     return {
       value: v.replace(/\bsans serif\b/g, 'sans-serif'),
       why: 'the generic family is sans-serif, with a dash',
+    };
+  // A comma missing before the generic family of any family in the list
+  // (`Inter, Georgia serif`), the names in any case (`georgia serif`).
+  const SHORTHAND =
+    /^(\d+(\.\d+)?(px|rem|em|pt|%)?|bold|bolder|lighter|normal|italic|oblique|small-caps)$/i;
+  // A word of a family name: letters (a digit after the first word, as in
+  // `Source Serif 4`), or a generic; never a shorthand's weight or size.
+  const familyWord = (/** @type {string} */ w, /** @type {number} */ i) =>
+    (/^[A-Za-z][A-Za-z0-9]*$/.test(w) && !SHORTHAND.test(w)) ||
+    (i > 0 && /^\d+$/.test(w)) ||
+    GENERIC_FAMILIES.includes(w);
+  const pieces = v.split(/\s*,\s*/);
+  let missing = false;
+  const fixedPieces = pieces.map(piece => {
+    const ws = piece.split(/\s+/);
+    const end = ws[ws.length - 1];
+    if (
+      ws.length > 1 &&
+      GENERIC_FAMILIES.includes(end) &&
+      ws.slice(0, -1).every(familyWord)
+    ) {
+      missing = true;
+      return `${ws.slice(0, -1).join(' ')}, ${end}`;
+    }
+    return piece;
+  });
+  if (missing && pieces.length > 1)
+    return {
+      value: fixedPieces.join(', '),
+      why: 'a comma goes before each generic family',
     };
   if (v.includes(',')) return null;
   const words = v.split(/\s+/);
@@ -799,7 +963,7 @@ export function fontListMeant(value) {
   if (
     words.length > 1 &&
     GENERIC_FAMILIES.includes(last) &&
-    words.slice(0, -1).every(w => /^[A-Z][A-Za-z]*$/.test(w))
+    words.slice(0, -1).every(familyWord)
   )
     return {
       value: `${words.slice(0, -1).join(' ')}, ${last}`,
@@ -880,14 +1044,18 @@ function checkTypedValue(
       }
     return null;
   };
-  /** @param {string} what @param {string} example */
+  /** @param {string} what @param {string | null} example */
   const bad = (what, example) =>
     refuse(
       E.ERR_THEME_BAD_VALUE,
       `${name} is ${what}; "${value}" is not one.`,
       {
+        // Nothing read from the value (no example given): how, never a
+        // stock value.
         run: [
-          `${P} set ${slug} ${name} ${quoteCommandArgument(meant() ?? example)}`,
+          (meant() ?? example) == null
+            ? `${HOW} ${name}`
+            : `${P} set ${slug} ${name} ${quoteCommandArgument(String(meant() ?? example))}`,
         ],
       },
     );
@@ -956,6 +1124,15 @@ function checkTypedValue(
           `${P} undo ${slug} ${name}`,
         ],
       },
+    );
+  // Math whose units cannot combine (`8 + 2px`, `0.5rem * 1px`, a var()
+  // read as its fallback): the browser drops the whole value.
+  const math = type === 'size' ? calcUnitProblem(value) : null;
+  if (math)
+    refuse(
+      E.ERR_THEME_BAD_VALUE,
+      `${name} is a ${type}; the calc() in "${value}" cannot be worked out: ${math} (with each var() at its fallback, as when the variable is unset), so the browser drops the value.`,
+      {run: [`${HOW} ${name}`]},
     );
   // A var() inside a larger value (calc, max, color-mix) has a fallback of
   // the token's kind too, checked like a whole-value var().
@@ -1042,19 +1219,11 @@ function checkTypedValue(
       );
     return;
   }
-  if (type === 'color' && !isFixedColor(value)) bad('a color', '#1f2937');
+  if (type === 'color' && !isFixedColor(value)) bad('a color', null);
   if (type === 'size' && !isSize(value, name)) {
-    // With nothing to read from the value, the token's own default (a text
-    // size stays readable), never one size for every token.
-    // Followed through the tokens it reads (var(--font-size-base)).
-    let own = String(TOKENS[name] ?? '').trim();
-    for (let hop = 0; hop < 4; hop += 1) {
-      const ref = /^var\(\s*(--[a-z0-9-]+)\s*\)$/i.exec(own)?.[1];
-      if (!ref) break;
-      own = String(TOKENS[ref] ?? '').trim();
-    }
-    const sizeExample =
-      own && isSize(own, name) && !/var\(/.test(own) ? own : '6px';
+    // The token's own default is never offered as a repair: only a size
+    // read from the value typed.
+    const sizeExample = null;
     // The size meant, when one dot or sign is all that is wrong (1.px).
     const meant = value.trim().replace(/(\d)\.(?=[a-z%]|$)/gi, '$1');
     // A bare number is the size in px.
@@ -1609,6 +1778,8 @@ function valueLabel(value) {
 const ownLabel = (thing, word) =>
   word === thing ||
   (thing === 'font' && word === 'font-family') ||
+  (thing.startsWith('--font-family') &&
+    (word === 'font-family' || word === 'font')) ||
   (thing === 'text-size' && word === 'font-size');
 
 /**
@@ -1725,10 +1896,17 @@ export function checkSetting(
   // A value labeled with a word that is not this setting's own name (a
   // mode, a state, a device, a part, or a word the editor does not read) is
   // refused with what that word means here, never set with the word dropped.
+  // A property set on a part (`padding 'hover: 4px' --on button`) and the
+  // type tokens (`--font-weight-bold 'dark: 700'`) are read the same way;
+  // a content string is its own text.
+  const partProperty =
+    Boolean(flags.on) && !DIALS[thing] && !thing.startsWith('--');
+  const familyToken = thing.startsWith('--font-family');
   if (
     !unset &&
     typeof value === 'string' &&
-    (DIALS[thing] || (thing.startsWith('--') && !/font|content/.test(thing)))
+    !/content/.test(thing) &&
+    (DIALS[thing] || partProperty || thing.startsWith('--'))
   ) {
     const label = valueLabel(value);
     // A CSS property's name before the value (`border-radius: pill`,
@@ -1745,7 +1923,9 @@ export function checkSetting(
       const mode = MODE_WORDS[label.word];
       const colorful =
         PALETTE_DIALS.includes(thing) ||
-        (thing.startsWith('--') && isColorToken(thing));
+        (thing.startsWith('--') && isColorToken(thing)) ||
+        (partProperty &&
+          /color|^background$|^fill$|^stroke$|shadow/.test(thing));
       const parts = [...ctx.project.target.keys(), ...Object.keys(FAMILIES)];
       if (mode && DIALS[thing] && PALETTE_DIALS.includes(thing))
         refuse(
@@ -1799,8 +1979,16 @@ export function checkSetting(
       if (STATE_WORDS.includes(label.word))
         refuse(
           E.ERR_THEME_BAD_VALUE,
-          `"${label.word}" in "${value}" is a state; a state is set on a part, with --on <part> --state ${label.word}.`,
-          {run: [`${HOW} ${q(`${label.word} ${thing}`)}`]},
+          flags.on
+            ? `"${label.word}" in "${value}" is a state; a value for it is given with --state ${label.word}.`
+            : `"${label.word}" in "${value}" is a state; a state is set on a part, with --on <part> --state ${label.word}.`,
+          {
+            run: [
+              flags.on
+                ? `${P} set ${slug} ${thing} ${q(rest)}${scope} --state ${label.word}`
+                : `${HOW} ${q(`${label.word} ${thing}`)}`,
+            ],
+          },
         );
       if (DEVICE_WORDS.includes(label.word))
         refuse(
@@ -1814,7 +2002,57 @@ export function checkSetting(
           `"${label.word}" in "${value}" is a part; a value for one part is given with --on ${label.word}.`,
           {run: [`${P} set ${slug} ${thing} ${q(rest)} --on ${label.word}`]},
         );
-      if (!otherSettingLabel(thing, value))
+      // A flag's own name as the label (`state: hover`, `part: card`,
+      // `variant: primary`, `mode: dark`): what that flag does here.
+      const flagWord = {
+        state: 'state',
+        states: 'state',
+        part: 'on',
+        on: 'on',
+        component: 'on',
+        variant: 'when',
+        size: 'when',
+        when: 'when',
+        prop: 'when',
+        mode: 'mode',
+        theme: 'mode',
+      }[label.word];
+      if (
+        flagWord &&
+        (flagWord === 'mode'
+          ? Boolean(MODE_WORDS[rest.trim().toLowerCase()])
+          : !otherSettingLabel(thing, value))
+      ) {
+        const r = rest.trim().toLowerCase();
+        const m = flagWord === 'mode' ? MODE_WORDS[r] : null;
+        const when =
+          flagWord === 'when'
+            ? label.word === 'when' || label.word === 'prop'
+              ? r
+              : `${label.word}:${r}`
+            : null;
+        refuse(
+          E.ERR_THEME_BAD_VALUE,
+          flagWord === 'mode'
+            ? `"${value}" names ${m ? `the ${m} mode` : 'a mode'}, not a value for ${thing}: ${colorful ? `a value for one mode is given with --mode ${m ?? 'dark'}` : `a theme for one mode is set with \`set ${slug} mode ${m ?? 'dark'}-only\``}.`
+            : flagWord === 'state'
+              ? `"${value}" names a state, not a value for ${thing}: a value for a state is given with --on <part> --state ${r}.`
+              : flagWord === 'on'
+                ? `"${value}" names a part, not a value for ${thing}: a value for one part is given with --on ${r}.`
+                : `"${value}" names a variant, not a value for ${thing}: a value for one variant is given with --on <part> --when ${when}.`,
+          {
+            didYouMean: [`--${flagWord}`],
+            run: [
+              flagWord === 'mode' && !colorful
+                ? `${P} set ${slug} mode ${m ?? 'dark'}-only`
+                : `${HOW} ${q(`${r} ${thing}`)}`,
+            ],
+          },
+        );
+      }
+      // A family's own words may hold a colon; only the words above are
+      // read there.
+      if (!familyToken && !otherSettingLabel(thing, value))
         refuse(
           E.ERR_THEME_BAD_VALUE,
           `"${label.word}" in "${value}" is not a name the editor reads for ${thing}; give the value alone.`,
@@ -1834,14 +2072,23 @@ export function checkSetting(
     if (
       label &&
       ownLabel(thing, label.word) &&
-      label.word !== 'font' &&
+      // A `font:` with a size is the shorthand, read whole below; with
+      // only families (`font: Inter, serif`) it is the label.
+      (label.word !== 'font' || !/\d/.test(label.rest)) &&
       label.rest.replace(/;+\s*$/, '').trim()
     )
       value = label.rest;
   }
-  if (!unset && typeof value === 'string' && DIALS[thing]) {
+  if (
+    !unset &&
+    typeof value === 'string' &&
+    (DIALS[thing] || partProperty || thing.startsWith('--')) &&
+    !/content/.test(thing)
+  ) {
     // A value labeled with another setting's name is that setting's, never
-    // this dial's (`accent 'neutral: #64748b'`).
+    // this one's (`accent 'neutral: #64748b'`, `--radius-element 'accent:
+    // red'`). The value goes to this setting again only for a dial that
+    // checks it as its own (any word is a font family, so never the font).
     const other = otherSettingLabel(thing, value);
     if (other)
       refuse(
@@ -1851,10 +2098,22 @@ export function checkSetting(
           didYouMean: [other.thing],
           run: [
             `${P} set ${slug} ${other.thing} ${quoteCommandArgument(other.value)}${flags.on ? ` --on ${flags.on}` : ''}`,
-            `${P} set ${slug} ${thing} ${quoteCommandArgument(other.value)}${flags.on ? ` --on ${flags.on}` : ''}`,
+            // Another setting is not this part's property: the whole theme.
+            ...(flags.on && partProperty
+              ? [
+                  `${P} set ${slug} ${other.thing} ${quoteCommandArgument(other.value)}`,
+                ]
+              : []),
+            ...(DIALS[thing] && thing !== 'font'
+              ? [
+                  `${P} set ${slug} ${thing} ${quoteCommandArgument(other.value)}${flags.on ? ` --on ${flags.on}` : ''}`,
+                ]
+              : []),
           ],
         },
       );
+  }
+  if (!unset && typeof value === 'string' && DIALS[thing]) {
     const d = thing === 'font' ? null : pastedDeclaration(value);
     if (d?.value) value = d.value;
   }
@@ -2092,6 +2351,20 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         white: 'light',
       }[mode];
       const near = meant ? [meant] : nearest(mode, ['light', 'dark']);
+      // The line for that one mode: for a dial, the one `--mode dark` itself
+      // offers (the color token for that mode), never the both-modes dial.
+      const modeLine = (/** @type {string} */ m) => {
+        if (DIALS[thing] && !unset)
+          try {
+            checkSetting(ctx, slug, data, thing, v, {...flags, mode: m});
+          } catch (e) {
+            const first = /** @type {any} */ (e)?.suggestions?.find(
+              (/** @type {any} */ x) => / --mode (light|dark)\b/.test(x.name),
+            );
+            if (first) return first.name;
+          }
+        return setLine(slug, thing, v, {...s, mode: m}, unset);
+      };
       refuse(
         E.ERR_THEME_BAD_VALUE,
         `--mode takes light or dark, not "${flags.mode}".`,
@@ -2100,10 +2373,12 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           // The mode it is nearest keeps --mode; only with none near is the
           // same setting for both modes offered.
           run: [
-            ...(near.length === 1
-              ? [setLine(slug, thing, v, {...s, mode: near[0]}, unset)]
-              : []),
-            setLine(slug, thing, v, {...s, mode: undefined}, unset),
+            ...(near.length === 1 ? [modeLine(near[0])] : []),
+            // A word that means one mode (night) keeps it: the both-modes
+            // line only for a word read by spelling.
+            ...(meant
+              ? []
+              : [setLine(slug, thing, v, {...s, mode: undefined}, unset)]),
           ],
         },
       );
@@ -3050,7 +3325,10 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
             {
               ...(meant ? {didYouMean: [meant]} : {}),
               // The same scope, flags included.
-              run: [setLine(slug, 'corners', meant ?? 'medium', s)],
+              // Nothing near: how corners, never a stock rung.
+              run: [
+                meant ? setLine(slug, 'corners', meant, s) : `${HOW} corners`,
+              ],
             },
           );
         }
@@ -3132,15 +3410,15 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
               SPACING.map(([n]) => n),
             ),
             run: [
-              setLine(
-                slug,
-                'spacing',
-                nearest(
+              (() => {
+                const near = nearest(
                   v,
                   SPACING.map(([n]) => n),
-                )[0] ?? 'roomy',
-                s,
-              ),
+                )[0];
+                return near
+                  ? setLine(slug, 'spacing', near, s)
+                  : `${HOW} spacing`;
+              })(),
             ],
           },
         );
@@ -3229,13 +3507,24 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           .replace(/\s*!important\s*$/i, '')
           .replace(/;+\s*$/, '')
           .trim()
-          .replace(/^([0-9a-f]{3}|[0-9a-f]{6})$/i, '#$1')
-          // One hex digit short or over: repeat or drop the last one.
-          .replace(/^#([0-9a-f]{4})([0-9a-f])$/i, '#$1$2$2')
-          .replace(/^#([0-9a-f]{6})[0-9a-f]$/i, '#$1');
+          // A hex written 0x… (as in code) is that hex.
+          .replace(/^0x([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i, '#$1')
+          .replace(/^([0-9a-f]{3}|[0-9a-f]{6})$/i, '#$1');
+        // A hex a digit short or over is refused as it is: the digit
+        // missing could be anywhere, so none is made up.
+        // A name of several words with a color among them (`navy blue`)
+        // is that color.
+        const named = v
+          .toLowerCase()
+          .split(/[\s,-]+/)
+          .filter(w => COLOR_NAMES.includes(w));
         const near =
           problem.kind === 'unknown'
-            ? nearest(v.toLowerCase(), COLOR_NAMES)
+            ? /^#?[0-9a-f]{4,8}$/i.test(v.trim())
+              ? []
+              : named.length
+                ? named.slice(0, 1)
+                : nearest(v.toLowerCase(), COLOR_NAMES)
             : [];
         // light-dark(a, b): the dial takes one color, from which it makes
         // both modes; the light one is offered.

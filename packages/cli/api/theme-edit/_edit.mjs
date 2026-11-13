@@ -15,6 +15,7 @@ import {coversProperty} from './_css.mjs';
 import * as path from 'node:path';
 import {AstryxError} from '../error.mjs';
 import {vetSuggestions} from './_vet.mjs';
+import {colorPair, offersTyped} from './_normal.mjs';
 import {
   AUTO_SPREAD,
   CORNERS,
@@ -93,13 +94,9 @@ import {
   holdAfterBuild,
   fieldsMeant,
 } from './_settings.mjs';
-import {
-  checkSetting,
-  exampleOf,
-  normalizeEntry,
-  storedProblems,
-} from './_check.mjs';
+import {checkSetting, normalizeEntry, storedProblems} from './_check.mjs';
 import {MODAL, isColorToken} from './_compiler.mjs';
+import {colorProblem} from './_color.mjs';
 import {
   PALETTE_DIALS,
   VIBRANCY_DEFAULT,
@@ -1124,9 +1121,17 @@ function refuseStoredTokens(ctx, slug, data, skip) {
   if (!bad.length) return;
   // A repair offers only the value it holds, cleaned: never a stock value
   // the saved setting did not hold.
-  for (const b of bad)
+  for (const b of bad) {
     if (b.fix && !offersTyped(String(b.fix), String(b.setting.value)))
       delete b.fix;
+    // A light and a dark color saved as one (`red / blue`) is that pair.
+    const pair =
+      !b.fix && isColorToken(b.setting.thing)
+        ? colorPair(String(b.setting.value))
+        : null;
+    if (pair && !colorProblem(pair.light) && !colorProblem(pair.dark))
+      b.fix = `light-dark(${pair.light}, ${pair.dark})`;
+  }
   const found = bad.length === 1 ? bad[0] : null;
   // A clean value is offered only when set takes it, so the line works.
   const takes = (/** @type {typeof found} */ b) => {
@@ -1185,13 +1190,14 @@ function refuseStoredTokens(ctx, slug, data, skip) {
         // A value to set only for a token whose stored value has the wrong
         // type; any other thing `set` would refuse, or read as a dial.
         ...(one &&
+        one.fix &&
         !one.scope &&
         one.setting.source === 'token' &&
         ctx.C.isToken(one.setting.thing)
           ? [
               // The value the check suggests for this value, else a stock
               // one of the token's type.
-              `${P} set ${slug} ${one.setting.thing} ${quoteCommandArgument(one.fix ?? exampleOf(ctx.C.typeOf(one.setting.thing), one.setting.thing))}`,
+              `${P} set ${slug} ${one.setting.thing} ${quoteCommandArgument(String(one.fix))}`,
             ]
           : one && one.fix && one.setting.source === 'dial'
             ? [
@@ -1428,74 +1434,28 @@ function extremeSteps(res) {
     : [];
 }
 
-/**
- * The stock values a repair would put in when it could read nothing from
- * the input: the example of each value type, and the dials' defaults. A
- * line with one of these is offered only when the input held it.
- */
-const STOCK_VALUES = new Set([
-  '#1f2937',
-  '#7c3aed',
-  '#ffffff',
-  'inter',
-  'inter, sans-serif',
-  'system',
-  '1px',
-  '6px',
-  '12px',
-  '16',
-  '600',
-  '1.4',
-  '150ms',
-  'solid',
-]);
+export {carriesTyped, offersTyped} from './_normal.mjs';
 
 /**
- * Whether a suggested value carries what was typed: each of its words and
- * numbers is in the typed text (cleaned: case, quotes, escapes), apart from
- * a unit added to a bare number and the words of the CSS form it is written
- * in (`light-dark()`, `var()`, `calc()`, a generic family). A stock value
- * the input never held (a gray, a violet, `system`, `small`) does not.
- * @param {string} offered
- * @param {string} typed
+ * An object of settings written as JSON, with single quotes, or as its
+ * entries with no braces (`"accent": "#e11d48", "corners": "pill"`).
+ * Throws when it is none of these.
+ * @param {string} text
+ * @returns {any}
  */
-export function carriesTyped(offered, typed) {
-  const flat = String(typed)
-    .toLowerCase()
-    .replace(/\\(?=[#"' ])/g, '')
-    .replace(/[\s"'\u201C\u201D\u2018\u2019\u300C\u300D]/g, '');
-  const FORM = new Set([
-    'light',
-    'dark',
-    'var',
-    'calc',
-    'px',
-    'rem',
-    'em',
-    'sans',
-    'serif',
-    'monospace',
-  ]);
-  return (
-    String(offered)
-      .toLowerCase()
-      .match(/[a-z0-9.]+/g) ?? []
-  )
-    .map(w => w.replace(/^([0-9.]+)(px|rem|em)$/, '$1'))
-    .filter(w => !FORM.has(w))
-    .every(w => flat.includes(w));
+function looseObject(text) {
+  const t = text.trim();
+  const braced = t.startsWith('{') ? t : `{${t}}`;
+  try {
+    return JSON.parse(braced);
+  } catch {
+    return JSON.parse(
+      braced.replace(/'((?:[^'\\]|\\.)*)'/g, (_, x) =>
+        JSON.stringify(x.replace(/\\'/g, "'")),
+      ),
+    );
+  }
 }
-
-/**
- * Whether a repair may offer `offered` for `typed`: a stock value only when
- * the input held it; any other value (one read from the input, or mapped
- * from it by a documented rule) may be.
- * @param {string} offered
- * @param {string} typed
- */
-export const offersTyped = (offered, typed) =>
-  !STOCK_VALUES.has(String(offered).toLowerCase()) ||
-  carriesTyped(offered, typed);
 
 /**
  * A refusal with each line that sets the typed setting again kept only
@@ -1523,8 +1483,14 @@ function carryTyped(e, sub, slug, thing, typed) {
     String(thing).replace(/^-+/, '').toLowerCase();
   const kept = e.suggestions.filter(x => {
     const m = head.exec(x.name);
-    if (!m || !same(m[1] ?? m[2])) return true;
+    if (!m) return true;
     const v = m[3] ?? m[4];
+    // A stock value on another setting's line (the typed thing held an
+    // object or a label) is no more the input's than on this one.
+    if (!same(m[1] ?? m[2]))
+      return /^\s*[{"']/.test(String(thing))
+        ? offersTyped(v, `${String(thing)} ${typed}`)
+        : true;
     return offersTyped(v, typed);
   });
   if (kept.length === e.suggestions.length) return e;
@@ -1553,18 +1519,26 @@ async function change(sub, slug, thing, value, options) {
   // repairs (`Corners`, `var(--radius-page)`) removes that exact entry.
   const typedThing = thing;
   const typedValue = value;
-  // A JSON object of several settings pasted as one: one set line each.
-  if (
-    typeof thing === 'string' &&
-    (value == null || value === '') &&
-    /^\s*\{[\s\S]*\}\s*$/.test(thing)
-  ) {
+  // An object of several settings pasted as one (JSON, single quotes, or
+  // its entries with no braces, split at the first colon on the way): one
+  // set line each.
+  const objectText =
+    typeof thing !== 'string'
+      ? null
+      : value == null || value === ''
+        ? /^\s*\{[\s\S]*\}\s*$/.test(thing)
+          ? thing
+          : null
+        : /^\s*\{?\s*["']/.test(thing) && /["']\s*:/.test(String(value))
+          ? `${thing}:${value}`
+          : null;
+  if (objectText != null) {
     /** @type {any} */
     let obj = null;
     try {
-      obj = JSON.parse(thing);
+      obj = looseObject(objectText);
     } catch {
-      // Not JSON: read as typed.
+      // Not an object: read as typed.
     }
     if (obj && typeof obj === 'object' && Object.keys(obj).length > 1)
       refuse(

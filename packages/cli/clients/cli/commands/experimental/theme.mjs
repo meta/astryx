@@ -650,7 +650,14 @@ function strayOption(command, rest) {
         },
       );
   }
-  const word = rest.find(w => typeof w === 'string' && w.startsWith('--'));
+  // A value pasted with a token's label (`'--color-accent: #e11d48'`) is
+  // a value, read by the label reader, not an option.
+  const word = rest.find(
+    w =>
+      typeof w === 'string' &&
+      w.startsWith('--') &&
+      !/^--[a-z0-9-]+\s*:\s*\S/i.test(w),
+  );
   if (word == null) return null;
   return cliError(
     `unknown option '${word}': only the thing a change names may start with -- (a design token such as --color-accent).`,

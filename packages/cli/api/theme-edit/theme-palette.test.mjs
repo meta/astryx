@@ -1229,10 +1229,11 @@ describe('color settings, refused well', () => {
           : `astryx experimental theme editor set p ${rest}`,
       );
     }
+    // A hex a digit short: no digit is made up.
     expect(
       (await refusal(() => themeEditSet('p', 'accent', '#ff000', {cwd})))
         .run[0],
-    ).toBe("astryx experimental theme editor set p accent '#ff0000'");
+    ).toBe('astryx experimental theme editor how accent');
     const inputs = await refusal(() =>
       themeEditSet('p', 'info', 'blue', {cwd, on: 'inputs'}),
     );

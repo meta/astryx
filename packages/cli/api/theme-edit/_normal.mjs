@@ -121,12 +121,33 @@ export function escapesMeant(thing, value) {
   let v = value;
   const content = /^content$/i.test(thing);
   if (content)
-    return v
-      .replace(/\\u\{?([0-9a-f]{2,6})\}?/gi, (_, h) => `\\${h.toUpperCase()} `)
-      .replace(/\\n/g, '\\A ')
-      .replace(/\\t/g, '\\9 ')
-      .replace(/\\r/g, '\\D ');
+    return (
+      v
+        .replace(
+          /\\u\{?([0-9a-f]{2,6})\}?/gi,
+          (_, h) => `\\${h.toUpperCase()} `,
+        )
+        // `\x` with four hex digits is written for the code point (as
+        // `\u`), with two for that character.
+        .replace(
+          /\\x([0-9a-f]{4}|[0-9a-f]{2})/gi,
+          (_, h) => `\\${h.toUpperCase()} `,
+        )
+        .replace(/\\n/g, '\\A ')
+        .replace(/\\t/g, '\\9 ')
+        .replace(/\\r/g, '\\D ')
+    );
   v = v.replace(CSS_FUNCTIONS, f => f.toLowerCase());
+  // A JS escape of a printable character in a font family (`Inter\u0020
+  // Tight`) is that character, as CSS would read its own escape.
+  if (/font/i.test(thing))
+    v = v.replace(
+      /\\(?:u\{?([0-9a-f]{4,6})\}?|x([0-9a-f]{2}))/gi,
+      (m, u, x) => {
+        const c = String.fromCodePoint(parseInt(u ?? x, 16));
+        return /^[\p{L}\p{N} _-]$/u.test(c) ? c : m;
+      },
+    );
   // (A JSON string holding escaped quotes is unwrapped whole later.)
   if (!/^\s*"(?:[^"\\]|\\.)*"\s*$/.test(v)) v = v.replace(/\\([#"' ])/g, '$1');
   else v = v.replace(/\\([# ])/g, '$1');
@@ -159,6 +180,15 @@ export function escapesMeant(thing, value) {
         '$value' in j ? j.$value : 'value' in j ? j.value : undefined;
       if (text(inner) != null)
         return `${inner}${typeof j.unit === 'string' ? j.unit : ''}`;
+      // One labeled entry (`{"color": "#e11d48"}`) is read as the same
+      // label in its CSS form (`color: #e11d48`): one reader for both.
+      const keys = Object.keys(j);
+      if (
+        keys.length === 1 &&
+        /^(--)?[a-z][a-z0-9-]*$/i.test(keys[0]) &&
+        text(j[keys[0]]) != null
+      )
+        return `${keys[0]}: ${j[keys[0]]}`;
     }
   }
   return v;
@@ -515,3 +545,68 @@ export function colorPair(value) {
   if (two) return {light: unq(two[1]), dark: unq(two[2])};
   return null;
 }
+
+/**
+ * The stock values a repair would put in when it could read nothing from
+ * the input: the example of each value type, and the dials' defaults. A
+ * line with one of these is offered only when the input held it.
+ */
+export const STOCK_VALUES = new Set([
+  '#1f2937',
+  '#7c3aed',
+  '#ffffff',
+  'inter',
+  'inter, sans-serif',
+  'system',
+  '1px',
+  '6px',
+  '12px',
+  '16',
+  '600',
+  '1.4',
+  '150ms',
+  'solid',
+  // The dials' fallback words and the size tokens' Core defaults, offered
+  // when nothing could be read.
+  'medium',
+  'roomy',
+  'compact',
+  'round',
+  'light-dark(#1f2937, #f9fafb)',
+]);
+
+/**
+ * Whether a suggested value carries what was typed: each of its words and
+ * numbers is in the typed text (cleaned: case, quotes, escapes), apart from
+ * a unit added to a bare number and the words of the CSS form it is written
+ * in (`light-dark()`, `var()`, `calc()`, a generic family). A stock value
+ * the input never held (a gray, a violet, `system`, `small`) does not.
+ * @param {string} offered
+ * @param {string} typed
+ */
+export function carriesTyped(offered, typed) {
+  const flat = String(typed)
+    .toLowerCase()
+    .replace(/\\(?=[#"' ])/g, '')
+    .replace(/[\s"'\u201C\u201D\u2018\u2019\u300C\u300D]/g, '');
+  const FORM = new Set(['light', 'dark', 'var', 'calc', 'px', 'rem', 'em']);
+  return (
+    String(offered)
+      .toLowerCase()
+      .match(/[a-z0-9.]+/g) ?? []
+  )
+    .map(w => w.replace(/^([0-9.]+)(px|rem|em)$/, '$1'))
+    .filter(w => !FORM.has(w))
+    .every(w => flat.includes(w));
+}
+
+/**
+ * Whether a repair may offer `offered` for `typed`: a stock value only when
+ * the input held it; any other value (one read from the input, or mapped
+ * from it by a documented rule) may be.
+ * @param {string} offered
+ * @param {string} typed
+ */
+export const offersTyped = (offered, typed) =>
+  !STOCK_VALUES.has(String(offered).toLowerCase()) ||
+  carriesTyped(offered, typed);

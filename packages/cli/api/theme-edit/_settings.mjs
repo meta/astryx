@@ -1034,7 +1034,15 @@ export function loadTheme(
         ? cleaned
         : null;
     // Only the value it holds, cleaned: never a stock value it did not hold.
-    const example = meant;
+    // A vibrancy with no color to saturate is one set refuses: undo only.
+    const example =
+      bad.thing === 'vibrancy' &&
+      !data.settings.some(
+        (/** @type {any} */ x) =>
+          x !== bad && x.source === 'dial' && PALETTE_DIALS.includes(x.thing),
+      )
+        ? null
+        : meant;
     throw new AstryxError(
       `themes/${slug}/${slug}.settings.json: ${problem}, a value the editor no longer accepts. Remove or change that setting; nothing else needs to change. Nothing was changed.`,
       [
