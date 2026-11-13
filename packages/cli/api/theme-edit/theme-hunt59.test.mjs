@@ -90,6 +90,11 @@ describe('hunt59: the app copy and the stable build', () => {
     const r = buildCopy({check: true});
     expect(/** @type {any} */ (r.data).stale).toEqual([]);
     expect(/** @type {any} */ (r.data).upToDate).toBe(true);
+    // Each file of the copy names the exact command that writes it.
+    for (const f of ['src/themes/c/cTheme.ts', 'src/themes/c/cTheme.doc.mjs'])
+      expect(read(f)).toContain(
+        'Written by `astryx experimental theme editor show c`',
+      );
   }, 240_000);
 
   it('after a stable rebuild of the copy, the next set still writes it', async test => {

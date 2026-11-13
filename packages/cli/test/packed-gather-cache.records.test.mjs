@@ -414,6 +414,124 @@ Module._resolveFilename = function (request, parent, isMain, options) {
     180_000,
   );
 
+  it.skipIf(!hasModuleHooks)(
+    'keeps the component list, and a new or edited component shows on the very next run',
+    () => {
+      const tmp = keptTmp('component-list');
+      const other = makeProject();
+      try {
+        fs.writeFileSync(
+          path.join(other.widgets, 'astryx.integration.mjs'),
+          `export default { components: './components' };\n`,
+        );
+        const component = (
+          /** @type {string} */ name,
+          /** @type {string} */ description,
+        ) => {
+          const dir = path.join(other.widgets, 'components', name);
+          fs.mkdirSync(dir, {recursive: true});
+          fs.writeFileSync(
+            path.join(dir, `${name}.doc.mjs`),
+            `export const docs = {type: 'component', name: '${name}', description: '${description}', props: []};\n`,
+          );
+          fs.writeFileSync(
+            path.join(dir, `${name}.tsx`),
+            `export function ${name}() { return null; }\n`,
+          );
+        };
+        component('Gadget', 'Shows a gadget.');
+        // Core as a copy of what component discovery reads, so a test can edit
+        // a Core doc in place.
+        const core = path.join(
+          other.dir,
+          'node_modules',
+          '@astryxdesign',
+          'core',
+        );
+        const coreSource = fs.realpathSync(core);
+        fs.unlinkSync(core);
+        fs.mkdirSync(core);
+        for (const entry of [
+          'package.json',
+          'groups.doc.mjs',
+          'docs.mjs',
+          'src',
+        ]) {
+          fs.cpSync(path.join(coreSource, entry), path.join(core, entry), {
+            recursive: true,
+            filter: from => !from.includes(`${path.sep}__tests__`),
+          });
+        }
+        const lists = () =>
+          new Map(
+            fs
+              .readdirSync(path.join(tmp, CACHE_NAME))
+              .map(name => path.join(tmp, CACHE_NAME, name))
+              .filter(
+                file =>
+                  JSON.parse(fs.readFileSync(file, 'utf8')).value?.type ===
+                  'component.list',
+              )
+              .map(file => [file, fs.statSync(file).ino]),
+          );
+        for (const ask of [
+          ['component', '--list'],
+          ['component', '--list', '--detail', 'compact'],
+        ]) {
+          for (const json of [true, false]) {
+            const fresh = run(ask, {tmp: freshTmp(), cwd: other.dir, json});
+            expect(fresh.status, fresh.stderr).toBe(0);
+            // Kept, then read back: byte for byte what a fresh run prints.
+            expect(run(ask, {tmp, cwd: other.dir, json})).toEqual(fresh);
+            expect(run(ask, {tmp, cwd: other.dir, json})).toEqual(fresh);
+          }
+        }
+        const kept = lists();
+        // One per list detail: text and JSON print the same kept list.
+        expect(kept.size).toBe(2);
+        expect(run(['component', '--list'], {tmp, cwd: other.dir})).toEqual(
+          run(['component', '--list'], {tmp: freshTmp(), cwd: other.dir}),
+        );
+        expect(lists()).toEqual(kept);
+        // A new component folder, then an edited doc: each shows on the very
+        // next run, as a fresh run shows it.
+        component('Widget', 'Shows a widget.');
+        const added = run(['component', '--list'], {tmp, cwd: other.dir});
+        expect(added.stdout).toContain('Widget');
+        expect(added).toEqual(
+          run(['component', '--list'], {tmp: freshTmp(), cwd: other.dir}),
+        );
+        // A Core doc edited in place: its new description shows.
+        const buttonDoc = path.join(core, 'src', 'Button', 'Button.doc.mjs');
+        const text = fs.readFileSync(buttonDoc, 'utf8');
+        const description = /description:\s*'([^']{20,})'/.exec(text)?.[1];
+        expect(description).toBeDefined();
+        const compact = ['component', '--list', '--detail', 'compact'];
+        expect(run(compact, {tmp, cwd: other.dir}).stdout).toContain(
+          /** @type {string} */ (description).slice(0, 30),
+        );
+        fs.writeFileSync(
+          buttonDoc,
+          text.replace(
+            /** @type {string} */ (description),
+            'A button, edited in place.',
+          ),
+        );
+        const edited = run(compact, {tmp, cwd: other.dir});
+        expect(edited.stdout).toContain('A button, edited in place.');
+        expect(edited).toEqual(run(compact, {tmp: freshTmp(), cwd: other.dir}));
+        // A component read is unchanged warm and cold.
+        const read = ['component', 'Button'];
+        expect(run(read, {tmp, cwd: other.dir})).toEqual(
+          run(read, {tmp: freshTmp(), cwd: other.dir}),
+        );
+      } finally {
+        fs.rmSync(other.dir, {recursive: true, force: true});
+      }
+    },
+    240_000,
+  );
+
   it('leaves a missing cache folder missing when doctor runs', () => {
     const tmp = freshTmp();
     run(['doctor'], {tmp});
@@ -615,8 +733,11 @@ Module._resolveFilename = function (request, parent, isMain, options) {
       const fresh = run(ask, {tmp: freshTmp(), cwd: other.dir, json: false});
       expect(run(ask, {tmp, cwd: other.dir, json: false})).toEqual(fresh);
       const kept = templatesEntries(tmp);
-      expect(kept.size).toBe(1);
-      // Read back, not discovered again: the same file, and the same answer.
+      // Node 22.13 has no synchronous module hooks, so the supported fallback
+      // gathers fresh and keeps no template records.
+      expect(kept.size).toBe(hasModuleHooks ? 1 : 0);
+      // With hooks this reads back the same file; without them it gathers
+      // fresh. Either path must return the same answer.
       expect(run(ask, {tmp, cwd: other.dir, json: false})).toEqual(fresh);
       expect(templatesEntries(tmp)).toEqual(kept);
       write('Grand totals, tallied by week.');
@@ -671,8 +792,8 @@ Module._resolveFilename = function (request, parent, isMain, options) {
       expect(other.stdout).not.toContain('zqledger');
       run(ask, {tmp, cwd: outside, json: false});
       run(ask, {tmp, cwd: outside, json: false});
-      // The first copy kept its template records.
-      expect(templatesEntries(tmp).size).toBe(1);
+      // Only runtimes with synchronous hooks keep template records.
+      expect(templatesEntries(tmp).size).toBe(hasModuleHooks ? 1 : 0);
       expect(run(ask, {tmp, cwd: outside, cli: second})).toEqual(other);
       expect(run(ask, {tmp, cwd: outside})).toEqual(first);
     } finally {
@@ -826,10 +947,10 @@ Module._resolveFilename = function (request, parent, isMain, options) {
       const first = fresh();
       expect(first.stdout).toContain('Tally theme for ledgers.');
       expect(kept()).toEqual(first);
-      // The integration's theme records are kept: one entry, read back (the
-      // same file) on the next run.
+      // Runtimes with synchronous hooks keep one entry; older supported Node
+      // versions gather fresh on each run and keep none.
       const keptThemes = themeEntries(tmp);
-      expect(keptThemes.size).toBe(1);
+      expect(keptThemes.size).toBe(hasModuleHooks ? 1 : 0);
       expect(kept()).toEqual(first);
       expect(themeEntries(tmp)).toEqual(keptThemes);
       // An in-place edit to the theme's doc shows on the next run, which
@@ -838,7 +959,11 @@ Module._resolveFilename = function (request, parent, isMain, options) {
       const edited = kept();
       expect(edited.stdout).toContain('Tally theme, edited.');
       expect(edited).toEqual(fresh());
-      expect(themeEntries(tmp)).not.toEqual(keptThemes);
+      if (hasModuleHooks) {
+        expect(themeEntries(tmp)).not.toEqual(keptThemes);
+      } else {
+        expect(themeEntries(tmp).size).toBe(0);
+      }
       // So does an edit to a module the theme imports that breaks it.
       tokens("export {tokens} from './missing';\n");
       const broken = kept();
@@ -868,9 +993,13 @@ Module._resolveFilename = function (request, parent, isMain, options) {
       const first = run(ask, {tmp: freshTmp(), cwd: other.dir});
       expect(first.stdout).toContain('Ship it on Tuesdays.');
       expect(run(ask, {tmp, cwd: other.dir})).toEqual(first);
-      // docs keeps the integration's check results like the other commands.
+      // docs keeps the integration's check results only when module reads can be recorded.
       const kept = issuesEntries(tmp);
-      expect(kept.size).toBeGreaterThan(0);
+      if (hasModuleHooks) {
+        expect(kept.size).toBeGreaterThan(0);
+      } else {
+        expect(kept.size).toBe(0);
+      }
       expect(run(ask, {tmp, cwd: other.dir})).toEqual(first);
       expect(issuesEntries(tmp)).toEqual(kept);
       // An in-place edit to the topic shows on the very next call.
