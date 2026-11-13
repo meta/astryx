@@ -204,13 +204,23 @@ export const FOLDER_JUNK = new Set(['.DS_Store', '.gitkeep', 'Thumbs.db']);
  * files (what `git rm -r` or a branch switch leaves). A path that is not a
  * folder, or one that does not read, is not empty.
  * @param {string} dir
+ * @returns {boolean}
  */
 export function folderIsEmpty(dir) {
   if (!fs.existsSync(dir)) return true;
   try {
+    // A folder holding only empty folders (an empty tokens/) holds nothing
+    // either; a link is never followed.
     return (
       fs.lstatSync(dir).isDirectory() &&
-      fs.readdirSync(dir).every(n => FOLDER_JUNK.has(n))
+      fs
+        .readdirSync(dir)
+        .every(
+          n =>
+            FOLDER_JUNK.has(n) ||
+            (fs.lstatSync(path.join(dir, n)).isDirectory() &&
+              folderIsEmpty(path.join(dir, n))),
+        )
     );
   } catch {
     return false;
@@ -856,12 +866,39 @@ export function loadTheme(
     );
   const bad = problem ? badSetting(data) : null;
   if (problem && bad && settingsProblem(data, bad.thing) !== problem) {
-    // A value it takes, for a dial; a color for a color token.
-    const example = DIALS[bad.thing]
-      ? DIALS[bad.thing].values.split('|').find(w => !w.startsWith('<'))
-      : isColorToken(bad.thing)
-        ? '#1f2937'
+    // The value it holds, cleaned as typed input is (stray or invisible
+    // spaces, other letters, a pasted `corners: pill`), when the dial takes
+    // that; else a value it takes, for a dial; a color for a color token.
+    const cleaned =
+      DIALS[bad.thing] && typeof bad.value === 'string'
+        ? bad.value
+            .replace(/[\u200B-\u200D\u2060\uFEFF]/g, '')
+            .replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, ' ')
+            .trim()
+            .replace(/;+$/, '')
+            .replace(
+              new RegExp(
+                `^${bad.thing.replace(/[-]/g, '\\-')}\\s*[:=]\\s*`,
+                'i',
+              ),
+              '',
+            )
+            .trim()
+            .toLowerCase()
         : null;
+    const meant =
+      cleaned &&
+      cleaned !== bad.value &&
+      !valueProblem({...bad, value: cleaned})
+        ? cleaned
+        : null;
+    const example =
+      meant ??
+      (DIALS[bad.thing]
+        ? DIALS[bad.thing].values.split('|').find(w => !w.startsWith('<'))
+        : isColorToken(bad.thing)
+          ? '#1f2937'
+          : null);
     throw new AstryxError(
       `themes/${slug}/${slug}.settings.json: ${problem}, a value the editor no longer accepts. Remove or change that setting; nothing else needs to change. Nothing was changed.`,
       [
@@ -870,7 +907,9 @@ export function loadTheme(
           ? [
               {
                 name: `${P} set ${slug} ${undoArgs(bad).replace(bad.thing, `${bad.thing} ${quoteCommandArgument(example)}`)}`,
-                reason: 'or give it a value it takes',
+                reason: meant
+                  ? 'or set the value it holds, cleaned'
+                  : 'or give it a value it takes',
               },
             ]
           : []),

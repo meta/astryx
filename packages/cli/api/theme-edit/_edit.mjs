@@ -84,6 +84,7 @@ import {
   refuseLinks,
   usableNewName,
   FOLDER_JUNK,
+  folderIsEmpty,
   dialValueFits,
   holdAfterBuild,
 } from './_settings.mjs';
@@ -438,7 +439,8 @@ export async function themeEditNew(name, options = {}) {
   const holdsOther =
     fs.existsSync(f.dir) &&
     !left &&
-    fs.readdirSync(f.dir).some(n => !FOLDER_JUNK.has(n));
+    // Empty folders (an empty tokens/) hold nothing of anyone's.
+    !folderIsEmpty(f.dir);
   if (holdsOther)
     refuse(
       E.ERR_FILE_EXISTS,
@@ -918,6 +920,23 @@ function refuseStoredTokens(ctx, slug, data, skip) {
   // A clean value is offered only when set takes it, so the line works.
   const takes = (/** @type {typeof found} */ b) => {
     if (!b?.fix) return true;
+    // A value whose only fault was curly quotes around it: without them,
+    // when set takes that (`“#e11d48”` is #e11d48).
+    const bare = /^(["'])(.*)\1$/.exec(b.fix)?.[2];
+    if (
+      bare &&
+      b.setting.source === 'token' &&
+      !/font|content/.test(b.setting.thing)
+    ) {
+      const was = b.fix;
+      b.fix = bare;
+      if (takesOne(b)) return true;
+      b.fix = was;
+    }
+    return takesOne(b);
+  };
+  const takesOne = (/** @type {typeof found} */ b) => {
+    if (!b?.fix) return true;
     try {
       checkSetting(
         ctx,
@@ -1059,9 +1078,23 @@ async function change(sub, slug, thing, value, options) {
   try {
     return await changeOnce(sub, slug, thing, value, options, seen, typedThing);
   } catch (e) {
-    // A theme name one letter off an existing theme: the same command with
-    // that name comes first, before making a theme of the typo.
-    if (e instanceof AstryxError && e.code === E.ERR_UNKNOWN_THEME) {
+    // A theme name one letter off an existing theme, or typed in other
+    // letters or as a path (T, ./t, themes/t): the same command with that
+    // name comes first, never a bare look at the theme that drops the change.
+    const named =
+      e instanceof AstryxError &&
+      (e.code === E.ERR_UNKNOWN_THEME ||
+        (e.code === E.ERR_INVALID_ARGUMENT &&
+          (e.suggestions ?? []).some(
+            x =>
+              x.reason === 'did you mean' &&
+              slugOk(x.name) &&
+              x.name !== slug &&
+              fs.existsSync(
+                themeFiles(options.cwd ?? process.cwd(), x.name).settings,
+              ),
+          )));
+    if (named) {
       const near = (e.suggestions ?? []).find(x => x.reason === 'did you mean');
       if (near && slugOk(near.name)) {
         const flags = [
@@ -1081,7 +1114,9 @@ async function change(sub, slug, thing, value, options) {
             name: `${P} ${sub} ${near.name}${words.length ? ` ${words.join(' ')}` : ''}`,
             reason: `do this instead: ${near.name} is a theme here`,
           },
-          ...(e.suggestions ?? []).filter(x => x !== near),
+          ...(e.suggestions ?? []).filter(
+            x => x !== near && x.name !== `${P} show ${near.name}`,
+          ),
         ];
       }
       throw e;
