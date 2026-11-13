@@ -393,12 +393,13 @@ function measureFit(ctx, base, was, now, intent, steps) {
               if (!raw.has(key))
                 raw.set(key, own.get(`base||${prop}`) ?? `var(${r.token})`);
             }
-    /** @type {Map<string, {light: string, dark: string}>} */
+    /** @type {Map<string, {light: string, dark: string, raw: string}>} */
     const out = new Map();
     for (const [k, v] of raw)
       out.set(k, {
         light: resolveIn(v, toks.light, 'light'),
         dark: resolveIn(v, toks.dark, 'dark'),
+        raw: v,
       });
     return out;
   };
@@ -448,6 +449,8 @@ function measureFit(ctx, base, was, now, intent, steps) {
         continue;
       const prop = k.split('|')[2];
       // A shorthand written where the part read longhands: its first side.
+      // (Whether the value before is the same rule's, not a stand-in.)
+      const exact = a.has(k);
       const o =
         a.get(k) ??
         (prop === 'padding'
@@ -475,8 +478,29 @@ function measureFit(ctx, base, was, now, intent, steps) {
         }
         if (before == null) continue;
         if (fam === 'color' && intent.lighter != null) {
-          // A part's color is checked through the tokens it is set from
-          // (below); its rules can mix variants and layers.
+          // A part's color, per variant: only the rule a step writes (its
+          // own --when, else the plain rule), in the mode the question
+          // names (else light), never an overlay layer over the fill.
+          if (mode !== (intent.mode ?? 'light')) continue;
+          const [when, state] = k.split('|');
+          const written = steps.some(
+            st =>
+              st.on &&
+              members(String(st.on)).includes(part) &&
+              (st.when ?? 'base') === when &&
+              (st.state ? `:${st.state}` : '') === state,
+          );
+          if (!written || !exact) continue;
+          if (
+            /overlay|tint/.test(String(o?.raw ?? '')) ||
+            /overlay|tint/.test(v.raw)
+          )
+            continue;
+          const x = parseColor(after);
+          const y = parseColor(before);
+          if (x && y && Math.abs(luminance(x) - luminance(y)) >= 0.5)
+            if (intent.lighter !== luminance(x) > luminance(y))
+              return `${part}'s ${prop}${when !== 'base' ? ` (${when})` : ''} would get ${intent.lighter ? 'darker' : 'lighter'} in ${mode} mode (${before} to ${after})`;
           continue;
         }
         const dir = fam === 'opacity' ? intent.opacityDir : intent.dir;
@@ -487,7 +511,12 @@ function measureFit(ctx, base, was, now, intent, steps) {
               fam,
             ) ||
             // A space: one length written over one read (never a shorthand).
-            (fam === 'space' && intent.bound)
+            (fam === 'space' &&
+              (intent.bound ||
+                (exact &&
+                  steps.some(st => st.thing === prop) &&
+                  !/\s/.test(after) &&
+                  !/\s/.test(String(before)))))
           )
         )
           continue;
