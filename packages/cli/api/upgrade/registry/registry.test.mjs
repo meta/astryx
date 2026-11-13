@@ -17,6 +17,7 @@ import {
 } from '../../../authoring/shadcn/receipt.mjs';
 import {
   discoverRegistryReceipts,
+  logRegistryCompositionSummary,
   reconcileRegistryCompositions,
 } from './registry.mjs';
 import {upgrade} from '../upgrade.mjs';
@@ -674,6 +675,58 @@ describe('registry composition upgrades', () => {
     expect(fs.readFileSync(conflictPath, 'utf8')).toContain(
       '>>>>>>> latest 0.6.0',
     );
+  });
+
+  /** The lines `summary` logs, as the upgrade command prints them. */
+  function summaryLines(summary) {
+    const lines = [];
+    const log = vi
+      .spyOn(logger, 'log')
+      .mockImplementation(line => void lines.push(String(line)));
+    const warn = vi
+      .spyOn(logger, 'warn')
+      .mockImplementation(line => void lines.push(String(line)));
+    try {
+      logRegistryCompositionSummary(summary);
+    } finally {
+      log.mockRestore();
+      warn.mockRestore();
+    }
+    return lines;
+  }
+
+  it('does not send a dry run to review a conflict file it has not written', async () => {
+    const {sourcePath} = seed({base: 'value = 1\n', current: 'value = local\n'});
+    const result = await reconcile({}, {fetchImpl: remote('value = upstream\n')});
+    const conflictFile = `${SOURCE_TARGET}.astryx-conflict`;
+
+    // The file is not there, and the result says where an apply would put it.
+    expect(fs.existsSync(`${sourcePath}.astryx-conflict`)).toBe(false);
+    expect(result.summary.items[0].files[0]).toMatchObject({
+      action: 'conflict',
+      conflictFile,
+    });
+    const lines = summaryLines(result.summary);
+    expect(lines).toContain(
+      `  ${SOURCE_TARGET}: conflict. Re-run with --apply to write ${conflictFile} for review.`,
+    );
+    expect(lines.join('\n')).not.toContain('Review ');
+  });
+
+  it('sends an apply to review the conflict file it wrote', async () => {
+    const {sourcePath} = seed({base: 'value = 1\n', current: 'value = local\n'});
+    const result = await reconcile(
+      {apply: true},
+      {fetchImpl: remote('value = upstream\n')},
+    );
+    const conflictFile = `${SOURCE_TARGET}.astryx-conflict`;
+
+    expect(fs.existsSync(`${sourcePath}.astryx-conflict`)).toBe(true);
+    const lines = summaryLines(result.summary);
+    expect(lines).toContain(
+      `  ${SOURCE_TARGET}: conflict. Review ${conflictFile}.`,
+    );
+    expect(lines.join('\n')).not.toContain('--apply');
   });
 
   it('does not recreate a deleted or moved source', async () => {
