@@ -69,7 +69,7 @@ import {
   type BottomSheetSnapPoint,
 } from './snapOffsets';
 import {SETTLE_THRESHOLD} from '../motion/settleThreshold';
-import {getTouchRuntime} from '../utils/touchRuntime';
+import {getTouchRuntime, useTouchRuntime} from '../utils/touchRuntime';
 import {resolveSettleMs} from '../motion/resolveMotion';
 import {springs} from '../motion/uikit/springs';
 import {useMobileKeyboard} from '../keyboard/useMobileKeyboard';
@@ -970,11 +970,14 @@ export function BottomSheetPanel({
   const isCrossFade =
     isCoarseCrossFade || (isReducedMotion && isDismissedByTouchDrag);
   // Without Web Animations the animator jumps the sheet to its end, so the
-  // stylesheet's exit runs.
+  // stylesheet's exit runs. Before the shared touch runtime has loaded there
+  // is no animator, so the stylesheet's exit runs too.
+  const hasTouchRuntime = useTouchRuntime() != null;
   const playedDragExit =
     dragExit != null &&
     !isCrossFade &&
     !isReducedMotion &&
+    hasTouchRuntime &&
     supportsWebAnimations()
       ? dragExit
       : null;

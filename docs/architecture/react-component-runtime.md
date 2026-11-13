@@ -286,21 +286,25 @@ those contracts.
   (`component:Table` FR15) use its block-end form, the SideNav rail
   uses its inline-edge two-state form and keeps only its labels' and icons'
   fades of its own, and a resizable LayoutPanel's pane uses it on collapse and
-  open, moving the content on its moving edge's side, the resize controller measuring the pane's box before and after its
+  open, moving the content on its moving edge's side, the resize controller
+  measuring the pane's box before and after its
   collapse state commits and playing from the edge its direction names
-  (`component:Resizable` FR8, `component:LayoutPanel` FR7). None of these is public
+  (`component:Resizable` FR8, `component:LayoutPanel` FR7). None of these is
+  public
   (`architecture:component-style-authoring` INV7). The module follows INV3
   and INV5.
 - **INV13 — One shared set of internal touch modules.** Core's touch
-  behavior comes from one always-present set of internal gesture and touch
-  modules: the gesture core, the recognizers, the arena, the animator, and the
+  behavior comes from one shared set of internal gesture and touch modules,
+  present on every page once the shared loader has run: the gesture core, the
+  recognizers, the arena, the animator, and the
   touch press recognizer. The recognizer family (its base, the arena, and the
   host) is the one place these modules use classes, and it uses no
   inheritance checks: a recognizer is told apart by its `kind` field, never by
   `instanceof`. (Implementation gap: recognizers carry no `kind`
   field yet.) Every other module, and every public layer, is built from
   `create…` factories, the velocity tracker included (implementation gap: it is
-  still the `VelocityTracker` class), and no internal factory shares a public factory's name
+  still the `VelocityTracker` class), and no internal factory shares a public
+  factory's name
   (`spec:AST-107` FR6). Core and Lab components use `spec:AST-107`'s public
   layer wherever it covers their job and reach these modules directly only for
   these known public-API gaps: press feedback timing; the Reduce Motion
@@ -349,7 +353,10 @@ those contracts.
   in the deferred runtime. Gap: these modules still import the shared touch
   modules statically, so a page that renders them carries the touch runtime in
   its first load: `hooks/useActionGroupTracking`, `hooks/usePager`, Lightbox
-  (`useZoomCore`, `useZoomStage`), and Resizable (`resizablePane`). A surface
+  (`useZoomCore`, `useZoomStage`), Resizable (`resizablePane`), Slider
+  (`sliderTouchController`), SnapPaging, Chat (`useChatKeyboard`), and the
+  date and time fields' wheels (`motion/reducedMotion`). Each follow-up
+  removes its own names. A surface
   revealed by interaction that a component loads with `import()` under
   `architecture:component-import-boundaries` INV1 imports these modules
   statically too; the bundler still keeps one copy per page. That `import()`
