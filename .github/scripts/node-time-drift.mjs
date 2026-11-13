@@ -85,7 +85,7 @@ function main(args) {
   const late = drifted(measured, recorded, changed);
   for (const {file, recorded: before, measured: now} of late) {
     console.log(
-      `::error file=${file},title=Recorded Node test time is stale::${file} ran ${now} s; ${RECORD} records ${before} s. This change touches the file, so update its time in the record: gh run view <this run> --repo meta/astryx --log > run.log && node scripts/vitest-shard-sequencer.mjs record run.log`,
+      `::error file=${file},title=Recorded Node test time is stale::${file} ran ${now} s; ${RECORD} records ${before} s. This change touches the file, so update the record from this run (record merges: other files keep their times): gh run view <this run> --repo meta/astryx --log > run.log && node scripts/vitest-shard-sequencer.mjs record run.log`,
     );
   }
   if (late.length === 0)

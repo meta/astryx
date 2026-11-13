@@ -41,9 +41,18 @@ export default class ShardWatchdog {
     }
   }
 
+  // The clock starts when the file is queued, before Vitest imports it, so a
+  // file that hangs at module level is listed too.
+  /** @param {{moduleId: string}} testModule */
+  onTestModuleQueued(testModule) {
+    this.running.set(testModule.moduleId, Date.now());
+  }
+
   /** @param {{moduleId: string}} testModule */
   onTestModuleStart(testModule) {
-    this.running.set(testModule.moduleId, Date.now());
+    if (!this.running.has(testModule.moduleId)) {
+      this.running.set(testModule.moduleId, Date.now());
+    }
   }
 
   /** @param {{moduleId: string}} testModule */

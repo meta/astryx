@@ -25,7 +25,9 @@ describe('the Node legs inside their job limit', () => {
       `VITEST_SHARD_WATCHDOG_SECONDS=$(( ${limitMinutes - 1} * 60 - \${started:-180} ))`,
     );
     expect(step.run).toContain(
-      'WATCHDOG=(--reporter=default --reporter=./scripts/vitest-shard-watchdog.mjs)',
+      // Explicit reporters turn off Vitest's automatic github-actions
+      // reporter, so the list names it to keep each failure's annotation.
+      'WATCHDOG=(--reporter=default --reporter=github-actions --reporter=./scripts/vitest-shard-watchdog.mjs)',
     );
     // Both the scoped and the full run pass the watchdog.
     expect(

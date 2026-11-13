@@ -273,9 +273,10 @@ describe.each(Object.entries(FOLDERS))('in %s', (_folder, setUp) => {
       runs.set(cli, {bin: results[2 * index], host: results[2 * index + 1]});
     });
     // Each folder runs every example twice (bin and host entry), `limit` at a
-    // time: 4 on CI's 4-core runners. The whole file took 377 s on a loaded
-    // CI leg, so 10 minutes leaves a margin and still ends a run that hangs
-    // here, by this hook's name, before the leg's 15-minute job limit.
+    // time: 4 on CI's 4-core runners. The whole file, three folders, took
+    // 377 s on a loaded CI leg. 10 minutes per folder leaves a margin over
+    // that, and a hung hook that starts early in its leg fails by this hook's
+    // name. Later in a leg, the shard watchdog names the file instead.
   }, 10 * 60_000);
 
   it('runs every example', () => {

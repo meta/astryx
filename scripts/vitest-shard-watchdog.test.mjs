@@ -54,6 +54,17 @@ describe('the Node shard watchdog', () => {
     );
   }, 60_000);
 
+  it('names a file that hangs while it loads, before any test starts', () => {
+    const result = runFixtures(['hang-import.fixture.mjs'], {
+      VITEST_SHARD_WATCHDOG_SECONDS: '4',
+    });
+    const out = result.stdout + result.stderr;
+    expect(result.status, out).toBe(1);
+    expect(out).toContain(
+      '::error title=Node shard stuck::shard stuck in scripts/fixtures/shard-watchdog/hang-import.fixture.mjs',
+    );
+  }, 60_000);
+
   it("records each finished file's seconds, and stays quiet when nothing is stuck", () => {
     const times = path.join(scratch, 'times.json');
     const result = runFixtures(['quick.fixture.mjs'], {
