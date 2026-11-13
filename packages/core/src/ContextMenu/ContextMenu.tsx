@@ -3,8 +3,9 @@
 
 /**
  * @file ContextMenu.tsx
- * @input Uses React, StyleX, useLayer, shared layer dismissal, BottomSheet,
- *   useListFocus, and the shared menu-presentation resolver
+ * @input Uses React, StyleX, useLayer, shared layer dismissal, the lazily
+ *   loaded menu sheet (DropdownMenu/lazyMenuBottomSheet), useListFocus, and the
+ *   shared menu-presentation resolver
  * @output Exports ContextMenu with cursor-popover and touch-sheet presentations
  * @position Core implementation; consumed by index.ts
  *
@@ -44,11 +45,9 @@ import React, {
   useCallback,
   useEffect,
   useId,
-  lazy,
   useMemo,
   useRef,
   useState,
-  Suspense,
 } from 'react';
 import type {ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
@@ -60,7 +59,11 @@ import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {currentGesture} from '../Layer/gestureCounter';
 import {noteOutsideDismissal} from '../Layer/outsidePress';
-import {MenuBottomSheetActionList} from '../DropdownMenu/MenuBottomSheetActionList';
+import {
+  MenuBottomSheet,
+  MenuBottomSheetActionList,
+  preloadMenuBottomSheetActionList,
+} from '../DropdownMenu/lazyMenuBottomSheet';
 import {menuBottomSheetStyles} from '../DropdownMenu/menuBottomSheet.stylex';
 import {renderDropdownItems} from '../DropdownMenu/renderDropdownItems';
 import {
@@ -115,11 +118,6 @@ import english from '../i18n/generated-english/ContextMenu/ContextMenu.generated
 
 registerEnglishFallback(english);
 
-const LazyMenuBottomSheet = lazy(async () =>
-  import('../DropdownMenu/MenuBottomSheet').then(module => ({
-    default: module.MenuBottomSheet,
-  })),
-);
 const styles = stylex.create({
   // Trigger wrapper: suppress the iOS long-press callout/selection so the
   // long-press opens our context menu instead of the native text/callout UI.
@@ -391,6 +389,16 @@ export function ContextMenu({
   >;
   const items = itemsProp ?? [];
   const menuContent = menuContentProp;
+
+  // Syncs the touch sheet's action list with the presentation: a data-driven
+  // sheet menu loads its rows at rest, so its first open shows them at once. A
+  // pointer menu never loads them.
+  const usesSheetActionList = usesBottomSheet && itemsProp !== undefined;
+  useEffect(() => {
+    if (usesSheetActionList) {
+      void preloadMenuBottomSheetActionList();
+    }
+  }, [usesSheetActionList]);
 
   const menuId = useId();
   // Cursor point in the trigger's local coordinate space (offset from the
@@ -923,14 +931,12 @@ export function ContextMenu({
       </TriggerElement>
 
       {usesBottomSheet ? (
-        <Suspense fallback={null}>
-          <LazyMenuBottomSheet
-            isOpen={isOpen}
-            onOpenChange={updateOpenState}
-            label={sheetLabel}>
-            {renderedBottomSheetContent}
-          </LazyMenuBottomSheet>
-        </Suspense>
+        <MenuBottomSheet
+          isOpen={isOpen}
+          onOpenChange={updateOpenState}
+          label={sheetLabel}>
+          {renderedBottomSheetContent}
+        </MenuBottomSheet>
       ) : (
         layer.render(<LayerDepthProvider>{renderedMenu}</LayerDepthProvider>, {
           placement: 'below',
