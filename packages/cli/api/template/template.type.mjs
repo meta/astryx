@@ -49,7 +49,7 @@
  * A named place in a page template where blocks go.
  * @typedef {object} TemplateSlotEntry
  * @property {string} name - The slot's name, unique in the page.
- * @property {string} kind - What kind of place it is: a region (`navigation`, `header`, `toolbar`, `main`, `panel`, `footer`) or a section of the body named by what it holds (`metrics`, `chart`, `table`, `list`, `form`, `content`, `feedback`, `chat`). A template from a newer release can name a kind this list lacks.
+ * @property {string} kind - What kind of place it is, a TemplateSlotKind from `@astryxdesign/cli/authoring`: a region of the layout, or a part of the body named by what it holds. A template from a newer release can name a kind this release does not know.
  * @property {string} [description] - Where the slot is in the page and what goes there.
  */
 

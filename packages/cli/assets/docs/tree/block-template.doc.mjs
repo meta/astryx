@@ -94,15 +94,15 @@ export default {
       content: [
         {
           type: 'prose',
-          text: 'Declare `fits` so `{@command build}` can put the block into the right slot of the page it starts from. Page templates name their slots with the same kinds. {@link schema:template-doc} describes each kind and the release that first reads `fits`.',
+          text: 'Declare `fits` so `{@command build}` can put the block into the right slot of the page it starts from. Page templates name their slots with the same kinds. {@link schema:template-doc} gives the release that first reads `fits`; the TemplateSlotKind type says what each kind holds.',
         },
         {
           type: 'list',
           style: 'unordered',
           items: [
             'Decide from what the block renders and what a builder uses it for, not from the component name alone.',
-            'Give a whole part of a page body its section kind, and a region of the page its region kind. Use `main` only for a block that fills a whole page body.',
-            'A block that opens above the page from a trigger fits `overlay`, even when the block also shows the trigger. A small piece that goes inside another piece fits `inline`; a single control goes with the section it serves.',
+            'Give a whole part of a page body its section kind, and a region of the page its region kind. Use main only for a block that fills a whole page body.',
+            'A block that opens above the page from a trigger fits overlay, even when the block also shows the trigger. A small piece that goes inside another piece fits inline; a single control goes with the section it serves.',
             "Use an empty list (`fits: []`) for a reference that lays out a component's options side by side, and for a block that frames a whole app or page, which a page template starts instead.",
           ],
         },

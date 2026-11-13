@@ -147,30 +147,48 @@ export interface TemplateSlot {
 }
 
 /**
- * The kinds of place a block goes, shared by page slots and block fits.
- * Regions are places in a page's layout; sections are parts of a page body,
- * named by what they hold; `overlay` and `inline` are contexts, which no page
- * slot holds. `astryx docs authoring/template-doc` describes each one.
+ * The kinds of place a block goes, shared by page slots and block fits, so a
+ * block from any package fits a page from any other. Regions are places in a
+ * page's layout; sections are parts of a page body, named by what they hold;
+ * contexts are not places in a page, and no page slot holds one. A CLI that
+ * meets a kind it does not know loads the template and skips the kind, and
+ * `astryx doctor integration validate` names it.
  */
 export type TemplateSlotKind =
   // Regions
+  /** Moves people between pages or views. */
   | 'navigation'
+  /** The top of a page or section. */
   | 'header'
+  /** Controls that act on the content next to them. */
   | 'toolbar'
+  /** The page body. Every block that goes in a page fits it; a page names its parts with section kinds where it can. */
   | 'main'
+  /** A side region next to the main content. */
   | 'panel'
+  /** The bottom of a page or section. */
   | 'footer'
   // Sections
+  /** Headline numbers. */
   | 'metrics'
+  /** Plotted data. */
   | 'chart'
+  /** Records in rows and columns. */
   | 'table'
+  /** A collection of items. */
   | 'list'
+  /** Data entry and its submit actions. */
   | 'form'
+  /** Things to read or look at. */
   | 'content'
+  /** Messages about state. */
   | 'feedback'
+  /** A conversation. */
   | 'chat'
   // Contexts
+  /** Opens above the page from a trigger. */
   | 'overlay'
+  /** Goes inside another piece. */
   | 'inline';
 
 /**

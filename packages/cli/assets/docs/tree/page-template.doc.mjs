@@ -54,16 +54,16 @@ export default {
       content: [
         {
           type: 'prose',
-          text: 'Declare `slots` so `{@command build}` can put the blocks it suggests into the right part of your page. Block templates name the kinds of place they fit with the same vocabulary; the fields, the kinds and the CLI release that reads them are in {@link schema:template-doc}.',
+          text: 'Declare `slots` so `{@command build}` can put the blocks it suggests into the right part of your page. Block templates name the kinds of place they fit with the same vocabulary; the fields and the CLI release that reads them are in {@link schema:template-doc}, and the kinds in the TemplateSlotKind type.',
         },
         {
           type: 'list',
           style: 'unordered',
           items: [
-            'List each region a builder fills or replaces: the navigation, the page header, a toolbar, each part of the body, a side panel, and a footer.',
-            'Give each slot the one kind that says what goes there. Name a part of the body by what it holds, and keep `main` for a body that takes any part.',
+            'List each region of the layout a builder fills or replaces, and each part of the body.',
+            'Give each slot the one kind that says what goes there. Name a part of the body by what it holds, and keep main for a body that takes any part.',
             'Name each slot with one or two lowercase words joined by a hyphen, unique in the page, and describe in one sentence where it is.',
-            'A layer the page opens from a trigger is not a slot: blocks for it fit `overlay`, which no page holds.',
+            'A layer the page opens from a trigger is not a slot: blocks for it fit overlay, which no page holds.',
           ],
         },
       ],

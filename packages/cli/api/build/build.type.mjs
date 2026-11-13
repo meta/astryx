@@ -56,7 +56,7 @@
  *
  * @typedef {object} BuildSlot
  * @property {string} name The slot's name, unique in the template.
- * @property {string} kind What kind of place it is: a region (`navigation`, `header`, `toolbar`, `main`, `panel`, `footer`) or a section of the body named by what it holds (`metrics`, `chart`, `table`, `list`, `form`, `content`, `feedback`, `chat`). `main` is the page body, which takes any block that goes in a page.
+ * @property {string} kind What kind of place it is, a TemplateSlotKind from `@astryxdesign/cli/authoring`: a region of the layout, or a part of the body named by what it holds.
  * @property {string} [description] Where the slot is in the template and what goes there.
  */
 
@@ -71,7 +71,7 @@
  * Where a listed block goes in the start.
  *
  * @typedef {object} BuildBlockPlacement
- * @property {string} [slot] The name of the start's slot the block goes in (`start.slots`): the slot whose kind is the block's best fit, else the page body (`main`). Absent when no slot fits, when the block declares no fits or an empty list, or when it fits only `overlay` (opens from a trigger) or `inline` (goes inside another piece).
+ * @property {string} [slot] The name of the start's slot the block goes in (`start.slots`): the slot whose kind is the block's best fit, else the page body. Absent when no slot fits, when the block declares no fits or an empty list, or when it fits only places that open from a trigger or sit inside another piece.
  */
 
 /**

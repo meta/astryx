@@ -141,13 +141,13 @@ export const doc = {
       name: 'slots',
       type: 'TemplateSlot[]',
       description:
-        "Page templates only: the named places in the page where blocks go, in reading order. Each slot is `{name, kind, description}`: `name` is lowercase words joined by hyphens and unique in the page, `kind` is one of the slot kinds below, and `description` says in one sentence where the slot is and what goes there. A shell is a layout: its slots are its navigation and its body (`main`). `astryx build` lists the start's slots and names the slot each block it suggests goes in. Integration templates need @astryxdesign/cli 0.7.17 or later: earlier CLIs reject the field and drop that template.",
+        "Page templates only: the named places in the page where blocks go, in reading order, each `{name, kind, description}`. `name` is lowercase words joined by hyphens and unique in the page; `kind` is a TemplateSlotKind; `description` says in one sentence where the slot is and what goes there. `astryx build` names the slot of the start where each block it suggests goes. Integration templates need @astryxdesign/cli 0.7.17 or later: earlier CLIs reject the field and drop that template.",
     },
     {
       name: 'fits',
       type: 'TemplateSlotKind[]',
       description:
-        "Block templates only: the kinds of place the block goes in, best first: page slot kinds, or a context, `overlay` (opens from a trigger) or `inline` (goes inside another piece). An empty list says the block is a reference that shows a component's options and is not put into a page as it is. Decide it from what the block renders. `astryx build` puts each block it suggests into the start's slot of its best fit, else into the page body (`main`); an overlay or inline block goes in no slot. Integration templates need @astryxdesign/cli 0.7.17 or later: earlier CLIs reject the field and drop that template.",
+        "Block templates only: the kinds of place the block goes in, best first, decided from what the block renders. An empty list marks a reference block, one that shows a component's options and is not put into a page as it is. Integration templates need @astryxdesign/cli 0.7.17 or later: earlier CLIs reject the field and drop that template.",
     },
   ],
   examples: [
@@ -198,32 +198,6 @@ export default {
     {
       type: 'prose',
       text: "`category` uses the shared TemplateCategory taxonomy: 'Group - Variant' strings (e.g. 'Table - Bulk Actions'). Not every value maps to an existing template; unused values are reserved so authors get autocomplete for the full taxonomy.",
-    },
-    {
-      type: 'prose',
-      text: "Slot kinds (TemplateSlotKind) are one vocabulary for a page's `slots` and a block's `fits`, so a block from any package fits a page from any other. A region is a place in a page's layout; a section is a part of the body named by what it holds; a context is not a place in the page. A block fits a slot when its `fits` lists the slot's kind; a `main` slot takes every block that goes in a page. A CLI that meets a kind it does not know still loads the template and skips the kind, and `astryx doctor integration validate` names it.",
-    },
-    {
-      type: 'table',
-      headers: ['Kind', 'Group', 'What goes there'],
-      rows: [
-        ['`navigation`', 'region', 'Moves people between pages or views.'],
-        ['`header`', 'region', 'The top of a page or section.'],
-        ['`toolbar`', 'region', 'Controls that act on the content next to them.'],
-        ['`main`', 'region', 'The page body. Every block that goes in a page fits it; a page names its parts with section kinds where it can.'],
-        ['`panel`', 'region', 'A side region next to the main content.'],
-        ['`footer`', 'region', 'The bottom of a page or section.'],
-        ['`metrics`', 'section', 'Headline numbers.'],
-        ['`chart`', 'section', 'Plotted data.'],
-        ['`table`', 'section', 'Records in rows and columns.'],
-        ['`list`', 'section', 'A collection of items.'],
-        ['`form`', 'section', 'Data entry and its submit actions.'],
-        ['`content`', 'section', 'Things to read or look at.'],
-        ['`feedback`', 'section', 'Messages about state.'],
-        ['`chat`', 'section', 'A conversation.'],
-        ['`overlay`', 'context', 'Opens above the page from a trigger.'],
-        ['`inline`', 'context', 'Goes inside another piece.'],
-      ],
     },
   ],
 };

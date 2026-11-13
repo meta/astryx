@@ -34,7 +34,7 @@
  * @property {string} [displayName] - Friendly display name — present for template and theme results.
  * @property {'page' | 'block'} [kind] - Template kind (`page` | `block`) — present for template results.
  * @property {{name: string, kind: string, description?: string}[]} [slots] - The named places in a page template where blocks go, in reading order — present for a page result whose doc declares them.
- * @property {string[]} [fits] - The kinds of place a block template goes in, best first: page slot kinds, or `overlay` (opens from a trigger) or `inline` (goes inside another piece) — present for a block result whose doc declares them; empty for a reference block, which shows a component's options and is not placed in a page as it is.
+ * @property {string[]} [fits] - The kinds of place a block template goes in, best first (TemplateSlotKind values) — present for a block result whose doc declares them; empty for a reference block, which shows a component's options and is not placed in a page as it is.
  * @property {import('@astryxdesign/cli/authoring').ComponentDeprecation} [deprecated] - The replacement and modernization route — present for a deprecated component, from its doc's `deprecated`.
  */
 

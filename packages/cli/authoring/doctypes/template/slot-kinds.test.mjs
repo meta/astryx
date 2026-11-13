@@ -3,7 +3,6 @@
 import fs from 'node:fs';
 import {describe, expect, it} from 'vitest';
 import {SLOT_KINDS, isPageKind, isSlotKind, slotTakes} from './slot-kinds.mjs';
-import {doc as schemaDoc} from './template.doc.mjs';
 
 describe('the slot kinds', () => {
   it('are the members of TemplateSlotKind, in its order', () => {
@@ -16,17 +15,14 @@ describe('the slot kinds', () => {
     expect(SLOT_KINDS.map(k => k.kind)).toEqual(members);
   });
 
-  it('match the table the template doc schema prints', () => {
-    const table = /** @type {any} */ (schemaDoc.notes).find(
-      (/** @type {any} */ note) => note.type === 'table',
-    );
-    expect(
-      table.rows.map((/** @type {string[]} */ row) => [
-        row[0].replaceAll('`', ''),
-        row[1],
-        row[2],
-      ]),
-    ).toEqual(SLOT_KINDS.map(k => [k.kind, k.group, k.summary]));
+  it('carry the meanings the TemplateSlotKind type gives its members', () => {
+    const typeText = fs.readFileSync(new URL('./type.ts', import.meta.url), 'utf-8');
+    const union = typeText.slice(typeText.indexOf('export type TemplateSlotKind ='));
+    const documented = [...union.matchAll(/\/\*\* (.+?) \*\/\s*\| '([a-z-]+)'/g)].map(m => [
+      m[2],
+      m[1],
+    ]);
+    expect(documented).toEqual(SLOT_KINDS.map(k => [k.kind, k.summary]));
   });
 
   it('put regions and sections in a page and contexts nowhere', () => {
