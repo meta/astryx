@@ -525,18 +525,9 @@ export function holdInput(
 /** The keys a dismissing layer that keeps focus lets through. */
 const KEPT_INSIDE_KEYS: ReadonlySet<string> = new Set(['Tab']);
 
-/**
- * A dismissal hold that keeps the page live and keeps focus where it is. The
- * layer lets every pointer through, so a tap reaches what is beneath it.
- * While focus stays inside, the content stays exposed, and the shared input
- * stream stops every click and every key but Tab that targets the layer.
- * When focus leaves (moved, or dropped because the focused element was
- * removed, disabled, hidden or made inert), or when it was not inside, the
- * layer becomes `inert` and `aria-hidden` until the hold ends.
- */
+/** The `'kept-inside'` dismissal hold (see `InputHoldOptions.focus`). */
 function holdKeptInside(layer: Element, until: InputHoldEnd): () => void {
   const doc = layer.ownerDocument;
-  const view = doc.defaultView;
   const style = isHTMLElement(layer) ? layer.style : null;
   const previousPointerEvents = style?.pointerEvents ?? '';
   if (style != null) {
@@ -566,36 +557,38 @@ function holdKeptInside(layer: Element, until: InputHoldEnd): () => void {
     layer.setAttribute('aria-hidden', 'true');
   };
 
-  if (!hasFocusInside() || view == null) {
+  if (!hasFocusInside()) {
     makeInert();
   } else {
-    const isInLayer = (event: Event) =>
-      isNode(event.target) && containsAlongFlatTree(layer, event.target);
+    // Stopped at the layer in the capture phase, so document listeners, such
+    // as the interaction-modality tracker, still hear the key, and nothing
+    // inside the layer does.
     const stopActivation = (event: Event) => {
-      if (isInLayer(event)) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-      }
+      event.preventDefault();
+      event.stopImmediatePropagation();
     };
-    const stopKey = (event: KeyboardEvent) => {
-      if (!KEPT_INSIDE_KEYS.has(event.key)) {
+    const stopKey = (event: Event) => {
+      if (!KEPT_INSIDE_KEYS.has((event as KeyboardEvent).key)) {
         stopActivation(event);
       }
     };
-    stops.push(
-      subscribeInput(view, 'click', stopActivation, {
-        cancels: true,
-        first: true,
-      }),
-      subscribeInput(view, 'keydown', stopKey, {cancels: true, first: true}),
-      subscribeInput(view, 'keyup', stopKey, {cancels: true, first: true}),
-    );
+    const captures: [string, (event: Event) => void][] = [
+      ['click', stopActivation],
+      ['keydown', stopKey],
+      ['keyup', stopKey],
+    ];
+    for (const [type, listener] of captures) {
+      layer.addEventListener(type, listener, {capture: true});
+      stops.push(() =>
+        layer.removeEventListener(type, listener, {capture: true}),
+      );
+    }
     const makeInertIfFocusLeft = () => {
       if (!hasFocusInside()) {
         makeInert();
       }
     };
-    // Read after the event, when focus has landed. A browser sends no
+    // Read after the event, when focus has landed. Firefox and WebKit send no
     // `focusout` for a removed element, so a subtree change is read too.
     const onFocusOut = () => queueMicrotask(makeInertIfFocusLeft);
     layer.addEventListener('focusout', onFocusOut);

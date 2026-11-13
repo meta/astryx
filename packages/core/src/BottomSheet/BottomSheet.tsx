@@ -873,14 +873,9 @@ function StandaloneBottomSheet({
   const isInert = (isExiting && isReplaced) || stackView.isBlocked;
   const isExitHeld = isExiting && !isReplaced && isCloseSettled;
 
-  // Syncs the exit with the layer runtime's input hold. The page stays live
-  // and the sheet lets every pointer through. A sheet that closes with focus
-  // inside it is neither inert nor hidden while that focus stays, and takes
-  // no click and no key but Tab. When the exit ends, the dialog closes and
-  // focus returns in the same task. When focus leaves the sheet first (into a
-  // sheet opened above it, for example), or was not inside, the sheet is
-  // inert and hidden at once. Until the close settles, no closing sheet is
-  // held, so the first commit of a close never hides focus.
+  // Syncs the exit with the layer runtime's input hold. Until the close
+  // settles, no closing sheet is held, so the first commit of a close never
+  // hides focus.
   useLayoutEffect(() => {
     const dialog = dialogRef.current;
     if (!isExitHeld || dialog == null) {

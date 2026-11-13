@@ -977,6 +977,34 @@ describe("holdInput's dismissal that keeps focus inside (component:BottomSheet F
     release();
   });
 
+  it('lets document listeners hear a key it keeps from the layer, so the interaction modality reads keyboard', () => {
+    const {layer, child} = mountLayer();
+    onTestFinished(() => layer.remove());
+    act(() => child.focus());
+    const release = holdInput(layer, {
+      until: new Promise<never>(() => {}),
+      scope: 'layer',
+      focus: 'kept-inside',
+    });
+    const onDocumentKey = vi.fn();
+    document.addEventListener('keydown', onDocumentKey, {capture: true});
+    onTestFinished(() =>
+      document.removeEventListener('keydown', onDocumentKey, {capture: true}),
+    );
+    const onKey = vi.fn();
+    child.addEventListener('keydown', onKey);
+    child.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'Escape',
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    expect(onDocumentKey).toHaveBeenCalledTimes(1);
+    expect(onKey).not.toHaveBeenCalled();
+    release();
+  });
+
   it('makes the layer itself inert and aria-hidden once focus leaves, and gives both back at the end', async () => {
     const {layer, child} = mountLayer();
     const outside = document.createElement('button');
