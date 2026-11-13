@@ -390,10 +390,10 @@ export function ContextMenu({
   const items = itemsProp ?? [];
   const menuContent = menuContentProp;
 
+  const usesSheetActionList = usesBottomSheet && itemsProp !== undefined;
   // Syncs the touch sheet's action list with the presentation: a data-driven
   // sheet menu loads its rows at rest, so its first open shows them at once. A
   // pointer menu never loads them.
-  const usesSheetActionList = usesBottomSheet && itemsProp !== undefined;
   useEffect(() => {
     if (usesSheetActionList) {
       void preloadMenuBottomSheetActionList();
