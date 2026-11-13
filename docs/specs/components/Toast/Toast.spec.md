@@ -117,12 +117,13 @@ Consumer migration instructions belong in consumer docs and release notes.
   dismissed in the same handler is announced although it never appears, and of
   toasts raised past `maxVisible` in one handler the older, hidden one is
   announced and nothing is announced when it later appears (FR9).
-- **A mixed body can announce fewer words than it shows.** A `body` with no
-  text of its own and a `renderContent` card are announced from their rendered
-  text. A `body` that mixes its own text with a component that renders more
-  words is announced with only the text written in `body`, so the component's
-  words, such as a translated message, are lost. `spec:AST-086` FR7 has the
-  announced words match the shown words (FR9).
+- **A body with text of its own can announce other words than it shows.** A
+  `body` with no text of its own and a `renderContent` card are announced from
+  their rendered text. A `body` with text of its own, written in it or passed
+  to a component as children, is announced with only that text, so words a
+  component renders beside it or in its place, such as a translated message,
+  are lost or differ. `spec:AST-086` FR7 has the announced words match the
+  shown words (FR9).
 - **The action row does not track a held pointer.** A press that slides across
   the row's sibling actions does not act on the action it lifts on;
   `family:action-groups` has the row use the shared press tracking.
