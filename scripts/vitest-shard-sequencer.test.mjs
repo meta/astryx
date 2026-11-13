@@ -3,13 +3,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {describe, expect, it} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {configDefaults} from 'vitest/config';
 import DurationShardSequencer, {
   DURATIONS,
   LEG_PARALLELISM,
   mergeRecord,
   partitionByDuration,
+  readLegOneSeconds,
   recordLegOneSteps,
   readDurations,
   recordDurations,
@@ -22,6 +23,11 @@ const total = leg => leg.reduce((sum, file) => sum + recorded[file], 0);
 const slowest = [...files].sort((a, b) => recorded[b] - recorded[a]);
 
 describe('duration-balanced Node legs', () => {
+  // The Node shard step sets the switch for its own run; these tests set it
+  // themselves, so they read the same in that step as anywhere else.
+  beforeEach(() => vi.stubEnv('VITEST_LEG_ONE_RESERVE', '0'));
+  afterEach(() => vi.unstubAllEnvs());
+
   it('balances a slow changed test with the guards when one run lists both', () => {
     // A scoped run whose one changed test is the slowest recorded file, with
     // a set of slow guards. Split as two runs, leg 1 takes the changed test
@@ -179,6 +185,32 @@ describe('duration-balanced Node legs', () => {
           .sort(),
       ).toEqual(expected[index]);
       expect(leg.filter(item => item.project.name === 'ui')).toHaveLength(3);
+    }
+  });
+
+  it("gives the first leg its own steps' recorded time when the switch is set", async () => {
+    vi.stubEnv('VITEST_LEG_ONE_RESERVE', '1');
+    expect(readLegOneSeconds()).toBeGreaterThan(0);
+    const node = slowest.slice(0, 40).map(file => ({
+      project: {name: 'node'},
+      moduleId: path.join(ROOT, file),
+    }));
+    const count = 5;
+    const expected = partitionByDuration(
+      node.map(item => path.relative(ROOT, item.moduleId)),
+      count,
+      recorded,
+      {legOneSeconds: readLegOneSeconds()},
+    );
+    for (let index = 1; index <= count; index += 1) {
+      const sequencer = new DurationShardSequencer({
+        config: {root: ROOT, shard: {index, count}},
+      });
+      expect(
+        (await sequencer.shard(node))
+          .map(item => path.relative(ROOT, item.moduleId))
+          .sort(),
+      ).toEqual(expected[index - 1]);
     }
   });
 
