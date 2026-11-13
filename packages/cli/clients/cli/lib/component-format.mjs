@@ -276,7 +276,7 @@ function formatComponentIconSlots(slots) {
   const lines = [
     '**Component icon slots** - set in `defineTheme({componentIcons})` to a shared icon name, `null`, a partial `{icon, variant, size}` request, or a function of the slot state.\n',
     '| Slot | State | Fallback | Role | `null` |',
-    '|------|-------|----------|------|--------|',
+    '|---|---|---|---|---|',
   ];
   for (const slot of slots) {
     const state = slot.state?.length
@@ -309,9 +309,7 @@ function formatTargetsTable(docs, themeData) {
   lines.push(
     '| Component class | Preferred data attributes | Props | States |',
   );
-  lines.push(
-    '|-----------------|---------------------------|-------|--------|',
-  );
+  lines.push('|---|---|---|---|');
 
   for (const target of docs.theming.targets) {
     const coreVariants = getTargetVariants(target, docs);
@@ -375,7 +373,7 @@ export function formatFull(docs, options = {}) {
   if (docs.usage?.anatomy?.length) {
     sections.push('## Anatomy\n');
     sections.push('| Element | Required | Description |');
-    sections.push('|---------|----------|-------------|');
+    sections.push('|---|---|---|');
     for (const el of docs.usage.anatomy) {
       const req = el.required ? 'Yes' : 'No';
       sections.push(
@@ -487,7 +485,7 @@ export function formatFull(docs, options = {}) {
         );
         const varLines = [];
         varLines.push('| CSS Variable | Default | Description |');
-        varLines.push('|-------------|---------|-------------|');
+        varLines.push('|---|---|---|');
         for (const v of publicVars) {
           varLines.push(
             `| \`${mdCell(v.name)}\` | \`${mdCell(v.default)}\` | ${mdCell(v.description)} |`,
@@ -603,7 +601,7 @@ export function formatCompact(docs, componentName, importHint) {
     sections.push('Standard CSS properties that also set internal vars:\n');
     const propLines = [];
     propLines.push('| CSS Property | Sets |');
-    propLines.push('|-------------|------|');
+    propLines.push('|---|---|');
     for (const d of docs.theming.derived) {
       const target =
         d.expand === 'container'
