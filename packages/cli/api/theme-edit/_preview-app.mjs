@@ -4422,7 +4422,8 @@ async function addPreview(description, options, box) {
 
 /**
  * Make a new starter app (Next.js app router, Core and the neutral theme,
- * with the Astryx packages pinned to this CLI's release) in `dir`, with the
+ * with the Astryx packages pinned to this CLI's release, or with `theme` to
+ * the versions the project has) in `dir`, with the
  * theme preview route and its default pages inside. With `theme`, the theme
  * folder is copied into the app and the pages wear it. No install runs.
  * Every check runs before the first write, so a refusal changes nothing.
