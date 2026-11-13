@@ -20,6 +20,7 @@
  * - /packages/cli/assets/templates/blocks/components/AlertDialog/ (showcase blocks)
  */
 
+import type {ReactNode} from 'react';
 import React, {useId, useCallback, useRef} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Dialog} from '../Dialog/Dialog';
@@ -94,8 +95,11 @@ export interface AlertDialogProps extends BaseProps<HTMLDialogElement> {
 
   /**
    * Consequence description. Linked to the dialog via `aria-describedby`.
+   * Takes inline content, so a confirmation can emphasize or link what it is
+   * about to change; it renders inside body text, so block content such as
+   * lists or paragraphs does not belong here.
    */
-  description: string;
+  description: ReactNode;
 
   /**
    * Label for the cancel button. Rendered as a ghost Button.
