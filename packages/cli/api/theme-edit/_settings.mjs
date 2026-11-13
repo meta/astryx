@@ -3144,9 +3144,18 @@ export function compileTheme(ctx, data, base) {
         // What the variant's rule already holds (a setting for the other
         // mode, or one for both) keeps its other half; else the value the
         // variant shows unset.
-        const prev = vb[camel(css)];
-        const from = typeof prev === 'string' ? prev : x;
+        // The background shorthand is the same property: its color counts,
+        // and it is taken out so the color written here is in effect.
+        const family = [
+          css,
+          ...(css === 'background-color' ? ['background'] : []),
+        ];
+        const prev = family
+          .map(k => vb[camel(k)])
+          .find(y => typeof y === 'string' && !/gradient\(|url\(/i.test(y));
+        const from = prev ?? x;
         if (from == null) continue;
+        for (const k of family) delete vb[camel(k)];
         const half = halfOf(from, other);
         vb[camel(css)] =
           mode === 'light'

@@ -163,6 +163,24 @@ describe('one-mode backgrounds on parts whose variants have their own', () => {
         );
     }, 240_000);
 
+  it("keeps a variant's own background as the other half of a later one-mode background", async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('m5v', {cwd, like: 'neutral'});
+    await themeEditSet('m5v', 'background', '#ff0000', {
+      cwd,
+      on: 'button',
+      when: 'variant:primary',
+    });
+    await themeEditSet('m5v', 'background', '#eeeeee', {
+      cwd,
+      on: 'button',
+      mode: 'light',
+    });
+    const rule = ruleOf('m5v', '.astryx-button[data-variant="primary"]');
+    expect(rule).toMatch(/background-color: light-dark\(#eeeeee, #ff0000\)/);
+    expect(rule).not.toMatch(/background:/);
+  }, 240_000);
+
   it('does the same in a light-only theme, with no --mode', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('m5o', {cwd, like: 'neutral'});
