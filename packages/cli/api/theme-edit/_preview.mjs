@@ -1608,6 +1608,9 @@ export function appCopyBlocker(cwd, slug) {
   } catch {
     return rel;
   }
+  // A folder of system files only (or empty), as `git rm -r` or a branch
+  // switch leaves it, holds nothing of anyone's.
+  if (names.every(n => FOLDER_JUNK.has(n))) return null;
   /** @type {boolean} */
   let marked;
   try {

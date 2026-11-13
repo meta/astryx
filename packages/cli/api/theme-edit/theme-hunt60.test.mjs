@@ -3,7 +3,8 @@
 /**
  * @file #11468 round 4: a show that is refused leaves the app copy as it
  * was; system files in the copy do not stop it; a file of yours there stops
- * it, and `wiring` then gives the steps by hand, naming that file.
+ * it, and `wiring` then gives the steps by hand, naming that file; a folder
+ * left with only system files (or empty) is written again.
  *
  * @position api/theme-edit — tests
  */
@@ -60,6 +61,27 @@ describe('round 4 (2): what is in the copy folder', () => {
     await themeEditSet('j', 'corners', 'pill', {cwd});
     expect(read('src/themes/j/j.css')).not.toBe(before);
     expect(fs.existsSync(path.join(cwd, 'src/themes/j/.DS_Store'))).toBe(true);
+  }, 240_000);
+
+  it('a folder left with only system files, or empty, is written again', async () => {
+    for (const [slug, leftover] of [
+      ['e', ['.DS_Store']],
+      ['f', []],
+    ]) {
+      await themeEditNew(slug, {cwd});
+      const dir = path.join(cwd, 'src/themes', slug);
+      // What `git rm -r` or a branch switch leaves behind.
+      fs.rmSync(dir, {recursive: true, force: true});
+      fs.mkdirSync(dir, {recursive: true});
+      for (const name of leftover) fs.writeFileSync(path.join(dir, name), '');
+      await themeEditSet(slug, 'corners', 'pill', {cwd});
+      expect(fs.existsSync(path.join(dir, `${slug}.css`))).toBe(true);
+      expect(read(`src/themes/${slug}/${slug}.css`)).toContain('9999px');
+      const shown = await themeEditShow(slug, {cwd});
+      const wiring = /** @type {any} */ (shown.data).wiring.join('\n');
+      expect(wiring).toMatch(new RegExp(` theme add ${slug}:`));
+      expect(wiring).not.toContain("is not the editor's");
+    }
   }, 240_000);
 
   it('a file of yours stops it, and wiring gives the steps by hand naming it', async () => {
