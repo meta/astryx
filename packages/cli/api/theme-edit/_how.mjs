@@ -41,7 +41,7 @@ import {MODAL} from './_compiler.mjs';
 import {PALETTE_DIALS, mappingRows, paletteFiles} from './_palette.mjs';
 import {requireProject, context} from './_context.mjs';
 import {checked, exampleStep, howTheme, render} from './_how-commands.mjs';
-import {draftAnswer} from './_how-question.mjs';
+import {draftAnswer, valueAsked} from './_how-question.mjs';
 import {
   getCliInvocation,
   quoteCommandArgument,
@@ -220,7 +220,8 @@ async function answer(subject, options, cwd) {
       // A theme name near the one typed: the same question for it, never
       // only `show` (the question is kept).
       const err = /** @type {any} */ (e);
-      if (err?.code === ERROR_CODES.ERR_UNKNOWN_THEME && err.suggestions)
+      // (A name typed in another case or as a path too.)
+      if (err?.suggestions)
         for (const s of err.suggestions) {
           const near = / show ([a-z][a-z0-9-]*)$/.exec(
             String(s.name ?? ''),
@@ -1109,7 +1110,8 @@ function toolAnswer(t, env, targets) {
       },
     ];
   if (
-    asks ||
+    // A question about a part's value now is answered with that value.
+    (asks && !valueAsked(q)) ||
     /^which parts (are|does|do)\b/.test(q) ||
     (/^why (is|are|does|do)\b/.test(q) && !/\bnot\b|n'?t\b/.test(q))
   ) {

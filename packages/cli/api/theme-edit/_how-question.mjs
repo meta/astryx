@@ -663,6 +663,8 @@ function sharedAsk(q, partWords) {
         // "everything rounder except buttons and cards": both are excepted,
         // from one ask.
         if (/\bexcept\b/.test(seg.slice(0, m.index))) return seg;
+        // "the card and dialog corners match": one ask about both.
+        if (/\b(match|equally|alike|the same)\b/.test(seg)) return seg;
         const left = seg.slice(0, m.index);
         const right = seg.slice(m.index + m[0].length);
         for (const [re] of partWords) {
@@ -1002,6 +1004,16 @@ function partLexicon(ctx) {
   const subParts = [];
   for (const key of keys) {
     if (key.includes('-')) continue;
+    // "dialog close icon / button", "drawer header title": those parts.
+    for (const [phrase, part] of [
+      ['close (?:icon|button|x)', `${key}-header-close-icon`],
+      ['header title', `${key}-header-title-block`],
+    ])
+      if (keys.has(part))
+        subParts.push([
+          new RegExp(`\\b${key}s?(?:'s)?\\s+${phrase}s?\\b`),
+          {on: part},
+        ]);
     for (const sub of ['header', 'footer', 'title']) {
       const real =
         sub === 'title' && keys.has(`${key}-header-title-block`)
@@ -1929,7 +1941,7 @@ export function draftAnswer(ctx, env, question) {
       // A place ("not in the header") is the header part too.
       const before = String(all).slice(Math.max(0, at - 16), at);
       const owned =
-        /\b(table|column|accordion|card|dialog|modal|page|section|app|site|product|top ?nav|block|drawer|popover|panel)\s+$/i.test(
+        /\b(table|column|accordion|card|dialog|modal|page|section|app|site|product|top ?nav|block|drawer|popover|panel|header)\s+$/i.test(
           before,
         ) || /\b(in|on|inside|into|across|of)\s+(the\s+|my\s+)?$/i.test(before);
       return text && !surface && !owned
@@ -2186,7 +2198,7 @@ export function draftAnswer(ctx, env, question) {
   // "don't touch the buttons", "leave the corners": an exclusion. It writes
   // nothing, and it gives nothing to the clause after it.
   const EXCLUDE =
-    /^\s*(?:don'?t (?:touch|change)|do not (?:touch|change)|leave(?! (?:the )?(?:dark|light) mode\b)|keep (?:the )?[\w -]+ (?:alone|as is|as it is|unchanged|untouched|the same))\b/i;
+    /^\s*(?:(?:please )?(?:don'?t|do not|never) (?:touch|change|make)|[\w -]+ (?:should|must|shall)(?:n'?t| not) (?:be|get|look|become)\b|leave(?! (?:the )?(?:dark|light) mode\b)|keep (?:the )?[\w -]+ (?:alone|as is|as it is|unchanged|untouched|the same))\b/i;
   const blocked = (/** @type {string} */ x) =>
     EXCLUDE.test(x) ||
     (!/^\s*(?:please )?(?:can|could) (?:the|my|our|all) [\w -]+ be\b|^\s*(?:can|could) i (?:get|have)\b/i.test(
@@ -2262,7 +2274,8 @@ export function draftAnswer(ctx, env, question) {
       'more saturated',
     )
     .replace(
-      /(?<![-\w])(?:more )?(?:muted|pastel|duller|subdued|desaturated)(?![-\w])/gi,
+      // "muted ones", "the muted card": the muted variant, not a color ask.
+      /(?<![-\w])(?:more )?(?:muted|pastel|duller|subdued|desaturated)(?![-\w])(?! (?:ones?|cards?|buttons?|badges?|variant)\b)/gi,
       'less saturated',
     )
     // "less light", "less heavy", "less tight", "less thin": one step back on
@@ -2619,6 +2632,16 @@ export function draftAnswer(ctx, env, question) {
     // "flat cards, not flat buttons": the second part stays as it is.
     .replace(/^(.*\b(\w{3,})\b.*?),\s*(?:but )?not \2 [a-z ]+$/, '$1')
     .replace(/\b(everything|everywhere|all) but\b/g, '$1 except')
+    // "inputs with errors", "inputs that have an error": the error status.
+    .replace(
+      /\b([a-z]+s?) (?:with|that have|that has|showing) (?:an )?(?:errors?|error states?)\b/g,
+      '$1 in error state',
+    )
+    // "white text on primary": a variant of the buttons.
+    .replace(
+      /\b(on|for) (?:the )?(primary|secondary|ghost|destructive)\b(?! (?:ones?|buttons?|badges?|chips?|links?|tags?)\b)/g,
+      '$1 $2 buttons',
+    )
     // "dialog header and footer": both are the dialog's.
     .replace(
       /\b([a-z]+) (header|footer|title)s? and (header|footer|title)s?\b/g,
@@ -2626,7 +2649,7 @@ export function draftAnswer(ctx, env, question) {
     )
     // "all buttons except primary ones rounder": the ask before the except.
     .replace(
-      /^(.*?)\s+except\s+((?:the\s+)?(?:primary|secondary|ghost|destructive|danger)(?:\s+ones?|\s+buttons?)?)\s+(\S.*)$/i,
+      /^(.*?)\s+except\s+((?:the\s+)?(?:primary|secondary|ghost|destructive|danger)(?:\s+ones?|\s+buttons?)?)\s+(?!and\b|or\b|buttons?\b|ones?\b)(\S.*)$/i,
       '$1 $3 except $2',
     )
     .replace(
@@ -2644,6 +2667,10 @@ export function draftAnswer(ctx, env, question) {
   const media = MEDIA_RE.test(q);
   if (media) q = q.replace(MEDIA_RE, ' ').replace(/\s+/g, ' ').trim();
   const clauses = clausesOf(q, lex.parts);
+  /** Parts a symmetric "match" ask already answered for. @type {Set<string>} */
+  const symDone = new Set();
+  /** Places the question names that the editor cannot keep apart. @type {string[]} */
+  const placeNotes = [];
   // "checkboxes green": the color a checked box fills with.
   for (const c of clauses)
     if (
@@ -2797,6 +2824,103 @@ export function draftAnswer(ctx, env, question) {
     )
       c.aspects = ['fontsize'];
   }
+  // An elided clause ("… and darker when pressed", "… and black on
+  // secondary buttons", "all caps and smaller", "and half on ghost ones")
+  // takes what it leaves out from the clause before: its part, and the
+  // kind of change when it names none.
+  for (let i = 1; i < clauses.length; i++) {
+    const c = clauses[i];
+    const prev = clauses[i - 1];
+    if (c.except || prev.except || !prev.parts.length) continue;
+    // Only a clause joined by "and" to the one before, with words of its
+    // own beside a value ("4px" alone is the value of the clause before).
+    if (
+      !new RegExp(
+        `\\band\\s+${c.text.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
+      ).test(q) ||
+      /^\s*(?:at least\s+|about\s+)?\d*\.?\d+(?:px|rem|em|%)?\s*$/.test(c.text)
+    )
+      continue;
+    const ownParts = c.parts.length > 0;
+    const hasAsk =
+      c.dir ||
+      c.colors.length ||
+      c.lengths.length ||
+      exactFactor(c.text) != null;
+    if (!hasAsk) continue;
+    if (!c.parts.length) {
+      const own = /\b(primary|secondary|ghost|destructive|muted)\b/.exec(
+        c.text,
+      )?.[1];
+      c.parts = prev.parts.map(x => ({
+        ...x,
+        ...(own ? {when: `variant:${own}`} : {}),
+      }));
+    }
+    if (!c.aspects.length && !ownParts) {
+      const textish = prev.aspects.some(a =>
+        ['text', 'case', 'fontsize', 'weight', 'family'].includes(a),
+      );
+      c.aspects = c.colors.length
+        ? prev.aspects.includes('text')
+          ? ['text']
+          : [...prev.aspects]
+        : textish && /\b(smaller|bigger|larger|tiny|huge)\b/.test(c.text)
+          ? ['fontsize']
+          : textish && /\b(lighter|darker)\b/.test(c.text)
+            ? ['text']
+            : [...prev.aspects];
+    } else if (
+      !ownParts &&
+      c.aspects.length === 1 &&
+      c.aspects[0] === 'size' &&
+      !/\b(padding|room|spac)/.test(c.text) &&
+      prev.aspects.some(a =>
+        ['text', 'case', 'fontsize', 'weight', 'family'].includes(a),
+      )
+    )
+      c.aspects = ['fontsize'];
+    else if (
+      !ownParts &&
+      c.colors.length &&
+      c.aspects.length === 1 &&
+      c.aspects[0] === 'background' &&
+      prev.aspects.includes('text') &&
+      !/\b(background|bg|fill)\b/.test(c.text)
+    )
+      c.aspects = ['text'];
+  }
+  // An icon's color is its text color ("the close icon red").
+  for (const c of clauses)
+    if (
+      c.parts.some(x => /-icon$/.test(x.on)) &&
+      (c.aspects.includes('background') ||
+        (!c.aspects.length && c.colors.length)) &&
+      !/\b(background|bg|fill(ed)?)\b/.test(c.text)
+    )
+      c.aspects = c.aspects.length
+        ? c.aspects.map(x => (x === 'background' ? 'text' : x))
+        : ['text'];
+  // "buttons inside cards", "links in the sidebar": the editor themes a
+  // part everywhere; the place is said, never changed.
+  for (const c of clauses) {
+    const place =
+      /\b(?:inside|within|in(?! (?:dark|light)\b))\s+(?:the\s+|a\s+|an\s+|my\s+)?([a-z][a-z -]*)$/.exec(
+        c.text.replace(/\s+(?:on|when) \w+$/, ''),
+      );
+    if (!place || c.parts.length < 2) continue;
+    const at = c.text.indexOf(place[0]);
+    const inPlace = c.parts.filter(x =>
+      lex.parts.some(
+        ([re, y]) => y.on === x.on && (re.exec(c.text)?.index ?? -1) >= at,
+      ),
+    );
+    if (!inPlace.length || inPlace.length === c.parts.length) continue;
+    c.parts = c.parts.filter(x => !inPlace.includes(x));
+    placeNotes.push(
+      `the editor themes ${c.parts.map(x => x.on).join(', ')} everywhere: it cannot keep ${inPlace.map(x => x.on).join(', ')} apart, so this applies to every ${c.parts.map(x => x.on).join(', ')} (${inPlace.map(x => x.on).join(', ')} is not changed)`,
+    );
+  }
   // "except buttons and cards": the parts listed after an except clause are
   // excepted too.
   for (let i = 0; i < clauses.length - 1; i++) {
@@ -2813,6 +2937,29 @@ export function draftAnswer(ctx, env, question) {
       clauses[i].parts.push(...clauses[i + 1].parts);
       clauses.splice(i + 1, 1);
     }
+  }
+  // The same for a part-only clause the reading put before the except
+  // clause though the question says it after "except".
+  {
+    const exceptAt = q.search(/\bexcept\b/);
+    const ex = clauses.find(x => x.except);
+    if (ex && exceptAt >= 0)
+      for (let i = clauses.length - 1; i >= 0; i--) {
+        const x = clauses[i];
+        if (
+          x !== ex &&
+          !x.except &&
+          x.parts.length &&
+          !x.aspects.length &&
+          !x.colors.length &&
+          !x.lengths.length &&
+          !x.dir &&
+          q.indexOf(x.text) > exceptAt
+        ) {
+          ex.parts.push(...x.parts);
+          clauses.splice(i, 1);
+        }
+      }
   }
   for (let i = 0; i < clauses.length - 1; i++) {
     const c = clauses[i];
@@ -3507,6 +3654,20 @@ export function draftAnswer(ctx, env, question) {
 
   for (const c of clauses) {
     clauseNow = c;
+    // "but don't make buttons rounder": a prohibition inside the question
+    // changes nothing; it says what stays.
+    if (
+      /^\s*(?:(?:but|and)\s+)?(?:please\s+)?(?:don'?t|do not|never)\s+make\b|\b(?:should|must|shall)(?:n'?t| not)\s+(?:be|get|look|become)\b/.test(
+        c.text,
+      )
+    ) {
+      for (const p of c.parts) seenPart(p.on);
+      push({
+        text: `"${c.text.trim()}" asks for no change, so nothing is set there; ${c.parts.map(p => p.on).join(', ') || 'it'} stays as it is`,
+        options: [],
+      });
+      continue;
+    }
     // "reset the corners to default", "revert the font": take back what the
     // theme sets for it, as undo does.
     const back = resetAnswer(c);
@@ -3521,20 +3682,40 @@ export function draftAnswer(ctx, env, question) {
       const priorOn = prior.steps.find(st => st.on)?.on ?? null;
       // "except primary ones", "except ghost": a variant of the part being
       // changed.
-      const variant = /\b(primary|secondary|ghost|destructive|danger)\b/.exec(
-        c.text,
-      )?.[1];
-      /** @type {Array<{on: string, when?: string}>} */
-      const excepted = c.parts.length
-        ? c.parts
-        : variant && priorOn
+      const variant =
+        /\b(primary|secondary|ghost|destructive|danger|muted|small|large)\b/.exec(
+          c.text,
+        )?.[1];
+      const when = variant
+        ? variant === 'small'
+          ? 'size:sm'
+          : variant === 'large'
+            ? 'size:lg'
+            : `variant:${variant === 'danger' ? 'destructive' : variant}`
+        : undefined;
+      // "except on hover": that state of the part being changed.
+      const exceptState =
+        /\b(?:on |when )(hover(?:ed)?|focus(?:ed)?|pressed|active|disabled)\b/.exec(
+          c.text,
+        )?.[1];
+      /** @type {Array<{on: string, when?: string, state?: string}>} */
+      const excepted = [
+        // "the primary button and cards": the variant names the first part.
+        ...c.parts.map((x, i) =>
+          i === 0 && when && !x.when ? {...x, when} : x,
+        ),
+        ...(!c.parts.length && when && priorOn ? [{on: priorOn, when}] : []),
+        ...(!c.parts.length && !when && exceptState && priorOn
           ? [
               {
                 on: priorOn,
-                when: `variant:${variant === 'danger' ? 'destructive' : variant}`,
+                state: exceptState
+                  .replace(/ed$/, '')
+                  .replace(/^press$/, 'active'),
               },
             ]
-          : [];
+          : []),
+      ];
       if (!excepted.length) {
         // "except in the nav": a place, not a part.
         push({
@@ -3549,9 +3730,9 @@ export function draftAnswer(ctx, env, question) {
       const said = [];
       for (const p of excepted) {
         seenPart(p.on);
-        const name = `${p.on}${p.when ? ` (${p.when.replace(':', ' ')})` : ''}`;
+        const name = `${p.on}${p.when ? ` (${p.when.replace(':', ' ')})` : ''}${p.state ? ` when ${p.state}` : ''}`;
         // A part the words do not tell apart from the part being changed.
-        if (!p.when && p.on === priorOn) {
+        if (!p.when && !p.state && p.on === priorOn) {
           said.push(
             `${name} is the part being changed, so it cannot be kept apart`,
           );
@@ -3608,13 +3789,143 @@ export function draftAnswer(ctx, env, question) {
       });
       continue;
     }
+    // The parts the clause names, in the order the words name them.
+    const inOrder = () =>
+      [
+        ...new Set([
+          ...c.parts.map(x => x.on),
+          ...lex.parts.filter(([re]) => re.test(c.text)).map(([, x]) => x.on),
+        ]),
+      ]
+        .map(on => ({
+          on,
+          at: Math.min(
+            ...lex.parts
+              .filter(([, x]) => x.on === on)
+              .map(([re]) => re.exec(c.text)?.index ?? Infinity),
+          ),
+        }))
+        .sort((x, y) => x.at - y.at)
+        .map(x => x.on);
+    /** The color property a side of a comparison names. @param {string} t */
+    const colorProp = t =>
+      /\b(text|labels?|font|words?)\b/.test(t)
+        ? 'color'
+        : /\bborders?\b/.test(t)
+          ? 'border-color'
+          : /\b(background|fill|bg)\b/.test(t)
+            ? 'background-color'
+            : null;
+    // "button text the same color as the card text", "input border the
+    // same color as the button background", "dialog background match the
+    // card background": that color property of the other part, onto the
+    // first part's property the words name; the other part is not changed.
+    {
+      const cmp =
+        /\b(?:(?:the )?same colou?r as|match(?:es|ing)?|colou?red like)\s+(?:the\s+|my\s+)?/.exec(
+          c.text,
+        );
+      const ordered = cmp ? inOrder() : [];
+      const left = cmp ? c.text.slice(0, cmp.index) : '';
+      const right = cmp ? c.text.slice((cmp.index ?? 0) + cmp[0].length) : '';
+      const subjectProp = cmp ? colorProp(left) : null;
+      if (
+        cmp &&
+        ordered.length >= 2 &&
+        (subjectProp || /colou?r/.test(cmp[0]))
+      ) {
+        const sp = subjectProp ?? 'background-color';
+        const rp =
+          colorProp(right) ?? (sp === 'color' ? 'color' : 'background-color');
+        const [subjectOn, sourceOn] = ordered;
+        const value = partPropNow(sourceOn, rp, true);
+        if (value) {
+          seenPart(subjectOn);
+          seenPart(sourceOn);
+          const d = {
+            text: `${subjectOn}'s ${sp} takes ${sourceOn}'s ${rp}: ${value} (${sourceOn} is not changed)`,
+            options: [[set(sp, value, {on: subjectOn})]],
+          };
+          push(d);
+          recordTop(c, d.options[0] ?? []);
+          continue;
+        }
+      }
+    }
+    // "the card and dialog corners match", "cards and dialogs equally
+    // round", "buttons and inputs the same height": the second part takes
+    // the first part's value, so they match; nothing new is written.
+    {
+      const sym =
+        /\b(match|equally|alike|the same(?! \w+ as\b)(?: \w+)?)\s*$|\b(?:equally|the same) (round(?:ed)?|tall|high|padd(?:ed|ing)|big|bold)\b/.exec(
+          c.text,
+        );
+      // The parts of the whole sentence ("the card and dialog corners
+      // match" reads "the card" as a clause of its own).
+      const sentence =
+        q.split(/[;.\n]/).find(x => x.includes(c.text.trim())) ?? c.text;
+      const ordered =
+        sym && !/\b(as|than)\b/.test(sentence)
+          ? lex.parts
+              .map(([re, x]) => ({
+                on: x.on,
+                at: re.exec(sentence)?.index ?? -1,
+              }))
+              .filter(x => x.at >= 0)
+              .sort((x, y) => x.at - y.at)
+              .map(x => x.on)
+              .filter((on, i, all) => all.indexOf(on) === i)
+          : [];
+      const prop = /round|corner|radius/.test(c.text)
+        ? 'border-radius'
+        : /\bpadd/.test(c.text)
+          ? 'padding'
+          : /\b(tall|height|high)\b/.test(c.text)
+            ? 'height'
+            : /\bcolou?r|\bborders?\b/.test(c.text)
+              ? (colorProp(c.text) ?? 'background-color')
+              : null;
+      if (sym && ordered.length === 2 && prop) {
+        const [sourceOn, subjectOn] = ordered;
+        const value = partPropNow(sourceOn, prop, true);
+        const has = partPropNow(subjectOn, prop, true);
+        if (value) {
+          seenPart(subjectOn);
+          seenPart(sourceOn);
+          const d =
+            has && has === value
+              ? {
+                  text: `${sourceOn} and ${subjectOn} already have the same ${prop} (${value}), so nothing changes`,
+                  options: [],
+                }
+              : {
+                  text: `${subjectOn} takes ${sourceOn}'s ${prop} so they match: ${value} (${sourceOn} is not changed)`,
+                  options: [[set(prop, value, {on: subjectOn})]],
+                };
+          push(d);
+          recordTop(c, d.options[0] ?? []);
+          // The clause that only named the first part asks nothing more.
+          symDone.add(sourceOn);
+          continue;
+        }
+        // Nothing to copy from: say so, never a new value for both.
+        seenPart(subjectOn);
+        seenPart(sourceOn);
+        push({
+          text: `${sourceOn} has no ${prop} of its own that how can read, so it cannot copy it onto ${subjectOn}; give the value for both (for example "${prop} 40px on ${sourceOn} and ${subjectOn}")`,
+          options: [],
+        });
+        symDone.add(sourceOn);
+        continue;
+      }
+    }
     // "cards as round as buttons", "card padding the same as button
     // padding", "make the cards match the buttons' corners", "inputs as
     // tall as buttons": the part named first takes the other part's value
     // of that property now, written out; the other part is not changed.
     {
       const measure =
-        /\bas (round(?:ed)?|tall|high|bold|big|large) as\b|\bsame (corners?|radius|roundness|padding|height|font size|text size|weight) as\b|\b(?:match(?:es|ing)?|(?<!\b(?:i'?d|i|would|we'?d|you'?d)\s)like)\b[^.]*?\b(corners?|radius|padding|height)\b|\b(corners?|radius|padding|height)\b[^.]*?\b(?:bigger|larger|more|smaller|less|tighter|rounder|squarer) than\b|\b(corners?|radius|padding|height)\b[^.]*?\b(?:the )?same as\b/.exec(
+        /\bas (round(?:ed)?|tall|high|bold|big|large) as\b|\bsame (corners?|radius|roundness|padding|height|font size|text size|weight) as\b|\b(?:match(?:es|ing)?|(?<!\b(?:i'?d|i|would|we'?d|you'?d)\s)like)\b[^.]*?\b(corners?|radius|padding|height)\b|\b(corners?|radius|padding|height)\b[^.]*?\b(?:bigger|larger|more|smaller|less|tighter|rounder|squarer) than\b|\b(rounder|squarer|sharper) than\b|\b(corners?|radius|padding|height)\b[^.]*?\b(?:the )?same as\b/.exec(
           c.text,
         );
       const word = measure ? (measure.slice(1).find(Boolean) ?? '') : '';
@@ -3657,30 +3968,52 @@ export function draftAnswer(ctx, env, question) {
         // "card padding bigger than button padding": a step past the other
         // part's value, never a copy of it.
         const past =
-          /\b(bigger|larger|more|rounder|smaller|less|tighter|squarer) than\b/.exec(
+          /\b(bigger|larger|more|rounder|smaller|less|tighter|squarer|sharper) than\b/.exec(
             c.text,
           )?.[1];
         const pastFactor = past
-          ? /^(smaller|less|tighter|squarer)$/.test(past)
+          ? /^(smaller|less|tighter|squarer|sharper)$/.test(past)
             ? 0.8
             : 1.25
           : null;
-        const factor = exactFactor(c.text) ?? pastFactor;
-        const value =
-          now && factor
+        // "4px rounder than buttons": the other part's value and that much.
+        const delta = past
+          ? (c.lengths.find(l => /(px|rem|em)$/.test(l)) ?? null)
+          : null;
+        const factor = delta ? null : (exactFactor(c.text) ?? pastFactor);
+        const value = delta
+          ? `calc(${partPropNow(sourceOn, prop, true)} ${pastFactor && pastFactor < 1 ? '-' : '+'} ${delta})`
+          : now && factor
             ? scaledBox(now, factor)
             : past
               ? null
               : partPropNow(sourceOn, prop, true);
+        if (!value) {
+          // Nothing to measure against: said, never a step on both.
+          seenPart(subjectOn);
+          seenPart(sourceOn);
+          push({
+            text: `${sourceOn} has no ${prop} of its own that how can read, so ${subjectOn} cannot take it; give the value (for example "${prop} 16px on ${subjectOn}")`,
+            options: [],
+          });
+          continue;
+        }
         if (value) {
           seenPart(subjectOn);
           seenPart(sourceOn);
+          // The subject's own variant and the clause's state stay.
+          const sub = c.parts.find(x => x.on === subjectOn);
+          const sflags = {
+            on: subjectOn,
+            ...(sub?.when ? {when: sub.when} : {}),
+            ...(c.state ? {state: c.state} : {}),
+          };
           const d = {
             text:
               past && !exactFactor(c.text)
-                ? `${subjectOn} ${prop} a step ${pastFactor && pastFactor > 1 ? 'past' : 'under'} ${sourceOn}'s: ${value} (${sourceOn} has ${now} now and is not changed)`
+                ? `${subjectOn} ${prop} ${delta ?? 'a step'} ${pastFactor && pastFactor > 1 ? 'past' : 'under'} ${sourceOn}'s: ${value} (${sourceOn} has ${now} now and is not changed)`
                 : `${subjectOn} takes ${factor ? `${factor} times ` : ''}${sourceOn}'s ${prop}: ${value} (${sourceOn} has ${now} now and is not changed)`,
-            options: [[set(prop, value, {on: subjectOn})]],
+            options: [[set(prop, value, sflags)]],
           };
           push(d);
           recordTop(c, d.options[0] ?? []);
@@ -4292,6 +4625,25 @@ export function draftAnswer(ctx, env, question) {
   function partPropNow(part, prop, live = false) {
     const own = partValue(part, prop);
     if (own) return own;
+    // A color: the text color (or fill) the part shows at rest.
+    if (
+      prop === 'color' ||
+      prop === 'background-color' ||
+      prop === 'border-color'
+    ) {
+      const group =
+        prop === 'color'
+          ? 'text'
+          : prop === 'border-color'
+            ? 'border'
+            : 'background';
+      // A part with no text color of its own shows the main text color.
+      const token =
+        restColorRead(C.partReads(one(part), group)) ??
+        (group === 'text' ? '--color-text-primary' : null);
+      if (!token) return null;
+      return live ? `var(${token})` : resolvedValue(token);
+    }
     // The part's plain rule as built (both sides of a two-value padding).
     if (prop === 'padding') {
       const rule = partRuleTokens(
@@ -4376,19 +4728,38 @@ export function draftAnswer(ctx, env, question) {
    * The step that keeps one part as it is now when a step changes the whole
    * theme (or a group the part is in), or null when none can.
    * @param {Step} st
-   * @param {{on: string, when?: string}} p
+   * @param {{on: string, when?: string, state?: string}} p
    * @returns {Step | null | typeof UNTOUCHED}
    */
   function keepAsIs(st, p) {
-    const flags = {on: p.on, ...(p.when ? {when: p.when} : {})};
+    const flags = {
+      on: p.on,
+      ...(p.when ? {when: p.when} : {}),
+      ...(p.state ? {state: p.state} : {}),
+    };
     // A token the part never reads does not change it: nothing to keep.
     // (Only tokens a part never inherits: a text token reaches every part's
     // text through inheritance.)
-    if (
-      /^--(radius|spacing|size)-/.test(st.thing) &&
-      !partReadsToken(p.on, st.thing)
-    )
+    if (/^--(spacing|size)-/.test(st.thing) && !partReadsToken(p.on, st.thing))
       return UNTOUCHED;
+    // A radius token reaches a part through its own variables too: pin the
+    // radius it has now, as for the corners dial.
+    if (/^--radius-/.test(st.thing))
+      return keepAsIs({...st, thing: 'corners'}, p);
+    // "all text bigger except buttons": the part's text size now.
+    if (
+      st.thing === 'text-size' ||
+      st.thing === '--font-size-base' ||
+      /^--text-[a-z-]+-size$/.test(st.thing)
+    ) {
+      const now = partPropNow(p.on, 'font-size');
+      return now
+        ? set('font-size', now, {
+            ...flags,
+            ...(p.state ? {state: p.state} : {}),
+          })
+        : null;
+    }
     if (st.on && st.on !== p.on && !(FAMILIES[st.on] ?? []).includes(one(p.on)))
       return null;
     if (st.thing === 'corners' || st.thing === 'border-radius') {
@@ -4421,8 +4792,8 @@ export function draftAnswer(ctx, env, question) {
       // The shadow it has now, written out (the tokens it reads may be set
       // to none in the same answer).
       // Its shadow at rest; none when it has none.
-      const read = C.partReads(one(p.on), 'shadow').find(r =>
-        r.when.some(w => !w.includes(':')),
+      const read = C.partReads(one(p.on), 'shadow').find(
+        r => /^--shadow-/.test(r.token) && r.when.some(w => !w.includes(':')),
       );
       const now =
         partValue(p.on, 'box-shadow') ??
@@ -4455,7 +4826,14 @@ export function draftAnswer(ctx, env, question) {
     })[st.thing];
     if (group) {
       const want = p.when?.replace(':', '=');
+      // A state kept: the token the part reads in that state, else at rest.
+      const inState = p.state
+        ? C.partReads(one(p.on), group).find(r =>
+            r.when.some(w => w.includes(`:${p.state}`) && !/::before/.test(w)),
+          )
+        : null;
       const read =
+        inState ??
         C.partReads(one(p.on), group).find(r =>
           want ? r.when.includes(want) : r.when.includes(''),
         ) ??
@@ -5061,6 +5439,26 @@ export function draftAnswer(ctx, env, question) {
           )
             ? exactFactor(c.text)
             : null;
+        // A part with a radius of its own: the dial does not move it (the
+        // exact setting wins), so a step of that radius, said to be one.
+        const ownRadius =
+          on &&
+          !typedPx &&
+          cornerFactor == null &&
+          c.dir &&
+          !c.neg &&
+          // (A state rule of the dial still applies over a plain radius.)
+          !f.state
+            ? partValue(on, 'border-radius')
+            : null;
+        const ownStep = ownRadius
+          ? scaledBox(ownRadius, c.dir === 'less' ? 0.8 : 1.25)
+          : null;
+        if (ownStep)
+          return {
+            text: `corners${where}: border-radius ${ownStep} (now ${ownRadius}; a step, since your exact radius there wins over the corners dial)`,
+            options: [[set('border-radius', ownStep, f)]],
+          };
         if (cornerFactor != null) {
           const part = /** @type {string} */ (on);
           const read = C.partReads(one(part), 'corners')[0];
@@ -5361,6 +5759,13 @@ export function draftAnswer(ctx, env, question) {
               }
             : null;
         }
+        // "remove the top border", "no border on the right side": that side.
+        const borderSide = /\b(top|bottom|left|right)\b/.exec(c.text)?.[1];
+        if (c.neg && borderSide && !outline)
+          return {
+            text: `no ${borderSide} border${where}: border-${borderSide} none (the other sides keep theirs)`,
+            options: [[set(`border-${borderSide}`, 'none', f)]],
+          };
         if (c.neg)
           return {
             text: `no ${outline ? 'outline' : 'border'}${where}`,
@@ -6354,7 +6759,16 @@ export function draftAnswer(ctx, env, question) {
         if (!env.check([set('color', color, f)]).ok)
           return {
             text: `the text color${where}: --color-text-primary on ${on} only (${on} takes its color from a prop, so a color property never shows)`,
-            options: [[set('--color-text-primary', color, {on, ...modeOf(c)})]],
+            options: [
+              [
+                set('--color-text-primary', color, {
+                  on,
+                  // "red h1": that level only.
+                  ...(f.when ? {when: f.when} : {}),
+                  ...modeOf(c),
+                }),
+              ],
+            ],
           };
         return {
           text: `text color${where}: color`,
@@ -7153,6 +7567,100 @@ export function draftAnswer(ctx, env, question) {
   // A confidence gate: a question, a "tell me", a "but not too" or a typo
   // read as a direction leaves how unsure which way to go; a wrong write is
   // worse than none, so it gives the lookup and asks for the ask.
+  // The intent check: a part the question only compares against ("than
+  // buttons", "as round as inputs", "the same color as the card") is never
+  // changed. A command that would change it is dropped, and the answer
+  // says so; never a wrong command.
+  {
+    /** @type {Set<string>} */
+    const refs = new Set();
+    /** @type {Set<string>} */
+    const subjects = new Set();
+    for (const c of clauses) {
+      // "I would like …" is a wish, never a comparison.
+      const cmp =
+        /\b(?:than|as|(?<!\b(?:i|we|you)(?: would|'d)? )like|match(?:es|ing)?|same as|equal to|(?:the )?same (?:\w+ )?as)\s+(?:the\s+|my\s+)?/.exec(
+          c.text.replace(
+            /\b(?:i|we|you)(?: would|'d)? like(?: to| for)?\b/g,
+            m => ' '.repeat(m.length),
+          ),
+        );
+      if (!cmp) continue;
+      const after = (cmp.index ?? 0) + cmp[0].length;
+      for (const [re, x] of lex.parts) {
+        const m = re.exec(c.text);
+        if (!m) continue;
+        if (m.index >= after - 1) refs.add(x.on);
+        else subjects.add(x.on);
+      }
+    }
+    for (const sub of subjects) refs.delete(sub);
+    if (refs.size)
+      for (const d of result) {
+        const before = d.options.map(o => o.length);
+        d.options = d.options
+          .map(o =>
+            o.filter(
+              st =>
+                !(st.on && refs.has(st.on)) &&
+                // The page is its body background token.
+                !(
+                  refs.has('page') &&
+                  !st.on &&
+                  st.thing === '--color-background-body'
+                ),
+            ),
+          )
+          .filter(o => o.length);
+        if (d.options.map(o => o.length).join() !== before.join())
+          d.text = `${d.text} (${[...refs].join(', ')} is only what the ask compares against, so it is not changed)`;
+      }
+  }
+  // A question about what a part has now ("how much padding do buttons
+  // have", "how rounded are cards", "what color is the button"): its value
+  // now, as show reads it; never a change.
+  const asked = valueAsked(question);
+  if (asked) {
+    const named = lex.parts
+      .map(([re, x]) => ({
+        at: re.exec(question.toLowerCase())?.index ?? -1,
+        on: x.on,
+      }))
+      .filter(x => x.at >= 0)
+      .sort((x, y) => x.at - y.at)[0]?.on;
+    const now = named ? partPropNow(named, asked) : null;
+    result.splice(0, result.length, {
+      text: named
+        ? now
+          ? `${named} has ${asked} ${now} now (nothing is changed); to change it, ask for the change ("${asked === 'color' ? `${named} text red` : `${named} ${asked} 12px`}")`
+          : `${named} has no ${asked} of its own that how can read; ${HOW} ${named} lists what it reads`
+        : `how changes a theme; ${P} show ${env.slug} lists what it has now`,
+      options: [],
+      lookup: named ? `${HOW} ${named}` : `${P} show ${env.slug}`,
+    });
+    return {parts: partsSeen, aspects: aspectsSeen, drafts: result};
+  }
+  // "don't make the cards bigger", "buttons should not be rounder": a
+  // prohibition changes nothing; it says what stays.
+  if (segments.length && segments.every(x => EXCLUDE.test(x))) {
+    result.splice(0, result.length, {
+      text: 'nothing to change: you asked for it not to change, so it stays as it is; ask for the change you want instead',
+      options: [],
+      lookup: partsSeen[0] ? `${HOW} ${partsSeen[0]}` : `${P} show ${env.slug}`,
+    });
+    return {parts: partsSeen, aspects: aspectsSeen, drafts: result};
+  }
+  for (const n of placeNotes) result.push({text: n, options: []});
+  // A lookup for a part a "match" ask already answered for adds nothing.
+  for (let i = result.length - 1; i >= 0; i--) {
+    const d = result[i];
+    if (
+      !d.options.length &&
+      d.lookup &&
+      [...symDone].some(on => d.lookup === `${HOW} ${on}`)
+    )
+      result.splice(i, 1);
+  }
   const unsure = gateAll;
   if (unsure && result.some(d => d.options.some(o => o.length))) {
     const part = partsSeen[0];
@@ -7168,6 +7676,28 @@ export function draftAnswer(ctx, env, question) {
       options: [],
     });
   return {parts: partsSeen, aspects: aspectsSeen, drafts: result};
+}
+
+/**
+ * The property a question asks the value of ("how much padding …", "how
+ * rounded are …", "what color is …"), or null when it is not one.
+ * @param {string} q
+ * @returns {string | null}
+ */
+export function valueAsked(q) {
+  const t = q.toLowerCase().trim();
+  if (
+    !/^(?:how (?:much|many|big|round(?:ed)?|thick|wide|tall|bold|dark|light)|what(?:'s| is)?(?: the)? (?:colou?r|size|padding|radius|corner radius|font|weight|font size)|which colou?r)\b/.test(
+      t,
+    )
+  )
+    return null;
+  if (/\b(round|rounded|radius|corners?)\b/.test(t)) return 'border-radius';
+  if (/\bpadding|spacing\b/.test(t)) return 'padding';
+  if (/\bfont size|text size|how big\b/.test(t)) return 'font-size';
+  if (/\b(bold|weight)\b/.test(t)) return 'font-weight';
+  if (/\b(colou?r|dark|light)\b/.test(t)) return 'color';
+  return null;
 }
 
 /** Words for the operating system's own font. */

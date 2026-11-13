@@ -594,13 +594,8 @@ const QUESTIONS = [
       adds: /heading\.level:1\.fontSize=/,
     },
   ],
-  [
-    "don't make the buttons bold",
-    {
-      top: /^set q font-weight 400 --on button$/,
-      adds: /button\.base\.fontWeight=400/,
-    },
-  ],
+  // A prohibition changes nothing (it says what stays).
+  ["don't make the buttons bold", {top: null}],
   [
     'font size 18px for body',
     {top: /^set q text-size 18$/, adds: /scale\.base=18/},
@@ -3364,7 +3359,8 @@ const QUESTIONS_M = [
     /^set q --color-background-body '#000000' --mode dark$/,
   ],
   ['badges rounder', null, /already at the roundest rung/],
-  ['how round are the cards now?', null, /show lists what q sets now/],
+  // A question about a value answers with the value now.
+  ['how round are the cards now?', null, /card has border-radius \S+ now/],
   ['remove the focus outline', /^set q --focus-outline-width 0px$/],
   ['outline offset 3px on focus', /^set q --focus-outline-offset 3px$/],
   ['decrease corner radius by 2 pixels', /^set q corners \d+(\.\d+)?px$/],
