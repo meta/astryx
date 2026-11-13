@@ -4061,12 +4061,16 @@ export function compileTheme(ctx, data, base) {
       if (parts.length) for (const t of parts) putComp(s, t, s.thing, s.value);
       else putTok(s.thing, s.value, s.mode);
     } else if (s.source === 'property') {
-      // A background on the whole app shell is the page background: the
-      // shell's own header, side nav and main content area paint the body
-      // or surface color over it in every variant but section, so those
-      // regions (and only they, never what is drawn inside them) are made
-      // see-through and the page shows in every AppShell. A background a
-      // setting gives one of those regions itself is kept.
+      // A background on the whole app shell is the page background. The
+      // shell's header and side nav paint the body or surface color over it
+      // in every variant but section, and in an auto-height shell they are
+      // sticky, so content must not show through them when it scrolls: they
+      // take the same background. The main content area is made
+      // see-through. A gradient is fixed to the viewport on the shell and on
+      // those regions, so the regions line up with the page behind them. A
+      // background a setting gives one of those regions itself is kept.
+      /** @type {string[]} */
+      const pageParts = [];
       if (
         parts.includes('app-shell') &&
         /^background(-color|-image)?$/.test(kebab(s.thing)) &&
@@ -4074,22 +4078,29 @@ export function compileTheme(ctx, data, base) {
         !s.state
       ) {
         /** @param {Record<string, any>} r */
-        const clear = r => {
-          if (!['background', 'backgroundColor'].some(k => k in r))
-            r.backgroundColor = 'transparent';
-        };
+        const ownBackground = r =>
+          ['background', 'backgroundColor', 'backgroundImage'].some(
+            k => k in r,
+          );
         for (const region of ['app-shell-header', 'app-shell-sidenav'])
-          if (ctx.project.target.has(region))
-            clear(block({...s, mode: undefined}, region));
+          if (
+            ctx.project.target.has(region) &&
+            !ownBackground(block({...s, mode: undefined}, region))
+          )
+            pageParts.push(region);
         if (ctx.project.target.has('layout-content')) {
           const lc = ((theme.components['layout-content'] ??= {}).base ??= {});
-          clear((lc[':where(.astryx-app-shell [role="main"])'] ??= {}));
+          const main = (lc[':where(.astryx-app-shell [role="main"])'] ??= {});
+          if (!ownBackground(main)) main.backgroundColor = 'transparent';
         }
+        if (/gradient\(/.test(String(s.value)))
+          for (const t of ['app-shell', ...pageParts])
+            block({...s, mode: undefined}, t).backgroundAttachment = 'fixed';
         (ctx.compileNotes ??= []).push(
-          "the page background on app-shell shows in every AppShell variant: the shell's header, side nav and main content area are see-through (their own background is transparent); what is drawn inside them keeps its colors",
+          "the page background on app-shell also paints the shell's header and side nav (they stay opaque when content scrolls under them) and makes the main content area see-through; what is drawn inside keeps its colors, and in the default elevated layout the content panel keeps its own surface",
         );
       }
-      for (const t of parts) {
+      for (const t of [...parts, ...pageParts]) {
         // A heading takes its color from its color prop, which reads the
         // text color tokens after part styles: the color goes into those
         // tokens on the heading (a named color prop's own token for

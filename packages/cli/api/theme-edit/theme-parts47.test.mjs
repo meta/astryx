@@ -242,15 +242,31 @@ describe('the page background', () => {
     expect(cssOf('p1')).not.toMatch(
       /--color-background-(body|surface): transparent/,
     );
-    // The shell's own regions are see-through.
-    for (const sel of [
-      '.astryx-app-shell-header',
-      '.astryx-app-shell-sidenav',
-      '.astryx-layout-content:where(.astryx-app-shell [role="main"])',
-    ])
-      expect(ruleOf('p1', sel), sel).toMatch(/background-color: transparent/);
-    expect(r.data.notes.join(' ')).toMatch(/every AppShell variant/);
-    // The page gradient how offers reads no token the shell would lose.
+    // The header and side nav take the page background: in an auto-height
+    // shell they are sticky, so they stay opaque over scrolled content.
+    for (const sel of ['.astryx-app-shell-header', '.astryx-app-shell-sidenav'])
+      expect(ruleOf('p1', sel), sel).toMatch(/background: #ff0000/);
+    // The main content area is see-through.
+    expect(
+      ruleOf(
+        'p1',
+        '.astryx-layout-content:where(.astryx-app-shell [role="main"])',
+      ),
+    ).toMatch(/background-color: transparent/);
+    expect(r.data.notes.join(' ')).toMatch(/header and side nav/);
+    expect(r.data.notes.join(' ')).toMatch(/elevated layout/);
+    // A page gradient is fixed to the viewport on the shell and its sticky
+    // regions, so they line up when content scrolls.
+    await themeEditSet(
+      'p1',
+      'background',
+      'linear-gradient(180deg, #ff0000, #0000ff)',
+      {cwd, on: 'app-shell'},
+    );
+    for (const sel of ['.astryx-app-shell', '.astryx-app-shell-header'])
+      expect(ruleOf('p1', sel), sel).toMatch(/background-attachment: fixed/);
+    // The page gradient how offers reads no token the shell would lose, and
+    // gives each mode its own value so text stays readable in dark mode.
     const how = await themeEditHow('a gradient on the page background', {
       cwd,
       theme: 'p1',
@@ -258,5 +274,17 @@ describe('the page background', () => {
     const text = JSON.stringify(how.data);
     expect(text).toMatch(/--on app-shell/);
     expect(text).not.toMatch(/gradient\([^']*var\(--color-background/);
+    expect(text).toMatch(
+      /background-image 'linear-gradient\(180deg, #f5f7fa, #e4ebf5\)' --on app-shell --mode light/,
+    );
+    expect(text).toMatch(
+      /background-image 'linear-gradient\(180deg, #14171c, #1c222b\)' --on app-shell --mode dark/,
+    );
+    const solid = JSON.stringify(
+      (await themeEditHow('change the page background', {cwd, theme: 'p1'}))
+        .data,
+    );
+    expect(solid).toMatch(/--color-background-body '#f5f7fa' --mode light/);
+    expect(solid).toMatch(/--color-background-body '#14171c' --mode dark/);
   }, 240_000);
 });

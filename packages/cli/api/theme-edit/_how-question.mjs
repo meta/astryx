@@ -6049,24 +6049,55 @@ export function draftAnswer(ctx, env, question) {
       // "page background", "a gradient on the page": the token for a color,
       // and the app shell (the part that paints the page) for a color or
       // a gradient, with example values to change.
-      if (!color)
+      if (!color) {
+        // Example values to change, one per mode the theme shows: a light
+        // page in light mode and a dark one in dark mode, so text stays
+        // readable in both.
+        const gradient = /\bgradient\b/.test(c.text);
+        const PAGE = {
+          light: gradient
+            ? 'linear-gradient(180deg, #f5f7fa, #e4ebf5)'
+            : '#f5f7fa',
+          dark: gradient
+            ? 'linear-gradient(180deg, #14171c, #1c222b)'
+            : '#14171c',
+        };
+        /** @type {('light' | 'dark')[]} */
+        const shown =
+          env.data.mode === 'dark-only'
+            ? ['dark']
+            : env.data.mode === 'light-only'
+              ? ['light']
+              : c.mode === 'light' || c.mode === 'dark'
+                ? [c.mode]
+                : ['light', 'dark'];
+        const perMode = modal;
+        /** @param {'light' | 'dark'} m */
+        const flagsFor = m => (perMode ? {mode: m} : {});
         return {
-          text: `the page background: background on app-shell (the page behind your parts, in every AppShell variant) for a color or a gradient; --color-background-body for the body color`,
+          text: `the page background: background on app-shell (the page behind your parts, in every AppShell variant) for a color or a gradient; --color-background-body for the body color${perMode && shown.length > 1 ? ' (one value for each mode, so text stays readable in both)' : ''}`,
           options: [
-            ...(/\bgradient\b/.test(c.text)
+            ...(gradient
               ? []
-              : [[set('--color-background-body', '#f5f7fa', modeOf(c))]]),
-            [
+              : [
+                  shown.map(m =>
+                    set('--color-background-body', PAGE[m], flagsFor(m)),
+                  ),
+                ]),
+            shown.map(m =>
               set(
-                'background',
-                /\bgradient\b/.test(c.text)
-                  ? 'linear-gradient(180deg, #f5f7fa, #e4ebf5)'
-                  : '#f5f7fa',
-                {on: 'app-shell'},
+                perMode
+                  ? gradient
+                    ? 'background-image'
+                    : 'background-color'
+                  : 'background',
+                PAGE[m],
+                {on: 'app-shell', ...flagsFor(m)},
               ),
-            ],
+            ),
           ],
         };
+      }
       return {
         text: `the page background: --color-background-body${c.mode && modal ? ` in ${c.mode} mode` : ''}`,
         options: [
