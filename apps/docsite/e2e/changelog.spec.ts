@@ -4,8 +4,9 @@
  * @file changelog.spec.ts
  * @input Production docsite changelog routes
  * @output Proof that a changelog page holds one page of a package's releases,
- *   hydrates its server HTML, and that the package tabs, the page navigation
- *   and old links that name the package in the query reach the other pages
+ *   hydrates its server HTML, and that the package tabs, the page links (with
+ *   and without the page's scripts) and old links that name the package in
+ *   the query reach the other pages
  * @position Docsite browser tests; the Vitest suite does not route, hydrate
  *   or redirect
  */
@@ -61,14 +62,18 @@ test('/changelog holds the newest releases and keeps its server HTML when it hyd
   }
 });
 
-test('the page navigation opens the older releases of the package', async ({
+test('the page links open the older releases of the package and add no history entry', async ({
   page,
 }) => {
+  await page.goto('/docs/getting-started');
   await page.goto('/changelog');
   const newest = await releaseHeadings(page).allTextContents();
+  await expect(
+    pageNavigation(page).getByRole('link', {name: 'Go to page 2', exact: true}),
+  ).toHaveAttribute('href', '/changelog/core/2');
 
   await pageNavigation(page)
-    .getByRole('button', {name: 'Go to next page', exact: true})
+    .getByRole('link', {name: 'Go to next page', exact: true})
     .click();
   await expect(page).toHaveURL(/\/changelog\/core\/2$/);
   await expect(releaseHeadings(page)).toHaveCount(RELEASES_PER_PAGE);
@@ -77,11 +82,43 @@ test('the page navigation opens the older releases of the package', async ({
   // The reader starts the new page at its top.
   await expect(releaseHeadings(page).first()).toBeInViewport();
 
+  await expect(
+    pageNavigation(page).getByRole('link', {name: 'Go to page 2', exact: true}),
+  ).toHaveAttribute('aria-current', 'page');
+
   await pageNavigation(page)
-    .getByRole('button', {name: 'Go to page 1', exact: true})
+    .getByRole('link', {name: 'Go to page 1', exact: true})
     .click();
   await expect(page).toHaveURL(/\/changelog$/);
   await expect(releaseHeadings(page).first()).toHaveText(newest[0] ?? '');
+
+  // The page number is view state of the changelog: Back leaves the changelog.
+  await page.goBack();
+  await expect(page).toHaveURL(/\/docs\/getting-started$/);
+});
+
+test("a page link opens the older releases before the page's scripts arrive", async ({
+  page,
+}) => {
+  let releaseScripts = () => {};
+  const scripts = new Promise<void>(resolve => {
+    releaseScripts = resolve;
+  });
+  await page.route('**/_next/**/*.js*', async route => {
+    await scripts;
+    await route.continue();
+  });
+
+  try {
+    await page.goto('/changelog', {waitUntil: 'domcontentloaded'});
+    await pageNavigation(page)
+      .getByRole('link', {name: 'Go to page 2', exact: true})
+      .click();
+    await expect(page).toHaveURL(/\/changelog\/core\/2$/);
+    await expect(releaseHeadings(page)).toHaveCount(RELEASES_PER_PAGE);
+  } finally {
+    releaseScripts();
+  }
 });
 
 test("the default package's own path is an alias of /changelog", async ({

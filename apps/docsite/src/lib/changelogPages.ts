@@ -9,6 +9,7 @@
  */
 
 import {
+  RELEASE_HEADING,
   addEmptyReleasePlaceholders,
   linkifyComponents,
   linkifyContributors,
@@ -27,7 +28,6 @@ export const RELEASES_PER_PAGE = 5;
 const DEFAULT_PACKAGE = '@astryxdesign/core';
 const CLI_PACKAGE = '@astryxdesign/cli';
 const THEME_PACKAGE_PREFIX = '@astryxdesign/theme-';
-const RELEASE_HEADING = /^#{1,2}\s+\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?\s*$/;
 const RELEASE_SEPARATOR = '\n\n---\n\n';
 
 export interface ChangelogEntry {
@@ -75,7 +75,7 @@ function displayedEntries(entries: ChangelogEntry[]): ChangelogEntry[] {
 export function splitReleases(content: string): string[] {
   const releases: string[][] = [];
   for (const line of stripTitle(content).split('\n')) {
-    if (RELEASE_HEADING.test(line) || releases.length === 0) {
+    if (RELEASE_HEADING.test(line.trimEnd()) || releases.length === 0) {
       releases.push([]);
     }
     releases[releases.length - 1]?.push(line);

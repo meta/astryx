@@ -11,7 +11,7 @@
 
 import type {ComponentProps, ReactNode} from 'react';
 import Link from 'next/link';
-import {usePathname, useRouter} from 'next/navigation';
+import {usePathname} from 'next/navigation';
 import * as stylex from '@stylexjs/stylex';
 import {Markdown} from '@astryxdesign/core/Markdown';
 import {Text, Heading} from '@astryxdesign/core/Text';
@@ -19,8 +19,16 @@ import {VStack} from '@astryxdesign/core/Layout';
 import {Section} from '@astryxdesign/core/Section';
 import {TabList, Tab} from '@astryxdesign/core/TabList';
 import {Carousel} from '@astryxdesign/core/Carousel';
-import {Pagination} from '@astryxdesign/core/Pagination';
-import {typeScaleVars} from '@astryxdesign/core/theme/tokens.stylex';
+import {Button} from '@astryxdesign/core/Button';
+import {Icon} from '@astryxdesign/core/Icon';
+import {generatePageRange} from '@astryxdesign/core/Pagination';
+import {
+  colorVars,
+  fontWeightVars,
+  sizeVars,
+  spacingVars,
+  typeScaleVars,
+} from '@astryxdesign/core/theme/tokens.stylex';
 import {layout} from '../layout.stylex';
 import {
   changelogPagePath,
@@ -40,8 +48,29 @@ const styles = stylex.create({
     [typeScaleVars['--text-body-size']]: '1rem', // 16px
     [typeScaleVars['--text-body-leading']]: '1.75', // 28px line box
   },
+  // The page links look like the Pagination component's page buttons.
   pages: {
     alignSelf: 'center',
+    display: 'flex',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacingVars['--spacing-1'],
+    minWidth: 0,
+  },
+  currentPage: {
+    backgroundColor: colorVars['--color-neutral'],
+    fontWeight: fontWeightVars['--font-weight-medium'],
+  },
+  pageGap: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: sizeVars['--size-element-md'],
+    minHeight: sizeVars['--size-element-md'],
+    color: colorVars['--color-text-secondary'],
+    fontSize: typeScaleVars['--text-label-size'],
+    userSelect: 'none',
   },
 });
 
@@ -56,6 +85,18 @@ function PackageTabLink({
   ...props
 }: ComponentProps<typeof Link> & {to?: string}) {
   return <Link {...props} replace scroll={false} />;
+}
+
+/**
+ * The link of a page of releases. The page number is view state of the
+ * changelog: it replaces the history entry. An older page loads when the
+ * reader asks for it, not when its link comes into view.
+ */
+function ReleasePageLink({
+  to: _to,
+  ...props
+}: ComponentProps<typeof Link> & {to?: string}) {
+  return <Link {...props} replace prefetch={false} />;
 }
 
 interface ChangelogFrameProps {
@@ -138,23 +179,61 @@ export function ChangelogNotes({
   slug,
   defaultSlug,
 }: ChangelogNotesProps) {
-  const router = useRouter();
+  const pageHref = (target: number) =>
+    changelogPagePath(slug, target, defaultSlug);
+  const hasNewer = page > 1;
+  const hasOlder = page < pageCount;
 
   return (
     <VStack gap={8}>
       <Markdown headingLevelStart={2}>{markdown}</Markdown>
       {pageCount > 1 && (
-        <Pagination
-          page={page}
-          totalPages={pageCount}
-          // The page number is view state of the changelog: it replaces the
-          // history entry, and the new page opens at its top.
-          onChange={next =>
-            router.replace(changelogPagePath(slug, next, defaultSlug))
-          }
-          label="Older and newer releases"
-          xstyle={styles.pages}
-        />
+        <nav
+          aria-label="Older and newer releases"
+          {...stylex.props(styles.pages)}>
+          <Button
+            label="Go to previous page"
+            tooltip={hasNewer ? 'Go to previous page' : undefined}
+            variant="ghost"
+            icon={<Icon icon="chevronLeft" size="md" />}
+            isIconOnly
+            isDisabled={!hasNewer}
+            href={hasNewer ? pageHref(page - 1) : undefined}
+            as={ReleasePageLink}
+          />
+          {generatePageRange(page, pageCount, 1).map((item, index, range) =>
+            item === '...' ? (
+              <span
+                key={`gap-${range[index - 1]}-${range[index + 1]}`}
+                aria-hidden="true"
+                {...stylex.props(styles.pageGap)}>
+                …
+              </span>
+            ) : (
+              <Button
+                key={item}
+                label={`Go to page ${item}`}
+                aria-label={`Go to page ${item}`}
+                variant="ghost"
+                href={pageHref(item)}
+                as={ReleasePageLink}
+                aria-current={item === page ? 'page' : undefined}
+                xstyle={item === page && styles.currentPage}>
+                {item}
+              </Button>
+            ),
+          )}
+          <Button
+            label="Go to next page"
+            tooltip={hasOlder ? 'Go to next page' : undefined}
+            variant="ghost"
+            icon={<Icon icon="chevronRight" size="md" />}
+            isIconOnly
+            isDisabled={!hasOlder}
+            href={hasOlder ? pageHref(page + 1) : undefined}
+            as={ReleasePageLink}
+          />
+        </nav>
       )}
     </VStack>
   );
