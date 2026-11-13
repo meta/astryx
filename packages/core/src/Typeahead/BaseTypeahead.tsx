@@ -918,10 +918,13 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   const dismissedRef = useRef(false);
   // The query as typed, readable from a search's continuation.
   const queryRef = useRef(query);
-  queryRef.current = query;
   // The query last applied to search and presentation, so a controlled
   // update the field itself reported does not run that path again.
   const lastAppliedQueryRef = useRef('');
+  // The text a pick reported empty from. An app that holds `query` after
+  // that pick still shows this string; the layout effect records it without
+  // running the external path.
+  const heldQueryAfterPickRef = useRef<string | null>(null);
   // True while a search the app started with the field idle must not open
   // the listbox or announce. Settlement then keeps the answer for the next
   // open, as a dismissed search does.
@@ -1667,11 +1670,13 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         replaceResults(derived, derived.length);
         // A query the app sets must close the listbox before paint, as
         // emptying the field does. The layout effect shares this path.
-        // eslint-disable-next-line @eslint-react/set-state-in-effect -- close and drop results in the same commit as the new query
+        // INV3: the same commit updates the popover layer and the live
+        // region, and abandons the search source's timer and request.
+        // eslint-disable-next-line @eslint-react/set-state-in-effect -- INV3: close the popover layer in the same commit as the query the layout effect synchronized
         setHeldHeight(null);
-        // eslint-disable-next-line @eslint-react/set-state-in-effect -- close and drop results in the same commit as the new query
+        // eslint-disable-next-line @eslint-react/set-state-in-effect -- INV3: drop the highlight with the popover layer in the same commit as the query
         setHighlightedIndex(derived.length > 0 ? 0 : -1);
-        // eslint-disable-next-line @eslint-react/set-state-in-effect -- close and drop results in the same commit as the new query
+        // eslint-disable-next-line @eslint-react/set-state-in-effect -- INV3: drop results and the live-region search state in the same commit as the query
         setHasSearched(false);
         // Bumping the generation abandons any in-flight search, which means
         // its own `finally` will decline to clear this — so clear it here or
@@ -1725,10 +1730,20 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     ],
   );
 
+  // INV3: synchronize the `query` prop to the search source's timer and
+  // request, the popover layer, and the live region.
   useIsomorphicLayoutEffect(() => {
     if (query === lastAppliedQueryRef.current) {
+      heldQueryAfterPickRef.current = null;
       return;
     }
+    if (heldQueryAfterPickRef.current === query) {
+      heldQueryAfterPickRef.current = null;
+      lastAppliedQueryRef.current = query;
+      queryRef.current = query;
+      return;
+    }
+    heldQueryAfterPickRef.current = null;
     handleQueryChange(query, 'external');
   }, [query, handleQueryChange]);
 
@@ -1807,6 +1822,12 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         setUncontrolledQuery('');
         queryRef.current = '';
         lastAppliedQueryRef.current = '';
+      } else if (query !== '') {
+        // Record the empty query this pick reports so an app that echoes
+        // `onChangeQuery('')` into `query` does not re-run the external path.
+        queryRef.current = '';
+        lastAppliedQueryRef.current = '';
+        heldQueryAfterPickRef.current = query;
       }
       if (query !== '') {
         onChangeQuery?.('');

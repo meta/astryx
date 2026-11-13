@@ -1208,9 +1208,6 @@ export function Tokenizer<T extends SearchableItem>({
   // keeps the query (FR18). The ref follows every report; the press
   // snapshots it into the state the next presentation starts from.
   const sheetQueryRef = useRef(queryProp ?? defaultQuery ?? '');
-  if (queryProp !== undefined) {
-    sheetQueryRef.current = queryProp;
-  }
   const [sheetInitialQuery, setSheetInitialQuery] = useState('');
   const handleSheetQueryChange = useCallback(
     (query: string) => {

@@ -426,6 +426,55 @@ describe('BaseTypeahead', () => {
       expect(input).toHaveValue('Ap');
     });
 
+    it('does not fire the empty external path when the app holds the query after a pick', async () => {
+      const bootstrap = vi.fn(() => [
+        {id: 'a', label: 'Apple'},
+        {id: 'b', label: 'Apricot'},
+      ]);
+      const heldSource: SearchSource<SearchableItem> = {
+        search: query =>
+          [
+            {id: 'a', label: 'Apple'},
+            {id: 'b', label: 'Apricot'},
+          ].filter(item =>
+            item.label.toLowerCase().includes(query.toLowerCase()),
+          ),
+        bootstrap,
+      };
+      const onChangeQuery = vi.fn();
+      function Controlled() {
+        const [query] = useState('Ap');
+        return (
+          <Typeahead
+            label="Fruit"
+            searchSource={heldSource}
+            value={null}
+            onChange={() => {}}
+            query={query}
+            onChangeQuery={onChangeQuery}
+            hasEntriesOnFocus
+            debounceMs={0}
+          />
+        );
+      }
+      render(<Controlled />);
+      const input = screen.getByRole('combobox');
+      fireEvent.focus(input);
+      await waitFor(() =>
+        expect(
+          screen.getByRole('option', {name: 'Apple', hidden: true}),
+        ).toBeInTheDocument(),
+      );
+      const bootstrapCallsAtPick = bootstrap.mock.calls.length;
+      fireEvent.click(
+        screen.getByRole('option', {name: 'Apple', hidden: true}),
+      );
+      expect(onChangeQuery).toHaveBeenLastCalledWith('');
+      expect(input).toHaveValue('Ap');
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+      expect(bootstrap.mock.calls.length).toBe(bootstrapCallsAtPick);
+    });
+
     it('empties the text after a pick when the field is uncontrolled', async () => {
       const user = userEvent.setup();
       render(
