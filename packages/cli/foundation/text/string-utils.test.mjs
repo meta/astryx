@@ -24,6 +24,7 @@ import {describe, it, expect} from 'vitest';
 import {withListingCache} from '../fs/listing-cache.mjs';
 import {
   findClosestComponents,
+  firstSentence,
   searchComponents,
   levenshteinDistance,
 } from './string-utils.mjs';
@@ -202,5 +203,27 @@ describe('searchComponents', () => {
 
   it('returns an empty array for an empty registry without throwing', async () => {
     await expect(searchComponents('Button', NO_CORE, {})).resolves.toEqual([]);
+  });
+});
+
+describe('firstSentence', () => {
+  it('ends at the first sentence and collapses whitespace', () => {
+    expect(firstSentence('One thing.  Two\nthings.')).toBe('One thing.');
+    expect(firstSentence('No end mark')).toBe('No end mark');
+  });
+
+  it('keeps going past e.g and i.e', () => {
+    expect(firstSentence('Pick one, e.g. a Card. Then more.')).toBe(
+      'Pick one, e.g. a Card.',
+    );
+  });
+
+  it('does not end inside an open quote', () => {
+    const description =
+      'An invoice summary that formats its date and amount with Intl using the locale from useLocale, so switching the provider from English to German changes "Nov 2, 2026" and "$1,234.50" to "2. Nov. 2026" and "1.234,50 $" with no second locale source.';
+    expect(firstSentence(description)).toBe(description);
+    expect(
+      firstSentence('It reads \u201C2. Nov.\u201D in German. More.'),
+    ).toBe('It reads \u201C2. Nov.\u201D in German.');
   });
 });
