@@ -4063,16 +4063,29 @@ export function draftAnswer(ctx, env, question) {
       if (st.mode) return true;
       if (st.verb !== 'set') return false;
       if (st.thing.startsWith('--')) return C.typeOf(st.thing) === 'color';
+      // A gradient goes per mode too, as a background image (the other
+      // mode keeps its background color).
+      if (/^background(-image)?$/.test(st.thing) && gradientOnly(st.value))
+        return true;
       if (st.thing === 'background')
         return (
           parseColor(st.value ?? '') != null || /^var\(/.test(st.value ?? '')
         );
       return COLOR_PROPS.test(st.thing);
     };
+    /** @param {string | undefined} v */
+    const gradientOnly = v =>
+      /gradient\(/i.test(v ?? '') && !/url\(|light-dark\(/i.test(v ?? '');
     const options = d.options
       .filter(o => o.every(modal))
       .map(o =>
-        o.map(st => (st.mode ? st : {...st, mode: c.mode ?? undefined})),
+        o.map(st => {
+          const one =
+            st.thing === 'background' && gradientOnly(st.value)
+              ? {...st, thing: 'background-image'}
+              : st;
+          return one.mode ? one : {...one, mode: c.mode ?? undefined};
+        }),
       );
     if (options.length) return {...d, options};
     return {
@@ -6038,7 +6051,7 @@ export function draftAnswer(ctx, env, question) {
       // a gradient, with example values to change.
       if (!color)
         return {
-          text: `the page background: --color-background-body for a color; background on app-shell (the part that paints the page) for a color or a gradient`,
+          text: `the page background: background on app-shell (the page behind your parts, in every AppShell variant) for a color or a gradient; --color-background-body for the body color`,
           options: [
             ...(/\bgradient\b/.test(c.text)
               ? []

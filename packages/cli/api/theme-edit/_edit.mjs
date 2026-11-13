@@ -2165,6 +2165,9 @@ async function changeOnce(
                 ))) &&
             x.when === s.when &&
             x.state === s.state &&
+            // A shorthand for one mode replaces longhands of that mode or of
+            // both, never the other mode's.
+            (!s.mode || !x.mode || x.mode === s.mode) &&
             // A longhand the shorthand really sets (MDN's data), never a
             // property that only shares its name (overflow-wrap).
             (coversProperty(s.thing, x.thing) ||

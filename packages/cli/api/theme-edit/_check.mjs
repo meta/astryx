@@ -2386,8 +2386,14 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
     s.mode = mode;
   }
   const onFlag = s.on ? ` --on ${s.on}` : '';
-  // A value that already gives both modes takes no --mode.
-  if (s.mode && !unset && /^\s*light-dark\(/i.test(v ?? ''))
+  // A value that already gives both modes takes no --mode (a gradient
+  // holding a light-dark() stop included).
+  if (
+    s.mode &&
+    !unset &&
+    (/^\s*light-dark\(/i.test(v ?? '') ||
+      (/gradient\(/i.test(v ?? '') && /light-dark\(/i.test(v ?? '')))
+  )
     refuse(
       E.ERR_THEME_NO_MODE,
       `"${v}" already gives both modes, so it takes no --mode; drop --mode, or give the ${s.mode} color alone.`,
@@ -2502,7 +2508,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       )
         refuse(
           E.ERR_THEME_UNKNOWN_PART,
-          `"${s.on}" is not a part name; the page behind your parts is painted by app-shell.`,
+          `"${s.on}" is not a part name; the page behind your parts is app-shell (a background there shows in every AppShell variant).`,
           {
             didYouMean: ['app-shell'],
             run: [setLine(slug, thing, v, {...s, on: 'app-shell'}, unset)],

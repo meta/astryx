@@ -2695,6 +2695,8 @@ export function compileTheme(ctx, data, base) {
   /** @param {string | null} t */
   const keptSizes = t =>
     [...keptTokens(t)].filter(([k]) => /^--size-element-/.test(k));
+  /** The one-mode gradient layers each block holds, by mode. @type {WeakMap<object, {light: string[], dark: string[]}>} */
+  const modeLayers = new WeakMap();
   /** @type {Record<string, {light?: string, dark?: string}>} */
   const tok = {};
   /** @param {string} name @param {string | [string, string]} v @param {string} [mode] */
@@ -3497,36 +3499,43 @@ export function compileTheme(ctx, data, base) {
   const putComp = (s, target, prop, v) => {
     const b = block(s, target);
     // A gradient background for one mode: each layer's colors are painted
-    // in that mode only (transparent in the other), beside the layers for
-    // the other mode, which keep theirs; a background for both modes held
-    // before keeps showing in the other mode.
+    // in that mode only (transparent in the other), as background images
+    // beside the other mode's, so each mode keeps its own background color;
+    // a gradient for both modes held before keeps showing in the other
+    // mode. Which layers belong to which mode is recorded as they are
+    // written, never read back from their stops.
     if (
       s.mode &&
       /^background(-image)?$/.test(kebab(prop)) &&
       /gradient\(/i.test(v)
     ) {
-      const key =
-        kebab(prop) === 'background' ? 'background' : 'backgroundImage';
-      const mine = maskLayers(v, s.mode);
-      const otherMode = s.mode === 'light' ? 'dark' : 'light';
-      /** @type {string[]} */
-      let kept = [];
-      for (const k of ['background', 'backgroundImage']) {
-        const held = b[k];
-        if (typeof held !== 'string') continue;
-        const layers = splitTop(held, ',').map(x => x.trim());
-        const masked = layers.filter(x => modeOfLayer(x) != null);
-        kept.push(
-          ...(masked.length
-            ? layers.filter(x => modeOfLayer(x) === otherMode)
-            : maskLayers(held, otherMode)),
-        );
-        delete b[k];
+      let rec = modeLayers.get(b);
+      if (!rec) {
+        rec = {light: [], dark: []};
+        for (const k of ['background', 'backgroundImage']) {
+          const held = b[k];
+          if (typeof held !== 'string' || !/gradient\(/i.test(held)) continue;
+          rec.light.push(...maskLayers(held, 'light'));
+          rec.dark.push(...maskLayers(held, 'dark'));
+          if (k === 'backgroundImage') delete b[k];
+        }
+        modeLayers.set(b, rec);
       }
-      b[key] = [
-        ...(s.mode === 'light' ? mine : kept),
-        ...(s.mode === 'light' ? kept : mine),
-      ].join(', ');
+      rec[s.mode] = maskLayers(v, s.mode);
+      const parts = [...rec.light, ...rec.dark].map(layerParts);
+      for (const k of [
+        'backgroundImage',
+        'backgroundPosition',
+        'backgroundSize',
+        'backgroundRepeat',
+      ])
+        delete b[k];
+      b.backgroundImage = parts.map(x => x.image).join(', ');
+      if (parts.some(x => x.position || x.size || x.repeat)) {
+        b.backgroundPosition = parts.map(x => x.position || '0% 0%').join(', ');
+        b.backgroundSize = parts.map(x => x.size || 'auto').join(', ');
+        b.backgroundRepeat = parts.map(x => x.repeat || 'repeat').join(', ');
+      }
       return;
     }
     // A color set in a one-mode theme fills its mode's half only (as a
@@ -3658,13 +3667,34 @@ export function compileTheme(ctx, data, base) {
         b[camel(prop)] ??= was;
       }
     }
+    // A color for one mode under the part's own gradient does not show:
+    // the result says so.
+    if (
+      mode &&
+      colorFamily(prop) === 'background-color' &&
+      ['background', 'backgroundImage'].some(
+        k => typeof b[k] === 'string' && /gradient\(|url\(/i.test(b[k]),
+      )
+    )
+      (ctx.compileNotes ??= []).push(
+        `${target}${s.when ? ` ${s.when}` : ''}${s.state ? ` :${s.state}` : ''} has a background image (a gradient) over its color, so the ${mode} color does not show until that background is a color`,
+      );
     if (mode) {
       const prev = b[prop];
       // The other mode keeps exactly what it had: the value set for it, the
       // part's own, else what the property shows unset (light-dark() takes
       // colors only, so never inherit).
+      // A token on the part: its own value in the other mode (the base
+      // theme's, else Core's), never another color.
+      const otherSide = mode === 'light' ? 'dark' : 'light';
+      const tokenOther = prop.startsWith('--')
+        ? (base[otherSide]?.[prop] ??
+          /** @type {Record<string, string>} */ (TOKENS)[prop] ??
+          null)
+        : null;
       const other =
         prev ??
+        tokenOther ??
         baseComponent(base, ctx, target, prop, s) ??
         partDefault(ctx, target, prop, s.when, s.state) ??
         (s.state
@@ -4031,6 +4061,25 @@ export function compileTheme(ctx, data, base) {
       if (parts.length) for (const t of parts) putComp(s, t, s.thing, s.value);
       else putTok(s.thing, s.value, s.mode);
     } else if (s.source === 'property') {
+      // A background on the whole app shell is the page background: the
+      // shell's content and nav areas paint the body and surface colors
+      // over it in every variant but section, so inside the shell those
+      // are see-through and the page shows in every AppShell.
+      if (
+        parts.includes('app-shell') &&
+        /^background(-color|-image)?$/.test(kebab(s.thing)) &&
+        !s.when &&
+        !s.state
+      ) {
+        for (const tok of [
+          '--color-background-body',
+          '--color-background-surface',
+        ])
+          block({...s, mode: undefined}, 'app-shell')[tok] = 'transparent';
+        (ctx.compileNotes ??= []).push(
+          'the page background on app-shell shows in every AppShell variant: inside the shell its content and nav areas are see-through (--color-background-body and --color-background-surface are transparent there), so parts in it that read those colors show the page too',
+        );
+      }
       for (const t of parts) {
         // A heading takes its color from its color prop, which reads the
         // text color tokens after part styles: the color goes into those
@@ -4042,7 +4091,10 @@ export function compileTheme(ctx, data, base) {
           for (const tok of named
             ? [`--color-text-${named}`]
             : ['--color-text-primary', '--color-text-secondary'])
-            putComp(scope, t, tok, s.value);
+            // A value naming one of these tokens (the secondary text color)
+            // leaves that token as it is: it would read itself.
+            if (!new RegExp(`var\\(\\s*${tok}\\s*[,)]`).test(String(s.value)))
+              putComp(scope, t, tok, s.value);
           continue;
         }
         // A padding on a part whose box reads Core's padding variables is
@@ -4334,18 +4386,32 @@ export function maskLayers(value, mode) {
 }
 
 /**
- * The mode a layer maskLayers wrote is painted in, or null for a layer
- * painted in both.
+ * A background layer's image (its gradient) and what follows it, as the
+ * background longhands take them: position, size (after a slash) and
+ * repeat.
  * @param {string} layer
- * @returns {'light' | 'dark' | null}
+ * @returns {{image: string, position: string, size: string, repeat: string}}
  */
-function modeOfLayer(layer) {
-  if (/light-dark\(\s*transparent\s*,/i.test(layer)) return 'dark';
-  if (
-    /light-dark\([^()]*(?:\([^()]*\)[^()]*)*,\s*transparent\s*\)/i.test(layer)
-  )
-    return 'light';
-  return null;
+function layerParts(layer) {
+  const fn = /^((?:repeating-)?(?:linear|radial|conic)-gradient)\(/i.exec(
+    layer,
+  );
+  if (!fn) return {image: layer, position: '', size: '', repeat: ''};
+  let depth = 0;
+  let end = layer.length - 1;
+  for (let i = fn[0].length - 1; i < layer.length; i++) {
+    if (layer[i] === '(') depth++;
+    if (layer[i] === ')' && --depth === 0) {
+      end = i;
+      break;
+    }
+  }
+  const rest = splitTop(layer.slice(end + 1).trim(), ' ');
+  const REPEAT = /^(repeat|no-repeat|repeat-x|repeat-y|space|round)$/i;
+  const repeat = rest.filter(w => REPEAT.test(w)).join(' ');
+  const words = rest.filter(w => !REPEAT.test(w)).join(' ');
+  const [position = '', size = ''] = words.split('/').map(x => x.trim());
+  return {image: layer.slice(0, end + 1), position, size, repeat};
 }
 
 /** A side word in a longhand's name, in the order a box value lists sides. */
