@@ -13,18 +13,21 @@ export const doc = {
   name: 'search',
   displayName: 'astryx search',
   namespace: 'cli/commands',
-  summary: 'Search components, hooks, docs, and templates in one ranked list',
+  summary: 'Search components, hooks, docs, templates, and themes in one ranked list',
   description:
     'Terminal front-end to search(): prints one ranked, greppable list across ' +
-    'every content domain, each row carrying a follow-up command to act on it.',
+    'every content domain, each row carrying a follow-up command to act on it. ' +
+    'Outside an app, where @astryxdesign/core is not installed, it searches the docs and themes.',
   fn: 'search',
-  args: [{name: 'query', param: 'query', required: true}],
+  // Every word after `search` is the query: `astryx search dark mode` searches
+  // for "dark mode", with no quotes needed.
+  args: [{name: 'query', param: 'query', required: true, variadic: true}],
   options: [
     {
       flag: '--type <domain>',
       param: 'options.type',
-      choices: ['component', 'hook', 'doc', 'template'],
-      description: 'Filter to one domain (component|hook|doc|template)',
+      choices: ['component', 'hook', 'doc', 'template', 'theme'],
+      description: 'Filter to one domain (component|hook|doc|template|theme)',
     },
     {
       flag: '--limit <n>',
@@ -39,15 +42,21 @@ export const doc = {
   examples: [
     {label: 'Ranked results', cli: 'astryx search button'},
     {
+      label: 'Several words, no quotes',
+      cli: 'astryx search dark mode --type doc',
+    },
+    {
       label: 'Filter + JSON',
       cli: 'astryx search "data table" --type template --json',
     },
+    {label: 'Themes you can add', cli: 'astryx search warm --type theme'},
   ],
+  outsideProject: 'same',
   exitCodes: [
     {code: 0, when: 'success (including zero matches)'},
     {
       code: 1,
-      when: 'invalid --type, a --limit that is not a positive integer, or @astryxdesign/core cannot be found',
+      when: 'invalid --type, a --limit that is not a positive integer, or --type component, hook, or template where @astryxdesign/core cannot be found',
     },
   ],
   related: ['component', 'hook', 'docs', 'template', 'build'],

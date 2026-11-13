@@ -22,7 +22,6 @@ export {VegaChart} from './VegaChart';
 export {parseSchema} from './schema';
 export {
   buildVegaLiteConfig,
-  withAstryxConfig,
   DEFAULT_STROKE_WIDTH,
   DEFAULT_POINT_SIZE,
   DEFAULT_LEGEND_ORIENT,

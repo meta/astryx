@@ -1,7 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-'use client';
-
 /**
  * @file index.ts
  * @input Layer hooks and components
@@ -50,7 +48,11 @@ export type {
 export {LayerProvider} from './LayerProvider';
 export type {LayerProviderProps} from './LayerProvider';
 export {LayerContext, useLayerContext} from './LayerContext';
-export type {LayerContextValue, LayerToastConfig} from './LayerContext';
+export type {
+  LayerContextValue,
+  LayerInset,
+  LayerToastConfig,
+} from './LayerContext';
 
 // Shared entry animation styles for layer-based components
 export {layerAnimations} from './layerAnimations.stylex';

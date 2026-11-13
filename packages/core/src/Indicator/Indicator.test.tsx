@@ -23,7 +23,7 @@ describe('default indicators', () => {
   it('renders the checkbox theme target with state and size', () => {
     render(<CheckboxIndicator state="indeterminate" size="sm" />);
 
-    const box = document.querySelector('.astryx-checkbox');
+    const box = document.querySelector('.astryx-checkbox-indicator');
     expect(box).toBeInTheDocument();
     expect(box).toHaveAttribute('data-checked', 'indeterminate');
     expect(box).toHaveAttribute('data-size', 'sm');
@@ -36,12 +36,18 @@ describe('default indicators', () => {
 
     // The circle draws in the unchecked state — this is what lets a radio act
     // as a selection indicator where an icon would render nothing.
-    expect(document.querySelector('.astryx-radio')).toBeInTheDocument();
-    expect(document.querySelector('.astryx-radio-dot')).not.toBeInTheDocument();
+    expect(
+      document.querySelector('.astryx-radio-indicator'),
+    ).toBeInTheDocument();
+    expect(
+      document.querySelector('.astryx-radio-indicator-dot'),
+    ).not.toBeInTheDocument();
 
     rerender(<RadioIndicator state="checked" />);
-    expect(document.querySelector('.astryx-radio-dot')).toBeInTheDocument();
-    expect(document.querySelector('.astryx-radio')).toHaveAttribute(
+    expect(
+      document.querySelector('.astryx-radio-indicator-dot'),
+    ).toBeInTheDocument();
+    expect(document.querySelector('.astryx-radio-indicator')).toHaveAttribute(
       'data-checked',
       'checked',
     );
@@ -60,7 +66,7 @@ describe('default indicators', () => {
   it('reflects the disabled state for theme targeting', () => {
     render(<RadioIndicator state="checked" isDisabled />);
 
-    expect(document.querySelector('.astryx-radio')).toHaveAttribute(
+    expect(document.querySelector('.astryx-radio-indicator')).toHaveAttribute(
       'data-disabled',
       'disabled',
     );
@@ -340,54 +346,44 @@ describe('useIndicator', () => {
   });
 });
 
-/**
- * A theme target is public API. Renaming one to follow the
- * `<component>-kebab` convention (`checkbox` → `checkbox-indicator`) would
- * silently break every theme styling the old name — the CSS still compiles, it
- * just stops matching. So both names remain emitted for compatibility, and
- * these tests pin that promise from both ends: the new name exists, and the
- * old one has not quietly disappeared.
- */
-describe('renamed theme targets stay non-breaking', () => {
+/** Canonical target names are the only component classes emitted in 0.7. */
+describe('indicator theme target names', () => {
   const cases = [
     {
       name: 'CheckboxIndicator',
       render: () => <CheckboxIndicator state="checked" />,
       current: 'astryx-checkbox-indicator',
-      legacy: 'astryx-checkbox',
+      removed: 'astryx-checkbox',
     },
     {
       name: 'RadioIndicator',
       render: () => <RadioIndicator state="checked" />,
       current: 'astryx-radio-indicator',
-      legacy: 'astryx-radio',
+      removed: 'astryx-radio',
     },
   ] as const;
 
-  for (const {name, render: renderCase, current, legacy} of cases) {
-    it(`${name} emits both the current and the legacy target`, () => {
+  for (const {name, render: renderCase, current, removed} of cases) {
+    it(`${name} emits only the canonical target`, () => {
       const {container} = render(renderCase());
       const el = container.querySelector(`.${current}`);
       expect(el, `${name} should render ${current}`).toBeInTheDocument();
-      expect(el, `${name} must keep emitting ${legacy}`).toHaveClass(legacy);
+      expect(el, `${name} must not render ${removed}`).not.toHaveClass(removed);
     });
   }
 
-  it('keeps the legacy dot target on the radio mark', () => {
+  it('uses only the canonical dot target on the radio mark', () => {
     const {container} = render(<RadioIndicator state="checked" />);
     const dot = container.querySelector('.astryx-radio-indicator-dot');
     expect(dot).toBeInTheDocument();
-    expect(dot).toHaveClass('astryx-radio-dot');
+    expect(dot).not.toHaveClass('astryx-radio-dot');
   });
 
-  it('puts both names on ONE element, so either selector wins equally', () => {
-    // If the legacy class were moved to a wrapper instead, an old theme's
-    // rules would land on a different box than a new theme's — same-element
-    // is what makes the two names interchangeable.
+  it('renders one canonical checkbox target element', () => {
     const {container} = render(<CheckboxIndicator state="unchecked" />);
-    expect(container.querySelectorAll('.astryx-checkbox')).toHaveLength(1);
-    expect(container.querySelector('.astryx-checkbox')).toBe(
-      container.querySelector('.astryx-checkbox-indicator'),
-    );
+    expect(
+      container.querySelectorAll('.astryx-checkbox-indicator'),
+    ).toHaveLength(1);
+    expect(container.querySelector('.astryx-checkbox')).toBeNull();
   });
 });

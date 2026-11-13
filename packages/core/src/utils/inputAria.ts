@@ -3,7 +3,7 @@
 /**
  * @file inputAria.ts
  * @input Receives input label/description IDs and optional InputGroup context
- * @output Exports helpers for consistent input ARIA composition
+ * @output Exports getInputARIA and joinAriaIDs for consistent input ARIA composition
  * @position Internal utility; used by inputs that compose labels/descriptions
  */
 
@@ -23,7 +23,7 @@ export interface InputARIA {
 
 type AriaID = string | null | undefined | false;
 
-function joinAriaIDs(...values: AriaID[]): string | undefined {
+export function joinAriaIDs(...values: AriaID[]): string | undefined {
   const ids = values
     .flatMap(value =>
       typeof value === 'string' ? value.trim().split(/\s+/) : [],

@@ -42,6 +42,9 @@ const anatomy = [
 
 export const docs = {
   name: 'ProgressBar',
+  playground: {
+    defaults: {label: 'Uploading files', value: 60},
+  },
   displayName: 'Progress Bar',
   category: 'Feedback & Status',
   keywords: [
@@ -53,6 +56,7 @@ export const docs = {
     'determinate',
     'indeterminate',
     'meter',
+    'linearprogress',
   ],
   props: [
     {
@@ -100,7 +104,8 @@ export const docs = {
     {
       name: 'isIndeterminate',
       type: 'boolean',
-      description: 'Animated loading indicator for unknown progress.',
+      description:
+        'Animated loading indicator for unknown progress. Under reduced motion it pulses in place instead of sliding.',
       default: 'false',
     },
     {
@@ -132,27 +137,6 @@ export const docs = {
         className: 'astryx-progress-bar-mark',
         visualProps: ['variant', 'placement'],
       },
-      // Retained beside the canonical names for backwards compatibility.
-      // New themes use the canonical targets above.
-      {
-        className: 'astryx-progressbar',
-        visualProps: ['variant'],
-        deprecatedFor: 'progress-bar',
-      },
-      {
-        className: 'astryx-progressbar-fill',
-        visualProps: ['variant'],
-        deprecatedFor: 'progress-bar-fill',
-      },
-      {
-        className: 'astryx-progressbar-track',
-        deprecatedFor: 'progress-bar-track',
-      },
-      {
-        className: 'astryx-progressbar-mark',
-        visualProps: ['variant', 'placement'],
-        deprecatedFor: 'progress-bar-mark',
-      },
     ],
     vars: [
       {
@@ -180,7 +164,7 @@ export const docs = {
   usage: {
     anatomy,
     description:
-      "A horizontal bar showing the completion progress of a task. Use it for operations where the duration is known, or as an animated indicator when progress can't be calculated. Supports semantic color variants, value labels, and custom formatting.",
+      "A horizontal bar showing the completion progress of a task. Use it for operations where the duration is known, or as an animated indicator when progress can't be calculated. Supports semantic color variants, value labels, and custom formatting. Under a finger a new value animates as on iOS: linearly, in proportion to how far it moves (a full track takes one second at the theme's default tempo), and the fill keeps a minimum visible length above zero.",
     bestPractices: [
       {
         guidance: true,
@@ -297,27 +281,6 @@ export const docsZh = {
         className: 'astryx-progress-bar-mark',
         visualProps: ['variant', 'placement'],
       },
-      // Retained beside the canonical names for backwards compatibility.
-      // New themes use the canonical targets above.
-      {
-        className: 'astryx-progressbar',
-        visualProps: ['variant'],
-        deprecatedFor: 'progress-bar',
-      },
-      {
-        className: 'astryx-progressbar-fill',
-        visualProps: ['variant'],
-        deprecatedFor: 'progress-bar-fill',
-      },
-      {
-        className: 'astryx-progressbar-track',
-        deprecatedFor: 'progress-bar-track',
-      },
-      {
-        className: 'astryx-progressbar-mark',
-        visualProps: ['variant', 'placement'],
-        deprecatedFor: 'progress-bar-mark',
-      },
     ],
     vars: [
       {
@@ -345,7 +308,7 @@ export const docsZh = {
   usage: {
     anatomy,
     description:
-      "A horizontal bar showing the completion progress of a task. Use it for operations where the duration is known, or as an animated indicator when progress can't be calculated. Supports semantic color variants, value labels, and custom formatting.",
+      "A horizontal bar showing the completion progress of a task. Use it for operations where the duration is known, or as an animated indicator when progress can't be calculated. Supports semantic color variants, value labels, and custom formatting. Under a finger a new value animates as on iOS: linearly, in proportion to how far it moves (a full track takes one second at the theme's default tempo), and the fill keeps a minimum visible length above zero.",
     bestPractices: [
       {
         guidance: true,
@@ -388,7 +351,7 @@ export const docsDense = {
   usage: {
     anatomy,
     description:
-      "A horizontal bar showing the completion progress of a task. Use it for operations where the duration is known, or as an animated indicator when progress can't be calculated. Supports semantic color variants, value labels, and custom formatting.",
+      "A horizontal bar showing the completion progress of a task. Use it for operations where the duration is known, or as an animated indicator when progress can't be calculated. Supports semantic color variants, value labels, and custom formatting. Under a finger a new value animates as on iOS: linearly, in proportion to how far it moves (a full track takes one second at the theme's default tempo), and the fill keeps a minimum visible length above zero.",
     bestPractices: [
       {
         guidance: true,
@@ -431,7 +394,8 @@ export const docsDense = {
     formatValueLabel:
       'Custom value label formatter; defaults to percentage string.',
     variant: 'Semantic color variant.',
-    isIndeterminate: 'Animated loading indicator for unknown progress.',
+    isIndeterminate:
+      'Animated loading indicator for unknown progress. Under reduced motion it pulses in place instead of sliding.',
     marks:
       'Fixed target marks ({value, label?}) drawn on the track in the 0..max scale; stay visible past the fill. Marks inside the fill take the variant on-color; marks on the bare track take the primary text color (secondary when disabled). A label reveals a tooltip on hover/focus. Ignored when indeterminate.',
     isDisabled: 'Visually disabled: grays out fill and text.',

@@ -8,11 +8,12 @@ import {
   compareIdentities,
   findSourceOnlyCandidates,
 } from './contribution-inventory.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 let tmpDir;
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-ci-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-ci-'));
 });
 
 afterEach(() => {
@@ -302,6 +303,25 @@ describe('compareIdentities', () => {
     const issues = compareIdentities(local, packed);
     expect(issues).toHaveLength(1);
     expect(issues[0].message).toContain('dash');
+  });
+
+  it('errors when a packed template replaces a different target', () => {
+    const template = {id: 'acme-shell', type: 'page', name: 'Acme shell'};
+    const local = {
+      ...base(),
+      templates: [{...template, replaces: 'shell-side-nav'}],
+    };
+    const packed = {
+      ...base(),
+      templates: [{...template, replaces: 'shell-top-nav'}],
+    };
+
+    expect(compareIdentities(local, packed)).toEqual([
+      expect.objectContaining({
+        code: 'identity_mismatch',
+        message: expect.stringContaining('acme-shell'),
+      }),
+    ]);
   });
 
   it('errors when a codemod is missing from packed', () => {

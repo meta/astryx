@@ -194,7 +194,8 @@ const s = stylex.create({
     textAlign: 'start',
     paddingBlock: 'var(--spacing-1)',
     paddingInline: 'var(--spacing-2)',
-    border: 'none',
+    borderWidth: 0,
+    borderStyle: 'none',
     backgroundColor: {
       default: 'transparent',
       ':hover': 'var(--color-background-hover, var(--color-background-muted))',

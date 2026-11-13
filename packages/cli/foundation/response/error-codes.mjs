@@ -64,6 +64,8 @@
  *   | 'ERR_UNKNOWN_FEATURE'
  *   | 'ERR_UNKNOWN_CODEMOD'
  *   | 'ERR_CODEMOD_FAILED'
+ *   | 'ERR_CODEMOD_PROTECTED'
+ *   | 'ERR_CODEMOD_PROTECTION_SOURCE'
  *   | 'ERR_NOT_FOUND'
  *   | 'ERR_NO_DOC'
  *   | 'ERR_NO_SHOWCASE'
@@ -75,6 +77,7 @@
  *   | 'ERR_WRITE_FAILED'
  *   | 'ERR_THEME_INVALID'
  *   | 'ERR_THEME_LOAD'
+ *   | 'ERR_THEME_STALE'
  *   | 'ERR_PALETTE_GENERATION'
  *   | 'ERR_VERSION_DETECT'
  *   | 'ERR_INVALID_VERSION'
@@ -86,6 +89,30 @@
  *   | 'ERR_LAYOUT_INVALID'
  *   | 'ERR_UNCLASSIFIED_EXIT'
  *   | 'ERR_SIGNAL_TERMINATED'
+ *   | 'ERR_VERSIONS_UNAVAILABLE'
+ *   | 'ERR_PROJECT_REQUIRED'
+ *   | 'ERR_RENDER_COMPILE'
+ *   | 'ERR_RENDER_NO_DEFAULT_EXPORT'
+ *   | 'ERR_RENDER_MISSING_DEPENDENCY'
+ *   | 'ERR_RENDER_BROWSER_API'
+ *   | 'ERR_RENDER_ASSET_TOO_LARGE'
+ *   | 'ERR_RENDER_TIMEOUT'
+ *   | 'ERR_RENDER_FAILED'
+ *   | 'ERR_RENDER_NOT_ASTRYX'
+ *   | 'ERR_RENDER_SOURCE_DAMAGED'
+ *   | 'ERR_THEME_BAD_VALUE'
+ *   | 'ERR_THEME_NO_MODE'
+ *   | 'ERR_THEME_UNKNOWN_PART'
+ *   | 'ERR_THEME_UNKNOWN_VARIANT'
+ *   | 'ERR_THEME_UNKNOWN_STATE'
+ *   | 'ERR_THEME_PRIVATE_TOKEN'
+ *   | 'ERR_THEME_UNKNOWN_TOKEN'
+ *   | 'ERR_THEME_NO_EFFECT'
+ *   | 'ERR_THEME_NOT_CHECKED'
+ *   | 'ERR_THEME_BUSY'
+ *   | 'ERR_THEME_UNKNOWN_THING'
+ *   | 'ERR_THEME_NOT_SET'
+ *   | 'ERR_THEME_NOTHING_TO_UNDO'
  * )} ErrorCode
  */
 
@@ -159,8 +186,12 @@ export const ERROR_CODES = Object.freeze({
   ERR_UNKNOWN_FEATURE: 'ERR_UNKNOWN_FEATURE',
   /** A `--codemod` value did not match any registered codemod (upgrade). */
   ERR_UNKNOWN_CODEMOD: 'ERR_UNKNOWN_CODEMOD',
-  /** One or more codemods failed during an upgrade run. */
+  /** One or more codemods, or a post-codemod hook, failed during an upgrade run. */
   ERR_CODEMOD_FAILED: 'ERR_CODEMOD_FAILED',
+  /** A required codemod change remains blocked by a protected consumer file. */
+  ERR_CODEMOD_PROTECTED: 'ERR_CODEMOD_PROTECTED',
+  /** A working-tree protection declaration could not be read or parsed. */
+  ERR_CODEMOD_PROTECTION_SOURCE: 'ERR_CODEMOD_PROTECTION_SOURCE',
   /** A generic discover/lookup query matched nothing in any package. */
   ERR_NOT_FOUND: 'ERR_NOT_FOUND',
 
@@ -189,6 +220,8 @@ export const ERROR_CODES = Object.freeze({
   ERR_THEME_INVALID: 'ERR_THEME_INVALID',
   /** A theme file could not be loaded / parsed into a defineTheme result. */
   ERR_THEME_LOAD: 'ERR_THEME_LOAD',
+  /** `--check` found built outputs stale or missing (a result, exit 1). */
+  ERR_THEME_STALE: 'ERR_THEME_STALE',
 
   // ── Palette generation ──────────────────────────────────────────
   /** A palette generation request or its constraints were invalid. */
@@ -230,6 +263,126 @@ export const ERROR_CODES = Object.freeze({
    * command never reached a terminal path of its own.
    */
   ERR_SIGNAL_TERMINATED: 'ERR_SIGNAL_TERMINATED',
+
+  // ── Global mode (which release answers) ──────────────────────────
+  /**
+   * The CLI release a run needs could not run: the release that matches the
+   * project's Core is not installed and could not be fetched (offline, or the
+   * registry lacks it), the project's own CLI could not be started, or a copy
+   * that carries no Core could not install its release's Core outside a
+   * project. Nothing was written.
+   */
+  ERR_VERSIONS_UNAVAILABLE: 'ERR_VERSIONS_UNAVAILABLE',
+  /**
+   * The command needs a project (an app with Astryx installed, or an
+   * integration package) and was run outside one. Nothing was written.
+   */
+  ERR_PROJECT_REQUIRED: 'ERR_PROJECT_REQUIRED',
+
+  // ── Render (experimental) ────────────────────────────────────────
+  /**
+   * The page given to `astryx experimental render` does not compile (a syntax
+   * or type-syntax error). Nothing was written.
+   */
+  ERR_RENDER_COMPILE: 'ERR_RENDER_COMPILE',
+  /**
+   * The page module has no default export to render. Nothing was written.
+   */
+  ERR_RENDER_NO_DEFAULT_EXPORT: 'ERR_RENDER_NO_DEFAULT_EXPORT',
+  /**
+   * The page imports a package that is not installed where the page is.
+   * Nothing was written.
+   */
+  ERR_RENDER_MISSING_DEPENDENCY: 'ERR_RENDER_MISSING_DEPENDENCY',
+  /**
+   * The page reads a browser-only API (window, document, …) while rendering,
+   * and a rendered page has no browser yet. Nothing was written.
+   */
+  ERR_RENDER_BROWSER_API: 'ERR_RENDER_BROWSER_API',
+  /**
+   * A local file the page uses is too large to inline into one HTML file.
+   * Nothing was written.
+   */
+  ERR_RENDER_ASSET_TOO_LARGE: 'ERR_RENDER_ASSET_TOO_LARGE',
+  /**
+   * The page did not finish rendering in time and was stopped. Nothing was
+   * written.
+   */
+  ERR_RENDER_TIMEOUT: 'ERR_RENDER_TIMEOUT',
+  /**
+   * The page threw while rendering for any other reason. Nothing was written.
+   */
+  ERR_RENDER_FAILED: 'ERR_RENDER_FAILED',
+  /**
+   * `render --reverse` was given an HTML file that a render did not write and
+   * that holds no Astryx markup and no embedded source, so there is nothing
+   * to rebuild. Nothing was written.
+   */
+  ERR_RENDER_NOT_ASTRYX: 'ERR_RENDER_NOT_ASTRYX',
+  /**
+   * `render --reverse` refused the received file: its embedded source is
+   * damaged (not valid, or a file does not match its checksum), lists a path
+   * twice, carries a module, stylesheet or JSON file the page does not
+   * import or an image, font or media file whose bytes are not one, or
+   * carries a file a
+   * render never embeds (a dotfile, node_modules, a manifest, lockfile or
+   * tool configuration, a file a test, story or benchmark runner would run,
+   * or any kind but a page module, stylesheet, JSON file or image). Nothing
+   * was written.
+   */
+  ERR_RENDER_SOURCE_DAMAGED: 'ERR_RENDER_SOURCE_DAMAGED',
+  /**
+   * A value does not fit what it sets: not a color for a color token, not a size for a size, a step (`more`/`less`) on something that is not a dial, or a word a dial does not take. Nothing was changed. Raised only by `experimental theme`.
+   */
+  ERR_THEME_BAD_VALUE: 'ERR_THEME_BAD_VALUE',
+  /**
+   * `--mode light|dark` was given for something that cannot differ between light and dark: a size, a number, a font, or a property that is not a plain color, or a theme that has only one mode. Nothing was changed. Raised only by `experimental theme`.
+   */
+  ERR_THEME_NO_MODE: 'ERR_THEME_NO_MODE',
+  /**
+   * `--on` names something that is not a themeable part or a family. Nothing was changed. Raised only by `experimental theme`.
+   */
+  ERR_THEME_UNKNOWN_PART: 'ERR_THEME_UNKNOWN_PART',
+  /**
+   * `--when` names a prop the part does not have, or a value that prop does not take. Nothing was changed. Raised only by `experimental theme`.
+   */
+  ERR_THEME_UNKNOWN_VARIANT: 'ERR_THEME_UNKNOWN_VARIANT',
+  /**
+   * `--state` names a state the part does not have. Nothing was changed. Raised only by `experimental theme`.
+   */
+  ERR_THEME_UNKNOWN_STATE: 'ERR_THEME_UNKNOWN_STATE',
+  /**
+   * The setting names a variable private to a component (`--_...`), which a theme cannot set. Nothing was changed. Raised only by `experimental theme`.
+   */
+  ERR_THEME_PRIVATE_TOKEN: 'ERR_THEME_PRIVATE_TOKEN',
+  /**
+   * The setting names a design token that does not exist. Nothing was changed. Raised only by `experimental theme`.
+   */
+  ERR_THEME_UNKNOWN_TOKEN: 'ERR_THEME_UNKNOWN_TOKEN',
+  /**
+   * The change could not take effect: neither the part nor any part inside it reads the token (or, for the whole theme, no part reads it). The suggestions name the token the part really reads and the property that sets it directly. Nothing was changed. Raised only by `experimental theme`.
+   */
+  ERR_THEME_NO_EFFECT: 'ERR_THEME_NO_EFFECT',
+  /**
+   * Not an error: the change is saved, but the components could not be rendered, so it was not checked and has no preview. The result's `notChecked` carries this code and the cause, such as two copies of React. Reported only by `experimental theme`.
+   */
+  ERR_THEME_NOT_CHECKED: 'ERR_THEME_NOT_CHECKED',
+  /**
+   * Another command is changing the same theme (or preview) and did not finish in time. Nothing was changed; run the command again. Raised only by `experimental theme`.
+   */
+  ERR_THEME_BUSY: 'ERR_THEME_BUSY',
+  /**
+   * The thing to change is not a dial, a design token, or a CSS property. Nothing was changed. Raised only by `experimental theme`.
+   */
+  ERR_THEME_UNKNOWN_THING: 'ERR_THEME_UNKNOWN_THING',
+  /**
+   * `editor undo <theme> <thing>` names a setting the theme does not have (with those `--on`, `--when`, `--state` and `--mode`). Nothing was changed. Raised only by `experimental theme`.
+   */
+  ERR_THEME_NOT_SET: 'ERR_THEME_NOT_SET',
+  /**
+   * `undo` found no earlier change to step back to. Nothing was changed. Raised only by `experimental theme`.
+   */
+  ERR_THEME_NOTHING_TO_UNDO: 'ERR_THEME_NOTHING_TO_UNDO',
 });
 
 /**

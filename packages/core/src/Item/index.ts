@@ -1,7 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-'use client';
-
 /**
  * @file index.ts
  * @input Imports from Item.tsx
@@ -10,4 +8,12 @@
  */
 
 export {Item} from './Item';
-export type {ItemProps, ItemAlign, ItemDensity} from './Item';
+export type {
+  ItemProps,
+  ItemAlign,
+  ItemDensity,
+  ItemSwipeAction,
+  ItemSwipeActions,
+  ItemSwipeActionVariant,
+  ItemSwipeBehavior,
+} from './Item';

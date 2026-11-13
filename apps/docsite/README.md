@@ -36,6 +36,7 @@ from the monorepo and writes typed TypeScript registries to `src/generated/`.
 | `themeRegistry.ts`            | Installed `@astryxdesign/theme-*` packages         | Built theme objects, keyed by package name                    |
 | `showcaseRegistry.ts`         | Blocks with `isShowcase`                           | Copied showcase source files                                  |
 | `exampleRegistry.ts`          | Blocks with `exampleFor`                           | Copied example blocks per component                           |
+| `searchIndex.ts`              | The CLI's search, run in this site's project       | The candidates the search API ranks                           |
 
 The `src/generated/` directory is gitignored. Pages import from these registries
 and render whatever the pipeline found, with no manual wiring needed.
@@ -91,6 +92,32 @@ always resolve `@astryxdesign/core` from the bundled workspace version.
 To preview the `latest` view locally, run the pipeline with
 `DOCSITE_TARGET=latest` (needs network to fetch the published tarballs).
 
+## Template preview icons (experimental)
+
+Template and block previews render the icons their templates import. To draw
+them with an installed icon set instead, build with
+`DOCSITE_ICON_SET=<package>/<set>`. Name backup sets after the main set,
+separated by commas: `DOCSITE_ICON_SET=<package>/<set>,<package>/<backup>`.
+Each icon comes from the first set in the list that has its meaning, the same
+rule `astryx template` uses, and an icon no set has draws a placeholder that
+the preview's source declares. Install each set's package in the docsite first.
+When a set's library is one huge barrel module, the build imports each icon from its own file, so a preview compiles only the icons the set uses. A changed setting rebuilds the previews; there is no need to delete `.next`. Unset, the build is
+unchanged. This setting is experimental: it may change or be removed in a
+patch release.
+
+## Template preview images
+
+Template and block previews load the PNG and JPEG files under
+`public/template-assets` through the Next.js image optimizer (`/_next/image`).
+`scripts/template-image-loader.mjs` rewrites the `/template-assets/` paths in
+the modules that a preview renders. The template sources and the code the site
+shows keep their paths. `astryx template` and the shadcn Install item still
+replace them with placeholders. Vector images, video, and a path with no file
+stay as written.
+
+Each image keeps its pixel size, up to 1920 pixels wide, and arrives in the
+format the browser accepts.
+
 ## Adding a New Theme
 
 1. Create the theme package under `packages/themes/<name>/`
@@ -117,18 +144,28 @@ them. Check the theme's `## Fonts` section for the specific Google Fonts URL.
 
 1. Create the package under `packages/<name>/`
 2. Add `"@astryxdesign/<name>": "*"` to `apps/docsite/package.json` dependencies
-3. For a canary-only component package, set `astryx.canaryOnly: true` in its
-   `package.json`, add `astryx.integration.mjs` with `components: './src'`,
-   include that file in the package's `files`, and list the package in
-   `apps/docsite/astryx.config.mjs`. Keep optional showcase blocks in the
-   package too and expose their directory through the integration's `templates`
-   field; the docsite retrieves them through the CLI template API.
+3. For a component package other than Core, add `astryx.integration.mjs` with
+   `components: './src'`, include that file (and `src`) in the package's
+   `files`, and list the package in `apps/docsite/astryx.config.mjs`. Keep
+   optional showcase blocks in the package too and expose their directory
+   through the integration's `templates` field; the docsite retrieves them
+   through the CLI template API. A package that publishes only canaries also
+   sets `astryx.canaryOnly: true` in its `package.json`. A package that
+   publishes stable releases joins the Changesets `fixed` group in
+   `.changeset/config.json` so it versions with Core: the production snapshot
+   fetches every documented package at Core's published version, and a stable
+   integration on its own version would fail production builds as a partly
+   published release.
 4. Run `pnpm generate`
 
 The package appears in the sidebar, the libraries section, and gets its own
 `/docs/<name>` detail page. If the package contains `.doc.mjs` files,
 its components are extracted into `componentRegistry.ts` as well. Canary-only
 packages and components appear only on canary builds and carry a flask icon.
+A configured package that is a stable release (neither `private` nor
+`astryx.canaryOnly`) is documented on the production site too, from its
+published tarball, starting with its first stable release
+(`scripts/resolve-content-root.mjs`).
 
 ## Adding a Blog Post
 

@@ -35,6 +35,15 @@ describe('template.copy — overwrite + path safety', () => {
     expect(fs.readFileSync(path.join(dir, 'mine.tsx'), 'utf-8')).toBe('USER CODE');
   }, SLOW);
 
+  it('names the flag that replaces the file, as swizzle and theme add do', async () => {
+    fs.writeFileSync(path.join(dir, 'mine.tsx'), 'USER CODE');
+    await expect(
+      template('blank', {targetPath: './mine.tsx', cwd: dir}),
+    ).rejects.toThrow(
+      'Refusing to overwrite existing file mine.tsx. Re-run with --overwrite (or -f) to replace it.',
+    );
+  }, SLOW);
+
   it('overwrites when overwrite:true is passed', async () => {
     fs.writeFileSync(path.join(dir, 'mine.tsx'), 'USER CODE');
     const res = await template('blank', {targetPath: './mine.tsx', overwrite: true, cwd: dir});

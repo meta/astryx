@@ -16,7 +16,7 @@
  * - /packages/cli/assets/templates/blocks/components/TopNav/ (showcase blocks)
  */
 
-import type {ReactNode} from 'react';
+import {useRef, type ReactNode} from 'react';
 import type {BaseProps} from '../BaseProps';
 import * as stylex from '@stylexjs/stylex';
 import {
@@ -33,10 +33,15 @@ import type {LinkComponentType} from '../Link/types';
 import {useTopNavRenderMode} from './TopNavRenderContext';
 import {navItemStyles, type NavItemSize} from '../NavItem/navItemStyles.stylex';
 import {mergeProps} from '../utils';
-import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
+import {useCloseMobileDrawerOnActivate} from '../AppShell/useCloseMobileDrawerOnActivate';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
+import {usePressFeedback} from '../hooks/usePressFeedback';
+import {
+  disabledInteractionProps,
+  withholdCallerHandlers,
+} from '../utils/disabledInteraction';
 
 /**
  * NavItem styles with hover/selected states
@@ -71,6 +76,16 @@ const styles = stylex.create({
         '@media (hover: hover)': colorVars['--color-neutral'],
       },
       ':active': colorVars['--color-neutral'],
+      // The touch press model writes these instead of `:active`; the selected
+      // item keeps its fill under a finger the way it does under a mouse, and
+      // paints no overlay at any phase of the press.
+      '[data-astryx-press="on"]': colorVars['--color-neutral'],
+      '[data-astryx-press="fading"]': colorVars['--color-neutral'],
+    },
+    backgroundImage: {
+      default: null,
+      '[data-astryx-press="on"]': 'none',
+      '[data-astryx-press="fading"]': 'none',
     },
   },
   iconOnly: {
@@ -111,8 +126,9 @@ export interface TopNavItemProps extends BaseProps<HTMLAnchorElement> {
   isSelected?: boolean;
   /**
    * Whether the nav item is disabled.
-   * A disabled item renders as a plain anchor without an href (and without
-   * target), so it cannot navigate and is removed from the tab order.
+   * A disabled link renders as an anchor without an href (and without
+   * target), so it cannot navigate; it keeps its Tab stop and is exposed as a
+   * disabled link. A disabled action stays a focusable, non-operable button.
    * @default false
    */
   isDisabled?: boolean;
@@ -185,31 +201,91 @@ export function TopNavItem({
   ref,
   ...props
 }: TopNavItemProps) {
+  const pressable = usePressFeedback();
   const LinkComponent = useLinkComponent(as);
   const renderMode = useTopNavRenderMode();
-  const {closeMobileNav} = useAppShellMobile();
+  const closeDrawerAfter = useCloseMobileDrawerOnActivate(
+    renderMode === 'drawer',
+  );
 
-  // A disabled item renders as a plain <a> with no href: an href-less anchor
-  // is not focusable and exposes no link affordance, so programmatic focus +
-  // Enter, AT activation commands, and middle-click cannot navigate or fire
-  // the consumer onClick. The router LinkComponent is deliberately skipped —
-  // a disabled item performs no navigation, and custom router links may
-  // require a live href. target is omitted with the href. (Mirrors the
-  // disabled paths of Link and SideNavItem.)
-  const Root = isDisabled ? 'a' : LinkComponent;
+  // A disabled item runs no caller handler except `onFocus` and `onBlur`, as a
+  // natively disabled control runs none.
+  const callerProps = withholdCallerHandlers(props, isDisabled);
+
+  const isAction = href == null && onClick != null;
+  // A disabled link renders as an <a> with no href. Enter, assistive
+  // technology commands and a middle click cannot navigate or run the caller's
+  // onClick. The item keeps its Tab stop and the link role, so keyboard and
+  // screen-reader users still find it. It does not navigate, so it skips the
+  // router LinkComponent, which can require a live href. The target goes with
+  // the href.
+  const Root = isDisabled && !isAction ? 'a' : LinkComponent;
+  // Space activates on release, like a native button. The key-up handler
+  // checks the node and the disabled state, so no other code resets the press.
+  const spacePressedRef = useRef<HTMLAnchorElement | null>(null);
+
+  // The host stays an anchor because the public ref and event types are
+  // HTMLAnchorElement.
+  const actionKeyboardProps = isAction
+    ? {
+        role: props.role ?? 'button',
+        tabIndex: props.tabIndex ?? 0,
+        onKeyDown: (event: React.KeyboardEvent<HTMLAnchorElement>) => {
+          callerProps.onKeyDown?.(event);
+          if (event.defaultPrevented || event.target !== event.currentTarget) {
+            return;
+          }
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            event.currentTarget.click();
+          } else if (event.key === ' ') {
+            event.preventDefault();
+            spacePressedRef.current = event.currentTarget;
+          }
+        },
+        onKeyUp: (event: React.KeyboardEvent<HTMLAnchorElement>) => {
+          const activate =
+            event.key === ' ' &&
+            spacePressedRef.current === event.currentTarget;
+          if (event.key === ' ') {
+            spacePressedRef.current = null;
+          }
+          callerProps.onKeyUp?.(event);
+          if (
+            activate &&
+            !isDisabled &&
+            !event.defaultPrevented &&
+            event.target === event.currentTarget
+          ) {
+            event.preventDefault();
+            event.currentTarget.click();
+          }
+        },
+        onBlur: (event: React.FocusEvent<HTMLAnchorElement>) => {
+          spacePressedRef.current = null;
+          callerProps.onBlur?.(event);
+        },
+      }
+    : undefined;
+  const disabledActionProps =
+    isAction && isDisabled
+      ? {
+          ...disabledInteractionProps(callerProps.onKeyDown),
+          'aria-disabled': true as const,
+        }
+      : undefined;
 
   // =========================================================================
   // Drawer mode — render as a SideNavItem-style vertical list element
   // =========================================================================
   if (renderMode === 'drawer') {
+    const activate = closeDrawerAfter(onClick);
     const handleDrawerClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
       if (isDisabled) {
         preventDefaultClick(e);
         return;
       }
-      // Forward the original onClick if present
-      onClick?.(e);
-      closeMobileNav();
+      activate?.(e);
     };
 
     return (
@@ -219,8 +295,10 @@ export function TopNavItem({
         target={isDisabled ? undefined : target}
         aria-label={isIconOnly ? label : undefined}
         aria-current={isSelected ? 'page' : undefined}
+        role={isDisabled ? 'link' : undefined}
         aria-disabled={isDisabled || undefined}
-        tabIndex={isDisabled ? -1 : undefined}
+        tabIndex={isDisabled ? 0 : undefined}
+        {...pressable}
         {...mergeProps(
           themeProps('top-nav-item', {
             mode: 'drawer',
@@ -237,8 +315,11 @@ export function TopNavItem({
           className,
           style,
         )}
-        {...props}
-        onClick={handleDrawerClick}>
+        {...callerProps}
+        {...(isDisabled && !isAction ? disabledInteractionProps() : null)}
+        onClick={handleDrawerClick}
+        {...actionKeyboardProps}
+        {...disabledActionProps}>
         {icon}
         {!isIconOnly && (children ?? label)}
       </Root>
@@ -257,8 +338,10 @@ export function TopNavItem({
       onClick={isDisabled ? preventDefaultClick : onClick}
       aria-label={isIconOnly ? label : undefined}
       aria-current={isSelected ? 'page' : undefined}
+      role={isDisabled ? 'link' : undefined}
       aria-disabled={isDisabled || undefined}
-      tabIndex={isDisabled ? -1 : undefined}
+      tabIndex={isDisabled ? 0 : undefined}
+      {...pressable}
       {...mergeProps(
         themeProps('top-nav-item', {
           selected: isSelected ? 'selected' : null,
@@ -274,7 +357,10 @@ export function TopNavItem({
         className,
         style,
       )}
-      {...props}>
+      {...callerProps}
+      {...(isDisabled && !isAction ? disabledInteractionProps() : null)}
+      {...actionKeyboardProps}
+      {...disabledActionProps}>
       {icon}
       {!isIconOnly && (children ?? label)}
     </Root>

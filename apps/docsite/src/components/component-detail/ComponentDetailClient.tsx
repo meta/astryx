@@ -2,9 +2,18 @@
 
 'use client';
 
+/**
+ * @file Composes a generated component's overview, examples, and detail tabs.
+ * @input Component metadata (including its stability), package metadata, and
+ *   its showcase block.
+ * @output The interactive component detail article with stable example targets.
+ * @position Client content for /components/[name].
+ */
+
 import * as stylex from '@stylexjs/stylex';
 import {Suspense} from 'react';
 import {useSearchParams, useRouter, usePathname} from 'next/navigation';
+import {Badge, type BadgeVariant} from '@astryxdesign/core/Badge';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {VStack} from '@astryxdesign/core/Layout';
 import {Section} from '@astryxdesign/core/Section';
@@ -15,6 +24,7 @@ import {typeScaleVars} from '@astryxdesign/core/theme/tokens.stylex';
 import {CodeExampleBlock} from '../CodeExampleBlock';
 import {TabList, Tab} from '@astryxdesign/core/TabList';
 import {ShowcasePreview} from './ShowcasePreview';
+import {ExampleAnchor} from './ExampleAnchor';
 import {ComponentPreviewTheme} from './ComponentPreviewTheme';
 import {Anatomy} from './Anatomy';
 import {BestPractices} from './BestPractices';
@@ -22,7 +32,9 @@ import {Theming} from './Theming';
 import {Accessibility} from './Accessibility';
 import {HookSignature} from './HookSignature';
 import {ExampleBlock} from './ExampleBlock';
+import {SetupExampleBlock} from './SetupExampleBlock';
 import {MarkdownText} from '../MarkdownText';
+import {DeprecatedBadge, DeprecationNotice} from '../Deprecation';
 import {
   InteractivePreviewStage,
   useInteractiveState,
@@ -35,12 +47,16 @@ import {PropsTable} from './PropsTable';
 import type {ComponentEntry} from '../../generated/componentRegistry';
 import type {BlockEntry} from '../../generated/blockRegistry';
 import {showcaseRegistry} from '../../generated/showcaseRegistry';
-import {exampleRegistry} from '../../generated/exampleRegistry';
+import {
+  exampleRegistry,
+  setupExampleRegistry,
+} from '../../generated/exampleRegistry';
 import {
   shadcnRegistryIsPreview,
   shadcnRegistryOrigin,
 } from '../../generated/shadcnRegistry';
 import {trackNavigate} from '../../lib/analytics';
+import {exampleAnchorId} from '../../lib/exampleAnchor.mjs';
 import {
   shadcnComponentItemPath,
   shadcnInstallCommand,
@@ -92,11 +108,20 @@ interface ComponentDetailClientProps {
   showcase: BlockEntry | undefined;
 }
 
+/** The header badge for each stability other than stable, which shows none. */
+const STABILITY_BADGES: Record<
+  NonNullable<ComponentEntry['stability']>,
+  {label: string; variant: BadgeVariant}
+> = {
+  experimental: {label: 'Experimental', variant: 'orange'},
+  lab: {label: 'Lab', variant: 'purple'},
+};
+
 function OverviewContent({
   comp,
   pkg,
   pkgVersion,
-  showcase: _showcase,
+  showcase,
   hasShowcase,
 }: ComponentDetailClientProps & {hasShowcase: boolean}) {
   const isHook = comp.params != null;
@@ -106,11 +131,14 @@ function OverviewContent({
   return (
     <VStack gap={8} xstyle={styles.overviewProse}>
       {hasShowcase && (
-        <ComponentPreviewTheme>
-          <Card variant="muted" padding={0}>
-            <ShowcasePreview name={comp.name} />
-          </Card>
-        </ComponentPreviewTheme>
+        <ExampleAnchor
+          id={showcase ? exampleAnchorId(showcase.dirName) : undefined}>
+          <ComponentPreviewTheme>
+            <Card variant="muted" padding={0}>
+              <ShowcasePreview name={comp.name} />
+            </Card>
+          </ComponentPreviewTheme>
+        </ExampleAnchor>
       )}
 
       {comp.usage && (
@@ -153,7 +181,9 @@ function OverviewContent({
         <PropsTable props={comp.props} heading="Props" />
       )}
 
-      {(exampleRegistry[comp.name] || []).length > 0 && (
+      {(exampleRegistry[comp.name] || []).length +
+        (setupExampleRegistry[comp.name] || []).length >
+        0 && (
         <>
           <VStack gap={4}>
             <Heading level={2} type="display-3">
@@ -166,6 +196,9 @@ function OverviewContent({
           <VStack gap={10}>
             {(exampleRegistry[comp.name] || []).map((entry, i) => (
               <ExampleBlock key={i} entry={entry} componentName={comp.name} />
+            ))}
+            {(setupExampleRegistry[comp.name] || []).map((entry, i) => (
+              <SetupExampleBlock key={`setup-${i}`} entry={entry} />
             ))}
           </VStack>
         </>
@@ -181,8 +214,7 @@ function OverviewContent({
             <MarkdownText type="body">
               Already using the shadcn registry workflow? Install the real
               Astryx package and a local public re-export. Component
-              implementation source stays in Astryx. [How compatibility
-              works](/docs/shadcn-compatibility).
+              implementation source stays in Astryx.
             </MarkdownText>
             {shadcnRegistryIsPreview && (
               <Text type="supporting" color="secondary">
@@ -379,6 +411,8 @@ export function ComponentDetailClient({
     accessibilityRequirements.length > 0 ||
     accessibilityThemeCoverage.length > 0;
   const hasTabs = hasPlayground || hasThemingTab || hasAccessibilityTab;
+  const stabilityBadge =
+    comp.stability != null ? STABILITY_BADGES[comp.stability] : null;
 
   return (
     <Section
@@ -395,9 +429,26 @@ export function ComponentDetailClient({
             {!comp.isReady ? 'Canary · ' : ''}
             {pkg}
             {pkgVersion ? ` v${pkgVersion}` : ''} · {comp.moduleName}
+            {stabilityBadge && (
+              <>
+                {' '}
+                <Badge
+                  label={stabilityBadge.label}
+                  variant={stabilityBadge.variant}
+                />
+              </>
+            )}
+            {comp.deprecated && (
+              <>
+                {' '}
+                <DeprecatedBadge />
+              </>
+            )}
             {!comp.isReady && pkg ? ` · npm install ${pkg}@canary` : ''}
           </Text>
         </VStack>
+
+        {comp.deprecated && <DeprecationNotice deprecation={comp.deprecated} />}
 
         {hasTabs ? (
           <Suspense

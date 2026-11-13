@@ -6,11 +6,14 @@ import {expect, userEvent, waitFor, within} from 'storybook/test';
 import * as stylex from '@stylexjs/stylex';
 import {
   BaseTypeahead,
+  Typeahead,
   createStaticSource,
   type BaseTypeaheadProps,
   type SearchableItem,
   type SearchSource,
 } from '@astryxdesign/core/Typeahead';
+import {Tokenizer} from '@astryxdesign/core/Tokenizer';
+import BaseTypeaheadMenuBlock from '../../../packages/cli/assets/templates/blocks/components/BaseTypeahead/BaseTypeaheadMenu';
 import {
   borderVars,
   colorVars,
@@ -41,6 +44,14 @@ const emptySource = createStaticSource([]);
 const pendingSource: SearchSource = {
   search: () => new Promise(() => {}),
   bootstrap: () => new Promise(() => {}),
+};
+// A single-answer remote source with a reproducible pending interval (#8903).
+const delayedSource: SearchSource = {
+  search: async query => {
+    await new Promise<void>(resolve => setTimeout(resolve, 1000));
+    return source.search(query);
+  },
+  bootstrap: () => [],
 };
 
 const styles = stylex.create({
@@ -199,7 +210,7 @@ export const EmptyResults: Story = {
     <Demo
       source={emptySource}
       debounceMs={0}
-      emptySearchResultsText="No matching frameworks"
+      emptySearchText="No matching frameworks"
     />
   ),
   play: async ({canvasElement}) => {
@@ -207,6 +218,40 @@ export const EmptyResults: Story = {
     await userEvent.type(input, 'none');
     await waitFor(() => expect(input).toHaveAttribute('aria-expanded', 'true'));
   },
+};
+
+function EmptyThenPendingDemo() {
+  const [value, setValue] = useState<SearchableItem | null>(null);
+  const [tokens, setTokens] = useState<SearchableItem[]>([]);
+  return (
+    <div {...stylex.props(styles.stage)}>
+      <Demo source={delayedSource} label="Bare framework" />
+      <Typeahead
+        label="Single framework"
+        searchSource={delayedSource}
+        value={value}
+        onChange={setValue}
+      />
+      <Tokenizer
+        label="Framework tokens"
+        searchSource={delayedSource}
+        value={tokens}
+        onChange={setTokens}
+      />
+    </div>
+  );
+}
+
+export const EmptyThenPending: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Search for zzz, wait for the empty result, then type react or xxx. Each request takes one second; the previous empty result must not remain during debounce or loading.',
+      },
+    },
+  },
+  render: () => <EmptyThenPendingDemo />,
 };
 
 export const CustomRenderer: Story = {
@@ -275,4 +320,10 @@ export const NarrowLongResult: Story = {
       ).toBe(true);
     });
   },
+};
+
+// The documented example: a listbox menu with information around the list,
+// and a dialog menu that a pick or a filter button opens.
+export const Menu: Story = {
+  render: () => <BaseTypeaheadMenuBlock />,
 };

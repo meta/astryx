@@ -77,12 +77,7 @@ export type TokenResolver = (name: string) => string;
 // Internals
 // =============================================================================
 
-/**
- * The categorical palette, in slot order. Exported so integration packages
- * (e.g. `@astryxdesign/vega`) build their own scale ranges from the same list
- * instead of keeping a parallel copy that can drift.
- */
-export const CATEGORICAL_TOKENS = [
+const CATEGORICAL_TOKENS = [
   '--color-data-categorical-blue',
   '--color-data-categorical-orange',
   '--color-data-categorical-purple',

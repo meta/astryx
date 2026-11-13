@@ -21,8 +21,67 @@ export {
   type SyntaxToken,
 } from '@astryxdesign/core/CodeBlock';
 
-// InfoTip — accessible info-icon help affordance (RFC facebook/astryx#3349)
+// InfoTip — accessible info-icon help affordance (RFC meta/astryx#3349)
 export {InfoTip, type InfoTipProps, type InfoTipSize} from './InfoTip';
+
+// SelectableCardGroup — a set of selectable cards with the semantics of its
+// selection: one choice is a radio group, several a group of checkboxes
+export {
+  SelectableCardGroup,
+  SelectableCardGroupItem,
+  type SelectableCardGroupProps,
+  type SelectableCardGroupItemProps,
+} from './SelectableCardGroup';
+
+// CircleCheckIndicator — the iOS multiple-selection circle, a checkbox-family
+// indicator a theme can map to `checkbox`
+export {CircleCheckIndicator} from './CircleCheckIndicator';
+
+// EmojiPicker — standalone searchable emoji panel
+export {
+  EmojiPicker,
+  DEFAULT_FREQUENT_EMOJIS,
+  type EmojiPickerProps,
+  type EmojiOption,
+  type EmojiCategory,
+} from './EmojiPicker';
+
+// CommentPin — avatar-first anchor for one or grouped annotation threads
+export {
+  CommentPin,
+  type CommentPinParticipant,
+  type CommentPinProps,
+} from './CommentPin';
+
+// Comments family — a panel, standalone thread, and controlled composer
+export {
+  Comments,
+  type CommentsProps,
+  CommentThread,
+  type CommentThreadProps,
+  CommentComposer,
+  type CommentComposerProps,
+  DEFAULT_COMMENT_REACTIONS,
+  COMMENT_ICON_KEYS,
+  type CommentAgentCommand,
+  type CommentAnchor,
+  type CommentComposerContext,
+  type CommentComposerRenderProps,
+  type CommentData,
+  type CommentStatus,
+  type CommentHighlightColor,
+  type CommentImageUploader,
+  type CommentMode,
+  type CommentProgress,
+  type CommentReaction,
+  type CommentReactionOption,
+  type CommentThreadData,
+  type CommentThreadSharedProps,
+  type CommentUploadedImage,
+  type CommentUser,
+  type CommentVersion,
+  type CommentActivityEvent,
+} from './Comments';
 
 // TransferList — controlled dual-panel collection input
 export {
@@ -35,6 +94,9 @@ export {
   type TransferListSelectorProps,
 } from './TransferList';
 
+// LineClamp — clamp arbitrary content to N lines (facebook/astryx#4180)
+export {LineClamp, type LineClampProps} from './LineClamp';
+
 // Chat — experimental reasoning display
 export {
   ChatReasoning,
@@ -42,10 +104,14 @@ export {
 } from './ChatReasoning/ChatReasoning';
 export * from './Chat';
 
-// Drawer — experimental overlay panel
-export {Drawer, type DrawerProps} from './Drawer';
+// DialogHeroHeader — hero-style Dialog header (meta/astryx#4182)
+export {
+  DialogHeroHeader,
+  type DialogHeroHeaderProps,
+  type DialogHeroHeaderMediaMode,
+} from './DialogHeroHeader';
 
-// Tour — guided product-tour / NUX walkthrough (facebook/astryx#4239)
+// Tour — guided product-tour / NUX walkthrough (meta/astryx#4239)
 export {
   Tour,
   type TourProps,
@@ -98,6 +164,36 @@ export {
   mailIcon,
   lockIcon,
   starterIcons,
+  WeightedSVGIcon,
+  WeightedIconSprite,
+  weightedIconSymbolId,
+  type WeightedSVGIconProps,
+  type WeightedIconSpriteProps,
+  buildWeightedIcon,
+  parseSVGPaths,
+  ICON_WEIGHTS,
+  type IconWeight,
+  type WeightedIconDef,
+  type WeightedIconLayer,
+  type WeightedIconPath,
+  type BuildWeightedIconOptions,
+  registerWeightProbe,
+  xWeightedIcon,
+  checkWeightedIcon,
+  bellWeightedIcon,
+  homeWeightedIcon,
+  settingsWeightedIcon,
+  calendarWeightedIcon,
+  menuWeightedIcon,
+  heartWeightedIcon,
+  eyeWeightedIcon,
+  starWeightedIcon,
+  folderWeightedIcon,
+  shieldWeightedIcon,
+  searchWeightedIcon,
+  mailWeightedIcon,
+  lockWeightedIcon,
+  weightedStarterIcons,
 } from './SVGIcon';
 
 // Chart components — composable d3-based data visualization
@@ -253,16 +349,59 @@ export {
   type LogStreamLevel,
 } from './LogStream';
 
-// MobileTokenizer — Lab prototype (stack layer 1) of the touch Tokenizer
-// flow: summary trigger + stacked manage/add BottomSheets. Graduates to
-// Core Tokenizer presentation="bottom-sheet" (stack layer 2).
+// DiffViewer — read-only file diff (unified/split) for code review surfaces
 export {
-  MobileTokenizer,
-  type MobileTokenizerProps,
-  type MobileTokenizerChange,
-} from './MobileTokenizer';
+  DiffViewer,
+  parseUnifiedDiff,
+  createDiffFile,
+  type DiffViewerProps,
+  type DiffViewerViewMode,
+  type CreateDiffFileOptions,
+  type DiffViewerChangeIndicator,
+  type DiffViewerInlineHighlight,
+  type DiffViewerFile,
+  type DiffViewerFileStatus,
+  type DiffViewerHunk,
+  type DiffViewerLine,
+  type DiffViewerLineKind,
+  type DiffViewerLineRef,
+  type DiffViewerSide,
+} from './DiffViewer';
 
-// RichTextEditor (RFC facebook/astryx#3899) has graduated out of @astryxdesign/lab
-// into its own canary-only package, @astryxdesign/richtext, so it can be canaried
-// independently (e.g. into EPS/Nest). Import it from there:
+// NavigationStack: push/pop drill-down navigation with UIKit's transitions
+// and back swipes.
+export {
+  NavigationScreen,
+  NavigationStack,
+  useNavigationStack,
+  type NavigationScreenProps,
+  type NavigationStackApi,
+  type NavigationStackProps,
+} from './NavigationStack';
+
+// PageControl: UIPageControl's row of page indicators.
+export {PageControl, type PageControlProps} from './PageControl';
+
+// TabBar: the floating bottom tab bar of iOS 26's UITabBarController.
+export {
+  TabBar,
+  TabBarItem,
+  type TabBarItemProps,
+  type TabBarProps,
+} from './TabBar';
+
+// TabBarMoreList: the screen of TabBar's More tab (UIMoreListController).
+export {TabBarMoreList, type TabBarMoreListProps} from './TabBarMoreList';
+
+// RichTextEditor (RFC meta/astryx#3899) moved out of @astryxdesign/lab into
+// its own package, @astryxdesign/richtext. Import it from there:
 //   import {RichTextEditor, RichTextView} from '@astryxdesign/richtext';
+
+// Pull to refresh as UIRefreshControl, applied by the app to its own scroll
+// container, on Core's touch foundation.
+export {
+  REFRESH_REVEAL_VAR,
+  useRefreshControl,
+  type UseRefreshControlOptions,
+  type UseRefreshControlResult,
+} from './RefreshControl';

@@ -2,7 +2,7 @@
 
 /**
  * @file menuItemRoles.ts
- * @output Shared menu-item role set + focus selector.
+ * @output Shared menu-item role set, row selectors, and keyboard activation.
  * @position Internal; used by DropdownMenu and ContextMenu so their
  *   roving-focus, typeahead, and Enter/Space activation stay in sync.
  *
@@ -17,8 +17,18 @@ export const MENU_ITEM_ROLES: ReadonlySet<string> = new Set([
   'menuitemcheckbox',
 ]);
 
+/** The rows a press can act on: enabled rows only. */
 export const MENU_ITEM_SELECTOR: string = [...MENU_ITEM_ROLES]
   .map(role => `[role="${role}"]:not([aria-disabled="true"])`)
+  .join(',');
+
+/**
+ * Every row, disabled rows included. The arrow keys, Home, End and type-ahead
+ * visit a disabled row, so a keyboard user finds it and its reason; the row
+ * stays inert.
+ */
+export const MENU_ROW_SELECTOR: string = [...MENU_ITEM_ROLES]
+  .map(role => `[role="${role}"]`)
   .join(',');
 
 /**
@@ -29,3 +39,58 @@ export const MENU_ITEM_SELECTOR: string = [...MENU_ITEM_ROLES]
  * level scopes item collection and key handling to its own container.
  */
 export const MENU_BOUNDARY_SELECTOR = '[role="menu"]';
+
+/**
+ * Whether a click carries a modifier or a non-primary button: on a row that
+ * is a link the browser gives it a meaning of its own (a new tab, a
+ * download), which the row must leave alone.
+ */
+export function isModifiedClick(event: {
+  metaKey: boolean;
+  ctrlKey: boolean;
+  shiftKey: boolean;
+  altKey: boolean;
+  button: number;
+}): boolean {
+  return (
+    event.metaKey ||
+    event.ctrlKey ||
+    event.shiftKey ||
+    event.altKey ||
+    event.button !== 0
+  );
+}
+
+/**
+ * Activate a menu row from the keyboard (Enter / Space): a synthesized click
+ * that carries the key's modifiers, so a ⌘-Enter on a row that is a link opens
+ * it the way a ⌘-click would. `detail` stays 0, the mark of a
+ * non-pointer activation.
+ */
+export function activateMenuItem(
+  row: HTMLElement,
+  key: {metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean},
+): void {
+  row.dispatchEvent(
+    new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      metaKey: key.metaKey,
+      ctrlKey: key.ctrlKey,
+      shiftKey: key.shiftKey,
+      altKey: key.altKey,
+    }),
+  );
+}
+
+/**
+ * A disabled row's `onMouseDown`. The row takes focus from the keys
+ * (`tabindex="-1"`), so a mouse press would otherwise focus it and light it.
+ * Cancelling the press's default keeps focus where it is.
+ */
+export function keepDisabledRowUnfocused(event: {
+  preventDefault(): void;
+}): void {
+  event.preventDefault();
+}

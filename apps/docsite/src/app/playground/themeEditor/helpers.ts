@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {COMPONENT_VAR_TO_OVERRIDE, COMPONENT_VAR_NAMES} from './constants';
-import {expandColorScale, expandRadiusScale} from '@astryxdesign/core/theme';
+import {expandRadiusScale} from '@astryxdesign/core/theme';
 
 export function parseLightDark(
   value: string,
@@ -64,16 +64,36 @@ export function getTokenLabel(tokenName: string): string {
     .replace(/\b\w/g, c => c.toUpperCase());
 }
 
+/** The root font size the editor's px controls are written against. */
+const DEFAULT_ROOT_FONT_SIZE_PX = 16;
+
 /**
- * Build the `--spacing-*` token ramp from a base step: each token is
- * `round(base × step)px`. Token keys derive from the step (e.g. 0.5 → "0-5").
+ * A spacing token value in px at the default 16px root: the default scale's
+ * `'0.5rem'` reads as 8, and a theme's own px value (`'12px'`) as written.
+ * `NaN` for anything else.
+ */
+export function spacingToPx(value: string | undefined): number {
+  const match = /^(\d*\.?\d+)(px|rem)$/.exec((value ?? '').trim());
+  if (match == null) {
+    return Number.NaN;
+  }
+  const length = Number.parseFloat(match[1]);
+  return match[2] === 'rem' ? length * DEFAULT_ROOT_FONT_SIZE_PX : length;
+}
+
+/**
+ * Build the `--spacing-*` token ramp from a base step in px: each token is
+ * `round(base × step)` px, written in rem like the default scale so the ramp
+ * keeps following the reader's root font size, and the default base (4)
+ * reproduces the defaults exactly. Token keys derive from the step (e.g.
+ * 0.5 → "0-5").
  */
 export function buildSpacingScale(base: number): Record<string, string> {
   const steps = [0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
   const patch: Record<string, string> = {};
   for (const step of steps) {
     patch[`--spacing-${String(step).replace('.', '-')}`] =
-      `${Math.round(base * step)}px`;
+      `${Math.round(base * step) / DEFAULT_ROOT_FONT_SIZE_PX}rem`;
   }
   return patch;
 }
@@ -113,7 +133,7 @@ export function getConcentricityWarning(
   const radii = expandRadiusScale({base: radiusBase, multiplier: 1});
   const container = parseInt(radii['--radius-container'], 10);
   const element = parseInt(radii['--radius-element'], 10);
-  const gap = parseInt(buildSpacingScale(spacingBase)['--spacing-1'], 10);
+  const gap = spacingToPx(buildSpacingScale(spacingBase)['--spacing-1']);
   const suggestion =
     control === 'radius'
       ? `Set radius to ${spacingBase}px`
@@ -287,32 +307,4 @@ export function generateThemeCode(
 
   lines.push('});');
   return lines.join('\n');
-}
-
-export function getExpandedColorScale(
-  accentHex: string,
-): Record<string, string> {
-  const derived = expandColorScale({accent: accentHex}) as Record<
-    string,
-    string
-  >;
-  // Do not override the user's custom picker selection for `--color-accent` itself
-  delete derived['--color-accent'];
-  let hex = accentHex.replace('#', '');
-  // Normalize 3-char short hex (e.g. "f00") to 6-char ("ff0000")
-  if (hex.length === 3) {
-    hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
-  }
-  // Guard against invalid hex — fall back to black
-  if (hex.length !== 6 || !/^[0-9a-fA-F]{6}$/.test(hex)) {
-    hex = '000000';
-  }
-  const r = parseInt(hex.slice(0, 2), 16);
-  const g = parseInt(hex.slice(2, 4), 16);
-  const b = parseInt(hex.slice(4, 6), 16);
-  derived['--shadow-inset-hover'] =
-    `inset 0px 0px 0px 2px rgba(${r}, ${g}, ${b}, 0.3)`;
-  derived['--shadow-inset-selected'] =
-    `inset 0px 0px 0px 2px rgba(${r}, ${g}, ${b}, 0.5)`;
-  return derived;
 }

@@ -11,6 +11,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {runCli} from '../../../test-utils/run-cli.mjs';
 import {generateCompressedIndex} from '../../../foundation/agent-docs/agent-docs.mjs';
+import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
 
 const NON_ASCII = /[\u0080-\uFFFF]/;
 
@@ -37,7 +38,7 @@ async function nonAsciiLines(args) {
 
 beforeEach(() => {
   // Repo-local so the config module can be imported under Vitest.
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-upgrade-ascii-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-upgrade-ascii-'));
   write('package.json', JSON.stringify({name: 'consumer', private: true}));
   write(
     'node_modules/@astryxdesign/core/package.json',
@@ -83,5 +84,19 @@ describe('upgrade human output is ASCII', () => {
     expect(fs.readFileSync(path.join(tmpDir, 'src/panel.tsx'), 'utf8')).toContain(
       'minSize: 200',
     );
+  });
+
+  // Every fixture above has a real src/, so the completion line for a project
+  // whose source is somewhere else was never reached — this suite was green on
+  // that path by luck, not by coverage.
+  it('reports a source directory that does not exist', async () => {
+    fs.rmSync(path.join(tmpDir, 'src'), {recursive: true, force: true});
+    fs.mkdirSync(path.join(tmpDir, 'app'), {recursive: true});
+    write('app/panel.tsx', 'export const x = 1;\n');
+
+    expect(await nonAsciiLines(['upgrade', '--from', '0.5.0'])).toEqual([]);
+    expect(
+      await nonAsciiLines(['upgrade', '--from', '0.5.0', '--apply']),
+    ).toEqual([]);
   });
 });

@@ -1,7 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-'use client';
-
 /**
  * @file index.ts
  * @input DateInput component exports
@@ -15,6 +13,8 @@ export type {
   DateInputSize,
   DateInputFormat,
   DateInputNativePicker,
+  DateInputPresentation,
   DateInputStatus,
   DateInputStatusType,
+  DateInputEntryError,
 } from './DateInput';

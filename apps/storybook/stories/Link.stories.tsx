@@ -11,7 +11,8 @@ const meta: Meta<typeof Link> = {
   argTypes: {
     label: {
       control: 'text',
-      description: 'Accessible label (required)',
+      description:
+        'Accessible label for content that is not descriptive text, such as an icon. It replaces the content as the name.',
     },
     href: {
       control: 'text',
@@ -57,7 +58,6 @@ type Story = StoryObj<typeof Link>;
 
 export const Default: Story = {
   args: {
-    label: 'Documentation',
     href: '/docs',
     children: 'Documentation',
   },
@@ -65,7 +65,6 @@ export const Default: Story = {
 
 export const Secondary: Story = {
   args: {
-    label: 'Privacy Policy',
     href: '/privacy',
     color: 'secondary',
     children: 'Privacy Policy',
@@ -74,7 +73,6 @@ export const Secondary: Story = {
 
 export const Primary: Story = {
   args: {
-    label: 'Learn more',
     href: '/learn',
     color: 'primary',
     children: 'Learn more',
@@ -83,7 +81,6 @@ export const Primary: Story = {
 
 export const WithUnderline: Story = {
   args: {
-    label: 'Always underlined',
     href: '/underlined',
     hasUnderline: true,
     children: 'Always underlined',
@@ -92,7 +89,6 @@ export const WithUnderline: Story = {
 
 export const Disabled: Story = {
   args: {
-    label: 'Disabled link',
     href: '/disabled',
     isDisabled: true,
     children: 'Disabled link',
@@ -101,7 +97,6 @@ export const Disabled: Story = {
 
 export const ExternalLink: Story = {
   args: {
-    label: 'GitHub',
     href: 'https://github.com',
     isExternalLink: true,
     children: 'GitHub',
@@ -110,7 +105,6 @@ export const ExternalLink: Story = {
 
 export const WithTooltip: Story = {
   args: {
-    label: 'Settings',
     href: '/settings',
     tooltip: 'Configure your preferences',
     children: 'Settings',
@@ -119,7 +113,6 @@ export const WithTooltip: Story = {
 
 export const Standalone: Story = {
   args: {
-    label: 'Standalone Link',
     href: '/standalone',
     isStandalone: true,
     children: 'Standalone Link',
@@ -132,6 +125,102 @@ export const InlineWithText: Story = {
       Read the <Link href="/docs">documentation</Link> for more information
       about using Astryx components.
     </Text>
+  ),
+};
+
+/**
+ * `maxLines={1}` inside a fixed-width line: the link, as an anchor or as a
+ * button, stops at the line and draws an ellipsis.
+ */
+export const TruncatedInConstrainedLine: Story = {
+  tags: ['!autodocs'],
+  render: () => (
+    <div style={{display: 'grid', gap: 12, width: 220}} data-truncation-host="">
+      {(['anchor', 'button'] as const).map(form => (
+        <p
+          key={form}
+          data-truncation-line={form}
+          style={{
+            margin: 0,
+            overflow: 'hidden',
+            whiteSpace: 'nowrap',
+            textOverflow: 'ellipsis',
+          }}>
+          <Link
+            href={form === 'anchor' ? '/meetings/weekly' : undefined}
+            onClick={form === 'button' ? () => {} : undefined}
+            maxLines={1}>
+            Weekly design review with the product and research teams
+          </Link>
+        </p>
+      ))}
+    </div>
+  ),
+};
+
+/**
+ * An anchor Link and a button Link whose text wraps, in a start-aligned
+ * line, a right-to-left line and a centred line: each form lines up its
+ * wrapped lines the same way.
+ */
+export const WrappedLines: Story = {
+  tags: ['!autodocs'],
+  render: () => (
+    <div style={{display: 'grid', gap: 16, width: 180}}>
+      {(
+        [
+          ['start', 'ltr', undefined],
+          ['rtl', 'rtl', undefined],
+          ['center', 'ltr', 'center'],
+        ] as const
+      ).map(([alignment, dir, textAlign]) =>
+        (['anchor', 'button'] as const).map(form => (
+          <p
+            key={`${alignment}-${form}`}
+            dir={dir}
+            data-wrapped-line={`${alignment}-${form}`}
+            style={{margin: 0, textAlign}}>
+            <Link
+              href={form === 'anchor' ? '/invitations/phone' : undefined}
+              onClick={form === 'button' ? () => {} : undefined}>
+              Send the phone interview invitation now
+            </Link>
+          </p>
+        )),
+      )}
+    </div>
+  ),
+};
+
+/**
+ * A long Link inside `<Text maxLines={2}>` or `<Text maxLines={1}>` clamps
+ * with the ancestor text and keeps an inset focus ring, while a composed Link
+ * outside a clamp keeps its own box and focus ring.
+ */
+export const ClampedByAncestorText: Story = {
+  tags: ['!autodocs'],
+  render: () => (
+    <div style={{display: 'grid', gap: 24, width: 220}}>
+      <Text maxLines={2} data-testid="ancestor-clamp-text">
+        <Link href="/changelog">
+          Quarterly planning review with the product and research teams across
+          every region, plus the follow up retrospective notes and the rollout
+          summary
+        </Link>{' '}
+        and the closing remarks that follow the link in the same paragraph
+      </Text>
+      <Text maxLines={1} data-testid="ancestor-clamp-one-line">
+        <Link href="/roadmap">
+          Roadmap for the next two quarters with every milestone
+        </Link>{' '}
+        and the owners
+      </Text>
+      <p style={{margin: 0}} data-testid="composed-host">
+        <Link href="/team" data-testid="composed-link">
+          <strong>Team</strong> directory and roster listing for the whole org
+        </Link>
+      </p>
+    </div>
   ),
 };
 
@@ -250,7 +339,7 @@ export const ButtonFallbackDisabled: Story = {
     docs: {
       description: {
         story:
-          'The button fallback supports the `isDisabled` prop with native `disabled` attribute.',
+          'The button fallback supports the `isDisabled` prop: it stays focusable with `aria-disabled` and ignores clicks, Enter and Space.',
       },
     },
   },

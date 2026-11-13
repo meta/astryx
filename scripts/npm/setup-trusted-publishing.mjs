@@ -139,7 +139,7 @@ function parseCliArgs(argv) {
       // single, non-reusable release.yml that runs ALL npm publishing (see the
       // workflow_ref subtlety in the file header and release.yml's own header).
       workflow: {type: 'string', default: 'release.yml'},
-      repo: {type: 'string', default: 'facebook/astryx'},
+      repo: {type: 'string', default: 'meta/astryx'},
     },
     allowPositionals: false,
   });
@@ -237,8 +237,10 @@ async function checkAuth(registry) {
   }
 }
 
-// npm >= 11.10 is required for `npm trust github`. The subcommand landed in npm
-// 11.5, but upstream trusted-publishing docs (and lexical) pin 11.10+.
+// npm >= 11.15 is required. Older npm ignores `--allow-publish`, so the
+// publisher it creates may only stage releases and CI's direct publish fails,
+// and its `npm trust list` omits permissions, so every existing publisher
+// reads as a conflict.
 async function checkNpmTrustSupport() {
   let version;
   try {
@@ -248,12 +250,12 @@ async function checkNpmTrustSupport() {
     return {ok: false, reason: `Unable to determine npm version: ${err}`};
   }
   const [major, minor] = version.split('.').map(n => parseInt(n, 10));
-  if (major < 11 || (major === 11 && minor < 10)) {
+  if (major < 11 || (major === 11 && minor < 15)) {
     return {
       ok: false,
       reason:
         `npm ${version} is too old for 'npm trust github'. ` +
-        `Upgrade to npm >= 11.10 (\`npm i -g npm@latest\`) and re-run.`,
+        `Upgrade to npm >= 11.15 (\`npm i -g npm@latest\`) and re-run.`,
     };
   }
   try {
@@ -324,19 +326,34 @@ async function publishStub(pkg, {registry, stubVersion, repo, dryRun}) {
       console.log(`  [dry-run] Would publish ${pkg.name}@${stubVersion}`);
       return true;
     }
-    await execFileAsync(
-      'npm',
-      [
-        'publish',
-        '--registry',
-        registry,
-        '--access',
-        'public',
-        '--tag',
-        'bootstrap',
-      ],
-      {cwd: tmpDir},
-    );
+    try {
+      await execFileAsync(
+        'npm',
+        [
+          'publish',
+          '--registry',
+          registry,
+          '--access',
+          'public',
+          '--tag',
+          'bootstrap',
+        ],
+        {cwd: tmpDir},
+      );
+    } catch (err) {
+      // 409: this version already exists, which means an earlier run claimed
+      // the name. Registry reads can keep answering 404 for a few minutes after
+      // a package is created, so a re-run lands here; continue to trust setup.
+      if (
+        /E409|409 Conflict/.test(`${err.stderr ?? ''}\n${err.message ?? ''}`)
+      ) {
+        console.log(
+          `  ${pkg.name}@${stubVersion} already exists; the name is claimed`,
+        );
+        return true;
+      }
+      throw err;
+    }
     console.log(`  Published ${pkg.name}@${stubVersion}`);
     // Best-effort deprecate — the stub is already published (which is what
     // unblocks trust setup), so a deprecation failure must not fail the run.
@@ -568,7 +585,7 @@ async function main() {
   const [repoOwner, repoName] = repo.split('/');
   if (!repoOwner || !repoName) {
     console.error(
-      `Invalid --repo value "${repo}". Expected owner/name, e.g. facebook/astryx.`,
+      `Invalid --repo value "${repo}". Expected owner/name, e.g. meta/astryx.`,
     );
     process.exit(1);
   }
@@ -598,8 +615,9 @@ async function main() {
     console.log(`Authenticated to ${registry} as ${authedUser}`);
   }
 
-  // Preflight: npm >= 11.10 with `npm trust` available.
-  if (setupTrust && !dryRun) {
+  // Preflight: npm >= 11.15 with `npm trust` available, before any trust read
+  // or write (the trust reads below run whenever this is not a pure dry run).
+  if (setupTrust || !dryRun) {
     const support = await checkNpmTrustSupport();
     if (!support.ok) {
       console.error(support.reason);

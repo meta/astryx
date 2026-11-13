@@ -33,15 +33,19 @@
  *      shows help because the invocation failed (`help <unknown>`, or a
  *      command group with no subcommand), which exits 1.
  *
- * Non-JSON behavior is preserved exactly: every code path that printed
- * to stderr before still prints to stderr. Commander writes its
- * "error: ..." line via configureOutput.writeErr, which we pass
- * through verbatim outside of --json mode.
+ * Commander writes its own "error: ..." line via configureOutput.writeErr.
+ * The shim drops that line in both modes. Under --json the error envelope
+ * replaces it; in text mode `handleCommanderError` writes the Astryx line
+ * instead (`Error: <message>`, the same message the envelope carries), so
+ * a parse failure reads like every other CLI error. Other stderr output,
+ * such as help printed as the failure report, still passes through.
  */
 
 import {API_VERSION, isJsonMode, toErrorEnvelope} from '../../../foundation/response/json.mjs';
+import {answeredBy} from '../../../foundation/release/run-context.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {setCommand, setOutcome, recordHelp} from '../../../foundation/debug/index.mjs';
+import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
 
 /**
  * Fully-qualified name of a command relative to the root program, e.g.
@@ -82,7 +86,7 @@ function jsonActive() {
  * subcommand (e.g. `astryx component --help --json`).
  *
  * @param {import('commander').Command} cmd
- * @returns {{apiVersion: number, type: 'help', data: object}}
+ * @returns {{apiVersion: number, type: 'help', data: object, meta: {answeredBy: {cli: string, core: string | null, copy: 'project' | 'starting' | 'matched' | 'carried' | 'fallback'}}}}
  */
 export function buildHelpEnvelope(cmd) {
   // Reconstruct the fully-qualified command name (e.g. "astryx theme build").
@@ -117,6 +121,7 @@ export function buildHelpEnvelope(cmd) {
       options,
       subcommands,
     },
+    meta: {answeredBy: answeredBy()},
   };
 }
 
@@ -184,6 +189,7 @@ function commanderCodeToErrorCode(commanderCode, message) {
     case 'commander.unknownOption':
       return ERROR_CODES.ERR_INVALID_OPTION;
     case 'commander.missingArgument':
+    case 'commander.optionMissingArgument':
     case 'commander.missingMandatoryOptionValue':
       return ERROR_CODES.ERR_MISSING_ARGUMENT;
     case 'commander.excessArguments':
@@ -245,15 +251,26 @@ function applyShimRecursively(cmd) {
     } catch {
       // Never let recording interfere with the error path.
     }
+    // The error handler names the rejected command's usage from it.
+    /** @type {any} */ (err)[REJECTED_COMMAND] = cmd;
     throw err;
   });
   cmd.configureOutput({
     writeOut: (str) => process.stdout.write(str),
+    // Commander's own "error: ..." line never reaches the user. Under --json a
+    // consumer parsing both streams must not see it alongside the envelope;
+    // in text mode it is Commander's format, not Astryx's, so an invalid
+    // global option (`--lang zh-Hans`) printed `error: option '--lang
+    // <locale>' argument 'zh-Hans' is invalid…` where every other CLI error
+    // prints `Error: …`. handleCommanderError writes the Astryx line below,
+    // for both modes, from the same message.
+    //
+    // ONLY that line. Commander also writes HELP through this channel when it
+    // shows help because the invocation failed (a command group with no
+    // subcommand), and that output is still wanted in text mode.
     writeErr: (str) => {
-      // Suppress Commander's "error: ..." stderr line when --json is
-      // active, so a JSON consumer parsing both streams doesn't see
-      // it alongside the envelope. Non-JSON callers are unaffected.
       if (jsonActive()) return;
+      if (/^error:\s/i.test(str)) return;
       process.stderr.write(str);
     },
   });
@@ -261,6 +278,54 @@ function applyShimRecursively(cmd) {
   for (const sub of cmd.commands) {
     applyShimRecursively(sub);
   }
+}
+
+/** Carries the command Commander rejected from exitOverride to the error handler. */
+const REJECTED_COMMAND = Symbol.for('astryx.jsonShim.rejectedCommand');
+
+/**
+ * The usage line of the command a parse error came from, as a suggestion, for
+ * an option given without its value.
+ * @param {unknown} err
+ * @param {string} code
+ * @returns {import('../../../foundation/response/base').Suggestion[] | undefined}
+ */
+function usageSuggestion(err, code) {
+  const cmd = /** @type {any} */ (err)?.[REJECTED_COMMAND];
+  if (!cmd) return undefined;
+  const parts = [];
+  for (let node = cmd; node; node = node.parent) parts.unshift(node.name());
+  // The theme editor names what is missing with its usage and its help, as
+  // the project runs the CLI.
+  if (
+    code === 'commander.missingArgument' &&
+    parts.slice(1, 4).join(' ') === 'experimental theme editor'
+  ) {
+    const words = parts.slice(1).join(' ');
+    const invocation = getCliInvocation(process.cwd());
+    return [
+      {name: `${invocation} ${words} ${cmd.usage()}`.trim(), reason: 'usage'},
+      {name: `${invocation} ${words} --help`, reason: 'what each argument is'},
+    ];
+  }
+  if (code !== 'commander.optionMissingArgument') return undefined;
+  return [{name: `${parts.join(' ')} ${cmd.usage()}`.trim(), reason: 'usage'}];
+}
+
+/**
+ * The theme editor's message for a missing argument: what the command takes
+ * and the words it was given, in order.
+ * @param {unknown} err
+ * @param {string} message Commander's message
+ */
+function editorMissingMessage(err, message) {
+  const cmd = /** @type {any} */ (err)?.[REJECTED_COMMAND];
+  const given = /** @type {string[]} */ (cmd?.args ?? []);
+  const wants = (cmd?.registeredArguments ?? [])
+    .filter((/** @type {any} */ a) => a.required)
+    .map((/** @type {any} */ a) => `<${a.name()}>`);
+  const missing = /'([^']+)'/.exec(message)?.[1];
+  return `${cmd.name()} takes ${wants.join(' ')}, and ${given.length ? `was given ${given.length} (${given.join(' ')}), read as ${wants.slice(0, given.length).join(' ')}` : 'was given none'}: ${missing ? `<${missing}>` : 'an argument'} is missing.`;
 }
 
 /** Marks a command whose `command`/`addCommand` already self-install the shim. */
@@ -432,16 +497,29 @@ export function handleCommanderError(err) {
     code: commanderCodeToErrorCode(code, message),
   });
 
-  // Real error paths.
+  // Real error paths. Strip Commander's "error: " prefix once: in the envelope
+  // the key is already `error`, and in text mode the Astryx prefix replaces it.
+  const suggestions = usageSuggestion(err, code);
+  // In the theme editor a missing argument names what was given: in
+  // `set corners small` the first word is read as the theme, so "value" alone
+  // would name the wrong thing.
+  const cleaned =
+    suggestions?.length === 2
+      ? editorMissingMessage(err, message)
+      : message.replace(/^error:\s*/i, '');
   if (jsonActive()) {
-    // Strip Commander's "error: " prefix — the envelope key is `error`
-    // already, doubled "error" is noise.
-    const cleaned = message.replace(/^error:\s*/i, '');
-    emitJsonError(cleaned, undefined, commanderCodeToErrorCode(code, cleaned));
+    emitJsonError(
+      cleaned,
+      suggestions,
+      commanderCodeToErrorCode(code, cleaned),
+    );
   } else {
-    // Non-JSON mode: Commander already wrote the "error: ..." line
-    // to stderr via configureOutput.writeErr before throwing the
-    // CommanderError. Nothing to do — exit with the original code.
+    // Commander's own line was suppressed above, so a parse failure reads the
+    // same as every other CLI error — the `Error: …` line cliError prints.
+    process.stderr.write(`Error: ${cleaned}\n`);
+    if (suggestions) process.stderr.write(`Usage: ${suggestions[0].name}\n`);
+    if (suggestions?.[1])
+      process.stderr.write(`Run: ${suggestions[1].name}\n`);
   }
   process.exit(exitCode || 1);
 }

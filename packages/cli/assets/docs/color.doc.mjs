@@ -13,17 +13,18 @@ export const docs = {
   sections: [
     {
       title: 'Overview',
-  category: 'foundations',
+      category: 'foundations',
       content: [
         {
           type: 'prose',
-          text: 'Colors are semantic: tokens describe purpose, not appearance. Every color adapts automatically between light and dark modes via CSS light-dark(). Themes override the resolved values, so your code never references raw hex colors.',
+          text: 'Colors are semantic: tokens describe purpose, not appearance. Every color adapts automatically between light and dark modes via CSS light-dark(). Themes override the resolved values, so your code never references raw hex colors. Each theme defines its own values: `{@command theme list}` shows the themes that are available.',
         },
       ],
     },
     {
-      title: 'Surface Colors',
-  category: 'foundations',
+      id: 'surface-colors',
+      title: 'Color Tokens',
+      category: 'foundations',
       content: [
         {
           type: 'prose',
@@ -37,9 +38,14 @@ export const docs = {
       ],
     },
     {
-      title: 'Usage',
-  category: 'foundations',
+      id: 'usage',
+      title: 'Use color tokens in StyleX',
+      category: 'foundations',
       content: [
+        {
+          type: 'prose',
+          text: 'Import the typed color tokens and use them in `stylex.create()`; they resolve to the active theme and color mode.',
+        },
         {
           type: 'code',
           lang: 'tsx',
@@ -62,7 +68,7 @@ const styles = stylex.create({
     },
     {
       title: 'Best Practices',
-  category: 'foundations',
+      category: 'foundations',
       content: [
         {
           type: 'list',

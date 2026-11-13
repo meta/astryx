@@ -12,10 +12,13 @@
  *           <Name>` prints; nothing here is a second registry, so the list a
  *           theme author can enumerate and the set the compiler accepts cannot
  *           drift from the components or from each other.
+ *           A process reuses its target scan of a Core while the folders and
+ *           docs it read are unchanged.
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {reusedWhileUnchanged} from '../fs/read-record.mjs';
 import {loadComponentDoc} from './component-loader.mjs';
 
 const SKIP_DIRS = new Set(['node_modules', '__tests__']);
@@ -28,7 +31,6 @@ const SKIP_DIRS = new Set(['node_modules', '__tests__']);
  * @property {string} component - the component whose doc declares it
  * @property {string[]} props - visual props the target reflects (`variant:value` keys)
  * @property {string[]} states - runtime states the target reflects (bare-name keys)
- * @property {string} [deprecatedFor] - canonical replacement key for a deprecated target
  */
 
 /**
@@ -54,16 +56,42 @@ function targetKey(className) {
  * Unreadable docs are skipped rather than fatal — a single malformed doc must
  * not take out theme validation or the listing.
  *
+ * The scan walks every folder under `src` and reads every component doc. A
+ * process scans each Core once. It reuses that scan while every folder and
+ * doc it read is unchanged, as the docs and search catalogs do. A `src`
+ * reached through a symlink, as a project's node_modules reaches Core, shares
+ * the scan of its real path. Each call gets its own copy of the rows.
+ *
  * @param {string} coreSrc - absolute path to `<core>/src`
- * @param {{includeDeprecated?: boolean}} [options] - preserve the CLI's full listing by default; ownership checks can request active targets only
  * @returns {Promise<ThemingTarget[]>}
  */
-export async function collectThemingTargets(
-  coreSrc,
-  {includeDeprecated = true} = {},
-) {
+export async function collectThemingTargets(coreSrc) {
   if (!coreSrc || !fs.existsSync(coreSrc)) return [];
+  const real = fs.realpathSync(coreSrc);
+  let scan = targetScans.get(real);
+  if (scan == null) {
+    scan = reusedWhileUnchanged(() => scanThemingTargets(real));
+    targetScans.set(real, scan);
+  }
+  return (await scan()).map(target => ({
+    ...target,
+    props: [...target.props],
+    states: [...target.states],
+  }));
+}
 
+/**
+ * The target scan of each Core `src`, by its real path.
+ * @type {Map<string, () => Promise<ThemingTarget[]>>}
+ */
+const targetScans = new Map();
+
+/**
+ * Every theming target under `coreSrc`, read from its component docs.
+ * @param {string} coreSrc - real path to `<core>/src`
+ * @returns {Promise<ThemingTarget[]>}
+ */
+async function scanThemingTargets(coreSrc) {
   /** @type {Array<ThemingTarget & {parent: string|null}>} */
   const targets = [];
 
@@ -92,7 +120,6 @@ export async function collectThemingTargets(
           : path.basename(path.dirname(full));
 
       for (const target of doc?.theming?.targets || []) {
-        if (!includeDeprecated && target?.deprecatedFor != null) continue;
         const className = target?.className;
         if (typeof className !== 'string') continue;
         const key = targetKey(className);
@@ -105,9 +132,6 @@ export async function collectThemingTargets(
             typeof doc?.subComponentOf === 'string' ? doc.subComponentOf : null,
           props: stringList(target.visualProps),
           states: stringList(target.states),
-          ...(typeof target.deprecatedFor === 'string'
-            ? {deprecatedFor: target.deprecatedFor}
-            : {}),
         });
       }
     }
@@ -158,7 +182,6 @@ function canonicalizeParentTargets(targets) {
     const canonical = roots[0];
     canonical.props = [...new Set([...canonical.props, ...target.props])];
     canonical.states = [...new Set([...canonical.states, ...target.states])];
-    canonical.deprecatedFor ??= target.deprecatedFor;
     duplicates.add(target);
   }
 
@@ -250,33 +273,6 @@ export function targetsByKey(targets) {
     ];
   }
   return byKey;
-}
-
-/**
- * Build the component-validation registry from the same target rows used by
- * `theme targets`. Deprecated keys stay accepted during their compatibility
- * window, while the replacement map lets theme build issue exact guidance.
- *
- * @param {ThemingTarget[]} targets
- * @returns {{propsByKey: Record<string, string[]>, deprecatedByKey: Record<string, string>}}
- */
-export function targetValidationRegistry(targets) {
-  const propsByKey = targetsByKey(targets);
-  /** @type {Record<string, string>} */
-  const deprecatedByKey = {};
-
-  for (const target of targets) {
-    if (target.deprecatedFor == null) continue;
-    const existing = deprecatedByKey[target.key];
-    if (existing != null && existing !== target.deprecatedFor) {
-      throw new Error(
-        `Deprecated theme target "${target.key}" has conflicting replacements: "${existing}" and "${target.deprecatedFor}".`,
-      );
-    }
-    deprecatedByKey[target.key] = target.deprecatedFor;
-  }
-
-  return {propsByKey, deprecatedByKey};
 }
 
 /**

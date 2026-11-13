@@ -407,8 +407,8 @@ export function createRedactor({
  * and their exact values are the whole reason the snapshot is useful.
  *
  * Everything else in `env` is free text handed to us by the invoking
- * environment — an agent name from `ASTRYX_AGENT_ID`, `AGENT`, or
- * `ASTRYX_AGENT_METADATA` — so it goes through the same content rules as argv.
+ * environment — an agent name from `AGENT` or a known agent signal — so it
+ * goes through the same content rules as argv.
  * The list is a positive allowlist rather than a denylist of risky fields: a
  * field added to the snapshot later is scrubbed until someone decides
  * otherwise, which is the safe direction to be wrong in.

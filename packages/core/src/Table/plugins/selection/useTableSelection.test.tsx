@@ -195,9 +195,11 @@ describe('useTableSelection', () => {
   it('disables checkbox for disabled rows', () => {
     render(<SelectionTable getIsItemEnabled={item => !item.isLocked} />);
     const rowCheckboxes = screen.getAllByLabelText('Select row');
-    expect(rowCheckboxes[0]).not.toBeDisabled();
-    expect(rowCheckboxes[1]).not.toBeDisabled();
-    expect(rowCheckboxes[2]).toBeDisabled();
+    expect(rowCheckboxes[0]).not.toHaveAttribute('aria-disabled');
+    expect(rowCheckboxes[1]).not.toHaveAttribute('aria-disabled');
+    // Focusable disabled (spec:AST-085 FR1): aria-disabled, no native disabled.
+    expect(rowCheckboxes[2]).toHaveAttribute('aria-disabled', 'true');
+    expect(rowCheckboxes[2]).not.toHaveAttribute('disabled');
   });
 
   it('prepends selection <td> to each body row', () => {
@@ -347,6 +349,19 @@ describe('useTableSelection', () => {
         expect(readOverlay(screen.getAllByRole('row')[2])).toBe('');
       });
     });
+  });
+
+  it('leaves product chrome outside the selection plugin', () => {
+    const {result} = renderHook(() =>
+      useTableSelection<SelectableUser>({
+        getIsItemSelected: () => false,
+        onSelectItem: vi.fn(),
+        onSelectAll: vi.fn(),
+        getIsAllSelected: () => false,
+      }),
+    );
+
+    expect(result.current.transformScrollWrapper).toBeUndefined();
   });
 
   it('unsubscribes detached row refs instead of accumulating listeners', () => {

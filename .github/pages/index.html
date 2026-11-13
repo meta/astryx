@@ -1,0 +1,192 @@
+<!-- Copyright (c) Meta Platforms, Inc. and affiliates. -->
+
+<!doctype html>
+<html lang="en" data-astryx-theme="neutral">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Astryx is an open source design system built for people and agents." />
+    <meta name="robots" content="noindex, follow" />
+    <link rel="canonical" href="https://astryx.atmeta.com/" />
+    <link rel="stylesheet" href="/astryx/assets/reset.css" />
+    <link rel="stylesheet" href="/astryx/assets/astryx.css" />
+    <link rel="stylesheet" href="/astryx/assets/theme.css" />
+    <title>Astryx Design System</title>
+    <style>
+      body {
+        min-height: 100vh;
+        min-height: 100svh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: var(--spacing-6);
+        background: var(--color-background-body);
+        color: var(--color-text-primary);
+        font-family: var(--font-family-body);
+      }
+
+      main {
+        width: min(100%, 30rem);
+        margin-block: auto;
+      }
+
+      h1 {
+        margin-block-end: var(--spacing-2);
+        font-size: var(--text-heading-1-size);
+        font-weight: var(--font-weight-semibold);
+      }
+
+      .intro {
+        margin-block-end: var(--spacing-6);
+        color: var(--color-text-secondary);
+        font-size: var(--text-body-size);
+        line-height: var(--text-body-leading);
+      }
+
+      .links {
+        display: flex;
+        flex-direction: column;
+        gap: var(--spacing-3);
+      }
+
+      .card {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-height: var(--size-element-lg);
+        padding: var(--spacing-4);
+        border: var(--border-width) solid var(--color-border);
+        border-radius: var(--radius-element);
+        background: var(--color-background-card);
+        box-shadow: var(--shadow-low);
+        color: var(--color-text-primary);
+        text-decoration: none;
+        transition:
+          box-shadow var(--duration-fast) var(--ease-standard),
+          transform var(--duration-fast) var(--ease-standard);
+      }
+
+      .card.primary {
+        border-color: var(--color-accent);
+      }
+
+      @media (hover: hover) {
+        .card:hover {
+          box-shadow: var(--shadow-med);
+        }
+      }
+
+      .card:active {
+        transform: scale(0.98);
+      }
+
+      .card:focus-visible {
+        outline: var(--focus-outline-width) var(--focus-outline-style)
+          var(--focus-outline-color);
+        outline-offset: var(--focus-outline-offset);
+      }
+
+      .card-copy,
+      .card-title,
+      .card-desc {
+        display: block;
+      }
+
+      .card-title {
+        font-weight: var(--font-weight-semibold);
+      }
+
+      .card-desc {
+        margin-block-start: var(--spacing-0-5);
+        color: var(--color-text-secondary);
+        font-size: var(--text-supporting-size);
+        line-height: var(--text-supporting-leading);
+      }
+
+      .arrow {
+        flex: none;
+        margin-inline-start: var(--spacing-4);
+        color: var(--color-icon-secondary);
+        font-size: var(--text-heading-4-size);
+        line-height: 1;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .card {
+          transition-duration: 0s;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Astryx Design System</h1>
+      <p class="intro">
+        Open source, fully customizable, and built for people and agents working
+        together. Astryx’s public sites now live at astryx.atmeta.com.
+      </p>
+      <nav class="links" aria-label="Astryx destinations">
+        <a
+          id="documentation"
+          class="card primary"
+          href="https://astryx.atmeta.com/">
+          <span class="card-copy">
+            <strong class="card-title">Documentation</strong>
+            <small class="card-desc"
+              >Guides, components, templates, and themes</small
+            >
+          </span>
+          <span class="arrow" aria-hidden="true">→</span>
+        </a>
+        <a
+          id="storybook"
+          class="card"
+          href="https://astryx.atmeta.com/storybook/">
+          <span class="card-copy">
+            <strong class="card-title">Storybook</strong>
+            <small class="card-desc"
+              >Components, props, and interactive examples</small
+            >
+          </span>
+          <span class="arrow" aria-hidden="true">→</span>
+        </a>
+        <a id="sandbox" class="card" href="https://astryx.atmeta.com/sandbox/">
+          <span class="card-copy">
+            <strong class="card-title">Sandbox</strong>
+            <small class="card-desc"
+              >Full app examples and developer tools</small
+            >
+          </span>
+          <span class="arrow" aria-hidden="true">→</span>
+        </a>
+        <a
+          id="repository"
+          class="card"
+          href="https://github.com/meta/astryx">
+          <span class="card-copy">
+            <strong class="card-title">GitHub repository</strong>
+            <small class="card-desc"
+              >Source, issues, and contribution guide</small
+            >
+          </span>
+          <span class="arrow" aria-hidden="true">→</span>
+        </a>
+      </nav>
+    </main>
+    <script>
+      (() => {
+        const path = location.pathname.replace(/^\/astryx(?=\/|$)/, '') || '/';
+        for (const surface of ['storybook', 'sandbox']) {
+          if (path === `/${surface}` || path.startsWith(`/${surface}/`)) {
+            const target = new URL(path, 'https://astryx.atmeta.com');
+            target.search = location.search;
+            target.hash = location.hash;
+            document.getElementById(surface).href = target.href;
+          }
+        }
+      })();
+    </script>
+  </body>
+</html>

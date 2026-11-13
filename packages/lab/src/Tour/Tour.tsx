@@ -6,7 +6,7 @@
  * @file Tour.tsx
  * @input Uses React state/refs, TourContext
  * @output Exports Tour controller component and TourProps
- * @position Lab experiment (facebook/astryx#4239); controller consumed by index.ts
+ * @position Lab experiment (meta/astryx#4239); controller consumed by index.ts
  *
  * Tour is the controller for a product-tour / NUX walkthrough. It renders no
  * visible chrome of its own — it owns the tour state (active step, advance /
@@ -17,8 +17,8 @@
  *
  * The behavior (a controller plus spotlight feature steps, an `isActive`
  * switch, dismiss-with-reason, and step progress) is composed from Astryx
- * primitives. Each step anchors its callout via Popover and draws its own
- * highlight/backdrop (see TourStep) — the controller owns no chrome.
+ * primitives. Each step anchors a non-modal callout to its target and draws
+ * its own highlight/backdrop (see TourStep) — the controller owns no chrome.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/lab/src/Tour/TourStep.tsx
@@ -29,12 +29,24 @@
  * - /packages/lab/src/Tour/index.ts (exports if types change)
  */
 
-import {useCallback, useEffect, useMemo, useState, type ReactNode} from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import {
   TourContext,
   type TourDismissSource,
   type TourContextValue,
 } from './TourContext';
+
+// Client-only layout effect; the server renders no tour.
+const useClientLayoutEffect =
+  typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
 export interface TourProps {
   /**
@@ -108,15 +120,32 @@ export function Tour({
     };
   }, []);
 
-  // Reset to the first step whenever the tour is (re)started, so a dismissed
-  // tour begins from the top next time isActive flips back on.
-  useEffect(() => {
+  // Reset to the first step when the tour is deactivated, so a dismissed tour
+  // begins from the top next time isActive flips back on. Adjusted during
+  // render, so no commit carries the old step past deactivation.
+  const [wasActive, setWasActive] = useState(isActive);
+  if (!Object.is(wasActive, isActive)) {
+    setWasActive(isActive);
     if (!isActive) {
       setActiveStepIndex(0);
     }
-  }, [isActive]);
+  }
 
   const stepCount = stepIds.length;
+
+  // The element that had focus when the tour started. Focus returns to it
+  // when the tour ends from a step whose target cannot take focus. Read in a
+  // layout effect, before any step moves focus into its callout.
+  const openerRef = useRef<HTMLElement | null>(null);
+  useClientLayoutEffect(() => {
+    if (!isActive) {
+      return;
+    }
+    const active = document.activeElement;
+    openerRef.current =
+      active instanceof HTMLElement && active !== document.body ? active : null;
+  }, [isActive]);
+  const getOpener = useCallback(() => openerRef.current, []);
 
   const onNext = useCallback(() => {
     // Runs from a click/imperative call (never during render), so branch on the
@@ -149,6 +178,7 @@ export function Tour({
       onNext,
       onPrevious,
       onDismiss,
+      getOpener,
     }),
     [
       registerStep,
@@ -160,6 +190,7 @@ export function Tour({
       onNext,
       onPrevious,
       onDismiss,
+      getOpener,
     ],
   );
 

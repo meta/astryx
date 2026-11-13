@@ -2,6 +2,13 @@
 
 'use client';
 
+/**
+ * @file DocsShell.tsx
+ * @input Route metadata, the server-built docs nav model, and the AppShell header
+ * @output Docs navigation with a stable sidebar offset before hydration
+ * @position Docsite-only shell
+ */
+
 import {useState, useMemo} from 'react';
 import {usePathname} from 'next/navigation';
 import {Search, FlaskConical} from 'lucide-react';
@@ -11,20 +18,21 @@ import {SideNav, SideNavItem, SideNavSection} from '@astryxdesign/core/SideNav';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {Icon} from '@astryxdesign/core/Icon';
 import {SharedTopNav} from './SharedTopNav';
-import {CanaryBanner} from './CanaryBanner';
-import {CURRENT_TARGET} from '../lib/docsVersions';
-import type {PackageMeta} from '../generated/packageRegistry';
-import type {DocTopic} from '../generated/docsRegistry';
-import {
-  getComponentSidebarData,
-  type ComponentSidebarEntry,
-  type ComponentSidebarItem,
-} from './componentSidebarData';
+import {HeaderHeightSeed} from './HeaderHeightSeed';
+import {DocsBanner} from './InternalDocsPrompt';
+import type {
+  DocsNav,
+  DocsNavEntry,
+  DocsNavGroup,
+  DocsNavItem,
+  DocsNavPackage,
+} from './docsNav';
+import {docsSidebarGroups} from './docsSidebarData';
+import {DocsSidebarItems} from './DocsSidebarItems';
 
 interface DocsShellProps {
   children: React.ReactNode;
-  packages: PackageMeta[];
-  docTopics: DocTopic[];
+  nav: DocsNav;
 }
 
 const styles = stylex.create({
@@ -37,6 +45,14 @@ const styles = stylex.create({
   },
 });
 
+// A component and the group of its hooks can share a name.
+// Sibling rows with one key outlive the list that rendered them, so the two
+// kinds of row never share a key.
+const entryKey = (entry: DocsNavEntry) =>
+  `entry:${entry.packageName}:${entry.name}`;
+const groupKey = (group: DocsNavGroup) =>
+  `group:${group.packageName}:${group.label}`;
+
 function CanaryCategoryMarker() {
   return (
     <span {...stylex.props(styles.canaryMarker)}>
@@ -45,31 +61,20 @@ function CanaryCategoryMarker() {
   );
 }
 
-/** Foundations: tokens first, then alphabetical */
-const foundationsSort = (a: DocTopic, b: DocTopic) => {
-  if (a.topic === 'tokens') {
-    return -1;
-  }
-  if (b.topic === 'tokens') {
-    return 1;
-  }
-  return a.title.localeCompare(b.title);
-};
-
 // ── Shell ──────────────────────────────────────────────────────────────
 
-export function DocsShell({children, packages, docTopics}: DocsShellProps) {
+export function DocsShell({children, nav}: DocsShellProps) {
   const pathname = usePathname();
   const [componentQuery, setComponentQuery] = useState('');
 
-  const {componentItems, utilities, canaryCategories} =
-    getComponentSidebarData();
+  const {packages, docTopics, componentItems, utilities, canaryCategories} =
+    nav;
 
   const q = componentQuery.trim().toLowerCase();
 
   // When searching, flatten every readiness category to individual entries so
   // results are all at the same level with no nesting.
-  const flatSearchResults = useMemo<ComponentSidebarEntry[]>(() => {
+  const flatSearchResults = useMemo<DocsNavEntry[]>(() => {
     if (!q) {
       return [];
     }
@@ -96,18 +101,13 @@ export function DocsShell({children, packages, docTopics}: DocsShellProps) {
   }, [canaryCategories, utilities, q]);
 
   // Classify packages
-  const isTheme = (p: PackageMeta) => p.name.includes('theme-');
+  const isTheme = (p: DocsNavPackage) => p.name.includes('theme-');
   const libraryPackages = packages.filter(p => !isTheme(p) && !p.canaryOnly);
   const canaryPackages = packages.filter(p => !isTheme(p) && p.canaryOnly);
 
-  // Classify doc topics by category (from data). Getting Started is promoted
-  // to a top-level nav item, so it is excluded from the Guide section.
-  const guideTopics = docTopics
-    .filter(d => d.category === 'guide' && d.topic !== 'getting-started')
-    .sort((a, b) => a.title.localeCompare(b.title));
-  const foundationTopics = docTopics
-    .filter(d => d.category === 'foundations')
-    .sort(foundationsSort);
+  // Classify doc topics by category (from data).
+  const {guide: guideItems, foundations: foundationItems} =
+    docsSidebarGroups(docTopics);
 
   // True for the /components index AND every /components/[name] detail page.
   // On these routes we hide every non-Components section so the sidebar is
@@ -127,25 +127,25 @@ export function DocsShell({children, packages, docTopics}: DocsShellProps) {
     />
   );
 
-  const renderComponentItems = (items: ComponentSidebarItem[]) =>
+  const renderComponentItems = (items: DocsNavItem[]) =>
     items.map(item =>
       item.type === 'entry' ? (
         <SideNavItem
-          key={`${item.packageName}:${item.name}`}
+          key={entryKey(item)}
           label={item.displayName}
           href={item.href}
           isSelected={pathname === item.href}
         />
       ) : (
         <SideNavItem
-          key={`${item.packageName}:${item.label}`}
+          key={groupKey(item)}
           label={item.displayName}
           collapsible={{
             defaultIsCollapsed: !item.entries.some(e => pathname === e.href),
           }}>
           {item.entries.map(entry => (
             <SideNavItem
-              key={`${entry.packageName}:${entry.name}`}
+              key={entryKey(entry)}
               label={entry.displayName}
               href={entry.href}
               isSelected={pathname === entry.href}
@@ -157,10 +157,16 @@ export function DocsShell({children, packages, docTopics}: DocsShellProps) {
 
   return (
     <AppShell
+      className="astryx-docs-shell"
       variant="surface"
       height="auto"
-      banner={CURRENT_TARGET === 'canary' ? <CanaryBanner /> : undefined}
-      topNav={<SharedTopNav />}
+      banner={<DocsBanner />}
+      topNav={
+        <>
+          <SharedTopNav />
+          <HeaderHeightSeed />
+        </>
+      }
       sideNav={
         <SideNav topContent={isOnComponentsRoute ? componentSearch : undefined}>
           {!isOnComponentsRoute && (
@@ -184,14 +190,7 @@ export function DocsShell({children, packages, docTopics}: DocsShellProps) {
                 <SideNavItem
                   label="Guide"
                   collapsible={{defaultIsCollapsed: false}}>
-                  {guideTopics.map(d => (
-                    <SideNavItem
-                      key={d.topic}
-                      label={d.title}
-                      href={`/docs/${d.topic}`}
-                      isSelected={pathname === `/docs/${d.topic}`}
-                    />
-                  ))}
+                  <DocsSidebarItems items={guideItems} pathname={pathname} />
                 </SideNavItem>
               </SideNavSection>
 
@@ -200,14 +199,10 @@ export function DocsShell({children, packages, docTopics}: DocsShellProps) {
                 <SideNavItem
                   label="Foundations"
                   collapsible={{defaultIsCollapsed: false}}>
-                  {foundationTopics.map(d => (
-                    <SideNavItem
-                      key={d.topic}
-                      label={d.title}
-                      href={`/docs/${d.topic}`}
-                      isSelected={pathname === `/docs/${d.topic}`}
-                    />
-                  ))}
+                  <DocsSidebarItems
+                    items={foundationItems}
+                    pathname={pathname}
+                  />
                 </SideNavItem>
               </SideNavSection>
 
@@ -263,7 +258,7 @@ export function DocsShell({children, packages, docTopics}: DocsShellProps) {
                 {q
                   ? flatSearchResults.map(item => (
                       <SideNavItem
-                        key={`${item.packageName}:${item.name}`}
+                        key={entryKey(item)}
                         label={item.displayName}
                         href={item.href}
                         isSelected={pathname === item.href}
@@ -276,7 +271,7 @@ export function DocsShell({children, packages, docTopics}: DocsShellProps) {
                   (q ? (
                     filteredUtilities.map(comp => (
                       <SideNavItem
-                        key={`${comp.packageName}:${comp.name}`}
+                        key={entryKey(comp)}
                         label={comp.displayName}
                         href={comp.href}
                         isSelected={pathname === comp.href}
@@ -288,7 +283,7 @@ export function DocsShell({children, packages, docTopics}: DocsShellProps) {
                       collapsible={{defaultIsCollapsed: true}}>
                       {utilities.map(comp => (
                         <SideNavItem
-                          key={`${comp.packageName}:${comp.name}`}
+                          key={entryKey(comp)}
                           label={comp.displayName}
                           href={comp.href}
                           isSelected={pathname === comp.href}
@@ -320,7 +315,7 @@ export function DocsShell({children, packages, docTopics}: DocsShellProps) {
                           collapsible={{defaultIsCollapsed: true}}>
                           {category.utilities.map(comp => (
                             <SideNavItem
-                              key={`${comp.packageName}:${comp.name}`}
+                              key={entryKey(comp)}
                               label={comp.displayName}
                               href={comp.href}
                               isSelected={pathname === comp.href}

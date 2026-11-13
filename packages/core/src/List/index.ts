@@ -1,7 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-'use client';
-
 /**
  * @file index.ts
  * @input Imports from List.tsx and ListItem.tsx
@@ -12,6 +10,6 @@
  */
 
 export {List} from './List';
-export type {ListProps, ListStyle, ListDensity} from './List';
+export type {ListProps, ListStyle, ListDensity, ListEdge} from './List';
 export {ListItem} from './ListItem';
 export type {ListItemProps} from './ListItem';

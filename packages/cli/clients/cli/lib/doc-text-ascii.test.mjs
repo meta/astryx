@@ -42,7 +42,7 @@ const componentDoc = {
       {property: 'radius', vars: ['--widget-radius']},
     ],
     targets: [
-      {className: 'astryx-widget', deprecatedFor: 'astryx-widget-v2'},
+      {className: 'astryx-widget'},
       {className: 'astryx-widget-v2', visualProps: ['variant']},
     ],
   },
@@ -63,7 +63,10 @@ describe('component text output is ASCII', () => {
   it.each([
     ['formatFull', () => formatFull(componentDoc)],
     ['formatCompact', () => formatCompact(componentDoc, 'Widget')],
-    ['formatBrief', () => formatBrief(componentDoc, 'Widget', '@astryxdesign/core/Widget')],
+    [
+      'formatBrief',
+      () => formatBrief(componentDoc, 'Widget', '@astryxdesign/core/Widget'),
+    ],
     ['formatProps', () => formatProps(componentDoc, 'Widget')],
   ])('%s', (_name, render) => {
     expect(nonAscii(render())).toEqual([]);

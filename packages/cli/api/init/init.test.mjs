@@ -10,18 +10,21 @@
 
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import {init, getNextSteps} from './init.mjs';
 import {logger} from '../logger.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const MARKER_START = '<!-- ASTRYX:START -->';
 
 let tmpDir;
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-init-api-'));
+  // Outside any package: init writes agent docs at the nearest package.json.
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-init-api-'));
 });
 
 afterEach(() => {
@@ -30,6 +33,18 @@ afterEach(() => {
 
 /** @param {string} rel */
 const read = rel => fs.readFileSync(path.join(tmpDir, rel), 'utf8');
+
+/**
+ * Make tmpDir a project that declares Astryx: a folder that declares nothing
+ * is outside a project, where init prints no getting-started steps (spec
+ * AST-081 FR3).
+ */
+function asProject() {
+  fs.writeFileSync(
+    path.join(tmpDir, 'package.json'),
+    JSON.stringify({name: 'app', dependencies: {'@astryxdesign/core': '*'}}),
+  );
+}
 /** @param {string} rel */
 const exists = rel => fs.existsSync(path.join(tmpDir, rel));
 
@@ -58,6 +73,7 @@ function writeIntegration() {
 
 describe('init() — receipts + side effects', () => {
   it('default mode installs AGENTS.md and returns an init.run receipt', async () => {
+    asProject();
     const res = await init({}, {cwd: tmpDir});
     expect(res.type).toBe('init.run');
     if (res.type !== 'init.run') return;
@@ -217,6 +233,7 @@ describe('init() — logger', () => {
   });
 
   it('emits the install line + full next-steps through the shared logger', async () => {
+    asProject();
     /** @type {string[]} */
     const lines = [];
     const logSpy = vi.spyOn(console, 'log').mockImplementation((...a) => lines.push(a.join(' ')));
@@ -243,7 +260,7 @@ describe('init() — ASCII output', () => {
     const lines = [];
     const logSpy = vi.spyOn(console, 'log').mockImplementation((...a) => lines.push(a.join(' ')));
     const errSpy = vi.spyOn(console, 'error').mockImplementation((...a) => lines.push(a.join(' ')));
-    const empty = fs.mkdtempSync(path.join(process.cwd(), '.astryx-init-remove-'));
+    const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-init-remove-'));
     logger.setSilent(false);
     try {
       await init({}, {cwd: tmpDir});
@@ -289,7 +306,7 @@ describe('init() — write-path safety', () => {
   });
 
   it('refuses a template write that a symlinked src would carry outside cwd (ERR_PATH_TRAVERSAL)', async () => {
-    const outside = fs.mkdtempSync(path.join(process.cwd(), '.astryx-init-outside-'));
+    const outside = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-init-outside-'));
     try {
       fs.symlinkSync(outside, path.join(tmpDir, 'src'), 'dir');
       await expect(

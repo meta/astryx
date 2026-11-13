@@ -5,6 +5,7 @@
 /**
  * @file NativeDateSegment.tsx
  * @input Uses React, Icon, nativeDateSegments, and DateTimeInput's date state
+ *   and native date rejection
  * @output Exports NativeDateSegment — the OS-picker date half of DateTimeInput
  * @position Internal DateTimeInput surface selected by `nativePicker`
  *
@@ -25,11 +26,16 @@
 
 import {useCallback, useEffect, useRef, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
+import type {
+  FieldInputBaseProps,
+  FieldPartStyleProps,
+} from '../Field/fieldParts';
 import {hasEditableDateSegments} from '../DateInput/nativeDateSegments';
+import type {NativeDateRejection} from '../DateInput/useTypedDate';
 import {useMediaQuery} from '../hooks/useMediaQuery';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {Icon} from '../Icon';
-import {useLocale, useTranslator} from '../i18n';
+import {useLocale} from '../i18n';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {
   focusOutlineStyles,
@@ -40,8 +46,16 @@ import {
   themeProps,
   type ISODateString,
 } from '../utils';
+import {chainEventHandlers} from '../utils/chainEventHandlers';
 import type {InputStatusType} from '../Field';
 import {nativePickerSegmentStyles as styles} from './nativePickerSegmentStyles';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/DateTimeInput/NativeDateSegment.generated';
+
+registerEnglishFallback(english);
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -55,11 +69,27 @@ export type NativeDateSegmentProps = {
   max?: ISODateString;
   isDateDisabled: (date: ReturnType<typeof plainDateFromISO>) => boolean;
   isEffectivelyDisabled: boolean;
-  hasDisabledMessage: boolean;
+  /** While disabled, stay focusable: aria-disabled and readOnly, not `disabled`. */
+  isFocusableDisabled: boolean;
   isEffectivelyRequired: boolean;
   isBusy: boolean;
+  /** The field's status type, which a shown rejection makes `error`. */
   statusType?: InputStatusType;
+  /**
+   * The rejection of a refused date. DateTimeInput shows its status as the
+   * field status.
+   */
+  rejection: NativeDateRejection;
   ariaDescribedBy?: string;
+  /**
+   * The caller's base props (data-*, aria-*, DOM handlers, …) for the native
+   * input, the field's semantic control (family:input-fields FR10). Focus and
+   * blur handlers run after the segment's own.
+   */
+  controlProps?: Omit<
+    FieldInputBaseProps<HTMLInputElement>,
+    keyof FieldPartStyleProps | 'onChange' | 'defaultValue'
+  >;
 };
 
 /** The native date half rendered inside DateTimeInput's date wrapper. */
@@ -73,40 +103,50 @@ export function NativeDateSegment({
   max,
   isDateDisabled,
   isEffectivelyDisabled,
-  hasDisabledMessage,
+  isFocusableDisabled,
   isEffectivelyRequired,
   isBusy,
   statusType,
+  rejection,
   ariaDescribedBy,
+  controlProps,
 }: NativeDateSegmentProps) {
-  const t = useTranslator();
+  const {
+    onFocus: onFocusProp,
+    onBlur: onBlurProp,
+    onKeyDown: onKeyDownProp,
+    ...inputProps
+  } = controlProps ?? {};
+  const t = useComponentTranslator();
   const locale = useLocale();
   const isTouchPointer = useMediaQuery('(pointer: coarse)');
   const internalInputRef = useRef<HTMLInputElement | null>(null);
   const mergedInputRef = useMergedRefs(inputRef, internalInputRef);
 
-  const [rejectedValue, setRejectedValue] = useState<string | null>(null);
   const [isFocused, setIsFocused] = useState(false);
   const [isSegmentEditable, setIsSegmentEditable] = useState(false);
   const valueAtFocusRef = useRef<string | null>(null);
-  const lastCommitRef = useRef<string | null>(null);
+  // The text the control last committed, so a repeated native event does not
+  // commit it twice. Each entry belongs to the commit epoch it was made in.
+  const lastCommitRef = useRef<{text: string; epoch: number} | null>(null);
 
-  const prevValueRef = useRef(value);
-  if (value !== prevValueRef.current) {
-    prevValueRef.current = value;
+  // The value as last rendered, and an epoch that a value change while the
+  // control is unfocused moves on, retiring the last commit. Both are state:
+  // refs written here would keep a value from a render React discards.
+  const [prevValue, setPrevValue] = useState(value);
+  const [commitEpoch, setCommitEpoch] = useState(0);
+  if (value !== prevValue) {
+    setPrevValue(value);
     // Keep the accepted DOM value cached while a native picker is open. An
     // optimistic rollback changes the prop but leaves the focused control alone;
-    // clearing this cache would replay that rejected edit on blur.
+    // retiring this cache would replay that rejected edit on blur.
     if (!isFocused) {
-      lastCommitRef.current = null;
-    }
-    if (rejectedValue !== null) {
-      setRejectedValue(null);
+      setCommitEpoch(epoch => epoch + 1);
     }
   }
 
   const nativeValue = value && ISO_DATE.test(value) ? value : '';
-  const isInputValid = rejectedValue === null;
+  const isInputValid = rejection.message == null;
   const overlayText = nativeValue
     ? formatSharedDate(plainDateFromISO(nativeValue), 'date_long', locale)
     : placeholder;
@@ -117,13 +157,18 @@ export function NativeDateSegment({
       if (isEffectivelyDisabled) {
         return;
       }
-      if (lastCommitRef.current === newValue) {
+      const last = lastCommitRef.current;
+      if (
+        last !== null &&
+        last.epoch === commitEpoch &&
+        last.text === newValue
+      ) {
         return;
       }
 
       if (!newValue) {
-        lastCommitRef.current = newValue;
-        setRejectedValue(null);
+        lastCommitRef.current = {text: newValue, epoch: commitEpoch};
+        rejection.clear();
         if (value !== undefined) {
           onChange(undefined);
         }
@@ -135,18 +180,26 @@ export function NativeDateSegment({
         return;
       }
       if (isDateDisabled(parsed)) {
-        setRejectedValue(newValue);
+        rejection.refuse(parsed);
         return;
       }
 
-      setRejectedValue(null);
-      lastCommitRef.current = newValue;
+      rejection.clear();
+      lastCommitRef.current = {text: newValue, epoch: commitEpoch};
       const parsedISO = plainDateToISO(parsed);
       if (parsedISO !== value) {
         onChange(parsedISO);
       }
     },
-    [isDateDisabled, isEffectivelyDisabled, locale, onChange, value],
+    [
+      commitEpoch,
+      isDateDisabled,
+      isEffectivelyDisabled,
+      locale,
+      onChange,
+      rejection,
+      value,
+    ],
   );
 
   const handleChange = useCallback(
@@ -203,20 +256,30 @@ export function NativeDateSegment({
     const valueChangedWhileFocused =
       valueAtFocusRef.current !== null &&
       valueAtFocusRef.current !== nativeValue;
-    const wasRejected = rejectedValue !== null;
     valueAtFocusRef.current = null;
     setIsFocused(false);
-    setRejectedValue(null);
     if (
       !valueChangedWhileFocused &&
-      !wasRejected &&
+      !rejection.isRefused &&
       domValue !== undefined &&
       domValue !== nativeValue
     ) {
       commitValue(domValue);
     }
     lastCommitRef.current = null;
-  }, [commitValue, nativeValue, rejectedValue]);
+    // The sync effect restores the committed date once focus leaves. The
+    // rejection stays shown, so the restore is never silent.
+    rejection.commit();
+  }, [commitValue, nativeValue, rejection]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') {
+        rejection.commit();
+      }
+    },
+    [rejection],
+  );
 
   const openPicker = useCallback(() => {
     if (isEffectivelyDisabled) {
@@ -242,7 +305,7 @@ export function NativeDateSegment({
       <button
         type="button"
         onClick={openPicker}
-        disabled={isEffectivelyDisabled}
+        aria-disabled={isEffectivelyDisabled || undefined}
         aria-label={t('@astryx.dateInput.openCalendar')}
         tabIndex={-1}
         {...stylex.props(
@@ -259,19 +322,23 @@ export function NativeDateSegment({
       </button>
       <span {...stylex.props(styles.slot)}>
         <input
+          {...inputProps}
           ref={mergedInputRef}
           id={id}
           type="date"
           // UNCONTROLLED on purpose; see initialValueRef and the sync effect.
           defaultValue={initialValueRef.current ?? ''}
           onChange={handleChange}
-          onFocus={handleFocus}
-          onBlur={handleBlur}
+          onFocus={chainEventHandlers(handleFocus, onFocusProp)}
+          onBlur={chainEventHandlers(handleBlur, onBlurProp)}
+          onKeyDown={chainEventHandlers(handleKeyDown, onKeyDownProp)}
           min={min}
           max={max}
-          disabled={isEffectivelyDisabled && !hasDisabledMessage}
-          aria-disabled={hasDisabledMessage ? 'true' : undefined}
-          readOnly={hasDisabledMessage || undefined}
+          disabled={isEffectivelyDisabled && !isFocusableDisabled}
+          aria-disabled={
+            isEffectivelyDisabled && isFocusableDisabled ? 'true' : undefined
+          }
+          readOnly={(isEffectivelyDisabled && isFocusableDisabled) || undefined}
           aria-describedby={ariaDescribedBy}
           aria-required={isEffectivelyRequired ? 'true' : undefined}
           aria-invalid={
@@ -298,8 +365,12 @@ export function NativeDateSegment({
           </span>
         )}
       </span>
+      {/*
+          Announces the rejection message that the field status does not
+          announce. The field status announces the rest.
+        */}
       <VisuallyHidden as="div" role="alert" aria-live="assertive">
-        {!isInputValid ? t('@astryx.dateInput.invalidDate') : ''}
+        {rejection.alertMessage}
       </VisuallyHidden>
     </>
   );

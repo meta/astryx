@@ -112,6 +112,54 @@ describe('fast PR accessibility scope', () => {
     ).toThrow('No scoped Storybook route');
   });
 
+  it('audits Lab Chat additions through the Chat umbrella without selecting other Lab stories', () => {
+    const routes = buildStoryComponentRoutes({
+      stories: [
+        {id: 'lab-chatadditions--reactions', title: 'Lab/ChatAdditions'},
+        {
+          id: 'lab-chatadditions--typing-and-unread',
+          title: 'Lab/ChatAdditions',
+        },
+        {id: 'lab-chatadditions--emoji-picker', title: 'Lab/ChatAdditions'},
+        {id: 'lab-stat--showcase', title: 'Lab/Stat'},
+      ],
+      publicComponentsByPackage: {
+        lab: [
+          'ChatEmojiPicker',
+          'ChatReactionBar',
+          'ChatTypingIndicator',
+          'ChatUnreadDivider',
+          'Stat',
+        ],
+      },
+    }).map(route => ({
+      ...route,
+      component: storyIdentity.ownerForA11yStory(route.id) ?? route.component,
+    }));
+    const chatScope = resolvePrA11yComponents(
+      analysis({unresolvedComponentSources: ['lab/Chat']}),
+      process.cwd(),
+      routes,
+    );
+    expect(chatScope).toEqual(['lab/Chat']);
+    expect(unresolvedComponentFilters(routes, chatScope)).toEqual([]);
+    expect(storyIdsForComponentFilters(routes, chatScope)).toEqual([
+      'lab-chatadditions--reactions',
+      'lab-chatadditions--typing-and-unread',
+      'lab-chatadditions--emoji-picker',
+    ]);
+
+    const statScope = resolvePrA11yComponents(
+      analysis({modifiedComponentOwners: ['lab/Stat']}),
+      process.cwd(),
+      routes,
+    );
+    expect(statScope).toEqual(['lab/Stat']);
+    expect(storyIdsForComponentFilters(routes, statScope)).toEqual([
+      'lab-stat--showcase',
+    ]);
+  });
+
   it('routes NavHeadingMenu through its normalized NavMenu umbrella', () => {
     const routes = buildStoryComponentRoutes({
       stories: [

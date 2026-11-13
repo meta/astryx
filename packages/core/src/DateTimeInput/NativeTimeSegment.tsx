@@ -25,24 +25,35 @@
 
 import {useCallback, useEffect, useRef, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
+import type {
+  FieldInputBaseProps,
+  FieldPartStyleProps,
+} from '../Field/fieldParts';
 import {hasEditableDateSegments} from '../DateInput/nativeDateSegments';
 import type {InputStatusType} from '../Field';
 import {useMediaQuery} from '../hooks/useMediaQuery';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {Icon} from '../Icon';
-import {useTranslator} from '../i18n';
+import {useLocale} from '../i18n';
+import {formatLocaleTime} from '../utils/timeFormat';
 import type {ThemeProps} from '../utils/themeProps';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {
   focusOutlineStyles,
-  formatDisplayTime12h,
-  formatDisplayTime24h,
   formatISOTime,
   isTimeInRange,
   parseISOTime,
   type ISOTimeString,
 } from '../utils';
+import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {nativePickerSegmentStyles as styles} from './nativePickerSegmentStyles';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/DateTimeInput/NativeTimeSegment.generated';
+
+registerEnglishFallback(english);
 
 const FRACTIONAL_SECONDS = /\.\d+$/;
 
@@ -75,11 +86,21 @@ export type NativeTimeSegmentProps = {
   max?: ISOTimeString;
   hourFormat: '12h' | '24h';
   isEffectivelyDisabled: boolean;
-  hasDisabledMessage: boolean;
+  /** While disabled, stay focusable: aria-disabled and readOnly, not `disabled`. */
+  isFocusableDisabled: boolean;
   isEffectivelyRequired: boolean;
   isBusy: boolean;
   statusType?: InputStatusType;
   ariaDescribedBy?: string;
+  /**
+   * The caller's base props (data-*, aria-*, DOM handlers, …) for the native
+   * input, the field's semantic control (family:input-fields FR10). Focus and
+   * blur handlers run after the segment's own.
+   */
+  controlProps?: Omit<
+    FieldInputBaseProps<HTMLInputElement>,
+    keyof FieldPartStyleProps | 'onChange' | 'defaultValue'
+  >;
 };
 
 /** The shared native time control rendered inside Astryx field chrome. */
@@ -98,13 +119,20 @@ export function NativeTimeSegment({
   max,
   hourFormat,
   isEffectivelyDisabled,
-  hasDisabledMessage,
+  isFocusableDisabled,
   isEffectivelyRequired,
   isBusy,
   statusType,
   ariaDescribedBy,
+  controlProps,
 }: NativeTimeSegmentProps) {
-  const t = useTranslator();
+  const {
+    onFocus: onFocusProp,
+    onBlur: onBlurProp,
+    ...inputProps
+  } = controlProps ?? {};
+  const t = useComponentTranslator();
+  const locale = useLocale();
   const isTouchPointer = useMediaQuery('(pointer: coarse)');
   const internalInputRef = useRef<HTMLInputElement | null>(null);
   const mergedInputRef = useMergedRefs(inputRef, internalInputRef);
@@ -113,15 +141,21 @@ export function NativeTimeSegment({
   const [isFocused, setIsFocused] = useState(false);
   const [isSegmentEditable, setIsSegmentEditable] = useState(false);
   const valueAtFocusRef = useRef<string | null>(null);
-  const lastCommitRef = useRef<string | null>(null);
+  // The text the control last committed, so a repeated native event does not
+  // commit it twice. Each entry belongs to the commit epoch it was made in.
+  const lastCommitRef = useRef<{text: string; epoch: number} | null>(null);
 
-  const prevValueRef = useRef(value);
-  if (value !== prevValueRef.current) {
-    prevValueRef.current = value;
+  // The value as last rendered, and an epoch that a value change while the
+  // control is unfocused moves on, retiring the last commit. Both are state:
+  // refs written here would keep a value from a render React discards.
+  const [prevValue, setPrevValue] = useState(value);
+  const [commitEpoch, setCommitEpoch] = useState(0);
+  if (value !== prevValue) {
+    setPrevValue(value);
     // Preserve the accepted DOM value while the OS wheel is open so an
     // optimistic rollback cannot replay that edit when the field blurs.
     if (!isFocused) {
-      lastCommitRef.current = null;
+      setCommitEpoch(epoch => epoch + 1);
     }
     if (rejectedValue !== null) {
       setRejectedValue(null);
@@ -130,21 +164,23 @@ export function NativeTimeSegment({
 
   const nativeValue = normalizeNativeTime(value) ?? '';
   const isInputValid = rejectedValue === null;
-  const formatDisplayTime =
-    hourFormat === '12h' ? formatDisplayTime12h : formatDisplayTime24h;
   const overlayText = nativeValue
-    ? formatDisplayTime(nativeValue, false)
+    ? formatLocaleTime(nativeValue, locale, hourFormat, false)
     : placeholder;
   const showsOverlay = !!overlayText && !(isFocused && isSegmentEditable);
 
   const commitValue = useCallback(
     (newValue: string) => {
-      if (isEffectivelyDisabled || lastCommitRef.current === newValue) {
+      const last = lastCommitRef.current;
+      if (
+        isEffectivelyDisabled ||
+        (last !== null && last.epoch === commitEpoch && last.text === newValue)
+      ) {
         return;
       }
 
       if (!newValue) {
-        lastCommitRef.current = newValue;
+        lastCommitRef.current = {text: newValue, epoch: commitEpoch};
         setRejectedValue(null);
         if (value !== undefined) {
           onChange(undefined);
@@ -162,12 +198,12 @@ export function NativeTimeSegment({
       }
 
       setRejectedValue(null);
-      lastCommitRef.current = newValue;
+      lastCommitRef.current = {text: newValue, epoch: commitEpoch};
       if (normalized !== value) {
         onChange(normalized);
       }
     },
-    [isEffectivelyDisabled, max, min, onChange, value],
+    [commitEpoch, isEffectivelyDisabled, max, min, onChange, value],
   );
 
   const handleChange = useCallback(
@@ -265,7 +301,7 @@ export function NativeTimeSegment({
       <button
         type="button"
         onClick={openPicker}
-        disabled={isEffectivelyDisabled}
+        aria-disabled={isEffectivelyDisabled || undefined}
         aria-label={openPickerLabel}
         tabIndex={-1}
         {...stylex.props(
@@ -277,21 +313,30 @@ export function NativeTimeSegment({
       </button>
       <span {...stylex.props(styles.slot)}>
         <input
+          {...inputProps}
           ref={mergedInputRef}
           id={id}
           type="time"
           // UNCONTROLLED on purpose; see initialValueRef and the sync effect.
           defaultValue={initialValueRef.current ?? ''}
           onChange={handleChange}
-          onFocus={handleFocus}
-          onBlur={handleBlur}
+          onFocus={chainEventHandlers(handleFocus, onFocusProp)}
+          onBlur={chainEventHandlers(handleBlur, onBlurProp)}
           min={min}
           max={max}
           step={60}
-          disabled={isEffectivelyDisabled && !hasDisabledMessage}
-          aria-disabled={hasDisabledMessage ? 'true' : undefined}
-          readOnly={hasDisabledMessage || undefined}
-          aria-label={ariaLabelledBy ? undefined : inputLabel}
+          disabled={isEffectivelyDisabled && !isFocusableDisabled}
+          aria-disabled={
+            isEffectivelyDisabled && isFocusableDisabled ? 'true' : undefined
+          }
+          readOnly={(isEffectivelyDisabled && isFocusableDisabled) || undefined}
+          // The segment's own label applies only when nothing else names it;
+          // otherwise a caller aria-label from the spread above stays.
+          aria-label={
+            !ariaLabelledBy && inputLabel
+              ? inputLabel
+              : inputProps['aria-label']
+          }
           aria-labelledby={ariaLabelledBy}
           aria-describedby={ariaDescribedBy}
           autoFocus={hasAutoFocus}

@@ -70,7 +70,6 @@ export {useChartColors} from './useChartColors';
 export {
   getChartColors,
   getChartColorsFromResolver,
-  CATEGORICAL_TOKENS,
   type ChartColorsAPI,
   type SequentialHue,
   type TokenResolver,

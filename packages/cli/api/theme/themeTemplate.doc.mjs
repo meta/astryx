@@ -19,18 +19,22 @@ export const doc = {
     'Writes theme.template.ts: the annotated reference for the whole theme surface, covering every ' +
     'defineTheme field, the token families, the component override syntax, and how a theme is ' +
     'consumed, with the CLI command that prints the authoritative reference for each section. ' +
-    'Read it, copy what you need into your own theme file, delete it. Where `theme add` starts ' +
-    'you from a theme we ship, this starts you from a blank one. Refuses to overwrite without ' +
-    '`overwrite`, so it is safe to re-run.',
+    'Read it, copy what you need into your own theme file, delete it. Use `theme add` to ' +
+    'use an installed built theme, extend that theme for ordinary customization, or use ' +
+    '`theme eject` for a complete source fork. This command starts a new blank theme. Refuses to overwrite without ' +
+    '`overwrite`, so it is safe to re-run. With no package.json at or above cwd, it writes in cwd ' +
+    'and the CLI warns; pass a cwd inside a project, or run `npm init -y` in that folder first, to ' +
+    'write it at a project root.',
   importPath: '@astryxdesign/cli/api',
   signature:
-    'themeTemplate(options?: {targetPath?: string, overwrite?: boolean, cwd?: string}): ThemeNewResponse',
+    'themeTemplate(options?: {targetPath?: string, overwrite?: boolean, cwd?: string}): ThemeTemplateResponse',
   keywords: ['theme', 'template', 'starter', 'defineTheme', 'scaffold', 'reference', 'tokens'],
   params: [
     {
       name: 'options.targetPath',
       type: 'string',
-      description: 'Destination file. Must resolve within cwd.',
+      description:
+        'Destination file, read from cwd. Must resolve within the project root: the nearest folder at or above cwd with a package.json. Left out, the template is written at the project root.',
       default: "'theme.template.ts'",
     },
     {
@@ -43,17 +47,29 @@ export const doc = {
       name: 'options.cwd',
       type: 'string',
       description: 'Directory the target path resolves against.',
+      default: 'process.cwd()',
     },
   ],
   returns: [
     {
       type: 'theme.template',
       description:
-        'Receipt: the path (relative to cwd), whether it was written, and the reason it was not. `exists` when a file was already there, which is a success, not a failure.',
+        'Receipt: the path (relative to cwd), whether it was written, and the reason it was not. `exists` when a file was already there, which is a success, not a failure; then `overwritable` says whether overwrite would replace that file, and `alternative` is a free path for the template when it would not.',
     },
   ],
   throws: [
-    {code: 'ERR_PATH_TRAVERSAL', when: 'the target path escapes cwd'},
+    {
+      code: 'ERR_PATH_TRAVERSAL',
+      when: 'the target path escapes the project root (the nearest folder at or above cwd with a package.json)',
+    },
+    {
+      code: 'ERR_INVALID_ARGUMENT',
+      when: 'the target path is blank, names a folder, or is not a .ts file (with or without overwrite)',
+    },
+    {
+      code: 'ERR_FILE_EXISTS',
+      when: 'overwrite names a file that is not a copy of the template or a theme source, or a file in a folder the theme editor made (folder <slug>/ holds <slug>.settings.json)',
+    },
     {code: 'ERR_WRITE_FAILED', when: 'the template file cannot be written'},
   ],
   examples: [
@@ -64,5 +80,5 @@ export const doc = {
     },
   ],
   command: 'theme template',
-  related: ['themeAdd', 'themeBuild', 'themeList'],
+  related: ['themeAdd', 'themeEject', 'themeBuild', 'themeListAvailable', 'themeTargets'],
 };

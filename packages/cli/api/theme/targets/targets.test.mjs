@@ -19,7 +19,6 @@ describe('themeTargets (api/theme/targets)', () => {
     const allowedKeys = new Set([
       'className',
       'component',
-      'deprecatedFor',
       'key',
       'props',
       'states',
@@ -35,9 +34,6 @@ describe('themeTargets (api/theme/targets)', () => {
       expect(Object.keys(target).filter(key => !allowedKeys.has(key))).toEqual(
         [],
       );
-      if (target.deprecatedFor !== undefined) {
-        expect(target.deprecatedFor).toEqual(expect.any(String));
-      }
     }
   }, 60_000);
 
@@ -92,4 +88,14 @@ describe('themeTargets (api/theme/targets)', () => {
       code: 'ERR_UNKNOWN_COMPONENT',
     });
   }, 60_000);
+
+  it('reads a class selector as the output prints it, and ignores surrounding spaces', async () => {
+    const byClass = await themeTargets('.astryx-switch');
+    const byName = await themeTargets('astryx-switch');
+    expect(byClass.data.targets.length).toBeGreaterThan(0);
+    expect(byClass.data.targets).toEqual(byName.data.targets);
+    expect((await themeTargets('  Switch ')).data.targets).toEqual(
+      (await themeTargets('Switch')).data.targets,
+    );
+  });
 });

@@ -13,7 +13,7 @@ export const doc = {
   displayName: 'listThemes()',
   summary: 'Read the CLI bundled-theme descriptors.',
   description:
-    'Reads the typed same-stem descriptors under templates/themes and returns normalized entries synchronously. This low-level helper keeps its historical bundled-only contract; project-aware themeList() and themeAdd() also discover source themes from installed integrations.',
+    "Synchronously returns the themes bundled with the CLI, including each one's entry file, export name and file list. Bundled themes only; use themeListAvailable() to include themes from installed integrations.",
   importPath: '@astryxdesign/cli/api',
   signature: 'listThemes(): BundledTheme[]',
   keywords: ['theme', 'themes', 'descriptor', 'bundled', 'adapter', 'list'],

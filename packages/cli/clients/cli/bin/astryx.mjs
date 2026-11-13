@@ -14,7 +14,7 @@
 // unsupported runtimes this guard protects against.
 //
 // Sibling package modules (e.g. `cli/`, `lib/`) are resolved by this bin's REAL
-// path. When the CLI is installed as a package, `npx astryx` runs this file
+// path. When the CLI is installed as a package, the package manager runs this file
 // through the `node_modules/.bin/astryx` symlink, and some Node versions resolve
 // relative specifiers from the symlink's directory rather than the real package
 // — breaking bare `../…` imports with a cryptic ERR_MODULE_NOT_FOUND.
@@ -22,16 +22,47 @@
 // the bin is invoked (symlink, copy, or Windows shim). Uses only built-ins, so
 // the version gate below still runs first.
 import {fileURLToPath, pathToFileURL} from 'node:url';
-import {realpathSync} from 'node:fs';
 import {dirname, join} from 'node:path';
+import * as nodeModule from 'node:module';
+import {existsSync, mkdirSync, realpathSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {
+  currentUid,
+  isPrivateDir,
+} from '../../../foundation/env/private-dir.mjs';
+
+// Node's compile cache keeps the compiled form of the CLI's modules between
+// runs, so a run skips most of their compiling. It lives in a folder of the
+// user's own in the system temp folder (node-compile-cache-<uid>). It is used
+// only once that folder exists, so a machine's first run just makes it and a
+// one-off run never pays to write the cache; and only while it is a real
+// folder the user owns that no one else can reach, since a shared folder
+// could hold planted cache files (foundation/env/private-dir.mjs, the check
+// the kept search catalogs use too). Where the system has no user ids
+// (Windows), ownership cannot be checked, so the cache stays off.
+// NODE_DISABLE_COMPILE_CACHE turns it off. It is best effort: a cache Node
+// cannot read or write is skipped, and nothing about it is printed.
+try {
+  const uid = currentUid();
+  if (!process.env.NODE_DISABLE_COMPILE_CACHE && uid != null) {
+    const cacheDir = join(tmpdir(), `node-compile-cache-${uid}`);
+    if (!existsSync(cacheDir)) {
+      mkdirSync(cacheDir, {mode: 0o700});
+    } else if (isPrivateDir(cacheDir)) {
+      nodeModule.enableCompileCache?.(cacheDir);
+    }
+  }
+} catch {
+  // A run without the cache is the same run, only slower.
+}
 
 const binDir = dirname(realpathSync(fileURLToPath(import.meta.url)));
 /** @param {string} rel */
-const importSrc = rel =>
-  import(pathToFileURL(join(binDir, '..', rel)).href);
+const importSrc = rel => import(pathToFileURL(join(binDir, '..', rel)).href);
 
-const {isNodeVersionSupported, unsupportedNodeMessage} =
-  await importSrc('../../foundation/env/node-version.mjs');
+const {isNodeVersionSupported, unsupportedNodeMessage} = await importSrc(
+  '../../foundation/env/node-version.mjs',
+);
 
 if (!isNodeVersionSupported(process.versions.node)) {
   const msg = unsupportedNodeMessage(process.versions.node);
@@ -53,67 +84,18 @@ if (!isNodeVersionSupported(process.versions.node)) {
   process.exit(1);
 }
 
-// Imports that transitively load `styleText` must happen AFTER the gate above,
-// so they are dynamically imported here rather than at the top of the module.
-const {program, loadProjectDebugHandler, handleVersionJsonPreflight} =
-  await importSrc('index.mjs');
-const {isJsonMode, toErrorEnvelope} = await importSrc('../../foundation/response/json.mjs');
-const {handleCommanderError} = await importSrc('lib/json-shim.mjs');
-const {setOutcome} = await importSrc('../../foundation/debug/index.mjs');
-
-/**
- * Top-level error boundary (contract guarantee #4): an uncaught throw must
- * never reach a --json consumer as a raw stack trace. If we're in JSON mode,
- * convert it to the contract's error envelope on stdout and exit 1; otherwise
- * preserve the normal human-facing behavior.
- *
- * We detect JSON mode two ways: the global flag (set once root options are
- * parsed) and a raw argv check, since a throw can occur during parsing/command
- * load — before the preAction hook engages the flag.
- */
-function inJsonMode() {
-  return isJsonMode() || process.argv.slice(2).includes('--json');
-}
-
-/** @param {unknown} err */
-function handleFatal(err) {
-  // CommanderError (parse errors, --help, unknown command) routes
-  // through the JSON shim so that a --json consumer always gets a
-  // valid envelope and the right exit code. handleCommanderError
-  // calls process.exit when it owns the error.
-  if (handleCommanderError(err)) return;
-
-  // Anything still here is an uncaught throw or an unhandled rejection —
-  // a bug rather than a user error, and the class of failure most worth
-  // having a record of.
-  setOutcome('fatal', {exitCode: 1, error: err});
-
-  if (inJsonMode()) {
-    // Only emit if a command didn't already produce an envelope.
-    if (!process.__xdsJsonHandled) {
-      process.__xdsJsonHandled = true;
-      console.log(JSON.stringify(toErrorEnvelope(err), null, 2));
-    }
-    process.exit(1);
-  }
-  // Human mode: preserve Commander/Node default-ish behavior.
-  console.error(err instanceof Error ? err.stack || err.message : String(err));
-  process.exit(1);
-}
-
-process.on('unhandledRejection', handleFatal);
-process.on('uncaughtException', handleFatal);
-
-// Pick up the project's `debug` function before parsing, so parse errors and
-// `--help` — which short-circuit before any hook runs — are reported too.
-await loadProjectDebugHandler();
-
-// `--version --json` answers and exits without Commander, so it runs here —
-// after the handler exists, or the run would go unrecorded.
-handleVersionJsonPreflight();
-
-try {
-  await program.parseAsync(process.argv);
-} catch (err) {
-  handleFatal(err);
-}
+// Global mode: the run chooses the release that answers this folder and, when
+// it is not this copy, hands the run to it before anything the project
+// provides (its astryx.config, integrations, or Core) is loaded; only then
+// does it load and dispatch the command. See clients/cli/run.mjs,
+// foundation/release/handoff.mjs, and spec AST-081 FR2 and FR9.
+const {runCli} = await importSrc('run.mjs');
+const {recordRunFor} = await importSrc('../../foundation/fs/gather-cache.mjs');
+// A search or build records what it reads, so a later run with the same
+// inputs can reuse its gathered catalog (foundation/fs/gather-cache.mjs).
+await recordRunFor(process.argv.slice(2), () =>
+  runCli({
+    cliRoot: join(binDir, '..', '..', '..'),
+    argv: process.argv.slice(2),
+  }),
+);

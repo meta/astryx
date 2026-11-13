@@ -1,7 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-'use client';
-
 /**
  * @file index.ts
  * @input DateTimeInput component exports
@@ -15,9 +13,11 @@ export type {
   DateTimeInputSize,
   DateTimeInputHourFormat,
   DateTimeInputNativePicker,
+  DateTimeInputPresentation,
   DateTimeInputTimeIncrement,
   DateTimeInputTimeOptionInterval,
   DateTimeInputStatus,
   DateTimeInputStatusType,
+  DateInputEntryError,
   ISODateTimeString,
 } from './DateTimeInput';

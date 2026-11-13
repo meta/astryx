@@ -4,7 +4,7 @@
 
 /**
  * @file NativeDateField.tsx
- * @input Uses React, Field, Icon, InputClearButton, Spinner, useCalendarConstraints, hasEditableDateSegments
+ * @input Uses React, Field, Icon, InputClearButton, Spinner, useCalendarConstraints, hasEditableDateSegments, useNativeDateRejection
  * @output Exports NativeDateField — the OS-picker touch surface
  * @position One of DateInput's three surfaces. `DateInput` picks the pointer
  *   field on a mouse and, on touch, either `TouchDateField` (the default) or
@@ -26,11 +26,21 @@
  * - /packages/core/src/DateInput/NativeDateField.test.tsx (tests)
  */
 
-import {useCallback, useEffect, useId, useRef, useState} from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useOptimistic,
+  useRef,
+  useState,
+  useTransition,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useCalendarConstraints} from '../Calendar';
 import type {DateInputProps} from './DateInput';
 import {hasEditableDateSegments} from './nativeDateSegments';
+import {useNativeDateRejection} from './useTypedDate';
 import {
   Field,
   InputClearButton,
@@ -41,18 +51,21 @@ import {
 } from '../Field';
 import {useInputStatusIcon, useMergedRefs} from '../hooks';
 import {useMediaQuery} from '../hooks/useMediaQuery';
+import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {Icon} from '../Icon';
-import {useLocale, useTranslator} from '../i18n';
+import {useLocale} from '../i18n';
 import {useInputGroup} from '../InputGroup';
-import {groupStyles} from '../InputGroup/groupStyles';
-import {stableClassName} from '../naming';
+import {useFieldInputStyling} from '../Field/fieldParts';
+import {joinAriaIDs} from '../utils/inputAria';
+import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useSize} from '../SizeContext';
 import {Spinner} from '../Spinner';
 import {
   colorVars,
   radiusVars,
   sizeVars,
+  spacingVars,
   typeScaleVars,
   typographyVars,
 } from '../theme/tokens.stylex';
@@ -69,10 +82,18 @@ import {
   themeProps,
   type ISODateString,
 } from '../utils';
+import {chainEventHandlers} from '../utils/chainEventHandlers';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/DateInput/NativeDateField.generated';
+
+registerEnglishFallback(english);
 
 const styles = stylex.create({
   wrapper: {
-    gap: 8,
+    gap: spacingVars['--spacing-2'],
   },
   iconButton: {
     display: 'flex',
@@ -245,6 +266,7 @@ export function NativeDateField({
   disabledMessage,
   value,
   onChange,
+  changeAction,
   isLoading = false,
   min,
   max,
@@ -252,6 +274,9 @@ export function NativeDateField({
   placeholder: placeholderFromProps,
   size: sizeProp,
   status,
+  // The control takes no typed text, so it never reports a rejection. With
+  // the callback, the caller's error status words a refused date.
+  onEntryErrorChange,
   statusVariant = 'attached',
   labelTooltip,
   hasClear = false,
@@ -261,13 +286,30 @@ export function NativeDateField({
   weekStartsOn: _weekStartsOn,
   format = 'date_long',
   width,
-  xstyle,
-  className,
-  style,
+  containerXstyle,
+  containerClassName,
+  containerStyle,
+  controlXstyle,
+  controlClassName,
+  controlStyle,
   ref,
-  ...rest
+  ...restProps
 }: DateInputProps) {
-  const t = useTranslator();
+  const {rest, container} = useFieldInputStyling('DateInput', restProps, {
+    containerXstyle,
+    containerClassName,
+    containerStyle,
+  });
+  const {
+    id: idProp,
+    'aria-describedby': ariaDescribedByProp,
+    'aria-labelledby': ariaLabelledByProp,
+    onFocus: onFocusProp,
+    onBlur: onBlurProp,
+    onKeyDown: onKeyDownProp,
+    ...controlProps
+  } = rest;
+  const t = useComponentTranslator();
   const locale = useLocale();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder =
@@ -276,7 +318,9 @@ export function NativeDateField({
   // Only breaks a tie the engine probe cannot: see ./nativeDateSegments.
   const isTouchPointer = useMediaQuery('(pointer: coarse)');
 
-  const id = useId();
+  const generatedID = useId();
+  const id = idProp ?? generatedID;
+  const fieldLabelID = useId();
   const inputLabelID = useId();
   const descriptionID = useId();
   const statusMessageID = useId();
@@ -284,11 +328,22 @@ export function NativeDateField({
   const mergedInputRef = useMergedRefs(ref, inputRef);
   const inputGroup = useInputGroup();
 
+  const [, startTransition] = useTransition();
+  const [optimisticValue, setOptimisticValue] = useOptimistic(value);
+  const isBusy = isLoading || optimisticValue !== value;
+  // The busy Spinner is decorative; this control announces its busy start
+  // (spec:AST-086 FR8).
+  useBusyAnnouncement(isBusy, t('@astryx.spinner.loading'), inputRef);
+  // Keep the OS picker mounted and focusable while its own Action is pending.
+  // Native TimeInput follows the same pattern: commit guards block duplicates,
+  // while aria-busy and the Spinner communicate the save without detaching the
+  // platform picker from its input.
   const isEffectivelyDisabled = isDisabled || isLoading;
 
-  // Disabled-reason tooltip, same contract as the other two surfaces: a
-  // disabled control swallows pointer events, so the listeners attach to the
-  // wrapper and the input stays focusable via aria-disabled.
+  // Same contract as the other two surfaces: a disabled field never renders
+  // native `disabled` (spec:AST-085 FR1); the input stays focusable via
+  // aria-disabled and readOnly. The disabled-reason tooltip's listeners
+  // attach to the wrapper.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
@@ -298,9 +353,24 @@ export function NativeDateField({
 
   const {isDateDisabled} = useCalendarConstraints({min, max, dateConstraints});
 
+  const rejection = useNativeDateRejection({
+    source: 'DateInput',
+    format,
+    min,
+    max,
+    isDateDisabled,
+    value,
+    isLocked: isEffectivelyDisabled || isBusy,
+    status,
+    hasEntryErrorCallback: onEntryErrorChange != null,
+    isStatusAnnounced: !inputGroup,
+  });
+  const {fieldStatus} = rejection;
+  const isInputValid = rejection.message == null;
+
   const {statusIcon, describedBy: statusTooltipDescribedBy} =
     useInputStatusIcon({
-      status,
+      status: fieldStatus,
       statusVariant,
       isInGroup: !!inputGroup,
     });
@@ -309,16 +379,16 @@ export function NativeDateField({
     inputLabelID,
     [
       description ? descriptionID : null,
-      statusVariant !== 'tooltip' && status?.message ? statusMessageID : null,
+      statusVariant !== 'tooltip' && fieldStatus?.message
+        ? statusMessageID
+        : null,
       statusTooltipDescribedBy,
       showsDisabledMessage ? disabledMessageTooltip.describedBy : null,
+      ariaDescribedByProp,
     ],
     inputGroup,
   );
 
-  // A date the picker produced that `dateConstraints` refuses, held so the
-  // refusal can be announced instead of looking like a dead tap.
-  const [rejectedValue, setRejectedValue] = useState<string | null>(null);
   // Whether the control has focus — which, on a touch device, means its
   // picker is open.
   const [isFocused, setIsFocused] = useState(false);
@@ -327,22 +397,24 @@ export function NativeDateField({
   // probe touches the DOM, and unfocused the answer changes nothing.
   const [isSegmentEditable, setIsSegmentEditable] = useState(false);
   // The raw value the control last reported and we acted on, so the same edit
-  // arriving through both commit paths only fires one change.
-  const lastCommitRef = useRef<string | null>(null);
+  // arriving through both commit paths only fires one change. Each entry
+  // belongs to the commit epoch it was made in.
+  const lastCommitRef = useRef<{text: string; epoch: number} | null>(null);
 
-  const prevValueRef = useRef(value);
-  if (value !== prevValueRef.current) {
-    prevValueRef.current = value;
-    lastCommitRef.current = null;
-    if (rejectedValue !== null) {
-      setRejectedValue(null);
-    }
+  // The value as last rendered, and an epoch that a value change moves on,
+  // retiring the last commit. Both are state: refs written here would keep a
+  // value from a render React discards.
+  const [prevValue, setPrevValue] = useState(value);
+  const [commitEpoch, setCommitEpoch] = useState(0);
+  if (value !== prevValue) {
+    setPrevValue(value);
+    setCommitEpoch(epoch => epoch + 1);
   }
 
   // The control's own value is always ISO — the only form it accepts, and
   // what the picker reads and writes. `format` rides on the overlay instead.
-  const nativeValue = value && ISO_DATE.test(value) ? value : '';
-  const isInputValid = rejectedValue === null;
+  const nativeValue =
+    optimisticValue && ISO_DATE.test(optimisticValue) ? optimisticValue : '';
 
   const formatValue = useCallback(
     (iso: ISODateString): string =>
@@ -362,22 +434,43 @@ export function NativeDateField({
   const overlayText = nativeValue ? formatValue(nativeValue) : placeholder;
   const showsOverlay = !!overlayText && !(isFocused && isSegmentEditable);
 
+  const fireChange = useCallback(
+    (newValue: ISODateString | undefined) => {
+      if (isBusy) {
+        return;
+      }
+      onChange?.(newValue);
+      if (changeAction) {
+        startTransition(async () => {
+          setOptimisticValue(newValue);
+          await changeAction(newValue);
+        });
+      }
+    },
+    [isBusy, onChange, changeAction, startTransition, setOptimisticValue],
+  );
+
   const commitValue = useCallback(
     (newValue: string) => {
-      if (isEffectivelyDisabled) {
+      if (isEffectivelyDisabled || isBusy) {
         return;
       }
       // The same edit can arrive twice — React's synthetic change and the
       // native listener below both report it — so act on a raw value once.
-      if (lastCommitRef.current === newValue) {
+      const last = lastCommitRef.current;
+      if (
+        last !== null &&
+        last.epoch === commitEpoch &&
+        last.text === newValue
+      ) {
         return;
       }
-      lastCommitRef.current = newValue;
+      lastCommitRef.current = {text: newValue, epoch: commitEpoch};
 
       if (!newValue) {
-        setRejectedValue(null);
+        rejection.clear();
         if (value !== undefined) {
-          onChange?.(undefined);
+          fireChange(undefined);
         }
         return;
       }
@@ -389,19 +482,28 @@ export function NativeDateField({
       if (isDateDisabled(parsed)) {
         // iOS does not enforce min/max in its picker — those attributes are
         // constraint-validation flags, not clamps, and the sheet lets the
-        // user land on any date. Refuse it here and let the sync effect snap
-        // the control back; the live region below announces the refusal.
-        setRejectedValue(newValue);
+        // user land on any date. Refuse it here; the sync effect snaps the
+        // control back at blur.
+        rejection.refuse(parsed);
         return;
       }
 
-      setRejectedValue(null);
+      rejection.clear();
       const parsedISO = plainDateToISO(parsed);
       if (parsedISO !== value) {
-        onChange?.(parsedISO);
+        fireChange(parsedISO);
       }
     },
-    [value, onChange, isDateDisabled, isEffectivelyDisabled, locale],
+    [
+      value,
+      commitEpoch,
+      fireChange,
+      isDateDisabled,
+      isEffectivelyDisabled,
+      isBusy,
+      locale,
+      rejection,
+    ],
   );
 
   const handleChange = useCallback(
@@ -471,23 +573,29 @@ export function NativeDateField({
   const handleBlur = useCallback(() => {
     const domValue = inputRef.current?.value;
     setIsFocused(false);
-    // A refused date is reverted by the sync effect the moment focus leaves,
-    // so the field is once again showing a date that IS valid. Keeping the
-    // rejection past that point would mark good data invalid, with no way
-    // back except changing the field again. The live region announced the
-    // refusal while it happened; that is the feedback.
-    setRejectedValue(null);
     if (domValue !== undefined && domValue !== nativeValue) {
       commitValue(domValue);
     }
-  }, [commitValue, nativeValue]);
+    // The sync effect restores the committed date once focus leaves. The
+    // rejection stays shown, so the restore is never silent.
+    rejection.commit();
+  }, [commitValue, nativeValue, rejection]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') {
+        rejection.commit();
+      }
+    },
+    [rejection],
+  );
 
   // Focusing a date control is what raises the OS picker, so the usual
   // focus-restore after a clear would pop the picker the tap just dismissed —
   // and on iOS that reads as the clear having done nothing.
   const handleClear = useCallback(() => {
-    onChange?.(undefined);
-  }, [onChange]);
+    fireChange(undefined);
+  }, [fireChange]);
 
   const openPicker = useCallback(() => {
     if (isEffectivelyDisabled) {
@@ -516,34 +624,39 @@ export function NativeDateField({
       ref={el => {
         disabledMessageTooltip.ref(el);
       }}
-      {...rest}
+      {...(inputGroup ? inputGroupItemProps : undefined)}
       {...mergeProps(
         themeProps('date-input', {
           size,
-          status: status?.type ?? null,
+          status: fieldStatus?.type ?? null,
           disabled: isDisabled ? 'disabled' : null,
         }),
         stylex.props(
           inputWrapperStyles.base,
+          inputWrapperStyles.textField,
           sizeStyles[size],
           styles.wrapper,
-          isEffectivelyDisabled && inputWrapperStyles.disabled,
-          status && inputStatusBorderStyles[status.type],
-          status &&
+          // Disabled paint belongs to the disabled state only; a busy field
+          // keeps its ordinary paint and shows the Spinner (spec:AST-085
+          // FR6, family:buttons FR4).
+          isDisabled && inputWrapperStyles.disabled,
+          isEffectivelyDisabled && inputDisabledFocusStyles.inputFocusRing,
+          fieldStatus && inputStatusBorderStyles[fieldStatus.type],
+          fieldStatus &&
             !isEffectivelyDisabled &&
-            inputStatusHoverShadowStyles[status.type],
-          status && inputStatusFocusWithinStyles[status.type],
+            inputStatusHoverShadowStyles[fieldStatus.type],
+          fieldStatus && inputStatusFocusWithinStyles[fieldStatus.type],
           inputGroup && groupStyles.inGroup,
-          xstyle,
+          controlXstyle,
         ),
-        className,
-        style,
+        controlClassName,
+        controlStyle,
       )}>
       {inputGroup && <VisuallyHidden id={inputLabelID}>{label}</VisuallyHidden>}
       <button
         type="button"
         onClick={openPicker}
-        disabled={isEffectivelyDisabled}
+        aria-disabled={isEffectivelyDisabled || undefined}
         aria-label={t('@astryx.dateInput.openCalendar')}
         tabIndex={-1}
         {...stylex.props(
@@ -560,6 +673,8 @@ export function NativeDateField({
       </button>
       <span {...stylex.props(styles.slot)}>
         <input
+          {...controlProps}
+          onClick={isEffectivelyDisabled ? undefined : controlProps.onClick}
           ref={mergedInputRef}
           id={id}
           type="date"
@@ -567,20 +682,24 @@ export function NativeDateField({
           // mount — see `initialValueRef` and the sync effect above.
           defaultValue={initialValueRef.current ?? ''}
           onChange={handleChange}
-          onFocus={handleFocus}
-          onBlur={handleBlur}
+          onFocus={chainEventHandlers(handleFocus, onFocusProp)}
+          onBlur={chainEventHandlers(handleBlur, onBlurProp)}
+          onKeyDown={chainEventHandlers(handleKeyDown, onKeyDownProp)}
           min={min}
           max={max}
-          disabled={isEffectivelyDisabled && !showsDisabledMessage}
-          aria-disabled={showsDisabledMessage ? 'true' : undefined}
-          readOnly={showsDisabledMessage || undefined}
-          aria-labelledby={ariaLabelledBy}
+          aria-disabled={isEffectivelyDisabled ? 'true' : undefined}
+          readOnly={isEffectivelyDisabled || undefined}
+          aria-labelledby={
+            ariaLabelledByProp != null
+              ? joinAriaIDs(ariaLabelledBy ?? fieldLabelID, ariaLabelledByProp)
+              : ariaLabelledBy
+          }
           aria-describedby={ariaDescribedBy}
           aria-required={isEffectivelyRequired ? 'true' : undefined}
           aria-invalid={
-            status?.type === 'error' || !isInputValid ? 'true' : undefined
+            fieldStatus?.type === 'error' || !isInputValid ? 'true' : undefined
           }
-          aria-busy={isLoading || undefined}
+          aria-busy={isBusy || undefined}
           {...stylex.props(
             styles.input,
             showsOverlay && styles.inputTextHidden,
@@ -602,21 +721,19 @@ export function NativeDateField({
         )}
       </span>
       {/*
-          Live region announcing a refused date. The value snaps back on its
-          own, so without this a screen-reader user would get no feedback that
-          their pick was rejected (WCAG 3.3.1).
+          Announces the rejection message that the field status does not
+          announce. The field status announces the rest.
         */}
       <VisuallyHidden as="div" role="alert" aria-live="assertive">
-        {!isInputValid ? t('@astryx.dateInput.invalidDate') : ''}
+        {rejection.alertMessage}
       </VisuallyHidden>
-      {hasClear && value !== undefined && !isEffectivelyDisabled && (
+      {hasClear && value !== undefined && !isEffectivelyDisabled && !isBusy && (
         <InputClearButton
           label={t('@astryx.dateInput.clear', {label})}
           onClick={handleClear}
-          iconClassName={stableClassName('date-input-clear-icon')}
         />
       )}
-      {isLoading && <Spinner size="sm" />}
+      {isBusy && <Spinner size="sm" aria-hidden="true" />}
       {statusIcon}
       {showsDisabledMessage &&
         disabledMessageTooltip.renderTooltip(disabledMessage)}
@@ -629,20 +746,22 @@ export function NativeDateField({
 
   return (
     <Field
+      {...container}
       label={label}
       isLabelHidden={isLabelHidden}
       description={description}
       inputID={id}
+      labelID={ariaLabelledByProp != null ? fieldLabelID : undefined}
       descriptionID={description ? descriptionID : undefined}
       isOptional={isOptional}
       isRequired={isRequired}
       isDisabled={isDisabled}
       status={
-        status
+        fieldStatus
           ? {
-              type: status.type,
-              message: status.message,
-              messageID: status.message ? statusMessageID : undefined,
+              type: fieldStatus.type,
+              message: fieldStatus.message,
+              messageID: fieldStatus.message ? statusMessageID : undefined,
             }
           : undefined
       }

@@ -17,9 +17,20 @@ export const doc = {
   description:
     "Ejects a component's source into the consumer project for deep customization. " +
     'It copies from the locally resolved @astryxdesign/core (or the owning integration) ' +
-    'package source, rewriting imports that escape the component directory to the owner ' +
-    "package's subpaths and flagging whether any copied file uses StyleX. With no name " +
-    '(or list) it returns the swizzlable component names instead.',
+    'package source. Every import in the copy names a file the copy holds or a path ' +
+    'the owner package exports: names the package exports are imported from its ' +
+    'public paths, and every internal module the component needs is ' +
+    "copied beside it in the package's folder layout. Tests, stories and docs are not " +
+    'copied. An output folder swizzle owns (one the copy creates, an empty one, or one it ' +
+    'marked before) gets an astryx-swizzle.json marker naming each package its copies came from, ' +
+    "with its version, so @astryxdesign/build's Babel, PostCSS and Vite integrations, and " +
+    'withAstryx() under webpack, compile the copy below the theme. The receipt flags whether ' +
+    'any copied file uses StyleX and lists each npm package the copy imports with the range ' +
+    'the owner package declares. With no name ' +
+    '(or list) it returns the swizzlable component names instead. An integration ' +
+    'component that replaces a Core component is what that Core name copies; ' +
+    "options.package '@astryxdesign/core' copies the original. The list names Core " +
+    'components, including one an integration component replaces.',
   importPath: '@astryxdesign/cli/api',
   signature:
     'swizzle(component?: string, options?: SwizzleOptions): Promise<SwizzleListResponse | SwizzleCopyResponse>',
@@ -29,24 +40,26 @@ export const doc = {
       name: 'component',
       type: 'string',
       description:
-        'Bare or XDS-prefixed component name to copy. Omit to list the swizzlable components.',
+        "Component name to copy (e.g. 'Button'). Omit to list the swizzlable components.",
     },
     {
       name: 'options.cwd',
       type: 'string',
       description: 'Directory to resolve @astryxdesign/core from.',
+      default: 'process.cwd()',
     },
     {
       name: 'options.output',
       type: 'string',
-      description: 'Output directory; must resolve inside cwd.',
+      description:
+        'Output directory, relative to cwd. An absolute path, or one that resolves outside cwd, throws ERR_PATH_TRAVERSAL.',
       default: "'./components/astryx'",
     },
     {
       name: 'options.package',
       type: 'string',
       description:
-        'Owning package to copy from when the name is provided by more than one.',
+        "Owning package to copy from when the name is provided by more than one. Use '@astryxdesign/core' to copy an original replaced by an integration component.",
     },
     {
       name: 'options.list',
@@ -58,7 +71,8 @@ export const doc = {
     {
       name: 'options.overwrite',
       type: 'boolean',
-      description: 'Overwrite existing files instead of erroring.',
+      description:
+        "Replace the component's existing files instead of erroring. A helper an earlier swizzle wrote is never replaced by a copy that carries it: a different one stays, and the new copy writes its own under a version-suffixed name. Swizzling the component whose folder holds that helper counts it as one of that component's own files. A changed private attribute owner module, or a style module it imports, throws ERR_FILE_EXISTS without overwrite and is replaced with it.",
       default: 'false',
     },
   ],
@@ -71,7 +85,7 @@ export const doc = {
     {
       type: 'swizzle.copy',
       description:
-        'A receipt after copying the component into the project: the component name, owning package, output directory, files-copied count, the written file names, whether any file uses StyleX, and an optional maintainer-feedback note.',
+        'A receipt after copying the component into the project: the component name, owning package, output directory, files-copied count, the copied file names (relative to the component folder; the internal modules copied beside it start with `../`, e.g. `../InputGroup/groupStyles.ts`), whether any file uses StyleX, the npm packages the copy imports with the ranges the owner declares (dependencies), the output folder\'s astryx-swizzle.json (marker: {path, written, found?}; written is false for a folder swizzle does not own, and found names up to five entries it already holds), and, when the owner has an issues URL, feedback ({issuesUrl, ghCommand?}): where to report the gap that led to swizzling.',
     },
   ],
   throws: [
@@ -81,7 +95,7 @@ export const doc = {
     },
     {
       code: 'ERR_PATH_TRAVERSAL',
-      when: 'the component name contains a path separator or traversal, output resolves outside cwd, or an existing output file or directory is a symlink that resolves outside cwd',
+      when: 'the component name contains a path separator or traversal, output is absolute or resolves outside cwd, or an existing output file or directory is a symlink that resolves outside cwd',
     },
     {
       code: 'ERR_UNKNOWN_COMPONENT',
@@ -99,6 +113,10 @@ export const doc = {
       code: 'ERR_FILE_EXISTS',
       when: 'copying would overwrite existing files and overwrite is not set',
     },
+    {
+      code: 'ERR_WRITE_FAILED',
+      when: 'the output directory or a copied file could not be written (no permission, read-only mount, full disk)',
+    },
   ],
   examples: [
     {
@@ -108,7 +126,7 @@ export const doc = {
     {label: 'Eject a component', code: "await swizzle('Button');"},
     {
       label: 'Disambiguate by package',
-      code: "await swizzle('Button', {package: '@astryxdesign/core'});",
+      code: "await swizzle('Button', {package: '@astryxdesign/core', overwrite: true});",
     },
     {
       label: 'Custom output directory',

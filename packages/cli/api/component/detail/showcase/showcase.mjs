@@ -1,7 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `component.detail.showcase` leaf — a component's hero showcase source.
+ * @file `component.detail.showcase` leaf — a component's hero showcase source,
+ * with each demo-content element replaced by a placeholder.
  *
  * @input  a component name (+ cwd / package scope) or an explicit "no match"
  * @output the `component.detail.showcase` envelope
@@ -11,7 +12,10 @@
 import * as fs from 'node:fs';
 import {AstryxError} from '../../../error.mjs';
 import {ERROR_CODES} from '../../../../foundation/response/error-codes.mjs';
-import {findShowcase} from '../../../template/template.mjs';
+import {
+  findShowcase,
+  replaceDemoContent,
+} from '../../../template/template.mjs';
 
 /**
  * Resolve and read a component's showcase block into the
@@ -24,9 +28,10 @@ import {findShowcase} from '../../../template/template.mjs';
  * @param {string} ctx.name - the caller's original input, used in the error message
  * @param {string|null} [ctx.packageScope] - scope block discovery + the error to a package
  * @param {boolean} [ctx.resolve] - when false, skip discovery and treat as not found
+ * @param {string} ctx.ownerPackage - the npm package that owns the component
  * @returns {Promise<import('../../component.type.mjs').ComponentDetailShowcaseResponse>}
  */
-export async function componentDetailShowcase(componentName, {cwd, name, packageScope = null, resolve = true}) {
+export async function componentDetailShowcase(componentName, {cwd, name, packageScope = null, resolve = true, ownerPackage}) {
   const match = resolve
     ? await findShowcase(componentName, cwd, packageScope ? {package: packageScope} : undefined)
     : null;
@@ -36,10 +41,13 @@ export async function componentDetailShowcase(componentName, {cwd, name, package
   }
   return {
     type: 'component.detail.showcase',
+    package: ownerPackage,
     data: {
       component: componentName,
       aspectRatio: /** @type {number} */ (match.aspectRatio),
-      source: fs.readFileSync(match.filePath, 'utf-8'),
+      // Handed-out source, not a copy: demo content becomes the placeholder a
+      // copy writes, and fixture media stays.
+      source: replaceDemoContent(fs.readFileSync(match.filePath, 'utf-8')).source,
     },
   };
 }

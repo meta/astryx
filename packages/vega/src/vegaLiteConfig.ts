@@ -18,7 +18,10 @@
 
 import {mergeConfig} from 'vega';
 import type {Config as VegaLiteConfig} from 'vega-lite';
-import {CATEGORICAL_TOKENS, type TokenResolver} from '@astryxdesign/charts';
+import {
+  getChartColorsFromResolver,
+  type TokenResolver,
+} from '@astryxdesign/charts';
 import type {CompileOptions} from './types';
 
 // ---------------------------------------------------------------------------
@@ -122,8 +125,9 @@ export function buildVegaLiteConfig(token: TokenResolver): VegaLiteConfig {
     },
 
     range: {
-      // Same slot order as the compositional charts — one shared list.
-      category: CATEGORICAL_TOKENS.map(name => token(name)),
+      // The compositional charts' palette, in their slot order. Ten slots, the
+      // same range Vega used before; Vega cycles the range for more series.
+      category: getChartColorsFromResolver(token).categorical(10),
       diverging: [
         token('--color-data-blue-5'),
         token('--color-data-blue-4'),

@@ -1,6 +1,4 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-'use client';
-
 /**
  * @file index.ts
  * @output Exports ContextMenu, ContextMenuItem and related types
@@ -25,6 +23,10 @@ export {
   DropdownMenuDivider as ContextMenuDivider,
   type DropdownMenuDividerProps as ContextMenuDividerProps,
 } from '../DropdownMenu/DropdownMenuDivider';
+export {
+  DropdownMenuGroup as ContextMenuGroup,
+  type DropdownMenuGroupProps as ContextMenuGroupProps,
+} from '../DropdownMenu/DropdownMenuGroup';
 
 // Selectable items work inside a ContextMenu too — re-exported under the
 // ContextMenu name for a coherent API.

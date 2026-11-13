@@ -19,7 +19,11 @@ import {
   parseMarkdownIncremental,
 } from '../parser';
 import type {InlineNode} from '../parser';
-import {createMarkdownPlugin, isMarkdownExtensionNode} from './protocol';
+import {
+  createMarkdownPlugin,
+  getMarkdownPluginCapabilities,
+  isMarkdownExtensionNode,
+} from './protocol';
 import {visitMarkdownNodes} from '../ast';
 import type {
   MarkdownExtensionNode,
@@ -45,6 +49,13 @@ type BrokenMentionNode = MarkdownExtensionNode<
 function ThrowingRendererChild(): never {
   throw new Error('broken renderer child');
 }
+
+type CapabilityNode = MarkdownExtensionNode<
+  'capability-both',
+  'mark',
+  {readonly label: string},
+  'inline'
+>;
 
 type InvalidSyntaxNode = MarkdownExtensionNode<
   'invalid-syntax',
@@ -210,6 +221,56 @@ function replaceText(value: string, replacement: string) {
     },
   });
 }
+
+describe('getMarkdownPluginCapabilities (spec:AST-064 FR4)', () => {
+  it('reports only whether a plugin declares syntax and a transform', () => {
+    const transformOnly = createMarkdownPlugin({
+      name: 'capability-transform',
+      apiVersion: 1,
+      transform: root => root,
+    });
+    const both = createMarkdownPlugin<'capability-both', CapabilityNode>({
+      name: 'capability-both',
+      apiVersion: 1,
+      parseKey: 'v1',
+      syntax: {
+        inline: [
+          {
+            startsWith: ['%%'],
+            maxSpan: 8,
+            tokenize: () => ({status: 'no-match'}),
+          },
+        ],
+      },
+      transform: root => root,
+      renderers: {mark: {render: () => null, toText: () => ''}},
+    });
+    expect(getMarkdownPluginCapabilities(mentionPlugin)).toEqual({
+      syntax: true,
+      transform: false,
+    });
+    expect(getMarkdownPluginCapabilities(transformOnly)).toEqual({
+      syntax: false,
+      transform: true,
+    });
+    expect(getMarkdownPluginCapabilities(both)).toEqual({
+      syntax: true,
+      transform: true,
+    });
+    const report = getMarkdownPluginCapabilities(mentionPlugin);
+    expect(Object.keys(report)).toEqual(['syntax', 'transform']);
+    expect(Object.isFrozen(report)).toBe(true);
+  });
+
+  it('refuses an entry that did not come from createMarkdownPlugin', () => {
+    expect(() =>
+      getMarkdownPluginCapabilities({
+        name: 'forged',
+        apiVersion: 1,
+      } as unknown as typeof mentionPlugin),
+    ).toThrow('entries must come from a compatible createMarkdownPlugin()');
+  });
+});
 
 describe('Markdown plugin protocol', () => {
   it('keeps omitted and explicit empty pipelines identical', () => {
@@ -771,15 +832,132 @@ describe('Markdown plugin protocol', () => {
     expect(parseMarkdown('Safe', {plugins: [unsafeDestination]})).toMatchObject(
       [{type: 'paragraph', children: [{type: 'text', content: 'Safe'}]}],
     );
+    // A transform may return frozen nodes; a padded URL is still trimmed.
+    const frozenLink = (freezeParent: boolean) =>
+      createMarkdownPlugin({
+        name: `frozen-link-${freezeParent ? 'parent' : 'node'}`,
+        apiVersion: 1,
+        transform(root) {
+          return {
+            ...root,
+            children: root.children.map(block => {
+              if (block.type !== 'paragraph') {
+                return block;
+              }
+              const link = Object.freeze({
+                type: 'link' as const,
+                url: '  https://example.com/x  ',
+                children: Object.freeze([
+                  Object.freeze({type: 'text' as const, value: 'go'}),
+                ]),
+              });
+              const paragraph = {...block, children: [link]};
+              return freezeParent ? Object.freeze(paragraph) : paragraph;
+            }),
+          };
+        },
+      });
+    for (const freezeParent of [false, true]) {
+      const {container, unmount} = render(
+        <Markdown plugins={[frozenLink(freezeParent)]}>{'Safe'}</Markdown>,
+      );
+      expect(container.querySelector('a')?.getAttribute('href')).toBe(
+        'https://example.com/x',
+      );
+      unmount();
+    }
+    const setUrl = (type: 'link' | 'image', url: string) =>
+      createMarkdownPlugin({
+        name: `set-${type}-url`,
+        apiVersion: 1,
+        transform(root) {
+          return {
+            ...root,
+            children: root.children.map(block =>
+              block.type === 'paragraph'
+                ? {
+                    ...block,
+                    children: [
+                      type === 'link'
+                        ? {
+                            type: 'link' as const,
+                            url,
+                            children: [{type: 'text' as const, value: 'go'}],
+                          }
+                        : {type: 'image' as const, url, alt: 'pic'},
+                    ],
+                  }
+                : block,
+            ),
+          };
+        },
+      });
+    expect(
+      parseMarkdown('Safe', {plugins: [setUrl('link', ' \t ')]}),
+    ).toMatchObject([
+      {type: 'paragraph', children: [{type: 'link', href: ''}]},
+    ]);
+    expect(
+      parseMarkdown('Safe', {plugins: [setUrl('link', '  /docs  ')]}),
+    ).toMatchObject([
+      {type: 'paragraph', children: [{type: 'link', href: '/docs'}]},
+    ]);
+    expect(
+      parseMarkdown('Safe', {plugins: [setUrl('image', ' ')]}),
+    ).toMatchObject([
+      {type: 'paragraph', children: [{type: 'image', src: ''}]},
+    ]);
+    {
+      const {container} = render(
+        <Markdown plugins={[setUrl('link', ' \t ')]}>{'Safe'}</Markdown>,
+      );
+      expect(container.querySelector('a')).toBeNull();
+      expect(container.textContent).toContain('go');
+    }
+    {
+      const {container} = render(
+        <Markdown plugins={[setUrl('image', ' ')]}>{'Safe'}</Markdown>,
+      );
+      expect(container.querySelector('img')).toBeNull();
+      expect(container.textContent).toContain('[pic]');
+    }
+    for (const node of [
+      {
+        type: 'link' as const,
+        url: 'data:image/png;base64,iVBORw0KGgo=',
+        children: [{type: 'text' as const, value: 'unsafe'}],
+      },
+      {
+        type: 'image' as const,
+        url: 'data:image/png;base64,iVBORw0KGgo=',
+        alt: 'unsafe',
+      },
+    ]) {
+      const dataDestination = createMarkdownPlugin({
+        name: `data-${node.type}`,
+        apiVersion: 1,
+        transform(root) {
+          return {
+            ...root,
+            children: root.children.map(block =>
+              block.type === 'paragraph' ? {...block, children: [node]} : block,
+            ),
+          };
+        },
+      });
+      expect(parseMarkdown('Safe', {plugins: [dataDestination]})).toMatchObject(
+        [{type: 'paragraph', children: [{type: 'text', content: 'Safe'}]}],
+      );
+    }
     expect(parseMarkdown('Safe', {plugins: [nestedLink]})).toMatchObject([
       {type: 'paragraph', children: [{type: 'text', content: 'Safe'}]},
     ]);
     const identityReplacement = replaceText('missing', 'unchanged');
     expect(
-      parseMarkdown('![pic](data:image/png;base64,abc)', {
+      parseMarkdown('![pic](https://example.com/pic.png)', {
         plugins: [identityReplacement],
       }),
-    ).toMatchObject([{type: 'image', src: 'data:image/png;base64,abc'}]);
+    ).toMatchObject([{type: 'image', src: 'https://example.com/pic.png'}]);
     expect(
       parseMarkdown('[empty]()', {plugins: [identityReplacement]}),
     ).toMatchObject([

@@ -3,14 +3,17 @@
 /**
  * @file vegaLiteConfig.test.ts
  * @input Uses vitest, buildVegaLiteConfig, withAstryxConfig, its exported layout
- *   constants, and the shared CATEGORICAL_TOKENS from @astryxdesign/charts
+ *   constants, and the shared palette from @astryxdesign/charts
  * @output Functional tests for the Astryx-themed Vega-Lite config builder and
  *   the compile-options merge that applies it
  * @position Colocated test for vegaLiteConfig.ts (issue #4295 vega coverage)
  */
 
 import {describe, it, expect} from 'vitest';
-import {CATEGORICAL_TOKENS, type TokenResolver} from '@astryxdesign/charts';
+import {
+  getChartColorsFromResolver,
+  type TokenResolver,
+} from '@astryxdesign/charts';
 import {
   buildVegaLiteConfig,
   withAstryxConfig,
@@ -62,13 +65,17 @@ describe('buildVegaLiteConfig', () => {
     // resolver the range IS the shared token list, so a re-introduced local
     // copy in this package drifts and fails here.
     const config = buildVegaLiteConfig(echo);
-    expect(config.range?.category).toEqual([...CATEGORICAL_TOKENS]);
+    expect(config.range?.category).toEqual(
+      getChartColorsFromResolver(echo).categorical(10),
+    );
   });
 
   it('resolves every categorical slot through the caller token resolver', () => {
     const config = buildVegaLiteConfig(name => `value(${name})`);
     expect(config.range?.category).toEqual(
-      CATEGORICAL_TOKENS.map(name => `value(${name})`),
+      getChartColorsFromResolver(echo)
+        .categorical(10)
+        .map(name => `value(${name})`),
     );
   });
 
@@ -145,7 +152,9 @@ describe('withAstryxConfig', () => {
   it('keeps theme values the user did not override', () => {
     const options = withAstryxConfig(echo, {config: {background: '#ff0000'}});
     // Untouched theme keys survive the merge.
-    expect(options.config?.range?.category).toEqual([...CATEGORICAL_TOKENS]);
+    expect(options.config?.range?.category).toEqual(
+      getChartColorsFromResolver(echo).categorical(10),
+    );
     expect(options.config?.axis?.labelColor).toBe('--color-text-secondary');
   });
 });

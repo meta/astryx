@@ -56,6 +56,21 @@ export function Providers({children}) {
 
 `LinkProvider` wires up Next.js client-side navigation for all Astryx link-based components (Link, Button with href, TopNav, SideNav, Breadcrumbs, TabList).
 
+### 4. Next.js config (webpack builds)
+
+```js
+// next.config.mjs
+const nextConfig = {
+  experimental: {
+    optimizePackageImports: ['@astryxdesign/core'],
+  },
+};
+
+export default nextConfig;
+```
+
+With webpack (`next build --webpack`), a Server Component that imports from the package root would otherwise ship every client component; this keeps first load to what the page uses. In Server Components, also import from the component's own entry, such as `@astryxdesign/core/Button`. Turbopack needs no change.
+
 ## Gotchas
 
 | Issue                         | Symptom                                     | Fix                                         |
@@ -67,9 +82,9 @@ export function Providers({children}) {
 
 This example lives in the Astryx monorepo for convenience, but it should be representative of a real app consuming `@astryxdesign/core` from npm. Monorepo workspace resolution can silently bypass issues that external consumers hit.
 
-**Before merging changes to this example, test it as an external consumer.** See the [Testing Example Apps](https://github.com/facebook/astryx/wiki/Testing-Example-Apps) wiki page for the full procedure.
+**Before merging changes to this example, test it as an external consumer.** See the [Testing Example Apps](https://github.com/meta/astryx/wiki/Testing-Example-Apps) wiki page for the full procedure.
 
 ## Related
 
-- [Issue #145: Add example-nextjs project](https://github.com/facebook/astryx/issues/145)
+- [Issue #145: Add example-nextjs project](https://github.com/meta/astryx/issues/145)
 - [Astryx + Tailwind example](../example-nextjs-tailwind/): same dist approach with Tailwind for custom layout styles

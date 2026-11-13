@@ -1,7 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-'use client';
-
 /**
  * @file index.ts
  * @output Exports MultiSelector and types
@@ -15,6 +13,9 @@ export {
   type MultiSelectorSize,
   type MultiSelectorStatusType,
   type MultiSelectorSelectedItem,
+  type MultiSelectorRenderTriggerProps,
+  type MultiSelectorHandle,
+  type MultiSelectorChange,
 } from './MultiSelector';
 export type {
   MultiSelectorOptionType,

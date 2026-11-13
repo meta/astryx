@@ -16,6 +16,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
 import {execFileSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import {
   getResultsDir,
   ensureDir,
@@ -24,7 +25,7 @@ import {
   ensureTsxFiles,
 } from './utils.js';
 
-const __dirname = path.dirname(new URL(import.meta.url).pathname);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const VIBE_DIR = path.resolve(__dirname, '..');
 const _APP_DIR = path.join(VIBE_DIR, 'app');
 const REPO_ROOT = path.resolve(VIBE_DIR, '../..');

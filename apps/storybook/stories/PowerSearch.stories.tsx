@@ -10,6 +10,7 @@ import type {
 import type {SearchSource, SearchableItem} from '@astryxdesign/core/Typeahead';
 import {Button} from '@astryxdesign/core/Button';
 import {MagnifyingGlassIcon} from '@heroicons/react/24/outline';
+import {TextInput} from '@astryxdesign/core/TextInput';
 
 // =============================================================================
 // Sample data
@@ -452,8 +453,10 @@ const meta: Meta<typeof PowerSearch> = {
   component: PowerSearch,
   tags: ['autodocs'],
   decorators: [
+    // A 600px column where there is room that shrinks with the viewport, so
+    // the stories, the touch presentations above all, fit a phone-sized canvas.
     Story => (
-      <div style={{width: 600}}>
+      <div style={{display: 'grid', gridTemplateColumns: 'minmax(0, 600px)'}}>
         <Story />
       </div>
     ),
@@ -540,6 +543,447 @@ export const WithPresetFilters: Story = {
   name: 'Pre-set Filters',
 };
 
+/**
+ * A nearly full token row keeps its empty combobox on that row instead of
+ * growing the field with a blank trailing row. Typing still restores the
+ * input's normal editing width and may wrap visibly when space is exhausted.
+ */
+export const NearFullTokenRow: Story = {
+  render: args => {
+    const [filters, setFilters] = useState<PowerSearchFilter[]>([
+      {field: 'status', operator: 'is', value: {type: 'enum', value: 'open'}},
+      {
+        field: 'priority',
+        operator: 'is',
+        value: {type: 'enum', value: 'p1'},
+      },
+      {
+        field: 'title',
+        operator: 'contains',
+        value: {type: 'string', value: 'aaaaaaaaaaaaa'},
+      },
+    ]);
+    return (
+      <PowerSearch
+        {...args}
+        config={basicConfig}
+        filters={filters}
+        onChange={newFilters => setFilters([...newFilters])}
+      />
+    );
+  },
+  args: {
+    placeholder: 'Add more filters...',
+  },
+  name: 'Near-full Token Row',
+  play: async ({canvasElement}) => {
+    const wrapper =
+      canvasElement.querySelector<HTMLElement>('.astryx-tokenizer');
+    const input = wrapper?.querySelector<HTMLInputElement>('[role="combobox"]');
+    const tokens = wrapper?.querySelectorAll<HTMLElement>(':scope > span');
+    const firstToken = tokens?.item(0);
+    const finalToken = tokens?.item((tokens?.length ?? 0) - 1);
+    const clearButton = wrapper?.querySelector<HTMLButtonElement>(
+      'button[aria-label="Clear all"]',
+    );
+    if (!wrapper || !input || !firstToken || !finalToken || !clearButton) {
+      throw new Error('Near-full token-row fixture did not render as expected');
+    }
+    const isCoarsePointer = matchMedia('(pointer: coarse)').matches;
+    const requiresCoarsePointer =
+      new URLSearchParams(window.location.search).get('storyPlayPointer') ===
+      'coarse';
+    if (requiresCoarsePointer && !isCoarsePointer) {
+      throw new Error('Near-full token-row guard requires a coarse pointer');
+    }
+
+    await document.fonts.ready;
+    const reserveDeadline = performance.now() + 2000;
+    while (
+      wrapper.style.getPropertyValue('--_tokenizer-end-lane-reserve') === ''
+    ) {
+      if (performance.now() >= reserveDeadline) {
+        throw new Error('Clear-all lane reserve was not measured');
+      }
+      await new Promise<void>(resolve =>
+        requestAnimationFrame(() => resolve()),
+      );
+    }
+    await new Promise<void>(resolve =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+
+    const inputRect = input.getBoundingClientRect();
+    const firstTokenRect = firstToken.getBoundingClientRect();
+    const tokenRect = finalToken.getBoundingClientRect();
+    const clearRect = clearButton.getBoundingClientRect();
+    let clearHitRect = {left: clearRect.left, right: clearRect.right};
+    if (isCoarsePointer) {
+      // Button draws its touch band as the `::after` of an element inside
+      // it, so find whichever element in the button carries the band.
+      const bandHost = [clearButton, ...clearButton.querySelectorAll('*')].find(
+        element => getComputedStyle(element, '::after').content !== 'none',
+      );
+      const bandStyle = bandHost && getComputedStyle(bandHost, '::after');
+      const bandLeft = Number.parseFloat(bandStyle?.left ?? '');
+      const bandRight = Number.parseFloat(bandStyle?.right ?? '');
+      if (
+        !bandHost ||
+        !Number.isFinite(bandLeft) ||
+        !Number.isFinite(bandRight)
+      ) {
+        throw new Error('Clear all did not expose its coarse-pointer hit area');
+      }
+      const bandHostRect = bandHost.getBoundingClientRect();
+      clearHitRect = {
+        left: bandHostRect.left + bandLeft,
+        right: bandHostRect.right - bandRight,
+      };
+    }
+    if (Math.abs(firstTokenRect.top - tokenRect.top) > 0.5) {
+      throw new Error(
+        `Fixture tokens wrapped before the empty combobox check: first token top ${firstTokenRect.top.toFixed(2)}, final token top ${tokenRect.top.toFixed(2)}`,
+      );
+    }
+    // Fail closed if token metrics drift: the row is only "nearly full" while
+    // the ordinary in-flow editing input (the typed-query layout) cannot fit
+    // beside the final token. Without a placeholder the input never matches
+    // :placeholder-shown, so it lays out exactly as it does once typing starts.
+    const placeholderAttribute = input.getAttribute('placeholder');
+    input.removeAttribute('placeholder');
+    const inFlowInputTop = input.getBoundingClientRect().top;
+    if (placeholderAttribute !== null) {
+      input.setAttribute('placeholder', placeholderAttribute);
+    }
+    if (inFlowInputTop < tokenRect.bottom) {
+      throw new Error(
+        `Fixture is no longer a nearly full token row: the in-flow editing input still fits beside the final token (input top ${inFlowInputTop.toFixed(2)}, final token bottom ${tokenRect.bottom.toFixed(2)})`,
+      );
+    }
+    if (inputRect.top >= tokenRect.bottom) {
+      throw new Error(
+        `Empty combobox wrapped onto a blank row: input top ${inputRect.top.toFixed(2)}, final token bottom ${tokenRect.bottom.toFixed(2)}`,
+      );
+    }
+    if (inputRect.width <= 0) {
+      throw new Error('Empty combobox has no pointer hit target');
+    }
+    const overlap =
+      Math.min(inputRect.right, clearHitRect.right) -
+      Math.max(inputRect.left, clearHitRect.left);
+    if (overlap > 0) {
+      throw new Error(
+        `Empty combobox overlaps the coarse-pointer Clear all hit area by ${overlap.toFixed(2)}px`,
+      );
+    }
+    const clearHitTarget = document.elementFromPoint(
+      clearRect.left + clearRect.width / 2,
+      clearRect.top + clearRect.height / 2,
+    );
+    if (!clearHitTarget || !clearButton.contains(clearHitTarget)) {
+      throw new Error(
+        `Clear all center is hit-tested as ${clearHitTarget?.tagName ?? 'nothing'}`,
+      );
+    }
+    const tokenHitTarget = document.elementFromPoint(
+      tokenRect.left + tokenRect.width / 2,
+      tokenRect.top + tokenRect.height / 2,
+    );
+    if (!tokenHitTarget || !finalToken.contains(tokenHitTarget)) {
+      throw new Error(
+        `Final token center is hit-tested as ${tokenHitTarget?.tagName ?? 'nothing'}`,
+      );
+    }
+
+    const hitY = inputRect.top + inputRect.height / 2;
+    let inputHitTarget: Element | null = null;
+    for (let x = Math.ceil(inputRect.left); x < inputRect.right; x += 1) {
+      const candidate = document.elementFromPoint(x + 0.5, hitY);
+      if (candidate === input) {
+        inputHitTarget = candidate;
+        break;
+      }
+    }
+    if (!inputHitTarget) {
+      throw new Error('Empty combobox has no exposed pointer hit target');
+    }
+    inputHitTarget.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+    if (document.activeElement !== input) {
+      throw new Error('Clicking the empty combobox did not focus it');
+    }
+  },
+};
+
+export const NearFullTokenRowRTL: Story = {
+  ...NearFullTokenRow,
+  decorators: [
+    Story => (
+      <div dir="rtl">
+        <Story />
+      </div>
+    ),
+  ],
+  name: 'Near-full Token Row (RTL)',
+};
+
+const tokenRowGuardFilters: PowerSearchFilter[] = [
+  {field: 'status', operator: 'is', value: {type: 'enum', value: 'open'}},
+  {field: 'priority', operator: 'is', value: {type: 'enum', value: 'p1'}},
+  {
+    field: 'title',
+    operator: 'contains',
+    value: {type: 'string', value: 'release notes'},
+  },
+];
+
+const settleFrames = () =>
+  new Promise<void>(resolve =>
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+  );
+
+/** Resolves once fonts are ready and the clear-all lane has published its reserve. */
+async function waitForTokenRow(wrapper: HTMLElement) {
+  await document.fonts.ready;
+  const deadline = performance.now() + 2000;
+  while (
+    wrapper.style.getPropertyValue('--_tokenizer-end-lane-reserve') === ''
+  ) {
+    if (performance.now() >= deadline) {
+      throw new Error('Clear-all lane reserve was not measured');
+    }
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+  }
+  await settleFrames();
+}
+
+function tokenRowParts(canvasElement: HTMLElement) {
+  const wrapper = canvasElement.querySelector<HTMLElement>('.astryx-tokenizer');
+  const input = wrapper?.querySelector<HTMLInputElement>('[role="combobox"]');
+  const tokens = [
+    ...(wrapper?.querySelectorAll<HTMLElement>('.astryx-token') ?? []),
+  ];
+  if (!wrapper || !input || tokens.length !== tokenRowGuardFilters.length) {
+    throw new Error('Token-row fixture did not render as expected');
+  }
+  return {wrapper, input, tokens};
+}
+
+/**
+ * Default filters fill more than half of the field, and the search input
+ * stays beside them: no token paints over it, and pressing the input's
+ * center reaches the input rather than a token.
+ */
+export const DefaultFiltersBesideSearch: Story = {
+  render: args => {
+    const [filters, setFilters] = useState(tokenRowGuardFilters);
+    return (
+      <div style={{width: 600}}>
+        <PowerSearch
+          {...args}
+          config={basicConfig}
+          filters={filters}
+          onChange={newFilters => setFilters([...newFilters])}
+        />
+      </div>
+    );
+  },
+  args: {
+    placeholder: 'Add more filters...',
+  },
+  name: 'Default filters beside the search input',
+  play: async ({canvasElement}) => {
+    const {wrapper, input, tokens} = tokenRowParts(canvasElement);
+    await waitForTokenRow(wrapper);
+
+    const field = wrapper.getBoundingClientRect();
+    const tokenRects = tokens.map(token => token.getBoundingClientRect());
+    if (new Set(tokenRects.map(rect => Math.round(rect.top))).size !== 1) {
+      throw new Error('Fixture tokens no longer share one row');
+    }
+    // Fail closed if the fixture stops covering the field's middle, where a
+    // test or a person would naturally press the search input.
+    const fieldCenter = field.left + field.width / 2;
+    const tokenEnd = Math.max(...tokenRects.map(rect => rect.right));
+    const tokenStart = Math.min(...tokenRects.map(rect => rect.left));
+    if (getComputedStyle(wrapper).direction === 'rtl') {
+      if (tokenStart > fieldCenter) {
+        throw new Error('Fixture tokens no longer reach the field center');
+      }
+    } else if (tokenEnd < fieldCenter) {
+      throw new Error('Fixture tokens no longer reach the field center');
+    }
+
+    const inputRect = input.getBoundingClientRect();
+    if (inputRect.width <= 0) {
+      throw new Error('The search input has no pointer hit target');
+    }
+    tokens.forEach((token, index) => {
+      const rect = tokenRects[index];
+      const overlapX =
+        Math.min(rect.right, inputRect.right) -
+        Math.max(rect.left, inputRect.left);
+      const overlapY =
+        Math.min(rect.bottom, inputRect.bottom) -
+        Math.max(rect.top, inputRect.top);
+      if (overlapX > 0.5 && overlapY > 0.5) {
+        throw new Error(
+          `Token "${token.textContent ?? ''}" covers ${overlapX.toFixed(2)}px of the search input`,
+        );
+      }
+    });
+    const hit = document.elementFromPoint(
+      inputRect.left + inputRect.width / 2,
+      inputRect.top + inputRect.height / 2,
+    );
+    if (hit !== input) {
+      throw new Error(
+        `The search input's center is hit-tested as ${hit?.tagName ?? 'nothing'}${hit?.getAttribute('aria-label') ? ` "${hit.getAttribute('aria-label')}"` : ''}`,
+      );
+    }
+    hit.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+    if (document.activeElement !== input) {
+      throw new Error('Pressing the search input did not focus it');
+    }
+    input.blur();
+  },
+};
+
+export const DefaultFiltersBesideSearchRTL: Story = {
+  ...DefaultFiltersBesideSearch,
+  decorators: [
+    Story => (
+      <div dir="rtl">
+        <Story />
+      </div>
+    ),
+  ],
+  name: 'Default filters beside the search input (RTL)',
+};
+
+/**
+ * An app that compiles its own StyleX can emit the same atomic class as the
+ * search input's resting styles, unlayered, so it outranks the input's
+ * layered empty-query styles. Whichever single resting declaration wins that
+ * way, the empty input stays on the token row: the field never grows a
+ * blank row under its filters.
+ */
+export const TokenRowWhenRestingStylesWin: Story = {
+  render: args => {
+    const [filters, setFilters] = useState(tokenRowGuardFilters.slice(0, 2));
+    return (
+      <div style={{width: 600}}>
+        <PowerSearch
+          {...args}
+          config={basicConfig}
+          filters={filters}
+          onChange={newFilters => setFilters([...newFilters])}
+        />
+      </div>
+    );
+  },
+  args: {
+    placeholder: 'Add more filters...',
+  },
+  name: 'Token row when resting styles win',
+  play: async ({canvasElement}) => {
+    const wrapper =
+      canvasElement.querySelector<HTMLElement>('.astryx-tokenizer');
+    const input = wrapper?.querySelector<HTMLInputElement>('[role="combobox"]');
+    const tokens = [
+      ...(wrapper?.querySelectorAll<HTMLElement>('.astryx-token') ?? []),
+    ];
+    if (!wrapper || !input || tokens.length !== 2) {
+      throw new Error('Token-row fixture did not render as expected');
+    }
+    await waitForTokenRow(wrapper);
+    if (!input.matches(':placeholder-shown')) {
+      throw new Error(
+        'The empty search input does not match :placeholder-shown',
+      );
+    }
+
+    // The input's own atomic rules, split into resting and empty-query ones.
+    const ownClasses = new Set(input.classList);
+    const resting: Array<{className: string; property: string; value: string}> =
+      [];
+    const emptyQueryProperties = new Set<string>();
+    const visit = (rules: CSSRuleList) => {
+      for (const rule of rules) {
+        if (rule instanceof CSSLayerBlockRule) {
+          visit(rule.cssRules);
+          continue;
+        }
+        if (!(rule instanceof CSSStyleRule)) {
+          continue;
+        }
+        for (const selector of rule.selectorText.split(',')) {
+          const match = /^\.([\w-]+)((?::[\w-]+(?:\([^)]*\))?)*)$/.exec(
+            selector.trim(),
+          );
+          if (!match || !ownClasses.has(match[1])) {
+            continue;
+          }
+          const pseudo = match[2].replace(/:not\(#\\#\)/g, '');
+          for (const property of rule.style) {
+            if (pseudo === '') {
+              resting.push({
+                className: match[1],
+                property,
+                value: rule.style.getPropertyValue(property),
+              });
+            } else if (pseudo.includes(':placeholder-shown')) {
+              emptyQueryProperties.add(property);
+            }
+          }
+        }
+      }
+    };
+    for (const sheet of document.styleSheets) {
+      try {
+        visit(sheet.cssRules);
+      } catch {
+        // A cross-origin sheet cannot style the input's own classes.
+      }
+    }
+    const contested = resting.filter(({property}) =>
+      emptyQueryProperties.has(property),
+    );
+    // Fail closed: with no resting declaration that an empty-query rule
+    // overrides, the loop below would prove nothing.
+    if (contested.length === 0) {
+      throw new Error(
+        'No resting declaration of the search input has an empty-query override',
+      );
+    }
+
+    const restingHeight = wrapper.getBoundingClientRect().height;
+    const override = document.createElement('style');
+    document.head.append(override);
+    try {
+      for (const {className, property, value} of contested) {
+        override.textContent = `.${CSS.escape(className)}{${property}:${value} !important}`;
+        await settleFrames();
+        const height = wrapper.getBoundingClientRect().height;
+        const inputRect = input.getBoundingClientRect();
+        const row = tokens[tokens.length - 1].getBoundingClientRect();
+        const inputMiddle = inputRect.top + inputRect.height / 2;
+        if (inputMiddle < row.top || inputMiddle > row.bottom) {
+          throw new Error(
+            `With the resting "${property}: ${value}" winning, the empty search input left the token row (input middle ${inputMiddle.toFixed(2)}, row ${row.top.toFixed(2)}-${row.bottom.toFixed(2)})`,
+          );
+        }
+        if (height > restingHeight + 0.5) {
+          throw new Error(
+            `With the resting "${property}: ${value}" winning, the field grew from ${restingHeight.toFixed(2)} to ${height.toFixed(2)}`,
+          );
+        }
+      }
+    } finally {
+      override.remove();
+    }
+  },
+};
+
 export const FullFeatured: Story = {
   render: args => {
     const [filters, setFilters] = useState<PowerSearchFilter[]>([]);
@@ -600,6 +1044,7 @@ export const IssueTracker: Story = {
     maxSearchResults: 2,
     maxOperatorMenuItems: 2,
     menuWidth: 700,
+    presentation: 'popover',
   },
   parameters: {
     docs: {
@@ -1378,6 +1823,7 @@ export const OverflowInline: Story = {
           filters={filters}
           onChange={newFilters => setFilters([...newFilters])}
           tokenOverflowBehavior="unfocusedInline"
+          presentation="popover"
         />
         <p style={{marginTop: 8}}>
           This text will shift down when the search bar expands on focus.
@@ -1403,6 +1849,7 @@ export const OverflowLayer: Story = {
           filters={filters}
           onChange={newFilters => setFilters([...newFilters])}
           tokenOverflowBehavior="unfocusedLayer"
+          presentation="popover"
         />
         <p style={{marginTop: 8}}>
           This text should not shift when the search bar expands on focus.
@@ -1617,4 +2064,633 @@ export const StatusVariantComparison: Story = {
       </div>
     );
   },
+};
+
+// =============================================================================
+// Bottom-sheet presentation
+// =============================================================================
+
+// The sheet flow is designed for a phone: view these stories at a compact
+// touch viewport (Storybook's mobile2 preset) to see the sheets as a person
+// would.
+function PhoneFrame({children}: {children: React.ReactNode}) {
+  return <div style={{width: 390, maxWidth: '100%'}}>{children}</div>;
+}
+
+function FilterDump({filters}: {filters: ReadonlyArray<PowerSearchFilter>}) {
+  if (filters.length === 0) {
+    return null;
+  }
+  return (
+    <pre
+      style={{
+        marginTop: 16,
+        padding: 12,
+        borderRadius: 8,
+        fontSize: 12,
+        overflow: 'auto',
+        maxWidth: 390,
+      }}>
+      {JSON.stringify(filters, null, 2)}
+    </pre>
+  );
+}
+
+const sheetPresetFilters: ReadonlyArray<PowerSearchFilter> = [
+  {
+    field: 'status',
+    operator: 'any_of',
+    value: {type: 'enum_list', value: ['open', 'in_progress']},
+  },
+  {field: 'priority', operator: 'is', value: {type: 'enum', value: 'p1'}},
+  {
+    field: 'created',
+    operator: 'after',
+    value: {type: 'date_absolute', unixSeconds: 1710039600},
+  },
+];
+
+/**
+ * `presentation="bottom-sheet"`: the field is one trigger
+ * with display-only tokens; a tap opens the Filters sheet, whose rows edit or
+ * remove a filter, Add filter opens above it with the fields, and the value
+ * step opens above that and stages operator → value. Dismissing a step
+ * reveals the one beneath. Clear all asks first. List values (Assignee, Tags)
+ * open the Tokenizer's own sheet above the step.
+ */
+export const SheetPresentation: Story = {
+  render: args => {
+    const [filters, setFilters] =
+      useState<ReadonlyArray<PowerSearchFilter>>(sheetPresetFilters);
+    return (
+      <PhoneFrame>
+        <PowerSearch
+          {...args}
+          config={fullConfig}
+          filters={filters}
+          onChange={next => setFilters(next)}
+          // A count that follows the filters, so a commit from the flow (and
+          // Clear all) changes it and the flow announces the change.
+          resultCount={Math.max(1, Math.round(240 / (filters.length + 1)))}
+          timezoneID="America/Los_Angeles"
+          presentation="bottom-sheet"
+        />
+        <FilterDump filters={filters} />
+      </PhoneFrame>
+    );
+  },
+  name: 'Bottom sheet (forced)',
+  parameters: {viewport: {defaultViewport: 'mobile2'}},
+};
+
+/**
+ * The default presentation, `adaptive`: the sheet flow on a compact
+ * coarse-pointer screen, the tokenizer field and editor popover otherwise.
+ * Resize the viewport or switch the pointer emulation to see it switch.
+ */
+export const AdaptivePresentation: Story = {
+  render: args => {
+    const [filters, setFilters] =
+      useState<ReadonlyArray<PowerSearchFilter>>(sheetPresetFilters);
+    return (
+      <PhoneFrame>
+        <PowerSearch
+          {...args}
+          config={fullConfig}
+          filters={filters}
+          onChange={next => setFilters(next)}
+          timezoneID="America/Los_Angeles"
+        />
+        <FilterDump filters={filters} />
+      </PhoneFrame>
+    );
+  },
+  name: 'Adaptive (default)',
+};
+
+/**
+ * With `contentSearchFieldKey`, Add filter carries the content search: the
+ * field typeahead's suggestions list inline under the search box, and a value
+ * suggestion commits a filter straight away.
+ */
+export const SheetPresentationContentSearch: Story = {
+  render: args => {
+    const [filters, setFilters] = useState<ReadonlyArray<PowerSearchFilter>>(
+      [],
+    );
+    return (
+      <PhoneFrame>
+        <PowerSearch
+          {...args}
+          config={contentSearchConfig}
+          filters={filters}
+          onChange={next => setFilters(next)}
+          placeholder="Search issues…"
+          presentation="bottom-sheet"
+        />
+        <FilterDump filters={filters} />
+      </PhoneFrame>
+    );
+  },
+  name: 'Bottom sheet with content search',
+  parameters: {viewport: {defaultViewport: 'mobile2'}},
+};
+
+/**
+ * A placeholder longer than the trigger ends in an ellipsis inside it and
+ * stays clear of the result count at every width. The grid column sizes the
+ * field, so a test can narrow it.
+ */
+export const SheetPresentationLongPlaceholder: Story = {
+  render: () => {
+    const [filters, setFilters] = useState<ReadonlyArray<PowerSearchFilter>>(
+      [],
+    );
+    return (
+      <div style={{display: 'grid', gridTemplateColumns: 'minmax(0, 360px)'}}>
+        <PowerSearch
+          config={fullConfig}
+          filters={filters}
+          onChange={next => setFilters(next)}
+          placeholder="Filter issues by title, assignee, status, label or date..."
+          resultCount={128}
+          presentation="bottom-sheet"
+        />
+      </div>
+    );
+  },
+  name: 'Bottom sheet with a long placeholder',
+};
+
+/**
+ * Read-only keeps the Filters sheet as plain rows with Done only; disabled
+ * keeps the trigger focusable (aria-disabled) and shows its reason; the result
+ * count renders at the end of the field in both presentations.
+ */
+export const SheetPresentationStates: Story = {
+  render: () => {
+    const [filters, setFilters] =
+      useState<ReadonlyArray<PowerSearchFilter>>(sheetPresetFilters);
+    return (
+      <PhoneFrame>
+        <div style={{display: 'flex', flexDirection: 'column', gap: 24}}>
+          <PowerSearch
+            config={fullConfig}
+            filters={filters}
+            onChange={next => setFilters(next)}
+            label="Read-only filters"
+            isLabelHidden={false}
+            isReadOnly
+            resultCount={42}
+            presentation="bottom-sheet"
+          />
+          <PowerSearch
+            config={fullConfig}
+            filters={filters}
+            onChange={next => setFilters(next)}
+            label="Disabled filters"
+            isLabelHidden={false}
+            isDisabled
+            disabledMessage="Pick a project first"
+            presentation="bottom-sheet"
+          />
+          <PowerSearch
+            config={fullConfig}
+            filters={filters}
+            onChange={next => setFilters(next)}
+            label="With a status"
+            isLabelHidden={false}
+            status={{type: 'error', message: 'Add at least one filter'}}
+            startIcon={MagnifyingGlassIcon}
+            presentation="bottom-sheet"
+          />
+        </div>
+      </PhoneFrame>
+    );
+  },
+  name: 'Bottom sheet states',
+  parameters: {viewport: {defaultViewport: 'mobile2'}},
+};
+
+// =============================================================================
+// Bottom sheet with a realistic config
+// =============================================================================
+
+// Sized like real product filter bars: 17 fields in groups, most with 4–8
+// operators and some with 10, choice lists of 11 and 60 options, labels up to
+// 29 characters, a few descriptions, option labels that carry counts, and
+// every value type PowerSearch edits. Every name is generic.
+
+const realisticRegions = Array.from({length: 60}, (_, index) => ({
+  value: `region_${index + 1}`,
+  label: `Region ${String(index + 1).padStart(2, '0')} · ${(
+    (index * 7919) %
+    9000
+  ).toLocaleString('en-US')} items`,
+}));
+
+const realisticStages = [
+  'Draft',
+  'Submitted',
+  'In triage',
+  'Accepted',
+  'In progress',
+  'Blocked by dependency',
+  'In review',
+  'Ready to release',
+  'Released',
+  'Won’t do',
+  'Archived',
+].map((label, index) => ({value: `stage_${index}`, label}));
+
+const realisticOwnerSource: SearchSource = {
+  search: async (query: string) => {
+    await new Promise(resolve => setTimeout(resolve, 150));
+    return users.filter(user =>
+      user.label.toLowerCase().includes(query.toLowerCase()),
+    );
+  },
+  bootstrap: () => users,
+};
+
+const realisticTagSource: SearchSource = {
+  search: (query: string) =>
+    tagValues
+      .filter(tag => tag.label.toLowerCase().includes(query.toLowerCase()))
+      .map(tag => ({id: tag.value, label: tag.label})),
+  bootstrap: () => tagValues.map(tag => ({id: tag.value, label: tag.label})),
+};
+
+function RealisticCodeEditor({
+  value,
+  onChange,
+  placeholder,
+  isDisabled,
+}: {
+  value: string | null;
+  onChange: (value: string | null) => void;
+  placeholder: string;
+  isDisabled?: boolean;
+}) {
+  return (
+    <TextInput
+      label="Code"
+      isLabelHidden
+      value={value ?? ''}
+      placeholder={placeholder}
+      isDisabled={isDisabled}
+      width="100%"
+      onChange={next => onChange(next === '' ? null : next.toUpperCase())}
+    />
+  );
+}
+
+const realisticTextOperators: PowerSearchConfig['fields'][number]['operators'] =
+  [
+    {key: 'contains', label: 'contains', value: {type: 'string'}},
+    {key: 'not_contains', label: 'does not contain', value: {type: 'string'}},
+    {key: 'is', label: 'is exactly', value: {type: 'string'}},
+    {key: 'is_not', label: 'is not exactly', value: {type: 'string'}},
+    {key: 'starts', label: 'starts with', value: {type: 'string'}},
+    {key: 'ends', label: 'ends with', value: {type: 'string'}},
+    {key: 'any', label: 'is any of', value: {type: 'string_list'}},
+    {key: 'none', label: 'is none of', value: {type: 'string_list'}},
+    {key: 'set', label: 'is set', value: {type: 'empty'}},
+    {key: 'unset', label: 'is not set', value: {type: 'empty'}},
+  ];
+
+function realisticNumberOperators(
+  type: 'integer' | 'float',
+  units?: string,
+): PowerSearchConfig['fields'][number]['operators'] {
+  const value = {type, minValue: 0, units} as const;
+  return [
+    {key: 'eq', label: 'equals', value},
+    {key: 'ne', label: 'does not equal', value},
+    {key: 'gt', label: 'is greater than', value},
+    {key: 'gte', label: 'is at least', value},
+    {key: 'lt', label: 'is less than', value},
+    {key: 'lte', label: 'is at most', value},
+    {key: 'set', label: 'is set', value: {type: 'empty'}},
+    {key: 'unset', label: 'is not set', value: {type: 'empty'}},
+  ];
+}
+
+const realisticConfig: PowerSearchConfig = {
+  name: 'RealisticSearch',
+  fields: [
+    {
+      key: 'title',
+      label: 'Title',
+      group: 'Basics',
+      defaultOperator: 'contains',
+      operators: realisticTextOperators,
+    },
+    {
+      key: 'stage',
+      label: 'Stage',
+      group: 'Basics',
+      description: 'Where the item is in its workflow, from draft to archived.',
+      operators: [
+        {
+          key: 'is',
+          label: 'is',
+          value: {type: 'enum', values: realisticStages},
+        },
+        {
+          key: 'is_not',
+          label: 'is not',
+          value: {type: 'enum', values: realisticStages},
+        },
+        {
+          key: 'any',
+          label: 'is any of',
+          value: {type: 'enum_list', values: realisticStages},
+        },
+        {
+          key: 'none',
+          label: 'is none of',
+          value: {type: 'enum_list', values: realisticStages},
+        },
+        {key: 'set', label: 'is set', value: {type: 'empty'}},
+        {key: 'unset', label: 'is not set', value: {type: 'empty'}},
+      ],
+    },
+    {
+      key: 'priority',
+      label: 'Priority',
+      group: 'Basics',
+      operators: [
+        {key: 'is', label: 'is', value: {type: 'enum', values: priorityValues}},
+        {
+          key: 'is_not',
+          label: 'is not',
+          value: {type: 'enum', values: priorityValues},
+        },
+        {
+          key: 'any',
+          label: 'is any of',
+          value: {type: 'enum_list', values: priorityValues},
+        },
+        {
+          key: 'none',
+          label: 'is none of',
+          value: {type: 'enum_list', values: priorityValues},
+        },
+      ],
+    },
+    {
+      key: 'region',
+      label: 'Primary delivery region',
+      group: 'Basics',
+      operators: [
+        {
+          key: 'is',
+          label: 'is',
+          value: {type: 'enum', values: realisticRegions},
+        },
+        {
+          key: 'any',
+          label: 'is any of',
+          value: {type: 'enum_list', values: realisticRegions},
+        },
+        {
+          key: 'none',
+          label: 'is none of',
+          value: {type: 'enum_list', values: realisticRegions},
+        },
+      ],
+    },
+    {
+      key: 'owner',
+      label: 'Owner',
+      group: 'People',
+      operators: [
+        {
+          key: 'any',
+          label: 'is any of',
+          value: {type: 'entity_list', searchSource: realisticOwnerSource},
+        },
+        {
+          key: 'none',
+          label: 'is none of',
+          value: {type: 'entity_list', searchSource: realisticOwnerSource},
+        },
+        {key: 'set', label: 'is set', value: {type: 'empty'}},
+        {key: 'unset', label: 'is not set', value: {type: 'empty'}},
+      ],
+    },
+    {
+      key: 'reviewer',
+      label: 'Reviewer (searches as you type)',
+      group: 'People',
+      operators: [
+        {
+          key: 'is',
+          label: 'is',
+          value: {type: 'string', searchSource: realisticOwnerSource},
+        },
+        {
+          key: 'is_not',
+          label: 'is not',
+          value: {type: 'string', searchSource: realisticOwnerSource},
+        },
+      ],
+    },
+    {
+      key: 'labels',
+      label: 'Labels',
+      group: 'People',
+      operators: [
+        {
+          key: 'include',
+          label: 'include',
+          value: {
+            type: 'string_list',
+            searchSource: realisticTagSource,
+            isArbitraryStringAllowed: true,
+          },
+        },
+        {
+          key: 'exclude',
+          label: 'exclude',
+          value: {
+            type: 'string_list',
+            searchSource: realisticTagSource,
+            isArbitraryStringAllowed: true,
+          },
+        },
+      ],
+    },
+    {
+      key: 'estimate',
+      label: 'Estimate',
+      group: 'Numbers',
+      operators: realisticNumberOperators('integer', 'points'),
+    },
+    {
+      key: 'budget',
+      label: 'Approved budget',
+      group: 'Numbers',
+      description:
+        'The amount approved at the last planning review, in US dollars.',
+      operators: realisticNumberOperators('float', 'USD'),
+    },
+    {
+      key: 'created',
+      label: 'Created',
+      group: 'Dates',
+      operators: [
+        {
+          key: 'on',
+          label: 'is on',
+          value: {type: 'date_absolute', isDateOnly: true},
+        },
+        {
+          key: 'before',
+          label: 'is before',
+          value: {type: 'date_absolute', isDateOnly: true},
+        },
+        {
+          key: 'after',
+          label: 'is after',
+          value: {type: 'date_absolute', isDateOnly: true},
+        },
+        {
+          key: 'within',
+          label: 'is within the last',
+          value: {
+            type: 'date_relative',
+            isPastAllowed: true,
+            isFutureAllowed: false,
+          },
+        },
+        {key: 'between', label: 'is between', value: {type: 'date_range'}},
+        {key: 'set', label: 'is set', value: {type: 'empty'}},
+      ],
+    },
+    {
+      key: 'due',
+      label: 'Due',
+      group: 'Dates',
+      operators: [
+        {
+          key: 'before',
+          label: 'is before',
+          value: {type: 'date_absolute', isDateOnly: false},
+        },
+        {
+          key: 'after',
+          label: 'is after',
+          value: {type: 'date_absolute', isDateOnly: false},
+        },
+        {
+          key: 'next',
+          label: 'is within the next',
+          value: {
+            type: 'date_relative',
+            isPastAllowed: false,
+            isFutureAllowed: true,
+          },
+        },
+        {key: 'unset', label: 'is not set', value: {type: 'empty'}},
+      ],
+    },
+    {
+      key: 'window',
+      label: 'Maintenance window',
+      group: 'Dates',
+      operators: [
+        {key: 'between', label: 'is between', value: {type: 'date_range'}},
+      ],
+    },
+    {
+      key: 'start_time',
+      label: 'Daily start time',
+      group: 'Dates',
+      operators: [
+        {key: 'before', label: 'is before', value: {type: 'time'}},
+        {key: 'after', label: 'is after', value: {type: 'time'}},
+      ],
+    },
+    {
+      key: 'code',
+      label: 'Cost center code',
+      group: 'Other',
+      operators: [
+        {
+          key: 'is',
+          label: 'is',
+          value: {
+            type: 'custom',
+            Editor: RealisticCodeEditor,
+            getString: value => value,
+          },
+        },
+      ],
+    },
+    {
+      key: 'flagged',
+      label: 'Flagged for follow-up only',
+      group: 'Other',
+      operators: [{key: 'yes', label: '', value: {type: 'empty'}}],
+    },
+    {
+      key: 'notes',
+      label: 'Notes',
+      group: 'Other',
+      defaultOperator: 'contains',
+      operators: realisticTextOperators.slice(0, 6),
+    },
+    {
+      key: 'any_of_group',
+      label: 'Any of these conditions',
+      group: 'Other',
+      operators: [
+        {key: 'match_any', label: 'match any', value: {type: 'nested'}},
+        {key: 'match_all', label: 'match all', value: {type: 'nested'}},
+      ],
+    },
+  ],
+};
+
+const realisticPresetFilters: ReadonlyArray<PowerSearchFilter> = [
+  {
+    field: 'stage',
+    operator: 'any',
+    value: {type: 'enum_list', value: ['stage_1', 'stage_4', 'stage_6']},
+  },
+  {field: 'priority', operator: 'is', value: {type: 'enum', value: 'p1'}},
+];
+
+/**
+ * The bottom-sheet presentation with a config sized like real product filter
+ * bars, covering every value type PowerSearch edits: text with ten operators,
+ * a text field that searches as you type, text lists, single and multiple
+ * choice (11 and 60 options), people, whole and decimal numbers with units,
+ * dates with and without a time, relative dates past and future, date
+ * ranges, a time of day, a custom editor, a one-tap filter, and a nested
+ * group.
+ */
+export const SheetPresentationRealisticConfig: Story = {
+  render: args => {
+    const [filters, setFilters] = useState<ReadonlyArray<PowerSearchFilter>>(
+      realisticPresetFilters,
+    );
+    return (
+      <PhoneFrame>
+        <PowerSearch
+          {...args}
+          config={realisticConfig}
+          filters={filters}
+          onChange={next => setFilters(next)}
+          timezoneID="America/Los_Angeles"
+          presentation="bottom-sheet"
+        />
+        <FilterDump filters={filters} />
+      </PhoneFrame>
+    );
+  },
+  name: 'Sheet presentation · realistic config',
+  parameters: {viewport: {defaultViewport: 'mobile2'}},
 };

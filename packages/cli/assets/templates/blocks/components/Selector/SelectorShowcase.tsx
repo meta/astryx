@@ -9,7 +9,7 @@ export default function SelectorShowcase() {
   const [value, setValue] = useState<string | undefined>();
   return (
     <Selector
-      style={{width: 300}}
+      controlStyle={{width: 300}}
       label="Fruit"
       options={['Apple', 'Banana', 'Orange', 'Mango', 'Pineapple']}
       placeholder="Select a fruit..."

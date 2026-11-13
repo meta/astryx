@@ -119,6 +119,9 @@ export class Block {
  * @property {'wrap' | 'truncate'} [overflow] - What an inline record longer
  *   than {@link WRAP_WIDTH} does: `wrap` (the default) continues under the
  *   first column; `truncate` cuts it to one line.
+ * @property {(item: any) => boolean} [sizesColumn] - Which inline records the
+ *   first column is sized from (default: all). A record left out keeps its
+ *   place and overhangs a narrower column, so adding it changes no other line.
  */
 
 /** @param {unknown} v @returns {boolean} */
@@ -152,6 +155,8 @@ function toAscii(s) {
     .replace(/[\u2018\u2019]/g, "'")
     .replace(/[\u201C\u201D]/g, '"')
     .replace(/\u2026/g, '...')
+    .replace(/\u2192/g, '->')
+    .replace(/\u2190/g, '<-')
     .replace(/\u00a0/g, ' ');
 }
 
@@ -231,7 +236,9 @@ function wrapLine(line, width, indent) {
  * @returns {Block}
  */
 export function section(heading, subtitle) {
-  return new Block(toAscii(subtitle ? `${heading}\n${subtitle}` : String(heading)));
+  return new Block(
+    toAscii(subtitle ? `${heading}\n${subtitle}` : String(heading)),
+  );
 }
 
 /**
@@ -306,9 +313,10 @@ export function records(items, options = {}) {
  * @returns {Block}
  */
 function inlineRecords(items, options) {
-  const [lead, ...rest] = (options.fields ?? Object.keys(items[0] ?? {})).filter(
-    k => !options.omit?.includes(k),
-  );
+  // Columns from every row: an optional field is on some rows only.
+  const [lead, ...rest] = (
+    options.fields ?? [...new Set(items.flatMap(o => Object.keys(o ?? {})))]
+  ).filter(k => !options.omit?.includes(k));
   if (lead == null) return new Block('');
   /** @param {any} o @param {string} k */
   const value = (o, k) => {
@@ -316,8 +324,12 @@ function inlineRecords(items, options) {
     return fmt ? fmt(o[k]) : renderValue(o[k]);
   };
   const leads = items.map(o => (isEmpty(o[lead]) ? '' : value(o, lead)));
+  const sizes = options.sizesColumn ?? (() => true);
   const column = Math.min(
-    Math.max(0, ...leads.map(l => displayWidth(l))),
+    Math.max(
+      0,
+      ...leads.filter((_, i) => sizes(items[i])).map(l => displayWidth(l)),
+    ),
     INLINE_LEAD_MAX,
   );
   const indent = ' '.repeat(column + 2);
@@ -360,6 +372,17 @@ export function code(source, _options = {}) {
  */
 function isBlock(b) {
   return b instanceof Block;
+}
+
+/**
+ * The text value of a deprecated component's `deprecated` field: the component
+ * to use instead, then the modernization route. Every command that prints a
+ * component result's fields prints it this way.
+ * @param {{replacement: string, description: string}} deprecation
+ * @returns {string}
+ */
+export function formatDeprecation(deprecation) {
+  return `use ${deprecation.replacement}: ${deprecation.description}`;
 }
 
 /**

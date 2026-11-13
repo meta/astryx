@@ -6,8 +6,14 @@ export const doc = {
   exampleFor: 'ChatSystemMessage',
   name: 'ChatSystemMessage — Status Updates',
   displayName: 'ChatSystemMessage — Status Updates',
-  description: 'Realistic status messages in a conversation flow showing membership changes, timestamps, and resolution notices.',
+  description:
+    'Realistic status messages in a conversation flow showing membership changes, timestamps, and resolution notices.',
   isReady: true,
   aspectRatio: 4 / 3,
   componentsUsed: ['Chat', 'Icon'],
+  icons: {
+    CheckCircleIcon: 'success',
+    UserMinusIcon: 'userRemove',
+    UserPlusIcon: 'userAdd',
+  },
 };

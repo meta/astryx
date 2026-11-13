@@ -1,7 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-'use client';
-
 /**
  * @file index.ts
  * @output Exports ComplexSelector and its trigger-size contract types
@@ -15,5 +13,6 @@ export {
   type ComplexSelectorRenderState,
   type ComplexSelectorSize,
   type ComplexSelectorStatus,
+  type ComplexSelectorRenderTriggerProps,
   type ComplexSelectorVariant,
 } from './ComplexSelector';

@@ -28,6 +28,15 @@ export interface TableSemanticRowStatus {
 }
 
 export {Table} from './Table';
+export {
+  useTableColumnsVirtualization,
+  useTableRowsVirtualization,
+} from './plugins/virtualization';
+export type {
+  UseTableColumnsVirtualizationConfig,
+  UseTableRowsVirtualizationConfig,
+  TableVirtualizationCapability,
+} from './plugins/virtualization';
 export {TableRow} from './TableRow';
 export {TableCell} from './TableCell';
 export {TableHeaderCell} from './TableHeaderCell';
@@ -35,6 +44,7 @@ export {TableHeader} from './TableHeader';
 export {TableBody} from './TableBody';
 export {TableFooter} from './TableFooter';
 export {TableContext} from './TableContext';
+export {TableSelectionToolbar} from './TableSelectionToolbar';
 export {useTableSelection} from './plugins/selection';
 export {useTableSelectionState} from './plugins/selection';
 export {useTableSortable} from './plugins/sortable';
@@ -46,6 +56,7 @@ export {useTableColumnResize} from './plugins/columnResize';
 export {useTableStickyColumns} from './plugins/stickyColumns';
 export {useTableGroupedRows} from './plugins/groupedRows';
 export {useTableRowIndex} from './plugins/rowIndex';
+export {useTableInfiniteScroll} from './plugins/infiniteScroll';
 export {useTableRowStatus} from './plugins/rowStatus';
 export {useTableRowExpansion} from './plugins/rowExpansion';
 export {useTableTreeData, useTableTreeState} from './plugins/tree';
@@ -80,6 +91,9 @@ export type {
   BodyCellRenderProps,
   ScrollWrapperRenderProps,
   BaseTableProps,
+  TableRenderContext,
+  TableRowContext,
+  TablePluginRenderState,
 } from './types';
 export type {
   TableProps,
@@ -94,8 +108,10 @@ export type {TableHeaderProps} from './TableHeader';
 export type {TableBodyProps} from './TableBody';
 export type {TableFooterProps} from './TableFooter';
 export type {TableContextValue} from './TableContext';
+export type {TableSelectionToolbarProps} from './TableSelectionToolbar';
 export type {UseTableSelectionConfig} from './plugins/selection';
 export type {
+  TableSelectionState,
   UseTableSelectionStateConfig,
   UseTableSelectionStateResult,
 } from './plugins/selection';
@@ -122,6 +138,7 @@ export type {UseTableColumnResizeConfig} from './plugins/columnResize';
 export type {UseTableStickyColumnsConfig} from './plugins/stickyColumns';
 export type {UseTableRowExpansionConfig} from './plugins/rowExpansion';
 export type {UseTableRowIndexConfig} from './plugins/rowIndex';
+export type {UseTableInfiniteScrollConfig} from './plugins/infiniteScroll';
 export type {
   UseTableGroupedRowsConfig,
   UseTableGroupedRowsResult,

@@ -1,7 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-'use client';
-
 /**
  * @file Breadcrumbs component barrel export
  */
@@ -41,6 +39,10 @@ export {
   DropdownMenuDivider as BreadcrumbMenuDivider,
   type DropdownMenuDividerProps as BreadcrumbMenuDividerProps,
 } from '../DropdownMenu/DropdownMenuDivider';
+export {
+  DropdownMenuGroup as BreadcrumbMenuGroup,
+  type DropdownMenuGroupProps as BreadcrumbMenuGroupProps,
+} from '../DropdownMenu/DropdownMenuGroup';
 export {
   DropdownMenuCheckboxItem as BreadcrumbMenuCheckboxItem,
   type DropdownMenuCheckboxItemProps as BreadcrumbMenuCheckboxItemProps,

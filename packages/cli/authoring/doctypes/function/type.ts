@@ -12,6 +12,7 @@
 
 import type {
   AuthoredDocGraphFields,
+  ExampleKind,
   HookParamDoc,
   UsageDoc,
 } from '../base/type.js';
@@ -41,6 +42,8 @@ export interface FunctionExampleDoc {
   code: string;
   /** Optional sample result. */
   result?: string;
+  /** `demo` (default) may render as a live preview; `setup` is code only. */
+  kind?: ExampleKind;
 }
 
 /**
@@ -62,7 +65,7 @@ export interface FunctionDoc extends AuthoredDocGraphFields {
   summary?: string;
   /** Longer description. */
   description?: string;
-  /** The `astryx docs` topic that reads this doc. The CLI's API functions use 'cli/api' (the section `api-<name>` of the `cli` topic). Every function doc the CLI ships declares one, and `astryx doctor` fails on one that is missing or that no topic reads. */
+  /** The group that reads this doc. The CLI's API functions use 'cli/api', which the docs tree adopts by kind: each is the leaf `cli/api/functions/<name>`. Every function doc the CLI ships declares one, and `astryx doctor` fails on one that is missing or that nothing reads. */
   namespace?: string;
   /** Alternate slugs that also resolve to this doc. */
   aliases?: string[];
@@ -84,7 +87,8 @@ export interface FunctionDoc extends AuthoredDocGraphFields {
   usage?: UsageDoc;
   /** The CLI command that wraps this function, e.g. 'search'. */
   command?: string;
-  /** Related function/command names. */
+  /** Related function names; the CLI links each to its doc. Name the CLI
+   *  command with `command`, not here. */
   related?: string[];
   /** Component names this is commonly used with (hooks). */
   relatedComponents?: string[];

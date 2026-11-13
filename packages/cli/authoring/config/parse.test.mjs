@@ -63,6 +63,14 @@ describe('parseConfig (load boundary)', () => {
     ).toEqual({audience: 'internal', handle});
   });
 
+  it('accepts a discover source function and refuses anything else', () => {
+    const discover = async () => ({});
+    expect(parseConfig({discover}).discover).toBe(discover);
+    expect(reason({discover: 'https://example.com/catalog.json'})).toContain(
+      'discover',
+    );
+  });
+
   it('rejects obsolete or extended gap-report handler shapes', () => {
     expect(reason({gapReport: {command: './report.mjs'}})).toContain(
       'gapReport',

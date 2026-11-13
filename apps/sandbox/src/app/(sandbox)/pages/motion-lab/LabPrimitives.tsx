@@ -66,7 +66,9 @@ const sx = stylex.create({
     padding: '14px',
   },
   splitBorder: {
-    borderInlineStart: '1px solid var(--color-border)',
+    borderInlineStartWidth: '1px',
+    borderInlineStartStyle: 'solid',
+    borderInlineStartColor: 'var(--color-border)',
   },
   meterTrack: {
     height: '5px',
@@ -590,7 +592,12 @@ export function useReplay(run: () => void) {
 }
 
 /** Drives a demo on a loop while the rail's loop switch is on. */
-export function useLoop(run: () => void, periodMs: number) {
+export function useLoop(
+  run: () => void,
+  periodMs: number,
+  /** The shortest period the loop runs at; a card showing a fast rate lowers it. */
+  minPeriodMs = 700,
+) {
   const {isLooping, replayNonce} = useMotionLab();
   const ref = useRef(run);
   useLayoutEffect(() => {
@@ -601,7 +608,10 @@ export function useLoop(run: () => void, periodMs: number) {
     if (!isLooping) {
       return;
     }
-    const id = window.setInterval(() => ref.current(), Math.max(700, periodMs));
+    const id = window.setInterval(
+      () => ref.current(),
+      Math.max(minPeriodMs, periodMs),
+    );
     return () => window.clearInterval(id);
-  }, [isLooping, periodMs, replayNonce]);
+  }, [isLooping, minPeriodMs, periodMs, replayNonce]);
 }

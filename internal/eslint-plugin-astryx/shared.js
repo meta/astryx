@@ -33,6 +33,8 @@ export const COMPONENT_RULE_ALLOWED = new Set([
   'LinkProviderProps',
   'MediaThemeProps',
   'InternationalizationProviderProps',
+  // Renders one Markdown plugin node with no element of its own (spec:AST-064)
+  'MarkdownPluginNodeRendererProps',
   // Hook return-value / editor-config prop bags — not DOM-component props
   'OverlayContainerProps',
   'PowerSearchEditorProps',

@@ -14,11 +14,21 @@
 
 import {describe, it, expect, vi} from 'vitest';
 import {render, screen, act} from '@testing-library/react';
-import {useMemo, useState} from 'react';
+import {
+  StrictMode,
+  Suspense,
+  startTransition,
+  use,
+  useMemo,
+  useState,
+} from 'react';
+import type {ReactNode} from 'react';
 import {Table} from './Table';
+import {useBaseTablePlugins} from './useBaseTablePlugins';
 import {useTableRowStatus} from './plugins/rowStatus';
+import {useTableRowIndex} from './plugins/rowIndex';
 import type {UseTableRowStatusConfig} from './index';
-import type {TableColumn} from './types';
+import type {TableColumn, TablePlugin} from './types';
 
 // =============================================================================
 // Test Data
@@ -44,6 +54,16 @@ const testColumns: TableColumn<TestRow>[] = [
 ];
 
 const ciBudgetMultiplier = process.env.CI === 'true' ? 1.5 : 1;
+
+/**
+ * Milliseconds of CPU that this thread has used since `started`. The render
+ * budgets below are this thread's CPU time, not elapsed time. Other work on a
+ * busy machine stretches elapsed time, but not the CPU that the render uses.
+ */
+function cpuMsSince(started: NodeJS.CpuUsage): number {
+  const used = process.threadCpuUsage(started);
+  return (used.user + used.system) / 1000;
+}
 
 // =============================================================================
 // Test: Table doesn't re-render when unrelated state changes
@@ -439,15 +459,30 @@ describe('Table render performance', () => {
   // ===========================================================================
 
   describe('render benchmarks', () => {
+    // An untimed render first: a run's first Table render also pays one-off
+    // module and compiler work, which is not what these budgets measure. The
+    // warm-up unmounts and uses other rows, so the timed render is a fresh
+    // mount that reuses nothing.
+    const warmUp = () => {
+      const rows = createTestData(100).map(row => ({
+        ...row,
+        id: `warm-${row.id}`,
+        name: `Warm ${row.name}`,
+      }));
+      const {unmount} = render(
+        <Table data={rows} columns={testColumns} idKey="id" />,
+      );
+      unmount();
+    };
+
     it('should render 100 rows within performance budget', () => {
       const data = createTestData(100);
+      warmUp();
 
-      const startTime = performance.now();
+      const started = process.threadCpuUsage();
       render(<Table data={data} columns={testColumns} idKey="id" />);
-      const endTime = performance.now();
-
-      const renderTime = endTime - startTime;
-      console.log(`100 rows initial render: ${renderTime.toFixed(2)}ms`);
+      const renderTime = cpuMsSince(started);
+      console.log(`100 rows initial render: ${renderTime.toFixed(2)}ms CPU`);
 
       // Should render within 200ms (generous budget for CI variance)
       expect(renderTime).toBeLessThan(200);
@@ -455,13 +490,12 @@ describe('Table render performance', () => {
 
     it('should render 500 rows within performance budget', () => {
       const data = createTestData(500);
+      warmUp();
 
-      const startTime = performance.now();
+      const started = process.threadCpuUsage();
       render(<Table data={data} columns={testColumns} idKey="id" />);
-      const endTime = performance.now();
-
-      const renderTime = endTime - startTime;
-      console.log(`500 rows initial render: ${renderTime.toFixed(2)}ms`);
+      const renderTime = cpuMsSince(started);
+      console.log(`500 rows initial render: ${renderTime.toFixed(2)}ms CPU`);
 
       // CI runners vary more than local machines, so keep the local budget
       // strict while allowing headroom for shared-runner noise.
@@ -499,18 +533,18 @@ describe('Table render performance', () => {
         );
       }
 
-      const renderStart = performance.now();
+      const renderStart = process.threadCpuUsage();
       render(<TestComponent />);
-      const renderTime = performance.now() - renderStart;
+      const renderTime = cpuMsSince(renderStart);
 
       expect(getStatus).toHaveBeenCalledTimes(6);
       expect(renderTime).toBeLessThan(1500 * ciBudgetMultiplier);
 
-      const updateStart = performance.now();
+      const updateStart = process.threadCpuUsage();
       await act(async () => {
         screen.getByRole('button', {name: 'No-op update'}).click();
       });
-      const updateTime = performance.now() - updateStart;
+      const updateTime = cpuMsSince(updateStart);
 
       expect(getStatus).toHaveBeenCalledTimes(6);
       expect(updateTime).toBeLessThan(1000 * ciBudgetMultiplier);
@@ -518,6 +552,7 @@ describe('Table render performance', () => {
 
     it('should measure update performance', async () => {
       const data = createTestData(100);
+      let updates = 0;
 
       function TestComponent() {
         const [items, setItems] = useState(data);
@@ -526,13 +561,13 @@ describe('Table render performance', () => {
           <div>
             <button
               type="button"
-              onClick={() =>
+              onClick={() => {
+                updates++;
+                const name = `Updated ${updates}`;
                 setItems(prev =>
-                  prev.map((item, i) =>
-                    i === 50 ? {...item, name: 'Updated'} : item,
-                  ),
-                )
-              }>
+                  prev.map((item, i) => (i === 50 ? {...item, name} : item)),
+                );
+              }}>
               Update Row 50
             </button>
             <Table data={items} columns={testColumns} idKey="id" />
@@ -542,17 +577,367 @@ describe('Table render performance', () => {
 
       render(<TestComponent />);
 
-      const startTime = performance.now();
-      await act(async () => {
-        screen.getByRole('button').click();
-      });
-      const endTime = performance.now();
+      // CPU time, not elapsed time: on a loaded runner other work stretches
+      // elapsed time but not the time spent rendering. Each click renames the
+      // row again, so every round is a real update; the least of five after a
+      // warm-up is the update's own cost.
+      const updateCpuTime = async () => {
+        const started = process.cpuUsage();
+        await act(async () => {
+          screen.getByRole('button').click();
+        });
+        const used = process.cpuUsage(started);
+        return (used.user + used.system) / 1000;
+      };
+      await updateCpuTime();
+      let updateTime = Number.POSITIVE_INFINITY;
+      for (let round = 0; round < 5; round++) {
+        updateTime = Math.min(updateTime, await updateCpuTime());
+      }
+      console.log(`100 rows single update: ${updateTime.toFixed(2)}ms CPU`);
 
-      const updateTime = endTime - startTime;
-      console.log(`100 rows single update: ${updateTime.toFixed(2)}ms`);
-
-      // Update should be fast
+      expect(screen.getByText(`Updated ${updates}`)).toBeInTheDocument();
       expect(updateTime).toBeLessThan(100);
     });
+  });
+});
+
+// The column and plugin caches keep their committed arrays, so a render React
+// discards cannot make the next committed render re-render every row.
+describe('identity caches after a render React discards', () => {
+  const forever = new Promise<never>(() => {});
+  function Forever(): null {
+    use(forever);
+    return null;
+  }
+  function Discardable({
+    children,
+    isPending = false,
+  }: {
+    children: ReactNode;
+    isPending?: boolean;
+  }): ReactNode {
+    return (
+      <Suspense fallback={null}>
+        {children}
+        {isPending ? <Forever /> : null}
+      </Suspense>
+    );
+  }
+
+  it('keeps the committed columns, so rows skip a render after a discarded render with other columns', async () => {
+    const renders: string[] = [];
+    const nameColumn: TableColumn<TestRow> = {
+      key: 'name',
+      header: 'Name',
+      renderCell: row => {
+        renders.push(row.id);
+        return row.name;
+      },
+    };
+    const idColumn: TableColumn<TestRow> = {key: 'id', header: 'ID'};
+    const data = createTestData(3);
+    const table = (columns: TableColumn<TestRow>[], isPending = false) => (
+      <Discardable isPending={isPending}>
+        <Table data={data} columns={columns} idKey="id" />
+      </Discardable>
+    );
+    const {rerender} = render(table([idColumn, nameColumn]));
+    await act(async () => {
+      startTransition(() => {
+        rerender(table([nameColumn], true));
+      });
+    });
+    renders.length = 0;
+
+    // A new array holding the committed columns.
+    rerender(table([idColumn, nameColumn]));
+
+    expect(screen.getAllByRole('row')).toHaveLength(4);
+    expect(renders).toEqual([]);
+  });
+
+  it('returns the committed columns array when a discarded render had the same columns', async () => {
+    const renders: string[] = [];
+    const idColumn: TableColumn<TestRow> = {key: 'id', header: 'ID'};
+    const nameColumn: TableColumn<TestRow> = {
+      key: 'name',
+      header: 'Name',
+      renderCell: row => {
+        renders.push(row.id);
+        return row.name;
+      },
+    };
+    const data = createTestData(3);
+    const table = (isPending = false) => (
+      <Discardable isPending={isPending}>
+        <Table data={data} columns={[idColumn, nameColumn]} idKey="id" />
+      </Discardable>
+    );
+    const {rerender} = render(table());
+    await act(async () => {
+      startTransition(() => {
+        rerender(table(true));
+      });
+    });
+    renders.length = 0;
+
+    // A third array of the same columns, after the discarded one.
+    rerender(table());
+
+    expect(renders).toEqual([]);
+  });
+
+  it('keeps the committed plugins, so rows skip a render after a discarded render with another plugin', async () => {
+    const renders: string[] = [];
+    const columns: TableColumn<TestRow>[] = [
+      {key: 'id', header: 'ID'},
+      {
+        key: 'name',
+        header: 'Name',
+        renderCell: row => {
+          renders.push(row.id);
+          return row.name;
+        },
+      },
+    ];
+    const data = createTestData(3);
+    const committedPlugin: TablePlugin<TestRow> = {
+      transformBodyRow: props => props,
+    };
+    const discardedPlugin: TablePlugin<TestRow> = {
+      transformBodyRow: props => props,
+    };
+    const table = (plugin: TablePlugin<TestRow>, isPending = false) => (
+      <Discardable isPending={isPending}>
+        <Table
+          data={data}
+          columns={columns}
+          idKey="id"
+          plugins={{custom: plugin}}
+        />
+      </Discardable>
+    );
+    const {rerender} = render(table(committedPlugin));
+    await act(async () => {
+      startTransition(() => {
+        rerender(table(discardedPlugin, true));
+      });
+    });
+    renders.length = 0;
+
+    // A new record holding the committed plugin.
+    rerender(table(committedPlugin));
+
+    expect(screen.getAllByRole('row')).toHaveLength(4);
+    expect(renders).toEqual([]);
+  });
+
+  it('warns once about an invalid plugin under StrictMode', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      render(
+        <StrictMode>
+          <Table
+            data={createTestData(2)}
+            columns={testColumns}
+            idKey="id"
+            plugins={{
+              typo: {transformBodyRows: () => []} as TablePlugin<TestRow>,
+            }}
+          />
+        </StrictMode>,
+      );
+
+      const unknownKey = warn.mock.calls.filter(args =>
+        String(args[0]).includes('unknown key "transformBodyRows"'),
+      );
+      expect(unknownKey).toHaveLength(1);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('re-renders a table with no columns prop when its data array is new', () => {
+    const data = createTestData(2);
+    const {rerender} = render(<Table data={data} />);
+
+    // Generated columns are new objects on every render.
+    rerender(<Table data={[...data]} />);
+
+    expect(screen.getAllByRole('row')).toHaveLength(3);
+  });
+
+  it('keeps one plugin array for an inline array of the same base plugins', () => {
+    const basePlugin: TablePlugin<TestRow> = {transformBodyRow: props => props};
+    const arrays: TablePlugin<TestRow>[][] = [];
+    function Probe({count}: {count: number}) {
+      // The hook's own example: a base array written inline.
+      arrays.push(useBaseTablePlugins([basePlugin], undefined));
+      return <span>{count}</span>;
+    }
+    const {rerender} = render(<Probe count={0} />);
+
+    rerender(<Probe count={1} />);
+
+    expect(arrays.at(-1)).toBe(arrays[0]);
+  });
+
+  it('settles when a caller writes its plugin objects inline', () => {
+    function Probe({count}: {count: number}) {
+      const plugins = useBaseTablePlugins<TestRow>(
+        [{transformBodyRow: props => props}],
+        {custom: {transformColumns: columns => columns}},
+      );
+      return <span>{`${count}:${plugins.length}`}</span>;
+    }
+    const {rerender} = render(<Probe count={0} />);
+
+    rerender(<Probe count={1} />);
+
+    expect(screen.getByText('1:2')).toBeInTheDocument();
+  });
+
+  it('keeps another table unaffected when a caller edits its columns array after rendering', () => {
+    const data = createTestData(2);
+    const idColumn: TableColumn<TestRow> = {key: 'id', header: 'ID'};
+    const nameColumn: TableColumn<TestRow> = {key: 'name', header: 'Name'};
+    const columns = [idColumn, nameColumn];
+    render(<Table data={data} columns={columns} idKey="id" />);
+
+    // An edit in place, after the first table rendered.
+    columns.push({key: 'value', header: 'Value'});
+    render(<Table data={data} columns={[idColumn, nameColumn]} idKey="id" />);
+
+    expect(screen.getAllByRole('table').at(-1)).not.toHaveTextContent('Value');
+  });
+
+  it('renders a custom plugin whose transformColumns returns a new column each call', () => {
+    const data = createTestData(2);
+    function Parent() {
+      const [count, setCount] = useState(0);
+      return (
+        <>
+          <button type="button" onClick={() => setCount(count + 1)}>
+            Bump {count}
+          </button>
+          <Table
+            data={data}
+            columns={testColumns}
+            idKey="id"
+            plugins={{
+              extra: {
+                transformColumns: (cols: TableColumn<TestRow>[]) => [
+                  {key: 'extra', header: 'Extra'},
+                  ...cols,
+                ],
+              },
+            }}
+          />
+        </>
+      );
+    }
+    render(<Parent />);
+    act(() => {
+      screen.getByRole('button', {name: 'Bump 0'}).click();
+    });
+
+    expect(screen.getByRole('button', {name: 'Bump 1'})).toBeInTheDocument();
+    expect(
+      screen.getByRole('columnheader', {name: 'Extra'}),
+    ).toBeInTheDocument();
+  });
+});
+
+// =============================================================================
+// Test: a re-sort moves rows without re-rendering them
+// =============================================================================
+
+describe('re-sort', () => {
+  const sortedRows = createTestData(1000);
+  const reversedRows = [...sortedRows].reverse();
+  // By default, a role query reads each row's computed style to check that
+  // the row is not hidden. Over 1,000 rows in jsdom that costs seconds. These
+  // cases assert which rows come first, so they skip that check.
+  const rows = () => screen.getAllByRole('row', {hidden: true});
+
+  function renderSortable(
+    renderCell: (row: TestRow) => string,
+    plugins?: Record<string, TablePlugin<TestRow>>,
+  ) {
+    const columns: TableColumn<TestRow>[] = [
+      {key: 'name', header: 'Name', renderCell},
+      {key: 'value', header: 'Value'},
+    ];
+    const view = render(
+      <Table
+        data={sortedRows}
+        columns={columns}
+        idKey="id"
+        plugins={plugins}
+      />,
+    );
+    return () =>
+      view.rerender(
+        <Table
+          data={reversedRows}
+          columns={columns}
+          idKey="id"
+          plugins={plugins}
+        />,
+      );
+  }
+
+  it('re-renders no cell of 1,000 rows when no plugin reads the row index', () => {
+    const renderCell = vi.fn((row: TestRow) => row.name);
+    const resort = renderSortable(renderCell);
+    renderCell.mockClear();
+
+    resort();
+
+    expect(renderCell).not.toHaveBeenCalled();
+    expect(rows()[1]).toHaveTextContent('Item 999');
+  });
+
+  it('re-renders the rows when a plugin reads the row index', () => {
+    const renderCell = vi.fn((row: TestRow) => row.name);
+    const stripe: TablePlugin<TestRow> = {
+      transformBodyRow: (props, _item, index) => ({
+        ...props,
+        htmlProps: {...props.htmlProps, 'data-odd': index % 2 === 1},
+      }),
+    };
+    const resort = renderSortable(renderCell, {stripe});
+    renderCell.mockClear();
+
+    resort();
+
+    expect(renderCell).toHaveBeenCalledTimes(1000);
+    const [, first, second] = rows();
+    expect(first).toHaveTextContent('Item 999');
+    expect(first).toHaveAttribute('data-odd', 'false');
+    expect(second).toHaveAttribute('data-odd', 'true');
+  });
+
+  it('keeps row numbers in step with the new order', () => {
+    function Numbered({data}: {data: TestRow[]}) {
+      const rowIndex = useTableRowIndex({data});
+      return (
+        <Table
+          data={data}
+          columns={testColumns}
+          idKey="id"
+          plugins={{rowIndex}}
+        />
+      );
+    }
+    const small = createTestData(3);
+    const view = render(<Numbered data={small} />);
+
+    view.rerender(<Numbered data={[...small].reverse()} />);
+
+    const [, first, , last] = screen.getAllByRole('row');
+    expect(first).toHaveTextContent(/^1row-2/);
+    expect(last).toHaveTextContent(/^3row-0/);
   });
 });

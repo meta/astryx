@@ -1,6 +1,6 @@
 ---
 schema_version: 4
-template_version: 1
+template_version: 2
 kind: system-spec
 id: spec:AST-000
 authority: draft
@@ -17,6 +17,8 @@ affects_consumer_docs: [<doc-id>]
 ---
 
 # <Change> system spec
+
+<!-- Describe the system, not the project: present tense, what it does. No proposals, history, pull requests, research, or project status (what is built so far, what goes first) in the record. A requirement gap reads `<FR or INV id> gap: <observable mismatch>`; one line such as `Status: in progress` may say the record is still in progress. See docs/contributing/spec-writing.md and report its rubric results in the pull request. -->
 
 ## Intent
 

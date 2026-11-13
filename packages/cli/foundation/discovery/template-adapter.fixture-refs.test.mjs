@@ -5,7 +5,11 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import jscodeshift from 'jscodeshift';
-import {stripTemplateAssetRefs} from './template-adapter.mjs';
+import {
+  mapFixtureRefs,
+  replaceDemoMedia,
+  stripTemplateAssetRefs,
+} from './template-adapter.mjs';
 
 const PLACEHOLDER = stripTemplateAssetRefs("'/template-assets/x.png'").slice(
   1,
@@ -13,6 +17,14 @@ const PLACEHOLDER = stripTemplateAssetRefs("'/template-assets/x.png'").slice(
 );
 
 describe('stripTemplateAssetRefs fixture references', () => {
+  it('uses a placeholder that takes its tone from the surface behind it', () => {
+    const placeholder = decodeURIComponent(
+      stripTemplateAssetRefs("'/template-assets/x.png'").slice(1, -1),
+    );
+    expect(placeholder).toContain('fill-opacity');
+    expect(placeholder).not.toContain('#f5f6f8');
+  });
+
   it('replaces an image with a self-contained placeholder', () => {
     expect(PLACEHOLDER).toMatch(/^data:image\/svg\+xml,[^\s'"`()]+$/u);
   });
@@ -209,6 +221,81 @@ describe('stripTemplateAssetRefs fixture references', () => {
     expect(() => stripTemplateAssetRefs(source)).toThrow(
       new RegExp(`/template-assets/hero\\.png .*${use}`, 'u'),
     );
+  });
+});
+
+describe('replaceDemoMedia', () => {
+  it('counts a reference once, however many fixture paths its URL carries', () => {
+    const source =
+      "const hero = '/template-assets/a.png?f=/template-assets/b.png';";
+    expect(replaceDemoMedia(source)).toEqual({
+      source: stripTemplateAssetRefs(source),
+      demoMediaReplaced: 1,
+    });
+  });
+
+  it('counts a poster and a video as two references', () => {
+    const source =
+      '<video poster="/template-assets/poster.jpg" src="/template-assets/clip.mp4" />';
+    const result = replaceDemoMedia(source);
+    expect(result).toEqual({
+      source: stripTemplateAssetRefs(source),
+      demoMediaReplaced: 2,
+    });
+    expect(result.source).not.toContain('/template-assets/');
+  });
+
+  it.each([
+    [
+      'a prose mention',
+      '<p>Demo media lives under /template-assets/ in the docsite.</p>',
+    ],
+    [
+      'a third-party URL',
+      "const u = 'https://example.com/template-assets/a.png';",
+    ],
+    ['source with no fixture', 'const x = 1;'],
+  ])('counts nothing for %s it leaves as written', (_label, source) => {
+    expect(replaceDemoMedia(source)).toEqual({source, demoMediaReplaced: 0});
+  });
+});
+
+describe('mapFixtureRefs', () => {
+  it('gives the map each reference whole, with its kind and whether it is a value', () => {
+    const source = [
+      "const a = '/template-assets/hero.PNG?v=2#top';",
+      '<video src="/template-assets/clip.mp4" />',
+      '<p>The photo is /template-assets/hero.png.</p>',
+    ].join('\n');
+    /** @type {unknown[]} */
+    const seen = [];
+    mapFixtureRefs(source, ref => {
+      seen.push(ref);
+      return null;
+    });
+    expect(seen).toEqual([
+      {
+        reference: '/template-assets/hero.PNG?v=2#top',
+        kind: 'image',
+        isValue: true,
+      },
+      {reference: '/template-assets/clip.mp4', kind: 'video', isValue: true},
+      {reference: '/template-assets/hero.png', kind: 'image', isValue: false},
+    ]);
+  });
+
+  it('replaces what the map returns, and keeps and does not count a reference the map returns null for', () => {
+    const source =
+      '<video poster="/template-assets/poster.jpg" src="/template-assets/clip.mp4" />';
+    expect(
+      mapFixtureRefs(source, ({reference, kind}) =>
+        kind === 'image' ? `/optimized?url=${reference}` : null,
+      ),
+    ).toEqual({
+      source:
+        '<video poster="/optimized?url=/template-assets/poster.jpg" src="/template-assets/clip.mp4" />',
+      replaced: 1,
+    });
   });
 });
 

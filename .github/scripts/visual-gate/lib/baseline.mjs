@@ -108,6 +108,44 @@ export function readBaseline(baselineDir) {
   };
 }
 
+const BASELINE_SHOT_FIELDS = [
+  'sha256',
+  'storyId',
+  'theme',
+  'mode',
+  // These two preserve ownership when a story or theme leaves the current build.
+  'packageName',
+  'themePackageName',
+  // When this shot's pixels were captured, and by which run. Shots are
+  // promoted at different times, so one manifest-wide date cannot say this.
+  'capturedAt',
+  'runId',
+];
+
+/** Keep the baseline index reviewable; all other shot facts are derived per run. */
+export function compactBaselineManifest(manifest) {
+  const shots = Object.fromEntries(
+    Object.entries(manifest.shots ?? {}).map(([key, shot]) => [
+      key,
+      Object.fromEntries(
+        BASELINE_SHOT_FIELDS.flatMap(field =>
+          shot[field] === undefined ? [] : [[field, shot[field]]],
+        ),
+      ),
+    ]),
+  );
+  return {
+    version: manifest.version ?? 1,
+    shots,
+    decisions: manifest.decisions ?? [],
+    ...(manifest.platform ? {platform: manifest.platform} : {}),
+    ...(manifest.browser ? {browser: manifest.browser} : {}),
+    ...(manifest.viewport ? {viewport: manifest.viewport} : {}),
+    ...(manifest.capturedAt ? {capturedAt: manifest.capturedAt} : {}),
+    ...(manifest.context ? {context: manifest.context} : {}),
+  };
+}
+
 /**
  * @param {string} baselineDir
  * @param {object} manifest
@@ -116,7 +154,7 @@ export function writeBaseline(baselineDir, manifest) {
   fs.mkdirSync(path.join(baselineDir, 'shots'), {recursive: true});
   fs.writeFileSync(
     path.join(baselineDir, 'manifest.json'),
-    `${JSON.stringify(manifest, null, 2)}\n`,
+    `${JSON.stringify(compactBaselineManifest(manifest))}\n`,
   );
 }
 
@@ -146,6 +184,25 @@ export function incomparable(baselineManifest, currentManifest) {
     return `baseline viewport ${a.width}x${a.height} does not match this run's ${b.width}x${b.height}.`;
   }
   return null;
+}
+
+/**
+ * The earliest capture date among the shots; a shot without one counts as
+ * `fallback`.
+ * @param {Record<string, {capturedAt?: string}>} shots
+ * @param {string | undefined} fallback
+ * @returns {string | undefined}
+ */
+function oldestCapture(shots, fallback) {
+  const dates = Object.values(shots)
+    .map(shot => shot.capturedAt ?? fallback)
+    .filter(
+      date => typeof date === 'string' && !Number.isNaN(Date.parse(date)),
+    );
+  if (dates.length === 0) return fallback;
+  return dates.reduce((oldest, date) =>
+    Date.parse(date) < Date.parse(oldest) ? date : oldest,
+  );
 }
 
 /**
@@ -226,12 +283,20 @@ export function accept({
   const shotsDir = path.join(baselineDir, 'shots');
   fs.mkdirSync(shotsDir, {recursive: true});
 
+  // A shot from before per-shot dates carries the manifest's earlier date.
+  const earlierCapturedAt = manifest.capturedAt;
+  // The run that captured the pixels, not the run that accepts them.
+  const captureRunId = currentManifest.context?.runId ?? null;
   const promoted = [];
   for (const key of keys) {
     const source = path.join(captureDir, 'shots', `${key}.png`);
     if (!fs.existsSync(source)) continue;
     fs.copyFileSync(source, path.join(shotsDir, `${key}.png`));
-    manifest.shots[key] = currentManifest.shots[key];
+    manifest.shots[key] = {
+      ...currentManifest.shots[key],
+      capturedAt: currentManifest.capturedAt,
+      ...(captureRunId ? {runId: String(captureRunId)} : {}),
+    };
     promoted.push(key);
   }
 
@@ -249,7 +314,9 @@ export function accept({
   manifest.platform = currentManifest.platform;
   manifest.browser = currentManifest.browser;
   manifest.viewport = currentManifest.viewport;
-  manifest.capturedAt = currentManifest.capturedAt;
+  // The manifest's date is its oldest shot's date. An undated shot counts at
+  // the manifest's earlier date.
+  manifest.capturedAt = oldestCapture(manifest.shots, earlierCapturedAt);
   manifest.context = currentManifest.context ?? null;
   manifest.decisions = [
     ...(manifest.decisions ?? []),

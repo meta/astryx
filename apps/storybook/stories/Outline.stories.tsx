@@ -435,9 +435,9 @@ export const NavigateCallbacks: Story = {
 };
 
 /**
- * Keyboard navigation. The outline is a single tab stop: Tab moves into it
- * once, then Arrow keys move between headings, Home/End jump to the ends, and
- * Enter or Space activates — a 40-heading TOC costs one Tab press, not 40.
+ * Keyboard navigation. Each link is in the normal Tab order: Tab moves from
+ * link to link and leaves the outline after the last one, and Enter or Space
+ * activates. There is no arrow, Home, or End movement between links.
  */
 export const KeyboardNavigation: Story = {
   render: () => (
@@ -445,7 +445,7 @@ export const KeyboardNavigation: Story = {
       style={{display: 'flex', flexDirection: 'column', gap: 16, width: 240}}>
       <button type="button">Focus me, then press Tab</button>
       <Outline items={outlineItems} />
-      <button type="button">Tab again lands here</button>
+      <button type="button">After the outline</button>
     </div>
   ),
 };

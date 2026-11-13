@@ -203,6 +203,26 @@ describe('useHotkeys', () => {
     expect(onPress).not.toHaveBeenCalled();
   });
 
+  it('ignores IME enter keys, but triggers callback on valid enter', () => {
+    const onPress = vi.fn();
+    renderHook(() =>
+      useHotkeys([{keys: 'enter', onPress, allowInInputs: true}]),
+    );
+    const target = document.createElement('textarea');
+    document.body.appendChild(target);
+    const compositionEvent = press('Enter', {target, isComposing: true});
+    expect(onPress).not.toHaveBeenCalled();
+    expect(compositionEvent.defaultPrevented).toBe(false);
+
+    const keyCodeEvent = press('Enter', {target, keyCode: 229});
+    expect(onPress).not.toHaveBeenCalled();
+    expect(keyCodeEvent.defaultPrevented).toBe(false);
+
+    const validEvent = press('Enter', {target});
+    expect(onPress).toHaveBeenCalledExactlyOnceWith(validEvent);
+    expect(validEvent.defaultPrevented).toBe(true);
+  });
+
   it('does not re-subscribe on re-render, but uses latest handlers', () => {
     stubApplePlatform();
     const addSpy = vi.spyOn(window, 'addEventListener');

@@ -123,6 +123,34 @@ export const DIAGNOSTIC_CODES = Object.freeze(
       remediation:
         'Point the token reference at a topic and section that exist; `astryx docs <topic> --index` lists the section keys.',
     },
+    invalid_namespace: {
+      phase: 'link',
+      severity: 'error',
+      scope: 'node',
+      remediation:
+        'Give each namespace a route-safe name (lowercase letters and digits joined by hyphens) that no other namespace in its package uses.',
+    },
+    invalid_placement: {
+      phase: 'link',
+      severity: 'error',
+      scope: 'node',
+      remediation:
+        'Point placement.parent at a namespace of the same package ("namespace:<name>"), name one of its slots, and use a slot that accepts the doc\'s kind; `astryx docs authoring namespace-doc` lists the fields.',
+    },
+    overlapping_adoption: {
+      phase: 'link',
+      severity: 'error',
+      scope: 'node',
+      remediation:
+        'Change the adoption rules so exactly one namespace adopts the doc, or give the doc an explicit placement.',
+    },
+    duplicate_route: {
+      phase: 'link',
+      severity: 'error',
+      scope: 'node',
+      remediation:
+        'Rename or move one of the two docs, so each route in the docs tree belongs to one doc.',
+    },
     not_json: {
       phase: 'serialize',
       severity: 'error',

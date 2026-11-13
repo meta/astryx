@@ -9,8 +9,13 @@
  * SYNC: When TopNav components change, update tests to match new behavior
  */
 
+import {createRef, useState} from 'react';
+import * as stylex from '@stylexjs/stylex';
 import {describe, it, expect, vi} from 'vitest';
 import {fireEvent, render, screen, act} from '@testing-library/react';
+import {__resetMenuPressForTest} from '../hooks/useMenuPress';
+import {expectNativeLinkClicks} from '../hooks/__tests__/menuLinkClicks';
+import {NavHeadingMenu, NavHeadingMenuItem} from '../NavMenu';
 import userEvent from '@testing-library/user-event';
 import {TopNav} from './TopNav';
 import {TopNavRenderContext} from './TopNavRenderContext';
@@ -19,6 +24,9 @@ import {NavIcon} from '../NavIcon';
 import {TopNavItem} from './TopNavItem';
 import {TopNavMegaMenuFeaturedCard} from './TopNavMegaMenuFeaturedCard';
 import {LinkProvider} from '../Link/LinkProvider';
+import {InternationalizationProvider} from '../i18n/InternationalizationProvider';
+import koreanCatalog from '../../locales/ko-KR.json';
+import {rtlStyles} from '../utils';
 
 function CustomLink({
   children,
@@ -205,6 +213,18 @@ describe('TopNav', () => {
     // positioning context for the mega menu panel.
     expect(nav).not.toHaveStyle({position: 'relative'});
   });
+
+  it('lets the heading column shrink so a long heading can truncate', () => {
+    render(
+      <TopNav
+        label="Main navigation"
+        heading={<span>A very long product name</span>}
+        endContent={<span>End</span>}
+      />,
+    );
+    const column = screen.getByText('A very long product name').parentElement!;
+    expect(getComputedStyle(column).flexShrink).toBe('1');
+  });
 });
 
 describe('TopNavHeading', () => {
@@ -227,6 +247,93 @@ describe('TopNavHeading', () => {
     );
     expect(screen.getByText('Dashboard')).toBeInTheDocument();
     expect(screen.getByTestId('logo')).toBeInTheDocument();
+  });
+
+  // jsdom does not place grid items, so this locks the track that puts
+  // headerEndContent at the inline end when the root is wider than its parts.
+  it('gives the text track the free space so header end content sits at the inline end', () => {
+    const {rerender} = render(
+      <TopNavHeading
+        logo={<span>Logo</span>}
+        heading="Product"
+        headerEndContent={<span>End</span>}
+      />,
+    );
+    const withLogo = screen
+      .getByText('Product')
+      .closest('.astryx-top-nav-heading');
+    expect(withLogo).not.toBeNull();
+    expect(getComputedStyle(withLogo!).gridTemplateColumns).toBe(
+      'auto minmax(0,1fr)',
+    );
+
+    rerender(
+      <TopNavHeading heading="Product" headerEndContent={<span>End</span>} />,
+    );
+    const textOnly = screen
+      .getByText('Product')
+      .closest('.astryx-top-nav-heading');
+    expect(getComputedStyle(textOnly!).gridTemplateColumns).toBe(
+      'minmax(0,1fr)',
+    );
+  });
+
+  it('clips each linked line inside its column and leaves the column overflow visible', () => {
+    render(
+      <TopNavHeading
+        superheading="Suite"
+        superheadingHref="/suite"
+        heading="Product"
+        headingHref="/product"
+        subheading="Account"
+        subheadingHref="/account"
+      />,
+    );
+    for (const name of ['Suite', 'Product', 'Account']) {
+      const link = screen.getByRole('link', {name});
+      const style = getComputedStyle(link);
+      expect(style.overflow).toBe('hidden');
+      expect(style.minWidth).toBe('0');
+      expect(style.maxWidth).toBe('100%');
+    }
+    // The column itself is not a clip, so the link's own focus ring can paint.
+    const column = screen.getByRole('link', {name: 'Product'}).parentElement;
+    expect(getComputedStyle(column!).overflow).toBe('');
+  });
+
+  it('counts the chevron row in the text track when the heading has a menu', () => {
+    const {rerender} = render(
+      <TopNavHeading
+        logo={<span>Logo</span>}
+        heading="Product"
+        menu={<div>Menu</div>}
+      />,
+    );
+    const withLogo = document.querySelector('.astryx-top-nav-heading');
+    expect(getComputedStyle(withLogo!).gridTemplateColumns).toBe(
+      'auto minmax(calc(var(--spacing-7) + var(--spacing-1)),1fr)',
+    );
+
+    rerender(<TopNavHeading heading="Product" menu={<div>Menu</div>} />);
+    const textOnly = document.querySelector('.astryx-top-nav-heading');
+    expect(getComputedStyle(textOnly!).gridTemplateColumns).toBe(
+      'minmax(calc(var(--spacing-7) + var(--spacing-1)),1fr)',
+    );
+  });
+
+  it('gives a logo-only heading a single track', () => {
+    render(
+      <TopNavHeading
+        logo={<span>Logo</span>}
+        headingHref="/home"
+        logoLabel="Home"
+      />,
+    );
+    const root = screen.getByRole('link', {name: 'Home'});
+    expect(root).toHaveClass('astryx-top-nav-heading');
+    expect(getComputedStyle(root).display).toBe('grid');
+    expect(getComputedStyle(root).gridTemplateColumns).toBe('');
+    expect(root.childElementCount).toBe(1);
   });
 
   describe('logo link accessible name', () => {
@@ -298,6 +405,51 @@ describe('TopNavHeading', () => {
     expect(ref).toHaveBeenCalledWith(expect.any(HTMLElement));
   });
 
+  it('includes the visible heading in the menu trigger name without hrefs', () => {
+    render(<TopNavHeading heading="Acme" menu={<div>Menu content</div>} />);
+    expect(screen.getByRole('button')).toHaveAccessibleName('Acme, Open menu');
+  });
+
+  it('includes the heading in the translated menu trigger name with independent links', () => {
+    render(
+      <InternationalizationProvider
+        locale="ko-KR"
+        messages={{'ko-KR': koreanCatalog}}>
+        <TopNavHeading
+          heading="Acme"
+          headingHref="/acme"
+          menu={<div>Menu content</div>}
+        />
+      </InternationalizationProvider>,
+    );
+    expect(screen.getByRole('button')).toHaveAccessibleName('Acme, 메뉴 열기');
+    expect(screen.getByRole('link', {name: 'Acme'})).toHaveAttribute(
+      'href',
+      '/acme',
+    );
+  });
+
+  it('keeps the translated generic menu trigger name when the optional heading is absent or empty', () => {
+    const menu = <div>Menu content</div>;
+    const {rerender} = render(
+      <InternationalizationProvider
+        locale="ko-KR"
+        messages={{'ko-KR': koreanCatalog}}>
+        <TopNavHeading menu={menu} />
+      </InternationalizationProvider>,
+    );
+    expect(screen.getByRole('button')).toHaveAccessibleName('메뉴 열기');
+
+    rerender(
+      <InternationalizationProvider
+        locale="ko-KR"
+        messages={{'ko-KR': koreanCatalog}}>
+        <TopNavHeading heading="" menu={menu} />
+      </InternationalizationProvider>,
+    );
+    expect(screen.getByRole('button')).toHaveAccessibleName('메뉴 열기');
+  });
+
   // ===========================================================================
   // Menu popover semantics — the popup must not be announced as a modal
   // dialog, and role="menu" must be scoped to the actual menu items so the
@@ -315,10 +467,123 @@ describe('TopNavHeading', () => {
       </>
     );
 
+    it('acts on the product-menu item a press slid across it lifts on, once (family:action-groups FR1, FR2, FR5)', async () => {
+      __resetMenuPressForTest();
+      const user = userEvent.setup();
+      const onFirst = vi.fn();
+      const onSecond = vi.fn();
+      render(
+        <TopNavHeading
+          heading="My App"
+          menu={
+            <>
+              <div role="menuitem" tabIndex={-1} onClick={onFirst}>
+                Alpha
+              </div>
+              <div role="menuitem" tabIndex={-1} onClick={onSecond}>
+                Beta
+              </div>
+            </>
+          }
+        />,
+      );
+      await user.click(screen.getByRole('button', {name: /Open menu/}));
+      const FIRST = 'Alpha';
+      const SECOND = 'Beta';
+      const item = (name: string) =>
+        screen.getByRole('menuitem', {name, hidden: true});
+      for (const pointer of [
+        {pointerType: 'touch', pointerId: 1},
+        {pointerType: 'mouse', pointerId: 2, button: 0},
+      ]) {
+        onFirst.mockClear();
+        onSecond.mockClear();
+        fireEvent.pointerDown(item(FIRST), pointer);
+        fireEvent.pointerMove(item(SECOND), pointer);
+        fireEvent.pointerUp(item(SECOND), pointer);
+        expect(onSecond).toHaveBeenCalledTimes(1);
+        expect(onFirst).not.toHaveBeenCalled();
+      }
+    });
+
+    it('leaves a Ctrl-, Cmd-, Shift- or middle click on a link item in its product menu to the browser', async () => {
+      __resetMenuPressForTest();
+      const user = userEvent.setup();
+      render(
+        <TopNavHeading
+          heading="My App"
+          menu={
+            <NavHeadingMenu>
+              <NavHeadingMenuItem label="Docs" href="/docs" />
+              <NavHeadingMenuItem label="Status" href="/status" />
+            </NavHeadingMenu>
+          }
+        />,
+      );
+      await user.click(screen.getByRole('button', {name: /Open menu/}));
+      expectNativeLinkClicks(
+        screen.getByRole('menuitem', {name: 'Docs', hidden: true}),
+      );
+    });
+
+    it('moves focus one item per arrow key in a NavHeadingMenu (APG menu)', async () => {
+      __resetMenuPressForTest();
+      const user = userEvent.setup();
+      render(
+        <TopNavHeading
+          heading="My App"
+          menu={
+            <NavHeadingMenu>
+              <NavHeadingMenuItem label="One" onClick={() => {}} />
+              <NavHeadingMenuItem label="Two" onClick={() => {}} />
+              <NavHeadingMenuItem label="Three" onClick={() => {}} />
+            </NavHeadingMenu>
+          }
+        />,
+      );
+      await user.click(screen.getByRole('button', {name: /Open menu/}));
+      const item = (name: string) =>
+        screen.getByRole('menuitem', {name, hidden: true});
+      item('One').focus();
+      fireEvent.keyDown(item('One'), {key: 'ArrowDown'});
+      expect(item('Two')).toHaveFocus();
+      fireEvent.keyDown(item('Two'), {key: 'ArrowDown'});
+      expect(item('Three')).toHaveFocus();
+      fireEvent.keyDown(item('Three'), {key: 'ArrowUp'});
+      expect(item('Two')).toHaveFocus();
+    });
+
+    it('after a pointer pick, returns focus to the trigger without a keyboard ring (interaction-modality INV1)', async () => {
+      __resetMenuPressForTest();
+      const user = userEvent.setup();
+      render(
+        <TopNavHeading
+          heading="My App"
+          menu={
+            <NavHeadingMenu>
+              <NavHeadingMenuItem label="Alpha" onClick={() => {}} />
+              <NavHeadingMenuItem label="Beta" onClick={() => {}} />
+            </NavHeadingMenu>
+          }
+        />,
+      );
+      const trigger = screen.getByRole('button', {name: /Open menu/});
+      await user.click(trigger);
+      const focusSpy = vi.spyOn(trigger, 'focus');
+      const alpha = screen.getByRole('menuitem', {name: 'Alpha', hidden: true});
+      const mouse = {pointerType: 'mouse', pointerId: 4, button: 0};
+      alpha.focus();
+      fireEvent.pointerDown(alpha, mouse);
+      fireEvent.pointerUp(alpha, mouse);
+      expect(focusSpy).toHaveBeenCalledWith(
+        expect.objectContaining({focusVisible: false}),
+      );
+    });
+
     it('does not wrap the heading menu popup in a modal dialog', async () => {
       const user = userEvent.setup();
       render(<TopNavHeading heading="My App" menu={menuItems} />);
-      await user.click(screen.getByRole('button', {name: 'Open menu'}));
+      await user.click(screen.getByRole('button', {name: /Open menu/}));
       expect(document.querySelector('[role="dialog"]')).toBeNull();
       expect(document.querySelector('[aria-modal="true"]')).toBeNull();
     });
@@ -326,7 +591,7 @@ describe('TopNavHeading', () => {
     it('scopes role="menu" to only menuitem children with an accessible name', async () => {
       const user = userEvent.setup();
       render(<TopNavHeading heading="My App" menu={menuItems} />);
-      await user.click(screen.getByRole('button', {name: 'Open menu'}));
+      await user.click(screen.getByRole('button', {name: /Open menu/}));
       const menu = document.querySelector('[role="menu"]');
       expect(menu).not.toBeNull();
       expect(menu).toHaveAttribute('aria-label', 'My App');
@@ -340,7 +605,7 @@ describe('TopNavHeading', () => {
     it('keeps the popup heading button outside the menu and closes on click', async () => {
       const user = userEvent.setup();
       render(<TopNavHeading heading="My App" menu={menuItems} />);
-      const trigger = screen.getByRole('button', {name: 'Open menu'});
+      const trigger = screen.getByRole('button', {name: /Open menu/});
       await user.click(trigger);
       expect(trigger).toHaveAttribute('aria-expanded', 'true');
       const menu = document.querySelector('[role="menu"]');
@@ -366,7 +631,7 @@ describe('TopNavHeading', () => {
           menu={menuItems}
         />,
       );
-      await user.click(screen.getByRole('button', {name: 'Open menu'}));
+      await user.click(screen.getByRole('button', {name: /Open menu/}));
       expect(document.querySelector('[role="dialog"]')).toBeNull();
       const menu = document.querySelector('[role="menu"]');
       expect(menu).not.toBeNull();
@@ -403,6 +668,317 @@ describe('TopNavItem', () => {
     expect(link).toHaveAttribute('href', '/');
   });
 
+  it('preserves the custom link-renderer path for an explicit empty href', () => {
+    render(
+      <TopNavItem
+        label="Current page"
+        href=""
+        onClick={vi.fn()}
+        as={CustomLink}
+      />,
+    );
+    expect(screen.getByText('Current page')).toHaveAttribute(
+      'data-custom-link',
+    );
+  });
+
+  it('makes an onClick-only bar item a keyboard button without changing its anchor host', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    const onSubmit = vi.fn(event => {
+      event.preventDefault();
+    });
+    render(
+      <form onSubmit={onSubmit}>
+        <TopNavItem label="Feedback" onClick={onClick} />
+      </form>,
+    );
+    const action = screen.getByRole('button', {name: 'Feedback'});
+    expect(action.tagName).toBe('A');
+    expect(action).toHaveAttribute('role', 'button');
+    await user.tab();
+    expect(action).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(onClick).toHaveBeenCalledTimes(1);
+    await user.keyboard(' ');
+    expect(onClick).toHaveBeenCalledTimes(2);
+    await user.click(action);
+    expect(onClick).toHaveBeenCalledTimes(3);
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('makes an onClick-only drawer item keyboard operable', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <TopNavRenderContext value="drawer">
+        <TopNavItem label="Feedback" onClick={onClick} />
+      </TopNavRenderContext>,
+    );
+    const action = screen.getByRole('button', {name: 'Feedback'});
+    expect(action.tagName).toBe('A');
+    expect(action).toHaveAttribute('role', 'button');
+    await user.tab();
+    expect(action).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(onClick).toHaveBeenCalledTimes(1);
+    await user.keyboard(' ');
+    expect(onClick).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps bar action defaults when optional DOM props are undefined', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <TopNavItem
+        label="Feedback"
+        onClick={onClick}
+        role={undefined}
+        tabIndex={undefined}
+      />,
+    );
+    const action = screen.getByRole('button', {name: 'Feedback'});
+    await user.tab();
+    expect(action).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(onClick).toHaveBeenCalledOnce();
+  });
+
+  it('keeps drawer action defaults when optional DOM props are undefined', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <TopNavRenderContext value="drawer">
+        <TopNavItem
+          label="Feedback"
+          onClick={onClick}
+          role={undefined}
+          tabIndex={undefined}
+        />
+      </TopNavRenderContext>,
+    );
+    const action = screen.getByRole('button', {name: 'Feedback'});
+    await user.tab();
+    expect(action).toHaveFocus();
+    await user.keyboard(' ');
+    expect(onClick).toHaveBeenCalledOnce();
+  });
+
+  it('forwards action refs and DOM props through the existing custom link renderer', () => {
+    const ref = createRef<HTMLAnchorElement>();
+    const onMouseEnter = vi.fn();
+    const customLink = vi.fn(CustomLink);
+    render(
+      <LinkProvider component={customLink}>
+        <TopNavItem
+          label="Feedback"
+          onClick={vi.fn()}
+          as={customLink}
+          ref={ref}
+          id="feedback"
+          tabIndex={-1}
+          data-source="navigation"
+          className="consumer-action"
+          style={{marginInlineStart: 4}}
+          onMouseEnter={onMouseEnter}
+        />
+      </LinkProvider>,
+    );
+    const action = screen.getByRole('button', {name: 'Feedback'});
+    expect(ref.current).toBe(action);
+    expect(action).toHaveAttribute('id', 'feedback');
+    expect(action).toHaveAttribute('tabindex', '-1');
+    expect(action).toHaveAttribute('data-source', 'navigation');
+    expect(action).toHaveClass('consumer-action');
+    expect(action.style.marginInlineStart).toBe('4px');
+    fireEvent.mouseEnter(action);
+    expect(onMouseEnter).toHaveBeenCalledOnce();
+    expect(action).toHaveAttribute('data-custom-link');
+    expect(customLink).toHaveBeenCalled();
+  });
+
+  it('activates an action on Enter down and Space release, without repeated Space activation', () => {
+    const onClick = vi.fn();
+    render(<TopNavItem label="Feedback" onClick={onClick} />);
+    const action = screen.getByRole('button', {name: 'Feedback'});
+    expect(fireEvent.keyDown(action, {key: 'Enter'})).toBe(false);
+    expect(onClick).toHaveBeenCalledTimes(1);
+    fireEvent.keyUp(action, {key: 'Enter'});
+    expect(fireEvent.keyDown(action, {key: ' '})).toBe(false);
+    expect(fireEvent.keyDown(action, {key: ' ', repeat: true})).toBe(false);
+    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(fireEvent.keyUp(action, {key: ' '})).toBe(false);
+    expect(onClick).toHaveBeenCalledTimes(2);
+    fireEvent.keyUp(action, {key: ' '});
+    expect(onClick).toHaveBeenCalledTimes(2);
+  });
+
+  it('lets a caller keydown handler cancel Enter and Space activation', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    const onKeyDown = vi.fn(event => {
+      event.preventDefault();
+    });
+    render(
+      <TopNavItem label="Feedback" onClick={onClick} onKeyDown={onKeyDown} />,
+    );
+    await user.tab();
+    await user.keyboard('{Enter} ');
+    expect(onKeyDown).toHaveBeenCalledTimes(2);
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it('lets a caller keyup handler cancel Space activation', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    const onKeyUp = vi.fn(event => {
+      event.preventDefault();
+    });
+    render(<TopNavItem label="Feedback" onClick={onClick} onKeyUp={onKeyUp} />);
+    await user.tab();
+    await user.keyboard(' ');
+    expect(
+      onKeyUp.mock.calls.filter(([event]) => event.key === ' '),
+    ).toHaveLength(1);
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it('cancels a pending Space action when focus leaves and forwards blur', () => {
+    const onClick = vi.fn();
+    const onBlur = vi.fn();
+    render(<TopNavItem label="Feedback" onClick={onClick} onBlur={onBlur} />);
+    const action = screen.getByRole('button', {name: 'Feedback'});
+    fireEvent.keyDown(action, {key: ' '});
+    fireEvent.blur(action);
+    fireEvent.keyUp(action, {key: ' '});
+    expect(onBlur).toHaveBeenCalledOnce();
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it('does not carry a pending Space action to a replacement custom-link node', () => {
+    function ReplacingLink(props: React.ComponentPropsWithRef<'a'>) {
+      const [version, setVersion] = useState(0);
+      return (
+        <a
+          key={version}
+          {...props}
+          onDoubleClick={() => setVersion(value => value + 1)}
+        />
+      );
+    }
+    const onClick = vi.fn();
+    render(
+      <TopNavItem label="Feedback" onClick={onClick} as={ReplacingLink} />,
+    );
+    const previous = screen.getByRole('button', {name: 'Feedback'});
+    fireEvent.keyDown(previous, {key: ' '});
+    fireEvent.doubleClick(previous);
+    const current = screen.getByRole('button', {name: 'Feedback'});
+    expect(current).not.toBe(previous);
+    expect(previous).not.toBeInTheDocument();
+    fireEvent.keyUp(current, {key: ' '});
+    expect(onClick).not.toHaveBeenCalled();
+    fireEvent.keyDown(current, {key: ' '});
+    fireEvent.keyUp(current, {key: ' '});
+    expect(onClick).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the custom action host focused and inert when disabled', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    const {rerender} = render(
+      <TopNavItem label="Feedback" onClick={onClick} as={CustomLink} />,
+    );
+    const action = screen.getByRole('button', {name: 'Feedback'});
+    await user.tab();
+    rerender(
+      <TopNavItem
+        label="Feedback"
+        onClick={onClick}
+        as={CustomLink}
+        isDisabled
+      />,
+    );
+    expect(screen.getByRole('button', {name: 'Feedback'})).toBe(action);
+    expect(action).toHaveAttribute('data-custom-link');
+    expect(action).toHaveFocus();
+    await user.keyboard('{Enter} ');
+    expect(fireEvent.click(action)).toBe(false);
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it('preserves inferred anchor-specific click targets and callback refs', () => {
+    const onClick = vi.fn();
+    const onRef = vi.fn();
+    render(
+      <TopNavItem
+        label="Feedback"
+        href="/feedback"
+        onClick={event => {
+          event.preventDefault();
+          onClick(event.currentTarget.href);
+        }}
+        ref={node => {
+          if (node) {
+            onRef(node.href);
+          }
+        }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('link', {name: 'Feedback'}));
+    expect(onClick).toHaveBeenCalledOnce();
+    expect(onClick).toHaveBeenCalledWith(expect.stringMatching(/\/feedback$/));
+    expect(onRef).toHaveBeenCalledWith(expect.stringMatching(/\/feedback$/));
+  });
+
+  it('keeps a focused action mounted and inert when disabled', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    const onKeyDown = vi.fn();
+    const {rerender} = render(
+      <TopNavItem label="Feedback" onClick={onClick} onKeyDown={onKeyDown} />,
+    );
+    const action = screen.getByRole('button', {name: 'Feedback'});
+    await user.tab();
+    expect(action).toHaveFocus();
+    rerender(
+      <TopNavItem
+        label="Feedback"
+        onClick={onClick}
+        onKeyDown={onKeyDown}
+        isDisabled
+      />,
+    );
+    expect(screen.getByRole('button', {name: 'Feedback'})).toBe(action);
+    expect(action).toHaveFocus();
+    expect(action).toHaveAttribute('aria-disabled', 'true');
+    expect(action).not.toHaveAttribute('disabled');
+    await user.keyboard('{Enter} ');
+    expect(fireEvent.click(action)).toBe(false);
+    expect(onClick).not.toHaveBeenCalled();
+    // A disabled item runs no caller handler except onFocus and onBlur.
+    await user.keyboard('{Escape}');
+    expect(onKeyDown).not.toHaveBeenCalled();
+  });
+
+  it('keeps an initially disabled drawer action in its tab order without activating', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <TopNavRenderContext value="drawer">
+        <TopNavItem label="Feedback" onClick={onClick} isDisabled />
+      </TopNavRenderContext>,
+    );
+    const action = screen.getByRole('button', {name: 'Feedback'});
+    await user.tab();
+    expect(action).toHaveFocus();
+    expect(action).toHaveAttribute('aria-disabled', 'true');
+    expect(action).not.toHaveAttribute('disabled');
+    await user.keyboard('{Enter} ');
+    expect(fireEvent.click(action)).toBe(false);
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
   it('renders children instead of label when provided', () => {
     render(<TopNavItem label="Accessible name">Custom content</TopNavItem>);
     expect(screen.getByText('Custom content')).toBeInTheDocument();
@@ -426,12 +1002,14 @@ describe('TopNavItem', () => {
     );
   });
 
-  it('sets tabIndex to -1 when disabled', () => {
+  it('keeps its tab stop and link role when disabled (spec:AST-085 FR1, FR5)', async () => {
+    const user = userEvent.setup();
     render(<TopNavItem label="Home" href="#" isDisabled />);
-    expect(screen.getByText('Home').closest('a')).toHaveAttribute(
-      'tabIndex',
-      '-1',
-    );
+    const item = screen.getByRole('link', {name: 'Home'});
+    expect(item).toHaveAttribute('aria-disabled', 'true');
+    expect(item).toHaveAttribute('tabIndex', '0');
+    await user.tab();
+    expect(item).toHaveFocus();
   });
 
   describe('disabled items do not navigate', () => {
@@ -446,14 +1024,13 @@ describe('TopNavItem', () => {
           isDisabled
         />,
       );
-      // An href-less anchor exposes no link role, so it is not announced
-      // with a live destination.
-      expect(screen.queryByRole('link')).not.toBeInTheDocument();
-      const item = screen.getByText('Home').closest('a') as HTMLAnchorElement;
+      // The href-less anchor keeps the link role and its tab stop, so it is
+      // found and announced as disabled, with no live destination.
+      const item = screen.getByRole('link', {name: 'Home'});
       expect(item).not.toHaveAttribute('href');
       expect(item).not.toHaveAttribute('target');
       expect(item).toHaveAttribute('aria-disabled', 'true');
-      expect(item).toHaveAttribute('tabIndex', '-1');
+      expect(item).toHaveAttribute('tabIndex', '0');
 
       // fireEvent bypasses pointer-events: none, simulating programmatic/AT
       // activation. It returns false when preventDefault was called, i.e.
@@ -476,18 +1053,105 @@ describe('TopNavItem', () => {
           />
         </TopNavRenderContext>,
       );
-      expect(screen.queryByRole('link')).not.toBeInTheDocument();
-      const item = screen.getByText('Home').closest('a') as HTMLAnchorElement;
+      const item = screen.getByRole('link', {name: 'Home'});
       expect(item).not.toHaveAttribute('href');
       expect(item).not.toHaveAttribute('target');
       expect(item).toHaveAttribute('aria-disabled', 'true');
-      expect(item).toHaveAttribute('tabIndex', '-1');
+      expect(item).toHaveAttribute('tabIndex', '0');
 
       // fireEvent bypasses pointer-events: none, simulating programmatic/AT
       // activation. It returns false when preventDefault was called.
       const notCancelled = fireEvent.click(item);
       expect(notCancelled).toBe(false);
       expect(handleClick).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['default', undefined],
+      ['drawer', 'drawer' as const],
+    ])(
+      'stays inert from the keyboard once focused (%s mode)',
+      async (_name, mode) => {
+        const user = userEvent.setup();
+        const handleClick = vi.fn();
+        const handleKeyDown = vi.fn();
+        const item = (
+          <TopNavItem
+            label="Home"
+            href="/home"
+            onClick={handleClick}
+            onKeyDown={handleKeyDown}
+            isDisabled
+          />
+        );
+        render(
+          mode ? (
+            <TopNavRenderContext value={mode}>{item}</TopNavRenderContext>
+          ) : (
+            item
+          ),
+        );
+        await user.tab();
+        expect(screen.getByRole('link', {name: 'Home'})).toHaveFocus();
+        await user.keyboard('{Enter}');
+        await user.keyboard(' ');
+        expect(handleClick).not.toHaveBeenCalled();
+        expect(handleKeyDown).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([
+      ['default', null],
+      ['drawer', 'drawer' as const],
+    ])(
+      'does not run a disabled item’s caller handlers (%s mode)',
+      (_name, mode) => {
+        const onPointerDown = vi.fn();
+        const onMouseDown = vi.fn();
+        const onKeyDown = vi.fn();
+        const item = (
+          <TopNavItem
+            label="Home"
+            href="/home"
+            isDisabled
+            onPointerDown={onPointerDown}
+            onMouseDown={onMouseDown}
+            onKeyDown={onKeyDown}
+          />
+        );
+        render(
+          mode ? (
+            <TopNavRenderContext value={mode}>{item}</TopNavRenderContext>
+          ) : (
+            item
+          ),
+        );
+        const anchor = screen.getByText('Home').closest('a') as HTMLElement;
+        fireEvent.pointerDown(anchor);
+        fireEvent.mouseDown(anchor);
+        fireEvent.keyDown(anchor, {key: 'x'});
+        expect(onPointerDown).not.toHaveBeenCalled();
+        expect(onMouseDown).not.toHaveBeenCalled();
+        expect(onKeyDown).not.toHaveBeenCalled();
+      },
+    );
+
+    it('still runs an enabled item’s caller handlers', () => {
+      const onPointerDown = vi.fn();
+      const onKeyDown = vi.fn();
+      render(
+        <TopNavItem
+          label="Home"
+          href="/home"
+          onPointerDown={onPointerDown}
+          onKeyDown={onKeyDown}
+        />,
+      );
+      const anchor = screen.getByText('Home').closest('a') as HTMLElement;
+      fireEvent.pointerDown(anchor);
+      fireEvent.keyDown(anchor, {key: 'x'});
+      expect(onPointerDown).toHaveBeenCalledTimes(1);
+      expect(onKeyDown).toHaveBeenCalledTimes(1);
     });
 
     it('keeps href and click behavior for enabled items (default mode)', async () => {
@@ -658,6 +1322,35 @@ describe('TopNavItem', () => {
       const link = screen.getByRole('link', {name: /Read the announcement/});
       expect(link).toHaveAttribute('href', '/blog/v4');
     });
+
+    // design:bidirectionality DR4: the arrow points toward the inline end, so
+    // it mirrors in RTL. jsdom does not apply compiled StyleX CSS, so this pins
+    // the structure the mirror relies on: the arrow sits in its own element
+    // carrying the shared rtlStyles.mirror, and the link name is unchanged.
+    it('wraps the link arrow in the shared RTL mirror', () => {
+      const {className: mirrorClassName} = stylex.props(rtlStyles.mirror);
+      const mirrorClasses = mirrorClassName?.split(' ') ?? [];
+      expect(mirrorClasses.length).toBeGreaterThan(0);
+      render(
+        <div dir="rtl">
+          <TopNavMegaMenuFeaturedCard
+            title="What's new"
+            linkLabel="Read the announcement"
+            linkHref="/blog/v4"
+          />
+        </div>,
+      );
+      const link = screen.getByRole('link', {
+        name: 'Read the announcement →',
+      });
+      const arrow = Array.from(link.querySelectorAll('span')).find(
+        span => span.textContent === '→',
+      );
+      expect(arrow).toBeDefined();
+      for (const className of mirrorClasses) {
+        expect(arrow).toHaveClass(className);
+      }
+    });
   });
 });
 
@@ -679,7 +1372,7 @@ describe('TopNavHeading hover/click guard', () => {
     vi.useFakeTimers({shouldAdvanceTime: true});
     const user = userEvent.setup({advanceTimers: vi.advanceTimersByTime});
     render(<TopNavHeading heading="My App" menu={menuItems} />);
-    const trigger = screen.getByRole('button', {name: 'Open menu'});
+    const trigger = screen.getByRole('button', {name: /Open menu/});
 
     await user.hover(trigger);
     act(() => {
@@ -697,7 +1390,7 @@ describe('TopNavHeading hover/click guard', () => {
     vi.useFakeTimers({shouldAdvanceTime: true});
     const user = userEvent.setup({advanceTimers: vi.advanceTimersByTime});
     render(<TopNavHeading heading="My App" menu={menuItems} />);
-    const trigger = screen.getByRole('button', {name: 'Open menu'});
+    const trigger = screen.getByRole('button', {name: /Open menu/});
 
     await user.hover(trigger);
     act(() => {
@@ -717,7 +1410,7 @@ describe('TopNavHeading hover/click guard', () => {
     vi.useFakeTimers({shouldAdvanceTime: true});
     const user = userEvent.setup({advanceTimers: vi.advanceTimersByTime});
     render(<TopNavHeading heading="My App" menu={menuItems} />);
-    const trigger = screen.getByRole('button', {name: 'Open menu'});
+    const trigger = screen.getByRole('button', {name: /Open menu/});
 
     await user.hover(trigger);
     act(() => {
@@ -735,7 +1428,7 @@ describe('TopNavHeading hover/click guard', () => {
   it('returns focus to the trigger on Escape', async () => {
     const user = userEvent.setup();
     render(<TopNavHeading heading="My App" menu={menuItems} />);
-    const trigger = screen.getByRole('button', {name: 'Open menu'});
+    const trigger = screen.getByRole('button', {name: /Open menu/});
 
     await user.click(trigger);
     expect(trigger).toHaveAttribute('aria-expanded', 'true');

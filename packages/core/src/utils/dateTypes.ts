@@ -22,13 +22,7 @@ export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6;
  * A more self-documenting alternative to the numeric {@link DayOfWeek}.
  */
 export type DayOfWeekName =
-  | 'sun'
-  | 'mon'
-  | 'tue'
-  | 'wed'
-  | 'thu'
-  | 'fri'
-  | 'sat';
+  'sun' | 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat';
 
 /** Weekday names indexed by {@link DayOfWeek} (0 = Sunday). */
 const WEEKDAY_NAMES: ReadonlyArray<DayOfWeekName> = [
