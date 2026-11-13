@@ -2,7 +2,7 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] Under a finger, the calendar in the DateInput and DateTimeInput bottom sheets now pages its months like the iOS date picker:
+[fix] On a phone or tablet (a coarse primary pointer), the calendar in the DateInput and DateTimeInput bottom sheets now pages its months like the iOS date picker:
 
 - A swipe moves at most one month, chosen at the lift by iOS's paging rule: a quick flick, or a drag past half a month. It settles on iOS's paging curve.
 - The month title follows the drag and the settle. It changes when the next month is more than half in view.
@@ -11,6 +11,6 @@
 - A horizontal trackpad swipe moves the calendar with it and pages at the release, like a drag.
 - With Reduce Motion on, the arrows' step and a swipe's settle cross-fade in 200 ms instead of travelling.
 
-With a mouse, the calendar still scrolls natively. With any pointer, PageUp and PageDown now move the keyboard focus by a month, and by a year with Shift.
+Where the primary pointer is a mouse or trackpad, the calendar still scrolls natively. With any pointer, PageUp and PageDown now move the keyboard focus by a month, and by a year with Shift.
 
 @vjeux
