@@ -35,6 +35,7 @@ import {fileURLToPath} from 'node:url';
 import {spawn} from 'node:child_process';
 import {
   getCliInvocation,
+  commandInFolder,
   quoteCommandArgument,
 } from '../../../foundation/env/package-manager.mjs';
 import {isOutsideProject} from '../../../foundation/env/project-scope.mjs';
@@ -77,11 +78,14 @@ import {
 import {
   printBatchTrailer,
   printCompactTrailer,
-  themeBuild,
+  setEditorFolderListener,
+  setPrivateVarErrorListener,
   themeBuildFamily,
   themeBuildForReport,
+  themeBuildWithHandOff,
   themeSourceFiles,
   themeSourceGuesses,
+  buildSuggestion,
   writeDeferredBuildOutputs,
 } from '../../../api/theme/build/build.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
@@ -115,8 +119,10 @@ import {doc as themePaletteGenerateFn} from '../../../api/theme/themePaletteGene
  * @property {string} group - The group's command path: `theme` or `experimental theme`.
  * @property {string} build - The build subcommand's name: `build` or `compile`.
  * @property {(err: import('../../../api/error.mjs').AstryxError, cwd: string) => import('../../../api/error.mjs').AstryxError | null} [explain] - A clearer refusal for this group, or null.
- * @property {(files: string[], options: {cwd: string, check?: boolean, family?: boolean}) => Promise<import('../../../api/error.mjs').AstryxError | null>} [preflight] - A refusal before a build starts, or null.
+ * @property {(files: string[], options: {cwd: string, check?: boolean, family?: boolean, iconsSpecifier?: string, out?: string}) => Promise<import('../../../api/error.mjs').AstryxError | null>} [preflight] - A refusal before a build starts, or null.
  * @property {(files: string[], options: {cwd: string}) => Promise<() => Promise<void>>} [hold] - Locks held while a build or check runs; resolves to their release.
+ * @property {(file: string, cwd: string) => {name: string, reason: string} | null} [missingSource] - For a source file that is not there, this group's way to write it again, or null.
+ * @property {(options: {targetPath?: string, overwrite?: boolean, cwd?: string}) => import('../../../api/theme/theme.type.mjs').ThemeTemplateResponse} [template] - This group's template write, in place of `themeTemplate`.
  */
 
 /** @type {ThemeCommandWords} */
@@ -323,14 +329,15 @@ async function runThemeBuildWatch(entries, options, words = THEME_WORDS) {
 
   // A warning a build prints once per invocation is printed at most once
   // per watch session (spec:AST-017 FR29a), not on every rebuild.
-  let warned = false;
+  /** @type {Set<string>} each warning once, whichever build printed it */
+  const warned = new Set();
   // Watch never runs under --json, so the logger prints (cli-surface INV12).
   logger.setSilent(false);
   const onMessage = (/** @type {unknown} */ message) => {
     const m = /** @type {{type?: unknown, text?: unknown}} */ (message);
-    if (warned || m?.type !== WATCH_WARNING || typeof m.text !== 'string')
-      return;
-    warned = true;
+    if (m?.type !== WATCH_WARNING || typeof m.text !== 'string') return;
+    if (warned.has(m.text)) return;
+    warned.add(m.text);
     logger.warn(m.text);
   };
 
@@ -696,8 +703,32 @@ function printThemeEject(result, words = THEME_WORDS) {
         ]
       : []),
     text(
-      `This is a local fork. Build it with ${getCliInvocation()} ${words.group} ${words.build} ${quoteCommandArgument(path.join(data.outputDir, data.entry).split(path.sep).join('/'))}.`,
+      `This is a local fork. Build it with ${buildStep(getCliInvocation(), words, path.join(data.outputDir, data.entry))}.`,
     ),
+  );
+}
+
+/**
+ * The build command for a theme file a command just wrote, as it works from
+ * the current folder: a build writes its outputs beside the source and only
+ * inside the folder it runs from, so a file above that folder is built from
+ * the project root (`cd ../.. && … theme build theme.template.ts`).
+ * @param {string} invocation
+ * @param {{group: string, build: string}} words
+ * @param {string} file relative to the current folder
+ */
+function buildStep(invocation, words, file) {
+  const cwd = process.cwd();
+  const abs = path.resolve(cwd, file);
+  const rel = path.relative(cwd, abs);
+  const posix = (/** @type {string} */ p) => p.split(path.sep).join('/');
+  if (!rel.startsWith('..'))
+    return `${invocation} ${words.group} ${words.build} ${quoteCommandArgument(posix(rel))}`;
+  const root = findPackageRoot(path.dirname(abs)) ?? path.dirname(abs);
+  // The shell's own form of "in that folder" (PowerShell has no &&).
+  return commandInFolder(
+    posix(path.relative(cwd, root)),
+    `${invocation} ${words.group} ${words.build} ${quoteCommandArgument(posix(path.relative(root, abs)))}`,
   );
 }
 
@@ -935,30 +966,52 @@ function registerThemeCommands(theme, program, docs, words) {
         const guesses = looksGlobby
           ? []
           : themeSourceGuesses(entry.file, process.cwd());
+        // An editor theme's own source, deleted by hand: the editor writes
+        // it again.
+        const rewrite = looksGlobby
+          ? null
+          : (words.missingSource?.(entry.file, process.cwd()) ?? null);
         return cliError(`File not found: ${entry.filePath}`, {
           code: ERROR_CODES.ERR_FILE_NOT_FOUND,
-          suggestions: looksGlobby
-            ? [
-                {
-                  // The pattern stays unquoted: the shell expands it.
-                  name: `${getCliInvocation(process.cwd())} ${words.group} ${words.build} ${entry.file.replace(/['"]/g, '')}`,
-                  reason:
-                    'globs are expanded by your shell; pass the pattern unquoted, or list the files',
-                },
-              ]
-            : guesses.length > 0
-              ? guesses.map(guess => ({
-                  name: `${getCliInvocation(process.cwd())} ${words.group} ${words.build} ${quoteCommandArgument(guess)}`,
-                  reason: 'a theme source that exists',
-                }))
-              : [
-                  themeCommand(
-                    words,
-                    'template',
-                    ['theme.template.ts'],
-                    'start a theme source from the annotated template',
-                  ),
-                ],
+          suggestions: rewrite
+            ? [rewrite]
+            : looksGlobby
+              ? [
+                  {
+                    // The pattern stays unquoted: the shell expands it.
+                    // The caller's mode follows it, quoted, and a family
+                    // run stays one.
+                    name: buildSuggestion(
+                      entry.file,
+                      options,
+                      process.cwd(),
+                      words,
+                      {
+                        glob: true,
+                        family: Boolean(options.family),
+                        ...(options.family && options.familyKey
+                          ? {familyKey: String(options.familyKey)}
+                          : {}),
+                      },
+                    ),
+                    reason:
+                      'globs are expanded by your shell; pass the pattern unquoted, or list the files',
+                  },
+                ]
+              : guesses.length > 0
+                ? guesses.map(guess => ({
+                    // The same build of that source: a --check stays a check.
+                    name: buildSuggestion(guess, options, process.cwd(), words),
+                    reason: 'a theme source that exists',
+                  }))
+                : [
+                    themeCommand(
+                      words,
+                      'template',
+                      ['theme.template.ts'],
+                      'start a theme source from the annotated template',
+                    ),
+                  ],
         });
       }
 
@@ -1050,6 +1103,9 @@ function registerThemeCommands(theme, program, docs, words) {
                     ...(options.out && files.length === 1
                       ? ['--out', options.out]
                       : []),
+                    ...(options.iconsSpecifier
+                      ? ['--icons-specifier', options.iconsSpecifier]
+                      : []),
                     ...(options.check ? ['--check'] : []),
                   ],
                   'build each theme on its own',
@@ -1130,16 +1186,27 @@ function registerThemeCommands(theme, program, docs, words) {
       const watchChild =
         typeof process.send === 'function' &&
         process.argv0 === WATCH_CHILD_ARGV0;
-      if (watchChild) process.channel?.unref();
+      if (watchChild) {
+        process.channel?.unref();
+        setEditorFolderListener(warning => {
+          // Held open until the message is out, then let go again.
+          process.channel?.ref();
+          process.send?.({type: WATCH_WARNING, text: warning}, () =>
+            process.channel?.unref(),
+          );
+        });
+      }
       let privateVarError = false;
-      const onPrivateVarError = () => {
+      setPrivateVarErrorListener(() => {
         privateVarError = true;
-      };
+      });
 
       const refused = await words.preflight?.(files, {
         cwd: process.cwd(),
         check: options.check,
         family: Boolean(options.family),
+        iconsSpecifier: options.iconsSpecifier,
+        out: options.out,
       });
       if (refused) return themeError(refused, words, buildFallback);
 
@@ -1151,10 +1218,9 @@ function registerThemeCommands(theme, program, docs, words) {
               familyKey: /** @type {string} */ (options.familyKey),
               check: options.check,
               iconsSpecifier: options.iconsSpecifier,
-              __onPrivateVarError: onPrivateVarError,
-              __commandWords: words,
             },
             {cwd: process.cwd()},
+            {commandWords: words},
           );
           if (json) jsonOut(result);
           if (
@@ -1235,19 +1301,12 @@ function registerThemeCommands(theme, program, docs, words) {
             out: options.out,
             check: options.check,
             iconsSpecifier: options.iconsSpecifier,
-            __onPrivateVarError: onPrivateVarError,
-            __claimedOutputs: claimedOutputs,
-            __deferredWrites: deferred ? writes : undefined,
-            __commandWords: words,
-            __onEditorFolder: watchChild
-              ? (/** @type {string} */ warning) => {
-                  // Held open until the message is out, then let go again.
-                  process.channel?.ref();
-                  process.send?.({type: WATCH_WARNING, text: warning}, () =>
-                    process.channel?.unref(),
-                  );
-                }
-              : undefined,
+          };
+          /** @type {import('../../../api/theme/build/build.mjs').ThemeBuildHandOff} */
+          const handOff = {
+            claimedOutputs,
+            deferredWrites: deferred ? writes : undefined,
+            commandWords: words,
           };
           let result;
           if (report) {
@@ -1256,6 +1315,7 @@ function registerThemeCommands(theme, program, docs, words) {
               buildOptions,
               {cwd: process.cwd()},
               {compact},
+              handOff,
             );
             result = built.receipt;
             if (built.trailer) trailers.push(built.trailer);
@@ -1271,9 +1331,12 @@ function registerThemeCommands(theme, program, docs, words) {
               else show();
             }
           } else {
-            result = await themeBuild(entry.file, buildOptions, {
-              cwd: process.cwd(),
-            });
+            result = await themeBuildWithHandOff(
+              entry.file,
+              buildOptions,
+              {cwd: process.cwd()},
+              handOff,
+            );
           }
           logger.log = log;
           logger.warn = warn;
@@ -1577,7 +1640,9 @@ function registerThemeCommands(theme, program, docs, words) {
       /** @type {import('../../../api/theme/theme.type.mjs').ThemeTemplateResponse} */
       let result;
       try {
-        result = themeTemplate({
+        // The experimental command passes its own write, which protects
+        // only the editor's own files.
+        result = (words.template ?? themeTemplate)({
           targetPath,
           overwrite: options.overwrite,
           cwd: process.cwd(),
@@ -1586,10 +1651,11 @@ function registerThemeCommands(theme, program, docs, words) {
         const err =
           /** @type {import('../../../api/error.mjs').AstryxError} */ (e);
         return themeError(err, words, [
+          // No path: the template at the project root, from any folder.
           themeCommand(
             words,
             'template',
-            ['theme.template.ts'],
+            [],
             'write the template at the project root',
           ),
         ]);
@@ -1631,9 +1697,7 @@ function registerThemeCommands(theme, program, docs, words) {
           'It documents every defineTheme field, the token families, and the component override syntax. ' +
             'Copy what you need into your own theme file, then delete it.',
         ),
-        code(
-          `${invocation} ${words.group} ${words.build} ${quoteCommandArgument(result.data.path)}`,
-        ),
+        code(buildStep(invocation, words, result.data.path)),
       );
       return NO_RESULT_SET;
     },

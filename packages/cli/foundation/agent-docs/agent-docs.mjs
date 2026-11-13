@@ -83,8 +83,9 @@ import {
 export {discoverAgentDocs, isAstryxInitialized, isAstryxPromptInReach};
 
 // The folder the docs go to lives in ./agent-docs-target.mjs, with node
-// builtins only. So the per-command setup nudge loads it without this
-// module's discovery and config. Re-exported here for existing importers.
+// builtins and the CLI's paths module only. So the per-command setup nudge
+// loads it without this module's discovery and config. Re-exported here for
+// existing importers.
 export {
   AgentDocsHomeError,
   agentDocsTargetDir,
