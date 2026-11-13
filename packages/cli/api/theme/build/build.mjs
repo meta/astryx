@@ -67,6 +67,7 @@ import {createJiti} from 'jiti';
 import {
   formatCliCommand,
   getCliInvocation,
+  quoteCommandArgument,
 } from '../../../foundation/env/package-manager.mjs';
 import {
   CLI_ROOT,
@@ -1061,7 +1062,20 @@ function assertThemeSourceFile(filePath, cwd, mode = {}) {
     const build =
       sources.length > 1 && familyKey
         ? formatCliCommand(
-            `theme build --family ${sources.map(shellWord).join(' ')} --family-key ${shellWord(familyKey)}${mode.check ? ' --check' : ''}`,
+            [
+              'theme',
+              'build',
+              '--family',
+              ...sources,
+              '--family-key',
+              familyKey,
+              ...(mode.iconsSpecifier
+                ? ['--icons-specifier', mode.iconsSpecifier]
+                : []),
+              ...(mode.check ? ['--check'] : []),
+            ]
+              .map(w => quoteCommandArgument(w))
+              .join(' '),
             cwd,
           )
         : sources.length > 0
@@ -1174,7 +1188,8 @@ export function buildSuggestion(source, mode, cwd, words) {
         : []),
       ...(mode.check ? ['--check'] : []),
     ]
-      .map(shellWord)
+      // Quoted for the shell the command runs in (PowerShell too).
+      .map(w => quoteCommandArgument(w))
       .join(' '),
     cwd,
   );
@@ -2835,7 +2850,7 @@ class ThemeShapeError extends Error {}
  * @param {string} cwd
  * @returns {import('../../../foundation/response/base').Suggestion[]}
  */
-function themeLoadSuggestions(error, shown, cwd) {
+function themeLoadSuggestions(error, shown, cwd, mode = {}) {
   const missing = missingThemePackage(error.cause ?? error);
   if (missing) {
     const {installCommand} = installCommandFor(
@@ -2854,7 +2869,7 @@ function themeLoadSuggestions(error, shown, cwd) {
   if (/changed while it was loading/.test(error.message)) {
     return [
       {
-        name: formatCliCommand(`theme build ${shellWord(shown)}`, cwd),
+        name: buildSuggestion(shown, mode, cwd),
         reason: 'build again once the file is saved',
       },
     ];
@@ -3859,16 +3874,17 @@ async function themeBuildInternal(
             {
               // The file itself, with its outputs kept inside the working
               // folder (beside the link) when the file is outside it.
-              name: formatCliCommand(
-                [
-                  'theme',
-                  'build',
-                  path.relative(cwd, link) || link,
-                  ...(path.relative(cwd, link).startsWith('..') ||
-                  path.isAbsolute(path.relative(cwd, link))
-                    ? [
-                        '--out',
-                        path
+              name: buildSuggestion(
+                path.relative(cwd, link) || link,
+                {
+                  ...options,
+                  // The caller's --out, else beside the link when the file
+                  // is outside the working folder.
+                  out:
+                    options.out ??
+                    (path.relative(cwd, link).startsWith('..') ||
+                    path.isAbsolute(path.relative(cwd, link))
+                      ? path
                           .relative(
                             cwd,
                             path.join(
@@ -3877,18 +3893,15 @@ async function themeBuildInternal(
                             ),
                           )
                           .split(path.sep)
-                          .join('/'),
-                      ]
-                    : []),
-                ]
-                  .map(shellWord)
-                  .join(' '),
+                          .join('/')
+                      : undefined),
+                },
                 cwd,
               ),
               reason: 'build the file itself',
             },
           ]
-        : themeLoadSuggestions(err, shown, cwd),
+        : themeLoadSuggestions(err, shown, cwd, options),
       ERROR_CODES.ERR_THEME_LOAD,
     );
   }
@@ -3925,7 +3938,7 @@ async function themeBuildInternal(
       `Theme "${themeDef.name ?? path.basename(filePath)}" in ${shown} is a plain object, so a family build cannot see which theme it extends. A family member is made with defineTheme(...) from @astryxdesign/core/theme; build a plain-object theme on its own.`,
       [
         {
-          name: formatCliCommand(`theme build ${shellWord(shown)}`, cwd),
+          name: buildSuggestion(shown, options, cwd),
           reason: 'build this theme on its own',
         },
       ],
@@ -5007,8 +5020,10 @@ export async function themeBuildFamily(
       continue;
     }
     const file = source.file;
+    // `check` rides along for the suggestions a member's refusal makes; a
+    // prepared member writes nothing either way.
     // prettier-ignore
-    const member = await themeBuildInternal(file, {iconsSpecifier: options.iconsSpecifier}, {cwd}, {}, {prepareFamily: true, familyLoader, familyInterception});
+    const member = await themeBuildInternal(file, {iconsSpecifier: options.iconsSpecifier, check: options.check}, {cwd}, {}, {prepareFamily: true, familyLoader, familyInterception});
     if (!member || member.type) {
       throw new AstryxError(
         `Theme family member "${file}" did not produce a complete build plan.`,

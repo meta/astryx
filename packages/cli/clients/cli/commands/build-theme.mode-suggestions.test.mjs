@@ -11,6 +11,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import {runCli} from '../../../test-utils/run-cli.mjs';
+import {buildSuggestion} from '../../../api/theme/build/build.mjs';
 
 /** @type {string} */
 let app;
@@ -55,4 +56,56 @@ describe('a build refusal keeps --check and --out', () => {
       // Following it checks and writes nothing.
       expect(fs.existsSync(path.join(app, 'o.css'))).toBe(false);
     });
+});
+
+describe('a family check refusal keeps --check', () => {
+  it('theme build --family with a folder member', async () => {
+    fs.writeFileSync(
+      path.join(app, 'themes', 'b.theme.mjs'),
+      "export default { name: 'b', tokens: { '--color-bg': '#111' } };\n",
+    );
+    const r = await runCli(
+      [
+        '--json',
+        'theme',
+        'build',
+        '--family',
+        'themes',
+        'themes/b.theme.mjs',
+        '--family-key',
+        'fam',
+        '--check',
+      ],
+      {cwd: app},
+    );
+    expect(r.status).toBe(1);
+    const names = JSON.parse(r.stdout).suggestions.map(
+      (/** @type {any} */ x) => x.name,
+    );
+    expect(names.length).toBeGreaterThan(0);
+    for (const n of names) expect(n).toMatch(/ --check$/);
+  });
+});
+
+describe('buildSuggestion quotes for the shell it runs in', () => {
+  it.each(['linux', 'win32'])('%s', platform => {
+    const real = Object.getOwnPropertyDescriptor(process, 'platform');
+    Object.defineProperty(process, 'platform', {value: platform});
+    try {
+      const line = buildSuggestion(
+        "themes/Macy's.theme.mjs",
+        {check: true, iconsSpecifier: './icons.mjs'},
+        app,
+      );
+      // POSIX: '\'' inside single quotes; PowerShell: the quote doubled.
+      expect(line).toContain(
+        platform === 'win32'
+          ? "'themes/Macy''s.theme.mjs'"
+          : "'themes/Macy'\\''s.theme.mjs'",
+      );
+      expect(line).toMatch(/--icons-specifier \.\/icons\.mjs --check$/);
+    } finally {
+      if (real) Object.defineProperty(process, 'platform', real);
+    }
+  });
 });
