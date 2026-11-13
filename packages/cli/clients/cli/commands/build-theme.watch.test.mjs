@@ -473,4 +473,61 @@ describe('theme build --watch', () => {
       child.kill('SIGINT');
     }
   }, 60_000);
+
+  it('prints the editor-theme warning once per session, not on every rebuild', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app"}\n');
+    const editor = path.join(tmpDir, 'themes', 'g');
+    fs.mkdirSync(editor, {recursive: true});
+    fs.writeFileSync(
+      path.join(editor, 'g.settings.json'),
+      JSON.stringify({like: 'neutral', settings: []}),
+    );
+    const source = path.join(editor, 'g.theme.ts');
+    const version = (/** @type {string} */ color) =>
+      `export default { name: 'g', tokens: { '--color-bg': '${color}' } };\n`;
+    fs.writeFileSync(source, version('#ffffff'));
+    const child = spawn(
+      process.execPath,
+      [CLI_BIN, 'theme', 'build', 'themes/g/g.theme.ts', '--watch'],
+      {cwd: tmpDir, env: {...process.env, FORCE_COLOR: '0'}},
+    );
+    onTestFinished(() => {
+      child.kill('SIGKILL');
+    });
+    let out = '';
+    let stderr = '';
+    child.stdout.on('data', d => (out += d.toString()));
+    child.stderr.on('data', d => {
+      stderr += d.toString();
+      out += d.toString();
+    });
+    try {
+      await waitForOutput(child, () => out, 'Watching');
+      for (const [n, color] of /** @type {const} */ ([
+        [2, '#010203'],
+        [3, '#040506'],
+      ])) {
+        const changed = version(color);
+        fs.writeFileSync(source, changed);
+        await waitForOutput(child, () => out, 'Watching', {
+          count: n,
+          onPoll: () => {
+            try {
+              if (
+                !fs
+                  .readFileSync(path.join(editor, 'g.css'), 'utf-8')
+                  .includes(color)
+              )
+                fs.writeFileSync(source, changed);
+            } catch {
+              // The temporary folder is gone at teardown.
+            }
+          },
+        });
+      }
+      expect(stderr.match(/is a theme the theme editor made/g)).toHaveLength(1);
+    } finally {
+      child.kill('SIGINT');
+    }
+  }, 60_000);
 });

@@ -120,7 +120,9 @@ async function openGallery(
   }
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
-  const viewport = dialog.getByRole('button', {name: 'Zoom'});
+  // The pager's viewport. In a gallery the keyboard's zoom button is the
+  // current page's photo box inside it.
+  const viewport = dialog.locator('[data-lightbox-media] > :first-child');
   const track = viewport.locator(':scope > div').first();
   await expect
     .poll(async () =>
@@ -617,7 +619,7 @@ test('without zoom, a mouse press beside the photo that is released on it closes
   }
 });
 
-test('without zoom, a mouse click beside a photo narrower than its caption leaves the gallery open, as on main', async ({
+test('without zoom, a mouse click beside a photo narrower than its caption, level with it, closes the gallery', async ({
   browser,
 }) => {
   const context = await browser.newContext({
@@ -669,19 +671,20 @@ test('without zoom, a mouse click beside a photo narrower than its caption leave
         );
       }, beside),
     ).toBe(true);
+    // The caption's band sits under the photo, so this point is the
+    // backdrop's.
     await page.mouse.click(beside.x, beside.y);
-    await frames(page, 40);
-    await expect(dialog).toBeVisible();
+    await expect(dialog).toBeHidden();
   } finally {
     await context.close();
   }
 });
 
-test('with a mouse a click in the slot a moved-up caption leaves closes the gallery', async ({
+test('with a mouse a click on the caption row under a photo with none closes the gallery', async ({
   browser,
 }) => {
-  // With zoom a caption moves up under its fitted photo. The strip it leaves
-  // at the page's bottom edge is the backdrop, as without zoom.
+  // Every page has a two-line caption band. Under the third photo, which has
+  // no caption, that band is the backdrop.
   const context = await browser.newContext({
     viewport: {width: 1280, height: 1100},
     hasTouch: false,
@@ -697,28 +700,39 @@ test('with a mouse a click in the slot a moved-up caption leaves closes the gall
       story: 'core-lightbox--gallery-with-captions',
       trigger: 'Open gallery with captions',
     });
-    const slot = await g.dialog.locator('[data-current]').evaluate(current => {
+    for (const counter of ['2 / 4', '3 / 4']) {
+      await g.dialog.getByRole('button', {name: 'Next'}).click();
+      await expect(g.dialog.getByText(counter)).toBeVisible();
+    }
+    await expect(g.dialog.locator('[data-current]')).toHaveCount(1);
+    await expect
+      .poll(async () =>
+        g.dialog.locator('[data-current] [data-lightbox-caption]').count(),
+      )
+      .toBe(0);
+    const band = await g.dialog.locator('[data-current]').evaluate(current => {
       const r = current.getBoundingClientRect();
-      const caption = current
-        .querySelector('[data-lightbox-caption]')
+      const media = current
+        .querySelector('[data-lightbox-page-media]')
         ?.getBoundingClientRect();
       return {
         x: r.left + r.width / 2,
-        y: r.bottom - 4,
-        captionBottom: caption?.bottom ?? Number.NaN,
+        y: ((media?.bottom ?? Number.NaN) + r.bottom) / 2,
+        rowHeight: r.bottom - (media?.bottom ?? Number.NaN),
       };
     });
-    // The caption sits above the strip, so the point is the page's own.
-    expect(slot.captionBottom).toBeLessThan(slot.y);
+    // The band keeps its two lines' height, and the point is in it.
+    expect(band.rowHeight).toBeGreaterThan(20);
     expect(
-      await page.evaluate(
-        ({x, y}) =>
-          document.elementFromPoint(x, y)?.hasAttribute('data-lightbox-page') ??
-          false,
-        slot,
-      ),
+      await page.evaluate(({x, y}) => {
+        const el = document.elementFromPoint(x, y);
+        return (
+          el?.closest('[data-lightbox-page][data-current]') != null &&
+          el.closest('[data-lightbox-page-media]') == null
+        );
+      }, band),
     ).toBe(true);
-    await page.mouse.click(slot.x, slot.y);
+    await page.mouse.click(band.x, band.y);
     await expect(g.dialog).toBeHidden();
   } finally {
     await context.close();
