@@ -411,18 +411,22 @@ function computeCatalog(key, catalog, components, weights) {
  */
 const CATALOG_CODEC = {
   /**
-   * The shape a read-back catalog needs: its blocks, each with its vectors.
+   * What decode can get wrong in a read-back catalog: its key, each block's
+   * component, and projections of one width with finite numbers.
    * @param {any} read
    */
-  valid: read =>
-    read != null &&
-    read.blocks instanceof Map &&
-    [...read.blocks.values()].every(
+  valid: read => {
+    if (read == null || typeof read.key !== 'string') return false;
+    const blocks = [...read.blocks.values()];
+    const width = blocks[0]?.projected.length;
+    return blocks.every(
       (/** @type {any} */ b) =>
-        b != null &&
-        b.vector instanceof Map &&
-        b.projected instanceof Float64Array,
-    ),
+        typeof b.component === 'string' &&
+        b.projected.length > 0 &&
+        b.projected.length === width &&
+        [...b.projected].every(Number.isFinite),
+    );
+  },
   /** @param {ReturnType<typeof computeCatalog>} read */
   encode: read => ({
     key: read.key,

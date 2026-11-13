@@ -112,8 +112,22 @@ export function tableCodec(all) {
       Array.isArray(table.candidate) &&
       table.candidate.length === table.ids.length &&
       table.candidate.every((/** @type {any} */ c) => c != null) &&
+      Array.isArray(table.domain) &&
+      table.domain.length === table.ids.length &&
+      Array.isArray(table.name) &&
+      table.name.length === table.ids.length &&
       table.fields != null &&
-      typeof table.fields === 'object',
+      ['name', 'desc', 'card'].every(f => {
+        const field = table.fields[f];
+        return (
+          field != null &&
+          field.post instanceof Map &&
+          field.idf instanceof Map &&
+          Array.isArray(field.len) &&
+          field.len.length === table.ids.length &&
+          typeof field.avg === 'number'
+        );
+      }),
     encode(table) {
       const place = new Map(all.map((c, k) => [c, k]));
       const t = /** @type {any} */ (table);

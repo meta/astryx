@@ -62,6 +62,10 @@ const BREAKS = {
       ? Object.fromEntries(entry.value.map((v, i) => [i, v]))
       : Object.values(entry.value ?? {});
   },
+  'an entry table with no fields': (/** @type {any} */ entry) => {
+    if (entry.value && 'fields' in entry.value) entry.value.fields = {};
+    else delete entry.value;
+  },
   'a value whose decode throws': (/** @type {any} */ entry) => {
     entry.value = {all: 5, ids: 5, blocks: 5, components: 5};
   },
