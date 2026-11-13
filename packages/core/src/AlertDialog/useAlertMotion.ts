@@ -27,8 +27,7 @@ import {
 } from '../motion/animator';
 import {mapProgress, mapRange} from '../motion/progress';
 import {
-  easedProgress,
-  readThemeTiming,
+  readThemeTimingOrInstant,
   type ThemeTimingTokens,
 } from '../motion/themeTiming';
 import {holdInput} from '../Layer/inputHold';
@@ -54,17 +53,6 @@ const PRESENT_SCALE_FROM = 1.2;
 
 /** A dialog that misses its exit's end still closes this long after it. */
 const EXIT_BACKSTOP_MS = 100;
-
-/** A theme timing that does not resolve plays no motion. */
-function timingOn(
-  element: Element | null,
-  tokens: ThemeTimingTokens,
-): MotionCurve {
-  return (
-    (element == null ? null : readThemeTiming(element, tokens)) ??
-    easedProgress(0, x => x)
-  );
-}
 
 /**
  * The 1.2 start, never wider than the viewport: a wide alert would otherwise
@@ -246,7 +234,7 @@ export function useAlertMotion({
         panel,
         backdrop,
         scaleFrom,
-        timingOn(element, ALERT_ENTRANCE_TOKENS),
+        readThemeTimingOrInstant(element, ALERT_ENTRANCE_TOKENS),
       );
       hold(handle.finished, 'viewport');
       return;
@@ -258,7 +246,7 @@ export function useAlertMotion({
         panel,
         backdrop,
         1,
-        timingOn(element, ALERT_ENTRANCE_TOKENS),
+        readThemeTimingOrInstant(element, ALERT_ENTRANCE_TOKENS),
       );
       hold(handle.finished, 'viewport');
       // The dismissal's hold is released and the content is live again. The
@@ -279,7 +267,7 @@ export function useAlertMotion({
     if (now === 'leaving') {
       // During the dismissal no input reaches the alert: its content is inert
       // and the hold's shield catches every touch.
-      const progress = timingOn(element, ALERT_EXIT_TOKENS);
+      const progress = readThemeTimingOrInstant(element, ALERT_EXIT_TOKENS);
       exitMsRef.current = progress.duration * 1000;
       const handle = fadeFromHere(panel, backdrop, 0, progress);
       const focused = element?.ownerDocument.activeElement;
