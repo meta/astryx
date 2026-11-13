@@ -161,6 +161,10 @@
       "status": "allowed",
       "reason": "The attach and the scroll calls run in the same copy; the paging value is shared."
     },
+    "packages/core/src/Table/TableCellContextMenu.tsx:LazyTableContextMenu": {
+      "status": "allowed",
+      "reason": "Each copy's lazy loads that copy's menu module, which reads that copy's contexts; a shared lazy would render one copy's menu in another copy's cell."
+    },
     "packages/core/src/Table/glidingDivider.ts:inlineColorOf": {
       "status": "allowed",
       "reason": "Keyed by rows of one table; only that table's row-expansion plugin marks them, so its overlapping glides share one copy's maps."

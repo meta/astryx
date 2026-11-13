@@ -745,7 +745,7 @@ describe('ContextMenu', () => {
 
   it('suppresses native text selection on the long-press trigger', () => {
     const source = readFileSync(
-      'packages/core/src/ContextMenu/ContextMenu.tsx',
+      'packages/core/src/ContextMenu/ContextMenuTrigger.tsx',
       'utf8',
     );
 
