@@ -3646,6 +3646,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
