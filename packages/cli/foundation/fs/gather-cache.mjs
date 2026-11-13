@@ -16,7 +16,7 @@
  *   (foundation/config/project.mjs) for its integration issues: each
  *   integration's contribution-check results and the whole list (with the
  *   template and component replacement passes), which `component`,
- *   `template`, `theme`, `discover` and `search` report, by template
+ *   `template`, `theme`, `discover`, `docs` and `search` report, by template
  *   discovery (foundation/discovery/template-adapter.mjs) for its records, by theme discovery
  *   (foundation/discovery/theme-discovery.mjs) for each integration's themes,
  *   and by `doctor` (api/doctor/_adapter.mjs) for its file-only docs checks,
@@ -64,6 +64,7 @@ const INTEGRATION_COMMANDS = new Set([
   'template',
   'theme',
   'discover',
+  'docs',
 ]);
 
 /** The run's commands whose gathers are kept. */
@@ -74,6 +75,7 @@ const KEPT_COMMANDS = new Set([
   'template',
   'theme',
   'discover',
+  'docs',
   // The project check alone (no subcommand): its docs checks are kept.
   'doctor',
 ]);
