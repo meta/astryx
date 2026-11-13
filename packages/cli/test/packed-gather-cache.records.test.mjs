@@ -612,8 +612,11 @@ Module._resolveFilename = function (request, parent, isMain, options) {
       const fresh = run(ask, {tmp: freshTmp(), cwd: other.dir, json: false});
       expect(run(ask, {tmp, cwd: other.dir, json: false})).toEqual(fresh);
       const kept = templatesEntries(tmp);
-      expect(kept.size).toBe(1);
-      // Read back, not discovered again: the same file, and the same answer.
+      // Node 22.13 has no synchronous module hooks, so the supported fallback
+      // gathers fresh and keeps no template records.
+      expect(kept.size).toBe(hasModuleHooks ? 1 : 0);
+      // With hooks this reads back the same file; without them it gathers
+      // fresh. Either path must return the same answer.
       expect(run(ask, {tmp, cwd: other.dir, json: false})).toEqual(fresh);
       expect(templatesEntries(tmp)).toEqual(kept);
       write('Grand totals, tallied by week.');
@@ -668,8 +671,8 @@ Module._resolveFilename = function (request, parent, isMain, options) {
       expect(other.stdout).not.toContain('zqledger');
       run(ask, {tmp, cwd: outside, json: false});
       run(ask, {tmp, cwd: outside, json: false});
-      // The first copy kept its template records.
-      expect(templatesEntries(tmp).size).toBe(1);
+      // Only runtimes with synchronous hooks keep template records.
+      expect(templatesEntries(tmp).size).toBe(hasModuleHooks ? 1 : 0);
       expect(run(ask, {tmp, cwd: outside, cli: second})).toEqual(other);
       expect(run(ask, {tmp, cwd: outside})).toEqual(first);
     } finally {
@@ -737,10 +740,10 @@ Module._resolveFilename = function (request, parent, isMain, options) {
       const first = fresh();
       expect(first.stdout).toContain('Tally theme for ledgers.');
       expect(kept()).toEqual(first);
-      // The integration's theme records are kept: one entry, read back (the
-      // same file) on the next run.
+      // Runtimes with synchronous hooks keep one entry; older supported Node
+      // versions gather fresh on each run and keep none.
       const keptThemes = themeEntries(tmp);
-      expect(keptThemes.size).toBe(1);
+      expect(keptThemes.size).toBe(hasModuleHooks ? 1 : 0);
       expect(kept()).toEqual(first);
       expect(themeEntries(tmp)).toEqual(keptThemes);
       // An in-place edit to the theme's doc shows on the next run, which
@@ -749,7 +752,11 @@ Module._resolveFilename = function (request, parent, isMain, options) {
       const edited = kept();
       expect(edited.stdout).toContain('Tally theme, edited.');
       expect(edited).toEqual(fresh());
-      expect(themeEntries(tmp)).not.toEqual(keptThemes);
+      if (hasModuleHooks) {
+        expect(themeEntries(tmp)).not.toEqual(keptThemes);
+      } else {
+        expect(themeEntries(tmp).size).toBe(0);
+      }
       // So does an edit to a module the theme imports that breaks it.
       tokens("export {tokens} from './missing';\n");
       const broken = kept();
