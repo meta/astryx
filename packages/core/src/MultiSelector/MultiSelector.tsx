@@ -2560,7 +2560,13 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       // in this mode; the selector's own wiring below wins over them.
       ...callerProps,
       ...(isEffectivelyReadOnly
-        ? {role: 'combobox', 'aria-activedescendant': undefined}
+        ? {
+            role: 'combobox',
+            'aria-activedescendant': undefined,
+            'aria-label':
+              rest['aria-label'] ??
+              (ariaLabelledByProp != null ? undefined : label),
+          }
         : null),
       'aria-describedby': isEffectivelyReadOnly
         ? joinAriaIDs(ariaDescribedByProp, readOnlyDescriptionId)

@@ -4085,15 +4085,15 @@ describe('MultiSelector renderTrigger — read-only', () => {
         aria-controls="caller-panel"
         aria-activedescendant="caller-option"
         renderTrigger={props => (
-          <button type="button" {...props} aria-label="Fruit">
-            Apple
+          <button type="button" {...props}>
+            Fruit
           </button>
         )}
       />,
     );
 
     const trigger = screen.getByRole('combobox', {name: 'Fruit'});
-    expect(trigger).toHaveTextContent('Apple');
+    expect(trigger).toHaveTextContent('Fruit');
     expect(trigger).toHaveAccessibleDescription('Read only');
     expect(trigger).toHaveAttribute('aria-readonly', 'true');
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
@@ -4115,9 +4115,10 @@ describe('MultiSelector renderTrigger — read-only', () => {
           onChange={() => {}}
           isReadOnly
           hasSearch
+          aria-label="Profile fruit"
           aria-describedby="fruit-hint"
           renderTrigger={props => (
-            <button type="button" {...props} aria-label="Fruit">
+            <button type="button" {...props}>
               Apple
             </button>
           )}
@@ -4125,7 +4126,7 @@ describe('MultiSelector renderTrigger — read-only', () => {
       </InternationalizationProvider>,
     );
 
-    const trigger = screen.getByRole('combobox', {name: 'Fruit'});
+    const trigger = screen.getByRole('combobox', {name: 'Profile fruit'});
     expect(trigger).toHaveAccessibleDescription(
       'From your profile. Lecture seule',
     );
@@ -4134,6 +4135,7 @@ describe('MultiSelector renderTrigger — read-only', () => {
   it('preserves the caller role and description when read-only ends', () => {
     const selector = (isReadOnly: boolean) => (
       <>
+        <p id="fruit-name">Saved fruit</p>
         <p id="fruit-hint">From your profile.</p>
         <MultiSelector
           label="Fruit"
@@ -4141,10 +4143,11 @@ describe('MultiSelector renderTrigger — read-only', () => {
           value={['Apple']}
           onChange={() => {}}
           isReadOnly={isReadOnly}
+          aria-labelledby="fruit-name"
           aria-describedby="fruit-hint"
           aria-activedescendant="caller-option"
           renderTrigger={props => (
-            <button type="button" role="combobox" {...props} aria-label="Fruit">
+            <button type="button" role="combobox" {...props}>
               Apple
             </button>
           )}
@@ -4152,11 +4155,12 @@ describe('MultiSelector renderTrigger — read-only', () => {
       </>
     );
     const {rerender} = render(selector(true));
-    const trigger = screen.getByRole('combobox', {name: 'Fruit'});
+    const trigger = screen.getByRole('combobox', {name: 'Saved fruit'});
+    expect(trigger).not.toHaveAttribute('aria-label');
 
     rerender(selector(false));
 
-    expect(screen.getByRole('combobox', {name: 'Fruit'})).toBe(trigger);
+    expect(screen.getByRole('combobox', {name: 'Saved fruit'})).toBe(trigger);
     expect(trigger).not.toHaveAttribute('aria-readonly');
     expect(trigger).toHaveAccessibleDescription('From your profile.');
     expect(trigger).toHaveAttribute('aria-haspopup', 'listbox');
