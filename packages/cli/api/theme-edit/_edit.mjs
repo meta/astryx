@@ -1470,7 +1470,7 @@ async function changeOnce(sub, slug, thing, value, options, seen) {
       : []),
     ...(ownOverToken
       ? [
-          `${slug}.theme.ts sets ${s.thing}${s.on ? ` on ${s.on}` : ''} itself${ownOverToken[1] != null ? ` (${ownOverToken[1]})` : ''}, and your own source wins over the settings, so this does not show; change it in ${slug}.theme.ts, or take this back with \`${P} undo ${slug} ${undoArgs(s)}\``,
+          `${slug}.theme.ts sets ${s.thing}${s.on ? ` on ${s.on}` : ''} itself${ownOverToken[1] != null ? ` (${ownOverToken[1]})` : ''}, and your own source wins over the settings, so this does not show${PHONE_TYPE.test(s.thing) ? ` on wide screens (on ${PHONES} this setting shows: the editor repeats exact font settings after the base theme's type there)` : ''}; change it in ${slug}.theme.ts, or take this back with \`${P} undo ${slug} ${undoArgs(s)}\``,
         ]
       : []),
     ...(exactWins.length
@@ -2066,6 +2066,7 @@ export async function themeEditShow(theme, options = {}) {
           await baseResolved(ctx.project, data.like),
         ),
         ...ownOverSettingNotes(cwd, theme, data),
+        ...ownPhoneNotes(cwd, theme, data),
       ],
       // A size, number or font is the same in both modes: one value.
       resolved: Object.fromEntries(
@@ -2356,6 +2357,31 @@ function dialTouched(ctx, data, s, base) {
 }
 
 /**
+ * The family and weight tokens the theme's own source sets that phones do
+ * not show: on top of a base theme, its phone rule puts its own type back
+ * there (a Core limit), unless an exact setting is repeated after it.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {string[]}
+ */
+function ownPhoneNotes(cwd, slug, data) {
+  if (!data.like) return [];
+  const exact = new Set(
+    data.settings
+      .filter(x => x.source === 'token' && !x.on && !x.when && !x.state)
+      .map(x => x.thing),
+  );
+  const lost = ownSourceTokens(cwd, slug).filter(
+    k => PHONE_TYPE.test(k) && !exact.has(k),
+  );
+  if (!lost.length) return [];
+  return [
+    `on ${PHONES}, the base theme's type shows for ${lost.slice(0, 4).join(', ')}${lost.length > 4 ? ` and ${lost.length - 4} more` : ''}, which ${slug}.theme.ts sets: the base theme sets its type again there, after your file (a Core limit); wide screens show your file's`,
+  ];
+}
+
+/**
  * Notes for the exact settings the theme's own source sets itself (a
  * whole-theme token, or a token or property on a part's plain or variant
  * rule): the file's value shows, not the setting.
@@ -2376,7 +2402,7 @@ function ownOverSettingNotes(cwd, slug, data) {
     if (!x.on) {
       if (x.source === 'token' && !x.when && topKeys.has(x.thing))
         out.push(
-          `${describe(x)}: ${slug}.theme.ts sets ${x.thing} itself${top[x.thing] != null ? ` (${top[x.thing]})` : ''}, so this setting does not show`,
+          `${describe(x)}: ${slug}.theme.ts sets ${x.thing} itself${top[x.thing] != null ? ` (${top[x.thing]})` : ''}, so this setting does not show${PHONE_TYPE.test(x.thing) ? ` on wide screens (on ${PHONES} it does: the editor repeats exact font settings there)` : ''}`,
         );
       continue;
     }
@@ -2391,6 +2417,11 @@ function ownOverSettingNotes(cwd, slug, data) {
   }
   return out;
 }
+
+/** The type tokens base themes set again for phones. */
+const PHONE_TYPE = /^--font-family|^--(text-[a-z0-9-]+|font)-weight/;
+/** Phones, as the base themes' type rule names them. */
+const PHONES = 'phones (touch screens below 1024px)';
 
 /**
  * What taking tokens out of the theme file lets show: the dial, or an

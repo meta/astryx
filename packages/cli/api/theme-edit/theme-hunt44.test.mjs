@@ -156,21 +156,23 @@ describe('hunt44', () => {
     );
   }, 240_000);
 
-  it('N3/N4: on phones the own source family wins, and a masked exact setting stays masked', async () => {
+  it('N3/N4: the phone rule repeats exact font settings only, never the file', async () => {
     await themeEditNew('ph', {cwd});
     source(
       'ph',
       "tokens: {'--font-family-heading': 'Georgia, serif', '--font-family-body': 'Courier, monospace'}",
     );
     await themeEditShow('ph', {cwd});
-    await themeEditSet('ph', '--font-family-body', 'Verdana', {cwd});
+    const r = await themeEditSet('ph', '--font-family-body', 'Verdana', {cwd});
     const phone =
       css('ph')
         .split(/@media[^{]*pointer: coarse[^{]*\{/)
         .pop() ?? '';
-    expect(phone).toMatch(/--font-family-heading: Georgia, serif/);
-    expect(phone).toMatch(/--font-family-body: Courier, monospace/);
-    expect(phone).not.toMatch(/--font-family-body: Verdana/);
+    expect(phone).toMatch(/--font-family-body: Verdana/);
+    expect(phone).not.toMatch(/Georgia/);
+    expect(notes(r)).toMatch(
+      /on phones \(touch screens below 1024px\) this setting shows/,
+    );
   }, 240_000);
 
   it('R21-A: taking a token out of the file names the exact setting it then shows', async () => {
@@ -184,7 +186,7 @@ describe('hunt44', () => {
     );
   }, 240_000);
 
-  it('R21-B: compile of an edited source records it, unless the settings change with it', async () => {
+  it('R21-B: compile of an edited source records it', async () => {
     const {editorAfterCompile} = await import('./_adapter.mjs');
     const {editorStale} = await import('./_edit.mjs');
     await themeEditNew('rb', {cwd});
@@ -194,12 +196,10 @@ describe('hunt44', () => {
     );
     await editorAfterCompile(['themes/rb/rb.theme.ts'], {cwd});
     expect(await editorStale(cwd, 'rb')).toBeNull();
-    // A family the file sets goes into the editor's phone rule: the editor
-    // builds it again.
+    // The settings never carry what the file sets: a font edit is
+    // recorded too (F20-N2).
     source('rb', "tokens: {'--font-family-body': 'Georgia, serif'}");
     await editorAfterCompile(['themes/rb/rb.theme.ts'], {cwd});
-    expect(await editorStale(cwd, 'rb')).toMatch(
-      /changed since the last build/,
-    );
+    expect(await editorStale(cwd, 'rb')).toBeNull();
   }, 240_000);
 });

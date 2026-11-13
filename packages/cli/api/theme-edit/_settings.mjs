@@ -1617,8 +1617,22 @@ function namedInOwnSource(cwd, slug) {
       }
     })
     .join('\n');
+  // A font set through `typography` (heading: {family: ...}) names its
+  // role there, not the token the build writes for it.
+  const typography = /\btypography\b/.test(text);
   return name =>
     text.includes(name) ||
+    (typography &&
+      (/^--font-family-([a-z]+)$/.exec(name)?.[1] ?? '') !== '' &&
+      text.includes(
+        /** @type {string[]} */ (/^--font-family-([a-z]+)$/.exec(name))[1],
+      )) ||
+    (typography &&
+      /^--text-([a-z]+)-\d*-?weight$/.test(name) &&
+      text.includes(
+        /** @type {string[]} */ (/^--text-([a-z]+)/.exec(name))[1],
+      ) &&
+      /weight/.test(text)) ||
     // A property may be written camelCase (borderRadius).
     (!name.startsWith('--') &&
       text.includes(name.replace(/-([a-z])/g, (_, c) => c.toUpperCase())));
@@ -1850,10 +1864,9 @@ function sealModule(text) {
 
 /**
  * Record in an editor theme's generated settings that they were built with
- * its own source as it is now, after `compile` built that source: only
- * when the settings would come out the same (their phone rule repeats the
- * family and weight tokens the source sets, so a change to those needs the
- * editor's build), and only in a module as the editor wrote it.
+ * its own source as it is now, after `compile` built that source (the
+ * settings do not depend on what the source sets), only in a module as the
+ * editor wrote it.
  * @param {string} cwd
  * @param {string} slug
  * @returns {boolean} whether it was recorded
@@ -1866,27 +1879,6 @@ export function refreshSourceStamp(cwd, slug) {
   if (!stamp) return false;
   const now = themeSourceHash(cwd, slug);
   if (stamp[2] === now) return true;
-  // The phone rule as written, against what the source sets now.
-  const PHONE_TYPE = /^--font-family|^--(text-[a-z0-9-]+|font)-weight/;
-  const at = ts.indexOf('"adaptations"');
-  const phone = at < 0 ? '' : ts.slice(at);
-  const settingsKeys = new Set(
-    loadTheme(cwd, slug)
-      .settings.filter(x => x.source === 'token' && !x.on)
-      .map(x => x.thing),
-  );
-  const own = new Map(
-    [...ownPageTokens(cwd, slug)].filter(([k]) => PHONE_TYPE.test(k)),
-  );
-  for (const [k, v] of own)
-    if (
-      v == null ||
-      !phone.includes(`${JSON.stringify(k)}: ${JSON.stringify(v)}`)
-    )
-      return false;
-  for (const m of phone.matchAll(/"(--[a-z0-9-]+)":/g))
-    if (PHONE_TYPE.test(m[1]) && !settingsKeys.has(m[1]) && !own.has(m[1]))
-      return false;
   const text = ts
     .replace(/\r\n/g, '\n')
     .replace(SEAL, '')
@@ -2900,13 +2892,10 @@ export function compileTheme(ctx, data, base) {
   // Base themes set the type tokens again for phones (a coarse pointer
   // below the lg width); an exact font family or weight, and the headings
   // dial's weights, are written there too, so they apply on every screen.
-  // Sizes are not: phones keep their reading base. A family or weight the
-  // theme's own source sets wins there too, as it does on a wide screen:
-  // its value is written in place of the setting's.
+  // Sizes are not: phones keep their reading base. (What the theme's own
+  // source sets is not repeated: on phones the base theme's type comes
+  // back for it, a Core limit the notes name.)
   const PHONE_TYPE = /^--font-family|^--(text-[a-z0-9-]+|font)-weight/;
-  const ownType = Object.entries(
-    ctx.project?.cwd ? ownSourceTokenValues(ctx.project.cwd, data.name) : {},
-  ).filter(([k]) => PHONE_TYPE.test(k));
   const phone = Object.fromEntries([
     ...data.settings
       .filter(
@@ -2918,7 +2907,6 @@ export function compileTheme(ctx, data, base) {
           !(modeOnly && x.mode && x.mode !== modeOnly),
       )
       .map(x => [x.thing, x.value]),
-    ...ownType,
   ]);
   // The headings dial's weights, unless an exact token sets one.
   const headingsWeight = [...data.settings]
@@ -3478,6 +3466,75 @@ export function refuseThemeSource(cwd, slug) {
 }
 
 /**
+ * Refuse a [light, dark] pair the theme's own source gives a token that is
+ * not a color (a font family, a size, a weight): the build would write
+ * `light-dark()`, which browsers take only for colors. The editor refuses
+ * `--mode` on those tokens for the same reason.
+ * @param {Ctx} ctx
+ * @param {string} cwd
+ * @param {string} slug
+ */
+function refuseOwnPairs(ctx, cwd, slug) {
+  const f = themeFiles(cwd, slug);
+  /** @type {string[]} */
+  const bad = [];
+  try {
+    const ast = /** @type {any} */ (
+      parseModule(fs.readFileSync(f.ts, 'utf8'), {
+        sourceType: 'module',
+        plugins: ['typescript'],
+      })
+    );
+    /** @param {any} node */
+    const visit = node => {
+      if (!node || typeof node !== 'object') return;
+      if (
+        node.type === 'ObjectProperty' &&
+        typeof (node.key?.value ?? node.key?.name) === 'string' &&
+        String(node.key?.value ?? node.key?.name).startsWith('--') &&
+        node.value?.type === 'ArrayExpression' &&
+        node.value.elements.length === 2 &&
+        // A pair holding a value that is not text is named by the value
+        // checks, with the fix for that value.
+        node.value.elements.every(
+          (/** @type {any} */ e) =>
+            e?.type === 'StringLiteral' || e?.type === 'TemplateLiteral',
+        )
+      ) {
+        const k = String(node.key.value ?? node.key.name);
+        const type = ctx.C.typeOf(k);
+        // A size given as a bare number is named by the value check, with
+        // the unit it needs.
+        const unitless =
+          type === 'size' &&
+          node.value.elements.some(
+            (/** @type {any} */ e) =>
+              e?.type === 'StringLiteral' && /^\d*\.?\d+$/.test(e.value.trim()),
+          );
+        if (!MODAL.has(type) && !unitless) bad.push(k);
+      }
+      for (const v of Object.values(node))
+        if (Array.isArray(v)) v.forEach(visit);
+        else if (v && typeof v === 'object' && v.type) visit(v);
+    };
+    visit(ast.program);
+  } catch {
+    return;
+  }
+  if (bad.length)
+    throw new AstryxError(
+      `themes/${slug}/${slug}.theme.ts gives ${[...new Set(bad)].join(', ')} a [light, dark] pair, but only colors differ by mode: the build would write light-dark(), which browsers take only for colors. Give ${bad.length > 1 ? 'each' : 'it'} one value in ${slug}.theme.ts. Nothing was changed.`,
+      [
+        {
+          name: `grep -n -- ${quoteCommandArgument(bad[0])} ${quoteCommandArgument(`themes/${slug}/${slug}.theme.ts`)}`,
+          reason: 'see the line',
+        },
+      ],
+      ERROR_CODES.ERR_THEME_INVALID,
+    );
+}
+
+/**
  * Generate the theme source, build it with the theme build, then repeat any
  * part setting a more specific rule would beat and build again.
  * @param {Ctx} ctx
@@ -3489,6 +3546,7 @@ export async function buildTheme(ctx, slug, data) {
   const {cwd} = ctx.project;
   const f = themeFiles(cwd, slug);
   refuseThemeSource(cwd, slug);
+  refuseOwnPairs(ctx, cwd, slug);
   if (data.like) baseThemeFile(ctx.project, data.like);
   const base = await baseResolved(ctx.project, data.like);
   fs.mkdirSync(f.dir, {recursive: true});
@@ -3813,12 +3871,12 @@ function nonTextToken(t, typeOf = (/** @type {string} */ _k) => 'other') {
 function nonTextMessage(ctx, slug, [name, value, kind = 'value']) {
   const type = ctx.C.typeOf(name);
   if (kind === 'object')
-    return `${slug}.theme.ts gives ${name} an object (${JSON.stringify(value)}); a token value is a CSS value in quotes, or a [light, dark] pair such as ['6px', '8px'].`;
+    return `${slug}.theme.ts gives ${name} an object (${JSON.stringify(value)}); a token value is a CSS value in quotes, such as '8px' (only a color takes a [light, dark] pair).`;
   if (kind === 'unit') {
     const n = /** @type {unknown[]} */ (value).find(
       x => typeof x === 'number' && x !== 0,
     );
-    return `${slug}.theme.ts gives ${name}, a size, a [light, dark] pair with a number without a unit (${/** @type {unknown[]} */ (value).join(', ')}); a size needs one, such as ['${n}px', '${n}px'].`;
+    return `${slug}.theme.ts gives ${name}, a size, a [light, dark] pair with a number without a unit (${/** @type {unknown[]} */ (value).join(', ')}); a size needs one, and is the same in light and dark, so give one value, such as '${n}px'.`;
   }
   const one = Array.isArray(value)
     ? value.find(x => typeof x !== 'string')
