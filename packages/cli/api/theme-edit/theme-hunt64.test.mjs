@@ -74,9 +74,10 @@ describe('N64/N59: quotes only delimit', () => {
     ['`Inter`', '"Inter"'],
     ['\uFF02Inter\uFF02', '"Inter"'],
     ['\u2018Inter\u2019', "'Inter'"],
-    // French spaces inside guillemets are not part of the name.
-    ['\u00AB Inter \u00BB', '"Inter"'],
-    ['\u00AB\u00A0Inter\u202F\u00BB', '"Inter"'],
+    // What delimiting quotes hold is kept as typed: a slash between spaces.
+    ['\u201C / \u201D', '" / "'],
+    ['\u201C \u203A \u201D', '" \u203A "'],
+    ['\u00AB Inter \u00BB', '" Inter "'],
     // Curly quotes pair by kind, in any shape; one left unpaired is straight.
     ['\u201EInter\u201C', '"Inter"'],
     ['\u201AInter\u2018', "'Inter'"],
@@ -85,6 +86,18 @@ describe('N64/N59: quotes only delimit', () => {
     ['"a\u00A0b" x\u00A0y', '"a\u00A0b" x y'],
   ])('%j reads as %j', (typed, want) => {
     expect(normalValueText(typed)).toBe(want);
+  });
+
+  // A font family trims the spaces inside its quotes (French guillemets);
+  // other quoted text keeps them.
+  it.each([
+    ['--font-family-body', '\u00AB Inter \u00BB', '"Inter"'],
+    ['--font-family-body', '\u00AB\u00A0Inter\u202F\u00BB', '"Inter"'],
+    ['font', '\u00AB Inter \u00BB, serif', '"Inter", serif'],
+    ['content', '\u201C / \u201D', '" / "'],
+    ['content', '\u201C \u203A \u201D', '" \u203A "'],
+  ])('%s %j is %j', (thing, typed, want) => {
+    expect(normalizeEntry(thing, typed).value).toBe(want);
   });
 });
 

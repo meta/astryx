@@ -60,14 +60,9 @@ export function normalValueText(v) {
     } else if (QUOTE_PAIRS[c]) j = v.indexOf(QUOTE_PAIRS[c], i + 1);
     if (j > i) {
       flush();
-      // Spaces just inside the quotes (French « Inter », with a no-break
-      // or narrow no-break space) are not part of the name.
-      const inner = v
-        .slice(i + 1, j)
-        .replace(
-          /^[\s\u00A0\u202F\u2000-\u200A\u3000]+|[\s\u00A0\u202F\u2000-\u200A\u3000]+$/g,
-          '',
-        );
+      // What the quotes hold, as typed (`“ / ”` is a slash between
+      // spaces); a font family trims it (normalizeEntry).
+      const inner = v.slice(i + 1, j);
       const single = kind === CURLY_SINGLE || c === '\uFF07';
       const mark = single
         ? inner.includes("'")
@@ -185,6 +180,9 @@ export function normalizeEntry(thing, value) {
     v = v.replace(/\s*!\s*important\s*;?\s*$/i, '').replace(/;+\s*$/, '');
   }
   if (typeof v === 'string') v = withoutDebris(v);
+  // A font family's name never starts or ends with a space: French quotes
+  // (« Inter », with a no-break or narrow no-break space) hold the name.
+  if (typeof v === 'string' && /font/i.test(t)) v = trimInsideQuotes(v);
   return {thing: t, value: v};
 }
 
@@ -344,4 +342,18 @@ export function cleanDialValue(dial, value) {
     .replace(/^(["'])(.*)\1$/, '$2')
     .trim()
     .toLowerCase();
+}
+
+/**
+ * A value with the spaces just inside each straight-quoted string taken off
+ * (`" Inter "` is "Inter"), for a font family, whose name holds none there.
+ * @param {string} v
+ * @returns {string}
+ */
+export function trimInsideQuotes(v) {
+  const SP = '[\\s\\u00A0\\u202F\\u2000-\\u200A\\u3000]*';
+  return v.replace(
+    new RegExp(`(["'])${SP}((?:(?!\\1)[^\\\\]|\\\\.)*?)${SP}\\1`, 'g'),
+    '$1$2$1',
+  );
 }
