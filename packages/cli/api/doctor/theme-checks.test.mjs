@@ -86,7 +86,7 @@ async function fixture(themeSpecs = [{slug: 'ocean'}], options = {}) {
   );
 
   for (const spec of themeSpecs) {
-    const exportName = `${spec.slug}Theme`;
+    const exportName = spec.exportName ?? `${spec.slug}Theme`;
     const sourceDir = path.join(packageDir, 'themes', spec.slug);
     const fontProperty = spec.fontFamily
       ? `, fontFamily: ${JSON.stringify(spec.fontFamily)}`
@@ -152,9 +152,7 @@ afterEach(() => {
 describe('the released themes check', () => {
   /** @param {string} name */
   function emptyApp(name) {
-    const dir = fs.mkdtempSync(
-      path.join(REPO_ROOT, `.astryx-doctor-${name}-`),
-    );
+    const dir = fs.mkdtempSync(path.join(REPO_ROOT, `.astryx-doctor-${name}-`));
     dirs.push(dir);
     write(path.join(dir, 'package.json'), '{"name":"app","private":true}\n');
     return dir;
@@ -1046,6 +1044,116 @@ describe('app-theme doctor checks', () => {
     });
   });
 
+  it('check 5 compares a local theme another command generates, and its fix is that exact command', async () => {
+    const {dir} = await fixture();
+    await themeEject('ocean', {cwd: dir, package: '@acme/themes'});
+    const localDir = path.join(dir, 'src/themes/ocean');
+    const sourceFile = path.join(localDir, 'oceanTheme.ts');
+    fs.writeFileSync(
+      sourceFile,
+      "const oceanTheme = {name: 'ocean', tokens: {'--color-bg': '#000'}};\nexport {oceanTheme};\nexport default oceanTheme;\n",
+    );
+    await themeBuild(sourceFile, {}, {cwd: dir});
+    await themeAdd('ocean', {cwd: dir, import: true});
+    // The source now carries another command's generated mark, naming the
+    // exact command that writes it.
+    fs.writeFileSync(
+      sourceFile,
+      `// Written by \`astryx experimental theme editor show ocean\` after every build; do not edit it here.\n${fs.readFileSync(sourceFile, 'utf8')}`,
+    );
+    expect(
+      check(await checkAppThemes(dir), 'theme-local-builds'),
+    ).toMatchObject({status: 'pass'});
+
+    // A hand-edited output is still found stale; the fix runs the command
+    // the mark names, never a `theme build` of the generated source.
+    const css = path.join(localDir, 'ocean.css');
+    fs.writeFileSync(
+      css,
+      `${fs.readFileSync(css, 'utf8')}\n.mine { color: red; }\n`,
+    );
+    const fresh = check(await checkAppThemes(dir), 'theme-local-builds');
+    expect(fresh.status).toBe('fail');
+    expect(fresh.message).toContain('ocean');
+    expect(fresh.fix).toMatch(
+      / experimental theme editor show ocean; .* theme add ocean$/,
+    );
+    expect(fresh.fix).not.toMatch(/theme build/);
+
+    // Its built module gone: the owners fix is the same exact command.
+    fs.rmSync(path.join(localDir, 'ocean.js'));
+    const owners = check(await checkAppThemes(dir), 'theme-owners');
+    expect(owners.status).toBe('fail');
+    expect(owners.fix).toMatch(
+      / experimental theme editor show ocean; .* theme add ocean$/,
+    );
+    expect(owners.fix).not.toMatch(/theme build/);
+
+    // A themes folder discovery refuses: the fix names the theme only when
+    // the message does.
+    write(path.join(dir, 'src/themes/manifest.json'), '{}\n');
+    const broken = check(await checkAppThemes(dir), 'theme-owners');
+    expect(broken.fix).not.toContain('<slug>');
+    expect(broken.fix).not.toMatch(/theme add (?!ocean\b)/);
+  });
+
+  it('check 5 names the generating command when a marked source that re-exports its built module has none', async () => {
+    for (const mark of [
+      'Written by `astryx experimental theme editor show ocean`',
+      // A copy written before files named their exact command.
+      'Written by `astryx experimental theme editor`',
+    ]) {
+      const {dir} = await fixture();
+      await themeEject('ocean', {cwd: dir, package: '@acme/themes'});
+      const localDir = path.join(dir, 'src/themes/ocean');
+      const sourceFile = path.join(localDir, 'oceanTheme.ts');
+      fs.writeFileSync(
+        sourceFile,
+        "const oceanTheme = {name: 'ocean', tokens: {'--color-bg': '#000'}};\nexport {oceanTheme};\nexport default oceanTheme;\n",
+      );
+      await themeBuild(sourceFile, {}, {cwd: dir});
+      await themeAdd('ocean', {cwd: dir, import: true});
+      // The source re-exports its built module, as a generated copy does.
+      fs.writeFileSync(
+        sourceFile,
+        `// ${mark} after every build; do not edit it here.\nexport {oceanTheme, default} from './ocean.js';\n`,
+      );
+      fs.rmSync(path.join(localDir, 'ocean.js'));
+      const owners = check(await checkAppThemes(dir), 'theme-owners');
+      expect(owners.status, mark).toBe('fail');
+      expect(owners.fix, mark).toMatch(
+        / experimental theme editor show ocean; .* theme add ocean$/,
+      );
+      expect(owners.fix, mark).not.toMatch(/theme build/);
+      expect(owners.message, mark).not.toMatch(/Run `[^`]*theme build/);
+    }
+    // A theme whose name has a dash: its source is named by the theme's
+    // identifier (myThemeTheme.ts), as the editor and eject write it.
+    const {dir} = await fixture([
+      {slug: 'my-theme', exportName: 'myThemeTheme'},
+    ]);
+    await themeEject('my-theme', {cwd: dir, package: '@acme/themes'});
+    const localDir = path.join(dir, 'src/themes/my-theme');
+    const sourceFile = path.join(localDir, 'myThemeTheme.ts');
+    expect(fs.existsSync(sourceFile)).toBe(true);
+    fs.writeFileSync(
+      sourceFile,
+      "const myThemeTheme = {name: 'my-theme', tokens: {'--color-bg': '#000'}};\nexport {myThemeTheme};\nexport default myThemeTheme;\n",
+    );
+    await themeBuild(sourceFile, {}, {cwd: dir});
+    await themeAdd('my-theme', {cwd: dir, import: true});
+    fs.writeFileSync(
+      sourceFile,
+      "// Written by `astryx experimental theme editor show my-theme` after every build; do not edit it here.\nexport {myThemeTheme, default} from './my-theme.js';\n",
+    );
+    fs.rmSync(path.join(localDir, 'my-theme.js'));
+    const owners = check(await checkAppThemes(dir), 'theme-owners');
+    expect(owners.status).toBe('fail');
+    expect(owners.fix).toMatch(
+      / experimental theme editor show my-theme; .* theme add my-theme$/,
+    );
+  });
+
   it('check 5 leaves a local theme that sets a private var to the private-variables check', async () => {
     const {dir} = await fixture();
     await themeEject('ocean', {cwd: dir, package: '@acme/themes'});
@@ -1342,6 +1450,105 @@ describe('app-theme doctor checks', () => {
     });
   });
 
+  it('check 9 follows a local font import, a relative file or a package stylesheet, and proves its families', async () => {
+    for (const spec of [
+      './ocean-faces.css',
+      'ocean-faces.css',
+      'url(ocean-faces.css)',
+      '@fontsource/ocean-sans/index.css',
+    ]) {
+      const {dir, packageDir} = await fixture([
+        {
+          slug: 'ocean',
+          fontFamily: 'Ocean Sans',
+          fontCss: spec.startsWith('url(')
+            ? `@import ${spec};\n`
+            : `@import "${spec}";\n`,
+        },
+      ]);
+      const faces =
+        '@font-face { font-family: "Ocean Sans"; src: url("./ocean.woff2"); }\n';
+      if (!spec.startsWith('@'))
+        write(path.join(packageDir, 'dist/ocean-faces.css'), faces);
+      else {
+        write(
+          path.join(dir, 'node_modules/@fontsource/ocean-sans/package.json'),
+          JSON.stringify({name: '@fontsource/ocean-sans', version: '1.0.0'}),
+        );
+        write(
+          path.join(dir, 'node_modules/@fontsource/ocean-sans/index.css'),
+          faces,
+        );
+      }
+      expect(
+        check(await checkAppThemes(dir), 'theme-fonts'),
+        spec,
+      ).toMatchObject({status: 'pass'});
+    }
+  });
+
+  it('check 9 warns, never fails, on a local font import it cannot follow', async () => {
+    const {dir} = await fixture([
+      {
+        slug: 'ocean',
+        fontFamily: 'Ocean Sans',
+        fontCss: '@import "@fontsource/not-installed/index.css";\n',
+      },
+    ]);
+    expect(check(await checkAppThemes(dir), 'theme-fonts')).toMatchObject({
+      status: 'warn',
+      message: expect.stringContaining('could not follow'),
+    });
+  });
+
+  it('check 9 warns, never fails, when a chain of local imports runs past the files it follows', async () => {
+    const {dir, packageDir} = await fixture([
+      {
+        slug: 'ocean',
+        fontFamily: 'Ocean Sans',
+        fontCss: '@import "./f1.css";\n',
+      },
+    ]);
+    for (let i = 1; i <= 22; i++)
+      write(
+        path.join(packageDir, `dist/f${i}.css`),
+        i < 22
+          ? `@import "./f${i + 1}.css";\n`
+          : '@font-face { font-family: "Ocean Sans"; src: url("./o.woff2"); }\n',
+      );
+    expect(check(await checkAppThemes(dir), 'theme-fonts')).toMatchObject({
+      status: 'warn',
+      message: expect.stringContaining('could not follow'),
+    });
+  });
+
+  it("check 9 follows a package import from the stylesheet's real folder, as a linked install keeps it", async () => {
+    const {dir, packageDir} = await fixture([
+      {
+        slug: 'ocean',
+        fontFamily: 'Ocean Sans',
+        fontCss: '@import "@fontsource/ocean-sans/index.css";\n',
+      },
+    ]);
+    // The theme package really lives in a store folder beside its own
+    // font package, and the app reaches it through a link.
+    const store = path.join(dir, '.store/themes/node_modules');
+    fs.mkdirSync(path.join(store, '@acme'), {recursive: true});
+    fs.renameSync(packageDir, path.join(store, '@acme/themes'));
+    fs.symlinkSync(path.join(store, '@acme/themes'), packageDir, 'dir');
+    write(
+      path.join(store, '@fontsource/ocean-sans/package.json'),
+      JSON.stringify({name: '@fontsource/ocean-sans', version: '1.0.0'}),
+    );
+    write(
+      path.join(store, '@fontsource/ocean-sans/index.css'),
+      '@font-face { font-family: "Ocean Sans"; src: url("./o.woff2"); }\n',
+    );
+    expect(check(await checkAppThemes(dir), 'theme-fonts')).toMatchObject({
+      status: 'pass',
+    });
+  });
+
   it('check 10 fails on conflicting unscoped rules across added themes', async () => {
     const {dir} = await fixture([
       {slug: 'ocean', css: 'body { color: blue; }\n'},
@@ -1354,9 +1561,7 @@ describe('app-theme doctor checks', () => {
   });
 
   it('reports one information check when the CLI manages no themes', async () => {
-    const dir = fs.mkdtempSync(
-      path.join(REPO_ROOT, '.astryx-doctor-empty-'),
-    );
+    const dir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-doctor-empty-'));
     dirs.push(dir);
     write(path.join(dir, 'package.json'), '{"name":"empty"}\n');
 
