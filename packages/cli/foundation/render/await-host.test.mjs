@@ -11,12 +11,13 @@ import {EventEmitter} from 'node:events';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {afterEach, describe, expect, it, vi} from 'vitest';
+import {afterAll, afterEach, describe, expect, it, vi} from 'vitest';
 import {awaitHost, withHostStateFile} from './render-page.mjs';
 import {HOST_EXIT} from './host-exit.mjs';
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'await-host-test-'));
 afterEach(() => vi.useRealTimers());
+afterAll(() => fs.rmSync(scratch, {recursive: true, force: true}));
 
 function fakeHost() {
   const host = /** @type {any} */ (new EventEmitter());
@@ -103,6 +104,21 @@ describe('a host that ends with no answer reaching this process', () => {
     });
     await expect(endWithout(0, file)).rejects.toMatchObject({
       message: "The page's process ended while it sent its answer (exit 0).",
+    });
+  });
+
+  it("adds the page's last output line when the host left one", async () => {
+    const file = stateFileWith({
+      stage: 'rendering',
+      elapsedMs: 3000,
+      rssMb: 200,
+      freeMb: 700,
+      answered: 'no',
+      stderrTail: 'warming up\nReferenceError: window is not defined',
+    });
+    await expect(endWithout(0, file)).rejects.toMatchObject({
+      message:
+        "The page's process ended without an answer (exit 0) while rendering, after 3 seconds, with 700 MB of memory free. Its last output: ReferenceError: window is not defined",
     });
   });
 

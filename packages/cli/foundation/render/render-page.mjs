@@ -327,7 +327,7 @@ function noMessageError(code, stateFile) {
     saved = stateFile ? JSON.parse(fs.readFileSync(stateFile, 'utf8')) : null;
   } catch {}
   if (!saved) return hostEndError(code);
-  const detail = {exit: code, stage: saved.stage, elapsedMs: saved.elapsedMs, rssMb: saved.rssMb, freeMb: saved.freeMb};
+  const detail = {exit: code, stage: saved.stage, elapsedMs: saved.elapsedMs, rssMb: saved.rssMb, freeMb: saved.freeMb, ...(saved.stderrTail ? {stderrTail: saved.stderrTail} : {})};
   if (saved.answered === 'sent') {
     return new RenderError('ERR_RENDER_FAILED', `The page's process sent its answer, but this process did not receive it (exit ${code}).`, {reason: 'answer-lost', ...detail});
   }
@@ -335,9 +335,10 @@ function noMessageError(code, stateFile) {
     return new RenderError('ERR_RENDER_FAILED', `The page's process ended while it sent its answer (exit ${code}).`, {reason: 'ended-while-sending', ...detail});
   }
   const seconds = Math.round((saved.elapsedMs ?? 0) / 1000);
+  const last = saved.stderrTail ? ` Its last output: ${String(saved.stderrTail).split('\n').at(-1)}` : '';
   return new RenderError(
     'ERR_RENDER_FAILED',
-    `The page's process ended without an answer (exit ${code}) while ${saved.stage}, after ${seconds} seconds, with ${saved.freeMb} MB of memory free.`,
+    `The page's process ended without an answer (exit ${code}) while ${saved.stage}, after ${seconds} seconds, with ${saved.freeMb} MB of memory free.${last}`,
     {reason: 'host-ended', ...detail},
   );
 }
@@ -381,7 +382,11 @@ export async function withHostStateFile(use) {
   try {
     return await use(path.join(dir, 'host-state.json'));
   } finally {
-    fs.rmSync(dir, {recursive: true, force: true});
+    // Best effort: a removal that fails (a file still held open) never
+    // replaces the render's own result.
+    try {
+      fs.rmSync(dir, {recursive: true, force: true, maxRetries: 3});
+    } catch {}
   }
 }
 

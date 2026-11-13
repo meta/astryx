@@ -14,7 +14,7 @@
  * wrote to stderr. Each way the host itself ends without an answer has its own
  * exit code (HOST_EXIT), so none of them reads as a clean exit.
  *
- * @input argv[2]: JSON {entry, root, served, withoutSegmenter, timeoutMs}
+ * @input argv[2]: JSON {entry, root, served, withoutSegmenter, timeoutMs, stateFile}, where stateFile is a file in the CLI's per-run temporary folder
  * @output one IPC message: the worker's answer, or {hostError, stage}, or
  *   {hostExit, reason, stage, elapsedMs, rssMb, freeMb, stderrTail}
  * @position foundation/render — started by render-page.mjs

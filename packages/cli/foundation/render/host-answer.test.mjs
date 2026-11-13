@@ -22,32 +22,55 @@ function host({sendError = null, throws = false, connected = true} = {}) {
 }
 
 describe("the render host's answer", () => {
-  it('exits 0 only after the channel accepted the answer', () => {
-    const h = host();
-    h.answer({html: 'x'});
-    expect(h.send).toHaveBeenCalledTimes(1);
-    expect(h.exit).toHaveBeenCalledWith(0);
-    expect(h.phases).toEqual(['sending', 'sent']);
+  it('exits 0 only after the channel accepted the answer, and exits once', () => {
+    /** @type {(error: Error | null) => void} */
+    let done = () => {};
+    const exit = vi.fn();
+    const phases = /** @type {string[]} */ ([]);
+    const answer = makeAnswer({
+      send: (_message, callback) => {
+        done = callback;
+      },
+      exit,
+      connected: () => true,
+      record: phase => phases.push(phase),
+    });
+    answer({html: 'x'});
+    expect(exit).not.toHaveBeenCalled();
+    expect(phases).toEqual(['sending']);
+    done(null);
+    expect(exit.mock.calls).toEqual([[0]]);
+    expect(phases).toEqual(['sending', 'sent']);
   });
 
   it('exits with its own code when the send fails, never 0', () => {
-    const h = host({sendError: new Error('EPIPE')});
-    h.answer({html: 'x'});
-    expect(h.exit).toHaveBeenCalledWith(HOST_EXIT.sendFailed);
-    expect(h.phases).toEqual(['sending', 'send-failed']);
+    /** @type {(error: Error | null) => void} */
+    let done = () => {};
+    const exit = vi.fn();
+    const answer = makeAnswer({
+      send: (_message, callback) => {
+        done = callback;
+      },
+      exit,
+      connected: () => true,
+    });
+    answer({html: 'x'});
+    expect(exit).not.toHaveBeenCalled();
+    done(new Error('EPIPE'));
+    expect(exit.mock.calls).toEqual([[HOST_EXIT.sendFailed]]);
   });
 
-  it('exits with the send-failed code when the send throws', () => {
+  it('exits with the send-failed code when the send throws, never 0', () => {
     const h = host({throws: true});
     h.answer({html: 'x'});
-    expect(h.exit).toHaveBeenCalledWith(HOST_EXIT.sendFailed);
+    expect(h.exit.mock.calls).toEqual([[HOST_EXIT.sendFailed]]);
   });
 
   it('exits with the no-channel code when no channel is left', () => {
     const h = host({connected: false});
     h.answer({html: 'x'});
     expect(h.send).not.toHaveBeenCalled();
-    expect(h.exit).toHaveBeenCalledWith(HOST_EXIT.noChannel);
+    expect(h.exit.mock.calls).toEqual([[HOST_EXIT.noChannel]]);
   });
 
   it('sends one answer only', () => {
@@ -55,5 +78,6 @@ describe("the render host's answer", () => {
     h.answer({html: 'x'});
     h.answer({hostExit: 1, reason: 'worker-ended'});
     expect(h.send).toHaveBeenCalledTimes(1);
+    expect(h.exit.mock.calls).toEqual([[0]]);
   });
 });
