@@ -34,7 +34,7 @@ import {Field} from '../Field/Field';
 import type {InputStatus} from '../Field/types';
 import {List} from '../List/List';
 import type {ListDensity} from '../List/ListContext';
-import {useTooltip} from '../Tooltip/useTooltip';
+import {useTooltipInternal} from '../Tooltip/useTooltip';
 import * as stylex from '@stylexjs/stylex';
 import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
@@ -239,7 +239,8 @@ export function CheckboxList({
   // reason describes the group and each checkbox (see
   // CheckboxListContextValue.disabledMessageID).
   const showsDisabledMessage = isDisabled && !!disabledMessage;
-  const disabledMessageTooltip = useTooltip({
+  const disabledMessageTooltip = useTooltipInternal({
+    isReason: true,
     placement: 'above',
     // The group container is not naturally focusable; focusin bubbles up from
     // the checkboxes, so always attach focus listeners.

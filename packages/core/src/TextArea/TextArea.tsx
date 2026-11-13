@@ -47,7 +47,7 @@ import {Icon, renderIconSlot, type IconType} from '../Icon';
 import {isRenderable} from '../utils/isRenderable';
 import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {Spinner} from '../Spinner';
-import {useTooltip} from '../Tooltip';
+import {useTooltipInternal} from '../Tooltip/useTooltip';
 import {mergeProps} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
 import type {BaseProps} from '../BaseProps';
@@ -488,7 +488,8 @@ export function TextArea({
   // A disabled field keeps its tab stop but, like a natively disabled one,
   // runs no caller event handler other than focus and blur (`spec:AST-085` FR2).
   const fieldProps = withholdCallerHandlers(rest, isDisabled);
-  const disabledMessageTooltip = useTooltip({
+  const disabledMessageTooltip = useTooltipInternal({
+    isReason: true,
     placement: 'above',
     // The container div is not naturally focusable; focusin bubbles up from
     // the textarea, so always attach focus listeners.

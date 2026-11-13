@@ -45,7 +45,7 @@ import {FieldStatus} from '../FieldStatus/FieldStatus';
 import type {IconType} from '../Icon';
 import type {InputStatus} from '../Field/types';
 import {Spinner} from '../Spinner';
-import {useTooltip} from '../Tooltip';
+import {useTooltipInternal} from '../Tooltip/useTooltip';
 import {mergeProps, mergeRefs, rtlStyles} from '../utils';
 import {switchFocusInput, switchScope} from './switch.markers.stylex';
 import type {BaseProps} from '../BaseProps';
@@ -905,7 +905,8 @@ export function Switch({
   // native checkbox stays perceivable via aria-disabled instead of the disabled
   // attribute. Toggling is blocked by the isDisabled guard in onChange.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
-  const disabledMessageTooltip = useTooltip({
+  const disabledMessageTooltip = useTooltipInternal({
+    isReason: true,
     placement: 'above',
     // The container row is not naturally focusable; focusin bubbles up from the
     // native input, so always attach focus listeners.

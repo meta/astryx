@@ -24,7 +24,7 @@ import {SegmentedControlContext} from './SegmentedControlContext';
 import {useInternalListFocus} from '../hooks/useListFocus';
 import {isSegmentDisabledOnItsOwn} from '../privateAttributes/segmentDisabled.stylex';
 import {useKeyboardHint} from '../hooks/useKeyboardHint';
-import {useTooltip} from '../Tooltip';
+import {useTooltipInternal} from '../Tooltip/useTooltip';
 import type {
   SegmentedControlSize,
   SegmentedControlLayout,
@@ -341,7 +341,8 @@ export function SegmentedControl({
   // events while disabled; the radios stay perceivable via aria-disabled.
   // Selection is blocked by the isDisabled guards in the click/focus handlers.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
-  const disabledMessageTooltip = useTooltip({
+  const disabledMessageTooltip = useTooltipInternal({
+    isReason: true,
     placement: 'above',
     // The radiogroup container is not naturally focusable; focusin bubbles up
     // from the radios, so always attach focus listeners.

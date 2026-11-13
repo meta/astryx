@@ -48,7 +48,7 @@ import {renderIconSlot, type IconType} from '../Icon/Icon';
 import {isRenderable} from '../utils/isRenderable';
 import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {Spinner} from '../Spinner/Spinner';
-import {useTooltip} from '../Tooltip/useTooltip';
+import {useTooltipInternal} from '../Tooltip/useTooltip';
 import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
 import {getInputARIA} from '../utils/inputAria';
 import {isImeKeyEvent} from '../utils/ime';
@@ -400,7 +400,8 @@ export function TextInput({
   // disabled attribute. The field is made read-only so it can't be typed into,
   // and value mutation is blocked by the isDisabled guard in handleChange.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
-  const disabledMessageTooltip = useTooltip({
+  const disabledMessageTooltip = useTooltipInternal({
+    isReason: true,
     placement: 'above',
     // The container div is not naturally focusable; focusin bubbles up from
     // the input, so always attach focus listeners.

@@ -99,7 +99,7 @@ import {
   durationVars,
   easeVars,
 } from '../theme/tokens.stylex';
-import {useTooltip} from '../Tooltip';
+import {useTooltipInternal} from '../Tooltip/useTooltip';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {
   focusOutlineStyles,
@@ -649,7 +649,8 @@ export function TouchDateField({
   // wrapper. Only the persistent disabled state surfaces a reason, never the
   // transient busy one.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
-  const disabledMessageTooltip = useTooltip({
+  const disabledMessageTooltip = useTooltipInternal({
+    isReason: true,
     placement: 'above',
     focusTrigger: 'always',
     isEnabled: showsDisabledMessage,

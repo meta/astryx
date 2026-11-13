@@ -41,7 +41,7 @@ import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {Field, inputWrapperStyles} from '../Field';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
 import {Spinner} from '../Spinner';
-import {useTooltip} from '../Tooltip/useTooltip';
+import {useTooltipInternal} from '../Tooltip/useTooltip';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import type {LayerAlignment, LayerPlacement} from '../Layer/useLayer';
 import {usePopover} from '../Popover/usePopover';
@@ -635,7 +635,8 @@ export function ComplexSelector<Value>({
   // The tooltip listens on the trigger button, not the control box. So the
   // status info-tip in the box opens only its own message.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
-  const disabledMessageTooltip = useTooltip({
+  const disabledMessageTooltip = useTooltipInternal({
+    isReason: true,
     placement: 'above',
     isEnabled: showsDisabledMessage,
   });

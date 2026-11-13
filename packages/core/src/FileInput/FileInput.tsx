@@ -45,7 +45,7 @@ import {useAnnounce} from '../hooks/useAnnounce';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
 import {useClickableContainer} from '../hooks/useClickableContainer';
-import {useTooltip} from '../Tooltip';
+import {useTooltipInternal} from '../Tooltip/useTooltip';
 
 export type {
   InputStatus as FileInputStatus,
@@ -542,7 +542,8 @@ export function FileInput({
   // disabled attribute. Opening the picker is blocked by the isDisabled guards
   // in the handlers.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
-  const disabledMessageTooltip = useTooltip({
+  const disabledMessageTooltip = useTooltipInternal({
+    isReason: true,
     placement: 'above',
     focusTrigger: 'always',
     isEnabled: showsDisabledMessage,

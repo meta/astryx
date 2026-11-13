@@ -55,7 +55,7 @@ import {IconButton} from '../IconButton';
 import {SegmentedControl, SegmentedControlItem} from '../SegmentedControl';
 import {useSize} from '../SizeContext/SizeContext';
 import {Spinner} from '../Spinner';
-import {useTooltip} from '../Tooltip';
+import {useTooltipInternal} from '../Tooltip/useTooltip';
 import {useFieldInputStyling} from '../Field/fieldParts';
 import {
   colorVars,
@@ -518,7 +518,8 @@ export function TouchDateTimeField({
   const isEffectivelyDisabled = isDisabled || isLoading;
 
   const showsDisabledMessage = isDisabled && !!disabledMessage;
-  const disabledMessageTooltip = useTooltip({
+  const disabledMessageTooltip = useTooltipInternal({
+    isReason: true,
     placement: 'above',
     focusTrigger: 'always',
     isEnabled: showsDisabledMessage,

@@ -99,7 +99,7 @@ import {useEndLaneReserve} from './useEndLaneReserve';
 import {renderIconSlot, type IconType} from '../Icon';
 import {OverflowList} from '../OverflowList';
 import {useLayer} from '../Layer/useLayer';
-import {useTooltip} from '../Tooltip';
+import {useTooltipInternal} from '../Tooltip/useTooltip';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {
   colorVars,
@@ -1357,7 +1357,8 @@ export function Tokenizer<T extends SearchableItem>({
   // disabled attribute. Input is blocked by the isDisabled guards in
   // BaseTypeahead and handleWrapperClick.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
-  const disabledMessageTooltip = useTooltip({
+  const disabledMessageTooltip = useTooltipInternal({
+    isReason: true,
     placement: 'above',
     // The wrapper is not naturally focusable; focusin bubbles up from the
     // input, so always attach focus listeners.

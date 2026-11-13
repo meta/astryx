@@ -18,7 +18,7 @@ import * as stylex from '@stylexjs/stylex';
 import {Icon, type IconSize} from '../Icon/Icon';
 import type {IconName} from '../Icon/globalIconRegistry';
 import type {InputStatus, InputStatusType} from '../Field/types';
-import {useTooltip} from '../Tooltip/useTooltip';
+import {useTooltipInternal} from '../Tooltip/useTooltip';
 import {radiusVars} from '../theme/tokens.stylex';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
@@ -142,10 +142,11 @@ export function useInputStatusIcon({
   // a boolean takes control for the current open/close cycle.
   const [tapOpen, setTapOpen] = useState<boolean | undefined>(undefined);
 
-  const tooltip = useTooltip({
+  const tooltip = useTooltipInternal({
     placement: 'above',
     isEnabled: hasTooltip,
     isOpen: tapOpen,
+    isStatus: true,
   });
 
   // Give control back to hover and focus after a tap-opened tooltip is

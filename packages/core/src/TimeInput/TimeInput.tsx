@@ -76,7 +76,7 @@ import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
 import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
-import {useTooltip} from '../Tooltip';
+import {useTooltipInternal} from '../Tooltip/useTooltip';
 import {themeProps} from '../utils/themeProps';
 import {useLocale} from '../i18n';
 import {
@@ -507,7 +507,8 @@ function TimeField({
   // mutation guards block typing. The disabled-reason tooltip's listeners
   // attach to the input container.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
-  const disabledMessageTooltip = useTooltip({
+  const disabledMessageTooltip = useTooltipInternal({
+    isReason: true,
     placement: 'above',
     // The container div is not naturally focusable; focusin bubbles up from
     // the input, so always attach focus listeners.

@@ -70,7 +70,7 @@ import {
   noteOutsideDismissal,
   useOutsidePress,
 } from '../Layer/outsidePress';
-import {useTooltip} from '../Tooltip';
+import {useTooltipInternal} from '../Tooltip/useTooltip';
 import {useInputContainer} from '../hooks/useInputContainer';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
@@ -794,7 +794,8 @@ function PointerDateTimeField({
   // isEffectivelyDisabled guards. Only the persistent isDisabled state (not the
   // transient busy state) surfaces a reason.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
-  const disabledMessageTooltip = useTooltip({
+  const disabledMessageTooltip = useTooltipInternal({
+    isReason: true,
     placement: 'above',
     // The container div is not naturally focusable; focusin bubbles up from
     // the inputs, so always attach focus listeners.

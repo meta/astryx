@@ -54,7 +54,7 @@ import {
 } from '../Field';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
 import {VisuallyHidden} from '../VisuallyHidden';
-import {useTooltip} from '../Tooltip';
+import {useTooltipInternal} from '../Tooltip/useTooltip';
 import {getInputARIA} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
 import {withholdCallerHandlers} from '../utils/disabledInteraction';
@@ -831,7 +831,8 @@ export function NumberInput({
   // A disabled field keeps its tab stop but, like a natively disabled one,
   // runs no caller event handler other than focus and blur (`spec:AST-085` FR2).
   const fieldProps = withholdCallerHandlers(rest, isDisabled);
-  const disabledMessageTooltip = useTooltip({
+  const disabledMessageTooltip = useTooltipInternal({
+    isReason: true,
     placement: 'above',
     // The container div is not naturally focusable; focusin bubbles up from
     // the input, so always attach focus listeners.

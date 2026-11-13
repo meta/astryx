@@ -34,7 +34,7 @@ import React, {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
-import {useTooltip} from '../Tooltip';
+import {useTooltipInternal} from '../Tooltip/useTooltip';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
 import {useIndicator} from '../Indicator';
 import type {IndicatorPosition} from '../Indicator';
@@ -1289,14 +1289,16 @@ export function Selector<T extends SelectorOptionType>(
   // while the trigger stays focusable via aria-disabled. Opening and selection
   // are guarded independently, including options in an already-open surface.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
-  const disabledMessageTooltip = useTooltip({
+  const disabledMessageTooltip = useTooltipInternal({
+    isReason: true,
     placement: 'above',
     // The container div is not naturally focusable; focusin bubbles up from
     // the trigger button, so always attach focus listeners.
     focusTrigger: 'always',
     isEnabled: showsDisabledMessage,
   });
-  const statusTooltip = useTooltip({
+  const statusTooltip = useTooltipInternal({
+    isStatus: true,
     placement: 'above',
     isEnabled: effectiveStatusVariant === 'tooltip' && !!status?.message,
   });

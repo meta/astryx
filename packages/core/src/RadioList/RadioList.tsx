@@ -29,7 +29,7 @@ import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import {Field} from '../Field/Field';
 import type {InputStatus} from '../Field/types';
-import {useTooltip} from '../Tooltip/useTooltip';
+import {useTooltipInternal} from '../Tooltip/useTooltip';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {mergeProps} from '../utils/mergeProps';
@@ -254,7 +254,8 @@ export function RadioList({
   // onChange guard. The reason describes the radiogroup and each radio (see
   // RadioListReasonContext).
   const showsDisabledMessage = isDisabled && !!disabledMessage;
-  const disabledMessageTooltip = useTooltip({
+  const disabledMessageTooltip = useTooltipInternal({
+    isReason: true,
     placement: 'above',
     // The radiogroup container is not naturally focusable; focusin bubbles up
     // from the radios, so always attach focus listeners.
