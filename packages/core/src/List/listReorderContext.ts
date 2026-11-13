@@ -83,6 +83,11 @@ export interface ListReorderHandleProps {
    * child, before its label, so no slot aligns it.
    */
   readonly rowAlign?: ItemAlign;
+  /**
+   * The handle follows the row's list marker. It then takes its place in the
+   * row instead of hanging before the text.
+   */
+  readonly isAfterMarker?: boolean;
 }
 
 /**

@@ -239,34 +239,52 @@ const styles = stylex.create({
   rowWithRemove: {
     gridTemplateColumns: `minmax(0, 1fr) ${sizeVars['--size-element-md']}`,
   },
-  // The reorder handle starts the record, in a track before the first
-  // field's control. A record without a handle keeps the track empty (its
-  // `::before`), so every first field starts in one column.
+  // The reorder handle starts the record. Where it shows only on hover or
+  // focus, it hangs before the first field's control from an empty track, so
+  // the fields keep their columns. Under a coarse pointer it always shows, in
+  // a track of its own, and the record's content lines up past it. A record
+  // without a handle fills the track with its `::before`, so every first
+  // field starts in one column.
   handleControls: {
     display: 'grid',
-    gridTemplateColumns: `${REORDER_HANDLE_SIZE}px minmax(0, 1fr)`,
+    gridTemplateColumns: {
+      default: '0px minmax(0, 1fr)',
+      '@media (any-pointer: coarse)': `${REORDER_HANDLE_SIZE}px minmax(0, 1fr)`,
+    },
     alignItems: 'center',
-    columnGap: spacingVars['--spacing-1'],
+    columnGap: {
+      default: 0,
+      '@media (any-pointer: coarse)': spacingVars['--spacing-1'],
+    },
   },
   handleControlsWithoutHandle: {
     '::before': {
       content: '""',
     },
   },
-  // The first column's label and the content under the fields line up with
-  // the field controls, past the handle's track.
+  // Under a coarse pointer, the first column's label and the content under
+  // the fields line up with the field controls, past the handle's track.
   afterHandle: {
-    paddingInlineStart: PAST_HANDLE,
+    paddingInlineStart: {
+      default: 0,
+      '@media (any-pointer: coarse)': PAST_HANDLE,
+    },
   },
   // A record's status paints its own surface, so its box starts there too.
   statusAfterHandle: {
-    marginInlineStart: PAST_HANDLE,
+    marginInlineStart: {
+      default: 0,
+      '@media (any-pointer: coarse)': PAST_HANDLE,
+    },
   },
   // Stacked, every field lines up under the first field's control.
   stackedAfterHandle: {
     paddingInlineStart: {
       default: 0,
-      '@container list-input (max-width: 640px)': PAST_HANDLE,
+      '@container list-input (max-width: 640px)': {
+        default: 0,
+        '@media (any-pointer: coarse)': PAST_HANDLE,
+      },
     },
   },
   fields: {
