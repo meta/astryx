@@ -111,7 +111,7 @@ dataTokens dataTokens theme/MediaTheme.doc.mjs theme/domainTokens/dataTokens.ts
 dayCellUtils dayCellUtils Calendar/Calendar.doc.mjs Calendar/dayCellUtils.ts
 declarationBoundary declarationBoundary theme/MediaTheme.doc.mjs theme/declarationBoundary.ts
 defaultIcons defaultIcons Icon/Icon.doc.mjs Icon/defaultIcons.tsx
-defineSyntaxTheme defineSyntaxTheme theme/MediaTheme.doc.mjs theme/syntax/defineSyntaxTheme.ts
+defineSyntaxTheme defineSyntaxTheme theme/syntax/useSyntaxTheme.doc.mjs theme/syntax/defineSyntaxTheme.ts
 defineTheme defineTheme theme/MediaTheme.doc.mjs theme/defineTheme.ts
 derivedVarRegistry derivedVarRegistry theme/MediaTheme.doc.mjs theme/derivedVarRegistry.ts
 dockerfile dockerfile CodeBlock/CodeBlock.doc.mjs CodeBlock/languages/dockerfile.ts
@@ -191,7 +191,7 @@ popoverOperations popoverOperations Layer/Layer.doc.mjs Layer/popoverOperations.
 powerSearchSheetUtils powerSearchSheetUtils PowerSearch/PowerSearch.doc.mjs PowerSearch/powerSearchSheetUtils.ts
 powershell powershell CodeBlock/CodeBlock.doc.mjs CodeBlock/languages/powershell.ts
 preserveAnimations preserveAnimations Layer/Layer.doc.mjs Layer/preserveAnimations.ts
-presets presets theme/MediaTheme.doc.mjs theme/syntax/presets.ts
+presets presets theme/syntax/useSyntaxTheme.doc.mjs theme/syntax/presets.ts
 pressGroupContext pressGroupContext hooks/useAnimatedLayout.doc.mjs hooks/pressGroupContext.ts
 protocol protocol Markdown/Markdown.doc.mjs Markdown/plugins/protocol.ts
 publicContext publicContext i18n/InternationalizationProvider.doc.mjs i18n/publicContext.ts
