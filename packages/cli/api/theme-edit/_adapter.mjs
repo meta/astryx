@@ -376,16 +376,25 @@ const lockName = name =>
  */
 function absolute(result, root, from) {
   if (path.resolve(from) === root) return result;
-  /** @param {any} v @returns {any} */
-  const map = v =>
+  /** A line that names theme files inside it (`see`, a picture note). */
+  const PROSE = new Set(['see', 'pictureProblem']);
+  /** @param {any} v @param {string} [key] @returns {any} */
+  const map = (v, key) =>
     typeof v === 'string'
       ? /^themes\//.test(v)
         ? path.join(root, v)
-        : v
+        : key && PROSE.has(key)
+          ? v.replace(
+              /(^|[\s(,])(themes\/[^\s,;)]+)/g,
+              (_, before, file) => `${before}${path.join(root, file)}`,
+            )
+          : v
       : Array.isArray(v)
-        ? v.map(map)
+        ? v.map(x => map(x, key))
         : v && typeof v === 'object'
-          ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, map(x)]))
+          ? Object.fromEntries(
+              Object.entries(v).map(([k, x]) => [k, map(x, k)]),
+            )
           : v;
   return map(result);
 }

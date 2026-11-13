@@ -886,9 +886,10 @@ async function previewAndRoute(ctx, slug, data, png, focus = 'overview') {
     process.removeListener('SIGTERM', stopped);
   }
   const wrote = takeFirstAppCopy(ctx.project.cwd, slug);
+  const previewStale = await keepPreviewRoute(ctx, slug);
   return {
     ...p,
-    previewStale: await keepPreviewRoute(ctx, slug),
+    previewStale,
     // How to see the change: the page about it, at its own URL.
     // A page not written this time (preview null) still shows the theme
     // as it was; checks that failed with the page written do not.
@@ -902,6 +903,7 @@ async function previewAndRoute(ctx, slug, data, png, focus = 'overview') {
             cause: 'no preview was rendered',
           })
         : null,
+      {pictureProblem: png ? p.pictureProblem : null, stale: previewStale},
     ),
     // The first time the theme's app copy is written, its files are named.
     ...(wrote ? {appCopy: {wrote}} : {}),
@@ -1129,6 +1131,33 @@ async function change(sub, slug, thing, value, options) {
   // As typed: an undo of a saved entry written in a form the cleanup below
   // repairs (`Corners`, `var(--radius-page)`) removes that exact entry.
   const typedThing = thing;
+  // A JSON object of several settings pasted as one: one set line each.
+  if (
+    typeof thing === 'string' &&
+    (value == null || value === '') &&
+    /^\s*\{[\s\S]*\}\s*$/.test(thing)
+  ) {
+    /** @type {any} */
+    let obj = null;
+    try {
+      obj = JSON.parse(thing);
+    } catch {
+      // Not JSON: read as typed.
+    }
+    if (obj && typeof obj === 'object' && Object.keys(obj).length > 1)
+      refuse(
+        E.ERR_INVALID_ARGUMENT,
+        `This holds ${Object.keys(obj).length} settings; ${sub} changes one at a time.`,
+        {
+          run: Object.entries(obj)
+            .slice(0, 6)
+            .map(
+              ([k, x]) =>
+                `${P} ${sub} ${slug} ${quoteCommandArgument(k)}${sub === 'set' ? ` ${quoteCommandArgument(String(x))}` : ''}`,
+            ),
+        },
+      );
+  }
   // How it was typed, put right before anything reads it (a pasted
   // declaration, a dash, a var(), invisible spaces).
   if (typeof thing === 'string') {
