@@ -396,6 +396,7 @@ export function unreadableReason(file) {
  * @param {string} slug
  */
 export function refuseUnreadableFiles(cwd, slug) {
+  refuseThemesNotFolder(cwd);
   const f = themeFiles(cwd, slug);
   // The files the editor reads (the settings, the source, the history) are
   // named here; the files the build writes (with their types) by the
