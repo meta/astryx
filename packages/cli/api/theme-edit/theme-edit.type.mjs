@@ -98,6 +98,7 @@
  * @property {{code: string, cause: string} | null} notChecked - Saved but not checked: see ThemeEditPreviewFields.
  * @property {string[]} [previewStale] - In-app preview files changed by hand: see ThemeEditPreviewFields.
  * @property {string} [sheetStale] - Set when sheet.html shows the theme as it was before this change: see ThemeEditPreviewFields.
+ * @property {{wrote: string[]}} [appCopy] - Only the first time the theme's app copy is written: see ThemeEditPreviewFields.
  */
 
 /**

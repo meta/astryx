@@ -1516,7 +1516,12 @@ export function writeAppCopyAt(cwd, slug, fontsCss) {
   const name = `${camel(slug)}Theme`;
   const first = !fs.existsSync(path.join(dir, `${name}.doc.mjs`));
   if (!fs.existsSync(f.js) || !fs.existsSync(f.css)) return null;
-  // Only the editor's own copy is written over.
+  // The copy's source, as the stable build's header names it.
+  const source = `src/themes/${slug}/${name}.ts`;
+  // Only the editor's own copy is written over: its descriptor carries the
+  // editor's mark, and it holds only the copy's own files. Its built files
+  // are exactly what `theme build` of the copy's source writes, so a stable
+  // rebuild of the copy (doctor's fix) leaves it the editor's.
   if (fs.existsSync(dir)) {
     /** @type {string[]} */
     let names;
@@ -1525,16 +1530,22 @@ export function writeAppCopyAt(cwd, slug, fontsCss) {
     } catch {
       return null;
     }
-    const ours = names.every(n => {
-      try {
-        return fs
-          .readFileSync(path.join(dir, n), 'utf8')
-          .includes(APP_COPY_MARK);
-      } catch {
-        return false;
-      }
-    });
-    if (!ours) return null;
+    /** @type {boolean} */
+    let marked;
+    try {
+      marked = fs
+        .readFileSync(path.join(dir, `${name}.doc.mjs`), 'utf8')
+        .includes(APP_COPY_MARK);
+    } catch {
+      marked = false;
+    }
+    const own = new Set([
+      `${name}.doc.mjs`,
+      `${name}.ts`,
+      `${slug}.fonts.css`,
+      ...APP_COPY_BUILT.map(ext => `${slug}${ext}`),
+    ]);
+    if (!marked || !names.every(n => own.has(n))) return null;
   }
   const head = (/** @type {string} */ open, /** @type {string} */ close) =>
     `${open} ${APP_COPY_MARK} after every build of themes/${slug}/; do not edit it here. Change the theme with the editor. ${close}\n`;
@@ -1546,14 +1557,23 @@ export function writeAppCopyAt(cwd, slug, fontsCss) {
           ...fs.readFileSync(keptFonts, 'utf8').matchAll(/@import "([^"]+)";/g),
         ].map(m => m[1])
       : []);
+  // A built file as `theme build` of the copy's source writes it: the
+  // editor's build of the same theme, with the header naming that source.
+  const asBuilt = (/** @type {string} */ text) =>
+    text
+      .replace(/^( \* Source: ).*$/m, `$1${source}`)
+      .replace(/^( \* Command: ).*$/m, `$1astryx theme build ${source}`);
+  /** @type {Record<string, string>} */
+  const built = {};
+  for (const ext of APP_COPY_BUILT) {
+    const from = path.join(f.dir, `${slug}${ext}`);
+    if (fs.existsSync(from))
+      built[`${slug}${ext}`] = asBuilt(fs.readFileSync(from, 'utf8'));
+  }
   const files = {
     [`${name}.doc.mjs`]: `${head('//', '')}\n/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {\n  type: 'theme',\n  name: ${JSON.stringify(slug)},\n  displayName: ${JSON.stringify(slug)},\n  description: ${JSON.stringify(`The ${slug} theme, made with the theme editor (themes/${slug}/).`)},\n  maintained: false,\n};\n`,
     [`${name}.ts`]: `${head('//', '')}export {${name}} from './${slug}';\n`,
-    [`${slug}.js`]: `${head('/*', '*/')}${fs.readFileSync(f.js, 'utf8')}`,
-    [`${slug}.d.ts`]: fs.existsSync(path.join(f.dir, `${slug}.d.ts`))
-      ? `${head('/*', '*/')}${fs.readFileSync(path.join(f.dir, `${slug}.d.ts`), 'utf8')}`
-      : `${head('/*', '*/')}export declare const ${name}: import('@astryxdesign/core/theme').Theme;\n`,
-    [`${slug}.css`]: `${head('/*', '*/')}${fs.readFileSync(f.css, 'utf8')}`,
+    ...built,
     ...(fonts.length
       ? {
           [`${slug}.fonts.css`]: `${head('/*', '*/')}${fonts.map(c => `@import ${JSON.stringify(c)};`).join('\n')}\n`,
@@ -1581,6 +1601,9 @@ export function writeAppCopyAt(cwd, slug, fontsCss) {
     );
   return dir;
 }
+
+/** The build outputs of a theme, by their ending after `<theme>`. */
+const APP_COPY_BUILT = ['.css', '.css.d.ts', '.js', '.d.ts', '.variants.d.ts'];
 
 /** App copies written for the first time in this process, by app and theme. @type {Map<string, string[]>} */
 const FIRST_COPIES = new Map();

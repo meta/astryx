@@ -40,9 +40,11 @@ afterAll(() => {
   removeLinkedFixture(cwd);
 });
 
-/** The copy's file, without its first (generated) line. @param {string} rel */
+/** A built file without its Source and Command header lines. @param {string} rel */
 const body = rel =>
-  fs.readFileSync(path.join(cwd, rel), 'utf8').split('\n').slice(1).join('\n');
+  fs
+    .readFileSync(path.join(cwd, rel), 'utf8')
+    .replace(/^ \* (Source|Command): .*\n/gm, '');
 
 describe('hunt55: the app copy of an editor theme', () => {
   it('is a standard local theme theme add takes, kept in step', async () => {
@@ -52,20 +54,22 @@ describe('hunt55: the app copy of an editor theme', () => {
     expect(
       fs
         .readdirSync(dir)
-        .filter(n => n !== 'a.fonts.css')
+        // Font and variant types only when the theme has them.
+        .filter(n => n !== 'a.fonts.css' && n !== 'a.variants.d.ts')
         .sort(),
-    ).toEqual(['a.css', 'a.d.ts', 'a.js', 'aTheme.doc.mjs', 'aTheme.ts']);
-    expect(body('src/themes/a/a.css')).toBe(
-      fs.readFileSync(path.join(cwd, 'themes/a/a.css'), 'utf8'),
-    );
+    ).toEqual([
+      'a.css',
+      'a.css.d.ts',
+      'a.d.ts',
+      'a.js',
+      'aTheme.doc.mjs',
+      'aTheme.ts',
+    ]);
+    expect(body('src/themes/a/a.css')).toBe(body('themes/a/a.css'));
     await themeEditSet('a', 'corners', 'pill', {cwd});
-    expect(body('src/themes/a/a.css')).toBe(
-      fs.readFileSync(path.join(cwd, 'themes/a/a.css'), 'utf8'),
-    );
+    expect(body('src/themes/a/a.css')).toBe(body('themes/a/a.css'));
     await themeEditUndo('a', {cwd});
-    expect(body('src/themes/a/a.js')).toBe(
-      fs.readFileSync(path.join(cwd, 'themes/a/a.js'), 'utf8'),
-    );
+    expect(body('src/themes/a/a.js')).toBe(body('themes/a/a.js'));
     const r = await themeAdd('a', {cwd});
     expect(JSON.stringify(r.data)).toContain('./themes/a/a.js');
   }, 240_000);

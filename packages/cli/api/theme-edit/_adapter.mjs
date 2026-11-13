@@ -677,7 +677,22 @@ export function editorThemeRefusal(err, cwd) {
   // No app copy yet (a theme made before the editor wrote one, or the
   // copy removed): the next build writes it, then the same steps every
   // place gives (`wiring` of new and show).
-  const steps = preview.addWiring(root, slug);
+  // A one-mode theme's mode is a step too, as in `wiring`.
+  /** @type {'light' | 'dark' | 'system'} */
+  let mode = 'system';
+  try {
+    const m = JSON.parse(
+      fs.readFileSync(
+        path.join(root, 'themes', slug, `${slug}.settings.json`),
+        'utf8',
+      ),
+    ).mode;
+    if (m === 'light-only') mode = 'light';
+    else if (m === 'dark-only') mode = 'dark';
+  } catch {
+    // Settings that do not read: both modes.
+  }
+  const steps = preview.addWiring(root, slug, mode);
   return new AstryxError(
     `${slug} is a theme the editor made (themes/${slug}/), and it has no app copy yet: list, add, use, remove and eject take the copy every build of it writes in src/themes/${slug}/, a standard local theme. Build it once, then: ${steps.join('; ')}.`,
     [

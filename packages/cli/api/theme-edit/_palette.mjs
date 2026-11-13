@@ -1452,24 +1452,46 @@ function syncPaletteFiles(cwd, slug, data, base) {
 }
 
 /**
- * The record of the files the editor wrote into a theme folder
- * (`<theme>.pictures.json`: each by name, with the hash of what was
- * written): its pictures and its color config.
+ * The record of the files the editor wrote into a theme folder,
+ * `themes/<theme>/<theme>.pictures.json`: each by name, with the hash of
+ * what was written (its pictures and its color config). The one reader and
+ * writer of that record.
  * @param {string} cwd
  * @param {string} slug
  * @returns {Record<string, string>}
  */
-function readWrittenRecord(cwd, slug) {
+export function readWrittenRecord(cwd, slug) {
   try {
     const json = JSON.parse(
-      fs.readFileSync(
-        path.join(cwd, 'themes', slug, `${slug}.pictures.json`),
-        'utf8',
-      ),
+      fs.readFileSync(writtenRecordFile(cwd, slug), 'utf8'),
     );
     return json && typeof json === 'object' && !Array.isArray(json) ? json : {};
   } catch {
     return {};
+  }
+}
+
+/** @param {string} cwd @param {string} slug */
+const writtenRecordFile = (cwd, slug) =>
+  path.join(cwd, 'themes', slug, `${slug}.pictures.json`);
+
+/**
+ * Write the record whole, or remove it when it names nothing. A record that
+ * cannot be written leaves nothing removed later: the safe way round.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {Record<string, string>} map
+ */
+export function writeWrittenRecord(cwd, slug, map) {
+  const file = writtenRecordFile(cwd, slug);
+  try {
+    if (!Object.keys(map).length) fs.rmSync(file, {force: true});
+    else {
+      fs.mkdirSync(path.dirname(file), {recursive: true});
+      writeWhole(file, `${JSON.stringify(map, null, 2)}\n`);
+    }
+  } catch {
+    // Without the record, nothing it names is removed later.
   }
 }
 
@@ -1481,21 +1503,12 @@ function readWrittenRecord(cwd, slug) {
  * @param {string} name
  * @param {string | null} hash
  */
-function noteWritten(cwd, slug, name, hash) {
-  const file = path.join(cwd, 'themes', slug, `${slug}.pictures.json`);
+export function noteWritten(cwd, slug, name, hash) {
   const map = readWrittenRecord(cwd, slug);
   if (hash) map[name] = hash;
   else if (name in map) delete map[name];
   else return;
-  try {
-    if (!Object.keys(map).length) fs.rmSync(file, {force: true});
-    else {
-      fs.mkdirSync(path.dirname(file), {recursive: true});
-      writeWhole(file, `${JSON.stringify(map, null, 2)}\n`);
-    }
-  } catch {
-    // Without the record, a stopped run's config is kept: the safe way round.
-  }
+  writeWrittenRecord(cwd, slug, map);
 }
 
 /**

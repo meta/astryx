@@ -70,6 +70,8 @@ import {
   removeEmptyFolder,
   writeWhole,
   setOwnTokenReader,
+  readWrittenRecord,
+  writeWrittenRecord,
 } from './_palette.mjs';
 import {EDITOR_STAMP, pngTexts} from './_png.mjs';
 import {MODAL, isColorToken} from './_compiler.mjs';
@@ -222,44 +224,12 @@ export function dialValueFits(dial, value) {
   });
 }
 
-/**
- * Where the editor records the pictures it wrote into a theme folder: a
- * file of the theme's own beside its settings and history, each picture by
- * its name with the hash of what was written, so the record moves and is
- * copied with the theme.
- * @param {string} cwd
- * @param {string} slug
- */
-function writtenRecord(cwd, slug) {
-  return themeFiles(cwd, slug).pictures;
-}
-
 /** @param {string} file @returns {string | null} */
 const contentHash = file => {
   try {
     return createHash('sha256').update(fs.readFileSync(file)).digest('hex');
   } catch {
     return null;
-  }
-};
-
-/** @param {string} rec @returns {Record<string, string>} */
-const readRecord = rec => {
-  try {
-    const json = JSON.parse(fs.readFileSync(rec, 'utf8'));
-    return json && typeof json === 'object' && !Array.isArray(json) ? json : {};
-  } catch {
-    return {};
-  }
-};
-
-/** @param {string} rec @param {Record<string, string>} map */
-const writeRecord = (rec, map) => {
-  try {
-    if (!Object.keys(map).length) fs.rmSync(rec, {force: true});
-    else writeWhole(rec, `${JSON.stringify(map, null, 2)}\n`);
-  } catch {
-    // Without a record nothing is removed later: the safe way round.
   }
 };
 
@@ -270,13 +240,12 @@ const writeRecord = (rec, map) => {
  * @param {string[]} files
  */
 export function recordWritten(cwd, slug, files) {
-  const rec = writtenRecord(cwd, slug);
-  const map = readRecord(rec);
+  const map = readWrittenRecord(cwd, slug);
   for (const file of files) {
     const hash = contentHash(file);
     if (hash) map[path.basename(file)] = hash;
   }
-  writeRecord(rec, map);
+  writeWrittenRecord(cwd, slug, map);
 }
 
 /**
@@ -287,7 +256,7 @@ export function recordWritten(cwd, slug, files) {
  * @param {string} file
  */
 export function editorWrote(cwd, slug, file) {
-  const map = readRecord(writtenRecord(cwd, slug));
+  const map = readWrittenRecord(cwd, slug);
   const was = map[path.basename(file)];
   // A recorded picture is the editor's only while it is as it wrote it: a
   // picture changed after (re-saved by another tool, stamp and all) is the
@@ -340,10 +309,9 @@ export function adoptOlderPicture(cwd, slug, file) {
  */
 function forgetWritten(cwd, slug, names) {
   if (!names.length) return;
-  const rec = writtenRecord(cwd, slug);
-  const map = readRecord(rec);
+  const map = readWrittenRecord(cwd, slug);
   for (const n of names) delete map[n];
-  writeRecord(rec, map);
+  writeWrittenRecord(cwd, slug, map);
 }
 
 /**
@@ -3778,6 +3746,14 @@ export function setAfterBuild(fn) {
 }
 
 /**
+ * Builds whose after-build hook waits for the change to be saved: a change
+ * that fails after its build puts its theme folder back, and its app copy
+ * was never written.
+ * @type {WeakSet<Ctx>}
+ */
+const afterSave = new WeakSet();
+
+/**
  * Generate the theme source, build it with the theme build, then repeat any
  * part setting a more specific rule would beat and build again.
  * @param {Ctx} ctx
@@ -3893,7 +3869,7 @@ export async function buildTheme(ctx, slug, data) {
     .filter(w => !/^Font "/.test(w));
   // The app's copy, a standard local theme `theme add` reads, follows the
   // build (written by the hook the adapter sets: it owns that write).
-  if (afterBuild)
+  if (afterBuild && !afterSave.has(ctx))
     await step(() => {
       afterBuild?.(ctx, slug, data);
     });
@@ -5225,6 +5201,8 @@ export async function commitTheme(
   // tokens the own source sets in a way no read of the file follows) is
   // refused once the build shows it.
   const loopsBefore = new Set(builtLoops(cwd, slug).map(l => l.key));
+  // The app copy is written once the change is saved, never before.
+  afterSave.add(ctx);
   try {
     refuseIfLockLost();
     try {
@@ -5271,7 +5249,16 @@ export async function commitTheme(
     // Settings written whole: a `new` marker left beside them (a `new`
     // stopped after its theme was made) has nothing left to finish.
     clearNewMarker(f.dir);
+    afterSave.delete(ctx);
+    // The change is saved: its app copy follows. A copy that cannot be
+    // written leaves the copy as it was; the change stands.
+    try {
+      afterBuild?.(ctx, slug, data);
+    } catch (e) {
+      if (/** @type {any} */ (e)?.lockLost) throw e;
+    }
   } catch (e) {
+    afterSave.delete(ctx);
     // A command that lost its lock while stopped owns none of these files
     // now: it puts nothing back and deletes nothing (that would undo the
     // other command's change).

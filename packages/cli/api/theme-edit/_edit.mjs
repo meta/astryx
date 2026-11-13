@@ -602,7 +602,7 @@ export async function themeEditNew(name, options = {}) {
       notes,
       problems: r.problems,
       ...p,
-      // How to use the theme in this app (theme add takes packages only).
+      // How to use the theme in this app: theme add <theme> for its app copy.
       wiring: appWiring(ctx, name, data),
     },
   };
@@ -2367,7 +2367,7 @@ export async function themeEditShow(theme, options = {}) {
       skipped: sheet.skipped,
       pictures: shots.files,
       pictureProblem: shots.problem,
-      // How to use the theme in this app (theme add takes packages only).
+      // How to use the theme in this app: theme add <theme> for its app copy.
       wiring: appWiring(ctx, theme, data),
       ...(() => {
         // The first time the theme's app copy is written, its files.
