@@ -2082,6 +2082,48 @@ function keepShades(pal, kept) {
 }
 
 /**
+ * A value with each two-mode part as its one mode's half: a `[light, dark]`
+ * pair and a `light-dark(light, dark)` (at any depth of a value) become the
+ * half for `mode`.
+ * @param {any} v
+ * @param {'light' | 'dark'} mode
+ * @returns {any}
+ */
+export function oneMode(v, mode) {
+  if (Array.isArray(v))
+    return v.length === 2 && v.every(x => typeof x === 'string')
+      ? oneMode(v[mode === 'light' ? 0 : 1], mode)
+      : v.map(x => oneMode(x, mode));
+  if (typeof v === 'string') {
+    let out = v;
+    for (
+      let at = out.indexOf('light-dark(');
+      at >= 0;
+      at = out.indexOf('light-dark(')
+    ) {
+      let depth = 0;
+      let end = at + 'light-dark'.length;
+      for (; end < out.length; end++) {
+        if (out[end] === '(') depth++;
+        else if (out[end] === ')' && --depth === 0) break;
+      }
+      const halves = splitTop(out.slice(at + 'light-dark('.length, end), ',');
+      if (halves.length !== 2) break;
+      out =
+        out.slice(0, at) +
+        halves[mode === 'light' ? 0 : 1].trim() +
+        out.slice(end + 1);
+    }
+    return out;
+  }
+  if (v && typeof v === 'object')
+    return Object.fromEntries(
+      Object.entries(v).map(([k, x]) => [k, oneMode(x, mode)]),
+    );
+  return v;
+}
+
+/**
  * The settings, as a `defineTheme` object.
  * @param {Ctx} ctx
  * @param {ThemeData} data
@@ -3111,6 +3153,44 @@ export function compileTheme(ctx, data, base) {
         },
       ],
     };
+  // A one-mode theme reads its mode everywhere: every two-mode value it
+  // writes is its mode's half, and its scope says which mode it is, so a
+  // light-dark() it inherits (the base theme's part rules, its shadows)
+  // takes that mode's branch whatever the system asks for.
+  if (modeOnly) {
+    // What the base theme gives in two modes and this theme leaves alone
+    // (its own tokens, a part's rule), as its mode's half.
+    for (const k of new Set([
+      ...Object.keys(base.light ?? {}),
+      ...Object.keys(base.dark ?? {}),
+    ]))
+      if (
+        !(k in theme.tokens) &&
+        !(k in TOKENS) &&
+        base.light?.[k] !== base.dark?.[k] &&
+        base[modeOnly]?.[k] != null
+      )
+        theme.tokens[k] = base[modeOnly][k];
+    for (const [part, blocks] of Object.entries(
+      /** @type {Record<string, Record<string, any>>} */ (
+        /** @type {any} */ (base).components ?? {}
+      ),
+    ))
+      for (const [key, block] of Object.entries(blocks ?? {})) {
+        if (!block || typeof block !== 'object') continue;
+        for (const [prop, v] of Object.entries(block)) {
+          const flat = oneMode(v, modeOnly);
+          if (JSON.stringify(flat) === JSON.stringify(v)) continue;
+          const mine = ((theme.components[part] ??= {})[key] ??= {});
+          if (!(prop in mine)) mine[prop] = flat;
+        }
+      }
+    theme.tokens['color-scheme'] = modeOnly;
+    theme.tokens = oneMode(theme.tokens, modeOnly);
+    theme.components = oneMode(theme.components, modeOnly);
+    if (theme.adaptations)
+      theme.adaptations = oneMode(theme.adaptations, modeOnly);
+  }
   if (!Object.keys(theme.tokens).length) delete theme.tokens;
   if (!Object.keys(theme.components).length) delete theme.components;
   return theme;
