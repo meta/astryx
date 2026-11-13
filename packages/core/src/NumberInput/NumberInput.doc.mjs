@@ -307,7 +307,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          "Let people paste formatted numbers: a pasted 1,234,234,234 is read under the field's locale and commits as 1234234234 on blur. Typing is never intercepted.",
+          "Let people paste formatted numbers: a pasted 1,234,234,234 is read under the field's locale and commits as 1234234234 on blur. Typing is never blocked.",
       },
       {
         guidance: true,
@@ -641,7 +641,7 @@ export const docsZh = {
       {
         guidance: true,
         description:
-          '可以直接粘贴带格式的数字：粘贴 1,234,234,234 会按字段所在区域设置解析，失去焦点时提交为 1234234234。输入过程中不会拦截按键。',
+          '可以直接粘贴带格式的数字：粘贴 1,234,234,234 会按字段所在区域设置解析，失去焦点时提交为 1234234234。输入过程中不会阻止按键。',
       },
       {
         guidance: true,
@@ -720,7 +720,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          "Pasted formatted numbers parse: 1,234,234,234 commits as 1234234234 under the field's locale. Typing is never intercepted.",
+          "Pasted formatted numbers parse: 1,234,234,234 commits as 1234234234 under the field's locale. Typing is never blocked.",
       },
       {
         guidance: true,
