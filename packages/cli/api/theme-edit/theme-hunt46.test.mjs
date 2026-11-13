@@ -64,16 +64,27 @@ describe('N48: a font file or link', () => {
 
 describe('N45: a value pasted with its property name', () => {
   it.each([
-    ['accent', 'color: #e11d48;', '#e11d48'],
     ['--font-weight-bold', 'font-weight: 700', '700'],
     ['--text-body-size', 'font-size: 18px', '18px'],
-    ['accent', 'var(--brand, #e11d48)', '#e11d48'],
-    ['accent', 'light-dark(#e11d48, #fb7185)', '#e11d48'],
   ])('%s %j is offered as %s', async (thing, value, want) => {
     const err = await refusal(() => themeEditSet('b', thing, value, {cwd}));
     expect(names(err)[0]).toMatch(
       new RegExp(` set b ${thing} '?${want.replace(/[()#]/g, '\\$&')}'?$`),
     );
+  });
+});
+
+describe('N45: the accent dial', () => {
+  it('a color pasted with its property name is the color (one path for every dial)', async () => {
+    await themeEditSet('b', 'accent', 'color: #e11d48;', {cwd});
+  }, 240_000);
+
+  it.each([
+    ['var(--brand, #e11d48)', '#e11d48'],
+    ['light-dark(#e11d48, #fb7185)', '#e11d48'],
+  ])('%j is offered as %s', async (value, want) => {
+    const err = await refusal(() => themeEditSet('b', 'accent', value, {cwd}));
+    expect(names(err)[0]).toMatch(new RegExp(` set b accent '?${want}'?$`));
   });
 });
 

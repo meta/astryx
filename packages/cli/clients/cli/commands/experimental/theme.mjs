@@ -903,13 +903,25 @@ export function registerExperimentalTheme(group, program) {
         /** @type {string} */ thing,
         /** @type {string[]} */ value,
         /** @type {any} */ o,
-      ) =>
-        strayOption('set', value) ??
-        run(
-          program,
-          () => themeEditSet(name, thing, value.join(' '), changeOptions(o)),
-          changeBlocks,
-        ),
+      ) => {
+        // A declaration pasted as one argument (`--color-accent: #e11d48`,
+        // or `--color-accent:#e11d48`) is the token and its value; with no
+        // value otherwise, the missing-argument error the parser gives.
+        if (!value.length) {
+          const pasted = /^(--[a-z0-9-]+)\s*:\s*(.+?);?\s*$/i.exec(thing);
+          if (!pasted) return missingSetValue(name, thing);
+          thing = pasted[1];
+          value = [pasted[2]];
+        }
+        return (
+          strayOption('set', value) ??
+          run(
+            program,
+            () => themeEditSet(name, thing, value.join(' '), changeOptions(o)),
+            changeBlocks,
+          )
+        );
+      },
     }),
     setDoc,
     {tokens: true},
@@ -1285,6 +1297,33 @@ export function registerExperimentalTheme(group, program) {
       afterBuild: editorAfterCompile,
       template: editorThemeTemplate,
       hold: editorThemeHold,
+    },
+  );
+}
+
+/**
+ * The error for `set` given a theme and a thing but no value: the same code,
+ * message and suggestions the parser's missing-argument error gives.
+ * @param {string} name
+ * @param {string} thing
+ * @returns {never}
+ */
+function missingSetValue(name, thing) {
+  const invocation = getCliInvocation(process.cwd());
+  return cliError(
+    `set takes <theme> <thing> <value>, and was given 2 (${name} ${thing}), read as <theme> <thing>: <value> is missing.`,
+    {
+      code: ERROR_CODES.ERR_MISSING_ARGUMENT,
+      suggestions: [
+        {
+          name: `${invocation} experimental theme editor set [options] <theme> <thing> [value...]`,
+          reason: 'usage',
+        },
+        {
+          name: `${invocation} experimental theme editor set --help`,
+          reason: 'what each argument is',
+        },
+      ],
     },
   );
 }

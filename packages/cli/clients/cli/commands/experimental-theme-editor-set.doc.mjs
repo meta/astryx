@@ -28,7 +28,7 @@ export const doc = {
     {
       name: 'value',
       param: 'value',
-      required: true,
+      required: false,
       variadic: true,
     },
   ],

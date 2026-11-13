@@ -1358,6 +1358,13 @@ export function checkSetting(
   flags,
   unset = false,
 ) {
+  // Any other dial's value pasted with its property name (`font-size:
+  // 18px;` for text-size, `color: #e11d48` for accent) is the value: one
+  // path for every dial (the font dial reads its own below).
+  if (!unset && typeof value === 'string' && DIALS[thing] && thing !== 'font') {
+    const d = pastedDeclaration(value);
+    if (d?.value) value = d.value;
+  }
   // The font dial's value as pasted from a stylesheet (`Georgia, serif;`,
   // a comment, `!important`): a refusal suggests the font it names, when
   // set takes that.
@@ -3618,8 +3625,23 @@ export const ASPECTS = [...Object.keys(GROUPS), 'colors'];
 export function normalValue(thing, value) {
   const one = value.replace(/\s*[\r\n]+\s*/g, ' ');
   return (
-    thing === 'font' ? one.replace(/[ \t]+/g, ' ') : one.replace(/\t+/g, ' ')
+    thing === 'font' || thing.startsWith('--font-family')
+      ? familySpaces(one)
+      : one.replace(/\t+/g, ' ')
   ).trim();
+}
+
+/**
+ * Spacing in a font family name as CSS reads a bare name: every Unicode
+ * space (a no-break space, a thin space, a tab) is one space, a run of them
+ * one, and zero-width and format characters (zero-width space, joiners,
+ * word joiner, byte-order mark) are dropped.
+ * @param {string} v
+ */
+export function familySpaces(v) {
+  return v
+    .replace(/[\u200B-\u200D\u2060\uFEFF]/g, '')
+    .replace(/[\s\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]+/g, ' ');
 }
 
 /**
