@@ -168,7 +168,14 @@ export const SYNONYMS_OF = (() => {
  */
 
 /** @param {PageTemplate} page */
-const familyOf = page => (page.category.split(' - ')[0] ?? '').trim();
+/**
+ * A template's family: the part of its category before ` - ` ("Table" for
+ * "Table - Filtering").
+ * @param {{category?: string} | undefined} page
+ * @returns {string}
+ */
+export const familyOf = page =>
+  (String(page?.category ?? '').split(' - ')[0] ?? '').trim();
 
 /**
  * Family words, from the templates' own ids: a word in the ids of two or more

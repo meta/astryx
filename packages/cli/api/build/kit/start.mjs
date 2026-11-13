@@ -5,11 +5,12 @@
  * the evidence to lead, the template a part lives in, else the app shell.
  */
 
-import {loadWeights} from '../_adapter.mjs';
+import {loadFamilyWeights, loadWeights} from '../_adapter.mjs';
+import {familyMove} from './family.mjs';
 import {asksForNewPage} from './kind.mjs';
 import {pickAlternatives, pickStart} from './rank.mjs';
 import {hasEditPhrase, shellCallScore} from './shellcall.mjs';
-import {blendOrder, blendSummary, weighStart} from './weights.mjs';
+import {blend, blendOrder, blendSummary, weighStart} from './weights.mjs';
 
 /**
  * @typedef {import('../../search/search.type.mjs').SearchResultEntry} SearchResultEntry
@@ -168,6 +169,30 @@ export function chooseStart(ranked, kind, pages, directMatch, catalog, idea) {
           ? proposed
           : null
         : (ranked.find(r => r.name === weighed) ?? proposed);
+  /**
+   * A whole page whose start the family table places in another family starts
+   * from that family's best template in the blend's order.
+   * @param {PageTemplate} from
+   */
+  const moveFamily = from => {
+    const weights = loadWeights();
+    // A direct match and a template placed by its frame keep the start.
+    if (!weights || from.name === direct) return null;
+    if (pick?.containerMatched && pick.name === from.name) return null;
+    const moved = familyMove({
+      idea,
+      start: from.name,
+      direct,
+      proposed: proposed?.name ?? null,
+      blend: blend(idea, ranked, proposed, catalog, weights),
+      order: blendOrder(idea, ranked, proposed, catalog, weights) ?? [],
+      ranked,
+      catalog,
+      listed: weights.candidates,
+      table: loadFamilyWeights(),
+    });
+    return moved ? (catalog.find(t => t.name === moved) ?? null) : null;
+  };
   // An idea that would start on the app shell starts from the blend's best page
   // when the decision's whole-page probability is at least 0.30. A direct match,
   // ready or not, keeps the start and reason it already has.
@@ -175,7 +200,8 @@ export function chooseStart(ranked, kind, pages, directMatch, catalog, idea) {
     !direct && (!pick || pick.family === 'Shell')
       ? liftFromShell(ranked, kind, catalog, idea)
       : null;
-  const closest = lifted ?? (pick && catalog.find(t => t.name === pick.name));
+  const first = lifted ?? (pick && catalog.find(t => t.name === pick.name));
+  const closest = (first && kind === 'page' && moveFamily(first)) || first;
   if (closest) {
     const agrees = closest.name === direct;
     const place =

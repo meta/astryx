@@ -171,6 +171,30 @@ export function loadWeights() {
   return weights ?? null;
 }
 
+/** @type {import('./kit/family.mjs').FamilyWeights | null | undefined} */
+let familyWeights;
+
+/**
+ * The fixed family table of the start's family check (kit/family.weights.json),
+ * read once. Null when the file is missing or unreadable.
+ * @returns {import('./kit/family.mjs').FamilyWeights | null}
+ */
+export function loadFamilyWeights() {
+  if (familyWeights === undefined) {
+    try {
+      familyWeights = JSON.parse(
+        fs.readFileSync(
+          new URL('./kit/family.weights.json', import.meta.url),
+          'utf8',
+        ),
+      );
+    } catch {
+      familyWeights = null;
+    }
+  }
+  return familyWeights ?? null;
+}
+
 /** @type {{threshold: number, weights: Record<string, number>} | null | undefined} */
 let shellWeights;
 

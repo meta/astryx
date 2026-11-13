@@ -302,7 +302,7 @@ function familyAt(name, catalog, order) {
  * @param {WeightsFile} weights
  * @returns {{cands: string[], scores: number[], position: Map<string, number>}}
  */
-function blend(idea, ranked, pick, catalog, weights) {
+export function blend(idea, ranked, pick, catalog, weights) {
   const ready = new Set(catalog.map(t => t.name));
   const shellIds = new Set(
     ranked.filter(r => r.family === SHELL_FAMILY).map(r => r.name),
