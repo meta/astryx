@@ -10,14 +10,14 @@ npm install @astryxdesign/theme-neutral
 
 ## Usage
 
-Wrap your app with `XDSTheme` and pass the theme:
+Wrap your app with `Theme` and pass the theme:
 
 ```tsx
-import {XDSTheme} from '@astryxdesign/core/theme';
+import {Theme} from '@astryxdesign/core/theme';
 import {neutralTheme} from '@astryxdesign/theme-neutral/built';
 
 function App() {
-  return <XDSTheme theme={neutralTheme}>{/* your app */}</XDSTheme>;
+  return <Theme theme={neutralTheme}>{/* your app */}</Theme>;
 }
 ```
 
@@ -108,8 +108,8 @@ Without this, the theme falls back to system fonts. If you'd rather avoid extern
 
 ## Related Packages
 
-| Package                                                                              | Description                               |
-| ------------------------------------------------------------------------------------ | ----------------------------------------- |
+| Package                                                                          | Description                               |
+| -------------------------------------------------------------------------------- | ----------------------------------------- |
 | [`@astryxdesign/core`](https://github.com/meta/astryx/tree/main/packages/core)   | Core components and theme system          |
 | [`@astryxdesign/build`](https://github.com/meta/astryx/tree/main/packages/build) | Build plugins for StyleX source builds    |
 | [`@astryxdesign/cli`](https://github.com/meta/astryx/tree/main/packages/cli)     | CLI tooling including `astryx docs theme` |

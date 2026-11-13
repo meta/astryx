@@ -11,6 +11,10 @@ export const docs = {
   playground: {
     defaults: {
       value: 'tab-1',
+      children: [
+        {__element: 'Tab', props: {value: 'tab-1', label: 'Overview'}},
+        {__element: 'Tab', props: {value: 'tab-2', label: 'Activity'}},
+      ],
     },
   },
   theming: {
