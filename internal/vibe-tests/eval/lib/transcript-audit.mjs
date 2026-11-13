@@ -124,7 +124,7 @@ const OPTION_SPECS = {
     file: ['f', 'file', 'files', 'type-list'],
   },
   ag: {short: 'GgABCmp', attached: '', long: ['ignore', 'ignore-dir', 'file-search-regex', 'after', 'before', 'context', 'max-count', 'depth', 'path-to-ignore'], script: ['g'], file: []},
-  ack: {short: 'ABCm', attached: '', long: ['type', 'ignore-dir', 'ignore-file', 'after-context', 'before-context', 'context', 'max-count', 'match'], script: ['match'], file: ['f', 'g']},
+  ack: {short: 'ABCmtT', attached: '', long: ['type', 'type-add', 'type-set', 'type-del', 'ignore-dir', 'ignore-file', 'after-context', 'before-context', 'context', 'max-count', 'match'], script: ['match'], file: ['f', 'g']},
 };
 
 /** Splits a segment at pipes that are outside quotes. */
@@ -186,7 +186,11 @@ function scriptWords(words, spec) {
       for (let at = 1; at < word.length; at++) {
         const letter = word[at];
         if (spec.file.includes(letter)) fromFile = true;
-        if (spec.attached.includes(letter)) break;
+        if (spec.attached.includes(letter)) {
+          // BSD sed takes `-i ''`: an empty suffix as the next word.
+          if (at + 1 === word.length && /^(?:''|"")$/.test(words[index + 1]?.text ?? '')) index++;
+          break;
+        }
         if (!spec.short.includes(letter)) continue;
         const attached = at + 1 < word.length;
         if (spec.script.includes(letter)) scripts.push(attached ? words[index] : words[index + 1]);

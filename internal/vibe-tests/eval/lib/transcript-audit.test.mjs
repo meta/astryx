@@ -210,6 +210,11 @@ describe('reads the review found unaudited', () => {
     `rg --max-columns 200 "from '../lib" src`,
     `rg --color never "from '../lib" src`,
     `ag -G tsx "from '../lib" src`,
+    `sed -i '' "s|'../lib/utils'|'@/lib/utils'|" src/App.tsx`,
+    `find src -name '*.tsx' | xargs sed -i '' "s|'../lib/utils'|'@/lib/utils'|"`,
+    `find src -name '*.tsx' -exec sed -i '' "s|'../lib/utils'|'@/lib/utils'|" {} +`,
+    `ack -t js "from '../lib" src`,
+    `ack -T js "from '../lib" src`,
     `find src -name '*.tsx' -exec sed -i "s|'../lib/utils'|'@/lib/utils'|" {} + -exec echo done {} +`,
   ])('passes %j', command => {
     expect(audit(command).violations).toEqual([]);
