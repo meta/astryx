@@ -190,6 +190,36 @@ export const CursorBased: Story = {
   render: () => <PaginationDemo page={1} hasMore={true} />,
 };
 
+/** A page's address in a story: a fragment, so the story stays loaded. */
+const pageFragment = (page: number) => `#page-${page}`;
+
+export const PageLinks: Story = {
+  name: 'Page links',
+  render: () => (
+    // The page numbers, Previous and Next are links: open one in a new tab.
+    <PaginationDemo
+      page={1}
+      totalItems={200}
+      pageSize={10}
+      variant="pages"
+      getPageHref={pageFragment}
+    />
+  ),
+};
+
+export const PageLinksDots: Story = {
+  name: 'Page links (dots)',
+  render: () => (
+    // Previous and Next are links. The dots stay a radio group.
+    <PaginationDemo
+      page={1}
+      totalPages={8}
+      variant="dots"
+      getPageHref={pageFragment}
+    />
+  ),
+};
+
 export const SmallSize: Story = {
   name: 'Small Size',
   render: () => (

@@ -87,15 +87,27 @@ export const docs = {
     },
     {
       name: 'onChange',
-      type: '(page: number) => void',
-      description: 'Called when the page changes.',
-      required: true,
+      type: '(page: number, event?: React.MouseEvent<HTMLElement>) => void',
+      description:
+        'Called when the page changes. Required unless getPageHref is set. When a link was activated, event is its click event and the link navigates by itself; a control that is not a link passes no event.',
     },
     {
       name: 'changeAction',
       type: '(page: number) => void | Promise<void>',
       description:
         'Async action on page change. Fires after onChange and uses React transitions for built-in loading state.',
+    },
+    {
+      name: 'getPageHref',
+      type: '(page: number, pageSize?: number) => string',
+      description:
+        "Returns the URL of a page. When set, the page number, previous, next, first and last controls render as links to it, so a page opens in a new tab, its address can be copied, and it works before scripts load. pageSize is the current page size when pageSize or pageSizeOptions is set. The dots, the page box and the page-size selector are not links: navigate for them in onChange and onPageSizeChange. In cursor pagination, map the page before or after the current one to the cursor's URL. The destination follows the shared navigation rule described on the Link `href` prop.",
+    },
+    {
+      name: 'as',
+      type: 'ComponentType',
+      description:
+        'Custom link component for the links getPageHref makes (e.g. Next.js Link). Overrides the LinkProvider default.',
     },
     {
       name: 'totalItems',
@@ -218,9 +230,11 @@ export const docs = {
       { guidance: true, description: 'Use the count variant with a page size selector when users need to control how many items they see at once.' },
       { guidance: true, description: 'Use the dots variant for carousels and walkthroughs where the total is small and position matters more than a number.' },
       { guidance: true, description: 'Pass totalItems when the total is known so users can see how much content remains.' },
+      { guidance: true, description: 'Pass getPageHref when each page has its own URL, so a page opens in a new tab and its address can be copied.' },
       { guidance: false, description: 'Show pagination when all items fit on a single page; there is nothing to paginate.' },
       { guidance: false, description: 'Use the dots variant for more than about 10 pages; the dots become too small to be useful.' },
       { guidance: false, description: 'Place pagination above the content; users expect it at the bottom.' },
+      { guidance: false, description: 'Navigate in onChange for a control that is already a link; with getPageHref, navigate there only when onChange receives no click event, as from the dots and the page box.' },
     ],
   },
 };
@@ -238,15 +252,27 @@ export const docsZh = {
     },
     {
       name: 'onChange',
-      type: '(page: number) => void',
-      description: '页码变化时调用。',
-      required: true,
+      type: '(page: number, event?: React.MouseEvent<HTMLElement>) => void',
+      description:
+        '页码变化时调用。未设置 getPageHref 时必填。激活链接时，event 为该链接的点击事件，链接会自行导航；非链接控件不传事件。',
     },
     {
       name: 'changeAction',
       type: '(page: number) => void | Promise<void>',
       description:
         '页码变化时的异步操作。在 onChange 之后触发，使用 React transitions 实现内置加载状态。',
+    },
+    {
+      name: 'getPageHref',
+      type: '(page: number, pageSize?: number) => string',
+      description:
+        '返回某一页的 URL。设置后，页码、上一页、下一页、首页和末页控件渲染为指向该 URL 的链接，因此页面可在新标签页中打开、可复制地址，并在脚本加载前可用。设置了 pageSize 或 pageSizeOptions 时，pageSize 为当前每页大小。点指示器、页码输入框和每页大小选择器不是链接：请在 onChange 和 onPageSizeChange 中为它们导航。游标分页时，将当前页的前一页或后一页映射到游标的 URL。目标地址遵循 Link `href` 属性所述的共享导航规则。',
+    },
+    {
+      name: 'as',
+      type: 'ComponentType',
+      description:
+        '用于 getPageHref 所生成链接的自定义链接组件（如 Next.js Link）。覆盖 LinkProvider 的默认值。',
     },
     {
       name: 'totalItems',
@@ -361,9 +387,11 @@ export const docsZh = {
       { guidance: true, description: 'Use the count variant with a page size selector when users need to control how many items they see at once.' },
       { guidance: true, description: 'Use the dots variant for carousels and walkthroughs where the total is small and position matters more than a number.' },
       { guidance: true, description: 'Pass totalItems when the total is known so users can see how much content remains.' },
+      { guidance: true, description: 'Pass getPageHref when each page has its own URL, so a page opens in a new tab and its address can be copied.' },
       { guidance: false, description: 'Show pagination when all items fit on a single page; there is nothing to paginate.' },
       { guidance: false, description: 'Use the dots variant for more than about 10 pages; the dots become too small to be useful.' },
       { guidance: false, description: 'Place pagination above the content; users expect it at the bottom.' },
+      { guidance: false, description: 'Navigate in onChange for a control that is already a link; with getPageHref, navigate there only when onChange receives no click event, as from the dots and the page box.' },
     ],
   },
 };
@@ -382,16 +410,22 @@ export const docsDense = {
       { guidance: true, description: 'Use the count variant with a page size selector when users need to control how many items they see at once.' },
       { guidance: true, description: 'Use the dots variant for carousels and walkthroughs where the total is small and position matters more than a number.' },
       { guidance: true, description: 'Pass totalItems when the total is known so users can see how much content remains.' },
+      { guidance: true, description: 'Pass getPageHref when each page has its own URL, so a page opens in a new tab and its address can be copied.' },
       { guidance: false, description: 'Show pagination when all items fit on a single page; there is nothing to paginate.' },
       { guidance: false, description: 'Use the dots variant for more than about 10 pages; the dots become too small to be useful.' },
       { guidance: false, description: 'Place pagination above the content; users expect it at the bottom.' },
+      { guidance: false, description: 'Navigate in onChange for a control that is already a link; with getPageHref, navigate there only when onChange receives no click event, as from the dots and the page box.' },
     ],
   },
   propDescriptions: {
     page: 'Current page number (1-based).',
-    onChange: 'Called on page change.',
+    onChange:
+      'Called on page change. Required unless getPageHref set. A link passes its click event as 2nd arg + navigates by itself; non-link controls pass none.',
     changeAction:
       'Async action on page change. Fires after onChange; uses React transitions for loading.',
+    getPageHref:
+      'URL of a page. Page number/prev/next/first/last render as links. pageSize = current size when pageSize or pageSizeOptions set. Dots, page box + page-size selector are not links: navigate in onChange/onPageSizeChange. Cursor pagination: map the page before/after current to the cursor URL.',
+    as: 'Custom link component for getPageHref links (e.g. Next.js Link). Overrides LinkProvider.',
     totalItems: 'Total items. Calculates page count. Precedence over totalPages.',
     totalPages: 'Total pages. Use when page count known but not item count.',
     hasMore: 'More pages exist after current. For cursor-based pagination.',

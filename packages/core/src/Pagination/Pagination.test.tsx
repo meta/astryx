@@ -21,6 +21,7 @@ import {
 import userEvent from '@testing-library/user-event';
 import {Pagination, generatePageRange} from './Pagination';
 import {FormLayout} from '../FormLayout/FormLayout';
+import {LinkProvider} from '../Link/LinkProvider';
 import {InternationalizationProvider} from '../i18n';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 
@@ -30,6 +31,32 @@ afterEach(() => {
 
 function politeRegion(): HTMLElement | null {
   return document.querySelector('[data-astryx-live-region="polite"]');
+}
+
+function RouterLink({
+  to: _to,
+  ...props
+}: React.ComponentProps<'a'> & {to?: string}) {
+  return <a data-router-link="" {...props} />;
+}
+
+function NewTabLink({
+  to: _to,
+  ...props
+}: React.ComponentProps<'a'> & {to?: string}) {
+  return <a {...props} target="_blank" />;
+}
+
+/** A page's URL, with the page size when Pagination passes one. */
+function pagePath(page: number, pageSize?: number): string {
+  return pageSize == null
+    ? `/items/${page}`
+    : `/items/${page}?size=${pageSize}`;
+}
+
+/** A URL the test browser follows without loading a document. */
+function pageHash(page: number): string {
+  return `#page-${page}`;
 }
 
 // =============================================================================
@@ -1771,6 +1798,505 @@ describe('Pagination', () => {
       expect(
         screen.queryByRole('button', {name: 'Go to page 6'}),
       ).not.toBeInTheDocument();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Page links (getPageHref)
+  // ---------------------------------------------------------------------------
+
+  describe('page links', () => {
+    function warnSpy() {
+      return vi.spyOn(console, 'warn').mockImplementation(() => {});
+    }
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('renders each page number as a link to its URL and marks the current page', () => {
+      render(<Pagination page={2} totalPages={5} getPageHref={pagePath} />);
+      for (const page of [1, 2, 3, 4, 5]) {
+        expect(
+          screen.getByRole('link', {name: `Go to page ${page}`}),
+        ).toHaveAttribute('href', `/items/${page}`);
+      }
+      expect(screen.getByRole('link', {name: 'Go to page 2'})).toHaveAttribute(
+        'aria-current',
+        'page',
+      );
+      expect(
+        screen.getByRole('link', {name: 'Go to page 3'}),
+      ).not.toHaveAttribute('aria-current');
+      expect(screen.queryByRole('button', {name: /Go to page/})).toBeNull();
+    });
+
+    it('links Previous and Next to the page a step away', () => {
+      render(
+        <Pagination page={4} totalPages={10} step={5} getPageHref={pagePath} />,
+      );
+      // The stride of 5 overshoots page 1, so Previous lands on it.
+      expect(
+        screen.getByRole('link', {name: 'Go back 5 pages'}),
+      ).toHaveAttribute('href', '/items/1');
+      expect(
+        screen.getByRole('link', {name: 'Go forward 5 pages'}),
+      ).toHaveAttribute('href', '/items/9');
+    });
+
+    it('keeps an unavailable end a disabled button and asks for no URL outside the range', () => {
+      const getPageHref = vi.fn(pagePath);
+      const {rerender} = render(
+        <Pagination page={1} totalPages={3} getPageHref={getPageHref} />,
+      );
+      expect(
+        screen.getByRole('button', {name: 'Go to previous page'}),
+      ).toHaveAttribute('aria-disabled', 'true');
+      expect(
+        screen.queryByRole('link', {name: 'Go to previous page'}),
+      ).toBeNull();
+      expect(
+        screen.getByRole('link', {name: 'Go to next page'}),
+      ).toHaveAttribute('href', '/items/2');
+
+      rerender(
+        <Pagination page={3} totalPages={3} getPageHref={getPageHref} />,
+      );
+      expect(
+        screen.getByRole('button', {name: 'Go to next page'}),
+      ).toHaveAttribute('aria-disabled', 'true');
+      expect(screen.queryByRole('link', {name: 'Go to next page'})).toBeNull();
+
+      const pages = getPageHref.mock.calls.map(([page]) => page);
+      expect(Math.min(...pages)).toBe(1);
+      expect(Math.max(...pages)).toBe(3);
+    });
+
+    it('renders no link and asks for no URL while disabled', () => {
+      const getPageHref = vi.fn(pagePath);
+      render(
+        <Pagination
+          page={2}
+          totalPages={5}
+          getPageHref={getPageHref}
+          isDisabled
+        />,
+      );
+      expect(screen.queryByRole('link')).toBeNull();
+      expect(
+        screen.getByRole('button', {name: 'Go to page 3'}),
+      ).toHaveAttribute('aria-disabled', 'true');
+      expect(getPageHref).not.toHaveBeenCalled();
+    });
+
+    it('links First and Last to the first and the last page', () => {
+      render(
+        <Pagination
+          page={4}
+          totalPages={9}
+          variant="compact"
+          hasFirstLast
+          getPageHref={pagePath}
+        />,
+      );
+      expect(
+        screen.getByRole('link', {name: 'Go to first page'}),
+      ).toHaveAttribute('href', '/items/1');
+      expect(
+        screen.getByRole('link', {name: 'Go to last page'}),
+      ).toHaveAttribute('href', '/items/9');
+    });
+
+    it.each(['count', 'none'] as const)(
+      'links Previous and Next in the %s variant',
+      variant => {
+        render(
+          <Pagination
+            page={2}
+            totalItems={50}
+            variant={variant}
+            getPageHref={pagePath}
+          />,
+        );
+        expect(
+          screen.getByRole('link', {name: 'Go to previous page'}),
+        ).toHaveAttribute('href', '/items/1');
+        expect(
+          screen.getByRole('link', {name: 'Go to next page'}),
+        ).toHaveAttribute('href', '/items/3');
+      },
+    );
+
+    it('passes no page size when the caller sets none', () => {
+      const getPageHref = vi.fn(pagePath);
+      render(<Pagination page={1} totalPages={3} getPageHref={getPageHref} />);
+      expect(getPageHref).toHaveBeenCalledWith(2, undefined);
+      expect(screen.getByRole('link', {name: 'Go to page 2'})).toHaveAttribute(
+        'href',
+        '/items/2',
+      );
+    });
+
+    it('passes the page size the caller sets', () => {
+      render(
+        <Pagination
+          page={1}
+          totalItems={100}
+          pageSize={25}
+          getPageHref={pagePath}
+        />,
+      );
+      expect(screen.getByRole('link', {name: 'Go to page 2'})).toHaveAttribute(
+        'href',
+        '/items/2?size=25',
+      );
+    });
+
+    it('passes the current page size when only page size options are set', () => {
+      render(
+        <Pagination
+          page={1}
+          totalItems={100}
+          pageSizeOptions={[10, 20]}
+          onPageSizeChange={() => {}}
+          getPageHref={pagePath}
+        />,
+      );
+      expect(screen.getByRole('link', {name: 'Go to page 2'})).toHaveAttribute(
+        'href',
+        '/items/2?size=10',
+      );
+    });
+
+    it('renders its links through the as component', () => {
+      render(
+        <Pagination
+          page={2}
+          totalPages={3}
+          getPageHref={pagePath}
+          as={RouterLink}
+        />,
+      );
+      for (const link of screen.getAllByRole('link')) {
+        expect(link).toHaveAttribute('data-router-link');
+      }
+      // A disabled end has no destination, so the router link does not render it.
+      render(
+        <Pagination
+          page={1}
+          totalPages={3}
+          label="First page"
+          getPageHref={pagePath}
+          as={RouterLink}
+        />,
+      );
+      expect(
+        within(screen.getByRole('navigation', {name: 'First page'})).getByRole(
+          'button',
+          {name: 'Go to previous page'},
+        ),
+      ).not.toHaveAttribute('data-router-link');
+    });
+
+    it('renders its links through the LinkProvider component, and as wins over it', () => {
+      render(
+        <LinkProvider component={RouterLink}>
+          <Pagination page={2} totalPages={3} getPageHref={pagePath} />
+          <Pagination
+            page={2}
+            totalPages={3}
+            label="Own link"
+            getPageHref={pagePath}
+            as="a"
+          />
+        </LinkProvider>,
+      );
+      expect(
+        within(screen.getByRole('navigation', {name: 'Pagination'})).getByRole(
+          'link',
+          {name: 'Go to page 1'},
+        ),
+      ).toHaveAttribute('data-router-link');
+      expect(
+        within(screen.getByRole('navigation', {name: 'Own link'})).getByRole(
+          'link',
+          {name: 'Go to page 1'},
+        ),
+      ).not.toHaveAttribute('data-router-link');
+    });
+
+    it('renders a rejected URL as a link with no destination', () => {
+      render(
+        <Pagination
+          page={1}
+          totalPages={2}
+          getPageHref={page => `javascript:go(${page})`}
+        />,
+      );
+      for (const anchor of screen
+        .getByRole('navigation')
+        .querySelectorAll('a')) {
+        expect(anchor).not.toHaveAttribute('href');
+      }
+    });
+
+    it('links Previous and Next in cursor pagination to the pages beside the current one', () => {
+      const getPageHref = vi.fn((target: number) =>
+        target > 4 ? '/items?after=n' : '/items?before=p',
+      );
+      render(<Pagination page={4} hasMore getPageHref={getPageHref} />);
+      expect(
+        screen.getByRole('link', {name: 'Go to previous page'}),
+      ).toHaveAttribute('href', '/items?before=p');
+      expect(
+        screen.getByRole('link', {name: 'Go to next page'}),
+      ).toHaveAttribute('href', '/items?after=n');
+      expect(
+        getPageHref.mock.calls.map(([page]) => page).sort((a, b) => a - b),
+      ).toEqual([3, 5]);
+    });
+
+    it('asks for no URL after the last cursor page', () => {
+      const getPageHref = vi.fn((_page: number) => '/items?before=p');
+      render(<Pagination page={2} hasMore={false} getPageHref={getPageHref} />);
+      expect(
+        screen.getByRole('button', {name: 'Go to next page'}),
+      ).toHaveAttribute('aria-disabled', 'true');
+      // The caller has no cursor for a page after the last one.
+      expect(getPageHref.mock.calls.map(([page]) => page)).toEqual([1]);
+    });
+
+    it('runs the page change for a plain click on a link and leaves the navigation to the link', async () => {
+      const onChange = vi.fn();
+      const changeAction = vi.fn();
+      render(
+        <Pagination
+          page={1}
+          totalPages={5}
+          onChange={onChange}
+          changeAction={changeAction}
+          getPageHref={pageHash}
+        />,
+      );
+      const link = screen.getByRole('link', {name: 'Go to page 3'});
+      // `true`: no handler cancelled the click, so the link navigates.
+      expect(fireEvent.click(link)).toBe(true);
+      expect(onChange).toHaveBeenCalledTimes(1);
+      const [page, event] = onChange.mock.calls[0];
+      expect(page).toBe(3);
+      expect(event.type).toBe('click');
+      expect(event.target).toBe(link);
+      await waitFor(() => {
+        expect(politeRegion()).toHaveTextContent('Page 3 of 5');
+      });
+      await waitFor(() => expect(changeAction).toHaveBeenCalledWith(3));
+    });
+
+    it.each([
+      ['Control', {ctrlKey: true}],
+      ['Meta', {metaKey: true}],
+      ['Shift', {shiftKey: true}],
+      ['Alt', {altKey: true}],
+    ] as const)(
+      'changes no page here for a %s click, which the browser opens elsewhere',
+      async (_key, modifier) => {
+        const onChange = vi.fn();
+        const changeAction = vi.fn();
+        render(
+          <Pagination
+            page={1}
+            totalPages={5}
+            onChange={onChange}
+            changeAction={changeAction}
+            getPageHref={pageHash}
+          />,
+        );
+        fireEvent.click(
+          screen.getByRole('link', {name: 'Go to next page'}),
+          modifier,
+        );
+        fireEvent.click(
+          screen.getByRole('link', {name: 'Go to page 3'}),
+          modifier,
+        );
+        expect(onChange).not.toHaveBeenCalled();
+        expect(changeAction).not.toHaveBeenCalled();
+        expect(politeRegion()).toBeNull();
+      },
+    );
+
+    it('changes no page here for a link whose component opens it in another tab', () => {
+      const onChange = vi.fn();
+      render(
+        <Pagination
+          page={1}
+          totalPages={5}
+          onChange={onChange}
+          getPageHref={pageHash}
+          as={NewTabLink}
+        />,
+      );
+      fireEvent.click(screen.getByRole('link', {name: 'Go to page 3'}));
+      expect(onChange).not.toHaveBeenCalled();
+      expect(politeRegion()).toBeNull();
+    });
+
+    it('needs no onChange: a link click still announces the page', async () => {
+      const warn = warnSpy();
+      render(<Pagination page={1} totalPages={5} getPageHref={pageHash} />);
+      fireEvent.click(screen.getByRole('link', {name: 'Go to next page'}));
+      await waitFor(() => {
+        expect(politeRegion()).toHaveTextContent('Page 2 of 5');
+      });
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('passes the click event only for a link: a button control passes the page alone', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(<Pagination page={1} totalPages={5} onChange={onChange} />);
+      await user.click(screen.getByRole('button', {name: 'Go to page 3'}));
+      expect(onChange.mock.calls).toEqual([[3]]);
+    });
+
+    it('keeps the dots a radio group and links only Previous and Next', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <Pagination
+          page={2}
+          totalPages={4}
+          variant="dots"
+          onChange={onChange}
+          getPageHref={pageHash}
+        />,
+      );
+      expect(
+        screen.getAllByRole('link').map(link => link.getAttribute('href')),
+      ).toEqual(['#page-1', '#page-3']);
+      const group = screen.getByRole('radiogroup', {name: 'Page indicators'});
+      expect(within(group).getAllByRole('radio')).toHaveLength(4);
+      expect(group.querySelector('a')).toBeNull();
+
+      // A dot is not a link, so it passes the page alone.
+      screen.getByRole('radio', {name: 'Page 2'}).focus();
+      await user.keyboard('{ArrowRight}');
+      expect(onChange.mock.calls).toEqual([[3]]);
+    });
+
+    it('keeps the page box and links First, Previous, Next and Last', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <Pagination
+          page={2}
+          totalPages={8}
+          variant="input"
+          onChange={onChange}
+          getPageHref={pageHash}
+        />,
+      );
+      expect(
+        screen.getAllByRole('link').map(link => link.getAttribute('href')),
+      ).toEqual(['#page-1', '#page-1', '#page-3', '#page-8']);
+      // The page box is not a link, so it passes the page alone.
+      const box = screen.getByRole('spinbutton', {name: 'Go to page'});
+      expect(box).not.toHaveAttribute('aria-disabled');
+      await user.clear(box);
+      await user.type(box, '6{Enter}');
+      expect(onChange.mock.calls).toEqual([[6]]);
+    });
+
+    it('disables the dots that have no callback, and says so', () => {
+      const warn = warnSpy();
+      render(
+        <Pagination
+          page={2}
+          totalPages={4}
+          variant="dots"
+          getPageHref={pageHash}
+        />,
+      );
+      const dots = screen.getAllByRole('radio');
+      for (const dot of dots) {
+        expect(dot).toHaveAttribute('aria-disabled', 'true');
+      }
+      // Focus still reaches a disabled dot, and changes no page.
+      fireEvent.focus(dots[3]);
+      expect(politeRegion()).toBeNull();
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0][0]).toContain('the dots and the page box');
+    });
+
+    it('disables the page box that has no callback, and says so', () => {
+      const warn = warnSpy();
+      render(
+        <Pagination
+          page={2}
+          totalPages={4}
+          variant="input"
+          getPageHref={pageHash}
+        />,
+      );
+      expect(
+        screen.getByRole('spinbutton', {name: 'Go to page'}),
+      ).toHaveAttribute('aria-disabled', 'true');
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0][0]).toContain('the dots and the page box');
+    });
+
+    it('lets changeAction alone drive the dots and the page box', () => {
+      const warn = warnSpy();
+      render(
+        <Pagination
+          page={2}
+          totalPages={4}
+          variant="input"
+          changeAction={() => {}}
+          getPageHref={pageHash}
+        />,
+      );
+      expect(
+        screen.getByRole('spinbutton', {name: 'Go to page'}),
+      ).not.toHaveAttribute('aria-disabled');
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('disables the page-size selector that has no callback, and says so', () => {
+      const warn = warnSpy();
+      const {container, rerender} = render(
+        <Pagination
+          page={1}
+          totalItems={100}
+          pageSizeOptions={[10, 20]}
+          getPageHref={pagePath}
+        />,
+      );
+      const selector = () => container.querySelector('.astryx-selector');
+      expect(selector()).toHaveAttribute('data-disabled', 'disabled');
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0][0]).toContain('the page-size selector');
+
+      rerender(
+        <Pagination
+          page={1}
+          totalItems={100}
+          pageSizeOptions={[10, 20]}
+          onPageSizeChange={() => {}}
+          getPageHref={pagePath}
+        />,
+      );
+      expect(selector()).not.toHaveAttribute('data-disabled');
+    });
+
+    it('disables every control that has neither a link nor a callback, and says so', () => {
+      const warn = warnSpy();
+      render(<Pagination page={2} totalPages={3} />);
+      for (const button of screen.getAllByRole('button')) {
+        expect(button).toHaveAttribute('aria-disabled', 'true');
+      }
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0][0]).toContain('pass onChange, or getPageHref');
     });
   });
 
