@@ -167,7 +167,7 @@ describe('the browser-specs job', () => {
   it("writes the leg count and this leg's share for the steps after it", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'a11y-legs-'));
     scratch.push(dir);
-    const count = (legs, leg, env = {}) => {
+    const count = (legs, leg, env = {}, status = 0) => {
       const output = path.join(dir, `output-${legs}-${leg}`);
       const result = spawnSync(
         process.execPath,
@@ -194,12 +194,11 @@ describe('the browser-specs job', () => {
           },
         },
       );
-      expect(result.status, result.stderr).toBe(0);
+      expect(result.status, result.stderr).toBe(status);
       return {
         stdout: result.stdout,
         output: Object.fromEntries(
-          fs
-            .readFileSync(output, 'utf8')
+          (fs.existsSync(output) ? fs.readFileSync(output, 'utf8') : '')
             .trim()
             .split('\n')
             .map(line => [
@@ -215,30 +214,22 @@ describe('the browser-specs job', () => {
     expect(['1', '2', '3']).toContain(third.output.count);
     expect(third.output.runs).toBe(String(Number(third.output.count) >= 3));
     expect(third.stdout).toMatch(/^Accessibility legs: \d for \d+ spec files/m);
-    // A leg that cannot list the pull request's files runs the whole
-    // selection as the only leg, so no planned file is left out.
-    const lost = count(3, 2, {
-      GITHUB_EVENT_NAME: 'pull_request',
-      GITHUB_ACTIONS: 'true',
-    });
-    expect(lost.output).toMatchObject({
-      count: '1',
-      runs: 'true',
-      leg: '1',
-      legs: '[1]',
-    });
-    // The plan hands each planned leg its share.
-    const lostShares = JSON.parse(lost.output.shares);
-    expect(lostShares).toHaveLength(1);
-    expect(lostShares[0].scopeKnown).toBe(false);
+    // A plan that cannot list the pull request's files takes the whole
+    // selection as the only leg, so no planned file is left out; a selection
+    // that one leg cannot finish fails by name instead of at the cap.
+    const lost = count(
+      3,
+      2,
+      {GITHUB_EVENT_NAME: 'pull_request', GITHUB_ACTIONS: 'true'},
+      1,
+    );
     expect(lost.stdout).toContain(
       '::warning title=Accessibility scope unknown::',
     );
-    const lostShare = JSON.parse(
-      fs.readFileSync(path.join(dir, 'share-3-2.json'), 'utf8'),
+    expect(lost.stdout).toMatch(
+      /::error title=Accessibility specs over their leg's time::1 legs still leave/,
     );
-    expect(lostShare.scopeKnown).toBe(false);
-    expect(lostShare.run.length).toBeGreaterThan(0);
+    expect(lost.stdout).toMatch(/^Accessibility legs: 1 for \d+ spec files/m);
     const one = count(1, 1);
     expect(one.output).toMatchObject({
       count: '1',

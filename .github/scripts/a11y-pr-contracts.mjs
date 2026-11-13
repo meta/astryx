@@ -1321,7 +1321,7 @@ function main() {
       ? scopeLost
         ? planLegs(
             budgeted.run.map(({file}) => file),
-            {},
+            readDurations(root, policySha),
             1,
           )
         : planLegs(
@@ -1341,7 +1341,9 @@ function main() {
     console.log(
       `Accessibility legs: ${legs.count} for ${budgeted.run.length} spec files (the longest leg's recorded time ${minutes} min).`,
     );
-    const overLimit = scopeLost ? '' : planOverLimit(legs, isPullRequest);
+    // A lost scope plans the whole selection as one leg, so it too fails by
+    // name when that leg cannot fit, instead of being cut at the cap.
+    const overLimit = planOverLimit(legs, isPullRequest);
     if (overLimit) {
       console.log(overLimit);
       return 1;
