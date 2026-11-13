@@ -670,24 +670,27 @@ function printThemeApp(result) {
 }
 
 /**
- * The base the experimental theme editor can start an ejected theme from:
- * its own slug when it is an Astryx theme package (the editor builds only on
- * those), else neutral.
- * @param {{slug?: string | null, package?: string | null}} data
- * @returns {string}
+ * The base the experimental theme editor can start an ejected theme from,
+ * by the editor's own check: the theme's slug when it is a built-in base the
+ * editor knows (LIKE) and its package is installed where the command runs
+ * (baseInstalled), else neutral. Loaded only for an eject.
+ * @param {{slug?: string | null}} data
+ * @param {string} cwd
+ * @returns {Promise<string>}
  */
-export function editorBaseFor(data) {
-  return data.slug && data.package === `@astryxdesign/theme-${data.slug}`
-    ? data.slug
-    : 'neutral';
+export async function editorBaseFor(data, cwd) {
+  if (!data.slug) return 'neutral';
+  const {editorBaseIn} = await import('../../../api/theme-edit/_adapter.mjs');
+  return editorBaseIn(data.slug, cwd);
 }
 
 /**
  * Print every field in a source-fork receipt.
  * @param {import('../../../api/theme/theme.type.mjs').ThemeEjectResponse} result
  * @param {ThemeCommandWords} [words]
+ * @param {string} [like] the base the theme editor line starts from
  */
-function printThemeEject(result, words = THEME_WORDS) {
+function printThemeEject(result, words = THEME_WORDS, like = 'neutral') {
   const {data} = result;
   emit(
     section('Ejected theme'),
@@ -721,7 +724,7 @@ function printThemeEject(result, words = THEME_WORDS) {
     // Astryx theme package, so a theme from another package starts from
     // neutral.
     text(
-      `To make or change a theme: the experimental theme editor, ${getCliInvocation()} experimental theme editor new <name> --like ${editorBaseFor(data)}.`,
+      `To make or change a theme: the experimental theme editor, ${getCliInvocation()} experimental theme editor new <name> --like ${like}.`,
     ),
   );
 }
@@ -1639,7 +1642,12 @@ function registerThemeCommands(theme, program, docs, words) {
       }
       await warnOnThemeIntegrationIssues(json);
       if (json) jsonOut(result);
-      else printThemeEject(result, words);
+      else
+        printThemeEject(
+          result,
+          words,
+          await editorBaseFor(result.data, process.cwd()),
+        );
       return NO_RESULT_SET;
     },
   });
