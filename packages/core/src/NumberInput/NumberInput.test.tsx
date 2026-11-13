@@ -717,6 +717,43 @@ describe('NumberInput', () => {
       expect(input).toHaveValue('1,500,000');
     });
 
+    it('regroups a composed digit in the last group from the draft before it', () => {
+      render(<GroupedField locale="en-US" value={1500} />);
+      const input = screen.getByRole('spinbutton');
+      fireEvent.focus(input);
+      expect(input).toHaveValue('1,500');
+      fireEvent.compositionStart(input);
+      fireEvent.input(input, {target: {value: '1,5000'}});
+      expect(input).toHaveValue('1,5000');
+      fireEvent.compositionEnd(input);
+      expect(input).toHaveValue('15,000');
+    });
+
+    it('regroups a composed digit in the last vi-VN group', () => {
+      render(<GroupedField locale="vi-VN" value={1500} />);
+      const input = screen.getByRole('spinbutton');
+      fireEvent.focus(input);
+      expect(input).toHaveValue('1.500');
+      fireEvent.compositionStart(input);
+      fireEvent.input(input, {target: {value: '1.5000'}});
+      fireEvent.compositionEnd(input);
+      expect(input).toHaveValue('15.000');
+    });
+
+    it('folds a composed full-width digit to ASCII before regrouping', () => {
+      const onChange = vi.fn();
+      render(<GroupedField locale="en-US" value={1500} onChange={onChange} />);
+      const input = screen.getByRole('spinbutton');
+      fireEvent.focus(input);
+      fireEvent.compositionStart(input);
+      fireEvent.input(input, {target: {value: '1,500\uFF10'}});
+      fireEvent.compositionEnd(input);
+      expect(input).toHaveValue('15,000');
+
+      fireEvent.blur(input);
+      expect(onChange).toHaveBeenCalledWith(15000);
+    });
+
     it('does not regroup a composing candidate that is not only digits', () => {
       render(<GroupedField locale="en-US" />);
       const input = screen.getByRole('spinbutton');

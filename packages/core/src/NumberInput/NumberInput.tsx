@@ -234,6 +234,7 @@ import {
 } from '../Field/fieldParts';
 import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
+import {toAsciiDigits} from '../utils/unicodeDigits';
 import {useLocale} from '../i18n';
 import {
   deleteDigitAcrossGroupSeparator,
@@ -768,6 +769,10 @@ export function NumberInput({
   useMobileKeyboard(inputRef);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const isComposingRef = useRef(false);
+  // The text when a composition started. Regrouping at compositionend reads
+  // it to tell the field's own separators, which a composed digit shifted,
+  // from ones the person typed.
+  const compositionStartTextRef = useRef<string | undefined>(undefined);
   const inputGroup = useInputGroup();
   const inputGroupState = use(InputGroupInternalContext);
   const isDisabled = isDisabledProp || inputGroupState.isDisabled;
@@ -1029,22 +1034,32 @@ export function NumberInput({
     ],
   );
 
-  const handleCompositionStart = useCallback(() => {
-    isComposingRef.current = true;
-  }, []);
+  const handleCompositionStart = useCallback(
+    (e: CompositionEvent<HTMLInputElement>) => {
+      isComposingRef.current = true;
+      compositionStartTextRef.current = e.currentTarget.value;
+    },
+    [],
+  );
 
   const handleCompositionEnd = useCallback(
     (e: CompositionEvent<HTMLInputElement>) => {
       isComposingRef.current = false;
+      const previousText = compositionStartTextRef.current;
+      compositionStartTextRef.current = undefined;
       if (isDisabled || isReadOnly || !isGroupedWhileEditing) {
         return;
       }
       const input = e.currentTarget;
-      applyGroupedDraft(
-        input,
-        input.value,
-        input.selectionStart ?? input.value.length,
-      );
+      const caret = input.selectionStart ?? input.value.length;
+      // An IME can compose full-width or other script digits. Regrouping reads
+      // ASCII digits, so fold them first, as the parser does at commit.
+      const text = toAsciiDigits(input.value) ?? input.value;
+      const foldedCaret =
+        text === input.value
+          ? caret
+          : (toAsciiDigits(input.value.slice(0, caret))?.length ?? caret);
+      applyGroupedDraft(input, text, foldedCaret, previousText);
     },
     [applyGroupedDraft, isDisabled, isGroupedWhileEditing, isReadOnly],
   );
