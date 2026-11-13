@@ -85,7 +85,12 @@ import {
   FOLDER_JUNK,
   dialValueFits,
 } from './_settings.mjs';
-import {checkSetting, exampleOf, storedProblems} from './_check.mjs';
+import {
+  checkSetting,
+  exampleOf,
+  normalizeEntry,
+  storedProblems,
+} from './_check.mjs';
 import {MODAL} from './_compiler.mjs';
 import {
   PALETTE_DIALS,
@@ -870,9 +875,15 @@ function refuseStoredTokens(ctx, slug, data, skip) {
         one.setting.source === 'token' &&
         ctx.C.isToken(one.setting.thing)
           ? [
-              `${P} set ${slug} ${one.setting.thing} ${quoteCommandArgument(exampleOf(ctx.C.typeOf(one.setting.thing), one.setting.thing))}`,
+              // The value the check suggests for this value, else a stock
+              // one of the token's type.
+              `${P} set ${slug} ${one.setting.thing} ${quoteCommandArgument(one.fix ?? exampleOf(ctx.C.typeOf(one.setting.thing), one.setting.thing))}`,
             ]
-          : []),
+          : one && one.fix && one.setting.source === 'dial'
+            ? [
+                `${P} set ${slug} ${one.setting.thing} ${quoteCommandArgument(one.fix)}`,
+              ]
+            : []),
       ],
     },
   );
@@ -949,6 +960,13 @@ function extremeSteps(res) {
  * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditChangeResponse>}
  */
 async function change(sub, slug, thing, value, options) {
+  // How it was typed, put right before anything reads it (a pasted
+  // declaration, a dash, a var(), invisible spaces).
+  if (typeof thing === 'string') {
+    const entry = normalizeEntry(thing, value);
+    thing = entry.thing;
+    value = entry.value;
+  }
   /** @type {{ctx?: import('./_settings.mjs').Ctx, data?: import('./_settings.mjs').ThemeData}} */
   const seen = {};
   try {

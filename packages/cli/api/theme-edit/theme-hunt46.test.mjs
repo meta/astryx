@@ -98,12 +98,9 @@ describe('N46: a size suggestion', () => {
 });
 
 describe('N47: a token typed with its colon', () => {
-  it('suggests the same set without the colon first', async () => {
-    const err = await refusal(() =>
-      themeEditSet('b', '--color-accent:', '#e11d48', {cwd}),
-    );
-    expect(names(err)[0]).toMatch(/ set b --color-accent '#e11d48'$/);
-  });
+  it('is that token (hunt51: read before any check)', async () => {
+    await themeEditSet('b', '--color-accent:', '#e11d48', {cwd});
+  }, 240_000);
 });
 
 describe('R21-C: a font property pasted with no value', () => {
