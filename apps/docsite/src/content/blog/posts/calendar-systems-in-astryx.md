@@ -124,6 +124,6 @@ The issue was opened on a Friday, and calendar support shipped in 0.7.9 the foll
 
 ## What's next
 
-A locale's `-u-ca-` keyword selecting the calendar is planned for 0.8.0. Early feedback on typed entry ([#10366](https://github.com/meta/astryx/issues/10366), [#10367](https://github.com/meta/astryx/issues/10367)) is already making error messages plainer ("Enter a real date") and letting apps word their own.
+Letting a locale's `-u-ca-` keyword select the calendar is planned for 0.8.0. Early feedback on typed entry ([#10366](https://github.com/meta/astryx/issues/10366), [#10367](https://github.com/meta/astryx/issues/10367)) is already making error messages plainer ("Enter a real date") and letting apps word their own.
 
 If one of these calendars is the one you live by and something looks off, please [open an issue](https://github.com/meta/astryx/issues); that's how this whole thing started. The [calendars guide](/docs/calendars) covers setup, including the polyfill and server rendering.
