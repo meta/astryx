@@ -53,11 +53,7 @@ import {
   type RefObject,
 } from 'react';
 import {useCommittedRef} from '../hooks/useCommittedRef';
-import {
-  currentGesture,
-  TOUCH_POINTER_TYPES,
-  useTapRecognizer,
-} from './gestureCounter';
+import {TOUCH_POINTER_TYPES, useTapRecognizer} from './gestureCounter';
 import {noteOutsideDismissal} from './outsidePress';
 import {
   innermostInteractive,
