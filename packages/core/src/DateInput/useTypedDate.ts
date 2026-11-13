@@ -6,8 +6,9 @@
  * @file useTypedDate.ts
  * @input Provider locale and calendar, a field's format, bounds and constraints;
  *   calendarDateParser, parseDateInput for other Gregorian text,
- *   Field/useEntryErrorReport for the rejection status, alert and report, and
- *   Field/useValueReplacesEntry for when a new value replaces a kept entry
+ *   Field/useEntryErrorReport for the rejection status, alert and report,
+ *   Field/useValueReplacesEntry for when a new value replaces a kept entry, and
+ *   the field's resolved entry error behavior
  * @output Typed-date reading, committed text, the format hint, the calendar
  *   description and rejection messages for a date text field, the typed
  *   entry state that DateInput and DateTimeInput share, the
@@ -18,6 +19,7 @@
 
 import {useCallback, useMemo, useState} from 'react';
 import type {InputStatus} from '../Field/types';
+import type {EntryErrorBehavior} from '../FormLayout/FormLayoutContext';
 import {useEntryErrorReport} from '../Field/useEntryErrorReport';
 import {useValueReplacesEntry} from '../Field/useValueReplacesEntry';
 import {useLocale} from '../i18n/useLocale';
@@ -123,13 +125,14 @@ export interface TypedDate {
 }
 
 /**
- * The rejection a result shows: the error of a complete date, or of text that
- * Enter or blur committed. Text that is not a date is never complete, so its
- * error waits for the commit.
+ * The rejection a result shows: the error of text that Enter or blur
+ * committed, or, under `'complete'`, of a complete date. Text that is not a
+ * date is never complete, so its error waits for the commit.
  */
 export function typedDateError(
   result: CalendarDateParseResult | null,
   isCommitted: boolean,
+  entryErrorBehavior: EntryErrorBehavior,
 ): TypedDateError | null {
   if (result == null) {
     return null;
@@ -142,7 +145,7 @@ export function typedDateError(
   }
   if (
     (result.kind === 'nonexistent' || result.kind === 'outOfRange') &&
-    (result.isComplete || isCommitted)
+    (isCommitted || (result.isComplete && entryErrorBehavior === 'complete'))
   ) {
     return result.kind;
   }
@@ -161,8 +164,9 @@ function dateEntryError(
   text: string,
   min: ISODateString | undefined,
   max: ISODateString | undefined,
+  entryErrorBehavior: EntryErrorBehavior,
 ): DateInputEntryError | null {
-  const error = typedDateError(result, isCommitted);
+  const error = typedDateError(result, isCommitted, entryErrorBehavior);
   if (error == null || result == null) {
     return null;
   }
@@ -349,6 +353,12 @@ export interface UseTypedDateFieldOptions extends UseTypedDateOptions {
   onEntryErrorChange?: (error: DateInputEntryError | null) => void;
   /** Whether the caller gave a placeholder, which replaces the format hint. */
   hasPlaceholder: boolean;
+  /**
+   * Under `'blur-or-enter'`, typing reveals no rejection: only Enter or blur
+   * does. An edit that makes the text a date or empties it still clears a
+   * revealed rejection at once.
+   */
+  entryErrorBehavior: EntryErrorBehavior;
 }
 
 export interface TypedDateField {
@@ -393,6 +403,7 @@ export function useTypedDateField({
   isStatusAnnounced,
   onEntryErrorChange,
   hasPlaceholder,
+  entryErrorBehavior,
   ...options
 }: UseTypedDateFieldOptions): TypedDateField {
   const typedDate = useTypedDate(options);
@@ -422,7 +433,11 @@ export function useTypedDateField({
     pendingInput !== null && pendingInput.trim()
       ? typedDate.parse(pendingInput)
       : null;
-  const ownError = typedDateError(typedResult, isRejectionCommitted);
+  const ownError = typedDateError(
+    typedResult,
+    isRejectionCommitted,
+    entryErrorBehavior,
+  );
   const keptResult =
     ownError == null &&
     keptText !== null &&
@@ -438,14 +453,21 @@ export function useTypedDateField({
       ? {text: pendingInput, result: typedResult}
       : keptResult != null &&
           keptText !== null &&
-          typedDateError(keptResult, true) != null
+          typedDateError(keptResult, true, entryErrorBehavior) != null
         ? {text: keptText, result: keptResult}
         : null;
   const errorMessage =
     shown != null ? typedDate.errorMessage(shown.result) : null;
   const entryError =
     shown != null
-      ? dateEntryError(shown.result, true, shown.text, options.min, options.max)
+      ? dateEntryError(
+          shown.result,
+          true,
+          shown.text,
+          options.min,
+          options.max,
+          entryErrorBehavior,
+        )
       : null;
   const shownText = shown?.text ?? null;
   // Unreadable text that Enter or blur kept: the form posts the committed
@@ -530,7 +552,14 @@ export function useTypedDateField({
       const isEmpty = !text.trim();
       const error = isEmpty
         ? null
-        : dateEntryError(result, false, text, options.min, options.max);
+        : dateEntryError(
+            result,
+            false,
+            text,
+            options.min,
+            options.max,
+            entryErrorBehavior,
+          );
       // An edit that leaves the entry rejected or unfinished keeps the shown
       // rejection.
       const nextKeptText =
@@ -554,6 +583,7 @@ export function useTypedDateField({
       reportEntryError,
       options.min,
       options.max,
+      entryErrorBehavior,
       report,
       onTypedDate,
     ],
@@ -581,7 +611,14 @@ export function useTypedDateField({
       setKeptCommits(count => count + 1);
       setKeptText(null);
       reportEntryError(
-        dateEntryError(result, true, pendingInput, options.min, options.max),
+        dateEntryError(
+          result,
+          true,
+          pendingInput,
+          options.min,
+          options.max,
+          entryErrorBehavior,
+        ),
       );
       return;
     }
@@ -599,6 +636,7 @@ export function useTypedDateField({
     reportEntryError,
     options.min,
     options.max,
+    entryErrorBehavior,
     report,
     reset,
     firedEpoch,

@@ -1074,6 +1074,45 @@ describe('DateInput native rejected entries', () => {
     expect(statusText(container)).toBe(RANGE_MESSAGE);
   });
 
+  it.each([
+    ['complete', 'Enter'],
+    ['complete', 'blur'],
+    ['blur-or-enter', 'Enter'],
+    ['blur-or-enter', 'blur'],
+  ] as const)(
+    'under %s, holds a refused date until %s, with every signal together',
+    (entryErrorBehavior, commit) => {
+      stubPointer(true);
+      const {container} = render(
+        <DateInput
+          label="Date"
+          min="2026-03-10"
+          max="2026-03-20"
+          value="2026-03-15"
+          entryErrorBehavior={entryErrorBehavior}
+          onChange={() => {}}
+        />,
+      );
+      const input = getInput();
+      const isStyledInvalid = () => /\.inputInvalid\b/.test(input.className);
+      fireEvent.focus(input);
+      for (const date of ['0002-03-15', '2026-03-25']) {
+        fireEvent.change(input, {target: {value: date}});
+        expect(input).not.toHaveAttribute('aria-invalid');
+        expect(isStyledInvalid()).toBe(false);
+        expect(statusText(container)).toBe('');
+      }
+      if (commit === 'Enter') {
+        fireEvent.keyDown(input, {key: 'Enter'});
+      } else {
+        fireEvent.blur(input);
+      }
+      expect(input).toHaveAttribute('aria-invalid', 'true');
+      expect(isStyledInvalid()).toBe(true);
+      expect(statusText(container)).toBe(RANGE_MESSAGE);
+    },
+  );
+
   it('hides a shown rejection while disabled, and shows it again once editable', () => {
     stubPointer(true);
     const field = (isDisabled: boolean) => (

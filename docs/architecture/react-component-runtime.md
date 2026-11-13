@@ -573,7 +573,10 @@ contracts.
   reads: "Stores values only. Refs to DOM nodes are not attached yet when this
   runs." Internal: never in `hooks/index.ts` or the package entry; Lab imports
   both from `@astryxdesign/core/internal/committed-ref`, as it reaches other
-  Core internals.
+  Core internals. Lab imports `createSharedContext`, its one export, from
+  `@astryxdesign/core/internal/shared-context`, so a Lab component's context
+  reaches a swizzled copy's provider under one shared key (`spec:AST-110`
+  FR3).
 
 ## Deciding specs
 

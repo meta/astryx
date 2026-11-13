@@ -20,13 +20,20 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {lowerDoc} from '../doc-compiler/compile.mjs';
 import {packageSource} from '../doc-compiler/source.mjs';
-import {CLI_ROOT} from '../fs/paths.mjs';
+import {CLI_ROOT, realDir} from '../fs/paths.mjs';
+import {persistedGather} from '../fs/gather-cache.mjs';
+import {EXACT_CODEC} from '../fs/exact-codec.mjs';
 import {listDirEntries} from '../fs/listing-cache.mjs';
 import {formatCliCommand} from '../env/package-manager.mjs';
 import {LOCAL_THEME_ROOT} from '../config/theme-state.mjs';
 import {assertWithin, PathSafetyError} from '../fs/path-safety.mjs';
 import {THEME_MODULE_EXTENSIONS} from './theme-module-extensions.mjs';
 import {babelParser, jscodeshift} from '../runtime/lazy-dependencies.mjs';
+import {
+  readStore,
+  storedKey,
+  STORED_DOCS_FILE,
+} from '../doc-compiler/stored-docs.mjs';
 
 export const BUNDLED_THEME_PACKAGE = '@astryxdesign/cli';
 export const THEMES_DIR = path.join(CLI_ROOT, 'assets', 'templates', 'themes');
@@ -675,13 +682,24 @@ export function readStaticDescriptorValue(
     /** @type {{value: Record<string, any>} | {error: unknown}} */
     let read;
     try {
+      const source = fs.readFileSync(docPath, 'utf-8');
+      // A descriptor Astryx ships was read at publish, by the hash of its
+      // text (scripts/generate-stored-docs.mjs): the same text reads the
+      // same value without parsing. Any other text, or a store that cannot
+      // be read, is parsed.
+      let stored;
+      try {
+        stored = readStore(STORED_DOCS_FILE).get(
+          descriptorStoreKey(source, typeName, data),
+        );
+      } catch {
+        stored = undefined;
+      }
       read = {
-        value: readDescriptorSource(
-          fs.readFileSync(docPath, 'utf-8'),
-          label,
-          typeName,
-          data,
-        ),
+        value:
+          stored != null && typeof stored === 'object'
+            ? stored
+            : readDescriptorSource(source, label, typeName, data),
       };
     } catch (error) {
       read = {error};
@@ -694,13 +712,38 @@ export function readStaticDescriptorValue(
 }
 
 /**
+ * The typed descriptors read statically, each with whether plain data is
+ * accepted: what scripts/generate-stored-docs.mjs reads at publish.
+ * @type {ReadonlyArray<[string, boolean]>}
+ */
+export const STATIC_DESCRIPTOR_TYPES = [
+  ['ThemeDoc', false],
+  ['IconSetDoc', false],
+  ['IconDefinitionDoc', true],
+];
+
+/**
+ * Where a descriptor's statically read value is stored at publish: by the
+ * hash of its text, the type it is read as, and whether plain data counts.
+ * @param {string} source
+ * @param {string} typeName
+ * @param {boolean} data
+ * @returns {string}
+ */
+export function descriptorStoreKey(source, typeName, data) {
+  return `descriptor:${typeName}:${data ? 'data' : 'object'}:${storedKey(source)}`;
+}
+
+/**
+ * The static value a descriptor's source default-exports (see
+ * {@link readStaticDescriptorValue}); throws when it is not one.
  * @param {string} source
  * @param {string} label
  * @param {string} typeName
  * @param {boolean} [data]
  * @returns {Record<string, any>}
  */
-function readDescriptorSource(source, label, typeName, data = false) {
+export function readDescriptorSource(source, label, typeName, data = false) {
   /** @type {any} */
   let ast;
   try {
@@ -1740,18 +1783,39 @@ export function discoverLocalThemes(
   }));
 }
 
+/** An integration's discovered themes, kept exactly, with the shape they need. */
+const THEMES_CODEC = {
+  ...EXACT_CODEC,
+  valid: (/** @type {any} */ themes) =>
+    Array.isArray(themes) &&
+    themes.every(
+      theme =>
+        theme != null &&
+        typeof theme.slug === 'string' &&
+        typeof theme.exportName === 'string',
+    ),
+};
+
 /**
  * @param {import('../integrations/integrations.mjs').LoadedIntegration} integration
  * @returns {Promise<DiscoveredTheme[]>}
  */
 export async function discoverIntegrationThemes(integration) {
   if (!integration.themes) return [];
-  return discoverThemeDirectory(integration.themes, integration.name).map(
-    theme => ({
-      ...theme,
-      packageDir: integration.__packageDir,
-      packageExports: integration.__packageExports,
-      source: /** @type {const} */ ('package'),
-    }),
+  const themesDir = integration.themes;
+  // Kept between runs while every file and module it read is unchanged; the
+  // live fields below are added after, as on a fresh read.
+  const found = /** @type {DiscoveredTheme[]} */ (
+    await persistedGather(
+      ['integration-themes', realDir(themesDir), integration.name ?? null],
+      async () => discoverThemeDirectory(themesDir, integration.name),
+      THEMES_CODEC,
+    )
   );
+  return found.map(theme => ({
+    ...theme,
+    packageDir: integration.__packageDir,
+    packageExports: integration.__packageExports,
+    source: /** @type {const} */ ('package'),
+  }));
 }

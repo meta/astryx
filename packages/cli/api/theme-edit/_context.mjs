@@ -539,11 +539,21 @@ export function fontNotes(ctx, data) {
  * What a change did to part styles (component settings), one line each.
  * @param {any} before
  * @param {any} after
+ * @param {any} [base] the base theme, whose own values a write that repeats them does not change
  * @returns {string[]}
  */
-export function styledChanges(before, after) {
+export function styledChanges(before, after, base) {
   /** @type {string[]} */
   const out = [];
+  /** A value as CSS reads it, for comparing. @param {any} v */
+  const plain = v =>
+    (Array.isArray(v) && v.length === 2
+      ? `light-dark(${v[0]}, ${v[1]})`
+      : String(v ?? '')
+    )
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
   const a = before?.components ?? {};
   const b = after?.components ?? {};
   for (const target of new Set([...Object.keys(a), ...Object.keys(b)])) {
@@ -560,6 +570,14 @@ export function styledChanges(before, after) {
           : p.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`);
       for (const prop of new Set([...Object.keys(x), ...Object.keys(y)])) {
         if (JSON.stringify(x[prop]) === JSON.stringify(y[prop])) continue;
+        // Writing what the base theme already shows there changes nothing.
+        const shown = base?.components?.[target]?.[key]?.[prop];
+        if (
+          x[prop] === undefined &&
+          shown !== undefined &&
+          plain(shown) === plain(y[prop])
+        )
+          continue;
         const where = `${target}${key === 'base' ? '' : ` ${key}`}`;
         // A state block (`:hover`) lists each property it changes.
         if (

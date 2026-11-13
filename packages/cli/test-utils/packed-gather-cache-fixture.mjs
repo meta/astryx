@@ -371,6 +371,34 @@ export function expectWarmHit(tmp, asks, options = {}) {
   return answers;
 }
 
+/**
+ * The kept integration theme records in a temp folder's cache folder.
+ * @param {string} tmp
+ * @returns {Map<string, number>} name to inode
+ */
+export function themeEntries(tmp) {
+  const dir = path.join(tmp, CACHE_NAME);
+  /** @type {Map<string, number>} */
+  const out = new Map();
+  if (!fs.existsSync(dir)) return out;
+  for (const name of fs.readdirSync(dir)) {
+    const file = path.join(dir, name);
+    try {
+      const {value} = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (
+        Array.isArray(value) &&
+        value.length > 0 &&
+        value.every(t => t && typeof t.slug === 'string' && 'exportName' in t)
+      ) {
+        out.set(name, fs.statSync(file).ino);
+      }
+    } catch {
+      // Not a theme entry.
+    }
+  }
+  return out;
+}
+
 export const QUERIES = [
   ['search', 'running totals'],
   // Build reads the same kept catalog: a hit after the search's miss.

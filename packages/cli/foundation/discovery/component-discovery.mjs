@@ -681,11 +681,12 @@ function ownSourceFile(coreDir, name) {
     if (found) return found;
   }
 
-  // Search nested (component might be under a parent dir)
-  const entries = listDirEntries(srcDir);
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const nestedDir = path.join(srcDir, entry.name, name);
+  // Search nested (component might be under a parent dir): only the folders
+  // whose listing holds the name, in listing order.
+  const nested = foldersHolding(srcDir, listDirEntries(srcDir), [name]).map(
+    entry => path.join(srcDir, entry.name, name),
+  );
+  for (const nestedDir of nested) {
     if (existsCaseExact(nestedDir, srcDir)) {
       const found = searchDir(nestedDir);
       if (found) return found;

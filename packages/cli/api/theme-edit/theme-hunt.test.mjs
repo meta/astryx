@@ -123,6 +123,9 @@ describe('names', () => {
     expect(
       (await refusal(() => themeEditNew('My Theme', {cwd}))).run[0],
     ).toMatch(/new my-theme$/);
+    expect(
+      (await refusal(() => themeEditNew('Theme Park', {cwd}))).run[0],
+    ).toMatch(/new theme-park$/);
     expect((await refusal(() => themeEditNew('q', {cwd, like: ''}))).code).toBe(
       'ERR_THEME_BAD_VALUE',
     );
