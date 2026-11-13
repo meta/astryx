@@ -43,6 +43,13 @@ export function makeLinkedFixture(prefix, packages) {
   }
   const dir = path.join(root, 'project');
   fs.mkdirSync(dir);
+  // A fixture that links Core is an app that lists it, as a real app's
+  // package.json does: the theme editor finds the app by that listing.
+  if (packages.some(n => n === '@astryxdesign/core' || n === '@astryxdesign'))
+    fs.writeFileSync(
+      path.join(dir, 'package.json'),
+      `${JSON.stringify({private: true, type: 'module', dependencies: {'@astryxdesign/core': '*'}}, null, 2)}\n`,
+    );
   return dir;
 }
 

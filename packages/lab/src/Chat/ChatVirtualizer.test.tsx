@@ -232,10 +232,35 @@ describe('ChatVirtualizer', () => {
   );
   // The mount landing is a declared target in flight; its release (and the
   // end of convergence, during which scroll events may not flip the mode)
-  // is a rAF away.
+  // is a rAF away. So the wait is two of the page's frames, not a fixed time.
+  // Each wait queues behind the list's own callbacks for that frame. So a
+  // chain the list queued, up to two frames deep, has run however late the
+  // frames come.
   const settled = async (): Promise<void> => {
     await act(async () => {
-      await new Promise(r => setTimeout(r, 40));
+      for (let frame = 0; frame < 2; frame++) {
+        await new Promise<void>(resolve => {
+          requestAnimationFrame(() => resolve());
+        });
+      }
+    });
+  };
+  // A busy mark lasts for the commit that mounts history and the frame after
+  // it. The cases that time it fake the animation frames and step them, so a
+  // slow runner cannot stretch a frame past a wait.
+  const fakeFrames = (): void => {
+    vi.useFakeTimers({
+      toFake: ['requestAnimationFrame', 'cancelAnimationFrame'],
+    });
+  };
+  const nextFrame = (): void => {
+    act(() => {
+      vi.advanceTimersToNextFrame();
+    });
+  };
+  const allFrames = (): void => {
+    act(() => {
+      vi.runAllTimers();
     });
   };
   const scrollEvent = (el: HTMLElement, at: number): void => {
@@ -862,48 +887,68 @@ describe('ChatVirtualizer', () => {
     el.remove();
   });
 
-  it('marks a thread loaded into an empty list, or replacing the rows, as busy for the log', async () => {
-    const el = tallScroller();
-    const thread = (prefix: string, n: number): Row[] =>
-      Array.from({length: n}, (_, i) => ({
-        id: `${prefix}${i}`,
-        text: `${prefix} message ${i}`,
-      }));
-    const list = (data: Row[]) => <div role="log">{attachedTo(data, el)}</div>;
-    const {container, rerender} = render(list([]));
-    await settled();
-    const block = container.querySelector('[role="log"]')!
-      .firstElementChild as HTMLElement;
-    // A thread loads into the empty list: its rows are history, not news.
-    act(() => rerender(list(thread('a', 60))));
-    expect(block.getAttribute('aria-busy')).toBe('true');
-    await settled();
-    expect(block.hasAttribute('aria-busy')).toBe(false);
-    // Another thread replaces the rows: history again.
-    act(() => rerender(list(thread('b', 60))));
-    expect(block.getAttribute('aria-busy')).toBe('true');
-    await settled();
-    expect(block.hasAttribute('aria-busy')).toBe(false);
-    el.remove();
+  it('marks a thread loaded into an empty list, or replacing the rows, as busy for the log', () => {
+    fakeFrames();
+    try {
+      const el = tallScroller();
+      const thread = (prefix: string, n: number): Row[] =>
+        Array.from({length: n}, (_, i) => ({
+          id: `${prefix}${i}`,
+          text: `${prefix} message ${i}`,
+        }));
+      const list = (data: Row[]) => (
+        <div role="log">{attachedTo(data, el)}</div>
+      );
+      const {container, rerender} = render(list([]));
+      allFrames();
+      const block = container.querySelector('[role="log"]')!
+        .firstElementChild as HTMLElement;
+      // A thread loads into the empty list: its rows are history, not news.
+      act(() => rerender(list(thread('a', 60))));
+      expect(block.getAttribute('aria-busy')).toBe('true');
+      nextFrame();
+      expect(block.getAttribute('aria-busy')).toBe('true');
+      nextFrame();
+      expect(block.hasAttribute('aria-busy')).toBe(false);
+      // Another thread replaces the rows: history again.
+      act(() => rerender(list(thread('b', 60))));
+      expect(block.getAttribute('aria-busy')).toBe('true');
+      nextFrame();
+      expect(block.getAttribute('aria-busy')).toBe('true');
+      nextFrame();
+      expect(block.hasAttribute('aria-busy')).toBe(false);
+      el.remove();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
-  it('marks the rows the window moves over as busy for the log, and new tail rows not', async () => {
-    const el = tallScroller();
-    const list = (n: number) => <div role="log">{attachedTo(rows(n), el)}</div>;
-    const {container, rerender} = render(list(60));
-    await settled();
-    const block = container.querySelector('[role="log"]')!
-      .firstElementChild as HTMLElement;
-    expect(block.hasAttribute('aria-busy')).toBe(false);
-    // A message appended at the tail while following: news for the log.
-    act(() => rerender(list(61)));
-    expect(block.hasAttribute('aria-busy')).toBe(false);
-    // Scrolling up mounts history: busy for that commit and the next frame.
-    scrollEvent(el, 0);
-    expect(block.getAttribute('aria-busy')).toBe('true');
-    await settled();
-    expect(block.hasAttribute('aria-busy')).toBe(false);
-    el.remove();
+  it('marks the rows the window moves over as busy for the log, and new tail rows not', () => {
+    fakeFrames();
+    try {
+      const el = tallScroller();
+      const list = (n: number) => (
+        <div role="log">{attachedTo(rows(n), el)}</div>
+      );
+      const {container, rerender} = render(list(60));
+      allFrames();
+      const block = container.querySelector('[role="log"]')!
+        .firstElementChild as HTMLElement;
+      expect(block.hasAttribute('aria-busy')).toBe(false);
+      // A message appended at the tail while following: news for the log.
+      act(() => rerender(list(61)));
+      expect(block.hasAttribute('aria-busy')).toBe(false);
+      // Scrolling up mounts history: busy for that commit and the next frame.
+      scrollEvent(el, 0);
+      expect(block.getAttribute('aria-busy')).toBe('true');
+      nextFrame();
+      expect(block.getAttribute('aria-busy')).toBe('true');
+      nextFrame();
+      expect(block.hasAttribute('aria-busy')).toBe(false);
+      el.remove();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('mounts a message that arrives while the reader is in history, unmarked, so the log delivers it', async () => {
