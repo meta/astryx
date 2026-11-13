@@ -910,6 +910,9 @@ export function registerExperimentalTheme(group, program) {
         // A declaration pasted as one argument (`--color-accent: #e11d48`,
         // or `--color-accent:#e11d48`) is the token and its value; with no
         // value otherwise, the missing-argument error the parser gives.
+        // A pasted JSON object of settings goes to the editor whole, which
+        // gives one set line per entry.
+        if (!value.length && /^\s*\{/.test(thing)) value = [''];
         if (!value.length) {
           // Any thing, a token or a dial, with `:` or `=` (`accent: red`,
           // `--color-accent=#e11d48`).

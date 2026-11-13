@@ -1077,6 +1077,112 @@ export async function editorStoredRefusal(root, slug) {
 }
 
 /**
+ * The token values the theme's own source gives that `set` refuses (a
+ * radius of `banana`, a color of `12px`), each with why and the line of
+ * the file that sets it; checked with the very rules `set` uses.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {Array<{token: string, value: string, why: string, line: number | null}>}
+ */
+function ownTokenProblems(ctx, slug, data) {
+  const {cwd} = ctx.project;
+  /** @type {Array<{token: string, value: string, why: string, line: number | null}>} */
+  const out = [];
+  /** @type {string[]} */
+  let lines = [];
+  try {
+    lines = fs.readFileSync(themeFiles(cwd, slug).ts, 'utf8').split('\n');
+  } catch {
+    // No own source.
+  }
+  for (const [token, value] of Object.entries(
+    ownSourceTokenValues(cwd, slug),
+  )) {
+    if (!(token in ctx.project.core.tokenDefaults)) continue;
+    // A font family the file sets through typography comes back as Core
+    // writes it (quoted); its own check is the font dial's.
+    if (/^--font-family-/.test(token)) continue;
+    try {
+      checkSetting(ctx, slug, {...data, settings: []}, token, value, {});
+    } catch (e) {
+      if (!(e instanceof AstryxError)) throw e;
+      const at = lines.findIndex(l => l.includes(token));
+      out.push({
+        token,
+        value,
+        why: e.message.replace(/ Nothing was changed\.$/, ''),
+        line: at >= 0 ? at + 1 : null,
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * Refuse a theme whose own source gives a token a value `set` refuses: the
+ * build would write it as it is (a browser drops it), so it is named, with
+ * the line of the file, before anything is written.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ */
+function refuseOwnTokenValues(ctx, slug, data) {
+  const err = ownTokenRefusal(ctx, slug, data);
+  if (err) throw err;
+}
+
+/**
+ * The refusal for own-source token values `set` refuses, or null.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {AstryxError | null}
+ */
+function ownTokenRefusal(ctx, slug, data) {
+  const bad = ownTokenProblems(ctx, slug, data);
+  if (!bad.length) return null;
+  const file = `themes/${slug}/${slug}.theme.ts`;
+  return new AstryxError(
+    `${file} gives ${bad.length === 1 ? 'a token a value' : `${bad.length} tokens values`} the editor refuses, which the build would write as it is: ${bad
+      .slice(0, 3)
+      .map(
+        b =>
+          `${b.token}: "${b.value}"${b.line ? ` (line ${b.line})` : ''}: ${b.why}`,
+      )
+      .join(
+        '; ',
+      )}${bad.length > 3 ? `; and ${bad.length - 3} more` : ''}. Change it in ${file}. Nothing was changed.`,
+    [
+      {
+        name: `grep -n -- ${quoteCommandArgument(bad[0].token)} ${quoteCommandArgument(file)}`,
+        reason: 'see the line',
+      },
+    ],
+    ERROR_CODES.ERR_THEME_INVALID,
+  );
+}
+
+/**
+ * The refusal `compile` gives an editor theme whose own source gives a
+ * token a value `set` refuses, or null.
+ * @param {string} root
+ * @param {string} slug
+ * @returns {Promise<AstryxError | null>}
+ */
+export async function editorOwnTokenRefusal(root, slug) {
+  const ctx = await context(root);
+  /** @type {import('./_settings.mjs').ThemeData} */
+  let data;
+  try {
+    data = loadTheme(root, slug);
+  } catch {
+    return null;
+  }
+  return ownTokenRefusal(ctx, slug, data);
+}
+
+/**
  * For `compile`: the refusal of [light, dark] pairs on tokens that are not
  * colors in what the theme builds now, or null.
  * @param {string} root
@@ -1161,15 +1267,41 @@ async function change(sub, slug, thing, value, options) {
   }
   // How it was typed, put right before anything reads it (a pasted
   // declaration, a dash, a var(), invisible spaces).
+  /** @type {string | undefined} */
+  let dropped;
   if (typeof thing === 'string') {
     const entry = normalizeEntry(thing, value);
     thing = entry.thing;
     value = entry.value;
+    dropped = entry.dropped;
   }
   /** @type {{ctx?: import('./_settings.mjs').Ctx, data?: import('./_settings.mjs').ThemeData}} */
   const seen = {};
   try {
-    return await changeOnce(sub, slug, thing, value, options, seen, typedThing);
+    const r = await changeOnce(
+      sub,
+      slug,
+      thing,
+      value,
+      options,
+      seen,
+      typedThing,
+    );
+    // A second declaration pasted after the first is not set: said, with
+    // its own set line.
+    if (dropped && sub === 'set') {
+      const m = /^([^:]+):\s*(.*?);?\s*$/.exec(dropped);
+      const flags = [
+        ...(options.on ? [`--on ${options.on}`] : []),
+        ...(options.when ? [`--when ${options.when}`] : []),
+        ...(options.state ? [`--state ${options.state}`] : []),
+      ].join(' ');
+      /** @type {any} */ (r.data).notes = [
+        ...(r.data.notes ?? []),
+        `the pasted text also held "${dropped}", which this did not set${m ? `: ${P} set ${slug} ${quoteCommandArgument(m[1].trim())} ${quoteCommandArgument(m[2].trim())}${flags ? ` ${flags}` : ''} sets it` : ''}`,
+      ];
+    }
+    return r;
   } catch (e) {
     // A theme name one letter off an existing theme, or typed in other
     // letters or as a path (T, ./t, themes/t): the same command with that
@@ -1272,7 +1404,7 @@ async function changeOnce(
   const ctx = await context(cwd);
   // An undo of one setting only removes it, so it never waits on the
   // others being fixed.
-  if (sub !== 'undo')
+  if (sub !== 'undo') {
     refuseStoredTokens(ctx, slug, data, {
       thing,
       on: options.on,
@@ -1280,6 +1412,8 @@ async function changeOnce(
       state: options.state,
       mode: options.mode,
     });
+    refuseOwnTokenValues(ctx, slug, data);
+  }
   const flags = {
     on: options.on,
     when: options.when,
@@ -2315,6 +2449,7 @@ export async function themeEditShow(theme, options = {}) {
   // build a later refusal puts back.
   holdAfterBuild(ctx);
   refuseStoredTokens(ctx, theme, data);
+  refuseOwnTokenValues(ctx, theme, data);
   // Without React, show still lists the settings and builds the theme, as
   // set does; only the pages, pictures and the checks that render are
   // skipped, and the result says how to fix it.
@@ -2600,6 +2735,14 @@ export async function themeEditShow(theme, options = {}) {
         ),
         ...ownOverNotes,
         ...ownPhoneNotes(cwd, theme, data),
+        // A mode or base entry a hand edit put in the settings list does
+        // nothing: the theme's mode and base are its own fields.
+        ...data.settings
+          .filter(x => x.thing === 'mode' || x.thing === 'base')
+          .map(
+            x =>
+              `the settings list holds ${x.thing} = ${x.value}, which does nothing there (the theme's ${x.thing} is ${x.thing === 'mode' ? data.mode : (data.like ?? 'none')}); \`${P} undo ${theme} ${x.thing}\` removes it, and \`${P} set ${theme} ${x.thing} <value>\` sets the theme's ${x.thing}`,
+          ),
       ],
       // A size, number or font is the same in both modes: one value.
       resolved: Object.fromEntries(

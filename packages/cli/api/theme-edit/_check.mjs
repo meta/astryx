@@ -1485,6 +1485,21 @@ export function checkSetting(
   // A light and a dark color typed as one value: a token takes both as
   // light-dark() or one --mode at a time; a color dial takes one color and
   // makes both modes from it. Never one of them for both.
+  // A light and a dark color on a part's color property (`background`,
+  // `color`, `border-color` …) is that property's light-dark() pair.
+  if (
+    !unset &&
+    typeof value === 'string' &&
+    flags.on &&
+    !flags.mode &&
+    /^(color|background|(background|border|outline|text-decoration|caret|accent|fill|stroke)(-[a-z]+)?-color)$/.test(
+      String(thing).trim().toLowerCase(),
+    )
+  ) {
+    const pair = colorPair(value);
+    if (pair && !colorProblem(pair.light) && !colorProblem(pair.dark))
+      value = `light-dark(${pair.light}, ${pair.dark})`;
+  }
   if (
     !unset &&
     typeof value === 'string' &&
@@ -1911,12 +1926,21 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         );
     }
     const states = [...t.states, ...COMMON_STATES];
+    // A state the part lists in camelCase (toggle-button's isPressed) typed
+    // in any case or with dashes is that state.
+    const flat = (/** @type {string} */ x) =>
+      x.replace(/[-_\s]/g, '').toLowerCase();
+    if (s.state && !states.includes(s.state)) {
+      const same = states.find(x => flat(x) === flat(String(s.state)));
+      if (same) s.state = same;
+    }
     // Other words for a state, mapped to the one the part has; with none
     // near, the list of its states (never a guess such as hover).
     const SYNONYMS = wordTable(
       /** @type {Record<string, string[]>} */ ({
-        pressed: ['active'],
-        press: ['active'],
+        pressed: ['isPressed', 'active'],
+        press: ['isPressed', 'active'],
+        on: ['isPressed', 'checked', 'selected'],
         down: ['active'],
         clicked: ['active'],
         hovered: ['hover'],
@@ -3209,6 +3233,19 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           run: [
             `${P} set ${slug} ${colonless}${v ? ` ${quoteCommandArgument(v.replace(/;+\s*$/, ''))}` : ''}`,
           ],
+        },
+      );
+    // A dial typed as a flag (--corners round): the dial is meant.
+    const dial = thing.replace(/^-+/, '');
+    if (
+      !(thing in TOKENS) &&
+      (dial in DIALS || dial === 'base' || dial === 'mode')
+    )
+      refuse(
+        E.ERR_THEME_UNKNOWN_TOKEN,
+        `"${thing}" is not a design token; ${dial} is a dial, typed without dashes.`,
+        {
+          run: [setLine(slug, dial, v, {...s, mode: undefined}, unset)],
         },
       );
     if (!(thing in TOKENS)) {

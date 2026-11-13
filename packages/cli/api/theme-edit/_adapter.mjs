@@ -1019,6 +1019,9 @@ export async function editorCompileProblem(
       if (path.basename(file) === `${slug}.theme.ts`) {
         const pairs = await edit.editorPairRefusal(root, slug);
         if (pairs) return pairs;
+        // A token value the file gives that set refuses ships as it is.
+        const values = await edit.editorOwnTokenRefusal(root, slug);
+        if (values) return values;
       }
     }
   }

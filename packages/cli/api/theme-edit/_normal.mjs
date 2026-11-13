@@ -109,7 +109,7 @@ const QUOTE_PAIRS = {
  * Unicode spaces. A thing it cannot read is left as typed.
  * @param {string} thing
  * @param {string | undefined} value
- * @returns {{thing: string, value: string | undefined}}
+ * @returns {{thing: string, value: string | undefined, dropped?: string}} `dropped`: a second declaration pasted after the first, which is not set
  */
 export function normalizeEntry(thing, value) {
   let t = normalValueText(String(thing ?? '')).trim();
@@ -177,7 +177,17 @@ export function normalizeEntry(thing, value) {
   }
   // A second declaration pasted after the first (`accent: red; text-size:
   // 18`): the first is this setting.
-  if (typeof v === 'string') v = withoutSecondDeclaration(v);
+  /** A second declaration pasted after the first, which this does not set. @type {string | null} */
+  let dropped = null;
+  if (typeof v === 'string') {
+    const cut = withoutSecondDeclaration(v);
+    if (cut !== v)
+      dropped = v
+        .slice(cut.length)
+        .replace(/^\s*;\s*/, '')
+        .trim();
+    v = cut;
+  }
   if (pasted && typeof v === 'string') {
     v = v.replace(/\s*!\s*important\s*;?\s*$/i, '').replace(/;+\s*$/, '');
   }
@@ -197,10 +207,14 @@ export function normalizeEntry(thing, value) {
       // Not a JSON string.
     }
   }
+  // A font stack with its quotes escaped, as it sits inside a JSON or JS
+  // string (`\"Inter\", sans-serif`): the stack.
+  if (typeof v === 'string' && /font/i.test(t) && /\\["']/.test(v))
+    v = v.replace(/\\(["'])/g, '$1');
   // A font family's name never starts or ends with a space: French quotes
   // (« Inter », with a no-break or narrow no-break space) hold the name.
   if (typeof v === 'string' && /font/i.test(t)) v = trimInsideQuotes(v);
-  return {thing: t, value: v};
+  return {thing: t, value: v, ...(dropped ? {dropped} : {})};
 }
 
 /**

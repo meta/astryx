@@ -633,7 +633,13 @@ export function loadTheme(
     );
     const exists = (/** @type {string} */ n) =>
       Boolean(n) && fs.existsSync(themeFiles(cwd, n).settings);
-    const fixed = [named, whole, camelWords].find(exists) ?? named;
+    // The module or export name (brandTheme, the app copy's brandTheme.ts)
+    // names the theme brand.
+    const moduleName = [camelWords, named]
+      .map(n => n.replace(/-?theme$/, ''))
+      .filter(n => n && slugOk(n));
+    const fixed =
+      [named, whole, camelWords, ...moduleName].find(exists) ?? named;
     const same = fs.existsSync(themeFiles(cwd, fixed).settings) ? fixed : null;
     // A list where one theme goes (t,u or "t;u"): one theme at a time,
     // each that exists named; never a new theme made of the list. A name
@@ -1820,7 +1826,7 @@ export function ownSourceTokenValues(cwd, slug) {
 function scopeProblem(s) {
   if (s.on != null && !/^[a-z][a-z0-9-]*$/.test(s.on))
     return `${s.thing} is set on "${s.on}", which is not a part or group name`;
-  if (s.state != null && !/^[a-z][a-z-]*$/.test(s.state))
+  if (s.state != null && !/^[a-z][a-zA-Z-]*$/.test(s.state))
     return `${s.thing} has state "${s.state}", which is not a state name`;
   if (s.when != null && !/^[\w-]+:[\w.-]+$/.test(s.when))
     return `${s.thing} has --when "${s.when}", which is not prop:value`;
