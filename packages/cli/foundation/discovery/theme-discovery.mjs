@@ -685,13 +685,19 @@ export function readStaticDescriptorValue(
       const source = fs.readFileSync(docPath, 'utf-8');
       // A descriptor Astryx ships was read at publish, by the hash of its
       // text (scripts/generate-stored-docs.mjs): the same text reads the
-      // same value without parsing. Any other text is parsed.
-      const stored = readStore(STORED_DOCS_FILE).get(
-        descriptorStoreKey(source, typeName, data),
-      );
+      // same value without parsing. Any other text, or a store that cannot
+      // be read, is parsed.
+      let stored;
+      try {
+        stored = readStore(STORED_DOCS_FILE).get(
+          descriptorStoreKey(source, typeName, data),
+        );
+      } catch {
+        stored = undefined;
+      }
       read = {
         value:
-          stored !== undefined
+          stored != null && typeof stored === 'object'
             ? stored
             : readDescriptorSource(source, label, typeName, data),
       };
