@@ -17,7 +17,6 @@
  */
 
 import * as fs from 'node:fs';
-import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {lowerDoc} from '../doc-compiler/compile.mjs';
 import {packageSource} from '../doc-compiler/source.mjs';
@@ -27,36 +26,11 @@ import {formatCliCommand} from '../env/package-manager.mjs';
 import {LOCAL_THEME_ROOT} from '../config/theme-state.mjs';
 import {assertWithin, PathSafetyError} from '../fs/path-safety.mjs';
 import {THEME_MODULE_EXTENSIONS} from './theme-module-extensions.mjs';
+import {babelParser, jscodeshift} from '../runtime/lazy-dependencies.mjs';
 
 export const BUNDLED_THEME_PACKAGE = '@astryxdesign/cli';
 export const THEMES_DIR = path.join(CLI_ROOT, 'assets', 'templates', 'themes');
 export const THEME_DOC_SUFFIX = '.doc.mjs';
-
-const require = createRequire(import.meta.url);
-
-/** @type {typeof import('@babel/parser') | undefined} */
-let babelParser;
-/** @type {any} */
-let jscodeshiftApi;
-
-/**
- * The descriptor parser, loaded when the first descriptor is read.
- * @returns {typeof import('@babel/parser')}
- */
-function descriptorParser() {
-  babelParser ??= require('@babel/parser');
-  return /** @type {typeof import('@babel/parser')} */ (babelParser);
-}
-
-/**
- * The theme source parser, loaded when the first integration theme source is
- * checked. Bundled themes never need it.
- * @returns {any}
- */
-function sourceParser() {
-  jscodeshiftApi ??= require('jscodeshift');
-  return jscodeshiftApi;
-}
 
 /**
  * @typedef {object} DiscoveredTheme
@@ -238,7 +212,7 @@ function moduleSpecifiers(file, jscodeshift, {withRequire = false} = {}) {
  * @returns {string[]}
  */
 export function themeFileImports(file, options = {}) {
-  return moduleSpecifiers(file, sourceParser(), options);
+  return moduleSpecifiers(file, jscodeshift(), options);
 }
 
 /**
@@ -730,7 +704,7 @@ function readDescriptorSource(source, label, typeName, data = false) {
   /** @type {any} */
   let ast;
   try {
-    ast = descriptorParser().parse(source, {
+    ast = babelParser().parse(source, {
       sourceType: 'module',
       tokens: true,
       createParenthesizedExpressions: true,
@@ -1535,11 +1509,11 @@ export function discoverThemeDirectory(
           )
           .filter(file => file !== docPath),
       );
-      const jscodeshift = sourceParser();
+      const codeshift = jscodeshift();
       try {
         validateThemeModuleGraph(
           entryPath,
-          jscodeshift,
+          codeshift,
           sourceDir,
           allowedFiles,
           owner,
@@ -1550,7 +1524,7 @@ export function discoverThemeDirectory(
           !moduleExportsName(
             entryPath,
             exportName,
-            jscodeshift,
+            codeshift,
             sourceDir,
             allowedFiles,
           )
@@ -1681,7 +1655,7 @@ export function unreadThemeFolders(themeRoot, {packageDir, packageName} = {}) {
   for (const file of modules) {
     let specifiers;
     try {
-      specifiers = moduleSpecifiers(file, sourceParser());
+      specifiers = moduleSpecifiers(file, jscodeshift());
     } catch {
       continue;
     }
