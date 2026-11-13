@@ -161,11 +161,13 @@ Platform-specific details stay inside that compiler.
   adaptation blocks remain separate in authored order, and media-surface overrides
   emit last. Duplicate conditions and later root-restoring writes are preserved
   exactly; runtime and static output use the same blocks. A media surface
-  re-declares every scheme-dependent value the theme root declares, so it
-  resolves under the surface's color scheme even when a consumer's bundler
-  lowers `light-dark()`. In a re-declared value, a reference to a token the
-  surface declares itself takes the root's value of that token, so CSS that
-  keeps `light-dark()` resolves as before. A token the surface re-declares does
+  re-declares every scheme-dependent value the theme root declares, under the
+  base rules and under each adaptation's query, so it resolves under the
+  surface's color scheme even when a consumer's bundler lowers `light-dark()`.
+  In a re-declared value, a reference to a token the surface declares itself
+  takes the theme's value of that token, so CSS that keeps `light-dark()`
+  resolves as before. When the theme does not declare that token, the surface
+  does not re-declare the referring token. A token the surface re-declares does
   not take a value set for it on an element between the theme root and the
   surface. `substituteVarReferences` in `declarationBoundary.ts` writes those
   values with the declaration scanner, so a comment or a string never counts as
