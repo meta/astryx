@@ -613,11 +613,19 @@ export class Project {
     // The run reads one base. Only the integrations that are that base or
     // build on it contribute; the rest are kept aside for the commands that
     // list them.
-    recordBaseCandidates(cwd, loadedIntegrations);
+    // A package that failed to load is no base, but `--base` naming it says
+    // why: the ledger keeps its load error.
+    const failedToLoad = [...resolution.ledger.values()].flatMap(entry =>
+      entry.outcome === 'load-failed' && entry.error != null
+        ? [{name: entry.candidate.spec ?? entry.label, error: entry.error}]
+        : [],
+    );
+    recordBaseCandidates(cwd, loadedIntegrations, failedToLoad);
     const base = resolveBase({
       cwd,
       integrations: loadedIntegrations,
       requested: requestedBase(),
+      failedToLoad,
     });
     /** @type {Array<{integration: import('../integrations/integrations.mjs').LoadedIntegration, buildsOn: string[]}>} */
     let leftOut = [];

@@ -654,6 +654,20 @@ describe('a project whose only base is not Core', () => {
   );
 
   it(
+    "says --base names a dependency whose manifest does not load",
+    () => {
+      const dir = project({
+        '@acme/native-ui': {manifest: 'export default {base: {}, oops'},
+      });
+      const r = astryx(['--json', '--base', '@acme/native-ui', 'blog'], dir);
+      expect(r.status).toBe(1);
+      expect(r.json().code).toBe('ERR_BASE_NOT_FOUND');
+      expect(r.json().error).toContain('its integration manifest does not load');
+    },
+    SLOW,
+  );
+
+  it(
     'serves no step from a declared adapter, and never loads it',
     () => {
       const dir = project({

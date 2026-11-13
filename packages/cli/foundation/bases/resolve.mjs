@@ -55,7 +55,7 @@ export function requestedBase() {
   return requested;
 }
 
-/** @type {Map<string, LoadedIntegration[]>} */
+/** @type {Map<string, {integrations: LoadedIntegration[], failedToLoad: Array<{name: string, error: string}>}>} */
 const candidatesByDir = new Map();
 
 /**
@@ -64,9 +64,11 @@ const candidatesByDir = new Map();
  * project again.
  * @param {string} cwd
  * @param {LoadedIntegration[]} integrations
+ * @param {Array<{name: string, error: string}>} [failedToLoad] packages that
+ *   failed to load, with their load errors
  */
-export function recordBaseCandidates(cwd, integrations) {
-  candidatesByDir.set(path.resolve(cwd), integrations);
+export function recordBaseCandidates(cwd, integrations, failedToLoad = []) {
+  candidatesByDir.set(path.resolve(cwd), {integrations, failedToLoad});
 }
 
 /** Forget every recorded project. For tests. */
@@ -82,9 +84,11 @@ export function _resetBases() {
  * @returns {BaseResolution}
  */
 export function runBase(cwd = process.cwd()) {
+  const recorded = candidatesByDir.get(path.resolve(cwd));
   return resolveBase({
     cwd,
-    integrations: candidatesByDir.get(path.resolve(cwd)) ?? [],
+    integrations: recorded?.integrations ?? [],
+    failedToLoad: recorded?.failedToLoad ?? [],
     requested,
   });
 }
@@ -195,6 +199,7 @@ function ambiguous(names) {
  *   cwd: string,
  *   integrations: LoadedIntegration[],
  *   requested?: string | null,
+ *   failedToLoad?: Array<{name: string, error: string}>,
  *   projectHasCore?: () => boolean,
  * }} input
  * @returns {BaseResolution}
@@ -203,6 +208,7 @@ export function resolveBase({
   cwd,
   integrations,
   requested: name = null,
+  failedToLoad = [],
   projectHasCore = () => installedProjectCoreDir(cwd) != null,
 }) {
   const bases = integrations.filter(isBaseIntegration);
@@ -210,13 +216,14 @@ export function resolveBase({
     if (name === CORE_BASE_NAME) return found(coreBase());
     const hit = bases.find(integration => integration.name === name);
     if (hit) return found(baseOf(hit));
-    const broken = integrations.find(
-      integration => integration.name === name && integration.__loadError != null,
-    );
-    if (broken) {
+    const broken =
+      integrations.find(
+        integration => integration.name === name && integration.__loadError != null,
+      )?.__loadError ?? failedToLoad.find(entry => entry.name === name)?.error;
+    if (broken != null) {
       return failed(
         ERROR_CODES.ERR_BASE_NOT_FOUND,
-        `--base ${name}: its integration manifest does not load: ${broken.__loadError}`,
+        `--base ${name}: its integration manifest does not load: ${broken}`,
       );
     }
     const installed =
