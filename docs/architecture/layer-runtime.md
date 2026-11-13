@@ -670,7 +670,9 @@ layers use Layer rendering without joining Escape/platform dismissal.
   FR9). A `focus: 'blur'` hold, the default, keeps the shield and makes the
   content inert at once, as a leaving AlertDialog (`component:AlertDialog`
   FR7) and a closing BottomSheetSwitcher step (`component:BottomSheet` FR9)
-  are for their dismissal. The component
+  are for their dismissal. A blur hold leaves a nested layer, its path, and a
+  child live region live, such as a toast viewport that a leaving alert
+  hosts. The component
   still decides where focus returns. A component that holds input uses this hold rather
   than building its own. It is separate from INV14's presentation hold, which
   keeps a layer's chosen presentation.
