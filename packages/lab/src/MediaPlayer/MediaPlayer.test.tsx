@@ -391,10 +391,11 @@ describe('MediaPlaybackRate', () => {
       hidden: true,
     });
     act(() => item.focus());
-    await user.keyboard('k');
-    await user.keyboard('1');
-    expect(playback.play).not.toHaveBeenCalled();
+    // The menu keeps its arrow keys for moving between rows; the player must
+    // not seek with them.
+    await user.keyboard('{ArrowRight}');
     expect(playback.getCurrentTime()).toBe(0);
+    expect(playback.play).not.toHaveBeenCalled();
   });
 
   it('sets the playback speed from a menu that checks the current speed', async () => {
