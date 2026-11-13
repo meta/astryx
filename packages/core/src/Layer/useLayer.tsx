@@ -25,6 +25,7 @@ import React, {
   type ReactNode,
   type RefCallback,
 } from 'react';
+import {useCommittedRef, useCommittedRefInto} from '../hooks/useCommittedRef';
 import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {createPortal} from 'react-dom';
@@ -32,15 +33,22 @@ import {LayerContentBoundary} from './layerScopedContext';
 import {layerClickBoundary} from './layerClickBoundary';
 import {addAnchorName, readAnchorNames, removeAnchorName} from './anchorName';
 import {
+  afterRelease,
   claimContextMenuPress,
   currentGesture,
   currentGestureHasClicked,
+  isReleaseInFlight,
 } from './gestureCounter';
 import {resolveLayerPortalTarget} from './layerHost';
 import {layerTextReset} from './layerTextReset.stylex';
 import {layerStructureReset} from './layerStructureReset.stylex';
 import {layerViewportInset} from './layerViewportInset.stylex';
 import {keyboardLiftStyle, useLayerKeyboardClearance} from './LayerTouch';
+import {
+  layerEntranceSide,
+  readLayerEntranceSide,
+  writeLayerEntranceSide,
+} from './layerEntranceSide';
 import {LAYER_ANCHORED_ATTRIBUTE} from './layerKeyboardClearance';
 import {settledBox} from './settledBox';
 import {layerInsetProperties} from './layerInset';
@@ -465,10 +473,6 @@ export interface FixedLayerReturn {
   render: (children: ReactNode, props: FixedRenderProps) => ReactNode;
 }
 
-interface InternalLayerFields {
-  wasJustDismissed: () => boolean;
-}
-
 /**
  * Context-mode options a core component may pass through `useLayerInternal`;
  * not part of the public `useLayer` options.
@@ -496,10 +500,22 @@ interface InternalContextLayerOptions extends ContextLayerOptions {
    * hidden starts here.
    */
   onCloseStart?: () => void;
+  /**
+   * Watches the open layer for touches outside it that pan; returns the
+   * function that stops watching. A light-dismiss layer is given one by its
+   * owner (usePopover's `watchOutsidePans`). An anchored menu, which closes
+   * as such a pan begins, is given none.
+   */
+  watchesOutsidePans?: (layer: HTMLElement) => () => void;
+  /**
+   * The component writes the entrance's side itself, after the commit that
+   * moves the layer (a Selector's list over its selected option). The runtime
+   * then skips its own read as the layer shows, so a show reads the layer
+   * once. A layer element swapped in while it is open still gets the
+   * runtime's read.
+   */
+  writesEntranceSide?: boolean;
 }
-
-type InternalContextLayerReturn = ContextLayerReturn & InternalLayerFields;
-type InternalFixedLayerReturn = FixedLayerReturn & InternalLayerFields;
 
 function toCssLength(value: number | string): string {
   return typeof value === 'number' ? `${value}px` : value;
@@ -584,15 +600,22 @@ function animationNames(layer: HTMLElement): string {
   return style?.getPropertyValue('animation-name').trim() || 'none';
 }
 
+/** The settled boxes of a layer and its anchor, from one measurement pass. */
+interface AnchorBoxes {
+  readonly layer: DOMRect;
+  readonly anchor: DOMRect;
+}
+
 /**
  * Whether the standard list has failed a layer that must keep its anchor
  * clear: its box covers the anchor or, while the anchor is in view, leaves the
  * viewport on the block axis. Only a box that overlaps the anchor counts; a
  * layer flush against it does not.
  */
-function failsAnchor(layer: HTMLElement, anchor: HTMLElement): boolean {
-  const a = anchor.getBoundingClientRect();
-  const l = settledBox(layer);
+function failsAnchor(
+  {layer: l, anchor: a}: AnchorBoxes,
+  viewportBlock: number,
+): boolean {
   if (l.width <= 0 || l.height <= 0) {
     return false;
   }
@@ -601,8 +624,6 @@ function failsAnchor(layer: HTMLElement, anchor: HTMLElement): boolean {
     a.left < l.right &&
     l.top < a.bottom &&
     a.top < l.bottom;
-  // The viewport's block extent, as the layer's anchor positioning sees it.
-  const viewportBlock = layer.ownerDocument.documentElement.clientHeight;
   const anchorInView = a.bottom > 0 && a.top < viewportBlock;
   return covers || (anchorInView && (l.top < 0 || l.bottom > viewportBlock));
 }
@@ -619,12 +640,50 @@ function failsAnchor(layer: HTMLElement, anchor: HTMLElement): boolean {
  * in the first frame painted after a scroll of the anchor stops
  * (`observeScrollStop`), because during a scroll the browser does not choose
  * an option again. Nothing watches an anchor that moves without resizing, so
- * the layer never jumps to another side mid-scroll.
+ * the layer never jumps to another side mid-scroll. It returns the boxes it
+ * read when it leaves the layer in place, so a show reads them once. After a
+ * fresh placement, or without an anchor, it returns `null`.
  */
-function keepAnchorClear(layer: HTMLElement, anchor: HTMLElement | null): void {
-  if (anchor && failsAnchor(layer, anchor)) {
-    placeAfresh(layer);
+function keepAnchorClear(
+  layer: HTMLElement,
+  anchor: HTMLElement | null,
+): AnchorBoxes | null {
+  if (anchor == null) {
+    return null;
   }
+  // One measurement pass. `settledBox` can write the layer's transforms and
+  // restore them, so it reads last.
+  const anchorBox = anchor.getBoundingClientRect();
+  // The viewport's block extent, as the layer's anchor positioning sees it.
+  const viewportBlock = layer.ownerDocument.documentElement.clientHeight;
+  const boxes = {anchor: anchorBox, layer: settledBox(layer)};
+  if (failsAnchor(boxes, viewportBlock)) {
+    placeAfresh(layer);
+    return null;
+  }
+  return boxes;
+}
+
+/**
+ * Gives a shown layer's entrance its side. The boxes `keepAnchorClear` read
+ * stand when it left the layer in place; otherwise the side is read here,
+ * after the placement. Only an anchored layer has a side.
+ */
+function writeEntranceSide(
+  layer: HTMLElement,
+  trigger: HTMLElement | null,
+  boxes: AnchorBoxes | null,
+): void {
+  if (trigger == null || !layer.hasAttribute(LAYER_ANCHORED_ATTRIBUTE)) {
+    writeLayerEntranceSide(layer, null);
+    return;
+  }
+  writeLayerEntranceSide(
+    layer,
+    boxes == null
+      ? readLayerEntranceSide(layer, trigger)
+      : layerEntranceSide(boxes.layer, boxes.anchor),
+  );
 }
 
 /**
@@ -1144,25 +1203,26 @@ function getGutterStyles(
 }
 
 /**
- * Internal props for controls that sit beside an open layer. This stays out of
- * the public useLayer/usePopover return types until the input family adopts it.
+ * Internal props for controls that sit beside an open layer. They are not part
+ * of the public useLayer or usePopover return types.
  */
 export function useKeepLayerOpenProps(
   id: string,
   isOpen: boolean,
 ): KeepLayerOpenProps {
-  const isOpenRef = useRef(isOpen);
-  isOpenRef.current = isOpen;
-
   return useMemo(
     () => ({
       onPointerDown: (event: React.PointerEvent<HTMLElement>) => {
-        if (!isOpenRef.current) {
+        const control = event.currentTarget;
+        const doc = control.ownerDocument;
+        // The runtime shows the layer before its open state commits. The
+        // layer renders in the control's own tree, a shadow root included.
+        const root = control.getRootNode();
+        const layer = (isShadowRoot(root) ? root : doc).getElementById(id);
+        if (!isOpen && (layer == null || !isShownAsPopover(layer))) {
           return;
         }
         // The browser reads the invoker relationship at both ends of the press.
-        const control = event.currentTarget;
-        const doc = control.ownerDocument;
         control.setAttribute('popovertarget', id);
         const onPressEnd = () => {
           doc.removeEventListener('pointerup', onPressEnd);
@@ -1184,7 +1244,7 @@ export function useKeepLayerOpenProps(
         }
       },
     }),
-    [id],
+    [id, isOpen],
   );
 }
 
@@ -1204,7 +1264,7 @@ export function useKeepLayerOpenProps(
  */
 function useLayerImplementation(
   options: InternalContextLayerOptions | FixedLayerOptions,
-): InternalContextLayerReturn | InternalFixedLayerReturn {
+): ContextLayerReturn | FixedLayerReturn {
   const {mode, onShow, onHide, lightDismiss = false} = options;
   const lazyMount = mode === 'context' ? (options.lazyMount ?? false) : false;
   const keepsMountAfterShow =
@@ -1213,9 +1273,12 @@ function useLayerImplementation(
       : false;
   const keepsAnchorClear =
     mode === 'context' ? (options.keepsAnchorClear ?? false) : false;
-  const onCloseStartRef = useRef<(() => void) | undefined>(undefined);
-  onCloseStartRef.current =
-    mode === 'context' ? options.onCloseStart : undefined;
+  const watchesOutsidePans =
+    mode === 'context' ? options.watchesOutsidePans : undefined;
+  const writesEntranceSide =
+    mode === 'context' ? (options.writesEntranceSide ?? false) : false;
+  const onCloseStart = mode === 'context' ? options.onCloseStart : undefined;
+  const onCloseStartRef = useCommittedRef(onCloseStart);
   const id = useId();
   const anchorId = `--astryx-layer-${id.replace(/:/g, '')}`;
 
@@ -1267,6 +1330,8 @@ function useLayerImplementation(
   // one that arrives while another popover is mid show/hide runs once that
   // operation has unwound. hide() forgets it either way.
   const pendingShowRef = useRef(false);
+  // Cancels a show that waits for a press's release to be handled.
+  const cancelAfterReleaseRef = useRef<(() => void) | null>(null);
 
   // Ref mirrors isOpen for synchronous reads inside show/hide.
   // State drives re-renders; the ref lets the imperative calls avoid
@@ -1314,10 +1379,16 @@ function useLayerImplementation(
   );
 
   // The gesture during which the browser last closed this layer on its own.
-  // Read through wasJustDismissed by triggers deciding whether a click is
-  // theirs to act on.
+  // openNow reads it so that the same press cannot reopen the layer.
   const dismissedByGestureRef = useRef<number | null>(null);
   const forgetDismissalRef = useRef<(() => void) | null>(null);
+
+  // Stops the watch for pans outside the open layer (`watchesOutsidePans`).
+  const stopOutsidePanWatchRef = useRef<(() => void) | null>(null);
+  const stopOutsidePanWatch = useCallback(() => {
+    stopOutsidePanWatchRef.current?.();
+    stopOutsidePanWatchRef.current = null;
+  }, []);
 
   const wasJustDismissed = useCallback(() => {
     const gesture = currentGesture();
@@ -1483,6 +1554,23 @@ function useLayerImplementation(
     if (wasJustDismissed()) {
       return;
     }
+    // A light-dismiss layer asked to show while a press's release is handled
+    // (a menu row acts at the release) would be closed by that release's
+    // light dismiss, which runs after the handlers. It shows once the
+    // release is handled, so it stays a native auto popover.
+    if (lightDismiss && !isOpenRef.current && isReleaseInFlight()) {
+      const doc = popoverRef.current?.ownerDocument ?? document;
+      pendingShowRef.current = true;
+      cancelAfterReleaseRef.current?.();
+      cancelAfterReleaseRef.current = afterRelease(doc, () => {
+        cancelAfterReleaseRef.current = null;
+        if (pendingShowRef.current) {
+          pendingShowRef.current = false;
+          showRef.current();
+        }
+      });
+      return;
+    }
     // A context popover left over until React commits a previous hide must not
     // be reopened. The synchronous mount ref is the source of truth.
     const candidate = popoverRef.current;
@@ -1545,9 +1633,16 @@ function useLayerImplementation(
       closeKeepsShownRef.current = closeTransitionHolds || closeStartsAnimation;
       if (lightDismiss) {
         claimContextMenuPress(popover);
+        if (watchesOutsidePans != null) {
+          stopOutsidePanWatch();
+          stopOutsidePanWatchRef.current = watchesOutsidePans(popover);
+        }
       }
-      if (keepsAnchorClear) {
-        keepAnchorClear(popover, triggerRef.current);
+      const anchorBoxes = keepsAnchorClear
+        ? keepAnchorClear(popover, triggerRef.current)
+        : null;
+      if (!writesEntranceSide) {
+        writeEntranceSide(popover, triggerRef.current, anchorBoxes);
       }
       isOpenRef.current = true;
       setIsOpen(true);
@@ -1557,7 +1652,10 @@ function useLayerImplementation(
     anchorId,
     onShow,
     keepsAnchorClear,
+    writesEntranceSide,
     lightDismiss,
+    watchesOutsidePans,
+    stopOutsidePanWatch,
     requestContextMount,
     applyDeferredWritingContext,
     showPopoverElement,
@@ -1713,6 +1811,8 @@ function useLayerImplementation(
   }, [mode, openNow, cancelPendingAnchorWait, finishAnchorWait]);
 
   const hide = useCallback(() => {
+    cancelAfterReleaseRef.current?.();
+    cancelAfterReleaseRef.current = null;
     cancelPendingAnchorWait();
     pendingShowRef.current = false;
     if (isOpenRef.current) {
@@ -1726,6 +1826,7 @@ function useLayerImplementation(
       // dismissals from ours.
       openedPopoverRef.current = null;
       isOpenRef.current = false;
+      stopOutsidePanWatch();
       // See finding infra-4 note in `show`: mirror the same guard on hide so
       // unsupported browsers degrade gracefully instead of throwing.
       if (el) {
@@ -1746,12 +1847,19 @@ function useLayerImplementation(
     }
     releaseAnchor(popoverRef.current);
     clearContextMount();
-  }, [onHide, clearContextMount, releaseAnchor, cancelPendingAnchorWait]);
+  }, [
+    onHide,
+    clearContextMount,
+    releaseAnchor,
+    cancelPendingAnchorWait,
+    stopOutsidePanWatch,
+    onCloseStartRef,
+  ]);
 
   // A deferred show() replays through a ref so the queued closure reaches the
   // current callback rather than the one captured when it was queued.
   const showRef = useRef(show);
-  showRef.current = show;
+  useCommittedRefInto(showRef, show);
 
   // The open-state geometry observers of a layer that keeps its anchor clear
   // (`observeAnchorClearance`), as their teardown. The open-state layout
@@ -1897,15 +2005,19 @@ function useLayerImplementation(
   }, []);
 
   // Syncs the document's capture-phase gesture tracking with this mount.
-  // Unmount forgets the layer's dismissal and releases a pending anchor wait.
+  // Unmount forgets the layer's dismissal, releases a pending anchor wait and
+  // a show waiting for a release, and stops the outside-pan watch.
   useEffect(() => {
     // Install capture-phase gesture tracking before the first interaction.
     currentGesture();
     return () => {
       forgetDismissalRef.current?.();
       pendingAnchorWaitRef.current?.();
+      cancelAfterReleaseRef.current?.();
+      cancelAfterReleaseRef.current = null;
+      stopOutsidePanWatch();
     };
-  }, []);
+  }, [stopOutsidePanWatch]);
 
   // Reconcile browser-initiated closes (light-dismiss, popover="auto" stack
   // eviction). These are the only cases where the DOM mutates without going
@@ -1952,7 +2064,7 @@ function useLayerImplementation(
         removeAnchorName(trigger, anchorId);
       }
     },
-    [anchorId],
+    [anchorId, onCloseStartRef],
   );
 
   const handleToggle = useCallback(
@@ -1961,6 +2073,7 @@ function useLayerImplementation(
       if (toggleEvent.newState === 'closed' && isOpenRef.current) {
         openedPopoverRef.current = null;
         isOpenRef.current = false;
+        stopOutsidePanWatch();
         rememberDismissal(
           (e.currentTarget as HTMLElement | null)?.ownerDocument ?? document,
         );
@@ -1970,7 +2083,13 @@ function useLayerImplementation(
         clearContextMount();
       }
     },
-    [onHide, clearContextMount, rememberDismissal, releaseAnchor],
+    [
+      onHide,
+      clearContextMount,
+      rememberDismissal,
+      releaseAnchor,
+      stopOutsidePanWatch,
+    ],
   );
 
   // Ref callback for popover element — sets up the `toggle` listener.
@@ -2038,9 +2157,10 @@ function useLayerImplementation(
         // keyboard cap follows the replacement element too.
         followLayerElement();
         if (showPopoverElement(el)) {
-          if (keepsAnchorClear) {
-            keepAnchorClear(el, triggerRef.current);
-          }
+          const anchorBoxes = keepsAnchorClear
+            ? keepAnchorClear(el, triggerRef.current)
+            : null;
+          writeEntranceSide(el, triggerRef.current, anchorBoxes);
         } else {
           afterPopoverOperations(el.ownerDocument, () => {
             const current = popoverRef.current;
@@ -2048,10 +2168,12 @@ function useLayerImplementation(
               isOpenRef.current &&
               current === el &&
               openedPopoverRef.current !== el &&
-              showPopoverElement(el) &&
-              keepsAnchorClear
+              showPopoverElement(el)
             ) {
-              keepAnchorClear(el, triggerRef.current);
+              const anchorBoxes = keepsAnchorClear
+                ? keepAnchorClear(el, triggerRef.current)
+                : null;
+              writeEntranceSide(el, triggerRef.current, anchorBoxes);
             }
           });
         }
@@ -2377,39 +2499,28 @@ function useLayerImplementation(
     [popoverRefCallback, id, lightDismiss],
   );
 
-  const contextResult = useMemo<InternalContextLayerReturn>(
+  const contextResult = useMemo<ContextLayerReturn>(
     () => ({
       ref: contextRef,
       anchorId,
       show,
       hide,
       isOpen,
-      wasJustDismissed,
       id,
       render: renderContext,
     }),
-    [
-      contextRef,
-      anchorId,
-      show,
-      hide,
-      isOpen,
-      wasJustDismissed,
-      id,
-      renderContext,
-    ],
+    [contextRef, anchorId, show, hide, isOpen, id, renderContext],
   );
-  const fixedResult = useMemo<InternalFixedLayerReturn>(
+  const fixedResult = useMemo<FixedLayerReturn>(
     () => ({
       ref: undefined,
       show,
       hide,
       isOpen,
-      wasJustDismissed,
       id,
       render: renderFixed,
     }),
-    [show, hide, isOpen, wasJustDismissed, id, renderFixed],
+    [show, hide, isOpen, id, renderFixed],
   );
 
   return mode === 'context' ? contextResult : fixedResult;
@@ -2420,11 +2531,7 @@ export function useLayer(options: FixedLayerOptions): FixedLayerReturn;
 export function useLayer(
   options: ContextLayerOptions | FixedLayerOptions,
 ): ContextLayerReturn | FixedLayerReturn {
-  const internalLayer = useLayerImplementation(options);
-  return useMemo(() => {
-    const {wasJustDismissed: _, ...layer} = internalLayer;
-    return layer;
-  }, [internalLayer]);
+  return useLayerImplementation(options);
 }
 
 /**
@@ -2433,12 +2540,10 @@ export function useLayer(
  */
 export function useLayerInternal(
   options: InternalContextLayerOptions,
-): InternalContextLayerReturn;
-export function useLayerInternal(
-  options: FixedLayerOptions,
-): InternalFixedLayerReturn;
+): ContextLayerReturn;
+export function useLayerInternal(options: FixedLayerOptions): FixedLayerReturn;
 export function useLayerInternal(
   options: InternalContextLayerOptions | FixedLayerOptions,
-): InternalContextLayerReturn | InternalFixedLayerReturn {
+): ContextLayerReturn | FixedLayerReturn {
   return useLayerImplementation(options);
 }

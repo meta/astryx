@@ -40,6 +40,7 @@ import {
   waitForRest,
   withStorybook,
 } from '@astryxdesign/interaction-harness';
+import {UIKIT_TAP} from '../../motion/uikit/gestures';
 import {recordLiftOffset} from './liftOffset';
 
 const storybook = withStorybook(test);
@@ -147,6 +148,12 @@ function doubleTap(at: {x: number; y: number}): TouchScript {
   ];
 }
 
+// A double tap whose second touch reaches the page past UIKit's interval
+// between taps is two taps there: the play fails by name.
+const DOUBLE_TAP = {
+  boundaries: {tapIntervalMs: UIKIT_TAP.maximumIntervalBetweenTaps.value},
+};
+
 test('with a fine pointer (a desktop) the stage fills the viewer, as under a coarse pointer: its gestures take the whole viewer', async ({
   browser,
 }) => {
@@ -224,6 +231,7 @@ test('under Reduce Motion a double tap cross-fades to its zoom instead of travel
   });
   await driver.play(
     doubleTap({x: rect.x + rect.width / 2, y: rect.y + rect.height / 2}),
+    DOUBLE_TAP,
   );
   const held = await hold.held();
   const duration = Math.max(...held.map(a => a.curveEndMs));
@@ -314,6 +322,56 @@ test('with a mouse the zoom-in cursor shows over the fitted photo, not over the 
     expect(await cursorAt(stage.x + 20, y)).toBe('default');
     expect(await cursorAt(photo.x + photo.width / 2, y)).toBe('zoom-in');
     expect(await cursorAt(stage.x + 20, y)).toBe('default');
+  } finally {
+    await context.close();
+  }
+});
+
+test('with a mouse a gallery page shows the zoom-in cursor over the fitted photo, the arrow beside it and the grab cursor while zoomed', async ({
+  browser,
+}) => {
+  const context = await browser.newContext({
+    viewport: {width: 1280, height: 800},
+    hasTouch: false,
+    isMobile: false,
+  });
+  try {
+    const page = await context.newPage();
+    await routePhoto(page);
+    await openStory(page, storybook(), 'core-lightbox--gallery-with-zoom');
+    await page.getByRole('button', {name: 'Open gallery with zoom'}).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    const img = dialog.getByRole('img', {name: 'Forest path'});
+    await decoded(img);
+    await waitForRest(img);
+    await frames(page, 2);
+    const photo = await img.boundingBox();
+    if (photo == null) {
+      throw new Error('no photo');
+    }
+    // The page shows the cursor of the element under the pointer.
+    const cursorAt = async (x: number, y: number) => {
+      await page.mouse.move(x, y);
+      return page.evaluate(
+        ([px, py]) => {
+          const el = document.elementFromPoint(px, py);
+          return el == null ? null : getComputedStyle(el).cursor;
+        },
+        [x, y],
+      );
+    };
+    const x = photo.x + photo.width / 2;
+    const y = photo.y + photo.height / 2;
+    // The fitted photo leaves dark stage on its left, where a click closes.
+    expect(await cursorAt(photo.x - 20, y)).toBe('default');
+    expect(await cursorAt(x, y)).toBe('zoom-in');
+    expect(await cursorAt(photo.x - 20, y)).toBe('default');
+    // A double-click zooms the photo about the pointer.
+    await page.mouse.dblclick(x, y);
+    await waitForRest(img);
+    expect((await readTransform(img)).scale).toBeGreaterThan(1);
+    expect(await cursorAt(x, y)).toBe('grab');
   } finally {
     await context.close();
   }
@@ -571,7 +629,7 @@ test('under Reduce Motion a zoomed flick coasts on and settles at the edge, as o
     x: s.stage.x + s.stage.width / 2,
     y: s.stage.y + s.stage.height / 2,
   };
-  await driver.play(doubleTap(mid));
+  await driver.play(doubleTap(mid), DOUBLE_TAP);
   await waitForRest(img);
   await frames(page, 2);
   const liftOffset = await recordLiftOffset(img);
@@ -615,7 +673,7 @@ test('under Reduce Motion a zoomed photo pulled past its edge settles back to it
     x: s.stage.x + s.stage.width / 2,
     y: s.stage.y + s.stage.height / 2,
   };
-  await driver.play(doubleTap(mid));
+  await driver.play(doubleTap(mid), DOUBLE_TAP);
   await waitForRest(img);
   await frames(page, 2);
   // One slow drag right across the stage: the photo, centred and zoomed,

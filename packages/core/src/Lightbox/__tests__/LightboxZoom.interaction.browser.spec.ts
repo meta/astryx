@@ -73,6 +73,7 @@ import {
   toTouchEvents,
   type TouchScript,
 } from '@astryxdesign/interaction-harness';
+import {UIKIT_TAP} from '../../motion/uikit/gestures';
 import {recordLiftOffset} from './liftOffset';
 import {slowViewer} from './viewerTempo';
 
@@ -236,6 +237,12 @@ function doubleTap(at: {x: number; y: number}): TouchScript {
   ];
 }
 
+// A double tap whose second touch reaches the page past UIKit's interval
+// between taps is two taps there: the play fails by name.
+const DOUBLE_TAP = {
+  boundaries: {tapIntervalMs: UIKIT_TAP.maximumIntervalBetweenTaps.value},
+};
+
 const pageScale = async (page: Page) =>
   page.evaluate(() => window.visualViewport?.scale ?? 1);
 
@@ -296,6 +303,50 @@ const SHIPPED_THEMES = [
   'y2k',
 ] as const;
 
+/**
+ * The caption's colour against the lightest pixel in its top padding, above
+ * its first line: what the text sits on, with no glyph there.
+ */
+async function captionContrast(page: Page, caption: Locator) {
+  await frames(page, 2);
+  const {color, points, isOverPhoto} = await caption.evaluate(box => {
+    const element =
+      box.matches('.astryx-text') || box.querySelector('.astryx-text') == null
+        ? box
+        : (box.querySelector('.astryx-text') as Element);
+    const style = getComputedStyle(element);
+    const rect = element.getBoundingClientRect();
+    const y = rect.top + parseFloat(style.paddingTop) / 2;
+    const spots = [0.25, 0.5, 0.75].map(f => ({
+      x: rect.left + rect.width * f,
+      y,
+    }));
+    const photo = element
+      .closest('[data-current]')
+      ?.querySelector('img')
+      ?.getBoundingClientRect();
+    return {
+      color: style.color,
+      points: spots,
+      isOverPhoto:
+        photo != null &&
+        spots.every(
+          ({x, y: top}) =>
+            top >= photo.top &&
+            top <= photo.bottom &&
+            x >= photo.left &&
+            x <= photo.right,
+        ),
+    };
+  });
+  const shot = PNG.sync.read(await page.screenshot());
+  const scale = shot.width / (page.viewportSize()?.width ?? shot.width);
+  return {
+    value: contrast(parseRgb(color), lightestAt(shot, scale, points)),
+    isOverPhoto,
+  };
+}
+
 for (const theme of SHIPPED_THEMES) {
   test(`over a zoomed light photo, Close, Previous, Next and the counter keep their contrast (${theme})`, async ({
     page,
@@ -328,14 +379,16 @@ for (const theme of SHIPPED_THEMES) {
     await tapOn(dialog.getByRole('button', {name: 'Next'}));
     await expect(dialog.getByText('2 / 4')).toBeVisible();
     const img = dialog.getByRole('img', {name: 'Mountain lake'});
-    // The stage, and whatever moved inside it to show the second photo, rests.
-    await waitForRest(dialog.getByRole('button', {name: 'Zoom'}));
+    // The viewport, and whatever moved inside it to show the second photo,
+    // rests.
+    await waitForRest(dialog.locator('[data-lightbox-media] > :first-child'));
     const rect = await img.boundingBox();
     if (rect == null) {
       throw new Error('no photo');
     }
     await driver.play(
       doubleTap({x: rect.x + rect.width / 2, y: rect.y + rect.height / 2}),
+      DOUBLE_TAP,
     );
     await expect
       .poll(async () =>
@@ -416,6 +469,150 @@ for (const theme of SHIPPED_THEMES) {
       expect(ratios[name], name).toBeGreaterThanOrEqual(3);
     }
     expect(ratios.counter, 'counter').toBeGreaterThanOrEqual(4.5);
+  });
+}
+
+test("with zoom, a theme's button and Text colours reach neither the controls' icons nor the counter's text", async ({
+  page,
+}) => {
+  await page.goto(
+    `${storybook()}/iframe.html?id=core-lightbox--gallery-with-zoom&viewMode=story`,
+  );
+  await page.locator('#storybook-root > *').first().waitFor();
+  // Rules shaped as a theme writes them: the component's class and its
+  // reflected prop, more specific than a component's own styles.
+  await page.addStyleTag({
+    content:
+      '.astryx-button[data-variant="ghost"] { color: rgb(17, 17, 17); } .astryx-text[data-color="primary"] { color: rgb(17, 17, 17); }',
+  });
+  const driver = await touchDriver(page);
+  const trigger = await page
+    .getByRole('button', {name: 'Open gallery with zoom'})
+    .boundingBox();
+  if (trigger == null) {
+    throw new Error('no trigger');
+  }
+  await driver.tap({
+    x: trigger.x + trigger.width / 2,
+    y: trigger.y + trigger.height / 2,
+  });
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  // The on-dark colour as this theme resolves it, inside the viewer.
+  const onDark = await dialog.evaluate(element => {
+    const probe = element.ownerDocument.createElement('span');
+    probe.style.color = 'var(--color-on-dark)';
+    element.append(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  });
+  for (const name of ['Close', 'Previous', 'Next']) {
+    const icon = await dialog
+      .getByRole('button', {name})
+      .evaluate(
+        element =>
+          getComputedStyle(element.querySelector('svg') ?? element).color,
+      );
+    expect(icon, name).toBe(onDark);
+  }
+  const counter = await dialog
+    .getByText('1 / 4')
+    .evaluate(element => getComputedStyle(element).color);
+  expect(counter).toBe(onDark);
+});
+
+for (const [photo, fill] of [
+  ['mid-grey', '#7f7f7f'],
+  ['white', '#ffffff'],
+  ['black', '#000000'],
+] as const) {
+  test(`the caption keeps 4.5:1 on its backing, in its band and open, over a ${photo} photo`, async ({
+    page,
+  }) => {
+    await page.route('https://picsum.photos/**', async route =>
+      route.fulfill({
+        contentType: 'image/svg+xml',
+        // A tall photo fills the stage, so an open caption lies over it.
+        body: `<svg xmlns="http://www.w3.org/2000/svg" width="2000" height="4000"><rect width="2000" height="4000" fill="${fill}"/></svg>`,
+      }),
+    );
+    await page.goto(
+      `${storybook()}/iframe.html?id=core-lightbox--gallery-with-captions&viewMode=story`,
+    );
+    await page.locator('#storybook-root > *').first().waitFor();
+    await frames(page, 2);
+    const driver = await touchDriver(page);
+    const tapOn = async (locator: Locator) => {
+      const b = await locator.boundingBox();
+      if (b == null) {
+        throw new Error('nothing to tap');
+      }
+      await driver.tap({x: b.x + b.width / 2, y: b.y + b.height / 2});
+    };
+    await tapOn(page.getByRole('button', {name: 'Open gallery with captions'}));
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    // The current photo has loaded, so it has its box.
+    await expect
+      .poll(async () =>
+        dialog
+          .locator('[data-current] img')
+          .first()
+          .evaluate(img => (img as HTMLImageElement).naturalWidth),
+      )
+      .toBe(2000);
+    const caption = dialog
+      .locator('[data-current] [data-lightbox-caption]')
+      .first();
+    const ratio = async () => captionContrast(page, caption);
+    const inBand = await ratio();
+    expect(inBand.value, 'in the band').toBeGreaterThanOrEqual(4.5);
+    await tapOn(dialog.getByRole('button', {name: 'more'}));
+    await expect(dialog.getByRole('button', {name: 'less'})).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    // Open, its first lines lie over the photo's bottom.
+    const open = await ratio();
+    expect(open.isOverPhoto).toBe(true);
+    expect(open.value, 'open').toBeGreaterThanOrEqual(4.5);
+  });
+}
+
+// A light page's overlay is the lightest backdrop under the caption's band.
+for (const theme of SHIPPED_THEMES) {
+  test(`in light mode, a gallery's caption keeps 4.5:1 in its band (${theme})`, async ({
+    page,
+  }) => {
+    await page.route('https://picsum.photos/**', async route =>
+      route.fulfill({
+        contentType: 'image/svg+xml',
+        body: '<svg xmlns="http://www.w3.org/2000/svg" width="3000" height="2000"><rect width="3000" height="2000" fill="#fff"/></svg>',
+      }),
+    );
+    await page.goto(
+      `${storybook()}/iframe.html?id=core-lightbox--gallery-with-captions&viewMode=story&globals=astryxTheme:${theme};colorMode:light`,
+    );
+    await page.locator('#storybook-root > *').first().waitFor();
+    await frames(page, 2);
+    const driver = await touchDriver(page);
+    const opener = await page
+      .getByRole('button', {name: 'Open gallery with captions'})
+      .boundingBox();
+    if (opener == null) {
+      throw new Error('no opener');
+    }
+    await driver.tap({
+      x: opener.x + opener.width / 2,
+      y: opener.y + opener.height / 2,
+    });
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    const caption = dialog.locator('[data-lightbox-caption]').first();
+    await expect(caption).toBeVisible();
+    const {value} = await captionContrast(page, caption);
+    expect(value).toBeGreaterThanOrEqual(4.5);
   });
 }
 
@@ -698,7 +895,7 @@ test('a double tap zooms until the photo fills the screen, about the tapped poin
   const hold = await armHold(page, photo, {
     judges: {target: photo, property: 'scale'},
   });
-  await driver.play(doubleTap(at));
+  await driver.play(doubleTap(at), DOUBLE_TAP);
   const held = await hold.held();
   const duration = Math.max(...held.map(a => a.curveEndMs));
   const samples = curveOf(
@@ -735,7 +932,7 @@ test('a double tap zooms until the photo fills the screen, about the tapped poin
   expect(zoomed.fit.y + zoomed.y).toBeCloseTo(0, 0);
   await expect(stage).toHaveAttribute('aria-pressed', 'true');
   // Again: back to the fitted size.
-  await driver.play(doubleTap({x: 300, y: at.y}));
+  await driver.play(doubleTap({x: 300, y: at.y}), DOUBLE_TAP);
   await waitForAnimation(photo);
   await waitForRest(photo);
   const fitted = await state();
@@ -754,6 +951,7 @@ test("a double tap near the photo's top edge stops at the screen's top edge", as
       x: before.stage.x + before.stage.width / 2,
       y: before.stage.y + before.fit.y + 10,
     }),
+    DOUBLE_TAP,
   );
   await waitForAnimation(photo);
   await waitForRest(photo);
@@ -767,7 +965,7 @@ test('a zoomed pan tracks the finger, rubber-bands past the edge and returns', a
   const {driver, photo, state} = await openViewer(page);
   const before = await state();
   const mid = {x: 201, y: before.stage.y + before.stage.height / 2};
-  await driver.play(doubleTap(mid));
+  await driver.play(doubleTap(mid), DOUBLE_TAP);
   await waitForAnimation(photo);
   await waitForRest(photo);
   const zoomed = await state();
@@ -806,7 +1004,7 @@ test("a single zoomed photo's drag outward from the edge it rests at rubber-band
   const {driver, photo, state} = await openViewer(page);
   const before = await state();
   const mid = {x: 201, y: before.stage.y + before.stage.height / 2};
-  await driver.play(doubleTap(mid));
+  await driver.play(doubleTap(mid), DOUBLE_TAP);
   await waitForAnimation(photo);
   await waitForRest(photo);
   const zoomed = await state();
@@ -849,7 +1047,7 @@ test('a zoomed flick coasts and stops at the far edge', async ({page}) => {
   const {driver, photo, state} = await openViewer(page);
   const before = await state();
   const mid = {x: 201, y: before.stage.y + before.stage.height / 2};
-  await driver.play(doubleTap(mid));
+  await driver.play(doubleTap(mid), DOUBLE_TAP);
   await waitForAnimation(photo);
   await waitForRest(photo);
   // Bring the photo within 160 px of its far edge with a slow drag, held
@@ -899,7 +1097,7 @@ test('a finger landing on a coasting photo stops it where it shows', async ({
   await installTimerGate(page);
   const before = await state();
   const mid = {x: 201, y: before.stage.y + before.stage.height / 2};
-  await driver.play(doubleTap(mid));
+  await driver.play(doubleTap(mid), DOUBLE_TAP);
   await waitForAnimation(photo);
   await waitForRest(photo);
   // The offset at which the photo's right side meets the stage's: the stop
@@ -1079,7 +1277,7 @@ test('a finger left down after a pinch keeps panning without a jump', async ({
   test.skip(!driver.partialLifts, PARTIAL_LIFT_SKIP);
   const before = await state();
   const mid = {x: 201, y: before.stage.y + before.stage.height / 2};
-  await driver.play(doubleTap(mid));
+  await driver.play(doubleTap(mid), DOUBLE_TAP);
   await waitForAnimation(photo);
   await waitForRest(photo);
   // Two fingers spread and drift left together, then the right one lifts
@@ -1154,10 +1352,10 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
   const aheadControl = await startBusyControl(page, {ahead: true});
   const at = {x: 201, y: before.stage.y + before.stage.height / 2};
   // The same zoom at the default tempo, to compare the slowed one with.
-  await driver.play(doubleTap(at));
+  await driver.play(doubleTap(at), DOUBLE_TAP);
   const atTempo1 = curvesByProperty(await waitForAnimation(photo));
   await waitForRest(photo);
-  await driver.play(doubleTap(at));
+  await driver.play(doubleTap(at), DOUBLE_TAP);
   await waitForAnimation(photo);
   await waitForRest(photo);
   // With the main thread blocked, a loaded runner's compositor presents a
@@ -1170,7 +1368,7 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
   // spring covers most of its travel early, and a round trip from the test
   // would start the block too late.
   const blocking = blockMainThread(page, ZOOM_BLOCK_MS, {during: photo});
-  await driver.play(doubleTap(at));
+  await driver.play(doubleTap(at), DOUBLE_TAP);
   const block = await blocking;
   // Lightbox's own zoom played at that tempo. Each curve is that many times
   // as long as at tempo 1, and still runs after the block.
@@ -1373,6 +1571,7 @@ for (const pace of ['main-thread', 'frozen'] as const) {
     const cast = await startScreencast(page);
     await driver.play(
       doubleTap({x: 201, y: before.stage.y + before.stage.height / 2}),
+      DOUBLE_TAP,
     );
     // Neither runs on the compositor, so the block starts after the tap.
     await page.waitForTimeout(150);
@@ -1428,6 +1627,7 @@ test('the zoom settles and the pinch do no Layout or Paint per frame', async ({
   const zoomTrace = await traceRendering(page, async () => {
     await driver.play(
       doubleTap({x: 201, y: before.stage.y + before.stage.height / 2}),
+      DOUBLE_TAP,
     );
     [zoom] = await waitForAnimation(photo);
     await waitForRest(photo);
@@ -1481,6 +1681,7 @@ test('the zoomed photo is redrawn sharp', async ({page}, testInfo) => {
   const before = await state();
   await driver.play(
     doubleTap({x: 201, y: before.stage.y + before.stage.height / 2}),
+    DOUBLE_TAP,
   );
   await waitForAnimation(photo);
   await waitForRest(photo);
@@ -1663,7 +1864,10 @@ test(
     const hold = await armHold(page, photo, {
       judges: {target: photo, property: 'scale'},
     });
-    await driver.play(doubleTap({x: 120, y: s.stage.y + s.stage.height / 2}));
+    await driver.play(
+      doubleTap({x: 120, y: s.stage.y + s.stage.height / 2}),
+      DOUBLE_TAP,
+    );
     const held = await hold.held();
     await freezeTimers(page);
     const {storyboard: zoomIn} = await animationStoryboard(page, {

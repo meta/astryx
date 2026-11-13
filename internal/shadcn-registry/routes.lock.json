@@ -743,6 +743,11 @@
       "aliases": []
     },
     {
+      "name": "component-lab-weighted-svg-icon",
+      "path": "components/lab/weighted-svg-icon",
+      "aliases": []
+    },
+    {
       "name": "component-layer-provider",
       "path": "components/layer-provider",
       "aliases": []
@@ -2382,6 +2387,11 @@
       "aliases": []
     },
     {
+      "name": "example-internationalization-provider-calendar",
+      "path": "examples/internationalization-provider/calendar",
+      "aliases": []
+    },
+    {
       "name": "example-internationalization-provider-overrides",
       "path": "examples/internationalization-provider/overrides",
       "aliases": []
@@ -3782,6 +3792,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-direction-hook-usage",
+      "path": "examples/use-direction/hook-usage",
+      "aliases": []
+    },
+    {
       "name": "example-use-drag-to-snap-points-playing-card-on-three-places",
       "path": "examples/use-drag-to-snap-points/playing-card-on-three-places",
       "aliases": []
@@ -3952,8 +3967,18 @@
       "aliases": []
     },
     {
+      "name": "example-use-table-columns-virtualization-wide-table",
+      "path": "examples/use-table-columns-virtualization/wide-table",
+      "aliases": []
+    },
+    {
       "name": "example-use-table-grouped-rows-collapsible-groups",
       "path": "examples/use-table-grouped-rows/collapsible-groups",
+      "aliases": []
+    },
+    {
+      "name": "example-use-table-infinite-scroll-load-more-products",
+      "path": "examples/use-table-infinite-scroll/load-more-products",
       "aliases": []
     },
     {
@@ -4007,6 +4032,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-theme-name-active-theme",
+      "path": "examples/use-theme-name/active-theme",
+      "aliases": []
+    },
+    {
       "name": "example-use-theme-token-values",
       "path": "examples/use-theme/token-values",
       "aliases": []
@@ -4024,6 +4054,11 @@
     {
       "name": "example-use-tree-focus-keyboard-file-tree",
       "path": "examples/use-tree-focus/keyboard-file-tree",
+      "aliases": []
+    },
+    {
+      "name": "example-use-truncation-tooltip-on-cut-off-text",
+      "path": "examples/use-truncation/tooltip-on-cut-off-text",
       "aliases": []
     },
     {
@@ -4139,6 +4174,11 @@
     {
       "name": "hook-use-dev-warning",
       "path": "hooks/use-dev-warning",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-direction",
+      "path": "hooks/use-direction",
       "aliases": []
     },
     {
@@ -4352,6 +4392,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-table-columns-virtualization",
+      "path": "hooks/use-table-columns-virtualization",
+      "aliases": []
+    },
+    {
       "name": "hook-use-table-filter-state",
       "path": "hooks/use-table-filter-state",
       "aliases": []
@@ -4364,6 +4409,11 @@
     {
       "name": "hook-use-table-grouped-rows",
       "path": "hooks/use-table-grouped-rows",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-infinite-scroll",
+      "path": "hooks/use-table-infinite-scroll",
       "aliases": []
     },
     {
@@ -4432,6 +4482,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-theme-name",
+      "path": "hooks/use-theme-name",
+      "aliases": []
+    },
+    {
       "name": "hook-use-toast",
       "path": "hooks/use-toast",
       "aliases": []
@@ -4449,6 +4504,11 @@
     {
       "name": "hook-use-tree-focus",
       "path": "hooks/use-tree-focus",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-truncation",
+      "path": "hooks/use-truncation",
       "aliases": []
     },
     {

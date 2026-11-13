@@ -24,12 +24,12 @@
 import type {ItemAlign} from '../Item/Item';
 import {
   useMemo,
-  useRef,
   type ComponentType,
   type Key,
   type ReactNode,
   type RefObject,
 } from 'react';
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {sharedKey} from '../utils/sharedRealm';
 import type {Reorderable} from '../reorderable/createReorderable';
@@ -126,12 +126,28 @@ export interface ListReorderSession {
   readonly listStyle: typeof reorderListStyle;
 }
 
+/** How a reorder session finds a collection's rows in its container. */
+export interface ReorderRows {
+  /** The rows that hold a place in the order, in order. */
+  read(container: HTMLElement): HTMLElement[];
+  /**
+   * Whether `element` is a row of the collection. A row put back for its
+   * exit is a row, but holds no place in the order.
+   */
+  holds(element: Element, container: HTMLElement): boolean;
+}
+
 /** The machinery a reorderable object carries. */
 export interface ListReorderEngine {
-  /** A List's reorder session over the rows of the element `getList` returns. */
+  /**
+   * A reorder session over the rows of the element `getList` returns.
+   * `rows` finds those rows; without it, they are the element's children,
+   * as in a List.
+   */
   createSession(
     getList: () => HTMLElement | null,
     hintId: string,
+    rows?: ReorderRows,
   ): ListReorderSession;
   /**
    * Reorder mode for the item with `key`, started from the app's own UI. It
@@ -175,11 +191,10 @@ export function useReorderSession(
 ): ReorderSessionOf {
   const reorder = reorderable as ReorderableInternals | undefined;
   const engine = reorder?.[REORDER_ENGINE];
-  const getListRef = useRef(getList);
-  getListRef.current = getList;
+  const getListRef = useCommittedRef(getList);
   const session = useMemo(
     () => engine?.createSession(() => getListRef.current(), hintId) ?? null,
-    [engine, hintId],
+    [engine, hintId, getListRef],
   );
   return {session, options: reorder?.options ?? null};
 }

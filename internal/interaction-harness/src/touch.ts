@@ -172,10 +172,19 @@ export interface PlayOptions {
    * lift fails the same way. Then the proof never judges a gesture the page
    * did not receive. Only a driver whose page stamps touches on arrival
    * (WebKit) judges them.
+   *
+   * `tapIntervalMs` is the longest the component waits from a lift for the
+   * next tap, as UIKit's `maximumIntervalBetweenTaps`. Every driver judges it.
+   * A touch-down can reach the page after that window closes, where the
+   * script taps within it. If the page drew a frame in between, the play
+   * fails with `TouchTapIntervalError`: the page read separate taps. Without
+   * such a frame, the component decides, so a play that passes does not prove
+   * the page paired the taps.
    */
   readonly boundaries?: {
     readonly releasePxPerS?: number;
     readonly holdMs?: number;
+    readonly tapIntervalMs?: number;
   };
   /**
    * Called after each event is dispatched, before the next one (storyboards).
@@ -898,6 +907,131 @@ export class TouchStarvationError extends Error {
 }
 
 /**
+ * Where a multi-tap play's touch-down reached the page past the component's
+ * tap interval (`tapIntervalFault`).
+ */
+export interface TapIntervalFault {
+  /** The touch-down's index among the play's touch events. */
+  readonly step: number;
+  /** The gap from the lift before it, as the page received it, ms. */
+  readonly gapMs: number;
+  /** The same gap as the script spaces it, ms. */
+  readonly scriptedGapMs: number;
+  /** The component's tap interval, ms. */
+  readonly tapIntervalMs: number;
+  /**
+   * When the page drew its first frame after the interval closed and before
+   * the touch-down, ms after the close.
+   */
+  readonly frameAfterCloseMs: number;
+  /** How many frames the page drew between the close and the touch-down. */
+  readonly framesAfterClose: number;
+  /**
+   * The gap between the page's last frame before the interval closed and its
+   * first frame after, ms. Past `FRAME_STARVATION_MS`, the page's main thread
+   * was held across the close.
+   */
+  readonly closeFrameGapMs: number;
+}
+
+/**
+ * A multi-tap play's touch-down reached the page past the component's tap
+ * interval after the lift before it, where the script taps within it. So the
+ * page read separate taps, not the gesture the script makes. The error names
+ * the cause by the page's frames across the close. Where the page kept
+ * drawing, a dispatch stalled before the page, as on a starved runner. Where
+ * it drew no frame for longer than `FRAME_STARVATION_MS`, its main thread was
+ * held across the close. Always a red, never a pass: the proof judges no
+ * gesture the page did not receive.
+ */
+export class TouchTapIntervalError extends Error {
+  constructor(readonly fault: TapIntervalFault) {
+    const after = fault.frameAfterCloseMs.toFixed(0);
+    const cause =
+      fault.closeFrameGapMs > FRAME_STARVATION_MS
+        ? `The page drew no frame for ${fault.closeFrameGapMs.toFixed(0)} ms across that window's close, then a frame ${after} ms after it, before the touch-down. Its main thread was held across the close, by a task of its own or a starved machine. So the page read separate taps: the touch-down waited for that main thread.`
+        : `The page kept drawing across that window's close, and drew a frame ${after} ms after it, before the touch-down (${fault.framesAfterClose} in all). So the page read separate taps: a dispatch stalled before the page, as on a starved runner.`;
+    super(
+      `touchDriver: the touch-down at step ${fault.step} reached the page ${fault.gapMs.toFixed(0)} ms after the lift before it, past the ${fault.tapIntervalMs} ms the component waits for the next tap. The script spaces them ${fault.scriptedGapMs.toFixed(0)} ms. ${cause}`,
+    );
+    this.name = 'TouchTapIntervalError';
+  }
+}
+
+/**
+ * For each touch event of a play, its stamp and when the page received it.
+ * Also when the page drew each frame meanwhile. All are on the page's clock.
+ * Where the page stamps touches on arrival (WebKit), the stamp and the
+ * receipt are the same.
+ */
+export interface TouchPageTimes {
+  readonly stamps: readonly number[];
+  readonly receivedAt: readonly number[];
+  readonly frames: readonly number[];
+}
+
+/**
+ * The first touch-down of a play that reached the page after the component's
+ * tap interval had closed; null when none did. The interval runs from the
+ * lift's stamp. It counts as closed first only where the page drew a frame
+ * after it closed and before the touch-down arrived. Then the main thread was
+ * free before the touch came, so the component's timer ran first. Without
+ * such a frame, the component can still pair the taps, so it decides. A gap
+ * the script itself spaces past the interval is no fault. Only a lift that
+ * leaves no finger down ends a tap. Without the page's times, nothing proves
+ * the window closed first.
+ *
+ * The fault keeps the frame gap across the close, and the error names the
+ * cause by it. In Chromium, a page task that holds the main thread across the
+ * close ends with a frame before the touch-down it held. So a frame after the
+ * close does not prove that the runner was late.
+ */
+export function tapIntervalFault(
+  steps: readonly TouchEventStep[],
+  page: TouchPageTimes | null,
+  tapIntervalMs: number,
+): TapIntervalFault | null {
+  if (
+    page == null ||
+    page.stamps.length !== steps.length ||
+    page.receivedAt.length !== steps.length
+  ) {
+    return null;
+  }
+  const frames = [...page.frames].sort((a, b) => a - b);
+  let lift: number | null = null;
+  for (const [index, step] of steps.entries()) {
+    if (step.type === 'touchEnd' && step.fingers.length === 0) {
+      lift = index;
+      continue;
+    }
+    if (step.type !== 'touchStart' || lift == null) {
+      continue;
+    }
+    const scriptedGapMs = step.t - steps[lift].t;
+    const closesAt = page.stamps[lift] + tapIntervalMs;
+    const receivedAt = page.receivedAt[index];
+    const drawn = frames.filter(time => time > closesAt && time < receivedAt);
+    if (scriptedGapMs <= tapIntervalMs && drawn.length > 0) {
+      // Without a frame before the close, the page last ran at the lift.
+      const lastBefore =
+        frames.filter(time => time <= closesAt).at(-1) ?? page.receivedAt[lift];
+      return {
+        step: index,
+        gapMs: receivedAt - page.stamps[lift],
+        scriptedGapMs,
+        tapIntervalMs,
+        frameAfterCloseMs: drawn[0] - closesAt,
+        framesAfterClose: drawn.length,
+        closeFrameGapMs: drawn[0] - lastBefore,
+      };
+    }
+    lift = null;
+  }
+  return null;
+}
+
+/**
  * A play's lift reached the page more than the stillness interval after its
  * finger's last move, where the script throws. The scripted gap plus the time
  * the play's own `onEvent` ran passes that interval. Page work there holds the
@@ -1026,10 +1160,29 @@ interface TouchArrivalProbe {
 }
 
 /**
- * The longest time the page drew no frame while the gesture reached it, ms.
- * The span runs from the last frame before the first touch to the first
- * frame after the lift. With no such frame, the touch or the lift itself
- * bounds it. Null with no frame read.
+ * Each time the page drew no frame across a span, in order. The span runs
+ * from the last frame at or before `from` to the first frame at or after
+ * `to`. With no such frame, `from` or `to` itself bounds it. Empty with no
+ * frame read.
+ */
+export function frameGaps(
+  frames: readonly number[],
+  from: number,
+  to: number,
+): {readonly from: number; readonly to: number}[] {
+  if (frames.length === 0) {
+    return [];
+  }
+  const sorted = [...frames].sort((a, b) => a - b);
+  const before = sorted.filter(t => t <= from).at(-1) ?? from;
+  const after = sorted.find(t => t >= to) ?? to;
+  const edges = [before, ...sorted.filter(t => t > from && t < to), after];
+  return edges.slice(1).map((t, i) => ({from: edges[i], to: t}));
+}
+
+/**
+ * The longest time the page drew no frame while the gesture reached it, ms
+ * (`frameGaps` from the first touch to the lift). Null with no frame read.
  */
 export function longestFrameGap(
   frames: readonly number[],
@@ -1038,17 +1191,12 @@ export function longestFrameGap(
   if (frames.length === 0 || arrivals.length === 0) {
     return null;
   }
-  const from = arrivals[0].stamp;
-  const to = arrivals[arrivals.length - 1].stamp;
-  const sorted = [...frames].sort((a, b) => a - b);
-  const before = sorted.filter(t => t <= from).at(-1) ?? from;
-  const after = sorted.find(t => t >= to) ?? to;
-  const edges = [before, ...sorted.filter(t => t > from && t < to), after];
-  let longest = 0;
-  for (let i = 1; i < edges.length; i += 1) {
-    longest = Math.max(longest, edges[i] - edges[i - 1]);
-  }
-  return longest;
+  const gaps = frameGaps(
+    frames,
+    arrivals[0].stamp,
+    arrivals[arrivals.length - 1].stamp,
+  );
+  return Math.max(0, ...gaps.map(gap => gap.to - gap.from));
 }
 
 async function playSteps(
@@ -1057,6 +1205,7 @@ async function playSteps(
   dispatch: (step: TouchEventStep, timestamp: number) => Promise<void>,
   stampFor: (t: number) => number,
   probe: TouchArrivalProbe | null,
+  readTapTimes: (() => Promise<TouchPageTimes | null>) | null = null,
 ): Promise<PlayedEvent[]> {
   const {
     realtime = true,
@@ -1072,11 +1221,13 @@ async function playSteps(
   // timestamps carry it. Every real-time play is judged there, unless its
   // proof reads no release.
   const judges = probe != null && realtime && !releaseUnread;
+  // A tap play reads the page's arrivals and frames too.
+  const probed = judges || (probe != null && boundaries?.tapIntervalMs != null);
   // A driver gives a probe only where the page stamps touches on arrival.
   // There, a play behind its schedule never shrinks a scripted gap, so page
   // work in `onEvent` cannot eat the rest before a lift.
   const keepsGaps = probe != null;
-  if (judges) {
+  if (probed) {
     await probe.arm();
   }
   const played: PlayedEvent[] = [];
@@ -1108,8 +1259,23 @@ async function playSteps(
     onEventMs.push(performance.now() - watched);
   }
   // Judged once the lift is out, so no finger is left down.
-  if (judges) {
-    const {arrivals, frames} = await probe.read();
+  const probedTimes = probed ? await probe.read() : null;
+  const read = judges ? probedTimes : null;
+  if (boundaries?.tapIntervalMs != null) {
+    const stamps = probedTimes?.arrivals.map(arrival => arrival.stamp);
+    const split = tapIntervalFault(
+      steps,
+      stamps == null || probedTimes == null
+        ? ((await readTapTimes?.()) ?? null)
+        : {stamps, receivedAt: stamps, frames: probedTimes.frames},
+      boundaries.tapIntervalMs,
+    );
+    if (split != null) {
+      throw new TouchTapIntervalError(split);
+    }
+  }
+  if (read != null) {
+    const {arrivals, frames} = read;
     // A page that lost events, such as a target removed mid-gesture, gives no
     // release to read. Only a `'spacing'` play, which asks for the
     // judgment, fails then.
@@ -1173,6 +1339,24 @@ async function chromiumDriver(page: Page): Promise<TouchDriver> {
     press: (at, options) => held.press(at, options),
     async play(script, options = {}) {
       assertNoneHeld(held);
+      // A tap play reads when the page received each touch and drew each
+      // frame. The page sees the scripted stamps, so only its own listeners
+      // tell a late touch-down.
+      const taps =
+        options.boundaries?.tapIntervalMs == null
+          ? null
+          : await armInputRun(page, CHROMIUM_TOUCH_TYPES, {frames: true});
+      const readTapTimes = async (): Promise<TouchPageTimes | null> =>
+        taps == null
+          ? null
+          : taps.evaluate(run => {
+              run.stop();
+              return {
+                stamps: run.stamps.slice(),
+                receivedAt: run.receivedAt.slice(),
+                frames: run.frames.slice(),
+              };
+            });
       // Stamps follow the wall clock the page's own clock is on: with real-time
       // pacing an event's stamp and its dispatch agree to ~0.1 ms.
       const base = Date.now();
@@ -1197,7 +1381,12 @@ async function chromiumDriver(page: Page): Promise<TouchDriver> {
         },
         t => base + t,
         null,
-      );
+        readTapTimes,
+      ).finally(async () => {
+        // Stopped again, as a play that threw before its read never stopped it.
+        await taps?.evaluate(run => run.stop()).catch(() => undefined);
+        await taps?.dispose();
+      });
     },
     async tap(at) {
       assertNoneHeld(held);
@@ -1230,6 +1419,14 @@ export function webkitPageSession(page: Page): WebKitPageProxySession {
   }
   return session;
 }
+
+// The touch events alone, one for each step of a play in Chromium.
+const CHROMIUM_TOUCH_TYPES = [
+  'touchstart',
+  'touchmove',
+  'touchend',
+  'touchcancel',
+];
 
 /**
  * The events a paced play's probe records: a gesture host samples a finger

@@ -454,4 +454,11 @@ describe('InfoTip', () => {
       );
     });
   });
+
+  it('passes data-* attributes to the button and keeps its own name', () => {
+    render(<InfoTip content="Help" data-tag="i" aria-label="Ignored" />);
+    const button = screen.getByRole('button', {name: 'More information'});
+    expect(button).toHaveAttribute('data-tag', 'i');
+    expect(document.querySelectorAll('[data-tag="i"]')).toHaveLength(1);
+  });
 });

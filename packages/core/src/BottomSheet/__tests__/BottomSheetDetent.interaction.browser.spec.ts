@@ -43,12 +43,10 @@ import {
   frames,
   freezePageOn,
   holdAnimations,
-  installLongTaskLog,
   installPageFreeze,
   installTimerGate,
   markElement,
   openStory,
-  readLongTasks,
   readRelease,
   releaseAnimations,
   releaseVelocity,
@@ -207,7 +205,6 @@ interface OpenSheet {
 }
 
 async function openSheet(page: Page): Promise<OpenSheet> {
-  await installLongTaskLog(page);
   await openStory(page, storybook(), 'core-bottomsheet--snap-points');
   const driver = await touchDriver(page);
   const trigger = page.getByRole('button', {name: 'Open nearby places'});
@@ -267,37 +264,40 @@ test('a slow drag follows the finger and settles on the nearest detent', async (
   const tops: number[] = [];
   let moves = 0;
   let restingTop = NaN;
-  const started = Date.now();
-  await driver.play(script, {
-    onEvent: async step => {
-      if (step.type !== 'touchMove') {
-        return;
-      }
-      // Read right away (moves are paced at 60 Hz), and once more after the
-      // last move has been presented: the finger rests 150 ms before lifting.
-      tops.push(await sheetTop(sheet));
-      if (moves++ === lastMove) {
-        await frames(page, 1);
-        restingTop = await sheetTop(sheet);
-      }
-    },
-  });
+  const dragAndSettle = async () => {
+    await driver.play(script, {
+      onEvent: async step => {
+        if (step.type !== 'touchMove') {
+          return;
+        }
+        // Read right away (moves are paced at 60 Hz), and once more after
+        // the last move has been presented: the finger rests 150 ms before
+        // lifting.
+        tops.push(await sheetTop(sheet));
+        if (moves++ === lastMove) {
+          await frames(page, 1);
+          restingTop = await sheetTop(sheet);
+        }
+      },
+    });
+    await waitForRest(sheet);
+  };
+  // No long task from the gesture or the settle. A trace counts the main
+  // thread's own time in each task, which a loaded runner cannot stretch;
+  // the Long Tasks API counts wall time. Traces are Chromium's, so only
+  // Chromium checks this; the drag and the settle hold in both engines.
+  const longTasks =
+    browserName === 'chromium'
+      ? (await traceRendering(page, dragAndSettle)).longTasks
+      : await dragAndSettle().then(() => []);
   // The sheet tracked the finger: monotonic, and 1:1 once out of the
   // starting detent's 40 px magnet.
   expect(tops.every((top, i) => i === 0 || top >= tops[i - 1] - 0.5)).toBe(
     true,
   );
   expect(restingTop).toBeCloseTo(tallTop + dy, 0);
-  await waitForRest(sheet);
   expect(await sheetTop(sheet)).toBeCloseTo(halfTop, 0);
-  // No long task from the gesture or the settle (the story's own load is
-  // excluded). Only Chromium has the Long Tasks API, so only Chromium can
-  // check this; the drag and the settle above hold in both engines.
-  if (browserName === 'chromium') {
-    expect(await readLongTasks(page, {from: started, to: Date.now()})).toEqual(
-      [],
-    );
-  }
+  expect(longTasks).toEqual([]);
 });
 
 test('a downward flick dismisses the sheet', async ({page}) => {

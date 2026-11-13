@@ -17,7 +17,7 @@
  *
  * @input  blogPosts (from the generated registry)
  * @output A marketing section linking to the latest blog posts
- * @position Rendered inside the home page showcase overlay (app/(site)/page.tsx)
+ * @position Rendered inside the home page showcase overlay (app/(site)/HomePage.tsx)
  */
 
 'use client';

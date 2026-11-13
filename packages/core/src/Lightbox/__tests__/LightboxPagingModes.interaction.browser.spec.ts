@@ -22,6 +22,7 @@ import {
   drag,
   frames,
   openStory,
+  requireFrames,
   touchDriver,
   waitForRest,
   watchAnimations,
@@ -119,7 +120,9 @@ async function openGallery(
   }
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
-  const viewport = dialog.getByRole('button', {name: 'Zoom'});
+  // The pager's viewport. In a gallery the keyboard's zoom button is the
+  // current page's photo box inside it.
+  const viewport = dialog.locator('[data-lightbox-media] > :first-child');
   const track = viewport.locator(':scope > div').first();
   await expect
     .poll(async () =>
@@ -353,31 +356,42 @@ test('with a mouse a Next the owner refuses never moves the photo', async ({
       story: 'core-lightbox--gallery-keeps-index',
       trigger: 'Open gallery that keeps its photo',
     });
-    // Reads the track's offset on every frame from the press on.
+    // Reads the track's offset on every frame from the press on, for 40
+    // frames or 5 s, whichever comes first.
     await g.track.evaluate(track => {
-      const offsets: number[] = [];
-      (window as unknown as {__offsets: number[]}).__offsets = offsets;
-      const tick = () => {
-        const value = getComputedStyle(track).translate;
-        offsets.push(value === 'none' ? 0 : parseFloat(value));
-        if (offsets.length < 40) {
-          requestAnimationFrame(tick);
-        }
-      };
-      requestAnimationFrame(tick);
+      const offsets: {t: number; x: number}[] = [];
+      (
+        window as unknown as {__offsets: Promise<{t: number; x: number}[]>}
+      ).__offsets = new Promise(resolve => {
+        const start = performance.now();
+        setTimeout(() => resolve(offsets), 5_000);
+        const tick = (t: number) => {
+          const value = getComputedStyle(track).translate;
+          offsets.push({t, x: value === 'none' ? 0 : parseFloat(value)});
+          if (offsets.length < 40 && t - start < 5_000) {
+            requestAnimationFrame(tick);
+          } else {
+            resolve(offsets);
+          }
+        };
+        requestAnimationFrame(tick);
+      });
     });
     await g.dialog.getByRole('button', {name: 'Next'}).click();
-    await expect
-      .poll(async () =>
-        page.evaluate(
-          () => (window as unknown as {__offsets: number[]}).__offsets.length,
-        ),
-      )
-      .toBe(40);
-    const offsets = await page.evaluate(
-      () => (window as unknown as {__offsets: number[]}).__offsets,
+    // A page starved of frames reads too few of them to prove the photo
+    // stayed: that fails by name.
+    const offsets = requireFrames(
+      await page.evaluate(
+        async () =>
+          (
+            window as unknown as {
+              __offsets: Promise<{t: number; x: number}[]>;
+            }
+          ).__offsets,
+      ),
+      {min: 40, during: 'the page read the track after a refused Next'},
     );
-    expect(offsets.every(x => Math.abs(x) < 0.5)).toBe(true);
+    expect(offsets.every(({x}) => Math.abs(x) < 0.5)).toBe(true);
     expect(await g.counter()).toBe('1 / 4');
   } finally {
     await context.close();
@@ -665,11 +679,11 @@ test('without zoom, a mouse click beside a photo narrower than its caption leave
   }
 });
 
-test('with a mouse a click in the slot a moved-up caption leaves closes the gallery', async ({
+test('with a mouse a click on the caption row under a photo with none closes the gallery', async ({
   browser,
 }) => {
-  // With zoom a caption moves up under its fitted photo. The strip it leaves
-  // at the page's bottom edge is the backdrop, as without zoom.
+  // Every page has a two-line caption band. Under the third photo, which has
+  // no caption, that band is the backdrop.
   const context = await browser.newContext({
     viewport: {width: 1280, height: 1100},
     hasTouch: false,
@@ -685,28 +699,39 @@ test('with a mouse a click in the slot a moved-up caption leaves closes the gall
       story: 'core-lightbox--gallery-with-captions',
       trigger: 'Open gallery with captions',
     });
-    const slot = await g.dialog.locator('[data-current]').evaluate(current => {
+    for (const counter of ['2 / 4', '3 / 4']) {
+      await g.dialog.getByRole('button', {name: 'Next'}).click();
+      await expect(g.dialog.getByText(counter)).toBeVisible();
+    }
+    await expect(g.dialog.locator('[data-current]')).toHaveCount(1);
+    await expect
+      .poll(async () =>
+        g.dialog.locator('[data-current] [data-lightbox-caption]').count(),
+      )
+      .toBe(0);
+    const band = await g.dialog.locator('[data-current]').evaluate(current => {
       const r = current.getBoundingClientRect();
-      const caption = current
-        .querySelector('[data-lightbox-caption]')
+      const media = current
+        .querySelector('[data-lightbox-page-media]')
         ?.getBoundingClientRect();
       return {
         x: r.left + r.width / 2,
-        y: r.bottom - 4,
-        captionBottom: caption?.bottom ?? Number.NaN,
+        y: ((media?.bottom ?? Number.NaN) + r.bottom) / 2,
+        rowHeight: r.bottom - (media?.bottom ?? Number.NaN),
       };
     });
-    // The caption sits above the strip, so the point is the page's own.
-    expect(slot.captionBottom).toBeLessThan(slot.y);
+    // The band keeps its two lines' height, and the point is in it.
+    expect(band.rowHeight).toBeGreaterThan(20);
     expect(
-      await page.evaluate(
-        ({x, y}) =>
-          document.elementFromPoint(x, y)?.hasAttribute('data-lightbox-page') ??
-          false,
-        slot,
-      ),
+      await page.evaluate(({x, y}) => {
+        const el = document.elementFromPoint(x, y);
+        return (
+          el?.closest('[data-lightbox-page][data-current]') != null &&
+          el.closest('[data-lightbox-page-media]') == null
+        );
+      }, band),
     ).toBe(true);
-    await page.mouse.click(slot.x, slot.y);
+    await page.mouse.click(band.x, band.y);
     await expect(g.dialog).toBeHidden();
   } finally {
     await context.close();
