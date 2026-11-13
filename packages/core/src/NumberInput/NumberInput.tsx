@@ -1018,8 +1018,8 @@ export function NumberInput({
         commitDraftText(text);
         return;
       }
-      // The draft before this edit tells a separator the field wrote, and an
-      // edit has shifted, from one the person typed.
+      // The previous draft shows which separators the field wrote. An edit
+      // can move them off their grouping boundaries.
       applyGroupedDraft(
         input,
         text,
