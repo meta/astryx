@@ -33,7 +33,8 @@ const styles: Record<string, CSSProperties> = {
     height: '100%',
   },
   // The editor's and terminal's scrollbars end where the properties panel
-  // handle's grab zone begins, so the zone never covers them.
+  // handle's grab zone begins, so the zone never covers them. The gap sits on
+  // the scrolling items, so the terminal's divider still meets the panel's.
   besideEndHandle: {
     paddingInlineEnd: 'var(--spacing-2)',
   },
@@ -279,14 +280,17 @@ export default function ResizableWorkspacePage() {
                   height="fill"
                   content={
                     <LayoutContent padding={0}>
-                      <Stack
-                        direction="vertical"
-                        style={
-                          isMobile
-                            ? styles.contentFill
-                            : {...styles.contentFill, ...styles.besideEndHandle}
-                        }>
-                        <StackItem size="fill" style={styles.editorArea}>
+                      <Stack direction="vertical" style={styles.contentFill}>
+                        <StackItem
+                          size="fill"
+                          style={
+                            isMobile
+                              ? styles.editorArea
+                              : {
+                                  ...styles.editorArea,
+                                  ...styles.besideEndHandle,
+                                }
+                          }>
                           <CodeBlock
                             code={EDITOR_CODE}
                             language="typescript"
@@ -330,7 +334,14 @@ export default function ResizableWorkspacePage() {
                             </TabList>
                             <StackItem
                               size="fill"
-                              style={styles.terminalWrapper}>
+                              style={
+                                isMobile
+                                  ? styles.terminalWrapper
+                                  : {
+                                      ...styles.terminalWrapper,
+                                      ...styles.besideEndHandle,
+                                    }
+                              }>
                               <CodeBlock
                                 code={TERMINAL_OUTPUT}
                                 language="bash"
