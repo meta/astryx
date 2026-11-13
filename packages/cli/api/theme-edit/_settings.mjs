@@ -71,6 +71,7 @@ import {
   writeWhole,
   setOwnTokenReader,
 } from './_palette.mjs';
+import {EDITOR_STAMP, pngTexts} from './_png.mjs';
 import {MODAL, isColorToken} from './_compiler.mjs';
 import {
   baseInstalled,
@@ -285,7 +286,44 @@ export function recordWritten(cwd, slug, files) {
 export function editorWrote(cwd, slug, file) {
   const map = readRecord(writtenRecord(cwd, slug));
   const was = map[path.basename(file)];
-  return Boolean(was) && was === contentHash(file);
+  if (was && was === contentHash(file)) return true;
+  // A picture carries the editor's stamp, with the theme it shows.
+  try {
+    return pngTexts(fs.readFileSync(file))[EDITOR_STAMP] === slug;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Adopt a picture an older editor took (before it recorded or stamped its
+ * pictures) into the record: only while the theme has no record at all, the
+ * name is one the editor writes, and the picture is the editor's 1280-pixel
+ * wide window. Returns whether it was adopted.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {string} file
+ */
+export function adoptOlderPicture(cwd, slug, file) {
+  if (fs.existsSync(themeFiles(cwd, slug).pictures)) return false;
+  if (!/^(sheet|preview)(-[a-z-]+)?\.png$/.test(path.basename(file)))
+    return false;
+  /** @type {Buffer} */
+  let bytes;
+  try {
+    bytes = fs.readFileSync(file);
+  } catch {
+    return false;
+  }
+  // The width in the PNG header: the editor takes a 1280-pixel window.
+  if (
+    bytes.length < 24 ||
+    bytes.toString('latin1', 12, 16) !== 'IHDR' ||
+    bytes.readUInt32BE(16) !== 1280
+  )
+    return false;
+  recordWritten(cwd, slug, [file]);
+  return true;
 }
 
 /**
@@ -4418,7 +4456,21 @@ export const EDITOR_SUFFIXES = [
   'd.ts',
   'variants.d.ts',
   'history.json',
+  'pictures.json',
 ];
+
+/**
+ * Whether a name in a theme folder is a file the editor writes: the
+ * theme's generated files, settings, history, picture record, pages and
+ * pictures, and its color config.
+ * @param {string} slug
+ * @param {string} n
+ */
+export const isEditorFile = (slug, n) =>
+  EDITOR_SUFFIXES.some(x => n === `${slug}.${x}`) ||
+  /^(preview(-[a-z]+)?\.(html|png)|sheet(-[a-z-]+)?\.(html|png)|palette\.config(\.damaged(-\d+)?)?\.json)$/.test(
+    n,
+  );
 
 /**
  * The files in a theme folder that the editor writes, by name: the
@@ -4433,11 +4485,7 @@ export const EDITOR_SUFFIXES = [
 function ownFiles(dir) {
   if (!fs.lstatSync(dir, {throwIfNoEntry: false})?.isDirectory()) return [];
   const slug = path.basename(dir);
-  const mine = (/** @type {string} */ n) =>
-    EDITOR_SUFFIXES.some(x => n === `${slug}.${x}`) ||
-    /^(preview(-[a-z]+)?\.(html|png)|sheet(-[a-z-]+)?\.(html|png)|palette\.config(\.damaged(-\d+)?)?\.json)$/.test(
-      n,
-    );
+  const mine = (/** @type {string} */ n) => isEditorFile(slug, n);
   /** @type {string[]} */
   const out = [];
   for (const e of fs.readdirSync(dir, {withFileTypes: true}))
@@ -4557,33 +4605,22 @@ export function refuseLinks(cwd, slug) {
     }
     if (!st?.isSymbolicLink()) return;
     const rel = path.relative(cwd, p) || p;
-    // A link whose target is gone: there is nothing to copy. Name where it
-    // points, so that file can be put back; nothing is removed for the user.
-    if (!fs.existsSync(p)) {
-      /** @type {string} */
-      let target;
-      try {
-        target = fs.readlinkSync(p);
-      } catch {
-        target = '';
-      }
-      throw new AstryxError(
-        `${rel} is a link to ${target || 'a file'}, which does not exist; the editor writes a theme's own files only, never through a link. Put ${target || 'that file'} back, then replace the link with a copy of it. Nothing was changed.`,
-        [
-          {
-            name: `ls -l ${quoteCommandArgument(path.relative(cwd, p))}`,
-            reason: 'shows where the link points',
-          },
-        ],
-        ERROR_CODES.ERR_THEME_INVALID,
-      );
+    /** @type {string} */
+    let target;
+    try {
+      target = fs.readlinkSync(p);
+    } catch {
+      target = '';
     }
+    // Named, with where it points; nothing is removed or moved for the
+    // user.
+    const gone = !fs.existsSync(p);
     throw new AstryxError(
-      `${rel} is a link; the editor writes a theme's own files only, never through a link. Replace the link with a copy of what it points to. Nothing was changed.`,
+      `${rel} is a link to ${target || 'another file'}${gone ? ', which does not exist' : ''}; the editor reads and writes a theme's own files only, never through a link. ${gone ? `Put ${target || 'that file'} back, then put` : 'Put'} a copy of it in place of the link. Nothing was changed.`,
       [
         {
-          name: `cp -rL ${quoteCommandArgument(path.relative(cwd, p))} ${quoteCommandArgument(`${path.relative(cwd, p)}.copy`)}`,
-          reason: 'copy what it points to, then put the copy in its place',
+          name: `ls -l ${quoteCommandArgument(path.relative(cwd, p))}`,
+          reason: 'shows where the link points',
         },
       ],
       ERROR_CODES.ERR_THEME_INVALID,
@@ -4591,23 +4628,31 @@ export function refuseLinks(cwd, slug) {
   };
   link(f.root);
   link(f.dir);
-  /** @param {string} d */
-  const walk = d => {
-    /** @type {fs.Stats | undefined} */
-    let st;
-    try {
-      st = fs.lstatSync(d, {throwIfNoEntry: false});
-    } catch {
-      return;
+  // Only the files the editor reads or writes: a link to a file of the
+  // user's (notes, a mockup) is theirs, and is left alone.
+  const own = (/** @type {string} */ n) =>
+    isEditorFile(slug, n) || n === `${slug}.theme.ts` || n === 'tokens';
+  /** @type {string[]} */
+  let names;
+  try {
+    names = fs.readdirSync(f.dir);
+  } catch {
+    return;
+  }
+  for (const n of names.filter(own)) {
+    const p = path.join(f.dir, n);
+    link(p);
+    if (n === 'tokens') {
+      /** @type {string[]} */
+      let inner;
+      try {
+        inner = fs.readdirSync(p);
+      } catch {
+        inner = [];
+      }
+      for (const m of inner) link(path.join(p, m));
     }
-    if (!st?.isDirectory()) return;
-    for (const e of fs.readdirSync(d, {withFileTypes: true})) {
-      const p = path.join(d, e.name);
-      link(p);
-      if (e.isDirectory()) walk(p);
-    }
-  };
-  walk(f.dir);
+  }
 }
 
 /**

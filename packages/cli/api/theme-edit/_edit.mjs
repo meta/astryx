@@ -94,6 +94,8 @@ import {
   lockHeld,
   refuseIfLockLost,
   writeWhole,
+  isGraySeed,
+  seedOf,
 } from './_palette.mjs';
 import {renderPreview, renderSheet} from './_preview.mjs';
 import {refreshPreviewRoute} from './_preview-app.mjs';
@@ -279,11 +281,31 @@ export async function themeEditNew(name, options = {}) {
   // A dial value the dial does not take is left out of a suggested `new`
   // (a corrected name must not repeat it), and the refusal says so.
   /** @type {Array<[string, string]>} */
-  const unfit = Object.entries(settings).flatMap(([k, v]) =>
+  const badValue = Object.entries(settings).flatMap(([k, v]) =>
     (Array.isArray(v) ? v : v == null ? [] : [v])
       .map(x => /** @type {[string, string]} */ ([k, String(x)]))
       .filter(([dial, x]) => DIALS[dial] && !dialValueFits(dial, x)),
   );
+  // Refused for no effect as new refuses it: vibrancy with no color given
+  // that is not a gray (a new theme has no other color to saturate).
+  const colorGiven = Object.entries(settings).some(
+    ([k, v]) =>
+      PALETTE_DIALS.includes(k) &&
+      (Array.isArray(v) ? v : v == null ? [] : [v]).some(
+        x =>
+          !badValue.some(([a, b]) => a === k && b === String(x)) &&
+          !isGraySeed(seedOf(String(x))),
+      ),
+  );
+  /** @type {Array<[string, string]>} */
+  const noEffect =
+    settings.vibrancy != null && !colorGiven
+      ? (Array.isArray(settings.vibrancy)
+          ? settings.vibrancy
+          : [settings.vibrancy]
+        ).map(x => /** @type {[string, string]} */ (['vibrancy', String(x)]))
+      : [];
+  const unfit = [...badValue, ...noEffect];
   const isUnfit = (/** @type {string} */ k, /** @type {unknown} */ x) =>
     unfit.some(([a, b]) => a === k && b === String(x));
   /** @type {Record<string, string | string[] | undefined>} */
@@ -297,9 +319,16 @@ export async function themeEditNew(name, options = {}) {
           : v,
     ]),
   );
-  const dropped = unfit.length
-    ? ` The suggestion leaves out ${unfit.map(([k, x]) => `--${k} ${quoteCommandArgument(x)}`).join(', ')}: not ${unfit.length === 1 ? 'a value its dial takes' : 'values their dials take'} (${[...new Set(unfit.map(([k]) => `${k} takes ${DIALS[k].values}`))].join('; ')}).`
-    : '';
+  const flag = (/** @type {[string, string]} */ [k, x]) =>
+    `--${k} ${quoteCommandArgument(x)}`;
+  const dropped = [
+    badValue.length
+      ? ` The suggestion leaves out ${badValue.map(flag).join(', ')}: not ${badValue.length === 1 ? 'a value its dial takes' : 'values their dials take'} (${[...new Set(badValue.map(([k]) => `${k} takes ${DIALS[k].values}`))].join('; ')}).`
+      : '',
+    noEffect.length
+      ? ` The suggestion leaves out ${noEffect.map(flag).join(', ')}: vibrancy saturates the theme's colors, and no color that is not a gray is given, so it would change nothing.`
+      : '',
+  ].join('');
   const again = (
     /** @type {string} */ newName,
     /** @type {string | null | undefined} */ likeValue = likeFixed,

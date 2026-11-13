@@ -14,6 +14,7 @@ import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {AstryxError} from '../error.mjs';
+import {EDITOR_STAMP, withPngText} from './_png.mjs';
 import {
   findDeclaredWorkspaceRoot,
   findNodeModulesPackage,
@@ -43,6 +44,7 @@ import {
   modesOf,
   nearest,
   refuse,
+  adoptOlderPicture,
   editorWrote,
   recordWritten,
   themeFiles,
@@ -398,11 +400,19 @@ export async function pictures(project, shots, modes) {
   // A picture is written only over a picture the editor took, unchanged
   // since: a file of the user's by that name blocks every picture, and is
   // named.
+  /** Pictures an older editor took, now recorded. @type {string[]} */
+  const adopted = [];
   const blocked = shots
     .flatMap(({png}) => modes.map(m => outOf(png, m)))
     .filter(out => {
       const slug = themeOf(out);
-      return slug && fs.existsSync(out) && !editorWrote(project.cwd, slug, out);
+      if (!slug || !fs.existsSync(out) || editorWrote(project.cwd, slug, out))
+        return false;
+      if (adoptOlderPicture(project.cwd, slug, out)) {
+        adopted.push(path.relative(project.cwd, out));
+        return false;
+      }
+      return true;
     });
   if (blocked.length)
     return {
@@ -418,16 +428,36 @@ export async function pictures(project, shots, modes) {
       // A picture in a theme folder is recorded as the editor's, so a later
       // change removes it and never a picture of the user's.
       const slug = themeOf(out);
-      if (slug) recordWritten(project.cwd, slug, [out]);
+      if (slug) {
+        // Stamped with the editor's mark and the theme, then recorded.
+        try {
+          fs.writeFileSync(
+            out,
+            withPngText(fs.readFileSync(out), EDITOR_STAMP, slug),
+          );
+        } catch {
+          // An unstamped picture is still recorded below.
+        }
+        recordWritten(project.cwd, slug, [out]);
+      }
       if (r.cut) cut.push(r.file);
     }
   }
+  const adoptedNote = adopted.length
+    ? `${adopted.join(', ')} ${adopted.length === 1 ? 'was' : 'were'} taken by an earlier version of the editor and ${adopted.length === 1 ? 'is' : 'are'} now recorded as its own`
+    : null;
   return {
     files,
     // A picture of the window shows the top of a longer page only.
-    problem: cut.length
-      ? `${cut.join(', ')} show${cut.length === 1 ? 's' : ''} the top 2400 pixels of the page only (Chrome takes the window, not the whole page); open the .html beside ${cut.length === 1 ? 'it' : 'them'} to see all of it, or install Playwright (${installLine(project.cwd, ['playwright'])}) for whole-page pictures`
-      : null,
+    problem:
+      [
+        adoptedNote,
+        cut.length
+          ? `${cut.join(', ')} show${cut.length === 1 ? 's' : ''} the top 2400 pixels of the page only (Chrome takes the window, not the whole page); open the .html beside ${cut.length === 1 ? 'it' : 'them'} to see all of it, or install Playwright (${installLine(project.cwd, ['playwright'])}) for whole-page pictures`
+          : null,
+      ]
+        .filter(Boolean)
+        .join('; ') || null,
   };
 }
 
