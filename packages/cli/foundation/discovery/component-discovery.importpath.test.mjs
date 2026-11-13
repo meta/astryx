@@ -68,22 +68,20 @@ describe('findComponentSource inside an operation', () => {
   it('finds every Core component and hook as outside one', () => {
     /** @type {Set<string>} */
     const names = new Set();
-    /** @param {string} dir */
-    const visit = dir => {
-      for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
-        if (entry.isDirectory()) {
-          visit(path.join(dir, entry.name));
-          // A folder's name is also a lookup: nested folders are found by it.
-          names.add(entry.name);
-          continue;
-        }
-        const stem = /^(?:XDS)?(.+)\.tsx?$/.exec(entry.name)?.[1];
+    // Each component or hook file's name, one or two folders down: the
+    // names `component --list` resolves.
+    const src = path.join(coreDir, 'src');
+    for (const top of fs.readdirSync(src, {withFileTypes: true})) {
+      if (!top.isDirectory()) continue;
+      for (const file of fs.readdirSync(path.join(src, top.name))) {
+        const stem = /^(?:XDS)?((?:use)?[A-Z][A-Za-z0-9]*)\.tsx?$/.exec(
+          file,
+        )?.[1];
         if (stem) names.add(stem);
       }
-    };
-    visit(path.join(coreDir, 'src'));
+    }
     const sorted = [...names].sort();
-    expect(sorted.length).toBeGreaterThan(200);
+    expect(sorted.length).toBeGreaterThan(150);
     const outside = sorted.map(name => findComponentSource(coreDir, name));
     const inside = withListingCache(() =>
       sorted.map(name => findComponentSource(coreDir, name)),

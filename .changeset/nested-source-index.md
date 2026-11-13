@@ -2,6 +2,6 @@
 '@astryxdesign/cli': patch
 ---
 
-[perf] `component --list` resolves each component's import from one index of Core's folders instead of probing every folder per component, about 20 ms sooner. Output is unchanged.
+[perf] `component --list` finds a component that has no folder of its own about 20 ms sooner: one index of Core's folders replaces a check of each folder in turn. Output is unchanged.
 
 @josephfarina

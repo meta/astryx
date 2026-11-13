@@ -681,14 +681,11 @@ function ownSourceFile(coreDir, name) {
     if (found) return found;
   }
 
-  // Search nested (component might be under a parent dir). Inside an
-  // operation, the folders named `name` one level down are looked up in an
-  // index of those listings, built once, in the same order.
-  const nested = listingCacheActive()
-    ? (nestedEntriesByName(srcDir).get(name) ?? [])
-    : listDirEntries(srcDir).flatMap(entry =>
-        entry.isDirectory() ? [path.join(srcDir, entry.name, name)] : [],
-      );
+  // Search nested (component might be under a parent dir): only the folders
+  // whose listing holds the name, in listing order.
+  const nested = foldersHolding(srcDir, listDirEntries(srcDir), [name]).map(
+    entry => path.join(srcDir, entry.name, name),
+  );
   for (const nestedDir of nested) {
     if (existsCaseExact(nestedDir, srcDir)) {
       const found = searchDir(nestedDir);
@@ -698,37 +695,6 @@ function ownSourceFile(coreDir, name) {
 
   // Fallback: search entire src tree for the file
   return searchDir(srcDir);
-}
-
-/**
- * Every entry one folder down in `src/`, by its name, as paths in the order
- * of `src/`'s listing: the candidates {@link ownSourceFile} checks for a
- * component under a parent folder. Built once per operation.
- * @param {string} srcDir
- * @returns {Map<string, string[]>}
- */
-function nestedEntriesByName(srcDir) {
-  return oncePerListing(`nested-entries\0${srcDir}`, () => {
-    /** @type {Map<string, string[]>} */
-    const index = new Map();
-    for (const entry of listDirEntries(srcDir)) {
-      if (!entry.isDirectory()) continue;
-      const parent = path.join(srcDir, entry.name);
-      /** @type {import('node:fs').Dirent[]} */
-      let children;
-      try {
-        children = listDirEntries(parent);
-      } catch {
-        continue;
-      }
-      for (const child of children) {
-        const paths = index.get(child.name) ?? [];
-        paths.push(path.join(parent, child.name));
-        index.set(child.name, paths);
-      }
-    }
-    return index;
-  });
 }
 
 /**
