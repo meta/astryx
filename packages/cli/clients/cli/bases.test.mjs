@@ -550,6 +550,10 @@ describe('a project whose only base is not Core', () => {
       expect(experimental.stdout).not.toContain('experimental theme targets');
       expect(experimental.stdout).not.toContain('experimental theme editor how');
       expect(experimental.stdout).toContain('component <Name>');
+      const component = astryx(['component', '--help'], dir);
+      expect(component.stdout).not.toContain('component Button');
+      const search = astryx(['search', '--help'], dir);
+      expect(search.stdout).toContain('search button');
       const template = astryx(['template', '--help'], dir);
       expect(template.stdout).not.toMatch(/^ +--skeleton/m);
       expect(template.stdout).not.toMatch(/^ +--cdn/m);

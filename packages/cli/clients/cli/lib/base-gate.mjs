@@ -122,9 +122,14 @@ function servedText(cmd, text) {
   /** @type {Command} */
   let root = cmd;
   while (root.parent) root = root.parent;
+  // A path a text names starts at the root, or at the command it describes.
+  const prefix = commandPath(cmd);
   /** @param {string} part */
   const served = part =>
-    namedPaths(root, part).every(path => exampleAvailable(root, path, base));
+    [
+      ...namedPaths(root, part),
+      ...namedPaths(cmd, part).map(path => `${prefix} ${path}`),
+    ].every(path => exampleAvailable(root, path, base));
   return text
     .replace(/ ?\([^()]*\)/gu, part => (served(part) ? part : ''))
     .split('\n\n')
@@ -378,6 +383,17 @@ export async function checkRun(program, actionCommand) {
   else checkedAdapters = verdict.adapters;
 }
 
+/** Commands whose example values name an item of Core's content. */
+const CORE_ITEM_COMMANDS = new Set([
+  'component',
+  'hook',
+  'swizzle',
+  'docs',
+  'template',
+  'theme',
+  'gap-report',
+]);
+
 /**
  * Does an example invocation name only commands, options, and argument
  * values `base` serves?
@@ -409,6 +425,12 @@ export function exampleAvailable(root, cli, base) {
     }
     const arg = commandDocsOf(cmd)?.doc.args?.[positional];
     if (missingSteps(base, arg?.requires?.[token]).length > 0) return false;
+    // A content command's example values name Core's items (a component, a
+    // hook, a topic, a template, a theme), which another base does not have.
+    // A placeholder such as `<Name>` names no item.
+    const words = commandPath(cmd).split(' ');
+    const group = words[0] === 'experimental' ? words[1] : words[0];
+    if (!/^[<[]/u.test(token) && CORE_ITEM_COMMANDS.has(group)) return false;
     positional += 1;
   }
   return true;
