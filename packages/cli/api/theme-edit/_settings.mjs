@@ -3140,9 +3140,15 @@ export function compileTheme(ctx, data, base) {
       ]);
       for (const name of names) {
         const x = exactVariantValue(target, css, name, s.state);
-        if (x == null) continue;
-        const half = halfOf(x, other);
-        block({...s, when: `variant:${name}`}, target)[camel(css)] =
+        const vb = block({...s, when: `variant:${name}`}, target);
+        // What the variant's rule already holds (a setting for the other
+        // mode, or one for both) keeps its other half; else the value the
+        // variant shows unset.
+        const prev = vb[camel(css)];
+        const from = typeof prev === 'string' ? prev : x;
+        if (from == null) continue;
+        const half = halfOf(from, other);
+        vb[camel(css)] =
           mode === 'light'
             ? `light-dark(${v}, ${half})`
             : `light-dark(${half}, ${v})`;

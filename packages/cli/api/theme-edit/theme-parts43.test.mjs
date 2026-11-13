@@ -142,6 +142,27 @@ describe('one-mode backgrounds on parts whose variants have their own', () => {
     ).toBe('light-dark(#dddddd, #fdee8c14)');
   }, 240_000);
 
+  for (const [first, second] of [
+    ['light', 'dark'],
+    ['dark', 'light'],
+  ])
+    it(`keeps a ${first}-mode background when a ${second}-mode one follows, on every variant`, async ctx => {
+      if (needBases(ctx)) return;
+      const slug = `m5${first[0]}${second[0]}`;
+      await themeEditNew(slug, {cwd, like: 'neutral'});
+      const color = {light: '#eeeeee', dark: '#222222'};
+      for (const mode of [first, second])
+        await themeEditSet(slug, 'background', color[mode], {
+          cwd,
+          on: 'button',
+          mode,
+        });
+      for (const name of ['primary', 'secondary', 'ghost', 'destructive'])
+        expect(bgOf(slug, `.astryx-button[data-variant="${name}"]`)).toBe(
+          'light-dark(#eeeeee, #222222)',
+        );
+    }, 240_000);
+
   it('does the same in a light-only theme, with no --mode', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('m5o', {cwd, like: 'neutral'});
