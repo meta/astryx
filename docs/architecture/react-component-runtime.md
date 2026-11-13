@@ -352,8 +352,10 @@ those contracts.
   its own press, with no slide between actions; Lightbox pages by its buttons
   and arrow keys at once, with no drag or slide. A gesture in that window does
   not start the load. The bundler keeps one copy per page however many
-  components use them. `utils/touchRuntimeModules.tsx` is the one module the
-  loader's `import()` targets; it gathers the touch runtime, so the loader
+  components use them. If the runtime's chunk fails to load, the page stays as
+  it is before the load: components work by taps, clicks and keys, and no
+  gesture retries the load. `utils/touchRuntimeModules.tsx` is the one module
+  the loader's `import()` targets; it gathers the touch runtime, so the loader
   names a single chunk. `motion/settleThreshold.ts` holds `SETTLE_THRESHOLD`
   apart from the animator, so a component that reads the threshold statically
   does not pull in the deferred runtime. `hooks/pagerIndex.ts` holds a looping
