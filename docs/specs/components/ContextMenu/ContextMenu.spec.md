@@ -77,6 +77,14 @@ Consumer migration instructions belong in consumer docs and release notes.
   `context-menu` target.
 - Cursor-anchor placement across the two presentation paths, and open state
   (FR10).
+- `ContextMenuTrigger`, the internal module that renders the Trigger area's
+  wrapper and its cursor anchor. ContextMenu renders it, and a table cell
+  renders it before its menu code loads, so the cell's content keeps its node
+  when the menu attaches. It imports no menu code, so a base import can carry
+  it (`architecture:component-import-boundaries` INV1).
+- `ContextMenuForTrigger`, the internal mode that opens the same menu around a
+  trigger the caller already renders (a table cell), since `ContextMenu`
+  renders its own trigger. No public entry exports either module.
 
 **Does not own / non-goals**
 
