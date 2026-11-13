@@ -337,6 +337,72 @@ describe('parseDoc (load boundary, both formats)', () => {
   });
 });
 
+describe('example kind', () => {
+  const legacyComponent = (() => {
+    const {type: _type, ...rest} = goodComponent;
+    return rest;
+  })();
+  const kindMessage =
+    /examples\.0\.kind: unknown example kind "live"; use 'demo' \(may render as a live preview\) or 'setup' \(code only\)/;
+
+  it('accepts demo, setup, or no kind on component examples', () => {
+    const examples = [
+      {code: '<Widget label="a" />'},
+      {code: '<Widget label="b" />', kind: 'demo'},
+      {code: 'createWidgetStore(config)', kind: 'setup'},
+    ];
+    expect(parseComponent({...goodComponent, examples}).examples).toEqual(
+      examples,
+    );
+    expect(() => parseDoc({...legacyComponent, examples})).not.toThrow();
+  });
+
+  it('rejects an unknown kind on a stamped component doc', () => {
+    expect(() =>
+      parseComponent({
+        ...goodComponent,
+        examples: [{code: '<Widget />', kind: 'live'}],
+      }),
+    ).toThrow(kindMessage);
+  });
+
+  it('rejects an unknown kind on a legacy doc with its own message', () => {
+    expect(() =>
+      parseDoc({
+        ...legacyComponent,
+        examples: [{code: '<Widget />', kind: 'live'}],
+      }),
+    ).toThrow(kindMessage);
+  });
+
+  it('checks the examples of each grouped component', () => {
+    const {props: _props, ...group} = goodComponent;
+    expect(() =>
+      parseComponent({
+        ...group,
+        components: [
+          {name: 'Widget', examples: [{code: '<Widget />', kind: 'live'}]},
+        ],
+      }),
+    ).toThrow(/components\.0\.examples\.0\.kind: unknown example kind "live"/);
+  });
+
+  it('checks the kind on function examples', () => {
+    expect(() =>
+      parseHook({
+        ...goodFunction,
+        examples: [{code: 'useThing("a")', kind: 'setup'}],
+      }),
+    ).not.toThrow();
+    expect(() =>
+      parseHook({
+        ...goodFunction,
+        examples: [{code: 'useThing("a")', kind: 'live'}],
+      }),
+    ).toThrow(kindMessage);
+  });
+});
+
 describe('loadComponentDoc (end-to-end load boundary)', () => {
   let tmpDir;
 

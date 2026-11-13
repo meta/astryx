@@ -111,7 +111,7 @@ pnpm dev
 
 Storybook will open at http://localhost:6006 with:
 
-- **Theme switcher** - Toggle between the base tokens and the Neutral, Stone, and Y2K themes
+- **Theme switcher** - Toggle between the base tokens (None) and the bundled Neutral, Butter, Chocolate, Matcha, Stone, Gothic, and Y2K themes, plus the generated Probe test fixture
 - **Mode switcher** - Toggle between Light and Dark modes
 - **Component stories** - Interactive component examples
 
