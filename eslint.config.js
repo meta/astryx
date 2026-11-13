@@ -10,6 +10,7 @@ import eslintReact from '@eslint-react/eslint-plugin';
 import reactCompiler from 'eslint-plugin-react-compiler';
 import astryxPlugin from './internal/eslint-plugin-astryx/index.js';
 import {scope as internalBarrelScope} from './internal/eslint-plugin-astryx/no-internal-barrel-import.js';
+import {scope as staticTouchRuntimeScope} from './internal/eslint-plugin-astryx/no-static-touch-runtime.js';
 import {scope as nullishGuardScope} from './internal/eslint-plugin-astryx/no-nullish-jsx-guard.js';
 import {scope as truthyGuardScope} from './internal/eslint-plugin-astryx/no-truthy-jsx-guard.js';
 import {scope as privateAttributeScope} from './internal/eslint-plugin-astryx/no-raw-private-attribute.js';
@@ -36,6 +37,18 @@ const astryxConfig = isStrictMode
   ? astryxPlugin.configs.strict
   : astryxPlugin.configs.recommended;
 const reactSeverity = isStrictMode ? 'error' : 'warn';
+
+// Core imports that put the touch runtime in a first load today, each with
+// the change that removes it. The list only shrinks.
+const staticTouchRuntimeAllowlist = JSON.parse(
+  readFileSync(
+    path.join(
+      import.meta.dirname,
+      'internal/eslint-plugin-astryx/no-static-touch-runtime.allowlist.json',
+    ),
+    'utf8',
+  ),
+).entries;
 
 // Barrel imports that existed when `@astryx/no-internal-barrel-import` arrived,
 // by repo-relative file. The list only shrinks.
@@ -956,6 +969,27 @@ export default defineConfig(
       '@astryx/no-internal-barrel-import': [
         reactSeverity,
         {baseline: internalBarrelBaseline, root: import.meta.dirname},
+      ],
+    },
+  },
+  // The touch runtime (the animator and the gesture host) loads once per page
+  // after first paint through the touch loader. A Core component that reaches
+  // it statically puts it back in the first load. The imports that do so
+  // today are allowlisted, each with the change that removes it.
+  {
+    files: staticTouchRuntimeScope.files,
+    ignores: staticTouchRuntimeScope.ignores,
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-static-touch-runtime': [
+        reactSeverity,
+        {
+          allowlist: staticTouchRuntimeAllowlist,
+          root: import.meta.dirname,
+          optInFolders: ['SnapPaging'],
+        },
       ],
     },
   },
