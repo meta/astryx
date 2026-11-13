@@ -346,7 +346,7 @@ export const docs = {
           name: 'reorderable',
           type: 'Reorderable<T>',
           description:
-            'Makes the selected options reorderable through a handle at the end of each row: pass the object createReorderable makes. Its isReorderable(value) decides which options move (one it rejects at either end of the list also keeps the others from moving past it), and each move goes to its onReorder({key, to}), to being the index of the value in value after the move. Without it, the selected options keep their order.',
+            'Makes the selected options reorderable through a handle at the start of each row: pass the object createReorderable makes. Its isReorderable(value) decides which options move (one it rejects at either end of the list also keeps the others from moving past it), and each move goes to its onReorder({key, to}), to being the index of the value in value after the move. Without it, the selected options keep their order.',
         },
         {
           name: 'hasSelectAll',
@@ -756,7 +756,7 @@ export const docsDense = {
     searchLabel: 'Accessible search label.',
     searchPlaceholder: 'Search placeholder.',
     reorderable:
-      'createReorderable object for a trailing reorder handle (touch hold, mouse drag, keys); its isReorderable says which values move; staged moves change the draft; paused while searching.',
+      'createReorderable object for a leading reorder handle (touch hold, mouse drag, keys); its isReorderable says which values move; staged moves change the draft; paused while searching.',
     hasSelectAll: 'Add all transfer-enabled available options.',
     hasClear: 'Remove all transfer-enabled selected options.',
     renderOption: 'Custom row content.',

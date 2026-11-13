@@ -68,13 +68,13 @@ placement and file-drop targets require separate design specifications.
 
 ## State representation
 
-| State              | Required representation                                                     | Allowed variation                                                |
-| ------------------ | --------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| rest               | The handle is discoverable without overpowering item content                | Handle placement may follow the collection family                |
-| dragging           | Source and moving preview use the same temporary reduced-emphasis treatment | Pointer preview may move freely on both axes                     |
-| candidate position | A clear accent insertion line marks where the item will land                | Line length and inset may follow row geometry                    |
-| dropped            | Items settle into the committed order and temporary drag treatment clears   | Settling motion may use the system's fast movement language      |
-| cancelled          | Original order and normal contrast return immediately                       | Cancellation may be immediate even when normal motion is enabled |
+| State              | Required representation                                                     | Allowed variation                                                                                                                                      |
+| ------------------ | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| rest               | The handle is discoverable without overpowering item content                | Handle placement may follow the collection family. Where no pointer is coarse, the handle may stay hidden until its item is hovered or holds the focus |
+| dragging           | Source and moving preview use the same temporary reduced-emphasis treatment | Pointer preview may move freely on both axes                                                                                                           |
+| candidate position | A clear accent insertion line marks where the item will land                | Line length and inset may follow row geometry                                                                                                          |
+| dropped            | Items settle into the committed order and temporary drag treatment clears   | Settling motion may use the system's fast movement language                                                                                            |
+| cancelled          | Original order and normal contrast return immediately                       | Cancellation may be immediate even when normal motion is enabled                                                                                       |
 
 ## Responsive and input behavior
 

@@ -92,8 +92,9 @@ export interface ListProps extends BaseProps<
 
   /**
    * Makes the rows reorderable, with the object `createReorderable` makes.
-   * Each ListItem with an `itemKey` gets a reorder handle at its end. One the
-   * object's `isReorderable` rejects keeps its place. Each committed move
+   * Each ListItem with an `itemKey` gets a reorder handle at its start, shown
+   * while the row is hovered or holds the focus. One the object's
+   * `isReorderable` rejects keeps its place. Each committed move
    * calls its `onReorder` once with the row's key and its index after the
    * move. Apply it by rendering the rows in their new order. A drop on the
    * starting place, a cancel, or a move the order does not take changes

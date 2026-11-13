@@ -254,10 +254,10 @@ describe('TransferList', () => {
       const rowButtons = within(nameRow as HTMLLIElement).getAllByRole(
         'button',
       );
-      // The row's action, then List's reorder handle at the row's end.
-      expect(rowButtons[0]).toHaveAccessibleName('Remove Name');
-      expect(rowButtons[1]).toHaveAccessibleName('Reorder Name');
-      expect(rowButtons[1]).toHaveAttribute('data-astryx-list-reorder');
+      // List's reorder handle at the row's start, then the row's action.
+      expect(rowButtons[0]).toHaveAccessibleName('Reorder Name');
+      expect(rowButtons[0]).toHaveAttribute('data-astryx-list-reorder');
+      expect(rowButtons[1]).toHaveAccessibleName('Remove Name');
     });
 
     it('keeps support metadata out of rows while retaining search and groups', async () => {
