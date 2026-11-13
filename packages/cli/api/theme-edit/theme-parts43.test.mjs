@@ -197,6 +197,66 @@ describe('one-mode backgrounds on parts whose variants have their own', () => {
       ).toMatch(/background-color: light-dark\(#eeeeee, #123456\)/);
   }, 240_000);
 
+  for (const [like, names] of /** @type {Array<[string, string[]]>} */ ([
+    ['neutral', ['destructive', 'primary']],
+    ['butter', ['secondary', 'destructive', 'primary']],
+  ]))
+    it(`puts no plain background after a variant's one-mode color (${like})`, async ctx => {
+      if (needBases(ctx)) return;
+      const slug = `m5l${like[0]}`;
+      await themeEditNew(slug, {cwd, like});
+      await themeEditSet(slug, 'background', '#123456', {cwd, on: 'button'});
+      await themeEditSet(slug, 'background', '#eeeeee', {
+        cwd,
+        on: 'button',
+        mode: 'light',
+      });
+      for (const name of names) {
+        const rule = ruleOf(slug, `.astryx-button[data-variant="${name}"]`);
+        const at = rule.indexOf(
+          'background-color: light-dark(#eeeeee, #123456)',
+        );
+        expect(at, name).toBeGreaterThan(-1);
+        expect(rule.slice(at), name).not.toMatch(/background:/);
+      }
+    }, 240_000);
+
+  it("says once that a variant keeps its own gradient, and that a part's own gradient covers the color", async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('m5n1', {cwd, like: 'neutral'});
+    await themeEditSet(
+      'm5n1',
+      'background',
+      'linear-gradient(#ff0000, #0000ff)',
+      {cwd, on: 'button', when: 'variant:primary'},
+    );
+    await themeEditSet('m5n1', 'background', '#eeeeee', {
+      cwd,
+      on: 'button',
+      mode: 'light',
+    });
+    const later = await themeEditSet('m5n1', 'padding', '9px', {
+      cwd,
+      on: 'card',
+    });
+    expect(later.data.notes.join(' ')).not.toMatch(/background image/);
+    await themeEditNew('m5n2', {cwd, like: 'neutral'});
+    await themeEditSet(
+      'm5n2',
+      'background',
+      'linear-gradient(#ff0000, #0000ff)',
+      {cwd, on: 'button'},
+    );
+    const r = await themeEditSet('m5n2', 'background', '#eeeeee', {
+      cwd,
+      on: 'button',
+      mode: 'light',
+    });
+    expect(r.data.notes.join(' ')).toMatch(
+      /button's own background is an image .* which covers the light color/,
+    );
+  }, 240_000);
+
   it("leaves a variant's own gradient as it is, and says so", async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('m5g', {cwd, like: 'neutral'});

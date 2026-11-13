@@ -3143,6 +3143,19 @@ export function compileTheme(ctx, data, base) {
       ]
         .map(k => b[camel(k)])
         .find(y => typeof y === 'string' && !/gradient\(|url\(/i.test(y));
+      // The part's own background being an image (a gradient) covers any
+      // color under it: the color is written, and the result says it does
+      // not show.
+      const plainImage =
+        css === 'background-color'
+          ? ['background', 'backgroundImage']
+              .map(k => b[k])
+              .find(y => typeof y === 'string' && /gradient\(|url\(/i.test(y))
+          : undefined;
+      if (plainImage)
+        (ctx.compileNotes ??= []).push(
+          `${target}'s own background is an image (${plainImage}), which covers the ${mode} color: it does not show until that background is a color`,
+        );
       const names = new Set([
         ...(ctx.C.variantValues(target)?.variant ?? []),
         ...(ctx.C.MAP[target]?.attrs?.variant ?? []),
@@ -4599,9 +4612,21 @@ export async function buildTheme(ctx, slug, data) {
   let receipt = await step(() => runBuild(ctx, slug));
   const found = findOverrides(fs.readFileSync(f.css, 'utf8'), theme).filter(
     x =>
-      !((x.state
-        ? theme.components[x.target][x.key]?.[x.state]
-        : theme.components[x.target][x.key]) ?? {})[x.prop],
+      // A variant whose rule the settings already give this property (or
+      // one it covers, such as a one-mode background color written per
+      // variant, which carries the plain value as its other half) needs no
+      // copy of it.
+      !Object.keys(
+        (x.state
+          ? theme.components[x.target][x.key]?.[x.state]
+          : theme.components[x.target][x.key]) ?? {},
+      ).some(
+        k =>
+          !k.startsWith(':') &&
+          (k === x.prop ||
+            coversProperty(kebab(k), kebab(x.prop)) ||
+            coversProperty(kebab(x.prop), kebab(k))),
+      ),
   );
   /** @type {string[]} */
   const lifted = [];

@@ -1484,6 +1484,9 @@ async function changeOnce(
       );
   }
   const compiledBefore = compileTheme(ctx, data, base);
+  // The build notes the theme had before this change: only new ones are
+  // this change's to report.
+  const notesBefore = new Set(buildNotes(ctx));
   if (sub === 'set' && (s.thing === 'base' || s.thing === 'mode')) {
     const before = s.thing === 'base' ? (data.like ?? 'none') : data.mode;
     if (s.thing === 'base') {
@@ -1691,9 +1694,7 @@ async function changeOnce(
   const compiledAfter = compileTheme(ctx, data, base);
   // What the spacing dial said of the sizes it could not keep apart.
   // What the build said of settings it could not write as they are.
-  const compileNotes =
-    /** @type {{compileNotes?: string[]}} */ (/** @type {unknown} */ (ctx))
-      .compileNotes ?? [];
+  const compileNotes = buildNotes(ctx).filter(n => !notesBefore.has(n));
   const sizeNotes =
     /** @type {{sizeNotes?: string[]}} */ (/** @type {unknown} */ (ctx))
       .sizeNotes ?? [];
@@ -3534,4 +3535,15 @@ export async function themeEditUndo(theme, options = {}) {
 export async function editorStale(cwd, slug) {
   const data = loadTheme(cwd, slug);
   return staleBuild(cwd, slug, data) || null;
+}
+
+/**
+ * The notes the last build of the theme left (settings it could not write
+ * as they are).
+ * @param {unknown} ctx
+ * @returns {string[]}
+ */
+function buildNotes(ctx) {
+  const notes = /** @type {{compileNotes?: unknown}} */ (ctx)?.compileNotes;
+  return Array.isArray(notes) ? notes.map(String) : [];
 }
