@@ -312,13 +312,16 @@ Rejected: rules held by review alone, because a crossing shows only in the built
 > "After first paint, on every page" — Owner decision, 2026-11-13 (Cindy)
 
 Tooltip and hover-card code loads in the background once the page has painted,
-as the shared touch runtime does, so the page shows first and the first hover
-finds the code already loaded in most cases. No input starts the load sooner or
-hurries it. A hover during the loading window shows its surface late, or at the
-next hover (INV2, INV4). Other surfaces keep DEC-1.
+so the page shows first and the first hover usually finds the code already
+loaded. This covers every Tooltip surface, including the truncation tooltip of
+Text and Heading and the `tooltip` of Button and Link, and the HoverCard
+surface. No input starts the load sooner or hurries it. A hover during the
+loading window still waits the surface's hover delay, counted from the
+pointer's entry, and shows when the load lands if the pointer is still on the
+trigger, or at the next hover (INV2, INV4). Other surfaces keep DEC-1.
 
-Rejected: loading on the first hover or focus, because the owner chose the
-touch runtime's rule for these surfaces.
+Rejected: loading on the first hover or focus, because the owner chose to have
+the code ready before people hover rather than fetched when they do.
 Rejected: loading with the page, because every page pays for code before
 anyone hovers.
 
