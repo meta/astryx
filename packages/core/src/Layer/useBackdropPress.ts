@@ -7,7 +7,7 @@
  * @input A modal layer's backdrop dismissal and whether it is allowed now
  * @output Capture-phase pointer handlers and a click handler for the layer's
  *   <dialog> root
- * @position Shared backdrop-press rule for Dialog and Drawer
+ * @position Shared backdrop-press rule for Dialog, Drawer and BottomSheet
  */
 
 import {useCallback, useRef, type PointerEvent, type MouseEvent} from 'react';

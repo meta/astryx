@@ -20,6 +20,7 @@ import {Typeahead} from '@astryxdesign/core/Typeahead';
 import type {SearchableItem} from '@astryxdesign/core/Typeahead';
 import type {Meta, StoryObj} from '@storybook/react';
 import {Button} from '@astryxdesign/core/Button';
+import {BottomSheet, BottomSheetSwitcher} from '@astryxdesign/core/BottomSheet';
 import {CommandPalette} from '@astryxdesign/core/CommandPalette';
 import {Dialog} from '@astryxdesign/core/Dialog';
 import {Drawer} from '@astryxdesign/core/Drawer';
@@ -47,9 +48,9 @@ const commands = createStaticSource([
 
 export const Members: StoryObj = {
   render: function MembersStory() {
-    const [open, setOpen] = useState<'dialog' | 'drawer' | 'palette' | null>(
-      null,
-    );
+    const [open, setOpen] = useState<
+      'dialog' | 'drawer' | 'palette' | 'sheet' | 'switcher' | null
+    >(null);
     const close = (isOpen: boolean) => {
       if (!isOpen) {
         setOpen(null);
@@ -60,6 +61,8 @@ export const Members: StoryObj = {
         <Button label="Open dialog" onClick={() => setOpen('dialog')} />
         <Button label="Open drawer" onClick={() => setOpen('drawer')} />
         <Button label="Open palette" onClick={() => setOpen('palette')} />
+        <Button label="Open sheet" onClick={() => setOpen('sheet')} />
+        <Button label="Open switcher" onClick={() => setOpen('switcher')} />
         <Dialog
           isOpen={open === 'dialog'}
           onOpenChange={close}
@@ -88,6 +91,31 @@ export const Members: StoryObj = {
           aria-label="Commands"
           searchSource={commands}
         />
+        <BottomSheet
+          isOpen={open === 'sheet'}
+          onOpenChange={close}
+          label="Note sheet">
+          <input
+            aria-label="Note"
+            defaultValue={NOTE}
+            style={{width: '100%'}}
+          />
+        </BottomSheet>
+        <BottomSheetSwitcher
+          activeSheet={open === 'switcher' ? 'note' : null}
+          onActiveSheetChange={sheet => {
+            if (sheet == null) {
+              setOpen(null);
+            }
+          }}>
+          <BottomSheet sheetId="note" label="Note step">
+            <input
+              aria-label="Note"
+              defaultValue={NOTE}
+              style={{width: '100%'}}
+            />
+          </BottomSheet>
+        </BottomSheetSwitcher>
       </>
     );
   },

@@ -53,6 +53,7 @@ import {
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
   type SyntheticEvent,
 } from 'react';
@@ -65,7 +66,9 @@ import {useScrollLock} from '../hooks/useScrollLock';
 import {useFocusTrapEscapeCompatibilitySignal} from '../hooks/useFocusTrap';
 import {dispatchLayerEscapeKeyDown} from '../Layer/layerStack';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
+import {useBackdropPress} from '../Layer/useBackdropPress';
 import {composeEventHandlers} from '../utils';
+import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {mergeRefs} from '../utils/mergeRefs';
 import {useModalOutletWithoutRef} from '../Layer/modalOutlet';
 import {BottomSheetHostContext} from './BottomSheetHostContext';
@@ -295,6 +298,9 @@ export function BottomSheetSwitcher({
   onCancel,
   onClick,
   onKeyDown,
+  onPointerDownCapture,
+  onPointerUpCapture,
+  onPointerCancelCapture,
   className,
   style,
   xstyle,
@@ -992,32 +998,63 @@ export function BottomSheetSwitcher({
     },
     [],
   );
-  const handleClick = useCallback(
-    (event: ReactMouseEvent<HTMLDialogElement>) => {
-      // A `::backdrop` click targets its dialog element. Only the active
-      // sheet's backdrop is the flow's scrim; a retained dialog is inert and
-      // a hidden one closed, so neither can be clicked, but be explicit.
-      if (
-        hasScrim &&
-        event.target === event.currentTarget &&
-        event.currentTarget === hostDialogRef.current
-      ) {
-        dismissOnLightInteraction();
-      }
-    },
-    [dismissOnLightInteraction, hasScrim],
+  // A press on the ::backdrop targets the <dialog> itself. Only the active
+  // sheet's backdrop is the flow's scrim; a retained dialog is inert and a
+  // hidden one closed, so neither can be clicked, but be explicit. The press
+  // must start and end on the backdrop (family:overlay-dismissal FR10).
+  const handleScrimPress = useCallback(() => {
+    dismissOnLightInteraction();
+  }, [dismissOnLightInteraction]);
+  const scrimPress = useBackdropPress(
+    handleScrimPress,
+    hasScrim && isFlowOpen && allowsLightDismiss,
   );
   const onDialogCancel = useMemo(
     () => composeEventHandlers(onCancel, handleCancel),
     [handleCancel, onCancel],
   );
   const onDialogClick = useMemo(
-    () => composeEventHandlers(onClick, handleClick),
-    [handleClick, onClick],
+    () =>
+      composeEventHandlers(
+        onClick,
+        (event: ReactMouseEvent<HTMLDialogElement>) => {
+          if (event.currentTarget === hostDialogRef.current) {
+            scrimPress.onClick(event);
+          }
+        },
+      ),
+    [onClick, scrimPress.onClick],
   );
   const onDialogKeyDown = useMemo(
     () => composeEventHandlers(onKeyDown, handleKeyDown),
     [handleKeyDown, onKeyDown],
+  );
+  const onDialogPointerDownCapture = useMemo(
+    () =>
+      chainEventHandlers((event: ReactPointerEvent<HTMLDialogElement>) => {
+        if (event.currentTarget === hostDialogRef.current) {
+          scrimPress.onPointerDownCapture(event);
+        }
+      }, onPointerDownCapture),
+    [onPointerDownCapture, scrimPress.onPointerDownCapture],
+  );
+  const onDialogPointerUpCapture = useMemo(
+    () =>
+      chainEventHandlers((event: ReactPointerEvent<HTMLDialogElement>) => {
+        if (event.currentTarget === hostDialogRef.current) {
+          scrimPress.onPointerUpCapture(event);
+        }
+      }, onPointerUpCapture),
+    [onPointerUpCapture, scrimPress.onPointerUpCapture],
+  );
+  const onDialogPointerCancelCapture = useMemo(
+    () =>
+      chainEventHandlers((event: ReactPointerEvent<HTMLDialogElement>) => {
+        if (event.currentTarget === hostDialogRef.current) {
+          scrimPress.onPointerCancelCapture(event);
+        }
+      }, onPointerCancelCapture),
+    [onPointerCancelCapture, scrimPress.onPointerCancelCapture],
   );
 
   const contextValue = useMemo<BottomSheetSwitcherContextValue>(
@@ -1045,6 +1082,9 @@ export function BottomSheetSwitcher({
       onDialogCancel,
       onDialogClick,
       onDialogKeyDown,
+      onDialogPointerDownCapture,
+      onDialogPointerUpCapture,
+      onDialogPointerCancelCapture,
     }),
     [
       activeSheet,
@@ -1061,6 +1101,9 @@ export function BottomSheetSwitcher({
       onDialogCancel,
       onDialogClick,
       onDialogKeyDown,
+      onDialogPointerCancelCapture,
+      onDialogPointerDownCapture,
+      onDialogPointerUpCapture,
       onSheetEnterStart,
       onSheetScrimOpacityChange,
       onSheetTransitionComplete,
