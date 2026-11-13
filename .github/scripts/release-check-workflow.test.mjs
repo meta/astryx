@@ -39,6 +39,7 @@ const releaseJobs = [
   'pr-a11y-shard',
   'pr-a11y-audit',
   'pr-a11y-guards',
+  'pr-a11y-plan',
   'pr-a11y-specs',
   'pr-a11y',
   'a11y-contracts-shard',
@@ -106,6 +107,7 @@ function runs(
     'cancelled',
     'steps',
     'startsWith',
+    'env',
     `return Boolean(${expression});`,
   )(
     {
@@ -139,6 +141,8 @@ function runs(
       legs: {outputs: {count: '1', runs: 'true', leg: '1'}},
     },
     (value, prefix) => String(value ?? '').startsWith(prefix),
+    // A browser-specs leg runs with the share the plan gave it.
+    {RUNS: 'true'},
   );
 }
 
@@ -291,39 +295,48 @@ describe('explicit release routing', () => {
     expect(join.if).toContain('always()');
     expect(owner.env).toEqual({
       GUARDS_RESULT: '${{ needs.pr-a11y-guards.result }}',
+      PLAN_RESULT: '${{ needs.pr-a11y-plan.result }}',
       SPECS_RESULT: '${{ needs.pr-a11y-specs.result }}',
     });
     const result = shell(owner.run, {
       GUARDS_RESULT: 'success',
+      PLAN_RESULT: 'success',
       SPECS_RESULT: 'success',
     });
     expect(result.status, result.stderr).toBe(0);
   });
 
   it.each([
-    ['failure', 'success'],
-    ['cancelled', 'success'],
-    ['skipped', 'success'],
-    ['success', 'failure'],
-    ['success', 'cancelled'],
-    ['success', 'skipped'],
-  ])('blocks pr-a11y when its owners are %s/%s', (guards, specs) => {
-    const join = jobs['pr-a11y'];
-    const needs = dependencies(join);
-    needs['pr-a11y-guards'].result = guards;
-    needs['pr-a11y-specs'].result = specs;
-    expect(
-      runs(join, {
-        needs,
-        cancelled: guards === 'cancelled' || specs === 'cancelled',
-      }),
-    ).toBe(true);
-    const result = shell(
-      step('pr-a11y', 'Require every accessibility owner').run,
-      {GUARDS_RESULT: guards, SPECS_RESULT: specs},
-    );
-    expect(result.status).not.toBe(0);
-  });
+    ['failure', 'success', 'success'],
+    ['cancelled', 'success', 'success'],
+    ['skipped', 'success', 'success'],
+    ['success', 'failure', 'skipped'],
+    ['success', 'cancelled', 'skipped'],
+    ['success', 'skipped', 'skipped'],
+    ['success', 'success', 'failure'],
+    ['success', 'success', 'cancelled'],
+    ['success', 'success', 'skipped'],
+  ])(
+    'blocks pr-a11y when its owners are %s/plan %s/%s',
+    (guards, plan, specs) => {
+      const join = jobs['pr-a11y'];
+      const needs = dependencies(join);
+      needs['pr-a11y-guards'].result = guards;
+      needs['pr-a11y-plan'].result = plan;
+      needs['pr-a11y-specs'].result = specs;
+      expect(
+        runs(join, {
+          needs,
+          cancelled: [guards, plan, specs].includes('cancelled'),
+        }),
+      ).toBe(true);
+      const result = shell(
+        step('pr-a11y', 'Require every accessibility owner').run,
+        {GUARDS_RESULT: guards, PLAN_RESULT: plan, SPECS_RESULT: specs},
+      );
+      expect(result.status).not.toBe(0);
+    },
+  );
 
   it('keeps dispatch concurrency separate, cancelled only by a release re-check', () => {
     expect(workflow.concurrency.group).toContain('|| github.run_id');

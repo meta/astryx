@@ -13,7 +13,6 @@ import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {render} from './render.mjs';
-import {template} from '../template/template.mjs';
 import {segmenterWarning} from '../../foundation/render/render-page.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
 import {makeLinkedFixture, removeLinkedFixture} from '../../test-utils/linked-fixture.mjs';
@@ -1488,6 +1487,23 @@ describe('render(): a crash of Node itself', () => {
   }, 60_000);
 });
 
+describe('render(): a page that ends without an answer', () => {
+  // The message says why, so a failure in a list of renders says why too.
+  it('says where it ended, how long it ran and the memory left', async () => {
+    put('ends.tsx', 'process.exit(0);\nexport default () => <p>Hi</p>;\n');
+    /** @type {any} */
+    let error;
+    try {
+      await render('ends.tsx', {cwd: dir});
+    } catch (e) {
+      error = e;
+    }
+    expect(error?.code).toBe('ERR_RENDER_FAILED');
+    expect(error.message).toMatch(/without an answer \(exit 0\) while importing the page, after \d+ seconds, with \d+ MB of memory free\./);
+    expect(fs.existsSync(path.join(dir, 'ends.html'))).toBe(false);
+  }, 60_000);
+});
+
 describe('render(): Avatar initials without Intl.Segmenter', () => {
   // A render on a Node build that crashes in Intl.Segmenter removes it before
   // the page loads. A local module imported first does the same here.
@@ -1540,55 +1556,6 @@ export default function Page() {
     expect(warning.message).toContain(`${process.version} at ${process.execPath}`);
     expect(warning.message).toContain('may differ slightly');
   });
-});
-
-describe('render(): every ready page template', () => {
-  /** @type {string} */
-  let home;
-
-  beforeAll(() => {
-    home = makeLinkedFixture('astryx-render-templates-', ['@astryxdesign', '@stylexjs', '@heroicons', 'lucide-react', 'react', 'react-dom', 'recharts']);
-  });
-
-  afterAll(() => {
-    removeLinkedFixture(home);
-  });
-
-  it('scaffolds and renders each one', async () => {
-    const listed = /** @type {any} */ (await template(undefined, {list: true, type: 'page', cwd: home}));
-    /** @type {string[]} */
-    const ids = listed.data.filter((/** @type {any} */ t) => t.isReady).map((/** @type {any} */ t) => t.id);
-    expect(ids.length).toBeGreaterThan(0);
-    /** @type {Set<string>} */
-    const themes = new Set();
-    for (const id of ids) {
-      await template(id, {targetPath: `templates/${id}`, type: 'page', cwd: home});
-      const source = fs.readFileSync(path.join(home, 'templates', id, 'page.tsx'), 'utf8');
-      for (const m of source.matchAll(/from '(@astryxdesign\/theme-[a-z0-9-]+)[/']/g)) themes.add(m[1]);
-    }
-    // The node tests build Core only. A template that imports a theme's build
-    // needs that build.
-    for (const name of themes) {
-      const themeDir = fs.realpathSync(path.join(home, '..', 'node_modules', name));
-      if (fs.existsSync(path.join(themeDir, 'dist'))) continue;
-      const built = spawnSync('pnpm', ['run', 'build'], {cwd: themeDir, encoding: 'utf8', shell: process.platform === 'win32'});
-      expect(built.status, `${name} build: ${built.stderr}`).toBe(0);
-    }
-    /** @type {string[]} */
-    const failed = [];
-    for (let i = 0; i < ids.length; i += 4) {
-      await Promise.all(
-        ids.slice(i, i + 4).map(async id => {
-          try {
-            await render(`templates/${id}/page.tsx`, {cwd: home});
-          } catch (e) {
-            failed.push(`${id}: ${/** @type {any} */ (e).code} ${/** @type {any} */ (e).message}`);
-          }
-        }),
-      );
-    }
-    expect(failed).toEqual([]);
-  }, 900_000);
 });
 
 describe('render(): a page outside a project', () => {

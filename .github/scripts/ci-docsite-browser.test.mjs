@@ -230,7 +230,7 @@ describe('docsite-browser', () => {
     expect(check.run).toContain('built=$(cat apps/docsite/.next/BUILD_COMMIT)');
     expect(check.run).toContain('test "$built" = "$here"');
     // The checkout is the commit the build job checked out: no ref.
-    expect(browser.steps[0]).toEqual({uses: 'actions/checkout@v7'});
+    expect(browser.steps[0]).toEqual({uses: 'actions/checkout@v7', 'timeout-minutes': 8});
     expect(
       browser.steps.some(s => /docsite build|next build/.test(s.run ?? '')),
     ).toBe(false);

@@ -29,7 +29,13 @@ import {
 } from './_tables.mjs';
 import {colorsAt, decodePng, mainColors} from './_png.mjs';
 import {baseInstalled, installLine} from './_project.mjs';
-import {loadTheme, nearest, refuse, themeSourceProblem} from './_settings.mjs';
+import {
+  editedThemes,
+  loadTheme,
+  nearest,
+  refuse,
+  themeSourceProblem,
+} from './_settings.mjs';
 import {ASPECTS, checkSetting} from './_check.mjs';
 import {MODAL} from './_compiler.mjs';
 import {PALETTE_DIALS, mappingRows, paletteFiles} from './_palette.mjs';
@@ -182,7 +188,25 @@ function withPrefix(value, cwd) {
  */
 async function answer(subject, options, cwd) {
   const {list, at = [], count} = options;
-  const t = (subject ?? '').trim();
+  // "½rem": a fraction is a number before anything reads the question.
+  const t = (subject ?? '')
+    .trim()
+    .replace(/(\d*)(?:½|1\u20442)/g, (_, n) => `${n ? Number(n) + 0.5 : '0.5'}`)
+    .replace(
+      /(\d*)(?:¼|1\u20444)/g,
+      (_, n) => `${n ? Number(n) + 0.25 : '0.25'}`,
+    )
+    .replace(
+      /(\d*)(?:¾|3\u20444)/g,
+      (_, n) => `${n ? Number(n) + 0.75 : '0.75'}`,
+    );
+  // "explain spacing", "tell me about the accent": the lookup of what is
+  // named, never a change.
+  const explain =
+    /^(?:explain|describe|tell me about)\s+(?:the |my )?([a-z][a-z -]*?)\s*$/i.exec(
+      t,
+    );
+  if (explain && explain[1] !== t) return answer(explain[1], options, cwd);
   // --theme names a theme whatever the subject, so a bad one is refused
   // for a picture and a list too.
   if (options.theme === '')
@@ -246,6 +270,22 @@ async function answer(subject, options, cwd) {
       },
     );
   }
+  // "how b make buttons pill": a first word typed as its own argument that
+  // names an existing theme, with more words after it, is the theme, as for
+  // set, show and undo. A quoted question ("how 'accent red'") is one
+  // argument: its first word is never a theme.
+  const argv = /** @type {string[] | undefined} */ (options.words);
+  if (
+    !options.theme &&
+    argv &&
+    argv.length >= 2 &&
+    editedThemes(cwd).includes(argv[0])
+  )
+    return answer(
+      argv.slice(1).join(' '),
+      {...options, words: undefined, theme: argv[0]},
+      cwd,
+    );
   const ctx = await context(cwd);
   const {C} = ctx;
   const env = await howTheme(ctx, cwd, options.theme);
@@ -840,8 +880,11 @@ function tokenAnswer(ctx, env, subject, key, unknown, themeFields) {
   const {C} = ctx;
   const readers = C.anyReader(key);
   const type = C.typeOf(key);
+  // The theme's own value (its settings applied), else the base theme's.
   const now =
-    env.base.light[key] ?? String(ctx.project.core.tokenDefaults[key]);
+    env.own?.light[key] ??
+    env.base.light[key] ??
+    String(ctx.project.core.tokenDefaults[key]);
   const value = exampleForToken(type, key, now);
   const {commands, refused} = value
     ? checked(env, [
@@ -1025,7 +1068,36 @@ function toolAnswer(t, env, targets) {
     /^(how (round|big|small|large|thick|dark|light|bold|wide|tall) (is|are)|what (is|are) the (current|available)|which \w+ (does|do|is|are)|what (font|color|colour|radius|accent) (does|do|is|are)|what (values|options|choices))\b|\b(right now|currently|at the moment)\??$|\bnow\?$/.exec(
       q,
     );
-  if (asks || /^which parts (are|does|do)\b/.test(q)) {
+  // "is my theme valid", "how many dials", "list every change".
+  if (
+    /^(is|are) (my|the|this) theme (valid|ok|okay|broken|working)\b|^(check|validate) (my|the) theme\b/.test(
+      q,
+    )
+  )
+    return [
+      {
+        text: `show builds ${env.slug} and says what is wrong with it, if anything`,
+        commands: [`${P} show ${env.slug}`],
+      },
+    ];
+  if (
+    /^how many (dials|settings|tokens|parts)\b|^(list|show) (every|all|each) (dial|setting|token|part)s?\b/.test(
+      q,
+    )
+  )
+    return 'list';
+  if (/^(list|show) (every|all|my) (changes?|edits?|settings)\b/.test(q))
+    return [
+      {
+        text: `show lists every setting ${env.slug} has`,
+        commands: [`${P} show ${env.slug}`],
+      },
+    ];
+  if (
+    asks ||
+    /^which parts (are|does|do)\b/.test(q) ||
+    (/^why (is|are|does|do)\b/.test(q) && !/\bnot\b|n'?t\b/.test(q))
+  ) {
     // The part or setting the question names gets its own lookup.
     const named = q
       .split(/[^a-z-]+/)
@@ -1112,7 +1184,7 @@ function wholeThemeTokens(ctx, env, aspect) {
   /** @type {string[]} */
   let commands = [];
   for (const tok of toks) {
-    const now = env.base.light[tok] ?? '';
+    const now = env.own?.light[tok] ?? env.base.light[tok] ?? '';
     if (parseFloat(now) >= 999) continue;
     const value = exampleForToken(C.typeOf(tok), tok, now);
     if (!value) continue;

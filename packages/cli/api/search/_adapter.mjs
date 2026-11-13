@@ -6,9 +6,9 @@
  * domain, _gather-*.mjs) and loads the tree's static data before it runs.
  */
 
-import {readFileSync, realpathSync} from 'node:fs';
+import {readFileSync} from 'node:fs';
 import * as path from 'node:path';
-import {requireCoreDir} from '../../foundation/fs/paths.mjs';
+import {realDir, requireCoreDir} from '../../foundation/fs/paths.mjs';
 import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 import {persistedGather} from '../../foundation/fs/gather-cache.mjs';
 import {
@@ -128,19 +128,6 @@ async function gatherDomains(options) {
     coreSkipped,
     coreSkippedCode,
   };
-}
-
-/**
- * The folder's real path, so a link and its target share a kept gather.
- * @param {string} dir
- * @returns {string}
- */
-function realFolder(dir) {
-  try {
-    return realpathSync(dir);
-  } catch {
-    return dir;
-  }
 }
 
 /**
@@ -264,7 +251,7 @@ export function gatherCandidatesReused(options) {
     gather = reusedWhileUnchanged(
       () =>
         persistedGather(
-          [realFolder(cwd), type ?? null],
+          [realDir(cwd), type ?? null],
           () => gatherCandidates({cwd, type}),
           GATHER_CODEC,
           // A gather that skipped Core (a failed install still in its
