@@ -200,6 +200,19 @@ describe('prop lists keep union types whole', () => {
     );
   });
 
+  it('prints no separator or placeholder for a prop with no description', () => {
+    const docs = {
+      name: 'Tag',
+      description: 'A tag.',
+      props: [{name: 'label', type: 'string', required: true}],
+    };
+    const line = formatFull(docs)
+      .split('\n')
+      .find(l => l.startsWith('- `label`'));
+
+    expect(line).toBe('- `label`: `string` **(required)**');
+  });
+
   it('keeps pipes in a description as written', () => {
     const docs = {
       name: 'AppShell',

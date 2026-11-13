@@ -93,7 +93,8 @@ function formatPropsList(props) {
       // experimental prop is outside the stable compatibility promise.
       const stability =
         p.stability === 'experimental' ? ' **(experimental)**' : '';
-      return `- \`${p.name}\`: \`${p.type}\`${def}${req}${stability} - ${p.description}`;
+      const description = p.description ?? '';
+      return `- \`${p.name}\`: \`${p.type ?? ''}\`${def}${req}${stability}${description ? ` - ${description}` : ''}`;
     })
     .join('\n');
 }

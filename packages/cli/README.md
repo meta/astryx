@@ -298,7 +298,7 @@ Shape:
           {
             "flag": "--props",
             "type": "boolean",
-            "description": "Print only the props table",
+            "description": "Print only the props list",
           },
         ],
         "json": true,
