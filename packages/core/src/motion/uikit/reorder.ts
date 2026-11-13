@@ -6,7 +6,8 @@
  *   hysteresis)
  * @output Exports `reorder`: the values of a UIKit table's edit-mode reorder
  *   that a reorder plays. They are the reorder control's claim and the edge
- *   autoscroll. Neither is a spring or a curve. The rows' glides play the
+ *   autoscroll. Neither is a spring or a curve. A commit's rows glide on the
+ *   theme's move curve, and a row a drag leaves in place goes home on the
  *   shared settle role (`springs.settle`)
  * @position The reorder domain of the UIKit constants table (motion/uikit).
  *   Read by List/reorderModel.ts, List/listReorderEngine.tsx and
@@ -25,8 +26,8 @@
  * autoscroll step. Its drop springs from rest on a springDuration of 0.3 s
  * times min(1, the distance left / half the row's height). Astryx's reorder
  * departs from both by its design record. The rows stay still behind an
- * insertion cue until the drop, and every glide plays the shared settle
- * role. So neither is a value here.
+ * insertion cue until the drop, and a drop's rows glide on the theme's move
+ * curve. So neither is a value here.
  *
  * Every leaf carries one or more `@source` (apple-docs | wwdc | webkit |
  * measured | GUESS). GUESS values also carry the `@measure` task that will
