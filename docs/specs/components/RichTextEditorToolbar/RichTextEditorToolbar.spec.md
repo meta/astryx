@@ -25,6 +25,17 @@ system_specs: [spec:AST-061, spec:AST-087/FR11]
 
 # RichTextEditorToolbar component contract
 
+<!-- path-applicability:v1 -->
+
+```json
+{
+  "paths": [
+    "packages/richtext/src/ToolbarLinkPopover.tsx",
+    "packages/richtext/src/linkForm.tsx"
+  ]
+}
+```
+
 ## Contract at a glance
 
 | Area                    | Contract                                                                                                                                                                              |

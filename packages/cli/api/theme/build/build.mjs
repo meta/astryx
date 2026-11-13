@@ -108,6 +108,7 @@ import {
 } from '../../../foundation/discovery/template-needs.mjs';
 import {generateFamilyCSS, resolveThemeFamily} from './family.mjs';
 import {resolveIconImports} from './icon-imports.mjs';
+import {generatedMark} from '../../theme-edit/_marks.mjs';
 
 // Import shared theme processing from core. `astryx theme build` MUST produce the
 // exact same CSS as the `<Theme>` runtime, so it has exactly one generation
@@ -923,6 +924,82 @@ function isDirectorySync(file) {
   } catch {
     return false;
   }
+}
+
+/**
+ * The marks a file's leading comment carries (see `generatedMark`): a theme
+ * build's output, or a file the theme editor writes, with the command it
+ * names. The one reader build and doctor share.
+ * @param {string} source the start of the file
+ * @param {string} [file] its path, for a mark that names no exact command
+ */
+export function fileMark(source, file) {
+  return generatedMark(source, GENERATED_MARKER, file);
+}
+
+/**
+ * The command a file's leading comment says writes it, when another CLI
+ * command generates it (the theme editor's settings module or app copy):
+ * the exact command its mark names. Null for a theme build's own output and
+ * a file without a mark, such as a theme source of one's own.
+ * @param {string} file
+ * @returns {string | null}
+ */
+export function generatedFileCommand(file) {
+  const mark = fileMark(fileHead(file), file);
+  return mark?.kind === 'editor' ? mark.command : null;
+}
+
+/**
+ * The command that writes a missing `file`: a file beside it carries
+ * another command's mark, and a file there names `file` (a build output's
+ * header names its source), so it is one that command writes. Null for any
+ * other name, such as a typo.
+ * @param {string} file
+ * @returns {string | null}
+ */
+function missingGeneratedCommand(file) {
+  const dir = path.dirname(file);
+  const base = path.basename(file);
+  let names;
+  try {
+    names = fs.readdirSync(dir).sort();
+  } catch {
+    return null;
+  }
+  /** @type {string | null} */
+  let by = null;
+  let named = false;
+  for (const n of names) {
+    const f = path.join(dir, n);
+    try {
+      if (!fs.statSync(f).isFile()) continue;
+    } catch {
+      continue;
+    }
+    by ??= generatedFileCommand(f);
+    if (!named)
+      try {
+        named = fs.readFileSync(f, 'utf8').slice(0, 4000).includes(base);
+      } catch {
+        // A file that does not read names nothing.
+      }
+    if (by && named) return by;
+  }
+  return null;
+}
+
+/**
+ * The command that writes `file`: from its own mark, or, when it is
+ * missing, from the files beside it (see `missingGeneratedCommand`); null
+ * otherwise.
+ * @param {string} file
+ * @returns {string | null}
+ */
+export function generatedSourceCommand(file) {
+  return fs.existsSync(file)
+    ? generatedFileCommand(file)
+    : missingGeneratedCommand(file);
 }
 
 /** @param {string} file @returns {string} the start of a file, or '' when it cannot be read */

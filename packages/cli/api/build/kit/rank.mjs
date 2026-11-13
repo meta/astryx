@@ -175,6 +175,16 @@ export function rankPages(query, pages) {
     return d ? Math.log(1 + (n - d + 0.5) / (d + 0.5)) : 0;
   };
 
+  // How many templates of each family carry each term, for how typical of its
+  // family a template's descriptor is.
+  /** @type {Map<string, Map<string, number>>} */
+  const familyDf = new Map();
+  for (const {family, bag} of docs) {
+    const counts = familyDf.get(family) ?? new Map();
+    familyDf.set(family, counts);
+    for (const t of bag.keys()) counts.set(t, (counts.get(t) ?? 0) + 1);
+  }
+
   const familyOfWord = familyWordsOf(pages);
   /** @param {string[]} ts */
   const familiesIn = ts =>
@@ -226,8 +236,12 @@ export function rankPages(query, pages) {
       else if (familyNamed) score += BODY_FAMILY;
       const base = normalized(page.name) === normalized(family);
       if (familyNamed && base) score += FAMILY_BASE;
+      const inFamily = familyDf.get(family);
+      let shared = 0;
+      for (const t of bag.keys()) shared += (inFamily?.get(t) ?? 1) - 1;
       return {
         name: page.name,
+        typical: bag.size ? shared / bag.size : 0,
         score,
         hits,
         familyNamed,

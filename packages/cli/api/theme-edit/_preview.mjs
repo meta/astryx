@@ -1526,7 +1526,7 @@ function chromeBinary() {
 
 /** The first line of every file the editor writes into a theme's app copy. */
 export {APP_COPY_MARK} from './_marks.mjs';
-import {APP_COPY_MARK} from './_marks.mjs';
+import {APP_COPY_MARK, appCopyMark} from './_marks.mjs';
 
 /**
  * The app's copy of an editor theme: a standard local theme in
@@ -1572,7 +1572,7 @@ function appCopyFiles(cwd, slug, fontsCss) {
   if (!fs.existsSync(f.js) || !fs.existsSync(f.css)) return null;
   const source = `src/themes/${slug}/${name}.ts`;
   const head = (/** @type {string} */ open, /** @type {string} */ close) =>
-    `${open} ${APP_COPY_MARK} after every build of themes/${slug}/; do not edit it here. Change the theme with the editor. ${close}\n`;
+    `${open} ${appCopyMark(slug)} after every build of themes/${slug}/; do not edit it here. Change the theme with the editor. ${close}\n`;
   const keptFonts = path.join(dir, `${slug}.fonts.css`);
   const fonts =
     fontsCss ??
