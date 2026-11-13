@@ -116,64 +116,28 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/AppShell/AppShell.generated';
 import {ActivityWrapper, HasActivity} from './appShellActivity';
+import {
+  readScrollOffsets,
+  scrollToOffsets,
+  type ScrollOffsets,
+} from '../motion/scrollOffsets';
 
 registerEnglishFallback(english);
 
-/** A scroll offset to put back on an element. */
-interface ScrollOffset {
-  readonly element: Element;
-  readonly top: number;
-  readonly left: number;
-}
-
-/**
- * The scroll offsets of `elements` and everything inside them that is
- * scrolled. Activity hides a paused subtree with `display: none`, which drops
- * these offsets, so they are read before the pause and put back after.
- */
-function readScrollOffsets(
-  elements: ReadonlyArray<HTMLElement | null>,
-): ScrollOffset[] {
-  const offsets: ScrollOffset[] = [];
-  for (const root of elements) {
-    if (root == null) {
-      continue;
-    }
-    for (const element of [root, ...root.querySelectorAll('*')]) {
-      if (element.scrollTop !== 0 || element.scrollLeft !== 0) {
-        offsets.push({
-          element,
-          top: element.scrollTop,
-          left: element.scrollLeft,
-        });
-      }
-    }
-  }
-  return offsets;
-}
-
-function restoreScrollOffsets(offsets: ReadonlyArray<ScrollOffset>): void {
-  for (const {element, top, left} of offsets) {
-    element.scrollTop = top;
-    element.scrollLeft = left;
-  }
-}
-
 /**
  * Calls `pause` once every motion running on `elements` has ended, or at
- * once when none runs, with the scroll offsets inside them read just before.
- * Returns a cancel for a change that comes first.
+ * once when none runs. Returns a cancel for a change that comes first.
  */
 function pauseAfterMotion(
   elements: ReadonlyArray<HTMLElement | null>,
-  pause: (offsets: ScrollOffset[]) => void,
+  pause: () => void,
 ): () => void {
   if (!HasActivity) {
     return () => {};
   }
   const running = elements.flatMap(element => element?.getAnimations?.() ?? []);
   if (running.length === 0) {
-    pause(readScrollOffsets(elements));
+    pause();
     return () => {};
   }
   let isCancelled = false;
@@ -181,7 +145,7 @@ function pauseAfterMotion(
     running.map(async animation => animation.finished),
   ).then(() => {
     if (!isCancelled) {
-      pause(readScrollOffsets(elements));
+      pause();
     }
   });
   return () => {
@@ -785,9 +749,11 @@ export function AppShell({
   // so its effects stop. It shows again in the commit that reveals it, before
   // the reveal plays.
   const [isTopNavPaused, setIsTopNavPaused] = useState(isTopNavHidden);
-  // The scroll offsets inside each paused region, put back when it shows.
-  const topNavScrollRef = useRef<ScrollOffset[]>([]);
-  const sideNavScrollRef = useRef<ScrollOffset[]>([]);
+  // The scroll offsets inside each hidden region, read before the commit
+  // that hides it (which can resize and clamp them) and put back when it
+  // shows. Activity's display: none drops them while it is paused.
+  const topNavScrollRef = useRef<ScrollOffsets>([]);
+  const sideNavScrollRef = useRef<ScrollOffsets>([]);
   const [isSideNavPaused, setIsSideNavPaused] = useState(isSideNavHidden);
   if (!isTopNavHidden && isTopNavPaused) {
     setIsTopNavPaused(false);
@@ -1400,6 +1366,9 @@ export function AppShell({
   const beforeTopNavChange = useCallback(
     (wasHidden: boolean) => {
       noteTopNavFocus(wasHidden);
+      if (!wasHidden && topNavRegionRef.current != null) {
+        topNavScrollRef.current = readScrollOffsets(topNavRegionRef.current);
+      }
       topNavEdge.measureBefore();
     },
     [noteTopNavFocus, topNavEdge],
@@ -1407,6 +1376,11 @@ export function AppShell({
   const beforeSideNavChange = useCallback(
     (wasHidden: boolean) => {
       noteSideNavFocus(wasHidden);
+      if (!wasHidden) {
+        sideNavScrollRef.current = [railRef.current, mobileBarRef.current]
+          .filter(element => element != null)
+          .flatMap(element => readScrollOffsets(element));
+      }
       sideNavEdge.measureBefore();
       mobileBarEdge.measureBefore();
     },
@@ -1417,29 +1391,24 @@ export function AppShell({
     if (!isTopNavHidden) {
       // After the reveal starts: it puts back the offsets it measured, which
       // the pause had already dropped.
-      restoreScrollOffsets(topNavScrollRef.current);
+      scrollToOffsets(topNavScrollRef.current);
       topNavScrollRef.current = [];
       return;
     }
-    return pauseAfterMotion([topNavRegionRef.current], offsets => {
-      topNavScrollRef.current = offsets;
-      setIsTopNavPaused(true);
-    });
+    return pauseAfterMotion([topNavRegionRef.current], () =>
+      setIsTopNavPaused(true),
+    );
   }, [isTopNavHidden, topNavEdge]);
   useLayoutEffect(() => {
     sideNavEdge.animate();
     mobileBarEdge.animate();
     if (!isSideNavHidden) {
-      restoreScrollOffsets(sideNavScrollRef.current);
+      scrollToOffsets(sideNavScrollRef.current);
       sideNavScrollRef.current = [];
       return;
     }
-    return pauseAfterMotion(
-      [railRef.current, mobileBarRef.current],
-      offsets => {
-        sideNavScrollRef.current = offsets;
-        setIsSideNavPaused(true);
-      },
+    return pauseAfterMotion([railRef.current, mobileBarRef.current], () =>
+      setIsSideNavPaused(true),
     );
   }, [isSideNavHidden, sideNavEdge, mobileBarEdge]);
 

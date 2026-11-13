@@ -139,7 +139,8 @@ Consumer migration instructions belong in consumer docs and release notes.
   React's Activity is absent before React 19.2, so one module gives both the
   same fallback.
 - Hiding the top nav and the side nav while keeping their state, the focus
-  handoff and the one motion it plays (FR19–FR21).
+  handoff and the one motion it plays (FR19–FR21); the scroll restore runs
+  through `motion/scrollOffsets.ts`.
 
 AppShell's `.doc.mjs` documents no inline `components:` entries; this record is
 the only component record in the AppShell root.

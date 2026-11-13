@@ -40,6 +40,11 @@ import {
   type SavedAnimations,
 } from './carryAnimations';
 import {inertClone} from './inertClone';
+import {
+  readScrollOffsets,
+  scrollToOffsets,
+  type ScrollOffsets,
+} from './scrollOffsets';
 
 /** Above this many elements, old content is not copied: the new one enters. */
 const MAX_COPIED_ELEMENTS = 1500;
@@ -129,10 +134,7 @@ function readInherited(element: Element): Map<string, string> {
 }
 
 /** Scroll offsets a copy restores once laid out (a clone carries none). */
-const scrollOffsets = new WeakMap<
-  HTMLElement,
-  ReadonlyArray<readonly [Element, number, number]>
->();
+const scrollOffsets = new WeakMap<HTMLElement, ScrollOffsets>();
 
 /**
  * The CSS animations and transitions a copy's element ran, and the copy of
@@ -159,18 +161,17 @@ export function inertCopy(element: HTMLElement): HTMLElement | null {
   }
   const sourceNodes = [element, ...element.querySelectorAll('*')];
   const copyNodes = [copy, ...copy.querySelectorAll('*')];
-  const offsets: [Element, number, number][] = [];
-  sourceNodes.forEach((source, index) => {
-    if (source.scrollTop !== 0 || source.scrollLeft !== 0) {
-      offsets.push([copyNodes[index], source.scrollTop, source.scrollLeft]);
-    }
-  });
-  scrollOffsets.set(copy, offsets);
+  const copyOf = new Map(
+    sourceNodes.map((node, index) => [node, copyNodes[index]]),
+  );
+  scrollOffsets.set(
+    copy,
+    readScrollOffsets(element).map(
+      ([node, top, left]) => [copyOf.get(node) ?? node, top, left] as const,
+    ),
+  );
   inheritedValues.set(copy, readInherited(element));
-  carriedMotion.set(copy, {
-    saved: saveAnimations(element),
-    copyOf: new Map(sourceNodes.map((node, index) => [node, copyNodes[index]])),
-  });
+  carriedMotion.set(copy, {saved: saveAnimations(element), copyOf});
   return copy;
 }
 
@@ -180,14 +181,7 @@ export function inertCopy(element: HTMLElement): HTMLElement | null {
  * `scroll-behavior`. A box keeps no scroll position until it is laid out.
  */
 export function restoreScrollOffsets(copy: HTMLElement): void {
-  for (const [node, top, left] of scrollOffsets.get(copy) ?? []) {
-    if (typeof node.scrollTo === 'function') {
-      node.scrollTo({top, left, behavior: 'instant'});
-    } else {
-      node.scrollTop = top;
-      node.scrollLeft = left;
-    }
-  }
+  scrollToOffsets(scrollOffsets.get(copy) ?? []);
 }
 
 /**

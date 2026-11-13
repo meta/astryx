@@ -4,7 +4,8 @@
 /**
  * @file AppShellHiddenRegionScroll.a11y.chromium.spec.ts
  * @input The `Core/AppShell` Focus Mode story in a built Storybook, in
- *   Chromium at a short desktop viewport so the side nav scrolls
+ *   Chromium at a 200 px tall desktop viewport, so the side nav scrolls and
+ *   hiding the top nav grows the side column
  * @output Real-browser proof that a hidden region keeps its scroll position
  *   (component:AppShell FR19): a side nav scrolled down, hidden until it
  *   pauses, and shown again comes back at the same offset
@@ -30,7 +31,7 @@ test.afterAll(async () => {
   await storybook?.close();
 });
 
-test.use({viewport: {width: 1280, height: 420}});
+test.use({viewport: {width: 1280, height: 200}});
 
 /** Marks the side nav's scrolling box with `data-scroll-probe`. */
 async function markSideNavScroller(page: Page): Promise<void> {
