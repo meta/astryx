@@ -60,6 +60,13 @@ describe('saved, not checked', () => {
       code: 'ERR_THEME_NOT_CHECKED',
       cause: expect.stringContaining("reading 'use'"),
     });
+    // Nothing was rendered, so `see` names why, not a current preview.html.
+    expect(r.data.see).toContain(
+      'the change is saved, but the components could not be rendered here',
+    );
+    expect(r.data.see).toContain("reading 'use'");
+    expect(r.data.see).not.toContain('current after this change');
+    expect(r.data.see).not.toContain('run it with --png');
     const settings = JSON.parse(
       fs.readFileSync(path.join(cwd, 'themes/u/u.settings.json'), 'utf8'),
     );

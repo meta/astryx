@@ -3005,7 +3005,7 @@ describe('final pass 5', () => {
       );
       const dial = await themeEditSet('bb', 'corners', '7px', {cwd});
       expect(dial.data.see).toContain(
-        "the in-app preview is in src/app/[slug]/, at a URL that depends on the app's routing",
+        "the in-app preview is in src/app/[slug]/ (its overview page: add ?page=overview to its URL), at a URL that depends on the app's routing",
       );
       expect(dial.data.see).not.toContain('preview add');
       const list = await themeEditPreviewList({cwd, path: 'src/app/bb'});

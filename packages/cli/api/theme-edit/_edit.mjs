@@ -839,7 +839,7 @@ async function previewAndRoute(ctx, slug, data, png, focus = 'overview') {
     ...p,
     previewStale: await keepPreviewRoute(ctx, slug),
     // How to see the change: the page about it, at its own URL.
-    see: seeLine(ctx.project.cwd, slug, focus),
+    see: seeLine(ctx.project.cwd, slug, focus, p.notChecked ?? null),
     // The first time the theme's app copy is written, its files are named.
     ...(wrote ? {appCopy: {wrote}} : {}),
   };

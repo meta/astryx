@@ -3362,16 +3362,21 @@ function pageUrls(cwd, at, ids) {
 }
 
 /**
- * One line that says how to see a theme after a change: the in-app preview
- * page most about what changed (Colors after a color, Components after a
- * part, else Overview) at its own URL, else the editor's preview.html; and
- * --png, which takes pictures with no dev server running.
+ * One line that says how to see a theme after a change. First a look that
+ * changes nothing in the app: the editor's own preview.html (current after
+ * the change) and --png, which takes pictures with no dev server; then the
+ * in-app preview page most about what changed (Colors after a color,
+ * Components after a part, else Overview) at its own URL when there is a
+ * preview; adding one to the app last, as an option. A change that could
+ * not be rendered names why instead of the editor's page.
  * @param {string} cwd
  * @param {string} slug
  * @param {'colors' | 'components' | 'overview'} focus
+ * @param {{code: string, cause: string} | null} [notChecked] why the change
+ *   could not be rendered
  * @returns {string}
  */
-export function seeLine(cwd, slug, focus) {
+export function seeLine(cwd, slug, focus, notChecked = null) {
   /** @type {string[]} */
   const urls = [];
   /** Previews whose URL depends on the app's routing. @type {string[]} */
@@ -3393,20 +3398,23 @@ export function seeLine(cwd, slug, focus) {
     const ids = Array.isArray(data?.pages)
       ? data.pages.map((/** @type {any} */ x) => String(x?.id))
       : [];
+    // Only a page the preview has.
     const id = ids.includes(focus) ? focus : ids[0];
     const url = id ? pageUrls(cwd, {dir, app: null}, [id])[id] : undefined;
     if (url) urls.push(url);
-    else unplain.push(`${shownDir(cwd, dir)}/`);
+    else
+      unplain.push(
+        `${shownDir(cwd, dir)}/${id ? ` (its ${id} page: add ?page=${id} to its URL)` : ''}`,
+      );
   }
-  // First a look that changes nothing in the app: the editor's own page,
-  // current after every change, and --png; the app's preview page only
-  // when there is one, and adding one last, as an option.
   const f = themeFiles(cwd, slug);
-  const own = `look without changing your app: open or screenshot ${shown(cwd, f.preview)} (one self-contained page, current after this change; ${EDITOR} show ${slug} also writes ${shown(cwd, f.sheet)}, every component), or run it with --png for pictures in ${shownDir(cwd, f.dir)}/ with no dev server (it needs a Playwright or a Chrome)`;
+  const own = notChecked
+    ? `the change is saved, but the components could not be rendered here (${notChecked.cause}), so ${shown(cwd, f.preview)} still shows the theme as it was and --png takes no pictures until that is fixed`
+    : `look without changing your app: open or screenshot ${shown(cwd, f.preview)} (one self-contained page, current after this change; ${EDITOR} show ${slug} also writes ${shown(cwd, f.sheet)}, every component), or run it with --png for pictures in ${shownDir(cwd, f.dir)}/ with no dev server (it needs a Playwright or a Chrome)`;
   if (urls.length)
     return `${own}; in the running app: open ${urls.slice(0, 2).join(' or ')}`;
   if (unplain.length)
-    return `${own}; the in-app preview is in ${unplain.slice(0, 2).join(', ')}, at a URL that depends on the app's routing (add ?page=${focus} to it)`;
+    return `${own}; the in-app preview is in ${unplain.slice(0, 2).join(', ')}, at a URL that depends on the app's routing`;
   return `${own}; to see it inside your app, ${PREVIEW} add puts the preview pages there, each at its own URL`;
 }
 
