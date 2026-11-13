@@ -1037,6 +1037,13 @@ function partLexicon(ctx) {
         /\bselect(?:ion)?[\s-]?(?:box|menu|field|dropdown)(?:e?s)?\b/,
         {on: 'selector'},
       ]),
+      // "inline code", "block quote": those parts, read whole (so their
+      // first word is never a padding side).
+      /** @type {[RegExp, PartRef]} */ ([/\binline[\s-]code\b/, {on: 'code'}]),
+      /** @type {[RegExp, PartRef]} */ ([
+        /\bblock[\s-]?quotes?\b/,
+        {on: 'blockquote'},
+      ]),
       // "date pickers": Core's date input.
       /** @type {[RegExp, PartRef]} */ ([
         /\bdate ?pickers?\b/,
@@ -4338,9 +4345,20 @@ export function draftAnswer(ctx, env, question) {
     const text = lex.parts
       .filter(([, x]) => ons.has(x.on))
       .reduce((t, [re]) => t.replace(new RegExp(re.source, 'g'), ' '), c.text);
-    return /\b(left|right|top|bottom|horizontal(?:ly)?|vertical(?:ly)?|inline|block|sides)\b/.exec(
-      text,
-    )?.[1];
+    // left/right/top/bottom/sides name a side anywhere; inline, block,
+    // horizontal and vertical only beside the padding or margin they
+    // qualify ("inline padding", "padding-inline", "padding 8px vertical"),
+    // never as a word of a part's name ("inline code", "block quote").
+    const plain = /\b(left|right|top|bottom|sides)\b/.exec(text)?.[1];
+    if (plain) return plain;
+    const axis =
+      /\b(horizontal(?:ly)?|vertical(?:ly)?|inline|block)[\s-]+(?:padding|margin)\b/.exec(
+        text,
+      )?.[1] ??
+      /\b(?:padding|margin)[\s-]+(?:(?:of\s+)?-?\d*\.?\d+(?:px|rem|em)?\s+)?(?:on\s+the\s+)?(horizontal(?:ly)?|vertical(?:ly)?|inline|block)\b/.exec(
+        text,
+      )?.[1];
+    return axis;
   }
 
   /**

@@ -275,6 +275,36 @@ describe('padding sides are read outside part names', () => {
   );
 });
 
+describe('inline and block name a side only beside the padding', () => {
+  it(
+    'inline code and block quote padding are all sides of those parts',
+    async () => {
+      expect((await top('inline code padding 4px')).all).toBe(
+        'set q padding 4px --on code',
+      );
+      expect((await top('block quote padding 8px')).all).toBe(
+        'set q padding 8px --on blockquote',
+      );
+      expect((await top('code block padding 12px')).all).toBe(
+        'set q padding 12px --on code-block',
+      );
+    },
+    T,
+  );
+  it(
+    'inline or vertical beside padding is the side',
+    async () => {
+      expect((await top('inline padding 10px on cards')).all).toBe(
+        'set q padding-inline 10px --on card',
+      );
+      expect((await top('padding 8px vertical on cards')).all).toBe(
+        'set q padding-block 8px --on card',
+      );
+    },
+    T,
+  );
+});
+
 describe('bigger or smaller than another part', () => {
   it(
     'is a step past the other part value, never a copy',
