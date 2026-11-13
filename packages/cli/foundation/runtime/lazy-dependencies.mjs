@@ -8,17 +8,29 @@
  *   `jscodeshift` and `selectorParser`: the same module objects a static
  *   import gives, since each package resolves to the same file for `require`
  *   as for `import` (test/lazy-dependencies.test.mjs checks it).
- * @position The one loader for these packages in api/, assets/ and
- *   foundation/ (authoring/ may not import foundation, so the ShadCN source
- *   variants keep their own). Everything that imports the CLI's API reaches
- *   the modules that parse or rewrite sources, and most runs never parse one,
- *   so loading Babel and jscodeshift with them cost every importer about 350
- *   modules. A missing dependency now fails at first use instead of at import.
+ * @position The first-use loader for these packages on the API's import
+ *   path (authoring/ may not import foundation, so the ShadCN source variants
+ *   keep their own). Everything that imports the CLI's API reaches the
+ *   modules that parse or rewrite sources, and most runs never parse one, so
+ *   loading Babel and jscodeshift with them cost every importer about 350
+ *   modules. Each package is still resolved when this module loads, which
+ *   reads no module: a broken install without one fails at import, as
+ *   before, never as a parse that quietly finds nothing.
  */
 
 import {createRequire} from 'node:module';
 
 const require = createRequire(import.meta.url);
+
+// Resolved, not loaded: a missing package fails here, at import.
+for (const pkg of [
+  '@babel/parser',
+  '@babel/core',
+  'jscodeshift',
+  'postcss-selector-parser',
+]) {
+  require.resolve(pkg);
+}
 
 /** @type {typeof import('@babel/parser') | undefined} */
 let parser;

@@ -101,6 +101,39 @@ describe('lazy dependencies', () => {
     expect(shapes).toEqual(API_EXPORTS);
   });
 
+  it('keep a broken install failing at import', () => {
+    // A package that cannot be resolved, as on an install missing it.
+    const script = `
+      import {createRequire} from 'node:module';
+      const Module = createRequire(import.meta.url)('node:module');
+      const resolve = Module._resolveFilename;
+      Module._resolveFilename = function (request, ...rest) {
+        if (request === '@babel/parser') {
+          const error = new Error("Cannot find module '@babel/parser'");
+          error.code = 'MODULE_NOT_FOUND';
+          throw error;
+        }
+        return resolve.call(this, request, ...rest);
+      };
+      try {
+        await import(${JSON.stringify(
+          pathToFileURL(
+            path.join(CLI, 'foundation', 'runtime', 'lazy-dependencies.mjs'),
+          ).href,
+        )});
+        process.stdout.write('loaded');
+      } catch (error) {
+        process.stdout.write(String(error.code));
+      }
+    `;
+    const result = spawnSync(
+      process.execPath,
+      ['--input-type=module', '-e', script],
+      {encoding: 'utf8'},
+    );
+    expect(result.stdout, result.stderr).toBe('MODULE_NOT_FOUND');
+  }, 60_000);
+
   it('are not loaded by importing the API', () => {
     // Every package here is CommonJS, so a load shows in the require cache
     // (on every supported Node, unlike module hooks).

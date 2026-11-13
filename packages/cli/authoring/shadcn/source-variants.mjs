@@ -15,6 +15,15 @@ import * as path from 'node:path';
 // (The same packages foundation/runtime/lazy-dependencies.mjs loads, which
 // authoring/ may not import; each resolves to one file either way.)
 const require = createRequire(import.meta.url);
+// Resolved, not loaded: a missing package fails here, at import.
+for (const pkg of [
+  '@babel/core',
+  '@babel/parser',
+  'recast',
+  '@babel/plugin-transform-typescript',
+]) {
+  require.resolve(pkg);
+}
 /** @type {typeof import('@babel/core') | undefined} */
 let babelCore;
 /** @type {typeof import('@babel/parser') | undefined} */
