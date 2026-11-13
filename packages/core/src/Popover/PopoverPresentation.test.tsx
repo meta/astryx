@@ -566,8 +566,10 @@ describe('Popover presentation', () => {
     });
     // Never an alertdialog: the sheet always has a way out.
     expect(dialog).not.toHaveAttribute('role', 'alertdialog');
-    // The scrim is the dialog element itself.
+    // The scrim is the dialog element itself; the press starts and ends there.
     act(() => {
+      fireEvent.pointerDown(dialog, {pointerType: 'touch'});
+      fireEvent.pointerUp(dialog, {pointerType: 'touch'});
       fireEvent.click(dialog);
     });
     expect(onOpenChange).toHaveBeenLastCalledWith(false);

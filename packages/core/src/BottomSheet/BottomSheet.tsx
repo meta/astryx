@@ -859,7 +859,7 @@ function StandaloneBottomSheet({
     [dismissOnEscape, shouldDismissOnCloseRequest],
   );
   // A press on the ::backdrop targets the <dialog> itself. The press must
-  // start and end there (family:overlay-dismissal FR10).
+  // start and end there.
   const handleBackdropPress = useCallback(() => {
     dismissOnLightInteraction();
   }, [dismissOnLightInteraction]);

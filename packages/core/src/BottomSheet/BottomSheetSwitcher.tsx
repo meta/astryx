@@ -1001,11 +1001,16 @@ export function BottomSheetSwitcher({
   // A press on the ::backdrop targets the <dialog> itself. Only the active
   // sheet's backdrop is the flow's scrim; a retained dialog is inert and a
   // hidden one closed, so neither can be clicked, but be explicit. The press
-  // must start and end on the backdrop (family:overlay-dismissal FR10).
+  // must start and end on the backdrop.
   const handleScrimPress = useCallback(() => {
     dismissOnLightInteraction();
   }, [dismissOnLightInteraction]);
-  const scrimPress = useBackdropPress(
+  const {
+    onClick: onScrimClick,
+    onPointerDownCapture: onScrimPointerDownCapture,
+    onPointerUpCapture: onScrimPointerUpCapture,
+    onPointerCancelCapture: onScrimPointerCancelCapture,
+  } = useBackdropPress(
     handleScrimPress,
     hasScrim && isFlowOpen && allowsLightDismiss,
   );
@@ -1019,11 +1024,11 @@ export function BottomSheetSwitcher({
         onClick,
         (event: ReactMouseEvent<HTMLDialogElement>) => {
           if (event.currentTarget === hostDialogRef.current) {
-            scrimPress.onClick(event);
+            onScrimClick(event);
           }
         },
       ),
-    [onClick, scrimPress.onClick],
+    [onClick, onScrimClick],
   );
   const onDialogKeyDown = useMemo(
     () => composeEventHandlers(onKeyDown, handleKeyDown),
@@ -1033,28 +1038,28 @@ export function BottomSheetSwitcher({
     () =>
       chainEventHandlers((event: ReactPointerEvent<HTMLDialogElement>) => {
         if (event.currentTarget === hostDialogRef.current) {
-          scrimPress.onPointerDownCapture(event);
+          onScrimPointerDownCapture(event);
         }
       }, onPointerDownCapture),
-    [onPointerDownCapture, scrimPress.onPointerDownCapture],
+    [onPointerDownCapture, onScrimPointerDownCapture],
   );
   const onDialogPointerUpCapture = useMemo(
     () =>
       chainEventHandlers((event: ReactPointerEvent<HTMLDialogElement>) => {
         if (event.currentTarget === hostDialogRef.current) {
-          scrimPress.onPointerUpCapture(event);
+          onScrimPointerUpCapture(event);
         }
       }, onPointerUpCapture),
-    [onPointerUpCapture, scrimPress.onPointerUpCapture],
+    [onPointerUpCapture, onScrimPointerUpCapture],
   );
   const onDialogPointerCancelCapture = useMemo(
     () =>
       chainEventHandlers((event: ReactPointerEvent<HTMLDialogElement>) => {
         if (event.currentTarget === hostDialogRef.current) {
-          scrimPress.onPointerCancelCapture(event);
+          onScrimPointerCancelCapture(event);
         }
       }, onPointerCancelCapture),
-    [onPointerCancelCapture, scrimPress.onPointerCancelCapture],
+    [onPointerCancelCapture, onScrimPointerCancelCapture],
   );
 
   const contextValue = useMemo<BottomSheetSwitcherContextValue>(

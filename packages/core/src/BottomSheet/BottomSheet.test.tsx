@@ -39,6 +39,14 @@ import {__resetRevealsAtReportForTest} from '../keyboard/useMobileKeyboard';
 import {getKeyboardLayoutGuide} from '../keyboard/keyboardLayoutGuide';
 import {animatorFor} from '../motion/animator';
 
+// A press that starts and ends on the scrim: the browser targets the dialog
+// element with the pointer events and with the click.
+function pressScrim(dialog: HTMLElement) {
+  fireEvent.pointerDown(dialog);
+  fireEvent.pointerUp(dialog);
+  fireEvent.click(dialog);
+}
+
 // A sheet has no stops unless its host asks for them, so the tests that
 // exercise detents pass their own. These three — a 14% peek, a half-height
 // stop, and a 92% stop the Tall budget already covers — are the geometry the
@@ -1144,7 +1152,7 @@ describe('BottomSheet', () => {
           Content
         </BottomSheet>,
       );
-      fireEvent.click(screen.getByRole('dialog'));
+      pressScrim(screen.getByRole('dialog'));
       expect(onOpenChange).not.toHaveBeenCalled();
     });
 

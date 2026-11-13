@@ -32,6 +32,14 @@ import {
   subscribeScrollLock,
 } from '../hooks/rootScrollStyles';
 
+// A press that starts and ends on the scrim: the browser targets the dialog
+// element with the pointer events and with the click.
+function pressScrim(dialog: HTMLElement) {
+  fireEvent.pointerDown(dialog);
+  fireEvent.pointerUp(dialog);
+  fireEvent.click(dialog);
+}
+
 // jsdom implements no <dialog> presentation. The stubs record which open
 // dialogs are modal, standing in for the `:modal` pseudo-class jsdom cannot
 // match.
@@ -1994,7 +2002,7 @@ describe('BottomSheetSwitcher', () => {
       fireEvent.keyDown(confirmDialog, {key: 'Escape'});
       const cancel = new Event('cancel', {cancelable: true});
       confirmDialog.dispatchEvent(cancel);
-      fireEvent.click(confirmDialog);
+      pressScrim(confirmDialog);
 
       // Always prevented: the browser never closes a controlled dialog.
       expect(cancel.defaultPrevented).toBe(true);
@@ -2038,7 +2046,7 @@ describe('BottomSheetSwitcher', () => {
       // A click that is not on a backdrop, or on a dialog other than the
       // host's, dismisses nothing.
       fireEvent.click(screen.getByRole('button', {name: 'Inside'}));
-      fireEvent.click(getSheetDialog('a'));
+      pressScrim(getSheetDialog('a'));
       expect(onActiveSheetChange).toHaveBeenCalledTimes(2);
 
       // The composed cancel handler is on every sheet dialog, not the host
