@@ -8,7 +8,7 @@
  */
 
 import * as path from 'node:path';
-import {parse} from '@babel/parser';
+import {babelParse as parse} from '../../foundation/runtime/lazy-dependencies.mjs';
 import postcss from 'postcss';
 import {
   collectUnloadedFonts,

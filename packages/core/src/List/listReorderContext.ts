@@ -24,12 +24,12 @@
 import type {ItemAlign} from '../Item/Item';
 import {
   useMemo,
-  useRef,
   type ComponentType,
   type Key,
   type ReactNode,
   type RefObject,
 } from 'react';
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {sharedKey} from '../utils/sharedRealm';
 import type {Reorderable} from '../reorderable/createReorderable';
@@ -191,11 +191,10 @@ export function useReorderSession(
 ): ReorderSessionOf {
   const reorder = reorderable as ReorderableInternals | undefined;
   const engine = reorder?.[REORDER_ENGINE];
-  const getListRef = useRef(getList);
-  getListRef.current = getList;
+  const getListRef = useCommittedRef(getList);
   const session = useMemo(
     () => engine?.createSession(() => getListRef.current(), hintId) ?? null,
-    [engine, hintId],
+    [engine, hintId, getListRef],
   );
   return {session, options: reorder?.options ?? null};
 }
