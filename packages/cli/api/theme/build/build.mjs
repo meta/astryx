@@ -1441,7 +1441,8 @@ export function importSpecifier(relDir, base) {
   const normalized = relDir === '.' ? '.' : relDir.split(path.sep).join('/');
   const fromSrc = path.posix.relative('src', normalized.replace(/\/+$/, ''));
   if (!fromSrc) return `./${base}`;
-  return fromSrc.startsWith('..')
+  // Only a parent step (`..` or `../…`), never a folder named like `..cache`.
+  return fromSrc === '..' || fromSrc.startsWith('../')
     ? `${fromSrc}/${base}`
     : `./${fromSrc}/${base}`;
 }
@@ -5223,7 +5224,7 @@ export async function themeBuildFamily(
   const jsImport = importSpecifier(relOutDir, baseName);
   const cssImport = `${jsImport}.css`;
   logger.log(`
-Load the family CSS once, then select any member by theme identity:
+Load the family CSS once, then select any member by theme identity (paths are relative to a file in src/; adjust if yours lives elsewhere):
   import { ${themeBindings.join(', ')} } from '${jsImport}';
   import '${cssImport}';
 Or load the same stylesheet natively:

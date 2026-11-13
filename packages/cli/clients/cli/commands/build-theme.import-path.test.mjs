@@ -3,13 +3,10 @@
 /**
  * @file Regression test for `astryx theme build` install-instructions import paths.
  *
- * Covers the relDir-empty case: when the output directory equals the current
- * working directory, the relative dir is an empty string. Previously this
- * produced a double-slash import path like `from './/<name>'`. The build now
- * collapses the prefix to `./` so the emitted import is `from './<name>'`.
- *
- * Also covers the non-empty subdir case (`./<sub>/<name>`) to guard against
- * regressions in the opposite direction.
+ * The printed paths are relative to a file in src/, as the snippet's header
+ * says: an output in the project root is `../<name>` (never `.//<name>`), one
+ * in a folder beside src/ is `../<sub>/<name>`, one under src/ is
+ * `./<sub>/<name>`; a family build's snippet says the same.
  */
 
 import {describe, it, expect, beforeAll, beforeEach, afterEach} from 'vitest';
@@ -18,6 +15,10 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import {ensureCoreBuilt} from './ensure-core-built.mjs';
 import {runCli} from '../../../test-utils/run-cli.mjs';
+import {
+  makeLinkedFixture,
+  removeLinkedFixture,
+} from '../../../test-utils/linked-fixture.mjs';
 
 function writeTheme(dir, name) {
   fs.mkdirSync(dir, {recursive: true});
@@ -124,5 +125,45 @@ describe('theme build install-instructions import path', () => {
     expect(result.stdout).toContain("from '../themes/d/d'");
     expect(result.stdout).toContain("import '../themes/d/d.css'");
     expect(result.stdout).not.toContain("'./themes/d/d'");
+  });
+
+  it('a family outside src/ prints ../ paths under a header that says what they are relative to', async () => {
+    const project = makeLinkedFixture('astryx-family-import-', [
+      '@astryxdesign',
+    ]);
+    try {
+      const dir = path.join(project, 'themes');
+      fs.mkdirSync(dir, {recursive: true});
+      fs.writeFileSync(
+        path.join(project, 'package.json'),
+        '{"type":"module"}\n',
+      );
+      fs.writeFileSync(
+        path.join(dir, 'ocean.mjs'),
+        `import {defineTheme} from '@astryxdesign/core/theme';\nexport const oceanTheme = defineTheme({name: 'ocean', tokens: {'--color-background-body': '#ffffff'}});\n`,
+      );
+      fs.writeFileSync(
+        path.join(dir, 'ocean-calm.mjs'),
+        `import {defineTheme} from '@astryxdesign/core/theme';\nimport {oceanTheme} from './ocean.mjs';\nexport const oceanCalmTheme = defineTheme({name: 'ocean-calm', extends: oceanTheme, tokens: {'--color-background-body': '#eeeeee'}});\n`,
+      );
+      const result = await runCli(
+        [
+          'theme',
+          'build',
+          '--family',
+          'themes/ocean.mjs',
+          'themes/ocean-calm.mjs',
+          '--family-key',
+          'ocean-family',
+        ],
+        project,
+      );
+      expect(result.stdout).toContain("from '../themes/ocean-family'");
+      expect(result.stdout).toMatch(
+        /select any member by theme identity \(paths are relative to a file in src\/; adjust if yours lives elsewhere\):/,
+      );
+    } finally {
+      removeLinkedFixture(project);
+    }
   });
 });

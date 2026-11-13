@@ -4,8 +4,8 @@
  * @file Tests for the import specifier a theme build prints.
  * @input Output folders relative to the cwd, as path.relative gives them on
  *   this platform.
- * @output The specifier in the install snippet: `./` plus a `/`-joined path,
- *   relative to a file in src/.
+ * @output The specifier in the install snippet, relative to a file in src/:
+ *   `./…` for an output under src/, `../…` for one beside it, `/`-joined.
  * @position Unit coverage for importSpecifier in build.mjs.
  */
 
@@ -21,6 +21,11 @@ describe('importSpecifier', () => {
     expect(importSpecifier(path.join('themes', 'ocean'), 'ocean')).toBe(
       '../themes/ocean/ocean',
     );
+  });
+
+  it('reads only a parent step as one, never a folder named ..something', () => {
+    expect(importSpecifier('src/..cache', 'x')).toBe('./..cache/x');
+    expect(importSpecifier('..cache', 'x')).toBe('../..cache/x');
   });
 
   it('is relative to a file in src/', () => {
