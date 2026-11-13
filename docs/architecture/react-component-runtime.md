@@ -358,10 +358,12 @@ those contracts.
   with no overshoot; a date or time wheel turns by its keys, a mouse wheel's
   notches and a click on a row, at once, with no drag, no coast and no snap;
   Chat's dock moves with the layout at once instead of riding the on-screen
-  keyboard's slide. A gesture in that window does not start the load. The
-  bundler keeps one copy per page however many components use them. If the
-  runtime's chunk fails to load, the page stays as it is before the load:
-  components work by taps, clicks and keys, and no gesture retries the load.
+  keyboard's slide; a Slider takes a press on its track and a mouse drag on a
+  thumb through its pointer handlers, with no finger drag on a thumb, no lift
+  and no coast. A gesture in that window does not start the load. The bundler
+  keeps one copy per page however many components use them. If the runtime's
+  chunk fails to load, the page stays as it is before the load: components
+  work by taps, clicks and keys, and no gesture retries the load.
   `utils/touchRuntimeModules.tsx` is the one module the loader's `import()`
   targets; it gathers the touch runtime, so the loader names a single chunk.
   `motion/settleThreshold.ts` holds `SETTLE_THRESHOLD` apart from the
@@ -377,22 +379,18 @@ those contracts.
   arithmetic apart from the pager, so the date and time wheels read it without
   loading the pager. `hooks/actionGroupNeighbours.ts` holds the action-group
   target helpers apart from the tracking runtime, so a group's static code
-  finds its neighbours without loading gesture code. Gap: these modules still
-  import the shared touch modules statically, so a page that renders them
-  carries the touch runtime in its first load: Slider
-  (`sliderTouchController`). `@astryx/no-static-touch-runtime` reports any
-  other static path from a component into these modules; its allowlist names
-  exactly these imports and shrinks as they move behind the loader. A surface
-  revealed by interaction that a component loads with `import()` under
-  `architecture:component-import-boundaries` INV1 imports these modules
-  statically too; the bundler still keeps one copy per page. That `import()`
-  targets the surface module, never one of these modules, and it is not a
-  component lazy-loading its own touch code (`spec:AST-080` DEC-5). A touch
-  behavior that a caller opts into and that carries a large resource cost
-  comes through a public constructor whose module statically imports the
-  modules that behavior runs on; the component imports none of those, so only
-  an app that imports the constructor ships them
-  (`architecture:public-component-api` INV19). `useSnapPaging`
+  finds its neighbours without loading gesture code.
+  `@astryx/no-static-touch-runtime` reports any static path from a component
+  into these modules. A surface revealed by interaction that a component loads
+  with `import()` under `architecture:component-import-boundaries` INV1
+  imports these modules statically too; the bundler still keeps one copy per
+  page. That `import()` targets the surface module, never one of these
+  modules, and it is not a component lazy-loading its own touch code
+  (`spec:AST-080` DEC-5). A touch behavior that a caller opts into and that
+  carries a large resource cost comes through a public constructor whose
+  module statically imports the modules that behavior runs on; the component
+  imports none of those, so only an app that imports the constructor ships
+  them (`architecture:public-component-api` INV19). `useSnapPaging`
   (`@astryxdesign/core/SnapPaging`) is such an entry too: no component imports
   it, so only an app that imports it ships the pager. `Item`'s swipe actions
   come from `createSwipe` (`spec:AST-057` FR10): `Item` and `ListItem` import
