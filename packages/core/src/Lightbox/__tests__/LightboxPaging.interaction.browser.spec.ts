@@ -1732,7 +1732,7 @@ test('opening a gallery on a clamped caption lays out no more than opening one w
   ).toBeLessThanOrEqual(plain.layouts);
 });
 
-test('a tap on "more" takes exactly one forced layout, which places "less" in the first frame', async ({
+test('a tap on "more" takes exactly one forced layout', async ({
   page,
   browserName,
 }) => {
@@ -1754,7 +1754,7 @@ test('a tap on "more" takes exactly one forced layout, which places "less" in th
   await expect(dialog.getByRole('button', {name: 'less'})).toBeVisible();
   // The band cannot grow from its own resize report without looping, so the
   // tap lays the open caption out once, and "less" is placed before the
-  // first frame (component:Lightbox current-state impact, FR1).
+  // first frame.
   expect(tap.layouts, JSON.stringify(tap)).toBe(1);
 });
 
