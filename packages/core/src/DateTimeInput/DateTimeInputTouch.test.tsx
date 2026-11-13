@@ -512,6 +512,24 @@ describe('DateTimeInput touch surface', () => {
     expect(timeField()).toHaveValue('3:45 PM');
   });
 
+  it('keeps the hour and the date as the minute wheel passes its seam at 11:59 PM', () => {
+    const onChange = vi.fn();
+    render(
+      <DateTimeInput
+        label="Meeting"
+        value={'2026-03-21T23:59' as ISODateTimeString}
+        onChange={onChange}
+      />,
+    );
+    openDateSheet();
+    switchToTimePanel();
+
+    fireEvent.keyDown(screen.getByRole('listbox', {name: 'Minute'}), {
+      key: 'ArrowDown',
+    });
+    expect(onChange).toHaveBeenCalledWith('2026-03-21T23:00');
+  });
+
   it('clears an uncommitted time draft when Time Save closes without a date', () => {
     render(<DateTimeInput label="Meeting" onChange={() => {}} />);
     openTimeSheet();
@@ -719,6 +737,29 @@ describe('DateTimeInput touch surface', () => {
 
     fireEvent.click(optionIn('Second', '45'));
     expect(onChange).toHaveBeenCalledWith('2026-03-15T14:30:45');
+  });
+
+  it('keeps a bound with no whole minute when a date change clamps the drafted time', () => {
+    const onChange = vi.fn();
+    withMonthLayout(() => {
+      render(
+        <DateTimeInput
+          label="Meeting"
+          min={'2026-03-21T23:59:30' as ISODateTimeString}
+          onChange={onChange}
+        />,
+      );
+      openDateSheet();
+      switchToTimePanel();
+      fireEvent.click(optionIn('Hour', '3'));
+
+      fireEvent.click(screen.getByRole('radio', {name: 'Date'}));
+      fireEvent.click(
+        screen.getByRole('button', {name: 'Saturday, March 21, 2026'}),
+      );
+
+      expect(onChange).toHaveBeenLastCalledWith('2026-03-21T23:59:30');
+    });
   });
 
   it('disables out-of-range hours on the min/max boundary date', () => {

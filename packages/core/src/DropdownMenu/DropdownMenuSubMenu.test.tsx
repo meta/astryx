@@ -28,6 +28,7 @@ import {RadioList, RadioListItem} from '../RadioList';
 import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
 import {Theme, defineTheme} from '../theme';
 import {rtlStyles} from '../utils';
+import {TOUCH_QUERY} from '../utils/touchPresentation';
 
 beforeEach(() => {
   HTMLElement.prototype.showPopover = vi.fn(function (this: HTMLElement) {
@@ -1317,6 +1318,75 @@ describe('DropdownMenuSubMenu hover/click guard', () => {
 });
 
 describe('DropdownMenuSubMenu press model', () => {
+  const finger = (pointerId = 1) => ({pointerType: 'touch', pointerId});
+
+  it('a cancelled finger in a flyout clears its lit row as the root\u2019s does, on every device (spec:AST-094 FR28, FR43), presentation="popover" too', async () => {
+    const originalMatchMedia = window.matchMedia;
+    // A large screen, its primary pointer coarse (a tablet) or fine (a
+    // touchscreen laptop): the root is an anchored popover and its sub-menu
+    // flies out.
+    const stubPrimaryPointer = (coarse: boolean) =>
+      vi.stubGlobal(
+        'matchMedia',
+        vi.fn().mockImplementation((query: string) => ({
+          matches: coarse && query === TOUCH_QUERY,
+          media: query,
+          onchange: null,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        })),
+      );
+    try {
+      const litAfterCancel = async (presentation?: 'popover') => {
+        const user = userEvent.setup();
+        const {unmount} = render(
+          <DropdownMenu button={{label: 'Actions'}} presentation={presentation}>
+            <DropdownMenuItem label="Rename" onClick={() => {}} />
+            <DropdownMenuSubMenu label="Move to">
+              <DropdownMenuItem label="Folder A" onClick={() => {}} />
+              <DropdownMenuItem label="Folder B" onClick={() => {}} />
+            </DropdownMenuSubMenu>
+          </DropdownMenu>,
+        );
+        await user.click(screen.getByRole('button', {name: /Actions/}));
+        const trigger = screen.getByRole('menuitem', {
+          name: /Move to/,
+          hidden: true,
+        });
+        fireEvent.pointerDown(trigger, finger());
+        fireEvent.pointerUp(trigger, finger());
+        expect(trigger).toHaveAttribute('aria-expanded', 'true');
+        const folderA = screen.getByRole('menuitem', {
+          name: 'Folder A',
+          hidden: true,
+        });
+        const folderB = screen.getByRole('menuitem', {
+          name: 'Folder B',
+          hidden: true,
+        });
+        // A finger lands in the flyout and slides onto Folder B, which lights;
+        // then the browser takes the touch (a scroll, a system gesture).
+        fireEvent.pointerDown(folderA, finger(2));
+        fireEvent.pointerMove(folderB, finger(2));
+        expect(folderB).toHaveFocus();
+        fireEvent.pointerCancel(folderB, finger(2));
+        const lit = document.activeElement === folderB;
+        unmount();
+        return lit;
+      };
+      for (const coarse of [true, false]) {
+        stubPrimaryPointer(coarse);
+        expect(await litAfterCancel(), `coarse=${coarse}`).toBe(false);
+        expect(await litAfterCancel('popover'), `coarse=${coarse}`).toBe(false);
+      }
+    } finally {
+      vi.stubGlobal('matchMedia', originalMatchMedia);
+    }
+  });
+
   it('a press released on the sub-menu row opens it and keeps the menu', async () => {
     const user = userEvent.setup();
     render(<MoveMenu />);

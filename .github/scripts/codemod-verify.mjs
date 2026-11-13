@@ -14,12 +14,15 @@
  * 4. Report mismatches
  *
  * Exit 0 if codemods reproduce changes (or no consumer files changed).
- * Exit 1 if there are mismatches — callsites were hand-edited.
+ * Exit 1 if there are mismatches — callsites were hand-edited — unless the
+ * pull request carries the `allow-manual-edit` label: an owner exception that
+ * a maintainer applies (ALLOW_MANUAL_EDIT=true). It still lists every mismatch.
  */
 
 import {execSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {pathToFileURL} from 'node:url';
 import {getTransformsBetween} from '../../packages/cli/assets/codemods/registry.mjs';
 import {runCodemods} from '../../packages/cli/assets/codemods/runner.mjs';
 
@@ -261,7 +264,6 @@ async function main() {
   // codemod REMOVED from base is also absent in the PR, and every line it
   // ADDED is present in the PR. This allows the PR to contain additional
   // changes from stacked commits that are beyond the codemod's scope.
-  let mismatches = 0;
   let matches = 0;
   const mismatchDetails = [];
 
@@ -310,7 +312,6 @@ async function main() {
           `  ✅ ${file} (superset — PR includes codemod changes + additional edits)`,
         );
       } else {
-        mismatches++;
         const issues = [];
         if (missingRemovals.length > 0) {
           issues.push(
@@ -339,38 +340,63 @@ async function main() {
     }
   }
 
-  // Report
-  console.log(`\n${'='.repeat(60)}`);
-  console.log('Codemod Verification Results');
-  console.log('='.repeat(60));
-  console.log(`  Files verified: ${matches + mismatches}`);
-  console.log(`  ✅ Reproducible: ${matches}`);
-  console.log(`  ❌ Mismatches:   ${mismatches}`);
-
-  if (mismatches > 0) {
-    console.log(
-      '\nMismatched files (codemod changes not fully reflected in PR):',
-    );
-    for (const {file, diffLines, issues} of mismatchDetails) {
-      console.log(`  ❌ ${file} (${issues || diffLines + ' lines differ'})`);
-    }
-    console.log(
-      '\n⚠️  The codemod did not reproduce the committed consumer changes.',
-    );
-    console.log('This means either:');
-    console.log('  1. Callsites were hand-edited instead of using the codemod');
-    console.log('  2. The codemod is incomplete (add missing transforms)');
-    console.log(
-      '  3. Changes are intentionally beyond codemod scope (add allow-manual-edit label)',
-    );
-    process.exit(1);
-  }
-
-  console.log('\n✅ All consumer changes are reproducible by codemods.');
-  process.exit(0);
+  return report({
+    matches,
+    mismatchDetails,
+    allowed: process.env.ALLOW_MANUAL_EDIT === 'true',
+  });
 }
 
-main().catch(err => {
-  console.error('Codemod verification failed:', err);
-  process.exit(1);
-});
+/** The label a maintainer applies for an owner exception. */
+export const ALLOW_LABEL = 'allow-manual-edit';
+
+/**
+ * Prints the results and returns the exit code: 1 when the codemods did not
+ * reproduce every consumer change, 0 when they did or when `allowed`.
+ * @param {{matches: number, mismatchDetails: {file: string, diffLines: number, issues?: string}[], allowed: boolean, log?: (line: string) => void}} options
+ * @returns {0 | 1}
+ */
+export function report({matches, mismatchDetails, allowed, log = console.log}) {
+  const mismatches = mismatchDetails.length;
+  log(`\n${'='.repeat(60)}`);
+  log('Codemod Verification Results');
+  log('='.repeat(60));
+  log(`  Files verified: ${matches + mismatches}`);
+  log(`  ✅ Reproducible: ${matches}`);
+  log(`  ❌ Mismatches:   ${mismatches}`);
+
+  if (mismatches > 0) {
+    log('\nMismatched files (codemod changes not fully reflected in PR):');
+    for (const {file, diffLines, issues} of mismatchDetails) {
+      log(`  ❌ ${file} (${issues || diffLines + ' lines differ'})`);
+    }
+    log('\n⚠️  The codemod did not reproduce the committed consumer changes.');
+    log('This means either:');
+    log('  1. Callsites were hand-edited instead of using the codemod');
+    log('  2. The codemod is incomplete (add missing transforms)');
+    log(
+      `  3. Changes are intentionally beyond codemod scope (a maintainer adds the ${ALLOW_LABEL} label; it takes effect on the next push or a draft-and-ready toggle)`,
+    );
+    if (allowed) {
+      log(`\n✅ Mismatches allowed by ${ALLOW_LABEL} (owner exception).`);
+      return 0;
+    }
+    return 1;
+  }
+
+  log('\n✅ All consumer changes are reproducible by codemods.');
+  return 0;
+}
+
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
+  main().then(
+    code => process.exit(code),
+    err => {
+      console.error('Codemod verification failed:', err);
+      process.exit(1);
+    },
+  );
+}
