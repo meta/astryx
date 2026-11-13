@@ -25,7 +25,7 @@ import {AstryxError} from '../error.mjs';
 import {logger} from '../logger.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
-import {themeBuildForReport} from '../theme/build/build.mjs';
+import {oneColorMode, themeBuildForReport} from '../theme/build/build.mjs';
 import {
   AUTO_SPREAD,
   CORNERS,
@@ -4700,24 +4700,14 @@ export async function buildTheme(ctx, slug, data) {
  */
 export function buildColorModes(cwd, slug) {
   try {
-    return oneModeOf(
-      JSON.parse(fs.readFileSync(themeFiles(cwd, slug).settings, 'utf8')),
+    return oneColorMode(
+      modesOf(
+        JSON.parse(fs.readFileSync(themeFiles(cwd, slug).settings, 'utf8')),
+      ),
     );
   } catch {
     return null;
   }
-}
-
-/**
- * The one color mode of settings with one, or null.
- * @param {any} data
- * @returns {['light'] | ['dark'] | null}
- */
-function oneModeOf(data) {
-  const modes = modesOf(data);
-  return modes.length === 1 && (modes[0] === 'light' || modes[0] === 'dark')
-    ? [modes[0]]
-    : null;
 }
 
 /**
@@ -4741,7 +4731,11 @@ async function runBuild(ctx, slug, data) {
       {},
       {cwd},
       {compact: true},
-      {colorModes: data ? oneModeOf(data) : buildColorModes(cwd, slug)},
+      {
+        colorModes: data
+          ? oneColorMode(modesOf(data))
+          : buildColorModes(cwd, slug),
+      },
     );
     return receipt;
   } finally {

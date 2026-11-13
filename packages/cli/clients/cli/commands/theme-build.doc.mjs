@@ -26,7 +26,8 @@ export const doc = {
     'example and the font recipe, once for a batch. A source that also exports ' +
     "`colorModes` (`['light']` or `['dark']`) for a theme with one color mode gets " +
     'the same export in its built module, which `theme add` reads to wire the theme ' +
-    'in that mode.',
+    'in that mode; any other value is ignored without a warning, and a --family ' +
+    'build never writes the export.',
   fn: 'themeBuild',
   args: [{name: 'files', param: 'file', required: true, variadic: true}],
   options: [
