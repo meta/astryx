@@ -22,6 +22,7 @@ import {
   makeProject,
   run,
   keptTmp,
+  CACHE_NAME,
   freshTmp,
   entries,
   templatesEntries,
@@ -271,6 +272,87 @@ process.stdout.write(answer);
       fs.rmSync(dir, {recursive: true, force: true});
     }
   }, 60_000);
+  describe('a contribution added to a folder a nested kept entry listed', () => {
+    /** What to add to each root so the integration's checks report it. */
+    const broken = {
+      themes: (/** @type {string} */ root) => {
+        fs.mkdirSync(path.join(root, 'broken'), {recursive: true});
+        fs.writeFileSync(
+          path.join(root, 'broken', 'brokenTheme.doc.mjs'),
+          "export default {type: 'theme', name: 'broken', displayName: 'Broken', description: 'Broken.', maintained: true};\n",
+        );
+        fs.writeFileSync(
+          path.join(root, 'broken', 'brokenTheme.ts'),
+          "export const brokenTheme = {name: 'broken', tokens: {}};\n",
+        );
+      },
+      templates: (/** @type {string} */ root) =>
+        fs.writeFileSync(
+          path.join(root, 'broken.doc.mjs'),
+          "export default {type: 'page'};\n",
+        ),
+      components: (/** @type {string} */ root) =>
+        fs.writeFileSync(
+          path.join(root, 'Broken.doc.mjs'),
+          "export default {type: 'component'};\n",
+        ),
+      docs: (/** @type {string} */ root) =>
+        fs.writeFileSync(
+          path.join(root, 'broken.doc.mjs'),
+          "export const docs = {type: 'generic'};\n",
+        ),
+    };
+    const commands = [
+      ['component', 'Button'],
+      ['template', '--list'],
+      ['theme', 'list'],
+      ['search', 'running', 'totals'],
+    ];
+    for (const [root, add] of Object.entries(broken)) {
+      for (const ask of commands) {
+        it(`shows a broken entry added to ${root} on the next ${ask.join(' ')}`, () => {
+          const tmp = keptTmp(`nested-${root}-${ask[0]}`);
+          const other = makeProject();
+          try {
+            fs.writeFileSync(
+              path.join(other.widgets, 'astryx.integration.mjs'),
+              "export default {themes: './themes', templates: './templates', components: './components', docs: './docs'};\n",
+            );
+            for (const dir of ['themes', 'templates', 'components', 'docs']) {
+              fs.mkdirSync(path.join(other.widgets, dir), {recursive: true});
+            }
+            const at = (/** @type {string} */ where) =>
+              run(ask, {tmp: where, cwd: other.dir, json: false});
+            const inodes = () =>
+              new Map(
+                fs
+                  .readdirSync(path.join(tmp, CACHE_NAME))
+                  .filter(name => name.startsWith('gather-'))
+                  .map(name => [
+                    name,
+                    fs.statSync(path.join(tmp, CACHE_NAME, name)).ino,
+                  ]),
+              );
+            at(tmp);
+            at(tmp);
+            const warm = inodes();
+            expect(warm.size).toBeGreaterThan(0);
+            // The warm path hits: nothing is written again.
+            const before = at(tmp);
+            expect(inodes()).toEqual(warm);
+            add(path.join(other.widgets, root));
+            const after = at(tmp);
+            // The broken entry changes the answer, so equal to fresh shows it.
+            expect(after).not.toEqual(before);
+            expect(after).toEqual(at(freshTmp()));
+          } finally {
+            fs.rmSync(other.dir, {recursive: true, force: true});
+          }
+        }, 120_000);
+      }
+    }
+  });
+
   it('sees a template added or renamed after template discovery was kept inside search', () => {
     const tmp = keptTmp('nested-listing');
     const other = makeProject();
