@@ -7,7 +7,7 @@
  * project and integration modules. The project, integration and contribution
  * modules use them. A component lookup loads no code-rewrite package, which
  * only patching an integration manifest uses. A module hook in the child
- * records every module that the run resolves.
+ * records every module that the run loads (resolving a package loads none).
  */
 
 import {spawnSync} from 'node:child_process';
@@ -80,9 +80,9 @@ function packageOf(url) {
  * @returns {{status: number | null, packages: Set<string>, cliModules: Set<string>}}
  */
 function modulesLoadedBy(args) {
-  const log = path.join(dir, 'resolved.txt');
+  const log = path.join(dir, 'loaded.txt');
   fs.rmSync(log, {force: true});
-  const hook = path.join(dir, 'record-resolved.mjs');
+  const hook = path.join(dir, 'record-loaded.mjs');
   fs.writeFileSync(
     hook,
     [
@@ -96,7 +96,7 @@ function modulesLoadedBy(args) {
       '',
     ].join('\n'),
   );
-  const preload = path.join(dir, 'register-resolved.mjs');
+  const preload = path.join(dir, 'register-loaded.mjs');
   fs.writeFileSync(
     preload,
     [
@@ -161,7 +161,7 @@ describe('a run of the bin that prints the version', () => {
     const {status, packages, cliModules} = modulesLoadedBy(['--version']);
     expect(status).toBe(0);
     expect(packages.has('commander')).toBe(true);
-    expect(fs.readFileSync(path.join(dir, 'resolved.txt'), 'utf8')).toContain(
+    expect(fs.readFileSync(path.join(dir, 'loaded.txt'), 'utf8')).toContain(
       '/node_modules/commander/lib/command.js',
     );
     expect(cliModules.has('clients/cli/bin/astryx.mjs')).toBe(true);

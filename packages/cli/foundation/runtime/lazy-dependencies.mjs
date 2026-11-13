@@ -14,8 +14,9 @@
  *   modules that parse or rewrite sources, and most runs never parse one, so
  *   loading Babel and jscodeshift with them cost every importer about 350
  *   modules. Each package is still resolved when this module loads, which
- *   reads no module: a broken install without one fails at import, as
- *   before, never as a parse that quietly finds nothing.
+ *   reads no module, so every module that imports this loader needs all four
+ *   packages installed: a broken install without one fails when such a
+ *   module loads, never as a parse that quietly finds nothing.
  */
 
 import {createRequire} from 'node:module';
