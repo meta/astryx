@@ -66,13 +66,11 @@ function getColumnFallbackReason(
       ? 'a custom cell renderer has no single-line admission'
       : !(Number.isFinite(seed) && seed > 0)
         ? 'the inline viewport seed must be a positive finite CSS pixel width'
-        : input.isRowsWindowing
-          ? 'windowing rows and columns together comes in a later release'
-          : input.minWidth != null &&
-              resolveTableMinWidth(input.minWidth, floorMinWidth) !==
-                `${floorMinWidth}px`
-            ? 'a table min-width wider than the column floors changes the column pitch'
-            : undefined)
+        : input.minWidth != null &&
+            resolveTableMinWidth(input.minWidth, floorMinWidth) !==
+              `${floorMinWidth}px`
+          ? 'a table min-width wider than the column floors changes the column pitch'
+          : undefined)
   );
 }
 
@@ -126,6 +124,12 @@ function TableColumnWindow({
       isWindowed
         ? {
             segments,
+            cellCount: segments.reduce(
+              (count, segment) =>
+                count +
+                (segment.type === 'gap' ? 1 : segment.end - segment.start),
+              0,
+            ),
             // A windowed table renders at its minimum width, so each mounted
             // column takes its pitch in pixels: a percentage would resolve
             // against the spacers.
