@@ -86,8 +86,9 @@ export function hasStrongRightToLeft(text: string): boolean {
 }
 
 /**
- * Rules P2 and P3 of the Unicode Bidirectional Algorithm: the direction of
- * the first strongly directional character, or null when there is none. The
+ * Approximates rules P2 and P3 of the Unicode Bidirectional Algorithm from
+ * script and category: the direction of the first strongly directional
+ * character, or null when there is none. It does not skip isolated runs. The
  * loop reads whole code points, so a surrogate pair counts as one character.
  */
 export function firstStrongDirection(text: string): 'ltr' | 'rtl' | null {
