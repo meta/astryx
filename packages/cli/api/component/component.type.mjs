@@ -57,16 +57,6 @@
  */
 
 /**
- * A list read before `component()` adds `data.theme`.
- * @typedef {{type: 'component.list'; data: ComponentListData}} ComponentListRead
- */
-
-/**
- * A detail read before `component()` adds `data.theme`.
- * @typedef {Omit<ComponentDetailResponse, 'data'> & {data: Omit<ComponentDetailResponse['data'], 'theme'>}} ComponentDetailRead
- */
-
-/**
  * Detail-tagged payload for `component.list` (discriminated on `detail`).
  * @typedef {(
  *   | {detail: 'names'; components: Record<string, ComponentListEntry[]>}

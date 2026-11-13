@@ -193,6 +193,10 @@ export const doc = {
       when: 'the resolved component has no .doc.mjs typed doc file',
     },
     {
+      code: 'ERR_THEME_LOAD',
+      when: 'a detail or list read finds a recorded theme whose built module throws while it loads',
+    },
+    {
       code: 'ERR_INVALID_DOC',
       when: "the resolved component's .doc.mjs fails to load or validate",
     },

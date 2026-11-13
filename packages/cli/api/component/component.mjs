@@ -308,9 +308,9 @@ async function withComponentTheme(response, cwd) {
 /**
  * What a read returns before {@link component} adds `data.theme`.
  * @typedef {(
- *   | import('./component.type.mjs').ComponentListRead
+ *   | import('./_read.type.mjs').ComponentListRead
  *   | import('./component.type.mjs').ComponentBatchResponse
- *   | import('./component.type.mjs').ComponentDetailRead
+ *   | import('./_read.type.mjs').ComponentDetailRead
  *   | import('./component.type.mjs').ComponentDetailPropsResponse
  *   | import('./component.type.mjs').ComponentDetailSourceResponse
  *   | import('./component.type.mjs').ComponentDetailShowcaseResponse

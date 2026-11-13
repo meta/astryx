@@ -613,7 +613,7 @@ function withExampleKinds(examples) {
  * @param {OwnershipSubject} owner
  * @param {string} componentName
  * @param {string} coreDir
- * @returns {import('./component.type.mjs').ComponentDetailRead['data']}
+ * @returns {import('./_read.type.mjs').ComponentDetailRead['data']}
  */
 export function withOwnership(docs, owner, componentName, coreDir) {
   const importSpec =

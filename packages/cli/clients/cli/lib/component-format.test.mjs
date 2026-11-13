@@ -255,10 +255,10 @@ describe('formatBrief signature stays terse', () => {
 describe('theme custom-variant annotation', () => {
   // Regression guard: built themes never carried runtime variant
   // metadata, so every `themeData?.variants` read below was dead code and the
-  // `*` annotation could not fire for ANY built theme. `astryx theme build`
-  // now exports `themeVariants: { [componentKey]: { [prop]: value[] } }`
-  // beside the built theme; these tests pin the annotation rendering each
-  // value under the prop that accepts it.
+  // `*` annotation could not fire for ANY built theme. The theme lookup reads
+  // a `themeVariants: { [componentKey]: { [prop]: value[] } }` export beside
+  // the built theme; these tests pin the annotation rendering each value under
+  // the prop that accepts it.
   const docs = {
     name: 'Badge',
     description: 'A badge.',

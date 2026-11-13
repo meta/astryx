@@ -264,17 +264,29 @@ export function registerComponent(program) {
       // The api layer already resolved against core (result exists), so core is
       // present on this path; narrow away the null branch findCoreDir allows.
       const coreDir = /** @type {string} */ (findCoreDir(process.cwd()));
-      let themeData;
-      try {
-        themeData = await resolveTheme(process.cwd());
-      } catch (error) {
-        const message =
-          error instanceof Error
-            ? error.message.split('\n', 1)[0]?.trim() || error.name
-            : String(error);
-        return cliError(`Could not load the recorded theme: ${message}`, {
-          code: ERROR_CODES.ERR_THEME_LOAD,
-        });
+      // Only the views that print theme values load the theme, the same
+      // reads for which component() returns data.theme.
+      const printsTheme =
+        result.type === 'component.detail' ||
+        result.type === 'component.list' ||
+        (result.type === 'component.batch' &&
+          result.data.results.some(
+            row =>
+              row.status === 'found' && row.result.type === 'component.detail',
+          ));
+      let themeData = null;
+      if (printsTheme) {
+        try {
+          themeData = await resolveTheme(process.cwd());
+        } catch (error) {
+          const message =
+            error instanceof Error
+              ? error.message.split('\n', 1)[0]?.trim() || error.name
+              : String(error);
+          return cliError(`Could not load the recorded theme: ${message}`, {
+            code: ERROR_CODES.ERR_THEME_LOAD,
+          });
+        }
       }
 
       // Footer shared by the compact + names list views (prose → text()).

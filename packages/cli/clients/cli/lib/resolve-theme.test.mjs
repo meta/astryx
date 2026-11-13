@@ -535,8 +535,13 @@ describe('component output with a broken recorded theme', () => {
       const text = runComponent(dir, args);
       expect(text.status, text.stderr).toBe(0);
       expect(text.stdout).not.toBe('');
-      expect(text.stderr).toContain('multi-theme package @acme/themes');
-      expect(text.stderr.match(/⚠ theme:/gu) ?? []).toHaveLength(1);
+      if (type === 'component.list') {
+        expect(text.stderr).toContain('multi-theme package @acme/themes');
+        expect(text.stderr.match(/⚠ theme:/gu) ?? []).toHaveLength(1);
+      } else {
+        // A view that prints no theme value does not load the theme.
+        expect(text.stderr).not.toContain('⚠ theme:');
+      }
       expect(text.stderr).not.toMatch(/\n\s+at /u);
 
       const json = runComponent(dir, ['--json', ...args]);
@@ -569,6 +574,24 @@ describe('component output with a broken recorded theme', () => {
         name: 'ocean',
         values: {},
       });
+      expect(json.stderr).toBe('');
+    },
+    30_000,
+  );
+
+  it.each([
+    ['props', ['component', 'Button', '--props']],
+    ['source', ['component', 'Button', '--source']],
+    ['showcase', ['component', 'Button', '--showcase']],
+    ['blocks', ['component', 'Button', '--blocks']],
+  ])(
+    'answers a %s read with a theme that throws, in text and JSON alike',
+    (projection, args) => {
+      const dir = brokenThemeProject('runtime');
+      const text = runComponent(dir, args);
+      expect(text.status, text.stderr).toBe(0);
+      const json = runComponent(dir, ['--json', ...args]);
+      expect(json.status, json.stderr).toBe(0);
       expect(json.stderr).toBe('');
     },
     30_000,

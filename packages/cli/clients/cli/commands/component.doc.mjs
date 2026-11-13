@@ -97,7 +97,7 @@ export const doc = {
     {code: 0, when: 'success'},
     {
       code: 1,
-      when: 'unknown component, category, or package; more than 100 selectors; any batch row is unresolved; or @astryxdesign/core cannot be resolved',
+      when: 'unknown component, category, or package; more than 100 selectors; any batch row is unresolved; @astryxdesign/core cannot be resolved; or a detail, list, or batch read finds a recorded theme that throws while it loads',
     },
   ],
   related: ['search', 'hook', 'docs', 'template', 'swizzle'],
