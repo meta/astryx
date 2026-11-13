@@ -79,7 +79,6 @@ import {
   printBatchTrailer,
   printCompactTrailer,
   setEditorFolderListener,
-  setPrivateVarErrorListener,
   themeBuildFamily,
   themeBuildForReport,
   themeBuildWithHandOff,
@@ -1196,10 +1195,6 @@ function registerThemeCommands(theme, program, docs, words) {
           );
         });
       }
-      let privateVarError = false;
-      setPrivateVarErrorListener(() => {
-        privateVarError = true;
-      });
 
       const refused = await words.preflight?.(files, {
         cwd: process.cwd(),
@@ -1224,13 +1219,12 @@ function registerThemeCommands(theme, program, docs, words) {
           );
           if (json) jsonOut(result);
           if (
-            privateVarError ||
-            (result.type === 'theme.build.check' &&
-              !(
-                /** @type {import('../../../api/theme/theme.type.mjs').ThemeBuildCheckResponse} */ (
-                  result
-                ).data.upToDate
-              ))
+            result.type === 'theme.build.check' &&
+            !(
+              /** @type {import('../../../api/theme/theme.type.mjs').ThemeBuildCheckResponse} */ (
+                result
+              ).data.upToDate
+            )
           ) {
             process.exitCode = 1;
           }
@@ -1422,10 +1416,8 @@ function registerThemeCommands(theme, program, docs, words) {
         );
       }
 
-      // Private-variable diagnostics are build failures even though the released
-      // output and generated files stay unchanged. Stale --check output is also
-      // a failure after its receipt has been emitted.
-      if (privateVarError || (options.check && stale)) {
+      // Stale --check output is a failure after its receipt has been emitted.
+      if (options.check && stale) {
         process.exitCode = 1;
       }
 

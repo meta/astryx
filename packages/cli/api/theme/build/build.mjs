@@ -1129,22 +1129,6 @@ export function setEditorFolderListener(listener) {
 }
 
 /**
- * Who is told a build found private var errors (the CLI, to exit 1). Set
- * only by the CLI, never by an option of themeBuild.
- * @type {(() => void) | null}
- */
-let privateVarErrorListener = null;
-
-/**
- * Tell `listener` when a build in this process finds private var errors.
- * CLI-internal.
- * @param {(() => void) | null} listener
- */
-export function setPrivateVarErrorListener(listener) {
-  privateVarErrorListener = listener;
-}
-
-/**
  * A build's mode flags: what it does (`--check` compares, never writes) and
  * where (`--out`), carried into every build command a refusal suggests.
  * @typedef {{check?: boolean, out?: string, iconsSpecifier?: string}} BuildMode
@@ -4036,16 +4020,15 @@ async function themeBuildInternal(
     logger.warn(`  [warn] ${source}${w}`);
   }
 
-  // Validate no private vars are set directly
+  // A theme that sets a private var directly is refused before anything is
+  // written (a --check too): it is not a theme the build accepts, so no
+  // output, receipt or success may say otherwise.
   const privateVarErrors = validatePrivateVars(themeDef);
-  for (const e of privateVarErrors) {
-    warningMessages.push(e);
-    logger.error(`  [error] ${source}${e}`);
-  }
   if (privateVarErrors.length > 0) {
-    privateVarErrorListener?.();
-    logger.error(
-      `\n  ${source}${privateVarErrors.length} private var error(s). Use standard CSS properties instead.`,
+    throw new AstryxError(
+      `${privateVarErrors.map(e => `${source}${e}`).join('\n')}\n${privateVarErrors.length} private var error(s). Use standard CSS properties instead.`,
+      undefined,
+      ERROR_CODES.ERR_THEME_INVALID,
     );
   }
 
