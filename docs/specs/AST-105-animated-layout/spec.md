@@ -98,7 +98,9 @@ const animatedLayout = useAnimatedLayout({containerRef: scrollRef});
   tokens, never a spring, and no character or option plays a
   platform-measured curve for it (`spec:AST-094` FR45). A gesture's release
   settles on `spec:AST-094`'s spring from its release velocity; curve tokens
-  govern glides that no gesture releases. Both start on the same frame, and
+  govern glides that no gesture releases. A reorder drop starts no such
+  settle: each row it moves glides from its place before the drag, at rest,
+  on the curve tokens (`spec:AST-103` FR3). Both start on the same frame, and
   Reduce Motion reaches both, as `design:reduced-motion` DR1–DR3
   require: a cross-fade under a coarse primary pointer, an immediate change
   otherwise.
