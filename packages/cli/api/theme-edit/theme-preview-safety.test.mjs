@@ -31,7 +31,7 @@ import {
   themeEditPreviewRemove,
   themeEditShow,
 } from './theme-edit.mjs';
-import {stopPreviewCommitAt} from './_preview-app.mjs';
+import {setImporterScanMax, stopPreviewCommitAt} from './_preview-app.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
 import {
   makeLinkedFixture,
@@ -1991,26 +1991,27 @@ describe('final pass 5', () => {
     );
   }, 240_000);
 
-  it('brings the default pages back for a default page id', async () => {
+  it('adds back just the default page its id names, and refuses one already there', async () => {
     await themeEditPreviewAdd(undefined, {
       cwd,
       theme: 'sea',
       path: 'src/app/dp',
     });
     await themeEditPreviewRemove('overview', {cwd, path: 'src/app/dp'});
-    for (const r of [
-      await themeEditPreviewAdd('overview', {cwd, path: 'src/app/dp'}),
-      await themeEditPreviewAdd(undefined, {
+    const r = await themeEditPreviewAdd('overview', {cwd, path: 'src/app/dp'});
+    expect(r.data.added).toEqual(['overview']);
+    expect(r.data.pages).toContain('overview');
+    const there = await refusal(() =>
+      themeEditPreviewAdd(undefined, {
         cwd,
         path: 'src/app/dp',
         template: 'Components',
       }),
-    ]) {
-      expect(r.data.pages).toContain('overview');
-      expect(r.data.notes.join(' ')).toContain(
-        "a default page's id brings back the default pages",
-      );
-    }
+    );
+    expect(there.code).toBe('ERR_FILE_EXISTS');
+    expect(there.message).toContain(
+      'The components page is already in the preview',
+    );
     rm('src/app/dp');
   }, 120_000);
 
@@ -2031,14 +2032,14 @@ describe('final pass 5', () => {
         expect(r.code, d).toBe('ERR_INVALID_ARGUMENT');
         expect(r.message, d).toContain('drop one of them');
       }
-      const colors = await themeEditPreviewAdd('colors', {
-        cwd,
-        path: 'src/app/m1',
-      });
-      expect(colors.data.pages).not.toContain('colors');
-      expect(colors.data.notes.join(' ')).toContain(
-        'sea has none yet; it appears once it does: astryx experimental theme editor set sea accent <color>',
+      const colors = await refusal(() =>
+        themeEditPreviewAdd('colors', {cwd, path: 'src/app/m1'}),
       );
+      expect(colors.code).toBe('ERR_NOT_FOUND');
+      expect(colors.message).toContain(
+        'There is no Colors page to add: sea has no generated colors yet',
+      );
+      expect(colors.run[0]).toContain('editor set sea accent');
     } finally {
       rm('src/app/m1');
     }
@@ -2748,4 +2749,90 @@ describe('final pass 5', () => {
       rm('src/app/r22');
     }
   }, 180_000);
+
+  it('keeps pages any project file imports, anywhere and however written, and the route a file re-exports', async () => {
+    await themeEditPreviewAdd(undefined, {cwd, path: 'src/app/z1'});
+    write(
+      'components/lazy.tsx',
+      'export const Lazy = () => import(`../src/app/z1/_pages/components`);\n',
+    );
+    try {
+      const one = await refusal(() =>
+        themeEditPreviewRemove('components', {cwd, path: 'src/app/z1'}),
+      );
+      expect(one.message).toContain(
+        'components/lazy.tsx imports the components page',
+      );
+      rm('components');
+      write('src/app/again/page.tsx', "export {default} from '../z1/page';\n");
+      const all = await refusal(() =>
+        themeEditPreviewRemove(undefined, {cwd, path: 'src/app/z1'}),
+      );
+      expect(all.message).toContain(
+        'src/app/again/page.tsx imports the preview pages',
+      );
+      rm('src/app/again');
+      // Past the files it reads, nothing is removed, and the refusal says so.
+      setImporterScanMax(1);
+      try {
+        const big = await refusal(() =>
+          themeEditPreviewRemove(undefined, {cwd, path: 'src/app/z1'}),
+        );
+        expect(big.message).toContain('too many to check');
+        expect(exists('src/app/z1/page.tsx')).toBe(true);
+      } finally {
+        setImporterScanMax(null);
+      }
+      // A temp file a killed command left goes with the full remove.
+      write('src/app/z1/.page.tsx.astryx-999999-abc123.tmp', 'x');
+      await themeEditPreviewRemove(undefined, {cwd, path: 'src/app/z1'});
+      expect(exists('src/app/z1')).toBe(false);
+    } finally {
+      rm('components');
+      rm('src/app/again');
+      rm('src/app/z1');
+    }
+  }, 240_000);
+
+  it('adds exactly a default page named with --template, or says it is there, and tells a hand-edited route to move out', async () => {
+    await themeEditPreviewAdd(undefined, {cwd, path: 'src/app/z4'});
+    try {
+      await themeEditPreviewRemove('overview', {cwd, path: 'src/app/z4'});
+      await themeEditPreviewRemove('components', {
+        cwd,
+        path: 'src/app/z4',
+      }).catch(() => null);
+      const r = await themeEditPreviewAdd(undefined, {
+        cwd,
+        template: 'overview',
+        path: 'src/app/z4',
+      });
+      expect(r.data.added).toEqual(['overview']);
+      const again = await refusal(() =>
+        themeEditPreviewAdd(undefined, {
+          cwd,
+          template: 'overview',
+          path: 'src/app/z4',
+        }),
+      );
+      expect(again.code).toBe('ERR_FILE_EXISTS');
+      expect(again.message).toContain(
+        'The overview page is already in the preview',
+      );
+      await themeEditPreviewAdd(undefined, {
+        cwd,
+        template: 'login',
+        path: 'src/app/z4',
+      });
+      write('src/app/z4/page.tsx', `${read('src/app/z4/page.tsx')}\n// mine\n`);
+      const edited = await refusal(() =>
+        themeEditPreviewRemove('login', {cwd, path: 'src/app/z4'}),
+      );
+      expect(edited.message + JSON.stringify(edited)).toContain(
+        'move src/app/z4/page.tsx out of src/app/z4/',
+      );
+    } finally {
+      rm('src/app/z4');
+    }
+  }, 240_000);
 });

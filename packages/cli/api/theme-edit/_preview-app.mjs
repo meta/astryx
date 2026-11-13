@@ -2137,7 +2137,9 @@ function checkWrite(cwd, dir, data, w, elsewhere) {
       E.ERR_FILE_EXISTS,
       `${name} was changed by hand after the preview wrote it, so it is not replaced.`,
       {
-        fix: `copy your changes out of ${name}, then give it another name, and run the command again`,
+        // A copy renamed in the folder would still import the preview's
+        // pages and break when they go: it moves out, importing none.
+        fix: `move ${name} out of ${shownDir(cwd, dir)}/ (copy what you changed somewhere else in the app, importing nothing from the preview folder), then run the command again`,
       },
     );
   return 'replace';
@@ -2335,27 +2337,53 @@ function commitStep(step) {
   if (stopAt?.(step)) throw STOPPED;
 }
 
+/** Folders the importer search never enters: installs and build output. */
+const NOT_SOURCE = new Set([
+  'node_modules',
+  'out',
+  'dist',
+  'build',
+  'coverage',
+]);
+
+/** At most this many source files are read; past it, nothing is deleted. */
+let IMPORTER_SCAN_MAX = 50000;
+
 /**
- * Files of the app's own that import preview pages, so deleting those pages
- * would break the app's build: every source file under the routes folder
- * and src/ (node_modules, .next and dot folders left out; the preview's own
- * files too), with each import resolved (relative, `@/`, or a tsconfig
- * `paths` alias). Project-relative paths, sorted.
- * @param {string} cwd
- * @param {{dir: string, app: string | null}} at
- * @param {PreviewData} data
- * @param {PreviewPage[]} pages the pages about to be deleted
- * @returns {string[]}
+ * For tests: read at most `n` source files when checking for importers
+ * (null: the default).
+ * @param {number | null} n
  */
-function pageImporters(cwd, at, data, pages) {
-  const targets = new Set(pages.map(p => path.join(at.dir, p.file)));
-  if (!targets.size) return [];
-  const own = new Set(data.files.map(f => path.join(at.dir, f)));
+export function setImporterScanMax(n) {
+  IMPORTER_SCAN_MAX = n ?? 50000;
+}
+
+/**
+ * Files of the project's own that import any of `targets` (preview files
+ * about to be deleted), so deleting them would break the app's build. The
+ * whole project root is read: every .ts/.tsx/.js/.jsx/.mjs/.cjs/.mdx file
+ * outside node_modules, build output and dot folders, the preview's own
+ * files left out. Each file's import and export-from declarations,
+ * import() and require() calls (a string or a template with no
+ * substitution) are read from its syntax tree and resolved: relative,
+ * `@/`, or a tsconfig `paths` alias. `tooBig` when the project holds more
+ * source files than are read, so the caller refuses instead of guessing.
+ * @param {string} cwd
+ * @param {PreviewData} data
+ * @param {string} dir the preview folder
+ * @param {string[]} targets absolute paths, without extension
+ * @returns {{importers: string[], tooBig: boolean}}
+ */
+function pageImporters(cwd, data, dir, targets) {
+  const wanted = new Set(targets);
+  if (!wanted.size) return {importers: [], tooBig: false};
+  const names = [...new Set(targets.map(t => path.basename(t)))];
+  const own = new Set(data.files.map(f => path.join(dir, f)));
   const aliases = tsconfigAliases(cwd);
   /** @type {Set<string>} */
   const out = new Set();
-  const seen = new Set();
-  let budget = 5000;
+  let files = 0;
+  let tooBig = false;
   /** @param {string} file @param {string} spec */
   const resolves = (file, spec) => {
     const alias = aliases.find(x => spec.startsWith(x.prefix));
@@ -2366,44 +2394,127 @@ function pageImporters(cwd, at, data, pages) {
         : spec.startsWith('.')
           ? [path.resolve(path.dirname(file), spec)]
           : [];
-    return bases.some(b => targets.has(b.replace(/\.(tsx|ts|jsx|js)$/, '')));
+    return bases.some(
+      b =>
+        wanted.has(b.replace(/\.(tsx|ts|jsx|js|mjs|cjs)$/, '')) ||
+        wanted.has(path.join(b, 'index')),
+    );
   };
-  /** @param {string} dir */
-  const walk = dir => {
-    if (seen.has(dir) || budget <= 0) return;
-    seen.add(dir);
+  /** @param {any} node @param {(spec: string) => void} found */
+  const specifiers = (node, found) => {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      for (const x of node) specifiers(x, found);
+      return;
+    }
+    const text = (/** @type {any} */ n) =>
+      n?.type === 'StringLiteral'
+        ? n.value
+        : n?.type === 'TemplateLiteral' && n.expressions.length === 0
+          ? n.quasis.map((/** @type {any} */ q) => q.value.cooked).join('')
+          : null;
+    if (
+      (node.type === 'ImportDeclaration' ||
+        node.type === 'ExportNamedDeclaration' ||
+        node.type === 'ExportAllDeclaration') &&
+      node.source
+    ) {
+      const t = text(node.source);
+      if (t != null) found(t);
+    } else if (node.type === 'ImportExpression') {
+      const t = text(node.source);
+      if (t != null) found(t);
+    } else if (
+      node.type === 'CallExpression' &&
+      (node.callee?.type === 'Import' ||
+        (node.callee?.type === 'Identifier' && node.callee.name === 'require'))
+    ) {
+      const t = text(node.arguments?.[0]);
+      if (t != null) found(t);
+    } else if (
+      node.type === 'TSImportType' ||
+      node.type === 'TSExternalModuleReference'
+    ) {
+      const t = text(node.argument ?? node.expression);
+      if (t != null) found(t);
+    }
+    for (const [k, v] of Object.entries(node))
+      if (
+        k !== 'loc' &&
+        k !== 'start' &&
+        k !== 'end' &&
+        v &&
+        typeof v === 'object'
+      )
+        specifiers(v, found);
+  };
+  /** @param {string} at */
+  const walk = at => {
+    if (tooBig) return;
     /** @type {fs.Dirent[]} */
     let entries;
     try {
-      entries = fs.readdirSync(dir, {withFileTypes: true});
+      entries = fs.readdirSync(at, {withFileTypes: true});
     } catch {
       return;
     }
     for (const e of entries) {
-      const full = path.join(dir, e.name);
+      const full = path.join(at, e.name);
       if (e.isDirectory()) {
-        if (e.name !== 'node_modules' && !e.name.startsWith('.')) walk(full);
+        if (!NOT_SOURCE.has(e.name) && !e.name.startsWith('.')) walk(full);
+        if (tooBig) return;
         continue;
       }
-      if (!/\.(tsx|ts|jsx|js|mjs)$/.test(e.name) || own.has(full)) continue;
-      if (--budget <= 0) return;
-      try {
-        const text = fs.readFileSync(full, 'utf8');
-        for (const m of text.matchAll(
-          /(?:from\s*|import\s*\(\s*|import\s+)['"]([^'"]+)['"]/g,
-        ))
-          if (resolves(full, m[1])) {
-            out.add(shown(cwd, full));
-            break;
-          }
-      } catch {
-        // Unreadable: not one that imports the pages, as far as can be told.
+      if (!/\.(tsx|ts|jsx|js|mjs|cjs|mdx)$/.test(e.name) || own.has(full))
+        continue;
+      if (e.name.endsWith('.d.ts')) continue;
+      if (++files > IMPORTER_SCAN_MAX) {
+        tooBig = true;
+        return;
       }
+      /** @type {string} */
+      let source;
+      try {
+        source = fs.readFileSync(full, 'utf8');
+      } catch {
+        continue;
+      }
+      // Only a file that names a target's file name can import it.
+      if (!names.some(n => source.includes(n))) continue;
+      /** @type {string[]} */
+      const specs = [];
+      try {
+        const ast = parseModule(
+          e.name.endsWith('.mdx')
+            ? source
+                .split('\n')
+                .filter(l => /^\s*(import|export)\b/.test(l))
+                .join('\n')
+            : source,
+          {
+            sourceType: 'unambiguous',
+            errorRecovery: true,
+            plugins: [
+              'jsx',
+              ...(/\.(ts|tsx|mts|cts)$/.test(e.name)
+                ? [/** @type {const} */ ('typescript')]
+                : []),
+            ],
+          },
+        );
+        specifiers(ast.program, spec => specs.push(spec));
+      } catch {
+        // Not parsed: read its import strings as text.
+        for (const m of source.matchAll(
+          /(?:from\s*|import\s*\(\s*|require\s*\(\s*|import\s+)['"`]([^'"`$]+)['"`]/g,
+        ))
+          specs.push(m[1]);
+      }
+      if (specs.some(sp => resolves(full, sp))) out.add(shown(cwd, full));
     }
   };
-  for (const root of [at.dir, at.app, path.join(cwd, 'src')])
-    if (root) walk(root);
-  return [...out].sort();
+  walk(cwd);
+  return {importers: [...out].sort(), tooBig};
 }
 
 /**
@@ -2464,6 +2575,29 @@ function pendingEscapes(dir, p) {
 }
 
 /**
+ * Delete the temp files a preview command left in a preview folder, found
+ * by the names only the editor makes (`.<file>.astryx-<pid>-<id>.tmp`),
+ * once their process is gone.
+ * @param {string} dir
+ */
+function sweepTemps(dir) {
+  for (const sub of ['', PAGES_DIR, LEGACY_PAGES_DIR]) {
+    /** @type {string[]} */
+    let names;
+    try {
+      names = fs.readdirSync(path.join(dir, sub));
+    } catch {
+      continue;
+    }
+    for (const name of names) {
+      const m = /^\..+\.astryx-(\d+)-[a-z0-9]+\.tmp$/.exec(name);
+      if (m && (!alive(Number(m[1])) || Number(m[1]) === process.pid))
+        fs.rmSync(path.join(dir, sub, name), {force: true});
+    }
+  }
+}
+
+/**
  * Finish a preview change that was stopped part way (a kill), from the
  * step record it left: its leftover temp files go; each file it was writing
  * keeps the hash of what is on disk when that is the new or the old text,
@@ -2483,22 +2617,7 @@ function recoverPreview(cwd, dir) {
   // Unreadable, or naming a path outside the folder: the change is
   // treated as never started.
   const abandon = () => {
-    // Its temp files are found by the names only the editor makes, when
-    // their process is gone.
-    for (const sub of ['', PAGES_DIR, LEGACY_PAGES_DIR]) {
-      /** @type {string[]} */
-      let names;
-      try {
-        names = fs.readdirSync(path.join(dir, sub));
-      } catch {
-        continue;
-      }
-      for (const name of names) {
-        const m = /^\..+\.astryx-(\d+)-[a-z0-9]+\.tmp$/.exec(name);
-        if (m && !alive(Number(m[1])))
-          fs.rmSync(path.join(dir, sub, name), {force: true});
-      }
-    }
+    sweepTemps(dir);
     fs.rmSync(pendingFile, {force: true});
     const strays = unrecordedPages(dir).map(rel =>
       shown(cwd, path.join(dir, rel)),
@@ -2508,7 +2627,12 @@ function recoverPreview(cwd, dir) {
   try {
     p = JSON.parse(fs.readFileSync(pendingFile, 'utf8'));
   } catch (e) {
-    if (/** @type {any} */ (e)?.code === 'ENOENT') return null;
+    // No step record: temp files a stopped command left (one killed before
+    // it wrote the record) go, once their process is gone.
+    if (/** @type {any} */ (e)?.code === 'ENOENT') {
+      sweepTemps(dir);
+      return null;
+    }
     return abandon();
   }
   if (pendingEscapes(dir, p)) return abandon();
@@ -3728,7 +3852,7 @@ async function addPreview(description, options, box) {
       ? ` --theme ${quoteCommandArgument(options.theme)}`
       : '';
   // A default page's id (overview, components, colors), as `remove` takes
-  // it, asks for the default pages back: the same as a bare add.
+  // it, adds exactly that page back (or is refused, saying why).
   const DEFAULT_IDS = ['overview', 'components', COLORS_PAGE.id];
   const isDefault = (/** @type {unknown} */ v) =>
     typeof v === 'string' && DEFAULT_IDS.includes(v.trim().toLowerCase());
@@ -3922,6 +4046,33 @@ async function addPreview(description, options, box) {
           label: COLORS_PAGE.label,
           text: colors.source,
         });
+    }
+    // A default page named on its own adds exactly that page, when it is
+    // not there yet.
+    if (askedId != null) {
+      const there = data.pages.find(p => p.id === askedId);
+      if (there && fs.existsSync(path.join(at.dir, `${there.file}.tsx`)))
+        refuse(
+          E.ERR_FILE_EXISTS,
+          `The ${askedId} page is already in the preview; it is kept up to date as the theme changes.`,
+          {run: [`${PREVIEW} list${pf}`]},
+        );
+      if (!add.some(a => a.id === askedId))
+        refuse(
+          E.ERR_NOT_FOUND,
+          askedId === COLORS_PAGE.id
+            ? `There is no Colors page to add: ${data.theme ? `${data.theme} has no generated colors yet` : "the preview wears the app's own theme, and the page shows an editor theme's colors"}.`
+            : `The ${askedId} page cannot be added here.`,
+          {
+            run:
+              askedId === COLORS_PAGE.id && data.theme
+                ? [
+                    `${EDITOR} set ${data.theme} accent "#7c3aed"  # then add it again`,
+                  ]
+                : [`${PREVIEW} list${pf}`],
+          },
+        );
+      add.splice(0, add.length, ...add.filter(a => a.id === askedId));
     }
   } else {
     const flags = `${tf}${pf}`;
@@ -4638,13 +4789,31 @@ async function removePreview(page, options, box) {
   // whole preview.
   {
     const going = one && data.pages.length > 1 ? [one] : data.pages;
-    const importers = pageImporters(cwd, at, data, going);
+    // The whole preview takes its route and layout too, which other files
+    // may import (a re-export at another URL).
+    const targets = [
+      ...going.map(p => path.join(at.dir, p.file)),
+      ...(going === data.pages
+        ? data.files
+            .filter(f => /^(page|layout)\.(tsx|ts|jsx|js)$/.test(f))
+            .map(f => path.join(at.dir, f.replace(/\.[a-z]+$/, '')))
+        : []),
+    ];
+    const {importers, tooBig} = pageImporters(cwd, data, at.dir, targets);
+    if (tooBig)
+      refuse(
+        E.ERR_INVALID_ARGUMENT,
+        `This project holds more than ${IMPORTER_SCAN_MAX} source files, too many to check that none of them imports ${going.length > 1 ? 'the preview pages' : 'the page'}, so nothing was removed.`,
+        {
+          fix: `delete ${folder}/ by hand once nothing imports from it`,
+        },
+      );
     if (importers.length)
       refuse(
         E.ERR_FILE_EXISTS,
         `${importers.slice(0, 3).join(', ')}${importers.length > 3 ? ` and ${importers.length - 3} more` : ''} ${importers.length > 1 ? 'import' : 'imports'} ${going.length > 1 ? 'the preview pages' : `the ${going[0]?.id} page`}, and the preview did not write ${importers.length > 1 ? 'them' : 'it'}, so removing ${going.length > 1 ? 'them' : 'it'} would break the app's build.`,
         {
-          fix: `stop ${importers.length > 1 ? 'those files' : importers[0]} importing ${going.length > 1 ? 'the preview pages' : 'the page'} (or move what ${importers.length > 1 ? 'they need' : 'it needs'} out of ${folder}/), then run ${PREVIEW} remove${one ? ` ${one.id}` : ''}${pf} again`,
+          fix: `stop ${importers.length > 1 ? 'those files' : importers[0]} importing from ${folder}/ (copy what ${importers.length > 1 ? 'they need' : 'it needs'} out of it first), then run ${PREVIEW} remove${one ? ` ${one.id}` : ''}${pf} again`,
         },
       );
   }
@@ -4858,6 +5027,7 @@ async function removePreview(page, options, box) {
         {run: [`${retry(options.path ?? null)}  # once the cause is fixed`]},
       );
     }
+  sweepTemps(at.dir);
   tidyPageFolders(at.dir);
   // Files the record does not list stay: the preview never deletes what it
   // has no record of writing. Each is named, so the folder left is no
