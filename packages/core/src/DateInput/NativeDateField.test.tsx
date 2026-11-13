@@ -1011,35 +1011,35 @@ describe('DateInput native rejected entries', () => {
     expect(statusText(container)).toBe('');
   });
 
+  /** A caller that restores the date it had when the edit began, at blur. */
+  function RestoringDateInput() {
+    const [value, setValue] = useState<ISODateString | undefined>('2026-03-15');
+    const [editStartValue, setEditStartValue] = useState(value);
+    return (
+      <>
+        <DateInput
+          label="Date"
+          min="2026-03-10"
+          max="2026-03-20"
+          value={value}
+          onChange={setValue}
+          onFocus={() => setEditStartValue(value)}
+          onBlur={() => {
+            if (value !== editStartValue) {
+              setValue(editStartValue);
+            }
+          }}
+        />
+        <output data-testid="value">{value ?? ''}</output>
+        <button type="button" onClick={() => setValue('2026-03-18')}>
+          Replace
+        </button>
+      </>
+    );
+  }
+
   it('keeps a refused date shown when the caller restores its value at the blur that shows it', () => {
     stubPointer(true);
-    function RestoringDateInput() {
-      const [value, setValue] = useState<ISODateString | undefined>(
-        '2026-03-15',
-      );
-      const [editStartValue, setEditStartValue] = useState(value);
-      return (
-        <>
-          <DateInput
-            label="Date"
-            min="2026-03-10"
-            max="2026-03-20"
-            value={value}
-            onChange={setValue}
-            onFocus={() => setEditStartValue(value)}
-            onBlur={() => {
-              if (value !== editStartValue) {
-                setValue(editStartValue);
-              }
-            }}
-          />
-          <output data-testid="value">{value ?? ''}</output>
-          <button type="button" onClick={() => setValue('2026-03-18')}>
-            Replace
-          </button>
-        </>
-      );
-    }
     const {container} = render(<RestoringDateInput />);
     const input = getInput();
     fireEvent.focus(input);
@@ -1056,6 +1056,22 @@ describe('DateInput native rejected entries', () => {
     fireEvent.click(screen.getByRole('button', {name: 'Replace'}));
     expect(input).not.toHaveAttribute('aria-invalid');
     expect(statusText(container)).toBe('');
+  });
+
+  it('keeps a refused date that Enter showed when the caller restores its value at the next blur', () => {
+    stubPointer(true);
+    const {container} = render(<RestoringDateInput />);
+    const input = getInput();
+    fireEvent.focus(input);
+    fireEvent.change(input, {target: {value: '2026-03-12'}});
+    fireEvent.change(input, {target: {value: '2026-03-25'}});
+    fireEvent.keyDown(input, {key: 'Enter'});
+    expect(statusText(container)).toBe(RANGE_MESSAGE);
+
+    fireEvent.blur(input);
+    expect(screen.getByTestId('value')).toHaveTextContent('2026-03-15');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(statusText(container)).toBe(RANGE_MESSAGE);
   });
 
   it('hides a shown rejection while disabled, and shows it again once editable', () => {

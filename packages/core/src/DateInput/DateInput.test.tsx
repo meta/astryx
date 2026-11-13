@@ -2250,10 +2250,12 @@ function recordAssertiveAnnouncements(): string[] {
 function RestoringDateInput({
   initialValue,
   nextValue,
+  restoresOnEnter = true,
   ...props
 }: Omit<DateInputProps, 'label' | 'value' | 'onChange'> & {
   initialValue: ISODateString;
   nextValue: ISODateString;
+  restoresOnEnter?: boolean;
 }) {
   const [value, setValue] = useState<ISODateString | undefined>(initialValue);
   const [editStartValue, setEditStartValue] = useState(value);
@@ -2271,7 +2273,7 @@ function RestoringDateInput({
         onFocus={() => setEditStartValue(value)}
         onBlur={restore}
         onKeyDown={event => {
-          if (event.key === 'Enter') {
+          if (event.key === 'Enter' && restoresOnEnter) {
             restore();
           }
         }}
@@ -3078,6 +3080,33 @@ describe('DateInput rejected entries', () => {
       expect(statusText(container)).toBe('');
     },
   );
+
+  it('keeps text that Enter kept when the caller restores its value at the next blur, and reports nothing', () => {
+    const onEntryErrorChange = vi.fn();
+    const {container} = render(
+      <RestoringDateInput
+        initialValue="2026-01-25"
+        nextValue="2026-03-20"
+        restoresOnEnter={false}
+        onEntryErrorChange={onEntryErrorChange}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    fireEvent.focus(input);
+    fireEvent.change(input, {target: {value: '02/14/2026'}});
+    fireEvent.change(input, {target: {value: 'tomorrowish'}});
+    fireEvent.keyDown(input, {key: 'Enter'});
+    expect(screen.getByTestId('value')).toHaveTextContent('2026-02-14');
+
+    fireEvent.blur(input);
+    expect(screen.getByTestId('value')).toHaveTextContent('2026-01-25');
+    expect(input).toHaveValue('tomorrowish');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(statusText(container)).toBe(INVALID);
+    expect(onEntryErrorChange.mock.calls).toEqual([
+      [{kind: 'unreadable', text: 'tomorrowish'}],
+    ]);
+  });
 
   it('reports a retyped date again after the caller restores its value at the blur that keeps the text', () => {
     render(
