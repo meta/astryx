@@ -964,6 +964,8 @@ export const StuckHoverCardInModal: Story = {
  * The Tooltip side of the same contract. The tip is pinned open by the app
  * inside a modal; Escape reaches the tip, which calls `onOpenChange(false)`,
  * and this app's update hides it. The modal stays open — one press, one layer.
+ * A pointer or focus leave from the trigger asks the same way, and this app
+ * agrees to that too.
  */
 function PinnedTooltipInModalExample() {
   const [isOpen, setIsOpen] = useState(false);
@@ -990,7 +992,7 @@ function PinnedTooltipInModalExample() {
           header={
             <DialogHeader
               title="Modal with a pinned tooltip"
-              subtitle="The app holds the tip open — Escape asks it to close, and this app agrees"
+              subtitle="The app holds the tip open — Escape or leaving the trigger asks it to close, and this app agrees"
               onOpenChange={setIsOpen}
             />
           }
