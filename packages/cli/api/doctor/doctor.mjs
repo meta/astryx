@@ -126,6 +126,7 @@ import {
 } from './_adapter.mjs';
 import {checkBuilt} from './built-checks.mjs';
 import {coreOnlyDocNames} from '../../foundation/bases/core-docs.mjs';
+import {coreBase} from '../../foundation/bases/core.mjs';
 import {
   CLI_PROVIDER_ID,
   CORE_PROVIDER_ID,
@@ -149,6 +150,8 @@ import {
  * @property {string} cwd - Directory to diagnose.
  * @property {string} nodeVersion - Running Node version.
  * @property {string|null} coreDir - Resolved core package directory, or null.
+ * @property {import('../../foundation/bases/resolve.mjs').ActiveBase} [base]
+ *   The base the project's run reads; Core when absent.
  * @property {boolean} [ownCli] - Whether the project installs its own CLI;
  *   false means the copy that started the run answered it (spec AST-081 FR2).
  * @property {string[]} [addedThemePackages] - Packages of the project's added
@@ -330,6 +333,23 @@ export function checkCoreInstalled(ctx) {
       : {
           fix: 'Install the design system: `npm install @astryxdesign/core` (or yarn/pnpm/bun).',
         }),
+  };
+}
+
+/**
+ * The active base is installed and resolvable, in a project whose base is
+ * not Core. A project on Core has {@link checkCoreInstalled} instead.
+ * @param {DoctorContext} ctx
+ * @returns {DoctorCheck | null}
+ */
+export function checkBaseInstalled(ctx) {
+  if (ctx.base == null || ctx.base.core) return null;
+  const {name, version} = ctx.base;
+  return {
+    id: 'base-installed',
+    label: `${name} installed`,
+    status: 'pass',
+    message: `${name}, the active base, resolved${version ? ` (v${version})` : ''}.`,
   };
 }
 
@@ -2350,6 +2370,7 @@ export function checkGatherCache() {
 export const SYNC_CHECKS = [
   checkNodeVersion,
   checkCoreInstalled,
+  checkBaseInstalled,
   checkVersionAlignment,
   checkImplicitIntegrations,
   checkConfiguredIntegrations,
@@ -2364,6 +2385,18 @@ export const SYNC_CHECKS = [
   checkCliCommand,
   checkGatherCache,
 ];
+
+/**
+ * The checks that read Core. A project whose base is not Core reads no Core,
+ * so they are left out of it, with the `themes` check, which counts Core's
+ * theme packages.
+ * @type {ReadonlySet<(ctx: DoctorContext) => DoctorCheck | null>}
+ */
+const CORE_CHECKS = new Set([
+  checkCoreInstalled,
+  checkVersionAlignment,
+  checkPeerDeps,
+]);
 
 /**
  * Run all diagnostic checks and return a structured report.
@@ -2559,26 +2592,31 @@ export async function runChecks(options = {}) {
     projectError,
     iconSets,
     iconPlaceholders,
+    base: project?.base.ok ? project.base.base : coreBase(),
   };
+  const readsCore = ctx.base?.core !== false;
 
   /** @type {DoctorCheck[]} */
   const checks = [];
   // Run the theme checks and config check after the environment checks. The
   // released `themes` check keeps its place, ahead of the app-theme checks.
   for (const fn of SYNC_CHECKS) {
-    const check = fn(ctx);
+    const check = readsCore || !CORE_CHECKS.has(fn) ? fn(ctx) : null;
     if (check) checks.push(check);
     if (fn === checkVersionAlignment) {
       const appThemeChecks = await checkAppThemes(cwd);
-      // The wiring scan reads only files and modules (the app's source, the
-      // themes and the packages that declare them) and runs nothing, so it is
-      // kept like the docs checks.
-      const wiring = await keptFileCheck(
-        {name: 'theme-wiring', cwd, coreDir: coreDir ?? null},
-        () => themeImportWiring(cwd),
-        THEME_WIRING_CODEC,
-      );
-      checks.push(checkThemes(cwd, appThemeChecks, wiring), ...appThemeChecks);
+      if (readsCore) {
+        // The wiring scan reads only files and modules (the app's source, the
+        // themes and the packages that declare them) and runs nothing, so it
+        // is kept like the docs checks.
+        const wiring = await keptFileCheck(
+          {name: 'theme-wiring', cwd, coreDir: coreDir ?? null},
+          () => themeImportWiring(cwd),
+          THEME_WIRING_CODEC,
+        );
+        checks.push(checkThemes(cwd, appThemeChecks, wiring));
+      }
+      checks.push(...appThemeChecks);
       checks.push(await checkConfig(ctx));
     }
   }

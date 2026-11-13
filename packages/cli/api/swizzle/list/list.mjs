@@ -9,6 +9,7 @@
  */
 
 import {CORE_PACKAGE, resolveCore} from '../_adapter.mjs';
+import {runBase} from '../../../foundation/bases/resolve.mjs';
 
 /**
  * List swizzlable components discoverable from `cwd`'s @astryxdesign/core.
@@ -17,5 +18,11 @@ import {CORE_PACKAGE, resolveCore} from '../_adapter.mjs';
  */
 export function swizzleList(cwd = process.cwd()) {
   const {components} = resolveCore(cwd);
-  return {type: 'swizzle.list', package: CORE_PACKAGE, data: components};
+  // The list names the run's base, the package its items come from.
+  const run = runBase(cwd);
+  return {
+    type: 'swizzle.list',
+    package: run.ok ? run.base.name : CORE_PACKAGE,
+    data: components,
+  };
 }

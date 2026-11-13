@@ -56,8 +56,10 @@ import {resolveProviders} from '../../foundation/integrations/provider-resolutio
 import {warnOnIntegrationIssues} from '../../foundation/integrations/integration-warnings.mjs';
 import {logger} from '../logger.mjs';
 import {currentNonCoreBase} from '../../foundation/bases/state.mjs';
+import {runBase, splitForBase} from '../../foundation/bases/resolve.mjs';
 
 /** The package that owns Core's components, hooks, and codemods. */
+import {CORE_PROVIDER_ID} from '../../foundation/identity/providers.mjs';
 export {CORE_PROVIDER_ID as CORE_PACKAGE} from '../../foundation/identity/providers.mjs';
 
 // Re-exported for the run leaf's lightweight agent-docs inspection path
@@ -192,18 +194,28 @@ function rebaseDeclaration(rebase) {
 }
 
 /**
+ * Earlier names a base's package was published under.
+ * @type {Record<string, string[]>}
+ */
+const LEGACY_NAMES = {[CORE_PROVIDER_ID]: ['@xds/core']};
+
+/**
  * Detect the installed target version: the Core the Astryx project of `cwd`
  * installed, in its own node_modules or, for a member its workspace lists, in
  * a folder up to the workspace root. The nearest folder wins, the current
  * name before the legacy one, then Yarn Plug'n'Play. A Core above a project
  * no workspace lists does not count, so a nested project that has not
  * installed its own reports nothing installed. With no Astryx project, only
- * the node_modules of `cwd` itself is read, as released versions did.
+ * the node_modules of `cwd` itself is read, as released versions did. The
+ * package read is the run's base: Core, or the base a project or `--base`
+ * names.
  * @param {string} cwd
  * @returns {{version: string, packageName: string}|null}
  */
 export function detectInstalledTargetVersion(cwd) {
-  const found = findProjectPackageOf(cwd, ['@astryxdesign/core', '@xds/core']);
+  const run = runBase();
+  const name = run.ok ? run.base.name : CORE_PROVIDER_ID;
+  const found = findProjectPackageOf(cwd, [name, ...(LEGACY_NAMES[name] ?? [])]);
   if (!found) return null;
   try {
     const pkg = JSON.parse(
@@ -763,7 +775,7 @@ export async function loadProjectContext(cwd, extraIntegrationSpecs = []) {
       : // Resolved from the project, as --integration names a package it
         // installed, not from whichever folder the process started in.
         await loadIntegrations(extraSpecs, {cwd, resolveProviders: false});
-  const {integrations, ledger} = resolveProviders(
+  const resolved = resolveProviders(
     [
       ...candidates,
       ...installed.map(integration => ({
@@ -779,6 +791,12 @@ export async function loadProjectContext(cwd, extraIntegrationSpecs = []) {
     ],
     {codemods: true, prior: providerLedgerOf(project)},
   );
+  const {ledger} = resolved;
+  // Only integrations that are the run's base or build on it run codemods,
+  // the --integration packages included.
+  const integrations = project.base.ok
+    ? splitForBase(resolved.integrations, project.base.base).kept
+    : resolved.integrations;
   return {
     postCodemodHooks,
     integrations,
