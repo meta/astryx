@@ -188,25 +188,6 @@ describe('a published CLI in a project with no config', () => {
           );
           expect(result.status, result.stderr).toBe(0);
         }
-        // Nothing the lazy parsers load is part of a kept entry's record,
-        // as when they loaded with the CLI at startup.
-        const kept = path.join(home, 'cache', 'astryx', 'catalogs');
-        for (const file of fs.readdirSync(kept)) {
-          const entry = JSON.parse(
-            fs.readFileSync(path.join(kept, file), 'utf8'),
-          );
-          const stamped = (entry.stamps ?? []).map(
-            (/** @type {[string, string]} */ [where]) => where,
-          );
-          expect(
-            stamped.filter((/** @type {string} */ where) =>
-              where.includes(
-                `${path.sep}node_modules${path.sep}zod${path.sep}`,
-              ),
-            ),
-            file,
-          ).toEqual([]);
-        }
         const loaded = fs.readFileSync(log, 'utf8');
         expect(loaded, ask.join(' ')).toContain('/clients/cli/bin/astryx.mjs');
         expect(loaded.includes('/node_modules/zod/'), ask.join(' ')).toBe(

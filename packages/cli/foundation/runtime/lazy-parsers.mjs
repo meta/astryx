@@ -15,12 +15,9 @@
  *   the very module an `import` of it gives, so there is one zod and one set
  *   of schemas whichever way a module is reached (test/lazy-parsers.test.mjs
  *   checks it). zod is imported only by authoring/ modules, never required.
- *   What they load is left out of a kept gather's record, as it was when they
- *   loaded with the CLI at startup (withoutModuleRecords).
  */
 
 import {createRequire} from 'node:module';
-import {withoutModuleRecords} from '../fs/gather-cache.mjs';
 
 const require = createRequire(import.meta.url);
 
@@ -29,54 +26,34 @@ const loaded = {};
 
 /** @returns {typeof import('../../authoring/doctypes/parse.mjs')} */
 const doctypes = () =>
-  (loaded.doctypes ??= withoutModuleRecords(() =>
-    require('../../authoring/doctypes/parse.mjs'),
-  ));
+  (loaded.doctypes ??= require('../../authoring/doctypes/parse.mjs'));
 /** @returns {typeof import('../../authoring/doctypes/template/parse.mjs')} */
 const templates = () =>
-  (loaded.templates ??= withoutModuleRecords(() =>
-    require('../../authoring/doctypes/template/parse.mjs'),
-  ));
+  (loaded.templates ??= require('../../authoring/doctypes/template/parse.mjs'));
 /** @returns {typeof import('../../authoring/doctypes/theme/parse.mjs')} */
 const themes = () =>
-  (loaded.themes ??= withoutModuleRecords(() =>
-    require('../../authoring/doctypes/theme/parse.mjs'),
-  ));
+  (loaded.themes ??= require('../../authoring/doctypes/theme/parse.mjs'));
 /** @returns {typeof import('../../authoring/doctypes/icon-definition/parse.mjs')} */
 const iconDefinitions = () =>
-  (loaded.iconDefinitions ??= withoutModuleRecords(() =>
-    require('../../authoring/doctypes/icon-definition/parse.mjs'),
-  ));
+  (loaded.iconDefinitions ??= require('../../authoring/doctypes/icon-definition/parse.mjs'));
 /** @returns {typeof import('../../authoring/doctypes/icon-set/parse.mjs')} */
 const iconSetModule = () =>
-  (loaded.iconSetModule ??= withoutModuleRecords(() =>
-    require('../../authoring/doctypes/icon-set/parse.mjs'),
-  ));
+  (loaded.iconSetModule ??= require('../../authoring/doctypes/icon-set/parse.mjs'));
 /** @returns {typeof import('../../authoring/config/parse.mjs')} */
 const config = () =>
-  (loaded.config ??= withoutModuleRecords(() =>
-    require('../../authoring/config/parse.mjs'),
-  ));
+  (loaded.config ??= require('../../authoring/config/parse.mjs'));
 /** @returns {typeof import('../../authoring/integration/schema.mjs')} */
 const integration = () =>
-  (loaded.integration ??= withoutModuleRecords(() =>
-    require('../../authoring/integration/schema.mjs'),
-  ));
+  (loaded.integration ??= require('../../authoring/integration/schema.mjs'));
 /** @returns {typeof import('../../authoring/gap-report/parse.mjs')} */
 const gapReport = () =>
-  (loaded.gapReport ??= withoutModuleRecords(() =>
-    require('../../authoring/gap-report/parse.mjs'),
-  ));
+  (loaded.gapReport ??= require('../../authoring/gap-report/parse.mjs'));
 /** @returns {typeof import('../../authoring/discover/parse.mjs')} */
 const discover = () =>
-  (loaded.discover ??= withoutModuleRecords(() =>
-    require('../../authoring/discover/parse.mjs'),
-  ));
+  (loaded.discover ??= require('../../authoring/discover/parse.mjs'));
 /** @returns {typeof import('../../authoring/codemod/parse.mjs')} */
 const codemods = () =>
-  (loaded.codemods ??= withoutModuleRecords(() =>
-    require('../../authoring/codemod/parse.mjs'),
-  ));
+  (loaded.codemods ??= require('../../authoring/codemod/parse.mjs'));
 
 /** @type {typeof import('../../authoring/doctypes/parse.mjs').parseDoc} */
 export const parseDoc = (...args) => doctypes().parseDoc(...args);
@@ -120,3 +97,47 @@ export const parseDiscoverSource = (...args) =>
   discover().parseDiscoverSource(...args);
 /** @type {typeof import('../../authoring/codemod/parse.mjs').parseCodemod} */
 export const parseCodemod = (...args) => codemods().parseCodemod(...args);
+
+/**
+ * Load every parser module now, through `import`, for a run that will
+ * validate anyway: one in a project where an integration can load, whose
+ * manifests are always checked. The modules then load as they did when the
+ * CLI imported them at startup, and a later parser call finds its module
+ * loaded.
+ * @returns {Promise<void>}
+ */
+export async function loadParsers() {
+  const [
+    doctypesModule,
+    templatesModule,
+    themesModule,
+    iconDefinitionsModule,
+    iconSetsModule,
+    configModule,
+    integrationModule,
+    gapReportModule,
+    discoverModule,
+    codemodsModule,
+  ] = await Promise.all([
+    import('../../authoring/doctypes/parse.mjs'),
+    import('../../authoring/doctypes/template/parse.mjs'),
+    import('../../authoring/doctypes/theme/parse.mjs'),
+    import('../../authoring/doctypes/icon-definition/parse.mjs'),
+    import('../../authoring/doctypes/icon-set/parse.mjs'),
+    import('../../authoring/config/parse.mjs'),
+    import('../../authoring/integration/schema.mjs'),
+    import('../../authoring/gap-report/parse.mjs'),
+    import('../../authoring/discover/parse.mjs'),
+    import('../../authoring/codemod/parse.mjs'),
+  ]);
+  loaded.doctypes ??= doctypesModule;
+  loaded.templates ??= templatesModule;
+  loaded.themes ??= themesModule;
+  loaded.iconDefinitions ??= iconDefinitionsModule;
+  loaded.iconSetModule ??= iconSetsModule;
+  loaded.config ??= configModule;
+  loaded.integration ??= integrationModule;
+  loaded.gapReport ??= gapReportModule;
+  loaded.discover ??= discoverModule;
+  loaded.codemods ??= codemodsModule;
+}

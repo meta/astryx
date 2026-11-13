@@ -38,7 +38,8 @@ import * as path from 'node:path';
 import {LOCAL_THEME_ROOT} from './theme-state.mjs';
 import {loadModuleWithParser} from '../fs/module-loader.mjs';
 import {findConfigPath} from './config-path.mjs';
-import {parseConfig} from '../runtime/lazy-parsers.mjs';
+import {loadParsers, parseConfig} from '../runtime/lazy-parsers.mjs';
+import {mayHaveIntegrations} from '../integrations/may-have-integrations.mjs';
 import {
   loadIntegrations,
   loadLocalIntegration,
@@ -505,6 +506,9 @@ export class Project {
     const resolvedCache = fresh
       ? new InMemoryConfigCache()
       : (cache ?? new InMemoryConfigCache());
+    // Where an integration can load, its manifest is checked, so the parsers
+    // load now, together, as they did at startup.
+    if (mayHaveIntegrations(cwd)) await loadParsers();
     const configPath = findConfigPath(cwd);
     const hash = configContentHash(configPath);
     // The project root: the config's directory when there is one (findConfigPath
