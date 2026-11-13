@@ -33,7 +33,7 @@ import {
   resolveThemeModule,
   SOURCE_EXTENSIONS,
   doctorStylesheetImportFile,
-  generatedFileCommand,
+  fileMark,
   generatedSourceCommand,
   isPrivateVarRefusal,
   missingThemePackage,
@@ -41,9 +41,6 @@ import {
   themeBuild,
   themeRecordOwner,
   validateThemePrivateInputs,
-  GENERATED_MARKER,
-  APP_COPY_MARK,
-  EDITOR_GENERATED_MARK,
 } from './_adapter.mjs';
 import {
   getCliInvocation,
@@ -122,11 +119,14 @@ function refreshThemeCommand(projectDir, run, available, slug, owner) {
     ? relative(projectDir, path.join(theme.sourceDir, theme.entry))
     : projectPath(path.join(owner, slug, `${slug}Theme.ts`));
   // A source another command generates (its leading comment carries that
-  // command's mark), or a missing one in a folder whose files do: `theme
-  // build` refuses or cannot build it; the command that made it writes it.
+  // command's mark), or a missing one that command writes: the fix is that
+  // command, which writes the source and its outputs together.
   const by = generatedSourceCommand(path.resolve(projectDir, source));
+  // The exact command its mark names, run the way this project runs the CLI.
   if (by)
-    return `Rebuild ${projectPath(path.dirname(source))}/ with the command that made it (${by}), then run ${run} theme add ${slug}`;
+    return /^astryx\s/.test(by)
+      ? `${run} ${by.replace(/^astryx\s+/, '')}; ${run} theme add ${slug}`
+      : `Rebuild ${projectPath(path.dirname(source))}/ with ${by}, then run ${run} theme add ${slug}`;
   return `${run} theme build ${source}; ${run} theme add ${slug}`;
 }
 
@@ -234,12 +234,7 @@ function sourceImportEvidence(root, generatedModule) {
  * @param {string} source
  */
 function generatedThemeFile(source) {
-  const leading =
-    /^\s*(?:\/\*[\s\S]*?\*\/|(?:\/\/[^\n]*(?:\n|$)\s*)+)/.exec(source)?.[0] ??
-    '';
-  return [GENERATED_MARKER, EDITOR_GENERATED_MARK, APP_COPY_MARK].some(m =>
-    leading.includes(m),
-  );
+  return fileMark(source) != null;
 }
 
 /**
@@ -468,6 +463,7 @@ function namedThemeFonts(files) {
 function fontStylesheetEvidence(css, file, seen = new Set()) {
   const loaded = new Set();
   let external = false;
+  let unread = false;
   const root = postcss.parse(css);
   root.walkAtRules(atRule => {
     if (atRule.name.toLowerCase() === 'import') {
@@ -477,11 +473,13 @@ function fontStylesheetEvidence(css, file, seen = new Set()) {
         return;
       }
       const target = file ? doctorStylesheetImportFile(spec, file) : null;
-      if (!target || seen.has(target) || seen.size > 20) {
-        // A local import that does not resolve loads nothing doctor can
-        // see; it is no font service.
+      if (!target) {
+        // A local import doctor cannot follow may load the font: it
+        // cannot prove it either way.
+        unread = true;
         return;
       }
+      if (seen.has(target) || seen.size > 20) return;
       seen.add(target);
       try {
         const inner = fontStylesheetEvidence(
@@ -491,8 +489,9 @@ function fontStylesheetEvidence(css, file, seen = new Set()) {
         );
         for (const name of inner.loaded) loaded.add(name);
         external ||= inner.external;
+        unread ||= inner.unread;
       } catch {
-        // A stylesheet that does not read loads nothing doctor can see.
+        unread = true;
       }
       return;
     }
@@ -501,7 +500,7 @@ function fontStylesheetEvidence(css, file, seen = new Set()) {
       loaded.add(normalizeFontName(declaration.value).toLowerCase());
     });
   });
-  return {loaded, external};
+  return {loaded, external, unread};
 }
 
 /** @param {import('postcss').Rule} rule @param {string} slug */
@@ -1118,13 +1117,15 @@ export async function checkAppThemes(cwd) {
       message: discoveryError.message,
       // The added theme the broken folder holds, by its name.
       fix: (() => {
-        const named =
-          ownerEntries.find(([slug]) =>
-            new RegExp(
-              `(^|[\\s/"'(])${slug.replace(/[-]/g, '\\-')}([\\s/"').,:]|$)`,
-            ).test(discoveryError.message),
-          )?.[0] ?? ownerEntries[0][0];
-        return `Fix or move what the message names, then run ${run} theme add ${named}`;
+        const named = ownerEntries.find(([slug]) =>
+          new RegExp(
+            `(^|[\\s/"'(])${slug.replace(/[-]/g, '\\-')}([\\s/"').,:]|$)`,
+          ).test(discoveryError.message),
+        )?.[0];
+        // Only a theme the message names: never a guess at another one.
+        return named
+          ? `Fix or move what the message names, then run ${run} theme add ${named}`
+          : 'Fix or move what the message names, then run doctor again.';
       })(),
     });
   } else if (resolutionProblems.length > 0) {
@@ -1274,9 +1275,6 @@ export async function checkAppThemes(cwd) {
     });
   } else {
     const stale = [];
-    /** Local themes another command generates: not compared. */
-    /** @type {Array<{slug: string, by: string}>} */
-    const generated = [];
     /** Local themes the build refused for a private var: not checked. */
     /** @type {string[]} */
     const refused = [];
@@ -1297,14 +1295,8 @@ export async function checkAppThemes(cwd) {
             availableTheme.sourceDir,
             availableTheme.entry,
           );
-          // A source another command generates is kept up to date by that
-          // command; doctor does not compare it (and `theme build` refuses
-          // it).
-          const by = generatedFileCommand(sourceFile);
-          if (by) {
-            generated.push({slug: theme.slug, by});
-            continue;
-          }
+          // Every added local theme is compared, a copy another command
+          // generates included; only its fix names that command.
           const receipt = await themeBuild(
             sourceFile,
             {check: true},
@@ -1380,34 +1372,22 @@ export async function checkAppThemes(cwd) {
               message: `Local theme outputs are missing or stale: ${stale.join(', ')}.${refused.length > 0 ? ` Not checked (a private theme variable; see theme-private-variables): ${refused.join(', ')}.` : ''}`,
               fix: refresh.join(' '),
             }
-          : generated.length > 0 && refused.length === 0
+          : refused.length > 0
             ? {
-                // Not a pass: another command keeps these up to date, and
-                // doctor does not compare its files.
+                // Not a pass: the build refused these, so their outputs
+                // were never compared with their sources.
                 id: 'theme-local-builds',
                 label: 'Local theme build freshness',
                 status: 'info',
-                message: `Not checked: ${generated.map(g => `${g.slug} (generated by ${g.by})`).join(', ')}, which ${generated.length === 1 ? 'keeps it' : 'keep them'} up to date, so doctor does not compare ${generated.length === 1 ? 'its' : 'their'} outputs; every other added local theme output matches its source.`,
-                fix: generated
-                  .map(g => `Rebuild ${g.slug} with ${g.by}.`)
-                  .join(' '),
+                message: `Not checked: ${refused.join(', ')} ${refused.length === 1 ? 'sets' : 'set'} a private theme variable, so the build refuses ${refused.length === 1 ? 'it' : 'them'} and ${refused.length === 1 ? 'its' : 'their'} outputs were not compared with ${refused.length === 1 ? 'its source' : 'their sources'}.`,
+                fix: 'Follow the fix on the theme-private-variables check, then run doctor again.',
               }
-            : refused.length > 0
-              ? {
-                  // Not a pass: the build refused these, so their outputs
-                  // were never compared with their sources.
-                  id: 'theme-local-builds',
-                  label: 'Local theme build freshness',
-                  status: 'info',
-                  message: `Not checked: ${refused.join(', ')} ${refused.length === 1 ? 'sets' : 'set'} a private theme variable, so the build refuses ${refused.length === 1 ? 'it' : 'them'} and ${refused.length === 1 ? 'its' : 'their'} outputs were not compared with ${refused.length === 1 ? 'its source' : 'their sources'}.`,
-                  fix: 'Follow the fix on the theme-private-variables check, then run doctor again.',
-                }
-              : {
-                  id: 'theme-local-builds',
-                  label: 'Local theme build freshness',
-                  status: 'pass',
-                  message: 'Every added local theme output matches its source.',
-                },
+            : {
+                id: 'theme-local-builds',
+                label: 'Local theme build freshness',
+                status: 'pass',
+                message: 'Every added local theme output matches its source.',
+              },
     );
   }
 
@@ -1555,6 +1535,8 @@ export async function checkAppThemes(cwd) {
 
   const fontFailures = [];
   const externalFontWarnings = [];
+  /** Families behind a local font import doctor could not follow. */
+  const unreadFontWarnings = [];
   const missingFontWarnings = [];
   let generatedImports = null;
   try {
@@ -1603,6 +1585,8 @@ export async function checkAppThemes(cwd) {
       if (missing.length === 0) continue;
       if (evidence.external) {
         externalFontWarnings.push(`${theme.slug}: ${missing.join(', ')}`);
+      } else if (evidence.unread) {
+        unreadFontWarnings.push(`${theme.slug}: ${missing.join(', ')}`);
       } else {
         fontFailures.push({theme, message: missing.join(', ')});
       }
@@ -1639,6 +1623,11 @@ export async function checkAppThemes(cwd) {
         'Load the named package fonts in app HTML, or install a package version that exports <slug>.fonts.css (or fonts.css for a single-theme package).',
       );
     }
+  }
+  if (unreadFontWarnings.length > 0) {
+    fontWarningMessages.push(
+      `Font imports doctor could not follow prevent proof for ${unreadFontWarnings.join('; ')}.`,
+    );
   }
   if (externalFontWarnings.length > 0) {
     fontWarningMessages.push(

@@ -3,7 +3,7 @@
 /**
  * @file `theme build` of a file another command generates (its leading
  * comment carries that command's mark) builds it as any local theme, and a
- * missing file in a folder of such files is called generated, naming that
+ * missing file that command writes is called generated, naming the exact
  * command, never answered with a blank theme template.
  */
 
@@ -14,7 +14,7 @@ import * as os from 'node:os';
 import {runCli} from '../../../test-utils/run-cli.mjs';
 
 const MARK =
-  '// Written by `astryx experimental theme editor` after every build; do not edit it here.\n';
+  '// Written by `astryx experimental theme editor show d` after every build; do not edit it here.\n';
 
 /** @type {string} */
 let app;
@@ -28,7 +28,7 @@ beforeEach(() => {
   );
   fs.writeFileSync(
     path.join(app, 'src/themes/d/dTheme.doc.mjs'),
-    `${MARK}export default {};\n`,
+    `${MARK}export default {source: './dTheme.ts'};\n`,
   );
 });
 afterEach(() => {
@@ -56,7 +56,22 @@ describe('a generated theme source', () => {
     expect(env.code).toBe('ERR_FILE_NOT_FOUND');
     expect(env.error).toContain('It is a generated file');
     expect(JSON.stringify(env.suggestions)).not.toContain('theme template');
-    expect(env.suggestions[0].name).toMatch(/ experimental theme editor$/);
+    // The exact command the mark names.
+    expect(env.suggestions[0].name).toMatch(
+      / experimental theme editor show d$/,
+    );
+  });
+
+  it('a name no file there names (a typo) is only not found', async () => {
+    const r = await runCli(
+      ['--json', 'theme', 'build', 'src/themes/d/dTheem.ts'],
+      {cwd: app},
+    );
+    expect(r.status).toBe(1);
+    const env = JSON.parse(r.stdout);
+    expect(env.code).toBe('ERR_FILE_NOT_FOUND');
+    expect(env.error).not.toContain('generated');
+    expect(JSON.stringify(env.suggestions)).not.toContain('editor show');
   });
 
   it('a theme source of your own still builds', async () => {

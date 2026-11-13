@@ -78,15 +78,14 @@ export {
 } from '../../foundation/config/theme-state.mjs';
 export {
   GENERATED_MARKER,
+  fileMark,
   generatedFileCommand,
-  generatedFolderCommand,
   generatedSourceCommand,
   isPrivateVarRefusal,
   missingThemePackage,
   themeBuild,
   validateThemePrivateInputs,
 } from '../theme/build/build.mjs';
-export {APP_COPY_MARK, EDITOR_GENERATED_MARK} from '../theme-edit/_marks.mjs';
 export {installCommandFor as packageInstallCommand} from '../../foundation/discovery/template-needs.mjs';
 export {resolveRecordedTheme} from '../theme/theme.mjs';
 export {collectUnloadedFonts} from '../theme/build/font-warning.mjs';
@@ -321,11 +320,29 @@ export function doctorStylesheetImports(css) {
  */
 export function doctorStylesheetImportFile(specifier, fromFile) {
   if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(specifier)) return null;
+  const isFile = (/** @type {string} */ f) => {
+    try {
+      return fs.statSync(f).isFile();
+    } catch {
+      return false;
+    }
+  };
+  // A bare name is a file beside the stylesheet first (`@import
+  // "faces.css"`, as a browser reads it), then a package.
+  const beside = path.resolve(path.dirname(fromFile), specifier);
+  if (isFile(beside)) return beside;
+  if (/^\.{1,2}\//.test(specifier)) return null;
   try {
-    const file = /^\.{1,2}\//.test(specifier)
-      ? path.resolve(path.dirname(fromFile), specifier)
-      : createRequire(fromFile).resolve(specifier);
-    return fs.existsSync(file) && fs.statSync(file).isFile() ? file : null;
+    // Packages resolve from where the stylesheet really is (a linked
+    // install, as pnpm makes, keeps its own dependencies there).
+    let real = fromFile;
+    try {
+      real = fs.realpathSync(fromFile);
+    } catch {
+      // The path as given.
+    }
+    const file = createRequire(real).resolve(specifier);
+    return isFile(file) ? file : null;
   } catch {
     return null;
   }
