@@ -3931,10 +3931,72 @@ export function draftAnswer(ctx, env, question) {
       ]);
     if (on === 'focus-ring') {
       const ringColor = colorFor(c, 'fill');
+      // "focus ring color like the links": the part after "like" (or "the
+      // same as", "match") gives the ring its color; it is not a scope.
+      const likeAt =
+        /\b(?:like|same(?: colou?r)? as|(?:to )?match(?:es|ing)?)\s+(?:the\s+|my\s+)?/.exec(
+          c.text,
+        );
+      /** @param {string} part */
+      const partAt = part =>
+        Math.min(
+          ...lex.parts
+            .filter(([, x]) => x.on === part)
+            .map(([re]) => re.exec(c.text)?.index ?? Infinity),
+        );
+      const like = likeAt
+        ? (c.parts
+            .map(x => x.on)
+            .find(
+              x =>
+                x &&
+                x !== 'focus-ring' &&
+                partAt(x) >= (likeAt.index ?? 0) + likeAt[0].length - 1,
+            ) ?? null)
+        : null;
       // "focus ring on inputs only": the ring's tokens set on that part or
       // group, so the other parts keep theirs.
       const scope =
-        c.parts.map(x => x.on).find(x => x && x !== 'focus-ring') ?? null;
+        c.parts
+          .map(x => x.on)
+          .find(x => x && x !== 'focus-ring' && x !== like) ?? null;
+      if (like) {
+        // The color the part shows: its fill, or its text for a part with
+        // no fill of its own (a link).
+        // Its plain look: the main variant (primary, accent) at rest, else
+        // any read at rest.
+        /** @param {Array<{token: string, when: string[]}>} reads */
+        const atRest = reads => {
+          const rest = reads.filter(
+            r =>
+              /^--color-/.test(r.token) &&
+              !/overlay|transparent|tint/.test(r.token) &&
+              r.when.some(w => !w.includes(':')),
+          );
+          return (
+            rest.find(r =>
+              r.when.some(w => w === '' || /=(primary|accent)$/.test(w)),
+            ) ??
+            rest[0] ??
+            null
+          );
+        };
+        const fill = atRest(C.partReads(one(like), 'background'));
+        const text = atRest(C.partReads(one(like), 'text'));
+        const read = like === 'link' || !fill ? (text ?? fill) : fill;
+        if (read)
+          return {
+            text: `the focus ring's color${scope ? ` on ${scope} only` : ''}, from ${like}: --focus-outline-color reads ${read.token} (now ${current(read.token) || 'unset'}), so it follows ${like}'s color`,
+            options: [
+              [
+                set('--focus-outline-color', `var(${read.token})`, {
+                  ...modeOf(c),
+                  ...(scope ? {on: scope} : {}),
+                }),
+              ],
+            ],
+          };
+      }
       const sc = scope ? {on: scope} : {};
       const scoped = scope ? ` on ${scope} only` : '';
       if (ringColor && c.lengths[0] && !c.neg)
@@ -4751,7 +4813,7 @@ export function draftAnswer(ctx, env, question) {
           };
         // An amount with nothing there now to take it of: a step its way,
         // said to be a step.
-        if (padFactor && !c.dir && padFactor !== 1)
+        if (padFactor && padFactor !== 1)
           return {
             text: `room inside ${on}: spacing ${padFactor < 1 ? 'less' : 'more'} (one step, not an exact amount: ${on} has no ${gap ? 'gap' : 'padding'} this can read; give a value, such as 8px, for one)`,
             options: [[set('spacing', padFactor < 1 ? 'less' : 'more', {on})]],
