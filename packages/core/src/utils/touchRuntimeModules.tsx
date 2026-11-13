@@ -5,15 +5,17 @@
 /**
  * @file touchRuntimeModules.tsx
  * @input The shared touch modules: the animator, and the touch parts of
- *   SegmentedControl, Switch, Toast, Popover, action groups and Lightbox's
- *   pager and zoom, which use the animator and the gesture host
+ *   SegmentedControl, Switch, Toast, Popover, action groups, Lightbox's
+ *   pager and zoom, and the date and time wheels, which use the animator and
+ *   the gesture host
  * @output `touchRuntime`, the one object the touch loader publishes
  * @position Loaded only through `import()` in utils/touchRuntime.ts. No
  *   other module imports this file
  */
 
 import {useEffect, useRef, type RefObject} from 'react';
-import {animatorFor} from '../motion/animator';
+import {animatorFor, createMotionEngine} from '../motion/animator';
+import {lockSelection} from '../gestures/selectionLock';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useCommittedRefInto} from '../hooks/useCommittedRef';
 import {
@@ -227,16 +229,84 @@ function LightboxTouch({
   return null;
 }
 
+interface WheelGesturesProps {
+  readonly columnRef: RefObject<HTMLElement | null>;
+  readonly isActive: boolean;
+  /** A touch landed on the wheel, at its event time. */
+  readonly onTouchDown: (time: number) => void;
+  readonly onPan: (pan: PanGestureRecognizer) => void;
+  /** The pan failed: a touch that never dragged lifted. */
+  readonly onPanFailed: () => void;
+  readonly onTap: (tap: TapGestureRecognizer) => void;
+}
+
+/**
+ * A date or time wheel's drag, catch and tap: a finger or a trackpad turns the
+ * rows, and a tap on a row turns the wheel onto it. It renders nothing. It
+ * mounts once the runtime has loaded, so the first touch it tracks is the
+ * first one after the load.
+ */
+function WheelGestures({
+  columnRef,
+  isActive,
+  onTouchDown,
+  onPan,
+  onPanFailed,
+  onTap,
+}: WheelGesturesProps): null {
+  const handlersRef = useRef({onTouchDown, onPan, onPanFailed, onTap});
+  useCommittedRefInto(handlersRef, {onTouchDown, onPan, onPanFailed, onTap});
+  const pan = useGestureRecognizer(
+    columnRef,
+    () =>
+      new PanGestureRecognizer({
+        name: 'wheel-pan',
+        direction: 'vertical',
+        // A trackpad's two-finger scroll drives the pan as a finger does. A
+        // mouse wheel's notches never reach the pan.
+        allowedScrollTypes: ['continuous'],
+        // A held finger on the wheel never starts text selection or the
+        // callout.
+        selectionLock: lockSelection,
+        shouldReceiveTouch: (_pan, touch) => {
+          handlersRef.current.onTouchDown(touch.time);
+          return true;
+        },
+      }),
+    recognizer => handlersRef.current.onPan(recognizer),
+    {isEnabled: isActive},
+  );
+  // Syncs the wheel's catch with the pan's failure.
+  useEffect(
+    () =>
+      pan.addTransitionListener((_pan, _from, to) => {
+        if (to === 'failed') {
+          handlersRef.current.onPanFailed();
+        }
+      }),
+    [pan],
+  );
+  useGestureRecognizer(
+    columnRef,
+    () => new TapGestureRecognizer({name: 'wheel-tap'}),
+    recognizer => handlersRef.current.onTap(recognizer),
+    {isEnabled: isActive},
+  );
+  return null;
+}
+
 /** What the touch loader publishes once the page has loaded it. */
 export const touchRuntime = {
   ActionGroupTracking,
   animatorFor,
+  createMotionEngine,
   createPopoverSurfaceMotion,
   LightboxPager,
   LightboxTouch,
   SegmentedMotion,
   SwitchTouch,
   ToastSwipeClaim,
+  WheelGestures,
 } as const;
 
 export type TouchRuntime = typeof touchRuntime;

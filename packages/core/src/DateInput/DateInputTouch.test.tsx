@@ -61,6 +61,13 @@ import {WHEEL_ROW_HEIGHT} from './wheelOptions';
 import {SWIPE_DISTANCE} from './useOwnScrollGesture';
 import {DRAG_SLOP} from './usePointerDragScroll';
 import {SCROLL_QUIET_MS} from './useScrollSettle';
+import {__loadTouchRuntimeForTest} from '../utils/touchRuntime';
+
+// A wheel's drag, spin and snap come with the shared touch runtime once the
+// page has loaded it.
+beforeAll(async () => {
+  await __loadTouchRuntimeForTest();
+});
 
 // ---------------------------------------------------------------------------
 // jsdom scaffolding
