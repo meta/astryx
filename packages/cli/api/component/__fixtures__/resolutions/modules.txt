@@ -253,7 +253,7 @@ useCalendarNavigation useCalendarNavigation Calendar/useCalendarNavigation.doc.m
 useChatComposerTokens useChatComposerTokens Chat/Chat.doc.mjs Chat/useChatComposerTokens.ts
 useChatDictation useChatDictation Chat/Chat.doc.mjs Chat/useChatDictation.ts
 useChatNewMessages useChatNewMessages Chat/Chat.doc.mjs Chat/useChatNewMessages.ts
-useChatPasteAsToken useChatPasteAsToken Chat/Chat.doc.mjs Chat/useChatPasteAsToken.ts
+useChatPasteAsToken useChatPasteAsToken Chat/useChatPasteAsToken.doc.mjs Chat/useChatPasteAsToken.ts
 useChatStreamScroll useChatStreamScroll Chat/Chat.doc.mjs Chat/useChatStreamScroll.ts
 useCloseMobileDrawerOnActivate useCloseMobileDrawerOnActivate AppShell/AppShell.doc.mjs AppShell/useCloseMobileDrawerOnActivate.ts
 useComponentTranslator useComponentTranslator i18n/InternationalizationProvider.doc.mjs i18n/useComponentTranslator.ts

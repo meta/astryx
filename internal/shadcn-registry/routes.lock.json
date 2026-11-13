@@ -3762,6 +3762,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-chat-paste-as-token-long-paste",
+      "path": "examples/use-chat-paste-as-token/long-paste",
+      "aliases": []
+    },
+    {
       "name": "example-use-clickable-container-clickable-project-card",
       "path": "examples/use-clickable-container/clickable-project-card",
       "aliases": []
@@ -4144,6 +4149,11 @@
     {
       "name": "hook-use-calendar-navigation",
       "path": "hooks/use-calendar-navigation",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-chat-paste-as-token",
+      "path": "hooks/use-chat-paste-as-token",
       "aliases": []
     },
     {
