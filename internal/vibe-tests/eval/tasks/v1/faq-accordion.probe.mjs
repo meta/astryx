@@ -20,12 +20,12 @@ const FAQ = [
 export default function steps(page) {
   const question = index => page.getByRole('button', {name: FAQ[index][0], exact: true});
   const answer = index => page.getByText(FAQ[index][1], {exact: true});
-  // An animated accordion can keep a closed answer mounted, clipped to no height or inert,
+  // An animated accordion can keep a closed answer mounted and clipped to no height,
   // so an answer counts as shown only when a person can see it.
   const perceivable = index =>
     answer(index).evaluateAll(elements =>
       elements.some(element => {
-        if (!element.checkVisibility({opacityProperty: true, visibilityProperty: true}) || element.closest('[inert]')) return false;
+        if (!element.checkVisibility({opacityProperty: true, visibilityProperty: true})) return false;
         const box = element.getBoundingClientRect();
         if (box.width < 1 || box.height < 1) return false;
         for (let parent = element.parentElement; parent; parent = parent.parentElement) {

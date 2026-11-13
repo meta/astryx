@@ -151,6 +151,8 @@ describe('reads the review found unaudited', () => {
     `sh -c 'cat /runs/r1/runs/other__arm__r1/workspace/src/App.tsx | grep Button'`,
     'cat > notes.txt <<EOF\n$(cat /repo/x.probe.mjs)\nEOF',
     'cat > notes.txt <<EOF\n`cat /repo/x.probe.mjs`\nEOF',
+    `find "/home/agent/my code" -name '*.mjs' -exec grep -l getByRole {} +`,
+    `grep -rn "getByRole" "/repo/my dir"`,
   ])('fails %j', command => {
     expect(audit(command).violations.length).toBeGreaterThan(0);
   });
@@ -180,6 +182,11 @@ describe('reads the review found unaudited', () => {
     `find src -name '*.tsx' -exec sed -i "s|'../lib/utils'|'@/lib/utils'|" {} +`,
     `git grep -n "from '../lib"`,
     "cat > notes.txt <<'EOF'\n$(cat /repo/x.probe.mjs)\nEOF",
+    `find src -name '*.tsx' | xargs -I {} sed -i "s|'../lib/utils'|'@/lib/utils'|" {}`,
+    `find src -name '*.tsx' | xargs -n 1 sed -i "s|'../lib/utils'|'@/lib/utils'|"`,
+    `find src -name '*.tsx' -exec rg -l "from '../lib" {} +`,
+    `sed -i -e "s|'../lib/a'|'@/lib/a'|" -e "s|'../lib/b'|'@/lib/b'|" src/App.tsx`,
+    'cat > run.sh <<EOF\nROOT=\\$(cd .. && pwd)\nEOF',
   ])('passes %j', command => {
     expect(audit(command).violations).toEqual([]);
   });

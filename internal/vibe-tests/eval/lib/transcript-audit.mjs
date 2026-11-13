@@ -54,7 +54,8 @@ export function splitHeredocs(command) {
       if (INTERPRETER.test(runner)) code.push(body);
       // The shell runs command substitutions in an unquoted heredoc body.
       if (!quote) {
-        const substitutions = [...body.matchAll(/\$\(([^)]*)\)|`([^`]*)`/g)].map(match => match[1] ?? match[2]);
+        // An escaped `\$(` or backtick is literal text, so it does not run.
+        const substitutions = [...body.matchAll(/(?<!\\)\$\(([^)]*)\)|(?<!\\)`([^`]*)`/g)].map(match => match[1] ?? match[2]);
         if (substitutions.length > 0) return `${runner}\n${substitutions.join('\n')}`;
       }
       return runner;
@@ -96,8 +97,8 @@ const RECURSIVE_READER =
   /(?:^|[\s|;&(])(?:rg|ag|ack|[efz]?grep\s+(?:[^|]*\s)?(?:-[A-Za-z]*[rR][A-Za-z]*|--recursive|--dereference-recursive))(?=\s|$)|(?:\$\(|`)\s*find\s|\bfind\s[^|]*(?:-exec|-execdir|-ok)\b|\bfind\s.*\|\s*xargs\b/;
 
 /** Commands whose quoted arguments are text: a sed script or a search pattern. */
-const TEXT_ARGUMENTS =
-  /^(?:\w+=\S*\s+)*(?:xargs(?:\s+-\S+)*\s+)?(?:sed|[efz]?grep|rg|ag|ack|git\s+grep)(?=\s|$)|\s-exec(?:dir)?\s+(?:sed|[efz]?grep)\s/;
+const TEXT_COMMAND =
+  /(?:^(?:\w+=\S*\s+)*(?:xargs\s[^|]*?)?|\s-exec(?:dir)?\s+)(?:sed|[efz]?grep|rg|ag|ack|git\s+grep)(?=\s|$)/;
 
 /** Splits a segment at pipes that are outside quotes. */
 function pipelineStages(segment) {
@@ -120,17 +121,27 @@ function pipelineStages(segment) {
 }
 
 /**
- * In a pipeline stage run by sed or a search command, blanks quoted text that
- * holds a space, a `|` or a nested quote: that is the script or the pattern, so
- * `'../lib'` inside it is not a path. Other stages keep their quoted text.
+ * In a pipeline stage that runs sed or a search command (also through `xargs`
+ * or `find -exec`), blanks the script or pattern: the first quoted argument after
+ * the command, and any quoted argument after `-e`, when it holds a space, a `|`
+ * or a nested quote. So `'../lib'` inside a pattern is not a path, while a quoted
+ * path before the command or after the pattern is still audited.
  */
 function textAsText(segment) {
   return pipelineStages(segment)
-    .map(stage =>
-      TEXT_ARGUMENTS.test(stage.trim())
-        ? stage.replace(/"[^"]*"|'[^']*'/g, quoted => (/[\s|'"]/.test(quoted.slice(1, -1)) ? '""' : quoted))
-        : stage,
-    )
+    .map(stage => {
+      const lead = /^\s*/.exec(stage)[0];
+      const match = TEXT_COMMAND.exec(stage.slice(lead.length));
+      if (!match) return stage;
+      const at = lead.length + match.index + match[0].length;
+      let first = true;
+      const rest = stage.slice(at).replace(/(-e\s+)?("[^"]*"|'[^']*')/g, (whole, flag, quoted) => {
+        const isScript = first || Boolean(flag);
+        first = false;
+        return isScript && /[\s|'"]/.test(quoted.slice(1, -1)) ? `${flag ?? ''}""` : whole;
+      });
+      return stage.slice(0, at) + rest;
+    })
     .join('|');
 }
 
