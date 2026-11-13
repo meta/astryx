@@ -286,6 +286,16 @@ function $remark(
     block.selectStart();
   } else {
     $switchList(list, item, marker, isCheckList);
+    // Lexical merges a dirty list with a list of the same type after it, but
+    // not with one before it. Marking the list before it joins the two, as
+    // the Markdown reads back.
+    const previous = list.getPreviousSibling();
+    if (
+      $isListNode(previous) &&
+      previous.getListType() === list.getListType()
+    ) {
+      previous.markDirty();
+    }
     item.selectStart();
   }
   // Its own undo step, so undo returns to the marker as typed.

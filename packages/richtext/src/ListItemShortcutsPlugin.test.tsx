@@ -14,7 +14,7 @@
 import {describe, expect, it} from 'vitest';
 import {createRef} from 'react';
 import {act, render, waitFor} from '@testing-library/react';
-import {$isListNode} from '@lexical/list';
+import {$isListItemNode, $isListNode} from '@lexical/list';
 import {
   $convertToMarkdownString,
   CHECK_LIST,
@@ -239,6 +239,33 @@ describe('Markdown shortcuts typed at the start of a list item', () => {
       .getEditorState()
       .read(() => $convertToMarkdownString(transformers));
     expect(written).toBe('- [x] Plan the launch\n- [x] Ship it');
+    expect(
+      editor.getEditorState().read(() => {
+        const list = $getRoot().getFirstChild();
+        return $isListNode(list)
+          ? [
+              list.getListType(),
+              ...list
+                .getChildren()
+                .map(child =>
+                  $isListItemNode(child) ? child.getChecked() : null,
+                ),
+            ]
+          : null;
+      }),
+    ).toEqual(['check', true, true]);
+  });
+
+  it('joins a switched list to a list of the same type just before it', async () => {
+    const {editor} = await typeAt(
+      '1. Draft\n2. Review\n\n- Ship\n',
+      'Ship',
+      '1. ',
+    );
+    expect(markdownOf(editor)).toBe('1. Draft\n2. Review\n3. Ship\n');
+    expect(
+      editor.getEditorState().read(() => $getRoot().getChildrenSize()),
+    ).toBe(1);
   });
 
   it('renumbers the items after a lifted item that holds a nested numbered list, as one list', async () => {
