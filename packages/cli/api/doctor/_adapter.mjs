@@ -41,9 +41,13 @@ import {computerAgentTextSettings} from '../../foundation/env/user-settings.mjs'
 import * as fs from 'node:fs';
 import {placeholderUses} from '../../foundation/discovery/template-icons.mjs';
 export {placeholderFixes} from '../../foundation/discovery/template-icons.mjs';
-export {unlistedIconSets} from '../../foundation/discovery/icon-set-discovery.mjs';
+export {
+  iconUseCommand,
+  unlistedIconSets,
+} from '../../foundation/discovery/icon-set-discovery.mjs';
 import {elementPropOrigins} from '../../foundation/discovery/module-exports.mjs';
 import {cssImports} from '../../foundation/render/embedded-imports.mjs';
+import {satisfiesRange} from '../../foundation/env/semver.mjs';
 import * as path from 'node:path';
 import {
   persistedGather,
@@ -72,10 +76,13 @@ export {
   resolveThemeModule,
 } from '../../foundation/config/theme-state.mjs';
 export {
+  GENERATED_MARKER,
+  isPrivateVarRefusal,
   missingThemePackage,
   themeBuild,
   validateThemePrivateInputs,
 } from '../theme/build/build.mjs';
+export {APP_COPY_MARK, EDITOR_GENERATED_MARK} from '../theme-edit/_marks.mjs';
 export {installCommandFor as packageInstallCommand} from '../../foundation/discovery/template-needs.mjs';
 export {resolveRecordedTheme} from '../theme/theme.mjs';
 export {collectUnloadedFonts} from '../theme/build/font-warning.mjs';
@@ -92,6 +99,14 @@ export {
 const CHECK_CODEC = {
   encode: (/** @type {any} */ check) => check,
   decode: (/** @type {any} */ check) => check,
+  /** A check record: its id, label, status and message. */
+  valid: (/** @type {any} */ check) =>
+    check != null &&
+    typeof check === 'object' &&
+    typeof check.id === 'string' &&
+    typeof check.label === 'string' &&
+    typeof check.status === 'string' &&
+    typeof check.message === 'string',
 };
 
 /**
@@ -289,6 +304,31 @@ export function doctorElementPropOrigins(file, element) {
  */
 export function doctorStylesheetImports(css) {
   return new Set(cssImports(css));
+}
+
+/**
+ * The `@astryxdesign/core` range a package's peerDependencies declare, and
+ * whether it accepts `coreVersion` (spec:AST-017/FR12). The one rule every
+ * doctor check uses to compare a package with the installed Core:
+ * `theme-core-peers` for added theme packages, `integration-core-range` for
+ * every other loaded integration.
+ * @param {{peerDependencies?: Record<string, unknown>} | null | undefined} pkg
+ * @param {string | null | undefined} coreVersion
+ * Any declared string is judged by `satisfiesRange`, so an empty range
+ * accepts every Core; only a missing range is `null`.
+ * @returns {{range: string | null, accepts: boolean}}
+ */
+export function corePeerRange(pkg, coreVersion) {
+  const raw = pkg?.peerDependencies?.['@astryxdesign/core'];
+  const range = typeof raw === 'string' ? raw.trim() : null;
+  return {
+    range,
+    accepts:
+      range !== null &&
+      typeof coreVersion === 'string' &&
+      coreVersion !== '' &&
+      satisfiesRange(coreVersion, range),
+  };
 }
 
 /** @param {string} projectDir */

@@ -10,6 +10,13 @@ import {CLI_ROOT} from '../fs/paths.mjs';
 import {importDocModule} from './import.mjs';
 import {storedKey, STORED_DOCS_FILE} from './stored-docs.mjs';
 import {storedDocsText} from '../../scripts/generate-stored-docs.mjs';
+import {
+  descriptorStoreKey,
+  readDescriptorSource,
+  readStaticDescriptorValue,
+  STATIC_DESCRIPTOR_TYPES,
+} from '../discovery/theme-discovery.mjs';
+import {ASTRYX_DEFINITIONS_DIR} from '../discovery/icon-definition-discovery.mjs';
 
 // The file is written at `prepack`, so a checkout has none. These tests
 // serve its text from memory to the importer's read of it: writing it into
@@ -29,6 +36,25 @@ vi.mock('node:fs', async importOriginal => {
         : actual.readFileSync(file, ...rest)
   );
   return {...actual, default: {...actual, readFileSync}, readFileSync};
+});
+// Counts the descriptor parses: a descriptor the store answers is never
+// parsed.
+const parses = vi.hoisted(() => ({count: 0}));
+vi.mock('../runtime/lazy-dependencies.mjs', async importOriginal => {
+  const actual = /** @type {any} */ (await importOriginal());
+  return {
+    ...actual,
+    babelParser: () => {
+      const parser = actual.babelParser();
+      return {
+        ...parser,
+        parse: (/** @type {any[]} */ ...args) => {
+          parses.count++;
+          return parser.parse(...args);
+        },
+      };
+    },
+  };
 });
 /** @type {Record<string, Record<string, unknown>>} */
 let stored = {};
@@ -105,6 +131,65 @@ describe('stored doc exports', () => {
     expect(Object.prototype.toString.call(read)).toBe('[object Module]');
     expect(Object.isExtensible(read)).toBe(false);
     expect(await importDocModule(GUIDE)).toBe(read);
+  });
+
+  it('hold, for every shipped typed descriptor, the value its static read gives', () => {
+    /** @param {string} dir @returns {string[]} */
+    const docFiles = dir =>
+      fs.readdirSync(dir, {withFileTypes: true}).flatMap(entry => {
+        const file = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          return entry.name === 'node_modules' || entry.name.startsWith('.')
+            ? []
+            : docFiles(file);
+        }
+        return entry.name.endsWith('.doc.mjs') ? [file] : [];
+      });
+    /** @type {Record<string, number>} */
+    const checked = {};
+    for (const file of [
+      ...docFiles(CLI_ROOT),
+      ...docFiles(path.join(CLI_ROOT, '..', 'core', 'src')),
+    ]) {
+      const text = fs.readFileSync(file, 'utf-8');
+      for (const [typeName, data] of STATIC_DESCRIPTOR_TYPES) {
+        const value = stored[descriptorStoreKey(text, typeName, data)];
+        if (value === undefined) continue;
+        expect(value, file).toEqual(
+          readDescriptorSource(text, file, typeName, data),
+        );
+        checked[typeName] = (checked[typeName] ?? 0) + 1;
+      }
+    }
+    // Every icon definition the CLI ships, and Core's themes.
+    expect(checked.IconDefinitionDoc).toBe(
+      fs
+        .readdirSync(ASTRYX_DEFINITIONS_DIR)
+        .filter(name => name.endsWith('.doc.mjs')).length,
+    );
+    expect(checked.ThemeDoc).toBeGreaterThan(0);
+  });
+
+  it('answer a shipped descriptor without parsing it, and parse an edited copy', () => {
+    const file = path.join(ASTRYX_DEFINITIONS_DIR, 'add.doc.mjs');
+    parses.count = 0;
+    const read = readStaticDescriptorValue(file, 'add', 'IconDefinitionDoc', {
+      data: true,
+    });
+    expect(parses.count).toBe(0);
+    const text = fs.readFileSync(file, 'utf-8');
+    expect(read).toEqual(
+      readDescriptorSource(text, 'add', 'IconDefinitionDoc', true),
+    );
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'stored-descriptor-'));
+    tmpDirs.push(dir);
+    const copy = path.join(dir, 'add.doc.mjs');
+    fs.writeFileSync(copy, `${text}// edited\n`);
+    parses.count = 0;
+    expect(
+      readStaticDescriptorValue(copy, 'add', 'IconDefinitionDoc', {data: true}),
+    ).toEqual(read);
+    expect(parses.count).toBe(1);
   });
 
   it('import a doc that is not shipped, as before', async () => {
