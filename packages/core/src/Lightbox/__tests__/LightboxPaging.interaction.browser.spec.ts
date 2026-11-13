@@ -1732,6 +1732,32 @@ test('opening a gallery on a clamped caption lays out no more than opening one w
   ).toBeLessThanOrEqual(plain.layouts);
 });
 
+test('a tap on "more" takes exactly one forced layout, which places "less" in the first frame', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== 'chromium', 'rendering traces are Chromium-only');
+  await page.route('https://picsum.photos/**', async route => {
+    const id = /\/id\/(\d+)\//.exec(route.request().url())?.[1] ?? '10';
+    await route.fulfill({
+      contentType: 'image/svg+xml',
+      body: photoSvg(COLORS[id] ?? '#888'),
+    });
+  });
+  await openStory(page, storybook(), 'core-lightbox--gallery-with-captions');
+  await page.getByRole('button', {name: 'Open gallery with captions'}).click();
+  const dialog = page.getByRole('dialog');
+  const more = dialog.getByRole('button', {name: 'more'});
+  await expect(more).toBeVisible();
+  await frames(page, 2);
+  const tap = await taskLayouts(page, 'click', async () => more.click());
+  await expect(dialog.getByRole('button', {name: 'less'})).toBeVisible();
+  // The band cannot grow from its own resize report without looping, so the
+  // tap lays the open caption out once, and "less" is placed before the
+  // first frame (component:Lightbox current-state impact, FR1).
+  expect(tap.layouts, JSON.stringify(tap)).toBe(1);
+});
+
 /**
  * Logs every geometry read of an element inside a caption in the task of the
  * next input of `type`. The task runs from the document's capture listener to
