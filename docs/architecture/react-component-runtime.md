@@ -363,7 +363,11 @@ those contracts.
   targets; it gathers the touch runtime, so the loader names a single chunk.
   `motion/settleThreshold.ts` holds `SETTLE_THRESHOLD` apart from the
   animator, so a component that reads the threshold statically does not pull
-  in the deferred runtime. `hooks/pagerIndex.ts` holds a looping pager's index
+  in the deferred runtime. `motion/motionQueries.ts` holds the reduced-motion
+  and coarse-pointer queries apart from the animator, and
+  `gestures/scrollType.ts` holds the wheel's scroll reading apart from the
+  gesture host, so the reduced-motion policy and a wheel read them without
+  loading the runtime. `hooks/pagerIndex.ts` holds a looping pager's index
   arithmetic apart from the pager, so the date and time wheels read it without
   loading the pager. `hooks/actionGroupNeighbours.ts` holds the action-group
   target helpers apart from the tracking runtime, so a group's static code
@@ -371,9 +375,9 @@ those contracts.
   import the shared touch modules statically, so a page that renders them
   carries the touch runtime in its first load: Slider
   (`sliderTouchController`), Chat (`useChatKeyboard`), and the date and time
-  fields' wheels (`DateInput/PickerWheel`, `DateInput/wheelStrip`,
-  `motion/reducedMotion`). Through the wheels, PowerSearch and Table carry it
-  too. `@astryx/no-static-touch-runtime` reports any other static path from a
+  fields' wheels (`DateInput/PickerWheel`, `DateInput/wheelStrip`). Through
+  the wheels, PowerSearch and Table carry it too.
+  `@astryx/no-static-touch-runtime` reports any other static path from a
   component into these modules; its allowlist names exactly these imports and
   shrinks as they move behind the loader. A surface revealed by interaction
   that a component loads with `import()` under
