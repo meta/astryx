@@ -101,7 +101,7 @@ describe('the weekly full WebKit run', () => {
     );
   });
 
-  it('starts only the jobs the WebKit proofs need, and its verdict', () => {
+  it('starts only the jobs the WebKit proofs and accessibility contracts need, and its verdict', () => {
     const started = Object.keys(ci.jobs).filter(id =>
       starts(id, weeklyDispatch),
     );
@@ -112,6 +112,7 @@ describe('the weekly full WebKit run', () => {
         'interaction-legs',
         'pr-interaction-webkit',
         'room',
+        'webkit-weekly-a11y',
         'webkit-weekly-request',
         'webkit-weekly-verdict',
       ].sort(),
@@ -400,5 +401,54 @@ describe('the release check WebKit scope', () => {
     );
     for (const id of ['pr-interaction-webkit', 'interaction-legs'])
       expect(ci.jobs[id].permissions.actions, id).toBe('read');
+  });
+});
+
+describe("the weekly run's WebKit accessibility contracts (report-only)", () => {
+  const job = ci.jobs['webkit-weekly-a11y'];
+
+  it('runs only on the weekly run, never on a pull request or a release-check', () => {
+    expect(starts('webkit-weekly-a11y', weeklyDispatch)).toBe(true);
+    expect(
+      starts('webkit-weekly-a11y', {
+        github: {...weeklyDispatch.github},
+        inputs: {operation: 'release-check', recheck: false},
+      }),
+    ).toBe(false);
+    expect(
+      starts('webkit-weekly-a11y', {
+        github: {event_name: 'pull_request', event: {pull_request: {}}},
+        inputs: {},
+      }),
+    ).toBe(false);
+  });
+
+  it('runs the cross-browser accessibility specs in WebKit, and a failing spec cannot fail the job', () => {
+    const specs = job.steps.find(each => each.id === 'specs');
+    expect(specs['continue-on-error']).toBe(true);
+    expect(specs.run).toContain(
+      'playwright test --config playwright.config.ts --project webkit',
+    );
+    expect(job.container.image).toBe(
+      ci.jobs['pr-interaction-webkit'].container.image,
+    );
+  });
+
+  it('stays out of the weekly verdict, so a red holds no release', () => {
+    const verdict = ci.jobs['webkit-weekly-verdict'];
+    expect(verdict.needs).not.toContain('webkit-weekly-a11y');
+    expect(JSON.stringify(verdict)).not.toContain('webkit-weekly-a11y');
+  });
+
+  it('always reports each failure and uploads the report', () => {
+    const report = step(job, 'Report the WebKit accessibility results');
+    expect(report.if).toBe('always()');
+    expect(report.run).toContain('.github/scripts/webkit-a11y-report.mjs');
+    // The report reads the JSON the specs write.
+    const specs = job.steps.find(each => each.id === 'specs');
+    expect(report.run).toContain(specs.env.PLAYWRIGHT_JSON_OUTPUT_NAME);
+    const upload = step(job, 'Upload the WebKit accessibility report');
+    expect(upload.if).toBe('always()');
+    expect(upload.with.name).toBe('webkit-weekly-a11y-report');
   });
 });

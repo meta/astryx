@@ -118,11 +118,15 @@ function filesHeld(dir, rel = '') {
 
 /** Runtime dependencies the packed CLI resolves from its install root. */
 const RUNTIME_DEPS = [
+  '@babel/core',
   '@babel/parser',
+  '@babel/plugin-transform-typescript',
   'commander',
   'ignore',
   'jiti',
   'jscodeshift',
+  'postcss-selector-parser',
+  'recast',
   'zod',
 ];
 
