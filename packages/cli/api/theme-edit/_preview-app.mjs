@@ -3244,7 +3244,7 @@ export async function refreshPreviewRoute(cwd, slug) {
         stale.push(
           standIn
             ? `${shown(cwd, file)} (changed by hand, so it is kept; the theme has no generated colors now, so ${standIn}, which the page imports, holds an empty stand-in that keeps the app building. Give the page another name if you want to keep your changes, then run ${PREVIEW} add)`
-            : shown(cwd, file),
+            : `${shown(cwd, file)} (changed by hand, so it does not follow this change: move it out of ${shownDir(cwd, dir)}/, keeping your copy elsewhere in the app and importing nothing from the preview folder, then run ${PREVIEW} add${dirFlag(cwd, dir)} to write it again)`,
         );
         return false;
       }
@@ -3339,11 +3339,39 @@ function routesOf(cwd, at) {
 function previewPath(cwd, at) {
   const app = routesOf(cwd, at);
   if (!app) return null;
+  // A folder Next does not serve (_private, @slot, an intercepting route):
+  // no URL, as add refuses it.
+  if (unservedWhy(cwd, at.dir)) return null;
   const segs = urlSegments(app, at.dir);
   if (segs.some(seg => /^\[.+\]$/.test(seg))) return null;
   const base = nextBasePath(cwd);
   if (base == null) return null;
-  return `${base}/${segs.map(seg => encodeURIComponent(seg)).join('/')}`;
+  // A folder named %5F… is served at the decoded name (`_x`), encoded as a
+  // URL segment needs it.
+  const decoded = (/** @type {string} */ seg) => {
+    try {
+      return decodeURIComponent(seg);
+    } catch {
+      return seg;
+    }
+  };
+  return `${base}/${segs.map(seg => encodeURIComponent(decoded(seg))).join('/')}`;
+}
+
+/**
+ * Why a preview folder found in the routes folder is not served, or null.
+ * @param {string} cwd
+ * @param {string} dir
+ * @returns {string | null}
+ */
+function unservedWhy(cwd, dir) {
+  const app = routesOf(cwd, {dir, app: null});
+  if (!app) return null;
+  // A [param] folder is served, with a value for it; only _private, @slot
+  // and intercepting folders are not.
+  const segs = path.relative(app, dir).split(path.sep);
+  if (!segs.some(x => /^[_@]/.test(x) || INTERCEPT.test(x))) return null;
+  return unroutedSegment(app, dir);
 }
 
 /**
@@ -3374,13 +3402,22 @@ function pageUrls(cwd, at, ids) {
  * @param {'colors' | 'components' | 'overview'} focus
  * @param {{code: string, cause: string} | null} [notChecked] why the change
  *   could not be rendered
+ * @param {{pictureProblem?: string | null, stale?: string[]}} [extra] this
+ *   result's picture problem (what kept --png from taking pictures) and its
+ *   previewStale entries (an in-app preview changed by hand)
  * @returns {string}
  */
-export function seeLine(cwd, slug, focus, notChecked = null) {
+export function seeLine(cwd, slug, focus, notChecked = null, extra = {}) {
   /** @type {string[]} */
   const urls = [];
   /** Previews whose URL depends on the app's routing. @type {string[]} */
   const unplain = [];
+  /** Previews in a folder Next does not serve. @type {string[]} */
+  const unserved = [];
+  /** @type {string[]} */
+  const stale = extra.stale ?? [];
+  /** Previews whose route was changed by hand. @type {string[]} */
+  const handEdited = [];
   // The previews recorded for the theme, and any found in the routes
   // folders that wear it (a folder renamed by hand), as remove finds them.
   const dirs = [
@@ -3395,6 +3432,20 @@ export function seeLine(cwd, slug, focus, notChecked = null) {
       continue;
     }
     if (data?.theme !== slug) continue;
+    const why = unservedWhy(cwd, dir);
+    if (why) {
+      unserved.push(`${shownDir(cwd, dir)}/ (${why})`);
+      continue;
+    }
+    if (
+      stale.some(
+        f =>
+          f.startsWith(`${shownDir(cwd, dir)}/`) && /changed by hand/.test(f),
+      )
+    ) {
+      handEdited.push(shownDir(cwd, dir));
+      continue;
+    }
     const ids = Array.isArray(data?.pages)
       ? data.pages.map((/** @type {any} */ x) => String(x?.id))
       : [];
@@ -3408,16 +3459,44 @@ export function seeLine(cwd, slug, focus, notChecked = null) {
       );
   }
   const f = themeFiles(cwd, slug);
+  // What keeps --png from taking pictures, when this result's own picture
+  // run failed (a file of yours named like a picture).
+  const pngNote = extra.pictureProblem
+    ? `--png took no pictures: ${extra.pictureProblem}`
+    : `run it with --png for pictures in ${shownDir(cwd, f.dir)}/ with no dev server (it needs a Playwright or a Chrome)`;
   const own = notChecked
     ? /could not be written/.test(notChecked.cause)
       ? `the change is saved, but ${notChecked.cause}; --png takes no pictures until that is fixed`
       : `the change is saved, but the components could not be rendered here (${notChecked.cause}), so ${shown(cwd, f.preview)} still shows the theme as it was and --png takes no pictures until that is fixed`
-    : `look without changing your app: open or screenshot ${shown(cwd, f.preview)} (one self-contained page, current after this change; ${EDITOR} show ${slug} also writes ${shown(cwd, f.sheet)}, every component), or run it with --png for pictures in ${shownDir(cwd, f.dir)}/ with no dev server (it needs a Playwright or a Chrome)`;
+    : `look without changing your app: open or screenshot ${shown(cwd, f.preview)} (one self-contained page, current after this change; ${EDITOR} show ${slug} also writes ${shown(cwd, f.sheet)}, every component), or ${pngNote}`;
+  const edited = handEdited.length
+    ? `; the in-app preview in ${handEdited.slice(0, 2).join(', ')}/ was changed by hand, so it does not follow this change (previewStale says what to move out, then ${PREVIEW} add writes it again)`
+    : '';
   if (urls.length)
-    return `${own}; in the running app: open ${urls.slice(0, 2).join(' or ')}`;
+    return `${own}; in the running app: open ${urls.slice(0, 2).join(' or ')}${edited}`;
   if (unplain.length)
-    return `${own}; the in-app preview is in ${unplain.slice(0, 2).join(', ')}, at a URL that depends on the app's routing`;
-  return `${own}; to see it inside your app, ${PREVIEW} add puts the preview pages there, each at its own URL`;
+    return `${own}; the in-app preview is in ${unplain.slice(0, 2).join(', ')}, at a URL that depends on the app's routing${edited}`;
+  if (unserved.length)
+    return `${own}; the in-app preview is in ${unserved.slice(0, 2).join(', ')}, which the app does not serve: move it back, or make one with ${PREVIEW} add --theme ${slug}${edited}`;
+  if (edited) return `${own}${edited}`;
+  // With more than one editor theme, a bare add may wear another one.
+  const many = editorThemeCount(cwd) > 1;
+  return `${own}; to see it inside your app, ${PREVIEW} add${many ? ` --theme ${slug}` : ''} puts the preview pages there, each at its own URL`;
+}
+
+/**
+ * How many editor themes the project has.
+ * @param {string} cwd
+ */
+function editorThemeCount(cwd) {
+  const root = themeFiles(cwd, 'x').root;
+  try {
+    return fs
+      .readdirSync(root)
+      .filter(d => fs.existsSync(themeFiles(cwd, d).settings)).length;
+  } catch {
+    return 0;
+  }
 }
 
 /**
@@ -4994,6 +5073,24 @@ async function removePreview(page, options, box) {
   const retry = (/** @type {string | null} */ p) =>
     `${PREVIEW} remove${page != null ? ` ${quoteCommandArgument(page)}` : ''}${p == null ? '' : ` --path ${quoteCommandArgument(p)}`}`;
   const at = previewDir(cwd, options.path, {retry});
+  // A file given for the preview's folder: its folder when the file is a
+  // preview's own, else the previews there are (as add refuses a file).
+  if (fs.existsSync(at.dir) && !fs.statSync(at.dir).isDirectory()) {
+    const parent = path.dirname(at.dir);
+    const own = fs.existsSync(path.join(parent, PREVIEW_DATA));
+    const others = previewsIn(cwd);
+    refuse(
+      E.ERR_INVALID_ARGUMENT,
+      `${shown(cwd, at.dir)} is a file; a preview is a folder${own ? `, and this file is in the preview ${shownDir(cwd, parent)}/` : ''}.`,
+      {
+        run: own
+          ? [retry(shownDir(cwd, parent))]
+          : others.length
+            ? others.slice(0, 3).map(d => retry(shownDir(cwd, d)))
+            : [`${PREVIEW} list`],
+      },
+    );
+  }
   // The pages a stopped change was removing, read before it is finished.
   /** @type {string[]} */
   let removing = [];
