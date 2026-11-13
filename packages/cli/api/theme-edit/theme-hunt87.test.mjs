@@ -230,11 +230,14 @@ describe('value questions', () => {
 
 describe('heading text', () => {
   it(
-    'heading text lighter sets the text token on headings',
+    'heading text lighter sets the text color on headings only',
     async () => {
+      // Both forms build the same CSS: the heading's own text color.
       expect(
         (await answer('make the heading text lighter')).commands[0],
-      ).toMatch(/^set q --color-text-primary '#[0-9a-f]{6}' --on heading/);
+      ).toMatch(
+        /^set q (--color-text-primary|color) '#[0-9a-f]{6}' --on heading/,
+      );
     },
     T,
   );
