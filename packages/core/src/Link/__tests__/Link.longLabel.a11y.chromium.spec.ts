@@ -39,8 +39,11 @@ for (const form of ['anchor', 'button', 'external'] as const) {
       .locator(`[data-long-label="${form}"]`)
       .evaluate(line => {
         const root = line.firstElementChild as HTMLElement;
+        // Lines of the label only: the external icon and the hidden new-tab
+        // text are not label lines.
+        const label = root.firstElementChild as HTMLElement;
         const range = document.createRange();
-        range.selectNodeContents(root);
+        range.selectNodeContents(label);
         const lines = Array.from(range.getClientRects()).filter(
           rect => rect.width > 0,
         );

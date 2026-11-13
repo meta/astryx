@@ -88,10 +88,9 @@ const styles = stylex.create({
     transitionDuration: durationVars['--duration-fast'],
     transitionTimingFunction: easeVars['--ease-standard'],
   },
-  // A truncating label needs a box that stops at its container: an
-  // inline-flex root otherwise grows to its whole text, so its Text never
-  // overflows and draws no ellipsis (`component:Link` FR6, `component:Text`
-  // FR4).
+  // A truncating root may shrink below its label's length inside a flex row,
+  // so its Text overflows and draws an ellipsis (`component:Link` FR6,
+  // `component:Text` FR4).
   truncating: {
     minWidth: 0,
   },
