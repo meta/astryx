@@ -884,8 +884,8 @@ it on the surface inside the layer and run no layout while it plays.
 - `Layer/inputHold.ts` owns the input hold that a touch presentation places
   while it enters or leaves (`spec:AST-094` FR35), and
   `Layer/holdEntranceInput.ts` its use by layers that enter through CSS
-  (INV16). A dismissal hold leaves a nested layer, its path, and a child live
-  region live. It finds a nested layer with `hasLayerRootWithin`, a reader of
+  (INV16). A blur dismissal hold leaves a nested layer, its path, and a
+  child live region live. It finds a nested layer with `hasLayerRootWithin`, a reader of
   the layer-root owner (`architecture:public-component-api` INV23). The
   owner's other readers test an element or its ancestors, and the hold asks
   whether a subtree holds a layer root.
