@@ -72,14 +72,15 @@ export function testsOf(report) {
 
 /**
  * The report for one run: the failed (`unexpected`) and flaky tests, each with
- * a command that runs it again in WebKit.
+ * a command that runs it again in WebKit, and any error that stopped the run.
  * @param {any} report Playwright's JSON report, or null when the run left none
  * @param {{sha?: string}} [options]
  */
 export function buildReport(report, {sha = ''} = {}) {
   const tests = report ? testsOf(report) : [];
   // A run that left no report, stopped on an error, or ran no test is never a
-  // pass: no spec matched, or a spec failed to load before its tests.
+  // pass: no spec matched, or a spec failed to load before its tests. A run
+  // that stopped on an error after some tests ran keeps their results.
   const errors = (report?.errors ?? []).map(
     (/** @type {any} */ error) =>
       String(error?.message ?? error)
@@ -87,7 +88,7 @@ export function buildReport(report, {sha = ''} = {}) {
         .split('\n')
         .find(Boolean) ?? '',
   );
-  if (!report || errors.length > 0 || tests.length === 0) {
+  if (!report || tests.length === 0) {
     const why = !report
       ? 'the specs did not run to the end'
       : errors.length > 0
@@ -97,6 +98,7 @@ export function buildReport(report, {sha = ''} = {}) {
       ok: false,
       counts: null,
       failures: [],
+      errors,
       markdown: `# WebKit accessibility contracts (report-only)\n\nThe run left no results${sha ? ` for ${sha}` : ''}: ${why}. See the run's log.\n`,
     };
   }
@@ -124,6 +126,14 @@ export function buildReport(report, {sha = ''} = {}) {
     '',
     `${sha ? `Commit ${sha}. ` : ''}${counts.failed} failed, ${counts.flaky} flaky, ${counts.passed} passed, ${counts.skipped} skipped${counts.notRun ? `, ${counts.notRun} not run` : ''}. A failure here holds no release; each goes to the fix loop with the command below.`,
     '',
+    ...(errors.length
+      ? [
+          `The run stopped on ${errors.length === 1 ? 'an error' : `${errors.length} errors`}, so this is not a pass:`,
+          '',
+          ...errors.map(error => `- ${error}`),
+          '',
+        ]
+      : []),
     ...(counts.notRun
       ? [
           `The run stopped before ${counts.notRun} of ${tests.length} tests ran, so this is not a pass. See the run's log.`,
@@ -136,15 +146,16 @@ export function buildReport(report, {sha = ''} = {}) {
           '| --- | --- | --- | --- | --- |',
           ...rows,
         ]
-      : counts.notRun
+      : counts.notRun || errors.length
         ? []
         : ['Every WebKit accessibility contract passed.']),
     '',
   ].join('\n');
   return {
-    ok: counts.failed === 0 && counts.notRun === 0,
+    ok: counts.failed === 0 && counts.notRun === 0 && errors.length === 0,
     counts,
     failures,
+    errors,
     markdown,
   };
 }
@@ -166,7 +177,7 @@ if (
     fs.writeFileSync(path.join(outDir, 'report.md'), result.markdown);
     fs.writeFileSync(
       path.join(outDir, 'report.json'),
-      `${JSON.stringify({counts: result.counts, failures: result.failures}, null, 2)}\n`,
+      `${JSON.stringify({counts: result.counts, failures: result.failures, errors: result.errors}, null, 2)}\n`,
     );
   }
   if (!result.counts)
