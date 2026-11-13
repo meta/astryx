@@ -1282,7 +1282,7 @@ export function previewRouteSource({
     '        sideNav={',
     '          <SideNav>',
     '            {PAGES.map(p => (',
-    '              <SideNavItem key={p.id} label={p.label} isSelected={p.id === current.id} onClick={() => setPage(p.id)} />',
+    '              <SideNavItem key={p.id} label={p.label} isSelected={p.id === current.id} href={`?page=${p.id}`} onClick={e => { e.preventDefault(); go(p.id); }} />',
     '            ))}',
     '          </SideNav>',
     '        }>',
@@ -1336,6 +1336,21 @@ export function previewRouteSource({
     '',
     'export default function ThemePreviewPage() {',
     '  const [page, setPage] = React.useState(PAGES[0]?.id);',
+    // Each page has its own URL (?page=<id>), so a link, a reload, the back
+    // button or a screenshot reaches any page; the page renders after mount.
+    "  const fromUrl = () => new URLSearchParams(window.location.search).get('page');",
+    '  React.useEffect(() => {',
+    '    const sync = () => { const id = fromUrl(); if (id && PAGES.some(p => p.id === id)) setPage(id); };',
+    '    sync();',
+    "    window.addEventListener('popstate', sync);",
+    "    return () => window.removeEventListener('popstate', sync);",
+    '  }, []);',
+    '  const go = (id: string) => {',
+    '    setPage(id);',
+    '    const url = new URL(window.location.href);',
+    "    url.searchParams.set('page', id);",
+    "    window.history.pushState(null, '', url);",
+    '  };',
     // Pages render only in the browser: some components crash a server
     // render, and Next prerenders a client page's first state.
     '  const [ready, setReady] = React.useState(false);',

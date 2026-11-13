@@ -112,7 +112,7 @@ import {
   takeFirstAppCopy,
   writeAppCopy,
 } from './_preview.mjs';
-import {appWiring, refreshPreviewRoute} from './_preview-app.mjs';
+import {appWiring, refreshPreviewRoute, seeLine} from './_preview-app.mjs';
 import {baseInstalled, baseResolved, installLine} from './_project.mjs';
 import {reactMissing} from './_parts.mjs';
 import {
@@ -805,6 +805,23 @@ function unquoteWord(word) {
 }
 
 /**
+ * The preview page most about a change: Colors for a color (a color dial
+ * or a color token), Components for a part setting, else Overview.
+ * @param {{thing: string, on?: string | null}} s
+ * @returns {'colors' | 'components' | 'overview'}
+ */
+function changeFocus(s) {
+  if (s.on) return 'components';
+  if (
+    PALETTE_DIALS.includes(s.thing) ||
+    s.thing === 'vibrancy' ||
+    /^--color-/.test(s.thing)
+  )
+    return 'colors';
+  return 'overview';
+}
+
+/**
  * The preview after a change, with the in-app preview route kept in step:
  * its imports follow the theme, such as the stylesheet of a font package
  * installed since the last change.
@@ -812,13 +829,17 @@ function unquoteWord(word) {
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
  * @param {boolean} png
+ * @param {'colors' | 'components' | 'overview'} [focus] the preview page
+ *   most about the change: Colors for a color, Components for a part
  */
-async function previewAndRoute(ctx, slug, data, png) {
+async function previewAndRoute(ctx, slug, data, png, focus = 'overview') {
   const p = await previewAfter(ctx, slug, data, png);
   const wrote = takeFirstAppCopy(ctx.project.cwd, slug);
   return {
     ...p,
     previewStale: await keepPreviewRoute(ctx, slug),
+    // How to see the change: the page about it, at its own URL.
+    see: seeLine(ctx.project.cwd, slug, focus),
     // The first time the theme's app copy is written, its files are named.
     ...(wrote ? {appCopy: {wrote}} : {}),
   };
@@ -1965,8 +1986,9 @@ async function changeOnce(
           pictureProblem: null,
           notChecked: null,
           previewStale: [],
+          see: seeLine(cwd, slug, changeFocus(s)),
         }
-      : await previewAndRoute(ctx, slug, data, png);
+      : await previewAndRoute(ctx, slug, data, png, changeFocus(s));
   return {
     type: sub === 'set' ? 'themeEdit.set' : 'themeEdit.undo',
     data: {

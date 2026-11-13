@@ -3313,17 +3313,96 @@ function recordPreview(cwd, slug, dir, keep = true) {
 }
 
 /**
+ * The routes folder a preview folder is in, by place (also one a command
+ * has just made), or null.
+ * @param {string} cwd
+ * @param {{dir: string, app: string | null}} at
+ */
+function routesOf(cwd, at) {
+  return (
+    at.app ??
+    [path.join(cwd, 'app'), path.join(cwd, 'src', 'app')].find(r =>
+      at.dir.startsWith(r + path.sep),
+    ) ??
+    null
+  );
+}
+
+/**
+ * The URL path the app serves a preview at (with the basePath next.config
+ * sets), or null when no URL can be told: outside the routes folder, under
+ * a [param] folder, or a basePath set from code.
+ * @param {string} cwd
+ * @param {{dir: string, app: string | null}} at
+ * @returns {string | null}
+ */
+function previewPath(cwd, at) {
+  const app = routesOf(cwd, at);
+  if (!app) return null;
+  const segs = urlSegments(app, at.dir);
+  if (segs.some(seg => /^\[.+\]$/.test(seg))) return null;
+  const base = nextBasePath(cwd);
+  if (base == null) return null;
+  return `${base}/${segs.map(seg => encodeURIComponent(seg)).join('/')}`;
+}
+
+/**
+ * Each page's own URL in the running app: the preview's path with
+ * ?page=<id>, the first page at the bare path too. Empty when no URL can
+ * be told.
+ * @param {string} cwd
+ * @param {{dir: string, app: string | null}} at
+ * @param {string[]} ids
+ * @returns {Record<string, string>}
+ */
+function pageUrls(cwd, at, ids) {
+  const base = previewPath(cwd, at);
+  if (base == null) return {};
+  return Object.fromEntries(ids.map(id => [id, `${base}?page=${id}`]));
+}
+
+/**
+ * One line that says how to see a theme after a change: the in-app preview
+ * page most about what changed (Colors after a color, Components after a
+ * part, else Overview) at its own URL, else the editor's preview.html; and
+ * --png, which takes pictures with no dev server running.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {'colors' | 'components' | 'overview'} focus
+ * @returns {string}
+ */
+export function seeLine(cwd, slug, focus) {
+  /** @type {string[]} */
+  const urls = [];
+  for (const dir of recordedPreviews(cwd, slug)) {
+    /** @type {any} */
+    let data;
+    try {
+      data = JSON.parse(fs.readFileSync(path.join(dir, PREVIEW_DATA), 'utf8'));
+    } catch {
+      continue;
+    }
+    const ids = Array.isArray(data?.pages)
+      ? data.pages.map((/** @type {any} */ x) => String(x?.id))
+      : [];
+    const id = ids.includes(focus) ? focus : ids[0];
+    const url = id ? pageUrls(cwd, {dir, app: null}, [id])[id] : undefined;
+    if (url) urls.push(url);
+  }
+  const png = `or run it with --png for pictures with no dev server (it needs a Playwright or a Chrome)`;
+  return urls.length
+    ? `open ${urls.slice(0, 2).join(' or ')} in the running app, ${png}`
+    : `open ${shown(cwd, themeFiles(cwd, slug).preview)} in a browser, ${png}; ${PREVIEW} add puts the preview pages in your app, each at its own URL`;
+}
+
+/**
  * How to open the preview, from where it is.
  * @param {string} cwd
  * @param {{dir: string, app: string | null}} at
  */
 function openLine(cwd, at) {
   // The routes folder by place, also one this command has just made.
-  const app =
-    at.app ??
-    [path.join(cwd, 'app'), path.join(cwd, 'src', 'app')].find(r =>
-      at.dir.startsWith(r + path.sep),
-    );
+  const app = routesOf(cwd, at);
   if (app) {
     // A (group) folder is not part of the URL; a [param] folder is a value
     // the person picks; each other folder is one URL segment, encoded.
@@ -4418,6 +4497,12 @@ async function addPreview(description, options, box) {
       pages: data.pages.map(x => x.id),
       files: data.files.map(f => shown(cwd, path.join(at.dir, f))),
       open: openLine(cwd, at),
+      // Each page's own URL, so any page can be opened or pictured.
+      urls: pageUrls(
+        cwd,
+        at,
+        data.pages.map(x => x.id),
+      ),
     },
   };
 }
@@ -4653,6 +4738,9 @@ export async function themeEditPreviewApp(dir, options = {}) {
       folder,
       theme: slug,
       pages: data.pages.map(x => x.id),
+      urls: Object.fromEntries(
+        data.pages.map(x => [x.id, `/theme-preview?page=${x.id}`]),
+      ),
       files,
       notes,
       // A folder named like a flag (`-`, `-k`) is a path to cd only with ./.
@@ -4790,11 +4878,16 @@ export async function themeEditPreviewList(options = {}) {
       folder: at && data ? shownDir(cwd, at.dir) : null,
       theme: data?.theme ?? null,
       themeMissing,
-      pages: (data?.pages ?? []).map(x => ({
-        id: x.id,
-        label: x.label,
-        ...(missing.has(x.id) ? {missing: true} : {}),
-      })),
+      pages: (data?.pages ?? []).map(x => {
+        const url = at && data ? pageUrls(cwd, at, [x.id])[x.id] : undefined;
+        return {
+          id: x.id,
+          label: x.label,
+          // The page's own URL in the running app, when one can be told.
+          ...(url ? {url} : {}),
+          ...(missing.has(x.id) ? {missing: true} : {}),
+        };
+      }),
       notes,
     },
   };

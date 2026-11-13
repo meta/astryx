@@ -2057,6 +2057,7 @@ describe('final pass 5', () => {
       expect(list.data.pages).toContainEqual({
         id: 'components',
         label: 'Components',
+        url: '/m3?page=components',
         missing: true,
       });
       expect(list.data.notes.join(' ')).toContain(
@@ -2397,7 +2398,9 @@ describe('final pass 5', () => {
         ['experimental', 'theme', 'preview', 'list', '--path', 'src/app/lm'],
         {cwd},
       );
-      expect(text.stdout).toMatch(/components\s+Components - missing/);
+      expect(text.stdout).toMatch(
+        /components\s+Components - \/lm\?page=components - missing/,
+      );
       expect(text.stdout).not.toContain('- true');
     } finally {
       rm('src/app/lm');
@@ -2887,4 +2890,48 @@ describe('final pass 5', () => {
       else write('next.config.mjs', config);
     }
   }, 120_000);
+
+  it('gives every preview page its own URL, and each change a line on how to see it', async () => {
+    await themeEditNew('see', {cwd, like: 'neutral'});
+    try {
+      const before = await themeEditSet('see', 'corners', '6px', {cwd});
+      expect(before.data.see).toContain('themes/see/preview.html');
+      expect(before.data.see).toContain('--png');
+      const r = await themeEditPreviewAdd(undefined, {
+        cwd,
+        theme: 'see',
+        path: 'src/app/see',
+      });
+      expect(r.data.urls).toEqual({
+        overview: '/see?page=overview',
+        components: '/see?page=components',
+      });
+      const route = read('src/app/see/page.tsx');
+      expect(route).toContain("url.searchParams.set('page', id)");
+      expect(route).toContain('href={`?page=${p.id}`}');
+      expect(route).toContain("addEventListener('popstate'");
+      const list = await themeEditPreviewList({cwd, path: 'src/app/see'});
+      expect(list.data.pages.map(p => p.url)).toEqual([
+        '/see?page=overview',
+        '/see?page=components',
+      ]);
+      const color = await themeEditSet('see', 'accent', 'teal', {cwd});
+      await themeEditPreviewAdd(undefined, {cwd, path: 'src/app/see'});
+      expect(color.data.see).toMatch(
+        /open \/see\?page=(colors|overview) in the running app/,
+      );
+      const again = await themeEditSet('see', 'accent', '#7c3aed', {cwd});
+      expect(again.data.see).toContain('/see?page=colors');
+      const part = await themeEditSet('see', 'background', 'red', {
+        cwd,
+        on: 'card',
+      });
+      expect(part.data.see).toContain('/see?page=components');
+      const dial = await themeEditSet('see', 'corners', '8px', {cwd});
+      expect(dial.data.see).toContain('/see?page=overview');
+    } finally {
+      rm('src/app/see');
+      rm('themes/see');
+    }
+  }, 240_000);
 });
