@@ -8,13 +8,16 @@
  *   keydown and click on the document
  * @output Exports the gesture identity, whether its click has run, whether a
  *   press is down or being released (afterRelease runs a callback once that
- *   release is handled), and the press claims (claimPress,
- *   claimContextMenuPress)
+ *   release is handled), the press claims (claimPress,
+ *   claimContextMenuPress), and the touch tap recognizer (useTapRecognizer,
+ *   TOUCH_POINTER_TYPES)
  * @position Internal to the package, not exported. useLayer reads it to tell
  *   a click that belongs to a dismissing press from a fresh one.
  *   useTouchTrigger, useMenuPress, ContextMenu and DropdownMenu read the
  *   gesture too. A layer or a menu that opens on a press claims that press
- *   here
+ *   here. The tap recognizer lives here, apart from useTouchTrigger, so a
+ *   trigger that only waits for a tap (a truncated Text) does not carry the
+ *   touch trigger code its lazily loaded tooltip uses
  *
  * A browser light-dismiss and the trigger's own click come from ONE press, and
  * which of them React sees first is a race. Comparing timestamps against a
@@ -24,6 +27,7 @@
  * the dismissal", no matter how long the main thread was blocked in between.
  */
 
+import {useEffect, useState} from 'react';
 import {subscribeInput} from '../utils/inputStream';
 import {sharedState} from '../utils/sharedRealm';
 import {clearTouchEndMark, isTouchEndCancelled} from '../utils/touchEndMark';
@@ -418,4 +422,89 @@ export function claimContextMenuPress(layer: HTMLElement): void {
   if (state.contextMenuGesture === state.gesture) {
     claimPress(layer);
   }
+}
+
+/**
+ * Pointer types whose *press* is a tap rather than a click.
+ *
+ * A pen belongs here but not in the arrival path: in detection range it hovers
+ * — firing `pointerenter`/`pointermove` with no contact, exactly as a mouse
+ * does, on a device where `(hover: hover)` matches — and only becomes a tap
+ * once it lands. See `handlePointerEnter` in useTouchTrigger.
+ */
+export const TOUCH_POINTER_TYPES = new Set(['touch', 'pen']);
+
+/** Waits for the tap that a touch or pen press may become. Internal. */
+export interface TapRecognizer {
+  /**
+   * Call on every press. A touch or pen press on `trigger` waits for its tap:
+   * the press's own `click`. A touch the browser takes for a scroll or a
+   * pinch (`pointercancel`) is no tap, and a new press replaces one still
+   * waiting. Returns whether the press is touch or pen.
+   */
+  press(
+    event: PointerEvent,
+    trigger: Element | null,
+    onTap: (tapEvent: Event) => void,
+  ): boolean;
+  /** Stops waiting for a press still waiting for its tap. */
+  forget(): void;
+  /**
+   * Whether a touch or pen press still waits for its tap, with no key press
+   * or new press since. A focus at that time is the press's own focus.
+   */
+  isTouchPressCurrent(): boolean;
+}
+
+/** One tap recognizer for a trigger, released on unmount. Internal. */
+export function useTapRecognizer(): TapRecognizer {
+  const [recognizer] = useState(createTapRecognizer);
+  // Releases a pending tap on unmount.
+  useEffect(() => () => recognizer.forget(), [recognizer]);
+  return recognizer;
+}
+
+function createTapRecognizer(): TapRecognizer {
+  let stopWaiting: (() => void) | null = null;
+  let waitingGesture: number | null = null;
+  const forget = () => {
+    stopWaiting?.();
+    stopWaiting = null;
+  };
+  return {
+    press(event, trigger, onTap) {
+      forget();
+      if (!TOUCH_POINTER_TYPES.has(event.pointerType)) {
+        return false;
+      }
+      if (trigger == null) {
+        return true;
+      }
+      // The tap must belong to this press. A key press or a new pointer press
+      // advances the gesture, so a keyboard activation that later fires
+      // `click` on the trigger (Enter on a button) is not mistaken for it.
+      const gesture = currentGesture();
+      waitingGesture = gesture;
+      const stop = () => {
+        trigger.removeEventListener('click', handleTap);
+        trigger.removeEventListener('pointercancel', stop);
+        if (stopWaiting === stop) {
+          stopWaiting = null;
+        }
+      };
+      const handleTap = (tapEvent: Event) => {
+        stop();
+        if (currentGesture() === gesture) {
+          onTap(tapEvent);
+        }
+      };
+      trigger.addEventListener('click', handleTap);
+      trigger.addEventListener('pointercancel', stop);
+      stopWaiting = stop;
+      return true;
+    },
+    forget,
+    isTouchPressCurrent: () =>
+      stopWaiting != null && waitingGesture === currentGesture(),
+  };
 }

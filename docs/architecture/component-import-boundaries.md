@@ -177,13 +177,13 @@ one pending load per module, caches a success, and resets after a failure.
 
 ### Allowlist
 
-| Crossing (base module → module it imports statically)             | Entries that reach it                          | Cost, gzip             | Invariant  | Row leaves when                                                          |
-| ----------------------------------------------------------------- | ---------------------------------------------- | ---------------------- | ---------- | ------------------------------------------------------------------------ |
-| `Text/TruncationTooltip` → `Layer/useTouchTrigger`                | Text, Heading, Button, IconButton, Link, Table | 4.6 KB (Text, Heading) | INV1, INV8 | the truncation tooltip's eager code carries no touch tap recognizer      |
-| `Button/Button` → `Tooltip/useTooltip`                            | Button, IconButton                             | 15.5 KB                | INV1       | Button's tooltip layer code is lazy                                      |
-| `Link/Link` → `Tooltip`                                           | Link                                           | 17.6 KB                | INV1       | Link's tooltip layer code is lazy                                        |
-| `Table/tableContextMenu` → `ContextMenu`                          | Table                                          | 78.2 KB                | INV1       | cells without actions reach no menu module                               |
-| `Table/BaseTable` → `Table/plugins/virtualization/useTableWindow` | Table                                          | 3.0 KB                 | INV7       | a Table that never windows reaches neither the controller nor its engine |
+| Crossing (base module → module it imports statically)             | Entries that reach it                          | Cost, gzip             | Invariant  | Row leaves when                                                                                        |
+| ----------------------------------------------------------------- | ---------------------------------------------- | ---------------------- | ---------- | ------------------------------------------------------------------------------------------------------ |
+| `Text/TruncationTooltip` → `Layer/gestureCounter`                 | Text, Heading, Button, IconButton, Link, Table | 4.6 KB (Text, Heading) | INV1, INV8 | the truncation tooltip's eager code carries no touch tap recognizer; the row moves with the recognizer |
+| `Button/Button` → `Tooltip/useTooltip`                            | Button, IconButton                             | 15.5 KB                | INV1       | Button's tooltip layer code is lazy                                                                    |
+| `Link/Link` → `Tooltip`                                           | Link                                           | 17.6 KB                | INV1       | Link's tooltip layer code is lazy                                                                      |
+| `Table/tableContextMenu` → `ContextMenu`                          | Table                                          | 78.2 KB                | INV1       | cells without actions reach no menu module                                                             |
+| `Table/BaseTable` → `Table/plugins/virtualization/useTableWindow` | Table                                          | 3.0 KB                 | INV7       | a Table that never windows reaches neither the controller nor its engine                               |
 
 Costs are the check's own printout in CI: each crossing's removal from the
 entry with every other crossing kept, in the entry build above. A local run

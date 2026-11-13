@@ -95,12 +95,14 @@ export const CORE_BOUNDARIES = {
     'Tooltip/tooltipPresentInterest',
     'Layer/layerScopedContext',
   ],
-  // The shared internal touch modules, and the layer's touch tap recognizer.
+  // The shared internal touch modules, the layer's touch trigger, and the
+  // gesture counter, which holds the touch tap recognizer.
   touchModules: [
     /^gestures\//,
     /^motion\//,
     /^internal\/touch$/,
     /^Layer\/useTouchTrigger$/,
+    /^Layer\/gestureCounter$/,
   ],
   capabilities: [
     ...tablePluginCapabilities(REPO),
