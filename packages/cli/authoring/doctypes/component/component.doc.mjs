@@ -181,7 +181,7 @@ export const doc = {
       name: 'examples',
       type: 'ComponentExampleDoc[]',
       description:
-        'Short code examples ({label?, code}) rendered by the CLI after the props table.',
+        "Short code examples ({label?, code, kind?}) rendered by the CLI after the props table. `kind` is `'demo'` (the default; it may render as a live preview) or `'setup'` (shown as code, never rendered live).",
     },
     {
       name: 'playground',
