@@ -47,24 +47,7 @@ import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {setCommand, setOutcome, recordHelp} from '../../../foundation/debug/index.mjs';
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
 import {commandAvailable, helpBase, optionAvailable} from './base-gate.mjs';
-
-/**
- * Fully-qualified name of a command relative to the root program, e.g.
- * `theme build`. The root itself is ''.
- * @param {import('commander').Command} cmd
- * @returns {string}
- */
-function fullNameOf(cmd) {
-  /** @type {string[]} */
-  const parts = [];
-  /** @type {any} */
-  let node = cmd;
-  while (node?.parent) {
-    parts.unshift(node.name());
-    node = node.parent;
-  }
-  return parts.join(' ');
-}
+import {commandPath} from './command-path.mjs';
 
 /**
  * Cheap argv check used before preAction has had a chance to engage
@@ -153,7 +136,7 @@ export function buildHelpErrorEnvelope(cmd) {
       ERROR_CODES.ERR_UNKNOWN_COMMAND,
     );
   }
-  const group = fullNameOf(cmd);
+  const group = commandPath(cmd);
   return toErrorEnvelope(
     `'${group}' needs a subcommand`,
     available.map(name => ({name: `${group} ${name}`, reason: 'available subcommand'})),
@@ -254,7 +237,7 @@ function applyShimRecursively(cmd) {
   // recorded against the root program instead of `theme build`.
   cmd.exitOverride(err => {
     try {
-      setCommand(fullNameOf(cmd));
+      setCommand(commandPath(cmd));
     } catch {
       // Never let recording interfere with the error path.
     }

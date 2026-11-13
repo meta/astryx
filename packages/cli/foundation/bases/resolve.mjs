@@ -55,23 +55,6 @@ export function requestedBase() {
   return requested;
 }
 
-/**
- * The value of `--base` in a run's arguments, read before Commander parses
- * so a project loaded that early reads the same base the run checks.
- * Arguments after `--` are operands and never name a base.
- * @param {string[]} argv the arguments after `astryx`
- * @returns {string | null}
- */
-export function requestedBaseFromArgv(argv) {
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
-    if (arg === '--') return null;
-    if (arg === '--base') return argv[i + 1] ?? null;
-    if (arg.startsWith('--base=')) return arg.slice('--base='.length);
-  }
-  return null;
-}
-
 /** @type {Map<string, LoadedIntegration[]>} */
 const candidatesByDir = new Map();
 

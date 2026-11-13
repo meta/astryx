@@ -23,6 +23,7 @@ import {setOutcome} from '../../../foundation/debug/index.mjs';
 import {cliError} from './cli-error.mjs';
 import {isOutsideProject} from '../../../foundation/env/project-scope.mjs';
 import {commandDocsOf, setHelpExampleFilter} from './define-command.mjs';
+import {commandPath} from './command-path.mjs';
 
 /** @typedef {import('commander').Command} Command */
 /** @typedef {import('../../../foundation/bases/resolve.mjs').ActiveBase} ActiveBase */
@@ -40,22 +41,6 @@ export function helpBase() {
   } catch {
     return null;
   }
-}
-
-/**
- * The full command path after `astryx`, such as `theme build`.
- * @param {Command} cmd
- * @returns {string}
- */
-export function commandPath(cmd) {
-  const parts = [];
-  /** @type {Command | null} */
-  let c = cmd;
-  while (c && c.parent) {
-    parts.unshift(c.name());
-    c = c.parent;
-  }
-  return parts.join(' ');
 }
 
 /**
@@ -281,7 +266,12 @@ export function runAdapters() {
  */
 export async function checkRun(program, actionCommand) {
   checkedAdapters = {};
-  if (actionCommand === program) return;
+  if (actionCommand === program) {
+    // A bare run declares no step, but it answers from the run's base.
+    const resolution = runBase();
+    if (!resolution.ok) refuseResolution(resolution);
+    return;
+  }
   const doc = commandDocsOf(actionCommand)?.doc;
   if (refusesHereFirst(doc, process.cwd())) return;
   const resolution = runBase();

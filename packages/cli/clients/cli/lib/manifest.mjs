@@ -43,9 +43,13 @@ import {API_VERSION} from '../../../foundation/response/json.mjs';
 import {commandDocsOf} from './define-command.mjs';
 import {doc as manifestDoc} from '../commands/manifest.doc.mjs';
 import {commandAvailable, helpBase} from './base-gate.mjs';
-import {longFlag} from '../../../foundation/bases/requirements.mjs';
+import {
+  longFlag,
+  missingSteps,
+} from '../../../foundation/bases/requirements.mjs';
 import {coreBase} from '../../../foundation/bases/core.mjs';
 import {answeredBy} from '../../../foundation/release/run-context.mjs';
+import {commandPath} from './command-path.mjs';
 
 /**
  * What a run may do beyond the command it was asked for (spec AST-081;
@@ -126,24 +130,6 @@ function describeArgument(arg) {
 }
 
 /**
- * Compute the fully-qualified command name relative to the root program,
- * e.g. `theme build`. The root program itself maps to ''.
- * @param {import('commander').Command} cmd
- * @param {import('commander').Command} root
- * @returns {string}
- */
-function fullName(cmd, root) {
-  const parts = [];
-  /** @type {import('commander').Command | null} */
-  let c = cmd;
-  while (c && c !== root) {
-    parts.unshift(c.name());
-    c = c.parent;
-  }
-  return parts.join(' ');
-}
-
-/**
  * The docs a command was built from. `manifest` is registered by hand in
  * index.mjs, so its CommandDoc is read here.
  * @param {import('commander').Command} cmd
@@ -165,7 +151,7 @@ function docsOf(cmd, name) {
  * @returns {import('./manifest').ManifestCommand | null}  null for hidden/internal commands
  */
 function describeCommand(cmd, root, jsonSupported, base = null) {
-  const name = fullName(cmd, root);
+  const name = commandPath(cmd);
   // Skip the auto-generated help command and any hidden/internal commands
   // (e.g. the postinstall shim) — agents never invoke these directly.
   // `_hidden` is a Commander internal not present on its public types.
@@ -308,6 +294,33 @@ export function storedManifest() {
     }
   }
   return storedManifestData ?? null;
+}
+
+/**
+ * A stored manifest as a run on `base` reads it: each command's `available`
+ * and the manifest's `base` follow that base. The stored manifest was built on
+ * Core, so a run on Core reads it as it is.
+ * @param {import('./manifest').CLIManifest} manifest
+ * @param {import('../../../foundation/bases/resolve.mjs').ActiveBase | null} base
+ * @returns {import('./manifest').CLIManifest}
+ */
+export function rebaseManifest(manifest, base) {
+  if (base == null || base.core) return manifest;
+  /** @param {import('./manifest').ManifestCommand[]} cmds @returns {import('./manifest').ManifestCommand[]} */
+  const rebase = cmds =>
+    cmds.map(cmd => {
+      const subcommands = cmd.subcommands ? rebase(cmd.subcommands) : undefined;
+      const available =
+        subcommands && !cmd.requires?.length
+          ? subcommands.some(sub => sub.available)
+          : missingSteps(base, cmd.requires).length === 0;
+      return {...cmd, ...(subcommands ? {subcommands} : {}), available};
+    });
+  return {
+    ...manifest,
+    commands: rebase(manifest.commands),
+    base: {name: base.name, version: base.version, steps: [...base.steps]},
+  };
 }
 
 /**

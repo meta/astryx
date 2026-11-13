@@ -19,7 +19,12 @@
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
 import {jsonOut} from '../../../foundation/response/json.mjs';
 import {emit, section, text, records} from '../formatters/index.mjs';
-import {buildManifest, storedManifest} from '../lib/manifest.mjs';
+import {
+  buildManifest,
+  rebaseManifest,
+  storedManifest,
+} from '../lib/manifest.mjs';
+import {helpBase} from '../lib/base-gate.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
 import {resultSet} from '../../../foundation/debug/index.mjs';
 import {doc as manifestCommand} from './manifest.doc.mjs';
@@ -34,8 +39,10 @@ export function registerManifest(program, {jsonSupported, version}) {
     action: () => {
       // The published package reads the manifest it stored: only this
       // command is loaded then (see commandsForArgs).
-      const manifest =
-        storedManifest() ?? buildManifest(program, {jsonSupported, version});
+      const stored = storedManifest();
+      const manifest = stored
+        ? rebaseManifest(stored, helpBase())
+        : buildManifest(program, {jsonSupported, version});
       // The manifest IS a result set: one entry per command the CLI ships.
       const answered = resultSet({
         count: manifest.commands.length,

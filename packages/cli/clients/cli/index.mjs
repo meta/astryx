@@ -53,6 +53,8 @@ import {
   commandAvailable,
   helpBase,
 } from './lib/base-gate.mjs';
+import {commandPath} from './lib/command-path.mjs';
+import {scanRootArgs} from './lib/root-args.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -164,23 +166,6 @@ export const JSON_SUPPORTED = new Set([
 ]);
 
 /**
- * Compute the fully qualified command name, e.g. "theme build" or "swizzle".
- * @param {import('commander').Command} actionCommand
- * @param {import('commander').Command} root the root program
- * @returns {string}
- */
-function fullCommandName(actionCommand, root) {
-  const parts = [];
-  /** @type {import('commander').Command | null} */
-  let cmd = actionCommand;
-  while (cmd && cmd !== root) {
-    parts.unshift(cmd.name());
-    cmd = cmd.parent;
-  }
-  return parts.join(' ');
-}
-
-/**
  * Load the handlers that will receive this run, before Commander parses.
  *
  * Called from the bin BEFORE Commander parses, not from a hook. Most commands
@@ -255,30 +240,16 @@ async function loadProjectOnce() {
 }
 
 /**
- * The first word of a run that is not an option or an option's value. The
- * root's own options say which take a value; without the program, only
- * `--base` is known to.
+ * The first word of a run that is not an option or an option's value.
+ * Without the program, only `--base` is known to take a value.
  * @param {string[]} argv
  * @param {import('commander').Command} [program] the root, with its options
  * @returns {string | undefined}
  */
 function firstOperand(argv, program) {
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
-    if (arg === '--') return argv[i + 1];
-    if (arg.length < 2 || !arg.startsWith('-')) return arg;
-    if (arg.includes('=')) continue;
-    const option = program
-      ? program.options.find(o => o.long === arg || o.short === arg)
-      : arg === '--base'
-        ? {required: true, optional: false}
-        : undefined;
-    if (option?.required) i += 1;
-    else if (option?.optional && argv[i + 1] != null && !argv[i + 1].startsWith('-')) {
-      i += 1;
-    }
-  }
-  return undefined;
+  return scanRootArgs(argv, program?.options ?? [{long: '--base', required: true}], {
+    unknown: 'skip',
+  }).operand;
 }
 
 /**
@@ -350,7 +321,7 @@ export async function refuseHelpWithoutBase(argv = process.argv.slice(2), progra
  * @param {import('commander').Command} root
  */
 function captureInvocation(actionCommand, root) {
-  const name = fullCommandName(actionCommand, root);
+  const name = commandPath(actionCommand);
   debug.setCommand(name);
   debug.setGlobalOptions(root.opts());
 
@@ -460,32 +431,18 @@ const READS_EVERY_COMMAND = new Set(['manifest']);
  * @returns {Set<string> | null}
  */
 export function commandsForArgs(program, argv) {
-  let printsVersion = false;
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
-    // Commander reads a lone `-` as an operand, as it reads any word.
-    if (arg.length < 2 || arg[0] !== '-') {
-      return commands.some(cmd => cmd.name === arg) &&
-        (!READS_EVERY_COMMAND.has(arg) || (arg === 'manifest' && storedManifest() != null))
-        ? new Set([arg])
-        : null;
-    }
-    const equals = arg.startsWith('--') ? arg.indexOf('=') : -1;
-    const flag = equals === -1 ? arg : arg.slice(0, equals);
-    const option = program.options.find(o => o.long === flag || o.short === flag);
-    // Help flags, `--`, combined short flags and unknown flags read the whole
-    // list, or make Commander stop dispatching by name.
-    if (option == null) return null;
-    const takesValue = option.required || option.optional;
-    if (equals !== -1 && !takesValue) return null;
-    if (equals === -1 && option.required) i += 1;
-    const next = argv[i + 1];
-    if (equals === -1 && option.optional && next != null && !(next.length > 1 && next[0] === '-')) {
-      i += 1;
-    }
-    if (option.long === '--version') printsVersion = true;
+  const scan = scanRootArgs(argv, program.options);
+  // Help flags, `--`, combined short flags and unknown flags read the whole
+  // list, or make Commander stop dispatching by name.
+  if (scan.stopped) return null;
+  const arg = scan.operand;
+  if (arg != null) {
+    return commands.some(cmd => cmd.name === arg) &&
+      (!READS_EVERY_COMMAND.has(arg) || (arg === 'manifest' && storedManifest() != null))
+      ? new Set([arg])
+      : null;
   }
-  return printsVersion ? new Set() : null;
+  return scan.printsVersion ? new Set() : null;
 }
 
 /**
@@ -534,6 +491,19 @@ export const COMMAND_LIST_FILE = path.join(__dirname, 'commands.generated.json')
  */
 function printsRootHelp(argv) {
   return argv.length === 1 && ['--help', '-h', 'help'].includes(argv[0]);
+}
+
+/**
+ * Does a run in the working folder read Core? Loads the project, as the help
+ * preload would, to see which base it reads.
+ * @param {string[]} argv
+ * @returns {Promise<boolean>}
+ */
+async function readsCore(argv) {
+  await loadProjectForHelp(argv);
+  const {runBase} = await import('../../foundation/bases/resolve.mjs');
+  const run = runBase();
+  return run.ok && run.base.core;
 }
 
 /**
@@ -811,9 +781,9 @@ export async function createProgram({argv} = {}) {
     // no-ops — stdout now carries only the JSON envelope.
     setJsonMode(true);
     // The root program's own action (no subcommand) is handled directly in
-    // its action handler — let it through. fullCommandName is '' there.
+    // its action handler — let it through. its path is '' there.
     if (actionCommand === program) return;
-    const fullName = fullCommandName(actionCommand, program);
+    const fullName = commandPath(actionCommand);
     if (JSON_SUPPORTED.has(fullName)) return;
     process.__xdsJsonHandled = true;
     // A group given a word it does not have reports an unknown subcommand and
@@ -870,7 +840,7 @@ export async function createProgram({argv} = {}) {
   program.hook('postAction', (thisCommand, actionCommand) => {
     if (!program.opts().json) return;
     if (process.__xdsJsonHandled) return;
-    const fullName = fullCommandName(actionCommand, program);
+    const fullName = commandPath(actionCommand);
     console.log(JSON.stringify({
       apiVersion: API_VERSION,
       error: `Internal: '${fullName}' completed without emitting a JSON envelope`,
@@ -1031,7 +1001,12 @@ export async function createProgram({argv} = {}) {
   });
 
   const loads = argv == null ? null : commandsForArgs(program, argv);
-  const listed = argv != null && printsRootHelp(argv) ? storedCommandList() : null;
+  // The stored list holds Core's commands, so a run on another base, or one
+  // whose base does not resolve, loads every command instead.
+  const listed =
+    argv != null && printsRootHelp(argv) && (await readsCore(argv))
+      ? storedCommandList()
+      : null;
   if (listed) listStoredCommands(program, listed);
   for (const cmd of listed ? [] : commands) {
     if (loads != null && !loads.has(cmd.name)) continue;

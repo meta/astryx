@@ -1625,17 +1625,21 @@ export async function checkCliDocs(_ctx, options = {}) {
 const CORE_DOC_PROVIDERS = new Set(['@astryxdesign/core', '@astryxdesign/cli']);
 
 /**
- * Does a link problem name a doc in `names` as its missing target, written
- * `"[<provider>:]<kind>:<name>"`, with no provider or a Core one?
- * @param {string} problem
+ * Does a link problem name, as its missing target, a doc in `names` that a
+ * Core provider owns? A link written `"[<provider>:]<kind>:<name>"` with no
+ * provider names a doc of the doc it sits in.
+ * @param {string} problem `<route>[ § <section> or (<field>)]: …`
  * @param {Set<string>} names
+ * @param {Map<string, string>} providerByRoute
  * @returns {boolean}
  */
-function namesCoreDoc(problem, names) {
+function namesCoreDoc(problem, names, providerByRoute) {
   if (names.size === 0) return false;
+  const source = providerByRoute.get(problem.split(/ §| \(|:/u, 1)[0]);
   for (const match of problem.matchAll(/"(?:([^":\s]+):)?[a-z-]+:([\w-]+)"/gu)) {
-    const [, provider, name] = match;
-    if (provider != null && !CORE_DOC_PROVIDERS.has(provider)) continue;
+    const [, written, name] = match;
+    const provider = written ?? source;
+    if (provider == null || !CORE_DOC_PROVIDERS.has(provider)) continue;
     if (names.has(name)) return true;
   }
   return false;
@@ -1693,8 +1697,14 @@ export async function checkDocsTree(_ctx, options = {}) {
         ...(await docsLinkProblems(catalog, tree, {references: true})),
       );
       const coreDocs = await coreOnlyDocNames();
+      /** @type {Map<string, string>} */
+      const providerByRoute = new Map(
+        [...tree.nodes.values()].map(node => [node.route, node.provider]),
+      );
       problems.push(
-        ...linkProblems.filter(problem => !namesCoreDoc(problem, coreDocs)),
+        ...linkProblems.filter(
+          problem => !namesCoreDoc(problem, coreDocs, providerByRoute),
+        ),
       );
     }
     // New findings warn: a project that passed before keeps passing

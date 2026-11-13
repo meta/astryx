@@ -26,6 +26,7 @@ import {BASE_STEPS} from '../../foundation/bases/steps.mjs';
 import {coreBase} from '../../foundation/bases/core.mjs';
 import {unknownIntegrationKeys} from '../../authoring/integration/schema.mjs';
 import {refusesHereFirst} from './lib/base-gate.mjs';
+import {rebaseManifest} from './lib/manifest.mjs';
 
 const BIN = path.resolve(import.meta.dirname, 'bin', 'astryx.mjs');
 const COMMANDS = path.resolve(import.meta.dirname, 'commands');
@@ -264,6 +265,36 @@ describe('base resolution', () => {
   });
 });
 
+describe('a stored manifest', () => {
+  it('follows the run base, as the published package reads it', () => {
+    const stored = /** @type {any} */ ({
+      name: 'astryx',
+      base: {name: '@astryxdesign/core', version: '1.0.0', steps: BASE_STEPS},
+      commands: [
+        {
+          name: 'theme',
+          available: true,
+          subcommands: [
+            {name: 'theme build', requires: ['themes.compile'], available: true},
+            {name: 'theme list', available: true},
+          ],
+        },
+        {name: 'experimental', available: true, subcommands: [
+          {name: 'experimental render', requires: ['render.page'], available: true},
+        ]},
+      ],
+    });
+    expect(rebaseManifest(stored, coreBase())).toBe(stored);
+    const native = rebaseManifest(stored, {
+      name: '@acme/native-ui', core: false, dir: null, version: '2.1.0', adapters: {}, steps: [],
+    });
+    expect(native.base).toEqual({name: '@acme/native-ui', version: '2.1.0', steps: []});
+    expect(native.commands[0].available).toBe(true);
+    expect(native.commands[0].subcommands.map(c => c.available)).toEqual([false, true]);
+    expect(native.commands[1].available).toBe(false);
+  });
+});
+
 describe('the base declaration', () => {
   it('reports an adapter capability this CLI does not know', () => {
     expect(
@@ -498,6 +529,11 @@ describe('a project whose only base is not Core', () => {
       expect(theme.stdout.trimEnd().split('\n').at(-1)).toBe(
         '6 commands hidden: the active base @acme/native-ui does not provide the steps they need.',
       );
+      const groupJson = astryx(['--json', 'experimental', 'theme'], dir);
+      expect(groupJson.json().data.commands.map(c => c.name)).not.toContain('compile');
+      const bare = astryx(['--json', '--base', '@acme/nope'], dir);
+      expect(bare.status).toBe(1);
+      expect(bare.json().code).toBe('ERR_BASE_NOT_FOUND');
       const experimental = astryx(['experimental', 'theme', '--help'], dir);
       expect(experimental.stdout).not.toContain('experimental theme targets');
       expect(experimental.stdout).not.toContain('experimental theme editor how');
@@ -679,7 +715,7 @@ describe('a project whose only base is not Core', () => {
   title: 'Native guide',
   category: 'guide',
   description: 'How to use the native library.',
-  sections: [{id: 'intro', title: 'Intro', content: [{type: 'prose', text: 'See {@link @acme/native-ui:generic:tokens}.'}]}],
+  sections: [{id: 'intro', title: 'Intro', content: [{type: 'prose', text: 'See {@link @acme/native-ui:generic:tokens} and {@link generic:spacing}.'}]}],
 };
 `,
           },
@@ -689,6 +725,7 @@ describe('a project whose only base is not Core', () => {
       const tree = r.json().data.checks.find(c => c.id === 'docs-tree');
       expect(tree.status).toBe('warn');
       expect(tree.message).toContain('@acme/native-ui:generic:tokens');
+      expect(tree.message).toContain('"generic:spacing"');
     },
     SLOW,
   );
