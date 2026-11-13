@@ -87,7 +87,7 @@ Options:
 
 - `--type <component|hook|doc|template|theme>`: restrict to a single domain (`doc` and `theme` work outside an app too)
 - `--limit <n>`: cap the number of results (default 20)
-- `--verbose`: also print each result's match score and reason
+- `--verbose`: also print each result's match score and reason, and its whole description
 - `--json`: typed `{ apiVersion, type: 'search', data: { query, matchCount, results } }` envelope — `matchCount` is how many candidates matched in total, `results` the slice `--limit` allowed
 
 ## Commands
