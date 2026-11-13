@@ -759,17 +759,18 @@ describe('every color decision is generator config', () => {
     );
   });
 
-  it('writes one mode for a one-mode theme and keeps the author fields the dials do not own', () => {
+  it('writes both modes for a one-mode theme too and keeps the author fields the dials do not own', () => {
+    // A one-mode theme keeps both halves: its mode is the one the app's
+    // <Theme> is given, and a region Core draws in the other mode (a toast,
+    // a lightbox) reads the other half.
     const light = plan([{thing: 'accent', value: '#60a5fa'}], {
       mode: 'light-only',
     });
-    expect(light.config.modeStrategy).toBe('light-only');
+    expect(light.config.modeStrategy).toBe('light-and-dark');
     expect(
       Object.keys(/** @type {any} */ (light.candidate.palette.accent)),
-    ).not.toContain('dark');
-    expect(light.pal.tokens['--color-accent'].dark).toEqual(
-      light.pal.tokens['--color-accent'].light,
-    );
+    ).toContain('dark');
+    expect(light.pal.tokens['--color-accent'].dark.color).toBeTruthy();
     const authored = {
       modeStrategy: 'light-only',
       neutralProfile: 'warm-v1',
@@ -1742,14 +1743,17 @@ describe('chaos round 4', () => {
       ).toBe('ERR_THEME_BAD_VALUE');
   });
 
-  it('lists what the dropped mode loses when a theme becomes one-mode', async () => {
+  it('keeps both halves when a theme becomes one-mode, and says where its mode goes', async () => {
+    // The theme's colors stay as they were; its mode is the one the app's
+    // <Theme> is given.
     await themeEditNew('m', {cwd});
     await themeEditSet('m', 'accent', '#0d9488', {cwd});
     const dark = await themeEditSet('m', 'mode', 'dark-only', {cwd});
-    expect(dark.data.changedTokens.some(x => /\(light\): /.test(x))).toBe(true);
+    expect(dark.data.changedTokens).toEqual([]);
+    expect(dark.data.notes.join(' ')).toContain('mode="dark"');
     await themeEditUndo('m', {cwd, thing: 'mode'});
     const light = await themeEditSet('m', 'mode', 'light-only', {cwd});
-    expect(light.data.changedTokens.some(x => /\(dark\): /.test(x))).toBe(true);
+    expect(light.data.notes.join(' ')).toContain('mode="light"');
     fs.rmSync(path.join(cwd, 'themes', 'm'), {recursive: true, force: true});
   });
 
@@ -1833,7 +1837,7 @@ describe('a palette an earlier editor wrote', () => {
       fs
         .readFileSync(ts, 'utf8')
         .replace(
-          /"--color-accent": palette\.accent\.dark\[[\d.]+\],/,
+          /"--color-accent": \[\s*palette\.accent\.light\[[\d.]+\],\s*palette\.accent\.dark\[[\d.]+\],?\s*\],/,
           '"--color-accent": [palette.accent.light[50], palette.accent.dark[70]],',
         )
         .replace(/^\/\/ Module [0-9a-f]{16}\.\n/m, ''),

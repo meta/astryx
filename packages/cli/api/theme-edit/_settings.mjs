@@ -2082,48 +2082,6 @@ function keepShades(pal, kept) {
 }
 
 /**
- * A value with each two-mode part as its one mode's half: a `[light, dark]`
- * pair and a `light-dark(light, dark)` (at any depth of a value) become the
- * half for `mode`.
- * @param {any} v
- * @param {'light' | 'dark'} mode
- * @returns {any}
- */
-export function oneMode(v, mode) {
-  if (Array.isArray(v))
-    return v.length === 2 && v.every(x => typeof x === 'string')
-      ? oneMode(v[mode === 'light' ? 0 : 1], mode)
-      : v.map(x => oneMode(x, mode));
-  if (typeof v === 'string') {
-    let out = v;
-    for (
-      let at = out.indexOf('light-dark(');
-      at >= 0;
-      at = out.indexOf('light-dark(')
-    ) {
-      let depth = 0;
-      let end = at + 'light-dark'.length;
-      for (; end < out.length; end++) {
-        if (out[end] === '(') depth++;
-        else if (out[end] === ')' && --depth === 0) break;
-      }
-      const halves = splitTop(out.slice(at + 'light-dark('.length, end), ',');
-      if (halves.length !== 2) break;
-      out =
-        out.slice(0, at) +
-        halves[mode === 'light' ? 0 : 1].trim() +
-        out.slice(end + 1);
-    }
-    return out;
-  }
-  if (v && typeof v === 'object')
-    return Object.fromEntries(
-      Object.entries(v).map(([k, x]) => [k, oneMode(x, mode)]),
-    );
-  return v;
-}
-
-/**
  * The settings, as a `defineTheme` object.
  * @param {Ctx} ctx
  * @param {ThemeData} data
@@ -2158,11 +2116,9 @@ export function compileTheme(ctx, data, base) {
   /** @param {string} name @param {string | [string, string]} v @param {string} [mode] */
   const putTok = (name, v, mode) => {
     const t = (tok[name] ??= {});
-    // A one-mode theme writes the value of its mode to both sides.
-    if (Array.isArray(v) && modeOnly) {
-      t.light = t.dark = v[modeOnly === 'light' ? 0 : 1];
-      return;
-    }
+    // A one-mode theme keeps both halves of a pair: its mode is the one the
+    // app's <Theme> is given, and a region Core draws in the other mode
+    // (a toast, a lightbox) still reads the other half.
     if (Array.isArray(v)) {
       if (!mode || mode === 'light') t.light = v[0];
       if (!mode || mode === 'dark') t.dark = v[1];
@@ -2812,7 +2768,7 @@ export function compileTheme(ctx, data, base) {
         for (const m of /** @type {const} */ (['light', 'dark']))
           if (!x.mode || x.mode === m) value[m] = {color: x.value};
     ((theme.components[target] ??= {})[key] ??= {})['--color-text-secondary'] =
-      liftValue(value, modeOnly);
+      liftValue(value, null);
   }
   // `headings` owns heading weight and tracking whatever the order: `type`
   // sets them only where no `headings` setting does.
@@ -3065,15 +3021,6 @@ export function compileTheme(ctx, data, base) {
       theme.typography.heading = {family: f.family, fallbacks: f.fallbacks};
     }
   }
-  // A one-mode theme looks the same whatever the system asks for: every
-  // color the theme does not set takes its mode's value from the base (or
-  // Core) on both sides.
-  if (modeOnly)
-    for (const k of Object.keys(/** @type {Record<string, string>} */ (TOKENS)))
-      if (MODAL.has(ctx.C.typeOf(k)) && !tok[k]) {
-        const v = base[modeOnly]?.[k];
-        if (v && !/var\(/.test(v)) putTok(k, v);
-      }
   // A scale steeper or flatter than the standard one changes the headings;
   // the steps below the base text size keep the standard ratio, so small
   // text stays as it was. An exact token setting still wins.
@@ -3153,44 +3100,6 @@ export function compileTheme(ctx, data, base) {
         },
       ],
     };
-  // A one-mode theme reads its mode everywhere: every two-mode value it
-  // writes is its mode's half, and its scope says which mode it is, so a
-  // light-dark() it inherits (the base theme's part rules, its shadows)
-  // takes that mode's branch whatever the system asks for.
-  if (modeOnly) {
-    // What the base theme gives in two modes and this theme leaves alone
-    // (its own tokens, a part's rule), as its mode's half.
-    for (const k of new Set([
-      ...Object.keys(base.light ?? {}),
-      ...Object.keys(base.dark ?? {}),
-    ]))
-      if (
-        !(k in theme.tokens) &&
-        !(k in TOKENS) &&
-        base.light?.[k] !== base.dark?.[k] &&
-        base[modeOnly]?.[k] != null
-      )
-        theme.tokens[k] = base[modeOnly][k];
-    for (const [part, blocks] of Object.entries(
-      /** @type {Record<string, Record<string, any>>} */ (
-        /** @type {any} */ (base).components ?? {}
-      ),
-    ))
-      for (const [key, block] of Object.entries(blocks ?? {})) {
-        if (!block || typeof block !== 'object') continue;
-        for (const [prop, v] of Object.entries(block)) {
-          const flat = oneMode(v, modeOnly);
-          if (JSON.stringify(flat) === JSON.stringify(v)) continue;
-          const mine = ((theme.components[part] ??= {})[key] ??= {});
-          if (!(prop in mine)) mine[prop] = flat;
-        }
-      }
-    theme.tokens['color-scheme'] = modeOnly;
-    theme.tokens = oneMode(theme.tokens, modeOnly);
-    theme.components = oneMode(theme.components, modeOnly);
-    if (theme.adaptations)
-      theme.adaptations = oneMode(theme.adaptations, modeOnly);
-  }
   if (!Object.keys(theme.tokens).length) delete theme.tokens;
   if (!Object.keys(theme.components).length) delete theme.components;
   return theme;
@@ -3387,22 +3296,11 @@ function settingsSource(slug, data, theme, pal, cwd = '') {
       ? `${REF}${r.family}`
       : `${REF}${r.family ?? family}.${m}.${r.stop}${r.alpha ? `+${r.alpha}` : ''}`;
   const out = {...theme, name: `${slug}-settings`};
-  const only =
-    data.mode === 'light-only'
-      ? 'light'
-      : data.mode === 'dark-only'
-        ? 'dark'
-        : null;
+  // A one-mode theme keeps both halves too (see compileTheme).
   if (pal && theme.tokens) {
     out.tokens = {...theme.tokens};
     for (const [k, v] of Object.entries(pal.tokens)) {
       const now = theme.tokens[k];
-      // A one-mode theme reads one shade, its mode's, on both sides.
-      if (only) {
-        if (now === v[only].color)
-          out.tokens[k] = refOf(v.family, only, v[only]);
-        continue;
-      }
       const [l, d] = Array.isArray(now) ? now : [now, now];
       if (l !== v.light.color || d !== v.dark.color) continue;
       out.tokens[k] = [
@@ -3417,15 +3315,13 @@ function settingsSource(slug, data, theme, pal, cwd = '') {
     for (const [target, key, ground] of LIFT_PARTS) {
       const lift = pal.lift[ground];
       if (!lift) continue;
-      const literal = liftValue(lift, only);
+      const literal = liftValue(lift, null);
       /** A shade of the neutral palette as a reference; a color as it is. @param {'light' | 'dark'} m */
       const one = m => {
         const r = /** @type {any} */ (lift[m]);
         return r.family === 'literal' ? r.color : refOf('neutral', m, r);
       };
-      const refs = only
-        ? one(only)
-        : `light-dark(${one('light')}, ${one('dark')})`;
+      const refs = `light-dark(${one('light')}, ${one('dark')})`;
       const block = out.components[target]?.[key];
       if (block?.['--color-text-secondary'] !== literal) continue;
       out.components[target] = {

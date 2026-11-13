@@ -1261,11 +1261,19 @@ function nextAppsUnder(cwd) {
  * every place that says how to use an editor theme gives.
  * @param {string} cwd
  * @param {string} slug
+ * @param {'light' | 'dark' | 'system'} [mode]
  * @returns {string[]}
  */
-export function addWiring(cwd, slug) {
+export function addWiring(cwd, slug, mode = 'system') {
   return [
     `${formatCliCommand(`theme add ${slug}`, cwd)}: adds the theme's app copy (src/themes/${slug}/, written again after every build) to the app's theme module, and prints the one-time wiring of that module in the app root; ${formatCliCommand(`theme use ${slug}`, cwd)} makes it the default`,
+    // Core has no mode inside a theme: a one-mode theme's mode is the one
+    // the app's <Theme> is given.
+    ...(mode === 'system'
+      ? []
+      : [
+          `${slug} is ${mode}-only: give the <Theme> that theme add's wiring puts in the app root mode="${mode}" (<Theme theme={…} mode="${mode}">); the theme keeps both halves of its colors, so a toast or a lightbox Core draws in the other mode stays readable`,
+        ]),
     `every set and undo builds the theme and its app copy again, so the app takes each change; after editing ${shown(cwd, themeFiles(cwd, slug).ts)} by hand, ${P.replace(/ editor$/, '')} compile ${shown(cwd, themeFiles(cwd, slug).ts)} builds both again`,
   ];
 }
@@ -1308,7 +1316,7 @@ export function appWiring(ctx, slug, data) {
       .readFileSync(path.join(copy, `${name}.doc.mjs`), 'utf8')
       .includes(APP_COPY_MARK)
   )
-    return addWiring(cwd, slug);
+    return addWiring(cwd, slug, ti.mode);
   return [
     `in ${where}, import the theme and its stylesheets: import {Theme} from '@astryxdesign/core/theme'; import {${name}} from '${ti.module.replace(/\.js$/, '')}'; ${ti.css.map(c => `import '${c}';`).join(' ')}`,
     `wrap the app in it: <Theme theme={${name}}${ti.mode === 'system' ? '' : ` mode="${ti.mode}"`}>{children}</Theme>`,

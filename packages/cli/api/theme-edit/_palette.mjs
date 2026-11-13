@@ -1043,7 +1043,10 @@ function planPalette(cwd, slug, data, base) {
       ? {...existing}
       : {};
   const {settings: saved, mode: savedMode} = savedSettings(cwd, slug);
-  const modes = modesOf(data);
+  // Every theme's palette has both modes: a one-mode theme keeps both
+  // halves of its colors (its mode is the one the app's <Theme> is given),
+  // and a region Core draws in the other mode reads the other half.
+  const modes = modesForStrategy('light-and-dark');
 
   const vibrancy = dialVibrancy(data.settings);
   const savedVibrancy = dialVibrancy(saved);
@@ -1888,7 +1891,8 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
   const candidate = generate(config, paletteFiles(slug).config);
   const t = tools(candidate, data, base, ownSourceTokenValues(cwd, slug));
   const {stops, at, ref, exactOf, rawOf, settingOf, side, solid, surfaces} = t;
-  const modes = modesOf(data);
+  // Both halves, for a one-mode theme too (see planPalette).
+  const modes = modesForStrategy('light-and-dark');
   /** @type {PaletteMapping['tokens']} */
   const tokens = {};
   /** @type {ContrastCheck[]} */

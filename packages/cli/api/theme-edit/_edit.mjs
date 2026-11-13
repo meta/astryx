@@ -1253,6 +1253,13 @@ async function changeOnce(sub, slug, thing, value, options, seen) {
               ]
             : []),
           ...otherModeNotes(data),
+          // Core has no mode inside a theme: the app's <Theme> is given it.
+          ...(s.thing === 'mode' &&
+          (data.mode === 'light-only' || data.mode === 'dark-only')
+            ? [
+                `the app shows ${slug} in ${data.mode === 'light-only' ? 'light' : 'dark'} mode when its <Theme> is given mode="${data.mode === 'light-only' ? 'light' : 'dark'}" (<Theme theme={…} mode="${data.mode === 'light-only' ? 'light' : 'dark'}">), as the preview does; the theme keeps both halves of its colors, so a toast or a lightbox Core draws in the other mode stays readable`,
+              ]
+            : []),
           // The colors are made again for the new base or mode: their
           // shade notes follow.
           ...data.settings
