@@ -550,7 +550,32 @@ function scaled(v, f) {
   const m = /^(\d*\.?\d+)(px|rem|em)$/.exec(String(v ?? '').trim());
   if (!m) return null;
   const n = Number(m[1]) * f;
-  return `${m[2] === 'px' ? Math.round(n) : Number(n.toFixed(3))}${m[2]}`;
+  // A fraction of a pixel is a real length (hi-dpi screens draw it): kept
+  // to 0.01px, never rounded away to the same value or to 0.
+  return `${m[2] === 'px' ? Number(n.toFixed(2)) : Number(n.toFixed(3))}${m[2]}`;
+}
+
+/**
+ * The question without its amount words ("3 times", "2x", "x2", "×2",
+ * "+50%", "50 percent", "by a factor of 2"), so a number in them is never
+ * read as a length.
+ * @param {string} text
+ */
+function withoutAmount(text) {
+  return text
+    .replace(/\bby a factor of \d*\.?\d+\b/g, ' ')
+    .replace(
+      /\b(scale|multiply)\b([^.]*?)\bby \d*\.?\d+\b(?!\s*(px|rem|em|%))/g,
+      '$1$2',
+    )
+    .replace(/\b\d*\.?\d+(?:px)?\s*(?:times|x|×)(?=\s|$|\b)/g, ' ')
+    .replace(/(^|\s)[x×]\s?\d*\.?\d+\b/g, ' ')
+    .replace(/(^|[\s(])[+-]\s?\d{1,3}(?:\.\d+)?(?:px)?\s?(%|percent\b)/g, ' ')
+    .replace(/(?:^|\s)0?\.\d+(?:px)?\s+(?=(the|of)\b)/g, ' ')
+    .replace(
+      /\b\d{1,3}(?:\.\d+)?(?:px)?\s?(%|percent\b)\s*(?=(bigger|larger|more|wider|taller|thicker|higher|roomier|smaller|less|tighter|narrower|thinner|shorter|lower|transparent|opaque|strength|of|as)\b)/g,
+      ' ',
+    );
 }
 
 /**
@@ -622,37 +647,92 @@ const compared = new WeakMap();
  * @returns {number | null}
  */
 export function exactFactor(text) {
-  const t = text.toLowerCase();
-  if (/\b(half|halve|halved)\b/.test(t)) return 0.5;
+  const t = text
+    .toLowerCase()
+    .replace(/½/g, ' 1/2 ')
+    .replace(/¼/g, ' 1/4 ')
+    .replace(/⅓/g, ' 1/3 ')
+    .replace(/×/g, ' x ')
+    .replace(/(\d)(?:px)?\s*percent\b/g, '$1%')
+    .replace(/(\d)px(?=\s*(?:%|times|x\b))/g, '$1')
+    .replace(/\s+/g, ' ');
+  const SHRINK = /^(smaller|less|tighter|narrower|thinner|shorter|lower)$/;
+  const GROW = /^(bigger|larger|more|wider|taller|thicker|higher|roomier)$/;
+  /** A change by a share: "a quarter bigger", "+50%", "cut by a third". @param {number} share @param {boolean} down */
+  const by = (share, down) => {
+    const f = down ? 1 - share : 1 + share;
+    return f >= 0 ? f : null;
+  };
+  const fraction = (/** @type {string} */ w) =>
+    ({
+      half: 0.5,
+      'a half': 0.5,
+      'a third': 1 / 3,
+      'a quarter': 0.25,
+      '1/2': 0.5,
+      '1/3': 1 / 3,
+      '1/4': 0.25,
+    })[w] ?? null;
+  // "half again as big": one and a half.
+  if (/\bhalf again\b/.test(t)) return 1.5;
+  // "a quarter bigger", "a third smaller", "cut by a third", "reduce by half".
+  const share =
+    /\b(a half|half|a third|a quarter|1\/2|1\/3|1\/4)\s+(bigger|larger|more|wider|taller|thicker|higher|smaller|less|tighter|narrower|thinner|shorter|lower)\b/.exec(
+      t,
+    );
+  if (share) {
+    const f = fraction(share[1]);
+    if (f != null) return by(f, SHRINK.test(share[2]));
+  }
+  const cut =
+    /\b(cut|reduce|lower|shrink|decrease|increase|raise|grow)\b[^.]*?\bby (a half|half|a third|a quarter|1\/2|1\/3|1\/4)\b/.exec(
+      t,
+    );
+  if (cut) {
+    const f = fraction(cut[2]);
+    if (f != null) return by(f, !/^(increase|raise|grow)$/.test(cut[1]));
+  }
+  // "+50%", "-25%", "50% bigger", "100% smaller".
+  const signed = /(^|[\s(])([+-])\s?(\d{1,3}(?:\.\d+)?)\s?%/.exec(t);
+  if (signed) return by(Number(signed[3]) / 100, signed[2] === '-');
+  const pctBy =
+    /\b(\d{1,3}(?:\.\d+)?)\s?%\s*(bigger|larger|more|wider|taller|thicker|higher|roomier|smaller|less|tighter|narrower|thinner|shorter|lower)\b/.exec(
+      t,
+    );
+  if (pctBy && Number(pctBy[1]) > 0)
+    return by(Number(pctBy[1]) / 100, SHRINK.test(pctBy[2]));
+  const pct = /\b(\d{1,3}(?:\.\d+)?)\s?%\s*(?:strength|of|as)\b/.exec(t);
+  if (pct && Number(pct[1]) > 0) return Number(pct[1]) / 100;
+  if (/\b(half|halve|halved|1\/2)\b/.test(t)) return 0.5;
+  // "½ the padding" (read as 0.5 the padding).
+  const lead = /(?:^|\s)(0?\.\d+)(?:px)?\s+(?:the|of)\b/.exec(t);
+  if (lead) return Number(lead[1]);
   if (/\b(double|doubled|twice)\b/.test(t)) return 2;
   if (/\b(triple|tripled|three times)\b/.test(t)) return 3;
-  if (/\ba third\b/.test(t)) return 1 / 3;
-  if (/\ba quarter\b/.test(t)) return 0.25;
-  const pct = /\b(\d{1,3})\s?%\s*(?:strength|of|as)\b/.exec(t);
-  if (pct && Number(pct[1]) > 0) return Number(pct[1]) / 100;
-  // "50% bigger", "20% less": a change by that share.
-  const by =
-    /\b(\d{1,3})\s?%\s*(bigger|larger|more|wider|taller|smaller|less|tighter|narrower)\b/.exec(
+  if (/\b(quadruple|quadrupled|four times)\b/.test(t)) return 4;
+  if (/\b(a third|1\/3)\b/.test(t)) return 1 / 3;
+  if (/\b(a quarter|1\/4)\b/.test(t)) return 0.25;
+  // "by a factor of 2", "scale … by 1.5", "multiply … by 2".
+  const factor =
+    /\bby a factor of (\d*\.?\d+)\b/.exec(t) ??
+    /\b(?:scale|multiply)\b[^.]*?\bby (\d*\.?\d+)\b(?!\s*(?:px|rem|em|%))/.exec(
       t,
     );
-  if (by && Number(by[1]) > 0) {
-    const f = /^(smaller|less|tighter|narrower)$/.test(by[2])
-      ? 1 - Number(by[1]) / 100
-      : 1 + Number(by[1]) / 100;
-    return f > 0 ? f : null;
-  }
-  // "3 times bigger", "1.5 times as big", "2 times smaller".
+  if (factor && Number(factor[1]) >= 0 && Number(factor[1]) <= 10)
+    return Number(factor[1]);
+  // "3 times bigger", "2 times smaller", "4 times", "2x", "1.5x", "x2".
   const nTimes =
-    /\b(\d*\.?\d+)(?:px)?\s*(?:times|x)\s+(bigger|larger|more|wider|taller|thicker|as|smaller|less|thinner|narrower)\b/.exec(
+    /\b(\d*\.?\d+)(?:px)?\s*(?:times|x)\b(?:\s+(bigger|larger|more|wider|taller|thicker|as|smaller|less|thinner|narrower))?/.exec(
       t,
     );
-  if (nTimes && Number(nTimes[1]) > 0 && Number(nTimes[1]) <= 10)
-    return /^(smaller|less|thinner|narrower)$/.test(nTimes[2])
-      ? 1 / Number(nTimes[1])
-      : Number(nTimes[1]);
-  const times = /\bx\s?(\d*\.?\d+)\b/.exec(t);
-  if (times && Number(times[1]) > 0 && Number(times[1]) <= 4)
+  if (nTimes && Number(nTimes[1]) >= 0 && Number(nTimes[1]) <= 20) {
+    const n = Number(nTimes[1]);
+    return nTimes[2] && SHRINK.test(nTimes[2]) ? (n > 0 ? 1 / n : null) : n;
+  }
+  const times = /(?:^|\s)x\s?(\d*\.?\d+)\b/.exec(t);
+  if (times && Number(times[1]) >= 0 && Number(times[1]) <= 20)
     return Number(times[1]);
+  void GROW;
   return null;
 }
 
@@ -1136,11 +1216,38 @@ function clausesOf(q, partWords) {
         if (parts[i].on === 'badge' && !/\b(badges?|chips?|tags?)\b/.test(text))
           parts.splice(i, 1);
     // "Space Grotesk headings": a font's name is a font, never its words.
-    const aspects = aspectsOf(
+    const aspects0 = aspectsOf(
       text
         .replace(new RegExp(`\\b(${FONT_NAMES})\\b`, 'g'), ' font ')
         .replace(/\bspace (mono|grotesk|grotesque)\b/g, ' font '),
     );
+    // "padding 3 times bigger", "half the border width": the comparative
+    // goes with the amount of the thing named, never a size change too.
+    // "more transparent", "less opaque": the part's opacity, never its
+    // background made transparent too.
+    const seeThrough =
+      /\b(more|less) (transparent|translucent|see-through|opaque)\b/.test(
+        text,
+      ) && parts.length > 0;
+    const aspects = seeThrough
+      ? ['opacity']
+      : exactFactor(text) != null && aspects0.length > 1
+        ? (() => {
+            // An amount goes with the measured thing it names (padding,
+            // corners, a font size…), never a size or motion change too.
+            const SCALAR = [
+              'spacing',
+              'corners',
+              'fontsize',
+              'leading',
+              'tracking',
+              'opacity',
+              'border',
+            ];
+            const named = aspects0.filter(a => SCALAR.includes(a));
+            return named.length ? named : aspects0.filter(a => a !== 'size');
+          })()
+        : aspects0;
     // "orange not red" negates a color, not the change.
     const hue = Object.keys(HUES).join('|');
     const negText = text.replace(
@@ -1234,9 +1341,7 @@ function clausesOf(q, partWords) {
       lengths: [
         ...(text.match(/\b(?:clamp|calc|min|max)\([^)]*\)/g) ?? []),
         // "3 times bigger": the 3 is an amount, never a length.
-        ...lengthsIn(
-          text.replace(/\b\d*\.?\d+(?:px)?\s*(?:times|x)\s+(?=\w)/g, ' '),
-        ),
+        ...lengthsIn(withoutAmount(text)),
       ],
       state,
       mode,
@@ -3392,13 +3497,29 @@ export function draftAnswer(ctx, env, question) {
       if (cornerAsk && c.parts.length) {
         const on = c.parts[0].on;
         const read = C.partReads(one(on), 'corners')[0];
+        // The clause's state and variant ("on hover", "primary") are kept,
+        // and the move starts from that state's own radius.
+        const {noState: _ns, ...pf} = flagsFor(c, c.parts[0]);
+        const scopedRadius =
+          pf.state || pf.when
+            ? ([...env.data.settings]
+                .reverse()
+                .find(
+                  st =>
+                    st.thing === 'border-radius' &&
+                    st.on === on &&
+                    (st.state ?? null) === (pf.state ?? null) &&
+                    (st.when ?? null) === (pf.when ?? null) &&
+                    !st.mode,
+                )?.value ?? null)
+            : null;
         // A radius the theme set on the part in px moves from that value.
-        const ownRadius = partValue(on, 'border-radius');
+        const ownRadius = scopedRadius ?? partValue(on, 'border-radius');
         if (ownRadius && /^\d*\.?\d+px$/.test(ownRadius)) {
           const next = Math.max(0, parseFloat(ownRadius) + (down ? -n : n));
           const d = {
             text: `${on}'s corners ${down ? 'down' : 'up'} by ${n}px: from ${ownRadius} to ${next}px`,
-            options: [[set('border-radius', `${next}px`, {on})]],
+            options: [[set('border-radius', `${next}px`, pf)]],
           };
           push(d);
           recordTop(c, d.options[0] ?? []);
@@ -3412,7 +3533,7 @@ export function draftAnswer(ctx, env, question) {
                 set(
                   'border-radius',
                   `max(0px, calc(var(${read.token}) ${down ? '-' : '+'} ${n}px))`,
-                  {on},
+                  pf,
                 ),
               ],
             ],
@@ -3604,9 +3725,12 @@ export function draftAnswer(ctx, env, question) {
       // "padding 3 times bigger", "25% darker": an amount of what is there,
       // never the number as a value.
       !(
-        exactFactor(c.text) &&
-        (/^\d*\.?\d+%?$/.test(String(named.value).trim()) ||
-          /\b\d*\.?\d+(px)?\s*(times|x)\s/.test(c.text))
+        exactFactor(c.text) != null &&
+        withoutAmount(c.text) !== c.text.replace(/\s+/g, ' ')
+      ) &&
+      !(
+        exactFactor(c.text) != null &&
+        /^\d*\.?\d+%?$/.test(String(named.value).trim())
       ) &&
       !(
         /^\d*\.?\d+%$/.test(String(named.value).trim()) &&
@@ -4286,26 +4410,51 @@ export function draftAnswer(ctx, env, question) {
     // bigger") of a part's scalar value: that factor of what the part has
     // now (its own setting, else the token it reads), never a step.
     {
-      const amount = on && !compared.get(c) ? exactFactor(c.text) : null;
+      const typed = on && !compared.get(c) ? exactFactor(c.text) : null;
+      // "a bit more transparent": a step of the opacity there now.
+      const seeStep =
+        typed == null && a === 'opacity' && on
+          ? /\bmore (transparent|translucent|see-through)\b|\bless opaque\b/.test(
+              c.text,
+            )
+            ? 0.8
+            : /\bless (transparent|translucent)\b|\bmore opaque\b/.test(c.text)
+              ? 1.25
+              : null
+          : null;
+      const amount = typed ?? seeStep;
       const borderWidth =
         a === 'border' &&
         /\b(border[- ]width|thick(er|ness)?|thin(ner)?)\b/.test(c.text);
-      const prop = !amount
-        ? null
-        : borderWidth
-          ? 'border-width'
-          : a === 'fontsize'
-            ? 'font-size'
-            : a === 'leading'
-              ? 'line-height'
-              : a === 'tracking'
-                ? 'letter-spacing'
-                : a === 'opacity'
-                  ? 'opacity'
-                  : a === 'size' && /\b(width|wider|narrower)\b/.test(c.text)
-                    ? 'max-width'
-                    : null;
-      if (prop && on && amount) {
+      const prop =
+        amount == null
+          ? null
+          : borderWidth
+            ? 'border-width'
+            : a === 'fontsize'
+              ? 'font-size'
+              : a === 'leading'
+                ? 'line-height'
+                : a === 'tracking'
+                  ? 'letter-spacing'
+                  : a === 'opacity'
+                    ? 'opacity'
+                    : a === 'size' && /\b(width|wider|narrower)\b/.test(c.text)
+                      ? 'max-width'
+                      : null;
+      // "50% more transparent": the opacity loses that share; "less opaque"
+      // already reads as a factor below 1.
+      const opacityAmount =
+        prop === 'opacity' &&
+        typed != null &&
+        /\bmore (transparent|translucent|see-through)\b|\bless opaque\b/.test(
+          c.text,
+        ) &&
+        typed > 1
+          ? 2 - typed
+          : amount;
+      if (prop && on && opacityAmount != null) {
+        const amount = opacityAmount;
         const part = /** @type {string} */ (on);
         const group = C.groupOfProp(prop);
         const read = group
@@ -4322,7 +4471,14 @@ export function draftAnswer(ctx, env, question) {
           now == null
             ? null
             : /^\d*\.?\d+$/.test(String(now).trim())
-              ? String(Number((n * amount).toFixed(3)))
+              ? String(
+                  Number(
+                    (prop === 'opacity'
+                      ? Math.min(1, n * amount)
+                      : n * amount
+                    ).toFixed(3),
+                  ),
+                )
               : scaled(String(now), amount);
         if (value)
           return {
@@ -4341,20 +4497,42 @@ export function draftAnswer(ctx, env, question) {
         };
       }
       case 'leading': {
+        // An amount ("1.5x", "half") or a percent ("150%": of the line
+        // height there now) is a factor, never a typed number.
+        const pctLeading = /\b(\d{1,3}(?:\.\d+)?)(?:px)?\s?%/.exec(c.text);
+        const leadFactor =
+          exactFactor(c.text) ??
+          (pctLeading ? Number(pctLeading[1]) / 100 : null);
         const n =
-          /\b(normal)\b/.exec(c.text)?.[1] ??
-          /\b(\d(?:\.\d+)?)\b(?!\s*(px|rem|em|%))/.exec(c.text)?.[1];
+          leadFactor != null
+            ? null
+            : (/\b(normal)\b/.exec(c.text)?.[1] ??
+              /(?:^|\s)(\d(?:\.\d+)?)(?![\d.]|\s*(px|rem|em|%|x\b|times\b))/.exec(
+                c.text,
+              )?.[1]);
         const tok =
           !on || on === 'body' || p?.role === 'body'
             ? '--text-body-leading'
             : null;
-        const now = tok ? current(tok) : null;
+        // What it is now: the token, else the part's own line height.
+        // A part with no line height of its own reads the body's.
+        const now = tok
+          ? current(tok)
+          : on
+            ? (nowIn(on, 'line-height') ??
+              ('--text-body-leading' in TOKENS
+                ? current('--text-body-leading')
+                : null))
+            : null;
+        const numeric = now != null && /^\d*\.?\d+$/.test(String(now).trim());
         const value =
           n ??
-          (now && /^\d*\.?\d+$/.test(now)
+          (numeric
             ? String(
                 Number(
-                  (Number(now) * (c.dir === 'less' ? 0.9 : 1.1)).toFixed(2),
+                  (
+                    Number(now) * (leadFactor ?? (c.dir === 'less' ? 0.9 : 1.1))
+                  ).toFixed(2),
                 ),
               )
             : c.dir === 'less'
@@ -4366,7 +4544,7 @@ export function draftAnswer(ctx, env, question) {
             options: [[set(tok, value)]],
           };
         return {
-          text: `line height${where}`,
+          text: `line height${where}${numeric && !n ? ` (now ${now})` : ''}`,
           options: [[set('line-height', value, f)]],
         };
       }
@@ -4374,11 +4552,16 @@ export function draftAnswer(ctx, env, question) {
         const tall = tallIn(c.text);
         const tied = radiusIn(c.text);
         // "1.5 times bigger": an amount, never a radius.
-        const typedPx = /\b\d*\.?\d+(px)?\s*(times|x)\s/.test(c.text)
-          ? null
-          : ((tied && /^-?\d*\.?\d+$/.test(tied) ? `${tied}px` : tied) ??
-            c.lengths.find(l => l !== tall) ??
-            null);
+        // A percent with an amount ("50% of now", "20% bigger") is an
+        // amount too: a CSS percent radius is an ellipse.
+        const typedPx =
+          /\b\d*\.?\d+(px)?\s*(times|x)\s/.test(c.text) ||
+          (exactFactor(c.text) != null &&
+            !c.lengths.some(l => l !== tall && !/%$/.test(l)))
+            ? null
+            : ((tied && /^-?\d*\.?\d+$/.test(tied) ? `${tied}px` : tied) ??
+              c.lengths.find(l => l !== tall) ??
+              null);
         // A radius of 0 is square.
         const px = typedPx && parseFloat(typedPx) === 0 ? null : typedPx;
         const zero = Boolean(typedPx) && !px;
@@ -4396,17 +4579,40 @@ export function draftAnswer(ctx, env, question) {
           )
             ? exactFactor(c.text)
             : null;
-        if (cornerFactor) {
+        if (cornerFactor != null) {
           const part = /** @type {string} */ (on);
           const read = C.partReads(one(part), 'corners')[0];
+          // Else the part's plain rule as built (the base theme's radius
+          // for it), its tokens read in this theme.
+          const rule = partRuleTokens(
+            ctx.project.cwd,
+            env.slug,
+            env.data.like,
+            one(part),
+          ).get('border-radius');
+          const ruleNow = rule
+            ? String(rule).replace(
+                /var\(\s*(--[a-z0-9-]+)\s*(?:,[^)]*)?\)/gi,
+                (_, t) => current(t) || _,
+              )
+            : null;
           const now =
             nowIn(part, 'border-radius') ??
-            (read?.token ? current(read.token) : null);
+            (read?.token ? current(read.token) : null) ??
+            (ruleNow && scaled(ruleNow, 1) ? ruleNow : null);
           const value = now ? scaled(now, cornerFactor) : null;
           if (value)
             return {
               text: `corners${where}: border-radius ${value} (now ${now})`,
               options: [[set('border-radius', value, f)]],
+            };
+          // Nothing this can read: a step its way, said to be a step.
+          if (cornerFactor !== 1)
+            return {
+              text: `corners${where}: corners ${cornerFactor < 1 ? 'less' : 'more'} (one step, not an exact amount: ${part} has no radius this can read; give one, such as border-radius 6px)`,
+              options: [
+                [set('corners', cornerFactor < 1 ? 'less' : 'more', f)],
+              ],
             };
         }
         // "revert the rounded corners": take back what the theme sets.
@@ -4452,6 +4658,31 @@ export function draftAnswer(ctx, env, question) {
                 ? 'more'
                 : 'round');
         if (!value) return null;
+        // "double the corner radius everywhere", "double --radius-element":
+        // each radius token (or the one named) from its value now, exactly.
+        const wholeFactor = !on && !px ? exactFactor(c.text) : null;
+        if (wholeFactor != null) {
+          const named = /--radius-[a-z]+/.exec(c.text)?.[0];
+          const toks = named
+            ? [named]
+            : [
+                '--radius-inner',
+                '--radius-element',
+                '--radius-container',
+                '--radius-page',
+              ];
+          const steps = toks.flatMap(tk => {
+            const nowTk = current(tk);
+            const next = nowTk ? scaled(nowTk, wholeFactor) : null;
+            return next ? [set(tk, next)] : [];
+          });
+          if (steps.length)
+            return {
+              text: `corners for the whole theme: ${toks.map(tk => `${tk} ${current(tk)}`).join(', ')}, each ×${Number(wholeFactor.toFixed(3))}`,
+              options: [steps],
+              sequence: steps.length > 1,
+            };
+        }
         if (!on) {
           // The corners dial takes pixels: a rem or em size is converted at
           // 16px to the rem.
@@ -4606,6 +4837,16 @@ export function draftAnswer(ctx, env, question) {
                 }
               : null;
           }
+          // An amount ("double", "half") of the width there now.
+          const bwFactor = c.lengths[0] ? null : exactFactor(c.text);
+          const bwNow = current('--border-width');
+          const bwExact =
+            bwFactor != null && bwNow ? scaled(bwNow, bwFactor) : null;
+          if (bwExact)
+            return {
+              text: `the border width of the whole theme: --border-width ${bwExact} (now ${bwNow})`,
+              options: [[set('--border-width', bwExact)]],
+            };
           if (c.lengths[0] || c.dir)
             return {
               text: 'the border width of the whole theme: --border-width',
@@ -4718,7 +4959,9 @@ export function draftAnswer(ctx, env, question) {
         const value =
           /\b(dense|compact)\b/.test(c.text) && !c.dir
             ? 'compact'
-            : c.neg && /\b(padding|space|gap|margin)\b/.test(c.text)
+            : (c.neg || /\b(zero|no|none|without)\b/.test(c.text)) &&
+                /\b(padding|spac(e|es|ing)|gaps?|margins?)\b/.test(c.text) &&
+                !/\bno (more|less)\b/.test(c.text)
               ? null
               : /\b(cramped|crowded|airy|spacious|roomy)\b/.test(c.text) ||
                   c.dir === 'more'
@@ -4729,7 +4972,7 @@ export function draftAnswer(ctx, env, question) {
         if (!on)
           return value
             ? {
-                text: 'room in the whole theme: the spacing dial (padding, gaps and control heights together)',
+                text: `room in the whole theme: the spacing dial (padding, gaps and control heights together)${exactFactor(c.text) != null ? '; one step, not the exact amount asked: give a value for a token (--spacing-4 24px) for that' : ''}`,
                 options: [[set('spacing', value)]],
               }
             : null;
@@ -4756,6 +4999,51 @@ export function draftAnswer(ctx, env, question) {
         const padNow = part => {
           const own = nowIn(part, gap ? 'gap' : 'padding');
           if (own) return own;
+          // Own side settings (padding-inline 20px) on top of what the part
+          // has for the rest: one box, each side as it is now.
+          if (!gap) {
+            const block = nowIn(part, 'padding-block');
+            const inline = nowIn(part, 'padding-inline');
+            const sideOf = (/** @type {string} */ k) =>
+              nowIn(part, `padding-${k}`);
+            const sides = ['top', 'right', 'bottom', 'left'].map(sideOf);
+            if (block || inline || sides.some(Boolean)) {
+              const rest = padNow0(part);
+              const restSides = rest
+                ? (() => {
+                    const v = String(rest).trim().split(/\s+/);
+                    return [
+                      v[0],
+                      v[1] ?? v[0],
+                      v[2] ?? v[0],
+                      v[3] ?? v[1] ?? v[0],
+                    ];
+                  })()
+                : null;
+              if (restSides) {
+                const [bt, bi] = [block, inline].map(x =>
+                  x ? String(x).trim().split(/\s+/) : null,
+                );
+                const box = [
+                  sides[0] ?? bt?.[0] ?? restSides[0],
+                  sides[1] ?? bi?.[1] ?? bi?.[0] ?? restSides[1],
+                  sides[2] ?? bt?.[1] ?? bt?.[0] ?? restSides[2],
+                  sides[3] ?? bi?.[0] ?? restSides[3],
+                ];
+                const out =
+                  box[0] === box[2] && box[1] === box[3]
+                    ? box[0] === box[1]
+                      ? box[0]
+                      : `${box[0]} ${box[1]}`
+                    : box.join(' ');
+                return out;
+              }
+            }
+          }
+          return padNow0(part);
+        };
+        /** padNow without the part's own setting. @param {string} part */
+        const padNow0 = part => {
           // The part's plain rule in the theme as built (the base theme's
           // card padding), its tokens read in this theme.
           const rule = partRuleTokens(
@@ -4774,6 +5062,27 @@ export function draftAnswer(ctx, env, question) {
           const reads = C.partReads(one(part), 'spacing').filter(r =>
             r.props.some(p => (gap ? /gap/ : /^padding/).test(p)),
           );
+          // Each side from the token Core reads for it (a button's block and
+          // inline padding differ; a badge has no block padding): one box.
+          if (!gap) {
+            /** @param {RegExp} re */
+            const sideTok = re =>
+              reads.find(r => r.props.some(x => re.test(x)))?.token ?? null;
+            const toks = [
+              sideTok(/^padding-(block(-start)?|top)$/),
+              sideTok(/^padding-(inline(-end)?|right)$/),
+              sideTok(/^padding-(block(-end)?|bottom)$/),
+              sideTok(/^padding-(inline(-start)?|left)$/),
+            ];
+            if (toks.some(Boolean)) {
+              const box = toks.map(tk => (tk ? current(tk) || '0px' : '0px'));
+              return box[0] === box[2] && box[1] === box[3]
+                ? box[0] === box[1]
+                  ? box[0]
+                  : `${box[0]} ${box[1]}`
+                : box.join(' ');
+            }
+          }
           const read =
             reads.find(r => /^--spacing-/.test(r.token)) ?? reads[0] ?? null;
           return read?.token ? current(read.token) : null;
@@ -4782,7 +5091,7 @@ export function draftAnswer(ctx, env, question) {
         // the other part's padding, when the theme sets one; else a step,
         // and the answer says so.
         const versus = compared.get(c) ?? null;
-        if (padFactor && versus) {
+        if (padFactor != null && versus) {
           const now = padNow(versus);
           const exact = now ? scaledBox(now, padFactor) : null;
           return exact
@@ -4795,7 +5104,7 @@ export function draftAnswer(ctx, env, question) {
                 options: [[set('spacing', value ?? 'more', f)]],
               };
         }
-        if (padFactor) {
+        if (padFactor != null) {
           const now = padNow(on);
           const value = now ? scaledBox(now, padFactor) : null;
           if (value)
@@ -4825,12 +5134,32 @@ export function draftAnswer(ctx, env, question) {
           };
         if (!value)
           return {
-            text: `no padding${where}`,
-            options: [[set('padding', '0px', f)]],
+            text: `no ${gap ? 'gap' : 'padding'}${where}`,
+            options: [[set(gap ? 'gap' : 'padding', '0px', f)]],
           };
+        // A step in one state or variant ("on hover") stays there.
+        const stepFlags = {
+          on,
+          ...(f.state ? {state: f.state} : {}),
+          ...(f.when ? {when: f.when} : {}),
+        };
+        const stepOk = env.check([set('spacing', value, stepFlags)]).ok;
+        // The dial takes no state: a step of the padding there now, in that
+        // state, said to be a step.
+        if (!stepOk && (f.state || f.when)) {
+          const nowPad = padNow(on);
+          const stepped = nowPad
+            ? scaledBox(nowPad, value === 'less' ? 0.8 : 1.25)
+            : null;
+          if (stepped)
+            return {
+              text: `${gap ? 'the gap' : 'padding'}${where}: ${stepped} (now ${nowPad}; a step: give an amount, such as double or 24px, for an exact one)`,
+              options: [[set(gap ? 'gap' : 'padding', stepped, f)]],
+            };
+        }
         return {
           text: `room inside ${on}: spacing ${value} (padding, gaps and heights inside it; one step${padFactor ? ', not an exact amount: give a value, such as 24px, for one' : ''})`,
-          options: [[set('spacing', value, {on})]],
+          options: [[set('spacing', value, stepOk ? stepFlags : {on})]],
         };
       }
       case 'tracking': {
@@ -4947,7 +5276,8 @@ export function draftAnswer(ctx, env, question) {
           };
         const px = c.lengths[0];
         const f2 = /\bmuch\b/.test(c.text) ? 1.5 : 1.25;
-        const factor = c.dir === 'less' ? 1 / f2 : f2;
+        // An exact amount ("double", "half") of the size there now.
+        const factor = exactFactor(c.text) ?? (c.dir === 'less' ? 1 / f2 : f2);
         // An exact --font-size-base wins over the text-size dial, so the
         // dial would change nothing there: step that token instead.
         const pinned = on
@@ -4993,7 +5323,7 @@ export function draftAnswer(ctx, env, question) {
         }
         if (!on)
           return {
-            text: 'the base text size: text-size (every heading scales from it)',
+            text: `the base text size: text-size (every heading scales from it)${!px && exactFactor(c.text) != null ? '; one step, not the exact amount asked: give a size (text-size 18) for that' : ''}`,
             options: [
               [
                 set(
@@ -5240,9 +5570,16 @@ export function draftAnswer(ctx, env, question) {
             ],
           };
         if (
-          /\b(wider|narrower|width)\b/.test(c.text) &&
+          /\b(wider|narrower|width|wide)\b/.test(c.text) &&
           !/\bborder[- ]width\b/.test(c.text)
         ) {
+          // An amount ("20% wider", "twice as wide") with no width there to
+          // take it of: said so, never a made-up cap.
+          if (!c.lengths[0] && exactFactor(c.text) != null)
+            return {
+              text: `${on} has no width of its own to scale (it takes the width its content and container give it); give a width, such as max-width 480px`,
+              options: [],
+            };
           const w =
             c.lengths[0] ??
             (/\bnarrower\b/.test(c.text) || c.dir === 'less'
