@@ -283,15 +283,9 @@ function extendOnlySpecifiers(ast) {
       )
     ) {
       const u = uses.get(node.name) ?? {extends: 0, other: 0};
-      const asExtends =
-        parent?.type === 'ObjectProperty' &&
-        parent.value === node &&
-        (parent.key?.name ?? parent.key?.value) === 'extends' &&
-        grand?.type === 'ObjectExpression' &&
-        great?.type === 'CallExpression' &&
-        great.callee?.type === 'Identifier' &&
-        great.callee.name === 'defineTheme' &&
-        great.arguments?.[0] === grand;
+      // The `extends` of a `defineTheme({...})` call, as the check reads a
+      // theme's base everywhere else.
+      const asExtends = definedThemeBase(great) === node;
       if (asExtends) u.extends++;
       else u.other++;
       uses.set(node.name, u);
@@ -303,6 +297,28 @@ function extendOnlySpecifiers(ast) {
     }
   };
   visit(ast.program, null, null, null);
+  // Every other way the file loads a module (`import()`, `require()`,
+  // `export … from`): a specifier loaded so is not only extended.
+  /** @type {Set<string>} */
+  const loadedOtherwise = new Set();
+  walkAst(ast.program, node => {
+    if (
+      ['ExportNamedDeclaration', 'ExportAllDeclaration'].includes(node.type) &&
+      typeof node.source?.value === 'string'
+    )
+      loadedOtherwise.add(node.source.value);
+    if (
+      node.type === 'ImportExpression' &&
+      typeof node.source?.value === 'string'
+    )
+      loadedOtherwise.add(node.source.value);
+    if (
+      node.type === 'CallExpression' &&
+      (node.callee?.type === 'Import' || node.callee?.name === 'require') &&
+      typeof node.arguments?.[0]?.value === 'string'
+    )
+      loadedOtherwise.add(node.arguments[0].value);
+  });
   /** @type {Map<string, boolean>} */
   const only = new Map();
   for (const [name, from] of bindings) {
@@ -312,7 +328,10 @@ function extendOnlySpecifiers(ast) {
   }
   return new Set(
     [...only]
-      .filter(([from, ok]) => ok && importsOf.get(from) === 1)
+      .filter(
+        ([from, ok]) =>
+          ok && importsOf.get(from) === 1 && !loadedOtherwise.has(from),
+      )
       .map(([from]) => from),
   );
 }

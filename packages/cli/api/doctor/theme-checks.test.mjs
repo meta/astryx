@@ -956,6 +956,10 @@ describe('app-theme doctor checks', () => {
       `export const page = oceanTheme;\n`,
       `import {defineTheme} from '@astryxdesign/core/theme';\nexport const themes = [oceanTheme, defineTheme({extends: oceanTheme, name: 'x'})];\n`,
       `// defineTheme({extends: oceanTheme})\nexport const page = oceanTheme;\n`,
+      // An extend-only import beside another way of loading the module.
+      `import {defineTheme} from '@astryxdesign/core/theme';\nexport const t = defineTheme({extends: oceanTheme, name: 'x'});\nexport * from '${specifier}';\n`,
+      `import {defineTheme} from '@astryxdesign/core/theme';\nexport const t = defineTheme({extends: oceanTheme, name: 'x'});\nexport const later = () => import('${specifier}');\n`,
+      `import {defineTheme} from '@astryxdesign/core/theme';\nexport const t = defineTheme({extends: oceanTheme, name: 'x'});\nexport const later = () => require('${specifier}');\n`,
     ]) {
       fs.writeFileSync(
         path.join(dir, 'src/Page.tsx'),
