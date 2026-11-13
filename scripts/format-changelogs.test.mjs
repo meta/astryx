@@ -156,7 +156,7 @@ describe('formatVersionBlock line-wrapping', () => {
   });
 
   it("keeps a Changeset's list of details under its own entry", () => {
-    // A v0.7.16 Changeset, as written: a headline, then a list of details.
+    // Abridged from a v0.7.16 Changeset: a headline, then a list of details.
     const changeset = [
       "[experimental] `astryx experimental theme editor`: CSS read with the current specifications' grammar.",
       '',
