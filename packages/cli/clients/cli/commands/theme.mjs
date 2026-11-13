@@ -35,6 +35,7 @@ import {fileURLToPath} from 'node:url';
 import {spawn} from 'node:child_process';
 import {
   getCliInvocation,
+  commandInFolder,
   quoteCommandArgument,
 } from '../../../foundation/env/package-manager.mjs';
 import {isOutsideProject} from '../../../foundation/env/project-scope.mjs';
@@ -79,9 +80,9 @@ import {
   printCompactTrailer,
   setEditorFolderListener,
   setPrivateVarErrorListener,
-  themeBuild,
   themeBuildFamily,
   themeBuildForReport,
+  themeBuildWithHandOff,
   themeSourceFiles,
   themeSourceGuesses,
   writeDeferredBuildOutputs,
@@ -327,14 +328,15 @@ async function runThemeBuildWatch(entries, options, words = THEME_WORDS) {
 
   // A warning a build prints once per invocation is printed at most once
   // per watch session (spec:AST-017 FR29a), not on every rebuild.
-  let warned = false;
+  /** @type {Set<string>} each warning once, whichever build printed it */
+  const warned = new Set();
   // Watch never runs under --json, so the logger prints (cli-surface INV12).
   logger.setSilent(false);
   const onMessage = (/** @type {unknown} */ message) => {
     const m = /** @type {{type?: unknown, text?: unknown}} */ (message);
-    if (warned || m?.type !== WATCH_WARNING || typeof m.text !== 'string')
-      return;
-    warned = true;
+    if (m?.type !== WATCH_WARNING || typeof m.text !== 'string') return;
+    if (warned.has(m.text)) return;
+    warned.add(m.text);
     logger.warn(m.text);
   };
 
@@ -700,8 +702,32 @@ function printThemeEject(result, words = THEME_WORDS) {
         ]
       : []),
     text(
-      `This is a local fork. Build it with ${getCliInvocation()} ${words.group} ${words.build} ${quoteCommandArgument(path.join(data.outputDir, data.entry).split(path.sep).join('/'))}.`,
+      `This is a local fork. Build it with ${buildStep(getCliInvocation(), words, path.join(data.outputDir, data.entry))}.`,
     ),
+  );
+}
+
+/**
+ * The build command for a theme file a command just wrote, as it works from
+ * the current folder: a build writes its outputs beside the source and only
+ * inside the folder it runs from, so a file above that folder is built from
+ * the project root (`cd ../.. && … theme build theme.template.ts`).
+ * @param {string} invocation
+ * @param {{group: string, build: string}} words
+ * @param {string} file relative to the current folder
+ */
+function buildStep(invocation, words, file) {
+  const cwd = process.cwd();
+  const abs = path.resolve(cwd, file);
+  const rel = path.relative(cwd, abs);
+  const posix = (/** @type {string} */ p) => p.split(path.sep).join('/');
+  if (!rel.startsWith('..'))
+    return `${invocation} ${words.group} ${words.build} ${quoteCommandArgument(posix(rel))}`;
+  const root = findPackageRoot(path.dirname(abs)) ?? path.dirname(abs);
+  // The shell's own form of "in that folder" (PowerShell has no &&).
+  return commandInFolder(
+    posix(path.relative(cwd, root)),
+    `${invocation} ${words.group} ${words.build} ${quoteCommandArgument(posix(path.relative(root, abs)))}`,
   );
 }
 
@@ -1171,9 +1197,9 @@ function registerThemeCommands(theme, program, docs, words) {
               familyKey: /** @type {string} */ (options.familyKey),
               check: options.check,
               iconsSpecifier: options.iconsSpecifier,
-              __commandWords: words,
             },
             {cwd: process.cwd()},
+            {commandWords: words},
           );
           if (json) jsonOut(result);
           if (
@@ -1254,9 +1280,12 @@ function registerThemeCommands(theme, program, docs, words) {
             out: options.out,
             check: options.check,
             iconsSpecifier: options.iconsSpecifier,
-            __claimedOutputs: claimedOutputs,
-            __deferredWrites: deferred ? writes : undefined,
-            __commandWords: words,
+          };
+          /** @type {import('../../../api/theme/build/build.mjs').ThemeBuildHandOff} */
+          const handOff = {
+            claimedOutputs,
+            deferredWrites: deferred ? writes : undefined,
+            commandWords: words,
           };
           let result;
           if (report) {
@@ -1265,6 +1294,7 @@ function registerThemeCommands(theme, program, docs, words) {
               buildOptions,
               {cwd: process.cwd()},
               {compact},
+              handOff,
             );
             result = built.receipt;
             if (built.trailer) trailers.push(built.trailer);
@@ -1280,9 +1310,12 @@ function registerThemeCommands(theme, program, docs, words) {
               else show();
             }
           } else {
-            result = await themeBuild(entry.file, buildOptions, {
-              cwd: process.cwd(),
-            });
+            result = await themeBuildWithHandOff(
+              entry.file,
+              buildOptions,
+              {cwd: process.cwd()},
+              handOff,
+            );
           }
           logger.log = log;
           logger.warn = warn;
@@ -1597,10 +1630,11 @@ function registerThemeCommands(theme, program, docs, words) {
         const err =
           /** @type {import('../../../api/error.mjs').AstryxError} */ (e);
         return themeError(err, words, [
+          // No path: the template at the project root, from any folder.
           themeCommand(
             words,
             'template',
-            ['theme.template.ts'],
+            [],
             'write the template at the project root',
           ),
         ]);
@@ -1642,9 +1676,7 @@ function registerThemeCommands(theme, program, docs, words) {
           'It documents every defineTheme field, the token families, and the component override syntax. ' +
             'Copy what you need into your own theme file, then delete it.',
         ),
-        code(
-          `${invocation} ${words.group} ${words.build} ${quoteCommandArgument(result.data.path)}`,
-        ),
+        code(buildStep(invocation, words, result.data.path)),
       );
       return NO_RESULT_SET;
     },

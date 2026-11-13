@@ -269,7 +269,7 @@ function isCoreSource(dir) {
  * @param {string} p
  * @returns {string}
  */
-function realDir(p) {
+export function realDir(p) {
   try {
     return fs.realpathSync(path.resolve(p));
   } catch {

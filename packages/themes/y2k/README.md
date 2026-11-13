@@ -10,14 +10,14 @@ npm install @astryxdesign/theme-y2k
 
 ## Usage
 
-Wrap your app with `XDSTheme` and pass the theme:
+Wrap your app with `Theme` and pass the theme:
 
 ```tsx
-import {XDSTheme} from '@astryxdesign/core/theme';
+import {Theme} from '@astryxdesign/core/theme';
 import {y2kTheme} from '@astryxdesign/theme-y2k/built';
 
 function App() {
-  return <XDSTheme theme={y2kTheme}>{/* your app */}</XDSTheme>;
+  return <Theme theme={y2kTheme}>{/* your app */}</Theme>;
 }
 ```
 
