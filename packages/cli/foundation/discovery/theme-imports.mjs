@@ -101,7 +101,7 @@ function resolveLocalTheme(theme, cwd) {
     stylesheetFile,
     ...(fs.existsSync(fontStylesheetFile) ? {fontStylesheetFile} : {}),
     source: /** @type {const} */ ('local'),
-    ...builtColorMode(moduleFile),
+    ...builtColorMode(moduleFile, theme.exportName),
   };
 }
 
@@ -229,7 +229,7 @@ function resolvePackageTheme(theme, cwd, ownerThemeCount) {
       /** @type {any} */ (theme).source === 'bundled' || theme.bundled
         ? /** @type {const} */ ('bundled')
         : /** @type {const} */ ('package'),
-    ...builtColorMode(selected.module.target),
+    ...builtColorMode(selected.module.target, theme.exportName),
   };
 }
 
@@ -239,13 +239,26 @@ function resolvePackageTheme(theme, cwd, ownerThemeCount) {
  * the theme export), read without running it; nothing for a module with
  * both modes, which exports none.
  * @param {string | null | undefined} moduleFile
+ * @param {string} [exportName] the theme's export: a module that re-exports
+ *   only the theme by name (`export {oceanTheme} from './ocean.js'`) is
+ *   read where the theme is declared
  * @returns {{mode?: 'light' | 'dark'}}
  */
-export function builtColorMode(moduleFile) {
+export function builtColorMode(moduleFile, exportName) {
   if (!moduleFile) return {};
   // The file that declares it: the module, or the built module it re-exports
-  // (`export * from './ocean.js'`).
-  const declaring = moduleExportSource(moduleFile, 'colorModes');
+  // (`export * from './ocean.js'`); else the built module that declares the
+  // theme the module re-exports by name.
+  const declaring =
+    moduleExportSource(moduleFile, 'colorModes') ??
+    (exportName
+      ? (() => {
+          const theme = moduleExportSource(moduleFile, exportName);
+          return theme && theme !== moduleFile
+            ? moduleExportSource(theme, 'colorModes')
+            : null;
+        })()
+      : null);
   if (!declaring) return {};
   let text;
   try {

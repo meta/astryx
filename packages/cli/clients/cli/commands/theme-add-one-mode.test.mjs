@@ -245,56 +245,102 @@ describe('theme add of a theme with one color mode', () => {
     expect(JSON.parse(r.stdout).data.themes[0].mode).toBe('dark');
   });
 
-  it('the printed wiring type-checks with exactOptionalPropertyTypes', () => {
-    // A folder inside the CLI package, so Core and React types resolve.
-    const dir = fs.mkdtempSync(path.join(import.meta.dirname, '.wiring-tsc-'));
-    dirs.push(dir);
-    const module = renderThemeModule(
-      [
-        {
-          slug: 'neutral',
-          owner: '@astryxdesign/theme-neutral',
-          exportName: 'neutralTheme',
-          module: '@astryxdesign/theme-neutral',
-          stylesheet: '@astryxdesign/theme-neutral/theme.css',
-          moduleFile: '',
-          stylesheetFile: '',
-          source: 'package',
-          mode: 'light',
-        },
-      ],
-      'neutral',
-      true,
-    ).replace(/^import "[^"]+";$/gm, '');
-    fs.writeFileSync(path.join(dir, 'astryx-themes.ts'), module);
-    fs.writeFileSync(
-      path.join(dir, 'app.tsx'),
-      "import {Theme} from '@astryxdesign/core/theme';\nimport {themes, defaultThemeSlug, themeModes} from './astryx-themes';\n\nexport const App = () => (\n  <Theme theme={themes[defaultThemeSlug]} mode={themeModes[defaultThemeSlug] ?? 'system'}>\n    <div />\n  </Theme>\n);\n",
+  it.each([
+    ['a theme with one mode', [/** @type {const} */ ('light')], false],
+    ['no theme with one mode, after one was removed', [], true],
+  ])(
+    'the printed wiring type-checks with exactOptionalPropertyTypes: %s',
+    (_label, modes, keepModes) => {
+      // A folder inside the CLI package, so Core and React types resolve; the
+      // theme is a local stub typed as Theme takes it (no theme package needs
+      // to be built).
+      const dir = fs.mkdtempSync(
+        path.join(import.meta.dirname, '.wiring-tsc-'),
+      );
+      dirs.push(dir);
+      fs.writeFileSync(
+        path.join(dir, 'stub-theme.ts'),
+        "import type {ComponentProps} from 'react';\nimport type {Theme} from '@astryxdesign/core/theme';\nexport const stubTheme = null as unknown as ComponentProps<typeof Theme>['theme'];\n",
+      );
+      const module = renderThemeModule(
+        [
+          {
+            slug: 'stub',
+            owner: 'stub',
+            exportName: 'stubTheme',
+            module: './stub-theme',
+            stylesheet: './stub.css',
+            moduleFile: '',
+            stylesheetFile: '',
+            source: 'package',
+            ...(modes.length ? {mode: modes[0]} : {}),
+          },
+        ],
+        'stub',
+        true,
+        {keepModes},
+      ).replace(/^import "[^"]+";$/gm, '');
+      expect(module).toContain('export const themeModes');
+      fs.writeFileSync(path.join(dir, 'astryx-themes.ts'), module);
+      fs.writeFileSync(
+        path.join(dir, 'app.tsx'),
+        "import {Theme} from '@astryxdesign/core/theme';\nimport {themes, defaultThemeSlug, themeModes} from './astryx-themes';\n\nexport const App = () => (\n  <Theme theme={themes[defaultThemeSlug]} mode={themeModes[defaultThemeSlug] ?? 'system'}>\n    <div />\n  </Theme>\n);\n",
+      );
+      fs.writeFileSync(
+        path.join(dir, 'tsconfig.json'),
+        JSON.stringify({
+          compilerOptions: {
+            strict: true,
+            exactOptionalPropertyTypes: true,
+            jsx: 'react-jsx',
+            module: 'esnext',
+            moduleResolution: 'bundler',
+            noEmit: true,
+            skipLibCheck: true,
+            target: 'es2022',
+          },
+          files: ['app.tsx'],
+        }),
+      );
+      const tsc = createRequire(
+        path.resolve(import.meta.dirname, '../../../../..', 'package.json'),
+      ).resolve('typescript/bin/tsc');
+      const r = spawnSync(process.execPath, [tsc, '-p', 'tsconfig.json'], {
+        cwd: dir,
+        encoding: 'utf8',
+      });
+      expect(r.stdout + r.stderr).toBe('');
+      expect(r.status).toBe(0);
+    },
+    120_000,
+  );
+
+  it('removing the last one-mode theme keeps an empty themeModes export', async () => {
+    const dir = app('export const colorModes = ["light"];\n');
+    expect((await add(dir, true)).status).toBe(0);
+    await runCli(['theme', 'add', 'sand', '--package', '@acme/themes'], dir);
+    await runCli(['theme', 'use', 'sand'], dir);
+    const r = await runCli(['theme', 'remove', 'ocean', '--json'], dir);
+    expect(r.status, r.stderr).toBe(0);
+    expect(generated(dir)).toContain(
+      "export const themeModes: Partial<Record<keyof typeof themes, 'light' | 'dark'>> = {};",
     );
+  });
+
+  it('reads the mode where a package module re-exports only its theme by name', async () => {
+    const dir = app('export const colorModes = ["dark"];\n');
+    const pkg = path.join(dir, 'node_modules/@acme/themes');
     fs.writeFileSync(
-      path.join(dir, 'tsconfig.json'),
-      JSON.stringify({
-        compilerOptions: {
-          strict: true,
-          exactOptionalPropertyTypes: true,
-          jsx: 'react-jsx',
-          module: 'esnext',
-          moduleResolution: 'bundler',
-          noEmit: true,
-          skipLibCheck: true,
-          target: 'es2022',
-        },
-        files: ['app.tsx'],
-      }),
+      path.join(pkg, 'dist/ocean-entry.js'),
+      "import './ocean.css';\nexport {oceanTheme} from './ocean.js';\n",
     );
-    const tsc = createRequire(
-      path.resolve(import.meta.dirname, '../../../../..', 'package.json'),
-    ).resolve('typescript/bin/tsc');
-    const r = spawnSync(process.execPath, [tsc, '-p', 'tsconfig.json'], {
-      cwd: dir,
-      encoding: 'utf8',
-    });
-    expect(r.stdout + r.stderr).toBe('');
-    expect(r.status).toBe(0);
-  }, 120_000);
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(pkg, 'package.json'), 'utf8'),
+    );
+    manifest.exports['./themes/ocean'] = './dist/ocean-entry.js';
+    fs.writeFileSync(path.join(pkg, 'package.json'), JSON.stringify(manifest));
+    const r = await add(dir, true);
+    expect(r.status, r.stderr).toBe(0);
+    expect(JSON.parse(r.stdout).data.themes[0].mode).toBe('dark');
+  });
 });

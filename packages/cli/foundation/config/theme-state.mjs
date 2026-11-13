@@ -403,8 +403,16 @@ export function readThemeState(cwd = process.cwd()) {
  * @param {ResolvedAppTheme[]} themes
  * @param {string} defaultSlug
  * @param {boolean} typescript
+ * @param {{keepModes?: boolean}} [options] `keepModes`: the module has
+ *   exported `themeModes` before, so it keeps exporting it (empty when no
+ *   theme has one mode), as the app's wiring imports it
  */
-export function renderThemeModule(themes, defaultSlug, typescript) {
+export function renderThemeModule(
+  themes,
+  defaultSlug,
+  typescript,
+  {keepModes = false} = {},
+) {
   if (!themes.some(theme => theme.slug === defaultSlug)) {
     // The record's default names no added theme; choosing an added one as the
     // default rewrites the record.
@@ -455,15 +463,16 @@ export function renderThemeModule(themes, defaultSlug, typescript) {
   }\nexport const defaultThemeSlug${
     typescript ? ': keyof typeof themes' : ''
   } = ${JSON.stringify(defaultSlug)};\n${
-    // Only when an added theme has one color mode: `Theme`'s `mode` for
-    // each such theme, so the app follows the selected one. A record of
-    // two-mode themes writes the module exactly as before.
-    modes.length > 0
+    // When an added theme has one color mode: `Theme`'s `mode` for each
+    // such theme, so the app follows the selected one; kept (empty) once the
+    // module has exported it, as the app's wiring imports it. A record of
+    // two-mode themes that never had one writes the module as before.
+    modes.length > 0 || keepModes
       ? `\nexport const themeModes${
           typescript
             ? `: Partial<Record<keyof typeof themes, 'light' | 'dark'>>`
             : ''
-        } = {\n${modes.join('\n')}\n};\n`
+        } = {${modes.length > 0 ? `\n${modes.join('\n')}\n` : ''}};\n`
       : ''
   }`;
 }
@@ -517,6 +526,11 @@ export function planThemeAppWrite(state, themes, defaultSlug, resolvedThemes) {
     entries,
     defaultSlug,
     module.typescript,
+    {
+      keepModes: /\bexport const themeModes\b/.test(
+        String(module.expectedOriginal ?? ''),
+      ),
+    },
   );
   return {
     module,
