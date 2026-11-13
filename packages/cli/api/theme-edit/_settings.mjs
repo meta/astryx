@@ -1007,15 +1007,8 @@ export function loadTheme(
       !valueProblem({...bad, value: cleaned})
         ? cleaned
         : null;
-    const example =
-      meant ??
-      // A vibrancy step (more, less) from a value it cannot read is a
-      // guess set may refuse; the undo is the fix there.
-      (DIALS[bad.thing] && bad.thing !== 'vibrancy'
-        ? DIALS[bad.thing].values.split('|').find(w => !w.startsWith('<'))
-        : isColorToken(bad.thing)
-          ? '#1f2937'
-          : null);
+    // Only the value it holds, cleaned: never a stock value it did not hold.
+    const example = meant;
     throw new AstryxError(
       `themes/${slug}/${slug}.settings.json: ${problem}, a value the editor no longer accepts. Remove or change that setting; nothing else needs to change. Nothing was changed.`,
       [

@@ -1036,6 +1036,11 @@ export async function themeEditSet(theme, thing, value, options = {}) {
 function refuseStoredTokens(ctx, slug, data, skip) {
   const bad = storedProblems(ctx, slug, data, skip);
   if (!bad.length) return;
+  // A repair offers only the value it holds, cleaned: never a stock value
+  // the saved setting did not hold.
+  for (const b of bad)
+    if (b.fix && !offersTyped(String(b.fix), String(b.setting.value)))
+      delete b.fix;
   const found = bad.length === 1 ? bad[0] : null;
   // A clean value is offered only when set takes it, so the line works.
   const takes = (/** @type {typeof found} */ b) => {
@@ -1281,6 +1286,118 @@ function extremeSteps(res) {
 }
 
 /**
+ * The stock values a repair would put in when it could read nothing from
+ * the input: the example of each value type, and the dials' defaults. A
+ * line with one of these is offered only when the input held it.
+ */
+const STOCK_VALUES = new Set([
+  '#1f2937',
+  '#7c3aed',
+  '#ffffff',
+  'inter',
+  'inter, sans-serif',
+  'system',
+  '1px',
+  '6px',
+  '12px',
+  '16',
+  '600',
+  '1.4',
+  '150ms',
+  'solid',
+]);
+
+/**
+ * Whether a suggested value carries what was typed: each of its words and
+ * numbers is in the typed text (cleaned: case, quotes, escapes), apart from
+ * a unit added to a bare number and the words of the CSS form it is written
+ * in (`light-dark()`, `var()`, `calc()`, a generic family). A stock value
+ * the input never held (a gray, a violet, `system`, `small`) does not.
+ * @param {string} offered
+ * @param {string} typed
+ */
+export function carriesTyped(offered, typed) {
+  const flat = String(typed)
+    .toLowerCase()
+    .replace(/\\(?=[#"' ])/g, '')
+    .replace(/[\s"'\u201C\u201D\u2018\u2019\u300C\u300D]/g, '');
+  const FORM = new Set([
+    'light',
+    'dark',
+    'var',
+    'calc',
+    'px',
+    'rem',
+    'em',
+    'sans',
+    'serif',
+    'monospace',
+  ]);
+  return (
+    String(offered)
+      .toLowerCase()
+      .match(/[a-z0-9.]+/g) ?? []
+  )
+    .map(w => w.replace(/^([0-9.]+)(px|rem|em)$/, '$1'))
+    .filter(w => !FORM.has(w))
+    .every(w => flat.includes(w));
+}
+
+/**
+ * Whether a repair may offer `offered` for `typed`: a stock value only when
+ * the input held it; any other value (one read from the input, or mapped
+ * from it by a documented rule) may be.
+ * @param {string} offered
+ * @param {string} typed
+ */
+export const offersTyped = (offered, typed) =>
+  !STOCK_VALUES.has(String(offered).toLowerCase()) ||
+  carriesTyped(offered, typed);
+
+/**
+ * A refusal with each line that sets the typed setting again kept only
+ * when it carries the value typed; with none left, `how` for the setting.
+ * Another setting's line, an undo or a look stays.
+ * @param {any} e
+ * @param {'set' | 'undo'} sub
+ * @param {string} slug
+ * @param {string} thing
+ * @param {unknown} typed
+ */
+function carryTyped(e, sub, slug, thing, typed) {
+  if (
+    sub !== 'set' ||
+    !(e instanceof AstryxError) ||
+    typeof typed !== 'string' ||
+    !e.suggestions?.length
+  )
+    return e;
+  const head = new RegExp(
+    `^.* set \\S+ (?:'([^']+)'|(\\S+)) (?:'((?:[^']|'\\\\'')*)'|(\\S+))`,
+  );
+  const same = (/** @type {string} */ x) =>
+    x.replace(/^-+/, '').toLowerCase() ===
+    String(thing).replace(/^-+/, '').toLowerCase();
+  const kept = e.suggestions.filter(x => {
+    const m = head.exec(x.name);
+    if (!m || !same(m[1] ?? m[2])) return true;
+    const v = m[3] ?? m[4];
+    return offersTyped(v, typed);
+  });
+  if (kept.length === e.suggestions.length) return e;
+  e.suggestions = kept.some(x => / (set|undo|new) /.test(` ${x.name} `))
+    ? kept
+    : [
+        ...kept,
+        {
+          name: `${P} how ${quoteCommandArgument(String(thing))}`,
+          reason: 'what it takes',
+        },
+      ];
+  return e;
+}
+
+/**
  * @param {'set' | 'undo'} sub
  * @param {string} slug
  * @param {string} thing
@@ -1292,6 +1409,7 @@ async function change(sub, slug, thing, value, options) {
   // As typed: an undo of a saved entry written in a form the cleanup below
   // repairs (`Corners`, `var(--radius-page)`) removes that exact entry.
   const typedThing = thing;
+  const typedValue = value;
   // A JSON object of several settings pasted as one: one set line each.
   if (
     typeof thing === 'string' &&
@@ -1400,8 +1518,15 @@ async function change(sub, slug, thing, value, options) {
       }
       throw e;
     }
-    // Every `set` the refusal suggests is checked as `set` checks it.
-    throw vetSuggestions(e, seen.ctx, slug, seen.data);
+    // Every `set` the refusal suggests is checked as `set` checks it, and
+    // carries the value typed (cleaned), never a stock value.
+    throw carryTyped(
+      vetSuggestions(e, seen.ctx, slug, seen.data),
+      sub,
+      slug,
+      typedThing,
+      typedValue,
+    );
   }
 }
 

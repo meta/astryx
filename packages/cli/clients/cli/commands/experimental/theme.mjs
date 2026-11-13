@@ -486,7 +486,16 @@ function flagValues(name) {
  */
 function changeBlocks(r) {
   const d = r.data;
-  const s = d.setting;
+  // The status line names the value as saved, with a quote or space mark
+  // the text output would fold written as its CSS escape (\201C), so the
+  // text and the JSON name the same value.
+  const s = {
+    ...d.setting,
+    value: String(d.setting.value).replace(
+      /[\u00A0\u00AB\u00BB\u2000-\u200B\u2018-\u201F\u2039\u203A\u202F\u3000\u300C-\u300F]/g,
+      c => `\\${c.codePointAt(0)?.toString(16).toUpperCase()} `,
+    ),
+  };
   const status =
     d.was != null
       ? `[ok] ${d.theme}: ${s.thing} ${d.was} -> ${s.value}`

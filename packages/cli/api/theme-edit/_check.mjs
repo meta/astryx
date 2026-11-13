@@ -688,11 +688,13 @@ export function storedProblems(ctx, slug, data, skip = '') {
       const spaces =
         clean.replace(/["']/g, '') !==
         s.value.replace(
-          /[\u2018-\u201F\u00AB\u00BB\u2039\u203A\uFF02\uFF07`"']/g,
+          /[\u2018-\u201F\u00AB\u00BB\u2039\u203A\u300C-\u300F\uFF02\uFF07`"']/g,
           '',
         );
       const quotes =
-        /[\u2018-\u201F\u00AB\u00BB\u2039\u203A\uFF02\uFF07`]/.test(s.value) &&
+        /[\u2018-\u201F\u00AB\u00BB\u2039\u203A\u300C-\u300F\uFF02\uFF07`]/.test(
+          s.value,
+        ) &&
         clean.replace(
           /[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000\u200B-\u200D\u2060\uFEFF]/g,
           '',
@@ -756,6 +758,53 @@ export function storedProblems(ctx, slug, data, skip = '') {
     }
   }
   return found;
+}
+
+/** The generic families a font list ends with. */
+const GENERIC_FAMILIES = [
+  'serif',
+  'sans-serif',
+  'monospace',
+  'system-ui',
+  'cursive',
+  'fantasy',
+  'ui-serif',
+  'ui-sans-serif',
+  'ui-monospace',
+  'ui-rounded',
+];
+
+/**
+ * The font list a value with a missing comma or a spaced generic means
+ * (`Georgia serif` is `Georgia, serif`, `Inter, sans serif` is `Inter,
+ * sans-serif`), with why; null when it has neither. A generic is read only
+ * in lower case, so a family named `Source Serif` stays one name.
+ * @param {string} value
+ * @returns {{value: string, why: string} | null}
+ */
+export function fontListMeant(value) {
+  const v = String(value).trim();
+  if (/["']/.test(v)) return null;
+  if (/\bsans serif\b/.test(v) && !/\d/.test(v))
+    return {
+      value: v.replace(/\bsans serif\b/g, 'sans-serif'),
+      why: 'the generic family is sans-serif, with a dash',
+    };
+  if (v.includes(',')) return null;
+  const words = v.split(/\s+/);
+  const last = words[words.length - 1];
+  // Only family names before it (capitalized words), never a font
+  // shorthand's weight, style or size.
+  if (
+    words.length > 1 &&
+    GENERIC_FAMILIES.includes(last) &&
+    words.slice(0, -1).every(w => /^[A-Z][A-Za-z]*$/.test(w))
+  )
+    return {
+      value: `${words.slice(0, -1).join(' ')}, ${last}`,
+      why: `a comma goes before the generic family ${last}`,
+    };
+  return null;
 }
 
 /**
@@ -841,6 +890,22 @@ function checkTypedValue(
         ],
       },
     );
+  // A font family list with a comma missing before a generic family
+  // (`Georgia serif`), or a generic written with a space (`sans serif`): the
+  // list meant.
+  if (type === 'font') {
+    const fixed = fontListMeant(value);
+    if (fixed)
+      refuse(
+        E.ERR_THEME_BAD_VALUE,
+        `"${value}" names a family that exists nowhere: ${fixed.why}.`,
+        {
+          run: [
+            `${P} set ${slug} ${name} ${quoteCommandArgument(fixed.value)}`,
+          ],
+        },
+      );
+  }
   // A font file or a link is no family name: never quoted into one.
   if (type === 'font') {
     const file = fontFileReason(pastedFont(value) || value);
@@ -902,6 +967,16 @@ function checkTypedValue(
         within.some(f =>
           /^(rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)$/i.test(f),
         )
+      )
+        continue;
+      // A factor in a size's math (`calc(0.75rem * var(--x, 1))`, as the
+      // official themes write their type scale): a plain number there is
+      // what multiplies the size.
+      if (
+        type === 'size' &&
+        within.some(f => /^(calc|min|max|clamp)$/i.test(f)) &&
+        /^[+-]?(\d+\.?\d*|\.\d+)$/.test(fallback.trim()) &&
+        (/[*/]\s*var\(/i.test(value) || /var\([^()]*\)\s*[*/]/i.test(value))
       )
         continue;
       if (fallback === '')
@@ -1457,6 +1532,84 @@ function baseReads(ctx, like, token) {
   }
 }
 
+/** Mode words a value may be labeled with, and the mode each means. */
+const MODE_WORDS = /** @type {Record<string, 'light' | 'dark'>} */ ({
+  light: 'light',
+  'light-mode': 'light',
+  day: 'light',
+  dark: 'dark',
+  'dark-mode': 'dark',
+  night: 'dark',
+});
+/** State words a value may be labeled with. */
+const STATE_WORDS = [
+  'hover',
+  'active',
+  'focus',
+  'focus-visible',
+  'focus-within',
+  'disabled',
+  'pressed',
+  'selected',
+  'checked',
+  'open',
+  'expanded',
+  'visited',
+];
+/** Words for a kind of screen a value may be labeled with. */
+const DEVICE_WORDS = [
+  'phone',
+  'phones',
+  'mobile',
+  'tablet',
+  'tablets',
+  'desktop',
+  'laptop',
+  'ipad',
+  'iphone',
+  'android',
+  'ios',
+  'touch',
+  'small-screen',
+  'small-screens',
+  'large-screen',
+  'large-screens',
+  'print',
+];
+
+/**
+ * The word a value is labeled with and the value after it (`dark: #2563eb`,
+ * `"corners": "pill"`, `{"dark": "#2563eb"}`, `dark=#2563eb`, `dark mode:
+ * #2563eb`, `textSize: 18`), the word as a dashed name; null when the value
+ * holds no label.
+ * @param {string} value
+ * @returns {{word: string, rest: string} | null}
+ */
+function valueLabel(value) {
+  const m =
+    /^\s*\{?\s*["']?([a-zA-Z][a-zA-Z0-9 _-]*?|--[a-z0-9-]+)["']?\s*[:=]\s*(.+?)\s*;?\s*\}?\s*$/.exec(
+      String(value),
+    );
+  if (!m || /^https?$/i.test(m[1])) return null;
+  const word = m[1]
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+    .replace(/[\s_]+/g, '-')
+    .toLowerCase();
+  const rest = m[2].trim().replace(/^"(.*)"\s*,?$/, '$1');
+  return {word, rest};
+}
+
+/**
+ * Whether a label is the setting's own name (`accent: red` for accent,
+ * `font-family: Inter` for font).
+ * @param {string} thing @param {string} word
+ */
+const ownLabel = (thing, word) =>
+  word === thing ||
+  (thing === 'font' && word === 'font-family') ||
+  (thing === 'text-size' && word === 'font-size');
+
 /**
  * Check one setting and give it back ready to store, or refuse. What it
  * accepts, the settings loader takes too: the loader's own check runs last,
@@ -1485,6 +1638,41 @@ export function checkSetting(
   // A light and a dark color typed as one value: a token takes both as
   // light-dark() or one --mode at a time; a color dial takes one color and
   // makes both modes from it. Never one of them for both.
+  // A light-dark() written with another separator (`light-dark(red /
+  // blue)`, `light-dark(red; blue)`): the pair meant, with a comma.
+  if (!unset && typeof value === 'string') {
+    const near =
+      /^\s*light-dark\(\s*([^,;/()]+?)\s*(?:\s\/\s|\/|;)\s*([^,;/()]+?)\s*\)\s*$/i.exec(
+        value,
+      );
+    if (near)
+      refuse(
+        E.ERR_THEME_BAD_VALUE,
+        `"${value}" separates its two colors with something other than a comma; light-dark() takes "light-dark(light, dark)".`,
+        {
+          run: [
+            setLine(
+              slug,
+              thing,
+              `light-dark(${near[1]}, ${near[2]})`,
+              {...flags, mode: undefined},
+              false,
+            ),
+          ],
+        },
+      );
+  }
+  // A font list with a comma missing before its generic family, or a
+  // generic written with a space, on the font dial: the list meant.
+  if (!unset && typeof value === 'string' && thing === 'font') {
+    const fixed = fontListMeant(value);
+    if (fixed)
+      refuse(
+        E.ERR_THEME_BAD_VALUE,
+        `"${value}" names a family that exists nowhere: ${fixed.why}.`,
+        {run: [setLine(slug, 'font', fixed.value, flags, false)]},
+      );
+  }
   // A light and a dark color on a part's color property (`background`,
   // `color`, `border-color` …) is that property's light-dark() pair.
   if (
@@ -1533,7 +1721,124 @@ export function checkSetting(
       );
     }
   }
-  if (!unset && typeof value === 'string' && DIALS[thing] && thing !== 'font') {
+  // A value labeled with a word that is not this setting's own name (a
+  // mode, a state, a device, a part, or a word the editor does not read) is
+  // refused with what that word means here, never set with the word dropped.
+  if (
+    !unset &&
+    typeof value === 'string' &&
+    (DIALS[thing] || (thing.startsWith('--') && !/font|content/.test(thing)))
+  ) {
+    const label = valueLabel(value);
+    // A CSS property's name before the value (`border-radius: pill`,
+    // `color: #e11d48`, `font: bold 16px Inter`) is read by the paths
+    // below, as a declaration pasted from a stylesheet.
+    if (
+      label &&
+      !ownLabel(thing, label.word) &&
+      !cssProperties().has(label.word)
+    ) {
+      const q = quoteCommandArgument;
+      const rest = label.rest;
+      const scope = `${flags.on ? ` --on ${flags.on}` : ''}${flags.when ? ` --when ${flags.when}` : ''}`;
+      const mode = MODE_WORDS[label.word];
+      const colorful =
+        PALETTE_DIALS.includes(thing) ||
+        (thing.startsWith('--') && isColorToken(thing));
+      const parts = [...ctx.project.target.keys(), ...Object.keys(FAMILIES)];
+      if (mode && DIALS[thing] && PALETTE_DIALS.includes(thing))
+        refuse(
+          E.ERR_THEME_BAD_VALUE,
+          `"${label.word}" in "${value}" names the ${mode} mode; ${thing} makes both modes from one color.`,
+          {
+            run: [
+              `${P} set ${slug} ${thing} ${q(rest)}${scope}`,
+              ...(thing === 'accent'
+                ? [
+                    `${P} set ${slug} --color-accent ${q(rest)}${scope} --mode ${mode}`,
+                  ]
+                : []),
+            ],
+          },
+        );
+      const level = /^h([1-6])$/.exec(label.word)?.[1];
+      if (level && thing === 'headings') {
+        const w = rest.trim().toLowerCase();
+        refuse(
+          E.ERR_THEME_BAD_VALUE,
+          `"${label.word}" in "${value}" is one heading level; headings sets every level, and one level is set with --on heading --when level:${level}.`,
+          {
+            run:
+              HEADING_WEIGHTS[w] !== undefined
+                ? [
+                    `${P} set ${slug} font-weight ${HEADING_WEIGHTS[w]} --on heading --when level:${level}`,
+                    `${P} set ${slug} headings ${w}`,
+                  ]
+                : HEADING_TRACKING[w] !== undefined
+                  ? [
+                      `${P} set ${slug} letter-spacing ${q(HEADING_TRACKING[w])} --on heading --when level:${level}`,
+                      `${P} set ${slug} headings ${w}`,
+                    ]
+                  : [`${HOW} headings`],
+          },
+        );
+      }
+      if (mode)
+        refuse(
+          E.ERR_THEME_BAD_VALUE,
+          colorful
+            ? `"${label.word}" in "${value}" names the ${mode} mode; a value for one mode is given with --mode ${mode}.`
+            : `"${label.word}" in "${value}" names the ${mode} mode, and ${thing} is the same in light and dark.`,
+          {
+            run: [
+              `${P} set ${slug} ${thing} ${q(rest)}${scope}${colorful ? ` --mode ${mode}` : ''}`,
+            ],
+          },
+        );
+      if (STATE_WORDS.includes(label.word))
+        refuse(
+          E.ERR_THEME_BAD_VALUE,
+          `"${label.word}" in "${value}" is a state; a state is set on a part, with --on <part> --state ${label.word}.`,
+          {run: [`${HOW} ${q(`${label.word} ${thing}`)}`]},
+        );
+      if (DEVICE_WORDS.includes(label.word))
+        refuse(
+          E.ERR_THEME_BAD_VALUE,
+          `"${label.word}" in "${value}" names a kind of screen; the editor sets ${thing} for every screen, not for one kind.`,
+          {run: [`${P} set ${slug} ${thing} ${q(rest)}${scope}`]},
+        );
+      if (parts.includes(label.word))
+        refuse(
+          E.ERR_THEME_BAD_VALUE,
+          `"${label.word}" in "${value}" is a part; a value for one part is given with --on ${label.word}.`,
+          {run: [`${P} set ${slug} ${thing} ${q(rest)} --on ${label.word}`]},
+        );
+      if (!otherSettingLabel(thing, value))
+        refuse(
+          E.ERR_THEME_BAD_VALUE,
+          `"${label.word}" in "${value}" is not a name the editor reads for ${thing}; give the value alone.`,
+          {
+            didYouMean: nearest(label.word, [
+              ...Object.keys(DIALS),
+              ...parts,
+              ...STATE_WORDS,
+            ]),
+            run: [`${P} set ${slug} ${thing} ${q(rest)}${scope}`],
+          },
+        );
+    }
+    // The setting's own name before its value (`font: Inter`, `Font:
+    // Georgia`) is the value.
+    // (A `font:` shorthand is read whole below, as its family.)
+    if (
+      label &&
+      ownLabel(thing, label.word) &&
+      label.word !== 'font' &&
+      label.rest.replace(/;+\s*$/, '').trim()
+    )
+      value = label.rest;
+  }
+  if (!unset && typeof value === 'string' && DIALS[thing]) {
     // A value labeled with another setting's name is that setting's, never
     // this dial's (`accent 'neutral: #64748b'`).
     const other = otherSettingLabel(thing, value);
@@ -1549,7 +1854,7 @@ export function checkSetting(
           ],
         },
       );
-    const d = pastedDeclaration(value);
+    const d = thing === 'font' ? null : pastedDeclaration(value);
     if (d?.value) value = d.value;
   }
   // The font dial's value as pasted from a stylesheet (`Georgia, serif;`,
@@ -2329,6 +2634,38 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
             })(),
           },
         );
+      // A comparative weight word is the weight (lighter is light, never the
+      // tracking tighter); two words (`bold tight`, `bold, tight`) are a
+      // weight and a tracking, one line each.
+      if (!unset) {
+        const MORE = /** @type {Record<string, string>} */ ({
+          lighter: 'light',
+          thinner: 'light',
+          bolder: 'bold',
+          heavier: 'heavy',
+          wider: 'wide',
+          looser: 'wide',
+        });
+        const words = String(v ?? '')
+          .trim()
+          .toLowerCase()
+          .split(/[\s,]+/)
+          .filter(Boolean)
+          .map(w => MORE[w] ?? w);
+        const known = (/** @type {string} */ w) =>
+          HEADING_WEIGHTS[w] !== undefined || HEADING_TRACKING[w] !== undefined;
+        if (
+          (words.length > 1 || MORE[String(v).trim().toLowerCase()]) &&
+          words.every(known)
+        )
+          refuse(
+            E.ERR_THEME_BAD_VALUE,
+            words.length > 1
+              ? `"${v}" is ${words.length} headings values; headings takes one at a time (a weight and a tracking are two settings).`
+              : `"${v}" is the weight ${words[0]}.`,
+            {run: words.map(w => `${P} set ${slug} headings ${w}`)},
+          );
+      }
       if (s.mode)
         refuse(
           E.ERR_THEME_NO_MODE,
@@ -2968,7 +3305,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           colors.length
             ? 'vibrancy sets how saturated the generated colors are, and every color this theme sets is a gray, so it would change nothing. Set a color first.'
             : 'vibrancy sets how saturated the generated colors are, and this theme sets no color yet. Set one first.',
-          {run: [`${P} set ${slug} accent ${quoteCommandArgument('#7c3aed')}`]},
+          {run: [`${HOW} accent`]},
         );
     } else if (thing === 'font') {
       if (s.when || s.state)

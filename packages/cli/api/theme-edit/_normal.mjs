@@ -101,6 +101,69 @@ const QUOTE_PAIRS = {
   '`': '`',
 };
 
+/** CSS functions whose names a value may write in any case. */
+const CSS_FUNCTIONS =
+  /\b(light-dark|rgba?|hsla?|hwb|lab|lch|oklab|oklch|color|color-mix|calc|min|max|clamp|var)\(/gi;
+
+/**
+ * A value as meant when typed with escapes or in another notation: CSS
+ * function names in lower case (`LIGHT-DARK(` is `light-dark(`, as CSS reads
+ * it); a shell or JSON backslash before `#`, a quote or a space taken off;
+ * a JavaScript escape in a `content` string written as CSS writes it
+ * (`\u2022` is `\2022 `, `\n` a line break, `\t` a tab); and the JSON
+ * shapes a design-tokens file or an array writes (`{"$value": "#e11d48"}`,
+ * `{"value": 18, "unit": "px"}`, `["#e11d48"]`, `["Inter", "sans-serif"]`).
+ * @param {string} thing
+ * @param {string} value
+ * @returns {string}
+ */
+export function escapesMeant(thing, value) {
+  let v = value;
+  const content = /^content$/i.test(thing);
+  if (content)
+    return v
+      .replace(/\\u\{?([0-9a-f]{2,6})\}?/gi, (_, h) => `\\${h.toUpperCase()} `)
+      .replace(/\\n/g, '\\A ')
+      .replace(/\\t/g, '\\9 ')
+      .replace(/\\r/g, '\\D ');
+  v = v.replace(CSS_FUNCTIONS, f => f.toLowerCase());
+  // (A JSON string holding escaped quotes is unwrapped whole later.)
+  if (!/^\s*"(?:[^"\\]|\\.)*"\s*$/.test(v)) v = v.replace(/\\([#"' ])/g, '$1');
+  else v = v.replace(/\\([# ])/g, '$1');
+  const t = v.trim();
+  if (/^[[{]/.test(t)) {
+    /** @type {any} */
+    let j;
+    try {
+      j = JSON.parse(t);
+    } catch {
+      return v;
+    }
+    /** @param {any} x */
+    const text = x =>
+      typeof x === 'string' || typeof x === 'number' ? String(x) : null;
+    if (Array.isArray(j) && j.length && j.every(x => text(x) != null)) {
+      if (j.length === 1) return String(j[0]);
+      if (/font/i.test(thing))
+        return j
+          .map(x =>
+            /\s/.test(String(x)) && !/^["']/.test(String(x))
+              ? `"${x}"`
+              : String(x),
+          )
+          .join(', ');
+      return v;
+    }
+    if (j && typeof j === 'object' && !Array.isArray(j)) {
+      const inner =
+        '$value' in j ? j.$value : 'value' in j ? j.value : undefined;
+      if (text(inner) != null)
+        return `${inner}${typeof j.unit === 'string' ? j.unit : ''}`;
+    }
+  }
+  return v;
+}
+
 /**
  * The thing and value a setting was typed as, put right before any check: a
  * declaration pasted whole or split (`accent: #e11d48`, `--color-accent=red`,
@@ -175,6 +238,7 @@ export function normalizeEntry(thing, value) {
       .toLowerCase();
     if (DIALS[dial]) t = dial;
   }
+  if (typeof v === 'string') v = escapesMeant(t, v);
   // A second declaration pasted after the first (`accent: red; text-size:
   // 18`): the first is this setting.
   /** A second declaration pasted after the first, which this does not set. @type {string | null} */
@@ -407,11 +471,15 @@ export function trimInsideQuotes(v) {
  */
 export function otherSettingLabel(dial, value) {
   const m =
-    /^\s*["']?([a-z][a-z0-9-]*|--[a-z0-9-]+)["']?\s*[:=]\s*(.+?)\s*;?\s*$/i.exec(
+    /^\s*["']?([a-z][a-z0-9_-]*|--[a-z0-9-]+)["']?\s*[:=]\s*["']?(.+?)["']?\s*;?\s*$/i.exec(
       String(value),
     );
   if (!m) return null;
-  const label = m[1].toLowerCase();
+  // A label in camelCase or snake_case (textSize, text_size) is the dial.
+  const label = m[1]
+    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+    .replace(/_/g, '-')
+    .toLowerCase();
   if (label === dial) return null;
   if (!DIALS[label] && !label.startsWith('--')) return null;
   return {thing: label, value: m[2]};

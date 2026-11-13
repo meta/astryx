@@ -358,7 +358,9 @@ describe('color dials through the palette generator', () => {
       themeEditSet('p', 'vibrancy', '60', {cwd}),
     );
     expect(none.code).toBe('ERR_THEME_NO_EFFECT');
-    expect(none.run[0]).toContain('set p accent');
+    // No stock color is offered: the color is the user's to pick.
+    expect(none.run.join(' ')).not.toMatch(/#7c3aed/);
+    expect(none.run[0]).toMatch(/how accent|set p accent/);
     await themeEditSet('p', 'accent', '#7c3aed', {cwd});
     const before = read('tokens/p.palette.ts');
     const r = await themeEditSet('p', 'vibrancy', '80', {cwd});
@@ -2129,8 +2131,10 @@ describe('colors11: refusals name a command that works', () => {
         themeEditSet('p', prop, 'banana', {cwd, on: 'card'}),
       );
       expect(r.run.length, prop).toBeGreaterThan(0);
+      // A color it can read from the value, else what the property
+      // takes: never a stock color the value did not hold.
       expect(r.run[0], prop).toMatch(
-        new RegExp(` set p ${prop} \\S+ --on card$`),
+        new RegExp(`( set p ${prop} \\S+ --on card| how ${prop})$`),
       );
     }
   });

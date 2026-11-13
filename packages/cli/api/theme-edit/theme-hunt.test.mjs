@@ -171,7 +171,8 @@ describe('new takes its flags as set does', () => {
       themeEditNew('v1', {cwd, settings: {vibrancy: '60'}}),
     );
     expect(r.code).toBe('ERR_THEME_NO_EFFECT');
-    expect(r.run[0]).toMatch(/new v1 --vibrancy 60 --accent '#7c3aed'$/);
+    // No stock color is put in for the vibrancy: the color is the user's.
+    expect(r.run.join(' ')).not.toMatch(/#7c3aed/);
   });
 
   it('refuses a font or text size that would not build', async () => {
