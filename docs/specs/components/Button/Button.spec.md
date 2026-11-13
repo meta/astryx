@@ -223,7 +223,7 @@ Consumer migration instructions belong in consumer docs and release notes.
   the fill (`spec:AST-020` FR1, WCAG 2.2 SC 1.4.11): `ButtonText`, or
   `CanvasText` on `destructive` (`architecture:theme-tokens` INV11). In a
   ButtonGroup, the group's dividers stay and its first and last buttons close
-  the group's outer edge, with no doubled seam. `ghost` stays borderless.
+  the group's outer edge, with no doubled seam. A grouped `destructive` button's leading edge (the divider before it, or the group's outer edge when it comes first) keeps the forced-colors default colour; its other edges take `CanvasText`. `ghost` stays borderless.
   Outside forced colors no border is added. A theme that sets a solid
   variant's own border width keeps it.
 
