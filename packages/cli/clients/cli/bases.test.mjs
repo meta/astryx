@@ -526,6 +526,9 @@ describe('a project whose only base is not Core', () => {
       expect(theme.stdout).toMatch(/^ {2}list /m);
       expect(theme.stdout).not.toMatch(/^ {2}build /m);
       expect(theme.stdout).not.toContain('theme targets');
+      expect(theme.stdout).not.toContain('experimental theme editor');
+      const root = astryx(['--help'], dir);
+      expect(root.stdout).not.toContain('experimental theme editor');
       expect(theme.stdout.trimEnd().split('\n').at(-1)).toBe(
         '6 commands hidden: the active base @acme/native-ui does not provide the steps they need.',
       );

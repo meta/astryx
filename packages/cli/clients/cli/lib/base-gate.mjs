@@ -85,12 +85,66 @@ export function optionAvailable(cmd, option, base) {
 }
 
 /**
+ * The command paths a text names: each run of two or more words that walks
+ * from the root down its commands, such as `experimental theme editor`.
+ * @param {Command} root
+ * @param {string} text
+ * @returns {string[]}
+ */
+function namedPaths(root, text) {
+  const words = text.toLowerCase().match(/[a-z][a-z-]*/gu) ?? [];
+  /** @type {string[]} */
+  const paths = [];
+  for (let i = 0; i < words.length; i += 1) {
+    let cmd = root;
+    const path = [];
+    for (let j = i; j < words.length; j += 1) {
+      const child = childCommands(cmd).find(c => c.name() === words[j]);
+      if (!child) break;
+      path.push(words[j]);
+      cmd = child;
+    }
+    if (path.length >= 2) paths.push(path.join(' '));
+  }
+  return paths;
+}
+
+/**
+ * Help text with what names a command the run's base does not serve left
+ * out: such a parenthetical, else such a paragraph.
+ * @param {Command} cmd the command the text describes
+ * @param {string} text
+ * @returns {string}
+ */
+function servedText(cmd, text) {
+  const base = helpBase();
+  if (base == null || base.core || !text) return text;
+  /** @type {Command} */
+  let root = cmd;
+  while (root.parent) root = root.parent;
+  /** @param {string} part */
+  const served = part =>
+    namedPaths(root, part).every(path => exampleAvailable(root, path, base));
+  return text
+    .replace(/ ?\([^()]*\)/gu, part => (served(part) ? part : ''))
+    .split('\n\n')
+    .filter(served)
+    .join('\n\n');
+}
+
+/**
  * Help settings that list only what the run's base serves. Passed to the
  * root's `configureHelp`, so every subcommand inherits them.
  * @returns {Partial<import('commander').Help>}
  */
 export function baseHelpSettings() {
   return {
+    commandDescription(cmd) {
+      return servedText(cmd, Help.prototype.commandDescription.call(this, cmd));
+    },
+    subcommandDescription(cmd) {
+      return servedText(cmd, Help.prototype.subcommandDescription.call(this, cmd));
+    },
     visibleCommands(cmd) {
       const visible = Help.prototype.visibleCommands.call(this, cmd);
       const base = helpBase();

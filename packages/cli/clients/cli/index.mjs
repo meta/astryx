@@ -1000,7 +1000,13 @@ export async function createProgram({argv} = {}) {
     }
   });
 
-  const loads = argv == null ? null : commandsForArgs(program, argv);
+  // Help on a base other than Core reads every command, so its examples and
+  // text can name only what that base serves.
+  const offCoreHelp =
+    argv != null &&
+    (argv.includes('--help') || argv.includes('-h') || firstOperand(argv, program) === 'help') &&
+    !(await readsCore(argv));
+  const loads = argv == null || offCoreHelp ? null : commandsForArgs(program, argv);
   // The stored list holds Core's commands, so a run on another base, or one
   // whose base does not resolve, loads every command instead.
   const listed =
