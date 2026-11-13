@@ -981,6 +981,39 @@ describe('HoverCard', () => {
     });
   });
 
+  it('keeps a 4px gap and a 12px padding by default', () => {
+    render(
+      <HoverCard label="History" content={<span>Card</span>} isOpen>
+        <button type="button">Edited</button>
+      </HoverCard>,
+    );
+    const card = screen.getByRole('dialog', {hidden: true});
+    expect(card.getAttribute('style') ?? '').toContain('var(--spacing-1)');
+    // The dev class name names the padding rung (`paddingStyles.N`).
+    expect(screen.getByText('Card').parentElement?.className).toMatch(
+      /__paddingStyles\.3\b/,
+    );
+  });
+
+  it('takes the trigger distance and padding on the spacing scale', () => {
+    render(
+      <HoverCard
+        label="History"
+        content={<span>Card</span>}
+        isOpen
+        offset={3}
+        padding={5}>
+        <button type="button">Edited</button>
+      </HoverCard>,
+    );
+    const card = screen.getByRole('dialog', {hidden: true});
+    expect(card.getAttribute('style') ?? '').toContain('var(--spacing-3)');
+    expect(card.getAttribute('style') ?? '').not.toContain('var(--spacing-1)');
+    expect(screen.getByText('Card').parentElement?.className).toMatch(
+      /__paddingStyles\.5\b/,
+    );
+  });
+
   describe('a replaced trigger element', () => {
     function SwapsItsRoot() {
       const [isLink, setIsLink] = useState(false);
