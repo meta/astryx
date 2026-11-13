@@ -80,9 +80,9 @@ import {
   printCompactTrailer,
   setEditorFolderListener,
   setPrivateVarErrorListener,
-  themeBuild,
   themeBuildFamily,
   themeBuildForReport,
+  themeBuildWithHandOff,
   themeSourceFiles,
   themeSourceGuesses,
   writeDeferredBuildOutputs,
@@ -1197,9 +1197,9 @@ function registerThemeCommands(theme, program, docs, words) {
               familyKey: /** @type {string} */ (options.familyKey),
               check: options.check,
               iconsSpecifier: options.iconsSpecifier,
-              __commandWords: words,
             },
             {cwd: process.cwd()},
+            {commandWords: words},
           );
           if (json) jsonOut(result);
           if (
@@ -1280,9 +1280,12 @@ function registerThemeCommands(theme, program, docs, words) {
             out: options.out,
             check: options.check,
             iconsSpecifier: options.iconsSpecifier,
-            __claimedOutputs: claimedOutputs,
-            __deferredWrites: deferred ? writes : undefined,
-            __commandWords: words,
+          };
+          /** @type {import('../../../api/theme/build/build.mjs').ThemeBuildHandOff} */
+          const handOff = {
+            claimedOutputs,
+            deferredWrites: deferred ? writes : undefined,
+            commandWords: words,
           };
           let result;
           if (report) {
@@ -1291,6 +1294,7 @@ function registerThemeCommands(theme, program, docs, words) {
               buildOptions,
               {cwd: process.cwd()},
               {compact},
+              handOff,
             );
             result = built.receipt;
             if (built.trailer) trailers.push(built.trailer);
@@ -1306,9 +1310,12 @@ function registerThemeCommands(theme, program, docs, words) {
               else show();
             }
           } else {
-            result = await themeBuild(entry.file, buildOptions, {
-              cwd: process.cwd(),
-            });
+            result = await themeBuildWithHandOff(
+              entry.file,
+              buildOptions,
+              {cwd: process.cwd()},
+              handOff,
+            );
           }
           logger.log = log;
           logger.warn = warn;
