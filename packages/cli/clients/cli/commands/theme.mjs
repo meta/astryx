@@ -85,6 +85,7 @@ import {
   themeBuildWithHandOff,
   themeSourceFiles,
   themeSourceGuesses,
+  buildSuggestion,
   writeDeferredBuildOutputs,
 } from '../../../api/theme/build/build.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
@@ -985,7 +986,8 @@ function registerThemeCommands(theme, program, docs, words) {
                 ]
               : guesses.length > 0
                 ? guesses.map(guess => ({
-                    name: `${getCliInvocation(process.cwd())} ${words.group} ${words.build} ${quoteCommandArgument(guess)}`,
+                    // The same build of that source: a --check stays a check.
+                    name: buildSuggestion(guess, options, process.cwd(), words),
                     reason: 'a theme source that exists',
                   }))
                 : [

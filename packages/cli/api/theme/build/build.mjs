@@ -1040,8 +1040,10 @@ export function themeSourceGuesses(file, cwd) {
  * source has, such as `.css` or `.json` (THEME_SOURCE_EXTENSIONS).
  * @param {string} filePath
  * @param {string} cwd
+ * @param {BuildMode} [mode] the caller's --check and --out, kept in every
+ *   build a refusal suggests
  */
-function assertThemeSourceFile(filePath, cwd) {
+function assertThemeSourceFile(filePath, cwd, mode = {}) {
   const rel = (/** @type {string} */ file) => path.relative(cwd, file);
   const sourceHead = fileHead(filePath);
   if (sourceHead.includes(GENERATED_MARKER)) {
@@ -1058,16 +1060,19 @@ function assertThemeSourceFile(filePath, cwd) {
     const familyKey = /Command: .*--family-key (\S+)/.exec(sourceHead)?.[1];
     const build =
       sources.length > 1 && familyKey
-        ? `theme build --family ${sources.map(shellWord).join(' ')} --family-key ${shellWord(familyKey)}`
+        ? formatCliCommand(
+            `theme build --family ${sources.map(shellWord).join(' ')} --family-key ${shellWord(familyKey)}${mode.check ? ' --check' : ''}`,
+            cwd,
+          )
         : sources.length > 0
-          ? `theme build ${shellWord(sources[0])}`
+          ? buildSuggestion(sources[0], mode, cwd)
           : null;
     throw new AstryxError(
       `${rel(filePath)} is an output of \`theme build\`, not a theme source.${sources.length > 0 ? ` It was built from ${sources.join(', ')}.` : ''}`,
       build
         ? [
             {
-              name: formatCliCommand(build, cwd),
+              name: build,
               reason: 'build the theme source',
             },
           ]
@@ -1079,12 +1084,11 @@ function assertThemeSourceFile(filePath, cwd) {
     throw new AstryxError(
       `${rel(filePath)} is not a theme module. A theme source is a ${THEME_SOURCE_EXTENSIONS.join(', ')} file that exports defineTheme(...).`,
       themeFilesIn(path.dirname(filePath)).map(name => ({
-        name: formatCliCommand(
-          `theme build ${shellWord(
-            rel(path.join(path.dirname(filePath), name))
-              .split(path.sep)
-              .join('/'),
-          )}`,
+        name: buildSuggestion(
+          rel(path.join(path.dirname(filePath), name))
+            .split(path.sep)
+            .join('/'),
+          mode,
           cwd,
         ),
         reason: 'a theme source in that folder',
@@ -1140,6 +1144,40 @@ let privateVarErrorListener = null;
  */
 export function setPrivateVarErrorListener(listener) {
   privateVarErrorListener = listener;
+}
+
+/**
+ * A build's mode flags: what it does (`--check` compares, never writes) and
+ * where (`--out`), carried into every build command a refusal suggests.
+ * @typedef {{check?: boolean, out?: string, iconsSpecifier?: string}} BuildMode
+ */
+
+/**
+ * The `theme build` command for `source` with the caller's mode flags, so a
+ * suggestion never turns a check into a write or moves the outputs.
+ * @param {string} source as the user types it, from cwd
+ * @param {BuildMode} mode
+ * @param {string} cwd
+ * @param {{group: string, build: string}} [words] the command's own words
+ *   (`experimental theme compile`), else `theme build`
+ * @returns {string}
+ */
+export function buildSuggestion(source, mode, cwd, words) {
+  return formatCliCommand(
+    [
+      ...(words ? words.group.split(' ') : ['theme']),
+      words?.build ?? 'build',
+      source,
+      ...(mode.out ? ['--out', mode.out] : []),
+      ...(mode.iconsSpecifier
+        ? ['--icons-specifier', mode.iconsSpecifier]
+        : []),
+      ...(mode.check ? ['--check'] : []),
+    ]
+      .map(shellWord)
+      .join(' '),
+    cwd,
+  );
 }
 
 /**
@@ -3688,7 +3726,7 @@ async function themeBuildInternal(
     throw new AstryxError(
       `File not found: ${filePath}`,
       themeSourceGuesses(file, cwd).map(guess => ({
-        name: formatCliCommand(`theme build ${shellWord(guess)}`, cwd),
+        name: buildSuggestion(guess, options, cwd),
         reason: 'a theme source that exists',
       })),
       ERROR_CODES.ERR_FILE_NOT_FOUND,
@@ -3715,8 +3753,12 @@ async function themeBuildInternal(
     throw new AstryxError(
       `${path.relative(cwd, filePath) || '.'} is a folder. Pass the theme file inside it.`,
       themeFilesIn(filePath).map(name => ({
-        name: formatCliCommand(
-          `theme build ${shellWord(path.relative(cwd, path.join(filePath, name)).split(path.sep).join('/'))}`,
+        name: buildSuggestion(
+          path
+            .relative(cwd, path.join(filePath, name))
+            .split(path.sep)
+            .join('/'),
+          options,
           cwd,
         ),
         reason: 'a theme source in that folder',
@@ -3725,7 +3767,7 @@ async function themeBuildInternal(
     );
   }
 
-  assertThemeSourceFile(filePath, cwd);
+  assertThemeSourceFile(filePath, cwd, options);
 
   if (!report.compact) {
     logger.log(`\nBuilding theme from ${path.relative(cwd, filePath)}...`);
