@@ -32,6 +32,11 @@ const styles: Record<string, CSSProperties> = {
   contentFill: {
     height: '100%',
   },
+  // The editor's and terminal's scrollbars end where the properties panel
+  // handle's grab zone begins, so the zone never covers them.
+  besideEndHandle: {
+    paddingInlineEnd: 'var(--spacing-2)',
+  },
   terminalWrapper: {
     minHeight: 0,
     overflow: 'hidden',
@@ -274,7 +279,13 @@ export default function ResizableWorkspacePage() {
                   height="fill"
                   content={
                     <LayoutContent padding={0}>
-                      <Stack direction="vertical" style={styles.contentFill}>
+                      <Stack
+                        direction="vertical"
+                        style={
+                          isMobile
+                            ? styles.contentFill
+                            : {...styles.contentFill, ...styles.besideEndHandle}
+                        }>
                         <StackItem size="fill" style={styles.editorArea}>
                           <CodeBlock
                             code={EDITOR_CODE}
