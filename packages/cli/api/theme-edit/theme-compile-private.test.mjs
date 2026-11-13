@@ -9,7 +9,6 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {fileURLToPath} from 'node:url';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
@@ -18,6 +17,7 @@ import {
   removeLinkedFixture,
 } from '../../test-utils/linked-fixture.mjs';
 import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
+import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
 
 vi.mock('./_preview.mjs', async importOriginal =>
   (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
@@ -25,27 +25,16 @@ vi.mock('./_preview.mjs', async importOriginal =>
   ),
 );
 
-const THEMES = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '../../../themes',
-);
-
 /** @type {string} */
 let cwd;
 
-beforeAll(() => {
+/** Why a bundled theme could not be installed here, when it could not. */
+let unbuilt = '';
+
+beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-compile-private-', FIXTURE_PACKAGES);
-  // The bundled themes themselves, as an app that installs them has them.
-  for (const like of ['butter', 'neutral']) {
-    const link = path.join(
-      path.dirname(cwd),
-      'node_modules/@astryxdesign',
-      `theme-${like}`,
-    );
-    fs.rmSync(link, {recursive: true, force: true});
-    fs.symlinkSync(path.join(THEMES, like), link, 'dir');
-  }
-}, 120_000);
+  unbuilt = await installRealBaseThemes(cwd, ['butter', 'neutral']);
+}, 300_000);
 
 afterAll(() => {
   if (cwd) removeLinkedFixture(cwd);
@@ -56,7 +45,11 @@ const read = (slug, file) =>
   fs.readFileSync(path.join(cwd, 'themes', slug, file), 'utf8');
 
 describe('compile --check takes what the editor builds', () => {
-  it('writes corner radii as properties Core reads, never a private variable', async () => {
+  it('writes corner radii as properties Core reads, never a private variable', async test => {
+    if (unbuilt) {
+      console.warn(`skipped: ${unbuilt}`);
+      return test.skip();
+    }
     await themeEditNew('a', {cwd, like: 'neutral'});
     await themeEditSet('a', 'border-radius', '12px 16px', {cwd, on: 'card'});
     await themeEditSet('a', 'border-radius', '4px 10px', {cwd, on: 'button'});
@@ -73,7 +66,11 @@ describe('compile --check takes what the editor builds', () => {
     expect(r.stdout + r.stderr).not.toMatch(/private var/);
   }, 240_000);
 
-  it('refuses a chat-composer padding only a private variable could reach', async () => {
+  it('refuses a chat-composer padding only a private variable could reach', async test => {
+    if (unbuilt) {
+      console.warn(`skipped: ${unbuilt}`);
+      return test.skip();
+    }
     await themeEditNew('c', {cwd, like: 'neutral'});
     /** @type {any} */
     let err;

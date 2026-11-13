@@ -8,7 +8,6 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {fileURLToPath} from 'node:url';
 import {afterAll, beforeAll, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {
@@ -16,27 +15,29 @@ import {
   removeLinkedFixture,
 } from '../../test-utils/linked-fixture.mjs';
 import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
+import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
 vi.mock('./_preview.mjs', async importOriginal =>
   (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
     await importOriginal(),
   ),
 );
-const THEMES = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '../../../themes',
-);
+/** @type {string} */
 let cwd;
-beforeAll(() => {
+
+/** Why a bundled theme could not be installed here, when it could not. */
+let unbuilt = '';
+
+beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-accent-lift-', FIXTURE_PACKAGES);
-  const link = path.join(
-    path.dirname(cwd),
-    'node_modules/@astryxdesign/theme-neutral',
-  );
-  fs.rmSync(link, {recursive: true, force: true});
-  fs.symlinkSync(path.join(THEMES, 'neutral'), link, 'dir');
-});
+  unbuilt = await installRealBaseThemes(cwd, ['neutral']);
+}, 300_000);
+
 afterAll(() => removeLinkedFixture(cwd));
-it('keeps the official secondary text lift on a new accent while it reads', async () => {
+it('keeps the official secondary text lift on a new accent while it reads', async test => {
+  if (unbuilt) {
+    console.warn(`skipped: ${unbuilt}`);
+    return test.skip();
+  }
   await themeEditNew('t', {cwd, like: 'neutral'});
   /** @param {string} css */
   const lifts = css =>
