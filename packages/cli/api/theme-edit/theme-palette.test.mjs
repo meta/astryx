@@ -2948,8 +2948,9 @@ describe('parts30', () => {
     await themeEditSet('p', 'padding', 'initial', {cwd, on: 'card'});
     const css2 = read('p.css');
     const at2 = css2.indexOf('.astryx-card {');
+    // initial leaves the variable without a value: Core's own default.
     expect(css2.slice(at2, css2.indexOf('}', at2))).toMatch(
-      /--astryx-card-padding[a-z-]*:\s*0/,
+      /--astryx-card-padding[a-z-]*:\s*initial/,
     );
     await themeEditUndo('p', {cwd, thing: 'padding', on: 'card'});
     expect(
@@ -3093,9 +3094,9 @@ describe('parts33', () => {
       cwd,
       on: 'card',
     });
+    // initial leaves the side without a value: Core's own default for it.
     const card = blockOf('.astryx-card');
-    expect(card).toMatch(/--astryx-card-padding-block-start:\s*0/);
-    expect(card).not.toContain('initial');
+    expect(card).toMatch(/--astryx-card-padding-block-start:\s*initial/);
     await themeEditUndo('p', {cwd, thing: 'padding-block-start', on: 'card'});
   });
 });
@@ -3158,7 +3159,8 @@ describe('r19b (1): a card physical side beside other sides', () => {
   it('writes padding-left as its side after another side, with a keyword, and with math', async () => {
     for (const [first, value, want] of [
       [['padding-top', '12px'], '20px', '20px'],
-      [null, 'initial', '0'],
+      [null, 'initial', 'initial'],
+      [null, '0', '0px'],
       [null, 'calc(4px + 2px)', 'calc(4px + 2px)'],
     ]) {
       if (first) await themeEditSet('p', first[0], first[1], {cwd, on: 'card'});
@@ -3409,10 +3411,11 @@ describe('parts36', () => {
   };
   const SIDES = ['block-start', 'block-end', 'inline-start', 'inline-end'];
 
-  it('gives a plain card back its own sides under a clickable card or a variant that sets them', async () => {
+  it('resets a plain card inside a clickable card or a variant that sets its sides, never copying a value', async () => {
     // Custom properties inherit: a plain card nested in a padded clickable
-    // card (or a default card in a muted one) resets every side on its own
-    // base, which comes first and so never beats the narrower rule.
+    // card (or a default card in a muted one) gets each side reset on its
+    // own class, so Core's own fallback holds; the card's base copies no
+    // theme's value.
     for (const [on, when, narrow] of [
       ['clickable-card', undefined, '.astryx-clickable-card'],
       ['card', 'variant:muted', '.astryx-card[data-variant="muted"]'],
@@ -3423,15 +3426,17 @@ describe('parts36', () => {
         ...(when ? {when} : {}),
       });
       const css = read('p.css');
-      const card = ruleOf('.astryx-card');
+      const reset = ruleOf(`.astryx-card:where(${narrow} *)`);
       for (const k of SIDES)
-        expect(card, `${on} ${k}`).toMatch(
-          new RegExp(`--astryx-card-padding-${k}:`),
+        expect(reset, `${on} ${k}`).toMatch(
+          new RegExp(`--astryx-card-padding-${k}:\\s*initial`),
         );
-      // The narrower rule writes the sides, not the shorthand.
+      expect(ruleOf('.astryx-card')).not.toMatch(
+        /--astryx-card-padding-block-start:/,
+      );
       expect(ruleOf(narrow)).not.toMatch(/--astryx-card-padding:\s*7px/);
-      expect(css.indexOf('.astryx-card {')).toBeLessThan(
-        css.indexOf(`${narrow} {`),
+      expect(css.indexOf(`.astryx-card:where(${narrow} *)`)).toBeGreaterThan(
+        -1,
       );
       await themeEditUndo('p', {
         cwd,
@@ -3492,6 +3497,87 @@ describe('parts36', () => {
       cwd,
       thing: 'padding',
       on: 'card',
+      state: 'hover',
+    });
+  });
+});
+
+describe('parts37', () => {
+  /** @param {string} selector */
+  const ruleOf = selector => {
+    const css = read('p.css');
+    const i = css.indexOf(`${selector} {`);
+    return i < 0 ? '' : css.slice(i, css.indexOf('}', i));
+  };
+
+  it("writes a section padding as its whole padding, so a nested section keeps its parent's", async () => {
+    await themeEditSet('p', 'padding', '20px', {cwd, on: 'section'});
+    const rule = ruleOf('.astryx-section');
+    expect(rule).toMatch(/--astryx-section-padding:\s*20px/);
+    expect(rule).not.toMatch(/--astryx-section-padding-(block|inline)-/);
+    await themeEditUndo('p', {cwd, thing: 'padding', on: 'section'});
+    // A hover-only padding writes the hover sides and resets nested
+    // sections; the plain section's base gets nothing.
+    await themeEditSet('p', 'padding', '20px', {
+      cwd,
+      on: 'section',
+      state: 'hover',
+    });
+    expect(ruleOf('.astryx-section')).not.toMatch(/--astryx-section-padding/);
+    await themeEditUndo('p', {
+      cwd,
+      thing: 'padding',
+      on: 'section',
+      state: 'hover',
+    });
+  });
+
+  it('writes padding 0 as a length on every part Core reads it inside calc()', async () => {
+    for (const on of ['card', 'section', 'dialog', 'drawer', 'bottom-sheet']) {
+      await themeEditSet('p', 'padding', '0', {cwd, on});
+      const rule = ruleOf(`.astryx-${on}`);
+      expect(rule, on).toMatch(new RegExp(`--astryx-${on}-padding:\\s*0px`));
+      expect(rule, on).not.toMatch(/:\s*0;/);
+      await themeEditUndo('p', {cwd, thing: 'padding', on});
+    }
+  });
+
+  it('refuses at the next set a hand edit that set would refuse', async () => {
+    await themeEditNew('h37', {cwd});
+    const file = path.join(cwd, 'themes', 'h37', 'h37.settings.json');
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    data.settings.push({
+      thing: 'padding',
+      value: '4px 8px',
+      source: 'property',
+      on: 'chat-composer',
+    });
+    fs.writeFileSync(file, JSON.stringify(data, null, 2));
+    const r = await refusal(() =>
+      themeEditSet('h37', 'corners', 'pill', {cwd}),
+    );
+    expect(r.message).toContain('4px 8px');
+    expect(r.run.join(' ')).toMatch(/undo h37 padding --on chat-composer/);
+    fs.rmSync(path.join(cwd, 'themes', 'h37'), {recursive: true, force: true});
+  });
+
+  it('copies no padding onto the plain card for a clickable card hover padding', async () => {
+    // A card padding from the user's own theme source (or a variant they
+    // wrote) is not overridden: the plain card's base gets no padding
+    // variable, only the reset for cards nested in a clickable card.
+    await themeEditSet('p', 'padding', '5px', {
+      cwd,
+      on: 'clickable-card',
+      state: 'hover',
+    });
+    expect(ruleOf('.astryx-card')).not.toMatch(/--astryx-card-padding/);
+    expect(read('p.css')).toMatch(
+      /\.astryx-card:where\(\.astryx-clickable-card:hover \*\)/,
+    );
+    await themeEditUndo('p', {
+      cwd,
+      thing: 'padding',
+      on: 'clickable-card',
       state: 'hover',
     });
   });

@@ -2307,10 +2307,13 @@ export function compileTheme(ctx, data, base) {
    */
   const emitPadding = () => {
     // The side variables written on a narrower selector (a variant, a
-    // state, a clickable card), by the part whose variables they are: they
-    // inherit, so a plain one of those parts inside takes its own again.
-    /** @type {Map<string, Set<string>>} */
+    // state, a clickable card), by the part whose variables they are, with
+    // that selector: they inherit, so a plain one of those parts inside is
+    // reset to its own fallback (below), never given a copy of a value.
+    /** @type {Map<string, Map<string, Set<string>>>} */
     const narrow = new Map();
+    /** A side as CSS reads it inside calc(): a bare 0 is no length. @param {string} v */
+    const length = v => (/^[+-]?(0+\.?0*|\.0+)$/.test(v) ? '0px' : v);
     for (const {target, s, list} of padQueue.values()) {
       const prefix = /** @type {string} */ (padVars(target));
       const owner = prefix.slice('--astryx-'.length, -'-padding'.length);
@@ -2320,8 +2323,11 @@ export function compileTheme(ctx, data, base) {
       for (const x of list) {
         const prop = kebab(x.thing);
         const raw = String(x.value).trim();
-        const value = /^(initial|unset)$/i.test(raw) ? '0' : raw;
-        const w = splitTop(value, ' ').map(y => y.trim());
+        // initial and unset leave the variable without a value, so the part
+        // takes Core's own default for it.
+        const value = /^(initial|unset)$/i.test(raw) ? 'initial' : raw;
+        const w = splitTop(value, ' ').map(y => length(y.trim()));
+        const one = length(value);
         for (const dir of /** @type {const} */ (['ltr', 'rtl'])) {
           const o = side[dir];
           const left = dir === 'ltr' ? 'inline-start' : 'inline-end';
@@ -2340,18 +2346,18 @@ export function compileTheme(ctx, data, base) {
           } else if (prop === 'padding-inline') {
             o['inline-start'] = w[0];
             o['inline-end'] = w[1] ?? w[0];
-          } else if (prop === 'padding-top') o['block-start'] = value;
-          else if (prop === 'padding-bottom') o['block-end'] = value;
-          else if (prop === 'padding-left') o[left] = value;
-          else if (prop === 'padding-right') o[right] = value;
+          } else if (prop === 'padding-top') o['block-start'] = one;
+          else if (prop === 'padding-bottom') o['block-end'] = one;
+          else if (prop === 'padding-left') o[left] = one;
+          else if (prop === 'padding-right') o[right] = one;
           else {
             const k = prop.slice('padding-'.length);
-            if (/^(block|inline)-(start|end)$/.test(k)) o[k] = value;
+            if (/^(block|inline)-(start|end)$/.test(k)) o[k] = one;
           }
         }
       }
       /** @type {Record<string, string>} */
-      const plain = {};
+      let plain = {};
       /** @type {Record<string, string>} */
       const ltr = {};
       /** @type {Record<string, string>} */
@@ -2369,20 +2375,27 @@ export function compileTheme(ctx, data, base) {
           if (b != null) rtl[`${prefix}-${k}`] = b;
         }
       }
-      // Four equal sides are the whole padding too, as Core writes it (on
-      // the part's own base only: a narrower selector writes the sides).
+      // Four equal sides on the part's own base are its whole padding, the
+      // one variable Core reads after a padding a parent passes down (a
+      // nested section keeps following its parent's); a narrower selector
+      // writes the sides, which out-rank the base's.
       const vals = Object.values(plain);
       if (!scoped && vals.length === 4 && vals.every(v => v === vals[0]))
-        plain[prefix] = vals[0];
+        plain = {[prefix]: vals[0]};
       if (scoped) {
-        const names = narrow.get(owner) ?? new Set();
-        for (const k of [
-          ...Object.keys(plain),
-          ...Object.keys(ltr),
-          ...Object.keys(rtl),
-        ])
-          names.add(k);
-        narrow.set(owner, names);
+        const sel = narrowSelector(target, s);
+        if (sel) {
+          const bySel = narrow.get(owner) ?? new Map();
+          const names = bySel.get(sel) ?? new Set();
+          for (const k of [
+            ...Object.keys(plain),
+            ...Object.keys(ltr),
+            ...Object.keys(rtl),
+          ])
+            names.add(k);
+          bySel.set(sel, names);
+          narrow.set(owner, bySel);
+        }
       }
       for (const [k, v] of Object.entries(plain)) putComp(s, target, k, v);
       for (const [dir, rule] of /** @type {const} */ ([
@@ -2394,43 +2407,37 @@ export function compileTheme(ctx, data, base) {
           b[key] = {...(b[key] ?? {}), ...rule};
         }
     }
-    // Each side the narrower selectors write, on the part's own base: the
-    // base theme's value for it, else none (so Core's own fallback holds).
-    for (const [owner, names] of narrow) {
-      const own = /** @type {any} */ (base).components?.[owner]?.base ?? {};
-      /** @type {Record<string, string>} */
-      const from = {};
-      const w = splitTop(String(own.padding ?? '').trim(), ' ').filter(Boolean);
-      if (w.length) {
-        const [top, r = top, bottom = top, l = r] = w;
-        Object.assign(from, {
-          'block-start': top,
-          'inline-end': r,
-          'block-end': bottom,
-          'inline-start': l,
-        });
-      }
-      for (const [k, a] of /** @type {const} */ ([
-        ['paddingBlock', 'block'],
-        ['paddingInline', 'inline'],
-      ])) {
-        const x = splitTop(String(own[k] ?? '').trim(), ' ').filter(Boolean);
-        if (x.length) {
-          from[`${a}-start`] = x[0];
-          from[`${a}-end`] = x[1] ?? x[0];
-        }
-      }
-      for (const k of ['BlockStart', 'BlockEnd', 'InlineStart', 'InlineEnd'])
-        if (typeof own[`padding${k}`] === 'string')
-          from[kebab(k)] = own[`padding${k}`];
+    // A plain part inside a narrower one: each side the narrower selector
+    // writes is reset (left without a value, so Core's own fallback holds),
+    // on the part's own class at its own weight, before any base setting a
+    // theme gives it (the part's own base, or a source of the user's own,
+    // which comes later and so wins).
+    for (const [owner, bySel] of narrow) {
       const b = ((theme.components[owner] ??= {}).base ??= {});
-      const prefix = `--astryx-${owner}-padding`;
-      for (const name of names) {
-        if (name in b || name === prefix) continue;
-        b[name] = from[name.slice(prefix.length + 1)] ?? 'initial';
+      for (const [sel, names] of bySel) {
+        /** @type {Record<string, string>} */
+        const reset = {};
+        for (const name of names) if (!(name in b)) reset[name] = 'initial';
+        if (Object.keys(reset).length) {
+          const key = `:where(${sel} *)`;
+          b[key] = {...(b[key] ?? {}), ...reset};
+        }
       }
     }
   };
+  /**
+   * The selector a narrower padding scope is written with (a clickable
+   * card's class, a variant's attribute, a state's pseudo-class), or null
+   * for a state Core writes as a block of its own.
+   * @param {string} target @param {Setting} s
+   */
+  const narrowSelector = (target, s) => {
+    const tg = ctx.project.target.get(target);
+    if (s.state && tg?.states.includes(s.state)) return null;
+    const [k, v] = s.when ? String(s.when).split(':') : [];
+    return `.astryx-${target}${s.when ? `[data-${k}="${v}"]` : ''}${s.state ? stateKey(s.state, wrapsOneControl(ctx, target)) : ''}`;
+  };
+
   /**
    * Each part's blocks with its base first, and in each block the rules for
    * a direction before a state's: Core writes them in this order, and a

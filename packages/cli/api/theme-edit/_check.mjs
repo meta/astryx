@@ -582,13 +582,29 @@ export function storedProblems(ctx, slug, data, skip = '') {
     })();
     if (problem) found.push(problem);
   }
-  // A font dial is checked as set checks it (a CSS keyword, a size or a
-  // whole CSS font value is no family).
+  // Every part setting and the font dial are checked as set checks a value
+  // typed in (a CSS keyword where no family is, one length where Core reads
+  // a padding inside calc(), a value the property's grammar refuses …), so
+  // a hand edit set would refuse is reported, never built, as compile does.
+  const scoped = new Set(found.map(f => f.setting));
   for (const s of data.settings) {
-    if (s.source !== 'dial' || s.thing !== 'font' || s.thing === skip) continue;
+    if (s.thing === skip || scoped.has(s)) continue;
+    if (!(
+      s.source === 'property' ||
+      (s.source === 'dial' && s.thing === 'font')
+    ))
+      continue;
     try {
-      checkSetting(ctx, slug, data, 'font', s.value, {on: s.on});
+      checkSetting(
+        ctx,
+        slug,
+        {...data, settings: data.settings.filter(x => x !== s)},
+        s.thing,
+        s.value,
+        {on: s.on, when: s.when, state: s.state, mode: s.mode, only: s.only},
+      );
     } catch (e) {
+      if (!(e instanceof AstryxError)) throw e;
       found.push({
         setting: s,
         why:
