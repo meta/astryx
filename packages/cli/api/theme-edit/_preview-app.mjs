@@ -25,6 +25,7 @@ import {baseResolved, installLine, openProject} from './_project.mjs';
 import {P, wordTable} from './_tables.mjs';
 import {
   buildTheme,
+  camel,
   editedThemes,
   fontPackages,
   loadTheme,
@@ -43,6 +44,7 @@ import {
   componentsPageSource,
   overviewPageSource,
   previewRouteSource,
+  appCopyBlocker,
   themeImports,
 } from './_preview.mjs';
 import {
@@ -70,6 +72,7 @@ import {
 } from '../../foundation/env/package-manager.mjs';
 import {sha256} from '../../foundation/render/source-block.mjs';
 import {findNodeModulesPackage} from '../../foundation/fs/paths.mjs';
+import {normalizeEntry} from './_check.mjs';
 
 const E = ERROR_CODES;
 
@@ -512,7 +515,7 @@ function readNextConfig(cwd) {
         const v = str(n);
         return v == null
           ? null
-          : (v.replace(/^\.?\//, '').split('/')[0] ?? null);
+          : v.replace(/^(\.\/)+/, '').replace(/\/+$/, '') || null;
       }),
     };
   }
@@ -566,9 +569,15 @@ function reservedFolder(cwd, dir) {
     return 'node_modules/ belongs to the package manager, which replaces it';
   if (segs[0] === 'public')
     return 'Next serves every file in public/ as it is, at the site root, so anyone could download it';
+  // The build folders by their real path: a distDir with a subfolder
+  // (src/.next-build) covers that folder only, not the rest of src/.
   const built = [
     ...new Set(['.next', 'out', readNextConfig(cwd).distDir]),
-  ].find(d => d && segs[0] === d);
+  ].find(d => {
+    if (typeof d !== 'string' || !d.trim()) return false;
+    const at = path.resolve(cwd, d);
+    return at !== cwd && (dir === at || dir.startsWith(at + path.sep));
+  });
   if (built)
     return `${built}/ is where Next writes its build, and the next build empties it`;
   const odd = segs.find(seg => windowsReserved(seg) || /^\.+$/.test(seg));
@@ -1250,6 +1259,83 @@ function nextAppsUnder(cwd) {
   };
   walk(cwd, 1);
   return out.sort((a, b) => a.root.localeCompare(b.root));
+}
+
+/**
+ * The steps that put an editor theme into the app through its app copy
+ * (src/themes/<theme>/): one `theme add`, which prints the one-time wiring
+ * of the app's theme module, and what keeps the copy in step. The one text
+ * every place that says how to use an editor theme gives.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {'light' | 'dark' | 'system'} [mode]
+ * @returns {string[]}
+ */
+export function addWiring(cwd, slug, mode = 'system') {
+  return [
+    `${formatCliCommand(`theme add ${slug}`, cwd)}: adds the theme's app copy (src/themes/${slug}/, written again after every build) to the app's theme module, and prints the one-time wiring of that module in the app root; ${formatCliCommand(`theme use ${slug}`, cwd)} makes it the default`,
+    // Core has no mode inside a theme: a one-mode theme's mode is the one
+    // the app's <Theme> is given.
+    ...(mode === 'system'
+      ? []
+      : [
+          `${slug} is ${mode}-only: give the <Theme> that theme add's wiring puts in the app root mode="${mode}" (<Theme theme={…} mode="${mode}">); the theme keeps both halves of its colors, so a toast or a lightbox Core draws in the other mode stays readable`,
+        ]),
+    `every set and undo builds the theme and its app copy again, so the app takes each change; after editing ${shown(cwd, themeFiles(cwd, slug).ts)} by hand, ${P.replace(/ editor$/, '')} compile ${shown(cwd, themeFiles(cwd, slug).ts)} builds both again`,
+  ];
+}
+
+/**
+ * How to use an editor theme in this app: `theme add <theme>` for the app
+ * copy the editor writes in src/themes/<theme>/; when a folder of the
+ * user's is there instead, step by step by hand: the file of the app's root
+ * (a Next app's root layout, else the file that renders the app), the
+ * imports the preview route uses for the same theme (its module, its
+ * stylesheet and the font stylesheets) and the Theme around the app. Then
+ * what builds it.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {string[]}
+ */
+export function appWiring(ctx, slug, data) {
+  const cwd = ctx.project.cwd;
+  const routes = nextRoutesOf(cwd);
+  const layout = routes
+    ? fs.readdirSync(routes).find(f => /^layout\.(tsx|ts|jsx|js)$/.test(f))
+    : undefined;
+  const file = routes && layout ? path.join(routes, layout) : null;
+  const ti = themeImports(ctx, slug, data, file ? path.dirname(file) : cwd);
+  const name = `${camel(slug)}Theme`;
+  const where = file
+    ? `${shown(cwd, file)} (the app's root layout)`
+    : "the file that renders your app's root (paths below are from the app folder)";
+  const appModule = ['src/astryx-themes.ts', 'astryx-themes.ts'].find(m =>
+    fs.existsSync(path.join(cwd, m)),
+  );
+  // The app's copy (src/themes/<theme>/, a standard local theme) is what
+  // the stable theme commands add: one command, which prints the one-time
+  // app wiring itself.
+  // Only while the copy is the editor's (the same test its writer uses);
+  // else the steps by hand, naming what is in the way.
+  const blocker = appCopyBlocker(cwd, slug);
+  if (blocker === null && fs.existsSync(path.join(cwd, 'src', 'themes', slug)))
+    return addWiring(cwd, slug, ti.mode);
+  return [
+    ...(blocker
+      ? [
+          `${blocker} is not the editor's, so the editor does not write the theme's app copy in src/themes/${slug}/ (and theme add does not take it); the steps by hand:`,
+        ]
+      : []),
+    `in ${where}, import the theme and its stylesheets: import {Theme} from '@astryxdesign/core/theme'; import {${name}} from '${ti.module.replace(/\.js$/, '')}'; ${ti.css.map(c => `import '${c}';`).join(' ')}`,
+    `wrap the app in it: <Theme theme={${name}}${ti.mode === 'system' ? '' : ` mode="${ti.mode}"`}>{children}</Theme>`,
+    ...(appModule
+      ? [
+          `${appModule} (written by theme add and use) stays as it is: to keep its themes too, merge them in your own file ({...themes, ${JSON.stringify(slug)}: ${name}}), never in ${appModule}, which add, use and remove write again`,
+        ]
+      : []),
+    `every set and undo builds ${shown(cwd, themeFiles(cwd, slug).js)} and ${shown(cwd, themeFiles(cwd, slug).css)} again, so the app takes each change; after editing ${shown(cwd, themeFiles(cwd, slug).ts)} by hand, ${P.replace(/ editor$/, '')} compile ${shown(cwd, themeFiles(cwd, slug).ts)} builds it again`,
+  ];
 }
 
 /**
@@ -2871,7 +2957,10 @@ async function routeTheme(cwd, dir, data, opts = {}) {
   if (!data.theme) return null;
   const t = loadTheme(cwd, data.theme);
   const ctx = await context(cwd);
-  const unbuilt = !fs.existsSync(themeFiles(cwd, data.theme).js);
+  // The same rule `preview app` uses: any output missing, or a build that
+  // does not match the settings, is built again (judged by content).
+  const stale = staleBuild(cwd, data.theme, t);
+  const unbuilt = stale != null;
   if (unbuilt && opts.build !== false) await buildTheme(ctx, data.theme, t);
   const ti = themeImports(ctx, data.theme, t, dir);
   return {
@@ -2908,16 +2997,21 @@ async function themeLocked(options, slug, fn) {
 async function buildWorn(cwd, theme, options, notes) {
   if (!theme?.unbuilt) return;
   const slug = theme.name;
+  /** @type {string | null} */
+  let why = null;
   const build = async () => {
-    if (fs.existsSync(themeFiles(cwd, slug).js)) return;
-    await buildTheme(await context(cwd), slug, loadTheme(cwd, slug));
+    const t = loadTheme(cwd, slug);
+    why = staleBuild(cwd, slug, t);
+    if (!why) return;
+    await buildTheme(await context(cwd), slug, t);
   };
   await (typeof options?.lockTheme === 'function'
     ? options.lockTheme(slug, build)
     : build());
-  notes.push(
-    `built ${shown(cwd, themeFiles(cwd, slug).dir)}/ first: its build was missing`,
-  );
+  if (why)
+    notes.push(
+      `built ${shown(cwd, themeFiles(cwd, slug).dir)}/ first: its build was not current (${why})`,
+    );
 }
 
 /** The Colors page: its id and file, relative to the route folder. */
@@ -3826,6 +3920,20 @@ async function reportingRecovery(fn) {
 }
 
 /**
+ * A --theme value as the editor reads a pasted entry: `theme: t`,
+ * `--theme=t` and the like name the theme t.
+ * @param {string | undefined} v
+ * @returns {string | undefined}
+ */
+function themeArg(v) {
+  if (typeof v !== 'string') return v;
+  const {thing, value} = normalizeEntry(v, undefined);
+  return /^-*theme$/i.test(thing) && value?.trim()
+    ? value.trim().replace(/^['"]|['"]$/g, '')
+    : v;
+}
+
+/**
  * {@link themeEditPreviewAdd}, with the note of a recovery in `box`.
  * @param {string | undefined} description
  * @param {import('./theme-edit.type.mjs').ThemeEditPreviewAddOptions} options
@@ -3833,6 +3941,7 @@ async function reportingRecovery(fn) {
  * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditPreviewAddResponse>}
  */
 async function addPreview(description, options, box) {
+  options = {...options, theme: themeArg(options.theme)};
   const {cwd = process.cwd()} = options;
   if (isOutsideProject(cwd))
     refuse(
@@ -4315,7 +4424,8 @@ async function addPreview(description, options, box) {
 
 /**
  * Make a new starter app (Next.js app router, Core and the neutral theme,
- * with the Astryx packages pinned to this CLI's release) in `dir`, with the
+ * with the Astryx packages pinned to this CLI's release, or with `theme` to
+ * the versions the project has) in `dir`, with the
  * theme preview route and its default pages inside. With `theme`, the theme
  * folder is copied into the app and the pages wear it. No install runs.
  * Every check runs before the first write, so a refusal changes nothing.
@@ -4332,6 +4442,7 @@ export async function themeEditPreviewApp(dir, options = {}) {
       'Name the folder for the new app: a new or empty folder inside the current one.',
       {run: [`${PREVIEW} app theme-app`]},
     );
+  options = {...options, theme: themeArg(options.theme)};
   const slug = options.theme ?? null;
   const theme =
     slug == null
@@ -4417,6 +4528,27 @@ export async function themeEditPreviewApp(dir, options = {}) {
     copyDir('');
     if (theme.like && theme.like !== 'neutral')
       dependencies[`@astryxdesign/theme-${theme.like}`] = cliVersion();
+    // The copied build was made on this project's Core and base theme: the
+    // new app installs those same versions, so the build is current there.
+    /** @type {string[]} */
+    const pinnedTo = [];
+    for (const pkg of [
+      '@astryxdesign/core',
+      '@astryxdesign/theme-neutral',
+      ...(theme.like && theme.like !== 'neutral'
+        ? [`@astryxdesign/theme-${theme.like}`]
+        : []),
+    ]) {
+      const v = installedVersion(cwd, pkg);
+      if (v && v !== cliVersion()) {
+        dependencies[pkg] = v;
+        pinnedTo.push(`${pkg} ${v}`);
+      }
+    }
+    if (pinnedTo.length)
+      notes.push(
+        `the new app installs ${pinnedTo.join(', ')}, the versions this project has and ${slug}'s build was made on, not this CLI's ${cliVersion()}; to move it to ${cliVersion()}, update those packages in the new app and run ${EDITOR} show ${slug} there`,
+      );
     /** @param {string} rel */
     const fromRoute = rel => {
       const r = path.relative(routeDir, rel).split(path.sep).join('/');
@@ -4531,6 +4663,26 @@ export async function themeEditPreviewApp(dir, options = {}) {
 
 /** The version range of an open font package the host project lacks. */
 const OPEN_FONT_RANGE = '^5.0.0';
+
+/**
+ * The version of a package installed for the project, read off disk (a
+ * package need not export its package.json).
+ * @param {string} cwd
+ * @param {string} pkg
+ * @returns {string | null}
+ */
+function installedVersion(cwd, pkg) {
+  const found = findNodeModulesPackage(cwd, pkg);
+  if (!found) return null;
+  try {
+    const v = JSON.parse(
+      fs.readFileSync(path.join(found.packageDir, 'package.json'), 'utf8'),
+    ).version;
+    return typeof v === 'string' ? v : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * The installed version of a package, as the project resolves it.
@@ -4663,6 +4815,39 @@ export async function themeEditPreviewRemove(page, options = {}) {
 }
 
 /**
+ * The preview folders in the app: every folder under the routes folders
+ * (app/, src/app/) holding a theme-preview.json, a few levels deep.
+ * @param {string} cwd
+ * @returns {string[]}
+ */
+function previewsIn(cwd) {
+  /** @type {string[]} */
+  const out = [];
+  /** @param {string} dir @param {number} depth */
+  const walk = (dir, depth) => {
+    if (depth > 6 || out.length >= 20) return;
+    if (fs.existsSync(path.join(dir, PREVIEW_DATA))) out.push(dir);
+    /** @type {fs.Dirent[]} */
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, {withFileTypes: true});
+    } catch {
+      return;
+    }
+    for (const e of entries)
+      if (
+        e.isDirectory() &&
+        e.name !== 'node_modules' &&
+        !e.name.startsWith('.')
+      )
+        walk(path.join(dir, e.name), depth + 1);
+  };
+  for (const r of [path.join(cwd, 'app'), path.join(cwd, 'src', 'app')])
+    if (fs.existsSync(r)) walk(r, 0);
+  return out.sort();
+}
+
+/**
  * {@link themeEditPreviewRemove}, with the note of a recovery in `box`.
  * @param {string | undefined} page
  * @param {import('./theme-edit.type.mjs').ThemeEditPreviewListOptions} options
@@ -4703,26 +4888,40 @@ async function removePreview(page, options, box) {
   if (!data) {
     // A folder that holds the app takes no preview: the way on is the
     // preview elsewhere, or a new one in its own folder.
-    /** @type {string | null} */
-    let other = null;
-    if (holdsApp(cwd, at.dir))
-      try {
-        const d = previewDir(cwd, undefined, {optional: true, retry})?.dir;
-        if (d && d !== at.dir && fs.existsSync(path.join(d, PREVIEW_DATA)))
-          other = d;
-      } catch {
-        // Several previews, or none: add is the way on.
-      }
+    // The previews there are, each with its remove; `add` there only
+    // when add would take the folder.
+    const others = previewsIn(cwd).filter(d => d !== at.dir);
+    /** @type {string | undefined} */
+    let usual;
+    try {
+      usual = previewDir(cwd, undefined, {optional: true, retry})?.dir;
+    } catch {
+      // Several previews, or none.
+    }
+    const pageArg = page != null ? ` ${quoteCommandArgument(page)}` : '';
+    let addable = true;
+    try {
+      previewDir(cwd, options.path, {write: true, retry});
+    } catch {
+      addable = false;
+    }
     refuse(
       E.ERR_NOT_FOUND,
-      `There is no theme preview in ${shownDir(cwd, at.dir)}/ (no ${PREVIEW_DATA}).`,
+      `There is no theme preview in ${shownDir(cwd, at.dir)}/ (no ${PREVIEW_DATA}).${others.length ? ` ${others.length > 1 ? 'The previews here are in' : 'The preview here is in'} ${others.map(d => `${shownDir(cwd, d)}/`).join(', ')}.` : ''}`,
       {
         run: [
-          holdsApp(cwd, at.dir)
-            ? other
-              ? `${PREVIEW} remove${page != null ? ` ${quoteCommandArgument(page)}` : ''}  # the preview in ${shownDir(cwd, other)}/`
-              : `${PREVIEW} add`
-            : `${PREVIEW} add${pf}`,
+          ...others.slice(0, 3).map(
+            d =>
+              // The usual preview folder needs no --path.
+              `${PREVIEW} remove${pageArg}${d === usual ? '' : ` --path ${quoteCommandArgument(shownDir(cwd, d))}`}`,
+          ),
+          ...(others.length
+            ? []
+            : [
+                addable && !holdsApp(cwd, at.dir)
+                  ? `${PREVIEW} add${pf}`
+                  : `${PREVIEW} add`,
+              ]),
         ],
       },
     );

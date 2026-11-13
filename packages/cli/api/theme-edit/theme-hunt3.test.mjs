@@ -408,10 +408,14 @@ describe('builds that stay the same', () => {
 });
 
 describe('the command line', () => {
-  it('names an editor theme to the package commands', async () => {
+  it('the package commands take an editor theme through its app copy', async () => {
+    // src/themes/h/ is a standard local theme the editor writes after every
+    // build: use names the add that works.
     const r = await cli(['use', 'h']);
     expect(r.status).toBe(1);
-    expect(r.body.error).toContain('a theme the editor made');
+    expect(r.body.error).toMatch(
+      /Theme "h" is not added\. Run `.* theme add h` first/,
+    );
   }, 120_000);
 
   it('a moved name points where it went; a bare group answers --json', async () => {

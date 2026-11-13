@@ -908,7 +908,9 @@ export function registerExperimentalTheme(group, program) {
         // or `--color-accent:#e11d48`) is the token and its value; with no
         // value otherwise, the missing-argument error the parser gives.
         if (!value.length) {
-          const pasted = /^(--[a-z0-9-]+)\s*:\s*(.+?);?\s*$/i.exec(thing);
+          // Any thing, a token or a dial, with `:` or `=` (`accent: red`,
+          // `--color-accent=#e11d48`).
+          const pasted = /^(\S+?)\s*[:=]\s*(.+?);?\s*$/.exec(thing);
           if (!pasted)
             return missingSetValue(
               editor.commands.find(c => c.name() === 'set'),
