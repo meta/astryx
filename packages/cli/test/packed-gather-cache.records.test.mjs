@@ -30,6 +30,7 @@ import {
   derivedEntries,
   entries,
   templatesEntries,
+  themeEntries,
   QUERIES,
   hasModuleHooks,
 } from '../test-utils/packed-gather-cache-fixture.mjs';
@@ -235,7 +236,7 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     120_000,
   );
 
-  it('records nothing for component, template, theme or discover in a project with no integration', () => {
+  it('records nothing for component, template, theme, discover or docs in a project with no integration', () => {
     const tmp = keptTmp('no-integration');
     // A project with Core and nothing else: no config, no manifest, no
     // dependency that ships one.
@@ -275,6 +276,7 @@ Module._resolveFilename = function (request, parent, isMain, options) {
         ['component', 'Button'],
         ['theme', 'list'],
         ['discover'],
+        ['docs'],
       ]) {
         // Stdout and status: a once-a-day notice may go to stderr.
         const answer = (
@@ -676,6 +678,121 @@ Module._resolveFilename = function (request, parent, isMain, options) {
       fs.rmSync(outside, {recursive: true, force: true});
     }
   }, 120_000);
+
+  it("keeps an integration's themes, and finds an edit to a theme or a module it imports", () => {
+    const tmp = keptTmp('themes');
+    const other = makeProject();
+    try {
+      fs.writeFileSync(
+        path.join(other.widgets, 'astryx.integration.mjs'),
+        `export default { themes: './themes' };\n`,
+      );
+      // A package that ships the theme's built files as its exports.
+      const version = JSON.parse(
+        fs.readFileSync(
+          path.join(REPO_ROOT, 'packages', 'cli', 'package.json'),
+          'utf8',
+        ),
+      ).version;
+      fs.writeFileSync(
+        path.join(other.widgets, 'package.json'),
+        JSON.stringify({
+          name: '@acme/widgets',
+          version: '1.0.0',
+          type: 'module',
+          peerDependencies: {'@astryxdesign/core': `^${version}`},
+          exports: {
+            './themes/tally': './dist/tally.js',
+            './themes/tally.css': './dist/tally.css',
+          },
+        }),
+      );
+      fs.mkdirSync(path.join(other.widgets, 'dist'));
+      fs.writeFileSync(
+        path.join(other.widgets, 'dist', 'tally.js'),
+        "export const tallyTheme = {name: 'tally', tokens: {}};\n",
+      );
+      fs.writeFileSync(
+        path.join(other.widgets, 'dist', 'tally.css'),
+        '[data-astryx-theme="tally"] { --color-text: black; }\n',
+      );
+      const theme = path.join(other.widgets, 'themes', 'tally');
+      fs.mkdirSync(theme, {recursive: true});
+      const describe = (/** @type {string} */ text) =>
+        fs.writeFileSync(
+          path.join(theme, 'tallyTheme.doc.mjs'),
+          `/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {type: 'theme', name: 'tally', displayName: 'Tally', description: '${text}', maintained: true};\n`,
+        );
+      describe('Tally theme for ledgers.');
+      fs.writeFileSync(
+        path.join(theme, 'tallyTheme.ts'),
+        "import {tokens} from './tokens';\nexport const tallyTheme = {name: 'tally', tokens};\n",
+      );
+      const tokens = (/** @type {string} */ source) =>
+        fs.writeFileSync(path.join(theme, 'tokens.ts'), source);
+      tokens('export const tokens = {};\n');
+      const ask = ['theme', 'list'];
+      const fresh = () => run(ask, {tmp: freshTmp(), cwd: other.dir});
+      const kept = () => run(ask, {tmp, cwd: other.dir});
+      const first = fresh();
+      expect(first.stdout).toContain('Tally theme for ledgers.');
+      expect(kept()).toEqual(first);
+      // The integration's theme records are kept: one entry, read back (the
+      // same file) on the next run.
+      const keptThemes = themeEntries(tmp);
+      expect(keptThemes.size).toBe(1);
+      expect(kept()).toEqual(first);
+      expect(themeEntries(tmp)).toEqual(keptThemes);
+      // An in-place edit to the theme's doc shows on the next run, which
+      // discovers the themes again.
+      describe('Tally theme, edited.');
+      const edited = kept();
+      expect(edited.stdout).toContain('Tally theme, edited.');
+      expect(edited).toEqual(fresh());
+      expect(themeEntries(tmp)).not.toEqual(keptThemes);
+      // So does an edit to a module the theme imports that breaks it.
+      tokens("export {tokens} from './missing';\n");
+      const broken = kept();
+      expect(broken).toEqual(fresh());
+      expect(broken).not.toEqual(edited);
+    } finally {
+      fs.rmSync(other.dir, {recursive: true, force: true});
+    }
+  }, 180_000);
+
+  it('lets docs read the kept checks, and shows a topic edit on the very next call', () => {
+    const tmp = keptTmp('docs');
+    const other = makeProject();
+    try {
+      fs.writeFileSync(
+        path.join(other.widgets, 'astryx.integration.mjs'),
+        `export default { docs: './docs' };\n`,
+      );
+      fs.mkdirSync(path.join(other.widgets, 'docs'));
+      const topic = (/** @type {string} */ text) =>
+        fs.writeFileSync(
+          path.join(other.widgets, 'docs', 'deploying.doc.mjs'),
+          `export const docs = {type: 'generic', name: 'deploying', title: 'Deploying', description: 'How to deploy.', sections: [{title: 'Overview', content: [{type: 'prose', text: '${text}'}]}]};\n`,
+        );
+      topic('Ship it on Tuesdays.');
+      const ask = ['docs', 'deploying'];
+      const first = run(ask, {tmp: freshTmp(), cwd: other.dir});
+      expect(first.stdout).toContain('Ship it on Tuesdays.');
+      expect(run(ask, {tmp, cwd: other.dir})).toEqual(first);
+      // docs keeps the integration's check results like the other commands.
+      const kept = issuesEntries(tmp);
+      expect(kept.size).toBeGreaterThan(0);
+      expect(run(ask, {tmp, cwd: other.dir})).toEqual(first);
+      expect(issuesEntries(tmp)).toEqual(kept);
+      // An in-place edit to the topic shows on the very next call.
+      topic('Ship it on Thursdays.');
+      const edited = run(ask, {tmp, cwd: other.dir});
+      expect(edited.stdout).toContain('Ship it on Thursdays.');
+      expect(edited).toEqual(run(ask, {tmp: freshTmp(), cwd: other.dir}));
+    } finally {
+      fs.rmSync(other.dir, {recursive: true, force: true});
+    }
+  }, 180_000);
 
   it('is skipped silently when its folder cannot be used', () => {
     fs.mkdirSync(path.join(work, 'tmp'), {recursive: true});

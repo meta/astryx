@@ -118,6 +118,16 @@ import {
 const ISSUES_CODEC = {
   encode: (/** @type {any} */ value) => value,
   decode: (/** @type {any} */ value) => value,
+  /** A list of issue records, each with its code, severity and message. */
+  valid: (/** @type {any} */ value) =>
+    Array.isArray(value) &&
+    value.every(
+      issue =>
+        issue != null &&
+        typeof issue.code === 'string' &&
+        typeof issue.severity === 'string' &&
+        typeof issue.message === 'string',
+    ),
 };
 
 export {CONFIG_BASENAMES, findConfigPath} from './config-path.mjs';

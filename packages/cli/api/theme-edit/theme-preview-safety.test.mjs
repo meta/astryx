@@ -2835,4 +2835,56 @@ describe('final pass 5', () => {
       rm('src/app/z4');
     }
   }, 240_000);
+
+  it('rebuilds a stale or partly missing build, reads a pasted --theme, and names the preview a wrong remove --path missed', async () => {
+    await themeEditNew('aa', {cwd, like: 'neutral'});
+    try {
+      await themeEditPreviewAdd(undefined, {
+        cwd,
+        theme: 'theme: aa',
+        path: 'src/app/aa',
+      });
+      expect(JSON.parse(read('src/app/aa/theme-preview.json')).theme).toBe(
+        'aa',
+      );
+      rm('themes/aa/aa.css');
+      const r = await themeEditPreviewAdd(undefined, {cwd, path: 'src/app/aa'});
+      expect(r.data.notes.join(' ')).toContain(
+        'first: its build was not current',
+      );
+      expect(exists('themes/aa/aa.css')).toBe(true);
+      fs.mkdirSync(path.join(cwd, 'src/app/nopreview'), {recursive: true});
+      const miss = await refusal(() =>
+        themeEditPreviewRemove(undefined, {cwd, path: 'src/app/nopreview'}),
+      );
+      expect(miss.message).toContain('The preview here is in src/app/aa/');
+      // That preview's remove, not an add the folder would refuse.
+      expect(miss.run[0]).toMatch(/preview remove( --path src\/app\/aa)?$/);
+      expect(miss.run.join(' ')).not.toContain('preview add');
+    } finally {
+      rm('src/app/nopreview');
+      rm('src/app/aa');
+      rm('themes/aa');
+    }
+  }, 240_000);
+
+  it('refuses only the real distDir, not the rest of its parent folder', async () => {
+    const config = exists('next.config.mjs') ? read('next.config.mjs') : null;
+    write('next.config.mjs', "export default {distDir: 'src/.next-build'};\n");
+    try {
+      const r = await refusal(() =>
+        themeEditPreviewAdd(undefined, {cwd, path: 'src/.next-build/tp'}),
+      );
+      expect(r.message).toContain('where Next writes its build');
+      const ok = await themeEditPreviewAdd(undefined, {
+        cwd,
+        path: 'src/app/dd',
+      });
+      expect(ok.data.folder).toBe('src/app/dd');
+    } finally {
+      rm('src/app/dd');
+      if (config == null) rm('next.config.mjs');
+      else write('next.config.mjs', config);
+    }
+  }, 120_000);
 });

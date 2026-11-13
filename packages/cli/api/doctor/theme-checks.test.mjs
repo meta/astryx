@@ -950,6 +950,36 @@ describe('app-theme doctor checks', () => {
     });
   });
 
+  it('check 5 leaves a local theme that sets a private var to the private-variables check', async () => {
+    const {dir} = await fixture();
+    await themeEject('ocean', {cwd: dir, package: '@acme/themes'});
+    const localDir = path.join(dir, 'src/themes/ocean');
+    const sourceFile = path.join(localDir, 'oceanTheme.ts');
+    fs.writeFileSync(
+      sourceFile,
+      "const oceanTheme = {name: 'ocean', tokens: {'--color-bg': '#000'}};\nexport {oceanTheme};\nexport default oceanTheme;\n",
+    );
+    await themeBuild(sourceFile, {}, {cwd: dir});
+    await themeAdd('ocean', {cwd: dir, import: true});
+    // A hand edit sets a private var after the theme was built and added.
+    fs.writeFileSync(
+      sourceFile,
+      "const oceanTheme = {name: 'ocean', tokens: {'--color-bg': '#000'}, components: {button: {base: {'--_button-radius': '2px'}}}};\nexport {oceanTheme};\nexport default oceanTheme;\n",
+    );
+
+    const checks = await checkAppThemes(dir);
+    // Not a stale output, and never a pass: the build refuses the theme, so
+    // its outputs were not compared.
+    expect(check(checks, 'theme-local-builds')).toMatchObject({
+      status: 'info',
+      message: expect.stringContaining('Not checked: ocean'),
+      fix: expect.stringContaining('theme-private-variables'),
+    });
+    const priv = check(checks, 'theme-private-variables');
+    expect(priv).toMatchObject({status: 'fail'});
+    expect(priv.message).toContain('--_button-radius');
+  });
+
   it('check 5 names a package a local theme imports and the app lacks, with the install command', async () => {
     const {dir} = await fixture();
     await themeEject('ocean', {cwd: dir, package: '@acme/themes'});
@@ -1125,6 +1155,24 @@ describe('app-theme doctor checks', () => {
     });
     expect(result.message).toContain('^9.0.0');
   });
+
+  it('check 7 passes a theme package whose Core range is empty, which accepts every Core', async () => {
+    const {dir} = await fixture([{slug: 'ocean'}], {peerRange: ''});
+
+    expect(check(await checkAppThemes(dir), 'theme-core-peers')).toMatchObject({
+      status: 'pass',
+    });
+  });
+
+  it('reports an added theme package outside the Core range once, as theme-core-peers', async () => {
+    const {dir} = await fixture([{slug: 'ocean'}], {peerRange: '^9.0.0'});
+
+    const {checks} = await runChecks({cwd: dir});
+    expect(check(checks, 'theme-core-peers')).toMatchObject({status: 'fail'});
+    expect(
+      checks.find(item => item.id === 'integration-core-range'),
+    ).toBeUndefined();
+  }, 30_000);
 
   it('check 8 fails when the static default is not an added slug', async () => {
     const {dir, moduleFile} = await fixture();

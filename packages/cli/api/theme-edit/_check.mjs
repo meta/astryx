@@ -235,7 +235,7 @@ function matchingParen(text, open) {
  * @returns {number | null}
  */
 function textSizePx(v) {
-  const m = /^\+?(\d*\.?\d+(?:e[+-]?\d+)?)(px|rem|em|%)?$/i.exec(
+  const m = /^\+?(\d*\.?\d+(?:e[+-]?\d+)?)(px|rem|em|pt|%)?$/i.exec(
     typedPlain(v)
       .replace(/(\d)\.(?=[a-z%]*$)/i, '$1')
       .replace(/\s+/g, '')
@@ -244,7 +244,14 @@ function textSizePx(v) {
   if (!m) return null;
   const unit = (m[2] ?? '').toLowerCase();
   const n =
-    Number(m[1]) * (/r?em/.test(unit) ? 16 : unit === '%' ? 16 / 100 : 1);
+    Number(m[1]) *
+    (/r?em/.test(unit)
+      ? 16
+      : unit === '%'
+        ? 16 / 100
+        : unit === 'pt'
+          ? 4 / 3
+          : 1);
   const px = Math.round(n * 100) / 100;
   return Math.max(10, Math.min(32, px));
 }
@@ -509,7 +516,7 @@ const COLOR_DIAL_WORDS = (() => {
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
  * @param {string | {thing: string, on?: string, when?: string, state?: string, mode?: string}} [skip]
- * @returns {Array<{setting: import('./_settings.mjs').Setting, why: string, scope?: boolean}>} every saved setting the editor no longer accepts
+ * @returns {Array<{setting: import('./_settings.mjs').Setting, why: string, scope?: boolean, fix?: string}>} every saved setting the editor no longer accepts (`fix`: the clean value to set, when one reads)
  */
 export function storedProblems(ctx, slug, data, skip = '') {
   // The setting the command replaces (its thing in the same scope); a
@@ -524,7 +531,7 @@ export function storedProblems(ctx, slug, data, skip = '') {
         (s.when ?? '') === (skip.when ?? '') &&
         (s.state ?? '') === (skip.state ?? '') &&
         (s.mode ?? '') === (skip.mode ?? '');
-  /** @type {Array<{setting: import('./_settings.mjs').Setting, why: string, scope?: boolean}>} */
+  /** @type {Array<{setting: import('./_settings.mjs').Setting, why: string, scope?: boolean, fix?: string}>} */
   const found = [];
   const TOKENS = ctx.project.core.tokenDefaults;
   // Where each saved setting applies names a real part, group, state and
@@ -612,7 +619,14 @@ export function storedProblems(ctx, slug, data, skip = '') {
       checkSetting(
         ctx,
         slug,
-        {...data, settings: data.settings.filter(x => x !== s)},
+        {
+          ...data,
+          // A saved setting for one mode stays saved when the theme keeps
+          // one mode (it applies again with both): the rule that refuses
+          // --mode on a one-mode theme is for a value typed in.
+          ...(s.mode ? {mode: 'both'} : {}),
+          settings: data.settings.filter(x => x !== s),
+        },
         s.thing,
         s.value,
         {on: s.on, when: s.when, state: s.state, mode: s.mode, only: s.only},
@@ -628,9 +642,24 @@ export function storedProblems(ctx, slug, data, skip = '') {
       });
     }
   }
+  // A hand edit that put an invisible or non-breaking space in any value
+  // (the browser reads `rgb(1\u00A02\u00A03)` as invalid, a family with a
+  // zero-width space as another font): named, with the value as set writes
+  // it.
+  for (const s of data.settings) {
+    if (replaced(s) || typeof s.value !== 'string') continue;
+    const clean = normalValueText(s.value);
+    if (clean !== s.value)
+      found.push({
+        setting: s,
+        why: `${s.thing} holds a no-break, thin or zero-width space, which the browser does not read as a space`,
+        fix: clean,
+      });
+  }
   for (const s of data.settings) {
     if (s.source !== 'token' || s.thing === skipThing || !(s.thing in TOKENS))
       continue;
+    if (found.some(f => f.setting === s)) continue;
     // A var() a hand edit put in that names no design token reads nothing,
     // as set refuses it.
     const bad = unknownVarRef(String(s.value ?? ''), TOKENS, s.thing);
@@ -651,12 +680,20 @@ export function storedProblems(ctx, slug, data, skip = '') {
       );
       checkCycle(s.thing, s.value, TOKENS, data, ctx.project.cwd, s);
     } catch (e) {
+      // The value the check itself suggests, as for typed input.
+      const line = /** @type {any} */ (e)?.suggestions?.find(
+        (/** @type {any} */ x) =>
+          x.name.startsWith(`${P} set ${slug} ${s.thing} `),
+      )?.name;
       found.push({
         setting: s,
         why:
           e instanceof Error
             ? e.message.replace(/ Nothing was changed\.$/, '')
             : String(e),
+        ...(line
+          ? {fix: unquoteArg(line.slice(`${P} set ${slug} ${s.thing} `.length))}
+          : {}),
       });
     }
   }
@@ -1548,6 +1585,11 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       refuse(E.ERR_THEME_UNKNOWN_TOKEN, bad.message, {
         didYouMean: bad.near,
         run: [
+          ...(bad.fixed
+            ? [
+                `${P} set ${slug} ${thing} ${quoteCommandArgument(bad.fixed)}${/** @type {const} */ (['on', 'state', 'when', 'mode']).map(k => (flags[k] ? ` --${k} ${quoteCommandArgument(String(flags[k]))}` : '')).join('')}`,
+              ]
+            : []),
           bad.close
             ? `${HOW} --list tokens ${bad.near[0].replace(/^--/, '').split('-')[0]}`
             : `${HOW} --list tokens`,
@@ -2021,34 +2063,43 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           `${thing} takes ${DIALS[thing].values}, not "${v}".`,
           {
             didYouMean: near,
-            run: near[0]
-              ? [`${P} set ${slug} ${thing} ${near[0]}`]
-              : // A type-scale ratio (1.25) is the nearest type preset.
-                thing === 'type' && ratioPreset(lower)
-                ? [`${P} set ${slug} type ${ratioPreset(lower)}`]
-                : // A corner word or a size with a unit is the corners dial:
-                  // on the buttons for `buttons`, for the whole theme
-                  // otherwise. A bare number is no size: the dial's own
-                  // words.
-                  CORNERS.some(([n]) => lower.replace(/s$/, '') === n) ||
-                    (/[a-z%]$/.test(lower) && lengthPx(lower) != null)
-                  ? [
-                      setLine(
-                        slug,
-                        'corners',
-                        CORNERS.find(
-                          ([n]) => lower.replace(/s$/, '') === n,
-                        )?.[0] ?? lower,
-                        thing === 'buttons' ? {on: 'button'} : {},
-                      ),
-                    ]
-                  : [
-                      ...(/^[+-]?\d*\.?\d+$/.test(lower) ? ok : [])
-                        .filter(w => /^[a-z-]+$/.test(w))
-                        .slice(0, 4)
-                        .map(w => `${P} set ${slug} ${thing} ${w}`),
-                      `${HOW} ${thing}`,
-                    ],
+            run:
+              // `type` is the scale's shape; a text-size word or a length
+              // is the body size: text-size, never the corners.
+              thing === 'type' &&
+              (['small', 'medium', 'large', 'larger'].includes(lower) ||
+                (/[a-z%]$/.test(lower) && textSizePx(lower) != null))
+                ? [
+                    `${P} set ${slug} text-size ${['small', 'medium', 'large', 'larger'].includes(lower) ? lower : textSizePx(lower)}`,
+                  ]
+                : near[0]
+                  ? [`${P} set ${slug} ${thing} ${near[0]}`]
+                  : // A type-scale ratio (1.25) is the nearest type preset.
+                    thing === 'type' && ratioPreset(lower)
+                    ? [`${P} set ${slug} type ${ratioPreset(lower)}`]
+                    : // A corner word or a size with a unit is the corners dial:
+                      // on the buttons for `buttons`, for the whole theme
+                      // otherwise. A bare number is no size: the dial's own
+                      // words.
+                      CORNERS.some(([n]) => lower.replace(/s$/, '') === n) ||
+                        (/[a-z%]$/.test(lower) && lengthPx(lower) != null)
+                      ? [
+                          setLine(
+                            slug,
+                            'corners',
+                            CORNERS.find(
+                              ([n]) => lower.replace(/s$/, '') === n,
+                            )?.[0] ?? lower,
+                            thing === 'buttons' ? {on: 'button'} : {},
+                          ),
+                        ]
+                      : [
+                          ...(/^[+-]?\d*\.?\d+$/.test(lower) ? ok : [])
+                            .filter(w => /^[a-z-]+$/.test(w))
+                            .slice(0, 4)
+                            .map(w => `${P} set ${slug} ${thing} ${w}`),
+                          `${HOW} ${thing}`,
+                        ],
           },
         );
       }
@@ -2972,7 +3023,11 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           `mode takes both, light-only, or dark-only, not "${v}".`,
           {
             didYouMean: near,
-            run: near[0] ? [`${P} set ${slug} mode ${near[0]}`] : [],
+            run: near[0]
+              ? [`${P} set ${slug} mode ${near[0]}`]
+              : ['both', 'light-only', 'dark-only'].map(
+                  m => `${P} set ${slug} mode ${m}`,
+                ),
           },
         );
       }
@@ -3110,8 +3165,15 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           ),
           also: r0.also,
         });
-      } else if (hard.length)
-        s.note = `the editor's render of ${hard.map(([t]) => t).join(', ')} did not read ${thing} (each part is rendered once, with its default props, so a variant that reads it may be missed); it is set as asked`;
+      } else if (hard.length) {
+        // Some members read it and take the change; name them, and say
+        // what the others read instead (from the check's own message).
+        const readers = recorded.filter(([, r]) => !r).map(([t]) => t);
+        const instead = /reads: ([^.]+)\./.exec(
+          String(/** @type {any} */ (hard[0][1])?.message ?? ''),
+        )?.[1];
+        s.note = `${readers.length ? `${readers.join(', ')} read ${thing} and take this change; ` : ''}the editor's render of ${hard.map(([t]) => t).join(', ')} did not read it${instead ? ` (${hard[0][0]} reads ${instead})` : ''}, so those stay as they were; each part is rendered once, with its default props, so a variant that reads it may be missed`;
+      }
       if (!s.note && recorded.length) {
         const fed = C.feeds(recorded[0][0], thing);
         if (fed.length) s.note = `feeds ${C.fmtFeeds(fed, recorded[0][0])}`;
@@ -3151,6 +3213,24 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
     return s;
   }
   const prop = kebab(thing);
+  // A token typed without its leading dashes (color-accent,
+  // text-body-size): the token, when no CSS property has that name.
+  if (
+    !unset &&
+    !thing.startsWith('-') &&
+    `--${thing}` in TOKENS &&
+    !cssProperties().has(thing)
+  )
+    refuse(
+      E.ERR_THEME_UNKNOWN_THING,
+      `"${thing}" is not a dial, a token, or a CSS property; the token is --${thing}.`,
+      {
+        didYouMean: [`--${thing}`],
+        run: [
+          `${P} set ${slug} --${thing}${value ? ` ${quoteCommandArgument(value)}` : ''}`,
+        ],
+      },
+    );
   // A dial typed in other letters (Font, FONT) is the dial, not the CSS
   // property of the same name.
   if (thing !== thing.toLowerCase() && DIALS[thing.toLowerCase()])
@@ -3181,6 +3261,30 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
     s.source = 'property';
     s.thing = prop;
     if (unset) return s;
+    // A length property (padding, a corner radius, a gap) that reads a
+    // design token of another kind (a color, a font, a duration) gets
+    // nothing the browser keeps: refused like the token form.
+    if (matchValue(prop, '1px') && !matchValue(prop, 'red'))
+      for (const m of v.matchAll(/var\(\s*(--[a-z0-9-]+)/gi)) {
+        const kind = ctx.C.isToken(m[1]) ? ctx.C.typeOf(m[1]) : null;
+        if (kind && !['size', 'number', 'other'].includes(kind)) {
+          const like = /radius/.test(prop)
+            ? 'var(--radius-container)'
+            : /^(padding|margin|gap|row-gap|column-gap|inset)/.test(prop)
+              ? 'var(--spacing-4)'
+              : exampleOf('size', prop);
+          refuse(
+            E.ERR_THEME_BAD_VALUE,
+            `${prop} takes a length; ${m[1]} is a ${kind}, so the browser would drop it.`,
+            {
+              run: [
+                `${P} set ${slug} ${prop} ${quoteCommandArgument(v.replace(new RegExp(`var\\(\\s*${m[1]}\\s*(,[^)]*)?\\)`, 'i'), like))} --on ${quoteCommandArgument(String(s.on))}${s.state ? ` --state ${s.state}` : ''}${s.when ? ` --when ${quoteCommandArgument(s.when)}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}`,
+                `${HOW} --list tokens ${/radius/.test(prop) ? 'radius' : 'spacing'}`,
+              ],
+            },
+          );
+        }
+      }
     // initial and unset leave a part's padding variables without a value:
     // the part takes Core's own default, which the result names.
     if (/^padding/.test(prop) && /^(initial|unset)$/i.test(v.trim()) && s.on) {
@@ -3206,7 +3310,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
     // (a composer's or a menu's padding in its corners): one length is all
     // that works there, whether a length, a variable, or calc(), min(),
     // max() or clamp() giving one.
-    if (s.on && ctx.derived) {
+    if (s.on && ctx.derived && !WRAPPED_PARTS[s.on]) {
       const inCalc = calcVars(ctx.project);
       const hit = partsOf(ctx, s).find(t =>
         (ctx.derived?.[t] ?? []).some(
@@ -3239,6 +3343,15 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         !/radius/.test(prop);
       const side = /^padding-/.test(prop);
       const density = prop === 'padding' && /^density:/.test(s.when ?? '');
+      // Core reads the box's padding only from a variable of its own, which
+      // a theme may not write, and a padding property would pad the
+      // transparent wrapper too.
+      if (prop === 'padding' && !density)
+        refuse(
+          E.ERR_THEME_NO_EFFECT,
+          `${s.on}'s theme class is on a transparent wrapper; ${wrapped.box} inside it reads its padding from a variable of Core's own, which a theme cannot set, and a padding on the wrapper would add a gap outside the box. Its padding follows the theme's spacing.`,
+          {run: [`${HOW} ${s.on}`]},
+        );
       if (surface || side || density)
         refuse(
           E.ERR_THEME_BAD_VALUE,
@@ -3253,9 +3366,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
                   `${P} set ${slug} --color-background-popover ${quoteCommandArgument('#ffffff')}`,
                   `${HOW} ${s.on}`,
                 ]
-              : [
-                  `${P} set ${slug} padding ${quoteCommandArgument(v)} --on ${s.on}`,
-                ],
+              : [`${HOW} ${s.on}`],
           },
         );
     }
@@ -3676,9 +3787,26 @@ export {familySpaces};
  * @param {string} v
  * @param {Record<string, unknown>} TOKENS
  * @param {string} thing
- * @returns {{message: string, near: string[], close: boolean} | null}
+ * @returns {{message: string, near: string[], close: boolean, fixed?: string} | null}
  */
 export function unknownVarRef(v, TOKENS, thing) {
+  // A var() whose name is not a custom property (`var(color-x)`, `var(-x)`,
+  // `var()`, `var(--)`) makes the whole value invalid: the browser drops
+  // it. Named with the repaired form when there is one.
+  for (const m of v.matchAll(/var\(\s*([^,)]*?)\s*(?=[,)]|$)/gi)) {
+    const raw = m[1];
+    if (/^--[a-z0-9_][a-z0-9_-]*$/i.test(raw)) continue;
+    const bare = raw.replace(/^-+/, '');
+    const repaired = /^[a-z0-9][a-z0-9_-]*$/i.test(bare) ? `--${bare}` : null;
+    return {
+      message: `var(${raw}) is not a CSS variable reference: a variable's name starts with --${repaired ? `, as in var(${repaired})` : ''}, and the browser drops the whole value otherwise.`,
+      near: repaired ? [repaired] : [],
+      close: Boolean(repaired && repaired in TOKENS),
+      ...(repaired
+        ? {fixed: v.replace(m[0], m[0].replace(raw, repaired))}
+        : {}),
+    };
+  }
   for (const [, name, comma] of v.matchAll(/var\(\s*(--[a-z0-9-]+)\s*(,)?/gi)) {
     if (name in TOKENS || name.startsWith('--_')) continue;
     // A fallback always gives a value: never "reads nothing" (a likely
@@ -3733,4 +3861,81 @@ export function fontFileReason(value) {
   return hit
     ? `"${hit}" is a font file or a link, not a font family name. A theme names a family (such as Inter); load the file with @font-face in your app's CSS, or install a font package, then set the family it defines.`
     : null;
+}
+
+/**
+ * A value with every Unicode space (no-break, thin, ideographic…) as a plain
+ * space and zero-width and format characters dropped, for every value type:
+ * the browser reads only a plain space as one.
+ * @param {string} v
+ */
+export function normalValueText(v) {
+  // Curly quotes (a word processor's, a phone's) are the straight ones CSS
+  // reads.
+  const straight = v
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"');
+  // A quoted CSS string (`content: "a\u00A0b"`) keeps what is inside it.
+  return straight
+    .split(/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/)
+    .map((part, i) =>
+      i % 2
+        ? part
+        : part
+            .replace(/[\u200B-\u200D\u2060\uFEFF]/g, '')
+            .replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, ' '),
+    )
+    .join('');
+}
+
+/**
+ * The thing and value a setting was typed as, put right before any check: a
+ * declaration pasted whole or split (`accent: #e11d48`, `--color-accent=red`,
+ * `font:inter`, `accent:` with the value next), a token typed with an em or
+ * en dash (`—color-accent`) or as `var(--color-accent)`, and the value's
+ * Unicode spaces. A thing it cannot read is left as typed.
+ * @param {string} thing
+ * @param {string | undefined} value
+ * @returns {{thing: string, value: string | undefined}}
+ */
+export function normalizeEntry(thing, value) {
+  let t = normalValueText(String(thing ?? '')).trim();
+  let v = value == null ? value : normalValueText(String(value));
+  // A pasted declaration (the whole of it in the thing, or the thing with
+  // its colon and the value next): its `;` and `!important` go with it.
+  let pasted = false;
+  if (v == null || v.trim() === '') {
+    const m = /^(\S+?)\s*[:=]\s*(.+?)\s*;?\s*$/.exec(t);
+    if (m && !/^https?$/i.test(m[1])) {
+      t = m[1];
+      v = m[2];
+      pasted = true;
+    }
+  }
+  // A thing ending in its colon or equals sign, the value given next.
+  if (/\s*[:=]+$/.test(t)) {
+    t = t.replace(/\s*[:=]+$/, '');
+    pasted = true;
+  }
+  // Dash-like characters where a token's two dashes go (an em or en dash,
+  // a non-breaking hyphen, a minus sign, a full-width hyphen, alone or
+  // mixed with hyphens): `--`.
+  t = t.replace(/^[-\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]+/, run =>
+    /[^-]/.test(run) ? '--' : run,
+  );
+  // A token typed as a var() reference.
+  const ref = /^var\(\s*(--[a-z0-9-]+)\s*\)$/i.exec(t);
+  if (ref) t = ref[1];
+  if (pasted && typeof v === 'string')
+    v = v.replace(/\s*!\s*important\s*;?\s*$/i, '').replace(/;+\s*$/, '');
+  return {thing: t, value: v};
+}
+
+/**
+ * A word as a suggested command quotes it, without the quotes.
+ * @param {string} word
+ */
+function unquoteArg(word) {
+  const m = /^'(.*)'$/s.exec(word.trim());
+  return m ? m[1].replace(/'\\''/g, "'") : word.trim();
 }
