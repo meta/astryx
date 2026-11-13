@@ -97,7 +97,7 @@ one pending load per module, caches a success, and resets after a failure.
 
 ## Boundaries and invariants
 
-- **INV1 — Surfaces revealed by interaction load on first intent.** A public
+- **INV1 — Surfaces revealed by interaction load on first intent, tooltips and hover cards after first paint.** A public
   import reaches a surface module only through `import()` behind the shared
   module loader, never statically. This holds for the surface's own public
   component too: the `Tooltip`, `HoverCard`, `Popover`, `DropdownMenu`, and
@@ -107,7 +107,7 @@ one pending load per module, caches a success, and resets after a failure.
   the ARIA attributes and ids INV3 requires, the intent listeners, and the
   loader call. A module inside a lazily loaded graph imports Core modules
   directly, never through a barrel (`scripts/core-single-bundle.test.mjs`).
-- **INV2 — Intent starts the load.** The load starts at the trigger's first
+- **INV2 — Intent starts the load, except for tooltips and hover cards.** The load starts at the trigger's first
   `pointerenter` from a mouse or pen, `focus`, `pointerdown` from any pointer,
   or open request (a controlled open, a keyboard shortcut, a context-menu
   invocation). The listeners use native events only; they recognize no
@@ -139,8 +139,8 @@ one pending load per module, caches a success, and resets after a failure.
   press elsewhere before load drops a held hover or focus. A replayed intent
   arms the surface's dismissal as the same intent does on a loaded surface.
   For a `Tooltip` or `HoverCard` surface, a hover made while it loads shows
-  the surface when the load lands if the pointer is still on the trigger;
-  otherwise the next hover shows it.
+  the surface once the load has landed and the hover delay has passed, if the
+  pointer is still on the trigger; otherwise the next hover shows it.
 - **INV5 — The load moves nothing.** Loading changes no box in the page: the
   trigger's size, position, and content are the same before and after. No
   closed surface paints during the load. The surface paints in the top layer
@@ -320,8 +320,8 @@ loading window still waits the surface's hover delay, counted from the
 pointer's entry, and shows when the load lands if the pointer is still on the
 trigger, or at the next hover (INV2, INV4). Other surfaces keep DEC-1.
 
-Rejected: loading on the first hover or focus, because the owner chose to have
-the code ready before people hover rather than fetched when they do.
+Rejected: loading on the first hover or focus, because the first hover then
+waits for the fetch.
 Rejected: loading with the page, because every page pays for code before
 anyone hovers.
 
