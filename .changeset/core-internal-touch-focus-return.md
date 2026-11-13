@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[chore] Internal: Core's internal touch entry re-exports its focus-return-on-removal helper for Lab's Tour. Apps import nothing new.
+[chore] Makes the focus-return helper available to Tour so removing a step leaves the page usable. (#11123)
 
 @cixzhang

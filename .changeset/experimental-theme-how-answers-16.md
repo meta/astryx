@@ -2,7 +2,7 @@
 '@astryxdesign/cli': patch
 ---
 
-[experimental] `astryx experimental theme editor how`: a negated dark mode, undo of what is set, typed times and transforms, and the right targets.
+[experimental] `astryx experimental theme editor how`: a negated dark mode, undo of what is set, typed times and transforms, and the right targets. (#11419)
 
 - "Except in dark mode", "but not in dark mode" and "leave dark mode alone" change light mode only; "not pure black" is a near-black and "not pure white" a near-white.
 - "Undo the corners" on a theme that sets no corners says there is nothing to undo.

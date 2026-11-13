@@ -2,7 +2,7 @@
 '@astryxdesign/cli': patch
 ---
 
-[experimental] `astryx experimental theme editor how`: a confidence gate, and dislikes, take-backs and dark-mode selectors read.
+[experimental] `astryx experimental theme editor how`: a confidence gate, and dislikes, take-backs and dark-mode selectors read. (#11419)
 
 - When a question is a question ("is the card too round?"), says "tell me" or "but not too", or asks to "stop" something, how gives the lookup and asks for the change in words instead of guessing a write; "explain X" is the lookup of X.
 - "I hate the shadows", "skip …" and "not a fan of …" ask for none of it when that is the whole ask.

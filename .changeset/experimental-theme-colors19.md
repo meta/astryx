@@ -2,7 +2,7 @@
 '@astryxdesign/cli': patch
 ---
 
-[experimental] `astryx experimental theme editor`: fallbacks, saved font dials and size suggestions.
+[experimental] `astryx experimental theme editor`: fallbacks, saved font dials and size suggestions. (#11419)
 
 - A part value's `var()` fallbacks are checked against the property (`padding 'var(--nope, red)'` is refused), as token fallbacks are.
 - A saved `font` dial that `set` would refuse (a CSS keyword such as `inherit`, a size, a whole CSS font value) is reported with the commands that fix it, and never built.

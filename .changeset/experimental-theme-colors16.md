@@ -2,7 +2,7 @@
 '@astryxdesign/cli': patch
 ---
 
-[experimental] `astryx experimental theme editor`: number tokens read as CSS reads them.
+[experimental] `astryx experimental theme editor`: number tokens read as CSS reads them. (#11378)
 
 - Only the tokens Core's stylesheet multiplies by a size inside calc() (the line heights) refuse a unit; weight tokens take the font-weight keywords again (`bold`, `normal`), so a theme saved with one stays editable.
 - Numbers are read as the browser reads them: `1.5e0`, `+1.5`, `15E-1` and `1.5EM` are numbers, and a `color-mix()` share like `50.%` is refused.

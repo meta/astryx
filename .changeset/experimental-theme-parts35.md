@@ -2,7 +2,7 @@
 '@astryxdesign/cli': patch
 ---
 
-[experimental] `astryx experimental theme editor`: one padding model for parts whose box reads Core's padding variables.
+[experimental] `astryx experimental theme editor`: one padding model for parts whose box reads Core's padding variables. (#11440)
 
 - On card, clickable-card, selectable-card, dialog, drawer, bottom-sheet, section and number-input, each part's padding is worked out per variant and per state from every padding setting in the order made, side by side for each text direction (a physical left is the start in a left-to-right box and the end in a right-to-left one; so is the `padding` shorthand's left), and written to the variables the box reads. The later setting wins in both directions, a variant or a state out-ranks the base, and the content that reaches the box's edges stays in line.
 - A clickable or selectable card is padded as a card.

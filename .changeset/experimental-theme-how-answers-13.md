@@ -2,7 +2,7 @@
 '@astryxdesign/cli': patch
 ---
 
-[experimental] `astryx experimental theme editor how`: mode phrases, questions about what is set, the focus ring, and changes by an amount.
+[experimental] `astryx experimental theme editor how`: mode phrases, questions about what is set, the focus ring, and changes by an amount. (#11378)
 
 - "The same accent in light and dark" sets both modes, and a trailing "and dark mode only" still makes the theme dark-only.
 - A step that cannot move (badges already fully round) says so, with no command that would be refused.

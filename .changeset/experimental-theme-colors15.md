@@ -2,7 +2,7 @@
 '@astryxdesign/cli': patch
 ---
 
-[experimental] `astryx experimental theme editor`: more refusals and notes that are true.
+[experimental] `astryx experimental theme editor`: more refusals and notes that are true. (#11378)
 
 - A negative percentage the current CSS grammar ranges at 0 or more is refused on a part (`line-height -50%`, `gap -10%`).
 - A `color-mix()` share may be written as any CSS percentage (`5e1%`, `+50%`, `calc(50%)`).

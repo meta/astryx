@@ -2,7 +2,7 @@
 '@astryxdesign/cli': patch
 ---
 
-[experimental] `astryx experimental theme editor how`: a negated mode, the CSS cursor, device words beside an ask, and labels.
+[experimental] `astryx experimental theme editor how`: a negated mode, the CSS cursor, device words beside an ask, and labels. (#11378)
 
 - "Don't touch dark mode, make the accent orange" changes light mode only.
 - `cursor: pointer` sets the CSS cursor; only "caret" or "cursor color" is the text cursor's color.

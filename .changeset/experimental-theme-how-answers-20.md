@@ -2,7 +2,7 @@
 '@astryxdesign/cli': patch
 ---
 
-[experimental] `astryx experimental theme editor how`: the confidence gate works per clause, and a one-mode change never removes a mode.
+[experimental] `astryx experimental theme editor how`: the confidence gate works per clause, and a one-mode change never removes a mode. (#11419)
 
 - A clause that is a question, a "tell me", a "stop …" or a "don't touch …" holds back only itself: "stop making the buttons so round, make them square" makes them square, "don't explain, just set the accent to crimson" sets crimson, "don't touch spacing, just make text larger" changes only the text. A whole question ("can the cards be rounder?", "are buttons too round?!") gets the lookup; "can you make …" is an ask.
 - Questions without a question mark ("are my corners too round", "does it use a shadow on cards") are lookups; suggestions ("why not square buttons", "what about a teal accent", "is there a way to …") are asks. Sarcasm ("yeah, because …", "just what I wanted", "…, nice") gets no write.

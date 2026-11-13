@@ -2,7 +2,7 @@
 '@astryxdesign/cli': patch
 ---
 
-[experimental] `astryx experimental theme editor`: CSS read with the current specifications' grammar.
+[experimental] `astryx experimental theme editor`: CSS read with the current specifications' grammar. (#11378)
 
 - The editor also reads the current specifications' grammar from `@csstools/css-syntax-patches-for-csstree` (a new dependency, pinned). It adds about 0.1 MB unpacked to the install (one 79 KB JSON file, no dependencies of its own), and loads only when the editor checks a CSS value; no other command loads it, and startup is unchanged. A property MDN marks obsolete but the specifications still define, as browsers ship it, is taken: `font-stretch`, so the font shorthand split names a command that works.
 - A negative number the current grammar ranges at 0 or more is refused on a part (`line-height -1`, `gap -2px`), with the positive value as the suggestion.

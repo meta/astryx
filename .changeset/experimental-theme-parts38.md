@@ -2,7 +2,7 @@
 '@astryxdesign/cli': patch
 ---
 
-[experimental] `astryx experimental theme editor`: a part's padding replaces the base theme's, and every padding writes a length Core can calculate with.
+[experimental] `astryx experimental theme editor`: a part's padding replaces the base theme's, and every padding writes a length Core can calculate with. (#11453)
 
 - A padding on a card, section, dialog, drawer, bottom-sheet or number-input replaces the base theme's padding there, whichever sides the base theme set: the editor writes it as padding properties Core works out together with the base theme's, where the later one wins.
 - A clickable or selectable card's padding wins over a card's left or right padding in each text direction.

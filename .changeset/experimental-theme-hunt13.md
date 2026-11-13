@@ -2,7 +2,7 @@
 '@astryxdesign/cli': patch
 ---
 
-[experimental] `astryx experimental theme`: the thirteenth pass of fixes.
+[experimental] `astryx experimental theme`: the thirteenth pass of fixes. (#11378)
 
 - `undo` leaves out what this Core refuses in the step it goes back to. A saved setting that names no design token or CSS property, or a property with no part, is reported.
 - `show` builds an own change to `<name>.theme.ts`, and names a theme source that no longer builds. Its colors say where the theme source wins over the generated shade.

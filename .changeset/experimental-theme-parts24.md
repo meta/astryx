@@ -2,7 +2,7 @@
 '@astryxdesign/cli': patch
 ---
 
-[experimental] `astryx experimental theme editor`: shorthands by what they set, and part values Core can carry.
+[experimental] `astryx experimental theme editor`: shorthands by what they set, and part values Core can carry. (#11419)
 
 - A shorthand set after its longhands replaces only the longhands it really sets, read from MDN's data (`overflow` keeps `overflow-wrap`, `transform` keeps `transform-origin`, `flex` keeps `flex-direction`), and a part's `background` keeps reaching its variants when `background-blend-mode` comes later.
 - A group's shorthand replaces its members' longhands as a part's does, so the later setting wins either way.

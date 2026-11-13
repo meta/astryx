@@ -2,7 +2,7 @@
 '@astryxdesign/cli': patch
 ---
 
-[experimental] `astryx experimental theme`: template overwrite on any disk, and undo answers that are true.
+[experimental] `astryx experimental theme`: template overwrite on any disk, and undo answers that are true. (#11419)
 
 - `experimental theme template … --overwrite` never replaces a theme editor file under another spelling of its name (`themes/t/T.theme.ts` on a case-insensitive disk, or through a link).
 - `undo <theme> mode` or `base` on a theme with no saved change says so, instead of claiming its history does not reach back; after every step is undone it says the value was never changed.

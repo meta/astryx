@@ -2,7 +2,7 @@
 '@astryxdesign/cli': patch
 ---
 
-[experimental] `astryx experimental theme editor`: weights on phones, and values read as CSS reads them.
+[experimental] `astryx experimental theme editor`: weights on phones, and values read as CSS reads them. (#11419)
 
 - Heading and text weights (the `headings` weight dial, `--text-*-weight` tokens) now apply on phones too: they are written into the phone rules the base theme sets, as font families are.
 - A token set to `var(--x, <fallback>)` checks the fallback as the token's own kind.

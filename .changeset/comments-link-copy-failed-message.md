@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[chore] Internal: Core's English catalog gains `@astryx.comments.linkCopyFailed` ("Failed to copy value to clipboard.") for Lab's Comments. Apps import nothing new.
+[chore] Comments now has a translated failure message when copying a link to the clipboard fails. (#11376)
 
 @cixzhang
