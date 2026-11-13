@@ -3,7 +3,7 @@ schema_version: 4
 template_version: 2
 kind: system-spec
 id: spec:AST-111
-authority: draft
+authority: current
 archive_reason: null
 superseded_by: null
 approved_by: nynexman4464
@@ -423,8 +423,6 @@ These requirements apply to the text fields of `DateInput` and
 | FR19         | Documentation review                                                                                         | The internationalization guide and date component docs                                                                                                                                                                               | The caveat is missing                                                                                                                                                            |
 | FR20         | Hook tests                                                                                                   | `useCalendarDays` without `calendar` matches released output; `persian` and a Hebrew leap year (month 13) with `calendar`; `useCalendarNavigation` steps and labels calendar months; a provider calendar does not change either hook | A hook reads the provider's calendar, changes released Gregorian output, or assumes 12 months when given a calendar                                                              |
 | AR1–AR3      | Accessibility-tree and announcement assertions                                                               | Day buttons and announcements in `persian`; each rejection kind                                                                                                                                                                      | A spoken date uses another calendar than the grid, or two rejection kinds share a message                                                                                        |
-
-Known verification gap: none of these suites exist on `main`.
 
 ## Decision log
 

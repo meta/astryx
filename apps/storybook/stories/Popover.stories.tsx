@@ -469,6 +469,46 @@ function FilterContent({onApply}: {onApply?: () => void}) {
   );
 }
 
+/**
+ * A controlled Popover that a separate button also opens and closes. A press
+ * on that button while the popover is open closes it, and the button's label
+ * follows the state.
+ */
+export const ToggledByAnotherControl: Story = {
+  render: function ToggledByAnotherControlStory() {
+    const [isOpen, setIsOpen] = React.useState(false);
+    return (
+      <HStack gap={3}>
+        <Popover
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          label="Details"
+          width={260}
+          placement="below"
+          content={
+            <VStack gap={2}>
+              <Heading level={4} tabIndex={-1}>
+                Details
+              </Heading>
+              <Text type="body">
+                The button beside the trigger also opens and closes this
+                popover.
+              </Text>
+            </VStack>
+          }>
+          <Button label="Details">Details</Button>
+        </Popover>
+        <Button
+          label={isOpen ? 'Hide details' : 'Show details'}
+          variant="secondary"
+          onClick={() => setIsOpen(value => !value)}>
+          {isOpen ? 'Hide details' : 'Show details'}
+        </Button>
+      </HStack>
+    );
+  },
+};
+
 export const FilterPanel: Story = {
   render: function FilterPanelStory() {
     const [isOpen, setIsOpen] = React.useState(false);

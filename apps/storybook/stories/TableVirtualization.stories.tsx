@@ -1,12 +1,17 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react-vite';
 import {
+  Button,
   Card,
+  HStack,
   Table,
   VStack,
   pixel,
   useTableColumnsVirtualization,
   useTableRowsVirtualization,
+  useTableSelection,
+  useTableSelectionState,
   useTableStickyColumns,
   type TableColumn,
 } from '@astryxdesign/core';
@@ -109,4 +114,61 @@ function ColumnWindowingExample() {
 }
 export const ColumnWindowing: StoryObj = {
   render: () => <ColumnWindowingExample />,
+};
+
+function ColumnWindowingFocusExample() {
+  const virtualization = useTableColumnsVirtualization({
+    initialViewportWidth: 900,
+  });
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const {selectionConfig} = useTableSelectionState<WideRow>({
+    data: wideRows,
+    idKey: 'id',
+    selectedKeys,
+    setSelectedKeys,
+  });
+  const selection = useTableSelection<WideRow>(selectionConfig);
+  const [columns, setColumns] = useState(wideColumns);
+  // A focused checkbox stays mounted while its column scrolls away, and
+  // column changes keep the first visible column in place.
+  return (
+    <VStack width={900} gap={2}>
+      <HStack gap={2}>
+        <Button
+          label="Widen the first 40 columns"
+          variant="secondary"
+          onClick={() =>
+            setColumns(current =>
+              current.map((column, index) =>
+                index < 40 ? {...column, width: pixel(200)} : column,
+              ),
+            )
+          }>
+          Widen the first 40 columns
+        </Button>
+        <Button
+          label="Move the first column to the end"
+          variant="secondary"
+          onClick={() =>
+            setColumns(current => [...current.slice(1), current[0]])
+          }>
+          Move the first column to the end
+        </Button>
+      </HStack>
+      <Table
+        aria-label="Selectable account metrics"
+        data={wideRows}
+        columns={columns}
+        idKey="id"
+        plugins={{selection}}
+        virtualization={virtualization}
+        dividers="grid"
+      />
+    </VStack>
+  );
+}
+export const ColumnWindowingFocus: StoryObj = {
+  render: () => <ColumnWindowingFocusExample />,
 };

@@ -146,11 +146,20 @@ describe('R3: a mode or base in other letters', () => {
 });
 
 describe('R1: a base suggestion is always installed', () => {
-  it('STONE suggests no base the project lacks', async () => {
+  it('STONE suggests a base the project lacks only after its install line', async () => {
     const err = await refusal(() => themeEditSet('t', 'base', 'STONE', {cwd}));
-    for (const name of err.suggestions.map((/** @type {any} */ x) => x.name))
+    /** @type {string[]} */
+    const names = err.suggestions.map((/** @type {any} */ x) => x.name);
+    names.forEach((name, i) => {
       for (const b of name.match(/ base (\S+)$/)?.slice(1) ?? [])
-        expect(b === 'none' || baseInstalled(cwd, b), name).toBe(true);
+        if (b !== 'none' && !baseInstalled(cwd, b))
+          expect(
+            names
+              .slice(0, i)
+              .some(n => n.endsWith(` @astryxdesign/theme-${b}`)),
+            name,
+          ).toBe(true);
+    });
   });
 });
 

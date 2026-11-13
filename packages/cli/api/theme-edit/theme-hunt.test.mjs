@@ -533,7 +533,7 @@ describe('rollback and recovery', () => {
 });
 
 describe('fix3', () => {
-  it('never picks the home folder, even with Core installed there', () => {
+  it('picks the home folder only when its package.json lists Core, never out of another repo', () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-home-'));
     const saved = process.env.HOME;
     try {
@@ -547,10 +547,10 @@ describe('fix3', () => {
       const code = path.join(home, 'code/app');
       fs.mkdirSync(path.join(code, '.git'), {recursive: true});
       process.env.HOME = home;
+      // A repository below home is its own project.
       expect(projectRoot(code)).toBe(code);
-      expect(projectRoot(path.join(home, 'code'))).toBe(
-        path.join(home, 'code'),
-      );
+      // A plain folder of a home that lists Core: the home app (hunt36b F1).
+      expect(projectRoot(path.join(home, 'code'))).toBe(home);
     } finally {
       process.env.HOME = saved;
       fs.rmSync(home, {recursive: true, force: true});
@@ -678,6 +678,7 @@ describe('fix3: links, rollback, locks, paths', () => {
   it('from a subfolder, the reply paths are absolute', async () => {
     const sub = path.join(cwd, 'src/deep');
     fs.mkdirSync(sub, {recursive: true});
+    const kept = fs.readFileSync(path.join(cwd, 'package.json'), 'utf8');
     fs.writeFileSync(
       path.join(cwd, 'package.json'),
       JSON.stringify({dependencies: {'@astryxdesign/core': '*'}}),
@@ -686,7 +687,7 @@ describe('fix3: links, rollback, locks, paths', () => {
       const r = await themeEditShow('h', {cwd: sub});
       expect(JSON.stringify(r.data)).toContain(path.join(cwd, 'themes/h'));
     } finally {
-      fs.rmSync(path.join(cwd, 'package.json'));
+      fs.writeFileSync(path.join(cwd, 'package.json'), kept);
       fs.rmSync(path.join(cwd, 'src'), {recursive: true, force: true});
     }
   }, 120_000);
