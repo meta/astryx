@@ -356,14 +356,19 @@ export function allInodes(tmp) {
 /**
  * Run `asks` warm from `tmp` and check that they hit: no entry is written
  * again. A stale test proves nothing unless its warm path hit before the edit.
+ * Needs module hooks: without them the CLI keeps nothing.
  * @param {string} tmp
  * @param {string[][]} asks
+ * @param {{cwd?: string, env?: Record<string, string>, json?: boolean}} [options]
+ * @returns {{status: number | null, stdout: string, stderr: string}[]} the
+ *   warm answers
  */
-export function expectWarmHit(tmp, asks) {
+export function expectWarmHit(tmp, asks, options = {}) {
   const warm = allInodes(tmp);
   expect(warm.size).toBeGreaterThan(0);
-  for (const ask of asks) run(ask, {tmp});
+  const answers = asks.map(ask => run(ask, {tmp, ...options}));
   expect(allInodes(tmp)).toEqual(warm);
+  return answers;
 }
 
 export const QUERIES = [
