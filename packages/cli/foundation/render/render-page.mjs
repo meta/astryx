@@ -325,7 +325,9 @@ function noMessageError(code, stateFile) {
   let saved = null;
   try {
     saved = stateFile ? JSON.parse(fs.readFileSync(stateFile, 'utf8')) : null;
-  } catch {}
+  } catch {
+    // No readable state: fall back to the bare message below.
+  }
   if (!saved) return hostEndError(code);
   const detail = {exit: code, stage: saved.stage, elapsedMs: saved.elapsedMs, rssMb: saved.rssMb, freeMb: saved.freeMb, ...(saved.stderrTail ? {stderrTail: saved.stderrTail} : {})};
   if (saved.answered === 'sent') {
@@ -382,11 +384,12 @@ export async function withHostStateFile(use) {
   try {
     return await use(path.join(dir, 'host-state.json'));
   } finally {
-    // Best effort: a removal that fails (a file still held open) never
-    // replaces the render's own result.
     try {
       fs.rmSync(dir, {recursive: true, force: true, maxRetries: 3});
-    } catch {}
+    } catch {
+      // Best effort: a removal that fails (a file still held open) never
+      // replaces the render's own result.
+    }
   }
 }
 

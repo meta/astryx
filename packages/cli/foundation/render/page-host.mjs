@@ -53,7 +53,9 @@ function saveState(answered) {
   if (!input.stateFile) return;
   try {
     fs.writeFileSync(input.stateFile, JSON.stringify({...state(), answered}));
-  } catch {}
+  } catch {
+    // The state file only explains a failure; a failed write never ends the render.
+  }
 }
 
 const answer = makeAnswer({
