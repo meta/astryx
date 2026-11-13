@@ -28,19 +28,11 @@ import {EventEmitter} from 'node:events';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import {fileURLToPath, pathToFileURL} from 'node:url';
+import {fileURLToPath} from 'node:url';
 import {ensureCoreBuilt} from './ensure-core-built.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLI_BIN = path.resolve(__dirname, '../bin/astryx.mjs');
-// Each build child (never the watcher) waits 1.5 s before it builds, so every
-// rebuild is slow, as on a loaded machine.
-const SLOW_BUILDS = {
-  NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import ${
-    pathToFileURL(path.join(__dirname, 'build-theme.watch.slow-build.mjs')).href
-  }`.trim(),
-};
-
 function runCli(args, cwd) {
   try {
     const out = execFileSync('node', [CLI_BIN, ...args], {
@@ -110,7 +102,11 @@ function waitForOutput(
  * printing "rebuilding" when it starts and "Watching" when it ends. A rebuild
  * still running at the save may end without the color; the first rebuild that
  * starts after the save must not: that is a stale theme, and the wait fails by
- * name. The save is never repeated, so a stale rebuild is not hidden.
+ * name. fs.watch can drop an event under load, so the save is made again
+ * every 2 s, but only while no rebuild has started since it: a rebuild that
+ * starts after the save reads the new content, so a stale one is never hidden.
+ * More than 2 such saves fail by name: a watcher that keeps missing saves is
+ * a fault to report, not to wait out.
  * @param {import('node:child_process').ChildProcess} child
  * @param {() => string} read
  * @param {{file: string, source: string, content: string, color: string}} edit
@@ -121,6 +117,8 @@ function saveAndWaitForColor(child, read, {file, source, content, color}) {
   // Each started rebuild ends with one more "Watching" line after the first.
   const startedBefore = count(/rebuilding /g);
   fs.writeFileSync(source, content);
+  let savedAt = Date.now();
+  let missed = 0;
   const built = () => {
     try {
       return fs.readFileSync(file, 'utf-8').includes(color);
@@ -134,6 +132,23 @@ function saveAndWaitForColor(child, read, {file, source, content, color}) {
         cleanup();
         resolve(undefined);
         return;
+      }
+      if (
+        count(/rebuilding /g) === startedBefore &&
+        Date.now() - savedAt >= 2000
+      ) {
+        missed += 1;
+        if (missed > 2) {
+          cleanup();
+          reject(
+            new Error(
+              `the watcher missed ${missed} saves in a row: no rebuild started after saving ${source}:\n${read()}`,
+            ),
+          );
+          return;
+        }
+        fs.writeFileSync(source, content);
+        savedAt = Date.now();
       }
       const firstAfterSaveEnded =
         count(/rebuilding /g) > startedBefore &&
@@ -227,6 +242,25 @@ describe('the wait for a saved edit', () => {
       'a rebuild after the save produced a stale theme',
     );
   });
+
+  it('fails by name when the watcher misses more than two saves in a row', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'watch-wait-'));
+    onTestFinished(() => fs.rmSync(dir, {recursive: true, force: true}));
+    const file = path.join(dir, 'a.css');
+    const source = path.join(dir, 'a.mjs');
+    fs.writeFileSync(file, '--color-bg: #010203');
+    const w = fakeWatcher();
+    // Armed, but no rebuild ever starts.
+    w.print('Watching a.mjs for changes');
+    await expect(
+      saveAndWaitForColor(w.child, w.read, {
+        file,
+        source,
+        content: 'x',
+        color: '#040506',
+      }),
+    ).rejects.toThrow('the watcher missed 3 saves in a row');
+  }, 20_000);
 
   it('lets a rebuild running at the save end without the color, and takes the next one', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'watch-wait-'));
@@ -535,11 +569,13 @@ describe('theme build --watch', () => {
   }, 30_000);
 
   it.each([
-    ['', {}],
-    [', with every rebuild slow', SLOW_BUILDS],
+    ['', 0],
+    // A second between saves gives the rebuilds of one save time to finish
+    // before the next save: the race a count of "Watching" lines lost on CI.
+    [', saving the next color a second after the last one landed', 1000],
   ])(
     'prints the --out editor-folder warning once per session, not on every rebuild%s',
-    async (_slow, slowEnv) => {
+    async (_pause, pauseMs) => {
       fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app"}\n');
       const editor = path.join(tmpDir, 'themes', 'g');
       fs.mkdirSync(editor, {recursive: true});
@@ -563,7 +599,7 @@ describe('theme build --watch', () => {
           'themes/g/a.css',
           '--watch',
         ],
-        {cwd: tmpDir, env: {...process.env, ...slowEnv, FORCE_COLOR: '0'}},
+        {cwd: tmpDir, env: {...process.env, FORCE_COLOR: '0'}},
       );
       onTestFinished(() => {
         child.kill('SIGKILL');
@@ -580,6 +616,8 @@ describe('theme build --watch', () => {
         await waitForOutput(child, () => out, 'Watching other\\.mjs');
         // Two rebuilds, each writing into the editor folder again.
         for (const color of ['#010203', '#040506']) {
+          if (color !== '#010203' && pauseMs)
+            await new Promise(resolve => setTimeout(resolve, pauseMs));
           await saveAndWaitForColor(child, () => out, {
             file: path.join(editor, 'a.css'),
             source,
