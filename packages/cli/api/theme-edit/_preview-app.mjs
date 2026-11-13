@@ -1255,6 +1255,22 @@ function nextAppsUnder(cwd) {
 }
 
 /**
+ * The steps that put an editor theme into the app through its app copy
+ * (src/themes/<theme>/): one `theme add`, which prints the one-time wiring
+ * of the app's theme module, and what keeps the copy in step. The one text
+ * every place that says how to use an editor theme gives.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {string[]}
+ */
+export function addWiring(cwd, slug) {
+  return [
+    `${formatCliCommand(`theme add ${slug}`, cwd)}: adds the theme's app copy (src/themes/${slug}/, written again after every build) to the app's theme module, and prints the one-time wiring of that module in the app root; ${formatCliCommand(`theme use ${slug}`, cwd)} makes it the default`,
+    `every set and undo builds the theme and its app copy again, so the app takes each change; after editing ${shown(cwd, themeFiles(cwd, slug).ts)} by hand, ${P.replace(/ editor$/, '')} compile ${shown(cwd, themeFiles(cwd, slug).ts)} builds both again`,
+  ];
+}
+
+/**
  * How to use an editor theme in this app: `theme add <theme>` for the app
  * copy the editor writes in src/themes/<theme>/; when a folder of the
  * user's is there instead, step by step by hand: the file of the app's root
@@ -1292,10 +1308,7 @@ export function appWiring(ctx, slug, data) {
       .readFileSync(path.join(copy, `${name}.doc.mjs`), 'utf8')
       .includes(APP_COPY_MARK)
   )
-    return [
-      `${formatCliCommand(`theme add ${slug}`, cwd)}: adds the theme's app copy (src/themes/${slug}/, written again after every build) to the app's theme module, and prints the one-time wiring of that module in the app root; ${formatCliCommand(`theme use ${slug}`, cwd)} makes it the default`,
-      `every set and undo builds the theme and its app copy again, so the app takes each change; after editing ${shown(cwd, themeFiles(cwd, slug).ts)} by hand, ${P.replace(/ editor$/, '')} compile ${shown(cwd, themeFiles(cwd, slug).ts)} builds both again`,
-    ];
+    return addWiring(cwd, slug);
   return [
     `in ${where}, import the theme and its stylesheets: import {Theme} from '@astryxdesign/core/theme'; import {${name}} from '${ti.module.replace(/\.js$/, '')}'; ${ti.css.map(c => `import '${c}';`).join(' ')}`,
     `wrap the app in it: <Theme theme={${name}}${ti.mode === 'system' ? '' : ` mode="${ti.mode}"`}>{children}</Theme>`,

@@ -57,7 +57,7 @@ import {
   writeAppCopyAt,
 } from './_preview.mjs';
 import {humanWarn} from '../../foundation/response/json.mjs';
-import {camel, setAfterBuild, typedThemeName} from './_settings.mjs';
+import {setAfterBuild, typedThemeName} from './_settings.mjs';
 
 // Every build of a theme writes its app copy (src/themes/<theme>/).
 setAfterBuild(writeAppCopy);
@@ -674,27 +674,20 @@ export function editorThemeRefusal(err, cwd) {
   // A local theme of that name (a fork in the app's own themes folder) is
   // one the stable commands take: their own message stands.
   if (fs.existsSync(path.join(root, LOCAL_THEME_ROOT, slug))) return null;
-  const id = `${camel(slug)}Theme`;
-  const key = /^[a-z][a-z0-9]*$/i.test(slug) ? slug : JSON.stringify(slug);
-  // The paths from the folder of the app's generated themes module (where
-  // a file that merges themes sits), else from the app root.
-  const generated = path.join(root, 'src', 'astryx-themes.ts');
-  const from = fs.existsSync(generated) ? path.dirname(generated) : root;
-  let rel = path
-    .relative(from, path.join(root, 'themes', slug))
-    .split(path.sep)
-    .join('/');
-  if (!rel.startsWith('.')) rel = `./${rel}`;
-  const where =
-    from === root
-      ? 'in a file of your own at the app root'
-      : `in a file of your own beside ${path.relative(root, generated).split(path.sep).join('/')} (from another folder, change the paths to match)`;
+  // No app copy yet (a theme made before the editor wrote one, or the
+  // copy removed): the next build writes it, then the same steps every
+  // place gives (`wiring` of new and show).
+  const steps = preview.addWiring(root, slug);
   return new AstryxError(
-    `${slug} is a theme the editor made (themes/${slug}/), not a theme package, so list, add, use, remove and eject do not take it. To use it, import its module and its stylesheet ${where} (import {${id}} from '${rel}/${slug}.js'; import '${rel}/${slug}.css';) and merge it into the themes there ({...themes, ${key}: ${id}}); do not add it to src/astryx-themes.ts, which add, use and remove write again. Change it with the editor.`,
+    `${slug} is a theme the editor made (themes/${slug}/), and it has no app copy yet: list, add, use, remove and eject take the copy every build of it writes in src/themes/${slug}/, a standard local theme. Build it once, then: ${steps.join('; ')}.`,
     [
       {
         name: runLine(cwd, `experimental theme editor show ${slug}`),
-        reason: 'see the theme',
+        reason: `builds it and writes its app copy, src/themes/${slug}/`,
+      },
+      {
+        name: runLine(cwd, `theme add ${slug}`),
+        reason: 'then adds it to the app',
       },
     ],
     ERROR_CODES.ERR_UNKNOWN_THEME,

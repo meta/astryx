@@ -1372,7 +1372,12 @@ function syncPaletteFiles(cwd, slug, data, base) {
     const hash = fs.existsSync(abs(f.config))
       ? sha256(fs.readFileSync(abs(f.config)))
       : null;
-    const mine = hash != null && (data.palette === hash || saved === hash);
+    // Or the config the editor recorded writing (a color change stopped
+    // before its settings were saved).
+    const recorded = readWrittenRecord(cwd, slug)['palette.config.json'];
+    const mine =
+      hash != null &&
+      (data.palette === hash || saved === hash || recorded === hash);
     delete data.palette;
     if (!mine) return [];
     // A palette file edited by hand is never deleted: it stays, and the
@@ -1385,6 +1390,7 @@ function syncPaletteFiles(cwd, slug, data, base) {
     const notes = [];
     for (const p of [f.config, f.receipt, f.refs])
       fs.rmSync(abs(p), {force: true});
+    noteWritten(cwd, slug, 'palette.config.json', null);
     if (editedPalette)
       notes.push(
         `${f.palette} was edited by hand, so it stays: the theme no longer reads it. Move it out of tokens/ to keep it as your own, or delete it`,
@@ -1433,10 +1439,60 @@ function syncPaletteFiles(cwd, slug, data, base) {
     );
   }
   fs.mkdirSync(path.dirname(abs(f.config)), {recursive: true});
+  // Recorded before it is written: a run stopped after this leaves a config
+  // the next build knows is the editor's.
+  noteWritten(cwd, slug, 'palette.config.json', sha256(Buffer.from(text)));
   writeWhole(abs(f.config), text);
   data.palette = sha256(Buffer.from(text));
   themePaletteGenerate(f.config, {out: f.palette, overwrite: true}, {cwd});
   return plan.notes;
+}
+
+/**
+ * The record of the files the editor wrote into a theme folder
+ * (`<theme>.pictures.json`: each by name, with the hash of what was
+ * written): its pictures and its color config.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {Record<string, string>}
+ */
+function readWrittenRecord(cwd, slug) {
+  try {
+    const json = JSON.parse(
+      fs.readFileSync(
+        path.join(cwd, 'themes', slug, `${slug}.pictures.json`),
+        'utf8',
+      ),
+    );
+    return json && typeof json === 'object' && !Array.isArray(json) ? json : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Note a file the editor wrote into a theme folder, by name with the hash
+ * of what it wrote, or forget it (null).
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {string} name
+ * @param {string | null} hash
+ */
+function noteWritten(cwd, slug, name, hash) {
+  const file = path.join(cwd, 'themes', slug, `${slug}.pictures.json`);
+  const map = readWrittenRecord(cwd, slug);
+  if (hash) map[name] = hash;
+  else if (name in map) delete map[name];
+  else return;
+  try {
+    if (!Object.keys(map).length) fs.rmSync(file, {force: true});
+    else {
+      fs.mkdirSync(path.dirname(file), {recursive: true});
+      writeWhole(file, `${JSON.stringify(map, null, 2)}\n`);
+    }
+  } catch {
+    // Without the record, a stopped run's config is kept: the safe way round.
+  }
 }
 
 /**
