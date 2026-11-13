@@ -33,6 +33,7 @@ import {useTableWindow} from './plugins/virtualization/useTableWindow';
 import {getTableVirtualizationConfig} from './plugins/virtualization/useTableRowsVirtualization';
 import {
   resolveTableVirtualization,
+  type TableColumnFocusProps,
   type TableColumnLayout,
 } from './tableColumnWindowing';
 import {TableContext} from './TableContext';
@@ -44,6 +45,7 @@ import {
   withLogicalPositionWidths,
 } from './tableColumnAdmission';
 import {isRenderable} from '../utils/isRenderable';
+import {chainEventHandlers} from '../utils/chainEventHandlers';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import type {
@@ -786,6 +788,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
   // window, which a columns capability supplies.
   const renderTable = (
     columnLayout: TableColumnLayout | undefined,
+    columnFocusProps?: TableColumnFocusProps,
   ): ReactNode => {
     // --- Plugin pipeline: header cells ---
     const renderHeaderCell = (col: TableColumn<T>, columnIndex: number) => {
@@ -962,7 +965,29 @@ function BaseTableInner<T extends Record<string, unknown>>({
             .join(' ') || undefined,
           tableStyle,
         )}
-        {...rest}>
+        {...rest}
+        {...(columnFocusProps && {
+          onFocus: chainEventHandlers(
+            tableRenderProps.htmlProps.onFocus,
+            rest.onFocus,
+            columnFocusProps.onFocus,
+          ),
+          onBlur: chainEventHandlers(
+            tableRenderProps.htmlProps.onBlur,
+            rest.onBlur,
+            columnFocusProps.onBlur,
+          ),
+          onPointerDown: chainEventHandlers(
+            tableRenderProps.htmlProps.onPointerDown,
+            rest.onPointerDown,
+            columnFocusProps.onPointerDown,
+          ),
+          onContextMenu: chainEventHandlers(
+            tableRenderProps.htmlProps.onContextMenu,
+            rest.onContextMenu,
+            columnFocusProps.onContextMenu,
+          ),
+        })}>
         {children ? (
           children
         ) : (

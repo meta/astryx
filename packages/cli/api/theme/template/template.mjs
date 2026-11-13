@@ -83,6 +83,22 @@ function isReplaceableThemeFile(file) {
  * @returns {import('../theme.type.mjs').ThemeTemplateResponse}
  */
 export function themeTemplate(options = {}) {
+  return writeThemeTemplate(options, false);
+}
+
+/**
+ * The template write behind `themeTemplate`, with the experimental editor's
+ * one difference: with `editorFilesOnly`, in a folder the theme editor made
+ * only the editor's own files (`<folder>.*`) are protected, so an earlier
+ * template there is the person's. Internal: the experimental `template`
+ * command reaches it through `editorThemeTemplate` (api/theme-edit), and it
+ * is not part of the public API.
+ * @internal
+ * @param {{targetPath?: string, overwrite?: boolean, cwd?: string}} options
+ * @param {boolean} editorFilesOnly
+ * @returns {import('../theme.type.mjs').ThemeTemplateResponse}
+ */
+export function writeThemeTemplate(options, editorFilesOnly) {
   const {
     targetPath = THEME_TEMPLATE_DEFAULT_PATH,
     overwrite = false,
@@ -97,14 +113,12 @@ export function themeTemplate(options = {}) {
   );
   if (String(targetPath).trim() === '') {
     throw new AstryxError(
-      'The theme template path is blank. Give a file path, or leave it out for theme.template.ts.',
+      'The theme template path is blank. Give a file path, or leave it out for theme.template.ts at the project root.',
       [
         {
-          name: formatCliCommand(
-            `theme template ${THEME_TEMPLATE_DEFAULT_PATH}`,
-            cwd,
-          ),
-          reason: 'the default path',
+          // No path: the template at the project root, from any folder.
+          name: formatCliCommand('theme template', cwd),
+          reason: 'write the template at the project root',
         },
       ],
       ERROR_CODES.ERR_INVALID_ARGUMENT,
@@ -132,7 +146,14 @@ export function themeTemplate(options = {}) {
     if (err instanceof PathSafetyError) {
       throw new AstryxError(
         // The path as typed, not as read from the project root.
-        err.message.replace(`"${fromRoot}"`, `"${targetPath}"`),
+        // A typed path is read from the current folder, so the advice says
+        // so (the safety check reads it from the project root).
+        err.message
+          .replace(`"${fromRoot}"`, `"${targetPath}"`)
+          .replace(
+            /relative to the project root/g,
+            'relative to the current folder, inside the project',
+          ),
         [
           {
             // No path: the template at the project root.
@@ -177,10 +198,39 @@ export function themeTemplate(options = {}) {
     );
   }
 
-  const editorRecord =
-    fs.existsSync(resolved) && overwrite
-      ? editorThemeRecord(path.dirname(resolved))
-      : null;
+  // The folder as it is on disk (`themes/T` is `themes/t` on a
+  // case-insensitive disk, or through a link).
+  const realDir = fs.existsSync(resolved)
+    ? fs.realpathSync(path.dirname(resolved))
+    : path.dirname(resolved);
+  const record = fs.existsSync(resolved) ? editorThemeRecord(realDir) : null;
+  // The editor's own files are `<folder>.*` beside its settings; with
+  // editorFilesOnly any other file there (an earlier template) is the
+  // person's.
+  // On a case-insensitive disk `T.theme.ts` is `t.theme.ts`: names are
+  // compared in any case, and an existing file by what it is on disk.
+  const folder = path.basename(realDir).toLowerCase();
+  const sameFile = (/** @type {string} */ other) => {
+    try {
+      const a = fs.statSync(resolved);
+      const b = fs.statSync(other);
+      return a.ino === b.ino && a.dev === b.dev;
+    } catch {
+      return false;
+    }
+  };
+  const editorFile =
+    record != null &&
+    (!editorFilesOnly ||
+      path.basename(resolved).toLowerCase().startsWith(`${folder}.`) ||
+      fs
+        .readdirSync(realDir)
+        .some(
+          f =>
+            f.toLowerCase().startsWith(`${folder}.`) &&
+            sameFile(path.join(realDir, f)),
+        ));
+  const editorRecord = overwrite && editorFile ? record : null;
   if (editorRecord) {
     throw new AstryxError(
       `${relative} belongs to a theme the theme editor made (${editorRecord} is beside it). Replacing it would cut the theme off from its settings, so --overwrite does not replace it.`,
@@ -220,9 +270,7 @@ export function themeTemplate(options = {}) {
   if (fs.existsSync(resolved) && !overwrite) {
     // Whether --overwrite would replace this file, and if not, a path that
     // takes the template, so the hint never names a command that refuses.
-    const overwritable =
-      !editorThemeRecord(path.dirname(resolved)) &&
-      isReplaceableThemeFile(resolved);
+    const overwritable = !editorFile && isReplaceableThemeFile(resolved);
     return {
       type: 'theme.template',
       data: {
