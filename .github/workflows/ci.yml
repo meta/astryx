@@ -1274,7 +1274,7 @@ jobs:
         if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
         env:
           ASTRYX_THEME_EDITOR_BROWSER: '1'
-        run: pnpm exec vitest run packages/cli/api/theme-edit/theme-real-bases.test.mjs -t 'in each text direction|names what it waited on' --maxWorkers=1
+        run: pnpm exec vitest run packages/cli/api/theme-edit/theme-real-bases.test.mjs -t 'renders own and editor sides|names what it waited on' --maxWorkers=1
 
       # The contract runs in the time the job's 15-minute limit leaves, less a
       # minute, counted as the Node shard counts it: a contract that runs out of
@@ -1284,6 +1284,9 @@ jobs:
         if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
         run: |
           started=$(ps -o etimes= -C Runner.Worker 2>/dev/null | sort -n | tail -1 | tr -d ' ')
+          if [ -z "$started" ]; then
+            echo "::warning title=Theme-family bound::the job's age could not be read; counting it as 3 minutes"
+          fi
           left=$(( 14 * 60 - ${started:-180} ))
           if [ "$left" -le 0 ]; then
             echo "::error title=Theme-family contract out of time::the job reached 14 of its 15 minutes before the theme-family contract could start"

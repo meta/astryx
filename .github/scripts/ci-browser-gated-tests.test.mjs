@@ -186,7 +186,7 @@ describe('browser-gated script tests in the workflows', () => {
     expect(run.jobName).toBe('test-node');
     expect(run.step.env).toEqual({ASTRYX_THEME_EDITOR_BROWSER: '1'});
     expect(run.step.run).toContain(
-      "-t 'in each text direction|names what it waited on'",
+      "-t 'renders own and editor sides|names what it waited on'",
     );
     // The case cannot vanish from both runs: the Node shard skips it by name
     // (it.runIf on the switch), and this step, with the switch set, runs it.

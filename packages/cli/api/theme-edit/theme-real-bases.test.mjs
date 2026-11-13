@@ -402,7 +402,12 @@ describe('padding on real base themes', () => {
     it.runIf(BROWSER_STEP)(
       'renders own and editor sides in each text direction (butter)',
       async ctx => {
-        if (unbuilt) return ctx.skip();
+        // In its browser step a theme that cannot be built is a failure, not a skip.
+        if (unbuilt) {
+          if (BROWSER_STEP)
+            throw new Error(`the base themes could not be built: ${unbuilt}`);
+          return ctx.skip();
+        }
         await themeEditNew('plr', {cwd, like: 'butter'});
         ownEdit('plr', "button: {base: {paddingInlineStart: '30px'}},");
         await themeEditSet('plr', 'padding-left', '8px', {cwd, on: 'button'});
