@@ -165,7 +165,14 @@ export const docs = {
       name: 'formatValue',
       type: '(value: number) => string',
       description:
-        'Formats the committed value while the input is not focused. The raw numeric value is shown on focus for editing and the formatted value is exposed through aria-valuetext.',
+        'Formats the committed value while the input is not focused. Focus shows the ungrouped number, or grouped digits when isGroupedWhileEditing is set. The formatted value is exposed through aria-valuetext.',
+    },
+    {
+      name: 'isGroupedWhileEditing',
+      type: 'boolean',
+      description:
+        'Keeps locale digit grouping while the field is focused. Off by default: focus shows the ungrouped number. When on, each edit regroups the integer digits, the caret stays before the same digits, and Backspace or Delete next to a separator deletes the digit beyond it. Composition is left alone until it ends. A sign, a letter, or a decimal mark stays as typed.',
+      default: 'false',
     },
     {
       name: 'isWheelEnabled',
@@ -301,6 +308,11 @@ export const docs = {
         guidance: true,
         description:
           "Let people paste formatted numbers: a pasted 1,234,234,234 is read under the field's locale and commits as 1234234234 on blur. Typing is never intercepted.",
+      },
+      {
+        guidance: true,
+        description:
+          'Set isGroupedWhileEditing when people check large amounts by their digit groups while they type. Focus then keeps grouping (1.500.000 in vi-VN, 1,500,000 in en-US) instead of dropping separators.',
       },
       {
         guidance: true,
@@ -498,7 +510,14 @@ export const docsZh = {
       name: 'formatValue',
       type: '(value: number) => string',
       description:
-        '输入框未聚焦时格式化已提交的值。聚焦编辑时显示原始数值，并通过 aria-valuetext 提供格式化值。',
+        '输入框未聚焦时格式化已提交的值。聚焦时显示未分组的数字；若设置了 isGroupedWhileEditing，则保持分组。格式化值通过 aria-valuetext 提供。',
+    },
+    {
+      name: 'isGroupedWhileEditing',
+      type: 'boolean',
+      description:
+        '聚焦时保持区域设置的数字分组。默认关闭：聚焦显示未分组数字。开启后，每次编辑会重新分组整数部分，光标停留在相同数字之前；在分隔符旁按 Backspace 或 Delete 会删除分隔符另一侧的数字。输入法组合过程中不重新分组，直到组合结束。正负号、字母或小数标记保持原样。',
+      default: 'false',
     },
     {
       name: 'isWheelEnabled',
@@ -627,6 +646,11 @@ export const docsZh = {
       {
         guidance: true,
         description:
+          '当用户需要在输入过程中按千分位核对大额数字时，设置 isGroupedWhileEditing。聚焦时会保持分组（vi-VN 下为 1.500.000，en-US 下为 1,500,000），而不是去掉分隔符。',
+      },
+      {
+        guidance: true,
+        description:
           'Set min, max, and step to guide users toward valid values.',
       },
       {
@@ -697,6 +721,11 @@ export const docsDense = {
         guidance: true,
         description:
           "Pasted formatted numbers parse: 1,234,234,234 commits as 1234234234 under the field's locale. Typing is never intercepted.",
+      },
+      {
+        guidance: true,
+        description:
+          'Set isGroupedWhileEditing so large amounts keep grouping while focused (1.500.000 in vi-VN, 1,500,000 in en-US).',
       },
       {
         guidance: true,
@@ -796,7 +825,9 @@ export const docsDense = {
     max: 'Maximum value allowed.',
     step: 'Step increment.',
     formatValue:
-      'Formats committed value at rest; raw number is shown while editing.',
+      'Formats committed value at rest; ungrouped number while editing, or grouped digits with isGroupedWhileEditing.',
+    isGroupedWhileEditing:
+      'Keep locale digit grouping while focused. Default off (ungrouped while editing).',
     isWheelEnabled:
       'Allow focused wheel gestures to step value. Defaults to true.',
     hasNumberSteppers:
