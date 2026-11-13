@@ -23,6 +23,8 @@ import {
   ICON_USE_ORDER_COMMAND,
   refuseOutsideProject,
   setConfigValues,
+  iconSetLook,
+  iconUseCommand,
   unlistedIconSets,
 } from '../_adapter.mjs';
 import {setsNamed, unusableSet} from '../_records.mjs';
@@ -47,16 +49,6 @@ function oneSet(sets, withdrawn, selector) {
     );
   }
   return named[0];
-}
-
-/**
- * The `use` command that writes a choice, as printed in a refusal.
- * @param {string} selector
- * @param {string[]} backups
- * @param {string} [variant]
- */
-function useCommand(selector, backups, variant) {
-  return `astryx experimental icon use ${selector}${backups.map(each => ` --backup ${each}`).join('')}${variant ? ` --variant ${variant}` : ''}`;
 }
 
 /**
@@ -90,12 +82,12 @@ function checkVariant(main, selector, backups, variant) {
     declared.length === 0
       ? [
           {
-            name: useCommand(selector, backups),
+            name: iconUseCommand(selector, backups),
             reason: 'use it in its one look',
           },
         ]
       : declared.map(each => ({
-          name: useCommand(selector, backups, each),
+          name: iconUseCommand(selector, backups, each),
           reason:
             each === fallback
               ? `its default look, ${each}`
@@ -192,7 +184,7 @@ export async function iconUse(
   const unlisted = unlistedSets.map(iconSetKey);
   const left =
     unlistedSets.length > 0
-      ? unlistedIconSets(sets, main, backupSets, unlistedSets)
+      ? unlistedIconSets(sets, main, backupSets, unlistedSets, variant)
       : null;
   const themeMap =
     variant === undefined ? null : lookThemeMap(main.data, variant);
@@ -215,13 +207,9 @@ export async function iconUse(
       unlisted,
       ...(variant !== undefined
         ? {
-            // The look each set in the list draws: the project's variant,
-            // or the set's default look when it declares no such variant.
             looks: listed.map(set => ({
               set: iconSetKey(set),
-              variant: (set.data.variants ?? []).includes(variant)
-                ? variant
-                : (set.data.default?.variant ?? null),
+              variant: iconSetLook(set, variant),
             })),
           }
         : {}),

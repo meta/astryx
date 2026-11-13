@@ -110,6 +110,7 @@ import {
   projectHasOwnCli,
   computerIntegrationsOutside,
   findIconPlaceholders,
+  iconUseCommand,
   placeholderFixes,
   unlistedIconSets,
   computerIntegrationsToAdd,
@@ -1166,7 +1167,13 @@ export function checkIconSets(ctx) {
   const unlisted = sets.filter(set => !order.includes(set));
   if (sets.length > 1 && unlisted.length > 0 && order.length > 0) {
     const [main, ...backups] = order;
-    const {problem, fix} = unlistedIconSets(sets, main, backups, unlisted);
+    const {problem, fix} = unlistedIconSets(
+      sets,
+      main,
+      backups,
+      unlisted,
+      choice.variant,
+    );
     return {
       id,
       label,
@@ -1199,7 +1206,11 @@ export function checkIconSets(ctx) {
  * @param {string} [variant]
  */
 function iconUseCommandOf(choice, variant) {
-  return `astryx experimental icon use ${choice.configured}${(choice.backups ?? []).map(each => ` --backup ${each.selector}`).join('')}${variant ? ` --variant ${variant}` : ''}`;
+  return iconUseCommand(
+    /** @type {string} */ (choice.configured),
+    (choice.backups ?? []).map(each => each.selector),
+    variant,
+  );
 }
 
 /**
@@ -1234,7 +1245,12 @@ export function checkIconPlaceholders(ctx) {
     )
     .join(', ');
   const uses = found.reduce((total, each) => total + each.uses, 0);
-  const [mapFix, backupFix] = placeholderFixes(meanings, main);
+  const [mapFix, backupFix] = placeholderFixes(
+    meanings,
+    main,
+    (choice.backups ?? []).map(each => each.selector),
+    choice.variant,
+  );
   return {
     id,
     label,

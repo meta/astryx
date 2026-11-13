@@ -85,6 +85,12 @@ const chosen = (order, variant) => ({
   status: 'selected',
   set: order[0],
   configured: order[0].name,
+  backups: order.slice(1).map(set => ({
+    selector: set.name,
+    status: 'selected',
+    set,
+    reason: 'installed',
+  })),
   order,
   ...(variant ? {variant} : {}),
   reason: 'list',
@@ -267,6 +273,22 @@ describe("a project variant and the main set's own library", () => {
       );
       expect(source).toBe(TEMPLATE);
     });
+  });
+});
+
+describe('a project variant and a placeholder', () => {
+  it("keeps the list's backups and the look in the fix that adds a backup", () => {
+    const {icons} = mapTemplateIcons(
+      "import {FireGlyph} from '@acme/library';\nexport const A = () => <FireGlyph />;\n",
+      {sets: [GLYPHS, BRAND], choice: chosen([GLYPHS, BRAND], 'solid')},
+      {FireGlyph: 'fire'},
+    );
+    expect(icons?.placeholder.map(each => each.fixes)).toEqual([
+      [
+        'astryx experimental icon map fire <icon> --set glyphs',
+        'astryx experimental icon use glyphs --backup brand --backup <set> --variant solid',
+      ],
+    ]);
   });
 });
 

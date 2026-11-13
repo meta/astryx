@@ -260,3 +260,54 @@ describe('the project variant in astryx.config and icon --list', () => {
     expect(without.data.sets[0]).not.toHaveProperty('look');
   });
 });
+
+/**
+ * Run a printed `astryx experimental icon use` command through `iconUse`.
+ * @param {string} command
+ * @param {string} cwd
+ */
+function runUseCommand(command, cwd) {
+  const words = command
+    .replace(/^astryx experimental icon use /u, '')
+    .split(' ');
+  const [main, ...rest] = words;
+  /** @type {string[]} */
+  const backups = [];
+  /** @type {string | undefined} */
+  let variant;
+  for (let i = 0; i < rest.length; i += 2) {
+    if (rest[i] === '--backup') backups.push(rest[i + 1]);
+    else if (rest[i] === '--variant') variant = rest[i + 1];
+    else throw new Error(`unexpected word ${rest[i]} in ${command}`);
+  }
+  return iconUse(main, {cwd, backups, variant});
+}
+
+describe('every use command printed for a choice with a look', () => {
+  it('adds the unlisted sets and keeps the look, so running it keeps experimental.iconVariant', async () => {
+    const dir = project({
+      config: {experimental: {iconSet: 'glyphs', iconVariant: 'solid'}},
+    });
+    const result = await iconUse('glyphs', {cwd: dir, variant: 'solid'});
+    const command =
+      'astryx experimental icon use glyphs --backup lines --variant solid';
+    expect(result.data.next).toContain(`\`${command}\``);
+    await runUseCommand(command, dir);
+    const {choice} = await (await Project.load(dir, {fresh: true})).iconSets();
+    expect(choice.order?.map(set => set.name)).toEqual(['glyphs', 'lines']);
+    expect(choice.variant).toBe('solid');
+  });
+
+  it("names a refused variant's alternatives with the list's backups", async () => {
+    const dir = project();
+    await expect(
+      iconUse('glyphs', {cwd: dir, backups: ['lines'], variant: 'bold'}),
+    ).rejects.toMatchObject({
+      suggestions: expect.arrayContaining([
+        expect.objectContaining({
+          name: 'astryx experimental icon use glyphs --backup lines --variant solid',
+        }),
+      ]),
+    });
+  });
+});

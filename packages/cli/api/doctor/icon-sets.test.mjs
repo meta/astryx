@@ -106,6 +106,17 @@ describe('icon-sets check', () => {
     });
   });
 
+  it('an unlisted set fails with a fix that keeps the look', async () => {
+    const check = await iconCheckOf({
+      packages: [{}, {name: '@acme/lines'}],
+      config: {experimental: {iconSet: 'glyphs', iconVariant: 'solid'}},
+    });
+    expect(check).toMatchObject({status: 'fail'});
+    expect(check?.fix).toContain(
+      '`astryx experimental icon use glyphs --backup lines --variant solid`',
+    );
+  });
+
   it('fails a variant for a main set with one look, with the command that removes it', async () => {
     const {variants, default: _default, ...data} = glyphsData();
     const check = await iconCheckOf({
@@ -248,6 +259,16 @@ describe('icon-placeholders check', () => {
     );
     expect(check?.fix).toContain(
       'replace each use of the placeholder (`MissingIcon`)',
+    );
+  });
+
+  it("keeps the project's look in the fix that adds a backup", async () => {
+    const check = await placeholderCheckOf(
+      {experimental: {iconSet: 'glyphs', iconVariant: 'solid'}},
+      {'src/page.tsx': PAGE},
+    );
+    expect(check?.fix).toContain(
+      '`astryx experimental icon use glyphs --backup <set> --variant solid`',
     );
   });
 

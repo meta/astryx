@@ -58,7 +58,7 @@ import {
   walk,
   writtenNames,
 } from './template-source-tree.mjs';
-import {definitionsByIcon} from './icon-set-discovery.mjs';
+import {definitionsByIcon, iconUseCommand} from './icon-set-discovery.mjs';
 import {astryxDefinitionsByName} from './icon-definition-discovery.mjs';
 import {generatedOrigins} from './icon-set-writer.mjs';
 
@@ -327,15 +327,19 @@ function specifierText(entry) {
 }
 
 /**
- * The commands that give a placeholder icon a real one.
+ * The commands that give a placeholder icon a real one. The `use` command
+ * keeps the list's backups and the project's look, and adds a backup after
+ * them.
  * @param {string[]} definitions
  * @param {string} main the main set's name as the list writes it
+ * @param {readonly string[]} [backups] the list's backups as it writes them
+ * @param {string | null} [variant] the project's look
  * @returns {string[]}
  */
-export function placeholderFixes(definitions, main) {
+export function placeholderFixes(definitions, main, backups = [], variant) {
   return [
     `astryx experimental icon map ${definitions[0] ?? '<definition>'} <icon> --set ${main}`,
-    `astryx experimental icon use ${main} --backup <set>`,
+    iconUseCommand(main, [...backups, '<set>'], variant),
   ];
 }
 
@@ -906,6 +910,7 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
   const main = choice.configured ?? target.name;
   /** The look every icon draws, when the project names one. */
   const lookVariant = choice.variant;
+  const listedBackups = (choice.backups ?? []).map(each => each.selector);
   /** @type {Map<DiscoveredIconSet, Map<string, string>>} */
   const wrappedRead = new Map();
   /** @param {SourceIcon} record the look a mapped icon asks for */
@@ -1118,7 +1123,12 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
           source: {module, export: imported},
           target: {local: placeholderName},
           definitions: record.definitions,
-          fixes: placeholderFixes(record.definitions, main),
+          fixes: placeholderFixes(
+            record.definitions,
+            main,
+            listedBackups,
+            lookVariant,
+          ),
           ...(likely
             ? {
                 suggestion: {

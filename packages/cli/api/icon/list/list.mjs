@@ -13,24 +13,9 @@ import {
   astryxIconDefinitions,
   ICON_USE_ORDER_COMMAND,
   iconSetKey,
+  iconSetLook,
   loadIconSets,
 } from '../_adapter.mjs';
-
-/**
- * The look a set's icons draw in the project: the project's variant when the
- * set declares it, else its default look; null for a set the project's list
- * leaves out, and for a set that declares no variants.
- * @param {import('../../../foundation/discovery/icon-set-discovery.mjs').DiscoveredIconSet} set
- * @param {string | null} variant the project's variant, null for a set the
- *   list leaves out
- * @returns {string | null}
- */
-function lookOf(set, variant) {
-  if (variant == null) return null;
-  return (set.data.variants ?? []).includes(variant)
-    ? variant
-    : (set.data.default?.variant ?? null);
-}
 
 /**
  * List the installed icon sets.
@@ -95,8 +80,9 @@ export async function iconList({cwd}) {
                 ? /** @type {const} */ ('backup')
                 : null,
           rank: rank === -1 ? null : rank + 1,
+          // A set the list leaves out draws no look in the project.
           ...(choice.variant
-            ? {look: lookOf(set, rank === -1 ? null : choice.variant)}
+            ? {look: rank === -1 ? null : iconSetLook(set, choice.variant)}
             : {}),
         };
       }),
