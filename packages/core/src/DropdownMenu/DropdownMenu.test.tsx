@@ -406,6 +406,54 @@ describe('DropdownMenu', () => {
     ).toBeInTheDocument();
   });
 
+  it('names the sheet after the node-label submenu that opened, also across sections', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <DropdownMenu
+        button={{label: 'File actions'}}
+        presentation="bottom-sheet"
+        items={[
+          {
+            type: 'section',
+            title: 'Move',
+            items: [
+              {
+                label: (
+                  <>
+                    <em>Move</em> file
+                  </>
+                ),
+                items: [{label: 'Folder A'}],
+              },
+            ],
+          },
+          {
+            type: 'section',
+            title: 'Copy',
+            items: [
+              {
+                label: (
+                  <>
+                    <em>Copy</em> folder
+                  </>
+                ),
+                items: [{label: 'Folder B'}],
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', {name: /File actions/}));
+    await user.click(screen.getByRole('button', {name: /Copy folder/}));
+
+    expect(
+      screen.getByRole('dialog', {name: 'Copy folder'}),
+    ).toBeInTheDocument();
+  });
+
   it('drills into nested data items in bottom-sheet presentation', async () => {
     const user = userEvent.setup();
 
