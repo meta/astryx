@@ -225,10 +225,12 @@ function placeFitsBesideLastLine(flow: HTMLElement): boolean {
     place.getBoundingClientRect().width +
     parseFloat(placeStyle.marginLeft) +
     parseFloat(placeStyle.marginRight);
-  const box = flow.getBoundingClientRect();
-  return view.getComputedStyle(flow).direction === 'rtl'
-    ? Math.min(...lastLine.map(rect => rect.left)) - needed >= box.left
-    : Math.max(...lastLine.map(rect => rect.right)) + needed <= box.right;
+  // The place shortens the last line's box, so the line fits where its width
+  // and the place's fit the caption's, whatever its alignment or direction.
+  const width =
+    Math.max(...lastLine.map(rect => rect.right)) -
+    Math.min(...lastLine.map(rect => rect.left));
+  return width + needed <= flow.getBoundingClientRect().width;
 }
 
 // The caption's backing: the controls' backing colour, darker, so the caption
