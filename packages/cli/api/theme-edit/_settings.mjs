@@ -2507,8 +2507,8 @@ export function compileTheme(ctx, data, base) {
       // The own source's padding on the same rule wins over the editor's on
       // the sides it sets (the result says so); the editor's other sides
       // still apply.
-      const ownCovers = ownSides(target, s);
-      if (ownCovers.size === 4) continue;
+      const own = ownBox(target, s);
+      if (own.ltr.size === 4 && own.rtl.size === 4) continue;
       const prefix = /** @type {string} */ (padVars(target));
       const owner = prefix.slice('--astryx-'.length, -'-padding'.length);
       const scoped = target !== owner || s.when != null || s.state != null;
@@ -2552,10 +2552,10 @@ export function compileTheme(ctx, data, base) {
           }
         }
       }
-      for (const x of ownCovers) {
-        delete side.ltr[x];
-        delete side.rtl[x];
-      }
+      // The sides the own source pads in a direction are its own there.
+      for (const dir of /** @type {const} */ (['ltr', 'rtl']))
+        for (const x of Object.keys(side[dir]))
+          if (own[dir].has(boxSide(x, dir))) delete side[dir][x];
       /** @type {Record<string, string>} */
       let plain = {};
       /** @type {Record<string, string>} */
@@ -2642,11 +2642,34 @@ export function compileTheme(ctx, data, base) {
       for (const [prop, vals] of Object.entries(values ?? {}))
         for (const v of /** @type {string[]} */ (vals ?? [])) {
           const when = `${prop}:${v}`;
-          const covers = ownSides(owner, /** @type {any} */ ({when}));
-          if (!covers.size) continue;
-          const b = block(/** @type {any} */ ({when}), owner);
-          for (const x of covers)
+          const own = ownBox(owner, /** @type {any} */ ({when}));
+          if (!own.ltr.size && !own.rtl.size) continue;
+          const variant = /** @type {any} */ ({when});
+          const logical = [
+            'block-start',
+            'block-end',
+            'inline-start',
+            'inline-end',
+          ];
+          const at = (/** @type {'ltr' | 'rtl'} */ dir) =>
+            logical.filter(x => own[dir].has(boxSide(x, dir)));
+          const [l, r] = [at('ltr'), at('rtl')];
+          const b = block(variant, owner);
+          for (const x of l.filter(x => r.includes(x)))
             b[`--astryx-${owner}-padding-${x}`] ??= 'initial';
+          for (const [dir, xs] of /** @type {const} */ ([
+            [':dir(ltr)', l.filter(x => !r.includes(x))],
+            [':dir(rtl)', r.filter(x => !l.includes(x))],
+          ]))
+            if (xs.length) {
+              const [db, key] = dirBlock(variant, owner, dir);
+              db[key] = {
+                ...(db[key] ?? {}),
+                ...Object.fromEntries(
+                  xs.map(x => [`--astryx-${owner}-padding-${x}`, 'initial']),
+                ),
+              };
+            }
         }
     }
     // A plain part inside a narrower one: each side the narrower selector
@@ -2731,27 +2754,49 @@ export function compileTheme(ctx, data, base) {
     return out;
   };
   /**
-   * The sides (block-start, inline-end, …) the theme's own source pads on a
-   * part's rule for a scope (its plain rule, a variant, a state).
-   * @param {string} target @param {Setting} s
+   * The box side a padding side names in a direction: a physical side as it
+   * is, a logical one as the direction reads it (inline-start is the left in
+   * left-to-right text, the right in right-to-left).
+   * @param {string} x top, right, bottom, left, or a logical side
+   * @param {'ltr' | 'rtl'} dir
    */
-  const ownSides = (target, s) => {
-    /** @type {Set<string>} */
-    const out = new Set();
-    /** @type {Record<string, string[]>} */
-    const SIDES = {
-      padding: ['block-start', 'block-end', 'inline-start', 'inline-end'],
-      'padding-block': ['block-start', 'block-end'],
-      'padding-inline': ['inline-start', 'inline-end'],
-      'padding-top': ['block-start'],
-      'padding-bottom': ['block-end'],
-      'padding-left': ['inline-start'],
-      'padding-right': ['inline-end'],
-      'padding-block-start': ['block-start'],
-      'padding-block-end': ['block-end'],
-      'padding-inline-start': ['inline-start'],
-      'padding-inline-end': ['inline-end'],
-    };
+  const boxSide = (x, dir) =>
+    ({
+      'block-start': 'top',
+      'block-end': 'bottom',
+      'inline-start': dir === 'ltr' ? 'left' : 'right',
+      'inline-end': dir === 'ltr' ? 'right' : 'left',
+    })[x] ?? x;
+  /**
+   * The padding sides a padding property names, as it names them (physical
+   * stays physical, logical stays logical), with each one's value.
+   * @param {string} prop kebab-case
+   * @param {string} value
+   * @returns {Record<string, string>}
+   */
+  const paddingSides = (prop, value) => {
+    const w = splitTop(String(value).trim(), ' ').map(y => y.trim());
+    if (prop === 'padding') {
+      const [top, right = top, bottom = top, left = right] = w;
+      return {top, right, bottom, left};
+    }
+    if (prop === 'padding-block')
+      return {'block-start': w[0], 'block-end': w[1] ?? w[0]};
+    if (prop === 'padding-inline')
+      return {'inline-start': w[0], 'inline-end': w[1] ?? w[0]};
+    const side = prop.slice('padding-'.length);
+    return /^(top|right|bottom|left|(block|inline)-(start|end))$/.test(side)
+      ? {[side]: w[0]}
+      : {};
+  };
+  /**
+   * The box sides the theme's own source pads on a part's rule for a scope
+   * (its plain rule, a variant, a state), in each direction.
+   * @param {string} target @param {Setting} s
+   * @returns {Record<'ltr' | 'rtl', Set<string>>}
+   */
+  const ownBox = (target, s) => {
+    const out = {ltr: new Set(), rtl: new Set()};
     try {
       for (const k of ownPartTokens(
         ctx.project.cwd,
@@ -2760,7 +2805,9 @@ export function compileTheme(ctx, data, base) {
         s.when ?? 'base',
         s.state ? `:${s.state}` : null,
       ).keys())
-        for (const x of SIDES[k] ?? []) out.add(x);
+        for (const x of Object.keys(paddingSides(k, '0')))
+          for (const dir of /** @type {const} */ (['ltr', 'rtl']))
+            out[dir].add(boxSide(x, dir));
     } catch {
       // No own source.
     }
@@ -3133,47 +3180,29 @@ export function compileTheme(ctx, data, base) {
         }
         // A padding on a part without padding variables, where the own source
         // pads some sides of the same rule: the editor writes the other
-        // sides only, as longhands, so the own sides win.
-        if (/^padding(-|$)/.test(kebab(s.thing)) && !s.mode) {
-          const covers = ownSides(t, s);
-          if (covers.size) {
-            const w = splitTop(String(s.value).trim(), ' ').map(y => y.trim());
-            const prop = kebab(s.thing);
-            /** @type {Record<string, string>} */
-            const mine = {};
-            if (prop === 'padding') {
-              const [top, r = top, bottom = top, l = r] = w;
-              Object.assign(mine, {
-                'block-start': top,
-                'inline-end': r,
-                'block-end': bottom,
-                'inline-start': l,
-              });
-            } else if (prop === 'padding-block')
-              Object.assign(mine, {
-                'block-start': w[0],
-                'block-end': w[1] ?? w[0],
-              });
-            else if (prop === 'padding-inline')
-              Object.assign(mine, {
-                'inline-start': w[0],
-                'inline-end': w[1] ?? w[0],
-              });
-            else {
-              const one =
-                {
-                  'padding-top': 'block-start',
-                  'padding-bottom': 'block-end',
-                  'padding-left': 'inline-start',
-                  'padding-right': 'inline-end',
-                }[prop] ?? prop.slice('padding-'.length);
-              mine[one] = w[0];
+        // sides only, each as it names it (physical stays physical), so the
+        // own sides win; a side the own source holds in one direction only
+        // is written for the other direction.
+        if (/^padding(-|$)/.test(kebab(s.thing)) && !s.mode && !padVars(t)) {
+          const own = ownBox(t, s);
+          if (own.ltr.size || own.rtl.size) {
+            for (const [x, v] of Object.entries(
+              paddingSides(kebab(s.thing), String(s.value)),
+            )) {
+              const prop = camel(`padding-${x}`);
+              const [inL, inR] = [
+                own.ltr.has(boxSide(x, 'ltr')),
+                own.rtl.has(boxSide(x, 'rtl')),
+              ];
+              if (inL && inR) continue;
+              if (!inL && !inR) {
+                putComp(s, t, prop, v);
+                continue;
+              }
+              const [db, key] = dirBlock(s, t, inL ? ':dir(rtl)' : ':dir(ltr)');
+              db[key] = {...(db[key] ?? {}), [prop]: v};
             }
-            if (!padVars(t)) {
-              for (const [x, v] of Object.entries(mine))
-                if (!covers.has(x)) putComp(s, t, camel(`padding-${x}`), v);
-              continue;
-            }
+            continue;
           }
         }
         const sides =
