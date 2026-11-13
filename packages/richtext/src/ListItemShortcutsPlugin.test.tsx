@@ -256,6 +256,47 @@ describe('Markdown shortcuts typed at the start of a list item', () => {
     ).toEqual(['check', true, true]);
   });
 
+  it('keeps the other items of a check list as they were, with the default transformers', async () => {
+    const {editor} = await typeAt('- Alpha\n- Beta\n- Gamma\n', 'Alpha', '');
+    await act(async () => {
+      editor.update(
+        () => {
+          const list = $getRoot().getFirstChild();
+          if (!$isListNode(list)) {
+            throw new Error('No list');
+          }
+          list.setListType('check');
+          const [alpha, , gamma] = list.getChildren();
+          if ($isListItemNode(alpha)) {
+            alpha.setChecked(true);
+          }
+          if ($isListItemNode(gamma)) {
+            gamma.setChecked(true);
+          }
+          const beta = $getRoot()
+            .getAllTextNodes()
+            .find(textNode => textNode.getTextContent().startsWith('Beta'));
+          beta?.select(0, 0);
+        },
+        {discrete: true, tag: SKIP_SCROLL_INTO_VIEW_TAG},
+      );
+    });
+    for (const character of '[ ] ') {
+      await act(async () => {
+        editor.update(
+          () => {
+            const selection = $getSelection();
+            if ($isRangeSelection(selection)) {
+              selection.insertText(character);
+            }
+          },
+          {discrete: true, tag: SKIP_SCROLL_INTO_VIEW_TAG},
+        );
+      });
+    }
+    expect(markdownOf(editor)).toBe('- [x] Alpha\n- [ ] Beta\n- [x] Gamma\n');
+  });
+
   it('joins a switched list to a list of the same type just before it', async () => {
     const {editor} = await typeAt(
       '1. Draft\n2. Review\n\n- Ship\n',

@@ -165,22 +165,23 @@ function $switchList(
     return;
   }
   if (marker.kind === 'task') {
-    const wasCheckList = list.getListType() === 'check';
+    // Read a check list's states first: Lexical reports no checked state
+    // once the list is no longer a check list.
+    const checkStates =
+      list.getListType() === 'check'
+        ? items.map(each => each.getChecked() === true)
+        : null;
     if (list.getListType() !== 'bullet') {
       list.setListType('bullet');
     }
-    for (const each of items) {
-      if (wasCheckList && each.getChecked() !== undefined) {
-        $setTaskState(
-          each,
-          each.getChecked() === true ? 'checked' : 'unchecked',
-        );
+    items.forEach((each, index) => {
+      if (checkStates != null) {
         each.setChecked(undefined);
-      }
-      if ($getTaskState(each) == null) {
+        $setTaskState(each, checkStates[index] ? 'checked' : 'unchecked');
+      } else if ($getTaskState(each) == null) {
         $setTaskState(each, 'unchecked');
       }
-    }
+    });
     $setTaskState(item, marker.checked ? 'checked' : 'unchecked');
     return;
   }
