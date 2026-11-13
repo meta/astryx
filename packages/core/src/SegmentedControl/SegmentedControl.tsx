@@ -340,13 +340,26 @@ export function SegmentedControl({
   // then a tap or a click selects, and the selection moves at once.
   const touchRuntime = useTouchRuntime();
   const motionSelectionRef = useRef<SegmentedSelection | null>(null);
+  // Before the runtime loads, a pointer that is down on the group still
+  // keeps a focus move from selecting: the press selects through its click,
+  // and a press the browser cancels selects nothing.
+  const isPointerDownRef = useRef(false);
   const [selection] = useState<SegmentedSelection>(() => ({
-    isPressing: () => motionSelectionRef.current?.isPressing() ?? false,
+    isPressing: () =>
+      motionSelectionRef.current?.isPressing() ?? isPointerDownRef.current,
     keyPressed: () => motionSelectionRef.current?.keyPressed(),
   }));
-  const receiveMotionSelection = useCallback(
-    (motionSelection: SegmentedSelection | null) => {
-      motionSelectionRef.current = motionSelection;
+  const handlePointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      isPointerDownRef.current = true;
+      const doc = event.currentTarget.ownerDocument;
+      const release = () => {
+        isPointerDownRef.current = false;
+        doc.removeEventListener('pointerup', release, true);
+        doc.removeEventListener('pointercancel', release, true);
+      };
+      doc.addEventListener('pointerup', release, true);
+      doc.addEventListener('pointercancel', release, true);
     },
     [],
   );
@@ -484,6 +497,10 @@ export function SegmentedControl({
           showsDisabledMessage ? disabledMessageTooltip.describedBy : undefined,
         )}
         onKeyDown={handleContainerKeyDown}
+        onPointerDown={composeEventHandlers(
+          rest.onPointerDown,
+          handlePointerDown,
+        )}
         onFocus={handleContainerFocus}
         onBlur={composeEventHandlers(onBlurProp, hint.onBlur)}
         {...mergeProps(
@@ -508,7 +525,7 @@ export function SegmentedControl({
           value={value}
           isPresenting={isTouchPresentation}
           isTracking={!isDisabled}
-          onSelection={receiveMotionSelection}
+          selectionRef={motionSelectionRef}
         />
       )}
       {showsDisabledMessage &&

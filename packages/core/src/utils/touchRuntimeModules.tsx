@@ -14,6 +14,7 @@
 import type {RefObject} from 'react';
 import {animatorFor} from '../motion/animator';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {useCommittedRefInto} from '../hooks/useCommittedRef';
 import {
   useSegmentedSelectionMotion,
   type SegmentedSelection,
@@ -29,8 +30,8 @@ interface SegmentedMotionProps {
   readonly value: string;
   readonly isPresenting: boolean;
   readonly isTracking: boolean;
-  /** Receives the motion's selection state on mount, and `null` on unmount. */
-  readonly onSelection: (selection: SegmentedSelection | null) => void;
+  /** Holds the motion's selection state while this part is mounted. */
+  readonly selectionRef: RefObject<SegmentedSelection | null>;
 }
 
 /**
@@ -43,7 +44,7 @@ function SegmentedMotion({
   value,
   isPresenting,
   isTracking,
-  onSelection,
+  selectionRef,
 }: SegmentedMotionProps): null {
   const {selection, attachTrack} = useSegmentedSelectionMotion(
     trackRef,
@@ -56,11 +57,7 @@ function SegmentedMotion({
     const detach = attachTrack(trackRef.current);
     return typeof detach === 'function' ? detach : undefined;
   }, [attachTrack, trackRef]);
-  // Syncs the control's selection state with this part's motion.
-  useIsomorphicLayoutEffect(() => {
-    onSelection(selection);
-    return () => onSelection(null);
-  }, [selection, onSelection]);
+  useCommittedRefInto(selectionRef, selection);
   return null;
 }
 

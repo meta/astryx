@@ -30,6 +30,7 @@
 // ride the on-screen keyboard: the ride moves the field with the animator.
 
 import {useEffect, useSyncExternalStore} from 'react';
+import {createModuleLoader} from './moduleLoader';
 import type {TouchRuntime} from './touchRuntimeModules';
 
 export type {TouchRuntime} from './touchRuntimeModules';
@@ -64,10 +65,13 @@ function publish(loaded: TouchRuntime): void {
   }
 }
 
+const runtimeModule = createModuleLoader(
+  async () => import('./touchRuntimeModules'),
+);
+
 async function load(): Promise<void> {
   try {
-    const module = await import('./touchRuntimeModules');
-    publish(module.touchRuntime);
+    publish((await runtimeModule.load()).touchRuntime);
   } catch {
     // A chunk that fails to load leaves the page on taps, clicks and keys.
   }
@@ -111,10 +115,10 @@ export function useTouchRuntime(): TouchRuntime | null {
 
 /** Test only: loads the runtime now and makes every reader see it. */
 export async function __loadTouchRuntimeForTest(): Promise<TouchRuntime> {
-  const module = await import('./touchRuntimeModules');
-  publish(module.touchRuntime);
+  const loaded = (await runtimeModule.load()).touchRuntime;
+  publish(loaded);
   isScheduled = true;
-  return module.touchRuntime;
+  return loaded;
 }
 
 /** Test only: forgets the loaded runtime and any scheduled load. */

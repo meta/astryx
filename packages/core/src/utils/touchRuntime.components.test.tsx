@@ -107,6 +107,28 @@ describe('a touch component before and after the touch runtime loads', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  it('selects nothing for a SegmentedControl press the browser cancels before the load', () => {
+    const onChange = vi.fn();
+    render(
+      <SegmentedControl label="View" value="list" onChange={onChange}>
+        <SegmentedControlItem value="list" label="List" />
+        <SegmentedControlItem value="grid" label="Grid" />
+      </SegmentedControl>,
+    );
+    const list = screen.getByRole('radio', {name: 'List'});
+    const grid = screen.getByRole('radio', {name: 'Grid'});
+    act(() => {
+      list.focus();
+    });
+    // A press on Grid focuses it at pointerdown; the browser then cancels it.
+    fireEvent.pointerDown(grid, {pointerId: 3, pointerType: 'mouse'});
+    act(() => {
+      grid.focus();
+    });
+    fireEvent.pointerCancel(grid, {pointerId: 3, pointerType: 'mouse'});
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it('selects a SegmentedControl segment by its click before and after the load', async () => {
     const onChange = vi.fn();
     const {rerender} = render(
