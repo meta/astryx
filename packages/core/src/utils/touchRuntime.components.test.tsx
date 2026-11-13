@@ -134,6 +134,35 @@ describe('a touch component before and after the touch runtime loads', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  it('keeps the veto of a SegmentedControl finger tap that is down when the runtime loads', async () => {
+    const onChange = vi.fn();
+    render(
+      <SegmentedControl label="View" value="list" onChange={onChange}>
+        <SegmentedControlItem value="list" label="List" />
+        <SegmentedControlItem
+          value="grid"
+          label="Grid"
+          onClick={event => event.preventDefault()}
+        />
+      </SegmentedControl>,
+    );
+    const list = screen.getByRole('radio', {name: 'List'});
+    const grid = screen.getByRole('radio', {name: 'Grid'});
+    act(() => {
+      list.focus();
+    });
+    fireEvent.pointerDown(grid, {pointerId: 5, pointerType: 'touch'});
+    await act(async () => {
+      await __loadTouchRuntimeForTest();
+    });
+    fireEvent.pointerUp(grid, {pointerId: 5, pointerType: 'touch'});
+    act(() => {
+      grid.focus();
+    });
+    fireEvent.click(grid);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it('selects nothing for a SegmentedControl press the browser cancels before the load', () => {
     const onChange = vi.fn();
     render(

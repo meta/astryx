@@ -341,13 +341,15 @@ export function SegmentedControl({
   // then a tap or a click selects, and the selection moves at once.
   const touchRuntime = useTouchRuntime();
   const motionSelectionRef = useRef<SegmentedSelection | null>(null);
-  // Before the runtime loads, a press that has not reached its click still
-  // keeps a focus move from selecting: the press selects through its click,
-  // so a caller's `preventDefault()` vetoes it, and a press the browser
-  // cancels selects nothing.
+  // A press that has not reached its click keeps a focus move from
+  // selecting: the press selects through its click, so a caller's
+  // `preventDefault()` vetoes it, and a press the browser cancels selects
+  // nothing. The shared gesture counter sees every press, also one that began
+  // before the runtime loaded, which the motion never saw.
   const [selection] = useState<SegmentedSelection>(() => ({
     isPressing: () =>
-      motionSelectionRef.current?.isPressing() ?? isPressAwaitingClick(),
+      (motionSelectionRef.current?.isPressing() ?? false) ||
+      isPressAwaitingClick(),
     keyPressed: () => motionSelectionRef.current?.keyPressed(),
   }));
 
