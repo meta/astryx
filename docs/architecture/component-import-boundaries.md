@@ -179,7 +179,7 @@ one pending load per module, caches a success, and resets after a failure.
 
 | Crossing (base module → module it imports statically)             | Entries that reach it                          | Cost, gzip             | Invariant  | Row leaves when                                                                                        |
 | ----------------------------------------------------------------- | ---------------------------------------------- | ---------------------- | ---------- | ------------------------------------------------------------------------------------------------------ |
-| `Text/TruncationTooltip` → `Layer/gestureCounter`                 | Text, Heading, Button, IconButton, Link, Table | 4.6 KB (Text, Heading) | INV1, INV8 | the truncation tooltip's eager code carries no touch tap recognizer; the row moves with the recognizer |
+| `Text/TruncationTooltip` → `Layer/gestureCounter`                 | Text, Heading, Button, IconButton, Link, Table | 1.7 KB (Text, Heading) | INV1, INV8 | the truncation tooltip's eager code carries no touch tap recognizer; the row moves with the recognizer |
 | `Button/Button` → `Tooltip/useTooltip`                            | Button, IconButton                             | 15.5 KB                | INV1       | Button's tooltip layer code is lazy                                                                    |
 | `Link/Link` → `Tooltip`                                           | Link                                           | 17.6 KB                | INV1       | Link's tooltip layer code is lazy                                                                      |
 | `Table/tableContextMenu` → `ContextMenu`                          | Table                                          | 78.2 KB                | INV1       | cells without actions reach no menu module                                                             |
@@ -195,7 +195,7 @@ crossings brings the same module. Table carries 123.5 KB eager.
 ## Current-state impact
 
 - INV1, INV8 gap: Text's and Heading's imports reach the touch tap recognizer
-  through the truncation tooltip, 4.6 KB gzip each, on pages whose text never
+  through the truncation tooltip, 1.7 KB gzip each, on pages whose text never
   truncates. Button, IconButton, Link, and Table reach it the same way
   through Text.
 - INV1 gap: the `Tooltip`, `HoverCard`, `Popover`, `DropdownMenu`, and

@@ -15,9 +15,8 @@
  *   a click that belongs to a dismissing press from a fresh one.
  *   useTouchTrigger, useMenuPress, ContextMenu and DropdownMenu read the
  *   gesture too. A layer or a menu that opens on a press claims that press
- *   here. The tap recognizer lives here, apart from useTouchTrigger, so a
- *   trigger that only waits for a tap (a truncated Text) does not carry the
- *   touch trigger code its lazily loaded tooltip uses
+ *   here. The tap recognizer lives here, so a trigger that only waits for a
+ *   tap does not carry useTouchTrigger
  *
  * A browser light-dismiss and the trigger's own click come from ONE press, and
  * which of them React sees first is a race. Comparing timestamps against a
