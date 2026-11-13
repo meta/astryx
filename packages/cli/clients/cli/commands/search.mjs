@@ -17,7 +17,7 @@
  *   astryx search dark mode              Every word is part of the query
  *   astryx search modal --type component Filter to a single domain
  *   astryx search forms --limit 5        Cap the result count
- *   astryx search button --verbose       Also print score / reason
+ *   astryx search button --verbose       Also print score / reason, whole descriptions
  *   astryx search button --json          Typed JSON envelope
  */
 
@@ -184,9 +184,9 @@ export function registerSearch(program) {
             command: formatCliCommand,
             parent: formatCliCommand,
             deprecated: formatDeprecation,
-            // A result's whole description is its doc's job: the text view
-            // keeps the first sentence, and the result's command prints the
-            // rest. --verbose and --json keep it whole.
+            // The text view keeps a description's first sentence. A
+            // component, hook or doc result's command prints the whole doc;
+            // --verbose and --json keep the description whole.
             ...(options.verbose ? {} : {description: firstSentence}),
           },
         }),
