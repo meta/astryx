@@ -1405,7 +1405,7 @@
   },
   "@astryx.timeInput.invalidTime": {
     "defaultMessage": "Invalid time",
-    "description": "Screen-reader-only live-region alert in TimeInput / DateTimeInput when the typed time cannot be parsed. \"Time\" = clock time (HH:MM). The field silently reverts on blur, so this is the only rejection feedback a screen-reader user gets."
+    "description": "Error message in TimeInput / DateTimeInput for a typed time that cannot be parsed or is outside the allowed range, shown below the field and announced to screen readers. \"Time\" = clock time (HH:MM). The typed text stays in the field so the person can correct it."
   },
   "@astryx.timeInput.openPicker": {
     "defaultMessage": "Open {label}",

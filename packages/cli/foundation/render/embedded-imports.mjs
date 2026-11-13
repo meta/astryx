@@ -15,7 +15,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {parse} from '@babel/parser';
+import {babelParse as parse} from '../runtime/lazy-dependencies.mjs';
 import {PAGE_EXTENSIONS} from './embedded-files.mjs';
 import postcss from 'postcss';
 import {matchPath, readPathsIn} from './ts-paths.mjs';
