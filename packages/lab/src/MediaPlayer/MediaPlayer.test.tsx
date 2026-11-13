@@ -139,6 +139,30 @@ function renderPlayer(props: Partial<Parameters<typeof MediaPlayer>[0]> = {}) {
   };
 }
 
+/** The media of every injected rule on `element`'s classes that sets `property`. */
+function mediaDeclaring(element: Element | null, property: string): string[] {
+  const classes = Array.from(element?.classList ?? [], name => `.${name}`);
+  const medias: string[] = [];
+  const walk = (rules: CSSRuleList, media: string | null) => {
+    for (const rule of Array.from(rules)) {
+      if (rule instanceof CSSMediaRule) {
+        walk(rule.cssRules, rule.media.mediaText);
+      } else if (
+        media !== null &&
+        rule instanceof CSSStyleRule &&
+        classes.some(cls => rule.selectorText.startsWith(cls)) &&
+        rule.style.getPropertyValue(property) !== ''
+      ) {
+        medias.push(media);
+      }
+    }
+  };
+  for (const sheet of Array.from(document.styleSheets)) {
+    walk(sheet.cssRules, null);
+  }
+  return medias;
+}
+
 beforeEach(() => {
   announce.mockClear();
 });
@@ -442,6 +466,27 @@ describe('MediaPlaybackRate', () => {
 });
 
 describe('MediaVolume', () => {
+  it('opens its slider column always only under a coarse primary pointer, as Core reveals', () => {
+    const {container} = render(
+      <MediaPlayer label="Clip">
+        <MediaPlayerElement kind="video" src="/clip.mp4" />
+        <MediaVolume />
+        <MediaPlaybackRate />
+      </MediaPlayer>,
+    );
+    for (const group of [
+      container.querySelector('.astryx-media-volume'),
+      container.querySelector('.astryx-media-playback-rate'),
+    ]) {
+      expect(group).not.toBeNull();
+      expect(
+        mediaDeclaring(group, 'grid-template-columns').filter(media =>
+          media.includes('pointer'),
+        ),
+      ).toEqual(['(pointer: coarse)']);
+    }
+  });
+
   it('pairs Mute with a volume slider before it by default', async () => {
     const user = userEvent.setup();
     const {container} = render(
