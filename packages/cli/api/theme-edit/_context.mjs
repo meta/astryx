@@ -14,6 +14,7 @@ import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {AstryxError} from '../error.mjs';
+import {EDITOR_STAMP, withPngText} from './_png.mjs';
 import {
   findDeclaredWorkspaceRoot,
   findNodeModulesPackage,
@@ -43,6 +44,9 @@ import {
   modesOf,
   nearest,
   refuse,
+  adoptOlderPicture,
+  editorWrote,
+  recordWritten,
   themeFiles,
   refuseThemesNotFolder,
 } from './_settings.mjs';
@@ -382,24 +386,78 @@ export async function pictures(project, shots, modes) {
   const files = [];
   /** @type {string[]} */
   const cut = [];
+  /** @param {string} png @param {'light' | 'dark'} m */
+  const outOf = (png, m) =>
+    modes.length > 1 && m === 'dark' ? png.replace(/\.png$/, '-dark.png') : png;
+  /** The theme a picture's folder is, when it is a theme folder. @param {string} out */
+  const themeOf = out => {
+    const slug = path.basename(path.dirname(out));
+    return path.resolve(path.dirname(out)) ===
+      path.resolve(themeFiles(project.cwd, slug).dir)
+      ? slug
+      : null;
+  };
+  // A picture is written only over a picture the editor took, unchanged
+  // since: a file of the user's by that name blocks every picture, and is
+  // named.
+  /** Pictures an older editor took, now recorded. @type {string[]} */
+  const adopted = [];
+  const blocked = shots
+    .flatMap(({png}) => modes.map(m => outOf(png, m)))
+    .filter(out => {
+      const slug = themeOf(out);
+      if (!slug || !fs.existsSync(out) || editorWrote(project.cwd, slug, out))
+        return false;
+      if (adoptOlderPicture(project.cwd, slug, out)) {
+        adopted.push(path.relative(project.cwd, out));
+        return false;
+      }
+      return true;
+    });
+  if (blocked.length)
+    return {
+      files,
+      problem: `${blocked.map(f => path.relative(project.cwd, f)).join(', ')} ${blocked.length === 1 ? 'is a file' : 'are files'} the editor did not write (or changed since it did), so no picture was taken and ${blocked.length === 1 ? 'it is' : 'they are'} left as ${blocked.length === 1 ? 'it is' : 'they are'}`,
+    };
   for (const {html, png} of shots) {
     for (const m of modes) {
-      const out =
-        modes.length > 1 && m === 'dark'
-          ? png.replace(/\.png$/, '-dark.png')
-          : png;
+      const out = outOf(png, m);
       const r = await screenshot(project, html, out, m);
       if (!r.ok) return {files, problem: r.reason};
       files.push(r.file);
+      // A picture in a theme folder is recorded as the editor's, so a later
+      // change removes it and never a picture of the user's.
+      const slug = themeOf(out);
+      if (slug) {
+        // Stamped with the editor's mark and the theme, then recorded.
+        try {
+          fs.writeFileSync(
+            out,
+            withPngText(fs.readFileSync(out), EDITOR_STAMP, slug),
+          );
+        } catch {
+          // An unstamped picture is still recorded below.
+        }
+        recordWritten(project.cwd, slug, [out]);
+      }
       if (r.cut) cut.push(r.file);
     }
   }
+  const adoptedNote = adopted.length
+    ? `${adopted.join(', ')} ${adopted.length === 1 ? 'was' : 'were'} taken by an earlier version of the editor and ${adopted.length === 1 ? 'is' : 'are'} now recorded as its own`
+    : null;
   return {
     files,
     // A picture of the window shows the top of a longer page only.
-    problem: cut.length
-      ? `${cut.join(', ')} show${cut.length === 1 ? 's' : ''} the top 2400 pixels of the page only (Chrome takes the window, not the whole page); open the .html beside ${cut.length === 1 ? 'it' : 'them'} to see all of it, or install Playwright (${installLine(project.cwd, ['playwright'])}) for whole-page pictures`
-      : null,
+    problem:
+      [
+        adoptedNote,
+        cut.length
+          ? `${cut.join(', ')} show${cut.length === 1 ? 's' : ''} the top 2400 pixels of the page only (Chrome takes the window, not the whole page); open the .html beside ${cut.length === 1 ? 'it' : 'them'} to see all of it, or install Playwright (${installLine(project.cwd, ['playwright'])}) for whole-page pictures`
+          : null,
+      ]
+        .filter(Boolean)
+        .join('; ') || null,
   };
 }
 
@@ -589,6 +647,20 @@ export async function previewAfter(ctx, slug, data, png) {
   // The sheet of every component is made by show only: after a change it
   // says, at its top, that it shows the theme as it was.
   const sheetStale = markSheetStale(f.sheet, slug, ctx.project.cwd);
+  // Section sheets the editor made (they carry its stamp) go out of date the
+  // same way; any other file is left as it is.
+  const sectionsStale = (
+    fs.existsSync(f.dir) ? fs.readdirSync(f.dir) : []
+  ).filter(n => {
+    if (!/^sheet-[a-z-]+\.html$/.test(n)) return false;
+    const file = path.join(f.dir, n);
+    try {
+      if (!SHEET_STAMP.test(fs.readFileSync(file, 'utf8'))) return false;
+    } catch {
+      return false;
+    }
+    return markSheetStale(file, slug, ctx.project.cwd);
+  });
   const shots =
     png && preview
       ? await pictures(
@@ -602,11 +674,23 @@ export async function previewAfter(ctx, slug, data, png) {
     pictures: shots.files,
     pictureProblem: shots.problem,
     notChecked: notChecked(cause),
-    ...(sheetStale
+    ...(sheetStale && !sectionsStale.length
       ? {
           sheetStale: `sheet.html shows ${slug} as it was before this change; ${P} show ${slug} makes it again`,
         }
-      : {}),
+      : sectionsStale.length
+        ? {
+            sheetStale: `${[...(sheetStale ? ['sheet.html'] : []), ...sectionsStale].join(', ')} show ${slug} as it was before this change; ${[
+              ...(sheetStale
+                ? [`${P} show ${slug} makes sheet.html again`]
+                : []),
+              ...sectionsStale.map(
+                n =>
+                  `${P} show ${slug} --section ${n.replace(/^sheet-|\.html$/g, '')} makes ${n} again`,
+              ),
+            ].join(', ')}`,
+          }
+        : {}),
   };
 }
 
@@ -693,7 +777,10 @@ function markSheetStale(file, slug, cwd) {
     return false;
   }
   if (html.includes(STALE_MARK)) return true;
-  const banner = `${STALE_MARK}<div style="position:sticky;top:0;z-index:9999;padding:8px 12px;background:#fff3cd;color:#3d2c00;font:14px system-ui,sans-serif;border-bottom:1px solid #e0c870">This sheet shows ${slug} as it was before the last change. Run ${P} show ${slug} to make it again.</div>`;
+  // A section's sheet is made again by its own show.
+  const section = /^sheet-([a-z-]+)\.html$/.exec(path.basename(file))?.[1];
+  const again = `${P} show ${slug}${section ? ` --section ${section}` : ''}`;
+  const banner = `${STALE_MARK}<div style="position:sticky;top:0;z-index:9999;padding:8px 12px;background:#fff3cd;color:#3d2c00;font:14px system-ui,sans-serif;border-bottom:1px solid #e0c870">This sheet shows ${slug} as it was before the last change. Run ${again} to make it again.</div>`;
   const at = html.search(/<body[^>]*>/i);
   const next =
     at < 0 ? banner + html : html.replace(/<body[^>]*>/i, m => `${m}${banner}`);

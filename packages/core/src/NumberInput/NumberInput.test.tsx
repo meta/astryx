@@ -490,7 +490,7 @@ describe('NumberInput', () => {
       expect(input).toHaveValue('$1,234');
     });
 
-    it('preserves invalid pending text while focused, then restores the formatted true value', () => {
+    it('keeps a rejected draft unformatted at blur, with its rejection', () => {
       const onChange = vi.fn();
       render(
         <NumberInput
@@ -506,11 +506,12 @@ describe('NumberInput', () => {
       fireEvent.focus(input);
       fireEvent.change(input, {target: {value: '3.5'}});
       expect(input).toHaveValue('3.5');
-      expect(input).toHaveAttribute('aria-invalid', 'true');
-      expect(onChange).not.toHaveBeenCalledWith(3.5);
+      expect(input).not.toHaveAttribute('aria-invalid');
 
       fireEvent.blur(input);
-      expect(input).toHaveValue('3 items');
+      expect(input).toHaveValue('3.5');
+      expect(input).toHaveAttribute('aria-invalid', 'true');
+      expect(onChange).not.toHaveBeenCalled();
     });
 
     it('does not call the formatter for an empty value', () => {
@@ -660,18 +661,16 @@ describe('NumberInput', () => {
       }
 
       expect(input).toHaveValue('1·234·567');
-      expect(input).toHaveAttribute('aria-invalid', 'true');
+      expect(input).not.toHaveAttribute('aria-invalid');
       expect(screen.getByTestId('committed')).toHaveTextContent('7');
 
       if (commit === 'blur') {
         await user.tab();
-        expect(input).toHaveValue('7');
-        expect(input).not.toHaveAttribute('aria-invalid');
       } else {
         await user.keyboard('{Enter}');
-        expect(input).toHaveValue('1·234·567');
-        expect(input).toHaveAttribute('aria-invalid', 'true');
       }
+      expect(input).toHaveValue('1·234·567');
+      expect(input).toHaveAttribute('aria-invalid', 'true');
       expect(screen.getByTestId('committed')).toHaveTextContent('7');
     }
 
@@ -719,7 +718,8 @@ describe('NumberInput', () => {
       fireEvent.blur(input);
 
       expect(onChange).not.toHaveBeenCalled();
-      expect(input).toHaveValue('9');
+      expect(input).toHaveValue('1·234·567');
+      expect(input).toHaveAttribute('aria-valuenow', '9');
     });
 
     it('waits for IME composition to finish before committing', () => {
@@ -1009,7 +1009,7 @@ describe('NumberInput', () => {
       expect(input).toHaveValue('5');
     });
 
-    it('reverts an entry that is not a usable number', async () => {
+    it('keeps an entry that is not a usable number', async () => {
       const user = userEvent.setup();
       const handleChange = vi.fn();
       render(
@@ -1029,7 +1029,8 @@ describe('NumberInput', () => {
       await user.tab();
 
       expect(handleChange).not.toHaveBeenCalled();
-      expect(input).toHaveValue('');
+      expect(input).toHaveValue('12.5');
+      expect(input).toHaveAttribute('aria-invalid', 'true');
     });
 
     it('rounds a fractional max inwards for an integer-only field', async () => {
@@ -1096,7 +1097,8 @@ describe('NumberInput', () => {
       await user.tab();
 
       expect(handleChange).not.toHaveBeenCalled();
-      expect(input).toHaveValue('');
+      expect(input).toHaveValue('10');
+      expect(input).toHaveAttribute('aria-invalid', 'true');
     });
   });
 
@@ -1269,7 +1271,7 @@ describe('NumberInput', () => {
   });
 
   describe('invalid typed input feedback (WCAG 3.3.1)', () => {
-    it('sets aria-invalid="true" when typed input is unparseable', async () => {
+    it('marks a fractional integer-only draft invalid at blur, not while typing', async () => {
       const user = userEvent.setup();
       render(
         <NumberInput
@@ -1282,9 +1284,10 @@ describe('NumberInput', () => {
 
       const input = screen.getByRole('spinbutton');
       await user.click(input);
-      // "3.5" is invalid when isIntegerOnly is set
       await user.type(input, '3.5');
+      expect(input).not.toHaveAttribute('aria-invalid');
 
+      await user.tab();
       expect(input).toHaveAttribute('aria-invalid', 'true');
     });
 
@@ -1295,11 +1298,12 @@ describe('NumberInput', () => {
       const input = screen.getByRole('spinbutton');
       await user.click(input);
       await user.type(input, '42');
+      await user.tab();
 
       expect(input).not.toHaveAttribute('aria-invalid');
     });
 
-    it('announces an alert message when typed input is invalid', async () => {
+    it('shows the invalid-number message as the field status at commit', async () => {
       const user = userEvent.setup();
       render(
         <NumberInput
@@ -1313,11 +1317,16 @@ describe('NumberInput', () => {
       const input = screen.getByRole('spinbutton');
       await user.click(input);
       await user.type(input, '3.5');
+      expect(screen.queryByText('Invalid number')).not.toBeInTheDocument();
 
-      expect(screen.getByRole('alert')).toHaveTextContent('Invalid number');
+      await user.keyboard('{Enter}');
+      const message = screen.getByText('Invalid number');
+      expect(input.getAttribute('aria-describedby')).toContain(
+        message.closest('[id]')!.id,
+      );
     });
 
-    it('resolves the invalid-number announcement from the i18n catalog', async () => {
+    it('resolves the invalid-number message from the i18n catalog', async () => {
       const user = userEvent.setup();
       render(
         <InternationalizationProvider
@@ -1337,19 +1346,23 @@ describe('NumberInput', () => {
       const input = screen.getByRole('spinbutton');
       await user.click(input);
       await user.type(input, '3.5');
+      await user.tab();
 
-      expect(screen.getByRole('alert')).toHaveTextContent('رقم غير صالح');
+      expect(screen.getByText('رقم غير صالح')).toBeInTheDocument();
     });
 
     it('does not announce an alert message when input is valid', async () => {
       const user = userEvent.setup();
-      render(<NumberInput label="Count" value={null} onChange={() => {}} />);
+      const {container} = render(
+        <NumberInput label="Count" value={null} onChange={() => {}} />,
+      );
 
       const input = screen.getByRole('spinbutton');
       await user.click(input);
       await user.type(input, '42');
+      await user.tab();
 
-      expect(screen.getByRole('alert')).toHaveTextContent('');
+      expect(container.querySelector('[role="alert"]')).toHaveTextContent('');
       expect(screen.queryByText('Invalid number')).not.toBeInTheDocument();
     });
   });
@@ -2950,6 +2963,7 @@ describe('NumberInput stepping', () => {
         const input = screen.getByRole('spinbutton');
 
         fireEvent.change(input, {target: {value: 'abc'}});
+        fireEvent.keyDown(input, {key: 'Enter'});
         expect(input).toHaveAttribute('aria-invalid', 'true');
         fireEvent.pointerDown(increment, mousePress);
         act(() => {

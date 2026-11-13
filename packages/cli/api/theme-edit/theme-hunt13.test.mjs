@@ -118,16 +118,23 @@ describe('hunt13', () => {
     expect(r.data.setting.value).toBe('20px');
   }, 240_000);
 
-  it('F7-4: padding with a state on a part Core expands into container tokens is refused', async () => {
-    const r = await refusal(() =>
-      themeEditSet('m', 'padding', '40px', {
-        cwd,
-        on: 'card',
-        state: 'hover',
-      }),
+  it("F7-4 (now parts36): padding with a state on a part Core expands into container tokens goes to that state's sides", async () => {
+    // The padding model writes the state's own side variables, so the state
+    // padding shows; it is no longer refused.
+    await themeEditSet('m', 'padding', '40px', {
+      cwd,
+      on: 'card',
+      state: 'hover',
+    });
+    expect(fs.readFileSync(at('m', 'm.css'), 'utf8')).toMatch(
+      /\.astryx-card:hover[^{]*\{[^}]*--astryx-card-padding-block-start:\s*40px/,
     );
-    expect(r.code).toBe('ERR_THEME_NO_EFFECT');
-    expect(r.run[0]).toMatch(/padding 40px --on card$/);
+    await themeEditUndo('m', {
+      cwd,
+      thing: 'padding',
+      on: 'card',
+      state: 'hover',
+    });
   });
 });
 

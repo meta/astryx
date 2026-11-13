@@ -44,6 +44,7 @@ import {themeProps} from '../utils/themeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useTouchPresentation} from '../utils/touchPresentation';
 import type {SegmentedSelection} from './useSegmentedSelectionMotion';
+import {isPressAwaitingClick} from '../Layer/gestureCounter';
 import {useTouchRuntime} from '../utils/touchRuntime';
 
 export interface SegmentedControlProps extends Omit<
@@ -340,29 +341,15 @@ export function SegmentedControl({
   // then a tap or a click selects, and the selection moves at once.
   const touchRuntime = useTouchRuntime();
   const motionSelectionRef = useRef<SegmentedSelection | null>(null);
-  // Before the runtime loads, a pointer that is down on the group still
+  // Before the runtime loads, a press that has not reached its click still
   // keeps a focus move from selecting: the press selects through its click,
-  // and a press the browser cancels selects nothing.
-  const isPointerDownRef = useRef(false);
+  // so a caller's `preventDefault()` vetoes it, and a press the browser
+  // cancels selects nothing.
   const [selection] = useState<SegmentedSelection>(() => ({
     isPressing: () =>
-      motionSelectionRef.current?.isPressing() ?? isPointerDownRef.current,
+      motionSelectionRef.current?.isPressing() ?? isPressAwaitingClick(),
     keyPressed: () => motionSelectionRef.current?.keyPressed(),
   }));
-  const handlePointerDown = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      isPointerDownRef.current = true;
-      const doc = event.currentTarget.ownerDocument;
-      const release = () => {
-        isPointerDownRef.current = false;
-        doc.removeEventListener('pointerup', release, true);
-        doc.removeEventListener('pointercancel', release, true);
-      };
-      doc.addEventListener('pointerup', release, true);
-      doc.addEventListener('pointercancel', release, true);
-    },
-    [],
-  );
 
   // Disabled-reason tooltip. Applies to the whole-group disabled state. The
   // tooltip listeners attach to the radiogroup container, which keeps pointer
@@ -497,10 +484,6 @@ export function SegmentedControl({
           showsDisabledMessage ? disabledMessageTooltip.describedBy : undefined,
         )}
         onKeyDown={handleContainerKeyDown}
-        onPointerDown={composeEventHandlers(
-          rest.onPointerDown,
-          handlePointerDown,
-        )}
         onFocus={handleContainerFocus}
         onBlur={composeEventHandlers(onBlurProp, hint.onBlur)}
         {...mergeProps(

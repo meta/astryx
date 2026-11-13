@@ -21,10 +21,8 @@
 // later than LOAD_CAP_MS after that paint. An input never starts or hurries
 // the load.
 //
-// Until the load ends, a component that uses the runtime works by taps,
-// clicks and keys, with no drag tracking and no spring. A gesture that is in
-// flight when the load ends finishes that way: the touch parts attach only
-// when they mount, so the next press is the first one they track.
+// A press in flight at the load finishes by its click. The touch parts track
+// only the presses that start after they mount.
 //
 // A field focused before the load keeps the browser's own reveal and does not
 // ride the on-screen keyboard: the ride moves the field with the animator.
@@ -77,11 +75,11 @@ async function load(): Promise<void> {
   }
 }
 
-function whenIdle(start: () => void): void {
-  if (typeof window.requestIdleCallback === 'function') {
-    window.requestIdleCallback(start, {timeout: LOAD_CAP_MS});
+function whenIdle(view: Window, start: () => void): void {
+  if (typeof view.requestIdleCallback === 'function') {
+    view.requestIdleCallback(start, {timeout: LOAD_CAP_MS});
   } else {
-    setTimeout(start, 0);
+    view.setTimeout(start, 0);
   }
 }
 
@@ -94,10 +92,12 @@ export function scheduleTouchRuntimeLoad(): void {
     return;
   }
   isScheduled = true;
+  // The timers belong to this window, so they end with its document.
+  const view = window;
   // A frame callback runs before the frame paints. The task it queues runs
   // after that paint.
-  window.requestAnimationFrame(() => {
-    setTimeout(() => whenIdle(() => void load()), 0);
+  view.requestAnimationFrame(() => {
+    view.setTimeout(() => whenIdle(view, () => void load()), 0);
   });
 }
 
