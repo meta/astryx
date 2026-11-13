@@ -60,9 +60,17 @@ const RUNNERS = {
     runs: 'recorded built theme modules through the shared app-theme loader',
     sites: ['importThemeArtifact'],
   },
+  'api/theme-edit/_context.mjs': {
+    runs: "the project's installed Core registry of the variables a part's plain corners or padding also write, to refuse a state they would miss",
+    sites: ['import(<computed>)'],
+  },
   'api/theme-edit/_css.mjs': {
     runs: 'css-tree and the MDN property data it ships, on the first CSS name or value check, so other commands do not load them',
-    sites: ['require(css-tree)', 'require(mdn-data/css/properties.json)'],
+    sites: [
+      'require(@csstools/css-syntax-patches-for-csstree)',
+      'require(css-tree)',
+      'require(mdn-data/css/properties.json)',
+    ],
   },
   'api/theme-edit/_preview.mjs': {
     runs: 'a Playwright the project has installed, or a Chrome found on the machine, to picture a preview only with --png',
@@ -103,8 +111,13 @@ const RUNNERS = {
     sites: ['loadModuleWithParser(..., parseCodemod)'],
   },
   'authoring/shadcn/source-variants.mjs': {
-    runs: "@babel/plugin-transform-typescript (CommonJS), to reproduce the ShadCN client's transform",
-    sites: ['require(@babel/plugin-transform-typescript)'],
+    runs: "Babel, its TypeScript plugin and recast (CommonJS), each on first use, to reproduce the ShadCN client's transform",
+    sites: [
+      'require(@babel/core)',
+      'require(@babel/parser)',
+      'require(@babel/plugin-transform-typescript)',
+      'require(recast)',
+    ],
   },
   'clients/cli/bin/astryx.mjs': {
     runs: "the CLI's own modules, by real path, so a linked bin finds them",
@@ -346,10 +359,6 @@ const RUNNERS = {
     runs: 'the ignore matcher (CommonJS), loaded when a resolver first reads an ignore file',
     sites: ['require(ignore)'],
   },
-  'foundation/discovery/component-discovery.mjs': {
-    runs: '@babel/parser, on first use, to read the members a family doc lists in its components without running the doc',
-    sites: ['require(@babel/parser)'],
-  },
   'foundation/discovery/copied-passages.mjs': {
     runs: "the CLI's own guides and the package's topics, to compare their prose for passages two topics repeat",
     sites: ['builtinGuideFiles', 'loadTopicModule'],
@@ -390,21 +399,9 @@ const RUNNERS = {
       'require(typescript/package.json)',
     ],
   },
-  'foundation/discovery/module-exports.mjs': {
-    runs: "@babel/parser, loaded on first use, to read a module's exports",
-    sites: ['require(@babel/parser)'],
-  },
   'foundation/discovery/template-adapter.mjs': {
-    runs: '@babel/parser, to find the fixture references and page-local bindings in template source; and a template doc that does not validate, to read the replacement it declares',
-    sites: ['importDocModule', 'require(@babel/parser)'],
-  },
-  'foundation/discovery/template-source-tree.mjs': {
-    runs: '@babel/parser and @babel/core (CommonJS), each on first use, to read template source and resolve its bindings for demo-content replacement and icon mapping',
-    sites: ['require(@babel/core)', 'require(@babel/parser)'],
-  },
-  'foundation/discovery/theme-discovery.mjs': {
-    runs: '@babel/parser and jscodeshift (CommonJS), each on first use, so listing bundled themes never loads jscodeshift',
-    sites: ['require(@babel/parser)', 'require(jscodeshift)'],
+    runs: 'a template doc that does not validate, to read the replacement it declares',
+    sites: ['importDocModule'],
   },
   'foundation/doc-compiler/import.mjs': {
     runs: 'authored doc files, for the doc reader and discovery, and again after an edit, without the cache entry of a CommonJS doc',
@@ -455,10 +452,6 @@ const RUNNERS = {
     runs: "Yarn's pnpapi, under Plug'n'Play, to find an installed package",
     sites: ['require(pnpapi)'],
   },
-  'foundation/integrations/contribution-fixes.mjs': {
-    runs: 'jscodeshift (CommonJS) on first use, so loading the project never loads it',
-    sites: ['require(jscodeshift)'],
-  },
   'foundation/integrations/integrations.mjs': {
     runs: "each installed integration's manifest",
     sites: ['importUserModule'],
@@ -482,6 +475,15 @@ const RUNNERS = {
   'foundation/release/handoff.mjs': {
     runs: "the CLI release that answers a project's run, when it is not this copy",
     sites: ['child_process.spawn'],
+  },
+  'foundation/runtime/lazy-dependencies.mjs': {
+    runs: 'Babel, jscodeshift and postcss-selector-parser (CommonJS), each on first use rather than when a module that may use it is imported',
+    sites: [
+      'require(@babel/core)',
+      'require(@babel/parser)',
+      'require(jscodeshift)',
+      'require(postcss-selector-parser)',
+    ],
   },
   'host/index.mjs': {
     runs: "another release's host entry, from one of the host's package sets, when that release answers a hosted run",

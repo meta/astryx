@@ -1185,6 +1185,94 @@ describe('derived var expansion', () => {
     expect(rule).toContain('--astryx-card-padding: 20px');
   });
 
+  it.each([
+    [
+      'padding',
+      'clamp(8px, 2vw, 16px)',
+      ['--astryx-card-padding: clamp(8px, 2vw, 16px);'],
+    ],
+    ['padding', 'max(8px, 2vw)', ['--astryx-card-padding: max(8px, 2vw);']],
+    [
+      'padding',
+      'calc(1px + 2px) min(4px, 1vw)',
+      [
+        '--astryx-card-padding-block-start: calc(1px + 2px);',
+        '--astryx-card-padding-block-end: calc(1px + 2px);',
+        '--astryx-card-padding-inline: min(4px, 1vw);',
+      ],
+    ],
+    [
+      'paddingBlock',
+      'var(--x, 1px 2px)',
+      [
+        '--astryx-card-padding-block-start: var(--x, 1px 2px);',
+        '--astryx-card-padding-block-end: var(--x, 1px 2px);',
+      ],
+    ],
+    [
+      'paddingInline',
+      'calc(1px + 2px) 4px',
+      [
+        '--astryx-card-padding-inline-start: calc(1px + 2px);',
+        '--astryx-card-padding-inline-end: 4px;',
+      ],
+    ],
+  ])(
+    'keeps each %s component whole when it holds spaces: %s',
+    (prop, value, declarations) => {
+      const theme = defineTheme({
+        name: 'test-padding-functions',
+        components: {card: {base: {[prop]: value}}},
+      });
+      const rule = generateThemeRules(theme).find(r =>
+        r.includes('.astryx-card'),
+      );
+      for (const declaration of declarations) {
+        expect(rule).toContain(declaration);
+      }
+    },
+  );
+
+  it.each([
+    [
+      {paddingInlineStart: '4px', paddingInline: ''},
+      '--astryx-card-padding-inline-start: 4px;',
+    ],
+    [
+      {paddingBlockStart: '4px', paddingBlock: ''},
+      '--astryx-card-padding-block-start: 4px;',
+    ],
+    [
+      {paddingBlockStart: '4px', padding: ''},
+      '--astryx-card-padding-block-start: 4px;',
+    ],
+  ])(
+    'keeps the longhands before an empty shorthand: %j',
+    (base, declaration) => {
+      const theme = defineTheme({
+        name: 'test-padding-empty-shorthand',
+        components: {card: {base}},
+      });
+      const rule = generateThemeRules(theme).find(r =>
+        r.includes('.astryx-card'),
+      );
+      expect(rule).toContain(declaration);
+    },
+  );
+
+  it('emits no padding token for an empty padding value', () => {
+    // An empty value has no components, so there is nothing to emit; a
+    // `--astryx-card-padding: ;` declaration would be invalid CSS.
+    const theme = defineTheme({
+      name: 'test-padding-empty',
+      components: {card: {base: {padding: ''}}},
+    });
+    const rule = generateThemeRules(theme).find(r =>
+      r.includes('.astryx-card'),
+    );
+    expect(rule ?? '').not.toContain('--astryx-card-padding');
+  });
+
   it('handles variant-specific derived vars', () => {
     const theme = defineTheme({
       name: 'test-variant-derived',

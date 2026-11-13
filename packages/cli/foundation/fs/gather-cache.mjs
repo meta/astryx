@@ -13,9 +13,16 @@
  *   gathers fresh and stores that.
  * @position Used by search's adapter (api/search/_adapter.mjs) for the
  *   catalog `search` and `build` rank, and by the project
- *   (foundation/config/project.mjs) for each integration's contribution-check
- *   results, which `component`, `template`, `theme`, `discover` and `search`
- *   report. Gathers are kept only once the folder exists: the first such run
+ *   (foundation/config/project.mjs) for its integration issues: each
+ *   integration's contribution-check results and the whole list (with the
+ *   template and component replacement passes), which `component`,
+ *   `template`, `theme`, `discover` and `search` report, by template
+ *   discovery (foundation/discovery/template-adapter.mjs) for its records, by theme discovery
+ *   (foundation/discovery/theme-discovery.mjs) for each integration's themes,
+ *   and by `doctor` (api/doctor/_adapter.mjs) for its file-only docs checks,
+ *   in a run that records modules and variables to its end. The commands
+ *   whose runs keep these entries are `search`, `build`, `component`,
+ *   `template`, `theme`, `discover`, `docs` and `doctor`. Gathers are kept only once the folder exists: the first such run
  *   on a machine just makes it, so a one-off run pays nothing to store one. Only a published CLI stores anything:
  *   its build id (clients/cli/build-id.generated.json, written at `prepack`)
  *   names its exact code, so a checkout, whose code may change between runs
@@ -49,14 +56,17 @@ import {
 } from './read-record.mjs';
 
 /**
- * The kept commands whose only kept gather is their integrations' check
- * results: a project with no integration records none of them.
+ * The kept commands whose kept gathers are worth recording only where an
+ * integration can load (its check results, and template discovery, whose
+ * records hold Core's templates too but which costs little without one): a
+ * project with no integration records none of them.
  */
 const INTEGRATION_COMMANDS = new Set([
   'component',
   'template',
   'theme',
   'discover',
+  'docs',
 ]);
 
 /** The run's commands whose gathers are kept. */
@@ -67,6 +77,9 @@ const KEPT_COMMANDS = new Set([
   'template',
   'theme',
   'discover',
+  'docs',
+  // The project check alone (no subcommand): its docs checks are kept.
+  'doctor',
 ]);
 
 /** Where `prepack` writes the id of the package's exact contents. */
@@ -91,13 +104,16 @@ const UNSET = null;
  * their states, modules it loaded with theirs, and environment variables with
  * their values. Files and folders are recorded for the whole run; modules and
  * variables only while the run is armed: from its start to the end of its
- * first gather, and during each later gather. Null outside a recorded run.
- * @type {{reads: Map<string, string>, env: Map<string, string | null>, arm: () => boolean, disarm: () => void} | null}
+ * first gather, and during each later gather, or, in a run armed throughout
+ * (`doctor`), to its end. Null outside a recorded run.
+ * @type {{reads: Map<string, string>, env: Map<string, string | null>, arm: () => boolean, disarm: () => void, armedThroughout: boolean, realEnv: NodeJS.ProcessEnv} | null}
  */
 let run = null;
 
 /**
- * The running recorded run's reads and variables, for tests: null outside one.
+ * The running recorded run's reads and variables, or null outside one: for
+ * tests, and for a caller that keeps a value only in a recorded run (doctor's
+ * kept checks).
  * @returns {{reads: Map<string, string>, env: Map<string, string | null>} | null}
  */
 export function recordedRun() {
@@ -225,21 +241,28 @@ export async function recordRunFor(argv, fn) {
   if (
     !command ||
     !KEPT_COMMANDS.has(command) ||
+    (command === 'doctor' &&
+      argv.filter(arg => !arg.startsWith('-')).length > 1) ||
     runsUnderPnp() ||
     currentUid() == null ||
     withoutRecording(buildId) == null ||
-    // Last, being a few file checks: those commands keep only their
-    // integrations' check results, so a project with none records nothing.
+    // Last, being a few file checks: those commands keep what is worth
+    // keeping only where an integration can load, so a project with none
+    // records nothing.
     (INTEGRATION_COMMANDS.has(command) &&
       !withoutRecording(() => mayHaveIntegrations(process.cwd())))
   ) {
     return fn();
   }
   // Gathers are kept only once the folder exists: the first recorded run on a
-  // machine (search, build, component, template, theme or discover) just makes
+  // machine (search, build, component, template, theme, discover or docs) just makes
   // it, so a one-off run never pays to store one.
   const dir = cacheDirPath();
   if (!withoutRecording(() => fs.existsSync(dir))) {
+    // Once the per-user cache folder exists doctor uses it; it never makes
+    // it, so a doctor alone changes nothing on the machine (nor its own
+    // cache row).
+    if (command === 'doctor') return fn();
     try {
       withoutRecording(() => fs.mkdirSync(dir, {recursive: true, mode: 0o700}));
     } catch {
@@ -250,7 +273,10 @@ export async function recordRunFor(argv, fn) {
   // A folder the cache would refuse (not the user's own, open to others, a
   // link) leaves the run exactly as without the cache: no hook is installed.
   if (withoutRecording(gatherCacheDir) == null) return fn();
-  return recordRun(fn);
+  // doctor's kept checks read docs modules that load between its gathers, so
+  // its run records modules and variables to the end, not only during each
+  // gather.
+  return recordRun(fn, {armedThroughout: command === 'doctor'});
 }
 
 /**
@@ -258,9 +284,12 @@ export async function recordRunFor(argv, fn) {
  * tests; `recordRunFor` decides which runs are recorded.
  * @template T
  * @param {() => Promise<T>} fn
+ * @param {{armedThroughout?: boolean}} [options] - `armedThroughout`: record
+ *   modules and variables until the run ends, not only until each gather
+ *   ends, for a run whose later gathers read modules loaded in between.
  * @returns {Promise<T>}
  */
-export async function recordRun(fn) {
+export async function recordRun(fn, {armedThroughout = false} = {}) {
   const registerHooks = /** @type {any} */ (nodeModule).registerHooks;
   if (typeof registerHooks !== 'function' || run != null) return fn();
   /** @type {Map<string, string>} */
@@ -276,17 +305,31 @@ export async function recordRun(fn) {
       env.set(name, envState(realEnv[name]));
     }
   };
+  // Asking whether a variable is set, as `in` does and as `Object.keys` does
+  // for every name it lists, reads no value: only whether it is set counts.
+  // Every read of a value goes through `get` (spread, Object.entries,
+  // Object.assign, JSON.stringify included). Known gap: a descriptor's
+  // `value` (Object.getOwnPropertyDescriptor(s) on process.env) is a value
+  // read with no `get`, so it counts only as set. Nothing the CLI, Core, its
+  // dependencies, jiti's bundled babel or the integrations we test reads the
+  // environment that way.
+  /** @param {string | symbol} name */
+  const notePresence = name => {
+    if (typeof name === 'string' && !env.has(PRESENCE + name)) {
+      env.set(PRESENCE + name, presenceState(realEnv, name));
+    }
+  };
   const proxy = new Proxy(realEnv, {
     get(target, name) {
       noteEnv(name);
       return Reflect.get(target, name);
     },
     has(target, name) {
-      noteEnv(name);
+      notePresence(name);
       return Reflect.has(target, name);
     },
     getOwnPropertyDescriptor(target, name) {
-      noteEnv(name);
+      notePresence(name);
       return Reflect.getOwnPropertyDescriptor(target, name);
     },
     ownKeys(target) {
@@ -346,7 +389,7 @@ export async function recordRun(fn) {
     }
   };
   if (!arm()) return fn();
-  run = {reads, env, arm, disarm};
+  run = {reads, env, arm, disarm, armedThroughout, realEnv};
   try {
     return await recordReads(reads, fn, {exact: true});
   } finally {
@@ -405,6 +448,19 @@ function lookupStamp(folder) {
   } catch {
     return '-';
   }
+}
+
+/** The stamp name prefix for whether a variable is set, not its value. */
+const PRESENCE = '\0set:';
+
+/**
+ * Whether `name` is set in `env`, as stored.
+ * @param {NodeJS.ProcessEnv} env
+ * @param {string} name
+ * @returns {string | null}
+ */
+function presenceState(env, name) {
+  return typeof env[name] === 'string' ? 'set' : UNSET;
 }
 
 /**
@@ -471,10 +527,13 @@ function entryKey(key, id) {
  * @returns {string | null} why not, or null when all hold
  */
 function staleReason(stamps, env) {
+  // The environment as it is, never through the run's recording proxy:
+  // checking an entry is no read the run's own gathers depend on.
+  const real = run?.realEnv ?? process.env;
   for (const [name, value] of env) {
-    const current = envState(
-      name === '\0names' ? namesOf(process.env) : process.env[name],
-    );
+    const current = name.startsWith(PRESENCE)
+      ? presenceState(real, name.slice(PRESENCE.length))
+      : envState(name === '\0names' ? namesOf(real) : real[name]);
     if (current !== value) {
       return name === '\0names'
         ? 'the environment has other variables'
@@ -494,8 +553,9 @@ function staleReason(stamps, env) {
  * @param {unknown[]} key - What else decides the gather: its folder (a real
  *   path) and options.
  * @param {() => Promise<T>} load
- * @param {{encode: (value: T) => E, decode: (stored: E) => T}} codec - A
- *   plain-JSON form of the value and back.
+ * @param {{encode: (value: T) => E, decode: (stored: E) => T, valid?: (value: T) => boolean}} codec - A
+ *   plain-JSON form of the value and back, and optionally the shape a decoded
+ *   value must have to be used (anything else is a miss).
  * @param {(value: T) => boolean} [keep] whether a fresh gather may be
  *   stored: one that depends on something its stamps cannot see (a retry
  *   that waits on time) is used for this run only
@@ -509,7 +569,7 @@ export async function persistedGather(key, load, codec, keep = () => true) {
   try {
     return await gatherAt(key, load, codec, keep);
   } finally {
-    if (--gatherDepth === 0) run?.disarm();
+    if (--gatherDepth === 0 && !run?.armedThroughout) run?.disarm();
   }
 }
 
@@ -519,7 +579,7 @@ export async function persistedGather(key, load, codec, keep = () => true) {
  * @template T, E
  * @param {unknown[]} key
  * @param {() => Promise<T>} load
- * @param {{encode: (value: T) => E, decode: (stored: E) => T}} codec
+ * @param {{encode: (value: T) => E, decode: (stored: E) => T, valid?: (value: T) => boolean}} codec
  * @param {(value: T) => boolean} keep
  * @returns {Promise<T>}
  */
@@ -553,9 +613,20 @@ async function gatherAt(key, load, codec, keep) {
       reason = 'an entry for other inputs';
     } else {
       const stale = staleReason(stored.stamps, stored.env);
-      if (stale == null) {
-        const value = codec.decode(stored.value);
+      const value = stale == null ? readBack(stored, codec) : undefined;
+      if (stale == null && value === undefined) {
+        // Gathered again below, and stored over the bad entry.
+        reason = 'a malformed value';
+      } else if (stale == null) {
         recordStates(stored.stamps);
+        // A gather around this one depends on what this one read, the
+        // environment included: a hit hands its variables on, as a fresh
+        // gather's reads would be.
+        if (run) {
+          for (const [name, value] of stored.env) {
+            if (!run.env.has(name)) run.env.set(name, value);
+          }
+        }
         gatherCode = cliStates(stored.stamps);
         lastOutcome = {hit: true, reason: 'unchanged'};
         try {
@@ -565,8 +636,9 @@ async function gatherAt(key, load, codec, keep) {
           // An entry that cannot be touched is evicted sooner; nothing more.
         }
         return value;
+      } else {
+        reason = stale;
       }
-      reason = stale;
     }
   } catch (error) {
     if (/** @type {any} */ (error)?.code !== 'ENOENT')
@@ -624,7 +696,7 @@ function codeStamp(code, inputs) {
  * @template T, E
  * @param {unknown[]} key - Everything the value is computed from.
  * @param {() => T} compute
- * @param {{encode: (value: T) => E, decode: (stored: E) => T}} codec
+ * @param {{encode: (value: T) => E, decode: (stored: E) => T, valid?: (value: T) => boolean}} codec
  * @param {string[]} [inputs] - Files the computation reads, by path.
  * @returns {T}
  */
@@ -640,12 +712,13 @@ export function persistedDerived(key, compute, codec, inputs = []) {
     const stored = JSON.parse(
       withoutRecording(() => fs.readFileSync(file, 'utf-8')),
     );
-    if (
+    const value =
       stored?.format === FORMAT &&
       stored.derived === true &&
       stored.key === entry
-    ) {
-      const value = codec.decode(stored.value);
+        ? readBack(stored, codec)
+        : undefined;
+    if (value !== undefined) {
       try {
         const now = new Date();
         withoutRecording(() => fs.utimesSync(file, now, now));
@@ -680,6 +753,25 @@ export function persistedDerived(key, compute, codec, inputs = []) {
 }
 
 /**
+ * A stored entry's value, decoded, or undefined when it has none, its decode
+ * throws, or the decoded value fails the codec's shape check (`valid`): such
+ * an entry is a miss, worked out again and stored over.
+ * @param {any} stored
+ * @param {{decode: (stored: any) => any, valid?: (value: any) => boolean}} codec
+ * @returns {any}
+ */
+function readBack(stored, codec) {
+  if (!Object.hasOwn(stored, 'value') || stored.value == null) return undefined;
+  try {
+    const value = codec.decode(stored.value);
+    if (value == null) return undefined;
+    return !codec.valid || codec.valid(value) ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Store a fresh gather with what the run read, unless its plain form does not
  * read back as the same value. Silent on any failure.
  * @template T, E
@@ -687,7 +779,7 @@ export function persistedDerived(key, compute, codec, inputs = []) {
  * @param {string} file
  * @param {string} entry - The entry's key (entryKey).
  * @param {T} value
- * @param {{encode: (value: T) => E, decode: (stored: E) => T}} codec
+ * @param {{encode: (value: T) => E, decode: (stored: E) => T, valid?: (value: T) => boolean}} codec
  */
 function store(dir, file, entry, value, codec) {
   if (!run) return;
@@ -761,6 +853,12 @@ export function runsUnderPnp() {
  *   `pnp`: whether this run is under Yarn Plug'n'Play's loader (runsUnderPnp)
  */
 export function gatherCacheSummary() {
+  // The cache's own bookkeeping, never an input of what it keeps.
+  return withoutRecording(summarize);
+}
+
+/** @returns {{dir: string, bytes: number, entries: number, pnp: boolean} | null} */
+function summarize() {
   if (buildId() == null) return null;
   const dir = gatherCacheDir();
   if (dir == null) return null;

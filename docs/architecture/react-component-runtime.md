@@ -311,7 +311,13 @@ those contracts.
   (`spec:AST-105` FR1); a pull that a scroll area hands over only at its
   edge (`spec:AST-094` FR14, FR19); a snap-point drag whose release can
   dismiss its surface, judged by the use's measured projection (`spec:AST-094`
-  FR36); a drag on one element that moves another (a sheet's handle and
+  FR36); a drag's own pointer and scroll filter, claim distance and begin
+  gate, and a snap-point drag's own model of where a drag draws its element
+  and where a release lands (a row's swipe: no mouse drag, UIKit's dead zone,
+  tracking spring and release rule for a finger, and a full swipe reached by
+  position only, `spec:AST-057` AR2, FR5); a drag drawn into one custom
+  property that every part of its component reads (`spec:AST-057` FR2); a
+  drag on one element that moves another (a sheet's handle and
   scrolling body move the sheet; its dim is the layer runtime's backdrop
   tint, `architecture:layer-runtime` INV14); the animator's jobs beyond the
   public handle: a motion role other than `springs.stateChange`
@@ -321,7 +327,11 @@ those contracts.
   (`design:reduced-motion` DR1–DR3); the touch hit-area expansion; and List's
   reorder session, for a collection that adapts the reorderable object to its
   own values or whose rows are not `ListItem`s (`createReorderable`'s
-  plain-element `attach`, `spec:AST-103` FR4b, is not built).
+  plain-element `attach`, `spec:AST-103` FR4b, is not built). One chosen
+  start, `start: 'next-frame'`, exists for motion an interaction starts in an
+  input event's own task. On a busy page such motion then starts on the first
+  frame after that task, so it does not skip ahead. It is internal:
+  `createAnimator`'s options do not have it, and no public entry exports it.
   Components import
   them statically, and the bundler
   keeps one copy per page however many components use them. A surface
@@ -359,6 +369,9 @@ those contracts.
   past time, and, through `onEnd`, when that scroll ends. `timing`, UIKit's
   measured timing table, is on that subpath for Lab components that play the
   same measured motion.
+  `prepareFocusReturnOnRemoval` is on that subpath too: it returns focus when
+  a removal loses it, so a Lab Tour step that ends sends focus to its target
+  or the opener.
 - **INV15 — The animator animates a number.** The animator has a value mode:
   it plays a number, such as a count or a chart value, on the same timing as its property channels: theme motion tokens for a program-started change, and measured springs only where `spec:AST-094` FR45 keeps them, and hands the value to an `onUpdate`
   callback each frame for the component to format and write. The component owns
@@ -414,7 +427,7 @@ those contracts.
   refs. ToastViewport renders ToastRefSync, which writes through
   `useCommittedRefInto`, before a fragment that holds its children, so a child's
   layout cleanup, an unmount's included, reads the committed list. INV17 gap:
-  ToastViewport writes its toast list during render.
+  ToastViewport writes `toastsRef` and `maxVisibleRef` during render.
 - **INV18 — Layout is read as little as possible.** Placement uses CSS
   (anchor positioning, container queries, logical properties) instead of
   measuring in JS, as `architecture:component-style-authoring` INV2 prefers. A
@@ -429,7 +442,10 @@ those contracts.
   measurement pass: a remaining read names its reason in a comment and happens
   once per change, not per frame, or as the before-and-after pair a current
   clause requires. INV11's keyboard hook, which makes at most one layout read
-  per keyboard change, is one instance. (Known implementation gaps include: the
+  per keyboard change, is one instance. `observeResizeAfterLayout` observes like
+  `observeResize` without the registration-time call, so a caller's first read
+  comes from the browser's own first notification after layout (Lightbox's
+  caption). (Known implementation gaps include: the
   chat stream scroll hook reads scroll geometry on every scroll event, and
   about 49 Core source files that call `getBoundingClientRect` are not yet
   checked against this rule.)
@@ -557,7 +573,10 @@ contracts.
   reads: "Stores values only. Refs to DOM nodes are not attached yet when this
   runs." Internal: never in `hooks/index.ts` or the package entry; Lab imports
   both from `@astryxdesign/core/internal/committed-ref`, as it reaches other
-  Core internals.
+  Core internals. Lab imports `createSharedContext`, its one export, from
+  `@astryxdesign/core/internal/shared-context`, so a Lab component's context
+  reaches a swizzled copy's provider under one shared key (`spec:AST-110`
+  FR3).
 
 ## Deciding specs
 
@@ -634,3 +653,4 @@ component suite is not blanket conformance with every invariant.
 | INV17                 | Review of every `ref.current` assignment reached during render, plus StrictMode double-render tests where a ref feeds later behavior. `pnpm review:pre` item j flags an added render-time ref write, except lazy initialization and the exceptions this record names, with tests in `scripts/lib/pre-review-findings.test.mjs`; `useTableSortable`'s config ref is exempt as this invariant's named gap until the owner decides                                                                                                                                                                                                | A `ref.current` write in a component or hook body outside a lazy one-time initialization or an exception INV17 names, or behavior outside those exceptions that reads a value written by a render React discarded                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | INV18                 | Review of every added read that forces layout: `getBoundingClientRect`, `getClientRects`, `offset*`, `client*`, `scroll*` (`scrollTop`, `scrollHeight`, and the rest), `inner*` and `outer*`, `visualViewport` geometry, and `getComputedStyle` (evidence gap: no automated finding yet)                                                                                                                                                                                                                                                                                                                                       | A layout read in a per-frame, scroll or resize path that no current clause requires there, a read interleaved with writes, a read without a comment that names its reason, more than one measurement pass per change beyond the before-and-after pair a current clause requires, or JavaScript measurement where CSS placement serves                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | INV18 reorder         | Browser tests of a mouse drag in a reorderable List while a wheel scrolls its scroller: one checks the preview, the drop line and the drop, and one traces layout and counts the offset reads                                                                                                                                                                                                                                                                                                                                                                                                                                  | A wheel scroll mid-drag that leaves the drop line or the preview off the pointer, a drop away from the pointer, a layout the read forces, or more than one read in a scrolled frame                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| INV18 (after layout)  | `sharedResizeObserver.test.ts` cases for `observeResizeAfterLayout`, and the Chromium trace test that opens a Lightbox gallery on a clamped caption and counts its layouts                                                                                                                                                                                                                                                                                                                                                                                                                                                     | A first read in the registration-time call, a first read before the browser's own first notification after layout, or a layout that the caption's first read forces                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |

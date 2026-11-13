@@ -7,6 +7,7 @@ import {describe, expect, it} from 'vitest';
 import {configDefaults} from 'vitest/config';
 import DurationShardSequencer, {
   DURATIONS,
+  mergeRecord,
   partitionByDuration,
   readDurations,
   recordDurations,
@@ -20,11 +21,10 @@ const slowest = [...files].sort((a, b) => recorded[b] - recorded[a]);
 
 describe('duration-balanced Node legs', () => {
   it('balances a slow changed test with the guards when one run lists both', () => {
-    // A scoped run with one slow changed test (packed-gather-cache) and a
-    // set of slow guards. Split as two runs, leg 1 takes the changed test
+    // A scoped run whose one changed test is the slowest recorded file, with
+    // a set of slow guards. Split as two runs, leg 1 takes the changed test
     // on top of a full share of the guards; split as one run, it does not.
-    const changed = ['packages/cli/test/packed-gather-cache.test.mjs'];
-    expect(recorded[changed[0]]).toBeGreaterThan(300);
+    const changed = [slowest[0]];
     const guards = Object.entries(recorded)
       .filter(([file]) => file !== changed[0])
       .sort((a, b) => b[1] - a[1])
@@ -266,6 +266,27 @@ describe('duration-balanced Node legs', () => {
     expect(path.relative(ROOT, DURATIONS)).toBe(
       'scripts/vitest-node-durations.json',
     );
+  });
+
+  it('merges a run into the record: unreached files keep their times, swizzle-proof slices keep the largest, gone files leave', () => {
+    const slice = 'packages/cli/test/swizzle-proof/swizzle-proof.1.test.mjs';
+    expect(
+      mergeRecord(
+        {
+          'a.test.mjs': 10,
+          'unreached.test.mjs': 50,
+          [slice]: 300,
+          'gone.test.mjs': 5,
+        },
+        {'a.test.mjs': 20, [slice]: 200, 'new.test.mjs': 3},
+        file => file !== 'gone.test.mjs',
+      ),
+    ).toEqual({
+      'a.test.mjs': 20,
+      'new.test.mjs': 3,
+      [slice]: 300,
+      'unreached.test.mjs': 50,
+    });
   });
 
   it('reads colour codes spelled out, as `gh run view --log` prints them', () => {

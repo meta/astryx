@@ -5,7 +5,6 @@
  */
 
 import * as fs from 'node:fs';
-import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {DOC_EXPORTS} from '../doc-compiler/read.mjs';
 import {
@@ -25,12 +24,8 @@ import {
   moduleExportsName,
   staticExportObject,
 } from './module-exports.mjs';
-import {
-  inspectPackageExport,
-  sourceExportTarget,
-} from './package-exports.mjs';
-
-const require = createRequire(import.meta.url);
+import {inspectPackageExport, sourceExportTarget} from './package-exports.mjs';
+import {babelParser} from '../runtime/lazy-dependencies.mjs';
 
 const SKIP_DIRS = new Set(['hooks', 'utils', '__tests__', 'node_modules']);
 
@@ -176,9 +171,6 @@ function readDocMeta(docPath) {
   }
 }
 
-/** @type {typeof import('@babel/parser') | undefined} */
-let babelParser;
-
 /**
  * A property of an object literal, by its plain key.
  * @param {any} object - an ObjectExpression node
@@ -211,13 +203,9 @@ function docMemberNames(source) {
   /** @type {any} */
   let ast;
   try {
-    babelParser ??= require('@babel/parser');
-    ast = /** @type {typeof import('@babel/parser')} */ (babelParser).parse(
-      source,
-      {
-        sourceType: 'module',
-      },
-    );
+    ast = babelParser().parse(source, {
+      sourceType: 'module',
+    });
   } catch {
     return [];
   }
@@ -693,11 +681,12 @@ function ownSourceFile(coreDir, name) {
     if (found) return found;
   }
 
-  // Search nested (component might be under a parent dir)
-  const entries = listDirEntries(srcDir);
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const nestedDir = path.join(srcDir, entry.name, name);
+  // Search nested (component might be under a parent dir): only the folders
+  // whose listing holds the name, in listing order.
+  const nested = foldersHolding(srcDir, listDirEntries(srcDir), [name]).map(
+    entry => path.join(srcDir, entry.name, name),
+  );
+  for (const nestedDir of nested) {
     if (existsCaseExact(nestedDir, srcDir)) {
       const found = searchDir(nestedDir);
       if (found) return found;

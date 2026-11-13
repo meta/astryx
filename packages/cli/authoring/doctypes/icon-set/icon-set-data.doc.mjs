@@ -61,8 +61,8 @@ export const doc = {
       name: 'variants',
       type: 'string[]',
       description:
-        'The named looks the set offers, in lower-kebab case, such as `outline` and `solid`. Icon size is never a variant: CSS sets it. Omit it when the set has one look.',
-      example: "['outline', 'solid']",
+        "The named looks the set offers, in lower-kebab case, such as `outline` and `filled`. Icon size is never a variant: CSS sets it. Omit it when the set has one look. A project's `experimental.iconVariant` names one of these, so call each look what it draws rather than the library's word for it.",
+      example: "['outline', 'filled']",
     },
     {
       name: 'default',
@@ -75,7 +75,7 @@ export const doc = {
       name: 'themeMap',
       type: 'string',
       description:
-        'The export that maps each built-in icon definition to its artwork, keyed by exactly the built-in definitions in `map`.',
+        "The export that maps each built-in icon definition to its artwork, keyed by exactly the built-in definitions in `map`. When it is `themeIcons`, the generated module writes it, and beside it one map for each other variant an icon draws, `themeIcons<Variant>` (`themeIconsFilled`), whose entries draw that variant, or an icon's own export when it has none.",
       example: "'themeIcons'",
     },
     {
