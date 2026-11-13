@@ -8,7 +8,7 @@
 import {loadWeights} from '../_adapter.mjs';
 import {asksForNewPage} from './kind.mjs';
 import {pickAlternatives, pickStart} from './rank.mjs';
-import {shellCallScore} from './shellcall.mjs';
+import {hasEditPhrase, shellCallScore} from './shellcall.mjs';
 import {blendOrder, blendSummary, weighStart} from './weights.mjs';
 
 /**
@@ -69,13 +69,13 @@ const LIFT = [
   -0.7707, 0.6706, -0.2642, 0.2815, -0.1621, 0.1759, 0.1713, 0.2891, -0.3491,
 ];
 
-/** How sure the decision must be before a page replaces the shell. */
+/** The decision replaces the shell with a page when p >= 0.30. */
 const LIFT_AT = 0.3;
 
 /**
  * The page template that replaces an app-shell start, or null to keep the
- * shell. The blend's best template takes the start when the decision is sure
- * the idea is that page rather than a part for an empty frame.
+ * shell. The blend's best template takes the start when the decision's
+ * whole-page probability is at least 0.30.
  * @param {import('./rank.mjs').RankedPage[]} ranked
  * @param {import('./rank.mjs').IdeaKind} kind
  * @param {PageTemplate[]} catalog
@@ -91,9 +91,9 @@ function liftFromShell(ranked, kind, catalog, idea) {
     loadWeights(),
   );
   if (!b || !b.best) return null;
-  const text = shellCallScore(idea, kind, ranked);
   // A change to a page or app the builder already has keeps its shell.
-  if (text?.edit) return null;
+  if (hasEditPhrase(idea)) return null;
+  const text = shellCallScore(idea, kind, ranked);
   const x = [
     1,
     kind === 'page' ? 1 : 0,
@@ -167,7 +167,7 @@ export function chooseStart(ranked, kind, pages, directMatch, catalog, idea) {
           : null
         : (ranked.find(r => r.name === weighed) ?? proposed);
   // An idea that would start on the app shell starts from the blend's best page
-  // when the decision is sure that it reads as a whole page. A direct match,
+  // when the decision's whole-page probability is at least 0.30. A direct match,
   // ready or not, keeps the start and reason it already has.
   const lifted =
     !direct && (!pick || pick.family === 'Shell')

@@ -25,6 +25,15 @@ const EDIT =
   /\b(existing|current|my (page|app|dashboard|screen|site)|add (a |an |the )?\w* ?to|change|fix|move|rename|restyle|update|modify|replace|remove|tweak|adjust|improve|refactor|our (page|app))\b/;
 
 /**
+ * Whether an idea carries an edit phrase. It needs no word table.
+ * @param {string} idea
+ * @returns {boolean}
+ */
+export function hasEditPhrase(idea) {
+  return EDIT.test(String(idea).toLowerCase());
+}
+
+/**
  * The features the weights are keyed by.
  * @param {string} text the idea, lower case
  * @param {string} kind
