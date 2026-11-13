@@ -811,6 +811,7 @@ export async function renderPage(entry, options = {}) {
     const record = {
       ...(facts.cli ? {cli: facts.cli} : {}),
       page: facts.page,
+      ...(options.title === undefined ? {} : {title: options.title}),
       packages,
       markup: {
         sha256: sha256(markup),

@@ -73,6 +73,7 @@
  * @property {number} [data.format] - Embedded only: the render format of the file's embedded source.
  * @property {string} [data.renderedBy] - Embedded only: the version of the CLI that rendered the file, when the file names it.
  * @property {string[]} [data.packages] - Embedded only, when the file records them: the packages the page rendered with, as `name@version`.
+ * @property {string} [data.title] - Embedded only: the title given with --title when the page was rendered, which a render again needs too.
  * @property {boolean} [data.edited] - Embedded only, when the file records the page as rendered: whether someone changed its markup, title or styles after the render. The restored files are always the page as rendered, without those changes.
  * @property {boolean} [data.stylesEdited] - With `edited`: whether the styles (the <style> element) changed after the render.
  * @property {RenderEdit[]} [data.edits] - When `edited`: each run of text that changed after the render (at most 50, the title first), so the change can be made in the source. Empty when only styles, attributes, elements or formatting changed.

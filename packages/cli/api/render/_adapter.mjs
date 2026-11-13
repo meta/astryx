@@ -17,10 +17,20 @@ import {
   RenderError,
   renderPage,
 } from '../../foundation/render/render-page.mjs';
-import {RENDER_FORMAT, readSourceBlock, recordedText, renderedHeadOf, renderedMarkupOf, sha256} from '../../foundation/render/source-block.mjs';
+import {
+  RENDER_FORMAT,
+  packageName,
+  readSourceBlock,
+  recordedText,
+  releaseVersion,
+  renderedHeadOf,
+  renderedMarkupOf,
+  sha256,
+} from '../../foundation/render/source-block.mjs';
 import {decode} from '../../foundation/render/html-reader.mjs';
 import {locate, textEdits, textRuns} from '../../foundation/render/markup-edits.mjs';
-import {cliCommand, shellWord} from '../../foundation/render/file-header.mjs';
+import {cliCommand} from '../../foundation/render/file-header.mjs';
+import {shellArg} from '../../foundation/text/shell-arg.mjs';
 import {embeddedPathProblem, runnerPicksUp} from '../../foundation/render/embedded-files.mjs';
 import {isAssetBytes, isAssetPath} from '../../foundation/render/assets.mjs';
 import {createFileProtectionResolver} from '../../foundation/fs/file-protection.mjs';
@@ -385,8 +395,10 @@ function restoreFolder(input) {
  * @returns {string | null}
  */
 function renderedByOf(source, html) {
-  if (typeof source.cli === 'string' && source.cli) return source.cli;
-  return /<meta name="generator" content="Astryx ([^"<>]+)">/.exec(html.slice(0, 4096))?.[1] ?? null;
+  return (
+    releaseVersion(source.cli) ??
+    releaseVersion(/<meta name="generator" content="Astryx ([^"<>]+)">/.exec(html.slice(0, 4096))?.[1])
+  );
 }
 
 /**
@@ -399,7 +411,7 @@ function packagesOf(source) {
   const recorded = source.packages;
   if (!recorded || typeof recorded !== 'object' || Array.isArray(recorded)) return null;
   return Object.entries(recorded)
-    .filter(([, version]) => typeof version === 'string')
+    .filter(([name, version]) => packageName(name) && releaseVersion(version) !== null)
     .map(([name, version]) => `${name}@${version}`);
 }
 
@@ -476,7 +488,7 @@ export function reverseToFile({cwd, input, output, overwrite}) {
   };
   if (block.found && 'newer' in block) {
     const {format, cli} = block.newer;
-    const command = `${cliCommand(cli ?? 'latest')} experimental render --reverse ${shellWord(shown(cwd, input))}`;
+    const command = `${cliCommand(cli ?? 'latest')} experimental render --reverse ${shellArg(shown(cwd, input))}`;
     throw new AstryxError(
       `${shown(cwd, input)} is in render format ${format}${cli ? `, written by @astryxdesign/cli ${cli}` : ''}, which is newer than this CLI reads (render format ${RENDER_FORMAT}, @astryxdesign/cli ${cliVersion()}); nothing was written. Give it back with ${cli ? 'the CLI that wrote it' : 'the latest CLI'}: ${command}`,
       [{name: command, reason: cli ? 'give it back with the CLI version that wrote the file' : 'give it back with the latest CLI'}],
@@ -598,7 +610,7 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       const top = entryDir === '.' ? '' : `${entryDir}/`;
       let fresh = 'restored';
       for (let n = 2; fs.existsSync(path.join(cwd, fresh)); n++) fresh = `restored-${n}`;
-      const suggestion = `--out ${fresh}/${top}${path.basename(requested)}`;
+      const suggestion = `--out ${shellArg(`${fresh}/${top}${path.basename(requested)}`)}`;
       throw new AstryxError(
         `${shown(cwd, input)} would add ${outside.map(file => shown(cwd, file)).join(', ')} outside the folder the restore creates; nothing was written. A received page writes the files it imports only inside one new folder: restore it into one, such as ${suggestion}.`,
         [{name: suggestion, reason: 'restore the page and the files it imports into a new folder, keeping their layout'}],
@@ -627,6 +639,7 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       format: source.version,
       ...(renderedBy ? {renderedBy} : {}),
       ...(packages ? {packages} : {}),
+      ...(typeof source.title === 'string' ? {title: source.title} : {}),
       ...pageChanges(source, html, modules),
     };
   }

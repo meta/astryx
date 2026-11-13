@@ -1,5 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import {shellArg} from '../text/shell-arg.mjs';
+
 /**
  * @file The plain-text notes a rendered file carries for whoever opens it
  * next, a person or an agent with no other context: what made the file, what
@@ -21,11 +23,6 @@
  */
 export const cliCommand = version => `npx @astryxdesign/cli${version ? `@${version}` : ''}`;
 
-/**
- * A path or a title as one shell word.
- * @param {string} word
- */
-export const shellWord = word => (/^[\w./@:+=,-]+$/.test(word) ? word : `'${word.replace(/'/g, "'\\''")}'`);
 
 /**
  * Text that cannot end or nest an HTML comment.
@@ -56,12 +53,12 @@ const MAX_LISTED = 24;
  */
 export function headerNote(facts) {
   const run = cliCommand(facts.cli);
-  const file = shellWord(facts.file);
+  const file = shellArg(facts.file);
   const shown = facts.files.slice(0, MAX_LISTED).join(', ');
   const more = facts.files.length > MAX_LISTED ? `, and ${facts.files.length - MAX_LISTED} more` : '';
   const versions = Object.entries(facts.packages).map(([name, version]) => `${name} ${version}`);
   const core = facts.packages['@astryxdesign/core'];
-  const title = facts.title === undefined ? '' : ` --title ${shellWord(facts.title)}`;
+  const title = facts.title === undefined ? '' : ` --title ${shellArg(facts.title)}`;
   const lines = [
     `Rendered by Astryx: astryx experimental render, @astryxdesign/cli ${facts.cli ?? '(version unknown)'}, render format ${facts.format}.`,
     'This is one static file. It runs no script and loads nothing from the network.',
@@ -74,11 +71,13 @@ export function headerNote(facts) {
     'To change the page, change its source and render it again. Do not edit this HTML:',
     'the carried source does not get the edits you make here.',
     'Run these commands in the folder that holds this file:',
-    `  1. Get the source back. This writes ${facts.restored} and the files it imports:`,
+    `  1. Get the source back. This writes ${facts.restored} and the files it imports`,
+    `     (into ${facts.restored.split('/')[0]}-2/ and so on when that folder exists; the output names it):`,
     `       ${run} experimental render --reverse ${file}`,
     '  2. Edit the restored files.',
-    '  3. Render again. A render replaces a file that a render wrote:',
-    `       ${run} experimental render ${shellWord(facts.restored)} --out ${file}${title}`,
+    '  3. Render again. A render replaces a file that a render wrote. Step 1 prints this',
+    '     command with the folder it wrote:',
+    `       ${run} experimental render ${shellArg(facts.restored)} --out ${file}${title}`,
     `If you have the project, edit ${facts.page} there instead, and render it in the same way.`,
     "Inside a project, the project's own CLI answers these commands. A project CLI older than",
     `${facts.cli ?? 'the one that rendered this file'} writes the page without this note; to keep the note, update that CLI first:`,
@@ -93,7 +92,7 @@ export function headerNote(facts) {
       ? [
           `The source was written for @astryxdesign/core ${core}. In a project on a newer Core, update the`,
           "restored code from inside that project (the CLI hands this to the project's own CLI):",
-          `       ${cliCommand(null)} upgrade --from ${core} --path ${shellWord(facts.restored.split('/')[0])} --apply`,
+          `       ${cliCommand(null)} upgrade --from ${core} --path ${shellArg(facts.restored.split('/')[0])} --apply`,
         ]
       : []),
     'Later CLI versions read this file too.',
@@ -111,5 +110,5 @@ export function headerNote(facts) {
  * @returns {string} an HTML comment on one line
  */
 export function endNote(facts) {
-  return `<!-- Astryx render: the block above is the source of the page (render format ${facts.format}), as JSON; each file is base64 with its SHA-256. Get it back: ${commentSafe(cliCommand(facts.cli))} experimental render --reverse ${commentSafe(shellWord(facts.file))} -->`;
+  return `<!-- Astryx render: the block above is the source of the page (render format ${facts.format}), as JSON; each file is base64 with its SHA-256. Get it back: ${commentSafe(cliCommand(facts.cli))} experimental render --reverse ${commentSafe(shellArg(facts.file))} -->`;
 }

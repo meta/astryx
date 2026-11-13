@@ -8,6 +8,7 @@
  */
 
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {render} from './render.mjs';
@@ -255,6 +256,65 @@ describe('render --reverse says what changed after the render', () => {
     expect(error?.message).toContain('render format 2, written by @astryxdesign/cli 9.1.0');
     expect(error?.suggestions?.[0]?.name).toBe('npx @astryxdesign/cli@9.1.0 experimental render --reverse future.html');
     expect(fs.existsSync(path.join(dir, 'future-restored'))).toBe(false);
+  });
+
+  it('refuses a received file whose CLI version is not a semantic version, so no printed command carries it', async () => {
+    for (const [name, version] of [['crafted-new', 2], ['crafted-one', 1]]) {
+      const crafted = html.replace(
+        /<script type="application\/x-astryx-source">[\s\S]*?<\/script>/,
+        () => `<script type="${SOURCE_TYPE}">${JSON.stringify({version, cli: '9.1.0 && touch pwned', entry: 'report.tsx', files: []})}</script>`,
+      );
+      put(`${name}.html`, crafted);
+      const error = await errorOf(() => render(`${name}.html`, {cwd: dir, reverse: true}));
+      expect(error?.code).toBe('ERR_RENDER_SOURCE_DAMAGED');
+      expect(error?.message).toContain('not a release version');
+      expect(JSON.stringify(error)).not.toContain('pwned');
+      expect(fs.existsSync(path.join(dir, `${name}-restored`))).toBe(false);
+    }
+    // A newer format with no CLI version suggests the latest CLI.
+    put('unnamed.html', html.replace(/<script type="application\/x-astryx-source">[\s\S]*?<\/script>/, () => `<script type="${SOURCE_TYPE}">${JSON.stringify({version: 2, entry: 'report.tsx'})}</script>`));
+    const unnamed = await errorOf(() => render('unnamed.html', {cwd: dir, reverse: true}));
+    expect(unnamed?.code).toBe('ERR_RENDER_NEWER_FORMAT');
+    expect(unnamed?.suggestions?.[0]?.name).toBe('npx @astryxdesign/cli@latest experimental render --reverse unnamed.html');
+    put('crafted-gen.html', html.replace(`content="Astryx ${cliVersion()}"`, 'content="Astryx 1.0.0; touch pwned"').replace(/"cli":"[^"]*",/, ''));
+    const result = /** @type {any} */ (await render('crafted-gen.html', {cwd: dir, reverse: true, out: 'crafted-gen-back/report.tsx'}));
+    expect(result.data).not.toHaveProperty('renderedBy');
+  });
+
+  it('quotes a page name a received file chose, in every command it prints', async () => {
+    const page = Buffer.from("import {k} from './k';\nexport default function Page() {\n  return <p>{k}</p>;\n}\n");
+    const k = Buffer.from("export const k = 'value';\n");
+    const file = (/** @type {string} */ p, /** @type {Buffer} */ b) => ({path: p, sha256: sha256(b), base64: b.toString('base64')});
+    const block = (/** @type {string} */ folder) =>
+      `<!doctype html><html><head><meta charset="utf-8"><meta name="generator" content="Astryx 0.7.15"></head><body><p>value</p><script type="${SOURCE_TYPE}">${JSON.stringify({version: 1, entry: 'page.tsx', files: [file(`${folder}/page.tsx`, page), file(`${folder}/k.ts`, k)]})}</script></body></html>`;
+    // Restored by default: the page lands under its own folder name.
+    put('named.html', block('a; touch pwned'));
+    const restored = await runCli(['experimental', 'render', '--reverse', 'named.html'], dir);
+    expect(restored.status).toBe(0);
+    expect(restored.stdout).toMatch(/^Render it again: .*experimental render 'named-restored\/a; touch pwned\/page\.tsx' --out named\.html$/m);
+    expect(fs.existsSync(path.join(dir, 'pwned'))).toBe(false);
+    // Refused into a folder that exists: the suggested --out is quoted too.
+    fs.mkdirSync(path.join(dir, 'existing'), {recursive: true});
+    const refused = await errorOf(() => render('named.html', {cwd: dir, reverse: true, out: 'existing/page.tsx'}));
+    expect(refused?.code).toBe('ERR_PATH_TRAVERSAL');
+    expect(refused?.suggestions?.[0]?.name).toMatch(/^--out 'restored(-\d+)?\/a; touch pwned\/page\.tsx'$/);
+  });
+
+  it('keeps every path in the note relative to the project: no folder above it, user or host name', () => {
+    expect(html).not.toContain(path.dirname(dir));
+    expect(html).not.toContain(os.homedir());
+    expect(html).not.toContain(os.hostname());
+  });
+
+  it('quotes every path and the title in the command that renders the page again', async () => {
+    put('Q3 final.html', html);
+    const {stdout, status} = await runCli(['experimental', 'render', '--reverse', 'Q3 final.html', '--out', 'odd back/report.tsx'], dir);
+    expect(status).toBe(0);
+    expect(stdout).toMatch(/Render it again: .*experimental render 'odd back\/report\.tsx' --out 'Q3 final\.html'$/m);
+    await render('src/report.tsx', {cwd: dir, out: 'titled.html', title: "Ops' review"});
+    const titled = await runCli(['experimental', 'render', '--reverse', 'titled.html', '--out', 'titled-back/report.tsx'], dir);
+    expect(titled.stdout).toMatch(/^title:\s+Ops' review$/m);
+    expect(titled.stdout).toMatch(/--out titled\.html --title 'Ops'\\''\s?review'$/m);
   });
 
   it('prints the changes and the command that renders the page again', async () => {

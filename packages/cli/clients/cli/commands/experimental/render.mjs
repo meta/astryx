@@ -14,6 +14,7 @@
  */
 
 import {getCliInvocation} from '../../../../foundation/env/package-manager.mjs';
+import {shellArg} from '../../../../foundation/text/shell-arg.mjs';
 import {jsonOut} from '../../../../foundation/response/json.mjs';
 import {resultSet} from '../../../../foundation/debug/index.mjs';
 import {emit, section, text, record, list} from '../../formatters/index.mjs';
@@ -76,7 +77,7 @@ export function registerExperimentalRender(group, program) {
           ...(d.warnings.length > 0
             ? [section('Warnings'), list(d.warnings.map(w => w.message))]
             : []),
-          text(`Give it back: ${run} experimental render --reverse ${d.output}`),
+          text(`Give it back: ${run} experimental render --reverse ${shellArg(d.output)}`),
         );
         return answered;
       }
@@ -102,6 +103,7 @@ export function registerExperimentalRender(group, program) {
           ...(d.format === undefined ? {} : {format: d.format}),
           ...(d.renderedBy ? {renderedBy: d.renderedBy} : {}),
           ...(d.packages ? {packages: d.packages.join(', ') || 'none'} : {}),
+          ...(d.title === undefined ? {} : {title: d.title}),
           ...(d.edited === undefined ? {} : {edited: d.edited}),
           ...(d.stylesEdited === undefined ? {} : {stylesEdited: d.stylesEdited}),
         }),
@@ -129,7 +131,11 @@ export function registerExperimentalRender(group, program) {
             ]
           : []),
         ...(d.mode === 'embedded'
-          ? [text(`Render it again: ${run} experimental render ${d.output} --out ${d.input}`)]
+          ? [
+              text(
+                `Render it again: ${run} experimental render ${shellArg(d.output)} --out ${shellArg(d.input)}${d.title === undefined ? '' : ` --title ${shellArg(d.title)}`}`,
+              ),
+            ]
           : []),
       );
       return answered;

@@ -97,6 +97,14 @@ describe('the HTML reader', () => {
     expect(body.children[0].children[0].text).toBe('a & b');
   });
 
+  it('reads a self-closing SVG title as empty, and keeps the text after it', () => {
+    const doc = parseHtml('<div><svg><title/><path d="M0 0"/></svg><p>after</p></div>');
+    const div = /** @type {any} */ (doc.children[0]);
+    const [svg, p] = div.children;
+    expect(svg.children[0]).toEqual({tag: 'title', attrs: {}, children: []});
+    expect(p.children[0].text).toBe('after');
+  });
+
   it('tells Astryx markup from other HTML', () => {
     expect(isAstryxMarkup('<div class="x astryx-button"></div>')).toBe(true);
     expect(isAstryxMarkup('<div class="button"></div>')).toBe(false);

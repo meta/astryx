@@ -37,6 +37,7 @@ export const RENDER_FORMAT = 1;
  * @typedef {object} RenderRecord
  * @property {string} [cli] - The version of the CLI that rendered the file.
  * @property {string} [page] - The page's path from its project's root, `/`-separated.
+ * @property {string} [title] - The title given with --title, which a render again needs too.
  * @property {Record<string, string>} [packages] - The packages the page rendered with, by name: their versions.
  * @property {{sha256: string, style?: string, text?: string}} [markup] - The page as rendered, so a reverse can tell what changed after the render: the SHA-256 of the markup in <body> and of the <style> element, and `text`, the base64 of the JSON `{title, runs}` (the title and the markup's runs of text in order). The text stays encoded so that a find-and-replace over the page's text cannot change the record too.
  */
@@ -47,6 +48,25 @@ export const RENDER_FORMAT = 1;
 
 /** @param {Buffer | string} bytes */
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
+
+/**
+ * A version a received file names, when it is a semantic version
+ * (`0.7.16`, `0.8.0-canary.g1a2b3c4`); null for anything else. A received
+ * file is untrusted, and its versions reach printed commands.
+ * @param {unknown} value
+ * @returns {string | null}
+ */
+export const releaseVersion = value =>
+  typeof value === 'string' &&
+  /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.test(value)
+    ? value
+    : null;
+
+/**
+ * Whether a received name is an npm package name.
+ * @param {string} name
+ */
+export const packageName = name => /^(?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*$/.test(name);
 
 /**
  * The data block for a page's files.
@@ -62,6 +82,7 @@ export function sourceBlock(entry, files, record = {}) {
     entry,
     ...(record.cli ? {cli: record.cli} : {}),
     ...(record.page ? {page: record.page} : {}),
+    ...(record.title === undefined ? {} : {title: record.title}),
     ...(record.packages ? {packages: record.packages} : {}),
     files: files.map(f => ({
       path: f.path,
@@ -112,11 +133,13 @@ export function readSourceBlock(html) {
   } catch {
     return {found: true, damaged: 'its embedded source is not valid JSON'};
   }
+  // A CLI version that is not a semantic version is never a render's: the
+  // file was changed, and the value would reach a printed command.
+  if (payload?.cli !== undefined && releaseVersion(payload.cli) === null) {
+    return {found: true, damaged: 'its embedded source names a CLI version that is not a release version'};
+  }
   if (Number.isInteger(payload?.version) && payload.version > RENDER_FORMAT) {
-    return {
-      found: true,
-      newer: {format: payload.version, cli: typeof payload.cli === 'string' ? payload.cli : null},
-    };
+    return {found: true, newer: {format: payload.version, cli: releaseVersion(payload.cli)}};
   }
   if (
     payload?.version !== 1 ||
