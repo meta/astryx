@@ -1078,14 +1078,14 @@ describe('every color decision is generator config', () => {
       ],
       {
         config: {
-          darkChromaTaper: {edgeMultiplier: 0.5},
+          notes: 'brand colors from the style guide',
           neutralProfile: 'warm-v1',
           families: [],
         },
       },
     );
     const notes = pal.notes.join(' ');
-    expect(notes).toContain('does not read darkChromaTaper');
+    expect(notes).toContain('does not read notes');
     expect(notes).toContain('neutralProfile warm-v1 changes nothing here');
     expect(paletteNotes(pal, 'accent', 'x').join(' ')).toContain(
       'is outside the colors every screen shows (sRGB)',

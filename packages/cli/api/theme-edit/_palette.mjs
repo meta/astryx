@@ -650,8 +650,7 @@ const strategyOf = modes =>
   modes.length > 1 ? 'light-and-dark' : `${modes[0]}-only`;
 
 /**
- * The fields of a config the generator never reads (such as
- * `darkChromaTaper`), by path.
+ * The fields of a config the generator never reads, by path.
  * @param {any} config
  * @returns {string[]}
  */
