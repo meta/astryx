@@ -76,6 +76,36 @@ export function recordDurations(text) {
   return seconds;
 }
 
+const SWIZZLE_PROOF = /(^|\/)swizzle-proof\.\d+\.test\.mjs$/;
+
+/**
+ * The record after a run. The run's times replace those files' times; files
+ * the run did not reach keep their earlier times; a swizzle-proof slice keeps
+ * the largest time seen; a file that no longer exists leaves the record.
+ * @param {Record<string, number>} current
+ * @param {Record<string, number>} recorded
+ * @param {(file: string) => boolean} [exists]
+ * @returns {Record<string, number>}
+ */
+export function mergeRecord(
+  current,
+  recorded,
+  exists = file => fs.existsSync(path.join(ROOT, file)),
+) {
+  const merged = {...current};
+  for (const [file, seconds] of Object.entries(recorded)) {
+    merged[file] =
+      SWIZZLE_PROOF.test(file) && typeof current[file] === 'number'
+        ? Math.max(current[file], seconds)
+        : seconds;
+  }
+  return Object.fromEntries(
+    Object.entries(merged)
+      .filter(([file]) => exists(file))
+      .sort(([a], [b]) => a.localeCompare(b)),
+  );
+}
+
 export default class DurationShardSequencer extends BaseSequencer {
   relative(spec) {
     return path
@@ -153,9 +183,7 @@ if (
       {
         ...current,
         source: 'recorded Node leg logs',
-        seconds: Object.fromEntries(
-          Object.entries(seconds).sort(([a], [b]) => a.localeCompare(b)),
-        ),
+        seconds: mergeRecord(current.seconds ?? {}, seconds),
       },
       null,
       2,

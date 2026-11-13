@@ -1189,11 +1189,22 @@ jobs:
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
         run: pnpm -F @astryxdesign/core build
 
-      # Scoped like test-ui's run.
+      # Scoped like test-ui's run. The shard watchdog
+      # (scripts/vitest-shard-watchdog.mjs) fires a minute before the job's
+      # 15-minute limit, counted from the job's start (the runner's worker
+      # process starts with the job): a job the limit cancels keeps only part
+      # of its log, so it names the test files still running first. It also
+      # writes each file's seconds for the recorded-times check below.
       - name: Run this shard of the Node tests
+        id: node-tests
         env:
           SCOPED: ${{ github.event_name == 'pull_request' && steps.scope.outputs.vitest_full_suite == 'false' }}
+          VITEST_SHARD_TIMES_FILE: ${{ runner.temp }}/node-file-times.json
         run: |
+          started=$(ps -o etimes= -C Runner.Worker 2>/dev/null | sort -n | tail -1 | tr -d ' ')
+          VITEST_SHARD_WATCHDOG_SECONDS=$(( 14 * 60 - ${started:-180} ))
+          export VITEST_SHARD_WATCHDOG_SECONDS
+          WATCHDOG=(--reporter=default --reporter=github-actions --reporter=./scripts/vitest-shard-watchdog.mjs)
           if [ "$SCOPED" = true ]; then
             # One run covers the tests the change reaches and the tests no
             # module graph relates to it: guards that read sources, and tests
@@ -1208,12 +1219,20 @@ jobs:
             .github/scripts/run-named.sh "List the tests to run" --stdout "$RUNNER_TEMP/node-tests.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --reached "$RUNNER_TEMP/reached.json"
             mapfile -t TESTS < "$RUNNER_TEMP/node-tests.txt"
             if [ "${#TESTS[@]}" -gt 0 ]; then
-              .github/scripts/run-named.sh "Tests the change reaches and tests that read source files" -- pnpm test:node --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${TESTS[@]}"
+              .github/scripts/run-named.sh "Tests the change reaches and tests that read source files" -- pnpm test:node --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${WATCHDOG[@]}" "${TESTS[@]}"
             fi
           else
-            pnpm test:node --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+            pnpm test:node --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${WATCHDOG[@]}"
           fi
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+
+      # A test file this change touches that now runs far past its recorded
+      # time fails here, naming both times, so the pull request that slows it
+      # updates the record before a later pull request's leg runs over its
+      # job limit. Files the change does not touch are not checked.
+      - name: Check the recorded times of the test files this change touches
+        if: always() && github.event_name == 'pull_request' && steps.node-tests.outcome != 'skipped'
+        run: node .github/scripts/node-time-drift.mjs --times "$RUNNER_TEMP/node-file-times.json" --changed HEAD^1
 
       # A Lab-only change may carry a Lab component's CLI discovery entry; the
       # committed list must match its generator (spec:AST-030 FR26).

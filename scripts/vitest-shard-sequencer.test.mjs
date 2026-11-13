@@ -7,6 +7,7 @@ import {describe, expect, it} from 'vitest';
 import {configDefaults} from 'vitest/config';
 import DurationShardSequencer, {
   DURATIONS,
+  mergeRecord,
   partitionByDuration,
   readDurations,
   recordDurations,
@@ -265,6 +266,27 @@ describe('duration-balanced Node legs', () => {
     expect(path.relative(ROOT, DURATIONS)).toBe(
       'scripts/vitest-node-durations.json',
     );
+  });
+
+  it('merges a run into the record: unreached files keep their times, swizzle-proof slices keep the largest, gone files leave', () => {
+    const slice = 'packages/cli/test/swizzle-proof/swizzle-proof.1.test.mjs';
+    expect(
+      mergeRecord(
+        {
+          'a.test.mjs': 10,
+          'unreached.test.mjs': 50,
+          [slice]: 300,
+          'gone.test.mjs': 5,
+        },
+        {'a.test.mjs': 20, [slice]: 200, 'new.test.mjs': 3},
+        file => file !== 'gone.test.mjs',
+      ),
+    ).toEqual({
+      'a.test.mjs': 20,
+      'new.test.mjs': 3,
+      [slice]: 300,
+      'unreached.test.mjs': 50,
+    });
   });
 
   it('reads colour codes spelled out, as `gh run view --log` prints them', () => {
