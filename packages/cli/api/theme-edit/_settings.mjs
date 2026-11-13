@@ -117,7 +117,7 @@ setOwnTokenReader((cwd, slug) => ownSourceTokenValues(cwd, slug));
 /** What lifted secondary text sits on: the contrast check measures it there. */
 const LIFT_GROUND_TOKENS = new Set(LIFT_PARTS.map(([, , g]) => g));
 
-/** @typedef {{project: import('./_project.mjs').ThemeProject, C: import('./_compiler.mjs').Compiler, unchecked?: string | null, uncheckedCode?: string | null, wrote?: Map<string, string | null>, base?: {light: Record<string, string>, dark: Record<string, string>, components?: Record<string, any>}, keepStops?: Record<string, Record<'light' | 'dark', {family: string, stop: number, alpha?: string}>> | null, keepRadii?: Record<string, string> | null, sizeNotes?: string[], derived?: Record<string, Array<{property: string, vars?: string[], replaces?: boolean, expand?: string}>>}} Ctx */
+/** @typedef {{project: import('./_project.mjs').ThemeProject, C: import('./_compiler.mjs').Compiler, unchecked?: string | null, uncheckedCode?: string | null, wrote?: Map<string, string | null>, base?: {light: Record<string, string>, dark: Record<string, string>, components?: Record<string, any>}, keepStops?: Record<string, Record<'light' | 'dark', {family: string, stop: number, alpha?: string}>> | null, keepRadii?: Record<string, string> | null, sizeNotes?: string[], compileNotes?: string[], derived?: Record<string, Array<{property: string, vars?: string[], replaces?: boolean, expand?: string}>>}} Ctx */
 /** @typedef {import('./_parts.mjs').PaintSide} PaintSide */
 /** @typedef {import('./_parts.mjs').TextPair} TextPair */
 
@@ -2275,6 +2275,7 @@ export function controlSizes(sizes, f, kept = {}, noRoom = []) {
  */
 export function compileTheme(ctx, data, base) {
   ctx.sizeNotes = [];
+  ctx.compileNotes = [];
   // A setting the editor no longer accepts never reaches the build.
   data = {...data, settings: data.settings.filter(s => !valueProblem(s))};
   const TOKENS = ctx.project.core.tokenDefaults;
@@ -3134,6 +3135,14 @@ export function compileTheme(ctx, data, base) {
       // is left alone.
       const css = kebab(prop) === 'color' ? 'color' : 'background-color';
       const other = mode === 'light' ? 2 : 1;
+      // What the part's own rule holds of it (an earlier setting for both
+      // modes): the other half each variant keeps, before its unset value.
+      const plainHeld = [
+        css,
+        ...(css === 'background-color' ? ['background'] : []),
+      ]
+        .map(k => b[camel(k)])
+        .find(y => typeof y === 'string' && !/gradient\(|url\(/i.test(y));
       const names = new Set([
         ...(ctx.C.variantValues(target)?.variant ?? []),
         ...(ctx.C.MAP[target]?.attrs?.variant ?? []),
@@ -3150,10 +3159,21 @@ export function compileTheme(ctx, data, base) {
           css,
           ...(css === 'background-color' ? ['background'] : []),
         ];
+        // A variant whose own background is an image (a gradient) keeps
+        // it: one mode's color is not written there, and the result says so.
+        const image = family
+          .map(k => vb[camel(k)])
+          .find(y => typeof y === 'string' && /gradient\(|url\(/i.test(y));
+        if (image) {
+          (ctx.compileNotes ??= []).push(
+            `${target} variant:${name} keeps its own background image (${image}), so the ${mode} color is not written there`,
+          );
+          continue;
+        }
         const prev = family
           .map(k => vb[camel(k)])
-          .find(y => typeof y === 'string' && !/gradient\(|url\(/i.test(y));
-        const from = prev ?? x;
+          .find(y => typeof y === 'string');
+        const from = prev ?? plainHeld ?? x;
         if (from == null) continue;
         for (const k of family) delete vb[camel(k)];
         const half = halfOf(from, other);

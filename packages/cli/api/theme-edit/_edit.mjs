@@ -1690,6 +1690,10 @@ async function changeOnce(
   const r = await commitTheme(ctx, slug, data, {history: true});
   const compiledAfter = compileTheme(ctx, data, base);
   // What the spacing dial said of the sizes it could not keep apart.
+  // What the build said of settings it could not write as they are.
+  const compileNotes =
+    /** @type {{compileNotes?: string[]}} */ (/** @type {unknown} */ (ctx))
+      .compileNotes ?? [];
   const sizeNotes =
     /** @type {{sizeNotes?: string[]}} */ (/** @type {unknown} */ (ctx))
       .sizeNotes ?? [];
@@ -1955,6 +1959,7 @@ async function changeOnce(
         ]
       : []),
     ...(sub === 'set' && s.thing === 'spacing' ? sizeNotes : []),
+    ...(sub === 'set' ? compileNotes : []),
     ...(covers.length
       ? [
           `comes after ${covers.map(describe).join(', ')}, so ${covers.length > 1 ? 'those parts show' : `${covers[0].on} shows`} this value now; set ${covers.length > 1 ? 'one' : 'it'} again to make it win`,

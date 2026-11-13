@@ -181,6 +181,47 @@ describe('one-mode backgrounds on parts whose variants have their own', () => {
     expect(rule).not.toMatch(/background:/);
   }, 240_000);
 
+  it("keeps the part's earlier color for both modes as each variant's other half", async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('m5p', {cwd, like: 'neutral'});
+    await themeEditSet('m5p', 'background', '#123456', {cwd, on: 'button'});
+    await themeEditSet('m5p', 'background', '#eeeeee', {
+      cwd,
+      on: 'button',
+      mode: 'light',
+    });
+    for (const name of ['primary', 'secondary', 'ghost', 'destructive'])
+      expect(
+        ruleOf('m5p', `.astryx-button[data-variant="${name}"]`),
+        name,
+      ).toMatch(/background-color: light-dark\(#eeeeee, #123456\)/);
+  }, 240_000);
+
+  it("leaves a variant's own gradient as it is, and says so", async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('m5g', {cwd, like: 'neutral'});
+    await themeEditSet(
+      'm5g',
+      'background',
+      'linear-gradient(#ff0000, #0000ff)',
+      {cwd, on: 'button', when: 'variant:primary'},
+    );
+    const r = await themeEditSet('m5g', 'background', '#eeeeee', {
+      cwd,
+      on: 'button',
+      mode: 'light',
+    });
+    const primary = ruleOf('m5g', '.astryx-button[data-variant="primary"]');
+    expect(primary).toMatch(/linear-gradient\(#ff0000, #0000ff\)/);
+    expect(primary).not.toMatch(/#eeeeee/);
+    expect(ruleOf('m5g', '.astryx-button[data-variant="destructive"]')).toMatch(
+      /light-dark\(#eeeeee, /,
+    );
+    expect(r.data.notes.join(' ')).toMatch(
+      /button variant:primary keeps its own background image/,
+    );
+  }, 240_000);
+
   it('does the same in a light-only theme, with no --mode', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('m5o', {cwd, like: 'neutral'});
