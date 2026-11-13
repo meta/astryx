@@ -446,6 +446,38 @@ test('padding on the control keeps the thumb on the track, the fill and the mark
 // touch-action and user-select. None of the touch presentation's inline
 // styles show. The gesture host sets those only under a finger, while it is
 // down.
+test('a horizontal slider keeps room for its mark labels, whatever line height surrounds it', async ({
+  page,
+}) => {
+  await mount(page, 'core-slider--with-marks', 'ltr', 'ltr');
+  for (const lineHeight of ['normal', '3']) {
+    await page.evaluate(value => {
+      document.body.style.lineHeight = value;
+    }, lineHeight);
+    await page.evaluate(
+      async () =>
+        new Promise(resolve => requestAnimationFrame(() => resolve(null))),
+    );
+    const overflow = await page.evaluate(() => {
+      const labels = [
+        ...document.querySelectorAll<HTMLElement>(
+          '[data-testid="slider-mark-label"]',
+        ),
+      ];
+      const row = labels[0]?.closest<HTMLElement>('.astryx-slider');
+      if (row == null) {
+        return null;
+      }
+      const bottom = row.getBoundingClientRect().bottom;
+      return Math.max(
+        ...labels.map(label => label.getBoundingClientRect().bottom - bottom),
+      );
+    });
+    expect(overflow).not.toBeNull();
+    expect(overflow as number).toBeLessThanOrEqual(TOLERANCE);
+  }
+});
+
 test('a desktop slider keeps its pointer styles: no touch targets, no inline touch styles', async ({
   page,
 }) => {
