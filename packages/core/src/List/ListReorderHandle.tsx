@@ -8,16 +8,17 @@
  *   ListContext's `reorder`), the translator, theme tokens and the theme's
  *   `list-reorder-handle` icon slot
  * @output `ListReorderHandle`, `ListReorderRowName`, `reorderRowStyle` and
- *   `UNREAD_HANDLE_NAME`. The handle starts a reorderable List row. A finger
+ *   `UNREAD_HANDLE_NAME`. The handle starts or ends a reorderable List row,
+ *   as the reorderable's `handle` option places it. A finger
  *   held still on it drags it, and so does a pen where the primary pointer is
  *   coarse. A mouse, or a pen where it is fine, drags it at once. It is also a
  *   toggle (`aria-pressed`): a click, Space or Enter turns its row's reorder
  *   mode on and off. The row name serves a row without one, and the style a
  *   row that has one
  * @position Part of the reorder machinery that createReorderable carries.
- *   ListItem renders it, from the List's context, at the start of each row
- *   that can move. It shows while its row is hovered or holds the focus,
- *   and always under a coarse pointer
+ *   ListItem renders it, from the List's context, in each row that can move.
+ *   Unless it always shows, it shows while its row is hovered or holds the
+ *   focus, and always under a coarse pointer
  *
  * On iOS 26.2 (measured), a finger held still on a table's reorder control
  * for the scroll view's content-touch delay (150 ms) claims the drag. A flick
@@ -94,11 +95,13 @@ const HANDLE_SIZE = 28;
 /** The grip's side, the `sm` icon size: the handle's share of its row's height. */
 const GRIP_SIZE = '1rem';
 /**
- * How far a hanging handle sits before its row's text, px: its own side and
- * a small clearance. The grip's edge then sits 8 px from the text.
+ * How far a hanging handle sits outside its row's content, px: its own side
+ * and a small clearance. The grip's edge then sits 8 px from the content.
  * SYNC: List/List.tsx REORDER_GUTTER.
  */
 const REORDER_HANDLE_HANG = HANDLE_SIZE + 2;
+/** The hanging handle's inner margin: it gives back the row's gap. */
+const HANG_GIVE_BACK = `calc(${REORDER_HANDLE_HANG - HANDLE_SIZE}px - ${spacingVars['--spacing-2']})`;
 
 /** The grip when the theme maps nothing to `list-reorder-handle`. */
 const GRIP_FALLBACK = {icon: 'drag', size: 'sm'} as const;
@@ -118,18 +121,6 @@ const styles = stylex.create({
     width: HANDLE_SIZE,
     height: HANDLE_SIZE,
     marginBlock: `calc((${GRIP_SIZE} - ${HANDLE_SIZE}px) / 2)`,
-    // Where it shows only on hover or focus (a fine primary pointer), it hangs
-    // before the row's text and takes no width, so the text keeps its place.
-    // The end margin gives back the row's gap after it. Where it always
-    // shows (a coarse pointer), it takes its place in the row.
-    marginInlineStart: {
-      default: -REORDER_HANDLE_HANG,
-      '@media (pointer: coarse)': 0,
-    },
-    marginInlineEnd: {
-      default: `calc(${REORDER_HANDLE_HANG - HANDLE_SIZE}px - ${spacingVars['--spacing-2']})`,
-      '@media (pointer: coarse)': 0,
-    },
     padding: 0,
     borderWidth: 0,
     borderRadius: 4,
@@ -175,26 +166,55 @@ const styles = stylex.create({
       '@media (pointer: coarse)': 'transparent',
     },
   },
-  // It takes its place in the row where hanging cannot work: after a list
-  // marker, which it would cover, and in a row that reaches its container's
-  // padding edge, where nothing past the row keeps it.
-  inRowPlace: {
-    marginInlineStart: 0,
-    marginInlineEnd: 0,
+  // Where it shows only on hover or focus (a fine primary pointer), it hangs
+  // outside the row's content. It takes no width, so the content keeps its
+  // place. The inner margin gives back the row's gap. Under a coarse pointer
+  // it always shows, so it takes its place in the row. It also takes its
+  // place where hanging cannot work (`isInRow`).
+  hangAtStart: {
+    marginInlineStart: {
+      default: -REORDER_HANDLE_HANG,
+      '@media (pointer: coarse)': 0,
+    },
+    marginInlineEnd: {
+      default: HANG_GIVE_BACK,
+      '@media (pointer: coarse)': 0,
+    },
+  },
+  hangAtEnd: {
+    marginInlineStart: {
+      default: HANG_GIVE_BACK,
+      '@media (pointer: coarse)': 'auto',
+    },
+    marginInlineEnd: {
+      default: -REORDER_HANDLE_HANG,
+      '@media (pointer: coarse)': 0,
+    },
+  },
+  // In its place at the row's end, the handle ends the row, as an end slot
+  // would.
+  inRowAtEnd: {
+    marginInlineStart: 'auto',
   },
   // Presses on the grip land on the handle.
   grip: {
     pointerEvents: 'none',
   },
   // Shown while its row is hovered or holds the focus (the row is the reveal
-  // container), and always in reorder mode. It keeps its place while hidden.
-  // A disabled row dims its label and end content to half. The handle is
-  // outside them, so it dims itself to match.
+  // container), and always in reorder mode. It keeps its tab stop while
+  // hidden. A disabled row dims its label and end content to half. The
+  // handle is outside them, so it dims itself to match.
   reveal: {
     opacity: {
       default: 'var(--_reveal-opacity, 1)',
       ':is([aria-pressed="true"])': 1,
       ':is([aria-disabled="true"])': 'calc(0.5 * var(--_reveal-opacity, 1))',
+    },
+  },
+  shown: {
+    opacity: {
+      default: 1,
+      ':is([aria-disabled="true"])': 0.5,
     },
   },
   // `start`: at the top of the row's content.
@@ -274,6 +294,8 @@ export function ListReorderHandle({
   rowLabelledBy,
   rowAlign,
   isInRow = false,
+  isAlwaysVisible = false,
+  placement = 'start',
 }: ListReorderHandleProps) {
   const ref = useRef<HTMLButtonElement>(null);
   const t = useComponentTranslator();
@@ -284,6 +306,7 @@ export function ListReorderHandle({
   );
   const controller = use(ListContext)?.reorder?.session as
     ListReorderController | undefined;
+  const isAtEnd = placement === 'end';
   // The row's label element, when the handle sits in an Item's slot.
   const labelID = use(ItemLabelContext);
   const verbID = useId();
@@ -422,11 +445,16 @@ export function ListReorderHandle({
       }}
       {...focusOutlineProps.focusVisible(
         styles.handle,
-        revealStyles.revealLayoutPreserved,
-        styles.reveal,
+        isAlwaysVisible
+          ? styles.shown
+          : [revealStyles.revealLayoutPreserved, styles.reveal],
         reorderingHandleStyles.cursor,
         touchHitAreaStyles.layer,
-        isInRow && styles.inRowPlace,
+        isAlwaysVisible || isInRow
+          ? isAtEnd && styles.inRowAtEnd
+          : isAtEnd
+            ? styles.hangAtEnd
+            : styles.hangAtStart,
         rowAlign === 'start' && styles.inRowStart,
         rowAlign === 'first-line' && styles.inRowFirstLine,
       )}>

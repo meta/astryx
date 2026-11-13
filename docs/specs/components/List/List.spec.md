@@ -22,6 +22,7 @@ verified_by:
     packages/core/src/List/__tests__/ListReorder.test.tsx,
     packages/core/src/List/__tests__/ListReorderLayout.test.tsx,
     packages/core/src/List/__tests__/ListReorderTouch.interaction.browser.spec.ts,
+    packages/core/src/List/__tests__/ListReorderHandleOptions.interaction.browser.spec.ts,
     packages/core/src/List/__tests__/ListReorderPointer.interaction.browser.spec.ts,
     packages/core/src/List/__tests__/ListReorderMode.interaction.browser.spec.ts,
     packages/core/src/List/__tests__/reorderModel.test.ts,
@@ -237,18 +238,21 @@ Consumer migration instructions belong in consumer docs and release notes.
 - `spec:AST-103` owns reordering. List adopts it: it
   takes the `reorderable` object, a row's key is its `ListItem`'s `itemKey`
   and its position is its index, and the
-  handle is the one element reordering adds to a row, at its leading edge,
-  before the row's start content (`spec:AST-103` FR5). Where no pointer is
-  coarse, the handle shows while its row is hovered or holds the focus. It
-  then hangs before the row's text and takes no width, so the text keeps its
-  place. A reorderable list pads that room before its rows and reaches into
-  its host's padding by as much of it as the padding holds, so the FR9 clip
-  and a clipping host keep the handles. The rows move in only by the room
-  the host's padding lacks. Under a coarse pointer, the handle always shows
-  and takes its place in the row. It also takes its place in the row after
-  a list marker, and under `outset` and `bleed`, whose rows reach the
-  host's padding edge. Hidden, it keeps its tab stop.
-  The reorder
+  handle is the one element reordering adds to a row (`spec:AST-103` FR5),
+  at the row edge its reorderable's `handle.placement` names: its leading
+  edge, before the row's start content, by default, or its trailing edge.
+  The handle always shows and takes its place in the row, and a row that
+  stays put keeps that room, unless `handle.visibility` is `'hover'`.
+  Then, where the primary pointer is fine, the handle shows while its row is
+  hovered or holds the focus. It then hangs outside the row's content
+  and takes no width, so the content keeps its place. A reorderable list
+  pads that room on that edge and reaches into its host's padding by as much
+  of it as the padding holds, so the FR9 clip and a clipping host keep the
+  handles. The rows move in only by the room the host's padding lacks. Under
+  a coarse pointer the handle always shows and takes its place in the row.
+  It also takes its place in the row after a list marker at the leading
+  edge, and under `outset` and `bleed`, whose rows reach the host's padding
+  edge. Hidden, it keeps its tab stop. The reorder
   controller finds a collection's rows
   through a rows reader, which lists them in order and tells whether an
   element is one; List's rows are its element children.
