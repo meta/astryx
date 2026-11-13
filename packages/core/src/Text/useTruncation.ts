@@ -83,6 +83,8 @@ export function useTruncation(
   const unobserveContentRef = useRef<(() => void) | null>(null);
   // The last measured answer, which the text keeps while it is expanded.
   const answerRef = useRef({isTruncated: false, fullText: ''});
+  // The text an expanded element kept its answer for when it went.
+  const keptForRef = useRef<HTMLElement | null>(null);
 
   const checkTruncation = useCallback(
     (element: HTMLElement) => {
@@ -132,6 +134,7 @@ export function useTruncation(
       unobserveContentRef.current?.();
       unobserveContentRef.current = null;
 
+      const previous = elementRef.current;
       elementRef.current = element;
 
       // Shown in full, the text keeps the answer it had when clamped.
@@ -139,8 +142,20 @@ export function useTruncation(
         if (element != null) {
           setIsTruncated(answerRef.current.isTruncated);
           setFullText(answerRef.current.fullText);
+        } else {
+          keptForRef.current = previous;
         }
         return;
+      }
+
+      // A kept answer is about the text it measured. Other text starts from
+      // none, as it does after its old element goes.
+      const keptFor = keptForRef.current;
+      keptForRef.current = null;
+      if (keptFor != null && element !== keptFor) {
+        answerRef.current = {isTruncated: false, fullText: ''};
+        setIsTruncated(false);
+        setFullText('');
       }
 
       if (element && maxLines > 0) {

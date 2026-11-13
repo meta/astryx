@@ -28,8 +28,14 @@ export const oceanTheme = defineTheme({
   tokens: {'--color-background-body': '#ffffff'},
   components: {
     progressbar: {base: {color: 'red'}},
-    button: {base: {'--_button-radius': '2px'}},
   },
+});
+`;
+// A theme the build refuses: it sets a private var.
+const PRIVATE = `import {defineTheme} from '@astryxdesign/core/theme';
+export const pvTheme = defineTheme({
+  name: 'pv',
+  components: {button: {base: {'--_button-radius': '2px'}}},
 });
 `;
 const CALM = `import {defineTheme} from '@astryxdesign/core/theme';
@@ -53,6 +59,7 @@ beforeEach(() => {
   fs.writeFileSync(path.join(dir, 'package.json'), '{"type":"module"}\n');
   fs.writeFileSync(path.join(dir, 'ocean.mjs'), OCEAN);
   fs.writeFileSync(path.join(dir, 'ocean-calm.mjs'), CALM);
+  fs.writeFileSync(path.join(dir, 'pv.mjs'), PRIVATE);
 });
 
 afterEach(() => {
@@ -72,9 +79,16 @@ function run(args) {
 }
 
 describe('theme command human output is plain ASCII', () => {
-  it('a private-variable build keeps its output and exits 1', async () => {
+  it('a private-variable build is refused, writes nothing, and exits 1', async () => {
+    const refused = await run(['build', 'pv.mjs']);
+    expect(refused.code).toBe(1);
+    expect(refused.stderr).toContain('--_button-radius');
+    expect(refused.stdout).not.toContain('[ok]');
+    expect(fs.existsSync(path.join(dir, 'pv.css'))).toBe(false);
+    expect(nonAscii(refused)).toEqual([]);
+
     const short = await run(['build', 'ocean.mjs']);
-    expect(short.code).toBe(1);
+    expect(short.code).toBe(0);
     expect(short.stdout).toContain(
       '[note] Fonts named but not loaded: "Inter"',
     );
@@ -85,31 +99,33 @@ describe('theme command human output is plain ASCII', () => {
       dir,
     );
 
-    expect(result.code).toBe(1);
+    expect(result.code).toBe(0);
     expect(result.stdout).toContain('[ok] ocean.css');
     expect(result.stderr).toContain('[warn] Unknown component "progressbar"');
-    expect(result.stderr).toContain('[error] Component "button"');
     expect(result.stdout).toContain('note: Font "Inter"');
     expect(result.stdout).toContain('[note] Theme "ocean" names fonts');
     expect(nonAscii(result)).toEqual([]);
   });
 
-  it('JSON build and check keep their receipts and exit 1', async () => {
+  it('JSON build and check give their receipts; a private var gives an error envelope', async () => {
+    const refused = await runCli(['--json', 'theme', 'build', 'pv.mjs'], dir);
+    expect(refused.code).toBe(1);
+    expect(JSON.parse(refused.stdout)).toMatchObject({
+      code: 'ERR_THEME_INVALID',
+    });
+
     const built = await runCli(['--json', 'theme', 'build', 'ocean.mjs'], dir);
-    expect(built.code).toBe(1);
+    expect(built.code).toBe(0);
     expect(built.stderr).toBe('');
     const receipt = JSON.parse(built.stdout);
     expect(receipt.type).toBe('theme.build');
     expect(receipt.data.name).toBe('ocean');
-    expect(receipt.data.warnings).toEqual(
-      expect.arrayContaining([expect.stringContaining('--_button-radius')]),
-    );
 
     const checked = await runCli(
       ['--json', 'theme', 'build', 'ocean.mjs', '--check'],
       dir,
     );
-    expect(checked.code).toBe(1);
+    expect(checked.code).toBe(0);
     expect(checked.stderr).toBe('');
     expect(JSON.parse(checked.stdout)).toMatchObject({
       type: 'theme.build.check',
@@ -124,7 +140,7 @@ describe('theme command human output is plain ASCII', () => {
   it('--check, up to date and stale', async () => {
     await run(['build', 'ocean.mjs']);
     const upToDate = await run(['build', 'ocean.mjs', '--check']);
-    expect(upToDate.code).toBe(1);
+    expect(upToDate.code).toBe(0);
     expect(upToDate.stdout).toContain('[ok] Theme outputs are up to date');
     expect(nonAscii(upToDate)).toEqual([]);
 
@@ -137,7 +153,7 @@ describe('theme command human output is plain ASCII', () => {
 
   it('a batch build and check', async () => {
     const built = await run(['build', 'ocean.mjs', 'ocean-calm.mjs']);
-    expect(built.code).toBe(1);
+    expect(built.code).toBe(0);
     expect(built.stdout).toContain('[ok] Built 2 themes.');
     expect(nonAscii(built)).toEqual([]);
 
@@ -147,9 +163,25 @@ describe('theme command human output is plain ASCII', () => {
       'ocean-calm.mjs',
       '--check',
     ]);
-    expect(checked.code).toBe(1);
+    expect(checked.code).toBe(0);
     expect(checked.stdout).toContain('[ok] Checked 2 themes.');
     expect(nonAscii(checked)).toEqual([]);
+  });
+
+  it('a family refusal names the member that sets a private var', async () => {
+    const r = await run([
+      'build',
+      '--family',
+      'ocean.mjs',
+      'pv.mjs',
+      '--family-key',
+      'f',
+    ]);
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain('pv.mjs: ');
+    expect(r.stderr).toContain('--_button-radius');
+    expect(fs.existsSync(path.join(dir, 'f.css'))).toBe(false);
+    expect(nonAscii(r)).toEqual([]);
   });
 
   it('a family build and a stale family check', async () => {
@@ -162,7 +194,7 @@ describe('theme command human output is plain ASCII', () => {
       'ocean-family',
     ];
     const built = await run(familyArgs);
-    expect(built.code).toBe(1);
+    expect(built.code).toBe(0);
     expect(built.stdout).toContain('[ok] ocean-family.css');
     expect(nonAscii(built)).toEqual([]);
 

@@ -250,9 +250,7 @@ for (const viewport of [
 test.describe('under a finger', () => {
   test.use({hasTouch: true});
 
-  test(`"more" takes a finger's taps toward 44 px below it and beside it, never from the line above`, async ({
-    page,
-  }) => {
+  test(`"more" takes a finger's taps across 44 × 44 px`, async ({page}) => {
     const dialog = await openCaptionGallery(page, {width: 402, height: 874});
     expect(
       await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
@@ -284,20 +282,18 @@ test.describe('under a finger', () => {
       const right = inset('right');
       const bottom = inset('bottom');
       return {
-        top: inset('top'),
-        right,
-        bottom,
+        width: box.width + inset('left') + right,
+        height: box.height + inset('top') + bottom,
         above: takes(middle, box.top - 4),
         below: takes(middle, box.bottom + bottom / 2),
         beside: takes(box.right + right / 2, box.top + box.height / 2),
       };
     });
-    // The line above is the caption's own text: a tap there is not "more".
-    expect(facts.above).toBe(false);
-    expect(facts.top).toBe(0);
-    // Below and beside, a tap within the grown target is "more".
-    expect(facts.bottom).toBeGreaterThan(0);
-    expect(facts.right).toBeGreaterThan(0);
+    // No other target is near, so the target grows to the full 44 × 44 px
+    // on each axis, the line above included.
+    expect(facts.width).toBeGreaterThanOrEqual(44 - 0.5);
+    expect(facts.height).toBeGreaterThanOrEqual(44 - 0.5);
+    expect(facts.above).toBe(true);
     expect(facts.below).toBe(true);
     expect(facts.beside).toBe(true);
   });

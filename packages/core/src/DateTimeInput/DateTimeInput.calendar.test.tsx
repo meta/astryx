@@ -81,11 +81,7 @@ describe('DateTimeInput typed date entry with a calendar', () => {
     fireEvent.blur(input);
     expect(onChange).not.toHaveBeenCalled();
     expect(input).toHaveAttribute('aria-invalid', 'true');
-    expectShown(
-      input,
-      container,
-      'This date does not exist in the Hebrew Calendar',
-    );
+    expectShown(input, container, 'Enter a real date (Hebrew Calendar)');
     expect(input).toHaveValue('1 Adar I 5785');
   });
 

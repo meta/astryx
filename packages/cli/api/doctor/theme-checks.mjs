@@ -8,12 +8,13 @@
  */
 
 import * as path from 'node:path';
-import {parse} from '@babel/parser';
+import {babelParse as parse} from '../../foundation/runtime/lazy-dependencies.mjs';
 import postcss from 'postcss';
 import {
   collectUnloadedFonts,
   discoverDoctorThemes,
   discoverDoctorUnmigratedCopies,
+  corePeerRange,
   findDoctorCoreDir,
   doctorElementPropOrigins,
   doctorStylesheetImports,
@@ -31,6 +32,9 @@ import {
   resolveRecordedTheme,
   resolveThemeModule,
   SOURCE_EXTENSIONS,
+  isPrivateVarRefusal,
+  missingThemePackage,
+  packageInstallCommand,
   themeBuild,
   themeRecordOwner,
   validateThemePrivateInputs,
@@ -39,7 +43,6 @@ import {
   getCliInvocation,
   formatCliCommand,
 } from '../../foundation/env/package-manager.mjs';
-import {satisfiesRange} from '../../foundation/env/semver.mjs';
 import {logger} from '../logger.mjs';
 
 /** @typedef {import('./doctor.mjs').DoctorCheck} DoctorCheck */
@@ -1083,6 +1086,11 @@ export async function checkAppThemes(cwd) {
     });
   } else {
     const stale = [];
+    /** Local themes the build refused for a private var: not checked. */
+    /** @type {string[]} */
+    const refused = [];
+    /** @type {Map<string, string[]>} theme slugs by the package they import and the app lacks */
+    const missingPackages = new Map();
     const previousSilent = logger.silent;
     logger.setSilent(true);
     try {
@@ -1106,38 +1114,85 @@ export async function checkAppThemes(cwd) {
           ) {
             stale.push(theme.slug);
           }
-        } catch {
-          stale.push(theme.slug);
+        } catch (error) {
+          // A theme that sets a private var is the "Private theme
+          // variables" check's to report, not a stale output.
+          if (isPrivateVarRefusal(error)) {
+            refused.push(theme.slug);
+            continue;
+          }
+          const missing = missingThemePackage(error);
+          if (missing) {
+            missingPackages.set(missing, [
+              ...(missingPackages.get(missing) ?? []),
+              theme.slug,
+            ]);
+          } else {
+            stale.push(theme.slug);
+          }
         }
       }
     } finally {
       logger.setSilent(previousSilent);
     }
+    const packages = [...missingPackages.keys()];
+    const install =
+      packages.length > 0
+        ? packageInstallCommand(packages, state.projectDir)
+        : null;
+    const refresh = stale.map(slug =>
+      refreshThemeCommand(
+        state.projectDir,
+        run,
+        available,
+        slug,
+        state.themes[slug],
+      ),
+    );
     checks.push(
-      stale.length > 0
+      packages.length > 0
         ? {
             id: 'theme-local-builds',
             label: 'Local theme build freshness',
             status: 'fail',
-            message: `Local theme outputs are missing or stale: ${stale.join(', ')}.`,
-            fix: stale
-              .map(slug =>
-                refreshThemeCommand(
-                  state.projectDir,
-                  run,
-                  available,
-                  slug,
-                  state.themes[slug],
-                ),
-              )
-              .join(' '),
+            message: `Local themes import packages the app does not have installed, so they cannot build: ${[
+              ...missingPackages,
+            ]
+              .map(([pkg, slugs]) => `${pkg} (${slugs.join(', ')})`)
+              .join(
+                '; ',
+              )}.${stale.length > 0 ? ` Local theme outputs are also missing or stale: ${stale.join(', ')}.` : ''}${refused.length > 0 ? ` Not checked (a private theme variable; see theme-private-variables): ${refused.join(', ')}.` : ''}`,
+            fix: [
+              install?.installCommand ??
+                install?.noCommandReason ??
+                `Install ${packages.join(', ')}.`,
+              ...refresh,
+            ].join(' '),
           }
-        : {
-            id: 'theme-local-builds',
-            label: 'Local theme build freshness',
-            status: 'pass',
-            message: 'Every added local theme output matches its source.',
-          },
+        : stale.length > 0
+          ? {
+              id: 'theme-local-builds',
+              label: 'Local theme build freshness',
+              status: 'fail',
+              message: `Local theme outputs are missing or stale: ${stale.join(', ')}.${refused.length > 0 ? ` Not checked (a private theme variable; see theme-private-variables): ${refused.join(', ')}.` : ''}`,
+              fix: refresh.join(' '),
+            }
+          : refused.length > 0
+            ? {
+                // Not a pass: the build refused these, so their outputs
+                // were never compared with their sources.
+                id: 'theme-local-builds',
+                label: 'Local theme build freshness',
+                status: 'info',
+                message: `Not checked: ${refused.join(', ')} ${refused.length === 1 ? 'sets' : 'set'} a private theme variable, so the build refuses ${refused.length === 1 ? 'it' : 'them'} and ${refused.length === 1 ? 'its' : 'their'} outputs were not compared with ${refused.length === 1 ? 'its source' : 'their sources'}.`,
+                fix: 'Follow the fix on the theme-private-variables check, then run doctor again.',
+              }
+            : {
+                id: 'theme-local-builds',
+                label: 'Local theme build freshness',
+                status: 'pass',
+                message: 'Every added local theme output matches its source.',
+              },
     );
   }
 
@@ -1213,17 +1268,13 @@ export async function checkAppThemes(cwd) {
     const pkg = packageDir
       ? readPackageJson(path.join(packageDir, 'package.json'))
       : null;
-    const range = pkg?.peerDependencies?.['@astryxdesign/core'];
-    if (
-      !coreVersion ||
-      typeof range !== 'string' ||
-      !satisfiesRange(coreVersion, range)
-    ) {
+    const {range, accepts} = corePeerRange(pkg, coreVersion);
+    if (!accepts) {
       peerProblems.push({
         slug,
         owner,
-        range: typeof range === 'string' ? range : null,
-        message: `${slug}: ${owner} requires ${typeof range === 'string' ? range : 'an undeclared Core range'}, installed ${coreVersion ?? 'none'}`,
+        range,
+        message: `${slug}: ${owner} requires ${range ?? 'an undeclared Core range'}, installed ${coreVersion ?? 'none'}`,
       });
     }
   }

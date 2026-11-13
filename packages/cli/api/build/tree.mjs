@@ -7,7 +7,8 @@
  * (kit/signals.mjs), the block picker's blocks (blocks/blocks.mjs), and the
  * kit around them (kit/answer.mjs).
  * @input {query, options} and the data build's adapter gathered: the root's
- *   weights and the block picker's
+ *   weights and the block picker's, and the adapter's keeper for the picker's
+ *   per-block vectors
  * @output the build.kit response
  * @position api/build; build.mjs runs it with the shared route helper
  */
@@ -22,6 +23,7 @@ import {pickBlocks} from './blocks/blocks.mjs';
  * @typedef {object} BuildContext
  * @property {import('../../foundation/route/route.mjs').ClassifierWeights} weights the root's weights
  * @property {import('./blocks/blocks.mjs').BlockPickerWeights | null} blocks the block picker's weights; null: build names its own blocks
+ * @property {import('./blocks/blocks.mjs').KeepCatalog} [keepBlocks] keeps the picker's per-block vectors between runs
  * @typedef {import('./build.type.mjs').BuildKitResponse} BuildAnswer
  */
 
@@ -35,7 +37,12 @@ const main = defineSearcher({
   run: async (request, ctx) => {
     const signals = await kitSignals(request.query, request.options);
     if (!ctx.blocks) return kitAnswer(signals);
-    const picked = pickBlocks(request.query, signals, ctx.blocks);
+    const picked = pickBlocks(
+      request.query,
+      signals,
+      ctx.blocks,
+      ctx.keepBlocks,
+    );
     return kitAnswer(signals, picked.names, picked.entries);
   },
 });

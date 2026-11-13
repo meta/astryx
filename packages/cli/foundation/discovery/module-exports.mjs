@@ -19,9 +19,9 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {createRequire} from 'node:module';
 import {findInstalledPackage} from '../fs/paths.mjs';
 import {inspectPackageExport} from './package-exports.mjs';
+import {babelParser} from '../runtime/lazy-dependencies.mjs';
 
 const MODULE_EXTENSIONS = [
   '.mjs',
@@ -101,20 +101,6 @@ function moduleText(file) {
   const text = fs.readFileSync(file, 'utf-8');
   moduleTexts.set(file, {stamp, text});
   return text;
-}
-
-const requireFromHere = createRequire(import.meta.url);
-/** @type {typeof import('@babel/parser') | undefined} */
-let parser;
-
-/**
- * @babel/parser, loaded on first use: a run that reads no module's exports
- * never loads it.
- * @returns {typeof import('@babel/parser')}
- */
-function babelParser() {
-  parser ??= requireFromHere('@babel/parser');
-  return /** @type {typeof import('@babel/parser')} */ (parser);
 }
 
 /** @param {string} file */
