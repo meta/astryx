@@ -37,8 +37,8 @@ const themes = () =>
 const iconDefinitions = () =>
   (loaded.iconDefinitions ??= require('../../authoring/doctypes/icon-definition/parse.mjs'));
 /** @returns {typeof import('../../authoring/doctypes/icon-set/parse.mjs')} */
-const iconSets = () =>
-  (loaded.iconSets ??= require('../../authoring/doctypes/icon-set/parse.mjs'));
+const iconSetModule = () =>
+  (loaded.iconSetModule ??= require('../../authoring/doctypes/icon-set/parse.mjs'));
 /** @returns {typeof import('../../authoring/config/parse.mjs')} */
 const config = () =>
   (loaded.config ??= require('../../authoring/config/parse.mjs'));
@@ -65,10 +65,10 @@ export const parseTheme = (...args) => themes().parseTheme(...args);
 export const parseIconDefinition = (...args) =>
   iconDefinitions().parseIconDefinition(...args);
 /** @type {typeof import('../../authoring/doctypes/icon-set/parse.mjs').parseIconSet} */
-export const parseIconSet = (...args) => iconSets().parseIconSet(...args);
+export const parseIconSet = (...args) => iconSetModule().parseIconSet(...args);
 /** @type {typeof import('../../authoring/doctypes/icon-set/parse.mjs').parseIconSetData} */
 export const parseIconSetData = (...args) =>
-  iconSets().parseIconSetData(...args);
+  iconSetModule().parseIconSetData(...args);
 /** @type {typeof import('../../authoring/config/parse.mjs').parseConfig} */
 export const parseConfig = (...args) => config().parseConfig(...args);
 /** @type {typeof import('../../authoring/integration/schema.mjs').parseIntegrationBase} */
