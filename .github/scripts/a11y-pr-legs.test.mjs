@@ -24,6 +24,7 @@ import yaml from 'yaml';
 import {
   LEG_BUDGET_MS,
   LEG_LIMIT_MS,
+  RELEASE_LEG_LIMIT_MS,
   planLegs,
   planOverLimit,
 } from './a11y-pr-contracts.mjs';
@@ -271,7 +272,7 @@ describe('a plan over twelve minutes', () => {
     const three = planLegs(replay.files, replay.seconds, 3);
     expect(three.longestMs).toBeGreaterThan(LEG_LIMIT_MS);
     expect(planOverLimit(three, true)).toMatch(
-      /^::error title=Accessibility specs over twelve minutes::3 legs still leave \d+\.\d min/,
+      /^::error title=Accessibility specs over their leg's time::3 legs still leave \d+\.\d min .*more than the 12 minutes a leg's 15-minute job/,
     );
     const five = planLegs(replay.files, replay.seconds, 5);
     expect(five.count).toBe(5);
@@ -280,9 +281,14 @@ describe('a plan over twelve minutes', () => {
     expect(five.shares.flat().sort()).toEqual([...replay.files].sort());
   });
 
-  it('never fails a release check, which runs every spec in one long job', () => {
+  it("fails a release check by name only past its own job's time", () => {
+    // The release check's one leg has a 360-minute job.
+    expect(RELEASE_LEG_LIMIT_MS).toBe(345 * 60 * 1000);
     const one = planLegs(replay.files, replay.seconds, 1);
     expect(one.longestMs).toBeGreaterThan(LEG_LIMIT_MS);
     expect(planOverLimit(one, false)).toBe('');
+    expect(
+      planOverLimit({count: 1, longestMs: RELEASE_LEG_LIMIT_MS + 60000}, false),
+    ).toMatch(/more than the 345 minutes the release check's 360-minute job/);
   });
 });

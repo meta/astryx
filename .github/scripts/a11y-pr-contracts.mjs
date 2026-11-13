@@ -822,16 +822,24 @@ export const LEG_BUDGET_MS = 10 * 60 * 1000;
 export const LEG_LIMIT_MS = 12 * 60 * 1000;
 
 /**
- * The error a pull request's plan fails with when its longest leg is over
- * LEG_LIMIT_MS, or '' when it fits. A release check runs every spec in one
- * job with hours to spare, so it never fails here.
+ * The longest a release check's one leg may be planned at: its job has 360
+ * minutes. Every recorded spec file together takes about 137.
+ */
+export const RELEASE_LEG_LIMIT_MS = 345 * 60 * 1000;
+
+/**
+ * The error a plan fails with when its longest leg is over the time its job
+ * leaves for specs (LEG_LIMIT_MS for a pull request's legs,
+ * RELEASE_LEG_LIMIT_MS for a release check's one leg), or '' when it fits.
  * @param {{count: number, longestMs: number}} legs
  * @param {boolean} isPullRequest
  */
 export function planOverLimit(legs, isPullRequest) {
-  if (!isPullRequest || legs.longestMs <= LEG_LIMIT_MS) return '';
+  const limit = isPullRequest ? LEG_LIMIT_MS : RELEASE_LEG_LIMIT_MS;
+  if (legs.longestMs <= limit) return '';
   const minutes = (legs.longestMs / 60000).toFixed(1);
-  return `::error title=Accessibility specs over twelve minutes::${legs.count} legs still leave ${minutes} min of recorded time in one leg, more than the ${LEG_LIMIT_MS / 60000} minutes a leg's 15-minute job leaves for its specs. Split the change, or its longest spec files.`;
+  const job = isPullRequest ? "a leg's 15-minute job" : "the release check's 360-minute job";
+  return `::error title=Accessibility specs over their leg's time::${legs.count} legs still leave ${minutes} min of recorded time in one leg, more than the ${limit / 60000} minutes ${job} leaves for its specs. Split the change, or its longest spec files.`;
 }
 
 /**
@@ -1333,7 +1341,7 @@ function main() {
     console.log(
       `Accessibility legs: ${legs.count} for ${budgeted.run.length} spec files (the longest leg's recorded time ${minutes} min).`,
     );
-    const overLimit = planOverLimit(legs, isPullRequest && !scopeLost);
+    const overLimit = scopeLost ? '' : planOverLimit(legs, isPullRequest);
     if (overLimit) {
       console.log(overLimit);
       return 1;
