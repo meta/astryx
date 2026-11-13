@@ -648,13 +648,20 @@ export function Pagination({
 
   // The props that make a Button control change to `target`, as a link when
   // links are on. An unavailable control gets no URL and changes no page.
-  const controlProps = (target: number, isAvailable: boolean) => {
+  // A disabled control shows no tooltip.
+  const controlProps = (
+    target: number,
+    isAvailable: boolean,
+    tooltip?: string,
+  ) => {
     const href = isAvailable ? pageHref(target) : undefined;
+    const isControlDisabled =
+      isDisabled || !isAvailable || (href == null && !hasPageCallback);
     return {
       href,
       as,
-      isDisabled:
-        isDisabled || !isAvailable || (href == null && !hasPageCallback),
+      isDisabled: isControlDisabled,
+      tooltip: isControlDisabled ? undefined : tooltip,
       onClick: (event: React.MouseEvent<HTMLElement>) => {
         if (!isAvailable) {
           return;
@@ -948,7 +955,6 @@ export function Pagination({
         {showFirstLast && (
           <Button
             label={firstLabel}
-            tooltip={isDisabled || !hasPrevious ? undefined : firstLabel}
             variant="ghost"
             size={buttonSize}
             icon={
@@ -958,7 +964,7 @@ export function Pagination({
                 xstyle={rtlStyles.mirror}
               />
             }
-            {...controlProps(1, hasPrevious)}
+            {...controlProps(1, hasPrevious, firstLabel)}
             isIconOnly
             xstyle={variant === 'compact' && styles.compactFirst}
           />
@@ -966,7 +972,6 @@ export function Pagination({
 
         <Button
           label={previousLabel}
-          tooltip={isDisabled || !hasPrevious ? undefined : previousLabel}
           variant="ghost"
           size={buttonSize}
           icon={
@@ -976,7 +981,11 @@ export function Pagination({
               xstyle={rtlStyles.mirror}
             />
           }
-          {...controlProps(clampPage(optimisticPage - step), hasPrevious)}
+          {...controlProps(
+            clampPage(optimisticPage - step),
+            hasPrevious,
+            previousLabel,
+          )}
           isIconOnly
         />
 
@@ -984,7 +993,6 @@ export function Pagination({
 
         <Button
           label={nextLabel}
-          tooltip={isDisabled || !hasNext ? undefined : nextLabel}
           variant="ghost"
           size={buttonSize}
           icon={
@@ -994,14 +1002,17 @@ export function Pagination({
               xstyle={rtlStyles.mirror}
             />
           }
-          {...controlProps(clampPage(optimisticPage + step), hasNext)}
+          {...controlProps(
+            clampPage(optimisticPage + step),
+            hasNext,
+            nextLabel,
+          )}
           isIconOnly
         />
 
         {showFirstLast && (
           <Button
             label={lastLabel}
-            tooltip={isDisabled || !hasNext ? undefined : lastLabel}
             variant="ghost"
             size={buttonSize}
             icon={
@@ -1011,7 +1022,11 @@ export function Pagination({
                 xstyle={rtlStyles.mirror}
               />
             }
-            {...controlProps(computedTotalPages ?? optimisticPage, hasNext)}
+            {...controlProps(
+              computedTotalPages ?? optimisticPage,
+              hasNext,
+              lastLabel,
+            )}
             isIconOnly
             xstyle={variant === 'compact' && styles.compactLast}
           />

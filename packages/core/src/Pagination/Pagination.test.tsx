@@ -10,6 +10,7 @@
  */
 
 import {describe, it, expect, vi, afterEach} from 'vitest';
+import {useState} from 'react';
 import {
   render,
   screen,
@@ -1675,6 +1676,22 @@ describe('Pagination', () => {
         screen.getByRole('button', {name: 'Go to next page'}),
       ).toHaveAttribute('aria-disabled', 'true');
     });
+
+    it('keeps focus on Next when it reaches the last page', async () => {
+      const user = userEvent.setup();
+      function Paged() {
+        const [page, setPage] = useState(2);
+        return <Pagination page={page} onChange={setPage} totalPages={3} />;
+      }
+      render(<Paged />);
+      const next = screen.getByRole('button', {name: 'Go to next page'});
+      next.focus();
+      await user.keyboard('{Enter}');
+      // The same button stays in the page: it is not natively disabled.
+      expect(next).toHaveAttribute('aria-disabled', 'true');
+      expect(next).not.toHaveAttribute('disabled');
+      expect(next).toHaveFocus();
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -2173,6 +2190,24 @@ describe('Pagination', () => {
       expect(onChange.mock.calls[0][0]).toBe(3);
     });
 
+    it('shows the tooltip of each link control, and none for an unavailable end', () => {
+      render(
+        <Pagination
+          page={1}
+          totalPages={3}
+          variant="compact"
+          hasFirstLast
+          getPageHref={pagePath}
+        />,
+      );
+      // First and Previous are unavailable on page 1. Next and Last are links.
+      expect(
+        screen
+          .getAllByRole('tooltip', {hidden: true})
+          .map(tooltip => tooltip.textContent),
+      ).toEqual(['Go to next page', 'Go to last page']);
+    });
+
     it('needs no onChange: a link click still announces the page', async () => {
       const warn = warnSpy();
       render(<Pagination page={1} totalPages={5} getPageHref={pageHash} />);
@@ -2362,10 +2397,17 @@ describe('Pagination', () => {
 
     it('disables every control that has neither a link nor a callback, and says so', () => {
       const warn = warnSpy();
-      render(<Pagination page={2} totalPages={3} />);
-      for (const button of screen.getAllByRole('button')) {
+      render(
+        <Pagination page={2} totalPages={3} variant="compact" hasFirstLast />,
+      );
+      // First, Previous, Next and Last.
+      const buttons = screen.getAllByRole('button');
+      expect(buttons).toHaveLength(4);
+      for (const button of buttons) {
         expect(button).toHaveAttribute('aria-disabled', 'true');
       }
+      // A control that cannot act shows no tooltip.
+      expect(screen.queryAllByRole('tooltip', {hidden: true})).toHaveLength(0);
       expect(warn).toHaveBeenCalledTimes(1);
       expect(warn.mock.calls[0][0]).toContain('pass onChange, or getPageHref');
     });
