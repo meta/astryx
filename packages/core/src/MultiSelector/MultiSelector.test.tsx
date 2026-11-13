@@ -246,6 +246,36 @@ describe('MultiSelector', () => {
     },
   );
 
+  it.each([false, true])(
+    'keeps the required state on the trigger, not in the listbox name (hasSearch=%s)',
+    async hasSearch => {
+      const user = userEvent.setup();
+      render(
+        <MultiSelector
+          label="Fruit"
+          options={defaultOptions}
+          value={[]}
+          onChange={() => {}}
+          hasSearch={hasSearch}
+          isRequired
+          presentation="bottom-sheet"
+        />,
+      );
+
+      const trigger = hasSearch
+        ? screen.getByRole('button', {name: /Fruit/})
+        : screen.getByRole('combobox');
+      if (hasSearch) {
+        expect(trigger).toHaveAccessibleName(/Required/);
+      } else {
+        expect(trigger).toHaveAttribute('aria-required', 'true');
+      }
+      await user.click(trigger);
+      await screen.findByRole('dialog', {name: 'Fruit'});
+      expect(screen.getByRole('listbox')).toHaveAccessibleName('Fruit');
+    },
+  );
+
   it('moves keyboard focus into a bottom-sheet listbox', async () => {
     const user = userEvent.setup();
     render(
