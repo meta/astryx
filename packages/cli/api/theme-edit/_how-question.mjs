@@ -9023,10 +9023,19 @@ export function draftAnswer(ctx, env, question) {
       // that part; "such as" lists examples.
       const cmp =
         /\b(?:than|as \w+ as|match(?:es|ing)?|equal to|(?:the )?same (?:\w+ )?as|(?:(?:\w+(?:er|ed|ish|ly))|round|bold|dark|light|big|small|thick|thin|tall|wide|look|looks|styled|exactly|just) like(?= (?:the |my )?\w+(?: \w+)? (?:are|is|do|does|have|has)\b)?|like (?=(?:the |my )\w+(?: \w+)? (?:are|is|do|does|have|has)\b))\s+(?:the\s+|my\s+)?/.exec(
-          c.text.replace(
-            /\b(?:i|we|you)(?: would|'d)? like(?: to| for)?\b/g,
-            m => ' '.repeat(m.length),
-          ),
+          lex.parts
+            .reduce(
+              // A part's name is never a comparative ("the container like
+              // dialogs", "a header like cards"): masked, same length.
+              (t, [re]) =>
+                t.replace(new RegExp(re.source, 'g'), m =>
+                  'x'.repeat(m.length),
+                ),
+              c.text,
+            )
+            .replace(/\b(?:i|we|you)(?: would|'d)? like(?: to| for)?\b/g, m =>
+              ' '.repeat(m.length),
+            ),
         );
       if (!cmp) continue;
       const after = (cmp.index ?? 0) + cmp[0].length;

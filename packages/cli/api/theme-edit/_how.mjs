@@ -634,18 +634,49 @@ async function answer(subject, options, cwd) {
 function finish(env, drafts) {
   /** @type {Array<{text: string, commands: string[], sequence?: boolean, refused?: Array<{command: string, why: string}>}>} */
   const out = [];
-  for (const d of drafts) {
-    // The measured check: an option whose built result does not do what
-    // the question asks is left out, with a plain line saying why.
-    /** @type {string[]} */
-    const unmet = [];
-    if (d.intent && typeof env.measure === 'function') {
+  // The measured check runs first on the drafts that carry what their
+  // clause asks; a draft that joins them ("all of it, in order") then keeps
+  // only the steps some kept option still has, so it never brings back a
+  // step the check left out.
+  const key = (/** @type {import('./_how-commands.mjs').Step} */ st) =>
+    JSON.stringify([
+      st.verb,
+      st.thing,
+      st.value,
+      st.on,
+      st.when,
+      st.state,
+      st.mode,
+    ]);
+  /** @type {Set<string>} */
+  const dropped = new Set();
+  /** @type {Set<string>} */
+  const kept = new Set();
+  /** @type {Map<object, string[]>} */
+  const unmetOf = new Map();
+  if (typeof env.measure === 'function')
+    for (const d of drafts) {
+      if (!d.intent) continue;
       const intent = d.intent;
+      /** @type {string[]} */
+      const unmet = [];
       d.options = d.options.filter(o => {
         const why = env.measure(o, intent);
+        for (const st of o) (why ? dropped : kept).add(key(st));
         if (why) unmet.push(why);
         return !why;
       });
+      unmetOf.set(d, unmet);
+    }
+  for (const d of drafts) {
+    if (!d.intent && dropped.size)
+      d.options = d.options
+        .map(o => o.filter(st => !dropped.has(key(st)) || kept.has(key(st))))
+        .filter(o => o.length);
+    // The measured check: an option whose built result does not do what
+    // the question asks is left out, with a plain line saying why.
+    const unmet = unmetOf.get(d) ?? [];
+    if (unmet.length) {
       if (unmet.length && !d.options.length)
         d.text = `couldn't work out a command that does "${d.text}" as asked: ${[...new Set(unmet)].join('; ')}`;
       else if (unmet.length)

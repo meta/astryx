@@ -415,9 +415,13 @@ describe('"like" and "as" compare only in comparison forms', () => {
   it.each(
     /** @type {Array<[string, string[]]>} */ ([
       // Examples of the subject: every named part changes.
+      // (Checks are left out by the measured check: corners more would
+      // square the round radio.)
+      ['make form controls like inputs and checkboxes rounder', ['inputs']],
+      // A part named with "-er" is never a comparative before "like".
       [
-        'make form controls like inputs and checkboxes rounder',
-        ['inputs', 'checks'],
+        'make the container like dialogs and drawers rounder',
+        ['dialog', 'drawer'],
       ],
       [
         'make controls like selects and switches bolder',
@@ -473,6 +477,20 @@ describe('"like" and "as" compare only in comparison forms', () => {
       const {commands} = await answer(q);
       expect(commands.some(c => c.includes(`--on ${subject}`))).toBe(true);
       expect(commands.some(c => c.includes(`--on ${other}`))).toBe(false);
+    },
+    T,
+  );
+});
+
+describe('the answer that joins every clause is measured too', () => {
+  it(
+    'never brings back a step the check left out',
+    async () => {
+      const {commands} = await answer(
+        'make form controls like inputs and checkboxes rounder',
+      );
+      expect(commands.some(c => c.includes('--on checks'))).toBe(false);
+      expect(commands[0]).toBe('set q corners more --on inputs');
     },
     T,
   );
