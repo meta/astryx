@@ -75,8 +75,20 @@ export interface MediaPlayerActions {
   reload: () => void;
 }
 
+/** A reported playback time and the clock time it was reported at. */
+export interface MediaClock {
+  readonly time: number;
+  readonly at: number;
+}
+
 export interface MediaStore {
   getState: () => MediaPlayerState;
+  /**
+   * The last reported time and when it was reported. A new clock starts with
+   * each reported time, each start or resume of playback, and each speed
+   * change, so a smoothed time never counts a paused interval.
+   */
+  getClock: () => MediaClock;
   subscribe: (listener: () => void) => () => void;
   attachMedia: (media: HTMLMediaElement | null) => void;
   attachContainer: (container: HTMLElement | null) => void;
@@ -236,6 +248,11 @@ export function createMediaStore(): MediaStore {
   let detachMedia: (() => void) | null = null;
   let lastTextTrackId: string | null = null;
   const listeners = new Set<() => void>();
+  let clock: MediaClock = {time: 0, at: 0};
+
+  function isAdvancing(of: MediaPlayerState): boolean {
+    return !of.isPaused && !of.isEnded && !of.isWaiting;
+  }
 
   function setState(patch: Partial<MediaPlayerState>) {
     let hasChange = false;
@@ -260,7 +277,18 @@ export function createMediaStore(): MediaStore {
     if (!hasChange) {
       return;
     }
+    const previous = state;
     state = {...state, ...patch};
+    if (
+      state.currentTime !== previous.currentTime ||
+      state.playbackRate !== previous.playbackRate ||
+      isAdvancing(state) !== isAdvancing(previous)
+    ) {
+      clock = {
+        time: state.currentTime,
+        at: typeof performance === 'undefined' ? 0 : performance.now(),
+      };
+    }
     for (const listener of listeners) {
       listener();
     }
@@ -573,6 +601,7 @@ export function createMediaStore(): MediaStore {
 
   return {
     getState: () => state,
+    getClock: () => clock,
     subscribe: listener => {
       listeners.add(listener);
       return () => {

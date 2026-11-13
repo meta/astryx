@@ -324,6 +324,22 @@ describe('MediaTimeSlider', () => {
     expect(container).toBeTruthy();
   });
 
+  it('removes its scroll listener when the pointer leaves', () => {
+    const {slider} = renderTimeline();
+    const wrapper = slider.closest('[dir="ltr"]') as HTMLElement;
+    const add = vi.spyOn(window, 'addEventListener');
+    const remove = vi.spyOn(window, 'removeEventListener');
+    fireEvent.pointerEnter(wrapper, {pointerType: 'mouse'});
+    fireEvent.pointerMove(wrapper, {pointerType: 'mouse', clientX: 10});
+    fireEvent.pointerLeave(wrapper, {pointerType: 'mouse'});
+    const added = add.mock.calls.filter(([type]) => type === 'scroll');
+    const removed = remove.mock.calls.filter(([type]) => type === 'scroll');
+    expect(added).toHaveLength(1);
+    expect(removed.some(([, listener]) => listener === added[0]![1])).toBe(
+      true,
+    );
+  });
+
   it('skips five seconds per arrow key and ten per page key', async () => {
     const user = userEvent.setup();
     const {slider, playback} = renderTimeline();
@@ -338,6 +354,30 @@ describe('MediaTimeSlider', () => {
 });
 
 describe('MediaPlaybackRate', () => {
+  it('keeps keys typed in its open menu out of the player shortcuts', async () => {
+    // jsdom has no popover API.
+    vi.spyOn(HTMLElement.prototype, 'showPopover').mockImplementation(() => {});
+    vi.spyOn(HTMLElement.prototype, 'hidePopover').mockImplementation(() => {});
+    const user = userEvent.setup();
+    const {container} = render(
+      <MediaPlayer label="Clip">
+        <MediaPlayerElement kind="video" src="/clip.mp4" />
+        <MediaPlaybackRate variant="menu" />
+      </MediaPlayer>,
+    );
+    const playback = fakePlayback(container.querySelector('video')!);
+    await user.click(screen.getByRole('button', {name: 'Playback speed, 1×'}));
+    const item = screen.getByRole('menuitemradio', {
+      name: '1.5×',
+      hidden: true,
+    });
+    act(() => item.focus());
+    await user.keyboard('k');
+    await user.keyboard('1');
+    expect(playback.play).not.toHaveBeenCalled();
+    expect(playback.getCurrentTime()).toBe(0);
+  });
+
   it('sets the playback speed from a menu that checks the current speed', async () => {
     // jsdom has no popover API.
     vi.spyOn(HTMLElement.prototype, 'showPopover').mockImplementation(() => {});
@@ -536,6 +576,37 @@ describe('useMediaPlayer', () => {
       video.currentTime = 40;
     });
     expect(seen[0]).toBe(40);
+  });
+
+  it('does not count a paused interval when playback resumes', () => {
+    let now = 1000;
+    vi.spyOn(performance, 'now').mockImplementation(() => now);
+    let frameCallback: FrameRequestCallback | null = null;
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
+      frameCallback = callback;
+      return 1;
+    });
+    vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
+    function Readout() {
+      return <span data-testid="time">{useMediaPlaybackTime()}</span>;
+    }
+    const {container} = render(
+      <MediaPlayer label="Clip">
+        <MediaPlayerElement kind="video" src="/clip.mp4" />
+        <Readout />
+      </MediaPlayer>,
+    );
+    const video = container.querySelector('video')!;
+    fakePlayback(video, {duration: 60});
+    // Thirty seconds pass before playback starts.
+    now = 31000;
+    act(() => {
+      void video.play();
+    });
+    act(() => {
+      frameCallback?.(now + 16);
+    });
+    expect(Number(screen.getByTestId('time').textContent)).toBeLessThan(1);
   });
 
   it('throws outside a MediaPlayer', () => {

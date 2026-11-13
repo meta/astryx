@@ -257,7 +257,7 @@ export interface MediaPlayButtonProps extends MediaButtonPartProps {
  * @example
  * ```
  * <MediaPlayer label="Episode 12">
- *   <MediaPlayerAudio src="/media/episode-12.mp3" />
+ *   <MediaPlayerElement kind="audio" src="/media/episode-12.mp3" />
  *   <MediaPlayButton variant="primary" />
  * </MediaPlayer>
  * ```
@@ -576,19 +576,32 @@ export function MediaTimeSlider({
   const playbackTime = useMediaPlaybackTime();
   const value = isSeekable ? Math.min(scrubTime ?? playbackTime, duration) : 0;
 
+  const clearWrapperLeft = useCallback(() => {
+    wrapperLeftRef.current = null;
+  }, []);
+
   // Observes whichever element the wrapper ref receives, so a replaced
   // element is observed too.
-  const observeWrapper = useCallback((wrapper: HTMLDivElement | null) => {
-    wrapperRef.current = wrapper;
-    if (wrapper == null) {
-      return;
-    }
-    setWidth(wrapper.clientWidth);
-    return observeResize(wrapper, () => {
-      wrapperLeftRef.current = null;
+  const observeWrapper = useCallback(
+    (wrapper: HTMLDivElement | null) => {
+      wrapperRef.current = wrapper;
+      if (wrapper == null) {
+        return;
+      }
       setWidth(wrapper.clientWidth);
-    });
-  }, []);
+      const stopObserving = observeResize(wrapper, () => {
+        wrapperLeftRef.current = null;
+        setWidth(wrapper.clientWidth);
+      });
+      return () => {
+        stopObserving();
+        window.removeEventListener('scroll', clearWrapperLeft, {
+          capture: true,
+        });
+      };
+    },
+    [clearWrapperLeft],
+  );
 
   const travel = Math.max(width - SLIDER_THUMB_SIZE, 0);
   const toX = (time: number) =>
@@ -606,10 +619,6 @@ export function MediaTimeSlider({
   const previewTime =
     previewX != null ? toTime(previewX) : scrubTime != null ? value : null;
   const previewAt = previewX ?? (scrubTime != null ? playedX : null);
-
-  const clearWrapperLeft = () => {
-    wrapperLeftRef.current = null;
-  };
 
   const handlePointerEnter = () => {
     wrapperLeftRef.current = null;

@@ -10,18 +10,12 @@
  * @position Internal to MediaPlayer; every part reads its player from here
  */
 
-import {
-  createContext,
-  use,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from 'react';
+import {use, useEffect, useMemo, useState, useSyncExternalStore} from 'react';
 import {useMediaQuery} from '@astryxdesign/core/hooks';
+import {createSharedContext} from '@astryxdesign/core/internal/shared-context';
 import {
   INITIAL_MEDIA_STATE,
+  type MediaClock,
   type MediaPlayerActions,
   type MediaPlayerState,
   type MediaStore,
@@ -60,9 +54,14 @@ export interface MediaPlayerContextValue {
   setScrubTime: (time: number | null) => void;
 }
 
-export const MediaPlayerContext = createContext<MediaPlayerContextValue | null>(
-  null,
-);
+// Shared under a versioned key, so a swizzled copy's root provides to the
+// package's parts and hooks.
+export const MediaPlayerContext =
+  createSharedContext<MediaPlayerContextValue | null>(
+    'lab/media-player',
+    1,
+    null,
+  );
 
 export function useMediaPlayerContext(part: string): MediaPlayerContextValue {
   const context = use(MediaPlayerContext);
@@ -119,7 +118,6 @@ function pad(value: number): string {
   return String(value).padStart(2, '0');
 }
 
-/** Formats seconds as m:ss, or h:mm:ss when `hasHours` is true. */
 /**
  * Returns the playback position, advanced on every animation frame while the
  * media plays, so progress moves smoothly between the browser's time
@@ -154,16 +152,14 @@ export function useMediaPlaybackTime(): number {
     state => state.playbackRate,
   );
   const isReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
-  const anchorRef = useRef({time: currentTime, at: 0});
-  // The last frame's time, with the reported time it counts from. A frame
-  // that counts from an older report is not shown, so a jump shows the new
-  // time at once.
-  const [frame, setFrame] = useState({time: currentTime, from: currentTime});
-
-  // Syncs the anchor with the clock at each reported time.
-  useEffect(() => {
-    anchorRef.current = {time: currentTime, at: performance.now()};
-  }, [currentTime]);
+  const {store} = useMediaPlayerContext('useMediaPlaybackTime');
+  // The last frame's time, with the clock it counts from. A frame that counts
+  // from an older clock is not shown, so a jump or a resume shows the
+  // reported time at once.
+  const [frame, setFrame] = useState<{time: number; clock: MediaClock | null}>({
+    time: currentTime,
+    clock: null,
+  });
 
   // Syncs the smoothed time with the animation frames while the media plays.
   useEffect(() => {
@@ -177,23 +173,26 @@ export function useMediaPlaybackTime(): number {
     const end = Number.isFinite(duration) && duration > 0 ? duration : Infinity;
     let request = 0;
     const tick = (now: number) => {
-      const {time, at} = anchorRef.current;
+      const clock = store.getClock();
       setFrame({
         time: Math.min(
-          time + (Math.max(now - at, 0) / 1000) * playbackRate,
+          clock.time + (Math.max(now - clock.at, 0) / 1000) * playbackRate,
           end,
         ),
-        from: time,
+        clock,
       });
       request = requestAnimationFrame(tick);
     };
     request = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(request);
-  }, [isAdvancing, isReducedMotion, duration, playbackRate]);
+  }, [store, isAdvancing, isReducedMotion, duration, playbackRate]);
 
-  return isAdvancing && frame.from === currentTime ? frame.time : currentTime;
+  return isAdvancing && frame.clock === store.getClock()
+    ? frame.time
+    : currentTime;
 }
 
+/** Formats seconds as m:ss, or h:mm:ss when `hasHours` is true. */
 export function formatClock(seconds: number, hasHours = false): string {
   const total = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
   const hours = Math.floor(total / 3600);

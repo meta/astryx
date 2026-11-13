@@ -327,7 +327,12 @@ export function MediaPlayer({
       return;
     }
     const target = event.target as HTMLElement;
-    if (isEditableTarget(target)) {
+    // A menu or a popover inside the player, such as the speed menu, keeps
+    // its own keys.
+    if (
+      isEditableTarget(target) ||
+      target.closest('[role="menu"], [popover]')
+    ) {
       return;
     }
     const isOnControl =
