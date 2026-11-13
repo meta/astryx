@@ -304,8 +304,10 @@ describe('padding on real base themes', () => {
         /background(-color)?:\s*light-dark\(#eeeeee,/,
       );
       await themeEditSet('om1', 'background', '#f4f4f4', {cwd, on: 'card'});
-      expect(ruleOf('om1', '.astryx-card')).toMatch(
-        /background(-color)?:\s*light-dark\(#f4f4f4,/,
+      // Each card variant reads its own background: each keeps exactly its
+      // own other half (parts43).
+      expect(ruleOf('om1', '.astryx-card[data-variant="default"]')).toMatch(
+        /background-color:\s*light-dark\(#f4f4f4, var\(--color-background-card\)\)/,
       );
       await themeEditSet('om1', '--color-background-card', '#fafafa', {cwd});
       expect(cssOf('om1')).toMatch(

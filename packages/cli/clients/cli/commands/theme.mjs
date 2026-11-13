@@ -121,6 +121,8 @@ import {doc as themePaletteGenerateFn} from '../../../api/theme/themePaletteGene
  * @property {(err: import('../../../api/error.mjs').AstryxError, cwd: string) => import('../../../api/error.mjs').AstryxError | null} [explain] - A clearer refusal for this group, or null.
  * @property {(files: string[], options: {cwd: string, check?: boolean, family?: boolean, iconsSpecifier?: string, out?: string}) => Promise<import('../../../api/error.mjs').AstryxError | null>} [preflight] - A refusal before a build starts, or null.
  * @property {(files: string[], options: {cwd: string}) => Promise<() => Promise<void>>} [hold] - Locks held while a build or check runs; resolves to their release.
+ * @property {(file: string, cwd: string, opts: {check: boolean}) => Record<string, unknown> | null} [extraData] - Fields a group adds to a build's result data (the editor's `appCopyStale`).
+ * @property {(file: string, cwd: string) => ((family: string) => boolean) | null} [loadedFonts] - Font families the app loads for a theme file that the file itself cannot say, so the build does not name them as unloaded.
  * @property {(file: string, cwd: string) => {name: string, reason: string} | null} [missingSource] - For a source file that is not there, this group's way to write it again, or null.
  * @property {(options: {targetPath?: string, overwrite?: boolean, cwd?: string}) => import('../../../api/theme/theme.type.mjs').ThemeTemplateResponse} [template] - This group's template write, in place of `themeTemplate`.
  */
@@ -1331,6 +1333,37 @@ function registerThemeCommands(theme, program, docs, words) {
         const writes = [];
         const log = logger.log;
         const warn = logger.warn;
+        // A group may know fonts the app loads that the theme file cannot
+        // say (the editor's app copy stylesheet): those are not named as
+        // unloaded, in the notices, the trailer or the full help.
+        const loads = words.loadedFonts?.(entry.file, process.cwd()) ?? null;
+        /** @param {string} msg */
+        const namesOnlyLoaded = msg => {
+          // The families the notice names: on its first line, after the
+          // theme's own name.
+          const line =
+            msg
+              .split('\n')
+              .find(l => /not load/.test(l))
+              ?.replace(/^.*?(names fonts it does not load:|Font )/, '') ?? '';
+          const fonts = [...line.matchAll(/"([^"]+)"/g)].map(m => m[1]);
+          return (
+            Boolean(loads) && fonts.length > 0 && fonts.every(f => loads?.(f))
+          );
+        };
+        if (loads && !deferred) {
+          logger.log = (/** @type {string | undefined} */ message) => {
+            if (
+              typeof message === 'string' &&
+              /names fonts it does not load|named by this theme but not loaded/.test(
+                message,
+              ) &&
+              namesOnlyLoaded(message)
+            )
+              return;
+            log.call(logger, message);
+          };
+        }
         if (deferred) {
           logger.log = (/** @type {string | undefined} */ message) => {
             lines.push(() => log.call(logger, message));
@@ -1361,6 +1394,19 @@ function registerThemeCommands(theme, program, docs, words) {
               handOff,
             );
             result = built.receipt;
+            if (loads && built.trailer) {
+              const named = (/** @type {string} */ msg) =>
+                built.trailer?.unloadedFonts.some(
+                  (/** @type {string} */ f) =>
+                    loads(f) && msg.includes(`"${f}"`),
+                ) ?? false;
+              built.trailer.fontNotices = built.trailer.fontNotices.filter(
+                (/** @type {string} */ m) => !named(m),
+              );
+              built.trailer.unloadedFonts = built.trailer.unloadedFonts.filter(
+                (/** @type {string} */ f) => !loads(f),
+              );
+            }
             if (built.trailer) trailers.push(built.trailer);
             if (compact && result?.type === 'theme.build') {
               const {outputs, sizeKB, tokenCount, componentCount} = result.data;
@@ -1383,6 +1429,20 @@ function registerThemeCommands(theme, program, docs, words) {
           }
           logger.log = log;
           logger.warn = warn;
+          const data = /** @type {any} */ (result)?.data;
+          if (loads && data && Array.isArray(data.notices))
+            data.notices = data.notices.filter(
+              (/** @type {string} */ m) =>
+                !(
+                  /named by this theme but not loaded/.test(m) &&
+                  namesOnlyLoaded(m)
+                ),
+            );
+          // A group may add to a build's result (the editor's app copy note).
+          const extra = words.extraData?.(entry.file, process.cwd(), {
+            check: Boolean(options.check),
+          });
+          if (extra && result?.data) Object.assign(result.data, extra);
           results.push({file: entry.file, receipt: result ?? null});
           if (deferred) built.push({writes, lines});
           if (

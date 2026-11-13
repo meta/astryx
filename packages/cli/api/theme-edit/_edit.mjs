@@ -67,8 +67,9 @@ import {
   NEW_MARKER,
   clearNewMarker,
   refuseThemeSource,
-  settingsShapeOk,
+  settingsEntriesOk,
   slugFor,
+  typedThemeName,
   themeSource,
   themeSourceProblem,
   refuseThemeParse,
@@ -113,6 +114,7 @@ import {
   renderSheet,
   previewIsCurrent,
   takeFirstAppCopy,
+  appCopyBehind,
   appCopyStale,
   writeAppCopy,
 } from './_preview.mjs';
@@ -212,7 +214,9 @@ function editorLeftovers(dir, slug, damaged = false) {
 /** Whether a settings file parses, in the shape the editor reads. @param {string} file */
 function readableJson(file) {
   try {
-    return settingsShapeOk(
+    // An entry with no thing or no source is damage too: `new` keeps the
+    // file aside, as the refusal for it says.
+    return settingsEntriesOk(
       JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '')),
     );
   } catch {
@@ -349,9 +353,13 @@ export async function themeEditNew(name, options = {}) {
     /** @type {string | null | undefined} */ likeValue = likeFixed,
   ) => `${P} new ${newName}${newFlags(likeValue, fitSettings, png)}`;
   if (!slugOk(name)) {
-    const fixed = slugFor(name);
-    // Only a name typed in another case is the theme here already.
-    const sameName = String(name ?? '').toLowerCase() === fixed;
+    // A path typed for the name (themes/brand, ./t, t/) names the theme the
+    // path ends in.
+    const typed = String(name ?? '');
+    const path_ = /[\\/]/.test(typed);
+    const fixed = slugFor(path_ ? typedThemeName(typed) : typed);
+    // A name typed in another case, or as a path, is the theme here already.
+    const sameName = path_ || typed.toLowerCase() === fixed;
     const exists = sameName && fs.existsSync(themeFiles(cwd, fixed).settings);
     refuse(
       E.ERR_INVALID_ARGUMENT,
@@ -837,6 +845,23 @@ function changeFocus(s) {
 }
 
 /**
+ * A signal handler for the checks and pictures after a change is saved: it
+ * says the change is saved and how to run what did not, then lets the
+ * signal end the process (the render's own handler re-raises it; with none,
+ * this one does).
+ * @param {string} slug
+ * @returns {(sig: NodeJS.Signals) => void}
+ */
+export function stoppedAfterSave(slug) {
+  return sig => {
+    process.stderr.write(
+      `Stopped: the change to ${slug} is saved and built (and its undo step kept); its checks and pictures did not run. ${P} show ${slug} runs them.\n`,
+    );
+    if (process.listenerCount(sig) === 0) process.kill(process.pid, sig);
+  };
+}
+
+/**
  * The preview after a change, with the in-app preview route kept in step:
  * its imports follow the theme, such as the stylesheet of a font package
  * installed since the last change.
@@ -848,11 +873,24 @@ function changeFocus(s) {
  *   most about the change: Colors for a color, Components for a part
  */
 async function previewAndRoute(ctx, slug, data, png, focus = 'overview') {
-  const p = await previewAfter(ctx, slug, data, png);
+  // Stopped (Ctrl-C) while the checks and pictures run: the change is saved
+  // and built already, which one line says before the process ends.
+  const stopped = stoppedAfterSave(slug);
+  process.once('SIGINT', stopped);
+  process.once('SIGTERM', stopped);
+  /** @type {Awaited<ReturnType<typeof previewAfter>>} */
+  let p;
+  try {
+    p = await previewAfter(ctx, slug, data, png);
+  } finally {
+    process.removeListener('SIGINT', stopped);
+    process.removeListener('SIGTERM', stopped);
+  }
   const wrote = takeFirstAppCopy(ctx.project.cwd, slug);
+  const previewStale = await keepPreviewRoute(ctx, slug);
   return {
     ...p,
-    previewStale: await keepPreviewRoute(ctx, slug),
+    previewStale,
     // How to see the change: the page about it, at its own URL.
     // A page not written this time (preview null) still shows the theme
     // as it was; checks that failed with the page written do not.
@@ -866,6 +904,7 @@ async function previewAndRoute(ctx, slug, data, png, focus = 'overview') {
             cause: 'no preview was rendered',
           })
         : null,
+      {pictureProblem: png ? p.pictureProblem : null, stale: previewStale},
     ),
     // The first time the theme's app copy is written, its files are named.
     ...(wrote ? {appCopy: {wrote}} : {}),
@@ -890,6 +929,33 @@ async function keepPreviewRoute(ctx, slug) {
     // A damaged or moved preview.
     return [];
   }
+}
+
+/**
+ * What a change of mode asks of the app's wiring: a one-mode theme is
+ * given its mode by the app's <Theme>, and one back to both modes no longer.
+ * @param {string} slug
+ * @param {string | undefined} before
+ * @param {string | undefined} after
+ * @returns {string[]}
+ */
+function modeWiringNotes(slug, before, after) {
+  const one = (/** @type {string | undefined} */ m) =>
+    m === 'light-only' ? 'light' : m === 'dark-only' ? 'dark' : null;
+  const [was, now] = [one(before), one(after)];
+  if (was === now) return [];
+  return [
+    ...(was
+      ? [
+          `if the app's <Theme> was given mode="${was}" for ${slug}, take it out${now ? ` (or make it mode="${now}")` : ''}: with it the app stays ${was}, whatever the system asks for`,
+        ]
+      : []),
+    ...(now && !was
+      ? [
+          `the app shows ${slug} in ${now} mode when its <Theme> is given mode="${now}" (<Theme theme={…} mode="${now}">), as the preview does; the theme keeps both halves of its colors, so a toast or a lightbox Core draws in the other mode stays readable`,
+        ]
+      : []),
+  ];
 }
 
 /**
@@ -1066,6 +1132,33 @@ async function change(sub, slug, thing, value, options) {
   // As typed: an undo of a saved entry written in a form the cleanup below
   // repairs (`Corners`, `var(--radius-page)`) removes that exact entry.
   const typedThing = thing;
+  // A JSON object of several settings pasted as one: one set line each.
+  if (
+    typeof thing === 'string' &&
+    (value == null || value === '') &&
+    /^\s*\{[\s\S]*\}\s*$/.test(thing)
+  ) {
+    /** @type {any} */
+    let obj = null;
+    try {
+      obj = JSON.parse(thing);
+    } catch {
+      // Not JSON: read as typed.
+    }
+    if (obj && typeof obj === 'object' && Object.keys(obj).length > 1)
+      refuse(
+        E.ERR_INVALID_ARGUMENT,
+        `This holds ${Object.keys(obj).length} settings; ${sub} changes one at a time.`,
+        {
+          run: Object.entries(obj)
+            .slice(0, 6)
+            .map(
+              ([k, x]) =>
+                `${P} ${sub} ${slug} ${quoteCommandArgument(k)}${sub === 'set' ? ` ${quoteCommandArgument(String(x))}` : ''}`,
+            ),
+        },
+      );
+  }
   // How it was typed, put right before anything reads it (a pasted
   // declaration, a dash, a var(), invisible spaces).
   if (typeof thing === 'string') {
@@ -1160,9 +1253,10 @@ async function changeOnce(
   const data = loadTheme(cwd, slug, target);
   /** @type {string[]} */
   const fieldNotes = [];
-  if (sub === 'set' && (thing === 'base' || thing === 'mode')) {
-    // The other field, when it is damaged too, goes back to its default,
-    // so the theme loads again.
+  {
+    // A damaged field the command does not set goes back to its default,
+    // so the theme loads again (a change or removal of any setting repairs
+    // it on the way).
     if (
       thing !== 'mode' &&
       !['both', 'light-only', 'dark-only'].includes(data.mode)
@@ -1390,6 +1484,9 @@ async function changeOnce(
       );
   }
   const compiledBefore = compileTheme(ctx, data, base);
+  // The build notes the theme had before this change: only new ones are
+  // this change's to report.
+  const notesBefore = new Set(buildNotes(ctx));
   if (sub === 'set' && (s.thing === 'base' || s.thing === 'mode')) {
     const before = s.thing === 'base' ? (data.like ?? 'none') : data.mode;
     if (s.thing === 'base') {
@@ -1595,6 +1692,12 @@ async function changeOnce(
       : [];
   const r = await commitTheme(ctx, slug, data, {history: true});
   const compiledAfter = compileTheme(ctx, data, base);
+  // What the spacing dial said of the sizes it could not keep apart.
+  // What the build said of settings it could not write as they are.
+  const compileNotes = buildNotes(ctx).filter(n => !notesBefore.has(n));
+  const sizeNotes =
+    /** @type {{sizeNotes?: string[]}} */ (/** @type {unknown} */ (ctx))
+      .sizeNotes ?? [];
   const styled = styledChanges(compiledBefore, compiledAfter, base);
   const parts = partsOf(ctx, s);
   // Exact whole-theme tokens that win over what this dial writes: the dial
@@ -1619,6 +1722,17 @@ async function changeOnce(
         !x.on &&
         !x.when &&
         x.thing === `--font-family-${s.on}`,
+    );
+  // A spacing dial on a part keeps the exact spacing and sizes there too:
+  // the whole theme's, and the part's own.
+  if (sub === 'set' && s.source === 'dial' && s.thing === 'spacing' && s.on)
+    exactWins = data.settings.filter(
+      x =>
+        x.source === 'token' &&
+        !x.when &&
+        !x.state &&
+        /^--(size-element|spacing)-/.test(x.thing) &&
+        (!x.on || x.on === s.on),
     );
   // The theme's own source wins over an exact setting, as the exact
   // setting does over a dial: an exact token the file also sets is named
@@ -1820,6 +1934,7 @@ async function changeOnce(
         : null;
   /** @type {string[]} */
   const notes = [
+    ...fieldNotes,
     ...(covered.length ? [`replaces ${covered.map(describe).join(', ')}`] : []),
     ...(ownPartHits.length
       ? [
@@ -1844,6 +1959,8 @@ async function changeOnce(
           `keeps your exact ${exactWins.map(describe).join(', ')}: an exact setting wins over a dial, so ${exactWins.length > 1 ? 'those do' : 'that does'} not change; this shows after \`${P} undo ${slug} ${exactWins.map(x => undoArgs(x)).join(`\` and \`${P} undo ${slug} `)}\``,
         ]
       : []),
+    ...(sub === 'set' && s.thing === 'spacing' ? sizeNotes : []),
+    ...(sub === 'set' ? compileNotes : []),
     ...(covers.length
       ? [
           `comes after ${covers.map(describe).join(', ')}, so ${covers.length > 1 ? 'those parts show' : `${covers[0].on} shows`} this value now; set ${covers.length > 1 ? 'one' : 'it'} again to make it win`,
@@ -1889,9 +2006,18 @@ async function changeOnce(
     // An exact property on the same part wins over a dial there.
     ...(exactOver
       ? [
-          ownPartHits.length
-            ? `${describe(exactOver)} is an exact property and wins over ${s.thing} there too; undoing it does not make ${s.thing} show on ${[...new Set(ownPartHits.map(h => h.target))].join(', ')}, where ${slug}.theme.ts wins`
-            : `${describe(exactOver)} is an exact property and wins over ${s.thing} there, so this shows only after \`${P} undo ${slug} ${undoArgs(exactOver)}\``,
+          // The own source holding only some sides or corners there leaves
+          // the dial the others once the exact property is undone.
+          ownPartHits.length &&
+          ownPartHits.every(h =>
+            /(Top|Bottom|Left|Right|Start|End|Block|Inline)/.test(
+              camel(String(h.prop)),
+            ),
+          )
+            ? `${describe(exactOver)} is an exact property and wins over ${s.thing} there, so this shows only after \`${P} undo ${slug} ${undoArgs(exactOver)}\`, and then not on the ${[...new Set(ownPartHits.map(h => kebab(String(h.prop))))].join(', ')} ${slug}.theme.ts sets itself`
+            : ownPartHits.length
+              ? `${describe(exactOver)} is an exact property and wins over ${s.thing} there too; undoing it does not make ${s.thing} show on ${[...new Set(ownPartHits.map(h => h.target))].join(', ')}, where ${slug}.theme.ts wins`
+              : `${describe(exactOver)} is an exact property and wins over ${s.thing} there, so this shows only after \`${P} undo ${slug} ${undoArgs(exactOver)}\``,
         ]
       : []),
     // A whole-theme font under fonts set for each role shows only where no
@@ -2076,6 +2202,9 @@ async function changeOnce(
   // once preview.html was rendered from the theme as it is now (a retry
   // after a render that failed renders it).
   const f0 = themeFiles(cwd, slug);
+  // A change that changed nothing still writes back an app copy file that
+  // is gone or not the current build.
+  if (r.unchanged && appCopyBehind(cwd, slug)) writeAppCopy(ctx, slug, data);
   const p =
     r.unchanged &&
     !png &&
@@ -2088,6 +2217,8 @@ async function changeOnce(
           notChecked: null,
           previewStale: [],
           see: seeLine(cwd, slug, changeFocus(s)),
+          // A copy something keeps behind is said here too.
+          ...appCopyStale(cwd, slug),
         }
       : await previewAndRoute(ctx, slug, data, png, changeFocus(s));
   return {
@@ -3100,7 +3231,23 @@ export async function themeEditUndo(theme, options = {}) {
   const {cwd = process.cwd(), png = false, thing} = options;
   // base and mode are not settings in the list: undoing one goes back to
   // what the theme was made with (the oldest step the history keeps).
-  if (thing === 'base' || thing === 'mode') {
+  // A `base` or `mode` entry a hand edit put in the settings list is a
+  // setting like any other there: undo removes it.
+  const listed =
+    (thing === 'base' || thing === 'mode') &&
+    slugOk(theme) &&
+    (() => {
+      try {
+        return JSON.parse(
+          fs
+            .readFileSync(themeFiles(cwd, theme).settings, 'utf8')
+            .replace(/^\uFEFF/, ''),
+        ).settings.some((/** @type {any} */ x) => x?.thing === thing);
+      } catch {
+        return false;
+      }
+    })();
+  if ((thing === 'base' || thing === 'mode') && !listed) {
     requireProject(cwd);
     const now = loadTheme(cwd, theme, thing);
     const historyFile = themeFiles(cwd, theme).history;
@@ -3187,10 +3334,18 @@ export async function themeEditUndo(theme, options = {}) {
   // A link in the theme is refused as set refuses it, never read as an
   // empty history.
   if (slugOk(theme)) refuseLinks(cwd, theme);
+  /** The command that works when the settings cannot be read. @type {string[] | null} */
+  let repair = null;
   try {
     current = loadTheme(cwd, theme);
   } catch (e) {
     if (!(e instanceof AstryxError && e.code === E.ERR_THEME_INVALID)) throw e;
+    // What the refusal itself names (make the theme again, keeping the
+    // damaged file), never `show`, which fails the same way.
+    repair = (e.suggestions ?? [])
+      .map(x => x.name)
+      .filter(n => !/ show /.test(` ${n} `) && !/ undo /.test(` ${n} `));
+    if (!repair.length) repair = [`${P} new ${theme}`];
   }
   const f = themeFiles(cwd, theme);
   const {steps: history, dropped} = readHistory(f.history);
@@ -3200,14 +3355,14 @@ export async function themeEditUndo(theme, options = {}) {
       `${theme}.history.json is damaged, so there is no step to go back to.`,
       {
         fix: `move ${shown(cwd, f.history)} out of the theme folder (it is kept as it is): the next change starts a new history, and your settings stay as they are`,
-        run: [`${P} show ${theme}`],
+        run: repair ?? [`${P} show ${theme}`],
       },
     );
   if (!history.length)
     refuse(
       E.ERR_THEME_NOTHING_TO_UNDO,
-      `Nothing to undo: ${theme} has no earlier change.`,
-      {run: [`${P} show ${theme}`]},
+      `Nothing to undo: ${theme} has no earlier change${repair ? `, and ${theme}.settings.json cannot be read` : ''}.`,
+      {run: repair ?? [`${P} show ${theme}`]},
     );
   // A top step equal to the settings now (left by an undo stopped between
   // its two writes) changes nothing: skip it.
@@ -3337,8 +3492,10 @@ export async function themeEditUndo(theme, options = {}) {
     undone.push(
       `base ${current.like ?? 'none'} is back to ${prev.like ?? 'none'}`,
     );
-  if (current && current.mode !== prev.mode)
+  if (current && current.mode !== prev.mode) {
     undone.push(`mode ${current.mode} is back to ${prev.mode}`);
+    undone.push(...modeWiringNotes(theme, current.mode, prev.mode));
+  }
   // The page most about what the step reverted: Colors for a color,
   // Components for a part setting, else Overview.
   const touched = [
@@ -3378,4 +3535,15 @@ export async function themeEditUndo(theme, options = {}) {
 export async function editorStale(cwd, slug) {
   const data = loadTheme(cwd, slug);
   return staleBuild(cwd, slug, data) || null;
+}
+
+/**
+ * The notes the last build of the theme left (settings it could not write
+ * as they are).
+ * @param {unknown} ctx
+ * @returns {string[]}
+ */
+function buildNotes(ctx) {
+  const notes = /** @type {{compileNotes?: unknown}} */ (ctx)?.compileNotes;
+  return Array.isArray(notes) ? notes.map(String) : [];
 }
