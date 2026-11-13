@@ -42,16 +42,16 @@ describe('hunt54 (A): the wiring for this app', () => {
     expect(wiring).toContain('experimental theme compile themes/w/w.theme.ts');
   }, 120_000);
 
-  it('with a src/themes folder of the user by that name, the steps by hand', async () => {
+  it('with a file of the user at a copy name in src/themes/v, the steps by hand', async () => {
     fs.mkdirSync(path.join(cwd, 'src/themes/v'), {recursive: true});
-    fs.writeFileSync(path.join(cwd, 'src/themes/v/notes.md'), 'mine');
+    fs.writeFileSync(path.join(cwd, 'src/themes/v/vTheme.ts'), 'mine');
     try {
       const r = await themeEditNew('v', {cwd, like: 'neutral'});
       const wiring = /** @type {any} */ (r.data).wiring.join('\n');
       expect(wiring).toContain("import {vTheme} from './themes/v/v'");
       expect(wiring).toContain('<Theme theme={vTheme}>{children}</Theme>');
       expect(fs.readdirSync(path.join(cwd, 'src/themes/v'))).toEqual([
-        'notes.md',
+        'vTheme.ts',
       ]);
     } finally {
       fs.rmSync(path.join(cwd, 'src'), {recursive: true, force: true});

@@ -9,6 +9,7 @@
  * @position api/theme-edit — imported only by _adapter.mjs
  */
 
+import {THEME_SLUG_RE} from '../../foundation/discovery/theme-discovery.mjs';
 import * as fs from 'node:fs';
 import {coversProperty} from './_css.mjs';
 import * as path from 'node:path';
@@ -111,6 +112,7 @@ import {
   renderSheet,
   previewIsCurrent,
   takeFirstAppCopy,
+  appCopyStale,
   writeAppCopy,
 } from './_preview.mjs';
 import {appWiring, refreshPreviewRoute, seeLine} from './_preview-app.mjs';
@@ -358,6 +360,16 @@ export async function themeEditNew(name, options = {}) {
           ? [`${P} show ${fixed}`]
           : [again(usableNewName(cwd, fixed))],
       },
+    );
+  }
+  // A name the theme commands' own discovery skips ("a--b", "b-") would
+  // make an app copy no `theme add`, `theme list` or doctor takes.
+  if (!THEME_SLUG_RE.test(name)) {
+    const cleaned = name.replace(/-{2,}/g, '-').replace(/-+$/, '');
+    refuse(
+      E.ERR_INVALID_ARGUMENT,
+      `"${name}" is not a theme name the theme commands take: a dash only between letters or digits (no two in a row, none at the end), so its app copy in src/themes/ would be skipped by theme add, theme list and doctor.${dropped}`,
+      {run: [again(usableNewName(cwd, cleaned))]},
     );
   }
   // A built-in theme's name would collide with the theme of that name the
@@ -855,6 +867,8 @@ async function previewAndRoute(ctx, slug, data, png, focus = 'overview') {
     ),
     // The first time the theme's app copy is written, its files are named.
     ...(wrote ? {appCopy: {wrote}} : {}),
+    // A copy a file of yours kept from being written: said, never a quiet ok.
+    ...appCopyStale(ctx.project.cwd, slug),
   };
 }
 
@@ -2443,6 +2457,7 @@ export async function themeEditShow(theme, options = {}) {
         const wrote = takeFirstAppCopy(cwd, theme);
         return wrote ? {appCopy: {wrote}} : {};
       })(),
+      ...appCopyStale(cwd, theme),
       colorFiles: pal ? colorFiles(theme) : null,
     },
   };
