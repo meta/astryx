@@ -31,11 +31,12 @@ import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {cssProperties, keywordsOf, matchValue, splitTop} from './_css.mjs';
 
 /** @typedef {import('./_how-commands.mjs').Step} Step */
+/** @typedef {import('./_how-commands.mjs').MeasureIntent} MeasureIntent */
 
 /**
  * One answer: what it does, and the ways to do it. Each option is a list of
  * steps run in order; most options are one step.
- * @typedef {{text: string, options: Step[][], sequence?: boolean, lookup?: string, intent?: import('./_how-commands.mjs').MeasureIntent}} Draft
+ * @typedef {{text: string, options: Step[][], sequence?: boolean, lookup?: string, intent?: MeasureIntent}} Draft
  */
 
 /**
