@@ -8,12 +8,14 @@
  *   blur that keeps rejected text
  * @output Whether a new value replaces the field's kept entry in this render
  * @position Shared internal hook of the input-field family; used by
- *   DateInput/useTypedDate.ts (DateInput, DateTimeInput) and NumberInput.tsx
+ *   DateInput/useTypedDate.ts (DateInput, DateTimeInput), NumberInput.tsx, and
+ *   TimeInput/useTypedTime.ts (TimeInput, DateTimeInput)
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Field/useValueReplacesEntry.test.tsx
  * - /packages/core/src/DateInput/useTypedDate.ts
  * - /packages/core/src/NumberInput/NumberInput.tsx
+ * - /packages/core/src/TimeInput/useTypedTime.ts
  */
 
 import {useState} from 'react';

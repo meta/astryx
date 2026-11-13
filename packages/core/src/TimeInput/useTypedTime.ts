@@ -5,8 +5,9 @@
 /**
  * @file useTypedTime.ts
  * @input Provider locale, a time field's hour format, seconds, bounds, the
- *   caller's status, the shared time parser, and Field/useEntryErrorReport
- *   for the rejection status, alert and report
+ *   caller's status, the shared time parser, Field/useEntryErrorReport for
+ *   the rejection status, alert and report, and Field/useValueReplacesEntry
+ *   for when a new value replaces the kept draft
  * @output useTypedTime, the typed-time draft and its rejection that TimeInput
  *   and DateTimeInput's time segment share, and TimeInputEntryError
  * @position TimeInput helper hook; used by TimeInput and DateTimeInput
@@ -18,6 +19,7 @@ import {
   isSameEntryError,
   useEntryErrorReport,
 } from '../Field/useEntryErrorReport';
+import {useValueReplacesEntry} from '../Field/useValueReplacesEntry';
 import {useLocale} from '../i18n/useLocale';
 import {isTimeInRange, type ISOTimeString} from '../utils/timeParser';
 import {
@@ -151,25 +153,17 @@ export function useTypedTime({
   }, []);
 
   // A value from outside, disabling, and leaving the typed surface drop the
-  // draft. Adjusted during render, so no render shows a stale draft. A value
-  // passed in the same update as a commit that keeps a rejected draft keeps it.
-  const [seenKeptCommits, setSeenKeptCommits] = useState(keptCommits);
-  const isKeptAtThisUpdate = keptCommits !== seenKeptCommits;
-  if (isKeptAtThisUpdate) {
-    setSeenKeptCommits(keptCommits);
+  // draft. Adjusted during render, so no render shows a stale draft. The echo
+  // of a time that typing committed keeps the draft.
+  const isNewValue = useValueReplacesEntry(value, keptCommits);
+  const isEcho = lastCommitted !== null && value === lastCommitted.time;
+  if (isNewValue && isSurfaceRejected) {
+    setSurfaceRejected(false);
   }
-  const [prevValue, setPrevValue] = useState(value);
-  if (value !== prevValue) {
-    setPrevValue(value);
-    if (isSurfaceRejected) {
-      setSurfaceRejected(false);
-    }
-    const isEcho = lastCommitted !== null && value === lastCommitted.time;
-    if (!isKeptAtThisUpdate && !isEcho) {
-      setLastCommitted(null);
-      if (pendingInput !== null) {
-        drop();
-      }
+  if (isNewValue && !isEcho) {
+    setLastCommitted(null);
+    if (pendingInput !== null) {
+      drop();
     }
   }
   const [wasDisabled, setWasDisabled] = useState(isDisabled);
