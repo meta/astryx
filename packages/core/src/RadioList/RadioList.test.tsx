@@ -1133,6 +1133,66 @@ describe('RadioList', () => {
 // jsdom cannot emulate forced-colors rendering, so this asserts that the
 // compiled output includes the forced-colors rule; visual behavior needs
 // manual verification under Windows High Contrast.
+describe('one Tab stop', () => {
+  it('takes the other radios out of the Tab order for one Tab press', () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <RadioList label="Notify" value="sms" onChange={() => {}}>
+          <RadioListItem label="Email" value="email" />
+          <RadioListItem label="SMS" value="sms" />
+          <RadioListItem label="Push" value="push" />
+        </RadioList>,
+      );
+      const email = screen.getByRole('radio', {name: 'Email'});
+      const sms = screen.getByRole('radio', {name: 'SMS'});
+      const push = screen.getByRole('radio', {name: 'Push'});
+      email.focus();
+      fireEvent.keyDown(email, {key: 'Tab'});
+      expect(sms.tabIndex).toBe(-1);
+      expect(push.tabIndex).toBe(-1);
+      expect(email.tabIndex).toBe(0);
+      vi.runAllTimers();
+      expect(sms).not.toHaveAttribute('tabindex');
+      expect(push).not.toHaveAttribute('tabindex');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('leaves the Tab order alone for other keys and for Ctrl+Tab', () => {
+    render(
+      <RadioList label="Notify" value="sms" onChange={() => {}}>
+        <RadioListItem label="Email" value="email" />
+        <RadioListItem label="SMS" value="sms" />
+      </RadioList>,
+    );
+    const email = screen.getByRole('radio', {name: 'Email'});
+    const sms = screen.getByRole('radio', {name: 'SMS'});
+    fireEvent.keyDown(email, {key: 'ArrowDown'});
+    fireEvent.keyDown(email, {key: 'Tab', ctrlKey: true});
+    expect(sms).not.toHaveAttribute('tabindex');
+  });
+
+  it("runs a caller's onKeyDown after its own handling", () => {
+    const onKeyDown = vi.fn();
+    render(
+      <RadioList
+        label="Notify"
+        value="sms"
+        onChange={() => {}}
+        onKeyDown={onKeyDown}>
+        <RadioListItem label="Email" value="email" />
+        <RadioListItem label="SMS" value="sms" />
+      </RadioList>,
+    );
+    fireEvent.keyDown(screen.getByRole('radio', {name: 'Email'}), {
+      key: 'Tab',
+    });
+    expect(onKeyDown).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('forced colors (WCAG 1.4.11)', () => {
   it('compiles a forced-colors fill so the selected dot survives Windows High Contrast', () => {
     render(
