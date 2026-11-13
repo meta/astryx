@@ -54,7 +54,7 @@ import {useScrollLock} from '../hooks/useScrollLock';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useAttachment} from '../hooks/useAttachment';
 import {observeResizeAfterLayout} from '../utils/sharedResizeObserver';
-import {isHTMLElement} from '../utils/nodeType';
+import {isElement, isHTMLElement} from '../utils/nodeType';
 import {useTouchHitArea} from '../utils/touchHitArea';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {usePressTracker} from '../gestures/usePressTracker';
@@ -186,9 +186,30 @@ export interface LightboxProps extends BaseProps<HTMLDialogElement> {
 /** Set on the stage while a mouse or a pen hovers over the fitted photo. */
 const OVER_PHOTO_ATTRIBUTE = 'data-lightbox-over-photo';
 
+// A replaced element lays out as one box, whether inline or a block, as the
+// reset makes it.
+const REPLACED_ELEMENTS = new Set([
+  'img',
+  'svg',
+  'video',
+  'canvas',
+  'audio',
+  'iframe',
+  'embed',
+  'object',
+]);
+
+function isAtomicBox(element: Element, view: Window): boolean {
+  return (
+    REPLACED_ELEMENTS.has(element.localName) ||
+    view.getComputedStyle(element).display.startsWith('inline-')
+  );
+}
+
 /**
  * The current layout has the place below the text, so the text's lines are its
- * own. Only text nodes count, since a block element's box spans the caption.
+ * own. Text, replaced elements and inline-block boxes count. A paragraph's box
+ * spans the caption, so it does not.
  */
 function placeFitsBesideLastLine(flow: HTMLElement): boolean {
   const place = flow.firstElementChild;
@@ -206,13 +227,25 @@ function placeFitsBesideLastLine(flow: HTMLElement): boolean {
     return true;
   }
   const words: DOMRect[] = [];
-  const walker = doc.createTreeWalker(flow, NodeFilter.SHOW_TEXT);
-  for (let node = walker.nextNode(); node != null; node = walker.nextNode()) {
-    range.selectNodeContents(node);
-    for (const rect of range.getClientRects()) {
+  const keep = (rects: DOMRectList) => {
+    for (const rect of rects) {
       if (rect.width > 0 && rect.height > 0) {
         words.push(rect);
       }
+    }
+  };
+  const walker = doc.createTreeWalker(
+    flow,
+    NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT,
+  );
+  for (let node = walker.nextNode(); node != null; node = walker.nextNode()) {
+    if (isElement(node)) {
+      if (isAtomicBox(node, view)) {
+        keep(node.getClientRects());
+      }
+    } else {
+      range.selectNodeContents(node);
+      keep(range.getClientRects());
     }
   }
   if (words.length === 0) {
