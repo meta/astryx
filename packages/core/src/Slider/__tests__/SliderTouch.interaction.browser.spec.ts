@@ -648,10 +648,11 @@ async function expectSlowReleaseNotToCoast(
   );
 }
 
-// At a track of about 335 px, WebKit takes one long frame when a touch ends
-// straight out of a slow move. The page does no work in that frame, and the
-// harness reads it as a stalled lift. The fixed 320 px track is temporary:
-// it goes when the stall is fixed or found to be only the test engine's.
+// At a track of about 335 px, the headless WebKit build takes one long frame
+// when a touch ends straight out of a slow move. The page does no work in
+// that frame, and the harness reads it as a stalled lift. Safari on a real
+// iPhone shows no such frame at that width. The fixed 320 px track is
+// temporary: it goes when the headless engine stops stalling.
 test('a slow release does not coast: the value stays where the finger left it', async ({
   page,
 }) => {
