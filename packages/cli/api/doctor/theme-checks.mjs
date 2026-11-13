@@ -8,12 +8,13 @@
  */
 
 import * as path from 'node:path';
-import {parse} from '@babel/parser';
+import {babelParse as parse} from '../../foundation/runtime/lazy-dependencies.mjs';
 import postcss from 'postcss';
 import {
   collectUnloadedFonts,
   discoverDoctorThemes,
   discoverDoctorUnmigratedCopies,
+  corePeerRange,
   findDoctorCoreDir,
   doctorElementPropOrigins,
   doctorStylesheetImports,
@@ -41,7 +42,6 @@ import {
   getCliInvocation,
   formatCliCommand,
 } from '../../foundation/env/package-manager.mjs';
-import {satisfiesRange} from '../../foundation/env/semver.mjs';
 import {logger} from '../logger.mjs';
 
 /** @typedef {import('./doctor.mjs').DoctorCheck} DoctorCheck */
@@ -1248,17 +1248,13 @@ export async function checkAppThemes(cwd) {
     const pkg = packageDir
       ? readPackageJson(path.join(packageDir, 'package.json'))
       : null;
-    const range = pkg?.peerDependencies?.['@astryxdesign/core'];
-    if (
-      !coreVersion ||
-      typeof range !== 'string' ||
-      !satisfiesRange(coreVersion, range)
-    ) {
+    const {range, accepts} = corePeerRange(pkg, coreVersion);
+    if (!accepts) {
       peerProblems.push({
         slug,
         owner,
-        range: typeof range === 'string' ? range : null,
-        message: `${slug}: ${owner} requires ${typeof range === 'string' ? range : 'an undeclared Core range'}, installed ${coreVersion ?? 'none'}`,
+        range,
+        message: `${slug}: ${owner} requires ${range ?? 'an undeclared Core range'}, installed ${coreVersion ?? 'none'}`,
       });
     }
   }

@@ -17,46 +17,22 @@
  */
 
 import * as fs from 'node:fs';
-import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {lowerDoc} from '../doc-compiler/compile.mjs';
 import {packageSource} from '../doc-compiler/source.mjs';
-import {CLI_ROOT} from '../fs/paths.mjs';
+import {CLI_ROOT, realDir} from '../fs/paths.mjs';
+import {persistedGather} from '../fs/gather-cache.mjs';
+import {EXACT_CODEC} from '../fs/exact-codec.mjs';
 import {listDirEntries} from '../fs/listing-cache.mjs';
 import {formatCliCommand} from '../env/package-manager.mjs';
 import {LOCAL_THEME_ROOT} from '../config/theme-state.mjs';
 import {assertWithin, PathSafetyError} from '../fs/path-safety.mjs';
 import {THEME_MODULE_EXTENSIONS} from './theme-module-extensions.mjs';
+import {babelParser, jscodeshift} from '../runtime/lazy-dependencies.mjs';
 
 export const BUNDLED_THEME_PACKAGE = '@astryxdesign/cli';
 export const THEMES_DIR = path.join(CLI_ROOT, 'assets', 'templates', 'themes');
 export const THEME_DOC_SUFFIX = '.doc.mjs';
-
-const require = createRequire(import.meta.url);
-
-/** @type {typeof import('@babel/parser') | undefined} */
-let babelParser;
-/** @type {any} */
-let jscodeshiftApi;
-
-/**
- * The descriptor parser, loaded when the first descriptor is read.
- * @returns {typeof import('@babel/parser')}
- */
-function descriptorParser() {
-  babelParser ??= require('@babel/parser');
-  return /** @type {typeof import('@babel/parser')} */ (babelParser);
-}
-
-/**
- * The theme source parser, loaded when the first integration theme source is
- * checked. Bundled themes never need it.
- * @returns {any}
- */
-function sourceParser() {
-  jscodeshiftApi ??= require('jscodeshift');
-  return jscodeshiftApi;
-}
 
 /**
  * @typedef {object} DiscoveredTheme
@@ -238,7 +214,7 @@ function moduleSpecifiers(file, jscodeshift, {withRequire = false} = {}) {
  * @returns {string[]}
  */
 export function themeFileImports(file, options = {}) {
-  return moduleSpecifiers(file, sourceParser(), options);
+  return moduleSpecifiers(file, jscodeshift(), options);
 }
 
 /**
@@ -730,7 +706,7 @@ function readDescriptorSource(source, label, typeName, data = false) {
   /** @type {any} */
   let ast;
   try {
-    ast = descriptorParser().parse(source, {
+    ast = babelParser().parse(source, {
       sourceType: 'module',
       tokens: true,
       createParenthesizedExpressions: true,
@@ -1535,11 +1511,11 @@ export function discoverThemeDirectory(
           )
           .filter(file => file !== docPath),
       );
-      const jscodeshift = sourceParser();
+      const codeshift = jscodeshift();
       try {
         validateThemeModuleGraph(
           entryPath,
-          jscodeshift,
+          codeshift,
           sourceDir,
           allowedFiles,
           owner,
@@ -1550,7 +1526,7 @@ export function discoverThemeDirectory(
           !moduleExportsName(
             entryPath,
             exportName,
-            jscodeshift,
+            codeshift,
             sourceDir,
             allowedFiles,
           )
@@ -1681,7 +1657,7 @@ export function unreadThemeFolders(themeRoot, {packageDir, packageName} = {}) {
   for (const file of modules) {
     let specifiers;
     try {
-      specifiers = moduleSpecifiers(file, sourceParser());
+      specifiers = moduleSpecifiers(file, jscodeshift());
     } catch {
       continue;
     }
@@ -1766,18 +1742,39 @@ export function discoverLocalThemes(
   }));
 }
 
+/** An integration's discovered themes, kept exactly, with the shape they need. */
+const THEMES_CODEC = {
+  ...EXACT_CODEC,
+  valid: (/** @type {any} */ themes) =>
+    Array.isArray(themes) &&
+    themes.every(
+      theme =>
+        theme != null &&
+        typeof theme.slug === 'string' &&
+        typeof theme.exportName === 'string',
+    ),
+};
+
 /**
  * @param {import('../integrations/integrations.mjs').LoadedIntegration} integration
  * @returns {Promise<DiscoveredTheme[]>}
  */
 export async function discoverIntegrationThemes(integration) {
   if (!integration.themes) return [];
-  return discoverThemeDirectory(integration.themes, integration.name).map(
-    theme => ({
-      ...theme,
-      packageDir: integration.__packageDir,
-      packageExports: integration.__packageExports,
-      source: /** @type {const} */ ('package'),
-    }),
+  const themesDir = integration.themes;
+  // Kept between runs while every file and module it read is unchanged; the
+  // live fields below are added after, as on a fresh read.
+  const found = /** @type {DiscoveredTheme[]} */ (
+    await persistedGather(
+      ['integration-themes', realDir(themesDir), integration.name ?? null],
+      async () => discoverThemeDirectory(themesDir, integration.name),
+      THEMES_CODEC,
+    )
   );
+  return found.map(theme => ({
+    ...theme,
+    packageDir: integration.__packageDir,
+    packageExports: integration.__packageExports,
+    source: /** @type {const} */ ('package'),
+  }));
 }

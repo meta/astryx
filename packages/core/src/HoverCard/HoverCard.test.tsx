@@ -32,7 +32,15 @@ import {
 import {renderToString} from 'react-dom/server';
 import {hydrateRoot} from 'react-dom/client';
 import {createPortal} from 'react-dom';
-import {StrictMode, useState, type ComponentProps} from 'react';
+import {
+  StrictMode,
+  Suspense,
+  startTransition,
+  use,
+  useState,
+  type ComponentProps,
+  type ReactNode,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '../Button/Button';
 import {ClickableCard} from '../ClickableCard/ClickableCard';
@@ -1670,6 +1678,50 @@ describe('HoverCard', () => {
       tap(screen.getByText('Ruby Cheung'));
 
       // Immediately: a tap is a decision, not hover intent, so no delay applies.
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(true);
+      });
+    });
+
+    it('opens on a tap after React discards a render that disables the card', async () => {
+      // A transition that suspends for good: React renders its element, then
+      // keeps the committed tree and never commits that render.
+      const forever = new Promise<never>(() => {});
+      function Forever(): null {
+        use(forever);
+        return null;
+      }
+      const onOpenChange = vi.fn();
+      function Screen({
+        isEnabled,
+        isPending = false,
+      }: {
+        isEnabled: boolean;
+        isPending?: boolean;
+      }): ReactNode {
+        return (
+          <Suspense fallback={null}>
+            <HoverCard
+              content={<span>Card content</span>}
+              onOpenChange={onOpenChange}
+              isEnabled={isEnabled}
+              delay={300}>
+              Ruby Cheung
+            </HoverCard>
+            {isPending ? <Forever /> : null}
+          </Suspense>
+        );
+      }
+      const {rerender} = render(<Screen isEnabled />);
+      await act(async () => {
+        startTransition(() => {
+          rerender(<Screen isEnabled={false} isPending />);
+        });
+      });
+
+      tap(screen.getByText('Ruby Cheung'));
+
+      // The committed card is enabled, so the tap opens it.
       await waitFor(() => {
         expect(onOpenChange).toHaveBeenCalledWith(true);
       });

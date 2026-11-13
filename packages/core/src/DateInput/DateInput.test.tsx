@@ -2243,6 +2243,50 @@ function recordAssertiveAnnouncements(): string[] {
   return texts;
 }
 
+/**
+ * A caller that restores the value it had when the edit began, at the Enter
+ * or blur that ends the edit, as a live filter does.
+ */
+function RestoringDateInput({
+  initialValue,
+  nextValue,
+  restoresOnEnter = true,
+  ...props
+}: Omit<DateInputProps, 'label' | 'value' | 'onChange'> & {
+  initialValue: ISODateString;
+  nextValue: ISODateString;
+  restoresOnEnter?: boolean;
+}) {
+  const [value, setValue] = useState<ISODateString | undefined>(initialValue);
+  const [editStartValue, setEditStartValue] = useState(value);
+  const restore = () => {
+    if (value !== editStartValue) {
+      setValue(editStartValue);
+    }
+  };
+  return (
+    <>
+      <DateInput
+        label="Due"
+        value={value}
+        onChange={setValue}
+        onFocus={() => setEditStartValue(value)}
+        onBlur={restore}
+        onKeyDown={event => {
+          if (event.key === 'Enter' && restoresOnEnter) {
+            restore();
+          }
+        }}
+        {...props}
+      />
+      <output data-testid="value">{value ?? ''}</output>
+      <button type="button" onClick={() => setValue(nextValue)}>
+        Replace
+      </button>
+    </>
+  );
+}
+
 describe('DateInput onEntryErrorChange', () => {
   const OUT_OF_RANGE_MESSAGE = 'Enter a date on or before December 31, 2026';
   const NONEXISTENT_MESSAGE = 'Enter a real date';
@@ -2449,6 +2493,32 @@ describe('DateInput onEntryErrorChange', () => {
         onEntryErrorChange={onEntryErrorChange}
       />,
     );
+    expect(onEntryErrorChange.mock.calls).toEqual([
+      [{kind: 'unreadable', text: 'tomorrowish'}],
+      [null],
+    ]);
+  });
+
+  it('reports nothing when the caller restores its value at the blur that keeps the text, and null once a later value replaces it', () => {
+    const onEntryErrorChange = vi.fn();
+    render(
+      <RestoringDateInput
+        initialValue="2026-01-25"
+        nextValue="2026-03-20"
+        onEntryErrorChange={onEntryErrorChange}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    fireEvent.focus(input);
+    fireEvent.change(input, {target: {value: '02/14/2026'}});
+    fireEvent.change(input, {target: {value: 'tomorrowish'}});
+    fireEvent.blur(input);
+    expect(screen.getByTestId('value')).toHaveTextContent('2026-01-25');
+    expect(onEntryErrorChange.mock.calls).toEqual([
+      [{kind: 'unreadable', text: 'tomorrowish'}],
+    ]);
+
+    fireEvent.click(getButton('Replace'));
     expect(onEntryErrorChange.mock.calls).toEqual([
       [{kind: 'unreadable', text: 'tomorrowish'}],
       [null],
@@ -2977,6 +3047,84 @@ describe('DateInput rejected entries', () => {
     expect(input).not.toHaveAttribute('aria-invalid');
   });
 
+  it.each([
+    ['unreadable', 'blur', 'tomorrowish', INVALID],
+    ['unreadable', 'Enter', 'tomorrowish', INVALID],
+    ['nonexistent', 'blur', '02/31/2026', NONEXISTENT],
+    ['nonexistent', 'Enter', '02/31/2026', NONEXISTENT],
+  ])(
+    'keeps %s text and its message when the caller restores its value at the %s that keeps it',
+    (_kind, commit, text, message) => {
+      const {container} = render(
+        <RestoringDateInput initialValue="2026-01-25" nextValue="2026-03-20" />,
+      );
+      const input = screen.getByRole('combobox');
+      fireEvent.focus(input);
+      fireEvent.change(input, {target: {value: '02/14/2026'}});
+      expect(screen.getByTestId('value')).toHaveTextContent('2026-02-14');
+      fireEvent.change(input, {target: {value: text}});
+
+      if (commit === 'blur') {
+        fireEvent.blur(input);
+      } else {
+        fireEvent.keyDown(input, {key: 'Enter'});
+      }
+      expect(screen.getByTestId('value')).toHaveTextContent('2026-01-25');
+      expect(input).toHaveValue(text);
+      expect(input).toHaveAttribute('aria-invalid', 'true');
+      expect(statusText(container)).toBe(message);
+
+      fireEvent.click(getButton('Replace'));
+      expect(input).toHaveValue('March 20, 2026');
+      expect(input).not.toHaveAttribute('aria-invalid');
+      expect(statusText(container)).toBe('');
+    },
+  );
+
+  it('keeps text that Enter kept when the caller restores its value at the next blur, and reports nothing', () => {
+    const onEntryErrorChange = vi.fn();
+    const {container} = render(
+      <RestoringDateInput
+        initialValue="2026-01-25"
+        nextValue="2026-03-20"
+        restoresOnEnter={false}
+        onEntryErrorChange={onEntryErrorChange}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    fireEvent.focus(input);
+    fireEvent.change(input, {target: {value: '02/14/2026'}});
+    fireEvent.change(input, {target: {value: 'tomorrowish'}});
+    fireEvent.keyDown(input, {key: 'Enter'});
+    expect(screen.getByTestId('value')).toHaveTextContent('2026-02-14');
+
+    fireEvent.blur(input);
+    expect(screen.getByTestId('value')).toHaveTextContent('2026-01-25');
+    expect(input).toHaveValue('tomorrowish');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(statusText(container)).toBe(INVALID);
+    expect(onEntryErrorChange.mock.calls).toEqual([
+      [{kind: 'unreadable', text: 'tomorrowish'}],
+    ]);
+  });
+
+  it('reports a retyped date again after the caller restores its value at the blur that keeps the text', () => {
+    render(
+      <RestoringDateInput initialValue="2026-01-25" nextValue="2026-03-20" />,
+    );
+    const input = screen.getByRole('combobox');
+    fireEvent.focus(input);
+    fireEvent.change(input, {target: {value: '02/14/2026'}});
+    fireEvent.change(input, {target: {value: 'tomorrowish'}});
+    fireEvent.blur(input);
+    expect(screen.getByTestId('value')).toHaveTextContent('2026-01-25');
+
+    fireEvent.focus(input);
+    fireEvent.change(input, {target: {value: '02/14/2026'}});
+    expect(screen.getByTestId('value')).toHaveTextContent('2026-02-14');
+    expect(input).not.toHaveAttribute('aria-invalid');
+  });
+
   it('hides a kept rejection while disabled or busy, and shows it again once editable', () => {
     const field = (props: Partial<DateInputProps>) => (
       <DateInput label="Due" onChange={() => {}} {...props} />
@@ -3057,6 +3205,27 @@ describe('DateInput rejected entries', () => {
       fireEvent.blur(input);
       expect(input).toHaveAttribute('name', 'due');
       expect(posted(form)).toEqual([text]);
+    });
+
+    it('posts the restored date from a hidden input when the caller restores its value at the blur that keeps unreadable text', () => {
+      render(
+        <form aria-label="Form">
+          <RestoringDateInput
+            initialValue="2026-01-25"
+            nextValue="2026-03-20"
+            {...named}
+          />
+        </form>,
+      );
+      const form = screen.getByRole<HTMLFormElement>('form');
+      const input = screen.getByRole('combobox');
+      fireEvent.focus(input);
+      fireEvent.change(input, {target: {value: '02/14/2026'}});
+      fireEvent.change(input, {target: {value: 'tomorrowish'}});
+      fireEvent.blur(input);
+      expect(input).toHaveValue('tomorrowish');
+      expect(input).not.toHaveAttribute('name');
+      expect(posted(form)).toEqual(['January 25, 2026']);
     });
 
     it('lets the next Enter submit after Enter keeps unreadable text', () => {

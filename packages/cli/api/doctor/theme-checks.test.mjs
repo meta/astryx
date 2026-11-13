@@ -1126,6 +1126,24 @@ describe('app-theme doctor checks', () => {
     expect(result.message).toContain('^9.0.0');
   });
 
+  it('check 7 passes a theme package whose Core range is empty, which accepts every Core', async () => {
+    const {dir} = await fixture([{slug: 'ocean'}], {peerRange: ''});
+
+    expect(check(await checkAppThemes(dir), 'theme-core-peers')).toMatchObject({
+      status: 'pass',
+    });
+  });
+
+  it('reports an added theme package outside the Core range once, as theme-core-peers', async () => {
+    const {dir} = await fixture([{slug: 'ocean'}], {peerRange: '^9.0.0'});
+
+    const {checks} = await runChecks({cwd: dir});
+    expect(check(checks, 'theme-core-peers')).toMatchObject({status: 'fail'});
+    expect(
+      checks.find(item => item.id === 'integration-core-range'),
+    ).toBeUndefined();
+  }, 30_000);
+
   it('check 8 fails when the static default is not an added slug', async () => {
     const {dir, moduleFile} = await fixture();
     const source = fs
