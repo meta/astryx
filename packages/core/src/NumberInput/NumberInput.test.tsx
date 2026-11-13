@@ -754,6 +754,70 @@ describe('NumberInput', () => {
       expect(onChange).toHaveBeenCalledWith(15000);
     });
 
+    it('runs caller composition handlers', () => {
+      const onCompositionStart = vi.fn();
+      const onCompositionEnd = vi.fn();
+      render(
+        <InternationalizationProvider locale="en-US">
+          <NumberInput
+            label="Amount"
+            value={1500}
+            onChange={ignoreChange}
+            isGroupedWhileEditing
+            onCompositionStart={onCompositionStart}
+            onCompositionEnd={onCompositionEnd}
+          />
+        </InternationalizationProvider>,
+      );
+      const input = screen.getByRole('spinbutton');
+      fireEvent.focus(input);
+      fireEvent.compositionStart(input);
+      fireEvent.input(input, {target: {value: '1,5000'}});
+      fireEvent.compositionEnd(input);
+      expect(onCompositionStart).toHaveBeenCalledTimes(1);
+      expect(onCompositionEnd).toHaveBeenCalledTimes(1);
+      expect(input).toHaveValue('15,000');
+    });
+
+    it('runs caller composition handlers without grouping', () => {
+      const onCompositionStart = vi.fn();
+      const onCompositionEnd = vi.fn();
+      render(
+        <NumberInput
+          label="Amount"
+          value={1500}
+          onChange={ignoreChange}
+          onCompositionStart={onCompositionStart}
+          onCompositionEnd={onCompositionEnd}
+        />,
+      );
+      const input = screen.getByRole('spinbutton');
+      fireEvent.compositionStart(input);
+      fireEvent.compositionEnd(input);
+      expect(onCompositionStart).toHaveBeenCalledTimes(1);
+      expect(onCompositionEnd).toHaveBeenCalledTimes(1);
+    });
+
+    it('withholds caller composition handlers while disabled', () => {
+      const onCompositionStart = vi.fn();
+      const onCompositionEnd = vi.fn();
+      render(
+        <NumberInput
+          label="Amount"
+          value={1500}
+          onChange={ignoreChange}
+          isDisabled
+          onCompositionStart={onCompositionStart}
+          onCompositionEnd={onCompositionEnd}
+        />,
+      );
+      const input = screen.getByRole('spinbutton');
+      fireEvent.compositionStart(input);
+      fireEvent.compositionEnd(input);
+      expect(onCompositionStart).not.toHaveBeenCalled();
+      expect(onCompositionEnd).not.toHaveBeenCalled();
+    });
+
     it('does not regroup a composing candidate that is not only digits', () => {
       render(<GroupedField locale="en-US" />);
       const input = screen.getByRole('spinbutton');
