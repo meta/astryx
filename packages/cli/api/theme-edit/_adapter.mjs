@@ -786,6 +786,12 @@ export async function editorCompileProblem(files, {cwd, check, family}) {
         /^[^/]+\.(css|js|d\.ts|css\.d\.ts) was missing$/.test(why)
       )
         why = null;
+      // Saved settings the editor no longer accepts: show refuses them too,
+      // so the refusal names the undo that removes each.
+      if (why) {
+        const stored = await edit.editorStoredRefusal(root, slug);
+        if (stored) return stored;
+      }
       if (why && !check)
         return new AstryxError(
           `${slug}'s generated settings do not match its settings (${why}), so compile would build the old ones. The editor builds it from its settings.`,
@@ -808,6 +814,13 @@ export async function editorCompileProblem(files, {cwd, check, family}) {
           ],
           ERROR_CODES.ERR_THEME_INVALID,
         );
+      // A [light, dark] pair on a token that is not a color, however the
+      // file writes it: what the theme builds now is read (never written
+      // beside it), as the editor's own build reads it.
+      if (path.basename(file) === `${slug}.theme.ts`) {
+        const pairs = await edit.editorPairRefusal(root, slug);
+        if (pairs) return pairs;
+      }
     }
   }
   return null;

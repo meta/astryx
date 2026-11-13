@@ -1514,9 +1514,11 @@ export function partRuleTokens(cwd, slug, like, part) {
  * @param {string} part
  * @param {string} [scope] the rule: `base` (the plain one), or a variant
  *   such as `variant:primary`
+ * @param {string | null} [state] a state block inside that rule (`:hover`)
  * @returns {Map<string, string | null>}
  */
-export function ownPartTokens(cwd, slug, part, scope = 'base') {
+export function ownPartTokens(cwd, slug, part, scope = 'base', state = null) {
+  const at = ['components', part, scope, ...(state ? [state] : [])];
   /** @type {Map<string, string | null>} */
   const out = new Map();
   const f = themeFiles(cwd, slug);
@@ -1535,12 +1537,10 @@ export function ownPartTokens(cwd, slug, part, scope = 'base') {
     module,
   )?.[1];
   const baseFile = like ? baseModule(cwd, like) : null;
-  const base = baseFile
-    ? blockOf(baseFile, ['components', part, scope])
-    : new Map();
-  const settings = blockOf(f.settingsTs, ['components', part, scope]);
+  const base = baseFile ? blockOf(baseFile, at) : new Map();
+  const settings = blockOf(f.settingsTs, at);
   const named = namedInOwnSource(cwd, slug);
-  for (const [k, v] of blockOf(f.js, ['components', part, scope])) {
+  for (const [k, v] of blockOf(f.js, at)) {
     const given = settings.has(k) ? settings.get(k) : base.get(k);
     if (given !== v && named(k))
       out.set(
@@ -3064,7 +3064,7 @@ export function compileTheme(ctx, data, base) {
   // dial's weights, are written there too, so they apply on every screen.
   // Sizes are not: phones keep their reading base. (What the theme's own
   // source sets is not repeated: on phones the base theme's type comes
-  // back for it, a Core limit the notes name.)
+  // back for it, by Core contract; the notes name the fix.)
   const phone = Object.fromEntries([
     ...data.settings
       .filter(
@@ -3680,7 +3680,7 @@ function refuseOwnPairs(ctx, cwd, slug) {
             (/** @type {any} */ e) =>
               e?.type === 'StringLiteral' && /^\d*\.?\d+$/.test(e.value.trim()),
           );
-        if (!MODAL.has(type) && !unitless) bad.push(k);
+        if (type !== 'color' && !unitless) bad.push(k);
       }
       for (const v of Object.values(node))
         if (Array.isArray(v)) v.forEach(visit);
@@ -3692,7 +3692,7 @@ function refuseOwnPairs(ctx, cwd, slug) {
   }
   if (bad.length)
     throw new AstryxError(
-      `themes/${slug}/${slug}.theme.ts gives ${[...new Set(bad)].join(', ')} a [light, dark] pair, but only colors differ by mode: the build would write light-dark(), which browsers take only for colors. Give ${bad.length > 1 ? 'each' : 'it'} one value in ${slug}.theme.ts. Nothing was changed.`,
+      ownPairMessage(slug, [...new Set(bad)]),
       [
         {
           name: `grep -n -- ${quoteCommandArgument(bad[0])} ${quoteCommandArgument(`themes/${slug}/${slug}.theme.ts`)}`,
@@ -3701,6 +3701,61 @@ function refuseOwnPairs(ctx, cwd, slug) {
       ],
       ERROR_CODES.ERR_THEME_INVALID,
     );
+}
+
+/**
+ * The tokens that are not colors the theme as it builds now gives a
+ * [light, dark] pair (light-dark()), however its file writes them (a
+ * constant, `as const`, `satisfies`, a spread from an imported module):
+ * read from a build made into the project's cache folder, never beside the
+ * theme. Empty when it does not build there (the build names that itself).
+ * @param {Ctx} ctx
+ * @param {string} slug
+ * @returns {Promise<string[]>}
+ */
+export async function builtPairs(ctx, slug) {
+  const {cwd} = ctx.project;
+  const f = themeFiles(cwd, slug);
+  // The build writes only inside the project: the cache folder when it is
+  // there, else a hidden folder in the theme's (removed after).
+  const name = `.${slug}.pairs-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
+  const inside = !path.relative(cwd, ctx.project.cacheDir).startsWith('..');
+  const dir = path.join(inside ? ctx.project.cacheDir : f.dir, name);
+  const silent = logger.silent;
+  logger.setSilent(true);
+  try {
+    fs.mkdirSync(dir, {recursive: true});
+    await themeBuildForReport(
+      shown(cwd, f.ts),
+      {out: path.relative(cwd, path.join(dir, `${slug}.css`))},
+      {cwd},
+      {compact: true},
+    );
+    const js = fs
+      .readdirSync(dir)
+      .find(n => n.endsWith('.js') && !n.endsWith('.d.js'));
+    if (!js) return [];
+    return [...topTokensOf(path.join(dir, js))]
+      .filter(
+        ([k, v]) =>
+          /^light-dark\(/.test(String(v ?? '')) && ctx.C.typeOf(k) !== 'color',
+      )
+      .map(([k]) => k);
+  } catch {
+    return [];
+  } finally {
+    logger.setSilent(silent);
+    fs.rmSync(dir, {recursive: true, force: true});
+  }
+}
+
+/**
+ * The refusal of a [light, dark] pair on tokens that are not colors.
+ * @param {string} slug
+ * @param {string[]} names
+ */
+export function ownPairMessage(slug, names) {
+  return `themes/${slug}/${slug}.theme.ts gives ${names.join(', ')} a [light, dark] pair, but only colors differ by mode: the build would write light-dark(), which browsers take only for colors. Give ${names.length > 1 ? 'each' : 'it'} one value in ${slug}.theme.ts. Nothing was changed.`;
 }
 
 /**
@@ -3983,7 +4038,7 @@ export async function resolvedTokens(ctx, slug) {
  * in a [light, dark] pair, or null.
  * @param {any} t
  * @param {(name: string) => string} [typeOf] a token's type (size, color…)
- * @returns {[string, unknown, 'object' | 'pair' | 'unit' | 'value'] | null}
+ * @returns {[string, unknown, 'object' | 'pair' | 'unit' | 'value' | 'mode'] | null}
  */
 function nonTextToken(t, typeOf = (/** @type {string} */ _k) => 'other') {
   for (const [k, raw] of Object.entries(t?.tokens ?? {})) {
@@ -4018,11 +4073,16 @@ function nonTextToken(t, typeOf = (/** @type {string} */ _k) => 'other') {
                 : x;
         return [k, [half(parts[0]), half(parts[1])], missing ? 'pair' : 'unit'];
       }
+      // light-dark() takes only colors: a pair on any other token (a size,
+      // a font, a shadow) is dropped by the browser, however the theme
+      // file wrote it (a constant, `as const`, an imported module).
+      if (typeOf(k) !== 'color') return [k, parts, 'mode'];
       continue;
     }
     if (Array.isArray(raw)) {
       if (raw.length !== 2 || raw.some(x => typeof x !== 'string'))
         return [k, raw, 'pair'];
+      if (typeOf(k) !== 'color') return [k, raw, 'mode'];
       continue;
     }
     if (typeof raw !== 'string') return [k, raw, 'value'];
@@ -4035,10 +4095,11 @@ function nonTextToken(t, typeOf = (/** @type {string} */ _k) => 'other') {
  * write instead (a size in px, a weight as a number in quotes), or none.
  * @param {Ctx} ctx
  * @param {string} slug
- * @param {[string, unknown, ('object' | 'pair' | 'unit' | 'value')?]} bad
+ * @param {[string, unknown, ('object' | 'pair' | 'unit' | 'value' | 'mode')?]} bad
  */
 function nonTextMessage(ctx, slug, [name, value, kind = 'value']) {
   const type = ctx.C.typeOf(name);
+  if (kind === 'mode') return ownPairMessage(slug, [name]);
   if (kind === 'object')
     return `${slug}.theme.ts gives ${name} an object (${JSON.stringify(value)}); a token value is a CSS value in quotes, such as '8px' (only a color takes a [light, dark] pair).`;
   if (kind === 'unit') {

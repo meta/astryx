@@ -77,6 +77,8 @@ import {
   PHONE_TYPE,
   refreshSourceStamp,
   sourceChangedReason,
+  builtPairs,
+  ownPairMessage,
   freeThemeName,
   refuseLinks,
   usableNewName,
@@ -877,6 +879,47 @@ function refuseStoredTokens(ctx, slug, data, skip) {
 }
 
 /**
+ * For `compile`: the refusal `show` gives for saved settings the editor no
+ * longer accepts (naming the undo that removes each), or null.
+ * @param {string} root
+ * @param {string} slug
+ * @returns {Promise<import('../error.mjs').AstryxError | null>}
+ */
+export async function editorStoredRefusal(root, slug) {
+  try {
+    const ctx = await context(root);
+    refuseStoredTokens(ctx, slug, loadTheme(root, slug));
+    return null;
+  } catch (e) {
+    if (e instanceof AstryxError) return e;
+    throw e;
+  }
+}
+
+/**
+ * For `compile`: the refusal of [light, dark] pairs on tokens that are not
+ * colors in what the theme builds now, or null.
+ * @param {string} root
+ * @param {string} slug
+ * @returns {Promise<import('../error.mjs').AstryxError | null>}
+ */
+export async function editorPairRefusal(root, slug) {
+  const ctx = await context(root);
+  const names = await builtPairs(ctx, slug);
+  if (!names.length) return null;
+  return new AstryxError(
+    ownPairMessage(slug, names),
+    [
+      {
+        name: `grep -n -- ${quoteCommandArgument(names[0])} ${quoteCommandArgument(`themes/${slug}/${slug}.theme.ts`)}`,
+        reason: 'see where the file sets it',
+      },
+    ],
+    ERROR_CODES.ERR_THEME_INVALID,
+  );
+}
+
+/**
  * A note for type scale steps that land outside 9 to 200 pixels.
  * @param {Record<string, string>} res resolved light tokens
  * @returns {string[]}
@@ -1441,9 +1484,9 @@ async function changeOnce(sub, slug, thing, value, options, seen) {
   // On parts: every property or token this change writes on a part's
   // plain or variant rule (a dial's too, and each member of a group) that
   // the own source sets on that same rule.
-  /** @type {Array<{target: string, key: string, prop: string, value: string | null}>} */
+  /** @type {Array<{target: string, key: string, state?: string | null, prop: string, value: string | null}>} */
   const ownPartHits = [];
-  if (sub === 'set' && s.on && !s.state) {
+  if (sub === 'set' && s.on) {
     const a = /** @type {any} */ (compiledBefore)?.components ?? {};
     const b = /** @type {any} */ (compiledAfter)?.components ?? {};
     for (const target of new Set([...Object.keys(a), ...Object.keys(b)]))
@@ -1454,26 +1497,40 @@ async function changeOnce(sub, slug, thing, value, options, seen) {
         if (key !== 'base' && !key.startsWith('variant:')) continue;
         const x = a[target]?.[key] ?? {};
         const y = b[target]?.[key] ?? {};
-        /** @type {Map<string, string | null> | null} */
-        let own = null;
-        for (const prop of new Set([...Object.keys(x), ...Object.keys(y)])) {
-          if (
-            prop.startsWith(':') ||
-            JSON.stringify(x[prop]) === JSON.stringify(y[prop])
-          )
-            continue;
-          const css = prop.startsWith('--')
-            ? prop
-            : prop.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`);
-          own ??= ownPartTokens(cwd, slug, target, key);
-          if (own.has(css))
-            ownPartHits.push({
-              target,
-              key,
-              prop: css,
-              value: own.get(css) ?? null,
-            });
-        }
+        /**
+         * The changed properties of one rule (or a state block in it)
+         * the own source sets there too.
+         * @param {any} xs @param {any} ys @param {string | null} state
+         */
+        const compare = (xs, ys, state) => {
+          /** @type {Map<string, string | null> | null} */
+          let own = null;
+          for (const prop of new Set([
+            ...Object.keys(xs ?? {}),
+            ...Object.keys(ys ?? {}),
+          ])) {
+            if (JSON.stringify(xs?.[prop]) === JSON.stringify(ys?.[prop]))
+              continue;
+            if (prop.startsWith(':')) {
+              // A state block (`:hover`) in the rule.
+              if (!state) compare(xs?.[prop], ys?.[prop], prop);
+              continue;
+            }
+            const css = prop.startsWith('--')
+              ? prop
+              : prop.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`);
+            own ??= ownPartTokens(cwd, slug, target, key, state);
+            if (own.has(css))
+              ownPartHits.push({
+                target,
+                key,
+                state,
+                prop: css,
+                value: own.get(css) ?? null,
+              });
+          }
+        };
+        compare(x, y, null);
       }
   }
   // A part dial writes its property on each part it reaches: the own
@@ -1504,7 +1561,8 @@ async function changeOnce(sub, slug, thing, value, options, seen) {
     (s.source === 'token' || s.source === 'property') &&
     ownPartHits[0].target === s.on &&
     ownPartHits[0].prop === s.thing &&
-    ownPartHits[0].key === (s.when ?? 'base');
+    ownPartHits[0].key === (s.when ?? 'base') &&
+    (ownPartHits[0].state ?? null) === (s.state ? `:${s.state}` : null);
   const ownOverToken =
     sub !== 'set' || s.when || s.state || s.on
       ? null
@@ -1525,7 +1583,7 @@ async function changeOnce(sub, slug, thing, value, options, seen) {
             .slice(0, 3)
             .map(
               h =>
-                `${h.prop} on ${h.target}${h.key === 'base' ? '' : ` when ${h.key}`} itself${h.value != null ? ` (${h.value})` : ''}`,
+                `${h.prop} on ${h.target}${h.state ? ` ${h.state}` : ''}${h.key === 'base' ? '' : ` when ${h.key}`} itself${h.value != null ? ` (${h.value})` : ''}`,
             )
             .join(
               ', ',
@@ -2012,6 +2070,8 @@ export async function themeEditShow(theme, options = {}) {
     await buildTheme(ctx, theme, data);
     return resolvedTokens(ctx, theme);
   });
+  const ownOverNotes = ownOverSettingNotes(cwd, theme, data);
+  const ownMasked = ownOverNotes.map(n => n.slice(0, n.indexOf(': ')));
   const checked = await contrastProblems(ctx, data, res);
   // What cannot be measured is a note, not a problem.
   const problems = checked.filter(x => !x.startsWith('not checked'));
@@ -2131,7 +2191,13 @@ export async function themeEditShow(theme, options = {}) {
               `${brokenSource}, so settings cannot take effect; put back the import, extends and name lines in ${theme}.theme.ts${/no longer names the theme/.test(brokenSource) ? ` (a copy of another theme's source still names that theme: change its name to '${theme}')` : ''}`,
             ]
           : []),
-        ...checked.filter(x => x.startsWith('not checked')),
+        // A setting the theme file wins over is not live: no contrast
+        // caveat for it (its own note says it does not show).
+        ...checked.filter(
+          x =>
+            x.startsWith('not checked') &&
+            !ownMasked.some(d => x.includes(` for ${d},`)),
+        ),
         ...fontNotes(ctx, data),
         ...ownSourceMaskNotes(
           ctx,
@@ -2140,7 +2206,7 @@ export async function themeEditShow(theme, options = {}) {
           data,
           await baseResolved(ctx.project, data.like),
         ),
-        ...ownOverSettingNotes(cwd, theme, data),
+        ...ownOverNotes,
         ...ownPhoneNotes(cwd, theme, data),
       ],
       // A size, number or font is the same in both modes: one value.
@@ -2226,17 +2292,17 @@ function nowApplies(ctx, data, removed, base) {
   // On a part, the same for what the own source sets on that part's rule.
   if (
     (removed.source === 'token' || removed.source === 'property') &&
-    removed.on &&
-    !removed.state
+    removed.on
   ) {
     const own = ownPartTokens(
       ctx.project.cwd,
       data.name,
       removed.on,
       removed.when ?? 'base',
+      removed.state ? `:${removed.state}` : null,
     );
     if (own.has(removed.thing))
-      return `${removed.thing} = ${own.get(removed.thing) ?? 'its value'} on ${removed.on}${removed.when ? ` when ${removed.when}` : ''} (set in ${data.name}.theme.ts)`;
+      return `${removed.thing} = ${own.get(removed.thing) ?? 'its value'} on ${removed.on}${removed.state ? ` :${removed.state}` : ''}${removed.when ? ` when ${removed.when}` : ''} (set in ${data.name}.theme.ts)`;
   }
   // A role font removed under an exact --font-family-<role>: that token is
   // what shows there.
@@ -2432,9 +2498,12 @@ function dialTouched(ctx, data, s, base) {
 }
 
 /**
- * The family and weight tokens the theme's own source sets that phones do
- * not show: on top of a base theme, its phone rule puts its own type back
- * there (a Core limit), unless an exact setting is repeated after it.
+ * The family and weight tokens the theme's own source sets as plain tokens
+ * that phones do not show: on top of a base theme, its rule for those
+ * screens sets its type again (a rule wins over plain tokens, by Core's
+ * contract), unless an exact setting is repeated after it. The note names
+ * the fix within that contract: the theme's typography, or a same-screens
+ * rule.
  * @param {string} cwd
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
@@ -2451,8 +2520,11 @@ function ownPhoneNotes(cwd, slug, data) {
     k => PHONE_TYPE.test(k) && !exact.has(k),
   );
   if (!lost.length) return [];
+  const families = lost.filter(k => /^--font-family-/.test(k));
+  const role =
+    /^--font-family-([a-z]+)$/.exec(families[0] ?? '')?.[1] ?? 'body';
   return [
-    `on ${PHONES}, the base theme's type shows for ${lost.slice(0, 4).join(', ')}${lost.length > 4 ? ` and ${lost.length - 4} more` : ''}, which ${slug}.theme.ts sets: the base theme sets its type again there, after your file (a Core limit); wide screens show your file's`,
+    `on ${PHONES}, the base theme's type shows for ${lost.slice(0, 4).join(', ')}${lost.length > 4 ? ` and ${lost.length - 4} more` : ''}, which ${slug}.theme.ts sets as plain tokens: the base theme's rule for those screens sets its type again, and a rule wins over plain tokens there. To keep yours on every screen, set ${lost.length > 1 ? 'them' : 'it'} on the theme's typography in ${slug}.theme.ts (such as typography: {${role}: {family: ...}}, which that rule then keeps), or in a rule for the same screens`,
   ];
 }
 
@@ -2473,7 +2545,7 @@ function ownOverSettingNotes(cwd, slug, data) {
   /** @type {string[]} */
   const out = [];
   for (const x of data.settings) {
-    if (x.state || (x.source !== 'token' && x.source !== 'property')) continue;
+    if (x.source !== 'token' && x.source !== 'property') continue;
     if (!x.on) {
       if (x.source === 'token' && !x.when && topKeys.has(x.thing))
         out.push(
@@ -2481,13 +2553,14 @@ function ownOverSettingNotes(cwd, slug, data) {
         );
       continue;
     }
-    const key = `${x.on}\0${x.when ?? 'base'}`;
+    const state = x.state ? `:${x.state}` : null;
+    const key = `${x.on}\0${x.when ?? 'base'}\0${state ?? ''}`;
     if (!parts.has(key))
-      parts.set(key, ownPartTokens(cwd, slug, x.on, x.when ?? 'base'));
+      parts.set(key, ownPartTokens(cwd, slug, x.on, x.when ?? 'base', state));
     const own = /** @type {Map<string, string | null>} */ (parts.get(key));
     if (own.has(x.thing))
       out.push(
-        `${describe(x)}: ${slug}.theme.ts sets ${x.thing} on ${x.on}${x.when ? ` when ${x.when}` : ''} itself${own.get(x.thing) != null ? ` (${own.get(x.thing)})` : ''}, so this setting does not show there`,
+        `${describe(x)}: ${slug}.theme.ts sets ${x.thing} on ${x.on}${state ? ` ${state}` : ''}${x.when ? ` when ${x.when}` : ''} itself${own.get(x.thing) != null ? ` (${own.get(x.thing)})` : ''}, so this setting does not show there`,
       );
   }
   return out;
