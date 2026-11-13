@@ -46,6 +46,11 @@ import {elementPropOrigins} from '../../foundation/discovery/module-exports.mjs'
 import {cssImports} from '../../foundation/render/embedded-imports.mjs';
 import * as path from 'node:path';
 import {
+  persistedGather,
+  recordedRun,
+} from '../../foundation/fs/gather-cache.mjs';
+import {getCliInvocation} from '../../foundation/env/package-manager.mjs';
+import {
   Project,
   availableComputerIntegrations,
   computerIntegrationCandidates,
@@ -82,6 +87,36 @@ export {
   authoringAudit,
   authoringAuditData,
 } from './_authoring-audit.mjs';
+
+/** A doctor check record, kept as it is. */
+const CHECK_CODEC = {
+  encode: (/** @type {any} */ check) => check,
+  decode: (/** @type {any} */ check) => check,
+};
+
+/**
+ * A doctor check that reads only files, kept between runs through the kept
+ * gather (foundation/fs/gather-cache.mjs): a later `doctor` with every file,
+ * folder, module and environment variable it read unchanged reads the check
+ * back. Only the docs checks go through here; a check that depends on the
+ * time, the network or anything else the stamps do not see never does.
+ * @template T
+ * @param {{name: string, cwd: string, coreDir: string | null}} where - The
+ *   check, the project folder, and the Core folder the project loads.
+ * @param {() => Promise<T>} check
+ * @returns {Promise<T>}
+ */
+export function keptFileCheck({name, cwd, coreDir}, check) {
+  // Only a recorded run (a plain `doctor` from the bin) reads or keeps one: a
+  // hosted run names its commands its own way, so it always checks.
+  if (!recordedRun()) return check();
+  return persistedGather(
+    // With the command name the checks print commands with.
+    ['doctor-check', name, cwd, coreDir, getCliInvocation(cwd)],
+    check,
+    CHECK_CODEC,
+  );
+}
 
 /**
  * Package written to the generated app record for one discovered theme.
