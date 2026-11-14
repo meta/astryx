@@ -73,6 +73,12 @@ const meta: Meta<typeof Tokenizer> = {
     // signature, and Storybook drops a URL arg (`args=hasClear:!true`) whose
     // argType names no type. The browser end-lane contract sets it that way.
     hasClear: {control: 'boolean', type: 'boolean'},
+    isLoading: {
+      control: 'boolean',
+      type: 'boolean',
+      description:
+        "Whether the field's value is loading or being saved. Shows the end-lane Spinner and sets aria-busy on the control.",
+    },
     maxEntries: {control: 'number'},
     size: {
       control: 'radio',
@@ -518,6 +524,55 @@ export const Loading: Story = {
     placeholder: 'Search people...',
   },
   name: 'Loading (async source, with clear and end content)',
+};
+
+/** The value is busy, and searching stays usable. */
+export const InputBusy: Story = {
+  render: args => {
+    const [value, setValue] = useState<SearchableItem[]>([users[0], users[2]]);
+    return (
+      <Tokenizer
+        {...args}
+        searchSource={userSource}
+        value={value}
+        onChange={items => setValue(items)}
+      />
+    );
+  },
+  args: {
+    label: 'Team Members',
+    placeholder: 'Search people...',
+    isLoading: true,
+  },
+  name: 'Input busy (isLoading)',
+};
+
+/**
+ * `changeAction` saves each change, Clear all included. The proposed tokens
+ * show at once, and the field is busy until the save settles.
+ */
+export const TransitionAction: Story = {
+  render: args => {
+    const [value, setValue] = useState<SearchableItem[]>([users[0]]);
+    return (
+      <Tokenizer
+        {...args}
+        searchSource={userSource}
+        value={value}
+        onChange={() => {}}
+        changeAction={async items => {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          setValue(items);
+        }}
+        hasClear
+      />
+    );
+  },
+  args: {
+    label: 'Team Members',
+    placeholder: 'Search people...',
+  },
+  name: 'Transition action (changeAction)',
 };
 
 /**
