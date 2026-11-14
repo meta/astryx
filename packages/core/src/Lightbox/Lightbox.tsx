@@ -224,13 +224,48 @@ function lineHolder(node: Node, flow: HTMLElement, view: Window): Element {
 }
 
 /**
- * The current layout has the place below the text, so the text's lines are its
- * own. The last line holds text, replaced elements and inline-block boxes, and
- * the boxes of inline elements, with their padding, borders and generated
- * content. Inline-level elements add their margins. The line's room is the
- * content box of the block that holds it, less the place's side.
+ * Walks the flow's elements and text. It skips out-of-flow subtrees, since
+ * they take no room on the flow's lines.
  */
-function placeFitsBesideLastLine(flow: HTMLElement): boolean {
+function inFlowWalker(flow: HTMLElement, view: Window): TreeWalker {
+  return flow.ownerDocument.createTreeWalker(
+    flow,
+    NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT,
+    {
+      acceptNode: node =>
+        isElement(node) &&
+        /^(absolute|fixed)$/.test(view.getComputedStyle(node).position)
+          ? NodeFilter.FILTER_REJECT
+          : NodeFilter.FILTER_ACCEPT,
+    },
+  );
+}
+
+const NO_CONTENT = new Set(['', 'none', 'normal']);
+
+/**
+ * Whether a block-level element has its own `::before` or `::after` content.
+ * An inline element's generated content is part of its boxes; a block's is
+ * not part of any node.
+ */
+function hasBlockGeneratedContent(element: Element, view: Window): boolean {
+  if (
+    REPLACED_ELEMENTS.has(element.localName) ||
+    view.getComputedStyle(element).display.startsWith('inline')
+  ) {
+    return false;
+  }
+  return ['::before', '::after'].some(
+    pseudo => !NO_CONTENT.has(view.getComputedStyle(element, pseudo).content),
+  );
+}
+
+/**
+ * The current layout has the place below the text, so the text's lines are its
+ * own. Null means the last line's block, one of its ancestors or a block after
+ * its text has its own generated content, which has no node to measure.
+ */
+function placeFitsBesideLastLine(flow: HTMLElement): boolean | null {
   const place = flow.firstElementChild;
   const doc = flow.ownerDocument;
   const view = doc.defaultView ?? window;
@@ -245,10 +280,9 @@ function placeFitsBesideLastLine(flow: HTMLElement): boolean {
   if (typeof range.getClientRects !== 'function') {
     return true;
   }
-  // Text and one-box elements set the lines. An inline element's boxes add
-  // their padding, borders and generated content to the lines they are on.
-  // An inline-level element's start margin comes before its first box, and
-  // its end margin after its last.
+  // Inline boxes widen the line they are on. Only text and one-box elements
+  // decide which line is last. An inline-level element's start margin comes
+  // before its first box, and its end margin after its last.
   const lineBoxes: LineBox[] = [];
   const inlineBoxes: LineBox[] = [];
   const keep = (
@@ -276,10 +310,7 @@ function placeFitsBesideLastLine(flow: HTMLElement): boolean {
       });
     });
   };
-  const walker = doc.createTreeWalker(
-    flow,
-    NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT,
-  );
+  const walker = inFlowWalker(flow, view);
   for (let node = walker.nextNode(); node != null; node = walker.nextNode()) {
     if (isElement(node)) {
       const style = view.getComputedStyle(node);
@@ -301,10 +332,27 @@ function placeFitsBesideLastLine(flow: HTMLElement): boolean {
     return true;
   }
   const lowest = lineBoxes.reduce((a, b) => (b.bottom > a.bottom ? b : a));
+  const holder = lineHolder(lowest.node, flow, view);
+  // The last line's block, its ancestors, and any block after its text can
+  // put their own generated content on that line or below it.
+  for (
+    let element: Element | null = holder;
+    element != null && element !== flow;
+    element = element.parentElement
+  ) {
+    if (hasBlockGeneratedContent(element, view)) {
+      return null;
+    }
+  }
+  walker.currentNode = lowest.node;
+  for (let node = walker.nextNode(); node != null; node = walker.nextNode()) {
+    if (isElement(node) && hasBlockGeneratedContent(node, view)) {
+      return null;
+    }
+  }
   const lastLine = [...lineBoxes, ...inlineBoxes].filter(
     box => (box.top + box.bottom) / 2 > lowest.top,
   );
-  const holder = lineHolder(lowest.node, flow, view);
   const holderBox = holder.getBoundingClientRect();
   const holderStyle = view.getComputedStyle(holder);
   const contentLeft =
@@ -1139,13 +1187,16 @@ export function Lightbox({
         const textLines = Math.round(
           flow.getBoundingClientRect().height / line,
         );
+        // The fit check cannot measure a line with a block's own generated
+        // content. For that caption the frame reads the result after it
+        // commits the text's lines, a forced layout.
+        const fit =
+          textLines < lineCount ? placeFitsBesideLastLine(flow) : true;
         // A toggle that does not fit beside the text's last line takes a line
         // of its own. That decides the count only when the caption shows one
         // line more than its text.
         const lines =
-          lineCount === textLines + 1 && !placeFitsBesideLastLine(flow)
-            ? lineCount
-            : textLines;
+          fit === false && lineCount === textLines + 1 ? lineCount : textLines;
         if (lines < lineCount) {
           // Fewer lines shrink the caption. Inside this delivery that is a
           // resize loop, so they wait for the next frame. The caption's
@@ -1155,10 +1206,15 @@ export function Lightbox({
             if (bandCaptionRef.current !== caption) {
               return;
             }
-            // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the smaller count commits before this frame's layout
+            // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the smaller count commits before this frame's layout, or before the read below
             flushSync(() => {
               setCaptionShownLines(lines);
             });
+            if (fit == null) {
+              setCaptionShownLines(
+                Math.max(lines, linesOf(caption.clientHeight)),
+              );
+            }
           });
           cancelCaptionShrinkRef.current = () => {
             view.cancelAnimationFrame(frame);
