@@ -255,6 +255,12 @@ work.
   browser takes the pointer (`pointercancel`), or the person presses Escape.
   The highlight then returns at once. SegmentedControl, the family's named
   exception, is the one such group (`spec:AST-020` DEC-6).
+- **INV15 — A clip never cuts a focus indicator.** When an Astryx element
+  clips overflow, such as a List clipping for swipe actions or a Layout region
+  clipping its content, the focus indicator of each focusable descendant stays
+  whole: the clip leaves room for the indicator's width and offset on every
+  edge it clips. A component that cannot leave that room draws the indicator
+  inset on that descendant. Content the caller clips is the caller's (DEC-1).
 
 ## Allowed variation
 
@@ -352,6 +358,19 @@ a system architecture decision by `cixzhang` on 2026-08-30. Essential-action
 reachability, newer-intent precedence, and the evidence/scope guard were approved by
 `cixzhang` on 2026-09-10.
 
+### DEC-1 — Focus indicators stay whole inside clipping parts
+
+**Decider:** pending
+
+A keyboard user tabbing through a List sees row focus rings with their sides
+cut off, because the List clips its sides for swipe actions. The focus ring is
+how they know where they are, so a clip Astryx adds now leaves room for it, or
+the ring moves inside the row where it cannot be cut.
+
+Rejected: always drawing focus rings inset, which changes every component's
+focus look to fix the few that clip. Rejected: leaving each component to
+decide, which keeps the cut rings that exist today.
+
 ## Verification
 
 | Invariant  | Evidence                                                                                                                                                                                                                                                                              | Failure signal                                                                                                                                                                                                                                                                                              |
@@ -369,6 +388,7 @@ reachability, newer-intent precedence, and the evidence/scope guard were approve
 | INV12      | Unit tests of native scroll's progress and real-browser proofs of its adopters                                                                                                                                                                                                        | Progress routed through React state, a missing edge, travel under Reduce Motion, use where native scroll-driven animation is supported, or a public export fails                                                                                                                                            |
 | INV13      | Source boundary check over Core and each family member's pointer-stream tests                                                                                                                                                                                                         | A member outside menus and Selector's and MultiSelector's options that tracks a held pointer across its actions with its own code, or a public export of the tracker, fails                                                                                                                                 |
 | INV14      | `actionGroupTracker.test.ts` one-axis cases and SegmentedControl's drift, past-the-end, cancel and Escape browser cases                                                                                                                                                               | A one-axis group that cancels a press on a drift off it, loses its end action past an end, or keeps its highlight after a cancel or Escape, fails                                                                                                                                                           |
+| INV15      | Real-browser computed-geometry checks: keyboard focus on a List row under each edge value, and on a control inside a padded LayoutContent and LayoutPanel                                                                                                                             | A focus outline whose painted box is cut on any edge                                                                                                                                                                                                                                                        |
 
 Real-browser evidence is required when the behavior depends on
 `:focus-visible`, pointer capability, touch or pen synthesis, rendered focus

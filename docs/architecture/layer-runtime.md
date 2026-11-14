@@ -710,6 +710,13 @@ layers use Layer rendering without joining Escape/platform dismissal.
   scaled subtree and anchors to the trigger's untransformed box
   (`spec:AST-059` DEC-10).
 
+- **INV23 — Content in a layer sizes against the layer.** The content root of
+  every layer that hosts page-like content (Dialog, Drawer, BottomSheet,
+  Lightbox, and MobileNav) is an inline-size container. Container queries and
+  container-relative units inside it, including Layout regions' widths,
+  resolve against the layer and never against a container around the layer's
+  opener (`spec:AST-038`) (DEC-1).
+
 This record does not make future eligible-owner, branch-association, global-host,
 or browser-support requirements current. It does not own component focus entry or
 return, modal semantics, channel admission policy, public controlled/uncontrolled
@@ -926,6 +933,20 @@ transform.
 runtime and must move to `shipped` before its requirements are incorporated into
 this current architecture record.
 
+### DEC-1 — Layers are size containers
+
+**Decider:** pending
+
+A person opening a dialog from a narrow page section sees the dialog's title,
+filters, and pager squeezed and centred, because Layout regions inside measure
+the section the dialog came from. A dialog is its own space, so its content
+measures the dialog. This matches the layer content boundary, which already
+stops the opener's layout from reaching layer content (`spec:AST-038`).
+
+Rejected: Layout regions measuring with percentages instead of container
+units, which breaks their sizing in every page container. Rejected: asking
+apps to add a container inside each dialog.
+
 ## Verification
 
 | Invariant    | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                               |
@@ -950,6 +971,7 @@ this current architecture record.
 | INV20        | `layerEntranceSide.test.ts` and `popoverSurfaceMotion.test.ts`, which read one fixture table, for the side and the meeting point; `layerEntranceSide.test.ts` also for a step that stops at the room to a sized trigger, with no step for a layer flush against or over it; `LayerEntranceSide.interaction.browser.spec.ts` in Chromium and WebKit for the first frame of each anchored layer that flips, and `PopoverTouchMotion.interaction.browser.spec.ts` in Chromium and WebKit; `useLayer.test.tsx`                                                                                                                                                                                                                                                                                                                                                                                |
 | INV21        | A source check over Core for a scroll, resize, observer or animation-frame handler that writes a layer's `top`, `left`, `inset`, `translate` or `transform` from a measured rectangle, excluding the keyboard lift; a performance trace of a page scroll with an open Popover, counting script position writes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | A script write of a layer's position during a scroll, or a handler outside DEC-9's four uses that moves a layer toward its anchor                                                                                                                                                                                                                                                                                            |
 | INV22        | `LayerPressTransform.interaction.browser.spec.ts`: a browser case per layer that opens from a pressable trigger (Popover, DropdownMenu, Selector, MultiSelector, ComplexSelector, ContextMenu), by mouse and by finger: during and after a press, the layer's rectangle, layout box and computed transform match an unpressed open, a layer that opens on the press is placed from the untransformed box in its first frame, and a press on a trigger whose own layer is open leaves the trigger unscaled.                                                                                                                                                                                                                                                                                                                                                                                | A layer whose rectangle, size or computed transform changes while its trigger is pressed                                                                                                                                                                                                                                                                                                                                     |
+| INV23        | Real-browser checks: a Dialog, a Drawer, and a BottomSheet opened from a section that is itself an inline-size container, each holding a Layout with a header and footer, at 390 and 1440 px                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Layout regions measured against the opener's container                                                                                                                                                                                                                                                                                                                                                                       |
 
 Current unit coverage proves emitted styles, reducers, state transitions, and DOM
 placement. Native Popover, `<dialog>`, focus, top-layer ordering, and rendered
