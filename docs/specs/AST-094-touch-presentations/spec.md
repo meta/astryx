@@ -265,7 +265,8 @@ a measured, sourced difference exists.
   animation mid-flight at the value on screen. That value and its velocity
   MUST come from the curve, not from a layout read. A new target MUST keep the
   current velocity, and a release MUST hand its velocity to the spring that
-  follows.
+  follows. A reorder drop hands on no velocity: each row it moves glides
+  from its place before the drag (`spec:AST-103` FR3).
   A pager's release slower than `paging.release.velocityFloor` (225 pt/s)
   starts its settle from rest, as UIKit's does; a faster release hands its
   velocity to the settle. The floor is a guess inside the measured bracket
@@ -320,7 +321,9 @@ a measured, sourced difference exists.
   (owner decision, 2026-11-04). Gesture-driven motion where the release velocity
   matters plays a spring that starts at the gesture's velocity (the settle, a
   fling, the rubber-band return), or for a coast its measured deceleration rate
-  from that velocity, under every pointer (FR43). In a component whose main
+  from that velocity, under every pointer (FR43). A reorder drop is not such
+  motion: the rows it moves glide from their places before the drag, on the
+  theme's curve tokens (`spec:AST-103` FR3). In a component whose main
   interaction is a tap, a motion a tap, key or the program starts whose record
   names no duration step, and for which the platform has a measured duration,
   plays the theme duration token whose value in the Storybook theme (neutral) is
