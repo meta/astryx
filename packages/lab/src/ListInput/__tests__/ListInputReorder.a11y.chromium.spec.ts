@@ -197,7 +197,7 @@ test.describe('the record columns', () => {
     {width: 390, height: 844},
     {width: 1024, height: 768},
   ]) {
-    test(`at ${viewport.width} px, the Add button and each reorder handle stay inside the list's columns`, async ({
+    test(`at ${viewport.width} px, the Add button and each reorder handle stay inside the list's columns, on screen`, async ({
       page,
     }) => {
       await page.setViewportSize(viewport);
@@ -240,6 +240,8 @@ test.describe('the record columns', () => {
             ),
           ),
           handles: handles.length,
+          handleEnd: Math.max(...handles.map(right)),
+          pageWidth: document.documentElement.scrollWidth,
         };
       });
       expect(overflow.handles, JSON.stringify(overflow)).toBeGreaterThan(1);
@@ -259,6 +261,14 @@ test.describe('the record columns', () => {
         overflow.handlePastList,
         JSON.stringify(overflow),
       ).toBeLessThanOrEqual(0.5);
+      // The list fits the screen, so each handle can be reached without
+      // scrolling the page sideways.
+      expect(overflow.pageWidth, JSON.stringify(overflow)).toBeLessThanOrEqual(
+        viewport.width,
+      );
+      expect(overflow.handleEnd, JSON.stringify(overflow)).toBeLessThanOrEqual(
+        viewport.width,
+      );
     });
   }
 });
