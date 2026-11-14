@@ -254,6 +254,43 @@ describe('render(): every write takes its place in one step', () => {
     60_000,
   );
 
+  it('lands every copy but the page at its target in the one new folder: a copy an alias places is refused outside it', async () => {
+    put('alias-loop/tsconfig.json', '{"compilerOptions": {"paths": {"@/*": ["./src/*"]}}}\n');
+    put('alias-loop/package.json', '{"name":"alias-loop","private":true}');
+    put('alias-loop/src/lib/helper.ts', "import {title} from '@/app/page';\nexport const label = 'Helper';\nexport const echo = () => title;\n");
+    const page = "import {label} from '../lib/helper';\nexport const title = 'Loop';\nexport default function Page() { return <p>{label}</p>; }\n";
+    put('alias-loop/src/app/page.tsx', page);
+    const cwd = path.join(dir, 'alias-loop');
+    await render('src/app/page.tsx', {cwd});
+    /** @type {any} */
+    let refused;
+    try {
+      await render('src/app/page.html', {cwd, reverse: true, out: 'restored/app/page.tsx'});
+    } catch (e) {
+      refused = e;
+    }
+    expect(refused?.code).toBe('ERR_PATH_TRAVERSAL');
+    expect(refused.message).toContain('src/app/page.tsx');
+    expect(fs.existsSync(path.join(cwd, 'restored'))).toBe(false);
+    expect(fs.readFileSync(path.join(cwd, 'src/app/page.tsx'), 'utf8')).toBe(page);
+  }, 60_000);
+
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)('names the folder that takes no new file, not a temporary one', async () => {
+    fs.mkdirSync(path.join(dir, 'locked'), {recursive: true});
+    fs.chmodSync(path.join(dir, 'locked'), 0o555);
+    /** @type {any} */
+    let refused;
+    try {
+      await render('page.tsx', {cwd: dir, out: 'locked/page.html'});
+    } catch (e) {
+      refused = e;
+    } finally {
+      fs.chmodSync(path.join(dir, 'locked'), 0o755);
+    }
+    expect(refused?.code).toBe('ERR_WRITE_FAILED');
+    expect(refused.message).toBe('Could not write locked/page.html: locked does not take a new file (EACCES); nothing was written.');
+  }, 60_000);
+
   it('leaves no temporary file or folder behind', () => {
     expect(fs.readdirSync(dir).filter(name => name.includes('.tmp-'))).toEqual([]);
   });

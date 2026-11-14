@@ -203,6 +203,22 @@ function newFolderOf(file) {
 }
 
 /**
+ * Why a write failed, in terms of the target, never the hidden temporary
+ * file or folder beside it: the folder that would not take the temporary,
+ * or the error a file inside the temporary folder met.
+ * @param {unknown} e
+ * @param {string | null} temporary the temporary file or folder
+ * @param {string} folder the folder that holds the target
+ * @param {string} cwd
+ */
+function writeFailure(e, temporary, folder, cwd) {
+  const err = /** @type {NodeJS.ErrnoException} */ (e);
+  if (temporary && err?.path === temporary) return `${shown(cwd, folder)} does not take a new file (${err.code ?? err.message})`;
+  if (temporary && err?.path?.startsWith(temporary + path.sep)) return err.code ?? err.message;
+  return String(err?.message ?? e);
+}
+
+/**
  * Write one file in one step: its bytes go to a temporary file beside it,
  * which then takes its name. A reader, or another run at the same time, sees
  * the old whole file or the new one, never part of one, and a run stopped
@@ -244,7 +260,7 @@ function writeOutput(file, content, cwd, {replace}) {
       );
     }
     throw new AstryxError(
-      `Could not write ${shown(cwd, file)}: ${/** @type {Error} */ (e).message}; nothing was written.`,
+      `Could not write ${shown(cwd, file)}: ${writeFailure(e, temporary, path.dirname(file), cwd)}; nothing was written.`,
       [],
       ERROR_CODES.ERR_WRITE_FAILED,
     );
@@ -284,7 +300,7 @@ function writeFolder(folder, writes, cwd) {
     return true;
   } catch (e) {
     throw new AstryxError(
-      `Could not write ${shown(cwd, current)}: ${/** @type {Error} */ (e).message}; nothing was written.`,
+      `Could not write ${shown(cwd, current)}: ${writeFailure(e, staging, path.dirname(folder), cwd)}; nothing was written.`,
       [],
       ERROR_CODES.ERR_WRITE_FAILED,
     );
@@ -679,7 +695,9 @@ export function reverseToFile({cwd, input, output, overwrite}) {
         for (const [file, aliased] of [...relative.map(x => /** @type {[string, boolean]} */ ([x, false])), ...[...reach.aliased].map(x => /** @type {[string, boolean]} */ ([x, true]))]) {
           if (placed.has(file)) continue;
           placed.add(file);
-          if (i > 0 && !within(file)) (aliased ? aliasedOutside : outside).push(file);
+          // Every copy but the page at its target, the page's own copy that an
+          // alias places included, lands in the one new folder.
+          if (file !== target && !within(file)) (aliased ? aliasedOutside : outside).push(file);
           writes.push({file, bytes: Buffer.from(f.base64, 'base64')});
         }
       });
