@@ -853,7 +853,6 @@ export const WRAPPED_PARTS = /** @type {Record<string, {box: string}>} */ ({
   'chat-composer': {box: 'the rounded composer body'},
 });
 
-/** States every part takes, beyond the ones its doc lists. */
 /**
  * The pseudo-classes of CSS Selectors (Level 4 and the HTML and media
  * states browsers ship), by name: a part's `:name` block that names none of
@@ -937,6 +936,7 @@ export const CSS_PSEUDO_CLASSES = new Set([
   'where',
 ]);
 
+/** States every part takes, beyond the ones its doc lists. */
 export const COMMON_STATES = [
   'hover',
   'active',

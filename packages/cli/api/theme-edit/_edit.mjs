@@ -368,7 +368,11 @@ async function repairedNewSettings(cwd, options) {
   );
   const probe = usableNewName(cwd, 'my-theme');
   try {
-    await newTheme(probe, {...options, settings}, {check: true, repairing: true});
+    await newTheme(
+      probe,
+      {...options, settings},
+      {check: true, repairing: true},
+    );
     return settings;
   } catch (e) {
     const vetted = await vetNewLines(e, cwd, settings, options.like);
@@ -574,7 +578,11 @@ async function vetNewLines(e, cwd, typed, like) {
  * @param {{check?: boolean, repairing?: boolean}} [mode]
  * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditNewResponse | null>}
  */
-async function newTheme(name, options, {check = false, repairing = false} = {}) {
+async function newTheme(
+  name,
+  options,
+  {check = false, repairing = false} = {},
+) {
   const {cwd = process.cwd(), png = false, settings = {}} = options;
   // --like reads a base in any case, by the one case rule of every dial
   // (`set <theme> base Neutral` is neutral); `--like none` builds on no
