@@ -226,7 +226,10 @@ const surfaceModule = createModuleLoader(
 );
 
 let loadedSurface: TooltipSurfaceComponent | null = null;
-let isScheduled = false;
+// The windows whose triggers scheduled the load. Each schedules its own, so a
+// window that goes away (a frame, a Picture-in-Picture window) before its
+// callbacks run does not stop the others.
+let scheduledViews = new WeakSet<Window>();
 let hasFailed = false;
 // Open requests that wait for the load. A failed load drops them.
 const heldShows = new Set<() => void>();
@@ -263,7 +266,7 @@ async function loadSurface(): Promise<void> {
   } catch (error: unknown) {
     // The triggers keep working without tooltips. A later intent on a
     // trigger, or the next trigger that mounts, asks for the load again.
-    isScheduled = false;
+    scheduledViews = new WeakSet();
     hasFailed = true;
     for (const drop of [...heldShows]) {
       drop();
@@ -278,6 +281,9 @@ async function loadSurface(): Promise<void> {
 }
 
 function startLoad(): void {
+  if (pendingLoad != null || loadedSurface != null) {
+    return;
+  }
   pendingLoad = loadSurface().finally(() => {
     pendingLoad = null;
   });
@@ -289,10 +295,10 @@ function startLoad(): void {
  * after that paint. No input starts or hurries the load.
  */
 function scheduleTooltipLoad(view: Window | null): void {
-  if (isScheduled || loadedSurface != null || view == null) {
+  if (loadedSurface != null || view == null || scheduledViews.has(view)) {
     return;
   }
-  isScheduled = true;
+  scheduledViews.add(view);
   // The timers belong to the trigger's window, so they end with its document.
   // A frame callback runs before the frame paints. The task it queues runs
   // after that paint.
@@ -541,7 +547,9 @@ function createTooltipBridge(
     },
     hide: () => {
       if (surface == null) {
-        setShowRequested(false);
+        if (isShowRequested) {
+          dropHeldShow();
+        }
       } else {
         surface.actionsRef.current.hide();
       }
@@ -656,14 +664,12 @@ function retryFailedLoad(): void {
     return;
   }
   hasFailed = false;
-  isScheduled = true;
   startLoad();
 }
 
 /** Test only: loads the tooltip surface now and makes every tooltip see it. */
 export async function __loadTooltipForTest(): Promise<void> {
   publish((await surfaceModule.load()).TooltipSurface);
-  isScheduled = true;
 }
 
 /** Test only: the load in flight, or null when none has started. */

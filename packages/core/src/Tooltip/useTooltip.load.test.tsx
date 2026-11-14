@@ -318,6 +318,24 @@ describe('the tooltip loads after first paint (architecture:component-import-bou
     expect(shows()).toBe(true);
   });
 
+  it('a hide() before the load that cancels a held show() reports it through onHide (component:InfoTip FR2)', async () => {
+    const onHide = vi.fn();
+    let tooltip: UseTooltipModule.TooltipReturn | null = null;
+    render(
+      <Harness
+        onHide={onHide}
+        onReady={t => {
+          tooltip = t;
+        }}
+      />,
+    );
+    act(() => tooltip?.show());
+    act(() => tooltip?.hide());
+    expect(onHide).toHaveBeenCalledTimes(1);
+    act(() => tooltip?.hide());
+    expect(onHide).toHaveBeenCalledTimes(1);
+  });
+
   it('a show() followed by a hide() before the load opens nothing', async () => {
     let tooltip: UseTooltipModule.TooltipReturn | null = null;
     render(
@@ -431,6 +449,26 @@ describe('the tooltip loads after first paint (architecture:component-import-bou
     expect(loads.surface).toBe(2);
     expect(layerOf()).not.toBeNull();
     warn.mockRestore();
+  });
+
+  it('a first trigger whose window goes away before its load runs does not stop the page loading (FR14)', async () => {
+    const frame = document.createElement('iframe');
+    document.body.append(frame);
+    const frameBody = frame.contentDocument?.body;
+    if (frameBody == null) {
+      throw new Error('jsdom gave the frame no document');
+    }
+    // The frame's own timers never run: its window goes away first.
+    const frameView = frame.contentWindow as Window;
+    frameView.requestAnimationFrame = () => 0;
+    const {unmount} = render(<Harness />, {container: frameBody});
+    unmount();
+    frame.remove();
+
+    render(<Harness />);
+    await paintAndLoad();
+    expect(loads.surface).toBe(1);
+    expect(layerOf()).not.toBeNull();
   });
 
   it('the load waits for a trigger to attach: a tooltip whose trigger never attaches starts none', async () => {
