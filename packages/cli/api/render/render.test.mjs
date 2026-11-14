@@ -206,6 +206,43 @@ describe('render(): page to one HTML file', () => {
     );
   });
 
+  it('refuses a rendered file cut short before its embedded source, instead of rebuilding part of the page', async () => {
+    put('cut-short.html', html.slice(0, html.indexOf('<script type="application/x-astryx-source"') - 40));
+    /** @type {any} */
+    let refused;
+    try {
+      await render('cut-short.html', {cwd: dir, reverse: true, out: 'cut-short-back/page.tsx'});
+    } catch (e) {
+      refused = e;
+    }
+    expect(refused?.code).toBe('ERR_RENDER_SOURCE_DAMAGED');
+    expect(refused.message).toContain('cut-short.html is cut short');
+    expect(fs.existsSync(path.join(dir, 'cut-short-back'))).toBe(false);
+    // A whole file a host added to after </html> is not cut short.
+    put('added-to.html', `${html}<script>track()</script>\n`);
+    const back = /** @type {any} */ (await render('added-to.html', {cwd: dir, reverse: true, out: 'added-to-back/page.tsx'}));
+    expect(back.data).toMatchObject({mode: 'embedded', exact: true});
+  });
+
+  it('refuses a file a merge left with conflict markers, instead of choosing a side', async () => {
+    const lines = html.split('\n');
+    const at = lines.findIndex(line => line.includes('application/x-astryx-source'));
+    put('conflicted.html', [...lines.slice(0, at), '<<<<<<< HEAD', lines[at], '=======', lines[at], '>>>>>>> theirs', ...lines.slice(at + 1)].join('\n'));
+    /** @type {any} */
+    let refused;
+    try {
+      await render('conflicted.html', {cwd: dir, reverse: true, out: 'conflicted-back/page.tsx'});
+    } catch (e) {
+      refused = e;
+    }
+    expect(refused?.code).toBe('ERR_RENDER_SOURCE_DAMAGED');
+    expect(refused.message).toContain('merge conflict markers');
+    expect(fs.existsSync(path.join(dir, 'conflicted-back'))).toBe(false);
+    // A page that is not an Astryx page is still named as such.
+    put('plain-conflicted.html', '<html><body>\n<<<<<<< HEAD\n<p>a</p>\n=======\n<p>b</p>\n>>>>>>> theirs\n</body></html>\n');
+    expect(await codeOf(() => render('plain-conflicted.html', {cwd: dir, reverse: true}))).toBe('ERR_RENDER_NOT_ASTRYX');
+  });
+
   it('gives back a file whose markup a hand edit left with an open comment, and says it was edited', async () => {
     put('open-comment.html', html.replace('</h1>', '</h1><!-- todo: reword'));
     const back = /** @type {any} */ (await render('open-comment.html', {cwd: dir, reverse: true, out: 'open-comment-back/page.tsx'}));
