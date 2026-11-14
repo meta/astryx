@@ -306,8 +306,9 @@ describe('generateThemeRules', () => {
       }),
     ).toEqual(plain);
     // A pseudo-class block whose every value is undefined stays, empty: it
-    // is restated, so its component is themed (the prop override rules are
-    // written) and the block itself writes no rule.
+    // is restated, so its component is themed and writes exactly what a
+    // component given an empty style key writes (its prop override rules),
+    // and the block itself writes nothing.
     const hover = generateThemeRules({
       tokens: {},
       components: {
@@ -316,11 +317,12 @@ describe('generateThemeRules', () => {
         link: {base: {':hover': {color: undefined as unknown as string}}},
       },
     });
-    const added = hover.filter(rule => !plain.includes(rule)).join('\n');
-    expect(added).toMatch(/\.astryx-text\[data-color="secondary"\]/);
-    expect(added).toMatch(/\.astryx-heading\[data-weight=/);
-    expect(added).toMatch(/\.astryx-link\[data-color=/);
-    expect(added).not.toMatch(/:hover/);
+    const themed = generateThemeRules({
+      tokens: {},
+      components: {text: {base: {}}, heading: {base: {}}, link: {base: {}}},
+    });
+    expect(hover).toEqual(themed);
+    expect(themed).not.toEqual(plain);
   });
 
   it('replaces an inherited pseudo-class block with a restated one whose every value is left undefined', () => {
