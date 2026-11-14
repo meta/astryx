@@ -1162,7 +1162,8 @@ function written(path, through, options) {
   let child = path;
   let parent = path.parent;
   // A property read from it, such as `labels.remove` or `words.push`, through
-  // any TypeScript wrapper.
+  // any TypeScript wrapper. A choice between values, such as
+  // `(isAlt ? labels : other).remove`, may still yield it.
   let member = false;
   while (parent != null) {
     const node = parent.node;
@@ -1178,7 +1179,13 @@ function written(path, through, options) {
         node.type === 'TSTypeAssertion' ||
         node.type === 'ParenthesizedExpression') &&
       node.expression === child.node;
-    if (!reads && !wraps) {
+    const chooses =
+      through &&
+      ((node.type === 'ConditionalExpression' && node.test !== child.node) ||
+        node.type === 'LogicalExpression' ||
+        (node.type === 'SequenceExpression' &&
+          node.expressions.at(-1) === child.node));
+    if (!reads && !wraps && !chooses) {
       break;
     }
     member = member || reads;

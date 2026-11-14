@@ -726,6 +726,50 @@ function Rows({remove}) {
     await expectStable(raw);
   });
 
+  it('keeps createSwipe on the row with a TODO when a conditional chooses a local its options read and a property is set through it above a hoisted function', async () => {
+    const raw =
+      await applyTransform(`import {List, ListItem} from '@astryxdesign/core/List';
+function Rows({rows, isAlt, remove}) {
+  const labels = {remove: 'Delete'};
+  const altLabels = {remove: 'Erase'};
+  (isAlt ? labels : altLabels).remove = 'Remove';
+  function renderRow(row) {
+    return <ListItem key={row.id} label={row.label} swipeActions={{trailing: [{label: labels.remove, onActivate: remove}]}} />;
+  }
+  return <List>{rows.map(renderRow)}</List>;
+}`);
+    expectInlineWithTodo(flat(raw), 1);
+    await expectStable(raw);
+  });
+
+  it('keeps createSwipe on each row with a TODO when a logical expression chooses a local their options read and a property is set through it between two rows', async () => {
+    const raw =
+      await applyTransform(`import {ListItem} from '@astryxdesign/core/List';
+function Rows({override, remove}) {
+  const labels = {remove: 'Delete'};
+  const first = <ListItem label="A" swipeActions={{trailing: [{label: labels.remove, onActivate: remove}]}} />;
+  (override || labels).remove = 'Remove';
+  const second = <ListItem label="B" swipeActions={{trailing: [{label: labels.remove, onActivate: remove}]}} />;
+  return <>{first}{second}</>;
+}`);
+    expectInlineWithTodo(flat(raw), 2);
+    await expectStable(raw);
+  });
+
+  it("keeps createSwipe on each row with a TODO when a sequence's last value is a local their options read and a property is set through it between two rows", async () => {
+    const raw =
+      await applyTransform(`import {ListItem} from '@astryxdesign/core/List';
+function Rows({remove}) {
+  const labels = {remove: 'Delete'};
+  const first = <ListItem label="A" swipeActions={{trailing: [{label: labels.remove, onActivate: remove}]}} />;
+  (0, labels).remove = 'Remove';
+  const second = <ListItem label="B" swipeActions={{trailing: [{label: labels.remove, onActivate: remove}]}} />;
+  return <>{first}{second}</>;
+}`);
+    expectInlineWithTodo(flat(raw), 2);
+    await expectStable(raw);
+  });
+
   it("defines a swipe whose non-literal swipeBehavior the codemod merges into its options: a prop's in useMemo, and a module const's at module scope", async () => {
     const raw =
       await applyTransform(`import {ListItem} from '@astryxdesign/core/List';
