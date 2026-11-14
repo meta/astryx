@@ -25,7 +25,7 @@
  * - /packages/cli/assets/templates/blocks/components/Thumbnail/ (showcase blocks)
  */
 
-import {useRef, useState} from 'react';
+import {useRef, useState, type ImgHTMLAttributes} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
@@ -56,7 +56,13 @@ import english from '../i18n/generated-english/Thumbnail/Thumbnail.generated';
 
 registerEnglishFallback(english);
 
-export interface ThumbnailProps extends BaseProps<HTMLDivElement> {
+type ThumbnailImageProps = Pick<
+  ImgHTMLAttributes<HTMLImageElement>,
+  'loading' | 'decoding' | 'width' | 'height' | 'fetchPriority'
+>;
+
+export interface ThumbnailProps
+  extends BaseProps<HTMLDivElement>, ThumbnailImageProps {
   /** Ref forwarded to the root element */
   ref?: React.Ref<HTMLDivElement>;
   /**
@@ -75,6 +81,19 @@ export interface ThumbnailProps extends BaseProps<HTMLDivElement> {
    * dev-time warning.
    */
   alt?: string;
+  /**
+   * Browser loading hint for the preview image. Use `lazy` for thumbnails
+   * outside the initial viewport.
+   */
+  loading?: ThumbnailImageProps['loading'];
+  /** Browser decoding hint for the preview image. */
+  decoding?: ThumbnailImageProps['decoding'];
+  /** Intrinsic width of the preview image, in pixels or a valid HTML value. */
+  width?: ThumbnailImageProps['width'];
+  /** Intrinsic height of the preview image, in pixels or a valid HTML value. */
+  height?: ThumbnailImageProps['height'];
+  /** Browser fetch priority hint for the preview image. */
+  fetchPriority?: ThumbnailImageProps['fetchPriority'];
   /**
    * Accessible label for the thumbnail (e.g. file name).
    * Not rendered visually — shown in a tooltip on hover, exposed as the
@@ -368,6 +387,11 @@ function ImagePlaceholder() {
 export function Thumbnail({
   src,
   alt,
+  loading,
+  decoding,
+  width,
+  height,
+  fetchPriority,
   label,
   onRemove,
   onClick,
@@ -446,6 +470,11 @@ export function Thumbnail({
         <img
           src={src}
           alt={alt ?? ''}
+          loading={loading}
+          decoding={decoding}
+          width={width}
+          height={height}
+          fetchPriority={fetchPriority}
           role={isImageDecorative ? 'presentation' : undefined}
           aria-hidden={isImageDecorative || undefined}
           onError={() => setErroredSrc(src)}
