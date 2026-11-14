@@ -13,7 +13,7 @@ export const doc = {
   description:
     "Records the theme in the generated app module and imports its built module and stylesheets. --import remains accepted as a compatibility no-op. To copy a theme's source as an editable fork, run `theme eject <slug> [path] [--overwrite]`. A bare command or --list delegates to themeListCopySources(), whose released JSON bytes stay unchanged while its text names the current add and eject commands; use --package when owners share a slug. Outside a project, a bare command or --list lists the available themes as in a new project; given a slug it writes nothing and fails, naming the app project it needs (ERR_THEME_INVALID), or with ERR_UNKNOWN_THEME when no theme has that slug.",
   fn: 'themeAdd',
-  args: [{name: 'slug', param: 'slug', required: false}],
+  args: [{name: 'slug', param: 'slug', required: false, names: 'theme'}],
   options: [
     {flag: '--list', description: 'List available themes'},
     {
@@ -39,6 +39,7 @@ export const doc = {
     },
   ],
   outsideProject: 'own',
+  requires: ['themes.appModule'],
   exitCodes: [
     {code: 0, when: 'the theme is listed or added'},
     {

@@ -25,7 +25,7 @@ import {fileURLToPath} from 'node:url';
 
 import {discoverTemplates} from '../template/template.mjs';
 import {componentKeywords} from '../search/search.mjs';
-import {findCoreDir, requireCoreDir} from '../../foundation/fs/paths.mjs';
+import {coreContentDir, findCoreDir} from '../../foundation/fs/paths.mjs';
 import {persistedDerived} from '../../foundation/fs/gather-cache.mjs';
 import {analyzeTemplateNeeds} from '../../foundation/discovery/template-needs.mjs';
 import {extractComponents} from '../../foundation/discovery/template-adapter.mjs';
@@ -363,11 +363,12 @@ export function templateSetupNotes(template, cwd) {
  * The Core a build answers from: the project's, else the release's own,
  * installed into the per-user cache first when needed (a network install
  * and an npm subprocess; spec AST-081 FR3). Throws as requireCoreDir does.
+ * Null in a run whose base is not Core, which builds from its integrations.
  * @param {string} cwd
- * @returns {string}
+ * @returns {string | null}
  */
-export function requireBuildCoreDir(cwd) {
-  return requireCoreDir(cwd);
+export function buildCoreContentDir(cwd) {
+  return coreContentDir(cwd);
 }
 
 /**

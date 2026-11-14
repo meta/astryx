@@ -39,7 +39,12 @@ export type {IconSetData} from './doctypes/types.js'; //     outline.icons.json
 export type {IconDefinitionDoc} from './doctypes/types.js'; //  delete.doc.mjs
 export type {AstryxConfig} from './config/type.js'; //       astryx.config.{ts,mjs}
 export type {DebugEvent} from './debug/type.js'; //          one recorded CLI run
-export type {AstryxIntegration} from './integration/type.js'; // astryx.integration.{ts,mjs}
+export type {
+  AstryxIntegration,
+  BaseCapability,
+  BaseDeclaration,
+  BaseStep,
+} from './integration/type.js'; // astryx.integration.{ts,mjs}
 export type {
   GapReportHandler,
   GapReportHandlerContext,

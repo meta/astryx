@@ -31,7 +31,7 @@ import {section, text, records} from './formatters/index.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
 import {installJsonShim} from './lib/json-shim.mjs';
-import {markReportsResult} from './lib/define-command.mjs';
+import {describeCommand, markReportsResult} from './lib/define-command.mjs';
 // The light modules, not agent-docs.mjs: that one loads discovery and the
 // project config, which every run would pay for at startup.
 import {
@@ -45,6 +45,16 @@ import {
   setupNudge,
 } from '../../foundation/agent-docs/agent-doc-state.mjs';
 import * as debug from '../../foundation/debug/index.mjs';
+import {setRequestedBase} from '../../foundation/bases/resolve.mjs';
+import {
+  addBaseHelpText,
+  baseHelpSettings,
+  checkRun,
+  commandAvailable,
+  helpBase,
+} from './lib/base-gate.mjs';
+import {commandPath} from './lib/command-path.mjs';
+import {scanRootArgs} from './lib/root-args.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -156,23 +166,6 @@ export const JSON_SUPPORTED = new Set([
 ]);
 
 /**
- * Compute the fully qualified command name, e.g. "theme build" or "swizzle".
- * @param {import('commander').Command} actionCommand
- * @param {import('commander').Command} root the root program
- * @returns {string}
- */
-function fullCommandName(actionCommand, root) {
-  const parts = [];
-  /** @type {import('commander').Command | null} */
-  let cmd = actionCommand;
-  while (cmd && cmd !== root) {
-    parts.unshift(cmd.name());
-    cmd = cmd.parent;
-  }
-  return parts.join(' ');
-}
-
-/**
  * Load the handlers that will receive this run, before Commander parses.
  *
  * Called from the bin BEFORE Commander parses, not from a hook. Most commands
@@ -231,6 +224,35 @@ export async function loadProjectDebugHandler() {
 }
 
 /**
+ * Load the project in the working folder, unless this process already did.
+ * A project that cannot load is the command's to report.
+ * @returns {Promise<void>}
+ */
+async function loadProjectOnce() {
+  try {
+    const cwd = process.cwd();
+    if (hasRecordedProject(cwd)) return;
+    const {Project} = await import('../../foundation/config/project.mjs');
+    await Project.load(cwd);
+  } catch {
+    // Reported by the command that needs the project.
+  }
+}
+
+/**
+ * The first word of a run that is not an option or an option's value.
+ * Without the program, only `--base` is known to take a value.
+ * @param {string[]} argv
+ * @param {import('commander').Command} [program] the root, with its options
+ * @returns {string | undefined}
+ */
+function firstOperand(argv, program) {
+  return scanRootArgs(argv, program?.options ?? [{long: '--base', required: true}], {
+    unknown: 'skip',
+  }).operand;
+}
+
+/**
  * Load the project's integrations before a help run, so help prints commands
  * with the `cliCommand` they declare (spec:AST-081 FR5). Help is printed while
  * Commander parses, before any hook, so the preAction load cannot reach it.
@@ -242,11 +264,13 @@ export async function loadProjectDebugHandler() {
  * bin before Commander parses.
  *
  * @param {string[]} [argv] arguments after the binary.
+ * @param {import('commander').Command} [program] the root, which says
+ *   which of its options take a value
  * @returns {Promise<void>}
  */
-export async function loadProjectForHelp(argv = process.argv.slice(2)) {
+export async function loadProjectForHelp(argv = process.argv.slice(2), program) {
   const help =
-    argv.includes('--help') || argv.includes('-h') || argv[0] === 'help';
+    argv.includes('--help') || argv.includes('-h') || firstOperand(argv, program) === 'help';
   if (!help) return;
   try {
     const cwd = process.cwd();
@@ -264,6 +288,26 @@ export async function loadProjectForHelp(argv = process.argv.slice(2)) {
 }
 
 /**
+ * Fail a help run whose base does not resolve, as every other run fails:
+ * help lists what the run's base serves, so with no base it has nothing true
+ * to list. Called from the bin after the help preload.
+ * @param {string[]} [argv] arguments after the binary.
+ * @param {import('commander').Command} [program] the root, which says
+ *   which of its options take a value
+ * @returns {Promise<void>}
+ */
+export async function refuseHelpWithoutBase(argv = process.argv.slice(2), program) {
+  const help =
+    argv.includes('--help') || argv.includes('-h') || firstOperand(argv, program) === 'help';
+  if (!help) return;
+  const {runBase} = await import('../../foundation/bases/resolve.mjs');
+  const resolution = runBase();
+  if (resolution.ok) return;
+  if (argv.includes('--json')) setJsonMode(true);
+  cliError(resolution.message, {code: resolution.code});
+}
+
+/**
  * Hand the whole invocation to the debug recorder: which command ran, its
  * positional arguments by name, its options and where each value came from,
  * and the root-level flags.
@@ -277,7 +321,7 @@ export async function loadProjectForHelp(argv = process.argv.slice(2)) {
  * @param {import('commander').Command} root
  */
 function captureInvocation(actionCommand, root) {
-  const name = fullCommandName(actionCommand, root);
+  const name = commandPath(actionCommand);
   debug.setCommand(name);
   debug.setGlobalOptions(root.opts());
 
@@ -387,32 +431,18 @@ const READS_EVERY_COMMAND = new Set(['manifest']);
  * @returns {Set<string> | null}
  */
 export function commandsForArgs(program, argv) {
-  let printsVersion = false;
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
-    // Commander reads a lone `-` as an operand, as it reads any word.
-    if (arg.length < 2 || arg[0] !== '-') {
-      return commands.some(cmd => cmd.name === arg) &&
-        (!READS_EVERY_COMMAND.has(arg) || (arg === 'manifest' && storedManifest() != null))
-        ? new Set([arg])
-        : null;
-    }
-    const equals = arg.startsWith('--') ? arg.indexOf('=') : -1;
-    const flag = equals === -1 ? arg : arg.slice(0, equals);
-    const option = program.options.find(o => o.long === flag || o.short === flag);
-    // Help flags, `--`, combined short flags and unknown flags read the whole
-    // list, or make Commander stop dispatching by name.
-    if (option == null) return null;
-    const takesValue = option.required || option.optional;
-    if (equals !== -1 && !takesValue) return null;
-    if (equals === -1 && option.required) i += 1;
-    const next = argv[i + 1];
-    if (equals === -1 && option.optional && next != null && !(next.length > 1 && next[0] === '-')) {
-      i += 1;
-    }
-    if (option.long === '--version') printsVersion = true;
+  const scan = scanRootArgs(argv, program.options);
+  // Help flags, `--`, combined short flags and unknown flags read the whole
+  // list, or make Commander stop dispatching by name.
+  if (scan.stopped) return null;
+  const arg = scan.operand;
+  if (arg != null) {
+    return commands.some(cmd => cmd.name === arg) &&
+      (!READS_EVERY_COMMAND.has(arg) || (arg === 'manifest' && storedManifest() != null))
+      ? new Set([arg])
+      : null;
   }
-  return printsVersion ? new Set() : null;
+  return scan.printsVersion ? new Set() : null;
 }
 
 /**
@@ -461,6 +491,30 @@ export const COMMAND_LIST_FILE = path.join(__dirname, 'commands.generated.json')
  */
 function printsRootHelp(argv) {
   return argv.length === 1 && ['--help', '-h', 'help'].includes(argv[0]);
+}
+
+/**
+ * Does a run in the working folder read Core? Loads the project, as the
+ * preAction hook would, to see which base it reads.
+ * @returns {Promise<boolean>}
+ */
+async function readsCore() {
+  const {runBase, requestedBase} = await import(
+    '../../foundation/bases/resolve.mjs'
+  );
+  const {CORE_BASE_NAME} = await import('../../foundation/bases/core.mjs');
+  // A base is an integration, so where none can load, and no --base names
+  // another, the run reads Core with no project load.
+  const named = requestedBase();
+  if (
+    !mayHaveIntegrations(process.cwd()) &&
+    (named == null || named === CORE_BASE_NAME)
+  ) {
+    return true;
+  }
+  await loadProjectOnce();
+  const run = runBase();
+  return run.ok && run.base.core;
 }
 
 /**
@@ -550,7 +604,8 @@ export async function createProgram({argv} = {}) {
   // no-op so every item stays on one line — matching the rest of the CLI's
   // plain, unwrapped, width-independent output. Set before subcommands are
   // registered so they inherit it via copyInheritedSettings.
-  program.configureHelp({wrap: (str) => str});
+  // Help lists only the commands and options the run's base serves.
+  program.configureHelp({wrap: (str) => str, ...baseHelpSettings()});
 
   // Document the text-output contract in --help so agents know how to parse/grep
   // it (and when to reach for --json instead). Kept in sync with the formatter
@@ -592,10 +647,26 @@ export async function createProgram({argv} = {}) {
         .map(block => block.toString())
         .join('\n\n'),
   );
+  addBaseHelpText(program);
+
+  // The theme editor paragraph names commands, so help shows it only where
+  // the run's base serves them.
+  describeCommand(program, [
+    'Design system CLI — components, themes, and tooling',
+    {
+      commands: [
+        'experimental theme editor new',
+        'experimental theme editor set',
+        'experimental theme editor how',
+        'experimental theme editor show',
+        'experimental theme preview app',
+      ],
+      text: '\n\nMaking or changing a theme? Use the experimental theme editor: astryx experimental theme editor new <name> --like neutral, then editor set / editor how "<what you want>"; after each change look at it with astryx experimental theme editor show <name> --png (takes pictures of real components): a theme change is not done until you have looked. No app yet: astryx experimental theme preview app <dir>.',
+    },
+  ]);
 
   program
     .name('astryx')
-    .description('Design system CLI — components, themes, and tooling\n\nMaking or changing a theme? Use the experimental theme editor: astryx experimental theme editor new <name> --like neutral, then editor set / editor how "<what you want>"; after each change look at it with astryx experimental theme editor show <name> --png (takes pictures of real components): a theme change is not done until you have looked. No app yet: astryx experimental theme preview app <dir>.')
     .version(pkg.version)
     // These four change only the reads named in their text; every other
     // command ignores them.
@@ -619,6 +690,10 @@ export async function createProgram({argv} = {}) {
         .default('full'),
     )
     .option(
+      '--base <package>',
+      "The base library this run reads: @astryxdesign/core, or an installed package whose integration manifest declares base. Default: in an integration package, the base it is or builds on; else the project's Core; else its one installed base; else Core",
+    )
+    .option(
       '--json',
       'Output as typed JSON. Success envelope: { apiVersion, type, package?, data, meta? }. Error envelope: { apiVersion, error, code, suggestions? }.',
     )
@@ -632,7 +707,7 @@ export async function createProgram({argv} = {}) {
       if (extras.length > 0) {
         const unknown = String(extras[0]);
         const known = (program.commands || [])
-          .filter((c) => !(/** @type {any} */ (c)._hidden) && c.name() !== 'help')
+          .filter((c) => !(/** @type {any} */ (c)._hidden) && c.name() !== 'help' && commandAvailable(c, helpBase()))
           .map((c) => c.name());
         const close = known
           .map((name) => ({name, distance: levenshteinDistance(unknown.toLowerCase(), name.toLowerCase())}))
@@ -718,6 +793,7 @@ export async function createProgram({argv} = {}) {
    * must never be the reason a command fails.
    */
   program.hook('preAction', (thisCommand, actionCommand) => {
+    setRequestedBase(program.opts().base);
     try {
       captureInvocation(actionCommand, program);
     } catch {
@@ -725,15 +801,15 @@ export async function createProgram({argv} = {}) {
     }
   });
 
-  program.hook('preAction', (thisCommand, actionCommand) => {
+  program.hook('preAction', async (thisCommand, actionCommand) => {
     if (!program.opts().json) return;
     // Engage global JSON mode so humanLog()/humanWarn() across commands become
     // no-ops — stdout now carries only the JSON envelope.
     setJsonMode(true);
     // The root program's own action (no subcommand) is handled directly in
-    // its action handler — let it through. fullCommandName is '' there.
+    // its action handler — let it through. its path is '' there.
     if (actionCommand === program) return;
-    const fullName = fullCommandName(actionCommand, program);
+    const fullName = commandPath(actionCommand);
     if (JSON_SUPPORTED.has(fullName)) return;
     process.__xdsJsonHandled = true;
     // A group given a word it does not have reports an unknown subcommand and
@@ -741,7 +817,12 @@ export async function createProgram({argv} = {}) {
     const extras = actionCommand.commands.length > 0 ? actionCommand.args : [];
     const unknown = extras.find(arg => !String(arg).startsWith('-'));
     if (unknown != null) {
-      const names = actionCommand.commands.map(child => child.name());
+      // The suggestions name only what the run's base serves, so its
+      // integrations load first.
+      await loadProjectOnce();
+      const names = actionCommand.commands
+        .filter(child => commandAvailable(child, helpBase()))
+        .map(child => child.name());
       if (fullName === 'theme' || fullName === 'experimental') {
         // The theme groups name whole commands, closest first, and point at
         // `experimental theme <word>` when the word is one of its commands.
@@ -785,7 +866,7 @@ export async function createProgram({argv} = {}) {
   program.hook('postAction', (thisCommand, actionCommand) => {
     if (!program.opts().json) return;
     if (process.__xdsJsonHandled) return;
-    const fullName = fullCommandName(actionCommand, program);
+    const fullName = commandPath(actionCommand);
     console.log(JSON.stringify({
       apiVersion: API_VERSION,
       error: `Internal: '${fullName}' completed without emitting a JSON envelope`,
@@ -821,6 +902,16 @@ export async function createProgram({argv} = {}) {
       // Best-effort: the picker falls back to its package-manager guess.
     }
   });
+
+  /**
+   * The one requirement check, after JSON mode is set and the project is
+   * loaded, before any command body: the run's base resolves, and it serves
+   * every step the command and the options and argument values given to it
+   * declare. No command checks its own requirement.
+   */
+  program.hook('preAction', (thisCommand, actionCommand) =>
+    checkRun(program, actionCommand),
+  );
 
   /**
    * Enforcement layer 3 — setup nudge. If this project hasn't run `astryx init`
@@ -935,8 +1026,16 @@ export async function createProgram({argv} = {}) {
     }
   });
 
-  const loads = argv == null ? null : commandsForArgs(program, argv);
-  const listed = argv != null && printsRootHelp(argv) ? storedCommandList() : null;
+  const scanned = argv == null ? null : commandsForArgs(program, argv);
+  // A run that only prints the version reads no project. Every other run on a
+  // base other than Core loads every command, so help, examples, and
+  // suggestions can name only what that base serves.
+  const versionOnly = scanned != null && scanned.size === 0;
+  const onCore = argv == null || versionOnly || (await readsCore());
+  const loads = onCore ? scanned : null;
+  // The stored list holds Core's commands, so only a run on Core prints it.
+  const listed =
+    argv != null && onCore && printsRootHelp(argv) ? storedCommandList() : null;
   if (listed) listStoredCommands(program, listed);
   for (const cmd of listed ? [] : commands) {
     if (loads != null && !loads.has(cmd.name)) continue;

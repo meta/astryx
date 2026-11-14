@@ -81,6 +81,7 @@ export const doc = {
     },
   ],
   outsideProject: 'refuse',
+  requires: ['themes.targets'],
   notes: [
     {
       type: 'prose',

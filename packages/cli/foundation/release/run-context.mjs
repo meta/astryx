@@ -23,6 +23,7 @@ import {isJsonMode} from '../response/json.mjs';
 import {cachedRelease, ensureRelease, userCacheDir} from './cache.mjs';
 import {readJson, findReadCore, CORE_PACKAGE_NAME} from './project.mjs';
 import {hostedRun} from '../runtime/package-root.mjs';
+import {currentNonCoreBase} from '../bases/state.mjs';
 
 /** The running CLI package's folder. */
 const CLI_ROOT = path.resolve(
@@ -139,12 +140,15 @@ export function carriedCore(options = {}) {
 
 /**
  * `meta.answeredBy` for this run: the answering CLI's version, the Core the
- * run pairs with (`null` when there is none), and which copy answered.
+ * run pairs with (`null` when there is none), and which copy answered. A run
+ * whose base is not Core names that base in `base`, and pairs with no Core.
  * @param {string} [cwd]
- * @returns {{cli: string, core: string | null, copy: 'project' | 'starting' | 'matched' | 'carried' | 'fallback'}}
+ * @returns {{cli: string, core: string | null, copy: 'project' | 'starting' | 'matched' | 'carried' | 'fallback', base?: {name: string, version: string | null}}}
  */
 export function answeredBy(cwd = process.cwd()) {
   const choice = runChoice(cwd);
+  const base = currentNonCoreBase();
+  if (base) return {cli: cliVersion(), core: null, copy: choice.copy, base};
   const read = findReadCore(cwd);
   let core = read ? read.version : null;
   if (!core && choice.copy !== 'project') {

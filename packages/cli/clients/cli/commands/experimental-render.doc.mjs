@@ -28,6 +28,7 @@ export const doc = {
     },
     {
       flag: '--reverse',
+      requires: ['render.reverse'],
       param: 'options.reverse',
       description: 'Turn a rendered HTML file back into a page module',
     },
@@ -49,6 +50,7 @@ export const doc = {
     {label: 'As JSON', cli: 'astryx --json experimental render page.tsx'},
   ],
   outsideProject: 'same',
+  requires: ['render.page'],
   exitCodes: [
     {code: 0, when: 'the file was written (warnings included)'},
     {

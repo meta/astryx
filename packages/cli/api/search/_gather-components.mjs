@@ -57,10 +57,11 @@ function familyPlaces(docs) {
 /**
  * Build component candidates from core's own tree: name + keywords +
  * usage/description from the component's .doc.mjs.
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core
  * @returns {Promise<Candidate[]>}
  */
 async function gatherCoreComponents(coreDir) {
+  if (coreDir == null) return [];
   const grouped = discoverComponents(coreDir);
   const names = Object.values(grouped).flat();
   /** @type {Candidate[]} */
@@ -212,7 +213,7 @@ async function gatherIntegrationComponents(loadedIntegrations) {
 /**
  * Build component candidates: core's own tree plus every configured
  * integration's components.
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core
  * @param {string} cwd
  * @returns {Promise<Candidate[]>}
  */
@@ -294,7 +295,7 @@ export async function gatherComponents(coreDir, cwd) {
  * candidates use, without the import paths and prose a result carries. `build`
  * reads it to tell a part of a page from a page when its search was narrowed
  * away from components.
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core
  * @param {string} cwd
  * @returns {Promise<{name: string, keywords: string[]}[]>}
  */

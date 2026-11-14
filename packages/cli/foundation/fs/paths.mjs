@@ -24,6 +24,7 @@ import {ERROR_CODES} from '../response/error-codes.mjs';
 import {carriedCore, runChoice} from '../release/run-context.mjs';
 import {findDeclaringPackage} from '../release/project.mjs';
 import {hostedRun, recordResolved} from '../runtime/package-root.mjs';
+import {currentNonCoreBase} from '../bases/state.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -121,6 +122,19 @@ export function requireCoreDir(startDir = process.cwd()) {
 }
 
 /**
+ * The Core whose components, hooks, and docs this run reads: as
+ * {@link requireCoreDir} in a run on Core, and null in a run on another
+ * base, which reads no Core content. Each content reader treats null as no
+ * Core items and answers from the run's integrations alone.
+ *
+ * @param {string} [startDir]
+ * @returns {string | null}
+ */
+export function coreContentDir(startDir = process.cwd()) {
+  return currentNonCoreBase() ? null : requireCoreDir(startDir);
+}
+
+/**
  * An Error carrying a stable error code, which the JSON envelope and every
  * command's error output read the way they read an API error's.
  * @param {string} message
@@ -151,6 +165,8 @@ export function findCarriedCoreDir(startDir, {fetch = false} = {}) {
  * @returns {{dir: string | null, unavailable: string | null, version?: string, reason?: string}}
  */
 function carriedCoreFor(startDir, fetch = false) {
+  // A run whose base is not Core never reads Core, so it never fetches one.
+  if (currentNonCoreBase()) return {dir: null, unavailable: null};
   const carried = carriedCore({fetch: false});
   if (!carried.dir && !fetch) return carried;
   if (runChoice(startDir).copy === 'project') {
@@ -169,6 +185,18 @@ function carriedCoreFor(startDir, fetch = false) {
  * @returns {string | null}
  */
 export function findProjectCoreDir(startDir = process.cwd()) {
+  // A run whose base is not Core reads no Core, even one the project installs.
+  if (currentNonCoreBase()) return null;
+  return installedProjectCoreDir(startDir);
+}
+
+/**
+ * The project's installed @astryxdesign/core, whatever base the run reads:
+ * the lookup that decides the run's base.
+ * @param {string} [startDir]
+ * @returns {string | null}
+ */
+export function installedProjectCoreDir(startDir = process.cwd()) {
   const near = findNearbyCoreDir(startDir);
   if (near) return near;
   // A folder deeper than that reach still belongs to the project the walk to
@@ -889,9 +917,11 @@ export function discoverExternalPackages(startDir = process.cwd()) {
  * List available component directories in packages/core/src.
  * Component directories are capitalized (`Button`, `Dialog`); lowercase
  * directories hold shared infrastructure and are never listed.
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core
+ * @returns {string[]}
  */
 export function listComponents(coreDir) {
+  if (coreDir == null) return [];
   const srcDir = path.join(coreDir, 'src');
   if (!fs.existsSync(srcDir)) return [];
 

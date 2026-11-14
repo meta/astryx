@@ -85,8 +85,19 @@ export async function runCli({cliRoot, argv, declinedProjectCli}) {
     createProgram,
     loadProjectDebugHandler,
     loadProjectForHelp,
+    refuseHelpWithoutBase,
     handleVersionJsonPreflight,
   } = await import('./index.mjs');
+  // The base every project load reads, the one in createProgram included.
+  const {setRequestedBase} = await import('../../foundation/bases/resolve.mjs');
+  const {scanRootArgs} = await import('./lib/root-args.mjs');
+  const base = scanRootArgs(
+    process.argv.slice(2),
+    [{long: '--base', required: true}],
+    {unknown: 'skip', pastOperand: true},
+  ).values.get('--base');
+  setRequestedBase(typeof base === 'string' ? base : null);
+
   // Only the commands these arguments need load, before anything below runs,
   // as the full program did.
   const program = await createProgram({argv: process.argv.slice(2)});
@@ -146,7 +157,8 @@ export async function runCli({cliRoot, argv, declinedProjectCli}) {
   await loadProjectDebugHandler();
   // Help prints its commands while Commander parses, so a help run reads the
   // project's declared `cliCommand` here.
-  await loadProjectForHelp();
+  await loadProjectForHelp(process.argv.slice(2), program);
+  await refuseHelpWithoutBase(process.argv.slice(2), program);
 
   // `--version --json` answers and exits without Commander, so it runs here —
   // after the handler exists, or the run would go unrecorded.

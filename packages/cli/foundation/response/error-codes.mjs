@@ -91,6 +91,9 @@
  *   | 'ERR_SIGNAL_TERMINATED'
  *   | 'ERR_VERSIONS_UNAVAILABLE'
  *   | 'ERR_PROJECT_REQUIRED'
+ *   | 'ERR_BASE_CAPABILITY'
+ *   | 'ERR_BASE_NOT_FOUND'
+ *   | 'ERR_BASE_AMBIGUOUS'
  *   | 'ERR_RENDER_COMPILE'
  *   | 'ERR_RENDER_NO_DEFAULT_EXPORT'
  *   | 'ERR_RENDER_MISSING_DEPENDENCY'
@@ -279,6 +282,24 @@ export const ERROR_CODES = Object.freeze({
    * integration package) and was run outside one. Nothing was written.
    */
   ERR_PROJECT_REQUIRED: 'ERR_PROJECT_REQUIRED',
+
+  // ── Bases ────────────────────────────────────────────────────────
+  /**
+   * The command, or an option or argument value given to it, needs a step
+   * the run's base does not serve. Nothing was written. The envelope's
+   * `requirement` names the command, the steps, and the base.
+   */
+  ERR_BASE_CAPABILITY: 'ERR_BASE_CAPABILITY',
+  /**
+   * `--base` names a package that is not installed where the run can read
+   * it, or that is not Core and does not declare `base`. Nothing was done.
+   */
+  ERR_BASE_NOT_FOUND: 'ERR_BASE_NOT_FOUND',
+  /**
+   * The project installs two or more bases and no Core, and the run named
+   * none with `--base`. Nothing was done.
+   */
+  ERR_BASE_AMBIGUOUS: 'ERR_BASE_AMBIGUOUS',
 
   // ── Render (experimental) ────────────────────────────────────────
   /**

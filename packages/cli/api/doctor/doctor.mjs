@@ -125,6 +125,11 @@ import {
   readThemeState,
 } from './_adapter.mjs';
 import {checkBuilt} from './built-checks.mjs';
+import {coreOnlyDocNames} from '../../foundation/bases/core-docs.mjs';
+import {
+  CLI_PROVIDER_ID,
+  CORE_PROVIDER_ID,
+} from '../../foundation/identity/providers.mjs';
 
 /**
  * @typedef {'pass'|'warn'|'fail'|'info'} DoctorStatus
@@ -1620,6 +1625,10 @@ export async function checkCliDocs(_ctx, options = {}) {
   }
 }
 
+/** The providers whose docs a run on another base leaves out. */
+/** @type {Set<string>} */
+const CORE_DOC_PROVIDERS = new Set([CORE_PROVIDER_ID, CLI_PROVIDER_ID]);
+
 /**
  * The docs tree builds with no error, and every CLI typed doc in a `cli/...`
  * group has a route in it (spec:AST-046): each placement names a namespace of
@@ -1659,15 +1668,20 @@ export async function checkDocsTree(_ctx, options = {}) {
       }
       // Every link between docs names a doc that exists (spec:AST-047 FR9):
       // typed fields, reference and workflow blocks, and inline links. A
-      // reference block also includes all it names.
+      // reference block also includes all it names. A run whose base is not
+      // Core leaves Core's docs out; a link to one of them is not a problem.
       for (const node of tree.nodes.values()) {
         for (const edge of typedEdges(tree, node).unresolved) {
           problems.push(`${node.route}: ${edge}`);
         }
       }
-      problems.push(...(await docsLinkProblems(catalog, tree)));
+      const coreDocs = await coreOnlyDocNames();
+      /** @param {{provider: string, name: string}} target */
+      const absent = target =>
+        CORE_DOC_PROVIDERS.has(target.provider) && coreDocs.has(target.name);
+      problems.push(...(await docsLinkProblems(catalog, tree, {absent})));
       problems.push(
-        ...(await docsLinkProblems(catalog, tree, {references: true})),
+        ...(await docsLinkProblems(catalog, tree, {references: true, absent})),
       );
     }
     // New findings warn: a project that passed before keeps passing

@@ -22,6 +22,7 @@ export const docs = {
     'integration authoring',
     'authoring reference',
   ],
+  describes: 'cli',
   slots: {
     guides: {
       title: 'Build an integration',

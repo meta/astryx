@@ -82,6 +82,7 @@ export const doc = {
     },
   ],
   outsideProject: 'same',
+  requires: ['themes.compile'],
   exitCodes: [
     {
       code: 0,

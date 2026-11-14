@@ -365,10 +365,11 @@ export function familyMember(docs, name) {
  *
  * Keys are sorted alphabetically (groups and ungrouped components interleaved).
  * Components within each group are also sorted alphabetically.
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core
  * @returns {Record<string, string[]>}
  */
 export function discoverComponents(coreDir) {
+  if (coreDir == null) return {};
   // The component matcher calls this for each name it resolves, so one
   // operation reads the docs once. Each caller gets its own copy to change.
   const found = oncePerListing(`components\0${coreDir}`, () =>
@@ -581,11 +582,12 @@ function foldersHolding(srcDir, entries, names) {
  * Find the .doc.mjs file for a component.
  * For sub-components (e.g. StackItem), returns the parent's .doc.mjs
  * if the sub-component is documented there.
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core
  * @param {string} name
  * @returns {string | null}
  */
 export function findComponentReadme(coreDir, name) {
+  if (coreDir == null) return null;
   const srcDir = path.join(coreDir, 'src');
   const exactDoc = `${name}.doc.mjs`;
   const xdsDoc = `XDS${name}.doc.mjs`;
@@ -644,11 +646,12 @@ export function findComponentReadme(coreDir, name) {
  * `useResizable.ts`), so `.ts` candidates are searched alongside `.tsx`. Without
  * this, deriving the import path for a `.ts`-authored function falls back to the
  * bare `@astryxdesign/core` root instead of its tree-shakeable subpath.
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core
  * @param {string} name
  * @returns {string | null}
  */
 export function findComponentSource(coreDir, name) {
+  if (coreDir == null) return null;
   const found = ownSourceFile(coreDir, name);
   if (found == null) return null;
   // A component's exact name in another case (`tokenizer` for Tokenizer) is
@@ -790,11 +793,13 @@ function caseSpelledComponentSource(srcDir, name) {
 /**
  * Compute the Levenshtein (edit) distance between two strings.
  * Used for fuzzy-matching component names. Dependency-free.
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core: every
+ *   name then imports from the package root
  * @param {string} componentName
  * @returns {string}
  */
 export function resolveImportPath(coreDir, componentName) {
+  if (coreDir == null) return '@astryxdesign/core';
   const srcDir = path.join(coreDir, 'src');
   const exportKeys = exportKeysOf(coreDir);
 
