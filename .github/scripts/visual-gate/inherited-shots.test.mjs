@@ -312,15 +312,35 @@ describe('inherited visual changes', () => {
       ancestry: [`${S('c')}>${BASE}`],
     });
     const first = mine();
-    await markInherited({...first, headRef: 'this', headSha: HEAD, ...some});
+    await markInherited({
+      ...first,
+      headRef: 'this',
+      headSha: HEAD,
+      ...some,
+      readReport: async id =>
+        id === 2 ? {unreadable: true} : some.readReport(id),
+    });
     expect(first.verdict.inheritedLookupFailed).toBeUndefined();
     expect(first.verdict.changes[0].inherited).toEqual({from: 'main'});
     const none = fakeGitHub({reports: [two, one]});
+    const unreadable = async () => ({unreadable: true});
     const second = mine();
-    await markInherited({...second, headRef: 'this', headSha: HEAD, ...none});
+    await markInherited({
+      ...second,
+      headRef: 'this',
+      headSha: HEAD,
+      ...none,
+      readReport: unreadable,
+    });
     expect(second.verdict.inheritedLookupFailed).toBe(
-      'none of the 2 reports read could be opened',
+      'none of the 2 reports tried could be opened',
     );
+    // A report with nothing to compare is no data, not a broken lookup, and
+    // is not counted among the reports read.
+    const empty = mine();
+    await markInherited({...empty, headRef: 'this', headSha: HEAD, ...none});
+    expect(empty.verdict.inheritedLookupFailed).toBeUndefined();
+    expect(empty.verdict.inheritedChecked).toBe(0);
   });
 
   it('makes no call when nothing changed', async () => {

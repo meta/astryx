@@ -83,9 +83,9 @@ export function changedImages({verdict, manifest}) {
  * @param {string} options.headSha this pull request's head commit
  * @param {() => Promise<Array<{id: number, createdAt: string, headRef: string, headSha: string}>>} options.listReports
  *   other runs' `visual-pr-report` artifacts, newest first (one call)
- * @param {(id: number) => Promise<{verdict: any, manifest: any} | null>} options.readReport
- *   one artifact's verdict and manifest; null when it is gone or unreadable
- *   (one call)
+ * @param {(id: number) => Promise<{verdict: any, manifest: any} | {unreadable: true} | null>} options.readReport
+ *   one artifact's verdict and manifest; null when it is gone or has nothing
+ *   to compare, `{unreadable: true}` when it cannot be opened (one call)
  * @param {(sha: string) => Promise<{number: number, mergedAt: string | null, mergeSha: string | null} | null>} options.pullFor
  *   the pull request a head commit belongs to (one call)
  * @param {(ancestor: string, descendant: string) => Promise<boolean | null>} options.contains
@@ -151,16 +151,19 @@ async function lookUp({
   /** Heads whose report showed the shot changed with this image. @type {Map<string, string[]>} */
   const candidates = new Map();
   let read = 0;
+  let tried = 0;
   let unreadable = 0;
   for (const report of reports) {
     if (calls >= maxCalls - PROOF_CALLS) break;
     calls += 1;
+    tried += 1;
     const content = await readReport(report.id);
-    read += 1;
-    if (!content) {
+    if (content && 'unreadable' in content) {
       unreadable += 1;
       continue;
     }
+    if (!content) continue;
+    read += 1;
     for (const [key, hash] of changedImages(content))
       if (mine.get(key) === hash && SHA.test(report.headSha)) {
         const heads = candidates.get(key) ?? [];
@@ -168,9 +171,9 @@ async function lookUp({
         candidates.set(key, heads);
       }
   }
-  // One unreadable report is no data; none readable means the lookup broke.
-  if (read > 0 && unreadable === read)
-    throw new Error(`none of the ${read} reports read could be opened`);
+  // One unreadable report is no data; none openable means the lookup broke.
+  if (tried > 0 && unreadable === tried)
+    throw new Error(`none of the ${tried} reports tried could be opened`);
   /** @type {Map<string, boolean>} */
   const proven = new Map();
   const fromMain = async head => {
@@ -244,28 +247,32 @@ function githubReads({token, repository}) {
         const response = await get(`${base}/actions/artifacts/${id}/zip`);
         if (!response) return null;
         fs.writeFileSync(zip, Buffer.from(await response.arrayBuffer()));
-        const names = execFileSync('unzip', ['-Z1', zip], {
-          encoding: 'utf8',
-          maxBuffer: 1 << 24,
-        }).split('\n');
-        // A report without both files has no images to compare.
-        if (!names.includes('verdict.json') || !names.includes('manifest.json'))
-          return null;
-        const read = name =>
-          JSON.parse(
-            execFileSync('unzip', ['-p', zip, name], {
-              encoding: 'utf8',
-              maxBuffer: 1 << 26,
-            }),
-          );
         try {
+          const names = execFileSync('unzip', ['-Z1', zip], {
+            encoding: 'utf8',
+            maxBuffer: 1 << 24,
+          }).split('\n');
+          // A report without both files (a run that planned no shots) has
+          // nothing to compare.
+          if (
+            !names.includes('verdict.json') ||
+            !names.includes('manifest.json')
+          )
+            return null;
+          const read = name =>
+            JSON.parse(
+              execFileSync('unzip', ['-p', zip, name], {
+                encoding: 'utf8',
+                maxBuffer: 1 << 26,
+              }),
+            );
           return {
             verdict: read('verdict.json'),
             manifest: read('manifest.json'),
           };
         } catch {
-          // A broken report is no data; markInherited fails when none open.
-          return null;
+          // A broken archive is no data; markInherited fails when none open.
+          return {unreadable: true};
         }
       } finally {
         fs.rmSync(dir, {recursive: true, force: true});
@@ -310,7 +317,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     // No verdict means no visual section to label; the summary still says so.
     summary(`inheritance lookup failed: ${failureReason(error)}\n`);
   }
-  if (verdict) {
+  // A run with no changed shot has nothing to mark, and may have no manifest.
+  if (verdict && (verdict.changes ?? []).length > 0) {
     try {
       const manifest = JSON.parse(fs.readFileSync(flag('manifest'), 'utf8'));
       await markInherited({
