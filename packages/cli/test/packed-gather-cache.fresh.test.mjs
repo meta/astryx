@@ -181,7 +181,13 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
             before.get(name)?.ino === after.get(name)?.ino ? 'hit' : 'miss',
           );
         }
-        expect(fs.readdirSync(path.join(tmp, 'astryx', 'jiti')).length).toBe(2);
+        // The manifest's and the helper's transpiled copies, beside the
+        // folder's own record of its last size check (a dot file).
+        expect(
+          fs
+            .readdirSync(path.join(tmp, 'astryx', 'jiti'))
+            .filter(name => !name.startsWith('.')).length,
+        ).toBe(2);
         expect(outcomes).toEqual(['miss', 'hit', 'hit']);
       } finally {
         fs.rmSync(other.dir, {recursive: true, force: true});

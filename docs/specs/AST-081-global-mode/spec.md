@@ -407,9 +407,12 @@ works on is `spec:AST-040` FR9's.
     which in such a run also says that it keeps none;
   - the same per-user cache directory, for the code jiti transpiles from the
     files the CLI loads through it (an integration's manifest, TypeScript doc
-    topics and codemods, a TypeScript config, a built theme artifact), in
-    `astryx/jiti`: made `0700` on first use and used at once, only while it is
-    a real folder the user owns and others cannot open; otherwise nothing is
+    topics and codemods, a TypeScript config, a built theme artifact, and the
+    theme sources `theme build` loads), in `astryx/jiti`: made `0700` on first
+    use and used at once, only while it is a real folder the user owns and
+    others cannot open, and kept within the same size limit as the catalogs
+    by removing its least recently used copies once it has grown, never one
+    written or read in the last day; otherwise nothing is
     cached on disk; where the system has no user ids jiti keeps its own
     default, and a set `JITI_FS_CACHE` is left to jiti;
   - the platform's temporary directory, for scratch work such as building or
