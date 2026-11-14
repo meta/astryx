@@ -15,7 +15,7 @@
  *   does, over Core compiled as `build:esm` compiles it
  */
 
-import {execFileSync, spawnSync} from 'node:child_process';
+import {spawnSync} from 'node:child_process';
 import fs from 'node:fs';
 import {createRequire} from 'node:module';
 import os from 'node:os';
@@ -25,7 +25,9 @@ import {pathToFileURL} from 'node:url';
 const REPO = path.resolve(import.meta.dirname, '..');
 const require = createRequire(path.join(REPO, 'package.json'));
 const {
+  APP_EXTERNALS,
   eagerText,
+  extractAtRef,
   gzipBytes,
   sizeBuildOptions,
 } = require('./.github/scripts/lib/component-size.js');
@@ -125,54 +127,31 @@ function realTempDir(prefix) {
   return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
 }
 
-/** Core's source and manifest at `ref` (or the working tree), in `dir`. */
+/** The files Core's build reads: its source, manifest and Babel config. */
+const BUILD_INPUTS = [
+  `${CORE}/src`,
+  `${CORE}/package.json`,
+  `${CORE}/babel.config.json`,
+  `${CORE}/babel-plugin-add-extensions.cjs`,
+];
+
+/** Core's build inputs at `ref` (or the working tree), under `dir`. */
 function exportSource(ref, dir) {
   if (ref === '.') {
-    fs.cpSync(path.join(REPO, CORE, 'src'), path.join(dir, CORE, 'src'), {
-      recursive: true,
-    });
-    fs.copyFileSync(
-      path.join(REPO, CORE, 'package.json'),
-      path.join(dir, CORE, 'package.json'),
-    );
+    for (const input of BUILD_INPUTS) {
+      fs.cpSync(path.join(REPO, input), path.join(dir, input), {
+        recursive: true,
+      });
+    }
     return;
   }
-  const archive = execFileSync(
-    'git',
-    [
-      'archive',
-      '--format=tar',
-      ref,
-      '--',
-      `${CORE}/src`,
-      `${CORE}/package.json`,
-    ],
-    {cwd: REPO, maxBuffer: 1024 * 1024 * 1024},
-  );
-  execFileSync('tar', ['-x', '-C', dir], {input: archive});
-  // Generated source is not in git: the ref takes the working tree's copy of
-  // each such file it lacks.
-  const generated = execFileSync(
-    'git',
-    [
-      'ls-files',
-      '--others',
-      '--ignored',
-      '--exclude-standard',
-      '-z',
-      '--',
-      `${CORE}/src`,
-    ],
-    {cwd: REPO, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024},
-  )
-    .split('\0')
-    .filter(Boolean);
-  for (const file of generated) {
-    const target = path.join(dir, file);
-    if (fs.existsSync(target)) continue;
-    fs.mkdirSync(path.dirname(target), {recursive: true});
-    fs.copyFileSync(path.join(REPO, file), target);
-  }
+  extractAtRef({
+    repo: REPO,
+    ref,
+    target: dir,
+    paths: BUILD_INPUTS,
+    generatedFrom: `${CORE}/src`,
+  });
 }
 
 /** The `--ignore` globs of Core's `build:esm` script. */
@@ -186,26 +165,41 @@ function buildIgnores(manifest) {
 }
 
 /**
- * Core built at `ref` as `build:esm` builds it, with its package.json beside
- * the output, so bundlers read its `sideEffects`. A path to a directory that
- * holds a package.json is taken as a built dist. Returns the dist directory.
+ * Core built at `ref` as its `build:esm` script builds it there, with that
+ * ref's Babel config, into `sideDir/dist`, with its package.json beside the
+ * output so bundlers read its `sideEffects`. Both sides use the same layout
+ * under their own `sideDir`, so unchanged code bundles to the same bytes. A
+ * directory is taken as a built dist, such as Core's own `dist/`.
+ * Returns the dist directory.
  */
-export function buildCore(ref, workDir) {
-  if (ref !== '.' && fs.existsSync(path.join(ref, 'package.json'))) {
-    return fs.realpathSync(ref);
+export function buildCore(ref, sideDir) {
+  if (ref !== '.' && fs.existsSync(ref) && fs.statSync(ref).isDirectory()) {
+    // Bundlers read `sideEffects` from the nearest package.json: beside the
+    // output here, or the package's own one above Core's `dist/`.
+    const dist = fs.realpathSync(ref);
+    if (
+      !fs.existsSync(path.join(dist, 'package.json')) &&
+      !fs.existsSync(path.join(dist, '..', 'package.json'))
+    ) {
+      throw new Error(`${ref} has no package.json beside or above it.`);
+    }
+    return dist;
   }
-  const label = ref === '.' ? 'working-tree' : ref.replace(/[^\w.-]/g, '_');
-  const sourceDir = path.join(workDir, `src-${label}`);
-  const distDir = path.join(workDir, `dist-${label}`);
-  fs.mkdirSync(path.join(sourceDir, CORE), {recursive: true});
-  exportSource(ref, sourceDir);
+  const coreDir = path.join(sideDir, CORE);
+  const distDir = path.join(sideDir, 'dist');
+  exportSource(ref, sideDir);
+  // Babel resolves the config's presets and plugins from the config's folder.
+  fs.symlinkSync(
+    path.join(REPO, CORE, 'node_modules'),
+    path.join(coreDir, 'node_modules'),
+  );
   const manifest = JSON.parse(
-    fs.readFileSync(path.join(sourceDir, CORE, 'package.json'), 'utf8'),
+    fs.readFileSync(path.join(coreDir, 'package.json'), 'utf8'),
   );
   const babel = spawnSync(
     path.join(REPO, CORE, 'node_modules/.bin/babel'),
     [
-      path.join(sourceDir, CORE, 'src'),
+      'src',
       '--out-dir',
       distDir,
       '--extensions',
@@ -215,9 +209,9 @@ export function buildCore(ref, workDir) {
       '--ignore',
       buildIgnores(manifest),
       '--config-file',
-      path.join(REPO, CORE, 'babel.config.json'),
+      './babel.config.json',
     ],
-    {cwd: path.join(REPO, CORE), encoding: 'utf8', maxBuffer: 64 * 1024 * 1024},
+    {cwd: coreDir, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024},
   );
   // A partial build gives plausible wrong sizes, so any error stops the run.
   if (babel.error != null) throw babel.error;
@@ -227,7 +221,7 @@ export function buildCore(ref, workDir) {
     );
   }
   fs.copyFileSync(
-    path.join(sourceDir, CORE, 'package.json'),
+    path.join(coreDir, 'package.json'),
     path.join(distDir, 'package.json'),
   );
   return distDir;
@@ -254,13 +248,7 @@ export async function measurePage(distDir, components) {
       path.join(REPO, 'node_modules'),
       path.join(REPO, CORE, 'node_modules'),
     ],
-    external: [
-      'react',
-      'react/*',
-      'react-dom',
-      'react-dom/*',
-      '@stylexjs/stylex',
-    ],
+    external: APP_EXTERNALS,
     stdin: {
       contents: components
         .map(
@@ -338,8 +326,14 @@ async function main(argv) {
   };
   const workDir = realTempDir('astryx-reference-pages-');
   try {
-    const baseSizes = await measurePages(buildCore(args.base, workDir), pages);
-    const headSizes = await measurePages(buildCore(args.head, workDir), pages);
+    const baseSizes = await measurePages(
+      buildCore(args.base, path.join(workDir, 'base')),
+      pages,
+    );
+    const headSizes = await measurePages(
+      buildCore(args.head, path.join(workDir, 'head')),
+      pages,
+    );
     const comparison = comparePages(baseSizes, headSizes, {
       unusedOn: args.unusedOn,
     });
