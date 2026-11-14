@@ -31,7 +31,7 @@ import {
 import {SAMPLE_PAGE, elementNames, pageSource} from './_catalog.mjs';
 
 /** Bump when the shape of the cached part data changes. */
-const PART_DATA_VERSION = 8;
+const PART_DATA_VERSION = 9;
 
 /**
  * Flags that change what a component does or whether it shows, not how it
@@ -900,6 +900,17 @@ export function walkMarkup(html, decls, tokens) {
         ),
       ].map(x => [x[1], x[2]]),
     );
+    // The place another component puts a part in (the current page's
+    // button in a pagination, a pressed toggle) is a condition of what that
+    // component styles it with there, never the part's look at rest. A part
+    // that marks the place with a theme state of its own (a selected tab)
+    // is conditioned by that state already.
+    const ownState = ['selected', 'checked', 'state'].some(k => k in dataAttrs);
+    const context = ownState
+      ? []
+      : [...attrs.matchAll(/\baria-(current|pressed)="([^"]*)"/g)]
+          .filter(x => x[2] !== 'false')
+          .map(x => `${x[1]}=${x[2]}`);
     const parent = stack[stack.length - 1];
     const env = {...parent.env};
     const own = cls.flatMap(c => decls.get(c) ?? []);
@@ -924,9 +935,10 @@ export function walkMarkup(html, decls, tokens) {
       if (ownsTarget)
         for (const [k, v] of Object.entries(dataAttrs))
           (T.attrs[k] ??= new Set()).add(v);
-      const cond0 = Object.entries(dataAttrs)
-        .map(([k, v]) => `${k}=${v}`)
-        .join(',');
+      const cond0 = [
+        ...Object.entries(dataAttrs).map(([k, v]) => `${k}=${v}`),
+        ...context,
+      ].join(',');
       for (const d of own) {
         if (d.prop.startsWith('--')) continue;
         // An inherited background reads what its parent paints.

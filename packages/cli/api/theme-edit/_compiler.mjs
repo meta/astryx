@@ -115,8 +115,12 @@ export function makeCompiler(project, parts) {
     const kept = (attrPart.includes('=') ? attrPart.split(',') : []).filter(
       kv => {
         const [k] = kv.split('=');
+        // (The place another component puts the part in, from the part
+        // data's context conditions, stays: it is never the part at rest.)
         return (
           k === 'selected' ||
+          k === 'current' ||
+          k === 'pressed' ||
           (['variant', 'status', 'tone', 'color'].includes(k) &&
             (attrs[k]?.length ?? 0) > 1)
         );
