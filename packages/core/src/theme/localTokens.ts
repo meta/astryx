@@ -262,7 +262,8 @@ export function resolveLocalTokenContract(
   tokens: Record<string, string>,
   portableTokens: Readonly<Record<string, string>>,
 ): ResolvedLocalTokenContract | undefined {
-  const directlyEnrolled = hasOwn(input, 'localTokens');
+  // A key that holds undefined is not set, as everywhere in a theme.
+  const directlyEnrolled = input.localTokens !== undefined;
   const inherited = base?.__localTokenLineage !== undefined;
 
   if (!directlyEnrolled && !inherited) {
@@ -290,6 +291,9 @@ export function resolveLocalTokenContract(
   }
 
   for (const [name, value] of Object.entries(declarations ?? {})) {
+    if (value === undefined) {
+      continue;
+    }
     const inheritedOwner = owners[name];
     if (!isValidCSSCustomPropertyName(name)) {
       throw new Error(
@@ -354,6 +358,9 @@ export function resolveAdaptationLocalTokens(
 
   const resolved: Record<string, string> = {};
   for (const [name, value] of Object.entries(declarations)) {
+    if (value === undefined) {
+      continue;
+    }
     if (!rootLocalTokens || !hasOwn(rootLocalTokens, name)) {
       throw new Error(
         `${path}["${name}"] cannot enroll a theme-local token. Declare it in the root theme or an exact enrolled base first.`,

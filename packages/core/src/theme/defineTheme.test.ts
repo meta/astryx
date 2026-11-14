@@ -2026,3 +2026,24 @@ describe('defineTheme extends', () => {
     expect(child.tokens['--color-accent']).toBe('#111111');
   });
 });
+
+describe('local tokens left undefined', () => {
+  it('a localTokens field that holds undefined is not set', () => {
+    const theme = defineTheme({name: 'no-local', localTokens: undefined});
+    expect(theme).not.toHaveProperty('localTokens');
+    expect(theme).not.toHaveProperty('__localTokenLineage');
+  });
+
+  it('a local token that holds undefined is not set', () => {
+    const theme = defineTheme({
+      name: 'some-local',
+      localTokens: {
+        '--brand': 'red',
+        // @ts-expect-error an undefined value, as a conditional spread or an unset environment value gives
+        '--brand-2': undefined,
+      },
+    });
+    expect(theme.localTokens).toEqual({'--brand': 'red'});
+    expect(generateThemeTestCSS(theme)).not.toContain('--brand-2');
+  });
+});
