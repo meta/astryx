@@ -468,7 +468,9 @@ describe('Toolbar', () => {
     expect(trigger).toHaveFocus();
     await user.click(trigger);
     await waitFor(() =>
-      expect(screen.getByRole('menu', {hidden: true})).toHaveFocus(),
+      expect(
+        screen.getByRole('menuitem', {name: 'Duplicate', hidden: true}),
+      ).toHaveFocus(),
     );
 
     const item = screen.getByRole('menuitem', {
@@ -523,7 +525,9 @@ describe('Toolbar', () => {
     expect(trigger).toHaveFocus();
     await user.click(trigger);
     await waitFor(() =>
-      expect(screen.getByRole('menu', {hidden: true})).toHaveFocus(),
+      expect(
+        screen.getByRole('menuitem', {name: 'Duplicate', hidden: true}),
+      ).toHaveFocus(),
     );
 
     const first = screen.getByRole('menuitem', {

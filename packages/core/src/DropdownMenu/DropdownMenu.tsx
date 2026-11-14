@@ -23,10 +23,8 @@
  * A sub-menu drills in on a phone through the view stack useMenuDrillIn
  * keeps; the root shows the drilled view in place of its rows.
  *
- * Initial focus on open follows the input modality: a keyboard open
- * (Enter / Space / ArrowDown on the trigger) focuses the first enabled item
- * (APG menu-button); a pointer open focuses the menu container itself so no
- * item reads as pre-selected, and the first ArrowDown then moves to item 1.
+ * An open focuses the first enabled row, or the last after ArrowUp. A row the
+ * pointer reached first keeps focus. After pointer input the row shows no ring.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/DropdownMenu/DropdownMenu.doc.mjs
@@ -165,9 +163,9 @@ const styles = stylex.create({
     },
     flexDirection: 'column',
     gap: spacingVars['--spacing-0-5'],
-    // Pointer opens focus this container so subsequent arrow keys and Escape
-    // stay owned by the menu. It is an internal focus target, not a control,
-    // so suppress the browser ring; keyboard focus moves to an item instead.
+    // The menu can still be an internal focus target when it has no focusable
+    // rows. Normal opens focus a row instead, and the shared focus helper owns
+    // the pointer-versus-keyboard indication for that row.
     outline: 'none',
     // Menu rows never offer the browser's held-press link preview or text
     // selection: a held finger is driving the highlight.
@@ -1063,14 +1061,9 @@ function DropdownMenuPopover({
   // captures the trigger instead of the first menu item.
   const shouldFocusOnOpenRef = useRef(false);
 
-  // How the next open was initiated. Keyboard (and programmatic) opens focus
-  // the first enabled item per the APG menu-button pattern; pointer opens
-  // focus the menu container instead, so no item is visually highlighted as
-  // if pre-selected (#4477). Reset to 'keyboard' after every open so
-  // programmatic controlled opens keep the item-focus behavior.
-  const openModalityRef = useRef<'keyboard' | 'pointer'>('keyboard');
   // ArrowUp opens with the LAST enabled row highlighted.
   const focusLastOnOpenRef = useRef(false);
+  const openModalityRef = useRef<'keyboard' | 'pointer'>('pointer');
 
   // Synchronizes the dialog's name from the custom trigger's DOM, an external
   // system React does not own: the rendered control's accessible name is only
@@ -1160,6 +1153,8 @@ function DropdownMenuPopover({
     // a picker's list clamps instead.
     wrap: true,
     hasPaging: true,
+    // After pointer input, a focused row shows no keyboard ring.
+    focusFollowsLastInput: true,
     onEscape: closeMenu,
   });
 
@@ -1210,12 +1205,13 @@ function DropdownMenuPopover({
     }
   }, [controlledIsOpen, isControlled, popover]);
 
-  // Move focus into the menu only after the layer has committed open,
-  // honoring the input modality: keyboard (and programmatic) opens land on
-  // the first enabled item per the APG menu-button pattern; pointer opens
-  // focus the menu container itself (tabIndex={-1}) so no item is
-  // highlighted as if pre-selected (#4477). Container focus keeps arrows,
-  // typeahead, Escape and Tab in the menu's onKeyDown, and is also the
+  // Move focus into the menu only after the layer has committed open. Keyboard
+  // opens use the APG menu-button pattern; pointer opens preserve a row that
+  // was already reached and otherwise focus the first enabled item. The
+  // last-input focus helper keeps pointer focus from looking like a keyboard
+  // selection.
+  // A row that the pointer reached before this frame keeps focus, so a held
+  // press continues to act on the row under the pointer. The menu remains the
   // fallback when no item is focusable (e.g. all disabled), mirroring the
   // submenu flyout fallback.
   useEffect(() => {
@@ -1226,17 +1222,15 @@ function DropdownMenuPopover({
     requestAnimationFrame(() => {
       const focusEnd = focusLastOnOpenRef.current ? focusLast : focusFirst;
       focusLastOnOpenRef.current = false;
-      const isPointerOpen = openModalityRef.current === 'pointer';
-      // A pointer that lit a row before this frame keeps that row's
-      // highlight: the row under the pointer stays the focused row.
       const list = listRef.current;
       const active = list?.ownerDocument.activeElement;
+      const isPointerOpen = openModalityRef.current === 'pointer';
       const isRowLit =
         isPointerOpen &&
         active != null &&
         active !== list &&
         list?.contains(active) === true;
-      if (!isRowLit && (isPointerOpen || !focusEnd())) {
+      if (!isRowLit && !focusEnd()) {
         list?.focus();
       }
       openModalityRef.current = 'keyboard';
@@ -1369,10 +1363,7 @@ function DropdownMenuPopover({
   );
 
   const openAndFocus = useCallback(
-    (
-      modality: 'keyboard' | 'pointer' = 'keyboard',
-      notifyClick = false,
-    ): boolean => {
+    (notifyClick = false): boolean => {
       // An unavailable trigger never opens the menu. Button keeps an
       // aria-disabled trigger focusable for its tooltip and swallows only
       // Enter and Space, so the arrow keys, a press and a click would still
@@ -1385,13 +1376,11 @@ function DropdownMenuPopover({
       acceptedOpenRef.current = false;
       notifyClickOnShowRef.current = notifyClick;
       pendingControlledOpenRef.current = isControlled;
-      openModalityRef.current = modality;
       shouldFocusOnOpenRef.current = true;
       popover.show();
       if (!acceptedOpenRef.current) {
         notifyClickOnShowRef.current = false;
         pendingControlledOpenRef.current = false;
-        openModalityRef.current = 'keyboard';
         shouldFocusOnOpenRef.current = false;
         return false;
       }
@@ -1444,6 +1433,7 @@ function DropdownMenuPopover({
         }
         return false;
       }
+      openModalityRef.current = 'pointer';
       // The press opens the menu before the browser's own mousedown has
       // focused the trigger (a held finger never does), so the popover would
       // remember whatever was focused BEFORE the press as the element to hand
@@ -1455,7 +1445,7 @@ function DropdownMenuPopover({
         focusForLastInput(buttonRef.current, {preventScroll: true});
       }
       openingPressRef.current = {gesture: currentGesture()};
-      const didOpen = openAndFocus('pointer', true);
+      const didOpen = openAndFocus(true);
       // A mouse can release away from the trigger, or the trigger can move
       // away under it. So the layer claims a mouse's press, and that release
       // lands on the layer; over the trigger, the trigger keeps it. Only a
@@ -1498,27 +1488,25 @@ function DropdownMenuPopover({
   useCommittedRefInto(cancelMenuPressRef, menuPress.cancel);
 
   const handleButtonClick = useCallback(
-    (e: React.MouseEvent<HTMLElement>) => {
+    (event: React.MouseEvent) => {
       // The press already opened or closed the menu; its click is spent.
       if (menuPress.isTriggerClickFromPress()) {
         return;
       }
-      // detail === 0 marks a synthesized click (screen reader / AT
-      // activation): treat it as keyboard so those users still land on the
-      // first item. Real pointer clicks report detail >= 1.
-      const modality = e.detail === 0 ? 'keyboard' : 'pointer';
+      openModalityRef.current = event.detail === 0 ? 'keyboard' : 'pointer';
+      // A click with detail 0 comes from the keyboard or assistive technology.
       if (isControlled) {
         if (controlledIsOpen) {
           onClick?.();
           onOpenChange?.(false);
         } else {
-          openAndFocus(modality, true);
+          openAndFocus(true);
         }
       } else if (popover.isOpen) {
         onClick?.();
         popover.hide();
       } else {
-        openAndFocus(modality, true);
+        openAndFocus(true);
       }
     },
     [
@@ -1558,6 +1546,7 @@ function DropdownMenuPopover({
           if (e.repeat) {
             return;
           }
+          openModalityRef.current = 'keyboard';
           focusLastOnOpenRef.current = e.key === 'ArrowUp';
           if (!openAndFocus()) {
             // A refused open (disabled trigger) must not leave ArrowUp's
@@ -1790,11 +1779,8 @@ function DropdownMenuPopover({
             }}
             id={menuId}
             role="menu"
-            // Pointer opens focus the container so arrows, typeahead, Escape and
-            // Tab remain owned by the menu without pre-highlighting an item.
-            // An overflowing menu joins the Tab order so its scrollable region is
-            // keyboard-accessible; Tab still dismisses through listKeyDown. With
-            // a header or footer the menu is one Tab stop between them.
+            // The menu is a focusable fallback when no row can take focus;
+            // overflow and header/footer regions also make it a Tab stop.
             tabIndex={hasOverflow || hasRegions ? 0 : -1}
             // Give the menu an accessible name from its trigger's label, so
             // screen readers announce e.g. "Actions menu" rather than an unnamed
