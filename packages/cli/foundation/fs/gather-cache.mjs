@@ -41,7 +41,7 @@
  *   The folder is `catalogs` in the user's cache folder (userCacheDir):
  *   created 0700, used only while it is a real folder owned by the user and
  *   closed to others (isPrivateDir; never on a system with no user ids), each file written 0600 by a rename, oldest first evicted past
- *   CACHE_LIMIT_BYTES. Any failure to read, check, parse or write is silent
+ *   CACHE_LIMIT_BYTES (cache-eviction.mjs). Any failure to read, check, parse or write is silent
  *   and the run gathers fresh, as it would with no cache.
  */
 
@@ -58,6 +58,7 @@ import {currentUid, isPrivateDir} from '../env/private-dir.mjs';
 import {userCacheDir} from '../env/user-dirs.mjs';
 import {jitiCacheDir} from './jiti-cache.mjs';
 import {hostedRun} from '../runtime/package-root.mjs';
+import {CACHE_LIMIT_BYTES, evictOldest} from './cache-eviction.mjs';
 import {
   fileStamp,
   recordReads,
@@ -102,8 +103,12 @@ export const BUILD_ID_FILE = path.join(
   'build-id.generated.json',
 );
 
-/** The most the folder holds; the oldest entries go first past it. */
-export const CACHE_LIMIT_BYTES = 64 * 1024 * 1024;
+/**
+ * Whether a file in the folder is a kept entry, which eviction counts.
+ * @param {string} name
+ * @returns {boolean}
+ */
+const isEntry = name => name.startsWith('gather-');
 
 /** The stored format; a different one is a miss. */
 const FORMAT = 1;
@@ -781,7 +786,7 @@ export function persistedDerived(key, compute, codec, inputs = []) {
       const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
       fs.writeFileSync(temp, text, {mode: 0o600, flag: 'wx'});
       fs.renameSync(temp, file);
-      evict(dir);
+      evictOldest(dir, isEntry);
     } catch {
       // A value that cannot be stored is computed again next time.
     }
@@ -876,7 +881,7 @@ export function persistedSummary(key, make) {
         const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
         fs.writeFileSync(temp, text, {mode: 0o600, flag: 'wx'});
         fs.renameSync(temp, file);
-        evict(dir);
+        evictOldest(dir, isEntry);
       } catch {
         // A summary that cannot be stored is made again next time.
       }
@@ -931,40 +936,9 @@ function store(dir, file, entry, value, codec) {
     const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
     fs.writeFileSync(temp, text, {mode: 0o600, flag: 'wx'});
     fs.renameSync(temp, file);
-    evict(dir);
+    evictOldest(dir, isEntry);
   } catch {
     // A gather that cannot be stored is gathered again next time.
-  }
-}
-
-/**
- * Delete the oldest entries until the folder holds at most CACHE_LIMIT_BYTES.
- * @param {string} dir
- */
-function evict(dir) {
-  const entries = fs
-    .readdirSync(dir)
-    .filter(name => name.startsWith('gather-'))
-    .map(name => {
-      const entry = path.join(dir, name);
-      try {
-        const {size, mtimeMs} = fs.statSync(entry);
-        return {entry, size, mtimeMs};
-      } catch {
-        return null;
-      }
-    })
-    .filter(e => e != null)
-    .sort((a, b) => a.mtimeMs - b.mtimeMs);
-  let total = entries.reduce((sum, e) => sum + e.size, 0);
-  for (const {entry, size} of entries) {
-    if (total <= CACHE_LIMIT_BYTES) break;
-    try {
-      fs.unlinkSync(entry);
-      total -= size;
-    } catch {
-      // Another run removed it.
-    }
   }
 }
 
@@ -982,15 +956,16 @@ export function runsUnderPnp() {
 /**
  * The cache folder and how much it holds, for `doctor`: null when the CLI
  * keeps no gathers (a checkout) or has no usable folder.
- * @returns {{dir: string, bytes: number, entries: number, pnp: boolean} | null}
- *   `pnp`: whether this run is under Yarn Plug'n'Play's loader (runsUnderPnp)
+ * @returns {{dir: string, bytes: number, entries: number, pnp: boolean, limitBytes: number, jitiDir: string} | null}
+ *   `pnp`: whether this run is under Yarn Plug'n'Play's loader (runsUnderPnp);
+ *   `limitBytes`: the most the folder, and jiti's folder `jitiDir`, holds
  */
 export function gatherCacheSummary() {
   // The cache's own bookkeeping, never an input of what it keeps.
   return withoutRecording(summarize);
 }
 
-/** @returns {{dir: string, bytes: number, entries: number, pnp: boolean} | null} */
+/** @returns {{dir: string, bytes: number, entries: number, pnp: boolean, limitBytes: number, jitiDir: string} | null} */
 function summarize() {
   if (buildId() == null) return null;
   const dir = gatherCacheDir();
@@ -1010,5 +985,12 @@ function summarize() {
   } catch {
     return null;
   }
-  return {dir, bytes, entries, pnp: runsUnderPnp()};
+  return {
+    dir,
+    bytes,
+    entries,
+    pnp: runsUnderPnp(),
+    limitBytes: CACHE_LIMIT_BYTES,
+    jitiDir: jitiCacheDir(),
+  };
 }
