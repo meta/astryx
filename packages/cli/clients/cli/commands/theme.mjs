@@ -719,6 +719,7 @@ function printThemeApp(result) {
           firstAdd: change.firstAdd,
           ...(change.wireModes ? {wireModes: true} : {}),
           ...(change.moduleRemoved ? {moduleRemoved: true} : {}),
+          ...(change.themeModes ? {themeModes: true} : {}),
         },
       ],
       {
@@ -731,6 +732,7 @@ function printThemeApp(result) {
           'firstAdd',
           'wireModes',
           'moduleRemoved',
+          'themeModes',
         ],
         layout: 'stacked',
       },

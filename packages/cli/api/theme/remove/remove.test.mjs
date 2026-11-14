@@ -162,6 +162,45 @@ describe('themeRemove', () => {
       expect(fs.existsSync(modulePath())).toBe(false);
     });
 
+    it('leaves a module whose import line was edited by hand', async () => {
+      const source = fs.readFileSync(modulePath(), 'utf-8');
+      const edited = source.replace(
+        'import "@acme/themes/themes/ocean.css";',
+        'import "./ocean-overrides.css";',
+      );
+      expect(edited).not.toBe(source);
+      fs.writeFileSync(modulePath(), edited);
+      await expect(themeRemove('ocean', {cwd: tmpDir})).rejects.toMatchObject({
+        code: 'ERR_THEME_INVALID',
+      });
+      fs.rmSync(path.join(tmpDir, 'node_modules/@acme'), {recursive: true});
+      await expect(themeRemove('ocean', {cwd: tmpDir})).rejects.toMatchObject({
+        code: 'ERR_THEME_INVALID',
+      });
+      expect(fs.readFileSync(modulePath(), 'utf-8')).toBe(edited);
+    });
+
+    it('never deletes a module outside the project through a symlinked src', async () => {
+      const outside = fs.mkdtempSync(
+        path.join(REPO_ROOT, '.astryx-theme-outside-'),
+      );
+      try {
+        fs.cpSync(path.join(tmpDir, 'src'), outside, {recursive: true});
+        fs.rmSync(path.join(tmpDir, 'src'), {recursive: true});
+        fs.symlinkSync(outside, path.join(tmpDir, 'src'), 'dir');
+        await expect(themeRemove('ocean', {cwd: tmpDir})).rejects.toMatchObject(
+          {
+            code: 'ERR_THEME_INVALID',
+          },
+        );
+        expect(fs.existsSync(path.join(outside, 'astryx-themes.ts'))).toBe(
+          true,
+        );
+      } finally {
+        fs.rmSync(outside, {recursive: true, force: true});
+      }
+    });
+
     it('leaves a module with changes the CLI did not write, and says how to finish', async () => {
       const edited = `${fs.readFileSync(modulePath(), 'utf-8')}// mine\n`;
       fs.writeFileSync(modulePath(), edited);
@@ -170,7 +209,6 @@ describe('themeRemove', () => {
         message: expect.stringContaining(
           'src/astryx-themes.ts has changes the CLI did not write, so the CLI leaves it.',
         ),
-        suggestions: [{name: expect.stringMatching(/ theme list$/)}],
       });
       expect(fs.readFileSync(modulePath(), 'utf-8')).toBe(edited);
     });

@@ -43,6 +43,7 @@ import {
   ThemeStateError,
   planThemeAppWrite,
   readThemeState,
+  resolveThemeModule,
 } from '../../foundation/config/theme-state.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
@@ -1438,7 +1439,7 @@ async function removeThemeFromAppLocked(slug, cwd) {
     const others = Object.keys(state.themes).filter(
       other => other !== recordedSlug,
     );
-    if (others.length === 0) return removeLastTheme(state, recordedSlug);
+    if (others.length === 0) return await removeLastTheme(state, recordedSlug);
     const uses = others.slice(0, 3).map(other => ({
       name: formatCliCommand(`theme use ${other}`, state.projectDir),
       reason: `make ${other} the default`,
@@ -1484,21 +1485,23 @@ async function removeThemeFromAppLocked(slug, cwd) {
  * and the error says how to finish by hand.
  * @param {ReturnType<typeof readThemeState>} state
  * @param {string} slug
- * @returns {import('./theme.type.mjs').ThemeAppResponse}
+ * @returns {Promise<import('./theme.type.mjs').ThemeAppResponse>}
  */
-function removeLastTheme(state, slug) {
-  const {module} = state;
+async function removeLastTheme(state, slug) {
+  let module;
+  try {
+    // The project-root check every theme write runs: a `src` that is a
+    // symlink to a folder outside the project must not lose a file there.
+    module = resolveThemeModule(state.projectDir, {forWrite: true});
+  } catch (error) {
+    throw asThemeError(error);
+  }
   const original = module.expectedOriginal;
   const source = original?.toString('utf-8') ?? '';
-  if (original == null || !isUneditedThemeModule(source, module.typescript)) {
+  if (original == null || !(await isUneditedModule(state, source))) {
     throw new AstryxError(
       `Theme "${slug}" is the only added theme, and ${module.path} has changes the CLI did not write, so the CLI leaves it. To stop using app themes, delete ${module.path} and remove its import and the Theme wrapper from the app root.`,
-      [
-        {
-          name: formatCliCommand('theme list', state.projectDir),
-          reason: 'the themes you can add',
-        },
-      ],
+      undefined,
       ERROR_CODES.ERR_THEME_INVALID,
     );
   }
@@ -1535,6 +1538,35 @@ function removeLastTheme(state, slug) {
       },
     },
   };
+}
+
+/**
+ * Is the module exactly what the CLI writes for its record? While the recorded
+ * themes resolve, it must equal the module the CLI would write now. When one
+ * no longer resolves (its package is already uninstalled), the module is
+ * re-rendered from its own imports, which must still come from the recorded
+ * owners.
+ * @param {ReturnType<typeof readThemeState>} state
+ * @param {string} source
+ */
+async function isUneditedModule(state, source) {
+  let resolved;
+  try {
+    resolved = resolveRecordedThemes(
+      state,
+      await listAvailableThemes(state.projectDir),
+    );
+  } catch {
+    return isUneditedThemeModule(source, state.module.typescript);
+  }
+  try {
+    return (
+      planThemeAppWrite(state, state.themes, state.defaultSlug ?? '', resolved)
+        .moduleContents === source
+    );
+  } catch {
+    return false;
+  }
 }
 
 /**

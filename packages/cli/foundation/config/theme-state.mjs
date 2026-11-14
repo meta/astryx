@@ -539,9 +539,18 @@ export function isUneditedThemeModule(source, typescript) {
   for (const [index, slug] of slugs.entries()) {
     const {exportName, module, stylesheet, fontStylesheet} = imported[index];
     if (stylesheet === undefined) return false;
+    const owner = record.themes[slug];
+    // Each import still comes from the theme's recorded owner: a package
+    // theme from its package, a local theme from a relative path.
+    const fromOwner = (/** @type {string} */ specifier) =>
+      isLocalThemeOwner(owner)
+        ? specifier.startsWith('./') || specifier.startsWith('../')
+        : specifier === owner || specifier.startsWith(`${owner}/`);
+    if (![module, stylesheet, fontStylesheet ?? stylesheet].every(fromOwner))
+      return false;
     themes.push({
       slug,
-      owner: record.themes[slug],
+      owner,
       exportName,
       module,
       stylesheet,
