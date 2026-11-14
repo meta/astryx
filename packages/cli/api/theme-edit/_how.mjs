@@ -41,7 +41,7 @@ import {MODAL} from './_compiler.mjs';
 import {PALETTE_DIALS, mappingRows, paletteFiles} from './_palette.mjs';
 import {requireProject, context} from './_context.mjs';
 import {checked, exampleStep, howTheme, render} from './_how-commands.mjs';
-import {draftAnswer} from './_how-question.mjs';
+import {draftAnswer, valueAsked} from './_how-question.mjs';
 import {
   getCliInvocation,
   quoteCommandArgument,
@@ -191,6 +191,16 @@ async function answer(subject, options, cwd) {
   // "½rem": a fraction is a number before anything reads the question.
   const t = (subject ?? '')
     .trim()
+    // "corners:", "var(--radius-element)": a setting pasted as written is
+    // a lookup of it.
+    .replace(/^([a-z][a-z -]*):\s*$/i, '$1')
+    .replace(/^var\(\s*(--[a-z0-9-]+)\s*\)$/i, '$1')
+    // A lone "½" with no unit after it is a share of now ("card padding
+    // ½"), never 0.5px.
+    .replace(
+      /(\d*)(?:½|1\u20442)(?!\s*(?:rem|px|em|%|x\b|×|times\b))/g,
+      (_, n) => (n ? `${n}½` : ' half '),
+    )
     .replace(/(\d*)(?:½|1\u20442)/g, (_, n) => `${n ? Number(n) + 0.5 : '0.5'}`)
     .replace(
       /(\d*)(?:¼|1\u20444)/g,
@@ -200,6 +210,12 @@ async function answer(subject, options, cwd) {
       /(\d*)(?:¾|3\u20444)/g,
       (_, n) => `${n ? Number(n) + 0.75 : '0.75'}`,
     );
+  // "paddingLeft", "borderRadius": a property as JavaScript spells it is
+  // that CSS property, as set takes it.
+  if (/^[a-z]+(?:[A-Z][a-z]+)+$/.test(t)) {
+    const kebab = t.replace(/[A-Z]/g, ch => `-${ch.toLowerCase()}`);
+    if (cssProperties().has(kebab)) return answer(kebab, options, cwd);
+  }
   // "explain spacing", "tell me about the accent": the lookup of what is
   // named, never a change.
   const explain =
@@ -214,7 +230,23 @@ async function answer(subject, options, cwd) {
       run: [`${HOW} ${t ? JSON.stringify(t) : 'card'}`],
     });
   if (options.theme != null) {
-    loadTheme(cwd, options.theme);
+    try {
+      loadTheme(cwd, options.theme);
+    } catch (e) {
+      // A theme name near the one typed: the same question for it, never
+      // only `show` (the question is kept).
+      const err = /** @type {any} */ (e);
+      // (A name typed in another case or as a path too.)
+      if (err?.suggestions)
+        for (const s of err.suggestions) {
+          const near = / show ([a-z][a-z0-9-]*)$/.exec(
+            String(s.name ?? ''),
+          )?.[1];
+          if (near)
+            s.name = `${HOW} ${quoteCommandArgument(t || 'card')} --theme ${near}`;
+        }
+      throw e;
+    }
     // A theme whose source no longer extends its settings takes no setting:
     // an answer would suggest commands that cannot run.
     const broken = themeSourceProblem(cwd, options.theme);
@@ -510,8 +542,10 @@ async function answer(subject, options, cwd) {
       results: tool,
       ...unknown,
     };
-  // a question about what something is gets the lookup, not a change.
+  // a question about what something is gets the lookup, not a change; a
+  // question about a part's value now gets the value (draftAnswer).
   if (
+    !valueAsked(t) &&
     (/^\s*(what|which|where)\b.*\b(variables?|tokens?|do|does|means?|controls?|for)\b|^\s*what('s| is) the (css )?(variable|token|property)/i.test(
       t,
     ) ||
@@ -600,9 +634,74 @@ async function answer(subject, options, cwd) {
 function finish(env, drafts) {
   /** @type {Array<{text: string, commands: string[], sequence?: boolean, refused?: Array<{command: string, why: string}>}>} */
   const out = [];
+  // The measured check runs first on the drafts that carry what their
+  // clause asks; a draft that joins them ("all of it, in order") then keeps
+  // only the steps some kept option still has, so it never brings back a
+  // step the check left out.
+  const key = (/** @type {import('./_how-commands.mjs').Step} */ st) =>
+    JSON.stringify([
+      st.verb,
+      st.thing,
+      st.value,
+      st.on,
+      st.when,
+      st.state,
+      st.mode,
+    ]);
+  /** @type {Set<string>} */
+  const dropped = new Set();
+  /** @type {Set<string>} */
+  const kept = new Set();
+  /** @type {Map<object, string[]>} */
+  const unmetOf = new Map();
+  if (typeof env.measure === 'function')
+    for (const d of drafts) {
+      if (!d.intent) continue;
+      const intent = d.intent;
+      /** @type {string[]} */
+      const unmet = [];
+      d.options = d.options.filter(o => {
+        const why = env.measure(o, intent);
+        for (const st of o) (why ? dropped : kept).add(key(st));
+        if (why) unmet.push(why);
+        return !why;
+      });
+      unmetOf.set(d, unmet);
+    }
   for (const d of drafts) {
+    if (!d.intent && dropped.size) {
+      d.options = d.options
+        .map(o => o.filter(st => !dropped.has(key(st)) || kept.has(key(st))))
+        .filter(o => o.length);
+      // A joined answer left holding what another answer already says is
+      // that answer: it is not given twice (and never as "all of it").
+      const same = (/** @type {import('./_how-commands.mjs').Step[]} */ o) =>
+        drafts.some(
+          x =>
+            x !== d &&
+            x.options.some(
+              y =>
+                y.length === o.length &&
+                y.every((st, i) => key(st) === key(o[i])),
+            ),
+        );
+      if (d.options.length && d.options.every(same)) continue;
+    }
+    // The measured check: an option whose built result does not do what
+    // the question asks is left out, with a plain line saying why.
+    const unmet = unmetOf.get(d) ?? [];
+    if (unmet.length) {
+      if (unmet.length && !d.options.length)
+        d.text = `couldn't work out a command that does "${d.text}" as asked: ${[...new Set(unmet)].join('; ')}`;
+      else if (unmet.length)
+        d.text = `${d.text} (left out: ${[...new Set(unmet)].join('; ')})`;
+    }
     const {commands, refused} = checked(env, d.options);
     const lookups = d.lookup ? [d.lookup] : [];
+    if (!commands.length && !d.options.length && unmet.length) {
+      out.push({text: d.text, commands: lookups});
+      continue;
+    }
     if (!commands.length && d.options.length && !lookups.length) {
       out.push({
         text: `${d.text}: no command does it on ${env.slug}${refused[0] ? `: ${refused[0].why}` : ''}`,
@@ -1094,7 +1193,8 @@ function toolAnswer(t, env, targets) {
       },
     ];
   if (
-    asks ||
+    // A question about a part's value now is answered with that value.
+    (asks && !valueAsked(q)) ||
     /^which parts (are|does|do)\b/.test(q) ||
     (/^why (is|are|does|do)\b/.test(q) && !/\bnot\b|n'?t\b/.test(q))
   ) {

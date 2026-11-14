@@ -1,5 +1,5 @@
 {
-  "$comment": "Seconds of test time per Node test file, from the Node legs of a pull request's CI run (files that run did not reach keep their earlier Main-run times). Only how scripts/vitest-shard-sequencer.mjs balances legs depends on these numbers; a missing or stale entry never drops or repeats a file. Regenerate from a run's Node legs: gh run view <run> --repo meta/astryx --log > run.log && node scripts/vitest-shard-sequencer.mjs record run.log. The swizzle-proof slices keep the time they take when a change reaches them, the largest seen, so a pull request that reaches them still splits safely; one that does not finishes early in the legs that hold them, so its legs are uneven.",
+  "$comment": "Seconds of test time per Node test file, from the Node legs of a pull request's CI run (files that run did not reach keep their earlier Main-run times). Only how scripts/vitest-shard-sequencer.mjs balances legs depends on these numbers; a missing or stale entry never drops or repeats a file. Regenerate from a run's Node legs: gh run view <run> --repo meta/astryx --log > run.log && node scripts/vitest-shard-sequencer.mjs record run.log. The swizzle-proof slices keep the time they take when a change reaches them, the largest seen, so a pull request that reaches them still splits safely; one that does not finishes early in the legs that hold them, so its legs are uneven. legOneSteps holds the seconds of the steps only the first leg runs after its setup (ci.yml test-node's `matrix.shard == 1` steps), from a broad pull request's leg 1; the legs' split gives the first leg that much less Node test time. `record` refreshes them from the same log.",
   "source": "recorded Node leg logs",
   "seconds": {
     ".github/scripts/a11y-contract-shard.test.mjs": 0.9,
@@ -539,7 +539,7 @@
     "packages/cli/api/theme-edit/theme-own-tokens.test.mjs": 5.1,
     "packages/cli/api/theme-edit/theme-palette.test.mjs": 60.2,
     "packages/cli/api/theme-edit/theme-picture.test.mjs": 0,
-    "packages/cli/api/theme-edit/theme-preview-safety.test.mjs": 205,
+    "packages/cli/api/theme-edit/theme-preview-safety.test.mjs": 324.8,
     "packages/cli/api/theme-edit/theme-preview.test.mjs": 97.9,
     "packages/cli/api/theme-edit/theme-proto-words.test.mjs": 13.9,
     "packages/cli/api/theme-edit/theme-real-bases.test.mjs": 15.1,
@@ -1017,7 +1017,7 @@
     "packages/cli/test/packed-gather-cache.installed.test.mjs": 90.9,
     "packages/cli/test/packed-gather-cache.malformed.test.mjs": 161,
     "packages/cli/test/packed-gather-cache.nested.test.mjs": 181.3,
-    "packages/cli/test/packed-gather-cache.records.test.mjs": 107.3,
+    "packages/cli/test/packed-gather-cache.records.test.mjs": 184.6,
     "packages/cli/test/packed-help-imports.test.mjs": 1.5,
     "packages/cli/test/packed-manifest.test.mjs": 3.5,
     "packages/cli/test/packed-self-audit.test.mjs": 6.3,
@@ -1165,5 +1165,14 @@
     "scripts/verify-exports.test.mjs": 0.6,
     "scripts/vitest-setup-node.test.mjs": 0,
     "scripts/vitest-shard-sequencer.test.mjs": 0.7
+  },
+  "legOneSteps": {
+    "Check out the change for the tests that read its records": 0,
+    "List the tests that read a changed record": 0,
+    "Lab-only: CLI official-packages check": 0,
+    "Install Playwright for theme-family contract": 9,
+    "Offline-media browser cases": 17,
+    "Theme editor browser case": 30,
+    "Run the theme-family contract": 42
   }
 }

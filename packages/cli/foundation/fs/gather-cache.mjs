@@ -17,12 +17,17 @@
  *   integration's contribution-check results and the whole list (with the
  *   template and component replacement passes), which `component`,
  *   `template`, `theme`, `discover` and `search` report, by template
- *   discovery (foundation/discovery/template-adapter.mjs) for its records, by theme discovery
+ *   discovery (foundation/discovery/template-adapter.mjs) for its records, by
+ *   the component list (api/component/list/list.mjs), by theme discovery
  *   (foundation/discovery/theme-discovery.mjs) for each integration's themes,
- *   and by `doctor` (api/doctor/_adapter.mjs) for its file-only docs checks,
- *   in a run that records modules and variables to its end. The commands
- *   whose runs keep these entries are `search`, `build`, `component`,
- *   `template`, `theme`, `discover`, `docs` and `doctor`. Gathers are kept only once the folder exists: the first such run
+ *   by `doctor` (api/doctor/_adapter.mjs) for its file-only docs checks and
+ *   its theme-wiring scan,
+ *   in a run that records modules and variables to its end, and, through
+ *   `persistedSummary`, by kept-tree.mjs for the docs not-found hint's
+ *   summaries of folder trees, each kept while every path it stamped is
+ *   unchanged, in any command. The commands whose runs keep the other
+ *   entries are `search`, `build`, `component`, `template`, `theme`,
+ *   `discover`, `docs` and `doctor`. Gathers are kept only once the folder exists: the first such run
  *   on a machine just makes it, so a one-off run pays nothing to store one. Only a published CLI stores anything:
  *   its build id (clients/cli/build-id.generated.json, written at `prepack`)
  *   names its exact code, so a checkout, whose code may change between runs
@@ -78,7 +83,8 @@ const KEPT_COMMANDS = new Set([
   'theme',
   'discover',
   'docs',
-  // The project check alone (no subcommand): its docs checks are kept.
+  // The project check alone (no subcommand): its docs checks and theme-wiring
+  // scan are kept.
   'doctor',
 ]);
 
@@ -749,6 +755,102 @@ export function persistedDerived(key, compute, codec, inputs = []) {
       // A value that cannot be stored is computed again next time.
     }
   });
+  return value;
+}
+
+/**
+ * How old every stamped time must be before a summary is stored. A file
+ * system can store times as coarsely as 2 s, so a change within one tick of
+ * the last can leave a stamp as it was.
+ */
+const SUMMARY_SETTLE_MS = 2000;
+
+/**
+ * Whether every stamp in `stamps` was taken longer than
+ * {@link SUMMARY_SETTLE_MS} ago, by its modification and change times.
+ * @param {[string, string][]} stamps
+ * @returns {boolean}
+ */
+function settled(stamps) {
+  const limit = Date.now() - SUMMARY_SETTLE_MS;
+  return stamps.every(([, stamp]) => {
+    if (stamp === '-') return true;
+    const [, mtime, ctime] = stamp.split(':').map(Number);
+    return mtime < limit && ctime < limit;
+  });
+}
+
+/**
+ * A summary of files and folders, made at once, kept as an entry beside the
+ * gathers, in or out of a recorded run: the stored value while every path
+ * `make` stamped has the stamp it was stored with, else the one `make` gives
+ * now, which is stored unless a stamp is younger than
+ * {@link SUMMARY_SETTLE_MS}. The folder, the build id, the Yarn Plug'n'Play
+ * rule, the 0600 rename write and the eviction are those of a kept gather;
+ * anywhere a gather is not kept, or on any read or write error, `make` runs
+ * as before.
+ * @template T
+ * @param {unknown[]} key - Everything else the summary depends on.
+ * @param {() => {value: T, stamps: [string, string][]}} make - The summary,
+ *   with the stamp ({@link fileStamp}) of each path it depends on, each taken
+ *   before the path was read.
+ * @returns {T}
+ */
+export function persistedSummary(key, make) {
+  const id = withoutRecording(buildId);
+  const dir =
+    id == null || runsUnderPnp() ? null : withoutRecording(gatherCacheDir);
+  if (id == null || dir == null) return make().value;
+  const summaryKey = ['summary', ...key];
+  const file = entryFile(dir, summaryKey, id);
+  const entry = entryKey(summaryKey, id);
+  try {
+    const stored = JSON.parse(
+      withoutRecording(() => fs.readFileSync(file, 'utf-8')),
+    );
+    if (
+      stored?.format === FORMAT &&
+      stored.summary === true &&
+      stored.key === entry &&
+      Object.hasOwn(stored, 'value') &&
+      Array.isArray(stored.stamps) &&
+      stored.stamps.every(
+        (/** @type {[string, string]} */ [at, stamp]) =>
+          typeof at === 'string' && fileStamp(at) === stamp,
+      )
+    ) {
+      try {
+        const now = new Date();
+        withoutRecording(() => fs.utimesSync(file, now, now));
+      } catch {
+        // An entry that cannot be touched is evicted sooner; nothing more.
+      }
+      return stored.value;
+    }
+  } catch {
+    // No usable entry: made below.
+  }
+  const {value, stamps} = make();
+  if (settled(stamps)) {
+    withoutRecording(() => {
+      try {
+        const text = JSON.stringify({
+          format: FORMAT,
+          summary: true,
+          key: entry,
+          stamps,
+          value,
+        });
+        if (!isDeepStrictEqual(JSON.parse(text).value, value)) return;
+        const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
+        fs.writeFileSync(temp, text, {mode: 0o600, flag: 'wx'});
+        fs.renameSync(temp, file);
+        evict(dir);
+      } catch {
+        // A summary that cannot be stored is made again next time.
+      }
+    });
+  }
   return value;
 }
 

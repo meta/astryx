@@ -13,6 +13,7 @@ import postcss from 'postcss';
 import {
   collectUnloadedFonts,
   discoverDoctorThemes,
+  themeIdentifier,
   discoverDoctorUnmigratedCopies,
   corePeerRange,
   findDoctorCoreDir,
@@ -32,15 +33,15 @@ import {
   resolveRecordedTheme,
   resolveThemeModule,
   SOURCE_EXTENSIONS,
+  doctorStylesheetImportFile,
+  fileMark,
+  generatedSourceCommand,
   isPrivateVarRefusal,
   missingThemePackage,
   packageInstallCommand,
   themeBuild,
   themeRecordOwner,
   validateThemePrivateInputs,
-  GENERATED_MARKER,
-  APP_COPY_MARK,
-  EDITOR_GENERATED_MARK,
 } from './_adapter.mjs';
 import {
   getCliInvocation,
@@ -117,7 +118,15 @@ function refreshThemeCommand(projectDir, run, available, slug, owner) {
   }
   const source = theme
     ? relative(projectDir, path.join(theme.sourceDir, theme.entry))
-    : projectPath(path.join(owner, slug, `${slug}Theme.ts`));
+    : projectPath(path.join(owner, slug, `${themeIdentifier(slug)}Theme.ts`));
+  // A source another command generates (its leading comment carries that
+  // command's mark), or a missing one that command writes: the fix is that
+  // command, which writes the source and its outputs together.
+  const by = generatedSourceCommand(path.resolve(projectDir, source));
+  if (by)
+    return /^astryx\s/.test(by)
+      ? `${run} ${by.replace(/^astryx\s+/, '')}; ${run} theme add ${slug}`
+      : `Rebuild ${projectPath(path.dirname(source))}/ with ${by}, then run ${run} theme add ${slug}`;
   return `${run} theme build ${source}; ${run} theme add ${slug}`;
 }
 
@@ -225,12 +234,7 @@ function sourceImportEvidence(root, generatedModule) {
  * @param {string} source
  */
 function generatedThemeFile(source) {
-  const leading =
-    /^\s*(?:\/\*[\s\S]*?\*\/|(?:\/\/[^\n]*(?:\n|$)\s*)+)/.exec(source)?.[0] ??
-    '';
-  return [GENERATED_MARKER, EDITOR_GENERATED_MARK, APP_COPY_MARK].some(m =>
-    leading.includes(m),
-  );
+  return fileMark(source) != null;
 }
 
 /**
@@ -447,19 +451,61 @@ function namedThemeFonts(files) {
   return new Set(names.values());
 }
 
-/** @param {string} css */
-function fontStylesheetEvidence(css) {
+/**
+ * The families a font stylesheet loads with `@font-face`, following its
+ * local `@import`s (a relative file, or a package's stylesheet such as
+ * `@fontsource/inter/index.css`); `external` when it imports a URL
+ * (http, https, `//`), whose families doctor cannot read.
+ * @param {string} css
+ * @param {string} [file] the stylesheet's path, to resolve local imports
+ * @param {Set<string>} [seen]
+ */
+function fontStylesheetEvidence(css, file, seen = new Set()) {
   const loaded = new Set();
   let external = false;
+  let unread = false;
   const root = postcss.parse(css);
   root.walkAtRules(atRule => {
-    if (atRule.name.toLowerCase() === 'import') external = true;
+    if (atRule.name.toLowerCase() === 'import') {
+      const spec = [...doctorStylesheetImports(`@import ${atRule.params};`)][0];
+      if (!spec || /^(?:https?:)?\/\//i.test(spec)) {
+        external = true;
+        return;
+      }
+      const target = file ? doctorStylesheetImportFile(spec, file) : null;
+      if (!target) {
+        // A local import doctor cannot follow may load the font: it
+        // cannot prove it either way.
+        unread = true;
+        return;
+      }
+      if (seen.has(target)) return;
+      if (seen.size > 20) {
+        // Past the limit doctor follows, the rest is not proven either way.
+        unread = true;
+        return;
+      }
+      seen.add(target);
+      try {
+        const inner = fontStylesheetEvidence(
+          readTextFile(target),
+          target,
+          seen,
+        );
+        for (const name of inner.loaded) loaded.add(name);
+        external ||= inner.external;
+        unread ||= inner.unread;
+      } catch {
+        unread = true;
+      }
+      return;
+    }
     if (atRule.name.toLowerCase() !== 'font-face') return;
     atRule.walkDecls(/^font-family$/iu, declaration => {
       loaded.add(normalizeFontName(declaration.value).toLowerCase());
     });
   });
-  return {loaded, external};
+  return {loaded, external, unread};
 }
 
 /** @param {import('postcss').Rule} rule @param {string} slug */
@@ -1074,14 +1120,48 @@ export async function checkAppThemes(cwd) {
       label: 'Theme owners and built imports',
       status: 'fail',
       message: discoveryError.message,
-      fix: `${run} theme add <slug>`,
+      // The added theme the broken folder holds, by its name.
+      fix: (() => {
+        const named = ownerEntries.find(([slug]) =>
+          new RegExp(
+            `(^|[\\s/"'(])${slug.replace(/[-]/g, '\\-')}([\\s/"').,:]|$)`,
+          ).test(discoveryError.message),
+        )?.[0];
+        if (!named)
+          return 'Fix or move what the message names, then run doctor again.';
+        // A theme another command generates: that command writes it again
+        // (its fix is no `theme build`).
+        const owner = String(state.themes[named]);
+        const fix = isLocalThemeOwner(owner)
+          ? refreshThemeCommand(state.projectDir, run, [], named, owner)
+          : null;
+        return fix && !fix.includes(' theme build ')
+          ? fix
+          : `Fix or move what the message names, then run ${run} theme add ${named}`;
+      })(),
     });
   } else if (resolutionProblems.length > 0) {
     checks.push({
       id: 'theme-owners',
       label: 'Theme owners and built imports',
       status: 'fail',
-      message: resolutionProblems.map(problem => problem.message).join(' '),
+      message: resolutionProblems
+        .map(problem =>
+          // A theme another command generates is not rebuilt with `theme
+          // build`: its fix names that command, so its message does not.
+          refreshThemeCommand(
+            state.projectDir,
+            run,
+            available,
+            problem.slug,
+            problem.owner,
+          ).includes(' theme build ')
+            ? problem.message
+            : problem.message
+                .replace(/\s*Run `[^`]*theme build[^`]*` and try again\./, '')
+                .replace(/\s*Rebuild it with `[^`]*theme build[^`]*`\.?/, ''),
+        )
+        .join(' '),
       fix: resolutionProblems
         .map(problem =>
           refreshThemeCommand(
@@ -1239,8 +1319,14 @@ export async function checkAppThemes(cwd) {
         );
         if (!availableTheme) continue;
         try {
+          const sourceFile = path.join(
+            availableTheme.sourceDir,
+            availableTheme.entry,
+          );
+          // Every added local theme is compared, a copy another command
+          // generates included; only its fix names that command.
           const receipt = await themeBuild(
-            path.join(availableTheme.sourceDir, availableTheme.entry),
+            sourceFile,
             {check: true},
             {cwd: state.projectDir, projectCore: true},
           );
@@ -1477,6 +1563,8 @@ export async function checkAppThemes(cwd) {
 
   const fontFailures = [];
   const externalFontWarnings = [];
+  /** Families behind a local font import doctor could not follow. */
+  const unreadFontWarnings = [];
   const missingFontWarnings = [];
   let generatedImports = null;
   try {
@@ -1517,6 +1605,7 @@ export async function checkAppThemes(cwd) {
     try {
       const evidence = fontStylesheetEvidence(
         readTextFile(theme.fontStylesheetFile),
+        theme.fontStylesheetFile,
       );
       const missing = [...names].filter(
         name => !evidence.loaded.has(name.toLowerCase()),
@@ -1524,6 +1613,8 @@ export async function checkAppThemes(cwd) {
       if (missing.length === 0) continue;
       if (evidence.external) {
         externalFontWarnings.push(`${theme.slug}: ${missing.join(', ')}`);
+      } else if (evidence.unread) {
+        unreadFontWarnings.push(`${theme.slug}: ${missing.join(', ')}`);
       } else {
         fontFailures.push({theme, message: missing.join(', ')});
       }
@@ -1560,6 +1651,11 @@ export async function checkAppThemes(cwd) {
         'Load the named package fonts in app HTML, or install a package version that exports <slug>.fonts.css (or fonts.css for a single-theme package).',
       );
     }
+  }
+  if (unreadFontWarnings.length > 0) {
+    fontWarningMessages.push(
+      `Font imports doctor could not follow prevent proof for ${unreadFontWarnings.join('; ')}.`,
+    );
   }
   if (externalFontWarnings.length > 0) {
     fontWarningMessages.push(

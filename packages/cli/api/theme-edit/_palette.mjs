@@ -156,7 +156,11 @@ function sweepTemps(dir) {
       }
       continue;
     }
-    const m = /^\..+\.astryx-(\d+)-[a-z0-9]+\.tmp$/.exec(n);
+    // A picture taken under its own name (`.<picture>.part-<pid>.png`) by a
+    // run stopped while the browser ran.
+    const m =
+      /^\..+\.astryx-(\d+)-[a-z0-9]+\.tmp$/.exec(n) ??
+      /^\.[\w-]+\.part-(\d+)\.png$/.exec(n);
     if (!m) continue;
     const p = path.join(dir, n);
     try {
@@ -203,12 +207,14 @@ export function removeEmptyFolder(dir, opts = {}) {
 
 /**
  * Whether a file name is one of the editor's own temp files: a whole-file
- * write's `.<name>.astryx-<pid>-<random>.tmp`, or a build's
- * `.<name>.tmp-<id>`. A command stopped part way can leave one behind.
+ * write's `.<name>.astryx-<pid>-<random>.tmp`, a build's `.<name>.tmp-<id>`,
+ * or a picture's `.<picture>.part-<pid>.png`. A command stopped part way can
+ * leave one behind.
  * @param {string} name
  */
 export const isEditorTemp = name =>
-  /^\..+\.(astryx-\d+-[a-z0-9]+\.tmp|tmp-[\w-]+)$/.test(name);
+  /^\..+\.(astryx-\d+-[a-z0-9]+\.tmp|tmp-[\w-]+)$/.test(name) ||
+  /^\.[\w-]+\.part-\d+\.png$/.test(name);
 
 /**
  * A temp file beside `file` for a whole write, named so only the editor
