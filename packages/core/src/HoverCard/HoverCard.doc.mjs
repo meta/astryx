@@ -141,6 +141,20 @@ export const docs = {
             'Whether the hover card should be shown on mount. Still dismissible.',
         },
         {
+          name: 'offset',
+          type: 'SpacingStep',
+          description:
+            'Distance between the trigger and the card, on the spacing scale.',
+          default: '1',
+        },
+        {
+          name: 'padding',
+          type: 'SpacingStep',
+          description:
+            'Inner padding of the card, on the spacing scale. Matches the padding prop on Popover, Card and Stack.',
+          default: '3',
+        },
+        {
           name: 'isOpen',
           type: 'boolean',
           description:
@@ -351,6 +365,19 @@ export const docsZh = {
           description: '是否在挂载时显示悬浮卡片。仍然可以关闭。',
         },
         {
+          name: 'offset',
+          type: 'SpacingStep',
+          description: '触发元素与卡片之间的距离，使用间距刻度。',
+          default: '1',
+        },
+        {
+          name: 'padding',
+          type: 'SpacingStep',
+          description:
+            '卡片的内边距，使用间距刻度。与 Popover、Card 和 Stack 的 padding 属性一致。',
+          default: '3',
+        },
+        {
           name: 'isOpen',
           type: 'boolean',
           description:
@@ -510,6 +537,9 @@ export const docsDense = {
         hasHoverIndication:
           'Dashed underline on a text trigger. auto = text children (strings/numbers, holes ignored); no effect on element triggers.',
         isDefaultOpen: 'Show hover card on mount. Still dismissible.',
+        offset:
+          'Trigger-to-card distance on the spacing scale. Default 1 (4px).',
+        padding: 'Card inner padding on the spacing scale. Default 3.',
         isOpen:
           'Controlled open state. true holds open; false holds closed against hover and focus. Escape calls onOpenChange(false) without closing; setting false returns focus inside the card to the trigger.',
         xstyle: 'StyleX styles for the card surface (hover-card target).',

@@ -27,6 +27,7 @@ import {isRenderable} from '../utils/isRenderable';
 import {observeMutations} from '../utils/sharedMutationObserver';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
+import type {SpacingStep} from '../utils/types';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {
   useHoverCard,
@@ -178,6 +179,19 @@ export interface HoverCardProps extends Pick<
    * The hover card is still dismissible — this just opens it initially.
    */
   isDefaultOpen?: boolean;
+
+  /**
+   * Distance between the trigger and the card, on the spacing scale.
+   * @default 1
+   */
+  offset?: SpacingStep;
+
+  /**
+   * Inner padding of the card, on the spacing scale. Matches the `padding`
+   * prop on `Popover`, `Card` and `Stack`.
+   * @default 3
+   */
+  padding?: SpacingStep;
 }
 
 /**
@@ -236,6 +250,8 @@ export function HoverCard({
   hasHoverIndication = 'auto',
   isOpen,
   isDefaultOpen,
+  offset,
+  padding,
   xstyle,
   className,
   style,
@@ -267,6 +283,8 @@ export function HoverCard({
     label,
     isOpen,
     isDefaultOpen,
+    offset,
+    padding,
     onShow: handleShow,
     onHide: handleHide,
   });
