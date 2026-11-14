@@ -3,7 +3,7 @@
 /**
  * @file blog-photo-spacing.spec.ts
  * @input Production meetup recap with adjacent body photographs.
- * @output Real-browser proof that adjacent photos have a token-sized gap.
+ * @output Real-browser proof of separate photo/photo and photo/text gaps.
  * @position Docsite integration regression; media dimensions stay unchanged.
  */
 
@@ -36,6 +36,36 @@ for (const width of [390, 1280]) {
     for (const gap of gaps) {
       expect(gap).toBeGreaterThanOrEqual(16);
       expect(gap).toBeLessThanOrEqual(32);
+    }
+
+    const textGaps = await photos
+      .first()
+      .locator('..')
+      .evaluate(root => {
+        return Array.from(root.children).flatMap(element => {
+          const previous = element.previousElementSibling;
+          const isParagraph = element.classList.contains(
+            'astryx-markdown-paragraph',
+          );
+          const previousIsParagraph = previous?.classList.contains(
+            'astryx-markdown-paragraph',
+          );
+          const isBoundary =
+            (element.tagName === 'IMG' && previousIsParagraph) ||
+            (isParagraph && previous?.tagName === 'IMG');
+          if (!isBoundary || !previous) {
+            return [];
+          }
+          return [
+            element.getBoundingClientRect().top -
+              previous.getBoundingClientRect().bottom,
+          ];
+        });
+      });
+    expect(textGaps).toHaveLength(8);
+    for (const gap of textGaps) {
+      expect(gap).toBeGreaterThanOrEqual(31);
+      expect(gap).toBeLessThanOrEqual(33);
     }
   });
 }

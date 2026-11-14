@@ -13,3 +13,9 @@
 .body img + img {
   margin-block-start: var(--spacing-6);
 }
+
+/* Keep a blank line between prose and an adjacent photograph in either order. */
+.body .astryx-markdown-paragraph + img,
+.body img + .astryx-markdown-paragraph {
+  margin-block-start: var(--spacing-8);
+}
