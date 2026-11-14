@@ -56,7 +56,9 @@ export function parseHtml(html) {
       /** @type {ElementNode} */
       const node = {tag, attrs, children: []};
       top.children.push(node);
-      if (tag === 'script' || tag === 'style' || tag === 'textarea' || tag === 'title') {
+      // A raw-text element holds everything up to its end tag; a self-closing
+      // one (an SVG `<title />`) holds nothing.
+      if ((tag === 'script' || tag === 'style' || tag === 'textarea' || tag === 'title') && !m[4]) {
         const end = html.toLowerCase().indexOf(`</${tag}`, re.lastIndex);
         const stop = end < 0 ? html.length : end;
         node.children.push({text: html.slice(re.lastIndex, stop)});

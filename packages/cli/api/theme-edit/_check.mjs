@@ -102,7 +102,11 @@ import {
   cssFamily,
   familySpaces,
 } from './_settings.mjs';
+import {isColorToken} from './_compiler.mjs';
 import {
+  trimInsideQuotes,
+  colorPair,
+  otherSettingLabel,
   familiesOf,
   familyPieces,
   normalValueText,
@@ -357,6 +361,8 @@ function valueMeant(type, value) {
     .replace(/\s*!\s*important\s*$/i, '')
     .replace(/;+\s*$/, '')
     .trim();
+  // Copy debris around it (a trailing comma, a stray quote or bracket).
+  p = withoutDebris(p).trim();
   const q = /^(["'])(.*)\1$/.exec(p);
   if (q && type !== 'font') p = q[2].trim();
   const out = [p];
@@ -670,7 +676,11 @@ export function storedProblems(ctx, slug, data, skip = '') {
   // it.
   for (const s of data.settings) {
     if (replaced(s) || typeof s.value !== 'string') continue;
-    const clean = normalValueText(s.value);
+    // Read as typed input is (a font family's quotes trimmed too), so the
+    // line offered is the value set would save.
+    const clean = /font/i.test(s.thing)
+      ? trimInsideQuotes(normalValueText(s.value))
+      : normalValueText(s.value);
     if (clean !== s.value) {
       // Name what is wrong: invisible spaces, or quotes around the value
       // CSS does not read (a curly quote inside a quoted string is fine,
@@ -1472,7 +1482,58 @@ export function checkSetting(
   // Any other dial's value pasted with its property name (`font-size:
   // 18px;` for text-size, `color: #e11d48` for accent) is the value: one
   // path for every dial (the font dial reads its own below).
+  // A light and a dark color typed as one value: a token takes both as
+  // light-dark() or one --mode at a time; a color dial takes one color and
+  // makes both modes from it. Never one of them for both.
+  if (
+    !unset &&
+    typeof value === 'string' &&
+    (PALETTE_DIALS.includes(thing) || isColorToken(thing))
+  ) {
+    const pair = colorPair(value);
+    if (pair && !colorProblem(pair.light) && !colorProblem(pair.dark)) {
+      const q = quoteCommandArgument;
+      const on = flags.on ? ` --on ${flags.on}` : '';
+      refuse(
+        E.ERR_THEME_BAD_VALUE,
+        PALETTE_DIALS.includes(thing)
+          ? `"${value}" is a light and a dark color; ${thing} takes one color and makes both modes from it.`
+          : `"${value}" is a light and a dark color; ${thing} takes them as light-dark(), or one --mode at a time.`,
+        {
+          run: PALETTE_DIALS.includes(thing)
+            ? [
+                `${P} set ${slug} ${thing} ${q(pair.light)}${on}`,
+                ...(thing === 'accent'
+                  ? [
+                      `${P} set ${slug} --color-accent ${q(`light-dark(${pair.light}, ${pair.dark})`)}${on}`,
+                    ]
+                  : []),
+              ]
+            : [
+                `${P} set ${slug} ${thing} ${q(`light-dark(${pair.light}, ${pair.dark})`)}${on}`,
+                `${P} set ${slug} ${thing} ${q(pair.light)}${on} --mode light`,
+                `${P} set ${slug} ${thing} ${q(pair.dark)}${on} --mode dark`,
+              ],
+        },
+      );
+    }
+  }
   if (!unset && typeof value === 'string' && DIALS[thing] && thing !== 'font') {
+    // A value labeled with another setting's name is that setting's, never
+    // this dial's (`accent 'neutral: #64748b'`).
+    const other = otherSettingLabel(thing, value);
+    if (other)
+      refuse(
+        E.ERR_THEME_BAD_VALUE,
+        `"${value}" is labeled ${other.thing}, another setting than ${thing}; nothing is set from it.`,
+        {
+          didYouMean: [other.thing],
+          run: [
+            `${P} set ${slug} ${other.thing} ${quoteCommandArgument(other.value)}${flags.on ? ` --on ${flags.on}` : ''}`,
+            `${P} set ${slug} ${thing} ${quoteCommandArgument(other.value)}${flags.on ? ` --on ${flags.on}` : ''}`,
+          ],
+        },
+      );
     const d = pastedDeclaration(value);
     if (d?.value) value = d.value;
   }
@@ -1697,7 +1758,19 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       .trim()
       .toLowerCase();
     if (mode !== 'light' && mode !== 'dark') {
-      const near = nearest(mode, ['light', 'dark']);
+      // A word for one of the two (night, day) is that one; never the
+      // nearest spelling, which can be the other (night → light).
+      const meant = {
+        night: 'dark',
+        nighttime: 'dark',
+        dim: 'dark',
+        black: 'dark',
+        day: 'light',
+        daytime: 'light',
+        bright: 'light',
+        white: 'light',
+      }[mode];
+      const near = meant ? [meant] : nearest(mode, ['light', 'dark']);
       refuse(
         E.ERR_THEME_BAD_VALUE,
         `--mode takes light or dark, not "${flags.mode}".`,
@@ -2809,12 +2882,23 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       if (!step && canApply && (!/^\d{1,3}$/.test(v) || Number(v) > 100)) {
         // The value meant: a step in other letters (MORE), or the number
         // read as CSS reads it (70%, 7e1), kept in range.
-        const word = v.trim().toLowerCase();
-        const n = cssNumber(v);
+        // Quotes around it (`"50"`) are not part of it.
+        const bare = v
+          .trim()
+          .replace(/^(["'])(.*)\1$/, '$2')
+          .trim();
+        const word = bare.toLowerCase();
+        const n = cssNumber(bare);
+        // A fraction of one (0.5) is that share of the scale (50), as a
+        // number with no unit from 0 to 1 is read.
+        const scaled =
+          n && n.unit === '' && n.value > 0 && n.value < 1
+            ? n.value * 100
+            : n?.value;
         const near = ['more', 'less'].includes(word)
           ? word
-          : n && (n.unit === '' || n.unit === '%')
-            ? String(Math.max(0, Math.min(100, Math.round(n.value))))
+          : n && (n.unit === '' || n.unit === '%') && scaled != null
+            ? String(Math.max(0, Math.min(100, Math.round(scaled))))
             : null;
         refuse(
           E.ERR_THEME_BAD_VALUE,
@@ -3615,13 +3699,41 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       // A color mixed into the value (a border's) can go per mode on its
       // own; a value with none (a radius) is just set for both modes.
       const hasColor = /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i.test(v);
-      const alt = !hasColor
-        ? null
-        : prop === 'border' || prop.startsWith('border-')
-          ? 'border-color'
-          : prop === 'background'
-            ? 'background-color'
-            : null;
+      // A gradient's colors sit in its image, above any background-color:
+      // no color step can make them differ per mode.
+      const alt =
+        !hasColor || /gradient\(/i.test(v)
+          ? null
+          : prop === 'border' || prop.startsWith('border-')
+            ? 'border-color'
+            : prop === 'background'
+              ? 'background-color'
+              : null;
+      // On a part whose variants each have their own color, the color per
+      // mode is set for one variant at a time (as that refusal says): the
+      // step names the default one, or the first.
+      let altWhen = '';
+      if (alt && !s.when) {
+        const g = C.groupOfProp(alt);
+        const variants = [
+          ...new Set(
+            partsOf(ctx, s).flatMap(t =>
+              (g ? C.partReads(t, g) : [])
+                .filter(r => r.props.includes(alt))
+                .flatMap(r => r.when)
+                .map(w => /^variant=([\w-]+)$/.exec(w)?.[1])
+                .filter(Boolean),
+            ),
+          ),
+        ];
+        const plain = partsOf(ctx, s).some(t =>
+          (g ? C.partReads(t, g) : []).some(
+            r => r.props.includes(alt) && r.when.includes(''),
+          ),
+        );
+        if (variants.length && !plain)
+          altWhen = ` --when variant:${variants.includes('default') ? 'default' : variants[0]}`;
+      }
       refuse(
         E.ERR_THEME_NO_MODE,
         `--mode works on plain colors; ${prop} ${prop === 'box-shadow' || prop === 'border' ? 'mixes a color with sizes' : 'is not a color'}, so it cannot differ between light and dark.`,
@@ -3629,7 +3741,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           run: alt
             ? [
                 `${P} set ${slug} ${prop} ${quoteCommandArgument(v.replace(/#[0-9a-f]{3,8}|rgba?\([^)]*\)/i, 'currentcolor'))} --on ${s.on}${whenFlag}   # the shape, both modes`,
-                `${P} set ${slug} ${alt} ${quoteCommandArgument(/#[0-9a-f]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\)/i.exec(v)?.[0] ?? '#1f2937')} --on ${s.on}${whenFlag} --mode ${s.mode}   # then the color per mode`,
+                `${P} set ${slug} ${alt} ${quoteCommandArgument(/#[0-9a-f]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\)/i.exec(v)?.[0] ?? '#1f2937')} --on ${s.on}${altWhen}${whenFlag} --mode ${s.mode}   # then the color per mode${altWhen ? ', for each variant' : ''}`,
               ]
             : [
                 `${P} set ${slug} ${prop} ${quoteCommandArgument(v)} --on ${s.on}${whenFlag}   # both modes`,
