@@ -167,26 +167,29 @@ function buildIgnores(manifest) {
 /**
  * Core built at `ref` as its `build:esm` script builds it there, with that
  * ref's Babel config, into `sideDir/dist`, with its package.json beside the
- * output so bundlers read its `sideEffects`. Both sides use the same layout
- * under their own `sideDir`, so unchanged code bundles to the same bytes. A
- * directory is taken as a built dist, such as Core's own `dist/`.
+ * output so bundlers read its `sideEffects`. A directory is taken as a built
+ * dist, such as Core's own `dist/`, and copied into the same place. Both sides
+ * use the same layout under their own `sideDir`, so unchanged code bundles to
+ * the same bytes.
  * Returns the dist directory.
  */
 export function buildCore(ref, sideDir) {
-  if (ref !== '.' && fs.existsSync(ref) && fs.statSync(ref).isDirectory()) {
-    // Bundlers read `sideEffects` from the nearest package.json: beside the
-    // output here, or the package's own one above Core's `dist/`.
-    const dist = fs.realpathSync(ref);
-    if (
-      !fs.existsSync(path.join(dist, 'package.json')) &&
-      !fs.existsSync(path.join(dist, '..', 'package.json'))
-    ) {
-      throw new Error(`${ref} has no package.json beside or above it.`);
-    }
-    return dist;
-  }
   const coreDir = path.join(sideDir, CORE);
   const distDir = path.join(sideDir, 'dist');
+  if (ref !== '.' && fs.existsSync(ref) && fs.statSync(ref).isDirectory()) {
+    // A built dist joins the same layout. Its package.json, beside it or the
+    // package's own above Core's `dist/`, goes beside the copy.
+    const manifest = [
+      path.join(ref, 'package.json'),
+      path.join(ref, '..', 'package.json'),
+    ].find(file => fs.existsSync(file));
+    if (manifest === undefined) {
+      throw new Error(`${ref} has no package.json beside or above it.`);
+    }
+    fs.cpSync(ref, distDir, {recursive: true});
+    fs.copyFileSync(manifest, path.join(distDir, 'package.json'));
+    return distDir;
+  }
   exportSource(ref, sideDir);
   // Babel resolves the config's presets and plugins from the config's folder.
   fs.symlinkSync(
