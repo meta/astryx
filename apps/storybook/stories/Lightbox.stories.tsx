@@ -217,6 +217,44 @@ export const GalleryWithCaptions: Story = {
 };
 
 /**
+ * A long caption that ends in a block image wider than the caption's width
+ * beside the toggle. Widening the window must keep the caption's text lines.
+ */
+export const CaptionEndingInWideImage: Story = {
+  args: {
+    media: [
+      {
+        ...GALLERY_MEDIA[0],
+        caption: (
+          <>
+            A winding path through the forest, past the old mill and down to the
+            river, where the trail turns back toward the village. In autumn the
+            beeches along it turn copper, and on a clear morning you can see the
+            church spire from the bridge.
+            <img
+              alt=""
+              width={400}
+              height={16}
+              src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='16'%3E%3Crect width='400' height='16' fill='gray'/%3E%3C/svg%3E"
+            />
+          </>
+        ),
+      },
+      {...GALLERY_MEDIA[1], caption: 'Morning fog'},
+    ],
+  },
+  render: ({media}) => {
+    const [isOpen, setIsOpen] = useState(false);
+    return (
+      <>
+        <button onClick={() => setIsOpen(true)}>Open wide-image caption</button>
+        <Lightbox isOpen={isOpen} onOpenChange={setIsOpen} media={media} />
+      </>
+    );
+  },
+};
+
+/**
  * A controlled gallery whose parent keeps its index, paging only with its own
  * buttons, say while a change is confirmed. A swipe returns to the photo the
  * parent shows.

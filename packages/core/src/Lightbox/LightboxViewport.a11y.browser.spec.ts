@@ -793,3 +793,103 @@ for (const width of [360, 390]) {
     expect(facts.besideEnd, detail).toBeLessThanOrEqual(facts.toggleLeft + 0.5);
   });
 }
+
+/**
+ * Opens "Caption ending in wide image" at `width`, then opens its full
+ * caption. The caption ends in a block image that does not fit beside the
+ * toggle's place.
+ */
+async function openWideImageCaption(
+  page: Page,
+  width: number,
+): Promise<Locator> {
+  await page.setViewportSize({width, height: 874});
+  await page.route(/picsum\.photos/, async route =>
+    route.fulfill({contentType: 'image/svg+xml', body: PHOTO_SVG}),
+  );
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-lightbox--caption-ending-in-wide-image&viewMode=story`,
+  );
+  await page.getByRole('button', {name: 'Open wide-image caption'}).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', {name: 'more'}).click();
+  await expect(dialog.getByRole('button', {name: 'less'})).toBeVisible();
+  return dialog;
+}
+
+/** The open caption's height, its last block's bottom and its toggle's box. */
+async function readWideImageCaption(dialog: Locator) {
+  return dialog.evaluate(element => {
+    const caption = element.querySelector(
+      '[data-current] [data-lightbox-caption]',
+    ) as HTMLElement;
+    const text = caption.querySelector('.astryx-text') as HTMLElement;
+    const image = caption.querySelector('img') as HTMLElement;
+    const toggle = caption.querySelector('button') as HTMLElement;
+    const line = parseFloat(getComputedStyle(text).lineHeight);
+    const textBox = text.getBoundingClientRect();
+    return {
+      lines: Math.round(textBox.height / line),
+      imageBottom: image.getBoundingClientRect().bottom,
+      toggleTop: toggle.getBoundingClientRect().top,
+      toggleBottom: toggle.getBoundingClientRect().bottom,
+      textBottom: textBox.bottom,
+    };
+  });
+}
+
+test.describe('an open caption that ends in a block image wider than the room beside "less"', () => {
+  test.use({hasTouch: true, isMobile: true});
+
+  test('it keeps its lines when the window widens, as a fresh open does', async ({
+    browser,
+  }) => {
+    for (const [from, to] of [
+      [360, 362],
+      [360, 364],
+      [360, 420],
+    ]) {
+      const fresh = await (
+        await browser.newContext({
+          viewport: {width: to, height: 874},
+          hasTouch: true,
+          isMobile: true,
+        })
+      ).newPage();
+      const freshFacts = await readWideImageCaption(
+        await openWideImageCaption(fresh, to),
+      );
+      await fresh.context().close();
+
+      const context = await browser.newContext({
+        viewport: {width: from, height: 874},
+        hasTouch: true,
+        isMobile: true,
+      });
+      const page = await context.newPage();
+      const dialog = await openWideImageCaption(page, from);
+      const before = await readWideImageCaption(dialog);
+      await page.setViewportSize({width: to, height: 874});
+      // The caption's count settles in the frame after the resize, and it
+      // holds there. A count that kept growing would show in later frames.
+      for (let frame = 0; frame < 10; frame++) {
+        await page.evaluate(
+          async () => new Promise(resolve => requestAnimationFrame(resolve)),
+        );
+        const facts = await readWideImageCaption(dialog);
+        const detail = `${from} to ${to}px, frame ${frame}`;
+        expect(facts.lines, detail).toBeLessThanOrEqual(before.lines);
+        expect(facts.lines, detail).toBe(freshFacts.lines);
+      }
+      await context.close();
+    }
+  });
+
+  test('"less" takes the line below the image', async ({page}) => {
+    const dialog = await openWideImageCaption(page, 362);
+    const facts = await readWideImageCaption(dialog);
+    expect(facts.toggleTop).toBeGreaterThanOrEqual(facts.imageBottom - 0.5);
+    expect(facts.toggleBottom).toBeLessThanOrEqual(facts.textBottom + 0.5);
+  });
+});
