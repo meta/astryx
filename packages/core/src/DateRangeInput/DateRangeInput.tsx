@@ -917,9 +917,9 @@ export function DateRangeInput({
                       // Focusable while disabled (AR3, spec:AST-085 FR1).
                       aria-disabled={isPresetDisabled || undefined}
                       aria-describedby={
-                        showsDisabledMessage
-                          ? disabledMessageTooltip.describedBy
-                          : undefined
+                        (showsDisabledMessage &&
+                          disabledMessageTooltip.describedBy) ||
+                        undefined
                       }
                       onClick={() => {
                         if (!isPresetDisabled) {

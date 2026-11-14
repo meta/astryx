@@ -329,6 +329,33 @@ describe('the tooltip loads after first paint (architecture:component-import-bou
     expect(layerOf()).not.toBeNull();
     warn.mockRestore();
   });
+
+  it('after a failed load, a hover or focus on a mounted trigger asks for the load again at once (INV6)', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    loads.failures = 1;
+    render(<Harness />);
+    await paintAndLoad();
+    expect(loads.surface).toBe(1);
+    expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
+
+    fireEvent.pointerEnter(trigger(), {pointerType: 'mouse'});
+    await act(async () => {
+      await pendingTooltipLoad();
+    });
+    expect(loads.surface).toBe(2);
+    expect(layerOf()).not.toBeNull();
+    warn.mockRestore();
+  });
+
+  it('the load waits for a trigger to attach: a tooltip whose trigger never attaches starts none', async () => {
+    function Detached() {
+      const tooltip = useTooltip();
+      return <>{tooltip.renderTooltip(TIP)}</>;
+    }
+    render(<Detached />);
+    await paintAndLoad();
+    expect(loads.surface).toBe(0);
+  });
 });
 
 describe('the description reference and the load (architecture:component-import-boundaries INV3)', () => {

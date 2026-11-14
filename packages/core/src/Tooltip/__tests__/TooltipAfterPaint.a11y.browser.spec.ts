@@ -1,19 +1,21 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y scope ^(packages/core/src/Tooltip/|packages/core/src/Layer/useLayer)
+// @pr-a11y scope core/Tooltip
 
 /**
- * @file TooltipAfterPaint.a11y.chromium.spec.ts
+ * @file TooltipAfterPaint.a11y.browser.spec.ts
  * @input The `Core/Tooltip` Default story in a built Storybook, in Chromium
+ *   and WebKit
  * @output Real-browser proof of component:Tooltip FR2 and FR14: the trigger
  *   carries no `aria-describedby` before the tooltip's layer loads, the
- *   reference never names a missing element, and after the load the
- *   accessibility tree describes the trigger by the tooltip text, with no
- *   input
+ *   reference never names a missing element, axe passes before and after the
+ *   load, and after it Chromium's accessibility tree describes the trigger by
+ *   the tooltip text, with no input
  * @position Run with `pnpm test:a11y-contract`. The load waits for a real
  *   paint and idle period, which only a real engine produces.
  */
 
-import {expect, test} from '@astryxdesign/a11y-spec/playwright';
+import AxeBuilder from '@axe-core/playwright';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -34,6 +36,17 @@ test.afterAll(async () => {
 
 const STORY = 'core-tooltip--default';
 
+async function axeViolations(page: Page): Promise<string[]> {
+  // A story is a page fragment with no landmarks or heading.
+  const results = await new AxeBuilder({page})
+    .disableRules(['landmark-one-main', 'page-has-heading-one', 'region'])
+    .analyze();
+  return results.violations.map(
+    violation =>
+      `${violation.id}: ${violation.nodes.map(node => node.target.join(' ')).join(', ')}`,
+  );
+}
+
 interface ReferenceRecord {
   readonly hasReference: boolean;
   readonly dangling: boolean;
@@ -41,6 +54,7 @@ interface ReferenceRecord {
 
 test('the trigger names its tooltip only once the tooltip layer exists, and the accessibility tree reads the description', async ({
   page,
+  browserName,
 }) => {
   // Records every state of the trigger's reference from the first parse on.
   await page.addInitScript(() => {
@@ -69,6 +83,9 @@ test('the trigger names its tooltip only once the tooltip layer exists, and the 
   await page.goto(`${storybook.origin}/iframe.html?id=${STORY}&viewMode=story`);
   const trigger = page.getByRole('button', {name: 'Hover me'});
   await expect(trigger).toBeVisible();
+  // Whatever the load's progress, the page passes axe: before the load the
+  // trigger names nothing.
+  expect(await axeViolations(page)).toEqual([]);
 
   // No input: the load lands on its own after first paint.
   await expect(trigger).toHaveAttribute('aria-describedby', /\S/, {
@@ -88,7 +105,13 @@ test('the trigger names its tooltip only once the tooltip layer exists, and the 
   const text = (await tooltip.textContent())?.trim() ?? '';
   expect(text).not.toBe('');
 
-  // Chromium's accessibility tree: the trigger's computed description.
+  expect(await axeViolations(page)).toEqual([]);
+
+  // Chromium's accessibility tree: the trigger's computed description. WebKit
+  // has no protocol for it; axe and the reference checks above cover it.
+  if (browserName !== 'chromium') {
+    return;
+  }
   const cdp = await page.context().newCDPSession(page);
   const {root} = (await cdp.send('DOM.getDocument', {depth: 0})) as unknown as {
     root: {nodeId: number};

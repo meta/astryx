@@ -19,7 +19,6 @@
 
 import {
   use,
-  useEffect,
   useState,
   useSyncExternalStore,
   type ReactNode,
@@ -227,6 +226,7 @@ const surfaceModule = createModuleLoader(
 
 let loadedSurface: TooltipSurfaceComponent | null = null;
 let isScheduled = false;
+let hasFailed = false;
 let pendingLoad: Promise<void> | null = null;
 const listeners = new Set<() => void>();
 
@@ -256,9 +256,10 @@ async function loadSurface(): Promise<void> {
   try {
     publish((await surfaceModule.load()).TooltipSurface);
   } catch (error: unknown) {
-    // The triggers keep working without tooltips. The next tooltip that
-    // mounts schedules the load again.
+    // The triggers keep working without tooltips. A later intent on a
+    // trigger, or the next trigger that mounts, asks for the load again.
     isScheduled = false;
+    hasFailed = true;
     warnOnce(
       'tooltip-load',
       'Tooltip',
@@ -279,13 +280,12 @@ function startLoad(): void {
  * first paint, when the main thread is idle, and no later than LOAD_CAP_MS
  * after that paint. No input starts or hurries the load.
  */
-function scheduleTooltipLoad(): void {
-  if (isScheduled || loadedSurface != null || typeof window === 'undefined') {
+function scheduleTooltipLoad(view: Window | null): void {
+  if (isScheduled || loadedSurface != null || view == null) {
     return;
   }
   isScheduled = true;
-  // The timers belong to this window, so they end with its document.
-  const view = window;
+  // The timers belong to the trigger's window, so they end with its document.
   // A frame callback runs before the frame paints. The task it queues runs
   // after that paint.
   view.requestAnimationFrame(() => {
@@ -400,13 +400,19 @@ function createTooltipBridge(
     if (event.pointerType !== 'touch') {
       hoverStartedAt = performance.now();
     }
+    retryFailedLoad();
   };
 
   const setPosition = (element: HTMLElement | null) => {
     detachPosition?.();
     detachPosition = null;
     positionElement = element;
-    if (element != null && surface != null) {
+    if (element == null) {
+      return;
+    }
+    if (surface == null) {
+      scheduleTooltipLoad(element.ownerDocument.defaultView);
+    } else {
       detachPosition = attach(surface.positionRef, element);
     }
   };
@@ -414,13 +420,16 @@ function createTooltipBridge(
     detachInteraction?.();
     detachInteraction = null;
     interactionElement?.removeEventListener('pointerenter', noteEntry);
+    interactionElement?.removeEventListener('focusin', retryFailedLoad);
     interactionElement = element;
     hoverStartedAt = undefined;
     if (element == null) {
       return;
     }
     if (surface == null) {
+      scheduleTooltipLoad(element.ownerDocument.defaultView);
       element.addEventListener('pointerenter', noteEntry);
+      element.addEventListener('focusin', retryFailedLoad);
     } else {
       detachInteraction = attach(surface.interactionRef, element);
     }
@@ -542,7 +551,7 @@ function createTooltipBridge(
  * @example
  * ```
  * const tooltip = useTooltip({ placement: 'above' });
- * <Button ref={tooltip.ref} aria-describedby={tooltip.describedBy}>
+ * <Button ref={tooltip.ref} aria-describedby={tooltip.describedBy || undefined}>
  *   Hover me
  * </Button>
  * {tooltip.renderTooltip('Helpful tooltip text')}
@@ -556,10 +565,6 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   // Set only by a Core component that mounts the tooltip on interaction.
   const heldInterestRef = use(TooltipPresentInterestContext);
   const Surface = useSyncExternalStore(subscribe, getSurface, getServerSurface);
-  // Syncs the page's one load of the tooltip surface with the first tooltip
-  // that mounts.
-  useEffect(scheduleTooltipLoad, []);
-
   const renderTooltip = (
     children: ReactNode,
     props?: Omit<ContextRenderProps, 'positioning'>,
@@ -586,6 +591,19 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   };
 }
 
+/**
+ * After a failed load, an intent on a trigger asks for the load again at
+ * once.
+ */
+function retryFailedLoad(): void {
+  if (!hasFailed || pendingLoad != null) {
+    return;
+  }
+  hasFailed = false;
+  isScheduled = true;
+  startLoad();
+}
+
 /** Test only: loads the tooltip surface now and makes every tooltip see it. */
 export async function __loadTooltipForTest(): Promise<void> {
   publish((await surfaceModule.load()).TooltipSurface);
@@ -595,10 +613,4 @@ export async function __loadTooltipForTest(): Promise<void> {
 /** Test only: the load in flight, or null when none has started. */
 export function __pendingTooltipLoadForTest(): Promise<void> | null {
   return pendingLoad;
-}
-
-/** Test only: forgets the loaded surface and any scheduled load. */
-export function __resetTooltipForTest(): void {
-  isScheduled = false;
-  publish(null);
 }

@@ -122,14 +122,16 @@ one pending load per module, caches a success, and resets after a failure.
 - **INV3 — The trigger contract is complete before load.** The trigger's
   role, accessible name, and tab stop, and the ARIA its own record gives its
   closed state, are in server and hydrating markup and do not change when the
-  module loads. That ARIA differs per trigger: `component:Timestamp` AR3
+  module loads, except for a description reference that arrives with its
+  surface, as the last sentences of this rule allow. That ARIA differs per trigger: `component:Timestamp` AR3
   gives its `time` no `aria-haspopup` or `aria-expanded` and sets
   `aria-controls` only while the card is open, as
   `component:DropdownMenuSubMenu` FR1 does for its surface. Every ARIA
   reference names an element in the document. A
   description a surface supplies (a tooltip on an icon-only button) is in the
   base markup as hidden text before load, or the trigger carries no reference
-  to it. Focus stays where it is across the load, and the load remounts no
+  to it until the surface exists; the reference then arrives in the same task
+  as the element it names (`component:Tooltip` FR2). Focus stays where it is across the load, and the load remounts no
   content (`architecture:layer-runtime`, layer content boundary;
   `component:Timestamp` FR6).
 - **INV4 — An intent made before load is honored once.** The latest intent
@@ -142,7 +144,10 @@ one pending load per module, caches a success, and resets after a failure.
   arms the surface's dismissal as the same intent does on a loaded surface.
   For a `Tooltip` or `HoverCard` surface, a hover made while it loads shows
   the surface once the load has landed and the hover delay has passed, if the
-  pointer is still on the trigger; otherwise the next hover shows it.
+  pointer is still on the trigger; otherwise the next hover shows it. Keyboard
+  focus still on the trigger shows it when the load lands. A tap on a
+  `Tooltip` trigger before load is not held: the next tap shows the tooltip
+  (`component:Tooltip` FR14).
 - **INV5 — The load moves nothing.** Loading changes no box in the page: the
   trigger's size, position, and content are the same before and after. No
   closed surface paints during the load. The surface paints in the top layer
@@ -204,18 +209,17 @@ one pending load per module, caches a success, and resets after a failure.
 
 ### Allowlist
 
-| Crossing (base module → module it imports statically)             | Entries that reach it                          | Cost, gzip             | Invariant  | Row leaves when                                                          |
-| ----------------------------------------------------------------- | ---------------------------------------------- | ---------------------- | ---------- | ------------------------------------------------------------------------ |
-| `Text/TruncationTooltip` → `Layer/useTouchTrigger`                | Text, Heading, Button, IconButton, Link, Table | 4.6 KB (Text, Heading) | INV1, INV8 | the truncation tooltip's eager code carries no touch tap recognizer      |
-| `Table/tableContextMenu` → `ContextMenu`                          | Table                                          | 78.2 KB                | INV1       | cells without actions reach no menu module                               |
-| `Table/BaseTable` → `Table/plugins/virtualization/useTableWindow` | Table                                          | 3.0 KB                 | INV7       | a Table that never windows reaches neither the controller nor its engine |
+| Crossing (base module → module it imports statically)             | Entries that reach it                          | Cost, gzip                                                                | Invariant  | Row leaves when                                                          |
+| ----------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------- | ---------- | ------------------------------------------------------------------------ |
+| `Text/TruncationTooltip` → `Layer/useTouchTrigger`                | Text, Heading, Button, IconButton, Link, Table | 5.1 KB (Text, Heading); 4.2 KB (Button, IconButton, Link); 0.9 KB (Table) | INV1, INV8 | the truncation tooltip's eager code carries no touch tap recognizer      |
+| `Table/tableContextMenu` → `ContextMenu`                          | Table                                          | 78.2 KB                                                                   | INV1       | cells without actions reach no menu module                               |
+| `Table/BaseTable` → `Table/plugins/virtualization/useTableWindow` | Table                                          | 3.0 KB                                                                    | INV7       | a Table that never windows reaches neither the controller nor its engine |
 
 Costs are the check's own printout in CI: each crossing's removal from the
 entry with every other crossing kept, in the entry build above. A local run
 on another platform or Node version can print gzip sizes a few tenths of a KB
-apart. Rows share modules, so they do not add up. The truncation tooltip's touch code costs Button,
-IconButton, Link, and Table nothing on its own, because another of their
-crossings brings the same module. Table carries 123.5 KB eager.
+apart. Rows share modules, so they do not add up. Table carries 132.7 KB
+eager.
 
 ## Current-state impact
 
