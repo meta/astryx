@@ -51,7 +51,9 @@
  * @property {string} [description]
  * @property {string} [displayName]
  * @property {string[]} [templates] Template ids, when it adds any.
- * @property {string[]} [docs] Doc topic names, when it adds any.
+ * @property {string[]} [docs] What `astryx docs` opens each doc it adds by,
+ *   when it adds any: a topic's name, the name of a topic it adds sections
+ *   to, or the route of a guide it places, replaces, or extends.
  * @property {string[]} [themes] Theme slugs, when it adds any.
  * @property {string[]} [codemods] `<version>/<id>`, when it adds any.
  * @property {string[]} [agentDocs] Agent guidance, when a source lists any.
