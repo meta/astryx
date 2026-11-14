@@ -64,7 +64,7 @@
  * to move through three steps.
  */
 
-import {useId, useState} from 'react';
+import {useId, useRef, useState} from 'react';
 import {Banner} from '@astryxdesign/core/Banner';
 import {Button} from '@astryxdesign/core/Button';
 import {Center} from '@astryxdesign/core/Center';
@@ -241,6 +241,16 @@ export default function FormWizardDialogPage() {
     },
   ];
 
+  // The fields a blocked Continue can focus, named as in `errorsByStep`.
+  // CheckboxList and MultiSelector expose no focus handle, so `sections` and
+  // `recipients` are absent here: a blocked Continue falls through to the
+  // next problem rather than stalling.
+  const fieldRefs = {
+    name: useRef<HTMLInputElement>(null),
+    time: useRef<HTMLInputElement>(null),
+    startDate: useRef<HTMLInputElement>(null),
+  };
+
   const shownErrors = (index: number) =>
     attempted.has(index) ? errorsByStep[index] : {};
   const currentErrors = shownErrors(step);
@@ -255,6 +265,18 @@ export default function FormWizardDialogPage() {
 
   const goNext = () => {
     setAttempted(prev => new Set(prev).add(step));
+    // `errorsByStep` records each step's problems in the order the fields
+    // appear, so the first entry with a focus handle is the first thing in
+    // the dialog to fix. Focusing it makes the error it renders its
+    // accessible description, so the answer to a blocked Continue arrives
+    // where the fix has to happen.
+    const target = Object.keys(errorsByStep[step])
+      .map(key => fieldRefs[key as keyof typeof fieldRefs]?.current)
+      .find(Boolean);
+    if (target) {
+      target.focus();
+      return;
+    }
     if (Object.keys(errorsByStep[step]).length !== 0) {
       return;
     }
@@ -349,6 +371,7 @@ export default function FormWizardDialogPage() {
                   // for a legend explaining what the badges mean.
                   <FormLayout defaultOptionality="optional">
                     <TextInput
+                      ref={fieldRefs.name}
                       label="Report name"
                       isRequired
                       value={name}
@@ -431,6 +454,7 @@ export default function FormWizardDialogPage() {
                       direction="horizontal"
                       defaultOptionality="optional">
                       <TimeInput
+                        ref={fieldRefs.time}
                         label="Send at"
                         isRequired
                         value={time}
@@ -449,6 +473,7 @@ export default function FormWizardDialogPage() {
                       />
                     </FormLayout>
                     <DateInput
+                      ref={fieldRefs.startDate}
                       label="First run"
                       isRequired
                       value={startDate}

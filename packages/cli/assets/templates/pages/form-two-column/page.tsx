@@ -2,7 +2,7 @@
 
 'use client';
 
-import {useState, type CSSProperties} from 'react';
+import {useRef, useState, type CSSProperties} from 'react';
 import {VStack, HStack} from '@astryxdesign/core/Layout';
 import {Center} from '@astryxdesign/core/Center';
 import {Section} from '@astryxdesign/core/Section';
@@ -18,8 +18,7 @@ import {Divider} from '@astryxdesign/core/Divider';
 import {Card} from '@astryxdesign/core/Card';
 import {Selector} from '@astryxdesign/core/Selector';
 
-const ILLUSTRATION_URL =
-  '/template-assets/light-working-vertical-2.png';
+const ILLUSTRATION_URL = '/template-assets/light-working-vertical-2.png';
 
 const INQUIRY_REASONS = [
   'New business',
@@ -80,15 +79,33 @@ export default function FormTwoColumnPage() {
   const [details, setDetails] = useState('');
   const [submitted, setSubmitted] = useState(false);
 
-  const errors = submitted
-    ? {
-        fullName: !fullName.trim() ? 'Required' : undefined,
-        email: !email.trim() ? 'Required' : undefined,
-        details: !details.trim() ? 'Required' : undefined,
-      }
-    : {};
+  // Each field's problem, in the order the fields appear. The form shows
+  // them once the form has been sent.
+  const fieldErrors = {
+    fullName: !fullName.trim() ? 'Required' : undefined,
+    email: !email.trim() ? 'Required' : undefined,
+    details: !details.trim() ? 'Required' : undefined,
+  };
+  const errors: Partial<typeof fieldErrors> = submitted ? fieldErrors : {};
 
-  const handleSubmit = () => setSubmitted(true);
+  // A blocked submit focuses the first field to fix.
+  const fieldRefs = {
+    fullName: useRef<HTMLInputElement>(null),
+    email: useRef<HTMLInputElement>(null),
+    details: useRef<HTMLTextAreaElement>(null),
+  };
+
+  const handleSubmit = () => {
+    setSubmitted(true);
+    // Focusing the field scrolls it into view and makes the error it renders
+    // its accessible description, so the answer to a blocked submit arrives
+    // where the fix has to happen.
+    const target = Object.entries(fieldErrors)
+      .filter(([, error]) => error != null)
+      .map(([key]) => fieldRefs[key as keyof typeof fieldRefs].current)
+      .find(Boolean);
+    target?.focus();
+  };
 
   return (
     <Center style={pageStyle}>
@@ -119,6 +136,7 @@ export default function FormTwoColumnPage() {
               <VStack gap={4}>
                 <Text type="label">Your details</Text>
                 <TextInput
+                  ref={fieldRefs.fullName}
                   label="Full name"
                   isLabelHidden
                   placeholder="Full name*"
@@ -132,6 +150,7 @@ export default function FormTwoColumnPage() {
                 />
                 <Grid columns={{minWidth: 180}} gap={3}>
                   <TextInput
+                    ref={fieldRefs.email}
                     label="Email"
                     isLabelHidden
                     placeholder="Email*"
@@ -193,6 +212,7 @@ export default function FormTwoColumnPage() {
                   placeholder="Select a budget range..."
                 />
                 <TextArea
+                  ref={fieldRefs.details}
                   label="Project details"
                   isLabelHidden
                   placeholder="Project details*"
