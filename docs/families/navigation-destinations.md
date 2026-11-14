@@ -39,6 +39,7 @@ members:
     component:ListItem,
     component:Markdown,
     component:NavHeadingMenuItem,
+    component:Pagination,
     component:SideNavHeading,
     component:SideNavItem,
     component:Tab,
@@ -91,7 +92,7 @@ control.
 - **Current members:** Avatar; BreadcrumbItem; Button link mode; Citation;
   ClickableCard; DropdownMenuItem link rows (and the data-mode item they render,
   in the pointer menu and the touch sheet); Item; Link; ListItem; Markdown
-  links; NavHeadingMenuItem;
+  links; NavHeadingMenuItem; Pagination page links;
   SideNavHeading and SideNavItem; navigation-mode Tab; Token link mode;
   TopNavHeading, TopNavItem, TopNavMenu, TopNavMegaMenuItem, and
   TopNavMegaMenuFeaturedCard; and TreeListItem.
