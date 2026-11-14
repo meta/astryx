@@ -657,10 +657,11 @@ function lookupBlocks(d) {
  * unknown options so a design token (`--color-accent`) can be the thing
  * they name; a `--` word anywhere else is a mistyped option.
  * @param {string} command the subcommand, for the suggestion
+ * @param {import('@astryxdesign/cli/authoring').CommandDoc} doc the command's doc, which lists its options
  * @param {Array<string | undefined>} rest the operands after the thing
  * @returns {ReturnType<typeof cliError> | null}
  */
-function strayOption(command, rest) {
+function strayOption(command, doc, rest) {
   // A scope flag given twice would keep only the last one without a word.
   for (const flag of ['on', 'when', 'state', 'mode']) {
     const all = flagValues(flag);
@@ -687,18 +688,68 @@ function strayOption(command, rest) {
       !/^--[a-z0-9-]+\s*:\s*\S/i.test(w),
   );
   if (word == null) return null;
-  return cliError(
-    `unknown option '${word}': ${command} takes no such option, and a design token (such as --color-accent) is the thing a change names, before its value.`,
-    {
-      suggestions: [
-        {
-          name: cmd(`${EDITOR} ${command} --help`),
-          reason: 'every option it takes',
-        },
-      ],
-      code: ERROR_CODES.ERR_INVALID_OPTION,
-    },
-  );
+  return strayRefusal(command, doc, `${EDITOR} ${command}`, {
+    option: word,
+    note: 'a design token (such as --color-accent) is the thing a change names, before its value',
+  });
+}
+
+/**
+ * What a theme command answers for an option it does not take, or for
+ * words past what it takes: the one stray reader every editor and preview
+ * command uses. It names the options the command takes; it offers the same
+ * command without the stray words only when that is safe to run
+ * (`safeLine`: show reads and changes nothing; a preview remove without its
+ * option would remove the whole preview), and always the command's help.
+ * @param {string} command the command's words after the group (`set`, `preview remove`)
+ * @param {import('@astryxdesign/cli/authoring').CommandDoc} doc the command's doc, which lists its options
+ * @param {string} head the command line's start, as the project runs it
+ * @param {{option?: string, extra?: string[], note?: string}} stray an option it does not take, or words past what it takes, and a sentence about them
+ * @param {string | null} [safeLine] the command without them, when it is safe to run
+ * @returns {{message: string, suggestions: Array<{name: string, reason: string}>, code: string}}
+ */
+function strayAnswer(command, doc, head, stray, safeLine = null) {
+  const takes = [
+    ...(doc.options ?? []).flatMap(o =>
+      String(o.flag)
+        .split(/[\s,]+/)
+        .filter(w => w.startsWith('--')),
+    ),
+    '--json',
+  ].filter((w, i, all) => all.indexOf(w) === i);
+  const list =
+    takes.length > 1
+      ? `${takes.slice(0, -1).join(', ')} and ${takes.at(-1)}`
+      : takes.join('');
+  const message = stray.option
+    ? `unknown option '${stray.option}': ${command} takes ${list}${stray.note ? `; ${stray.note}` : ''}.`
+    : `${command} does not take "${(stray.extra ?? []).join(' ')}"${stray.note ? `; ${stray.note}` : ''}.`;
+  return {
+    message,
+    suggestions: [
+      ...(safeLine ? [{name: cmd(safeLine), reason: 'do this instead'}] : []),
+      {
+        name: cmd(`${head} --help`),
+        reason: stray.option ? 'every option it takes' : 'what it takes',
+      },
+    ],
+    code: stray.option
+      ? ERROR_CODES.ERR_INVALID_OPTION
+      : ERROR_CODES.ERR_INVALID_ARGUMENT,
+  };
+}
+
+/**
+ * {@link strayAnswer} as the refusal the command prints.
+ * @param {string} command
+ * @param {import('@astryxdesign/cli/authoring').CommandDoc} doc
+ * @param {string} head
+ * @param {{option?: string, extra?: string[], note?: string}} stray
+ * @param {string | null} [safeLine]
+ */
+function strayRefusal(command, doc, head, stray, safeLine = null) {
+  const a = strayAnswer(command, doc, head, stray, safeLine);
+  return cliError(a.message, {suggestions: a.suggestions, code: a.code});
 }
 
 /**
@@ -839,19 +890,23 @@ function unknownThemeOption(c) {
         !rest.slice(0, i).includes('--') &&
         ![...takes, '--json', '--help', '-h'].includes(w.split('=')[0]),
     );
-  // A folder name that starts with "-" reads as an option: it goes after --.
-  if (sub === 'app' && stray && /^-[^-]/.test(stray) && stray.length > 2)
-    return {
-      message: `unknown option '${stray}'. A folder name that starts with "-" goes after --.`,
-      suggestions: [
-        {name: cmd(`${head} -- ${stray}`), reason: 'do this instead'},
-        help,
-      ],
-    };
-  return {
-    message: `unknown option '${stray ?? ''}': preview ${sub} takes ${takes.length ? takes.join(', ') : 'no options'}.`,
-    suggestions: [help],
-  };
+  // A folder name that starts with "-" reads as an option: it goes after
+  // --, and that line is the safe one.
+  const folder =
+    sub === 'app' && stray && /^-[^-]/.test(stray) && stray.length > 2;
+  const a = strayAnswer(
+    `preview ${sub}`,
+    doc,
+    head,
+    {
+      option: stray ?? '',
+      ...(folder
+        ? {note: 'a folder name that starts with "-" goes after --'}
+        : {}),
+    },
+    folder ? `${head} -- ${stray}` : null,
+  );
+  return {message: a.message, suggestions: a.suggestions};
 }
 
 /**
@@ -914,33 +969,25 @@ function showStray(name, rest, o) {
   // An option the one reader names never comes here (readOptions reads
   // it first): this one is none show takes, so the show it offers leaves it
   // out and names no guess.
-  const line = `${EDITOR} show ${name}${o.section ? ` --section ${o.section}` : ''}${o.png ? ' --png' : ''}`;
-  return cliError(
-    `unknown option '${stray}': show takes --png, --section and --json.`,
-    {
-      suggestions: [
-        {name: cmd(line), reason: 'do this instead'},
-        {name: cmd(`${EDITOR} show --help`), reason: 'every option it takes'},
-      ],
-      code: ERROR_CODES.ERR_INVALID_OPTION,
-    },
+  return strayRefusal(
+    'show',
+    showDoc,
+    `${EDITOR} show`,
+    {option: stray},
+    `${EDITOR} show ${name}${o.section ? ` --section ${o.section}` : ''}${o.png ? ' --png' : ''}`,
   );
 }
 
 /**
  * A refusal for words after what a command takes, which would otherwise be
- * dropped without a word; null when there are none.
+ * dropped without a word (the one stray reader); null when there are none.
  * @param {string} command
+ * @param {import('@astryxdesign/cli/authoring').CommandDoc} doc
  * @param {string[]} extra
  */
-function extraWords(command, extra) {
+function extraWords(command, doc, extra) {
   if (!extra.length) return null;
-  return cliError(`${command} does not take "${extra.join(' ')}".`, {
-    suggestions: [
-      {name: cmd(`${EDITOR} ${command} --help`), reason: 'what it takes'},
-    ],
-    code: ERROR_CODES.ERR_INVALID_ARGUMENT,
-  });
+  return strayRefusal(command, doc, `${EDITOR} ${command}`, {extra});
 }
 
 /**
@@ -1319,7 +1366,7 @@ export function registerExperimentalTheme(group, program) {
           /^--[a-z0-9-]+$/i.test(value[0]) &&
           !thing.startsWith('-')
             ? null
-            : strayOption('set', value)) ??
+            : strayOption('set', setDoc, value)) ??
           run(
             program,
             () => themeEditSet(name, thing, value.join(' '), changeOptions(o)),
@@ -1341,7 +1388,7 @@ export function registerExperimentalTheme(group, program) {
       ) =>
         readOptions('show', showDoc) ??
         showStray(name, (c?.args ?? []).slice(1), o) ??
-        extraWords('show', (c?.args ?? []).slice(1)) ??
+        extraWords('show', showDoc, (c?.args ?? []).slice(1)) ??
         // The sheet is limited to one section (the docs say so): a second
         // --section is refused, never kept over the first in silence.
         (new Set(flagValues('section')).size > 1
@@ -1390,8 +1437,8 @@ export function registerExperimentalTheme(group, program) {
       ) =>
         (async () =>
           (await readOptionsChecked('undo', undoDoc)) ??
-          strayOption('undo', [which, ...(c?.args ?? []).slice(3)]) ??
-          extraWords('undo', (c?.args ?? []).slice(3)) ??
+          strayOption('undo', undoDoc, [which, ...(c?.args ?? []).slice(3)]) ??
+          extraWords('undo', undoDoc, (c?.args ?? []).slice(3)) ??
           run(
             program,
             () =>
@@ -1650,7 +1697,7 @@ export function registerExperimentalTheme(group, program) {
         const stray = picture
           ? null
           : (readOptions(howDoc.name.split(' ').pop() ?? 'how', howDoc) ??
-            strayOption('how', rest.slice(1)));
+            strayOption('how', howDoc, rest.slice(1)));
         if (stray) return stray;
         return run(
           program,

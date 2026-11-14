@@ -2484,6 +2484,24 @@ export function settableStates(ctx, slug, data, part) {
 }
 
 /**
+ * The colors a part's color prop may show when none is given: its default
+ * as its doc gives it; with none (Text's depends on its type), each value
+ * of the prop whose text token the part's own color reads, in the order
+ * the prop lists them. Empty with no color prop.
+ * @param {{type?: string, default?: string | null} | undefined} prop
+ * @param {Record<string, unknown> | undefined} reads the tokens the part's color reads (its part data)
+ * @returns {string[]}
+ */
+function colorPropDefaults(prop, reads) {
+  if (!prop) return [];
+  const own = /^'([\w-]+)'$/.exec(String(prop.default ?? '').trim())?.[1];
+  if (own) return [own];
+  return [...String(prop.type ?? '').matchAll(/'([\w-]+)'/g)]
+    .map(m => m[1])
+    .filter(v => Object.hasOwn(reads ?? {}, `--color-text-${v}`));
+}
+
+/**
  * Check one setting and give it back ready to store, or refuse. What it
  * accepts, the settings loader takes too: the loader's own check runs last,
  * so a saved setting never blocks the theme.
@@ -5604,27 +5622,27 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
           v && isColorValue(v) && isFixedColor(v) && !/\bvar\(/i.test(v)
             ? v
             : (nearestColorName(v) ?? '#1f2937');
-        // The token the part's color prop reads: the one named, else the
-        // prop's own default (a link's accent), set on the part alone.
-        const defaultColor = /^'([\w-]+)'$/.exec(
-          partComponentDocs(ctx, /** @type {string} */ (s.on)).find(
-            d => d.doc.props?.color?.default,
-          )?.doc.props.color.default ?? '',
-        )?.[1];
-        const colorName = named ?? defaultColor ?? 'primary';
+        // The tokens the part's color prop reads: the one named, else the
+        // prop's default as its doc gives it (a link's accent), else each
+        // color whose token the part reads (Text's depends on its type),
+        // set on the part alone.
+        const colors = named
+          ? [named]
+          : colorPropDefaults(
+              partComponentDocs(ctx, /** @type {string} */ (s.on))
+                .map(d => d.doc.props?.color)
+                .find(Boolean),
+              ctx.C.MAP[/** @type {string} */ (s.on)]?.own?.color?.tokens,
+            );
         const tail = `${s.on ? ` --on ${s.on}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}`;
         refuse(
           E.ERR_THEME_NO_EFFECT,
-          `${s.on} takes its color from the color prop, which Core sets after part styles, so a color set on ${s.on} never shows. Set the token its color prop reads (${colorName}: --color-text-${colorName}) on ${s.on} instead.`,
+          `${s.on} takes its color from the color prop, which Core sets after part styles, so a color set on ${s.on} never shows. Set the token its color prop reads (${colors.map(c => `${c}: --color-text-${c}`).join('; ')}) on ${s.on} instead.`,
           {
-            run: [
-              `${P} set ${slug} --color-text-${colorName} ${quoteCommandArgument(color)}${tail}`,
-              ...(named || defaultColor || colorName === 'secondary'
-                ? []
-                : [
-                    `${P} set ${slug} --color-text-secondary ${quoteCommandArgument(color)}${tail}`,
-                  ]),
-            ],
+            run: colors.map(
+              c =>
+                `${P} set ${slug} --color-text-${c} ${quoteCommandArgument(color)}${tail}`,
+            ),
           },
         );
       }
