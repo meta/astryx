@@ -1317,6 +1317,11 @@ release. It becomes a blocking gate only when a weekly run is clean, or every
 failure has an owner and a fix in progress, and the chief of staff and release
 owner confirm it.
 
+Amended 2026-11-14 by the chief of staff with CI & Release and the release
+owner: on a shared-surface hit, release WebKit also selects the interaction
+specs of components that import the changed shared module (reverse import
+graph), and runs the full suite when that set exceeds 50% of WebKit specs.
+
 ### DEC-25 — A shared primitive's change runs its dependents' audits
 
 **Reference:** `spec:AST-030/DEC-25`
