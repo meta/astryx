@@ -1587,9 +1587,8 @@ function PointerDateTimeField({
 
         if (e.key === 'ArrowDown' && e.altKey) {
           e.preventDefault();
-          // A keyboard open is never mid-click, so clear the deferral flag. A
-          // press that ended without a click would otherwise leave it set and
-          // hold every later open hostage to the next click anywhere.
+          // A keyboard open is never mid-click. Clear a flag a press without a
+          // click can leave so the list shows at once.
           timePointerActiveRef.current = false;
           showTimeOptions();
           return;
