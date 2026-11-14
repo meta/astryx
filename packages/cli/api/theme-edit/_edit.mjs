@@ -91,8 +91,7 @@ import {
   PHONE_TYPE,
   refreshSourceStamp,
   sourceChangedReason,
-  builtPairs,
-  ownPairMessage,
+  setOwnTokenCheck,
   freeThemeName,
   refuseLinks,
   usableNewName,
@@ -1405,19 +1404,21 @@ async function ownTokenProblems(ctx, slug, data) {
   };
   /** The file an entry is in, as the project names it; null for the theme file. @param {{file?: string}} e */
   const fileOf = e => (e.file ? path.relative(cwd, e.file) : null);
+  /** @param {{line: number | null, file?: string}} e */
+  const atOf = e => ({line: e.line, file: fileOf(e)});
   // Every value is judged as a build made now writes it (an import, an
   // expression, a spread or a computed key is its evaluated value). The
-  // source is read only to name the file and line that hold each value,
-  // and for the two facts a build erases: a `tokens` key given twice
-  // (JavaScript keeps the last) and a [light, dark] pair with other than
-  // two values (the build drops the rest).
+  // source is read to name the file and line that hold each value, and for
+  // what a build erases or refuses outright: a `tokens` key given twice
+  // (JavaScript keeps the last), a [light, dark] pair with other than two
+  // values (the build drops the rest), a private variable (the build
+  // refuses it), and a key that is no token name.
   const entries = ownTokenEntries(cwd, slug).filter(e => !e.overridden);
-  const built = await evaluatedTheme(ctx, slug);
   const tokensLine = entries.find(e => e.kind === 'unresolved')?.line ?? null;
   /** Where the build's value for a token comes from. @param {string} token */
   const whereOf = token => {
     const e = entries.find(x => x.token === token);
-    return e ? {line: e.line, file: fileOf(e)} : {line: tokensLine, file: null};
+    return e ? atOf(e) : {line: tokensLine, file: null};
   };
   for (const e of entries) {
     if (e.kind === 'duplicate')
@@ -1425,8 +1426,22 @@ async function ownTokenProblems(ctx, slug, data) {
         token: 'tokens',
         value: '',
         why: `defineTheme is given tokens twice (lines ${(e.lines ?? []).join(' and ')}); the build keeps only the last, so the first does nothing: merge them into one`,
-        line: e.line,
-        file: fileOf(e),
+        ...atOf(e),
+      });
+    else if (e.notToken) {
+      const key = e.key.replace(/^(["'`])(.*)\1$/, '$2');
+      out.push({
+        token: key,
+        value: '',
+        why: `${key} is no token: a token name starts with -- (such as --color-accent), and the build writes any other key as a CSS declaration on the theme's root, which styles every element; for one part, set it as a property on that part (\`${P} set ${slug} ${key} <value> --on <part>\`)`,
+        ...atOf(e),
+      });
+    } else if (e.token?.startsWith('--_'))
+      out.push({
+        token: e.token,
+        value: '',
+        why: `${e.token} is a private variable (--_*), which Core sets itself, so the build refuses a theme that sets one: remove it`,
+        ...atOf(e),
       });
     else if (
       e.kind === 'pair' &&
@@ -1439,68 +1454,51 @@ async function ownTokenProblems(ctx, slug, data) {
         token: e.token,
         value: `[${halves.map(h => (h === undefined ? '…' : JSON.stringify(h))).join(', ')}]`,
         why: `a [light, dark] pair holds exactly two values in quotes, and this holds ${halves.length}; the build would write ${halves.length < 2 ? 'light-dark() with an undefined half' : 'the first two and drop the rest'}`,
-        line: e.line,
-        file: fileOf(e),
+        ...atOf(e),
       });
     }
   }
+  // A private variable stops the build itself: nothing more to judge.
+  if (out.some(b => b.token.startsWith('--_'))) return out;
+  const built = await evaluatedTheme(ctx, slug, data.like ?? null);
   if (!built) return out;
   const named = new Set(out.map(b => b.token));
-  // A family or size the typography builds is judged with the typography.
+  // Typography: each token the build writes from it is judged like any
+  // other, and named by the typography field that gives it.
   const typo = entries.filter(e => e.kind === 'typography');
-  const roles = new Set(typo.map(e => e.key.split('.')[0]));
-  /** @param {string} token */
-  const byTypography = token => {
-    const role = /^--font-family-([a-z]+)$/.exec(token)?.[1];
-    if (role)
-      return roles.has(role) || (role === 'heading' && roles.has('body'));
-    return roles.has('scale') && /^--(font-size|text)-/.test(token);
+  /** @param {string} role */
+  const roleEntry = role =>
+    typo.find(e => e.key.startsWith(`${role}.`)) ??
+    (role === 'heading'
+      ? typo.find(e => e.key.startsWith('body.'))
+      : undefined);
+  /**
+   * The typography field that gives a token the build writes, or null when
+   * the token is no typography token or the source sets no typography.
+   * @param {string} token
+   */
+  const typographyOf = token => {
+    if (!typo.length) return null;
+    const family = /^--font-family-([a-z]+)$/.exec(token)?.[1];
+    if (family) return roleEntry(family) ?? null;
+    if (!/^--(font-size|text|heading)-/.test(token)) return null;
+    if (/-weight$/.test(token))
+      return (
+        roleEntry(
+          /heading/.test(token)
+            ? 'heading'
+            : /code/.test(token)
+              ? 'code'
+              : 'body',
+        ) ??
+        typo.find(e => /weight/.test(e.key)) ??
+        typo[0]
+      );
+    return typo.find(e => e.key.startsWith('scale.')) ?? typo[0];
   };
-  for (const token of built.own.keys()) {
-    if (!(token in known) || named.has(token) || byTypography(token)) continue;
-    const shape = built.shapes.get(token) ?? {kind: 'other'};
-    const at = whereOf(token);
-    if (
-      shape.kind === 'number' ||
-      shape.kind === 'object' ||
-      shape.kind === 'pair'
-    ) {
-      const bad =
-        shape.kind === 'object'
-          ? /** @type {[string, unknown, 'object']} */ ([
-              token,
-              shape.value,
-              'object',
-            ])
-          : /** @type {[string, unknown]} */ ([
-              token,
-              shape.kind === 'pair' ? shape.halves : shape.value,
-            ]);
-      // A pair of two text values is the light-dark() the build writes,
-      // judged below; any other pair, a number or an object is no text.
-      if (!(
-        shape.kind === 'pair' &&
-        (shape.halves ?? []).every(h => typeof h === 'string')
-      )) {
-        out.push({
-          token,
-          value: '',
-          why: nonTextMessage(ctx, slug, bad),
-          ...at,
-        });
-        continue;
-      }
-    }
-    const value = built.own.get(token);
-    if (value == null) continue;
-    // A pair on a token that is not a color is the pair refusal's.
-    if (/^light-dark\(/i.test(value) && !isColorToken(token)) continue;
-    const why = refused(token, value);
-    if (why) out.push({token, value, why, ...at});
-  }
-  // Typography as the build was given it (each field the source sets, by
-  // its evaluated value), then the families and sizes the build writes.
-  /** @type {Set<string>} */
+  // The fields the typography is given, as the build was given them
+  // (evaluated): what Core reads them as, with the working form.
+  /** @type {Set<any>} */
   const flagged = new Set();
   for (const e of typo) {
     const value = e.key
@@ -1511,47 +1509,100 @@ async function ownTokenProblems(ctx, slug, data) {
       );
     const why = typographyProblem(e.key, value);
     if (why) {
-      flagged.add(e.key.split('.')[0]);
+      flagged.add(e);
       out.push({
         token: `typography.${e.key}`,
         value: value == null ? '' : String(value),
         why,
-        line: e.line,
-        file: fileOf(e),
+        ...atOf(e),
       });
     }
   }
-  for (const role of ['body', 'heading', 'code']) {
-    const at = typo.find(e => e.key.startsWith(`${role}.`));
-    if (!at || flagged.has(role)) continue;
-    const token = `--font-family-${role}`;
-    const v = built.tops.get(token);
-    const why = v == null ? null : refused(token, v);
-    if (why && v != null)
-      out.push({
-        token: `typography.${role} (builds ${token})`,
-        value: v,
-        why,
-        line: at.line,
-        file: fileOf(at),
-      });
+  const scale = built.typography?.scale;
+  const scaleEntry = typo.find(e => e.key.startsWith('scale.'));
+  if (
+    scaleEntry &&
+    scale &&
+    scale.base === undefined &&
+    !flagged.has(scaleEntry)
+  ) {
+    flagged.add(scaleEntry);
+    out.push({
+      token: 'typography.scale',
+      value: '',
+      why: 'the type scale is given no base, and Core reads the sizes from the base and the ratio together: add the body size in pixels, such as scale: {base: 16, ratio: …}',
+      ...atOf(scaleEntry),
+    });
   }
-  const scale = typo.find(e => e.key.startsWith('scale.'));
-  if (scale && !flagged.has('scale')) {
-    const broken = [...built.tops].find(
-      ([k, v]) =>
-        /^--font-size-/.test(k) && /NaN|Infinity|^-/.test(String(v ?? '')),
-    );
-    if (broken)
+  for (const [token, value] of built.tops) {
+    if (!(token in known) || named.has(token)) continue;
+    const shape = built.shapes.get(token) ?? {kind: 'other'};
+    if (
+      value == null &&
+      shape.kind !== 'number' &&
+      shape.kind !== 'object' &&
+      shape.kind !== 'pair'
+    )
+      continue;
+    const owner = typographyOf(token);
+    const own = built.own.has(token);
+    if (!own && !owner) continue;
+    // A typography token the build leaves as the base theme writes it is
+    // the base theme's.
+    if (owner && !own && built.base.get(token) === value) continue;
+    // One problem per typography field: the first token it builds wrong.
+    if (owner && flagged.has(owner)) continue;
+    const at = owner ? atOf(owner) : whereOf(token);
+    const label = owner ? `typography.${owner.key} (builds ${token})` : token;
+    // A number, an object or a pair that is not two texts is no text.
+    if (
+      shape.kind === 'number' ||
+      shape.kind === 'object' ||
+      (shape.kind === 'pair' &&
+        !(shape.halves ?? []).every(h => typeof h === 'string'))
+    ) {
       out.push({
-        token: `typography.scale (builds ${broken[0]})`,
-        value: String(broken[1]),
-        why: typo.some(e => e.key === 'scale.base')
-          ? 'the type scale builds a size no page can use; the base is a positive number of pixels (such as 16) and the ratio a number above 1 and at most 4'
-          : 'the type scale is given no base, and Core needs one with the ratio: it builds sizes no page can use; add the body size in pixels, such as scale: {base: 16, ratio: …}',
-        line: scale.line,
-        file: fileOf(scale),
+        token: label,
+        value: '',
+        why: nonTextMessage(
+          ctx,
+          slug,
+          shape.kind === 'object'
+            ? [token, shape.value, 'object']
+            : [token, shape.kind === 'pair' ? shape.halves : shape.value],
+        ),
+        ...at,
       });
+      if (owner) flagged.add(owner);
+      continue;
+    }
+    if (value == null) continue;
+    // Only a color differs by mode: a pair on any other token builds a
+    // light-dark() no browser reads there. A size whose halves are bare
+    // numbers is named with the unit it needs too.
+    if (/^light-dark\(/i.test(value) && !isColorToken(token)) {
+      const halves = value
+        .replace(/^light-dark\(\s*|\s*\)$/gi, '')
+        .split(/\s*,\s*/);
+      const unitless =
+        ctx.C.typeOf(token) === 'size' &&
+        halves.every(h => /^\d*\.?\d+$/.test(h));
+      out.push({
+        token: label,
+        value,
+        why: unitless
+          ? nonTextMessage(ctx, slug, [token, halves.map(Number), 'unit'])
+          : `${at.file ?? `${slug}.theme.ts`} gives ${token} a [light, dark] pair, but only colors differ by mode: the build would write light-dark(), which browsers take only for colors; give it one value`,
+        ...at,
+      });
+      if (owner) flagged.add(owner);
+      continue;
+    }
+    const why = refused(token, value);
+    if (why) {
+      out.push({token: label, value, why, ...at});
+      if (owner) flagged.add(owner);
+    }
   }
   return out;
 }
@@ -1621,6 +1672,7 @@ async function refuseOwnTokenValues(ctx, slug, data) {
   const err = await ownTokenRefusal(ctx, slug, data);
   if (err) throw err;
 }
+setOwnTokenCheck(refuseOwnTokenValues);
 
 /**
  * The refusal for own-source token values `set` refuses, or null.
@@ -1676,29 +1728,6 @@ export async function editorOwnTokenRefusal(root, slug) {
     return null;
   }
   return ownTokenRefusal(ctx, slug, data);
-}
-
-/**
- * For `compile`: the refusal of [light, dark] pairs on tokens that are not
- * colors in what the theme builds now, or null.
- * @param {string} root
- * @param {string} slug
- * @returns {Promise<import('../error.mjs').AstryxError | null>}
- */
-export async function editorPairRefusal(root, slug) {
-  const ctx = await context(root);
-  const names = await builtPairs(ctx, slug);
-  if (!names.length) return null;
-  return new AstryxError(
-    ownPairMessage(slug, names),
-    [
-      {
-        name: `grep -n -- ${quoteCommandArgument(names[0])} ${quoteCommandArgument(`themes/${slug}/${slug}.theme.ts`)}`,
-        reason: 'see where the file sets it',
-      },
-    ],
-    ERROR_CODES.ERR_THEME_INVALID,
-  );
 }
 
 /**
@@ -2243,9 +2272,6 @@ async function changeOnce(
       mode: options.mode,
     });
   }
-  // The own source's token values are checked before every change, an
-  // undo too: an undo rebuilds the theme from that source.
-  await refuseOwnTokenValues(ctx, slug, data);
   const flags = {
     on: options.on,
     when: options.when,
@@ -2588,6 +2614,30 @@ async function changeOnce(
             (x.on ?? null) === (s.on ?? null)),
       );
       const near = nearOnes.map(describe);
+      // A token the theme's own source sets: that file is where it is
+      // changed, never the settings.
+      const ownEntry =
+        s.thing.startsWith('--') && !s.on && !s.when && !s.state
+          ? ownTokenEntries(cwd, slug).find(
+              x => x.token === s.thing && !x.overridden,
+            )
+          : undefined;
+      if (ownEntry) {
+        const file = ownEntry.file
+          ? path.relative(cwd, ownEntry.file)
+          : `themes/${slug}/${slug}.theme.ts`;
+        refuse(
+          E.ERR_THEME_NOT_SET,
+          `The settings do not set ${s.thing}: ${file} sets it itself${ownEntry.line ? ` (line ${ownEntry.line})` : ''}, so undo has nothing to remove; change or remove it in ${file}.`,
+          {
+            run: [
+              ownEntry.line
+                ? `sed -n ${ownEntry.line}p ${quoteCommandArgument(file)}`
+                : `grep -n -- ${quoteCommandArgument(s.thing)} ${quoteCommandArgument(file)}`,
+            ],
+          },
+        );
+      }
       // headings has two halves: name the one that is set.
       const otherHalf =
         s.thing === 'headings'
@@ -4575,9 +4625,6 @@ async function undoTheme(theme, options) {
       `Nothing to undo: ${theme} has no earlier change${repair ? `, and ${theme}.settings.json cannot be read` : ''}.`,
       {run: repair ?? [`${P} show ${theme}`]},
     );
-  // The step rebuilds the theme from its own source: a token value there
-  // that set refuses is refused here too, before anything is written.
-  if (current) await refuseOwnTokenValues(await context(cwd), theme, current);
   // A top step equal to the settings now (left by an undo stopped between
   // its two writes) changes nothing: skip it.
   const nowText = fs.readFileSync(f.settings, 'utf8');

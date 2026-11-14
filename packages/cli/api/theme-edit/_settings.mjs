@@ -1574,7 +1574,7 @@ export function valueProblem(s) {
  * A `duplicate` entry names a second `tokens` key (with every line); a
  * `typography` entry is one typography field (its dotted key and value);
  * an `unresolved` entry says the map holds something only a build reads.
- * @typedef {{token: string | null, key: string, line: number | null, kind: 'text' | 'number' | 'pair' | 'object' | 'other' | 'duplicate' | 'typography' | 'unresolved', value?: any, halves?: Array<string | number | undefined>, lines?: Array<number | null>, file?: string, overridden?: boolean, expression?: boolean}} OwnTokenEntry
+ * @typedef {{token: string | null, key: string, line: number | null, kind: 'text' | 'number' | 'pair' | 'object' | 'other' | 'duplicate' | 'typography' | 'unresolved', value?: any, halves?: Array<string | number | undefined>, lines?: Array<number | null>, file?: string, overridden?: boolean, expression?: boolean, notToken?: boolean}} OwnTokenEntry
  */
 
 /**
@@ -1883,18 +1883,37 @@ function ownPageTokens(
       if (p.type === 'SpreadElement') collect(p.argument, depth + 1, at);
       else if (p.type === 'ObjectProperty') {
         const k = p.computed ? textOf(at.unwrap(p.key)) : keyOf(p.key);
-        if (k?.startsWith('--')) out.set(k, textOf(at.unwrap(p.value)));
+        if (k?.startsWith('--')) out.set(k, builtText(at.unwrap(p.value)));
         else if (p.computed) unresolved = true;
-        if (detail && (k?.startsWith('--') || p.computed))
+        if (detail && (k || p.computed))
           detail.push({
             token: k?.startsWith('--') ? k : null,
             key: at.code.slice(p.key.start, p.key.end),
             line: p.loc?.start?.line ?? null,
             ...(at.file ? {file: at.file} : {}),
+            // A key that is no token name (`color`): the build writes it
+            // as a declaration on the theme's root.
+            ...(k && !k.startsWith('--') ? {notToken: true} : {}),
             ...valueShape(at.unwrap(p.value), at.unwrap),
           });
       } else unresolved = true;
     }
+  };
+  /**
+   * A token's value as the build writes it, when the file gives it as
+   * text: a [light, dark] pair of two texts is its light-dark(); else
+   * null.
+   * @param {any} node
+   * @returns {string | null}
+   */
+  const builtText = node => {
+    const halves =
+      node?.type === 'ArrayExpression' && node.elements.length === 2
+        ? node.elements.map((/** @type {any} */ e) => textOf(unwrap(e)))
+        : null;
+    return halves && halves.every((/** @type {any} */ h) => h != null)
+      ? `light-dark(${halves.join(', ')})`
+      : textOf(node);
   };
   /**
    * What a token's value is, as written: text, a number, a [light, dark]
@@ -5693,122 +5712,23 @@ export function themeSourceRefusal(cwd, slug) {
 }
 
 /**
- * Refuse a [light, dark] pair the theme's own source gives a token that is
- * not a color (a font family, a size, a weight): the build would write
- * `light-dark()`, which browsers take only for colors. The editor refuses
- * `--mode` on those tokens for the same reason.
- * @param {Ctx} ctx
- * @param {string} cwd
- * @param {string} slug
- */
-function refuseOwnPairs(ctx, cwd, slug) {
-  const f = themeFiles(cwd, slug);
-  /** @type {string[]} */
-  const bad = [];
-  try {
-    const ast = /** @type {any} */ (
-      parseModule(fs.readFileSync(f.ts, 'utf8'), {
-        sourceType: 'module',
-        plugins: ['typescript'],
-      })
-    );
-    /** @param {any} node */
-    const visit = node => {
-      if (!node || typeof node !== 'object') return;
-      if (
-        node.type === 'ObjectProperty' &&
-        typeof (node.key?.value ?? node.key?.name) === 'string' &&
-        String(node.key?.value ?? node.key?.name).startsWith('--') &&
-        node.value?.type === 'ArrayExpression' &&
-        node.value.elements.length === 2 &&
-        // A pair holding a value that is not text is named by the value
-        // checks, with the fix for that value.
-        node.value.elements.every(
-          (/** @type {any} */ e) =>
-            e?.type === 'StringLiteral' || e?.type === 'TemplateLiteral',
-        )
-      ) {
-        const k = String(node.key.value ?? node.key.name);
-        const type = ctx.C.typeOf(k);
-        // A size given as a bare number is named by the value check, with
-        // the unit it needs.
-        const unitless =
-          type === 'size' &&
-          node.value.elements.some(
-            (/** @type {any} */ e) =>
-              e?.type === 'StringLiteral' && /^\d*\.?\d+$/.test(e.value.trim()),
-          );
-        if (type !== 'color' && !unitless) bad.push(k);
-      }
-      for (const v of Object.values(node))
-        if (Array.isArray(v)) v.forEach(visit);
-        else if (v && typeof v === 'object' && v.type) visit(v);
-    };
-    visit(ast.program);
-  } catch {
-    return;
-  }
-  if (bad.length)
-    throw new AstryxError(
-      ownPairMessage(slug, [...new Set(bad)]),
-      [
-        {
-          name: `grep -n -- ${quoteCommandArgument(bad[0])} ${quoteCommandArgument(`themes/${slug}/${slug}.theme.ts`)}`,
-          reason: 'see the line',
-        },
-      ],
-      ERROR_CODES.ERR_THEME_INVALID,
-    );
-}
-
-/**
- * The tokens that are not colors the theme as it builds now gives a
- * [light, dark] pair (light-dark()), however its file writes them (a
- * constant, `as const`, `satisfies`, a spread from an imported module):
- * read from a build made into the project's cache folder, never beside the
- * theme. Empty when it does not build there (the build names that itself).
- * @param {Ctx} ctx
- * @param {string} slug
- * @returns {Promise<string[]>}
- */
-export async function builtPairs(ctx, slug) {
-  const tops = await cacheBuild(ctx, slug, js => topTokensOf(js));
-  return [...(tops ?? [])]
-    .filter(
-      ([k, v]) =>
-        /^light-dark\(/.test(String(v ?? '')) && ctx.C.typeOf(k) !== 'color',
-    )
-    .map(([k]) => k);
-}
-
-/**
- * The page-wide tokens the theme's own source gives, as a build made now
- * evaluates them (an imported module, an expression, a template): read
- * from a build into the project's cache folder, never beside the theme.
- * Null when it does not build there.
- * @param {Ctx} ctx
- * @param {string} slug
- * @returns {Promise<Map<string, string | null> | null>}
- */
-export async function evaluatedOwnTokens(ctx, slug) {
-  return cacheBuild(ctx, slug, js => builtOwnTokens(ctx.project.cwd, slug, js));
-}
-
-/**
  * What a build made now writes for a theme: its own page-wide tokens (see
  * builtOwnTokens), every top-level token, and the typography it was given
  * (evaluated: an import or an expression is its value). Null when it does
  * not build in the project's cache folder.
  * @param {Ctx} ctx
  * @param {string} slug
- * @returns {Promise<{own: Map<string, string | null>, tops: Map<string, string | null>, shapes: Map<string, BuiltShape>, typography: any} | null>}
+ * @param {string | null} like the base theme, whose built tokens are `base`
+ * @returns {Promise<{own: Map<string, string | null>, tops: Map<string, string | null>, base: Map<string, string | null>, shapes: Map<string, BuiltShape>, typography: any} | null>}
  */
-export async function evaluatedTheme(ctx, slug) {
+export async function evaluatedTheme(ctx, slug, like) {
+  const baseFile = like ? baseModule(ctx.project.cwd, like) : null;
   return cacheBuild(ctx, slug, js => {
     const read = builtModule(js);
     return {
       own: builtOwnTokens(ctx.project.cwd, slug, js) ?? new Map(),
       tops: topTokensOf(js),
+      base: baseFile ? topTokensOf(baseFile) : new Map(),
       shapes: read.shapes,
       typography: read.axes?.typography ?? null,
     };
@@ -5952,6 +5872,21 @@ export function ownPairMessage(slug, names) {
 }
 
 /**
+ * The check of a theme's own token values, run before every build, set by
+ * the editor (which owns the checks a value meets): null until it is set.
+ * @type {((ctx: Ctx, slug: string, data: ThemeData) => Promise<void>) | null}
+ */
+let ownTokenCheck = null;
+
+/**
+ * Set the check of a theme's own token values run before every build.
+ * @param {((ctx: Ctx, slug: string, data: ThemeData) => Promise<void>) | null} fn
+ */
+export function setOwnTokenCheck(fn) {
+  ownTokenCheck = fn;
+}
+
+/**
  * What runs after every build of a theme, set by the adapter (the app copy
  * of the theme): null until it is set.
  * @type {((ctx: Ctx, slug: string, data: ThemeData) => void) | null}
@@ -5995,7 +5930,9 @@ export async function buildTheme(ctx, slug, data) {
   const {cwd} = ctx.project;
   const f = themeFiles(cwd, slug);
   refuseThemeSource(cwd, slug);
-  refuseOwnPairs(ctx, cwd, slug);
+  // The theme's own token values, judged as a build of the source writes
+  // them, before anything is written.
+  await ownTokenCheck?.(ctx, slug, data);
   if (data.like) baseThemeFile(ctx.project, data.like);
   const base = await baseResolved(ctx.project, data.like);
   fs.mkdirSync(f.dir, {recursive: true});

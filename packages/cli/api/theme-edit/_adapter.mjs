@@ -1259,13 +1259,9 @@ export async function editorCompileProblem(
           ],
           ERROR_CODES.ERR_THEME_INVALID,
         );
-      // A [light, dark] pair on a token that is not a color, however the
-      // file writes it: what the theme builds now is read (never written
-      // beside it), as the editor's own build reads it.
+      // The file's own token values, judged as a build of it writes them
+      // (never written beside it), by the check the editor's build runs.
       if (path.basename(file) === `${slug}.theme.ts`) {
-        const pairs = await edit.editorPairRefusal(root, slug);
-        if (pairs) return pairs;
-        // A token value the file gives that set refuses ships as it is.
         const values = await edit.editorOwnTokenRefusal(root, slug);
         if (values) return values;
       }
