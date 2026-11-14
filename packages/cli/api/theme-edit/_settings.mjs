@@ -1940,7 +1940,14 @@ function ownPageTokens(
           if (q.type !== 'ObjectProperty') continue;
           const k = q.computed ? textOf(unwrap(q.key)) : keyOf(q.key);
           if (!k) continue;
-          if (k.startsWith('--'))
+          const leaf = unwrap(q.value);
+          // A token, or a part's property (its value no block), by its
+          // scope path and line.
+          if (
+            k.startsWith('--') ||
+            (leaf?.type !== 'ObjectExpression' &&
+              leaf?.type !== 'ArrayExpression')
+          )
             detail.push({
               token: k,
               key: k,
@@ -6709,6 +6716,27 @@ function nonTextToken(t, typeOf = (/** @type {string} */ _k) => 'other') {
 }
 
 /**
+ * A value as a message names it, whatever it is: text in quotes, a number,
+ * a BigInt with its `n`, a symbol, a function, an array or an object as
+ * JSON where it has one. Never throws.
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function describeValue(value) {
+  if (typeof value === 'bigint') return `${value}n`;
+  if (typeof value === 'symbol') return String(value);
+  if (typeof value === 'function') return 'a function';
+  if (value === undefined) return 'undefined';
+  try {
+    return JSON.stringify(value, (_k, v) =>
+      typeof v === 'bigint' ? `${v}n` : typeof v === 'symbol' ? String(v) : v,
+    );
+  } catch {
+    return String(value);
+  }
+}
+
+/**
  * Why a token value is not one, with a value of the token's own type to
  * write instead (a size in px, a weight as a number in quotes), or none.
  * @param {Ctx} ctx
@@ -6719,7 +6747,7 @@ export function nonTextMessage(ctx, slug, [name, value, kind = 'value']) {
   const type = ctx.C.typeOf(name);
   if (kind === 'mode') return ownPairMessage(slug, [name]);
   if (kind === 'object')
-    return `${slug}.theme.ts gives ${name} an object (${JSON.stringify(value)}); a token value is a CSS value in quotes, such as '8px' (only a color takes a [light, dark] pair).`;
+    return `${slug}.theme.ts gives ${name} an object (${describeValue(value)}); a token value is a CSS value in quotes, such as '8px' (only a color takes a [light, dark] pair).`;
   if (kind === 'unit') {
     const n = /** @type {unknown[]} */ (value).find(
       x => typeof x === 'number' && x !== 0,
@@ -6738,7 +6766,7 @@ export function nonTextMessage(ctx, slug, [name, value, kind = 'value']) {
   const shape = Array.isArray(value)
     ? 'a [light, dark] pair of two CSS values in quotes'
     : 'a CSS value in quotes';
-  return `${slug}.theme.ts gives ${name} the value ${JSON.stringify(value)}, which is not text: a token value is ${shape}${example ? ` (such as ${Array.isArray(value) ? `[${example}, ${example}]` : example})` : ''}.`;
+  return `${slug}.theme.ts gives ${name} the value ${describeValue(value)}, which is not text: a token value is ${shape}${example ? ` (such as ${Array.isArray(value) ? `[${example}, ${example}]` : example})` : ''}.`;
 }
 
 /**

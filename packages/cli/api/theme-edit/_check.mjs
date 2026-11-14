@@ -2335,6 +2335,9 @@ export function settableStates(ctx, slug, data, part) {
  * @param {string | undefined} value
  * @param {SetFlags} flags
  * @param {boolean} [unset] an undo of one setting: only the identity of the setting is checked
+ * @param {{reads?: ReadonlySet<string>}} [scope] `reads`: the custom
+ *   properties the theme itself sets where the value is read, which a var()
+ *   in it reads as it reads a design token
  * @returns {import('./_settings.mjs').Setting}
  */
 export function checkSetting(
@@ -2345,6 +2348,7 @@ export function checkSetting(
   value,
   flags,
   unset = false,
+  {reads} = {},
 ) {
   // Any other dial's value pasted with its property name (`font-size:
   // 18px;` for text-size, `color: #e11d48` for accent) is the value: one
@@ -2865,7 +2869,16 @@ export function checkSetting(
         throw e;
       }
   }
-  const s = checkSettingAsTyped(ctx, slug, data, thing, value, flags, unset);
+  const s = checkSettingAsTyped(
+    ctx,
+    slug,
+    data,
+    thing,
+    value,
+    flags,
+    unset,
+    reads,
+  );
   // A var() with a fallback always gives a value; a name one slip from a
   // design token is noted as a likely typo, and the setting stands.
   if (!unset && typeof value === 'string' && !s.note) {
@@ -2903,6 +2916,7 @@ function fallbackVarTypo(v, TOKENS) {
  * @param {string | undefined} value
  * @param {SetFlags} flags
  * @param {boolean} [unset]
+ * @param {ReadonlySet<string>} [reads] custom properties the theme sets where the value is read
  * @returns {import('./_settings.mjs').Setting}
  */
 function checkSettingAsTyped(
@@ -2913,8 +2927,9 @@ function checkSettingAsTyped(
   value,
   flags,
   unset = false,
+  reads = undefined,
 ) {
-  const s = checkOne(ctx, slug, data, thing, value, flags, unset);
+  const s = checkOne(ctx, slug, data, thing, value, flags, unset, reads);
   const why = unset ? null : valueProblem(s);
   if (why)
     refuse(
@@ -2942,9 +2957,10 @@ function checkSettingAsTyped(
  * @param {string | undefined} value
  * @param {SetFlags} flags
  * @param {boolean} unset
+ * @param {ReadonlySet<string>} [reads] custom properties the theme sets where the value is read
  * @returns {import('./_settings.mjs').Setting}
  */
-function checkOne(ctx, slug, data, thing, value, flags, unset) {
+function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
   const {C} = ctx;
   const TARGET = ctx.project.target;
   const TOKENS = ctx.project.core.tokenDefaults;
@@ -2980,7 +2996,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
   const v = normalValue(thing, value ?? '');
   // A var() that misspells a design token would read nothing.
   if (!unset) {
-    const bad = unknownVarRef(v, TOKENS, thing);
+    const bad = unknownVarRef(v, TOKENS, thing, reads);
     if (bad)
       refuse(E.ERR_THEME_UNKNOWN_TOKEN, bad.message, {
         didYouMean: bad.near,
@@ -5786,9 +5802,11 @@ export {familySpaces};
  * @param {string} v
  * @param {Record<string, unknown>} TOKENS
  * @param {string} thing
+ * @param {ReadonlySet<string>} [reads] custom properties the theme itself
+ *   sets where the value is read: a var() naming one reads it
  * @returns {{message: string, near: string[], close: boolean, fixed?: string} | null}
  */
-export function unknownVarRef(v, TOKENS, thing) {
+export function unknownVarRef(v, TOKENS, thing, reads) {
   // A var() whose name is not a custom property (`var(color-x)`, `var(-x)`,
   // `var()`, `var(--)`) makes the whole value invalid: the browser drops
   // it. Named with the repaired form when there is one.
@@ -5807,7 +5825,7 @@ export function unknownVarRef(v, TOKENS, thing) {
     };
   }
   for (const [, name, comma] of v.matchAll(/var\(\s*(--[a-z0-9-]+)\s*(,)?/gi)) {
-    if (name in TOKENS || name.startsWith('--_')) continue;
+    if (name in TOKENS || name.startsWith('--_') || reads?.has(name)) continue;
     // A fallback always gives a value: never "reads nothing" (a likely
     // typo is noted when the setting is made).
     if (comma) continue;

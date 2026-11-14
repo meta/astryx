@@ -11,7 +11,7 @@
 
 import {THEME_SLUG_RE} from '../../foundation/discovery/theme-discovery.mjs';
 import * as fs from 'node:fs';
-import {coversProperty} from './_css.mjs';
+import {coversProperty, cssProperties, matchValue} from './_css.mjs';
 import * as path from 'node:path';
 import {AstryxError} from '../error.mjs';
 import {
@@ -98,6 +98,7 @@ import {
   ownSourceTokenValues,
   ownTokenEntries,
   ownThemeInput,
+  describeValue,
   nonTextMessage,
   ownPartTokens,
   PHONE_TYPE,
@@ -1543,10 +1544,26 @@ async function ownTokenProblems(ctx, slug, data) {
   /** @type {Array<{token: string, value: string, why: string, line: number | null, file?: string | null}>} */
   const out = [];
   const known = ctx.project.core.tokenDefaults;
-  /** @param {string} token @param {string} value @returns {string | null} */
-  const refused = (token, value) => {
+  /**
+   * @param {string} token
+   * @param {string} value
+   * @param {ReadonlySet<string>} [reads] custom properties the theme sets where the value is read
+   * @returns {string | null}
+   */
+  const refused = (token, value, reads) => {
     try {
-      checkSetting(ctx, slug, {...data, settings: []}, token, value, {});
+      checkSetting(
+        ctx,
+        slug,
+        {...data, settings: []},
+        token,
+        value,
+        {},
+        false,
+        {
+          reads,
+        },
+      );
       return null;
     } catch (e) {
       if (!(e instanceof AstryxError)) throw e;
@@ -1626,18 +1643,25 @@ async function ownTokenProblems(ctx, slug, data) {
   if (!input || typeof input !== 'object') return out;
   const named = new Set(out.map(b => b.token));
   /**
-   * Why a token's value is refused, or null: text is checked as `set`
-   * checks it; a pair holds two texts and only a color takes one; any other
-   * value (null, a boolean, a number, an object) is no text.
+   * Why a token's value is refused, or null. An undefined value is not set
+   * (the build writes nothing for it). Any token, a design token or the
+   * theme's own, takes text or a pair of two texts; any other value (null,
+   * a boolean, a number, a BigInt, a symbol, an object) is no text. A design
+   * token's text is checked as `set` checks it, and only a color takes a
+   * pair.
    * @param {string} token
    * @param {unknown} value
    * @param {string} file the file named in a pair's refusal
+   * @param {ReadonlySet<string>} reads custom properties the theme sets where the value is read
    * @returns {string | null}
    */
-  const judge = (token, value, file) => {
+  const judge = (token, value, file, reads) => {
+    if (value === undefined) return null;
+    const custom = !(token in known);
     if (Array.isArray(value)) {
       if (value.length !== 2 || value.some(h => typeof h !== 'string'))
         return nonTextMessage(ctx, slug, [token, value]);
+      if (custom) return null;
       if (!isColorToken(token)) {
         const unitless =
           ctx.C.typeOf(token) === 'size' &&
@@ -1647,7 +1671,7 @@ async function ownTokenProblems(ctx, slug, data) {
           : `${file} gives ${token} a [light, dark] pair, but only colors differ by mode: the build would write light-dark(), which browsers take only for colors; give it one value`;
       }
       for (const [i, h] of value.entries()) {
-        const why = refused(token, String(h));
+        const why = refused(token, String(h), reads);
         if (why) return `its ${i === 0 ? 'light' : 'dark'} half: ${why}`;
       }
       return null;
@@ -1660,9 +1684,28 @@ async function ownTokenProblems(ctx, slug, data) {
           ? [token, value, 'object']
           : [token, value],
       );
+    if (custom) return null;
     if (/^light-dark\(/i.test(value) && !isColorToken(token))
       return `${file} gives ${token} a [light, dark] pair, but only colors differ by mode: the build would write light-dark(), which browsers take only for colors; give it one value`;
-    return refused(token, value);
+    return refused(token, value, reads);
+  };
+  /**
+   * Why a part's CSS property value is refused, or null: an undefined
+   * value is not set; text is the property's own check; a number is
+   * written as it is, so it stands only where the property takes a bare
+   * number; any other value is no text.
+   * @param {string} prop the property, as CSS names it
+   * @param {unknown} value
+   * @param {string} file
+   * @returns {string | null}
+   */
+  const judgeProperty = (prop, value, file) => {
+    if (value === undefined || typeof value === 'string') return null;
+    if (typeof value === 'number')
+      return matchValue(prop, String(value))
+        ? null
+        : `${file} gives ${prop} the number ${value}, which the build writes as it is (${prop}: ${value}) and ${prop} does not take, so the browser drops it; write it with a unit, such as '${value}px'`;
+    return `${file} gives ${prop} the value ${describeValue(value)}, which is not text: a part's property is a CSS value in quotes, such as '4px'`;
   };
   /** @param {{line: number | null, file: string | null}} at */
   const fileName = at => at.file ?? `${slug}.theme.ts`;
@@ -1675,11 +1718,17 @@ async function ownTokenProblems(ctx, slug, data) {
           v.every(h => typeof h === 'string')
         ? `light-dark(${v.join(', ')})`
         : '';
-  // The page's own tokens.
+  /** The custom properties a block of tokens sets. @param {any} node */
+  const varsIn = node =>
+    node && typeof node === 'object'
+      ? Object.keys(node).filter(k => k.startsWith('--'))
+      : [];
+  const pageVars = new Set(varsIn(input.tokens));
+  // The page's own tokens, a design token or the theme's own.
   for (const [token, value] of Object.entries(input.tokens ?? {})) {
-    if (!(token in known) || named.has(token)) continue;
+    if (named.has(token) || token.startsWith('--_')) continue;
     const at = whereOf(token);
-    const why = judge(token, value, fileName(at));
+    const why = judge(token, value, fileName(at), pageVars);
     if (why)
       out.push({
         token,
@@ -1688,16 +1737,34 @@ async function ownTokenProblems(ctx, slug, data) {
         ...at,
       });
   }
-  // The tokens each scope sets, wherever in it.
+  // The tokens and part properties each scope sets, wherever in it; a
+  // var() there reads the page's custom properties and the block's own.
   /** @param {any} node @param {string[]} path @param {number} depth */
   const scoped = (node, path, depth) => {
     if (!node || typeof node !== 'object' || depth > 12) return;
+    const reads = new Set([...pageVars, ...varsIn(node)]);
+    const scope = path.join('.');
     for (const [k, v] of Object.entries(node)) {
-      if (k.startsWith('--')) {
-        if (k.startsWith('--_') || !(k in known)) continue;
-        const scope = path.join('.');
+      // In a scope the build writes an undefined value as the text
+      // `undefined` (the page's tokens drop it), which no browser reads.
+      if (
+        v === undefined &&
+        (k.startsWith('--') ||
+          cssProperties().has(k.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`)))
+      ) {
         const at = whereIn(scope, k);
-        const why = judge(k, v, fileName(at));
+        out.push({
+          token: `${scope} ${k}`,
+          value: '',
+          why: `${fileName(at)} gives ${k} the value undefined here, which the build writes as the text undefined in this rule, where the browser drops it: remove the key to leave it unset`,
+          ...at,
+        });
+        continue;
+      }
+      if (k.startsWith('--')) {
+        if (k.startsWith('--_')) continue;
+        const at = whereIn(scope, k);
+        const why = judge(k, v, fileName(at), reads);
         if (why)
           out.push({
             token: `${scope} ${k}`,
@@ -1705,7 +1772,17 @@ async function ownTokenProblems(ctx, slug, data) {
             why,
             ...at,
           });
-      } else scoped(v, [...path, k], depth + 1);
+        continue;
+      }
+      if (v && typeof v === 'object' && !Array.isArray(v)) {
+        scoped(v, [...path, k], depth + 1);
+        continue;
+      }
+      const prop = k.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`);
+      if (!cssProperties().has(prop)) continue;
+      const at = whereIn(scope, k);
+      const why = judgeProperty(prop, v, fileName(at));
+      if (why) out.push({token: `${scope} ${prop}`, value: '', why, ...at});
     }
   };
   for (const scope of ['components', 'onDark', 'onLight', 'adaptations'])
@@ -1720,6 +1797,7 @@ async function ownTokenProblems(ctx, slug, data) {
     if (!node || typeof node !== 'object') return;
     for (const [k, v] of Object.entries(node)) {
       const key = [...path, k].join('.');
+      if (v === undefined) continue;
       if (v && typeof v === 'object' && !Array.isArray(v))
         fields(v, [...path, k]);
       else {
@@ -1791,7 +1869,7 @@ async function ownTokenProblems(ctx, slug, data) {
       // A token Core leaves as the base theme writes it is the base's.
       if (loaded?.base.get(token) === value) continue;
       const at = atOf(owner);
-      const why = judge(token, value, fileName(at));
+      const why = judge(token, value, fileName(at), pageVars);
       if (why) {
         reported.add(owner);
         out.push({
@@ -2896,7 +2974,7 @@ async function changeOnce(
       const ownEntry =
         s.thing.startsWith('--') && !s.on && !s.when && !s.state
           ? ownTokenEntries(cwd, slug).find(
-              x => x.token === s.thing && !x.overridden,
+              x => x.token === s.thing && !x.overridden && x.kind !== 'scoped',
             )
           : undefined;
       if (ownEntry) {
@@ -4400,7 +4478,9 @@ function ownPhoneNotes(cwd, slug, data) {
     entries.filter(e => e.kind === 'typography').map(e => e.key.split('.')[0]),
   );
   const inMap = new Set(
-    entries.filter(e => e.token && !e.overridden).map(e => e.token),
+    entries
+      .filter(e => e.token && !e.overridden && e.kind !== 'scoped')
+      .map(e => e.token),
   );
   /** @param {string} k */
   const fromTypography = k => {
