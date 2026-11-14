@@ -651,7 +651,12 @@ describe('the interaction leg count job in ci.yml', () => {
     // its count and send every run back to the ten-leg fallback.
     for (const lane of lanes) {
       const job = ci.jobs[lane.id];
-      expect(counter.steps[0]).toEqual(job.steps[0]);
+      // The same checkout, each with the bound its own job's time allows
+      // (ci-checkout-timeout.test.mjs owns the bounds).
+      const {'timeout-minutes': _counterBound, ...counterCheckout} =
+        counter.steps[0];
+      const {'timeout-minutes': _laneBound, ...laneCheckout} = job.steps[0];
+      expect(counterCheckout).toEqual(laneCheckout);
       const keep = "Keep the leg planner from the workflow's commit";
       expect(step(counter, keep).run).toBe(step(job, keep).run);
     }

@@ -6,9 +6,9 @@
  * domain, _gather-*.mjs) and loads the tree's static data before it runs.
  */
 
-import {readFileSync, realpathSync} from 'node:fs';
+import {readFileSync} from 'node:fs';
 import * as path from 'node:path';
-import {requireCoreDir} from '../../foundation/fs/paths.mjs';
+import {realDir, requireCoreDir} from '../../foundation/fs/paths.mjs';
 import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 import {persistedGather} from '../../foundation/fs/gather-cache.mjs';
 import {
@@ -131,25 +131,24 @@ async function gatherDomains(options) {
 }
 
 /**
- * The folder's real path, so a link and its target share a kept gather.
- * @param {string} dir
- * @returns {string}
- */
-function realFolder(dir) {
-  try {
-    return realpathSync(dir);
-  } catch {
-    return dir;
-  }
-}
-
-/**
  * A gathered catalog as plain JSON and back, for a gather kept between runs
  * (persistedGather). A template's derived component names are read once and
  * stored as their value; `components` is stored by position in `all`, whose
  * objects it shares.
  */
 const GATHER_CODEC = {
+  /**
+   * The shape a read-back gather needs: its candidates and components.
+   * @param {any} gathered
+   */
+  valid: gathered =>
+    gathered != null &&
+    Array.isArray(gathered.all) &&
+    Array.isArray(gathered.components) &&
+    gathered.all.every(
+      (/** @type {any} */ c) => c != null && typeof c === 'object',
+    ) &&
+    gathered.components.every((/** @type {any} */ c) => c != null),
   /**
    * @param {any} gathered
    * @returns {any}
@@ -264,7 +263,7 @@ export function gatherCandidatesReused(options) {
     gather = reusedWhileUnchanged(
       () =>
         persistedGather(
-          [realFolder(cwd), type ?? null],
+          [realDir(cwd), type ?? null],
           () => gatherCandidates({cwd, type}),
           GATHER_CODEC,
           // A gather that skipped Core (a failed install still in its

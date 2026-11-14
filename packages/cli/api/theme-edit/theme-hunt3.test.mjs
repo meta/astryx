@@ -408,10 +408,14 @@ describe('builds that stay the same', () => {
 });
 
 describe('the command line', () => {
-  it('names an editor theme to the package commands', async () => {
+  it('the package commands take an editor theme through its app copy', async () => {
+    // src/themes/h/ is a standard local theme the editor writes after every
+    // build: use names the add that works.
     const r = await cli(['use', 'h']);
     expect(r.status).toBe(1);
-    expect(r.body.error).toContain('a theme the editor made');
+    expect(r.body.error).toMatch(
+      /Theme "h" is not added\. Run `.* theme add h` first/,
+    );
   }, 120_000);
 
   it('a moved name points where it went; a bare group answers --json', async () => {
@@ -561,18 +565,17 @@ describe('fonts', () => {
 });
 
 describe('one mode with a state', () => {
-  it('never changes the other mode: variants are named, and a part with nothing to keep is refused', async () => {
+  it('never changes the other mode: each variant keeps its own, and a part with nothing to keep is refused', async () => {
     await themeEditNew('sm', {cwd, like: 'neutral'});
-    const r = await refusal(() =>
-      themeEditSet('sm', 'background-color', '#00ff00', {
-        cwd,
-        on: 'button',
-        state: 'hover',
-        mode: 'dark',
-      }),
+    await themeEditSet('sm', 'background-color', '#00ff00', {
+      cwd,
+      on: 'button',
+      state: 'hover',
+      mode: 'dark',
+    });
+    expect(read('themes/sm/sm.css')).toMatch(
+      /\.astryx-button\[data-variant="[a-z]+"\]:hover[^{]*\{[^}]*background-color: light-dark\([^,]+, #00ff00\)/,
     );
-    expect(r.code).toBe('ERR_THEME_NO_MODE');
-    expect(r.run[0]).toMatch(/--when variant:\w+ --state hover --mode dark$/);
     expect(
       (
         await refusal(() =>

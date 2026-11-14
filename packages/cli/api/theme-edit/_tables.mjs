@@ -429,7 +429,7 @@ export const DIALS = wordTable({
     help:
       'How much room there is: padding, gaps and control heights together. Rungs: ' +
       SPACING.map(([n, f]) => `${n} (x${f})`).join(', ') +
-      '. Whole theme: scales every spacing token and control height. With --on <part or group>: only inside it.',
+      '. Whole theme: scales every spacing token and control height (a denser theme has shorter controls; the small, medium and large sizes stay apart and in order, none under 24px). With --on <part or group>: only inside it.',
     values: 'tight|compact|medium|roomy|spacious|more|less',
     examples: [
       'set my spacing compact',
@@ -712,7 +712,23 @@ export const THING_HINTS = wordTable({
     `${P} set <theme> spacing roomy${on ? ` --on ${on}` : ''}`,
     `${P} set <theme> padding 12px --on ${on ?? '<part>'}`,
   ],
-  density: () => [`${P} set <theme> spacing compact`],
+  // The density named carries over: a spacing rung as it is, a word for
+  // more or less room as the rung that way; else how spacing.
+  density: (v, on) => {
+    const w = v.trim().toLowerCase();
+    const rung = SPACING.some(([n]) => n === w)
+      ? w
+      : /^(airy|loose|relaxed|comfortable|open|sparse|generous)$/.test(w)
+        ? 'roomy'
+        : /^(dense|cramped|condensed|packed|small|less)$/.test(w)
+          ? 'compact'
+          : null;
+    return [
+      rung
+        ? `${P} set <theme> spacing ${rung}${on ? ` --on ${on}` : ''}`
+        : `${HOW} spacing`,
+    ];
+  },
   bold: (v, on) => [
     `${P} set <theme> font-weight ${/^(none|false|off|no|normal)$/i.test(v.trim()) ? 'normal' : 'bold'} --on ${on ?? '<part>'}`,
   ],

@@ -31,11 +31,12 @@ import {pathToFileURL} from 'node:url';
 import {format} from 'node:util';
 import {parentPort, workerData} from 'node:worker_threads';
 import {transformSync} from '@babel/core';
-import {matchPath, readPathsIn, resolvePath} from './ts-paths.mjs';
+import {LOAD_EXTENSIONS, existingFile, matchPath, readPathsIn, resolvePath} from './ts-paths.mjs';
 import {createJiti} from 'jiti';
 import {assetDataUri, isAssetPath} from './assets.mjs';
 import {SINGLE_COPY, isServedPackage, packageOf} from './served-packages.mjs';
 import {findNodeModulesPackage} from '../fs/paths.mjs';
+import {importSpecifiers} from './embedded-imports.mjs';
 import {CHART_GLOBAL, CHART_ROOTS, chartDocument, chartSize, markLegends} from './charts.mjs';
 
 /** @typedef {{level: string, text: string}} PageLog */
@@ -607,6 +608,20 @@ const namesAlias = spec => {
  */
 const resolveAlias = spec => resolvePath(PATHS, spec) ?? spec;
 
+/**
+ * The file a relative or aliased import names, found the way the render
+ * loads it, or null for a package import or a file that does not exist.
+ * @param {string} spec
+ * @param {string} from the importing file
+ * @returns {string | null}
+ */
+function importedFile(spec, from) {
+  const raw = spec.split('?')[0];
+  if (raw.startsWith('.')) return existingFile(path.resolve(path.dirname(from), raw), LOAD_EXTENSIONS);
+  // An alias resolves by TypeScript's rules, as the import rewrite loads it.
+  return isAliased(raw) ? resolveAlias(raw) : null;
+}
+
 /** Packages the page took from the package set, by name: their folders. */
 /** @type {Map<string, string>} */
 const fromSet = new Map();
@@ -703,13 +718,16 @@ const plain = createJiti(entry, {fsCache: false, jsx: {runtime: 'automatic'}});
 const jiti = createJiti(entry, {
   fsCache: false,
   tryNative: false,
-  extensions: ['.js', '.mjs', '.cjs', '.jsx', '.ts', '.tsx', '.mts', '.cts', '.json'],
+  extensions: [...LOAD_EXTENSIONS],
   moduleCache: true,
   interopDefault: true,
   alias: SINGLE_COPY_ALIASES,
   jsx: {runtime: 'automatic'},
   transform(opts) {
-    const filename = opts.filename ?? '';
+    // jiti names the file with forward slashes on Windows (`C:/...`), while
+    // `entry`, `root` and the node_modules test use the platform separator.
+    // Without this, no file reads as local there and none is transformed.
+    const filename = opts.filename ? path.normalize(opts.filename) : '';
     let source = opts.source;
     if (filename && isLocal(filename) && /\.json$/i.test(filename) && !localFiles.includes(filename)) {
       localFiles.push(filename);
@@ -908,6 +926,28 @@ try {
   if (stylexRules.length > 0) {
     reach('compiling styles');
     css = stylexPlugin.processStylexRules(stylexRules, {useLayers: false});
+  }
+  // Node loads some local modules itself (jiti hands it a plain ES module,
+  // such as a built theme), so they never pass the transform that records
+  // local files. Follow the imports of every local module instead, so the
+  // file carries each module the page reaches, as --reverse expects.
+  for (let i = 0; i < localFiles.length; i++) {
+    const file = localFiles[i];
+    if (!/\.[cm]?[jt]sx?$/.test(file)) continue;
+    let source;
+    try {
+      source = fs.readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    for (const spec of importSpecifiers(source, file)) {
+      const target = importedFile(spec, file);
+      // Modules and JSON only: the transform already carries the stylesheets
+      // and images a module imports, and a Sass file is never carried.
+      if (target && /\.([cm]?[jt]sx?|json)$/i.test(target) && isLocal(target) && !localFiles.includes(target)) {
+        localFiles.push(target);
+      }
+    }
   }
   parentPort?.postMessage({
     ok: true,

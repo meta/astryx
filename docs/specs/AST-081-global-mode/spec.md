@@ -388,16 +388,23 @@ works on is `spec:AST-040` FR9's.
     folder that an environment setting points at counts only when it is an
     absolute path), for saved discover answers (`spec:AST-051` FR8), for the
     releases global mode installs into a project's run (FR2, FR3), and for
-    what `search`, `build`, `component`, `template`, `theme`, `discover` and
-    `doctor` keep in `astryx/catalogs` (search's catalogs, each
-    integration's contribution-check results, and doctor's file-only docs
-    checks, which doctor keeps only while the folder exists), a folder only
-    the user can reach (made `0700`, used only while it is a real folder the
-    user owns and others cannot open, never where the system has no user
-    ids), each kept value used only while every input its gather read is
-    unchanged; a run under Yarn Plug'n'Play's loader, such as `yarn astryx`,
-    keeps and uses no catalog; `doctor` lists that folder and its size in an
-    info row, which in such a run also says that it keeps none;
+    what `search`, `build`, `component`, `template`, `theme`, `discover`,
+    `docs` and `doctor` keep in `astryx/catalogs` (search's catalogs, each
+    integration's contribution-check results, template discovery's records,
+    the component list (with each integration's component replacements),
+    integrations' theme records, the docs not-found hint's
+    name summaries of folder trees, and doctor's file-only docs checks and
+    theme-wiring scan, which doctor keeps only while the folder exists), a
+    folder only the user can
+    reach (made `0700` by the first run that keeps a gather: `search` or
+    `build`, or another of those commands where an integration can load,
+    never `doctor`; that run keeps its gathers at once; used only while it is
+    a real folder the user owns and others cannot open, never where the
+    system has no user ids), each
+    kept value used only while every input its gather read is unchanged; a
+    run under Yarn Plug'n'Play's loader, such as `yarn astryx`, keeps and
+    uses no catalog; `doctor` lists that folder and its size in an info row,
+    which in such a run also says that it keeps none;
   - the same per-user cache directory, for the code jiti transpiles from the
     files the CLI loads through it (an integration's manifest, TypeScript doc
     topics and codemods, a TypeScript config, a built theme artifact), in
@@ -406,7 +413,11 @@ works on is `spec:AST-040` FR9's.
     cached on disk; where the system has no user ids jiti keeps its own
     default, and a set `JITI_FS_CACHE` is left to jiti;
   - the platform's temporary directory, for scratch work such as building or
-    verifying a package;
+    verifying a package, and for Node's compile cache of the CLI's own modules
+    in `node-compile-cache-<uid>`: made `0700` by a machine's first run and
+    written from that run, used only while it is a real folder the user owns
+    and others cannot open, never where the system has no user ids, and off
+    when `NODE_DISABLE_COMPILE_CACHE` is set;
   - the per-user configuration directory of the platform, for the documented
     settings of the computer-level agent text and the per-user state file,
     `astryx/state.json`, which holds what the update check found and when

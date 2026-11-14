@@ -31,11 +31,12 @@ import {
 import {SAMPLE_PAGE, elementNames, pageSource} from './_catalog.mjs';
 
 /** Bump when the shape of the cached part data changes. */
-const PART_DATA_VERSION = 4;
+const PART_DATA_VERSION = 5;
 
 /**
  * @typedef {object} PartRecord
  * @property {Record<string, {tokens: Record<string, string[]>, values: string[]}>} own - property -> tokens (with conditions) and raw values
+ * @property {Record<string, Record<string, string>>} [at] - property -> the value under each condition, private variables resolved
  * @property {Record<string, string[]>} inside - tokens read by unnamed elements inside the part -> properties
  * @property {Record<string, string[]>} attrs - data attributes seen on the part
  * @property {string[]} contains - parts rendered inside it
@@ -188,15 +189,22 @@ export function isItemOf(project, name) {
  */
 export function catalogVariants(project, name, cap, opts = {}) {
   const info = project.components[name];
-  const demo = demoProps(project, name);
-  if (!demo) return [];
-  // An overlay shown open never takes focus: on a page of many, each would
-  // pull the page to itself as it opens.
+  const own = demoProps(project, name);
+  if (!own) return [];
+  // No demo takes focus as it mounts: on a page of many, each would pull
+  // the page to itself.
+  /** @type {Record<string, unknown>} */
+  const demo = {
+    ...own,
+    ...(info.props?.hasAutoFocus ? {hasAutoFocus: false} : {}),
+    ...(info.props?.autoFocus && own.autoFocus ? {autoFocus: false} : {}),
+  };
+  // An overlay shown open, named, as a dialog must be.
   /** @param {Record<string, unknown>} d @returns {Record<string, unknown>} */
   const opened = d => ({
     ...d,
     ...('isOpen' in d ? {} : {isOpen: true}),
-    ...(info.props?.hasAutoFocus ? {hasAutoFocus: false} : {}),
+    ...(info.props?.label && d.label == null ? {label: `${name} example`} : {}),
   });
   if (info.opens && opts.shown) return [{label: '', props: opened(demo)}];
   const base = info.opens ? opened(demo) : demo;
@@ -499,6 +507,76 @@ async function buildPartData(project) {
   };
 }
 
+/**
+ * The value Core falls back to where its stylesheet reads a variable
+ * (`var(--astryx-card-padding, var(--spacing-4))` gives `var(--spacing-4)`),
+ * or null when it gives none.
+ * @param {any} project
+ * @param {string} name
+ * @returns {string | null}
+ */
+export function coreFallback(project, name) {
+  /** @type {string} */
+  let css;
+  try {
+    css = fs.readFileSync(
+      project.req.resolve('@astryxdesign/core/astryx.css'),
+      'utf8',
+    );
+  } catch {
+    return null;
+  }
+  const at = css.indexOf(`var(${name},`);
+  if (at < 0) return null;
+  let depth = 0;
+  const from = at + `var(${name},`.length;
+  for (let j = from; j < css.length; j++) {
+    if (css[j] === '(') depth++;
+    else if (css[j] === ')') {
+      if (depth === 0) return css.slice(from, j).trim();
+      depth--;
+    }
+  }
+  return null;
+}
+
+/** @type {Map<string, Set<string>>} */
+const calcCache = new Map();
+
+/**
+ * The variables Core's stylesheet reads inside a calc() (a composer's
+ * padding in its send button's radius): only one length works there.
+ * Empty with no stylesheet.
+ * @param {any} project
+ * @returns {Set<string>}
+ */
+export function calcVars(project) {
+  /** @type {string} */
+  let file;
+  try {
+    file = project.req.resolve('@astryxdesign/core/astryx.css');
+  } catch {
+    return new Set();
+  }
+  const cached = calcCache.get(file);
+  if (cached) return cached;
+  const css = fs.readFileSync(file, 'utf8');
+  /** @type {Set<string>} */
+  const out = new Set();
+  for (let i = css.indexOf('calc('); i >= 0; i = css.indexOf('calc(', i + 5)) {
+    let depth = 0;
+    let j = i + 4;
+    for (; j < css.length; j++) {
+      if (css[j] === '(') depth++;
+      else if (css[j] === ')' && --depth === 0) break;
+    }
+    for (const m of css.slice(i, j).matchAll(/var\((--[a-z0-9_-]+)/gi))
+      out.add(m[1].toLowerCase());
+  }
+  calcCache.set(file, out);
+  return out;
+}
+
 /** @type {Map<string, Set<string>>} */
 const multipliedCache = new Map();
 
@@ -590,6 +668,24 @@ function expand(v, env, tokens, seen = new Set(), depth = 0) {
 }
 
 /**
+ * A value with the private variables set on the element or its ancestors
+ * put in (a variable with no fallback only), so it reads public tokens and
+ * literal values alone where it can.
+ * @param {string} v
+ * @param {Record<string, string>} env
+ * @param {Set<string>} tokens
+ * @param {number} [depth]
+ * @returns {string}
+ */
+function resolvePrivate(v, env, tokens, depth = 0) {
+  if (depth > 8) return v;
+  const out = v.replace(/var\((--[a-zA-Z0-9_-]+)\)/g, (m, name) =>
+    !tokens.has(name) && env[name] != null ? env[name] : m,
+  );
+  return out === v ? v : resolvePrivate(out, env, tokens, depth + 1);
+}
+
+/**
  * Walk server-rendered markup: for each element, its classes' declarations
  * become what its part reads; text records the color pair it sits on.
  * @param {string} html
@@ -598,7 +694,7 @@ function expand(v, env, tokens, seen = new Set(), depth = 0) {
  * @returns {{map: Record<string, PartRecord>, pairs: TextPair[]}}
  */
 export function walkMarkup(html, decls, tokens) {
-  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>}>} */
+  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>}>} */
   const map = {};
   /** @type {Array<{env: Record<string, string>, target: string | null, fg: PaintSide | null, bg: PaintSide | null}>} */
   const stack = [{env: {}, target: null, fg: null, bg: null}];
@@ -649,6 +745,7 @@ export function walkMarkup(html, decls, tokens) {
     if (target) {
       const T = (map[target] ??= {
         own: {},
+        at: {},
         inside: {},
         attrs: {},
         contains: new Set(),
@@ -665,6 +762,11 @@ export function walkMarkup(html, decls, tokens) {
         const cond = [cond0, d.cond].filter(Boolean).join(' ');
         if (ownsTarget) {
           const P = (T.own[d.prop] ??= {tokens: {}, values: new Set()});
+          (T.at[d.prop] ??= {})[cond || 'always'] ??= resolvePrivate(
+            d.value,
+            env,
+            tokens,
+          );
           P.values.add(
             d.value.length > 80 ? `${d.value.slice(0, 80)}...` : d.value,
           );
@@ -715,6 +817,7 @@ export function walkMarkup(html, decls, tokens) {
           },
         ]),
       ),
+      at: v.at,
       inside: Object.fromEntries(
         Object.entries(v.inside).map(([k, s]) => [k, [...s]]),
       ),

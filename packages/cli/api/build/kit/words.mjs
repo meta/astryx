@@ -130,6 +130,54 @@ export function containersOf(query) {
   return found;
 }
 
+/**
+ * A template's keywords as the units a request can match, each read with the
+ * caller's own word reader. A one-word keyword is that word. A longer keyword
+ * is one phrase unit, its words joined by single spaces: a request matches it
+ * only when it names those words in that order (`phrasesIn`), and its words
+ * never count alone. So "table of contents" on a docs page adds no "table" to
+ * that page, and a table request still reads as a table.
+ * @param {readonly string[]} keywords
+ * @param {(text: string) => string[]} read the caller's word reader
+ * @returns {string[]}
+ */
+export function keywordUnits(keywords, read) {
+  return keywords.map(keyword => read(keyword).join(' ')).filter(Boolean);
+}
+
+/**
+ * The phrase units (two or more words) a request names: the unit's words
+ * appear next to each other, in order, in the request's words as the same
+ * reader reads them.
+ * @param {readonly string[]} words the request's words, in order
+ * @param {Iterable<string>} units
+ * @returns {Set<string>}
+ */
+export function phrasesIn(words, units) {
+  const text = ` ${words.join(' ')} `;
+  const found = new Set();
+  for (const unit of units) {
+    if (unit.includes(' ') && text.includes(` ${unit} `)) found.add(unit);
+  }
+  return found;
+}
+
+/**
+ * The words a template's keyword units give an idea: each one-word keyword,
+ * and every word of each phrase keyword the idea names (`phrasesIn`). A named
+ * phrase carries all of its words, as the same words listed one by one would;
+ * a phrase the idea does not name gives none of them.
+ * @param {readonly string[]} units the template's keyword units (`keywordUnits`)
+ * @param {readonly string[]} words the idea's words, in order, read the same way
+ * @returns {string[]}
+ */
+export function keywordWordsFor(units, words) {
+  const named = phrasesIn(words, units);
+  return units.flatMap(unit =>
+    !unit.includes(' ') ? [unit] : named.has(unit) ? unit.split(' ') : [],
+  );
+}
+
 /** @param {string} text */
 export const normalized = text =>
   (
@@ -163,7 +211,7 @@ export const SYNONYMS_OF = (() => {
 /**
  * @typedef {import('../_adapter.mjs').PageTemplate} PageTemplate
  * @typedef {import('../_adapter.mjs').ComponentWords} ComponentWords
- * @typedef {{name: string, score: number, hits: number, familyNamed: boolean, headNamed: boolean, containerMatched: boolean, family: string, base: boolean, matched: Set<string>}} RankedPage
+ * @typedef {{name: string, score: number, hits: number, familyNamed: boolean, headNamed: boolean, containerMatched: boolean, family: string, base: boolean, matched: Set<string>, typical: number}} RankedPage
  * @typedef {'page' | 'part' | 'edit'} IdeaKind
  */
 

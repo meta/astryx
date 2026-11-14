@@ -30,6 +30,7 @@ import {
   text,
 } from '../../formatters/index.mjs';
 import {cliError} from '../../lib/cli-error.mjs';
+import {editorMissingArgument} from '../../lib/json-shim.mjs';
 import {AstryxError} from '../../../../api/error.mjs';
 import {defineCommand} from '../../lib/define-command.mjs';
 import {
@@ -48,6 +49,9 @@ import {
   dialValueFits,
   newFlagList,
   editorCompileProblem,
+  editorBuildExtra,
+  editorLoadedFonts,
+  editorColorModes,
   editorThemeHold,
   editorThemeRefusal,
   editorMissingSource,
@@ -483,7 +487,16 @@ function flagValues(name) {
  */
 function changeBlocks(r) {
   const d = r.data;
-  const s = d.setting;
+  // The status line names the value as saved, with a quote or space mark
+  // the text output would fold written as its CSS escape (\201C), so the
+  // text and the JSON name the same value.
+  const s = {
+    ...d.setting,
+    value: String(d.setting.value).replace(
+      /[\u00A0\u00AB\u00BB\u2000-\u200B\u2018-\u201F\u2039\u203A\u202F\u3000\u300C-\u300F]/g,
+      c => `\\${c.codePointAt(0)?.toString(16).toUpperCase()} `,
+    ),
+  };
   const status =
     d.was != null
       ? `[ok] ${d.theme}: ${s.thing} ${d.was} -> ${s.value}`
@@ -638,7 +651,14 @@ function strayOption(command, rest) {
         },
       );
   }
-  const word = rest.find(w => typeof w === 'string' && w.startsWith('--'));
+  // A value pasted with a token's label (`'--color-accent: #e11d48'`) is
+  // a value, read by the label reader, not an option.
+  const word = rest.find(
+    w =>
+      typeof w === 'string' &&
+      w.startsWith('--') &&
+      !/^--[a-z0-9-]+\s*:\s*\S/i.test(w),
+  );
   if (word == null) return null;
   return cliError(
     `unknown option '${word}': only the thing a change names may start with -- (a design token such as --color-accent).`,
@@ -886,6 +906,7 @@ export function registerExperimentalTheme(group, program) {
             `[ok] made theme "${r.data.theme}"${r.data.like ? ` on top of ${r.data.like}` : ''}`,
             ...project(/** @type {any} */ (r.data)),
             `Tip: ${EDITOR} set ${r.data.theme} <thing> <value>, or ${HOW} "<what you want>"`,
+            `Look at it after each change (this changes nothing in your app): ${EDITOR} show ${r.data.theme} --png writes themes/${r.data.theme}/preview.png and sheet.png from real components; open the PNGs and check them against the request`,
           ],
         ),
     }),
@@ -902,13 +923,33 @@ export function registerExperimentalTheme(group, program) {
         /** @type {string} */ thing,
         /** @type {string[]} */ value,
         /** @type {any} */ o,
-      ) =>
-        strayOption('set', value) ??
-        run(
-          program,
-          () => themeEditSet(name, thing, value.join(' '), changeOptions(o)),
-          changeBlocks,
-        ),
+      ) => {
+        // A declaration pasted as one argument (`--color-accent: #e11d48`,
+        // or `--color-accent:#e11d48`) is the token and its value; with no
+        // value otherwise, the missing-argument error the parser gives.
+        // A pasted JSON object of settings goes to the editor whole, which
+        // gives one set line per entry.
+        if (!value.length && /^\s*\{/.test(thing)) value = [''];
+        if (!value.length) {
+          // Any thing, a token or a dial, with `:` or `=` (`accent: red`,
+          // `--color-accent=#e11d48`).
+          const pasted = /^(\S+?)\s*[:=]\s*(.+?);?\s*$/.exec(thing);
+          if (!pasted)
+            return missingSetValue(
+              editor.commands.find(c => c.name() === 'set'),
+            );
+          thing = pasted[1];
+          value = [pasted[2]];
+        }
+        return (
+          strayOption('set', value) ??
+          run(
+            program,
+            () => themeEditSet(name, thing, value.join(' '), changeOptions(o)),
+            changeBlocks,
+          )
+        );
+      },
     }),
     setDoc,
     {tokens: true},
@@ -1108,7 +1149,16 @@ export function registerExperimentalTheme(group, program) {
                 )
               : [
                   ...project(/** @type {any} */ (r.data)),
-                  `Tip: ${PREFIX} preview add${o.path == null ? '' : ` --path ${quoteCommandArgument(String(o.path))}`}`,
+                  // A folder add refuses has a note that says why instead.
+                  ...(r.data.notes.some(
+                    n =>
+                      n.includes(' refuses this folder') ||
+                      n.startsWith('no preview here; '),
+                  )
+                    ? []
+                    : [
+                        `Tip: ${PREFIX} preview add${o.path == null ? '' : ` --path ${quoteCommandArgument(String(o.path))}`}`,
+                      ]),
                 ],
           r =>
             resultSet({
@@ -1278,6 +1328,27 @@ export function registerExperimentalTheme(group, program) {
       missingSource: editorMissingSource,
       template: editorThemeTemplate,
       hold: editorThemeHold,
+      loadedFonts: editorLoadedFonts,
+      extraData: editorBuildExtra,
+      colorModes: editorColorModes,
     },
   );
+}
+
+/**
+ * The error for `set` given a theme and a thing but no value: the parser's
+ * missing-argument report, from the one builder it uses.
+ * @param {any} cmd the set command
+ * @returns {never}
+ */
+function missingSetValue(cmd) {
+  const {message, suggestions} = editorMissingArgument(
+    cmd,
+    ['theme', 'thing', 'value'],
+    'value',
+  );
+  return cliError(message, {
+    code: ERROR_CODES.ERR_MISSING_ARGUMENT,
+    suggestions,
+  });
 }

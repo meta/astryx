@@ -273,7 +273,8 @@ describe('dials and part properties (final 3)', () => {
           }),
         )
       ).run[0],
-    ).toMatch(/--on button --when size:sm$/);
+      // Nothing near banana: how, never a stock rung.
+    ).toMatch(/ how corners$/);
     fs.rmSync(path.join(cwd, 'themes/l5'), {recursive: true, force: true});
   }, 240_000);
 
