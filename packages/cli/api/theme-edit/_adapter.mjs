@@ -56,6 +56,7 @@ import {LIKE, P} from './_tables.mjs';
 /** The preview command, as a person runs it. */
 const PREVIEW_WORDS = P.replace(/ editor$/, ' preview');
 import {setLine} from './_check.mjs';
+import {splitCommand} from './_vet.mjs';
 import {
   SHOWCASE_GROUPS,
   appCopyBehind,
@@ -887,6 +888,120 @@ export function editorThemeRefusal(err, cwd) {
     ],
     ERROR_CODES.ERR_UNKNOWN_THEME,
   );
+}
+
+/**
+ * A refused compile whose first suggestion is another compile: that compile
+ * is run through compile's own checks before it is offered (in memory,
+ * nothing built), and each repair a refusal of it offers is folded into the
+ * one line. An --out outside the working folder is dropped, and the reason
+ * says why; when the rest cannot be repaired, the reason says so. A line
+ * that starts with `cd` runs elsewhere, so it is not checked from here.
+ * @param {AstryxError} err
+ * @param {string} cwd
+ * @returns {Promise<AstryxError>}
+ */
+export async function editorFollowCompile(err, cwd) {
+  const list = err.suggestions ?? [];
+  const first = list[0];
+  // The build's own refusals name `theme build`; the group's words replace
+  // those words when the refusal is shown.
+  const wordsIn = (/** @type {string} */ line) =>
+    [' experimental theme compile ', ' theme build '].find(w =>
+      line.includes(w),
+    );
+  if (!first || /^cd /.test(first.name) || !wordsIn(first.name)) return err;
+  /** @param {string} line */
+  const read = line => {
+    const words = wordsIn(line);
+    if (!words) return null;
+    const args = splitCommand(line.slice(line.indexOf(words) + words.length));
+    if (!args) return null;
+    /** @type {{source?: string, out?: string, iconsSpecifier?: string, check?: boolean}} */
+    const r = {};
+    for (let i = 0; i < args.length; i += 1) {
+      const a = args[i];
+      if (a === '--check') r.check = true;
+      else if (a === '--out') r.out = args[(i += 1)];
+      else if (a === '--icons-specifier') r.iconsSpecifier = args[(i += 1)];
+      else if (a.startsWith('-') || r.source) return null;
+      else r.source = a;
+    }
+    return r.source ? r : null;
+  };
+  const COMPILE = {group: 'experimental theme', build: 'compile'};
+  /** @param {string} p */
+  const real = p => {
+    let at = path.resolve(p);
+    const rest = [];
+    while (!fs.existsSync(at) && path.dirname(at) !== at) {
+      rest.unshift(path.basename(at));
+      at = path.dirname(at);
+    }
+    return path.join(fs.realpathSync(at), ...rest);
+  };
+  const inside = (/** @type {string} */ p) => {
+    const rel = path.relative(real(cwd), real(p));
+    return !rel.startsWith('..') && !path.isAbsolute(rel);
+  };
+  let line = first.name;
+  let reason = first.reason;
+  for (let i = 0; i < 6; i += 1) {
+    const r = read(line);
+    if (!r || !r.source) break;
+    const source = r.source;
+    const abs = path.resolve(cwd, source);
+    if (r.out && !inside(path.resolve(cwd, r.out))) {
+      line = buildSuggestion(
+        source,
+        {check: r.check, iconsSpecifier: r.iconsSpecifier},
+        cwd,
+        COMPILE,
+      );
+      reason = `do this instead, without --out: ${r.out} is outside the working folder, where a build may not write, so the outputs go beside the source`;
+      continue;
+    }
+    /** @type {{message: string, next?: string} | null} */
+    let problem = null;
+    if (!fs.existsSync(abs)) problem = {message: `${source} is not there`};
+    else if (fs.statSync(abs).isDirectory()) {
+      const own = `${path.basename(abs)}.theme.ts`;
+      problem = {
+        message: `${source} is a folder`,
+        next: fs.existsSync(path.join(abs, own))
+          ? buildSuggestion(
+              path.posix.join(source.replace(/\/+$/, ''), own),
+              r,
+              cwd,
+              COMPILE,
+            )
+          : undefined,
+      };
+    } else if (!r.out && !inside(path.dirname(abs)))
+      problem = {message: `${source} is outside the working folder`};
+    else {
+      const refused = await editorCompileProblem([source], {cwd, ...r});
+      if (refused)
+        problem = {
+          message: refused.message,
+          next: refused.suggestions?.[0]?.name,
+        };
+    }
+    if (!problem) break;
+    if (problem.next && problem.next !== line) {
+      line = problem.next;
+      if (/^cd /.test(line)) break;
+      continue;
+    }
+    reason = `${reason}; it is still refused: ${problem.message}`;
+    break;
+  }
+  if (line === first.name && reason === first.reason) return err;
+  err.suggestions = [
+    {...first, name: line, reason},
+    ...list.slice(1).filter(x => x.name !== line),
+  ];
+  return err;
 }
 
 /**

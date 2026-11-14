@@ -14,7 +14,7 @@ import * as fs from 'node:fs';
 import {coversProperty} from './_css.mjs';
 import * as path from 'node:path';
 import {AstryxError} from '../error.mjs';
-import {vetSuggestions} from './_vet.mjs';
+import {readSetLine, vetSuggestions} from './_vet.mjs';
 import {colorPair, offersTyped} from './_normal.mjs';
 import {
   AUTO_SPREAD,
@@ -40,6 +40,8 @@ import {
   radiusTokenOf,
   contrastProblems,
   describe,
+  entryDamage,
+  entryNotes,
   keyOf,
   loadTheme,
   maskedSettings,
@@ -1621,6 +1623,75 @@ function carryTyped(e, sub, slug, thing, typed) {
 }
 
 /**
+ * A `set` or `undo` line for the theme a path or other letters named, run
+ * through that command's own check (in memory, nothing written). Each
+ * repair a refusal of it offers is folded into the one line, so the line
+ * runs as offered; `why` names what is still refused when no repair is
+ * offered.
+ * @param {'set' | 'undo'} sub
+ * @param {string} slug
+ * @param {string} line
+ * @param {string} cwd
+ * @returns {Promise<{line: string, why: string | null}>}
+ */
+async function followChangeLine(sub, slug, line, cwd) {
+  /** @type {import('./_settings.mjs').ThemeData} */
+  let data;
+  /** @type {import('./_settings.mjs').Ctx} */
+  let ctx;
+  try {
+    data = loadTheme(cwd, slug);
+    ctx = /** @type {import('./_settings.mjs').Ctx} */ (await context(cwd));
+    ctx.base = await baseResolved(ctx.project, data.like);
+  } catch {
+    return {line, why: null};
+  }
+  const prefix = `${P} ${sub} ${slug} `;
+  let now = line;
+  for (let i = 0; i < 6; i += 1) {
+    const read = readSetLine(
+      sub === 'undo' ? now.replace(`${P} undo `, `${P} set `) : now,
+      slug,
+    );
+    if (!read) return {line: now, why: null};
+    try {
+      const s = checkSetting(
+        ctx,
+        slug,
+        structuredClone(data),
+        read.thing,
+        read.value,
+        read.flags,
+        sub === 'undo',
+      );
+      if (sub === 'undo' && !data.settings.some(x => keyOf(x) === keyOf(s)))
+        return {
+          line: now,
+          why: `${slug} does not set ${describe({...s, value: '?'}).replace(' = ?', '')}`,
+        };
+      return {line: now, why: null};
+    } catch (e) {
+      const next =
+        e instanceof AstryxError
+          ? (e.suggestions ?? []).find(
+              x => x.name.startsWith(prefix) && x.name !== now,
+            )
+          : undefined;
+      if (!next)
+        return {
+          line: now,
+          why:
+            e instanceof Error
+              ? e.message.replace(/\s*Nothing was changed\.$/, '')
+              : String(e),
+        };
+      now = next.name;
+    }
+  }
+  return {line: now, why: null};
+}
+
+/**
  * @param {'set' | 'undo'} sub
  * @param {string} slug
  * @param {string} thing
@@ -1788,10 +1859,16 @@ async function change(sub, slug, thing, value, options) {
           .map(w =>
             String(w).startsWith('--') ? w : quoteCommandArgument(String(w)),
           );
+        const followed = await followChangeLine(
+          sub,
+          near.name,
+          `${P} ${sub} ${near.name}${words.length ? ` ${words.join(' ')}` : ''}`,
+          options.cwd ?? process.cwd(),
+        );
         e.suggestions = [
           {
-            name: `${P} ${sub} ${near.name}${words.length ? ` ${words.join(' ')}` : ''}`,
-            reason: `do this instead: ${near.name} is a theme here`,
+            name: followed.line,
+            reason: `do this instead: ${near.name} is a theme here${followed.why ? `, but this still needs a fix: ${followed.why}` : ''}`,
           },
           ...(e.suggestions ?? []).filter(
             x => x !== near && x.name !== `${P} show ${near.name}`,
@@ -1846,10 +1923,13 @@ async function changeOnce(
     when: options.when,
     state: options.state,
     mode: options.mode,
+    // An undo removes the entry it names even when that entry's mode or
+    // source means nothing.
+    ...(sub === 'undo' ? {removing: true} : {}),
   });
   const data = loadTheme(cwd, slug, target);
   /** @type {string[]} */
-  const fieldNotes = [];
+  const fieldNotes = [...entryNotes(data)];
   {
     // A damaged field the command does not set goes back to its default,
     // so the theme loads again (a change or removal of any setting repairs
@@ -1939,8 +2019,24 @@ async function changeOnce(
             Boolean(x.only) === Boolean(flags.only),
         )
       : -1;
-  let rawIdx = -1;
-  if (exactIdx >= 0) {
+  // An entry of this name whose mode or source means nothing is the one an
+  // undo removes: only that entry, never a valid one beside it.
+  const damagedIdx =
+    sub === 'undo'
+      ? data.settings.findIndex(
+          x =>
+            (x.thing === typedThing || x.thing === thing) &&
+            (x.on ?? null) === (flags.on ?? null) &&
+            (x.when ?? null) === (flags.when ?? null) &&
+            (x.state ?? null) === (flags.state ?? null) &&
+            Boolean(x.only) === Boolean(flags.only) &&
+            (entryDamage(x) === 'source'
+              ? (x.mode ?? null) === (flags.mode ?? null)
+              : entryDamage(x) === 'mode' && !flags.mode),
+        )
+      : -1;
+  let rawIdx = damagedIdx;
+  if (exactIdx >= 0 && rawIdx < 0) {
     // Only an entry the editor would not save as written: one it refuses,
     // or reads as another name, part or state.
     const entry = data.settings[exactIdx];
@@ -3984,10 +4080,16 @@ export async function themeEditUndo(theme, options = {}) {
         ].map(w =>
           String(w).startsWith('--') ? w : quoteCommandArgument(String(w)),
         );
+        const followed = await followChangeLine(
+          'undo',
+          name,
+          `${P} undo ${name}${words.length ? ` ${words.join(' ')}` : ''}`,
+          cwd,
+        );
         e.suggestions = [
           {
-            name: `${P} undo ${name}${words.length ? ` ${words.join(' ')}` : ''}`,
-            reason: `do this instead: ${name} is a theme here`,
+            name: followed.line,
+            reason: `do this instead: ${name} is a theme here${followed.why ? `, but this still needs a fix: ${followed.why}` : ''}`,
           },
           ...(e.suggestions ?? []).filter(x => x !== near),
         ];

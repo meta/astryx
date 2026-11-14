@@ -973,7 +973,31 @@ export function loadTheme(
       ],
       ERROR_CODES.ERR_THEME_INVALID,
     );
+  readEntryWords(data);
   const problem = settingsProblem(data, skip);
+  // An entry whose mode or source means nothing: `undo` with its name
+  // removes that entry only; a step back loses the last change.
+  const damaged = problem ? damagedEntry(data, problem) : null;
+  if (damaged)
+    throw new AstryxError(
+      `themes/${slug}/${slug}.settings.json: ${problem}. Remove that setting with ${P} undo ${slug} ${undoArgs({...damaged, mode: entryDamage(damaged) === 'mode' ? undefined : damaged.mode})}; nothing else needs to change${steps ? `, or step back to the settings before the last change with ${P} undo ${slug} (the last change is then lost)` : ''}. Nothing was changed.`,
+      [
+        {
+          name: `${P} undo ${slug} ${undoArgs({...damaged, mode: entryDamage(damaged) === 'mode' ? undefined : damaged.mode})}`,
+          reason: 'do this instead: removes only that setting',
+        },
+        ...(steps
+          ? [
+              {
+                name: `${P} undo ${slug}`,
+                reason:
+                  'or step back to the settings before the last change (the last change is then lost)',
+              },
+            ]
+          : []),
+      ],
+      ERROR_CODES.ERR_THEME_INVALID,
+    );
   // A value made under looser rules is not damage: the command that
   // changes or removes that setting still works, with the other bad ones
   // left out of the build, so each listed fix runs on its own.
@@ -1222,10 +1246,13 @@ export function settingsProblem(
     // a setting with no name is damage.
     if (!s || typeof s.thing !== 'string' || !('value' in s))
       return 'a setting has no thing or value';
+    if (removes(skip) && skips(s, skip) && entryDamage(s)) continue;
     if (!['dial', 'token', 'property'].includes(s.source))
-      return `${s.thing} has no source (dial, token or property)`;
+      return s.source == null || s.source === ''
+        ? `${s.thing} has no source (dial, token or property)`
+        : `${s.thing} has source ${JSON.stringify(s.source)}, not dial, token or property`;
     if (s.mode != null && s.mode !== 'light' && s.mode !== 'dark')
-      return `${s.thing} has mode "${s.mode}"`;
+      return `${s.thing} has mode ${JSON.stringify(s.mode)}, not light or dark`;
     const key = keyOf(s);
     // The command that changes or removes a setting listed twice keeps one
     // value, or none, so it fixes the list.
@@ -1237,6 +1264,121 @@ export function settingsProblem(
     if (problem) return problem;
   }
   return null;
+}
+
+/** How a hand-written entry mode reads, in any case: null when it means nothing. */
+const MODE_WORDS = /** @type {Record<string, 'light' | 'dark'>} */ ({
+  light: 'light',
+  day: 'light',
+  dark: 'dark',
+  night: 'dark',
+});
+
+/**
+ * Read each entry's mode and source as the editor writes them: a mode in
+ * other letters or words (`Dark`, `night`, `day`) as light or dark, a
+ * source in other letters (`Dial`) as written, and a missing source from
+ * the thing (a dial name is a dial, a `--` name a token, anything with a
+ * part a property). Each change is kept as a note for the next command,
+ * which saves the entry that way. A value that means nothing is left for
+ * the check to name.
+ * @param {any} data
+ */
+function readEntryWords(data) {
+  /** @type {string[]} */
+  const notes = [];
+  for (const s of Array.isArray(data?.settings) ? data.settings : []) {
+    if (!s || typeof s !== 'object' || typeof s.thing !== 'string') continue;
+    if (typeof s.mode === 'string' && s.mode !== 'light' && s.mode !== 'dark') {
+      const read = MODE_WORDS[s.mode.trim().toLowerCase()];
+      if (read) {
+        notes.push(
+          `${s.thing} was saved with mode ${JSON.stringify(s.mode)}, read as ${read}`,
+        );
+        s.mode = read;
+      }
+    }
+    if (!['dial', 'token', 'property'].includes(s.source)) {
+      const typed = typeof s.source === 'string' ? s.source.trim() : '';
+      const read = typed
+        ? ['dial', 'token', 'property'].find(x => x === typed.toLowerCase())
+        : s.source == null || s.source === ''
+          ? DIALS[s.thing]
+            ? 'dial'
+            : s.thing.startsWith('--')
+              ? 'token'
+              : s.on
+                ? 'property'
+                : undefined
+          : undefined;
+      if (read) {
+        notes.push(
+          typed
+            ? `${s.thing} was saved with source ${JSON.stringify(s.source)}, read as ${read}`
+            : `${s.thing} was saved with no source, read as ${read}`,
+        );
+        s.source = read;
+      }
+    }
+  }
+  ENTRY_NOTES.set(data, notes);
+}
+
+/** @type {WeakMap<object, string[]>} */
+const ENTRY_NOTES = new WeakMap();
+
+/**
+ * What loading read differently from the file in the theme's entries (a
+ * mode or source in other letters, a missing source): one note each.
+ * @param {object} data the theme as {@link loadTheme} returned it
+ * @returns {string[]}
+ */
+export function entryNotes(data) {
+  return ENTRY_NOTES.get(data) ?? [];
+}
+
+/**
+ * Which part of an entry means nothing after reading: its mode or its
+ * source, or null.
+ * @param {any} s
+ * @returns {'mode' | 'source' | null}
+ */
+export function entryDamage(s) {
+  if (!s || typeof s.thing !== 'string') return null;
+  if (!['dial', 'token', 'property'].includes(s.source)) return 'source';
+  if (s.mode != null && s.mode !== 'light' && s.mode !== 'dark') return 'mode';
+  return null;
+}
+
+/**
+ * The entry a settings problem names when that problem is its mode or
+ * source, or null.
+ * @param {any} data
+ * @param {string} problem
+ */
+function damagedEntry(data, problem) {
+  return (
+    (Array.isArray(data?.settings) ? data.settings : []).find(
+      (/** @type {any} */ s) =>
+        (entryDamage(s) === 'source' &&
+          typeof s.source === 'string' &&
+          s.source !== '' &&
+          problem.startsWith(`${s.thing} has source `)) ||
+        (entryDamage(s) === 'mode' &&
+          problem.startsWith(`${s.thing} has mode `)),
+    ) ?? null
+  );
+}
+
+/**
+ * Whether the command removes the setting it names (an undo): only that
+ * takes an entry whose mode or source means nothing.
+ * @param {string | Partial<Setting> | undefined} skip
+ */
+function removes(skip) {
+  return Boolean(
+    skip && typeof skip === 'object' && /** @type {any} */ (skip).removing,
+  );
 }
 
 /**
@@ -1253,7 +1395,8 @@ function skips(s, skip) {
     (s.on ?? '') === (skip.on ?? '') &&
     (s.when ?? '') === (skip.when ?? '') &&
     (s.state ?? '') === (skip.state ?? '') &&
-    (s.mode ?? '') === (skip.mode ?? '')
+    ((s.mode ?? '') === (skip.mode ?? '') ||
+      (removes(skip) && !skip.mode && entryDamage(s) === 'mode'))
   );
 }
 
