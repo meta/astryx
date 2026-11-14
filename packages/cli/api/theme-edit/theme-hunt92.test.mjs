@@ -136,6 +136,35 @@ const CASES =
       [/ set b background (red|blue) --on button$/],
       / background none/,
     ],
+    // A reset typed with a typo is that reset, corrected.
+    [
+      'display',
+      'nnone',
+      {on: 'card'},
+      [/ set b display none --on card$/],
+      null,
+    ],
+    [
+      'box-shadow',
+      'nnone',
+      {on: 'card'},
+      [/ set b box-shadow none --on card$/],
+      null,
+    ],
+    [
+      'text-transform',
+      'nnone',
+      {on: 'button'},
+      [/ set b text-transform none --on button$/],
+      null,
+    ],
+    [
+      'font-weight',
+      'normall',
+      {on: 'button'},
+      [/ set b font-weight normal --on button$/],
+      null,
+    ],
     // A bare number on a shorthand where a length is only a position.
     ['background', '0.5', {on: 'card'}, [/ how background$/], /0\.5px/],
     ['background', '2', {on: 'card'}, [/ how background$/], /2px/],

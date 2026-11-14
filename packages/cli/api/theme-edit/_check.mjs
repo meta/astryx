@@ -1685,14 +1685,21 @@ function propertyProblem(prop, value) {
     : null;
   // A suggestion is offered only when the property takes it, in range too,
   // and never a reset the input did not hold (0, none, 1, auto, normal):
-  // following it would undo what was asked.
+  // following it would undo what was asked. A reset typed with a typo
+  // (`nnone`, `normall`: a word within two edits of it) is that reset,
+  // corrected.
   const RESETS =
     /^(0|0px|none|1|auto|normal|initial|unset|inherit|revert|transparent)$/i;
+  const typedAs = (/** @type {string} */ x) =>
+    x === typed ||
+    (/^[a-z][a-z-]{3,}$/.test(typed) &&
+      /^[a-z][a-z-]{3,}$/.test(x) &&
+      levenshteinDistance(x, typed) <= 2);
   const takes = (/** @type {string | null} */ x) =>
     x != null &&
     matchValue(prop, x) != null &&
     !belowRange(prop, x) &&
-    !(RESETS.test(x.trim()) && x.trim().toLowerCase() !== typed);
+    !(RESETS.test(x.trim()) && !typedAs(x.trim().toLowerCase()));
   // A lone length on a shorthand where it is only a position (background,
   // mask) wipes the rest: no px is guessed there.
   const pxFits = !/^(background|mask)$/i.test(prop);
