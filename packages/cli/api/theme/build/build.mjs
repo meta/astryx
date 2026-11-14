@@ -4878,14 +4878,19 @@ async function themeBuildInternal(
   // permanently in violation of its own "compiles with no warnings" guard).
   // Adaptation rules are resolved theme writes in their own right, so a family
   // named only inside one needs the same notice as one named at the root.
+  // The result names the recipe's command bare, as every machine-read
+  // command is; the printed note starts it the way this project runs the CLI.
+  /** @param {string} family @param {string} recipe */
+  const fontNotice = (family, recipe) =>
+    handOff.fontHelp?.notice(family) ??
+    `Font "${family}" is named by this theme but not loaded; add a <link> or @font-face in your app (recipe: ${recipe})`;
   /** @type {string[]} */
   const fontNotices = [];
   for (const family of unloadedFonts) {
-    const msg =
-      handOff.fontHelp?.notice(family) ??
-      `Font "${family}" is named by this theme but not loaded; add a <link> or @font-face in your app (recipe: ${formatCliCommand('docs typography', cwd)})`;
-    noticeMessages.push(msg);
-    fontNotices.push(msg);
+    noticeMessages.push(fontNotice(family, 'astryx docs typography'));
+    fontNotices.push(
+      fontNotice(family, formatCliCommand('docs typography', cwd)),
+    );
   }
 
   /** @type {ThemeBuildTrailer} */
@@ -4933,7 +4938,7 @@ async function themeBuildInternal(
  * @property {string} jsImport Import specifier of the built JS module.
  * @property {string} cssImport Import specifier of the built CSS.
  * @property {string[]} unloadedFonts Font families the theme names but does not load.
- * @property {string[]} fontNotices One notice per unloaded font family.
+ * @property {string[]} fontNotices One notice per unloaded font family, as printed.
  * @property {FontHelp | null} [fontHelp] How the caller loads fonts, when it does.
  */
 
@@ -5572,11 +5577,18 @@ Or load the same stylesheet natively:
   const unloadedFonts = [
     ...new Set(members.flatMap(member => member.unloadedFonts)),
   ];
-  const notices = unloadedFonts.map(
-    family =>
-      `Font "${family}" is named by this theme family but not loaded; add a <link> or @font-face in your app (recipe: ${formatCliCommand('docs typography', cwd)})`,
+  /** @param {string} family @param {string} recipe */
+  const familyNotice = (family, recipe) =>
+    `Font "${family}" is named by this theme family but not loaded; add a <link> or @font-face in your app (recipe: ${recipe})`;
+  // The result names the command bare; the printed note as this project
+  // runs the CLI.
+  const notices = unloadedFonts.map(family =>
+    familyNotice(family, 'astryx docs typography'),
   );
-  for (const notice of notices) logger.log(`  note: ${notice}`);
+  for (const family of unloadedFonts)
+    logger.log(
+      `  note: ${familyNotice(family, formatCliCommand('docs typography', cwd))}`,
+    );
   return {
     type: 'theme.build',
     data: {
