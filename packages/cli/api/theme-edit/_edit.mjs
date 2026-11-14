@@ -529,7 +529,7 @@ export async function themeEditNew(name, options = {}) {
   }
   applyNewSettings(ctx, name, data, settings, png, likeFixed ?? undefined);
   if (left?.keep.some(p => path.basename(p) === `${name}.theme.ts`))
-    refuseThemeSource(cwd, name);
+    await refuseThemeSource(cwd, name);
   /** @type {string[]} */
   const keptNotes = [];
   /** @type {string[]} */
@@ -3541,7 +3541,7 @@ export async function themeEditShow(theme, options = {}) {
   // An own source that does not parse is refused before anything is
   // built, written or removed (the build would fail part way).
   if (!readOnly) refuseThemeParse(cwd, theme);
-  const brokenSource = themeSourceProblem(cwd, theme);
+  const brokenSource = await themeSourceProblem(cwd, theme);
   // Every output, as `compile --check` reads them: one missing or edited by
   // hand is built again too.
   let stale = staleBuild(cwd, theme, data);

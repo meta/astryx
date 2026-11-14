@@ -25,7 +25,13 @@ import {AstryxError} from '../error.mjs';
 import {logger} from '../logger.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
-import {oneColorMode, themeBuildForReport} from '../theme/build/build.mjs';
+import {
+  loadThemeExport,
+  oneColorMode,
+  themeBuildForReport,
+} from '../theme/build/build.mjs';
+import {namedFontFamilies} from '../theme/build/font-warning.mjs';
+import {declarationValues} from '../../foundation/fonts/font-stylesheet.mjs';
 import {
   MODE_WORDS,
   AUTO_SPREAD,
@@ -5600,30 +5606,173 @@ function themeModuleSource(slug) {
 export const themeSource = slug => themeModuleSource(slug);
 
 /**
- * Why `<slug>.theme.ts` cannot carry the settings, or null: it must import
- * `./<slug>.settings`, extend `<camel>Settings` and keep the name, or no
- * setting takes effect.
+ * Why a theme's source cannot carry its settings, or null when it carries
+ * them. The theme is the export a build of the source reads, loaded as the
+ * build loads it: it must be named for the theme, and its definition must
+ * extend the settings imported from ./<slug>.settings. Null for a source
+ * that does not parse: its parse error is its own finding.
  * @param {string} cwd
  * @param {string} slug
- * @returns {string | null}
+ * @returns {Promise<string | null>}
  */
-export function themeSourceProblem(cwd, slug) {
+export async function themeSourceProblem(cwd, slug) {
   const f = themeFiles(cwd, slug);
-  if (!fs.existsSync(f.ts)) return null;
-  const code = fs
-    .readFileSync(f.ts, 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/\/\/.*$/gm, '');
+  /** @type {string} */
+  let code;
+  try {
+    code = fs.readFileSync(f.ts, 'utf8');
+  } catch {
+    return null;
+  }
+  /** @type {any} */
+  let ast;
+  try {
+    ast = parseModule(code, {sourceType: 'module', plugins: ['typescript']});
+  } catch {
+    // Its parse error is its own finding (refuseThemeParse, the build).
+    return null;
+  }
   const settings = `${camel(slug)}Settings`;
-  if (
-    !new RegExp(`from\\s+['"]\\./${slug}\\.settings(\\.[jt]s)?['"]`).test(code)
-  )
+  const fromSettings = new RegExp(`^\\./${slug}\\.settings(\\.[jt]s)?$`);
+  /** @type {string | null} */
+  let settingsBinding = null;
+  for (const node of ast.program.body)
+    if (
+      node.type === 'ImportDeclaration' &&
+      fromSettings.test(node.source.value)
+    )
+      for (const spec of node.specifiers)
+        if (
+          spec.type === 'ImportSpecifier' &&
+          (spec.imported.name ?? spec.imported.value) === settings
+        )
+          settingsBinding = spec.local.name;
+  if (!settingsBinding)
     return `${slug}.theme.ts does not import ./${slug}.settings`;
-  if (!new RegExp(`extends\\s*:\\s*${settings}\\b`).test(code))
-    return `${slug}.theme.ts no longer extends ${settings}`;
-  if (!new RegExp(`name\\s*:\\s*(['"\`])${slug}\\1`).test(code))
+  /** @param {any} definition */
+  const extendsSettings = definition =>
+    unwrapConst(
+      ast,
+      definition?.properties.find(
+        (/** @type {any} */ p) =>
+          p.type === 'ObjectProperty' &&
+          (p.key.name ?? p.key.value) === 'extends',
+      )?.value,
+    )?.name === settingsBinding;
+  /** @type {{theme: any, exportName: string}} */
+  let loaded;
+  try {
+    loaded = await loadThemeExport(f.ts, {cwd});
+  } catch {
+    // A module that does not load names no export. When none of its
+    // exported definitions extends the settings, that is why (defineTheme
+    // refuses a missing parent); else the build names its own failure.
+    return exportedDefinitions(ast).some(extendsSettings)
+      ? null
+      : `${slug}.theme.ts no longer extends ${settings}`;
+  }
+  if (loaded.theme?.name !== slug)
     return `${slug}.theme.ts no longer names the theme '${slug}'`;
+  if (!extendsSettings(exportedDefinition(ast, loaded.exportName)))
+    return `${slug}.theme.ts no longer extends ${settings}`;
   return null;
+}
+
+/**
+ * A module's top-level const bindings, by name.
+ * @param {any} ast
+ * @returns {Map<string, any>}
+ */
+function topConsts(ast) {
+  /** @type {Map<string, any>} */
+  const out = new Map();
+  for (const node of ast.program.body) {
+    const decl =
+      node.type === 'ExportNamedDeclaration' ? node.declaration : node;
+    if (decl?.type === 'VariableDeclaration')
+      for (const d of decl.declarations)
+        if (d.id.type === 'Identifier') out.set(d.id.name, d.init);
+  }
+  return out;
+}
+
+/**
+ * An expression with TypeScript wrappers and parentheses taken off, and a
+ * name read through to the top-level const it names. An imported name stays
+ * the identifier.
+ * @param {any} ast
+ * @param {any} node
+ * @returns {any}
+ */
+function unwrapConst(ast, node) {
+  const consts = topConsts(ast);
+  for (let depth = 0; node && depth < 20; depth++) {
+    if (
+      [
+        'TSAsExpression',
+        'TSSatisfiesExpression',
+        'TSNonNullExpression',
+        'TSTypeAssertion',
+        'ParenthesizedExpression',
+      ].includes(node.type)
+    )
+      node = node.expression;
+    else if (node.type === 'Identifier' && consts.get(node.name))
+      node = consts.get(node.name);
+    else return node;
+  }
+  return node;
+}
+
+/**
+ * The theme definitions of every export of a module.
+ * @param {any} ast
+ * @returns {any[]} ObjectExpressions
+ */
+function exportedDefinitions(ast) {
+  /** @type {string[]} */
+  const names = [];
+  for (const node of ast.program.body) {
+    if (node.type === 'ExportDefaultDeclaration') names.push('default');
+    if (node.type !== 'ExportNamedDeclaration' || node.source) continue;
+    if (node.declaration?.type === 'VariableDeclaration')
+      for (const d of node.declaration.declarations)
+        if (d.id.type === 'Identifier') names.push(d.id.name);
+    for (const spec of node.specifiers ?? [])
+      names.push(spec.exported.name ?? spec.exported.value);
+  }
+  return names.map(n => exportedDefinition(ast, n)).filter(Boolean);
+}
+
+/**
+ * The object a module export defines its theme with: the argument of the
+ * `defineTheme(...)` call, or the object itself, that the export names.
+ * @param {any} ast
+ * @param {string} exportName
+ * @returns {any} an ObjectExpression, or null
+ */
+function exportedDefinition(ast, exportName) {
+  /** @type {any} */
+  let value = null;
+  for (const node of ast.program.body) {
+    if (node.type === 'ExportDefaultDeclaration' && exportName === 'default')
+      value = node.declaration;
+    if (node.type !== 'ExportNamedDeclaration') continue;
+    if (node.declaration?.type === 'VariableDeclaration')
+      for (const d of node.declaration.declarations)
+        if (d.id.type === 'Identifier' && d.id.name === exportName)
+          value = d.init;
+    for (const spec of node.specifiers ?? [])
+      if (
+        !node.source &&
+        (spec.exported.name ?? spec.exported.value) === exportName
+      )
+        value = spec.local;
+  }
+  value = unwrapConst(ast, value);
+  if (value?.type === 'CallExpression')
+    value = unwrapConst(ast, value.arguments[0]);
+  return value?.type === 'ObjectExpression' ? value : null;
 }
 
 /**
@@ -5678,9 +5827,9 @@ export function refuseThemeParse(cwd, slug) {
  * @param {string} cwd
  * @param {string} slug
  */
-export function refuseThemeSource(cwd, slug) {
+export async function refuseThemeSource(cwd, slug) {
   refuseThemeParse(cwd, slug);
-  const refusal = themeSourceRefusal(cwd, slug);
+  const refusal = await themeSourceRefusal(cwd, slug);
   if (refusal) throw refusal;
 }
 
@@ -5691,10 +5840,10 @@ export function refuseThemeSource(cwd, slug) {
  * builds the theme refuses with it.
  * @param {string} cwd
  * @param {string} slug
- * @returns {AstryxError | null}
+ * @returns {Promise<AstryxError | null>}
  */
-export function themeSourceRefusal(cwd, slug) {
-  const why = themeSourceProblem(cwd, slug);
+export async function themeSourceRefusal(cwd, slug) {
+  const why = await themeSourceProblem(cwd, slug);
   return why
     ? new AstryxError(
         `${why}, so settings cannot take effect. Put back the import of ${camel(slug)}Settings from './${slug}.settings', extends: ${camel(slug)}Settings and name: '${slug}' in themes/${slug}/${slug}.theme.ts (your own changes stay below them). Nothing was changed.`,
@@ -5922,7 +6071,7 @@ export function holdAfterBuild(ctx) {
 export async function buildTheme(ctx, slug, data) {
   const {cwd} = ctx.project;
   const f = themeFiles(cwd, slug);
-  refuseThemeSource(cwd, slug);
+  await refuseThemeSource(cwd, slug);
   // The theme's own token values, judged as a build of the source writes
   // them, before anything is written.
   await ownTokenCheck?.(ctx, slug, data);
@@ -7457,7 +7606,7 @@ export async function commitTheme(
   const {cwd} = ctx.project;
   const f = themeFiles(cwd, slug);
   refuseLinks(cwd, slug);
-  refuseThemeSource(cwd, slug);
+  await refuseThemeSource(cwd, slug);
   const snapBefore = fs.existsSync(f.settings)
     ? fs.readFileSync(f.settings, 'utf8')
     : null;
@@ -7803,9 +7952,40 @@ export function fontsourcePackageOf(family) {
     .replace(/\s+/g, '-')}`;
 }
 
-/** @param {Ctx} ctx @param {ThemeData} data */
+/**
+ * The font families the theme's last build names (its
+ * `--font-family-*` declarations), by lowercase name; null before the
+ * theme has been built.
+ * @param {Ctx} ctx
+ * @param {string} slug
+ * @returns {Map<string, string> | null}
+ */
+export function builtFontFamilies(ctx, slug) {
+  /** @type {string} */
+  let css;
+  try {
+    css = fs.readFileSync(themeFiles(ctx.project.cwd, slug).css, 'utf8');
+  } catch {
+    return null;
+  }
+  /** @type {Map<string, string>} */
+  const out = new Map();
+  for (const value of declarationValues(css, /^--font-family-/))
+    for (const family of namedFontFamilies(value))
+      if (!out.has(family.toLowerCase())) out.set(family.toLowerCase(), family);
+  return out;
+}
+
+/**
+ * The font packages that load the families the theme builds: a font
+ * setting's package while the build still uses its family, and the
+ * installed @fontsource package of a family the theme's own source sets.
+ * Font notes, the previews and the app copy all load fonts from this list.
+ * @param {Ctx} ctx
+ * @param {ThemeData} data
+ */
 export function fontPackages(ctx, data) {
-  /** @type {Array<{pkg: string, family: string, installed: boolean, of: Setting}>} */
+  /** @type {Array<{pkg: string, family: string, installed: boolean, of: Setting | null}>} */
   const out = [];
   /** @param {string} pkg */
   const isInstalled = pkg => {
@@ -7816,16 +7996,25 @@ export function fontPackages(ctx, data) {
       return false;
     }
   };
+  const built = builtFontFamilies(ctx, data.name);
   for (const s of data.settings) {
     if (s.thing !== 'font') continue;
     const {pkg: known, family} = fontOf(s.value);
     const name = family.replace(/["']/g, '');
+    // A family the theme's own source replaced everywhere it was set is
+    // not in the build: nothing loads it.
+    if (built && !built.has(name.toLowerCase())) continue;
     // An installed @fontsource package of the family always loads it, even
     // for a family some systems ship.
     const own = fontsourcePackageOf(name);
     const pkg = known ?? (isInstalled(own) ? own : null);
     if (!pkg || out.some(x => x.pkg === pkg)) continue;
     out.push({pkg, family: name, installed: isInstalled(pkg), of: s});
+  }
+  for (const family of built?.values() ?? []) {
+    const pkg = fontsourcePackageOf(family);
+    if (out.some(x => x.pkg === pkg) || !isInstalled(pkg)) continue;
+    out.push({pkg, family, installed: true, of: null});
   }
   return out;
 }

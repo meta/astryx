@@ -34,6 +34,7 @@ import {
   loadTheme,
   nearest,
   refuse,
+  themeSourceParseError,
   themeSourceProblem,
 } from './_settings.mjs';
 import {ASPECTS, settableStates} from './_check.mjs';
@@ -249,7 +250,9 @@ async function answer(subject, options, cwd) {
     }
     // A theme whose source no longer extends its settings takes no setting:
     // an answer would suggest commands that cannot run.
-    const broken = themeSourceProblem(cwd, options.theme);
+    const broken =
+      themeSourceParseError(cwd, options.theme) ??
+      (await themeSourceProblem(cwd, options.theme));
     if (broken)
       refuse(
         E.ERR_THEME_INVALID,

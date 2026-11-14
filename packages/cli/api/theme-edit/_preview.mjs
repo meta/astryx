@@ -14,8 +14,6 @@
 
 import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
-import {declarationValues} from '../../foundation/fonts/font-stylesheet.mjs';
-import {loadableFontFamilies} from '../theme/build/font-warning.mjs';
 import * as path from 'node:path';
 import {spawn} from 'node:child_process';
 import * as os from 'node:os';
@@ -38,7 +36,6 @@ import {
   camel,
   folderIsEmpty,
   fontPackages,
-  fontsourcePackageOf,
   modesOf,
   shown,
   themeFiles,
@@ -1627,34 +1624,12 @@ import {builtColorMode} from '../../foundation/discovery/theme-imports.mjs';
  * @returns {string[]}
  */
 export function copyFontsCss(ctx, slug, data) {
-  const css = themeImports(
+  return themeImports(
     ctx,
     slug,
     data,
     path.join(ctx.project.cwd, 'src', 'themes', slug),
   ).css.slice(1);
-  // A family the built theme uses that its settings do not name (set in
-  // the theme's own source, by a token or typography): its installed
-  // @fontsource package loads it too.
-  /** @type {string} */
-  let built;
-  try {
-    built = fs.readFileSync(themeFiles(ctx.project.cwd, slug).css, 'utf8');
-  } catch {
-    return css;
-  }
-  for (const value of declarationValues(built, /^--font-family-/))
-    for (const family of loadableFontFamilies(value)) {
-      const pkg = fontsourcePackageOf(family);
-      if (css.some(c => c.startsWith(`${pkg}/`))) continue;
-      try {
-        ctx.project.req.resolve(`${pkg}/package.json`);
-        css.push(`${pkg}/index.css`);
-      } catch {
-        // Not installed: nothing to import.
-      }
-    }
-  return css;
 }
 
 /**

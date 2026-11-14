@@ -40,6 +40,7 @@ import {partData} from './_parts.mjs';
 import {writeWhole} from './_palette.mjs';
 import {
   fontOf,
+  builtFontFamilies,
   fontPackages,
   fontsourcePackageOf,
   modesOf,
@@ -505,9 +506,9 @@ export async function pictures(project, shots, modes) {
 }
 
 /**
- * Font notes for the settings: the import line for an open font, the
- * install line when its package is missing, and a warning for a family no
- * package loads, naming the closest open font.
+ * Font notes for the families the theme builds: the import line for an
+ * open font, the install line when its package is missing, and a warning
+ * for a family no package loads, naming the closest open font.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {import('./_settings.mjs').ThemeData} data
  * @returns {string[]}
@@ -542,9 +543,16 @@ export function fontNotes(ctx, data) {
         first.replace(/["']/g, '').trim().toLowerCase() === f,
     );
   };
+  // A font setting whose family the build no longer uses (the theme's own
+  // source sets every place it went) gets no note: nothing shows it.
+  const built = builtFontFamilies(ctx, data.name);
   for (const s of data.settings) {
     if (
       s.thing !== 'font' ||
+      (built &&
+        !built.has(
+          fontOf(s.value).family.replace(/["']/g, '').trim().toLowerCase(),
+        )) ||
       SYSTEM_FONTS.includes(s.value) ||
       isDesktopFamily(fontOf(s.value).family.replace(/["']/g, '')) ||
       OPEN_FONTS[s.value] ||

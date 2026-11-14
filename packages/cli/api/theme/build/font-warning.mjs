@@ -135,17 +135,15 @@ function splitFamilies(value) {
 }
 
 /**
- * The font families a CSS font-family value names that something has to
- * load: its names without generics, CSS-wide keywords, `var()` references
- * or known system families.
+ * The font families a CSS font-family value names, without generics,
+ * CSS-wide keywords or `var()` references (system families included).
  * @param {string} value
  * @returns {string[]}
  */
-export function loadableFontFamilies(value) {
-  return splitFamilies(value).filter(family => {
-    const key = family.toLowerCase();
-    return !GENERIC_KEYWORDS.has(key) && !SYSTEM_FAMILIES.has(key);
-  });
+export function namedFontFamilies(value) {
+  return splitFamilies(value).filter(
+    family => !GENERIC_KEYWORDS.has(family.toLowerCase()),
+  );
 }
 
 /**

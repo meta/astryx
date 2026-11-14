@@ -125,8 +125,8 @@ import {doc as themePaletteGenerateFn} from '../../../api/theme/themePaletteGene
  * @property {(err: import('../../../api/error.mjs').AstryxError, cwd: string) => import('../../../api/error.mjs').AstryxError | null} [explain] - A clearer refusal for this group, or null.
  * @property {(files: string[], options: {cwd: string, check?: boolean, family?: boolean, iconsSpecifier?: string, out?: string}) => Promise<import('../../../api/error.mjs').AstryxError | null>} [preflight] - A refusal before a build starts, or null.
  * @property {(err: import('../../../api/error.mjs').AstryxError, cwd: string) => Promise<import('../../../api/error.mjs').AstryxError>} [follow] - The refusal with its first suggested build checked and repaired as the build would check it.
- * @property {(files: string[], options: {cwd: string}) => Promise<() => Promise<void>>} [hold] - Locks held while a build or check runs; resolves to their release.
- * @property {(file: string, cwd: string, opts: {check: boolean, upToDate?: boolean}) => Record<string, unknown> | null | Promise<Record<string, unknown> | null>} [extraData] - Fields a group adds to a build's result data (the editor's `appCopyStale`); in a check, `upToDate: false` fails it.
+ * @property {(files: string[], options: {cwd: string, check?: boolean, out?: string}) => Promise<() => Promise<void>>} [hold] - Locks held while a build or check runs; resolves to their release.
+ * @property {(file: string, cwd: string, opts: {check: boolean, upToDate?: boolean, out?: string}) => Record<string, unknown> | null | Promise<Record<string, unknown> | null>} [extraData] - Fields a group adds to a build's result data (the editor's `appCopyStale`); in a check, `upToDate: false` fails it.
  * @property {(file: string, cwd: string) => (['light'] | ['dark'] | null)} [colorModes] - The one color mode a theme file has that the file itself cannot say, for the build to write into the built module.
  * @property {(file: string, cwd: string) => ((family: string) => boolean) | null | Promise<((family: string) => boolean) | null>} [loadedFonts] - Font families the app loads for a theme file that the file itself cannot say, so the build does not name them as unloaded.
  * @property {(file: string, cwd: string) => {name: string, reason: string} | null} [missingSource] - For a source file that is not there, this group's way to write it again, or null.
@@ -234,10 +234,17 @@ function themeError(err, words = THEME_WORDS, fallback = []) {
   /** @param {string} text */
   const local = text => inGroupWords(text, words);
   const given = err.suggestions || [];
+  // A suggested command starts the way this project runs the CLI, in JSON
+  // as in text.
+  /** @param {string} name */
+  const runnable = name =>
+    /^astryx(\s|$)/.test(name)
+      ? `${getCliInvocation(process.cwd())}${name.slice('astryx'.length)}`
+      : name;
   return cliError(local(err.message), {
     suggestions: (given.length > 0 ? given : fallback).map(x => ({
       ...x,
-      name: local(x.name),
+      name: runnable(local(x.name)),
       ...(x.reason ? {reason: local(x.reason)} : {}),
     })),
     code: err.code,
@@ -1189,6 +1196,21 @@ function registerThemeCommands(theme, program, docs, words) {
       // Its key is required exactly with --family, and options that describe one
       // standalone output or a long-running loop remain intentionally separate.
       if (Boolean(options.family) !== Boolean(options.familyKey)) {
+        // The suggestion below builds each theme on its own; a group that
+        // refuses that build too (an editor theme run from a subfolder)
+        // answers with its own refusal, whose suggestion runs.
+        const own = await words.preflight?.(files, {
+          cwd: process.cwd(),
+          check: options.check,
+          family: false,
+          iconsSpecifier: options.iconsSpecifier,
+          out: files.length === 1 ? options.out : undefined,
+        });
+        if (own)
+          return themeError(
+            (await words.follow?.(own, process.cwd())) ?? own,
+            words,
+          );
         return cliError(
           options.family
             ? '--family requires --family-key <key>'
@@ -1513,6 +1535,7 @@ function registerThemeCommands(theme, program, docs, words) {
           const extra = await words.extraData?.(entry.file, process.cwd(), {
             check: Boolean(options.check),
             upToDate: /** @type {any} */ (result)?.data?.upToDate,
+            out: options.out,
           });
           if (extra && result?.data) Object.assign(result.data, extra);
           // A check the group failed says so where the check said ok.
@@ -1638,7 +1661,12 @@ function registerThemeCommands(theme, program, docs, words) {
       // Under --watch each rebuild runs on its own and takes the locks
       // itself; holding them for the whole watch would block every one.
       if (cmd.opts().watch) return;
-      release = await words.hold?.(cmd.args, {cwd: process.cwd()});
+      const o = cmd.opts();
+      release = await words.hold?.(cmd.args, {
+        cwd: process.cwd(),
+        check: Boolean(o.check),
+        out: o.out,
+      });
     });
     buildCli.hook('postAction', async () => {
       await release?.();
