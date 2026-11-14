@@ -834,7 +834,7 @@ export function loadTheme(
     // none): the settings were lost after.
     const stopped =
       fs.existsSync(path.join(f.dir, NEW_MARKER)) && !fs.existsSync(f.history);
-    if (!same && (stopped || madeByEditor(f.settingsTs))) {
+    if (!same && editorMadeFolder(cwd, slug)) {
       const remake = remakeLines(cwd, slug);
       refuse(
         ERROR_CODES.ERR_UNKNOWN_THEME,
@@ -1169,7 +1169,7 @@ export function loadTheme(
   const fieldFix = /^(it has no mode|mode ")/.test(problem ?? '')
     ? `${P} set ${slug} mode ${['both', 'light-only', 'dark-only'].includes(modeMeant) ? modeMeant : 'both'}`
     : /^base "/.test(problem ?? '')
-      ? `${P} set ${slug} base ${LIKE.includes(likeMeant) && baseInstalled(cwd, likeMeant) ? likeMeant : 'none'}`
+      ? `${P} set ${slug} base ${LIKE.includes(likeMeant) && baseInstalled(cwd, likeMeant) ? likeMeant : (builtOnBase(cwd, slug) ?? 'none')}`
       : null;
   // A damaged mode or base and a bad value in the list: setting the field
   // is refused while the list holds the bad value, but fixing that entry
@@ -1356,6 +1356,37 @@ export function settingsProblem(
 }
 
 /**
+ * The built-in base the editor last built a theme on, read from the
+ * generated module's header (`// Built on @astryxdesign/theme-neutral …`),
+ * else from the newest undo step, or null when neither can be read. What a damaged base in
+ * the settings file is put back to, and what a theme made again keeps.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {string | null}
+ */
+export function builtOnBase(cwd, slug) {
+  const f = themeFiles(cwd, slug);
+  /** @type {string | null | undefined} */
+  let header;
+  try {
+    header = /\/\/ Built on @astryxdesign\/theme-([a-z0-9-]+) /.exec(
+      fs.readFileSync(f.settingsTs, 'utf8'),
+    )?.[1];
+  } catch {
+    header = null;
+  }
+  // With the module gone too, the newest undo step names the base.
+  const steps = readHistory(f.history).steps;
+  const stepped = steps.length
+    ? settingsJson(steps[steps.length - 1])?.like
+    : null;
+  return (
+    [header, stepped].find(b => typeof b === 'string' && LIKE.includes(b)) ??
+    null
+  );
+}
+
+/**
  * The `new` that makes a theme again in place, on the base it was built on
  * as far as can still be read: the settings file's base (in any case), else
  * the base the generated module was built on. With none, it says the theme
@@ -1378,11 +1409,8 @@ export function remakeLines(cwd, slug) {
     saved && typeof saved.like === 'string'
       ? dialWordOf('base', saved.like)
       : null;
-  const built =
-    /\/\/ Built on @astryxdesign\/theme-([a-z0-9-]+) /.exec(
-      read(f.settingsTs),
-    )?.[1] ?? null;
-  const base = [typed, built].find(b => b && LIKE.includes(b)) ?? null;
+  const base =
+    [typed, builtOnBase(cwd, slug)].find(b => b && LIKE.includes(b)) ?? null;
   return {
     base,
     lines: base
@@ -1434,6 +1462,25 @@ function readEntryWords(data) {
           `${s.thing} was saved with mode ${JSON.stringify(s.mode)}, read as ${read}`,
         );
         s.mode = read;
+      }
+    }
+    // A part saved in other letters, with spaces around it, or as a list
+    // of that one part (`Card`, ` card`, `["card"]`) is that part: part
+    // names are lower case, so every reader matches it as one scope.
+    {
+      const one =
+        Array.isArray(s.on) && s.on.length === 1 && typeof s.on[0] === 'string'
+          ? s.on[0]
+          : s.on;
+      const part =
+        typeof one === 'string' && /^\s*[a-z][a-z0-9-]*\s*$/i.test(one)
+          ? one.trim().toLowerCase()
+          : null;
+      if (part && part !== s.on) {
+        notes.push(
+          `${s.thing} was saved on ${JSON.stringify(s.on)}, read as ${part}`,
+        );
+        s.on = part;
       }
     }
     // A dial's word saved in other letters (`Pill`) is that word.
@@ -6899,11 +6946,15 @@ export function readFields(data, cwd, fixing, slug) {
       );
       data.like = meant.like;
     } else if (slug) {
+      // The base the theme was built on, when its module or history still
+      // says it; else each installed base.
       damaged(
         'base',
         LIKE.includes(meant.like)
           ? [meant.like]
-          : LIKE.filter(x => baseInstalled(cwd, x)),
+          : (b => (b ? [b] : LIKE.filter(x => baseInstalled(cwd, x))))(
+              builtOnBase(cwd, slug),
+            ),
       );
     } else {
       delete data.like;
@@ -7373,6 +7424,37 @@ export function radiusAt(base, value, token) {
 /**
  * Whether a file is a module the editor generated (its first line is the
  * editor's header).
+ * @param {string} file
+ */
+/**
+ * Whether the editor made a theme's folder, though its settings may be
+ * gone: a stopped `new` left its marker, or the folder holds what only the
+ * editor writes (the generated settings module, an undo history, the theme
+ * source with the header the editor wrote it with).
+ * @param {string} cwd
+ * @param {string} slug
+ */
+export function editorMadeFolder(cwd, slug) {
+  const f = themeFiles(cwd, slug);
+  const firstLine = (/** @type {string} */ file) => {
+    try {
+      return fs.readFileSync(file, 'utf8').split('\n', 1)[0];
+    } catch {
+      return '';
+    }
+  };
+  return (
+    fs.existsSync(path.join(f.dir, NEW_MARKER)) ||
+    madeByEditor(f.settingsTs) ||
+    // Only editor commands write the undo history.
+    readHistory(f.history).steps.length > 0 ||
+    firstLine(f.ts) ===
+      `// The ${slug} theme. \`${P}\` wrote this file once and never changes it again.`
+  );
+}
+
+/**
+ * Whether a file carries the editor's generated header.
  * @param {string} file
  */
 export function madeByEditor(file) {

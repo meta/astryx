@@ -249,7 +249,7 @@ describe('the input reader reads numbers, labels and font lists one way', () => 
         expect(JSON.parse(fs.readFileSync(file, 'utf8'))[field]).toBe(meant);
       }
       for (const [field, typed, line] of [
-        // The lines set it again: each installed base, never none.
+        // The line sets it again to the base the theme was built on.
         ['like', 'zzzz', / set b base neutral$/],
         ['mode', 'sideways', / set b mode both$/],
       ]) {

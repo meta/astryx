@@ -365,10 +365,12 @@ function editorMissingSuggestions(cmd) {
   const wants = (cmd?.registeredArguments ?? []).filter(
     (/** @type {any} */ a) => a.required,
   );
+  // (`new` names a theme that does not exist yet: never the one here.)
   if (
     !(cmd?.args ?? []).length &&
     wants.length === 1 &&
-    wants[0].name() === 'theme'
+    wants[0].name() === 'theme' &&
+    cmd.name() !== 'new'
   ) {
     const themes = editorThemesHere(process.cwd());
     if (themes.length === 1)
@@ -382,6 +384,19 @@ function editorMissingSuggestions(cmd) {
           reason: 'what each argument is',
         },
       ];
+  }
+  // `new` with no name: a name no theme here has.
+  if (!(cmd?.args ?? []).length && cmd.name() === 'new') {
+    const taken = new Set(editorThemesHere(process.cwd()));
+    let free = 'my-theme';
+    for (let n = 2; taken.has(free); n += 1) free = `my-theme-${n}`;
+    return [
+      {
+        name: `${invocation} ${words} ${free}`,
+        reason: 'do this instead: a name for the new theme',
+      },
+      {name: `${invocation} ${words} --help`, reason: 'what each argument is'},
+    ];
   }
   return [
     {name: `${invocation} ${words} ${cmd.usage()}`.trim(), reason: 'usage'},
