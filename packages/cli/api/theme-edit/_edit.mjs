@@ -1118,7 +1118,7 @@ async function previewAndRoute(
         : null,
       {
         // Only a run that took no picture failed: a note on pictures that
-        // were taken (cut to 2400 pixels, adopted) is not a failure.
+        // were taken (why an earlier browser did not) is not a failure.
         pictureProblem:
           png && !(p.pictures ?? []).length ? p.pictureProblem : null,
         stale: previewStale,

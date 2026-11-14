@@ -7,8 +7,8 @@
  *   (.png), the color mode, and a browser to use instead of Playwright's own
  * @output the picture at the path given; on failure, Playwright's error on
  *   stderr and exit code 1
- * @position run by `screenshot` in _preview.mjs through `runBrowser`, which
- *   gives it a temp folder of its own, its time bound and its stop
+ * @position run by `screenshot` in api/theme-edit/_preview.mjs through
+ *   `runBrowser`, which gives it a temp folder of its own, its time bound and its stop
  */
 
 import {pathToFileURL} from 'node:url';

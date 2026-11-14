@@ -322,37 +322,6 @@ export function editorRecorded(cwd, slug, file) {
 }
 
 /**
- * Adopt a picture an older editor took (before it recorded or stamped its
- * pictures) into the record: only while the theme has no record at all, the
- * name is one the editor writes, and the picture is the editor's 1280-pixel
- * wide window. Returns whether it was adopted.
- * @param {string} cwd
- * @param {string} slug
- * @param {string} file
- */
-export function adoptOlderPicture(cwd, slug, file) {
-  if (fs.existsSync(themeFiles(cwd, slug).pictures)) return false;
-  if (!/^(sheet|preview)(-[a-z-]+)?\.png$/.test(path.basename(file)))
-    return false;
-  /** @type {Buffer} */
-  let bytes;
-  try {
-    bytes = fs.readFileSync(file);
-  } catch {
-    return false;
-  }
-  // The width in the PNG header: the editor takes a 1280-pixel window.
-  if (
-    bytes.length < 24 ||
-    bytes.toString('latin1', 12, 16) !== 'IHDR' ||
-    bytes.readUInt32BE(16) !== 1280
-  )
-    return false;
-  recordWritten(cwd, slug, [file]);
-  return true;
-}
-
-/**
  * Drop names from the record of what the editor wrote.
  * @param {string} cwd
  * @param {string} slug

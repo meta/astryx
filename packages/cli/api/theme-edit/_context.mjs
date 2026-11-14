@@ -45,14 +45,18 @@ import {
   modesOf,
   nearest,
   refuse,
-  adoptOlderPicture,
   editorWrote,
   recordWritten,
   themeFiles,
   refuseThemesNotFolder,
   shown,
 } from './_settings.mjs';
-import {SHOWCASE_GROUPS, renderPreview, screenshot} from './_preview.mjs';
+import {
+  SHOWCASE_GROUPS,
+  newPictureRun,
+  renderPreview,
+  screenshot,
+} from './_preview.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 
 const E = ERROR_CODES;
@@ -386,8 +390,10 @@ const notChecked = cause =>
 export async function pictures(project, shots, modes) {
   /** @type {string[]} */
   const files = [];
-  /** @type {string[]} */
-  const cut = [];
+  /** What a later browser's success says of an earlier one. @type {string[]} */
+  const notes = [];
+  /** One run for every picture: a browser that failed is not tried again. */
+  const run = newPictureRun();
   /** @param {string} png @param {'light' | 'dark'} m */
   const outOf = (png, m) =>
     modes.length > 1 && m === 'dark' ? png.replace(/\.png$/, '-dark.png') : png;
@@ -400,21 +406,17 @@ export async function pictures(project, shots, modes) {
       : null;
   };
   // A picture is written only over a picture the editor took, unchanged
-  // since: a file of the user's by that name blocks every picture, and is
-  // named.
-  /** Pictures an older editor took, now recorded. @type {string[]} */
-  const adopted = [];
+  // since: a file of the user's by that name (a screenshot of the same
+  // size included) blocks every picture, and is named.
   const blocked = shots
     .flatMap(({png}) => modes.map(m => outOf(png, m)))
     .filter(out => {
       const slug = themeOf(out);
-      if (!slug || !fs.existsSync(out) || editorWrote(project.cwd, slug, out))
-        return false;
-      if (adoptOlderPicture(project.cwd, slug, out)) {
-        adopted.push(path.relative(project.cwd, out));
-        return false;
-      }
-      return true;
+      return (
+        Boolean(slug) &&
+        fs.existsSync(out) &&
+        !editorWrote(project.cwd, /** @type {string} */ (slug), out)
+      );
     });
   if (blocked.length)
     return {
@@ -461,7 +463,7 @@ export async function pictures(project, shots, modes) {
           problem: `${path.relative(project.cwd, path.dirname(out))}/ cannot be written (${/** @type {any} */ (e)?.code ?? 'no access'}), so no picture was taken; fix its permissions, then run the command again`,
         };
       }
-      const r = await screenshot(project, html, part, m);
+      const r = await screenshot(project, html, part, m, run);
       if (!r.ok) {
         fs.rmSync(part, {force: true});
         return {files, problem: r.reason};
@@ -492,24 +494,13 @@ export async function pictures(project, shots, modes) {
         }
         recordWritten(project.cwd, slug, [out]);
       }
-      if (r.cut) cut.push(r.file);
+      if (r.note && !notes.includes(r.note)) notes.push(r.note);
     }
   }
-  const adoptedNote = adopted.length
-    ? `${adopted.join(', ')} ${adopted.length === 1 ? 'was' : 'were'} taken by an earlier version of the editor and ${adopted.length === 1 ? 'is' : 'are'} now recorded as its own`
-    : null;
   return {
     files,
-    // A picture of the window shows the top of a longer page only.
-    problem:
-      [
-        adoptedNote,
-        cut.length
-          ? `${cut.join(', ')} show${cut.length === 1 ? 's' : ''} the top 2400 pixels of the page only (Chrome takes the window, not the whole page); open the .html beside ${cut.length === 1 ? 'it' : 'them'} to see all of it, or install Playwright (${installLine(project.cwd, ['playwright'])}) for whole-page pictures`
-          : null,
-      ]
-        .filter(Boolean)
-        .join('; ') || null,
+    // Pictures were taken; a note says why an earlier browser did not.
+    problem: notes.join('; ') || null,
   };
 }
 
