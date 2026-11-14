@@ -466,6 +466,23 @@ describe('pickStart on parts and edits (spec:AST-048/FR3)', () => {
     );
   });
 
+  it("starts from the family's template for the frame that holds the page", async () => {
+    expect(await start('notification settings in a modal')).toBe(
+      'settings-dialog',
+    );
+    expect(await start('a toggle in a modal on the settings page')).toBe(
+      'settings',
+    );
+    const pages = [
+      page('widget', 'Widget - Basic', 'A plain widget page.'),
+      page('widget-dialog', 'Widget - Dialog', 'A widget page in a dialog.'),
+    ];
+    const lead = (/** @type {string} */ idea) =>
+      pickStart(rankPages(idea, pages))?.name;
+    expect(lead('a widget in a dialog')).toBe('widget-dialog');
+    expect(lead('a widget with a toggle in a dialog')).toBe('widget');
+  });
+
   it('counts a frame only when it holds the page the idea names', async () => {
     const [catalog] = await shipped;
     /** @param {string} idea */
