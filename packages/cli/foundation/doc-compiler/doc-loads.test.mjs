@@ -111,6 +111,15 @@ const RUNNERS = {
     runs: "each integration's codemods, through the codemod parser, to plan an upgrade",
     sites: ['loadModuleWithParser(..., parseCodemod)'],
   },
+  'authoring/example/preview.mjs': {
+    runs: 'Babel, its TypeScript plugin and the `globals` lists (CommonJS), each on first use, to read a doc example as the module a live preview runs',
+    sites: [
+      'require(@babel/core)',
+      'require(@babel/parser)',
+      'require(@babel/plugin-transform-typescript)',
+      'require(globals)',
+    ],
+  },
   'authoring/shadcn/source-variants.mjs': {
     runs: "Babel, its TypeScript plugin and recast (CommonJS), each on first use, to reproduce the ShadCN client's transform",
     sites: [
@@ -459,6 +468,10 @@ const RUNNERS = {
     runs: "Yarn's pnpapi, under Plug'n'Play, to find an installed package",
     sites: ['require(pnpapi)'],
   },
+  'foundation/integrations/example-code.mjs': {
+    runs: 'the React the package resolves, to read its named exports for the example check',
+    sites: ['require(react)'],
+  },
   'foundation/integrations/integrations.mjs': {
     runs: "each installed integration's manifest",
     sites: ['importUserModule'],
@@ -504,9 +517,17 @@ const RUNNERS = {
     runs: "`astryx manifest --json`, from a folder beside each package manager's lockfile, to store the manifest at `prepack` (build time)",
     sites: ['child_process.spawnSync'],
   },
+  'scripts/generate-component-list.mjs': {
+    runs: "node, to work out Core's component list on a copy of exactly the files Core publishes (at `prepack`)",
+    sites: ['child_process.spawnSync'],
+  },
   'scripts/generate-self-audit.mjs': {
-    runs: "`npm pack --dry-run --json --ignore-scripts`, to list the files the package publishes, and node, to run Doctor's audit of the CLI's own files on a copy of exactly those files (at `prepack`)",
-    sites: ['child_process.spawnSync ×2'],
+    runs: "node, to run Doctor's audit of the CLI's own files on a copy of exactly the files the package publishes (at `prepack`)",
+    sites: ['child_process.spawnSync'],
+  },
+  'scripts/published-files.mjs': {
+    runs: '`npm pack --dry-run --json --ignore-scripts`, to list the files a package publishes (at `prepack`)',
+    sites: ['child_process.spawnSync'],
   },
   'scripts/generate-stored-docs.mjs': {
     runs: 'each shipped doc file that imports nothing and runs nothing as it loads, to store its exports (build time, not shipped)',

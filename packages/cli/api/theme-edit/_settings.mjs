@@ -27,6 +27,7 @@ import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {oneColorMode, themeBuildForReport} from '../theme/build/build.mjs';
 import {
+  MODE_WORDS,
   AUTO_SPREAD,
   CORNERS,
   DIALS,
@@ -46,7 +47,7 @@ import {
   WRAPPED_PARTS,
   CARD_LIKE,
 } from './_tables.mjs';
-import {cleanDialValue} from './_normal.mjs';
+import {cleanDialValue, typoLimit, typoNear} from './_normal.mjs';
 import {
   alphaOf,
   colorProblem,
@@ -84,6 +85,7 @@ import {
   baseThemeFile,
 } from './_project.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
+import {compareText} from '../../foundation/text/compare-text.mjs';
 
 // The palette reads the tokens the own source sets through this module.
 setOwnTokenReader((cwd, slug) => ownSourceTokenValues(cwd, slug));
@@ -486,7 +488,7 @@ export function editedThemes(cwd, order = 'name') {
   };
   return names
     .map(d => ({d, t: when(d)}))
-    .sort((a, b) => b.t - a.t || a.d.localeCompare(b.d))
+    .sort((a, b) => b.t - a.t || compareText(a.d, b.d))
     .map(x => x.d);
 }
 
@@ -501,13 +503,26 @@ export const shown = (cwd, f) =>
  * @param {number} [n]
  */
 export function nearest(x, list, n = 3) {
-  const limit = Math.max(2, Math.floor(x.length / 3));
-  // Nearest by edit distance first (brand-drak is brand-dark, not brand); a
-  // name one holds inside the other is near too, after the close ones.
+  // A phrase that negates a word (not round, no caps, unbold,
+  // rounded-none) never has that word as its nearest: it asks the opposite.
+  // A typo of a listed keyword that itself starts with no- or not-
+  // (`not-alowed` for not-allowed, `no-repat` for no-repeat) is no
+  // negation: it is read as a typo.
+  if (
+    negates(x) &&
+    ![...list].some(c => /^(no|not)-/.test(c) && typoNear(x, c))
+  )
+    return [];
+  // Within the editor's one typo limit (typoLimit), nearest by edit
+  // distance first (brand-drak is brand-dark, not brand); a name one holds
+  // inside the other is near too, after the close ones.
+  const limit = typoLimit(x);
   return [...list]
     .filter(c => c.length > 2)
     .map(c => {
-      const d = levenshteinDistance(x, c);
+      const d = levenshteinDistance(x.toLowerCase(), c.toLowerCase(), limit, {
+        swaps: true,
+      });
       return /** @type {[string, number]} */ ([
         c,
         d <= limit ? d : c.includes(x) || x.includes(c) ? limit + 0.5 : d,
@@ -517,6 +532,17 @@ export function nearest(x, list, n = 3) {
     .sort((a, b) => a[1] - b[1])
     .slice(0, n)
     .map(([c]) => c);
+}
+
+/**
+ * Whether typed words negate what they name (`not round`, `no caps`,
+ * `anything but blue`, `unbold`, `non-bold`, `rounded-none`).
+ * @param {string} x
+ */
+export function negates(x) {
+  return /(^|[\s-])(not|no|non|without|never|less)([\s-]|$)|anything but|^un(round|bold|rais|outlin|cap)|-none$/i.test(
+    String(x).trim(),
+  );
 }
 
 /**
@@ -959,7 +985,31 @@ export function loadTheme(
       ],
       ERROR_CODES.ERR_THEME_INVALID,
     );
+  readEntryWords(data);
   const problem = settingsProblem(data, skip);
+  // An entry whose mode or source means nothing: `undo` with its name
+  // removes that entry only; a step back loses the last change.
+  const damaged = problem ? damagedEntry(data, problem) : null;
+  if (damaged)
+    throw new AstryxError(
+      `themes/${slug}/${slug}.settings.json: ${problem}. Remove that setting with ${P} undo ${slug} ${undoArgs({...damaged, mode: entryDamage(damaged) === 'mode' ? undefined : damaged.mode})}; nothing else needs to change${steps ? `, or step back to the settings before the last change with ${P} undo ${slug} (the last change is then lost)` : ''}. Nothing was changed.`,
+      [
+        {
+          name: `${P} undo ${slug} ${undoArgs({...damaged, mode: entryDamage(damaged) === 'mode' ? undefined : damaged.mode})}`,
+          reason: 'do this instead: removes only that setting',
+        },
+        ...(steps
+          ? [
+              {
+                name: `${P} undo ${slug}`,
+                reason:
+                  'or step back to the settings before the last change (the last change is then lost)',
+              },
+            ]
+          : []),
+      ],
+      ERROR_CODES.ERR_THEME_INVALID,
+    );
   // A value made under looser rules is not damage: the command that
   // changes or removes that setting still works, with the other bad ones
   // left out of the build, so each listed fix runs on its own.
@@ -1208,10 +1258,13 @@ export function settingsProblem(
     // a setting with no name is damage.
     if (!s || typeof s.thing !== 'string' || !('value' in s))
       return 'a setting has no thing or value';
+    if (removes(skip) && skips(s, skip) && entryDamage(s)) continue;
     if (!['dial', 'token', 'property'].includes(s.source))
-      return `${s.thing} has no source (dial, token or property)`;
+      return s.source == null || s.source === ''
+        ? `${s.thing} has no source (dial, token or property)`
+        : `${s.thing} has source ${JSON.stringify(s.source)}, not dial, token or property`;
     if (s.mode != null && s.mode !== 'light' && s.mode !== 'dark')
-      return `${s.thing} has mode "${s.mode}"`;
+      return `${s.thing} has mode ${JSON.stringify(s.mode)}, not light or dark`;
     const key = keyOf(s);
     // The command that changes or removes a setting listed twice keeps one
     // value, or none, so it fixes the list.
@@ -1223,6 +1276,113 @@ export function settingsProblem(
     if (problem) return problem;
   }
   return null;
+}
+
+/**
+ * Read each entry's mode and source as the editor writes them: a mode in
+ * other letters or words (`Dark`, `night`, `day`) as light or dark, a
+ * source in other letters (`Dial`) as written, and a missing source from
+ * the thing (a dial name is a dial, a `--` name a token, anything with a
+ * part a property). Each change is kept as a note for the next command,
+ * which saves the entry that way. A value that means nothing is left for
+ * the check to name.
+ * @param {any} data
+ */
+function readEntryWords(data) {
+  /** @type {string[]} */
+  const notes = [];
+  for (const s of Array.isArray(data?.settings) ? data.settings : []) {
+    if (!s || typeof s !== 'object' || typeof s.thing !== 'string') continue;
+    if (typeof s.mode === 'string' && s.mode !== 'light' && s.mode !== 'dark') {
+      const read = MODE_WORDS[s.mode.trim().toLowerCase()];
+      if (read) {
+        notes.push(
+          `${s.thing} was saved with mode ${JSON.stringify(s.mode)}, read as ${read}`,
+        );
+        s.mode = read;
+      }
+    }
+    if (!['dial', 'token', 'property'].includes(s.source)) {
+      const typed = typeof s.source === 'string' ? s.source.trim() : '';
+      const read = typed
+        ? ['dial', 'token', 'property'].find(x => x === typed.toLowerCase())
+        : s.source == null || s.source === ''
+          ? DIALS[s.thing]
+            ? 'dial'
+            : s.thing.startsWith('--')
+              ? 'token'
+              : s.on
+                ? 'property'
+                : undefined
+          : undefined;
+      if (read) {
+        notes.push(
+          typed
+            ? `${s.thing} was saved with source ${JSON.stringify(s.source)}, read as ${read}`
+            : `${s.thing} was saved with no source, read as ${read}`,
+        );
+        s.source = read;
+      }
+    }
+  }
+  ENTRY_NOTES.set(data, notes);
+}
+
+/** @type {WeakMap<object, string[]>} */
+const ENTRY_NOTES = new WeakMap();
+
+/**
+ * What loading read differently from the file in the theme's entries (a
+ * mode or source in other letters, a missing source): one note each.
+ * @param {object} data the theme as {@link loadTheme} returned it
+ * @returns {string[]}
+ */
+export function entryNotes(data) {
+  return ENTRY_NOTES.get(data) ?? [];
+}
+
+/**
+ * Which part of an entry means nothing after reading: its mode or its
+ * source, or null.
+ * @param {any} s
+ * @returns {'mode' | 'source' | null}
+ */
+export function entryDamage(s) {
+  if (!s || typeof s.thing !== 'string') return null;
+  if (!['dial', 'token', 'property'].includes(s.source)) return 'source';
+  if (s.mode != null && s.mode !== 'light' && s.mode !== 'dark') return 'mode';
+  return null;
+}
+
+/**
+ * The entry a settings problem names when that problem is its mode or
+ * source, or null.
+ * @param {any} data
+ * @param {string} problem
+ */
+function damagedEntry(data, problem) {
+  return (
+    (Array.isArray(data?.settings) ? data.settings : []).find(
+      (/** @type {any} */ s) =>
+        (entryDamage(s) === 'source' &&
+          typeof s.source === 'string' &&
+          s.source !== '' &&
+          problem.startsWith(`${s.thing} has source `)) ||
+        (entryDamage(s) === 'mode' &&
+          problem.startsWith(`${s.thing} has mode `)),
+    ) ?? null
+  );
+}
+
+/**
+ * Whether the command removes the setting it names (an undo): only that
+ * takes an entry whose mode or source means nothing.
+ * @param {string | Partial<Setting> | undefined} skip
+ */
+function removes(skip) {
+  return Boolean(
+    skip && typeof skip === 'object' && /** @type {any} */ (skip).removing,
+  );
 }
 
 /**
@@ -1239,7 +1399,8 @@ function skips(s, skip) {
     (s.on ?? '') === (skip.on ?? '') &&
     (s.when ?? '') === (skip.when ?? '') &&
     (s.state ?? '') === (skip.state ?? '') &&
-    (s.mode ?? '') === (skip.mode ?? '')
+    ((s.mode ?? '') === (skip.mode ?? '') ||
+      (removes(skip) && !skip.mode && entryDamage(s) === 'mode'))
   );
 }
 
@@ -1364,7 +1525,10 @@ export function valueProblem(s) {
  * One entry of the top-level `tokens` map in a theme's own source, as
  * written: its token (null for a computed key no read of the file can
  * resolve), the key as typed, the line that sets it, and its value's shape.
- * @typedef {{token: string | null, key: string, line: number | null, kind: 'text' | 'number' | 'pair' | 'other', value?: string | number, halves?: Array<string | number | undefined>}} OwnTokenEntry
+ * A `duplicate` entry names a second `tokens` key (with every line); a
+ * `typography` entry is one typography field (its dotted key and value);
+ * an `unresolved` entry says the map holds something only a build reads.
+ * @typedef {{token: string | null, key: string, line: number | null, kind: 'text' | 'number' | 'pair' | 'object' | 'other' | 'duplicate' | 'typography' | 'unresolved', value?: any, halves?: Array<string | number | undefined>, lines?: Array<number | null>}} OwnTokenEntry
  */
 
 /**
@@ -1495,10 +1659,59 @@ function ownPageTokens(
   if (!chosen) return out;
   const def = unwrap(chosen.call.arguments[0]);
   if (def?.type !== 'ObjectExpression') return out;
-  const tokensProp = def.properties.find(
+  // JavaScript keeps the last of two `tokens` keys: that one is read, and
+  // both are named.
+  const tokensProps = def.properties.filter(
     (/** @type {any} */ p) =>
       p.type === 'ObjectProperty' && !p.computed && keyOf(p.key) === 'tokens',
   );
+  if (detail && tokensProps.length > 1)
+    detail.push({
+      token: null,
+      key: 'tokens',
+      kind: 'duplicate',
+      line: tokensProps[0].loc?.start?.line ?? null,
+      lines: tokensProps.map((/** @type {any} */ p) => p.loc?.start?.line),
+    });
+  // The typography fields, as written, for their own checks.
+  const typo = def.properties.find(
+    (/** @type {any} */ p) =>
+      p.type === 'ObjectProperty' &&
+      !p.computed &&
+      keyOf(p.key) === 'typography',
+  );
+  if (detail && typo) {
+    /** @param {any} node @param {string[]} at */
+    const walk = (node, at) => {
+      const obj = unwrap(node);
+      if (obj?.type !== 'ObjectExpression') return;
+      for (const p of obj.properties) {
+        if (p.type !== 'ObjectProperty' || p.computed) continue;
+        const k = keyOf(p.key);
+        if (!k) continue;
+        const v = unwrap(p.value);
+        if (v?.type === 'ObjectExpression') walk(v, [...at, k]);
+        else
+          detail.push({
+            token: null,
+            key: [...at, k].join('.'),
+            kind: 'typography',
+            line: p.loc?.start?.line ?? null,
+            value:
+              textOf(v) ??
+              (v?.type === 'NumericLiteral'
+                ? v.value
+                : v?.type === 'UnaryExpression' &&
+                    v.operator === '-' &&
+                    v.argument?.type === 'NumericLiteral'
+                  ? -v.argument.value
+                  : undefined),
+          });
+      }
+    };
+    walk(typo.value, []);
+  }
+  const tokensProp = tokensProps[tokensProps.length - 1];
   if (!tokensProp) return out;
   let unresolved = false;
   /** @param {any} node @param {number} depth */
@@ -1547,12 +1760,30 @@ function ownPageTokens(
           );
         }),
       };
+    if (node?.type === 'ObjectExpression')
+      return {
+        kind: 'object',
+        value: Object.fromEntries(
+          node.properties
+            .filter((/** @type {any} */ p) => p.type === 'ObjectProperty')
+            .map((/** @type {any} */ p) => [
+              keyOf(p.key) ?? '?',
+              textOf(unwrap(p.value)) ?? null,
+            ]),
+        ),
+      };
     return {kind: 'other'};
   };
   collect(tokensProp.value, 0);
   // A value no read of the file can resolve (a call, an import) is read
   // from the build (ownTokens), and checked again after the next one.
-  void unresolved;
+  if (detail && unresolved)
+    detail.push({
+      token: null,
+      key: 'tokens',
+      kind: 'unresolved',
+      line: tokensProp.loc?.start?.line ?? null,
+    });
   return out;
 }
 
@@ -1926,7 +2157,7 @@ function ownTokens(cwd, slug) {
  * @param {string} slug
  * @returns {Map<string, string | null> | null}
  */
-function builtOwnTokens(cwd, slug) {
+function builtOwnTokens(cwd, slug, js = /** @type {string | null} */ (null)) {
   const f = themeFiles(cwd, slug);
   /** @type {string} */
   let module;
@@ -1938,7 +2169,10 @@ function builtOwnTokens(cwd, slug) {
   const built = /\/\/ Built with \S+\.theme\.ts ([0-9a-f]{16})\./.exec(
     module,
   )?.[1];
-  if (!built || !fs.existsSync(f.js) || built !== themeSourceHash(cwd, slug))
+  if (
+    !js &&
+    (!built || !fs.existsSync(f.js) || built !== themeSourceHash(cwd, slug))
+  )
     return null;
   // What the settings module gives each top-level token: a text value as
   // it is, a [light, dark] pair as a pair.
@@ -1993,7 +2227,7 @@ function builtOwnTokens(cwd, slug) {
   const named = namedInOwnSource(cwd, slug);
   /** @type {Map<string, string | null>} */
   const out = new Map();
-  for (const [k, v] of builtTopTokens(cwd, slug)) {
+  for (const [k, v] of js ? topTokensOf(js) : builtTopTokens(cwd, slug)) {
     const given = settings.get(k);
     const own =
       given === undefined
@@ -5217,6 +5451,39 @@ function refuseOwnPairs(ctx, cwd, slug) {
  * @returns {Promise<string[]>}
  */
 export async function builtPairs(ctx, slug) {
+  const tops = await cacheBuild(ctx, slug, js => topTokensOf(js));
+  return [...(tops ?? [])]
+    .filter(
+      ([k, v]) =>
+        /^light-dark\(/.test(String(v ?? '')) && ctx.C.typeOf(k) !== 'color',
+    )
+    .map(([k]) => k);
+}
+
+/**
+ * The page-wide tokens the theme's own source gives, as a build made now
+ * evaluates them (an imported module, an expression, a template): read
+ * from a build into the project's cache folder, never beside the theme.
+ * Null when it does not build there.
+ * @param {Ctx} ctx
+ * @param {string} slug
+ * @returns {Promise<Map<string, string | null> | null>}
+ */
+export async function evaluatedOwnTokens(ctx, slug) {
+  return cacheBuild(ctx, slug, js => builtOwnTokens(ctx.project.cwd, slug, js));
+}
+
+/**
+ * Build the theme into the project's cache folder and read the built
+ * module with `read` before the folder is removed; null when it does not
+ * build there.
+ * @template T
+ * @param {Ctx} ctx
+ * @param {string} slug
+ * @param {(js: string) => T} read
+ * @returns {Promise<T | null>}
+ */
+async function cacheBuild(ctx, slug, read) {
   const {cwd} = ctx.project;
   const f = themeFiles(cwd, slug);
   // The build writes only inside the project: the cache folder when it is
@@ -5237,15 +5504,10 @@ export async function builtPairs(ctx, slug) {
     const js = fs
       .readdirSync(dir)
       .find(n => n.endsWith('.js') && !n.endsWith('.d.js'));
-    if (!js) return [];
-    return [...topTokensOf(path.join(dir, js))]
-      .filter(
-        ([k, v]) =>
-          /^light-dark\(/.test(String(v ?? '')) && ctx.C.typeOf(k) !== 'color',
-      )
-      .map(([k]) => k);
+    if (!js) return null;
+    return read(path.join(dir, js));
   } catch {
-    return [];
+    return null;
   } finally {
     logger.setSilent(silent);
     fs.rmSync(dir, {recursive: true, force: true});

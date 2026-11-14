@@ -46,7 +46,7 @@
  * @property {string} data.input - The page module, relative to cwd when inside it.
  * @property {string} data.output - The HTML file written.
  * @property {number} data.bytes - Size of the HTML file.
- * @property {string[]} data.files - Local files the page loaded (modules, stylesheets, images, JSON), relative to the folder that holds them all (the page's folder unless it imports from above it), page first; each is embedded so --reverse can give it back.
+ * @property {string[]} data.files - Local files the file carries, relative to the folder that holds them all (the page's folder unless it imports from above it), page first: the modules, stylesheets, images and JSON the page loaded, and the images, fonts and media a carried module or stylesheet names by a relative path inside that folder; each is embedded so --reverse can give it back.
  * @property {string[]} data.stylesheets - Package stylesheets that were cut to the rules the page uses and inlined.
  * @property {number} data.classes - Distinct class names in the markup.
  * @property {number} data.cssBytes - Size of the inlined CSS.

@@ -1,9 +1,11 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Word weights for `build`'s START (spec:AST-048): a checked-in table of
- * per-template word weights, blended with the page ranker's own scores, picks
- * the template an idea starts from.
+ * @file Word weights for `build`'s START (spec:AST-048): checked-in tables of
+ * per-template word weights, blended with the page ranker's own scores, pick
+ * the template an idea starts from. The call model (the file's top-level
+ * tables and blend) decides page or app shell; an optional pick model
+ * (`pick`) chooses which page once the call model calls a page.
  *
  * @input An idea, the ranker's output for it (`rankPages`, `pickStart`), the
  *   project's ready page templates, and the weights (`weights.json` beside this
@@ -20,6 +22,8 @@
  */
 
 import {STOPWORDS} from '../../search/search.mjs';
+import {keywordUnits, keywordWordsFor} from './words.mjs';
+import {isWordModel} from './word-model.mjs';
 
 /** The app shell, as one candidate. */
 export const SHELL = 'SHELL';
@@ -160,7 +164,33 @@ export function weightWords(idea) {
  * @property {WeightTable[]} tables
  * @property {number[]} blend three numbers per member (the tables, in order,
  *   with the ranker second), then one for `SHELL`
+ * @property {{tables: WeightTable[], blend: number[]}} [pick] the pick
+ *   model: its own tables and blend numbers, used only to choose which page
+ *   starts once the call model (the top-level tables and blend) has called a
+ *   page. Without it, one model does both.
  */
+
+/**
+ * Whether the weights file carries a well-formed pick model. A malformed
+ * `pick` block is ignored, so one model then does both decisions.
+ * @param {WeightsFile} weights
+ * @returns {boolean}
+ */
+const hasPickModel = weights =>
+  isWordModel(weights.pick, weights.candidates.length);
+
+/**
+ * The pick model of a weights file: its `pick` tables and blend when present,
+ * else the file's own.
+ * @param {WeightsFile} weights
+ * @returns {WeightsFile}
+ */
+const pickModel = weights => {
+  const pick = weights.pick;
+  return pick && hasPickModel(weights)
+    ? {...weights, tables: pick.tables, blend: pick.blend}
+    : weights;
+};
 
 /**
  * A table's score for every candidate.
@@ -238,26 +268,50 @@ function memberFeatures(v) {
  */
 
 /**
- * How many of the idea's stemmed words a template's own descriptor names: its
- * display name, its category, and its keywords, less search's stopwords.
+ * The words of a descriptor text as this file reads an idea: stemmed, less
+ * search's stopwords. Search's stopwords are no evidence: "to" in a "to-do
+ * list" keyword must not answer the "to" of "rows to track orders".
+ * @param {string} text
+ * @returns {string[]}
+ */
+const contentWords = text =>
+  weightWords(text)
+    .filter(w => !STOPWORDS.has(w))
+    .map(stem);
+
+/**
+ * The words a template's descriptor gives an idea: every word of `texts`, and
+ * the words its keywords give the idea (`keywordWordsFor`): a phrase keyword
+ * counts all of its words when the idea names the whole phrase, and none of
+ * them otherwise.
+ * @param {string[]} texts
+ * @param {readonly string[]} keywords
+ * @param {string[]} order the idea's words, in order (`contentWords`)
+ * @returns {Set<string>}
+ */
+const descriptorWordsFor = (texts, keywords, order) =>
+  new Set([
+    ...contentWords(texts.join(' ')),
+    ...keywordWordsFor(keywordUnits(keywords, contentWords), order),
+  ]);
+
+/**
+ * How many of the idea's words a template's own descriptor names: its display
+ * name, its category, and its keywords.
  * @param {string} name
  * @param {DescribedTemplate[]} catalog
- * @param {Set<string>} words the idea's stemmed words, less search's stopwords
+ * @param {string[]} order the idea's words, in order (`contentWords`)
  */
-function ownWords(name, catalog, words) {
+function ownWords(name, catalog, order) {
   const t = catalog.find(c => c.name === name);
   if (!t) return 0;
-  // Search's stopwords are no evidence: "to" in a "to-do list" keyword must
-  // not answer the "to" of "rows to track orders".
-  const own = new Set(
-    weightWords(
-      [t.displayName ?? '', t.category ?? '', ...(t.keywords ?? [])].join(' '),
-    )
-      .filter(w => !STOPWORDS.has(w))
-      .map(stem),
+  const own = descriptorWordsFor(
+    [t.displayName ?? '', t.category ?? ''],
+    t.keywords ?? [],
+    order,
   );
   let n = 0;
-  for (const w of words) if (own.has(w)) n++;
+  for (const w of new Set(order)) if (own.has(w)) n++;
   return n;
 }
 
@@ -371,28 +425,21 @@ function typicalOfTie(name, ranked, cands) {
 }
 
 /**
- * The words of a template's whole descriptor, stemmed, less search's
- * stopwords: its display name, category, keywords, description, and the names
- * of the components its page composes.
+ * The words a template's whole descriptor gives an idea
+ * (`descriptorWordsFor`): its display name, category, keywords, description,
+ * and the names of the components its page composes.
  * @param {DescribedTemplate} t
+ * @param {string[]} order the idea's words, in order (`contentWords`)
  * @returns {Set<string>}
  */
-function descriptorWords(t) {
+function descriptorWords(t, order) {
   const components = (t.components ?? []).map(c =>
     c.replace(/([a-z0-9])([A-Z])/g, '$1 $2'),
   );
-  return new Set(
-    weightWords(
-      [
-        t.displayName ?? '',
-        t.category ?? '',
-        ...(t.keywords ?? []),
-        t.description ?? '',
-        ...components,
-      ].join(' '),
-    )
-      .filter(w => !STOPWORDS.has(w))
-      .map(stem),
+  return descriptorWordsFor(
+    [t.displayName ?? '', t.category ?? '', t.description ?? '', ...components],
+    t.keywords ?? [],
+    order,
   );
 }
 
@@ -423,14 +470,11 @@ function fullerOfTie(name, idea, ranked, cands, catalog) {
   );
   if (tied.length < 2) return name;
   const family = catalog.filter(t => familyOf(t.name, catalog) === self.family);
-  const words = new Map(family.map(t => [t.name, descriptorWords(t)]));
+  const order = contentWords(idea);
+  const words = new Map(family.map(t => [t.name, descriptorWords(t, order)]));
   const df = (/** @type {string} */ w) =>
     family.filter(t => words.get(t.name)?.has(w)).length;
-  const said = new Set(
-    weightWords(idea)
-      .filter(w => !STOPWORDS.has(w))
-      .map(stem),
-  );
+  const said = new Set(order);
   const own = tied.map(r => words.get(r.name) ?? new Set());
   const n = family.length;
   const score = tied.map((_, i) => {
@@ -455,6 +499,37 @@ function fullerOfTie(name, idea, ranked, cands, catalog) {
 }
 
 /**
+ * The pick model's best ready, non-shell template that `ok` accepts, or null
+ * when it has none.
+ * @param {string} idea
+ * @param {import('./rank.mjs').RankedPage[]} ranked
+ * @param {import('./rank.mjs').RankedPage | null} pick
+ * @param {DescribedTemplate[]} catalog
+ * @param {WeightsFile} weights
+ * @param {(c: string) => boolean} [ok]
+ * @returns {string | null}
+ */
+function bestPage(idea, ranked, pick, catalog, weights, ok = () => true) {
+  const {cands, scores} = blend(
+    idea,
+    ranked,
+    pick,
+    catalog,
+    pickModel(weights),
+  );
+  let at = -1;
+  for (let c = 0; c < cands.length; c++) {
+    if (
+      cands[c] !== SHELL &&
+      ok(cands[c]) &&
+      (at < 0 || scores[c] > scores[at])
+    )
+      at = c;
+  }
+  return at < 0 ? null : cands[at];
+}
+
+/**
  * Every ready, non-shell template in the blend's own order, best first: the
  * order the page start is chosen from, so the alternatives build names beside
  * the start come from the same ranking. Null without weights.
@@ -467,7 +542,13 @@ function fullerOfTie(name, idea, ranked, cands, catalog) {
  */
 export function blendOrder(idea, ranked, pick, catalog, weights) {
   if (!weights) return null;
-  const {cands, scores} = blend(idea, ranked, pick, catalog, weights);
+  const {cands, scores} = blend(
+    idea,
+    ranked,
+    pick,
+    catalog,
+    pickModel(weights),
+  );
   return cands
     .map((c, i) => ({c, s: scores[i], i}))
     .filter(x => x.c !== SHELL)
@@ -512,23 +593,23 @@ export function weighStart(
   // The tables cannot judge a template they do not list (an integration's
   // template, or one added since they were fit), so its own descriptor
   // decides: the ranker's pick stands when the idea names as many words of its
-  // display name, category and keywords as of the tables' first listed
-  // template's, or names its family first and nearly as many; otherwise that
-  // listed template starts. Nothing learned about the template is involved,
+  // display name, category and keywords as of the best listed template's (the
+  // pick model's choice, as for every other page), or names its family first
+  // and nearly as many; otherwise that listed template starts. Nothing learned about the template is involved,
   // so a new template competes on its own words.
   if (kept && !position.has(kept)) {
-    const listed = best(c => c !== SHELL && position.has(c));
+    const listed = bestPage(idea, ranked, pick, catalog, weights, c =>
+      position.has(c),
+    );
     if (!listed) return kept;
     // The idea's own words, less search's stopwords: "basically" must not
     // answer the "Basic" of a category.
-    const content = weightWords(idea).filter(w => !STOPWORDS.has(w));
-    const said = new Set(content.map(stem));
-    const mine = ownWords(kept, catalog, said);
-    const theirs = ownWords(listed, catalog, said);
+    const order = contentWords(idea);
+    const mine = ownWords(kept, catalog, order);
+    const theirs = ownWords(listed, catalog, order);
     // An idea that names the template's family before the listed one's
     // ("a dashboard with a data table") is that family's page, unless it
     // names far more of the listed template's words.
-    const order = content.map(stem);
     const stays =
       mine >= theirs ||
       (familyAt(kept, catalog, order) < familyAt(listed, catalog, order) &&
@@ -543,7 +624,8 @@ export function weighStart(
     return fullerOfTie(kept, idea, ranked, cands, catalog);
   }
   const top = best(() => true);
-  if (top !== SHELL) return top;
+  if (top !== SHELL)
+    return bestPage(idea, ranked, pick, catalog, weights) ?? top;
   // An idea that asks for a new page keeps the ranker's template rather than
   // the shell.
   if (newPage && kept) return kept;
@@ -551,8 +633,9 @@ export function weighStart(
 }
 
 /**
- * The blend's scores: the app shell's, and the best non-shell template with
- * its score and the runner-up's. Null without weights.
+ * The call model's scores: the app shell's, the best non-shell template's and
+ * the runner-up's, with the page to start from (the pick model's choice when
+ * the file has one, else the call model's best page). Null without weights.
  * @param {string} idea
  * @param {import('./rank.mjs').RankedPage[]} ranked
  * @param {import('./rank.mjs').RankedPage | null} pick
@@ -571,7 +654,9 @@ export function blendSummary(idea, ranked, pick, catalog, weights) {
   rest.sort((x, y) => y.score - x.score || x.i - y.i);
   return {
     shell,
-    best: rest[0]?.name ?? null,
+    best: hasPickModel(weights)
+      ? bestPage(idea, ranked, pick, catalog, weights)
+      : (rest[0]?.name ?? null),
     bestScore: rest[0]?.score ?? 0,
     secondScore: rest[1]?.score ?? 0,
   };

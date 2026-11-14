@@ -31,6 +31,7 @@ import {Project} from '../../../foundation/config/project.mjs';
 import {warnOnIntegrationIssues} from '../../../foundation/integrations/integration-warnings.mjs';
 import {doc as componentCommand} from './component.doc.mjs';
 import {doc as componentFn} from '../../../api/component/component.doc.mjs';
+import {compareText} from '../../../foundation/text/compare-text.mjs';
 
 /**
  * The api layer's component() widens its return to `{type: string, data: unknown}`,
@@ -396,7 +397,7 @@ export function registerComponent(program) {
           const firstGroup = Object.entries(groups)[0];
           const entries =
             options.category && firstGroup ? firstGroup[1] : Object.values(groups).flat();
-          const sorted = [...entries].sort((a, b) => a.name.localeCompare(b.name));
+          const sorted = [...entries].sort((a, b) => compareText(a.name, b.name));
 
           emit(
             options.category && firstGroup

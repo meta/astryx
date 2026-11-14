@@ -53,6 +53,9 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     // Every kind of entry the folder holds is named, the docs not-found
     // hint's name summaries (kept-tree.mjs) included.
     expect(plain).toContain("the docs not-found hint's name summaries");
+    // The bound on the folder, and on jiti's folder beside it.
+    expect(plain).toContain('at most 64 MB');
+    expect(plain).toContain(path.join(tmp, 'astryx', 'jiti'));
     const pnp = path.join(work, 'as-pnp.cjs');
     fs.writeFileSync(pnp, "process.versions.pnp = '3';\n");
     const underPnp = row({NODE_OPTIONS: `--require ${pnp}`}).message;
@@ -638,6 +641,105 @@ Module._resolveFilename = function (request, parent, isMain, options) {
       }
     },
     240_000,
+  );
+
+  it.skipIf(!hasModuleHooks)(
+    "lets doctor --built read doctor's kept checks back, and checks the build on every run",
+    () => {
+      const tmp = keptTmp('doctor-built');
+      const other = makeProject();
+      try {
+        const dist = path.join(other.dir, 'dist');
+        fs.mkdirSync(dist);
+        fs.writeFileSync(
+          path.join(dist, 'index.html'),
+          '<html><head><link rel="stylesheet" href="app.css"></head><body></body></html>\n',
+        );
+        const css = path.join(dist, 'app.css');
+        fs.writeFileSync(css, '.page { color: red; }\n');
+        /** @param {{stdout: string}} result */
+        const checks = result =>
+          /** @type {{id: string}[]} */ (JSON.parse(result.stdout).data.checks);
+        // The cache row names the folder and what it holds, which differ
+        // between a kept and a fresh temp folder.
+        /** @param {{id: string}[]} list */
+        const withoutCacheRow = list =>
+          list.filter(check => check.id !== 'gather-cache');
+        /** @param {{id: string}[]} list */
+        const usage = list =>
+          list.find(check => check.id === 'built-astryx-usage');
+        const built = (/** @type {string} */ at) =>
+          checks(run(['doctor', '--built', 'dist'], {tmp: at, cwd: other.dir}));
+
+        run(['doctor'], {tmp, cwd: other.dir});
+        const kept = doctorEntries(tmp);
+        expect([...kept.keys()].sort()).toEqual([
+          'cli-docs',
+          'docs-progressive-disclosure',
+          'docs-tree',
+        ]);
+        // A kept entry read back is marked as just used; date them an hour
+        // back to see it.
+        const dir = path.join(tmp, CACHE_NAME);
+        const hourAgo = new Date(Date.now() - 3600_000);
+        /** @returns {number[]} */
+        const doctorTimes = () =>
+          fs
+            .readdirSync(dir)
+            .map(name => path.join(dir, name))
+            .filter(file => [...kept.values()].includes(fs.statSync(file).ino))
+            .map(file => fs.statSync(file).mtimeMs);
+        for (const name of fs.readdirSync(dir)) {
+          fs.utimesSync(path.join(dir, name), hourAgo, hourAgo);
+        }
+        // doctor --built reads the same entries back and answers as a fresh
+        // doctor --built does.
+        const first = built(tmp);
+        expect(doctorEntries(tmp)).toEqual(kept);
+        const times = doctorTimes();
+        expect(times).toHaveLength(3);
+        for (const time of times)
+          expect(time).toBeGreaterThan(hourAgo.getTime());
+        expect(withoutCacheRow(first)).toEqual(
+          withoutCacheRow(built(freshTmp())),
+        );
+        expect(usage(first)).toMatchObject({status: 'fail'});
+        // The build itself is checked on every run: an edit shows on the very
+        // next one, as on a fresh run, and leaves the kept checks as they were.
+        fs.writeFileSync(css, '@layer astryx-base { .page { color: red; } }\n');
+        const edited = built(tmp);
+        expect(usage(edited)).toMatchObject({status: 'pass'});
+        expect(withoutCacheRow(edited)).toEqual(
+          withoutCacheRow(built(freshTmp())),
+        );
+        expect(doctorEntries(tmp)).toEqual(kept);
+      } finally {
+        fs.rmSync(other.dir, {recursive: true, force: true});
+      }
+    },
+    180_000,
+  );
+
+  it.skipIf(!hasModuleHooks)(
+    'answers a doctor integration check as a fresh run does, run after run',
+    () => {
+      const tmp = keptTmp('doctor-integration');
+      const other = makeProject();
+      try {
+        const validate = (/** @type {string} */ at) =>
+          run(['doctor', 'integration', 'validate'], {
+            tmp: at,
+            cwd: other.widgets,
+          });
+        const fresh = validate(freshTmp());
+        expect(validate(tmp)).toEqual(fresh);
+        expect(validate(tmp)).toEqual(fresh);
+        expect(doctorEntries(tmp).size).toBe(0);
+      } finally {
+        fs.rmSync(other.dir, {recursive: true, force: true});
+      }
+    },
+    120_000,
   );
 
   it('leaves a missing cache folder missing when doctor runs', () => {
