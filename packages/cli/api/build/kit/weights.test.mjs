@@ -254,6 +254,54 @@ describe('weighStart', () => {
       expect(start).toBe('fold');
     });
 
+    it("counts another template's phrase keyword only as the whole phrase", () => {
+      // grid's "table of contents" is one phrase: its words never count alone,
+      // and named in order it counts once.
+      const own = [
+        {name: 'board'},
+        {name: 'charts'},
+        {name: 'grid', displayName: 'Grid', keywords: ['table of contents']},
+        {name: 'fold', displayName: 'Folding Rows'},
+      ];
+      const ranked = [
+        page('fold', 9, 'Fold'),
+        page('grid', 3, 'Grid'),
+        page('charts', 1, 'Charts'),
+        page('board', 0.5, 'Board'),
+        page('top-nav', 0, 'Shell'),
+      ];
+      /** @param {string} idea */
+      const start = idea =>
+        weighStart(idea, ranked, ranked[0], own, {weights: WEIGHTS});
+      expect(start('folding table of orders and contents on cards')).toBe(
+        'fold',
+      );
+      expect(start('a grid table of contents with folding on cards')).toBe(
+        'grid',
+      );
+    });
+
+    it('starts a new template its one phrase keyword describes', () => {
+      // The tables do not list acme-ledger; its own words decide. The phrase
+      // the idea names counts all three of its words.
+      const own = [
+        {name: 'board', displayName: 'Kanban Board', keywords: ['kanban']},
+        {name: 'charts', displayName: 'Charts'},
+        {name: 'grid', displayName: 'Grid'},
+        {name: 'acme-ledger', keywords: ['quarterly vendor ledger']},
+      ];
+      const ranked = [page('acme-ledger', 9, 'Acme'), ...RANKED];
+      expect(
+        weighStart(
+          'a quarterly vendor ledger page on a kanban board',
+          ranked,
+          ranked[0],
+          own,
+          {weights: WEIGHTS},
+        ),
+      ).toBe('acme-ledger');
+    });
+
     it("never counts a stopword from the idea's words", () => {
       // "basically" is one of search's stopwords and stems to "basic", the
       // word of grid's category; it must not tip the count to grid.
