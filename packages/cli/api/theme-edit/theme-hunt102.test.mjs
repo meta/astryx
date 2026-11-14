@@ -139,6 +139,34 @@ describe('the app copy fonts follow the families the built theme uses', () => {
     }
   }, 240_000);
 
+  it("a stable build counts only the theme's own font stylesheet, not another one in its folder", async () => {
+    const dir = path.join(cwd, 'src/themes/brand');
+    fs.mkdirSync(dir, {recursive: true});
+    fs.writeFileSync(
+      path.join(dir, 'brandTheme.ts'),
+      "import {defineTheme} from '@astryxdesign/core/theme';\nexport const brandTheme = defineTheme({name: 'brand', tokens: {'--font-family-body': 'Inter, sans-serif'}});\n",
+    );
+    const remove = installInter();
+    try {
+      // A stray stylesheet: `theme add` never imports it.
+      fs.writeFileSync(
+        path.join(dir, 'other.fonts.css'),
+        '@import "@fontsource/inter/index.css";\n',
+      );
+      const stray = cli(['theme', 'build', 'src/themes/brand/brandTheme.ts']);
+      expect(stray.stdout + stray.stderr).toMatch(/not loaded[^\n]*Inter/);
+      fs.writeFileSync(
+        path.join(dir, 'brand.fonts.css'),
+        '@import "@fontsource/inter/index.css";\n',
+      );
+      const own = cli(['theme', 'build', 'src/themes/brand/brandTheme.ts']);
+      expect(own.stdout + own.stderr).not.toMatch(/not loaded[^\n]*Inter/);
+    } finally {
+      remove();
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  }, 240_000);
+
   it('a stable build of the copy source counts the font stylesheet beside it', async () => {
     await themeEditNew('f5', {cwd});
     await themeEditSet('f5', 'font', 'Inter', {cwd});

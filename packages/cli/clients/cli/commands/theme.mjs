@@ -141,29 +141,23 @@ const THEME_WORDS = {
 };
 
 /**
- * The font families a font stylesheet beside a theme source loads
- * (`<name>.fonts.css` in the same folder, as a local theme ships one): an
- * @fontsource package by its name, another stylesheet by the `family=` it
- * requests. A build of that source does not name those families as
- * unloaded. Null when no such stylesheet is there.
+ * The font families a local theme's font stylesheet loads: the
+ * `<slug>.fonts.css` beside its source, where the theme's folder is named
+ * for its slug (the one font stylesheet `theme add` imports for it), read
+ * with its imports (an @fontsource package by its name, a stylesheet by its
+ * @font-face rules or the `family=` it requests). A build of that source
+ * does not name those families as unloaded. Another stylesheet in the
+ * folder loads nothing for the app, so it counts for nothing. Null when the
+ * theme has no font stylesheet.
  * @param {string} file the theme source, as given
  * @param {string} cwd
  * @returns {((family: string) => boolean) | null}
  */
 function fontsLoadedBeside(file, cwd) {
   const dir = path.dirname(path.resolve(cwd, file));
-  /** @type {string[]} */
-  let sheets;
-  try {
-    sheets = fs.readdirSync(dir).filter(n => n.endsWith('.fonts.css'));
-  } catch {
-    return null;
-  }
-  /** @type {Set<string>} */
-  const loaded = new Set();
-  for (const sheet of sheets)
-    for (const f of stylesheetFontFamilies(path.join(dir, sheet)))
-      loaded.add(f);
+  const sheet = path.join(dir, `${path.basename(dir)}.fonts.css`);
+  if (!fs.existsSync(sheet)) return null;
+  const loaded = stylesheetFontFamilies(sheet);
   return loaded.size ? family => loaded.has(fontKey(family)) : null;
 }
 
