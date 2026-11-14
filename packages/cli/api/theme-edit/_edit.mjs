@@ -2800,6 +2800,28 @@ async function ownTokenProblems(ctx, slug, data) {
     }
   };
   fields(input.typography, []);
+  // Core builds a role's font list from its family, with the fallbacks
+  // after it: fallbacks with no family in that role build nothing.
+  if (input.typography && typeof input.typography === 'object')
+    for (const role of ['body', 'heading', 'code']) {
+      const r = input.typography[role];
+      if (
+        !r ||
+        typeof r !== 'object' ||
+        flagged.has(role) ||
+        r.fallbacks === undefined ||
+        r.family
+      )
+        continue;
+      const key = `${role}.fallbacks`;
+      const e = typo.find(x => x.key === key) ?? typo[0];
+      out.push({
+        token: `typography.${key}`,
+        value: typeof r.fallbacks === 'string' ? r.fallbacks : '',
+        why: `Core builds a role's font list from its family, with the fallbacks after it, so typography.${key} builds nothing without typography.${role}.family${role === 'body' ? '' : `; ${role === 'heading' ? 'a heading with no family takes the body list whole' : 'give the code family beside them'}`}: give ${role}.family beside them (such as family: 'Inter')`,
+        ...(e ? atOf(e) : {line: null, file: null}),
+      });
+    }
   // Core writes a role's weight only from a type scale: without one, a
   // weight builds nothing.
   if (

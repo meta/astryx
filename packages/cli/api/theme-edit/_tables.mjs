@@ -10,7 +10,10 @@
  */
 
 import {discoverBundledThemes} from '../../foundation/discovery/theme-discovery.mjs';
-import {collectUnloadedFonts} from '../theme/build/font-warning.mjs';
+import {
+  SYSTEM_FONTS_BY_PLATFORM,
+  collectUnloadedFonts,
+} from '../theme/build/font-warning.mjs';
 
 /**
  * A lookup table that only answers for its own keys: a word typed by a
@@ -214,70 +217,9 @@ export const isSystemFamily = family =>
  * not load everywhere.
  */
 const ONE_SYSTEM_FAMILIES = new Map(
-  Object.entries({
-    macOS: [
-      '-apple-system',
-      'blinkmacsystemfont',
-      'helvetica neue',
-      'sf mono',
-      'sf pro',
-      'sf pro text',
-      'sf pro display',
-      'monaco',
-      'menlo',
-      'palatino',
-      'lucida grande',
-      'gill sans',
-      'snell roundhand',
-      'pingfang sc',
-      'pingfang tc',
-      'pingfang hk',
-      'hiragino sans',
-      'hiragino sans gb',
-      'hiragino kaku gothic pron',
-      'hiragino mincho pron',
-      'apple sd gothic neo',
-    ],
-    Windows: [
-      'segoe ui',
-      'segoe ui emoji',
-      'segoe ui symbol',
-      'segoe ui light',
-      'segoe ui semilight',
-      'segoe ui semibold',
-      'segoe ui black',
-      'consolas',
-      'cambria',
-      'calibri',
-      'lucida console',
-      'brush script mt',
-      'old english text mt',
-      'microsoft yahei',
-      'microsoft yahei ui',
-      'microsoft jhenghei',
-      'microsoft jhenghei ui',
-      'simsun',
-      'simhei',
-      'nsimsun',
-      'meiryo',
-      'yu gothic',
-      'yu mincho',
-      'ms gothic',
-      'ms mincho',
-      'malgun gothic',
-      '微软雅黑',
-      '宋体',
-      '黑体',
-    ],
-    'Android and ChromeOS': ['roboto'],
-    Linux: [
-      'liberation mono',
-      'liberation sans',
-      'liberation serif',
-      'dejavu sans',
-      'dejavu sans mono',
-    ],
-  }).flatMap(([system, names]) => names.map(n => [n, system])),
+  Object.entries(SYSTEM_FONTS_BY_PLATFORM)
+    .filter(([system]) => system !== 'everywhere')
+    .flatMap(([system, names]) => names.map(n => [n, system])),
 );
 
 /** @param {string} family */

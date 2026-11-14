@@ -8905,15 +8905,24 @@ export function fontsourcePackageOf(family) {
 }
 
 /**
- * The Fontsource package to suggest installing for a family: none for a
- * font a system ships (on any platform), whose name Fontsource does not
- * publish; else the family's package in Fontsource's naming.
+ * The Fontsource package to suggest installing for a family: an open
+ * font's own package (the editor's font table knows it is published); none
+ * for a font a system ships (on any platform), which Fontsource does not
+ * publish; else the family's package in Fontsource's naming, which
+ * Fontsource may or may not publish (`known` false).
  * @param {string} family
- * @returns {string | null}
+ * @returns {{pkg: string, known: boolean} | null}
  */
 export function fontsourceSuggestion(family) {
   const name = cssUnescape(String(family).replace(/["']/g, '')).trim();
-  return isSystemFamily(name) ? null : fontsourcePackageOf(name);
+  const open = Object.values(OPEN_FONTS).find(
+    f =>
+      f.family.replace(/["']/g, '').trim().toLowerCase() === name.toLowerCase(),
+  );
+  if (open) return {pkg: open.pkg, known: true};
+  if (isSystemFamily(name)) return null;
+  const pkg = fontsourcePackageOf(name);
+  return pkg ? {pkg, known: false} : null;
 }
 
 /**

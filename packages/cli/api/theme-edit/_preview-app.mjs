@@ -5033,9 +5033,9 @@ export async function themeEditPreviewApp(dir, options = {}) {
     // has no package of) is not installed in the new app: said, with the
     // package that would load it.
     for (const family of familiesNothingLoads(ctx, theme, fonts)) {
-      const pkg = fontsourceSuggestion(family);
+      const s = fontsourceSuggestion(family);
       notes.push(
-        `"${family}" is not a font the CLI knows to be open, and this project has no package of it, so the new app does not install it and shows the next font in the stack${pkg ? `; if Fontsource publishes it, ${installLine(cwd, [pkg])} in the new app installs it (then import '${pkg}' in its root layout)` : ''}`,
+        `"${family}" is not a font the CLI knows to be open, and this project has no package of it, so the new app does not install it and shows the next font in the stack${s ? `; if Fontsource publishes it, ${installLine(cwd, [s.pkg])} in the new app installs it (then import '${s.pkg}' in its root layout)` : ''}`,
       );
     }
     routeTheme = {

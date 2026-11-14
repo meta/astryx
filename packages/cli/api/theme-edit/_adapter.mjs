@@ -52,7 +52,7 @@ import * as preview from './_preview-app.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {findPackageRoot} from '../../foundation/fs/paths.mjs';
-import {context, coreApp} from './_context.mjs';
+import {baseWeightNotes, context, coreApp} from './_context.mjs';
 import {APP_COPY_MARK} from './_marks.mjs';
 import {
   fontKey,
@@ -1613,21 +1613,30 @@ export function editorFontHelp(file, cwd) {
   const copy = `src/themes/${at.slug}/${at.slug}.fonts.css`;
   /** @param {string} family */
   const notice = family => {
-    const pkg = fontsourceSuggestion(family);
-    return pkg
-      ? `Font "${family}" is named by this theme but not loaded; if Fontsource publishes it, ${installLine(root, [pkg])} installs its package, which ${copy} then imports`
+    const s = fontsourceSuggestion(family);
+    return s
+      ? `Font "${family}" is named by this theme but not loaded; ${s.known ? '' : 'if Fontsource publishes it, '}${installLine(root, [s.pkg])} installs its package, which ${copy} then imports`
       : `Font "${family}" is named by this theme but not loaded, and no font package is named for it: the app must load it, or it falls back`;
   };
   return {
     notice,
     recipe: families => {
-      const pkgs = families
-        .map(fontsourceSuggestion)
-        .filter(/** @returns {p is string} */ p => p !== null);
+      const all = families.map(fontsourceSuggestion).filter(s => s !== null);
+      // Packages the editor knows Fontsource publishes go on one install
+      // line; a name it cannot vouch for gets its own, so one that does
+      // not exist never stops the others installing.
+      const known = all.filter(s => s.known).map(s => s.pkg);
+      const guessed = all.filter(s => !s.known).map(s => s.pkg);
+      const lines = [
+        ...(known.length ? [installLine(root, known)] : []),
+        ...guessed.map(
+          pkg => `${installLine(root, [pkg])}   (if Fontsource publishes it)`,
+        ),
+      ];
       return `  The built CSS only sets font-family. ${at.slug}'s app copy loads a family
-  once its package is installed (if Fontsource publishes it), importing it in
-  ${copy} on the next compile, set or show:
-${pkgs.length ? `\n    ${installLine(root, pkgs)}\n` : '\n    (no Fontsource package is named for these families: load them in your app)\n'}
+  once its package is installed, importing it in ${copy} on the next
+  compile, set or show:
+${lines.length ? `\n${lines.map(l => `    ${l}`).join('\n')}\n` : '\n    (no Fontsource package is named for these families: load them in your app)\n'}
   Recipe and fallback-stack guidance: ${runLine(root, 'docs typography')}
 `;
     },
@@ -1777,7 +1786,12 @@ export async function editorBuildExtra(file, cwd, opts) {
     /** @type {string[]} */
     let notices;
     try {
-      notices = edit.ownPhoneNotes(root, slug, loadTheme(root, slug));
+      const data = loadTheme(root, slug);
+      notices = [
+        ...edit.ownPhoneNotes(root, slug, data),
+        // A weight the base theme's font stylesheet does not load.
+        ...baseWeightNotes(await context(root), data),
+      ];
     } catch {
       notices = [];
     }

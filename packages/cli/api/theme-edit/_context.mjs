@@ -42,6 +42,7 @@ import {typoNear} from './_normal.mjs';
 import {
   fontOf,
   builtFontFamilies,
+  builtFontWeights,
   fontPackages,
   fontsourceSuggestion,
   modesOf,
@@ -615,8 +616,8 @@ export function fontNotes(ctx, data) {
   // it, when Fontsource's naming gives one.
   /** @param {string} family */
   const unloadedNote = family => {
-    const pkg = fontsourceSuggestion(family);
-    return `"${family}" is not a system font and no package loads it: the app must load it, or it falls back.${pkg ? ` If Fontsource publishes it, ${installLine(ctx.project.cwd, [pkg])} installs its package, which the previews and the app copy then load.` : ''}`;
+    const s = fontsourceSuggestion(family);
+    return `"${family}" is not a system font and no package loads it: the app must load it, or it falls back.${s ? ` ${s.known ? '' : 'If Fontsource publishes it, '}${installLine(ctx.project.cwd, [s.pkg])} installs its package, which the previews and the app copy then load.` : ''}`;
   };
   for (const {pkg, family, installed} of packages) {
     const fallbacks =
@@ -711,14 +712,52 @@ export function fontNotes(ctx, data) {
         packages.some(x => x.installed && fontKey(x.family) === fontKey(family))
       )
         continue;
-      const pkg = fontsourceSuggestion(family);
+      const s = fontsourceSuggestion(family);
       notes.push(
-        `"${family}" comes from ${base.spec}, which loads it from ${new URL(base.remote[0], 'https://x').host}: the app shows it, but the previews (preview.html, sheet.html and their pictures) cannot load a remote stylesheet and show the next font in the stack.${pkg ? ` ${installLine(ctx.project.cwd, [pkg])} installs a copy the previews load too.` : ''}`,
+        `"${family}" comes from ${base.spec}, which loads it from ${new URL(base.remote[0], 'https://x').host}: the app shows it, but the previews (preview.html, sheet.html and their pictures) cannot load a remote stylesheet and show the next font in the stack.${s ? ` ${installLine(ctx.project.cwd, [s.pkg])} installs a copy the previews load too.` : ''}`,
       );
     }
+  notes.push(...baseWeightNotes(ctx, data));
   for (const family of familiesNothingLoads(ctx, data, packages)) {
     if (dialFamilies.has(fontKey(family))) continue;
     notes.push(unloadedNote(family));
+  }
+  return notes;
+}
+
+/**
+ * A note for each weight the theme uses that the base theme's font
+ * stylesheet does not load for its family (it shows as the nearest weight
+ * the sheet loads), unless an installed package loads that family.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {string[]}
+ */
+export function baseWeightNotes(ctx, data) {
+  /** @type {string[]} */
+  const notes = [];
+  const base = baseFontsSheet(ctx, data);
+  const built = builtFontFamilies(ctx, data.name);
+  const packages = fontPackages(ctx, data);
+  if (base?.weights.size) {
+    const used = builtFontWeights(ctx, data.name) ?? [];
+    for (const [family, loadedWeights] of base.weights) {
+      if (built && !built.has(family.toLowerCase())) continue;
+      if (
+        packages.some(x => x.installed && fontKey(x.family) === fontKey(family))
+      )
+        continue;
+      const missing = used.filter(w => !loadedWeights.includes(w));
+      if (!missing.length) continue;
+      const s = fontsourceSuggestion(family);
+      const nearest = (/** @type {number} */ w) =>
+        loadedWeights.reduce((a, b) =>
+          Math.abs(b - w) < Math.abs(a - w) ? b : a,
+        );
+      notes.push(
+        `${family} is loaded by ${base.spec} at ${loadedWeights.join(', ')} only, so ${missing.map(w => `${w} shows as ${nearest(w)}`).join(', ')}${s ? `; ${installLine(ctx.project.cwd, [s.pkg])} loads every weight of it` : ''}`,
+      );
+    }
   }
   return notes;
 }
