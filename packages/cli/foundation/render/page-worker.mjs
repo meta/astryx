@@ -18,7 +18,7 @@
  * so the server render sets them aside and draws them after it with React
  * DOM in a small document (charts.mjs).
  *
- * @input workerData {entry, root, served, withoutSegmenter}
+ * @input workerData {entry, root, scope, served, withoutSegmenter}
  * @output one message: {ok: true, markup, css, files, texts, logs} or
  *   {ok: false, error: {code, message, detail?}}
  * @position foundation/render — started by page-host.mjs
@@ -34,15 +34,15 @@ import {transformSync} from '@babel/core';
 import {LOAD_EXTENSIONS, existingFile, matchPath, readPathsIn, resolvePath} from './ts-paths.mjs';
 import {createJiti} from 'jiti';
 import {assetDataUri, isAssetPath} from './assets.mjs';
-import {SINGLE_COPY, isServedPackage, packageOf} from './served-packages.mjs';
+import {SINGLE_COPY, isServedPackage, packageOf, resolveServed} from './served-packages.mjs';
 import {findNodeModulesPackage} from '../fs/paths.mjs';
 import {importSpecifiers} from './embedded-imports.mjs';
 import {CHART_GLOBAL, CHART_ROOTS, chartDocument, chartSize, markLegends} from './charts.mjs';
 
 /** @typedef {{level: string, text: string}} PageLog */
 
-/** @type {{entry: string, root: string, served: {dir: string, integrations: string[]} | null, withoutSegmenter?: boolean}} */
-const {entry, root} = workerData;
+/** @type {{entry: string, root: string, scope: string, served: {dir: string, integrations: string[]} | null, withoutSegmenter?: boolean}} */
+const {entry, root, scope} = workerData;
 
 // Some Node builds crash in Intl.Segmenter. Without it, Core splits text by
 // code points, so a joined emoji can count as several characters.
@@ -50,7 +50,8 @@ if (workerData.withoutSegmenter) delete (/** @type {any} */ (Intl)).Segmenter;
 
 /** The package set, for a page outside a project whose folder has no Core of its own. */
 const served = workerData.served && findNodeModulesPackage(path.dirname(entry), '@astryxdesign/core') === null ? workerData.served : null;
-const ROOT_PREFIX = root.endsWith(path.sep) ? root : root + path.sep;
+/** The folder whose modules the page carries (see render-page.mjs `carryScopeOf`). */
+const SCOPE_PREFIX = scope.endsWith(path.sep) ? scope : scope + path.sep;
 
 /** @type {PageLog[]} */
 const logs = [];
@@ -144,10 +145,10 @@ const fnKey = p => {
 
 const NODE_MODULES = `${path.sep}node_modules${path.sep}`;
 
-/** A module of the project itself: inside its folder, not a package.
+/** A module of the page's own: inside the folder whose modules it carries, not a package.
  * @param {string} file */
 const isLocal = file =>
-  !file.includes(NODE_MODULES) && (file === entry || file.startsWith(ROOT_PREFIX));
+  !file.includes(NODE_MODULES) && (file === entry || file.startsWith(SCOPE_PREFIX));
 
 /** Charts the server render set aside, drawn after it. @type {any[]} */
 const charts = [];
@@ -713,6 +714,32 @@ if (servedParent && Object.keys(SINGLE_COPY_ALIASES).length > 0) {
   });
 }
 
+/** What the StyleX compiler reads as a theme or constants file, by name. */
+const STYLEX_THEME_FILE = /\.(?:stylex(?:\.const)?|transformed)(?:\.(?:js|ts|tsx|jsx|mjs|cjs))?$/;
+
+/**
+ * Outside a project, the file the page loads for each StyleX theme file a
+ * module imports from a package, for the StyleX compiler. The compiler finds
+ * a theme import from the folder of the file that imports it, which outside
+ * a project holds no copy of the packages the set serves, so it is given the
+ * file the page loads. Its own rules still name that file for the variables'
+ * names, so they match the package's stylesheet.
+ * @param {string} source
+ * @param {string} filename
+ * @returns {Record<string, string[]> | null}
+ */
+function servedThemeFiles(source, filename) {
+  if (!served) return null;
+  /** @type {Record<string, string[]>} */
+  const files = {};
+  for (const spec of importSpecifiers(source, filename)) {
+    if (spec.startsWith('.') || path.isAbsolute(spec) || !STYLEX_THEME_FILE.test(spec)) continue;
+    const file = resolveServed(spec, filename, served);
+    if (file) files[spec] = [file];
+  }
+  return Object.keys(files).length > 0 ? files : null;
+}
+
 const plain = createJiti(entry, {fsCache: false, jsx: {runtime: 'automatic'}});
 
 const jiti = createJiti(entry, {
@@ -735,6 +762,7 @@ const jiti = createJiti(entry, {
     if (filename && isLocal(filename) && /\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(filename)) {
       if (!localFiles.includes(filename)) localFiles.push(filename);
       const ts = /\.(tsx?|mts|cts)$/.test(filename);
+      const themeFiles = source.includes('stylex') ? servedThemeFiles(source, filename) : null;
       const result = transformSync(source, {
         filename,
         babelrc: false,
@@ -755,6 +783,7 @@ const jiti = createJiti(entry, {
                     runtimeInjection: false,
                     treeshakeCompensation: true,
                     unstable_moduleResolution: {type: 'commonJS', rootDir: root},
+                    ...(themeFiles ? {aliases: themeFiles} : {}),
                   },
                 ],
               ]
