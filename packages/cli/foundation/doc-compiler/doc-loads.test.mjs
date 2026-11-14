@@ -529,6 +529,10 @@ const RUNNERS = {
     runs: "node, to work out Core's component list on a copy of exactly the files Core publishes (at `prepack`)",
     sites: ['child_process.spawnSync'],
   },
+  'scripts/generate-search-catalog.mjs': {
+    runs: "node, to gather search's catalog in a project that installs exactly the files the CLI and Core publish, once per package manager and beside each one's lockfile (at `prepack`)",
+    sites: ['child_process.spawnSync'],
+  },
   'scripts/generate-self-audit.mjs': {
     runs: "node, to run Doctor's audit of the CLI's own files on a copy of exactly the files the package publishes (at `prepack`)",
     sites: ['child_process.spawnSync'],
