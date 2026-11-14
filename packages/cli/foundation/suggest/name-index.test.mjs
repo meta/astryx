@@ -4,7 +4,9 @@
  * @file The not-found hint's one name index: a project's first miss makes
  * the kept gathers' folder and keeps the index there, later misses reuse it,
  * adding, renaming or removing a doc, a template or an integration shows in
- * the very next hint, and a new CLI build makes it again. The index is kept
+ * the very next hint, a new CLI build makes it again, and an installed Core
+ * is kept by its package.json (a Core upgrade makes it again) while a linked
+ * one is stamped file by file. The index is kept
  * only by an installed CLI with a build id, so the CLI's root is set to an
  * installed-looking folder with one.
  *
@@ -247,6 +249,99 @@ describe('the name index', () => {
       );
       expect(await hint('GlintCard')).toBe('astryx component GlintCard');
       expect(keptIndexes()).toBe(before + 1);
+    },
+    SLOW,
+  );
+
+  it(
+    "keeps an installed Core by its package.json, and a linked Core's files each",
+    async () => {
+      const {hintNameIndex} = await import('./name-index.mjs');
+      /**
+       * A Core with one component, at `dir`.
+       * @param {string} dir
+       * @param {string} version
+       */
+      const writeCore = (dir, version) => {
+        fs.mkdirSync(path.join(dir, 'src', 'Glimmer'), {recursive: true});
+        fs.writeFileSync(
+          path.join(dir, 'package.json'),
+          JSON.stringify({name: '@astryxdesign/core', version}),
+        );
+        fs.writeFileSync(
+          path.join(dir, 'src', 'Glimmer', 'Glimmer.tsx'),
+          'export function Glimmer() { return null; }\n',
+        );
+      };
+      /**
+       * The stamps the kept index for `coreDir` holds, by path.
+       * @param {string} coreDir
+       * @returns {string[]}
+       */
+      const keptPaths = coreDir => {
+        const entries = fs
+          .readdirSync(STORE)
+          .filter(name => name.startsWith('gather-') && name.endsWith('.json'))
+          .map(name =>
+            JSON.parse(fs.readFileSync(path.join(STORE, name), 'utf8')),
+          )
+          .filter(
+            entry =>
+              entry.summary &&
+              JSON.stringify(entry.key).includes('hint-names') &&
+              JSON.stringify(entry.key).includes(coreDir),
+          );
+        expect(entries).toHaveLength(1);
+        return entries[0].stamps.map((/** @type {[string]} */ [at]) => at);
+      };
+
+      const installed = path.join(
+        project,
+        'node_modules',
+        '@astryxdesign',
+        'core',
+      );
+      writeCore(installed, '1.0.0');
+      await sleep(SETTLE_WAIT_MS);
+      expect((await hintNameIndex(project, installed, [])).core).toContain(
+        'tglimmer',
+      );
+      const stamped = keptPaths(installed);
+      expect(stamped).toContain(path.join(installed, 'package.json'));
+      expect(
+        stamped.filter(at => at.startsWith(path.join(installed, 'src'))),
+      ).toEqual([]);
+
+      // A Core upgrade rewrites its package.json: the index is made again.
+      fs.mkdirSync(path.join(installed, 'src', 'Sparkle'));
+      fs.writeFileSync(
+        path.join(installed, 'src', 'Sparkle', 'Sparkle.tsx'),
+        'export function Sparkle() { return null; }\n',
+      );
+      fs.writeFileSync(
+        path.join(installed, 'package.json'),
+        JSON.stringify({name: '@astryxdesign/core', version: '1.1.0'}),
+      );
+      expect((await hintNameIndex(project, installed, [])).core).toContain(
+        'tsparkle',
+      );
+
+      // A linked Core, outside any node_modules folder, is stamped file by
+      // file: an edit to its sources shows at once.
+      const linked = path.join(TEMP_ROOT, 'workspace-core');
+      writeCore(linked, '0.0.0');
+      await sleep(SETTLE_WAIT_MS);
+      await hintNameIndex(project, linked, []);
+      expect(
+        keptPaths(linked).filter(at => at.startsWith(path.join(linked, 'src'))),
+      ).not.toEqual([]);
+      fs.writeFileSync(
+        path.join(linked, 'src', 'Glimmer', 'GlimmerTwo.tsx'),
+        'export function GlimmerTwo() { return null; }\n',
+      );
+      expect((await hintNameIndex(project, linked, [])).core).toContain(
+        'tglimmertwo',
+      );
     },
     SLOW,
   );

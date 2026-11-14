@@ -8,7 +8,8 @@
  * doc text and the name each integration doc declares, and kept in the kept
  * gathers' store under one stamp set: every folder it listed and every file
  * it read. While all of them keep their stamps, a miss reads the index and
- * stats those paths, and nothing else.
+ * stats those paths, and nothing else. The CLI's own files are covered by its
+ * build id, and an installed Core's by its package.json.
  *
  * @input Core's folder, the integrations the project loads, the CLI's own
  *   folders
@@ -143,6 +144,9 @@ export function hintNameIndex(cwd, coreDir, integrations, docsRoutes) {
         ...selfDocs.map(root => ({root, skip: skipCliSelfDocFolder})),
       ],
       code: INDEX_CODE,
+      // An installed Core is kept by its own package.json, which its install
+      // rewrites; a linked Core keeps a stamp of each file.
+      installed: coreDir ? [coreDir] : [],
       // The routes depend on the project, which integrations load, where
       // their docs and icon sets are, and what a hosted run approves.
       key: [

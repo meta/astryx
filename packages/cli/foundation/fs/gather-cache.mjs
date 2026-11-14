@@ -835,8 +835,9 @@ function settled(stamps) {
  * A summary of files and folders, made at once, kept as an entry beside the
  * gathers, in or out of a recorded run: the stored value while every path
  * `make` stamped has the stamp it was stored with (the CLI's own files are
- * covered by the build id instead: inCliBuild), else the one `make` gives
- * now, which is stored unless a stamp is younger than
+ * covered by the build id instead: inCliBuild; an installed package's files
+ * among `installed`, by its own package.json: coveredStamps), else the one
+ * `make` gives now, which is stored unless a stamp is younger than
  * {@link SUMMARY_SETTLE_MS}. The folder, the build id, the Yarn Plug'n'Play
  * rule, the 0600 rename write and the eviction are those of a kept gather;
  * anywhere a gather is not kept, or on any read or write error, `make` runs
@@ -846,15 +847,18 @@ function settled(stamps) {
  * @param {() => {value: T, stamps: [string, string][]}} make - The summary,
  *   with the stamp ({@link fileStamp}) of each path it depends on, each taken
  *   before the path was read.
+ * @param {{installed?: string[]}} [options] - `installed`: the folders of
+ *   packages whose files the summary reads, each covered by its installed
+ *   identity when it is installed (installedPackageRoots).
  * @returns {T}
  */
-export function persistedSummary(key, make) {
+export function persistedSummary(key, make, {installed = []} = {}) {
   const at = summaryAt(key);
   if (!at) return make().value;
   const stored = storedSummary(at);
   if (stored) return stored.value;
   const {value, stamps} = make();
-  storeSummary(at, value, stamps);
+  storeSummary(at, value, stamps, installed);
   return value;
 }
 
@@ -864,15 +868,16 @@ export function persistedSummary(key, make) {
  * @template T
  * @param {unknown[]} key
  * @param {() => Promise<{value: T, stamps: [string, string][]}>} make
+ * @param {{installed?: string[]}} [options] - As for {@link persistedSummary}.
  * @returns {Promise<T>}
  */
-export async function persistedSummaryAsync(key, make) {
+export async function persistedSummaryAsync(key, make, {installed = []} = {}) {
   const at = summaryAt(key);
   if (!at) return (await make()).value;
   const stored = storedSummary(at);
   if (stored) return stored.value;
   const {value, stamps} = await make();
-  storeSummary(at, value, stamps);
+  storeSummary(at, value, stamps, installed);
   return value;
 }
 
@@ -947,17 +952,81 @@ function inCliBuild(file) {
 }
 
 /**
+ * The roots under which each of `dirs` is an installed package: its folder
+ * as given and its real folder, when the real folder is inside a
+ * node_modules folder (a package manager placed it there: npm's copy, pnpm's
+ * store entry). A package linked from elsewhere, such as a workspace's own
+ * Core, is no installed package and has no roots: its files keep their own
+ * stamps.
+ * @param {string[]} dirs
+ * @returns {string[]}
+ */
+function installedPackageRoots(dirs) {
+  return dirs.flatMap(dir => {
+    try {
+      const real = withoutRecording(() => fs.realpathSync(dir));
+      if (!real.split(path.sep).includes('node_modules')) return [];
+      return [...new Set([path.resolve(dir), real])];
+    } catch {
+      return [];
+    }
+  });
+}
+
+/**
+ * `stamps`, with each file and folder of an installed package among
+ * `installed` (installedPackageRoots) left out, but for packages placed in a
+ * node_modules folder inside it, and that package's package.json stamped in
+ * their place: a package manager rewrites it on every install, upgrade or
+ * reinstall of the package, while it leaves the package's other files as
+ * published. The package.json stamp is taken now; the summary is stored only
+ * once every stamp has settled.
+ * @param {[string, string][]} stamps
+ * @param {string[]} installed
+ * @returns {[string, string][]}
+ */
+function coveredStamps(stamps, installed) {
+  const roots = installedPackageRoots(installed);
+  if (roots.length === 0) return stamps;
+  /** @param {string} file */
+  const rootOf = file =>
+    roots.find(
+      root =>
+        (file === root || file.startsWith(root + path.sep)) &&
+        !file.startsWith(root + path.sep + 'node_modules' + path.sep),
+    );
+  /** @type {Map<string, string>} */
+  const identities = new Map();
+  /** @type {[string, string][]} */
+  const kept = [];
+  for (const stamp of stamps) {
+    const root = rootOf(stamp[0]);
+    if (root === undefined) kept.push(stamp);
+    else identities.set(root, path.join(root, 'package.json'));
+  }
+  for (const manifest of identities.values()) {
+    kept.push([manifest, withoutRecording(() => fileStamp(manifest))]);
+  }
+  return kept;
+}
+
+/**
  * Keep `value` at `at` with its stamps, unless a stamp is too young or the
  * value does not read back the same. Silent on any failure. A file in jiti's
  * cache is not kept as a stamp, as for a kept gather (inJitiCache), nor is
  * one of the CLI's own files: the build id in the summary's key covers them
- * (inCliBuild), so a new build makes the summary again.
+ * (inCliBuild), so a new build makes the summary again. An installed package
+ * among `installed` is kept by its package.json alone (coveredStamps).
  * @param {{dir: string, file: string, entry: string}} at
  * @param {unknown} value
  * @param {[string, string][]} made the stamps the summary was made with
+ * @param {string[]} installed
  */
-function storeSummary({dir, file, entry}, value, made) {
-  const stamps = made.filter(([at]) => !inJitiCache(at) && !inCliBuild(at));
+function storeSummary({dir, file, entry}, value, made, installed) {
+  const stamps = coveredStamps(
+    made.filter(([at]) => !inJitiCache(at) && !inCliBuild(at)),
+    installed,
+  );
   if (!settled(stamps)) return;
   withoutRecording(() => {
     try {

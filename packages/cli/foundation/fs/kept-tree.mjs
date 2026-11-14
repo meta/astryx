@@ -105,14 +105,16 @@ export function hasNameLine(lines, name) {
 
 /**
  * What a kept tree summary is kept under, and what makes it.
- * @typedef {{kind: string, roots: Array<string | {root: string, skip?: (name: string) => boolean}>, code: string[], skip?: (name: string) => boolean, key?: unknown[], recorded?: boolean}} TreeSummaryOptions
+ * @typedef {{kind: string, roots: Array<string | {root: string, skip?: (name: string) => boolean}>, code: string[], skip?: (name: string) => boolean, key?: unknown[], recorded?: boolean, installed?: string[]}} TreeSummaryOptions
  *   `roots`: each a folder, or a folder with the folder names its own walk
  *   does not enter; `code`: the files whose code makes the summary; `skip`:
  *   folder names the walk of a root without its own does not enter (both are
  *   part of `kind`); `key`: anything else the summary depends on;
  *   `recorded`: every path `summarize` reads through fs or probes is checked
  *   too, by its own stamp, so it can read files outside the trees and through
- *   caches that stat a file before they reuse it
+ *   caches that stat a file before they reuse it; `installed`: the folders of
+ *   packages whose files, where the package is installed, its own
+ *   package.json stamps instead (gather-cache.mjs persistedSummary)
  */
 
 /**
@@ -193,15 +195,19 @@ function treeSummary({kind, roots, code, skip = () => false, key = []}) {
  */
 export function keptTreeSummary(options, summarize) {
   const {summaryKey, walk} = treeSummary(options);
-  return persistedSummary(summaryKey, () => {
-    const {trees, stamps, finish} = walk();
-    if (!options.recorded) return {value: summarize(trees), stamps};
-    /** @type {Map<string, string>} */
-    const seen = new Map();
-    const value = recordReads(seen, () => summarize(trees), {exact: true});
-    finish(seen);
-    return {value, stamps};
-  });
+  return persistedSummary(
+    summaryKey,
+    () => {
+      const {trees, stamps, finish} = walk();
+      if (!options.recorded) return {value: summarize(trees), stamps};
+      /** @type {Map<string, string>} */
+      const seen = new Map();
+      const value = recordReads(seen, () => summarize(trees), {exact: true});
+      finish(seen);
+      return {value, stamps};
+    },
+    {installed: options.installed},
+  );
 }
 
 /**
@@ -215,15 +221,19 @@ export function keptTreeSummary(options, summarize) {
  */
 export function keptTreeSummaryAsync(options, summarize) {
   const {summaryKey, walk} = treeSummary(options);
-  return persistedSummaryAsync(summaryKey, async () => {
-    const {trees, stamps, finish} = walk();
-    if (!options.recorded) return {value: await summarize(trees), stamps};
-    /** @type {Map<string, string>} */
-    const seen = new Map();
-    const value = await recordReads(seen, () => summarize(trees), {
-      exact: true,
-    });
-    finish(seen);
-    return {value, stamps};
-  });
+  return persistedSummaryAsync(
+    summaryKey,
+    async () => {
+      const {trees, stamps, finish} = walk();
+      if (!options.recorded) return {value: await summarize(trees), stamps};
+      /** @type {Map<string, string>} */
+      const seen = new Map();
+      const value = await recordReads(seen, () => summarize(trees), {
+        exact: true,
+      });
+      finish(seen);
+      return {value, stamps};
+    },
+    {installed: options.installed},
+  );
 }
