@@ -74,7 +74,8 @@ import {useFocusRegionContainment} from '../hooks/useFocusTrap';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {isRtlElement} from '../hooks/isRtlElement';
 import {useZoomCore} from './useZoomCore';
-import {usePager} from '../hooks/usePager';
+import type {UsePagerOptions} from '../hooks/usePager';
+import {useTouchRuntime} from '../utils/touchRuntime';
 import {TapGestureRecognizer} from '../gestures/TapGestureRecognizer';
 import type {GestureTouch} from '../gestures/types';
 import {useGestureRecognizer} from '../gestures/useGestureRecognizer';
@@ -569,6 +570,15 @@ const styles = stylex.create({
 const pageStyles = stylex.create({
   position: (index: number) => ({
     insetInlineStart: `calc(${index} * (100% + ${zoomMedia.viewer.pageGap}px))`,
+  }),
+});
+
+// Before the touch runtime loads there is no pager, so the track rests on the
+// current page by its insets. The pager moves the track once it has loaded.
+const trackRestStyles = stylex.create({
+  at: (index: number) => ({
+    insetInlineStart: `calc(${-index} * (100% + ${zoomMedia.viewer.pageGap}px))`,
+    insetInlineEnd: `calc(${index} * (100% + ${zoomMedia.viewer.pageGap}px))`,
   }),
 });
 
@@ -1478,7 +1488,11 @@ export function Lightbox({
     );
   }, [index, isZoomTarget]);
 
-  usePager({
+  // The pager comes with the shared touch runtime, which loads after first
+  // paint. Until then the buttons and the arrow keys page at once, and no
+  // drag pages.
+  const touchRuntime = useTouchRuntime();
+  const pagerOptions: UsePagerOptions = {
     viewportRef: imageWrapperRef,
     // A single photo has no pager, since it has nothing to page to. Its track
     // still holds its one page and takes the zoom's gestures.
@@ -1520,7 +1534,11 @@ export function Lightbox({
         }
       }
     },
-  });
+  };
+  const pagerPart =
+    touchRuntime == null ? null : (
+      <touchRuntime.LightboxPager {...pagerOptions} />
+    );
 
   // Whether a point is on the current page's media. That is inside its
   // caption's own box, or in its photo's or video's rows across the width of
@@ -1865,6 +1883,7 @@ export function Lightbox({
                       ref={trackRef}
                       {...stylex.props(
                         styles.track,
+                        touchRuntime == null && trackRestStyles.at(index),
                         isZoomTarget && styles.trackZoomTarget,
                         isTouch &&
                           !isZoomTarget &&
@@ -2062,6 +2081,7 @@ export function Lightbox({
                 </div>
               </div>
             </MediaTheme>
+            {pagerPart}
           </LayerContentBoundary>
         </ModalAnnounceProvider>
       </LayerDepthProvider>

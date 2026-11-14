@@ -5,8 +5,8 @@
 /**
  * @file touchRuntimeModules.tsx
  * @input The shared touch modules: the animator, and the touch parts of
- *   SegmentedControl, Switch, Toast, Popover and action groups, which use the
- *   animator and the gesture host
+ *   SegmentedControl, Switch, Toast, Popover, action groups and Lightbox's
+ *   pager, which use the animator and the gesture host
  * @output `touchRuntime`, the one object the touch loader publishes
  * @position Loaded only through `import()` in utils/touchRuntime.ts. No
  *   other module imports this file
@@ -33,6 +33,7 @@ import {
   useActionGroupTracking,
   type ActionGroupTrackingOptions,
 } from '../hooks/useActionGroupTracking';
+import {usePager, type UsePagerOptions} from '../hooks/usePager';
 
 interface SegmentedMotionProps {
   readonly trackRef: RefObject<HTMLElement | null>;
@@ -149,11 +150,22 @@ function ActionGroupTracking({
   return null;
 }
 
+/**
+ * Lightbox's pager: it drags and springs the gallery's track between pages.
+ * It renders nothing. It mounts once the runtime has loaded and takes the
+ * track from the page it rests on.
+ */
+function LightboxPager(options: UsePagerOptions): null {
+  usePager(options);
+  return null;
+}
+
 /** What the touch loader publishes once the page has loaded it. */
 export const touchRuntime = {
   ActionGroupTracking,
   animatorFor,
   createPopoverSurfaceMotion,
+  LightboxPager,
   SegmentedMotion,
   SwitchTouch,
   ToastSwipeClaim,
