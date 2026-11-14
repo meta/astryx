@@ -1,4 +1,4 @@
-Results for "close" (20 of 49)
+Results for "close" (20 of 50)
 name:        AlertDialog
 domain:      component
 package:     @astryxdesign/core
@@ -39,6 +39,11 @@ domain:      component
 package:     @astryxdesign/core
 import:      @astryxdesign/core/Toast
 command:     pnpm exec astryx component Toast
+name:        createSwipe
+domain:      hook
+package:     @astryxdesign/core
+import:      @astryxdesign/core/Swipe
+command:     pnpm exec astryx hook createSwipe
 name:        useImperativeAlertDialog
 domain:      hook
 package:     @astryxdesign/core
@@ -99,9 +104,3 @@ domain:      doc
 package:     @astryxdesign/cli
 command:     pnpm exec astryx docs icons theme-overrides
 parent:      pnpm exec astryx docs icons --index
-name:        migration/component-migration
-section:     move-the-app-frame-first
-domain:      doc
-package:     @astryxdesign/cli
-command:     pnpm exec astryx docs migration/component-migration move-the-app-frame-first
-parent:      pnpm exec astryx docs migration/component-migration --index

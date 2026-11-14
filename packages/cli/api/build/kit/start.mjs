@@ -8,7 +8,8 @@
 import {loadWeights} from '../_adapter.mjs';
 import {asksForNewPage} from './kind.mjs';
 import {pickAlternatives, pickStart} from './rank.mjs';
-import {blendOrder, weighStart} from './weights.mjs';
+import {hasEditPhrase, shellCallScore} from './shellcall.mjs';
+import {blendOrder, blendSummary, weighStart} from './weights.mjs';
 
 /**
  * @typedef {import('../../search/search.type.mjs').SearchResultEntry} SearchResultEntry
@@ -55,6 +56,60 @@ function placement(kind, inPage) {
       ? 'the idea is a part of a page, so it starts from the page it names.'
       : 'the idea is a part of a page and names no page, so it starts from the app shell.';
   return null;
+}
+
+/**
+ * Fixed coefficients of a logistic decision over build's own numbers: bias,
+ * whole page, edit, blend margin over the shell, the shell's blend score, the
+ * gap to the blend's second template, the idea's comma count, the text score
+ * (shellcall.mjs) and its edit-word flag. Fixed constants; nothing is trained
+ * at run time. An edit phrase keeps the shell before the decision runs, so the
+ * two edit inputs are 0 whenever it runs; they stay because the constants were
+ * fit with them.
+ */
+const LIFT = [
+  -0.7707, 0.6706, -0.2642, 0.2815, -0.1621, 0.1759, 0.1713, 0.2891, -0.3491,
+];
+
+/** The decision replaces the shell with a page when p >= 0.30. */
+const LIFT_AT = 0.3;
+
+/**
+ * The page template that replaces an app-shell start, or null to keep the
+ * shell. The blend's best template takes the start when the decision's
+ * whole-page probability is at least 0.30.
+ * @param {import('./rank.mjs').RankedPage[]} ranked
+ * @param {import('./rank.mjs').IdeaKind} kind
+ * @param {PageTemplate[]} catalog
+ * @param {string} idea
+ * @returns {PageTemplate | null}
+ */
+function liftFromShell(ranked, kind, catalog, idea) {
+  const b = blendSummary(
+    idea,
+    ranked,
+    pickStart(ranked, 'page'),
+    catalog,
+    loadWeights(),
+  );
+  if (!b || !b.best) return null;
+  // A change to a page or app the builder already has keeps its shell.
+  if (hasEditPhrase(idea)) return null;
+  const text = shellCallScore(idea, kind, ranked);
+  const x = [
+    1,
+    kind === 'page' ? 1 : 0,
+    kind === 'edit' ? 1 : 0,
+    b.bestScore - b.shell,
+    b.shell,
+    b.bestScore - b.secondScore,
+    (String(idea).match(/,/g) ?? []).length,
+    text?.score ?? 0,
+    text?.edit ? 1 : 0,
+  ];
+  const logit = x.reduce((s, v, i) => s + v * LIFT[i], 0);
+  if (1 / (1 + Math.exp(-logit)) < LIFT_AT) return null;
+  return catalog.find(t => t.name === b.best) ?? null;
 }
 
 /**
@@ -113,10 +168,18 @@ export function chooseStart(ranked, kind, pages, directMatch, catalog, idea) {
           ? proposed
           : null
         : (ranked.find(r => r.name === weighed) ?? proposed);
-  const closest = pick && catalog.find(t => t.name === pick.name);
-  if (pick && closest) {
+  // An idea that would start on the app shell starts from the blend's best page
+  // when the decision's whole-page probability is at least 0.30. A direct match,
+  // ready or not, keeps the start and reason it already has.
+  const lifted =
+    !direct && (!pick || pick.family === 'Shell')
+      ? liftFromShell(ranked, kind, catalog, idea)
+      : null;
+  const closest = lifted ?? (pick && catalog.find(t => t.name === pick.name));
+  if (closest) {
     const agrees = closest.name === direct;
-    const place = placement(kind, pick.base && pick.familyNamed);
+    const place =
+      lifted || !pick ? null : placement(kind, pick.base && pick.familyNamed);
     return {
       ...asTemplate(closest),
       basis: agrees ? 'direct' : 'closest',
