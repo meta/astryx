@@ -26,6 +26,8 @@ import {useCommittedRef} from '../hooks/useCommittedRef';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {TooltipPresentInterestContext} from './tooltipPresentInterest';
 import {createTriggerFocusGate, isFocusOnTrigger} from '../utils/triggerFocus';
+import {getInteractionModality} from '../utils/interactionModality';
+import {isTextField} from '../keyboard/keyboardHeight';
 import * as stylex from '@stylexjs/stylex';
 import {
   useLayerInternal,
@@ -556,6 +558,15 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   const opensOnFocus = useCallback(
     (target: HTMLElement, trigger: HTMLElement | null): boolean => {
       if (trigger != null && !isFocusOnTrigger(target, trigger, focusTrigger)) {
+        return false;
+      }
+      // Focus on a trigger that is not a text field opens nothing after a
+      // pointer press, also when script moves it there. A text field is
+      // excepted, as browsers mark a pointer's focus on it focus-visible.
+      if (
+        !isTextField(target) &&
+        getInteractionModality(target) === 'pointer'
+      ) {
         return false;
       }
       return !isTouchInteraction() && target.matches(':focus-visible');
