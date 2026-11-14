@@ -479,6 +479,34 @@ describe('busyWindowProof against a control', () => {
       judgedFromMs: 20,
     });
   });
+
+  it('throws BusyWindowTooLateError when a settle bound leaves the control too few frames, where judging on would have held enough', () => {
+    // It comes within 4 px of its end at +33 ms: the block started late for
+    // the motion, while the control moves on every frame.
+    const late = moving().map((f, i) => {
+      const y = i <= 12 ? 256 - 4 * i : i === 13 ? 206 : i === 14 ? 203 : 200;
+      return {...f, box: {...f.box!, y}} as TrackedFrame;
+    });
+    const run = () =>
+      busyWindowProof(late, BLOCK, {
+        control: asControl(moving()),
+        settledWithin: 4,
+      });
+    expect(run).toThrow(BusyWindowTooLateError);
+    expect(run).toThrow(
+      /busyWindowProof: the tracked y came within 4 px of where it ends 33 ms after the block began, so the part judged from 20 ms held 1 of the control's frames, under the 4 it needs, where judging on to 680 ms would have held \d+ \(\d+ frames presented in the block\): the block started late for the motion\./,
+    );
+    let caught: unknown = null;
+    try {
+      run();
+    } catch (error) {
+      caught = error;
+    }
+    expect((caught as BusyWindowTooLateError).numbers).toMatchObject({
+      judgedFromMs: 20,
+      controlFrames: 1,
+    });
+  });
 });
 
 /**
