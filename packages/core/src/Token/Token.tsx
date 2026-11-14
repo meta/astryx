@@ -498,7 +498,7 @@ export function Token({
             disabled: isDisabled ? 'disabled' : null,
           }),
           // Rings for the token's own button or link only; the remove button
-          // rings itself (`architecture:interaction-modality` INV3).
+          // rings itself.
           stylex.props(
             focusWithinOwner,
             styles.base,
@@ -553,7 +553,7 @@ export function Token({
             disabled: isDisabled ? 'disabled' : null,
           }),
           // Rings for the token's own button or link only; the remove button
-          // rings itself (`architecture:interaction-modality` INV3).
+          // rings itself.
           stylex.props(
             focusWithinOwner,
             styles.base,

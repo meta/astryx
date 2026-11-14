@@ -1029,10 +1029,8 @@ export function Item({
           selected: isSelected ? 'selected' : null,
           disabled: isDisabled ? 'disabled' : null,
         }),
-        // The row rings for its own primary only: its invisible button or
-        // link, or in delegation mode the nested control that is its sole tab
-        // stop. Any other control in it (a start or end slot) rings itself
-        // (`architecture:interaction-modality` INV3).
+        // The row rings only for its own button or link. In delegation mode it
+        // rings for the nested control. Other controls ring themselves.
         stylex.props(
           isDelegate ? focusOutlineStyles.focusWithin : focusWithinOwner,
           styles.root,
