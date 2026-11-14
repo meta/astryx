@@ -1962,9 +1962,9 @@ describe('ci admission', () => {
           });
         return run;
       };
-      // 18 small + 20 + 52 = 90 fits; at 29, 99 does not.
+      // 18 small + 21 + 51 = 90 fits; at 30, 99 does not.
       const fitsBeside = async marker =>
-        (await admit({active: [justAdmitted(marker)], peak: 52})).looks === 1;
+        (await admit({active: [justAdmitted(marker)], peak: 51})).looks === 1;
       expect(await fitsBeside('skipped')).toBe(true);
       expect(await fitsBeside('success')).toBe(false);
       expect(await fitsBeside(undefined)).toBe(false);
