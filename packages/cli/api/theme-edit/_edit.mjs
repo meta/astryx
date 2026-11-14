@@ -62,6 +62,7 @@ import {
   maskedSettings,
   modesOf,
   nearest,
+  closestOf,
   partsOf,
   undoArgs,
   withoutBadValues,
@@ -3204,10 +3205,13 @@ function carryTyped(e, sub, slug, thing, typed, data, cwd = process.cwd()) {
     ? kept
     : [
         ...kept.filter(x => !/ --help$/.test(x.name)),
-        {
-          name: `${P} how ${quoteCommandArgument(String(thing))}`,
-          reason: 'what it takes',
-        },
+        // (With no thing named, the settings it can name.)
+        String(thing).trim()
+          ? {
+              name: `${P} how ${quoteCommandArgument(String(thing))}`,
+              reason: 'what it takes',
+            }
+          : {name: `${P} how --list dials`, reason: 'the settings it takes'},
       ];
   return e;
 }
@@ -4088,6 +4092,43 @@ async function changeOnce(
         .replace(/^"|"$/g, '');
     const half =
       s.thing === 'headings' && ['weight', 'tracking'].includes(norm(value));
+    // A headings word typed with a typo (wdie): the half its reading names
+    // (the one typo limit), never the other half by default; with no single
+    // reading, each half the theme sets.
+    if (s.thing === 'headings' && !half) {
+      const words = [
+        ...Object.keys(HEADING_WEIGHTS),
+        ...Object.keys(HEADING_TRACKING),
+      ];
+      const typedWord = norm(value);
+      if (!words.includes(typedWord)) {
+        const halves = data.settings.filter(
+          x =>
+            x.thing === 'headings' &&
+            (x.on ?? null) === (s.on ?? null) &&
+            (x.when ?? null) === (s.when ?? null) &&
+            (x.state ?? null) === (s.state ?? null),
+        );
+        const readings = closestOf(typedWord, words);
+        const axisOf = (/** @type {string} */ w) =>
+          HEADING_TRACKING[w] !== undefined ? 'tracking' : 'weight';
+        const meant =
+          readings.length === 1
+            ? halves.find(x => (x.axis ?? 'weight') === axisOf(readings[0]))
+            : undefined;
+        refuse(
+          E.ERR_THEME_NOT_SET,
+          meant
+            ? `"${value}" is no headings word; it reads as ${readings[0]}, and the theme sets ${describe(meant)}.`
+            : `The theme sets ${halves.map(describe).join(' and ') || 'no headings'}, not ${value}.`,
+          {
+            run: (meant ? [meant] : halves).map(
+              x => `${P} undo ${slug} ${setArgs(x, String(x.value))}`,
+            ),
+          },
+        );
+      }
+    }
     if (
       held &&
       !half &&
@@ -5159,7 +5200,13 @@ export async function themeEditShow(theme, options = {}) {
   try {
     data = loadTheme(cwd, theme);
   } catch (e) {
-    throw await vetLoadRefusal(e, cwd, theme);
+    // The settings reader's one refusal, with set's repair for a damaged
+    // saved value beside its undo, as every change command gives it.
+    throw await withSavedRepair(
+      await vetLoadRefusal(e, cwd, theme),
+      theme,
+      cwd,
+    );
   }
   const ctx = await context(cwd);
   // The app copy is written once show succeeds (at its end), never by a
@@ -6234,6 +6281,35 @@ export async function themeEditUndo(theme, options = {}) {
 }
 
 /**
+ * What a step back from `after` to `before` takes back, each setting, base
+ * and mode it changes, as the undo headline names them.
+ * @param {import('./_settings.mjs').ThemeData} after the settings now
+ * @param {import('./_settings.mjs').ThemeData} before the settings it goes back to
+ * @returns {string[]}
+ */
+function stepTakesBack(after, before) {
+  const now = new Map(before.settings.map(s => [keyOf(s), s]));
+  const was = new Map(after.settings.map(s => [keyOf(s), s]));
+  /** @type {string[]} */
+  const took = [];
+  for (const [k, s] of was) {
+    const back = now.get(k);
+    if (!back) took.push(describe(s));
+    else if (back.value !== s.value)
+      took.push(`${describe(s)} (back to ${back.value})`);
+  }
+  for (const [k, s] of now)
+    if (!was.has(k)) took.push(`the removal of ${describe(s)}`);
+  if ((after.like ?? 'none') !== (before.like ?? 'none'))
+    took.push(
+      `base ${after.like ?? 'none'} (back to ${before.like ?? 'none'})`,
+    );
+  if (after.mode !== before.mode)
+    took.push(`mode ${after.mode} (back to ${before.mode})`);
+  return took;
+}
+
+/**
  * {@link themeEditUndo}'s work.
  * @param {string} theme
  * @param {import('./theme-edit.type.mjs').ThemeEditUndoOptions} options
@@ -6351,10 +6427,22 @@ async function undoTheme(theme, options) {
   if (slugOk(theme)) refuseLinks(cwd, theme);
   /** The command that works when the settings cannot be read. @type {string[] | null} */
   let repair = null;
+  /** The settings reader's refusal of a file that reads but holds damage. @type {unknown} */
+  let readsDamaged = null;
   try {
     current = loadTheme(cwd, theme);
   } catch (e) {
     if (!(e instanceof AstryxError && e.code === E.ERR_THEME_INVALID)) throw e;
+    // A file that reads (valid JSON, entries new keeps) holding a damaged
+    // entry is no unreadable file: its own refusal names what works.
+    /** @type {string} */
+    let text;
+    try {
+      text = fs.readFileSync(themeFiles(cwd, theme).settings, 'utf8');
+    } catch {
+      text = '';
+    }
+    if (text && !settingsRemade(settingsJson(text))) readsDamaged = e;
     // What the refusal itself names (make the theme again, keeping the
     // damaged file), never `show`, which fails the same way.
     repair = (e.suggestions ?? [])
@@ -6375,6 +6463,15 @@ async function undoTheme(theme, options) {
         fix: `move ${shown(cwd, f.history)} out of the theme folder (it is kept as it is): the next change starts a new history, and your settings stay as they are`,
         run: repair ?? [`${P} show ${theme}`],
       },
+    );
+  // No step back, and a file that reads but holds damage: the settings
+  // reader's refusal, its undo and set's repair (never a `new` that is
+  // refused for a theme that is there).
+  if (!history.length && readsDamaged)
+    throw await withSavedRepair(
+      await vetLoadRefusal(readsDamaged, cwd, theme),
+      theme,
+      cwd,
     );
   if (!history.length)
     refuse(
@@ -6521,29 +6618,32 @@ async function undoTheme(theme, options) {
   const p = await previewAndRoute(ctx, theme, prev, png, focus, 'undo');
   // What the step took back, for the headline: each setting, base and mode
   // it changed, in one line.
-  /** @type {string[]} */
-  const took = [];
-  for (const [k, s] of was) {
-    const back = now.get(k);
-    if (!back) took.push(describe(s));
-    else if (back.value !== s.value)
-      took.push(`${describe(s)} (back to ${back.value})`);
-  }
-  if (current)
-    for (const [k, s] of now)
-      if (!was.has(k)) took.push(`the removal of ${describe(s)}`);
-  if (current && (current.like ?? 'none') !== (prev.like ?? 'none'))
-    took.push(
-      `base ${current.like ?? 'none'} (back to ${prev.like ?? 'none'})`,
-    );
-  if (current && current.mode !== prev.mode)
-    took.push(`mode ${current.mode} (back to ${prev.mode})`);
+  const took = current ? stepTakesBack(current, prev) : [];
   const undid =
     took.length === 0
       ? 'the last change'
       : took.length === 1
         ? took[0]
         : `${took.length} changes: ${took.join('; ')}`;
+  // The change now on top, from the history's own entries: what the next
+  // undo takes back (an ask that made several changes is taken back one
+  // step at a time).
+  /** @type {string | null} */
+  let next = null;
+  {
+    const at = JSON.stringify(prev);
+    for (let i = history.length - 1; i >= 0; i--)
+      if (!same(history[i], at)) {
+        const before = settingsJson(history[i]);
+        const back =
+          before && typeof before === 'object' && Array.isArray(before.settings)
+            ? stepTakesBack(prev, before)
+            : [];
+        if (back.length)
+          next = `the change before this, ${back.join('; ')}, is next; undo again to take it back too`;
+        break;
+      }
+  }
   return {
     type: 'themeEdit.undo',
     data: {
@@ -6556,6 +6656,7 @@ async function undoTheme(theme, options) {
           }
         : {}),
       undone,
+      ...(next ? {next} : {}),
       settings: prev.settings.length,
       stepsLeft: stepsLeft,
       // What the step back changed, as a change reports it.

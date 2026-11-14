@@ -70,6 +70,7 @@ import {
   booleanWord,
   cleanDialValue,
   modeWord,
+  normalizeEntry,
   typoLimit,
   typoNear,
 } from './_normal.mjs';
@@ -557,6 +558,26 @@ export function nearest(x, list, n = 3) {
     .sort((a, b) => a[1] - b[1])
     .slice(0, n)
     .map(([c]) => c);
+}
+
+/**
+ * The readings of a typo among `list`: every name at the smallest edit
+ * distance, within the one typo limit (nearest's rule). One name is the
+ * reading; two or more equally near (`tightr`: tight and tighter) are each
+ * a reading, and none of them is chosen over the others.
+ * @param {string} x
+ * @param {Iterable<string>} list
+ * @returns {string[]}
+ */
+export function closestOf(x, list) {
+  const near = nearest(x, list, Infinity);
+  if (!near.length) return [];
+  const typed = x.toLowerCase();
+  const limit = typoLimit(x);
+  const d = (/** @type {string} */ c) =>
+    levenshteinDistance(typed, c.toLowerCase(), limit, {swaps: true});
+  const best = d(near[0]);
+  return near.filter(c => d(c) === best);
 }
 
 /**
@@ -1237,31 +1258,49 @@ export function loadTheme(
   const twice = problem?.includes(' is listed twice (')
     ? duplicated(data)
     : null;
+  // A base written in other letters or with a typo of a built-in base
+  // this project has not installed: that base, read as every reader reads
+  // it, installed first (the one install helper), never the one it was
+  // built on.
+  const baseToInstall =
+    /^base "/.test(problem ?? '') &&
+    LIKE.includes(likeMeant) &&
+    !baseInstalled(cwd, likeMeant)
+      ? likeMeant
+      : null;
   if (problem)
     throw new AstryxError(
-      `themes/${slug}/${slug}.settings.json: ${problem}. ${fieldFix ? 'Set it again' : twice ? `Set it to one of its values or undo it, or fix it by hand${recover.text}` : `Fix it by hand${recover.text}`}. Nothing was changed.`,
-      fieldFix
-        ? [{name: fieldFix, reason: 'do this instead'}]
-        : twice
-          ? [
-              ...twice.values
-                .filter(
-                  v =>
-                    typeof v === 'string' &&
-                    !valueProblem({...twice.setting, value: v}),
-                )
-                .slice(0, 2)
-                .map(v => ({
-                  name: `${P} set ${slug} ${setArgs(twice.setting, String(v))}`,
-                  reason: `keep ${v}`,
-                })),
-              {
-                name: `${P} undo ${slug} ${undoArgs(twice.setting)}`,
-                reason: 'remove both',
-              },
-              ...recover.run,
-            ]
-          : recover.run,
+      baseToInstall
+        ? `themes/${slug}/${slug}.settings.json: base "${data.like}" reads as ${baseToInstall}, which this project has not installed. Install it, then set the base again. Nothing was changed.`
+        : `themes/${slug}/${slug}.settings.json: ${problem}. ${fieldFix ? 'Set it again' : twice ? `Set it to one of its values or undo it, or fix it by hand${recover.text}` : `Fix it by hand${recover.text}`}. Nothing was changed.`,
+      baseToInstall
+        ? onBuiltInSteps(
+            cwd,
+            baseToInstall,
+            `${P} set ${slug} base ${baseToInstall}`,
+          )
+        : fieldFix
+          ? [{name: fieldFix, reason: 'do this instead'}]
+          : twice
+            ? [
+                ...twice.values
+                  .filter(
+                    v =>
+                      typeof v === 'string' &&
+                      !valueProblem({...twice.setting, value: v}),
+                  )
+                  .slice(0, 2)
+                  .map(v => ({
+                    name: `${P} set ${slug} ${setArgs(twice.setting, String(v))}`,
+                    reason: `keep ${v}`,
+                  })),
+                {
+                  name: `${P} undo ${slug} ${undoArgs(twice.setting)}`,
+                  reason: 'remove both',
+                },
+                ...recover.run,
+              ]
+            : recover.run,
       ERROR_CODES.ERR_THEME_INVALID,
     );
   return data;
@@ -1482,6 +1521,46 @@ export function dialWordOf(thing, value) {
 }
 
 /**
+ * Read each entry saved in a form set reads when typed (`{"corners":
+ * "pill"}`, `"corners pill"`, `"corners: pill"`) as that setting, its thing
+ * and value read as set reads them, with a note; the next change saves it
+ * the editor's way. In place.
+ * @param {any} data
+ * @param {string[]} notes
+ */
+function readTypedEntries(data, notes) {
+  if (!Array.isArray(data?.settings)) return;
+  data.settings = data.settings.map((/** @type {any} */ s) => {
+    const keys =
+      s && typeof s === 'object' && !Array.isArray(s) ? Object.keys(s) : [];
+    const pair =
+      typeof s === 'string' && s.trim()
+        ? (/^\s*(\S+?)\s*[:=]?\s+(.+?)\s*$/.exec(s) ??
+          /^\s*(\S+?)\s*[:=]\s*(.+?)\s*$/.exec(s))
+        : keys.length === 1 &&
+            !('thing' in s) &&
+            (typeof s[keys[0]] === 'string' || typeof s[keys[0]] === 'number')
+          ? [null, keys[0], String(s[keys[0]])]
+          : null;
+    if (!pair) return s;
+    const read = normalizeEntry(String(pair[1]), String(pair[2]));
+    if (!read.thing || read.value == null || read.value === '') return s;
+    notes.push(
+      `${JSON.stringify(s)} was saved as a typed setting, read as ${read.thing} = ${read.value}`,
+    );
+    const thing = String(read.thing);
+    // Its source as the reader takes a missing one (a dial name is a dial,
+    // a `--` name a token).
+    const source = DIALS[thing]
+      ? 'dial'
+      : thing.startsWith('--')
+        ? 'token'
+        : undefined;
+    return {thing, value: String(read.value), ...(source ? {source} : {})};
+  });
+}
+
+/**
  * Read each entry's mode and source as the editor writes them: a mode in
  * other letters or words (`Dark`, `night`, `day`) as light or dark, a
  * source in other letters (`Dial`) as written, and a missing source from
@@ -1507,6 +1586,7 @@ function readEntryWords(data) {
     );
     delete data.lifted;
   }
+  readTypedEntries(data, notes);
   for (const s of Array.isArray(data?.settings) ? data.settings : []) {
     if (!s || typeof s !== 'object' || typeof s.thing !== 'string') continue;
     if (typeof s.mode === 'string' && s.mode !== 'light' && s.mode !== 'dark') {
@@ -7438,7 +7518,14 @@ export function readFields(data, cwd, fixing, slug) {
   ) => {
     throw Object.assign(
       new AstryxError(
-        `themes/${slug}/${slug}.settings.json: ${field === 'mode' ? 'mode' : 'base'} "${field === 'mode' ? data.mode : data.like}" is no value the editor reads, and a change never drops it. Set it again. Nothing was changed.`,
+        // A base read as a built-in one this project has not installed says
+        // so, as show's refusal does.
+        field === 'base' &&
+          fixes.length === 1 &&
+          LIKE.includes(fixes[0]) &&
+          !baseInstalled(cwd, fixes[0])
+          ? `themes/${slug}/${slug}.settings.json: base "${data.like}" reads as ${fixes[0]}, which this project has not installed. Install it, then set the base again. Nothing was changed.`
+          : `themes/${slug}/${slug}.settings.json: ${field === 'mode' ? 'mode' : 'base'} "${field === 'mode' ? data.mode : data.like}" is no value the editor reads, and a change never drops it. Set it again. Nothing was changed.`,
         // A base line for a built-in base not installed goes after its
         // install (the one install helper).
         fixes.length
@@ -7542,7 +7629,12 @@ export function readAsMeant(data, cwd, fixing) {
  * @param {unknown} data the parsed file (undefined when it does not parse)
  */
 export function settingsRemade(data) {
-  return data === undefined || !settingsEntriesOk(data);
+  if (data === undefined) return true;
+  // Entries saved in a form set reads are read, as the settings reader
+  // reads them.
+  const copy = structuredClone(data);
+  readTypedEntries(copy, []);
+  return !settingsEntriesOk(copy);
 }
 
 /**

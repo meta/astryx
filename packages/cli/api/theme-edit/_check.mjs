@@ -62,6 +62,7 @@ import {
   wordTable,
   WRAPPED_PARTS,
   CARD_LIKE,
+  systemFontFamilies,
   isSystemFamily,
   fontStack,
 } from './_tables.mjs';
@@ -88,6 +89,7 @@ import {
 import {
   camel,
   kebab,
+  closestOf,
   nearest,
   negates,
   partsOf,
@@ -1183,11 +1185,17 @@ function fontListProblem(value, ctx, presets = false) {
     if (!tail.length) {
       // A family the editor does not know that is a typo of a generic, or
       // (on the font dial, alone) of a preset: that name.
+      // Or a typo of a system family the build knows (arail is Arial,
+      // Menol is Menlo), on any font list: one known-family rule.
       const generic = genericOf(name);
+      const known = [
+        ...(presets && pieces.length === 1 ? PRESETS : []),
+        ...systemFontFamilies(),
+      ];
       const preset =
-        presets && pieces.length === 1 && !generic
+        !generic && !isSystemFamily(cssUnescape(name))
           ? (() => {
-              const hits = PRESETS.filter(k => typoNear(bare(name), bare(k)));
+              const hits = known.filter(k => typoNear(bare(name), bare(k)));
               return hits.length === 1 ? hits[0] : null;
             })()
           : null;
@@ -4039,7 +4047,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
           ? [lower]
           : meant
             ? [meant]
-            : nearest(lower, ok);
+            : closestOf(lower, ok);
         refuse(
           E.ERR_THEME_BAD_VALUE,
           `${thing} takes ${DIALS[thing].values}, not "${v}".`,
@@ -4055,7 +4063,8 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
                     `${P} set ${slug} text-size ${['small', 'medium', 'large', 'larger'].includes(lower) ? lower : textSizePx(lower)}`,
                   ]
                 : near[0]
-                  ? [`${P} set ${slug} ${thing} ${near[0]}`]
+                  ? // Each reading of a typo equally near two values.
+                    near.map(x => `${P} set ${slug} ${thing} ${x}`)
                   : // A type-scale ratio (1.25) is the nearest type preset.
                     thing === 'type' && ratioPreset(lower)
                     ? [`${P} set ${slug} type ${ratioPreset(lower)}`]
@@ -4190,16 +4199,21 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
           : weightWord
             ? Number(weightWord)
             : null;
-        const meant =
-          words.find(w => w === lower) ??
-          (weight != null ? weightRung(weight) : nearest(lower, words)[0]);
+        // A typo equally near two words (tightr: tight, tighter) has each
+        // as a reading.
+        const readings = words.includes(lower)
+          ? [lower]
+          : weight != null
+            ? [weightRung(weight)].filter(Boolean)
+            : closestOf(lower, words);
+        const meant = readings[0];
         refuse(
           E.ERR_THEME_BAD_VALUE,
-          `headings takes ${DIALS.headings.values}, not "${v}".${weight != null && meant ? ` ${meant} sets weight ${HEADING_WEIGHTS[meant]}.` : ''}`,
+          `headings takes ${DIALS.headings.values}, not "${v}".${weight != null && meant ? ` ${meant} sets weight ${HEADING_WEIGHTS[meant]}.` : ''}${readings.length > 1 ? ` "${v}" is as near ${readings.join(' as ')}.` : ''}`,
           {
-            didYouMean: meant ? [meant] : [],
-            run: meant
-              ? [setLine(slug, 'headings', meant, s)]
+            didYouMean: readings,
+            run: readings.length
+              ? readings.map(x => setLine(slug, 'headings', x, s))
               : [`${HOW} headings`],
           },
         );
@@ -4712,16 +4726,20 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
             const keyword = CSS_SIZE_KEYWORDS[v.trim().toLowerCase()];
             if (keyword != null && keyword >= 10 && keyword <= 32)
               return {run: [`${P} set ${slug} text-size ${keyword}`]};
-            const near =
-              TEXT_SIZE.find(([n]) => n === v.trim().toLowerCase())?.[0] ??
-              nearest(
-                v.trim().toLowerCase(),
-                TEXT_SIZE.map(([n]) => n),
-              )[0];
-            return near
+            const exact = TEXT_SIZE.find(
+              ([n]) => n === v.trim().toLowerCase(),
+            )?.[0];
+            // A typo equally near two rungs (largr) has each as a reading.
+            const near = exact
+              ? [exact]
+              : closestOf(
+                  v.trim().toLowerCase(),
+                  TEXT_SIZE.map(([n]) => n),
+                );
+            return near.length
               ? {
-                  didYouMean: [near],
-                  run: [`${P} set ${slug} text-size ${near}`],
+                  didYouMean: near,
+                  run: near.map(x => `${P} set ${slug} text-size ${x}`),
                 }
               : (() => {
                   // A size typed full-width or with a trailing dot

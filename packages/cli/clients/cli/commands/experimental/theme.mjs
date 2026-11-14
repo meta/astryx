@@ -804,7 +804,13 @@ function optionsAsWritten(
       words.push(...argv.slice(i));
       break;
     }
-    const m = /^(--?|[\u2013\u2014]-?)([A-Za-z][A-Za-z-]*)(?:=(.*))?$/.exec(a);
+    // Any run of up to three hyphens and dash-like characters (an en or em
+    // dash, a minus sign, a non-breaking hyphen: `-—on`, `−−on`) is the
+    // option's dashes, as normalizeEntry reads a token's.
+    const m =
+      /^([-\u2010-\u2015\u2212\ufe58\ufe63\uff0d]{1,3})([A-Za-z][A-Za-z-]*)(?:=(.*))?$/.exec(
+        a,
+      );
     const flag = m ? meant(m[2]) : null;
     if (!m || !flag) {
       if (a !== '--json') words.push(a);

@@ -258,6 +258,15 @@ function splitFamilies(value) {
 }
 
 /**
+ * The system families the build counts as loaded (the one list), lower
+ * case: what a typed family is checked against for a typo.
+ * @returns {string[]}
+ */
+export function systemFontFamilies() {
+  return [...SYSTEM_FAMILIES];
+}
+
+/**
  * The font families a CSS font-family value names, without generics,
  * CSS-wide keywords or `var()` references (system families included).
  * @param {string} value

@@ -13,7 +13,10 @@ import {discoverBundledThemes} from '../../foundation/discovery/theme-discovery.
 import {
   SYSTEM_FONTS_BY_PLATFORM,
   collectUnloadedFonts,
+  systemFontFamilies,
 } from '../theme/build/font-warning.mjs';
+
+export {systemFontFamilies};
 
 /**
  * A lookup table that only answers for its own keys: a word typed by a
