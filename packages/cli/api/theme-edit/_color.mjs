@@ -442,6 +442,20 @@ const polar = (c, h) => [
 ];
 
 /**
+ * The colors written inside a value (a shadow's layers, a gradient's
+ * stops): each hex color and each color function, in order.
+ * @param {string} value
+ * @returns {string[]}
+ */
+export function colorsIn(value) {
+  return [...String(value ?? '').matchAll(COLOR_IN_VALUE)].map(m => m[0]);
+}
+
+/** One color written inside a value: a hex color or a color function. */
+export const COLOR_IN_VALUE =
+  /#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\((?:[^()]|\([^()]*\))*\)/gi;
+
+/**
  * The opacity of a CSS color, 0 to 1: the alpha of an 8- or 4-digit hex,
  * `rgba()`/`hsla()`, or a `/ alpha` part; 0 for `transparent`; 1 otherwise.
  * @param {unknown} value

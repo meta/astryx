@@ -26,23 +26,28 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
 
 /** @type {string} */
 let cwd;
+/** Why the bundled chocolate base could not be installed here, when it could not. */
+let unbuilt = '';
 
 beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-hunt97-', FIXTURE_PACKAGES);
   writeFixtureBaseTheme(cwd, 'neutral');
   await themeEditNew('q', {cwd, like: 'neutral'});
-}, 240_000);
+  unbuilt = await installRealBaseThemes(cwd, ['chocolate']);
+  if (!unbuilt) await themeEditNew('c', {cwd, like: 'chocolate'});
+}, 300_000);
 
 afterAll(() => {
   removeLinkedFixture(cwd);
 });
 
 /** @param {string} q */
-const answer = async q => {
-  const {data} = await themeEditHow(q, {cwd, theme: 'q'});
+const answer = async (q, theme = 'q') => {
+  const {data} = await themeEditHow(q, {cwd, theme});
   const results = data.results ?? [];
   return {
     first: (
@@ -160,6 +165,34 @@ describe('own colors stepped', () => {
       } finally {
         await themeEditUndo('q', {cwd});
       }
+    },
+    T,
+  );
+});
+
+describe('shadows written as 8-digit hex colors', () => {
+  it(
+    'chocolate: darker shadows raise each color alpha, too strong lowers it',
+    async test => {
+      if (unbuilt) {
+        console.warn(`skipped: ${unbuilt}`);
+        return test.skip();
+      }
+      /** @param {string} q */
+      const alphas = async q => {
+        const {first} = await answer(q, 'c');
+        expect(first.length).toBeGreaterThan(0);
+        expect(first.every(c => /^set c --shadow-[a-z]+ '/.test(c))).toBe(true);
+        return first.flatMap(c =>
+          [...c.matchAll(/#[0-9a-f]{6}([0-9a-f]{2})\b/gi)].map(m =>
+            Number.parseInt(m[1], 16),
+          ),
+        );
+      };
+      const darker = await alphas('make shadows darker');
+      const softer = await alphas('the shadows are too strong');
+      expect(darker.length).toBe(softer.length);
+      expect(darker.every((a, i) => a > softer[i])).toBe(true);
     },
     T,
   );

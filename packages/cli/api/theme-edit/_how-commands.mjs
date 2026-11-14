@@ -21,7 +21,7 @@ import {
   themeFiles,
 } from './_settings.mjs';
 import {FAMILIES, GROUPS, LIKE, P} from './_tables.mjs';
-import {alphaOf, parseColor} from './_color.mjs';
+import {alphaOf, colorsIn, parseColor, splitTop} from './_color.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 
 /** The theme name commands use when the app has no theme yet. */
@@ -361,12 +361,15 @@ const isForeground = (name, contrast = false) =>
  */
 function shadowStrength(v) {
   if (!v || /^none$/.test(v.trim())) return 0;
-  let sum = 0;
-  for (const m of v.matchAll(
-    /\/\s*([\d.]+)(%?)\s*\)|rgba\([^)]*,\s*([\d.]+)\s*\)/g,
-  ))
-    sum += m[3] != null ? Number(m[3]) : Number(m[1]) / (m[2] ? 100 : 1);
-  return sum;
+  // Each layer's color, read by the one color reader (hex with alpha,
+  // rgba(), hsla(), `/ alpha`). A layer has lengths: a bare color is no
+  // shadow.
+  return splitTop(v, ',')
+    .filter(layer => /(?:^|\s)-?\d*\.?\d+(?:px|rem|em)?(?=\s|$)/.test(layer))
+    .reduce(
+      (sum, layer) => sum + colorsIn(layer).reduce((n, c) => n + alphaOf(c), 0),
+      0,
+    );
 }
 
 /** @param {number[]} c */

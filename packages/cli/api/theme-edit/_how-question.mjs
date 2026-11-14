@@ -9,7 +9,14 @@
  * @position api/theme-edit — imported only by _how.mjs
  */
 
-import {COLOR_NAMES, alphaOf, hex, parseColor, ratio} from './_color.mjs';
+import {
+  COLOR_IN_VALUE,
+  COLOR_NAMES,
+  alphaOf,
+  hex,
+  parseColor,
+  ratio,
+} from './_color.mjs';
 import {
   DESIGN,
   DIALS,
@@ -913,6 +920,36 @@ export function hueToward(color, target, step) {
 }
 
 /**
+ * A color written with a new alpha, in the form it was written: a hex color
+ * as 8-digit hex, a `/ alpha` or rgba()/hsla() alpha replaced, an opaque
+ * color function given one.
+ * @param {string} color
+ * @param {number} a 0 to 1
+ */
+function withAlpha(color, a) {
+  const c = color.trim();
+  const round = (/** @type {number} */ n) => Math.round(n * 1000) / 1000;
+  if (c.startsWith('#')) {
+    const rgb = parseColor(c);
+    if (!rgb) return color;
+    return `${hex(rgb.slice(0, 3))}${Math.round(a * 255)
+      .toString(16)
+      .padStart(2, '0')}`;
+  }
+  const slash = /\/\s*[\d.]+(%?)\s*\)$/.exec(c);
+  if (slash)
+    return c.replace(
+      /\/\s*[\d.]+%?\s*\)$/,
+      slash[1] ? `/ ${Math.round(a * 1000) / 10}%)` : `/ ${round(a)})`,
+    );
+  const legacy =
+    /^(rgba?|hsla?)\(([^,()]*),([^,()]*),([^,()]*)(?:,[^,()]*)?\)$/i.exec(c);
+  if (legacy)
+    return `${legacy[1].replace(/a$/i, '')}a(${legacy[2].trim()}, ${legacy[3].trim()}, ${legacy[4].trim()}, ${round(a)})`;
+  return c.replace(/\)$/, ` / ${round(a)})`);
+}
+
+/**
  * A shadow with the alpha of each of its colors scaled (clamped to 0–1),
  * layers, offsets and blur kept; with a mode, only that half of each
  * light-dark() color.
@@ -923,18 +960,9 @@ export function hueToward(color, target, step) {
 export function shadowAlphaScaled(value, k, mode = null) {
   /** @param {string} part */
   const scale = part =>
-    part
-      .replace(/\/\s*([\d.]+)(%?)\s*\)/g, (_m, a1, pct) => {
-        const a = Math.max(0, Math.min(1, (Number(a1) / (pct ? 100 : 1)) * k));
-        return pct
-          ? `/ ${Math.round(a * 1000) / 10}%)`
-          : `/ ${Math.round(a * 1000) / 1000})`;
-      })
-      .replace(
-        /rgba\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*\)/g,
-        (_m, r, g, b, a1) =>
-          `rgba(${r}, ${g}, ${b}, ${Math.round(Math.max(0, Math.min(1, Number(a1) * k)) * 1000) / 1000})`,
-      );
+    part.replace(COLOR_IN_VALUE, c =>
+      withAlpha(c, Math.max(0, Math.min(1, alphaOf(c) * k))),
+    );
   if (!mode) return scale(value);
   return value.replace(
     /light-dark\(((?:[^(),]|\([^()]*\))*),\s*((?:[^(),]|\([^()]*\))*)\)/g,
