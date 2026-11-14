@@ -42,6 +42,7 @@ import {fileURLToPath} from 'node:url';
 import {API_VERSION} from '../../../foundation/response/json.mjs';
 import {commandDocsOf} from './define-command.mjs';
 import {doc as manifestDoc} from '../commands/manifest.doc.mjs';
+import {compareText} from '../../../foundation/text/compare-text.mjs';
 
 /**
  * What a run may do beyond the command it was asked for (spec AST-081;
@@ -222,7 +223,7 @@ function describeCommand(cmd, root, jsonSupported) {
   // `.command()` calls silently changes the output.
   if (subcommands.length > 0) {
     entry.subcommands = subcommands.sort((a, b) =>
-      /** @type {any} */ (a).name.localeCompare(/** @type {any} */ (b).name),
+      compareText(/** @type {any} */ (a).name, /** @type {any} */ (b).name),
     );
   }
 
@@ -307,7 +308,7 @@ export function buildManifest(program, opts = {}) {
     (program.commands || [])
       .map(cmd => describeCommand(cmd, program, jsonSupported))
       .filter(Boolean)
-  ).sort((a, b) => a.name.localeCompare(b.name));
+  ).sort((a, b) => compareText(a.name, b.name));
 
   return {
     name: 'astryx',

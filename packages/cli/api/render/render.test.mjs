@@ -706,12 +706,156 @@ describe('render(): every write stays inside the current folder', () => {
     const again = /** @type {any} */ (await render('src/app/page.tsx', {cwd}));
     expect(again.type).toBe('render.page');
     expect(fs.readFileSync(path.join(cwd, 'src/app/page.html'), 'utf8')).toContain('Alias header');
-    // Without the alias, the file it names is refused, naming why.
+    // Without the alias, the file comes back in the page's own layout inside
+    // the new folder, and the result names the import and its file.
     put('no-alias/package.json', '{"name":"no-alias","private":true}');
     fs.copyFileSync(path.join(dir, 'aliased-src/src/app/page.html'), path.join(dir, 'no-alias/page.html'));
-    expect(
-      await codeOf(() => render('page.html', {cwd: path.join(dir, 'no-alias'), reverse: true, out: 'page.tsx'})),
-    ).toBe('ERR_RENDER_SOURCE_DAMAGED');
+    const away = /** @type {any} */ (await render('page.html', {cwd: path.join(dir, 'no-alias'), reverse: true}));
+    expect(away.data).toMatchObject({
+      exact: true,
+      files: ['page-restored/app/page.tsx', 'page-restored/components/Header.tsx'],
+      aliased: {
+        config: 'tsconfig.json',
+        paths: {'@/*': ['./page-restored/*']},
+        imports: [{import: '@/components/Header', file: 'page-restored/components/Header.tsx'}],
+      },
+    });
+    expect(fs.readFileSync(path.join(dir, 'no-alias/page-restored/components/Header.tsx'))).toEqual(
+      fs.readFileSync(path.join(dir, 'aliased-src/src/components/Header.tsx')),
+    );
+  }, 60_000);
+
+  it('names the whole paths a page needs: every target of an alias, and the entries a config inherits', async () => {
+    put('multi/package.json', '{"name":"multi","private":true}');
+    put('multi/tsconfig.json', '{"compilerOptions": {"paths": {"@/*": ["./src/*", "./generated/*"]}}}\n');
+    put('multi/src/components/Header.tsx', 'export function Header() { return <h1>Multi</h1>; }\n');
+    put('multi/generated/api/client.ts', "export const client = 'generated client';\n");
+    put(
+      'multi/src/app/page.tsx',
+      "import {Header} from '@/components/Header';\nimport {client} from '@/api/client';\nexport default function Page() { return <main><Header />{client}</main>; }\n",
+    );
+    await render('multi/src/app/page.tsx', {cwd: dir});
+    // A project whose config takes its paths from the config it extends.
+    put('multi-to/package.json', '{"name":"multi-to","private":true}');
+    put('multi-to/tsconfig.base.json', '{"compilerOptions": {"paths": {"$lib/*": ["./lib/*"]}}}\n');
+    put('multi-to/tsconfig.json', '{"extends": "./tsconfig.base.json"}\n');
+    fs.copyFileSync(path.join(dir, 'multi/src/app/page.html'), path.join(dir, 'multi-to/multi.html'));
+    const back = /** @type {any} */ (await render('multi.html', {cwd: path.join(dir, 'multi-to'), reverse: true}));
+    expect(back.data).toMatchObject({exact: true});
+    expect(back.data.aliased).toEqual({
+      config: 'tsconfig.json',
+      paths: {
+        '$lib/*': ['./lib/*'],
+        '@/*': ['./multi-restored/generated/*', './multi-restored/src/*'],
+        '@/api/client': ['./multi-restored/generated/api/client.ts'],
+        '@/components/Header': ['./multi-restored/src/components/Header.tsx'],
+      },
+      imports: [
+        {import: '@/api/client', file: 'multi-restored/generated/api/client.ts'},
+        {import: '@/components/Header', file: 'multi-restored/src/components/Header.tsx'},
+      ],
+    });
+    // An alias whose first target overrides files of the second: the page
+    // renders again with the override, once the printed paths are set.
+    put('ov/package.json', '{"name":"ov","private":true}');
+    put('ov/tsconfig.json', '{"compilerOptions": {"paths": {"@/*": ["./src/overrides/*", "./src/*"]}}}\n');
+    put('ov/src/Zed.tsx', "export function Zed() { return <p>base Zed</p>; }\n");
+    put('ov/src/overrides/Zed.tsx', "import {Zed as Base} from '../Zed';\nexport function Zed() { return <section>override <Base /></section>; }\n");
+    put('ov/src/Apple.tsx', "export function Apple() { return <p>Apple</p>; }\n");
+    put('ov/src/page.tsx', "import {Zed} from '@/Zed';\nimport {Apple} from '@/Apple';\nexport default function Page() { return <main><Apple /><Zed /></main>; }\n");
+    await render('ov/src/page.tsx', {cwd: dir});
+    put('ov-to/package.json', '{"name":"ov-to","private":true}');
+    fs.copyFileSync(path.join(dir, 'ov/src/page.html'), path.join(dir, 'ov-to/ov.html'));
+    const ov = /** @type {any} */ (await render('ov.html', {cwd: path.join(dir, 'ov-to'), reverse: true}));
+    expect(ov.data.aliased.paths['@/Zed']).toEqual(['./ov-restored/overrides/Zed.tsx']);
+    put('ov-to/tsconfig.json', JSON.stringify({compilerOptions: {paths: ov.data.aliased.paths}}));
+    await render('ov-restored/page.tsx', {cwd: path.join(dir, 'ov-to'), out: 'again.html'});
+    expect(fs.readFileSync(path.join(dir, 'ov-to/again.html'), 'utf8')).toContain('override');
+  }, 60_000);
+
+  it('gives back an aliased page where no alias of the project names its imports: in its own layout, naming the paths to add', async () => {
+    const {sourceBlock: sourceBlockOf} = await import('../../foundation/render/source-block.mjs');
+    put('alias-home/tsconfig.json', '{"compilerOptions": {"paths": {"@/*": ["./src/*"], "@members": ["./src/lib/members.ts"]}}}\n');
+    put('alias-home/package.json', '{"name":"alias-home","private":true}');
+    put('alias-home/src/components/Header.tsx', 'export function Header() { return <h1>Team</h1>; }\n');
+    put('alias-home/src/lib/members.ts', "export const members = ['Ana', 'Bo'];\n");
+    put(
+      'alias-home/src/app/team/page.tsx',
+      "import {Header} from '@/components/Header';\nimport {members} from '@members';\nexport default function Page() { return <main><Header />{members.join(', ')}</main>; }\n",
+    );
+    await render('alias-home/src/app/team/page.tsx', {cwd: dir});
+    // Someone with only the HTML file, in a project with no tsconfig.json.
+    const cwd = path.join(dir, 'alias-away');
+    put('alias-away/package.json', '{"name":"alias-away","private":true}');
+    fs.copyFileSync(path.join(dir, 'alias-home/src/app/team/page.html'), path.join(cwd, 'team.html'));
+    const back = /** @type {any} */ (await render('team.html', {cwd, reverse: true}));
+    expect(back.data).toMatchObject({
+      mode: 'embedded',
+      exact: true,
+      output: 'team-restored/app/team/page.tsx',
+      aliased: {
+        config: 'tsconfig.json',
+        paths: {'@/*': ['./team-restored/*'], '@members': ['./team-restored/lib/members.ts']},
+        imports: [
+          {import: '@/components/Header', file: 'team-restored/components/Header.tsx'},
+          {import: '@members', file: 'team-restored/lib/members.ts'},
+        ],
+      },
+    });
+    for (const name of ['app/team/page.tsx', 'components/Header.tsx', 'lib/members.ts']) {
+      expect(fs.readFileSync(path.join(cwd, 'team-restored', name))).toEqual(fs.readFileSync(path.join(dir, 'alias-home/src', name)));
+    }
+    const {stdout} = await runCli(['experimental', 'render', '--reverse', 'team.html'], {cwd});
+    expect(stdout).toContain('set the "paths" of tsconfig.json (create it if it is not there) to: "@/*": ["./team-restored-2/*"], "@members": ["./team-restored-2/lib/members.ts"].');
+    // The entries are written for the config TypeScript reads there, from
+    // its baseUrl.
+    put('alias-base/package.json', '{"name":"alias-base","private":true}');
+    put('alias-base/tsconfig.json', '{"compilerOptions": {"baseUrl": "src"}}\n');
+    fs.copyFileSync(path.join(dir, 'alias-home/src/app/team/page.html'), path.join(dir, 'alias-base/team.html'));
+    const based = /** @type {any} */ (await render('team.html', {cwd: path.join(dir, 'alias-base'), reverse: true, out: 'src/team/app/team/page.tsx'}));
+    expect(based.data.aliased).toMatchObject({config: 'tsconfig.json', paths: {'@/*': ['./team/*'], '@members': ['./team/lib/members.ts']}});
+    // A record never remaps a package: a forged entry for `react` is not
+    // followed, and the file it names is refused.
+    put(
+      'alias-away/forged-react.html',
+      `<!doctype html><html><body><p class="astryx-text">x</p>${sourceBlockOf(
+        'page.tsx',
+        [
+          {path: 'page.tsx', bytes: Buffer.from("import React from 'react';\nexport default function Page() { return React.createElement('p', null, 'x'); }\n")},
+          {path: 'lib/react.ts', bytes: Buffer.from('export default {};\n')},
+        ],
+        {aliases: {react: 'lib/react.ts'}},
+      )}</body></html>`,
+    );
+    expect(await codeOf(() => render('forged-react.html', {cwd, reverse: true}))).toBe('ERR_RENDER_SOURCE_DAMAGED');
+    expect(fs.existsSync(path.join(cwd, 'forged-react-restored'))).toBe(false);
+    // Nor a package's own subpath import, which its package.json may map.
+    put(
+      'alias-away/forged-hash.html',
+      `<!doctype html><html><body><p class="astryx-text">x</p>${sourceBlockOf(
+        'page.tsx',
+        [
+          {path: 'page.tsx', bytes: Buffer.from("import {u} from '#utils';\nexport default function Page() { return <p>{u}</p>; }\n")},
+          {path: 'lib/utils.ts', bytes: Buffer.from("export const u = 'x';\n")},
+        ],
+        {aliases: {'#utils': 'lib/utils.ts'}},
+      )}</body></html>`,
+    );
+    expect(await codeOf(() => render('forged-hash.html', {cwd, reverse: true}))).toBe('ERR_RENDER_SOURCE_DAMAGED');
+    expect(fs.existsSync(path.join(cwd, 'forged-hash-restored'))).toBe(false);
+    // A record entry that names no carried file counts for nothing.
+    put(
+      'alias-away/forged.html',
+      `<!doctype html><html><body><p class="astryx-text">x</p>${sourceBlockOf(
+        'page.tsx',
+        [
+          {path: 'page.tsx', bytes: Buffer.from("import {X} from '@/x';\nexport default function Page() { return <X />; }\n")},
+          {path: 'other.ts', bytes: Buffer.from('export const other = 1;\n')},
+        ],
+        {aliases: {'@/x': 'missing.ts'}},
+      )}</body></html>`,
+    );
+    expect(await codeOf(() => render('forged.html', {cwd, reverse: true}))).toBe('ERR_RENDER_SOURCE_DAMAGED');
   }, 60_000);
 
   it('never writes through a symbolic link or over a protected file, even with --overwrite', async () => {
@@ -796,6 +940,53 @@ describe('render(): every write stays inside the current folder', () => {
     );
     const again = /** @type {any} */ (await render('by-path-back/page.tsx', {cwd: dir}));
     expect(again.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('missing-asset');
+  }, 60_000);
+
+  it('renders a page whose module names a path the system cannot look up', async () => {
+    put('long-name/names.ts', `export const far = './${'a'.repeat(300)}.png';\n`);
+    put('long-name/page.tsx', "import {far} from './names';\nexport default function Page() {\n  return <p>{far.length}</p>;\n}\n");
+    const result = /** @type {any} */ (await render('long-name/page.tsx', {cwd: dir}));
+    expect(result.data.files).toEqual(['page.tsx', 'names.ts']);
+  }, 60_000);
+
+  it('leaves out a named image outside the folder that holds the carried files, so the layout stays', async () => {
+    // A page under a tests/ folder: were the layout to move above it, its
+    // module would land under tests/, which a render never carries.
+    put('shared/far.png', PNG);
+    put('up/tests/icons.ts', "export const icons = {far: '../../shared/far.png'};\n");
+    put('up/tests/page.tsx', "import {icons} from './icons';\nexport default function Page() {\n  return <p>{Object.keys(icons).join(', ')}</p>;\n}\n");
+    const result = /** @type {any} */ (await render('up/tests/page.tsx', {cwd: dir}));
+    expect(result.data.files).toEqual(['page.tsx', 'icons.ts']);
+    const back = /** @type {any} */ (await render('up/tests/page.html', {cwd: dir, reverse: true, out: 'up-back/page.tsx'}));
+    expect(back.data).toMatchObject({exact: true, files: ['up-back/page.tsx', 'up-back/icons.ts']});
+  }, 60_000);
+
+  it('leaves out a named image larger than a render carries, and says so', async () => {
+    put('named-big/huge.png', Buffer.concat([PNG, Buffer.alloc(9 * 1024 * 1024)]));
+    put('named-big/icons.ts', "export const icons = {big: './huge.png'};\n");
+    put('named-big/page.tsx', "import {icons} from './icons';\nexport default function Page() {\n  return <p>{Object.keys(icons).join(', ')}</p>;\n}\n");
+    const result = /** @type {any} */ (await render('named-big/page.tsx', {cwd: dir}));
+    expect(result.data.files).not.toContain('huge.png');
+    expect(result.data.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({code: 'not-embedded', message: expect.stringContaining('huge.png is named in icons.ts but not carried in the file: it is larger than 8 MB')}),
+      ]),
+    );
+  }, 60_000);
+
+  it('carries an image a module or a stylesheet names that the page did not show, and gives every file back', async () => {
+    put('named/img/shown.png', PNG);
+    put('named/img/other.png', PNG);
+    put('named/img/unused-bg.png', PNG);
+    put('named/icons.ts', "export const icons = {shown: './img/shown.png', other: './img/other.png'};\n");
+    put('named/styles.css', '.used { color: red; }\n.unused { background: url("./img/unused-bg.png"); }\n');
+    put('named/page.tsx', "import './styles.css';\nimport {icons} from './icons';\nexport default function Page() { return <img className=\"used\" src={icons.shown} alt=\"\" />; }\n");
+    const r = /** @type {any} */ (await render('named/page.tsx', {cwd: dir}));
+    expect(r.data.files).toEqual(expect.arrayContaining(['img/shown.png', 'img/other.png', 'img/unused-bg.png']));
+    const back = /** @type {any} */ (await render('named/page.html', {cwd: dir, reverse: true, out: 'named-back/page.tsx'}));
+    expect(back.data).toMatchObject({exact: true});
+    expect(back.data.missing).toBeUndefined();
+    expect(fs.readFileSync(path.join(dir, 'named-back/img/other.png'))).toEqual(PNG);
   }, 60_000);
 
   it('gives back images named any way the render carried them', async () => {
@@ -1577,6 +1768,43 @@ describe('render(): every write stays inside the current folder', () => {
       fs.rmSync(outside, {recursive: true, force: true});
     }
   });
+});
+
+describe('render(): imports with a query, as Vite gives them', () => {
+  it('gives ?raw the file text, ?inline a stylesheet text, ?url an image address, and gives the files back', async () => {
+    put('queries/notes.css', '.note { color: teal; --note-marker: 1; }\n');
+    put('queries/dot.png', PNG);
+    put('queries/data.json', '{"a": 1}\n');
+    put(
+      'queries/page.tsx',
+      "import sheet from './notes.css?inline';\nimport text from './data.json?raw';\nimport * as whole from './data.json?raw';\nimport {default as named} from './data.json?raw';\nimport dot from './dot.png?url';\nexport default function Page() {\n  return <main><pre className=\"note\">{sheet}</pre><pre>{text}</pre><pre>{whole.default === text && named === text ? 'every import gets the text' : 'no'}</pre><img src={dot} alt=\"\" /></main>;\n}\n",
+    );
+    const result = /** @type {any} */ (await render('queries/page.tsx', {cwd: dir}));
+    const html = fs.readFileSync(path.join(dir, 'queries/page.html'), 'utf8');
+    expect(html).toContain('.note { color: teal; --note-marker: 1; }');
+    expect(html).toContain('every import gets the text');
+    expect(html).toContain('{&quot;a&quot;: 1}');
+    expect(html).toContain('src="data:image/png;base64,');
+    // A stylesheet imported with ?inline is text, not a sheet of the page:
+    // the class it styles is used, and no rule of it is in the page's styles.
+    expect(html.match(/<style[^>]*>([\s\S]*?)<\/style>/)?.[1]).not.toContain('--note-marker');
+    expect(result.data.files.sort()).toEqual(['data.json', 'dot.png', 'notes.css', 'page.tsx']);
+    const back = /** @type {any} */ (await render('queries/page.html', {cwd: dir, reverse: true, out: 'queries-back/page.tsx'}));
+    expect(back.data.exact).toBe(true);
+  }, 60_000);
+
+  it('loads a file with any other query as it loads without one: an image as its address, a module as itself', async () => {
+    put('queries/w.ts', "export const label = 'from the worker module';\n");
+    put(
+      'queries/others.tsx',
+      "import a from './dot.png?w=400';\nimport b from './dot.png?no-inline';\nimport c from './dot.png?url&inline';\nimport * as w from './w.ts?worker';\nexport default function Page() {\n  return <main><img src={a} alt=\"\" /><img src={b} alt=\"\" /><img src={c} alt=\"\" /><p>{w.label}</p></main>;\n}\n",
+    );
+    const result = /** @type {any} */ (await render('queries/others.tsx', {cwd: dir}));
+    const html = fs.readFileSync(path.join(dir, 'queries/others.html'), 'utf8');
+    expect(html.match(/src="data:image\/png;base64,/g)).toHaveLength(3);
+    expect(html).toContain('from the worker module');
+    expect(result.data.files.sort()).toEqual(['dot.png', 'others.tsx', 'w.ts']);
+  }, 60_000);
 });
 
 describe('render --reverse: a received file may carry only what a render embeds', () => {
