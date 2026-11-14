@@ -915,6 +915,9 @@ const CASES = [
     name: 'upgrade',
     args: ['upgrade', '--list'],
     cwd: '__TMP__',
+    jsonFieldAllowlist: [
+      'optional — printed as "(optional)" after the title of a codemod that runs only on request',
+    ],
   },
 ];
 

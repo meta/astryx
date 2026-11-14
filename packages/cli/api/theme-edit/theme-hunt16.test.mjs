@@ -305,7 +305,9 @@ describe('corrected new commands keep every option (r78e)', () => {
         '--headings',
         'tight',
         '--headings',
-        'BOLD',
+        // A dial word in capitals is that word (no refusal), so the bad
+        // value here is a misspelt one in capitals.
+        'BOLDD',
         '--accent',
         'red',
       ],
