@@ -163,7 +163,8 @@ export function Chart({
   const chartId = useId();
   const descId = `${chartId}-desc`;
   // useId() can contain ':' which is invalid in an SVG url(#id) reference.
-  const clipId = `plot-${chartId.replace(/:/g, '')}`;
+  const seriesChartId = chartId.replace(/:/g, '');
+  const clipId = `plot-${seriesChartId}`;
   const containerRef = useRef<HTMLDivElement>(null);
   const mergedContainerRef = useMergedRefs(containerRef, ref);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -247,8 +248,9 @@ export function Chart({
       yBandScale: layout.yBandScale,
       width: innerWidth,
       height: innerHeight,
+      chartId: seriesChartId,
     }),
-    [data, xKey, layout, innerWidth, innerHeight],
+    [data, xKey, layout, innerWidth, innerHeight, seriesChartId],
   );
 
   // ─── Event dispatch ───────────────────────────────────────────────────
