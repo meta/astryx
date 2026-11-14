@@ -365,6 +365,12 @@ describe('ideaKind: a part of a page, told by the components the system ships', 
     expect(kind('a settings page where admins add users')).toBe('page');
   });
 
+  it('takes an "add" idea that says nowhere the piece goes as before', () => {
+    expect(kind('add a settings page to the app')).toBe('page');
+    expect(kind('add a data table with filters')).toBe('page');
+    expect(kind('add a tooltip')).toBe('part');
+  });
+
   it('does not take "existing" that names no page or part as an edit', () => {
     expect(kind('a new settings page inspired by the existing one')).toBe(
       'page',

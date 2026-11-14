@@ -20,9 +20,10 @@
  * the existing dashboard", "clone the existing dashboard as a new page"). A
  * bare "existing" phrase that names a page ("existing reports dashboard with a
  * date filter") reads as the builder's own page. An idea that opens with "add"
- * puts a piece into a page the builder already has (FR9), so it is a change
- * too, unless its head names a page ("add a settings page") or it asks
- * for a new page ("add a new dashboard").
+ * and says where the piece goes ("add a filter row above the table") puts it
+ * into a page the builder already has, so it is a change too, unless its head
+ * names a page ("add a settings page to the app") or it asks for a new page
+ * ("add a new dashboard").
  */
 
 import {stem} from '../../search/search.mjs';
@@ -56,9 +57,16 @@ const EXISTING = /\bexisting\b/i;
 
 /**
  * The word that opens an idea adding a piece to a page the builder already
- * has (spec:AST-048/FR9).
+ * has (spec:AST-048/FR3, FR9), when the idea says where the piece goes.
  */
 const ADDS = /^\s*add\b/i;
+
+/**
+ * Where an added piece goes: a preposition of place before what it names
+ * ("to the table", "above the chart").
+ */
+const PUT =
+  /\b(?:to|into|onto|in|inside|within|on|above|below|beside|under|next to)\s+(?:the|a|an|my|our|this|each|every|existing)\b/i;
 
 /**
  * The word that marks an idea asking for a new page ("a new dashboard", "as a
@@ -82,6 +90,7 @@ export function ideaKind(query, pages, components) {
   if (changesExistingPage(text, familyWords, components)) return 'edit';
   if (
     ADDS.test(text) &&
+    PUT.test(text) &&
     !namesPage(text.split(HEAD_END)[0] ?? '', familyWords) &&
     !asksNewPage(text.toLowerCase().split(PHRASE_END), familyWords)
   )
@@ -106,8 +115,9 @@ export function ideaKind(query, pages, components) {
 }
 
 /**
- * Whether a head names a page: it ends on a word search drops, such as "page",
- * after a word that names a page family ("add a settings page").
+ * Whether a head names a page: it ends on a page family word ("add a
+ * dashboard") or on a word search drops, such as "page" ("add a settings
+ * page").
  * @param {string} head
  * @param {Map<string, string>} familyWords
  * @returns {boolean}
