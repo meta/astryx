@@ -30,7 +30,7 @@ system_specs: [spec:AST-061, spec:AST-087/FR11]
 ```json
 {
   "paths": [
-    "packages/richtext/src/ToolbarLinkPopover.tsx",
+    "packages/richtext/src/internal/ToolbarLinkPopover.tsx",
     "packages/richtext/src/linkForm.tsx"
   ]
 }

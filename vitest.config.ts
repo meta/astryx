@@ -267,6 +267,11 @@ export default defineConfig({
             'packages/charts/**',
             'packages/richtext/**',
             'packages/vega/**',
+            // CI runs the swizzle proof's slices in legs of their own
+            // (ci.yml swizzle-proof), so its Node legs leave them out.
+            ...(process.env.VITEST_SWIZZLE_PROOF_OWN_JOB === '1'
+              ? ['packages/cli/test/swizzle-proof/swizzle-proof.*.test.mjs']
+              : []),
           ],
         },
       },
