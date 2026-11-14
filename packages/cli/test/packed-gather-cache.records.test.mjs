@@ -414,6 +414,232 @@ Module._resolveFilename = function (request, parent, isMain, options) {
     180_000,
   );
 
+  it.skipIf(!hasModuleHooks)(
+    'keeps the component list, and a new or edited component shows on the very next run',
+    () => {
+      const tmp = keptTmp('component-list');
+      const other = makeProject();
+      try {
+        fs.writeFileSync(
+          path.join(other.widgets, 'astryx.integration.mjs'),
+          `export default { components: './components' };\n`,
+        );
+        const component = (
+          /** @type {string} */ name,
+          /** @type {string} */ description,
+        ) => {
+          const dir = path.join(other.widgets, 'components', name);
+          fs.mkdirSync(dir, {recursive: true});
+          fs.writeFileSync(
+            path.join(dir, `${name}.doc.mjs`),
+            `export const docs = {type: 'component', name: '${name}', description: '${description}', props: []};\n`,
+          );
+          fs.writeFileSync(
+            path.join(dir, `${name}.tsx`),
+            `export function ${name}() { return null; }\n`,
+          );
+        };
+        component('Gadget', 'Shows a gadget.');
+        // Core as a copy of what component discovery reads, so a test can edit
+        // a Core doc in place.
+        const core = path.join(
+          other.dir,
+          'node_modules',
+          '@astryxdesign',
+          'core',
+        );
+        const coreSource = fs.realpathSync(core);
+        fs.unlinkSync(core);
+        fs.mkdirSync(core);
+        for (const entry of [
+          'package.json',
+          'groups.doc.mjs',
+          'docs.mjs',
+          'src',
+        ]) {
+          fs.cpSync(path.join(coreSource, entry), path.join(core, entry), {
+            recursive: true,
+            filter: from => !from.includes(`${path.sep}__tests__`),
+          });
+        }
+        const lists = () =>
+          new Map(
+            fs
+              .readdirSync(path.join(tmp, CACHE_NAME))
+              .map(name => path.join(tmp, CACHE_NAME, name))
+              .filter(
+                file =>
+                  JSON.parse(fs.readFileSync(file, 'utf8')).value?.type ===
+                  'component.list',
+              )
+              .map(file => [file, fs.statSync(file).ino]),
+          );
+        for (const ask of [
+          ['component', '--list'],
+          ['component', '--list', '--detail', 'compact'],
+        ]) {
+          for (const json of [true, false]) {
+            const fresh = run(ask, {tmp: freshTmp(), cwd: other.dir, json});
+            expect(fresh.status, fresh.stderr).toBe(0);
+            // Kept, then read back: byte for byte what a fresh run prints.
+            expect(run(ask, {tmp, cwd: other.dir, json})).toEqual(fresh);
+            expect(run(ask, {tmp, cwd: other.dir, json})).toEqual(fresh);
+          }
+        }
+        const kept = lists();
+        // One per list detail: text and JSON print the same kept list.
+        expect(kept.size).toBe(2);
+        expect(run(['component', '--list'], {tmp, cwd: other.dir})).toEqual(
+          run(['component', '--list'], {tmp: freshTmp(), cwd: other.dir}),
+        );
+        expect(lists()).toEqual(kept);
+        // A new component folder, then an edited doc: each shows on the very
+        // next run, as a fresh run shows it.
+        component('Widget', 'Shows a widget.');
+        const added = run(['component', '--list'], {tmp, cwd: other.dir});
+        expect(added.stdout).toContain('Widget');
+        expect(added).toEqual(
+          run(['component', '--list'], {tmp: freshTmp(), cwd: other.dir}),
+        );
+        // A Core doc edited in place: its new description shows.
+        const buttonDoc = path.join(core, 'src', 'Button', 'Button.doc.mjs');
+        const text = fs.readFileSync(buttonDoc, 'utf8');
+        const description = /description:\s*'([^']{20,})'/.exec(text)?.[1];
+        expect(description).toBeDefined();
+        const compact = ['component', '--list', '--detail', 'compact'];
+        expect(run(compact, {tmp, cwd: other.dir}).stdout).toContain(
+          /** @type {string} */ (description).slice(0, 30),
+        );
+        fs.writeFileSync(
+          buttonDoc,
+          text.replace(
+            /** @type {string} */ (description),
+            'A button, edited in place.',
+          ),
+        );
+        const edited = run(compact, {tmp, cwd: other.dir});
+        expect(edited.stdout).toContain('A button, edited in place.');
+        expect(edited).toEqual(run(compact, {tmp: freshTmp(), cwd: other.dir}));
+        // A component read is unchanged warm and cold.
+        const read = ['component', 'Button'];
+        expect(run(read, {tmp, cwd: other.dir})).toEqual(
+          run(read, {tmp: freshTmp(), cwd: other.dir}),
+        );
+      } finally {
+        fs.rmSync(other.dir, {recursive: true, force: true});
+      }
+    },
+    240_000,
+  );
+
+  it.skipIf(!hasModuleHooks)(
+    "keeps doctor's theme-wiring scan, and an edit to the app's import or the theme module shows on the very next run",
+    () => {
+      const tmp = keptTmp('theme-wiring');
+      const other = makeProject();
+      try {
+        const version = JSON.parse(
+          fs.readFileSync(path.join(packed, 'package.json'), 'utf8'),
+        ).version;
+        const theme = path.join(
+          other.dir,
+          'node_modules',
+          '@astryxdesign',
+          'theme-neutral',
+        );
+        fs.mkdirSync(path.join(theme, 'dist'), {recursive: true});
+        fs.writeFileSync(
+          path.join(theme, 'package.json'),
+          JSON.stringify({
+            name: '@astryxdesign/theme-neutral',
+            version,
+            type: 'module',
+            exports: {
+              '.': './dist/index.js',
+              './built': './dist/neutral.js',
+              './theme.css': './dist/theme.css',
+            },
+          }),
+        );
+        const themeModule = path.join(theme, 'dist', 'neutral.js');
+        fs.writeFileSync(
+          themeModule,
+          `export const neutralTheme = {name: 'neutral', tokens: {}};\n`,
+        );
+        fs.writeFileSync(
+          path.join(theme, 'dist', 'index.js'),
+          `export {neutralTheme} from './neutral.js';\n`,
+        );
+        fs.writeFileSync(
+          path.join(theme, 'dist', 'theme.css'),
+          `[data-astryx-theme="neutral"] { --color-text: black; }\n`,
+        );
+        const themes = (/** @type {string} */ at) => {
+          const result = run(['doctor'], {tmp: at, cwd: other.dir});
+          return JSON.parse(result.stdout).data.checks.find(
+            (/** @type {{id: string}} */ c) => c.id === 'themes',
+          );
+        };
+        const wiringEntries = () =>
+          fs
+            .readdirSync(path.join(tmp, CACHE_NAME))
+            .filter(name =>
+              Array.isArray(
+                JSON.parse(
+                  fs.readFileSync(path.join(tmp, CACHE_NAME, name), 'utf8'),
+                ).value?.wired,
+              ),
+            );
+        // Nothing wired yet: kept, then read back, as a fresh run answers.
+        const unwired = themes(freshTmp());
+        expect(themes(tmp)).toEqual(unwired);
+        expect(wiringEntries()).toHaveLength(1);
+        expect(themes(tmp)).toEqual(unwired);
+        // The app passes the package's theme to Core's Theme: the very next
+        // run sees it.
+        fs.mkdirSync(path.join(other.dir, 'app'), {recursive: true});
+        fs.writeFileSync(
+          path.join(other.dir, 'app', 'providers.tsx'),
+          [
+            "import {Theme} from '@astryxdesign/core/theme';",
+            "import {neutralTheme} from '@astryxdesign/theme-neutral/built';",
+            'export const Providers = ({children}: any) => (',
+            '  <Theme theme={neutralTheme}>{children}</Theme>',
+            ');',
+            '',
+          ].join('\n'),
+        );
+        const wired = themes(tmp);
+        expect(wired).not.toEqual(unwired);
+        expect(wired).toEqual(themes(freshTmp()));
+        expect(themes(tmp)).toEqual(wired);
+        // An edit to the theme module alone scans again, as a fresh run does.
+        const keptEntry = path.join(tmp, CACHE_NAME, wiringEntries()[0]);
+        const before = fs.statSync(keptEntry).ino;
+        fs.writeFileSync(
+          themeModule,
+          `export const neutralTheme = {name: 'neutral', tokens: {color: {}}};\n`,
+        );
+        expect(themes(tmp)).toEqual(themes(freshTmp()));
+        const rescanned = fs.statSync(keptEntry).ino;
+        expect(rescanned).not.toBe(before);
+        // The package no longer exports the built theme the app imports: the
+        // very next run scans again and reports it, as a fresh run does.
+        const pkgFile = path.join(theme, 'package.json');
+        const pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf8'));
+        delete pkg.exports['./built'];
+        fs.writeFileSync(pkgFile, JSON.stringify(pkg));
+        const dropped = themes(tmp);
+        expect(dropped).not.toEqual(wired);
+        expect(dropped).toEqual(themes(freshTmp()));
+        expect(fs.statSync(keptEntry).ino).not.toBe(rescanned);
+      } finally {
+        fs.rmSync(other.dir, {recursive: true, force: true});
+      }
+    },
+    240_000,
+  );
+
   it('leaves a missing cache folder missing when doctor runs', () => {
     const tmp = freshTmp();
     run(['doctor'], {tmp});

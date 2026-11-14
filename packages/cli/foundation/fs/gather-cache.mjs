@@ -17,9 +17,11 @@
  *   integration's contribution-check results and the whole list (with the
  *   template and component replacement passes), which `component`,
  *   `template`, `theme`, `discover` and `search` report, by template
- *   discovery (foundation/discovery/template-adapter.mjs) for its records, by theme discovery
+ *   discovery (foundation/discovery/template-adapter.mjs) for its records, by
+ *   the component list (api/component/list/list.mjs), by theme discovery
  *   (foundation/discovery/theme-discovery.mjs) for each integration's themes,
- *   by `doctor` (api/doctor/_adapter.mjs) for its file-only docs checks,
+ *   by `doctor` (api/doctor/_adapter.mjs) for its file-only docs checks and
+ *   its theme-wiring scan,
  *   in a run that records modules and variables to its end, and, through
  *   `persistedSummary`, by kept-tree.mjs for the docs not-found hint's
  *   summaries of folder trees, each kept while every path it stamped is
@@ -81,7 +83,8 @@ const KEPT_COMMANDS = new Set([
   'theme',
   'discover',
   'docs',
-  // The project check alone (no subcommand): its docs checks are kept.
+  // The project check alone (no subcommand): its docs checks and theme-wiring
+  // scan are kept.
   'doctor',
 ]);
 

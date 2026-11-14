@@ -235,6 +235,17 @@ export function matchType(type, value) {
  */
 function matchWith(value, match) {
   const {lexer, parse} = csstree();
+  // A color function holding a variable (color-mix(…, var(--x))) is a
+  // color whatever the variable holds: it is matched as one, so a value
+  // with many of them is read like the same value with plain colors.
+  for (let i = 0; i < 4; i++) {
+    const next = value.replace(
+      /\b(?:color-mix|light-dark|rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\)/gi,
+      m => (/\bvar\(/i.test(m) ? 'red' : m),
+    );
+    if (next === value) break;
+    value = next;
+  }
   const vars =
     value.match(/(?:var|env)\([^()]*(?:\([^()]*\)[^()]*)*\)/gi) ?? [];
   /** @param {string} v */
@@ -263,7 +274,16 @@ function matchWith(value, match) {
       return null;
     }
   }
-  if (vars.length > 3) return null;
+  // Many variables: each stands for the same kind of value at once.
+  if (vars.length > 3) {
+    for (const stand of VAR_STANDS_FOR) {
+      let v = value;
+      for (const x of vars) v = v.replace(x, stand);
+      const ast = tryOne(v);
+      if (ast) return ast;
+    }
+    return null;
+  }
   /** @param {string} v @param {number} i @returns {any | null} */
   const fill = (v, i) => {
     if (i === vars.length) return tryOne(v);
