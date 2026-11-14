@@ -1001,14 +1001,11 @@ export function persistedDerived(key, compute, codec, inputs = []) {
   const value = compute();
   withoutRecording(() => {
     try {
-      const encoded = codec.encode(value);
-      const text = JSON.stringify({
-        format: FORMAT,
-        derived: true,
-        key: entry,
-        value: encoded,
-      });
-      if (!isDeepStrictEqual(JSON.parse(text).value, encoded)) return;
+      const body = storedText(codec, value);
+      if (body === undefined) return;
+      const head = JSON.stringify({format: FORMAT, derived: true, key: entry});
+      // The value's text goes in as checked, as the head's last field.
+      const text = `${head.slice(0, -1)},"value":${body}}`;
       const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
       fs.writeFileSync(temp, text, {mode: 0o600, flag: 'wx'});
       fs.renameSync(temp, file);
@@ -1187,6 +1184,26 @@ function readBack(read, codec) {
 }
 
 /**
+ * The JSON text a kept value is stored as, checked once to read back as what
+ * the codec meant: the codec's own checked text when it gives one
+ * (`encodeText`, as EXACT_CODEC does), else its plain form, written and
+ * checked to read back as that form. Undefined for a value that does not
+ * read back exactly, which is never kept; a codec's refusal throws.
+ * @template T
+ * @param {{encode: (value: T) => unknown, encodeText?: (value: T) => string}} codec
+ * @param {T} value
+ * @returns {string | undefined}
+ */
+function storedText(codec, value) {
+  if (codec.encodeText) return codec.encodeText(value);
+  const encoded = codec.encode(value);
+  const text = JSON.stringify(encoded);
+  return text !== undefined && isDeepStrictEqual(JSON.parse(text), encoded)
+    ? text
+    : undefined;
+}
+
+/**
  * Store a fresh gather with what the run read, unless its plain form does not
  * read back as the same value. Silent on any failure.
  * @template T, E
@@ -1199,7 +1216,8 @@ function readBack(read, codec) {
 function store(dir, file, entry, value, codec) {
   if (!run) return;
   try {
-    const encoded = codec.encode(value);
+    const body = storedText(codec, value);
+    if (body === undefined) return;
     const stamps = [...run.reads].filter(([file]) => !inJitiCache(file));
     gatherCode = cliStates(stamps);
     const {deps, own, under} = chooseBase(file, stamps, run.confirmed);
@@ -1212,9 +1230,6 @@ function store(dir, file, entry, value, codec) {
       stamps: own,
       env: [...run.env],
     });
-    const body = JSON.stringify(encoded);
-    if (body === undefined || !isDeepStrictEqual(JSON.parse(body), encoded))
-      return;
     // JSON text holds no line break, so the first one ends the head.
     const text = `${head}\n${body}`;
     const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
