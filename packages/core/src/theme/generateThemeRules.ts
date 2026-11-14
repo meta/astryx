@@ -493,13 +493,17 @@ function acceptDeclaration(
  * declarations it means to emit.
  */
 function joinDeclarations(
-  entries: [string, string][],
+  entries: [string, unknown][],
   location: string,
   sink: DiagnosticSink,
   mapProp: (prop: string) => string = p => p,
 ): string {
   const lines: string[] = [];
   for (const [rawProp, rawValue] of entries) {
+    // An undefined value sets nothing, as a page token's does.
+    if (rawValue === undefined) {
+      continue;
+    }
     // Legacy unenrolled tokens retain non-string values. Scan the same text
     // interpolation has always emitted, without changing the normalized theme.
     const value = stringifyTokenValue(rawValue);
@@ -578,6 +582,9 @@ function assignTokenCascade(
 ): void {
   for (const tokens of tokenSets) {
     for (const [rawToken, rawValue] of Object.entries(tokens ?? {})) {
+      if (rawValue === undefined) {
+        continue;
+      }
       const token = canonicalizeDeclarationName(rawToken);
       const value = stringifyTokenValue(rawValue);
       const analysis = analyzeDeclarationValue(value);
@@ -1365,7 +1372,14 @@ function generateComponentRules(
   }: ComponentRuleOptions = {},
 ): void {
   for (const [component, rules] of Object.entries(components)) {
+    // A component or style key left undefined is not set.
+    if (rules === undefined) {
+      continue;
+    }
     for (const [key, styles] of Object.entries(rules)) {
+      if (styles === undefined) {
+        continue;
+      }
       /**
        * Emit a style block on a selector: its declarations, then its
        * pseudo-class overrides, each rule passed through `wrap`; then, for a
@@ -1381,6 +1395,10 @@ function generateComponentRules(
         const props: [string, string][] = [];
         const nested: [string, StyleBlock][] = [];
         for (const [prop, value] of Object.entries(block)) {
+          // An undefined value sets nothing, as a page token's does.
+          if (value === undefined) {
+            continue;
+          }
           const isObject = value !== null && typeof value === 'object';
           // A pseudo-class override or a color-mode block nests. Anything
           // else is a declaration as written, so the boundary check reports
@@ -1416,10 +1434,12 @@ function generateComponentRules(
           parts.push(wrap(`  ${selector} {\n${declarations}\n  }`));
         }
         for (const [pseudo, pseudoStyles] of nested) {
-          const pseudoEntries = Object.entries(pseudoStyles);
+          const pseudoEntries = Object.entries(pseudoStyles).filter(
+            ([, value]) => value !== undefined,
+          );
           if (pseudo.startsWith(':') && pseudoEntries.length > 0) {
             const declarations = joinDeclarations(
-              pseudoEntries as [string, string][],
+              pseudoEntries,
               `${location}[${JSON.stringify(pseudo)}]`,
               sink,
               toKebabCase,
@@ -1642,9 +1662,9 @@ function generateColorOverrides(
     inherit: 'inherit',
   };
 
-  const touchesText = 'text' in components;
-  const touchesHeading = 'heading' in components;
-  const touchesLink = 'link' in components;
+  const touchesText = components.text !== undefined;
+  const touchesHeading = components.heading !== undefined;
+  const touchesLink = components.link !== undefined;
 
   if (touchesText || touchesHeading || touchesLink) {
     for (const [colorName, colorValue] of Object.entries(TEXT_COLOR_MAP)) {
@@ -1709,7 +1729,7 @@ function generateSizeOverrides(
   parts: string[],
   surface?: MediaSurface,
 ): void {
-  if (!('text' in components)) {
+  if (components.text === undefined) {
     return;
   }
   for (const [sizeName, sizeValue] of Object.entries(TEXT_SIZE_TOKEN_MAP)) {

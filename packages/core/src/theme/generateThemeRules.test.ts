@@ -190,6 +190,110 @@ describe('generateThemeRules', () => {
     }
   });
 
+  it('writes nothing for a part or surface value left undefined, as for a page token', () => {
+    const theme = defineTheme({
+      name: 'unset-values',
+      tokens: {'--radius-element': undefined},
+      components: {
+        button: {
+          base: {
+            '--radius-element': undefined as unknown as string,
+            padding: undefined as unknown as string,
+            ':hover': {color: undefined as unknown as string},
+          },
+        },
+      },
+      onDark: {
+        tokens: {'--color-accent': undefined},
+        components: {
+          button: {base: {padding: undefined as unknown as string}},
+          card: undefined as unknown as Record<string, Record<string, string>>,
+        },
+      },
+    });
+    const warnings: string[] = [];
+    const css = [
+      ...generateThemeRules(theme, warnings),
+      generateOnMediaCSS(theme, warnings),
+    ].join('\n');
+    expect(css).not.toMatch(/:\s*undefined;/);
+    expect(css).not.toContain('.astryx-card');
+    // A block left with no value writes no empty rule.
+    expect(css).not.toMatch(/:hover[^{]*\{\s*\}/);
+    expect(warnings).toEqual([]);
+  });
+
+  it('keeps an inherited part value a child leaves undefined, in a style key and a color-mode block', () => {
+    const base = defineTheme({
+      name: 'unset-base',
+      components: {
+        button: {base: {padding: '8px', '@dark': {color: 'white'}}},
+      },
+    });
+    const child = defineTheme({
+      extends: base,
+      name: 'unset-child',
+      components: {
+        button: {
+          base: {
+            padding: undefined as unknown as string,
+            '@dark': {color: undefined as unknown as string},
+          },
+        },
+      },
+    });
+    const merged = child.components?.button?.base as Record<string, unknown>;
+    expect(merged.padding).toBe('8px');
+    expect(merged['@dark']).toEqual({color: 'white'});
+    const css = generateThemeRules(child).join('\n');
+    expect(css).toMatch(/padding: 8px;/);
+    expect(css).toMatch(/color: white;/);
+    expect(css).not.toMatch(/:\s*undefined;/);
+  });
+
+  it('writes nothing for a component or style key a rule source leaves undefined', () => {
+    const plain = generateThemeRules({
+      tokens: {},
+      components: {link: {base: {color: 'red'}}},
+    });
+    const unset = generateThemeRules({
+      tokens: {},
+      components: {
+        link: {base: {color: 'red'}},
+        card: {base: undefined as unknown as Record<string, string>},
+        text: undefined as unknown as Record<string, Record<string, string>>,
+      },
+    });
+    expect(unset).toEqual(plain);
+  });
+
+  it('keeps null as it was: it replaces an inherited value and is written as it is', () => {
+    const base = defineTheme({
+      name: 'null-base',
+      components: {
+        button: {base: {padding: '8px', '@dark': {color: 'white'}}},
+      },
+    });
+    const child = defineTheme({
+      extends: base,
+      name: 'null-child',
+      components: {
+        button: {
+          base: {
+            padding: null as unknown as string,
+            '@dark': {color: null as unknown as string},
+          },
+        },
+      },
+    });
+    const merged = child.components?.button?.base as Record<string, unknown>;
+    expect(merged.padding).toBeNull();
+    expect(merged['@dark']).toEqual({color: null});
+    const css = generateThemeRules(child).join('\n');
+    expect(css).toMatch(/padding: null;/);
+    expect(css).not.toMatch(/padding: 8px;/);
+  });
+
   it('includes explicit component overrides', () => {
     const buttonRule = rules.find(r =>
       r.includes('.astryx-button[data-variant="secondary"]'),

@@ -7,7 +7,11 @@
  * them: `extends` inheritance, generated type-scale rules, and the on-media
  * (`onDark`/`onLight`) surfaces. Merging is per style key, so a child that
  * restates one property of `button.base` keeps the rest of the base's; a
- * color-mode block (`@light`, `@dark`) merges per property the same way.
+ * color-mode block (`@light`, `@dark`) merges per property the same way. A
+ * component, style key, or property left `undefined` is not set: in a style
+ * key or a color-mode block, the base's value for that property stays. A
+ * restated pseudo-class block (`:hover`) replaces the base's block whole; a
+ * property left `undefined` inside it is not set either.
  *
  * @input two ComponentStyleMaps — the base and the overrides that win
  * @output a merged ComponentStyleMap
@@ -20,14 +24,52 @@ import type {ComponentStyleMap} from './defineTheme';
 const COLOR_MODE_KEYS = ['@light', '@dark'] as const;
 
 /**
+ * A value without what it leaves undefined: each property of a plain
+ * object, at every depth (a style key's nested pseudo-class and color-mode
+ * blocks). A null is kept: it is a value. A value with nothing undefined is
+ * returned as it is.
+ */
+function withoutUndefined<T>(value: T): T {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return value;
+  }
+  let changed = false;
+  const entries: [string, unknown][] = [];
+  for (const [key, nested] of Object.entries(value)) {
+    if (nested === undefined) {
+      changed = true;
+      continue;
+    }
+    const kept = withoutUndefined(nested);
+    changed ||= kept !== nested;
+    entries.push([key, kept]);
+  }
+  return changed ? (Object.fromEntries(entries) as T) : value;
+}
+
+/**
+ * A component style map without what it leaves undefined: a component, a
+ * style key, or a property at any depth is not set. Every layer that reads
+ * a theme's component map (the merge, each resolved layer) reads it through
+ * this.
+ */
+export function withoutUnsetComponents(
+  map: ComponentStyleMap | undefined,
+): ComponentStyleMap | undefined {
+  return map === undefined ? undefined : withoutUndefined(map);
+}
+
+/**
  * Deep-merge component style maps: `overrides` wins per style key, and every
  * component and key the base declared that the overrides do not mention is
  * carried through untouched.
  */
 export function deepMergeComponents(
-  base?: ComponentStyleMap,
-  overrides?: ComponentStyleMap,
+  inheritedMap?: ComponentStyleMap,
+  ownMap?: ComponentStyleMap,
 ): ComponentStyleMap | undefined {
+  const base = withoutUnsetComponents(inheritedMap);
+  const overrides = withoutUnsetComponents(ownMap);
   if (!base && !overrides) {
     return undefined;
   }

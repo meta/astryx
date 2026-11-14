@@ -265,6 +265,65 @@ describe('rule order and writes', () => {
     );
   });
 
+  it('writes nothing for a part value a rule leaves undefined, and still refuses null', () => {
+    const theme = defineTheme(
+      adaptationInput([
+        {
+          when: {pointer: 'coarse'},
+          value: {
+            components: {
+              card: {
+                base: {
+                  padding: undefined as unknown as string,
+                  margin: '4px',
+                },
+              },
+            },
+          },
+        },
+      ]),
+    );
+    const css = generateAdaptationCSS(theme).component;
+    expect(css).toContain('margin: 4px');
+    expect(css).not.toMatch(/padding:\s*undefined/);
+    // A component or style key a rule leaves undefined is not set either.
+    const keys = defineTheme(
+      adaptationInput([
+        {
+          when: {pointer: 'coarse'},
+          value: {
+            components: {
+              card: {base: undefined as unknown as Record<string, string>},
+              button: undefined as unknown as Record<
+                string,
+                Record<string, string>
+              >,
+              link: {base: {color: 'red'}},
+            },
+          },
+        },
+      ]),
+    );
+    const keyCss = generateAdaptationCSS(keys).component;
+    expect(keyCss).toContain('color: red');
+    expect(keyCss).not.toContain('.astryx-card');
+    expect(keyCss).not.toContain('.astryx-button');
+    expect(() =>
+      defineTheme(
+        adaptationInput([
+          {
+            when: {pointer: 'coarse'},
+            value: {
+              components: {
+                card: {base: {padding: null as unknown as string}},
+              },
+            },
+          },
+        ]),
+      ),
+    ).toThrow(/must resolve to a concrete CSS string/);
+  });
+
   it('uses declaration order rather than inferred condition specificity', () => {
     const theme = defineTheme(
       adaptationInput([
