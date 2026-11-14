@@ -164,7 +164,7 @@ export default {
         },
         {
           type: 'prose',
-          text: "A demo runs on its own when its code compiles as a TSX module, ends with the JSX it renders (or declares a component, or default-exports one), and imports only the package, the packages it declares, React and Core: no relative path, and no code that runs only on a server. Every name it uses must be defined in it or imported, except the components and functions the package and Core document, React's exports, and browser globals such as `window`. A sample value is enough: `const viewer = {name: 'Ada'};`. `{@command doctor integration validate}` lists each demo that does not run on its own, with the fix.",
+          text: "A demo runs on its own when its code compiles as a TSX module, ends with the JSX it renders (or declares a component, or default-exports one), and imports only the package, the packages it declares, React and Core: no relative path, and no code that runs only on a server. Every name it uses must be defined in it or imported, except the components the package documents, the components and hooks Core documents, React's exports, and browser globals such as `window`. A sample value is enough: `const viewer = {name: 'Ada'};`. `{@command doctor integration validate}` lists each demo that does not run on its own, with the fix.",
         },
       ],
     },

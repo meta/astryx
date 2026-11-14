@@ -97,6 +97,34 @@ describe('previewableExample', () => {
     );
   });
 
+  it('splits sibling elements where the parser does, past comments and template text', () => {
+    expect(
+      moduleOf(
+        '<Text>One</Text>\n// a note between\n<Text>Two</Text>\n// two cards',
+      ),
+    ).toContain('return (\n<>\n<Text>One</Text>\n<Text>Two</Text>\n</>\n);');
+    const module = moduleOf(
+      [
+        'const html = `',
+        '<p>quoted</p>',
+        '`;',
+        '<Text>{html}</Text>',
+        '<AcmeCard />',
+      ].join('\n'),
+    );
+    expect(module).toContain('const html = `\n<p>quoted</p>\n`;');
+    expect(module).toContain(
+      'return (\n<>\n<Text>{html}</Text>\n<AcmeCard />\n</>\n);',
+    );
+  });
+
+  it('reports sibling elements followed by other code as not compiling', () => {
+    const [problem] = problemsOf(
+      '<Text>One</Text>\n<Text>Two</Text>\nconst x = 1;',
+    );
+    expect(problem.code).toBe('example_does_not_compile');
+  });
+
   it('accepts a semicolon after the JSX it ends with', () => {
     expect(read('<AcmeCard />;').previewable).toBe(true);
     expect(read('<Text>A</Text>\n<Text>B</Text>;').previewable).toBe(true);
@@ -193,6 +221,19 @@ describe('previewableExample', () => {
       'does not compile: the code stops before its last statement ends (line 3)',
     );
     expect(problem.fix).toContain('Show the whole statement');
+  });
+
+  it('renders a component wrapped in a call, never a constant with a component name', () => {
+    expect(
+      moduleOf(
+        "import {memo} from 'react';\nconst Card = memo(() => <AcmeCard />);",
+      ).endsWith('\n\nexport default Card;\n'),
+    ).toBe(true);
+    expect(
+      problemsOf("const Columns = [{key: 'name'}];").map(
+        problem => problem.code,
+      ),
+    ).toEqual(['example_renders_nothing']);
   });
 
   it('reports code that renders nothing', () => {

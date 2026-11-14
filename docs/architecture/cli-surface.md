@@ -948,9 +948,10 @@ A docs page or catalog shows a component example that is not
 one rule, and Doctor and preview tools read examples through it, so they
 agree on every example. It reads the example as a TSX module that renders
 its default export, else the JSX it ends with, else the last component it
-declares. The example may use, without importing them, the components and
-functions its package and Core document, React's exports, and the
-JavaScript and browser globals of the `globals` package. It may import the
+declares: a function or class, or a call that wraps one. The example may
+use, without importing them, the components its package documents, the
+components and hooks Core documents, React's exports, and the JavaScript
+and browser globals of the `globals` package. It may import the
 package, the packages the package declares in `dependencies`,
 `peerDependencies` and `optionalDependencies`, React, and Core. Server-only
 code is what `showcase_not_standalone` names, with the same declared
@@ -959,9 +960,10 @@ component of the package. `validate` lists each example the rule refuses
 as a `next` note with its fix: `example_does_not_compile`,
 `example_renders_nothing`, `example_undefined_name`, `example_server_only`
 and `example_import_unresolvable`. Each fails `--strict --next` now and
-`--strict` from the next minor release (DEC-11). An example whose names
-cannot be judged, because Core's docs or React cannot be read beside the
-package, is listed as not checked (DEC-7).
+`--strict` from the next minor release (DEC-11). An example the check
+cannot judge, such as one whose names it cannot judge because Core's docs
+or React cannot be read beside the package, is listed as not checked
+(DEC-7).
 
 Rejected: every export of the package in scope without an import (an app
 that copies the example needs the import), and stand-in values for names

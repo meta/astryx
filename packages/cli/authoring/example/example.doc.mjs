@@ -29,7 +29,7 @@ export const doc = {
       name: 'packageNames',
       type: 'ExampleScopeName[]',
       description:
-        'Each component and function the package documents, as `{name, import}`: the name, and the specifier an app imports it from. Its names win over Core and React names.',
+        'Each component the package documents, as `{name, import}`: the name, and the specifier an app imports it from. Its names win over Core and React names.',
       required: true,
     },
     {

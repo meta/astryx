@@ -64,9 +64,9 @@ export interface ExampleScopeName {
 export interface ExampleScope {
   /** The package the example documents. It may import itself. */
   packageName: string;
-  /** Each component and function the package documents. */
+  /** Each component the package documents. */
   packageNames: ReadonlyArray<ExampleScopeName>;
-  /** Each component and function Core documents. */
+  /** Each component and hook Core documents. */
   coreNames: ReadonlyArray<ExampleScopeName>;
   /** React's named exports. `React` itself is the namespace. */
   reactNames: ReadonlyArray<string>;

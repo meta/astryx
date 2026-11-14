@@ -113,7 +113,7 @@ describe('component examples that cannot run on their own', () => {
     ]);
     expect(notes.every(note => note.next === true)).toBe(true);
     expect(notes[0].message).toBe(
-      'Component doc "components/AcmeCard.doc.mjs" example "Needs a viewer" uses `viewer` but never defines or imports it, so a live preview throws a ReferenceError when that code runs. Fix: Define each one in the example (a sample value is enough) or import it; only the components and functions the package and Core document, React\'s exports and browser globals need no import. If the code needs values from an app, set `kind: \'setup\'` to show it as code only.',
+      "Component doc \"components/AcmeCard.doc.mjs\" example \"Needs a viewer\" uses `viewer` but never defines or imports it, so a live preview throws a ReferenceError when that code runs. Fix: Define each one in the example (a sample value is enough) or import it; only the package's documented components, Core's documented components and hooks, React's exports and browser globals need no import. If the code needs values from an app, set `kind: 'setup'` to show it as code only.",
     );
     expect(notes[1].message).toContain(
       'example "A fragment" does not compile: \'return\' outside of function (line 1). Fix:',

@@ -237,7 +237,40 @@ function isDefaultExport(node) {
 const COMPONENT_NAME = /^[A-Z](?=.*[a-z])/u;
 
 /**
- * The component a statement declares, if it declares one.
+ * The function a component is declared with: a function or class, or a call
+ * that wraps one (`memo(() => …)`), seen through parentheses and type
+ * assertions.
+ * @param {any} node an initializer
+ */
+function isComponentValue(node) {
+  let value = node;
+  while (
+    value?.type === 'TSAsExpression' ||
+    value?.type === 'TSSatisfiesExpression' ||
+    value?.type === 'TSNonNullExpression' ||
+    value?.type === 'ParenthesizedExpression'
+  ) {
+    value = value.expression;
+  }
+  if (
+    value?.type === 'ArrowFunctionExpression' ||
+    value?.type === 'FunctionExpression' ||
+    value?.type === 'ClassExpression'
+  ) {
+    return true;
+  }
+  return (
+    value?.type === 'CallExpression' &&
+    value.arguments.some((/** @type {any} */ argument) =>
+      isComponentValue(argument),
+    )
+  );
+}
+
+/**
+ * The component a statement declares, if it declares one: a function or
+ * class with a component name, or a variable with a component name that holds
+ * one.
  * @param {any} node
  * @returns {string | null}
  */
@@ -258,8 +291,8 @@ function declaredComponent(node) {
     if (
       declaration.declarations.length === 1 &&
       first.id.type === 'Identifier' &&
-      first.init &&
-      COMPONENT_NAME.test(first.id.name)
+      COMPONENT_NAME.test(first.id.name) &&
+      isComponentValue(first.init)
     ) {
       return first.id.name;
     }
@@ -323,28 +356,76 @@ function moduleFor(code) {
     }
     return {module: code, renders: false, toExample: samePosition};
   }
-  // Sibling elements at the end do not parse as statements. They start on a
-  // line of their own, at the first column, and run to the end of the code.
-  const lines = code.split('\n');
-  let offset = 0;
-  for (const line of lines) {
-    const rest = code.slice(offset).trimEnd().replace(/;$/u, '');
-    if (line.startsWith('<') && rest.endsWith('>')) {
-      const head = tryParse(code.slice(0, offset));
-      if ('ast' in head) {
-        const result = composed(
-          code,
-          head.ast.program.directives,
-          head.ast.program.body,
-          fragment([{text: rest, from: offset}]),
-        );
-        if ('ast' in tryParse(result.module)) return result;
-      }
-      break;
-    }
-    offset += line.length + 1;
+  const siblings = trailingSiblings(code);
+  if (siblings) {
+    return composed(
+      code,
+      siblings.directives,
+      siblings.statements,
+      fragment(siblings.elements),
+    );
   }
   return {error: parsed.error};
+}
+
+/**
+ * Code that ends with sibling elements, split where the parser says one
+ * element ends and the next begins: the statements before them, and each
+ * element, in order. Comments between and after the elements are dropped
+ * with the rest of what the parser skips. Null when the code fails to parse
+ * for any other reason, or when something other than an element follows
+ * the first sibling.
+ * @param {string} code
+ * @returns {{directives: any[], statements: any[], elements: Piece[]} | null}
+ */
+function trailingSiblings(code) {
+  /** @type {any[]} */
+  let directives = [];
+  /** @type {any[]} */
+  let statements = [];
+  /** @type {Piece[]} */
+  const elements = [];
+  let offset = 0;
+  for (;;) {
+    const rest = code.slice(offset);
+    const whole = tryParse(rest);
+    if ('ast' in whole) {
+      if (offset === 0) return null;
+      const body = /** @type {any[]} */ (whole.ast.program.body);
+      if (!body.every(isJsxStatement)) return null;
+      for (const node of body) {
+        elements.push({
+          text: rest.slice(node.expression.start, node.expression.end),
+          from: offset + node.expression.start,
+        });
+      }
+      return {directives, statements, elements};
+    }
+    const error = whole.error;
+    if (
+      error?.reasonCode !== 'UnwrappedAdjacentJSXElements' ||
+      typeof error.pos !== 'number' ||
+      error.pos === 0
+    ) {
+      return null;
+    }
+    const segment = tryParse(rest.slice(0, error.pos));
+    if (!('ast' in segment)) return null;
+    const body = /** @type {any[]} */ (segment.ast.program.body);
+    const last = body.at(-1);
+    if (!isJsxStatement(last)) return null;
+    if (offset === 0) {
+      directives = segment.ast.program.directives;
+      statements = body.slice(0, -1);
+    } else if (body.length !== 1) {
+      return null;
+    }
+    elements.push({
+      text: rest.slice(last.expression.start, last.expression.end),
+      from: offset + last.expression.start,
+    });
+    offset += error.pos;
+  }
 }
 
 /**
@@ -672,7 +753,8 @@ function notPreviewable(problems) {
  * packages it declares (React and Core always), and uses only names it
  * defines, imports, or takes from its scope or the JavaScript and browser
  * globals. A previewable example's `module` imports each scope name it uses
- * (the package's own components and functions, then Core's, then React's)
+ * (the package's own components, then Core's components and hooks, then
+ * React's exports)
  * and default-exports what it renders, so a bundler can build it as is.
  *
  * @param {{code: string, kind?: unknown}} example
@@ -773,7 +855,7 @@ export function previewableExample(example, scope) {
     problems.push({
       code: 'example_undefined_name',
       message: `uses ${shown} but never defines or imports ${undefinedNames.length === 1 ? 'it' : 'them'}, so a live preview throws a ReferenceError when that code runs`,
-      fix: "Define each one in the example (a sample value is enough) or import it; only the components and functions the package and Core document, React's exports and browser globals need no import. If the code needs values from an app, set `kind: 'setup'` to show it as code only.",
+      fix: "Define each one in the example (a sample value is enough) or import it; only the package's documented components, Core's documented components and hooks, React's exports and browser globals need no import. If the code needs values from an app, set `kind: 'setup'` to show it as code only.",
       names: undefinedNames,
     });
   }
