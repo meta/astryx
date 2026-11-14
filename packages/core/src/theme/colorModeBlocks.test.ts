@@ -76,6 +76,21 @@ describe('color-mode blocks', () => {
     expect(out).not.toContain('color: black');
   });
 
+  it('writes a number value as the style key always has, in a mode block too', () => {
+    // A theme written in JavaScript may give a number where the type says a
+    // string.
+    const out = css({
+      heading: {
+        'type:shared': {
+          fontWeight: 600,
+          '@dark': {lineHeight: 1},
+        } as unknown as Record<string, string>,
+      },
+    });
+    expect(out).toContain('font-weight: 600');
+    expect(out).toContain('line-height: 1');
+  });
+
   it('merges a mode block by property through extends', () => {
     expect(
       deepMergeComponents(

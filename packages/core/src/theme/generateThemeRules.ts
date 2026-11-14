@@ -1484,10 +1484,10 @@ function splitStyleBlock(
     } else if (prop.startsWith(':') && typeof value === 'object') {
       out.pseudos.push([prop, value as Record<string, string>]);
     } else if (
-      typeof value === 'string' &&
-      acceptDeclaration(toKebabCase(prop), value, location, sink)
+      typeof value !== 'object' &&
+      acceptDeclaration(toKebabCase(prop), `${value}`, location, sink)
     ) {
-      out.props.push([prop, value]);
+      out.props.push([prop, `${value}`]);
     }
   }
   return out;
