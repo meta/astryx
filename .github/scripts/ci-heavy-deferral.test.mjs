@@ -236,16 +236,18 @@ describe('a deferred push', () => {
       // The job starts even though the jobs it joins skipped...
       expect(starts(id, github, {others: 'skipped'}), id).toBe(true);
       // ...and its deferral step, which exits 1, runs right after the fork
-      // gate and the CI-is-full stop (and, in `test`, the PR report's
-      // record), so the context fails before any join could pass.
+      // gate and the stops for a full CI and a superseded head (and, in
+      // `test`, the PR report's record), so the context fails before any
+      // join could pass.
       const steps = ci.jobs[id].steps;
       const step = deferralStep(id);
       const before = steps.slice(0, steps.indexOf(step)).map(item => item.name);
-      expect(before.slice(0, 2), id).toEqual([
+      expect(before.slice(0, 3), id).toEqual([
         'Require a branch in this repository or the ci:run label',
         'Stop when CI is full',
+        'Stop for a superseded head',
       ]);
-      expect(before.slice(2), id).toEqual(
+      expect(before.slice(3), id).toEqual(
         id === 'test'
           ? [
               'Record the deferral for the PR report',

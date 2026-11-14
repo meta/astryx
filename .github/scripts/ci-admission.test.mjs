@@ -90,7 +90,12 @@ describe('where runs wait', () => {
       "${{ needs.room.outputs.attempt == github.run_attempt && 'rest' || 'whole' }}",
     );
     expect(needsOf(admission)).toEqual(['room']);
-    expect(room.permissions).toEqual({actions: 'read', contents: 'read'});
+    // Room reads the pull request's head (superseded-runs.test.mjs).
+    expect(room.permissions).toEqual({
+      actions: 'read',
+      contents: 'read',
+      'pull-requests': 'read',
+    });
     // The rest of the wait carries on from where room left off.
     for (const key of ['fits', 'started', 'looks', 'next'])
       expect(wait.with[key]).toBe(`\${{ needs.room.outputs.${key} }}`);
@@ -111,7 +116,16 @@ describe('where runs wait', () => {
           (need !== BESIDE && need !== DEFERRAL && reaches(need)),
       );
     for (const id of Object.keys(ci.jobs)) {
-      if (!['room', 'admission', 'ci-full', BESIDE, DEFERRAL].includes(id))
+      if (
+        ![
+          'room',
+          'admission',
+          'ci-full',
+          'superseded-runs',
+          BESIDE,
+          DEFERRAL,
+        ].includes(id)
+      )
         expect(reaches(id), id).toBe(true);
     }
   });
@@ -309,10 +323,13 @@ describe('where runs wait', () => {
         name: 'Stop when CI is full at the longest wait',
       }),
     ]);
-    // Room's only other steps: its checkout, and its stop when it found no
-    // room (above).
+    // Room's only other steps: its checkout, its head check and stop for a
+    // superseded head (superseded-runs.test.mjs), and its stop when it found
+    // no room (above).
     expect(ci.jobs.room.steps.filter(step => step.name !== STEP)).toEqual([
       expect.objectContaining({uses: 'actions/checkout@v7'}),
+      expect.objectContaining({name: "Check the pull request's head"}),
+      expect.objectContaining({name: 'Stop for a superseded head'}),
       expect.objectContaining({name: 'Stop when CI is full'}),
     ]);
   });
@@ -520,10 +537,13 @@ describe('peaks', () => {
     // that runs only for an agent push; spec:AST-030 FR20) start together the
     // moment admission ends; the Storybook build may still be running then.
     const waits = ['room', 'admission', 'heavy-ci'];
+    // superseded-runs starts with room and ends after one lookup, before
+    // admission does (superseded-runs.test.mjs).
     const first = Object.keys(ci.jobs).filter(
       name =>
         !waits.includes(name) &&
         name !== 'ci-full' &&
+        name !== 'superseded-runs' &&
         needsOf(ci.jobs[name]).every(need => waits.includes(need)),
     );
     const onPullRequest = first.filter(name => {
@@ -572,7 +592,7 @@ describe('the shared count', () => {
       const checkout = job.steps.find(step =>
         String(step.uses ?? '').startsWith('actions/checkout'),
       );
-      expect(checkout.with['sparse-checkout']).toBe(
+      expect(checkout.with['sparse-checkout'].split('\n')).toContain(
         '.github/actions/ci-admission',
       );
     }
