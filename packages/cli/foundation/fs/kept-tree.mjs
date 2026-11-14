@@ -20,7 +20,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {persistedSummary} from './gather-cache.mjs';
-import {fileStamp} from './read-record.mjs';
+import {fileStamp, recordReads} from './read-record.mjs';
 
 /** The module's own file: its code decides every summary's shape. */
 const OWN_FILE = fileURLToPath(import.meta.url);
@@ -109,14 +109,17 @@ export function hasNameLine(lines, name) {
  * every file it read is unchanged. Any failure to read or store a summary is
  * silent, and the summary is made again.
  * @template T
- * @param {{kind: string, roots: string[], code: string[], skip?: (name: string) => boolean}} options
+ * @param {{kind: string, roots: string[], code: string[], skip?: (name: string) => boolean, key?: unknown[], recorded?: boolean}} options
  *   `code`: the files whose code makes the summary; `skip`: folder names the
- *   walk does not enter (it is part of `kind`)
+ *   walk does not enter (it is part of `kind`); `key`: anything else the
+ *   summary depends on; `recorded`: every path `summarize` reads through fs
+ *   or probes is checked too, by its own stamp, so it can read files outside
+ *   the trees and through caches that stat a file before they reuse it
  * @param {(trees: Tree[]) => T} summarize gets one tree per root, in order
  * @returns {T}
  */
 export function keptTreeSummary(
-  {kind, roots, code, skip = () => false},
+  {kind, roots, code, skip = () => false, key = [], recorded = false},
   summarize,
 ) {
   const resolved = roots.map(root => path.resolve(root));
@@ -128,7 +131,8 @@ export function keptTreeSummary(
     }
     return [file, stamp];
   });
-  return persistedSummary(['kept-tree', kind, resolved, codeState], () => {
+  const summaryKey = ['kept-tree', kind, resolved, codeState, ...key];
+  return persistedSummary(summaryKey, () => {
     /** @type {[string, string][]} */
     const stamps = [];
     const trees = resolved.map(root => {
@@ -149,6 +153,18 @@ export function keptTreeSummary(
         },
       };
     });
-    return {value: summarize(trees), stamps};
+    if (!recorded) return {value: summarize(trees), stamps};
+    /** @type {Map<string, string>} */
+    const seen = new Map();
+    const value = recordReads(seen, () => summarize(trees), {exact: true});
+    const walked = new Set(stamps.map(([file]) => file));
+    for (const [file, state] of seen) {
+      if (walked.has(file)) continue;
+      // A folder probed is recorded by its identity alone. The full stamp,
+      // taken now, is stricter; a change during the read leaves it too young
+      // to store.
+      stamps.push([file, state.startsWith('dir:') ? fileStamp(file) : state]);
+    }
+    return {value, stamps};
   });
 }

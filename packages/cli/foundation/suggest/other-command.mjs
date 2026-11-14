@@ -14,11 +14,7 @@
  *   component, hook, template and docs adapters
  */
 
-import {Project} from '../config/project.mjs';
-import {
-  discoverComponentNamesWhere,
-  discoverIntegrationComponents,
-} from '../discovery/component-discovery.mjs';
+import {fileURLToPath} from 'node:url';
 import {
   builtinDocNamesWhere,
   integrationDocNamesWhere,
@@ -26,17 +22,27 @@ import {
 import {
   coreFilesNaming,
   foldEntryName,
-  integrationDocsSpelling,
+  integrationsDocsSpelling,
   integrationsFilesNaming,
 } from '../discovery/entry-name-files.mjs';
-import {getAllHookNames} from '../discovery/hook-discovery.mjs';
 import {
   coreTemplateIds,
   integrationTemplateIds,
   listTemplates,
   templateFilesNaming,
-} from '../discovery/template-adapter.mjs';
+} from '../discovery/template-ids.mjs';
+import {keptTreeSummary} from '../fs/kept-tree.mjs';
 import {findCoreDir} from '../fs/paths.mjs';
+import {mayHaveIntegrations} from '../integrations/may-have-integrations.mjs';
+
+/** The code that makes the kept integration component names. */
+const NAMES_CODE = [
+  fileURLToPath(import.meta.url),
+  fileURLToPath(
+    new URL('../discovery/component-discovery.mjs', import.meta.url),
+  ),
+  fileURLToPath(new URL('../discovery/module-exports.mjs', import.meta.url)),
+];
 
 /**
  * @typedef {'component' | 'hook' | 'template' | 'docs'} LookupCommand
@@ -152,7 +158,7 @@ export async function findOtherCommand(
   /** @type {import('../integrations/integrations.mjs').LoadedIntegration[] | undefined} */
   let loaded = known;
   const integrationsOnce = async () =>
-    (loaded ??= (await Project.load(cwd)).loadedIntegrations);
+    (loaded ??= await projectIntegrations(cwd));
   /** @param {string} name */
   const isWanted = name => foldEntryName(name) === wanted;
   /** @param {string} name */
@@ -176,7 +182,7 @@ export async function findOtherCommand(
       async () => ({
         components:
           coreDir && inCore.component
-            ? discoverComponentNamesWhere(
+            ? (await componentDiscovery()).discoverComponentNamesWhere(
                 coreDir,
                 isWanted,
                 inCore.componentTops,
@@ -187,7 +193,7 @@ export async function findOtherCommand(
     [
       'component',
       async () => ({
-        components: integrationComponentNames(
+        components: await integrationComponentNames(
           await integrationsOnce(),
           wanted,
           isWanted,
@@ -199,7 +205,11 @@ export async function findOtherCommand(
       async () => ({
         hooks:
           coreDir && inCore.hook
-            ? getAllHookNames(coreDir, isWantedHook, inCore.hookTops)
+            ? (await import('../discovery/hook-discovery.mjs')).getAllHookNames(
+                coreDir,
+                isWantedHook,
+                inCore.hookTops,
+              )
             : [],
       }),
     ],
@@ -214,8 +224,9 @@ export async function findOtherCommand(
       async () => {
         const builtin = builtinDocNamesWhere(isWanted);
         if (builtin.length > 0) return {docs: builtin};
-        const files = (await integrationsOnce()).flatMap(integration =>
-          integrationDocsSpelling(integration?.docs, wanted),
+        const files = integrationsDocsSpelling(
+          (await integrationsOnce()).map(integration => integration?.docs),
+          wanted,
         );
         return {docs: await integrationDocNamesWhere(files, isWanted)};
       },
@@ -236,6 +247,62 @@ export async function findOtherCommand(
 }
 
 /**
+ * Component discovery, loaded only when a file name or doc text can carry
+ * the name.
+ * @returns {Promise<typeof import('../discovery/component-discovery.mjs')>}
+ */
+function componentDiscovery() {
+  return import('../discovery/component-discovery.mjs');
+}
+
+/**
+ * The integrations the project at `cwd` loads: those of the project this run
+ * already loaded, else a fresh load. Where none can load, the project's
+ * modules are not imported.
+ * @param {string} cwd
+ * @returns {Promise<import('../integrations/integrations.mjs').LoadedIntegration[]>}
+ */
+async function projectIntegrations(cwd) {
+  if (!mayHaveIntegrations(cwd)) return [];
+  const {Project} = await import('../config/project.mjs');
+  return (Project.lastLoaded(cwd) ?? (await Project.load(cwd)))
+    .loadedIntegrations;
+}
+
+/**
+ * The names of the components `integration` lists, in discovery's order: a
+ * summary kept while the integration's components folder, every file
+ * discovery read and every path it probed are unchanged.
+ * @param {import('../integrations/integrations.mjs').LoadedIntegration} integration
+ * @param {typeof import('../discovery/component-discovery.mjs')} discovery
+ * @returns {string[]}
+ */
+function integrationComponentList(
+  integration,
+  {discoverIntegrationComponents},
+) {
+  const componentsDir = integration.components;
+  if (!componentsDir) return [];
+  return keptTreeSummary(
+    {
+      kind: 'integration-component-list',
+      roots: [componentsDir],
+      code: NAMES_CODE,
+      skip: name => name === 'node_modules' || name === '__tests__',
+      key: [
+        integration.name,
+        integration.__packageDir ?? null,
+        integration.__packageExports === undefined
+          ? 'read'
+          : JSON.stringify(integration.__packageExports),
+      ],
+      recorded: true,
+    },
+    () => discoverIntegrationComponents(integration).map(record => record.name),
+  );
+}
+
+/**
  * The names `isWanted` accepts among the components the loaded integrations
  * list, in project order: the names `astryx component` reads, which answers
  * a component whose doc is not valid with ERR_INVALID_DOC. Only an
@@ -243,18 +310,21 @@ export async function findOtherCommand(
  * @param {import('../integrations/integrations.mjs').LoadedIntegration[]} integrations
  * @param {string} wanted the folded name
  * @param {(name: string) => boolean} isWanted
- * @returns {string[]}
+ * @returns {Promise<string[]>}
  */
-function integrationComponentNames(integrations, wanted, isWanted) {
+async function integrationComponentNames(integrations, wanted, isWanted) {
   const naming = integrationsFilesNaming(
     integrations.map(integration => integration.components),
     wanted,
   );
+  /** @type {typeof import('../discovery/component-discovery.mjs') | undefined} */
+  let discovery;
   for (const [at, integration] of integrations.entries()) {
     if (!naming[at]) continue;
-    const found = discoverIntegrationComponents(integration)
-      .map(record => record.name)
-      .filter(isWanted);
+    discovery ??= await componentDiscovery();
+    const found = integrationComponentList(integration, discovery).filter(
+      isWanted,
+    );
     if (found.length > 0) return found;
   }
   return [];

@@ -324,6 +324,12 @@ describe('the cheap name checks', () => {
     expect(integrationFilesNaming(components, 'zorbletcard')).toBe(true);
     expect(integrationFilesNaming(components, 'zorblet')).toBe(false);
     fs.writeFileSync(
+      path.join(components, 'Prose.doc.mjs'),
+      "export default {type: 'component', name: 'Prose', description: 'Not a zorblet.'};\n",
+    );
+    // A word in lower case names no component.
+    expect(integrationFilesNaming(components, 'zorblet')).toBe(false);
+    fs.writeFileSync(
       path.join(components, 'Family.doc.mjs'),
       "export default {type: 'component', name: 'Family', components: [{name: 'Zorblet'}]};\n",
     );

@@ -256,6 +256,77 @@ describe('keptTreeSummary', () => {
     SLOW,
   );
 
+  it(
+    'with recorded reads, makes a summary again when a file it read outside the tree, or reused after a stat, changes',
+    async () => {
+      const root = path.join(TEMP_ROOT, 'recorded');
+      const outside = path.join(TEMP_ROOT, 'recorded-outside');
+      fs.mkdirSync(root, {recursive: true});
+      fs.mkdirSync(outside, {recursive: true});
+      const read = path.join(outside, 'read.txt');
+      const reused = path.join(outside, 'reused.txt');
+      fs.writeFileSync(read, 'one');
+      fs.writeFileSync(reused, 'two');
+      // A cache that reuses a text while the file's stat is unchanged, as
+      // discovery's caches do: a reuse reads no content.
+      /** @type {Map<string, {at: number, text: string}>} */
+      const texts = new Map();
+      /** @param {string} file */
+      const cachedText = file => {
+        const at = fs.statSync(file).mtimeMs;
+        const hit = texts.get(file);
+        if (hit?.at === at) return hit.text;
+        const text = fs.readFileSync(file, 'utf8');
+        texts.set(file, {at, text});
+        return text;
+      };
+      cachedText(reused);
+      let made = 0;
+      const summary = () =>
+        keptTreeSummary(
+          {kind: 'test-recorded', roots: [root], code: [], recorded: true},
+          () => {
+            made++;
+            return [fs.readFileSync(read, 'utf8'), cachedText(reused)];
+          },
+        );
+
+      await sleep(SETTLE_WAIT_MS);
+      expect(summary()).toEqual(['one', 'two']);
+      expect(summary()).toEqual(['one', 'two']);
+      expect(made).toBe(1);
+
+      fs.writeFileSync(read, 'three');
+      expect(summary()).toEqual(['three', 'two']);
+      expect(made).toBe(2);
+      await sleep(SETTLE_WAIT_MS);
+      summary();
+      expect(made).toBe(3);
+      summary();
+      expect(made).toBe(3);
+
+      fs.writeFileSync(reused, 'four');
+      expect(summary()).toEqual(['three', 'four']);
+      expect(made).toBe(4);
+    },
+    SLOW,
+  );
+
+  it('keeps one summary per key', async () => {
+    const root = path.join(TEMP_ROOT, 'keyed');
+    fs.mkdirSync(root, {recursive: true});
+    await sleep(SETTLE_WAIT_MS);
+    /** @param {string} key */
+    const summary = key =>
+      keptTreeSummary(
+        {kind: 'test-keyed', roots: [root], code: [], key: [key]},
+        () => key,
+      );
+    expect(summary('a')).toBe('a');
+    expect(summary('b')).toBe('b');
+    expect(summary('a')).toBe('a');
+  });
+
   it('summarizes a missing root as an empty tree', () => {
     const root = path.join(TEMP_ROOT, 'missing');
     const folders = keptTreeSummary(

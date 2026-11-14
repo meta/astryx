@@ -4,9 +4,9 @@
  * @file Whether a component, hook or integration docs topic can carry a
  * name, read without loading any doc: from Core's file and folder names, and
  * from integrations' doc file names and the words in those docs' text. The
- * Core and components-folder summaries are kept between runs while those
- * folders and docs are unchanged (../fs/kept-tree.mjs); a docs folder is read
- * from the disk.
+ * summaries are kept between runs while those folders and docs are unchanged
+ * (../fs/kept-tree.mjs); a docs folder whose words can spell the name is then
+ * read from the disk.
  *
  * @input  Core's folder, or integrations' components or docs folders, and a
  *   name folded as a reader may type it ({@link foldEntryName})
@@ -163,8 +163,9 @@ const WORD_RE = /[A-Za-z0-9_$]+/g;
 
 /**
  * What each integration's component docs can name: each doc's folded file
- * stem, and each word in its text, in lower case. `unreadable` when a doc
- * could not be read.
+ * stem, and each word in its text that starts with a capital letter, in
+ * lower case: a name a doc spells out is a component name, which starts with
+ * one. `unreadable` when a doc could not be read.
  * @param {string[]} componentsDirs
  * @returns {Array<{stems: string | string[], words: string | string[], unreadable: boolean}>}
  */
@@ -194,7 +195,7 @@ function integrationNameIndexes(componentsDirs) {
               continue;
             }
             for (const word of text.match(WORD_RE) ?? []) {
-              words.add(word.toLowerCase());
+              if (/^[A-Z]/.test(word)) words.add(word.toLowerCase());
             }
           }
         }
@@ -207,8 +208,8 @@ function integrationNameIndexes(componentsDirs) {
  * Whether an integration component can fold to `wanted`, for each
  * components folder in order. Integration discovery names a component after
  * its doc's file, or after a name the doc spells out (its export, or a family
- * member), so a doc whose file name and text both lack the name lists no
- * such component.
+ * member), which starts with a capital letter, so a doc whose file name and
+ * text both lack the name lists no such component.
  * @param {Array<string | undefined>} componentsDirs
  * @param {string} wanted a folded name
  * @returns {boolean[]}
@@ -263,6 +264,83 @@ function docsSpell(componentsDir, wanted) {
     } catch {
       return true;
     }
+  });
+}
+
+/**
+ * The words of the docs under each integration docs folder, in lower case,
+ * from a kept summary. `unreadable` when a doc could not be read.
+ * @param {string[]} docsDirs
+ * @returns {Array<{words: string | string[], unreadable: boolean}>}
+ */
+function integrationDocsWords(docsDirs) {
+  return keptTreeSummary(
+    {
+      kind: 'integration-docs-words',
+      roots: docsDirs,
+      code: [OWN_FILE],
+      skip: name => name === 'node_modules',
+    },
+    trees =>
+      trees.map(({folders, readText}) => {
+        const words = new Set();
+        let unreadable = false;
+        for (const {rel, entries} of folders) {
+          for (const {name, isDir} of entries) {
+            if (isDir || !INTEGRATION_DOC_RE.test(name)) continue;
+            try {
+              const text = readText(rel === '' ? name : path.join(rel, name));
+              for (const word of text.match(WORD_RE) ?? []) {
+                words.add(word.toLowerCase());
+              }
+            } catch {
+              unreadable = true;
+            }
+          }
+        }
+        return {words: nameLines(words), unreadable};
+      }),
+  );
+}
+
+/**
+ * Whether docs with these words can spell `wanted` as one word with spaces
+ * and hyphens between its letters. Such a spelling is a run of whole words
+ * joined by spaces and hyphens, so its first word starts `wanted` and its
+ * last word ends it.
+ * @param {string | string[]} words
+ * @param {string} wanted a folded name of word characters
+ * @returns {boolean}
+ */
+function canSpell(words, wanted) {
+  let starts = false;
+  let ends = false;
+  for (let at = 1; at <= wanted.length && !(starts && ends); at++) {
+    starts ||= hasNameLine(words, wanted.slice(0, at));
+    ends ||= hasNameLine(words, wanted.slice(-at));
+  }
+  return starts && ends;
+}
+
+/**
+ * {@link integrationDocsSpelling} for each docs folder, in order, as one
+ * list. A folder whose docs' words cannot spell the name reads no doc.
+ * @param {Array<string | undefined>} docsDirs
+ * @param {string} wanted a folded name
+ * @returns {string[]} the docs' paths
+ */
+export function integrationsDocsSpelling(docsDirs, wanted) {
+  const dirs = docsDirs.flatMap(dir => (dir ? [dir] : []));
+  if (dirs.length === 0 || wanted === '') return [];
+  if (!/^[a-z0-9_]+$/.test(wanted)) {
+    return dirs.flatMap(dir => integrationDocsSpelling(dir, wanted));
+  }
+  const indexes = integrationDocsWords(dirs);
+  return dirs.flatMap((dir, at) => {
+    const {words, unreadable} = indexes[at];
+    return unreadable || canSpell(words, wanted)
+      ? integrationDocsSpelling(dir, wanted)
+      : [];
   });
 }
 
