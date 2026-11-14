@@ -40,10 +40,14 @@ import {
 } from '../theme/build/build.mjs';
 import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
-import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import * as edit from './_edit.mjs';
-import {baseInstalled, installLine, themeCacheRoot} from './_project.mjs';
+import {
+  baseInstalled,
+  installLine,
+  packageInstalled,
+  themeCacheRoot,
+} from './_project.mjs';
 import * as preview from './_preview-app.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
@@ -94,7 +98,11 @@ setAfterBuild(writeAppCopy);
 import {LOCAL_THEME_ROOT} from '../../foundation/config/theme-state.mjs';
 
 export {parsePoints} from './_how.mjs';
-export {newFlagList, checkedChangeLine as editorCheckedLine} from './_edit.mjs';
+export {
+  newFlagList,
+  checkedChangeLine as editorCheckedLine,
+  checkedNewLines as editorCheckedNewLines,
+} from './_edit.mjs';
 import {themeEditHow as howAt} from './_how.mjs';
 
 /**
@@ -1552,6 +1560,25 @@ export async function editorThemeHold(files, {cwd, check = false, out}) {
 }
 
 /**
+ * For `compile` of an editor theme's own source: how the app takes the
+ * theme, in place of importing the build's own outputs. The app takes its
+ * app copy (src/themes/<t>/, written after every build, with the font
+ * stylesheet that loads the theme's fonts), which `theme add` wires in.
+ * Null for any other file.
+ * @param {string} file the path as given
+ * @param {string} cwd
+ * @returns {string | null}
+ */
+export function editorInstall(file, cwd) {
+  const root = projectRoot(cwd);
+  const at = editorThemeAt(root, path.resolve(cwd, file));
+  if (!at || path.basename(file) !== `${at.slug}.theme.ts`) return null;
+  return `Install in your app: the editor writes ${at.slug}'s app copy in src/themes/${at.slug}/ after every build (its module, stylesheet and font stylesheet), and the app takes that copy, not themes/${at.slug}/. Wire it in once:
+
+  ${runLine(root, `theme add ${at.slug}`)}`;
+}
+
+/**
  * For `compile` of an editor theme's own source: how to load a family the
  * build names, as the editor says it (the app copy imports a family's
  * installed Fontsource package); null for any other file.
@@ -1709,14 +1736,29 @@ export async function editorBuildExtra(file, cwd, opts) {
     const skipped = outSkipsCopy(root, slug, cwd, opts);
     if (skipped) return {appCopySkipped: skipped};
   }
-  // Every set and show builds the theme again from its source, without
-  // --icons-specifier: said, with the change that keeps it.
-  if (opts.iconsSpecifier && !opts.check)
-    return {
-      warnings: [
-        `${slug} is a theme the editor made: every set and show builds it again from themes/${slug}/${slug}.theme.ts without --icons-specifier, which puts the theme's own import of the registry back. To keep this one, import the registry from its package in ${slug}.theme.ts.`,
-      ],
-    };
+  if (!opts.check) {
+    // Every set and show builds the theme again from its source, without
+    // --icons-specifier: said, with the change that keeps it.
+    const warnings = opts.iconsSpecifier
+      ? [
+          `${slug} is a theme the editor made: every set and show builds it again from themes/${slug}/${slug}.theme.ts without --icons-specifier, which puts the theme's own import of the registry back. To keep this one, import the registry from its package in ${slug}.theme.ts.`,
+        ]
+      : [];
+    // What show says of the source's own type on phones, said by the
+    // compile that builds the app copy from it too.
+    /** @type {string[]} */
+    let notices;
+    try {
+      notices = edit.ownPhoneNotes(root, slug, loadTheme(root, slug));
+    } catch {
+      notices = [];
+    }
+    if (warnings.length || notices.length)
+      return {
+        ...(warnings.length ? {warnings} : {}),
+        ...(notices.length ? {notices} : {}),
+      };
+  }
   if (opts.check) {
     // A theme output that is stale is the check's own finding (it names
     // the file); the copy is compared only with a current build.
@@ -1800,16 +1842,9 @@ export async function editorLoadedFonts(file, cwd) {
     for (const f of importedFontFamilies(spec, from)) loaded.add(f);
   // A family the build names whose @fontsource package is installed: the
   // copy written after this build imports that package (copyFontsCss).
-  const req = createRequire(path.join(root, 'package.json'));
   /** @param {string} family */
-  const installed = family => {
-    try {
-      req.resolve(`${fontsourcePackageOf(family)}/package.json`);
-      return true;
-    } catch {
-      return false;
-    }
-  };
+  const installed = family =>
+    packageInstalled(root, fontsourcePackageOf(family));
   return family => loaded.has(fontKey(family)) || installed(family);
 }
 

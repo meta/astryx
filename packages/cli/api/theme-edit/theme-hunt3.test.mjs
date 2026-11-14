@@ -215,7 +215,7 @@ describe('set', () => {
       themeEditSet('h', 'color', '#ff0000', {cwd, on: 'text'}),
     );
     expect(r.code).toBe('ERR_THEME_NO_EFFECT');
-    expect(r.run[0]).toMatch(/--color-text-primary '#ff0000'$/);
+    expect(r.run[0]).toMatch(/--color-text-primary '#ff0000' --on text$/);
   });
 
   it('refuses blank scope flags', async () => {

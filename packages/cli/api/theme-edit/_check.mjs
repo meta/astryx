@@ -14,6 +14,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {partForWord} from './_part-words.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
+import {cssUnescape} from '../../foundation/text/css-escape.mjs';
 import {baseInstalled, baseThemeFile, installLine} from './_project.mjs';
 import {
   withFallbacks,
@@ -92,6 +93,7 @@ import {
   partsOf,
   refuse,
   lengthPx,
+  cornersPlain,
   radiusAt,
   radiusTokenOf,
   cornerParts,
@@ -110,7 +112,7 @@ import {
   fontsourcePackageOf,
   dialWordOf,
   paddedParts,
-  onBuiltIn,
+  onBuiltInSteps,
 } from './_settings.mjs';
 import {isColorToken} from './_compiler.mjs';
 import {
@@ -135,6 +137,7 @@ import {
   withoutCopyDebris,
   commaNumbers,
   weightSetting,
+  baseWord,
 } from './_normal.mjs';
 
 export {
@@ -1041,7 +1044,7 @@ const NUMBERISH = /^[+-]?(\d+\.?\d*|\.\d+)(px|rem|em|pt|%)?$/i;
  * @param {string} value
  * @param {any} ctx
  * @param {boolean} [presets] whether a preset name is read (the font dial)
- * @returns {{why: string, families: string, rung: string | null, size: boolean, textSize: number | null, style: string | null} | null}
+ * @returns {{why: string, families: string, asTyped: string | null, rung: string | null, size: boolean, textSize: number | null, style: string | null} | null}
  */
 function fontListProblem(value, ctx, presets = false) {
   // Copy debris (a trailing `;`, `!important`, a comment) is read away
@@ -1073,6 +1076,12 @@ function fontListProblem(value, ctx, presets = false) {
 
   /** @type {string[]} */
   const kept = [];
+  /**
+   * Each family read as a misspelling, as typed in quotes: quotes keep a
+   * family the editor does not know as written (Inder, Monaspace).
+   * @type {Map<number, string>}
+   */
+  const asTyped = new Map();
   /** @type {number | null} */
   let weight = null;
   let number = false;
@@ -1157,8 +1166,20 @@ function fontListProblem(value, ctx, presets = false) {
       } else break;
     }
     const base = words.slice(0, end).join(' ');
-    // Only those words: a font shorthand, not a list.
-    if (!base) return null;
+    // Only those words: alone, a font shorthand (read where the font dial
+    // reads one); in a list of several, an item that is no family.
+    if (!base) {
+      if (pieces.length < 2) return null;
+      for (const t of tail) {
+        if (t.kind === 'weight') weight ??= t.value ?? null;
+        else if (t.kind === 'style') style ??= t.text;
+        else if (t.kind === 'size') {
+          size = true;
+          sizeTyped ??= t.text;
+        }
+      }
+      continue;
+    }
     if (!tail.length) {
       // A family the editor does not know that is a typo of a generic, or
       // (on the font dial, alone) of a preset: that name.
@@ -1173,6 +1194,7 @@ function fontListProblem(value, ctx, presets = false) {
       if (generic || preset) {
         misspelled = true;
         kept.push(/** @type {string} */ (generic ?? preset));
+        asTyped.set(kept.length - 1, JSON.stringify(name));
       } else kept.push(name);
       continue;
     }
@@ -1227,8 +1249,11 @@ function fontListProblem(value, ctx, presets = false) {
               ? 'holds a number where a family goes (a weight is a whole hundred, a size has a unit), so the browser reads it as a family named that and falls back'
               : quotedGeneric
                 ? 'quotes a generic family, which makes it a family named that, so there is no generic to fall back to'
-                : 'misspells a generic family or font, so the browser reads it as a family named that and falls back',
+                : 'is near a generic family or font the editor knows; a family the editor does not know is kept as written when it is quoted',
     families: kept.join(', '),
+    asTyped: misspelled
+      ? kept.map((k, i) => asTyped.get(i) ?? k).join(', ')
+      : null,
     rung,
     size,
     textSize: sizeTyped ? textSizePx(sizeTyped) : null,
@@ -2037,6 +2062,15 @@ function propertyProblem(prop, value) {
       // Below the property's range (a negative width) is no size of the
       // other sign: the mirrored value is never offered.
       (takes(joined) && joined !== v ? joined : null) ??
+      // A comma between two bare numbers that the grammar pairs with a
+      // slash (`aspect-ratio 16,9`, `grid-row 2,4`) separates them: the
+      // pair, never a decimal (16.9).
+      (() => {
+        const pair = /^\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*$/.exec(v);
+        return pair && takes(`${pair[1]} / ${pair[2]}`)
+          ? `${pair[1]} / ${pair[2]}`
+          : null;
+      })() ??
       // A comma between digits is a decimal point (1,5rem is 1.5rem), never
       // a split into layers.
       (takes(commaNumbers(v, weightSetting(prop))) &&
@@ -2530,6 +2564,12 @@ export function checkSetting(
           ...(listProblem.families
             ? [
                 `${P} set ${slug} ${thing} ${quoteCommandArgument(listProblem.families)}${on}`,
+              ]
+            : []),
+          // The family as typed, kept as written by its quotes.
+          ...(listProblem.asTyped
+            ? [
+                `${P} set ${slug} ${thing} ${quoteCommandArgument(listProblem.asTyped)}${on}`,
               ]
             : []),
           ...(thing === 'font' && listProblem.rung
@@ -3296,7 +3336,19 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
         (x.when ?? null) === (s.when ?? null) &&
         (x.state ?? null) === (s.state ?? null),
     );
-  if (s.mode && data.mode !== 'both' && !unset && !sameModeEntry) {
+  // A one-mode theme still has the other mode where Core draws it (a toast,
+  // a lightbox): a value for that mode is written for those regions.
+  const otherModeOfOneMode =
+    s.mode != null &&
+    oneModeOfTheme(data) != null &&
+    oneModeOfTheme(data) !== s.mode;
+  if (
+    s.mode &&
+    data.mode !== 'both' &&
+    !unset &&
+    !sameModeEntry &&
+    !otherModeOfOneMode
+  ) {
     // What takes no --mode in any theme (a size, a font, a keyword) is
     // refused for that, with the command that drops --mode: a theme with
     // both modes would refuse it too, so its mode is no way out.
@@ -3307,14 +3359,9 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
     }
     refuse(
       E.ERR_THEME_NO_MODE,
-      `This theme is ${data.mode}; --mode is for themes with both modes.`,
+      `This theme is ${data.mode}, so its own mode needs no --mode.`,
       {
         run: [
-          // For the mode the theme does not show, both modes first; the
-          // same setting for the theme's own mode keeps where it applies.
-          ...((data.mode === 'light-only' ? 'light' : 'dark') !== s.mode
-            ? [`${P} set ${slug} mode both`]
-            : []),
           `${P} set ${slug} ${thing} ${quoteCommandArgument(v)}${onFlag}${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}`,
         ],
       },
@@ -4295,12 +4342,11 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
         // A rung in any case, a size in px written any way: the plain form.
         const lower = v.toLowerCase();
         // Any CSS number in px (2e1px, +4px), the shared length parse; a
-        // rem is that many 16px, saved in px.
-        const pxLen = /\d(px|rem)$/.test(lower) ? lengthPx(lower) : null;
-        if (CORNERS.some(([n]) => n === lower)) s.value = lower;
-        else if (pxLen != null && pxLen >= 0) {
-          s.value =
-            pxLen >= 1000 ? 'pill' : `${Math.round(pxLen * 10000) / 10000}px`;
+        // rem is that many 16px, saved in px (the one reading, cornersPlain,
+        // which the settings reader gives a saved value too).
+        const plain = cornersPlain(v);
+        if (plain) {
+          s.value = plain;
           if (/rem$/.test(lower))
             s.note = `corners ${v.trim()} is saved as ${s.value}`;
         }
@@ -4932,16 +4978,23 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
     } else if (thing === 'base') {
       // A built-in base this project has not installed: install it, then
       // the same set.
+      // A theme that builds on a base keeps it by changing nothing: no
+      // base is offered only to a theme on none.
       if (LIKE.includes(v) && !unset && !baseInstalled(ctx.project, v))
-        refuse(
+        throw new AstryxError(
+          `The ${v} theme is not installed, so ${slug} cannot build on it. Install @astryxdesign/theme-${v}, then set the base again${data.like ? `; ${slug} stays on ${data.like} until then` : ', or build on no theme'}. Nothing was changed.`,
+          [
+            ...onBuiltInSteps(ctx.project.cwd, v, `${P} set ${slug} base ${v}`),
+            ...(data.like
+              ? []
+              : [
+                  {
+                    name: `${P} set ${slug} base none`,
+                    reason: 'build on no theme',
+                  },
+                ]),
+          ],
           E.ERR_UNKNOWN_THEME,
-          `The ${v} theme is not installed, so ${slug} cannot build on it. Install @astryxdesign/theme-${v}, then set the base again, or build on no theme.`,
-          {
-            run: [
-              ...onBuiltIn(ctx.project.cwd, v, `${P} set ${slug} base ${v}`),
-              `${P} set ${slug} base none`,
-            ],
-          },
         );
       if (s.on)
         refuse(
@@ -4951,12 +5004,13 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
         );
       if (![...LIKE, 'none'].includes(v)) {
         // `NEUTRAL`, `base=neutral`, `None`: the base meant.
-        const meant = v
-          .toLowerCase()
-          .replace(/^base\s*[=:]\s*/, '')
-          .trim()
-          .replace(/^@astryxdesign\/theme-/, '')
-          .replace(/^theme-/, '');
+        // Read from the value as typed: its letters' case marks an export
+        // name (neutralTheme).
+        const meant = baseWord(
+          String(value ?? v)
+            .trim()
+            .replace(/^base\s*[=:]\s*/i, ''),
+        );
         // Only a base this project has installed is suggested; a theme
         // made here is never a base.
         const bases = [
@@ -5294,30 +5348,28 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
     s.source = 'property';
     s.thing = prop;
     if (unset) return s;
-    // A length property (padding, a corner radius, a gap) that reads a
-    // design token of another kind (a color, a font, a duration) gets
+    // A property that reads a design token of a kind it does not take (a
+    // color property reading a size, a length reading a color) gets
     // nothing the browser keeps: refused like the token form.
-    if (matchValue(prop, '1px') && !matchValue(prop, 'red'))
-      for (const m of v.matchAll(/var\(\s*(--[a-z0-9-]+)/gi)) {
-        const kind = ctx.C.isToken(m[1]) ? ctx.C.typeOf(m[1]) : null;
-        if (kind && !['size', 'number', 'other'].includes(kind)) {
-          const like = /radius/.test(prop)
-            ? 'var(--radius-container)'
-            : /^(padding|margin|gap|row-gap|column-gap|inset)/.test(prop)
-              ? 'var(--spacing-4)'
-              : exampleOf('size', prop);
-          refuse(
-            E.ERR_THEME_BAD_VALUE,
-            `${prop} takes a length; ${m[1]} is a ${kind}, so the browser would drop it.`,
-            {
-              run: [
-                `${P} set ${slug} ${prop} ${quoteCommandArgument(v.replace(new RegExp(`var\\(\\s*${m[1]}\\s*(,[^)]*)?\\)`, 'i'), like))} --on ${quoteCommandArgument(String(s.on))}${s.state ? ` --state ${s.state}` : ''}${s.when ? ` --when ${quoteCommandArgument(s.when)}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}`,
-                `${HOW} --list tokens ${/radius/.test(prop) ? 'radius' : 'spacing'}`,
-              ],
-            },
-          );
-        }
-      }
+    const mismatch = tokenKindMismatch(ctx, prop, v);
+    if (mismatch) {
+      const length = mismatch.takes === 'a length';
+      const like = /radius/.test(prop)
+        ? 'var(--radius-container)'
+        : /^(padding|margin|gap|row-gap|column-gap|inset)/.test(prop)
+          ? 'var(--spacing-4)'
+          : null;
+      refuse(E.ERR_THEME_BAD_VALUE, `${mismatch.message}.`, {
+        run: [
+          ...(length && like
+            ? [
+                `${P} set ${slug} ${prop} ${quoteCommandArgument(v.replace(new RegExp(`var\\(\\s*${mismatch.token}\\s*(,[^)]*)?\\)`, 'i'), like))} --on ${quoteCommandArgument(String(s.on))}${s.state ? ` --state ${s.state}` : ''}${s.when ? ` --when ${quoteCommandArgument(s.when)}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}`,
+              ]
+            : []),
+          `${HOW} --list tokens ${length ? (/radius/.test(prop) ? 'radius' : 'spacing') : mismatch.takes === 'a color' ? 'color' : ''}`.trimEnd(),
+        ],
+      });
+    }
     // initial and unset leave a part's padding variables without a value:
     // the part takes Core's own default, which the result names.
     if (
@@ -5553,16 +5605,25 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
           v && isColorValue(v) && isFixedColor(v) && !/\bvar\(/i.test(v)
             ? v
             : (nearestColorName(v) ?? '#1f2937');
+        // The token the part's color prop reads: the one named, else the
+        // prop's own default (a link's accent), set on the part alone.
+        const defaultColor = /^'([\w-]+)'$/.exec(
+          partComponentDocs(ctx, /** @type {string} */ (s.on)).find(
+            d => d.doc.props?.color?.default,
+          )?.doc.props.color.default ?? '',
+        )?.[1];
+        const colorName = named ?? defaultColor ?? 'primary';
+        const tail = `${s.on ? ` --on ${s.on}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}`;
         refuse(
           E.ERR_THEME_NO_EFFECT,
-          `${s.on} takes its color from the color prop, which Core sets after part styles, so a color set on ${s.on} never shows. Set the text color token instead.`,
+          `${s.on} takes its color from the color prop, which Core sets after part styles, so a color set on ${s.on} never shows. Set the token its color prop reads (${colorName}: --color-text-${colorName}) on ${s.on} instead.`,
           {
             run: [
-              `${P} set ${slug} --color-text-${named ?? 'primary'} ${quoteCommandArgument(color)}${s.mode ? ` --mode ${s.mode}` : ''}`,
-              ...(named
+              `${P} set ${slug} --color-text-${colorName} ${quoteCommandArgument(color)}${tail}`,
+              ...(named || defaultColor || colorName === 'secondary'
                 ? []
                 : [
-                    `${P} set ${slug} --color-text-secondary ${quoteCommandArgument(color)}${s.mode ? ` --mode ${s.mode}` : ''}`,
+                    `${P} set ${slug} --color-text-secondary ${quoteCommandArgument(color)}${tail}`,
                   ]),
             ],
           },
@@ -5909,6 +5970,68 @@ export function normalValue(thing, value) {
 export {familySpaces};
 
 /**
+ * The first design token a property's value reads through var() whose kind
+ * the property does not take, or null: the value with the var() replaced by
+ * a value of the token's kind (the example each kind's refusals give) is
+ * one the property's grammar does not take, so the browser drops it.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} prop the property, as CSS names it
+ * @param {string} v
+ * @returns {{token: string, kind: string, takes: string, message: string} | null}
+ */
+function tokenKindMismatch(ctx, prop, v) {
+  for (const m of v.matchAll(/var\(\s*(--[a-z0-9-]+)\s*(?:,[^()]*)?\)/gi)) {
+    const token = m[1];
+    if (!ctx.C.isToken(token)) continue;
+    const kind = ctx.C.typeOf(token);
+    if (kind === 'other') continue;
+    const sample = v.replace(m[0], exampleOf(kind, token));
+    if (matchValue(prop, sample)) continue;
+    const takes =
+      matchValue(prop, '1px') && !matchValue(prop, 'red')
+        ? 'a length'
+        : matchValue(prop, 'red') && !matchValue(prop, '1px')
+          ? 'a color'
+          : null;
+    return {
+      token,
+      kind,
+      takes: takes ?? `no ${kind}`,
+      message: takes
+        ? `${prop} takes ${takes}; ${token} is a ${kind}, so the browser would drop it`
+        : `${prop} takes no ${kind}; ${token} is a ${kind}, so the browser would drop it`,
+    };
+  }
+  return null;
+}
+
+/**
+ * Why a part's CSS property value is refused, as `set` refuses it, or
+ * null: a var() that reads nothing, a color property's value that is no
+ * color, or a value the property's grammar does not take.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} prop the property, as CSS names it
+ * @param {string} value
+ * @param {Record<string, unknown>} TOKENS
+ * @param {ReadonlySet<string>} [reads] custom properties the theme sets where the value is read
+ * @returns {string | null}
+ */
+export function propertyValueProblem(ctx, prop, value, TOKENS, reads) {
+  const v = value.trim();
+  const ref = unknownVarRef(v, TOKENS, prop, reads);
+  if (ref) return ref.message;
+  const mismatch = tokenKindMismatch(ctx, prop, v);
+  if (mismatch) return mismatch.message;
+  if (CSS_WIDE.includes(v.toLowerCase())) return null;
+  if (COLOR_PROPS.test(prop))
+    return /\bvar\(/i.test(v) || isColorValue(v)
+      ? null
+      : `${prop} takes a color; "${v}" is not one.`;
+  const grammar = propertyProblem(prop, v);
+  return grammar ? `${prop} takes ${grammar.takes}; "${v}" is not one.` : null;
+}
+
+/**
  * The first var() in a value that names no design token and would read
  * nothing (no fallback), or one a letter or two off a token, else null.
  * Dials take their own words, so a dial's var() with no near token passes.
@@ -5972,20 +6095,19 @@ export function unknownVarRef(v, TOKENS, thing, reads) {
  * @returns {string | null}
  */
 export function fontFileReason(value) {
-  const hit = String(value)
+  // Each family as CSS reads it: an escape (`Gill\ Sans`, `\5FAE`) is part
+  // of the name, never a path separator.
+  const families = String(value)
     .split(',')
-    .map(f => f.trim().replace(/^["']|["']$/g, ''))
-    .find(
-      f =>
-        /^url\(/i.test(f) ||
-        /:\/\//.test(f) ||
-        /[\\/]/.test(f) ||
-        /\.(woff2?|ttf|otf|eot)$/i.test(f),
-    );
-  const colon = String(value)
-    .split(',')
-    .map(f => f.trim().replace(/^["']|["']$/g, ''))
-    .find(f => f.includes(':'));
+    .map(f => cssUnescape(f.trim().replace(/^["']|["']$/g, '')));
+  const hit = families.find(
+    f =>
+      /^url\(/i.test(f) ||
+      /:\/\//.test(f) ||
+      /[\\/]/.test(f) ||
+      /\.(woff2?|ttf|otf|eot)$/i.test(f),
+  );
+  const colon = families.find(f => f.includes(':'));
   if (!hit && colon)
     return `"${colon}" holds a colon, so it is a pasted declaration or a link, not a font family name. Give the family alone, such as Inter, sans-serif.`;
   return hit

@@ -32,6 +32,18 @@ const ROWS = [
   {id: 3, task: 'Fix login timeout', owner: 'Riley', status: 'Blocked'},
 ];
 
+/**
+ * The Core components the in-app preview's top bar draws (its title and
+ * its light/dark/system switch). The route imports these, and the contrast
+ * check measures each one's text over the header, as the app shows it.
+ */
+export const TOP_BAR_COMPONENTS = Object.freeze([
+  'TopNav',
+  'TopNavHeading',
+  'SegmentedControl',
+  'SegmentedControlItem',
+]);
+
 /** The sample app page every preview shows. */
 export const SAMPLE_PAGE = h(
   'AppShell',
@@ -191,6 +203,16 @@ export function elementNames(v, out = new Set()) {
 }
 
 /**
+ * Where an element of a page comes from: a module specifier, bound to the
+ * export named like the element, or a module and the export it is (a
+ * template page is its file's `default`).
+ * @typedef {string | {from: string, export: string}} Binding
+ */
+
+/** The module a binding imports. @param {Binding} b */
+export const bindingFrom = b => (typeof b === 'string' ? b : b.from);
+
+/**
  * The page module source for a list of items. Each item renders on its own,
  * so one component that throws leaves the rest of the page. With a theme,
  * each item renders inside `<Theme>`; a theme with both modes follows the
@@ -198,7 +220,9 @@ export function elementNames(v, out = new Set()) {
  * flips it, since the file runs no script.
  * @param {object} spec
  * @param {CatalogItem[]} spec.items
- * @param {Record<string, string>} spec.imports component name -> module specifier
+ * @param {Record<string, Binding>} spec.imports element name -> the module
+ *   it comes from (bound to the export of the same name), or the module and
+ *   the export it is
  * @param {{module: string, css: string[], mode: 'system' | 'light' | 'dark'} | null} spec.theme
  *   module and css are import specifiers relative to the page
  * @param {'catalog' | 'sheet' | 'page'} spec.layout
@@ -206,11 +230,12 @@ export function elementNames(v, out = new Set()) {
  * @returns {string}
  */
 export function pageSource({items, imports, theme, layout, title = ''}) {
-  /** @type {Map<string, string[]>} */
+  /** @type {Map<string, Array<[string, string]>>} element and export, per module */
   const byModule = new Map();
-  for (const [name, spec] of Object.entries(imports)) {
+  for (const [name, b] of Object.entries(imports)) {
+    const spec = bindingFrom(b);
     const list = byModule.get(spec) ?? [];
-    list.push(name);
+    list.push([name, typeof b === 'string' ? name : b.export]);
     byModule.set(spec, list);
   }
   const lines = [
@@ -227,8 +252,8 @@ export function pageSource({items, imports, theme, layout, title = ''}) {
   let i = 0;
   for (const [spec, names] of byModule) {
     lines.push(`import * as M${i} from ${JSON.stringify(spec)};`);
-    for (const n of names)
-      entries.push(`${JSON.stringify(n)}: M${i}[${JSON.stringify(n)}]`);
+    for (const [n, exp] of names)
+      entries.push(`${JSON.stringify(n)}: M${i}[${JSON.stringify(exp)}]`);
     i++;
   }
   lines.push(`const C = {${entries.join(', ')}};`);

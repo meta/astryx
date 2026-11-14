@@ -23,6 +23,7 @@ import {
   SHEET_ORDER,
   elementNames,
   pageSource,
+  bindingFrom,
 } from './_catalog.mjs';
 import {
   catalogVariants,
@@ -100,7 +101,7 @@ function groupOf(name, category) {
  * whose packages the project has.
  * @param {import('./_project.mjs').ThemeProject} project
  * @param {string | undefined} group only this group
- * @returns {{items: import('./_catalog.mjs').CatalogItem[], imports: Record<string, string>, skipped: string[]}}
+ * @returns {{items: import('./_catalog.mjs').CatalogItem[], imports: Record<string, import('./_catalog.mjs').Binding>, skipped: string[]}}
  */
 export function showcaseItems(project, group) {
   /** @type {import('./_catalog.mjs').CatalogItem[]} */
@@ -119,6 +120,9 @@ export function showcaseItems(project, group) {
     if (!g) continue;
     const inParent = inParentOf(project, name);
     if (inParent === null) continue;
+    // A component no Core module exports by its name cannot be imported,
+    // so it would draw an empty cell: it gets none.
+    if (!importPathOf(project, name)) continue;
     for (const v of catalogVariants(project, name, 12, {shown: true}))
       items.push({
         group: g,
@@ -135,7 +139,7 @@ export function showcaseItems(project, group) {
   });
   /** @type {string[]} */
   const skipped = [];
-  /** @type {Record<string, string>} */
+  /** @type {Record<string, import('./_catalog.mjs').Binding>} */
   const templateImports = {};
   for (const t of PAGE_TEMPLATES) {
     const file = path.join(TEMPLATES_DIR, t, 'page.tsx');
@@ -151,7 +155,8 @@ export function showcaseItems(project, group) {
       continue;
     }
     const local = `Template_${t.replace(/-/g, '_')}`;
-    templateImports[local] = `./templates/${t}.tsx`;
+    // A template page is its file's default export.
+    templateImports[local] = {from: `./templates/${t}.tsx`, export: 'default'};
     items.push({
       group: 'pages',
       name: `${t} template`,
@@ -166,7 +171,7 @@ export function showcaseItems(project, group) {
   const chosen = items
     .filter(it => !group || it.group === group)
     .sort((a, b) => order(a) - order(b) || compareText(a.name, b.name));
-  /** @type {Record<string, string>} */
+  /** @type {Record<string, import('./_catalog.mjs').Binding>} */
   const imports = {};
   for (const n of elementNames(chosen.map(i => i.tree))) {
     if (templateImports[n]) {
@@ -228,12 +233,12 @@ function inParentOf(project, name) {
 
 /**
  * Template page modules the theme-building page imports, copied beside it.
- * @param {Record<string, string>} imports
+ * @param {Record<string, import('./_catalog.mjs').Binding>} imports
  * @returns {Array<{name: string, from: string}>}
  */
 function templateFiles(imports) {
-  return Object.values(imports).flatMap(spec => {
-    const m = /^\.\/templates\/([a-z0-9-]+)\.tsx$/.exec(spec);
+  return Object.values(imports).flatMap(b => {
+    const m = /^\.\/templates\/([a-z0-9-]+)\.tsx$/.exec(bindingFrom(b));
     return m
       ? [
           {
@@ -256,7 +261,21 @@ function templateFiles(imports) {
  * @returns {string[]}
  */
 export function baseFontsCss(ctx, data) {
-  if (!data.like) return [];
+  const sheet = baseFontsSheet(ctx, data);
+  return sheet ? [sheet.spec] : [];
+}
+
+/**
+ * The base theme's fonts stylesheet as {@link baseFontsCss} imports it: its
+ * import spec, the families it loads, and the remote stylesheets it loads
+ * them from (a Google Fonts `@import`), which a static page cannot load.
+ * Null when the base ships none or the build names none of its families.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {{spec: string, families: string[], remote: string[]} | null}
+ */
+export function baseFontsSheet(ctx, data) {
+  if (!data.like) return null;
   const pkg = `@astryxdesign/theme-${data.like}`;
   const sheet = `${pkg}/fonts.css`;
   // Read off disk: the package must export the sheet for an app to import
@@ -265,7 +284,7 @@ export function baseFontsCss(ctx, data) {
   /** @type {string} */
   let text;
   try {
-    if (!found) return [];
+    if (!found) return null;
     const exportsMap = JSON.parse(
       fs.readFileSync(path.join(found.packageDir, 'package.json'), 'utf8'),
     ).exports;
@@ -274,10 +293,10 @@ export function baseFontsCss(ctx, data) {
       typeof exportsMap !== 'object' ||
       !('./fonts.css' in exportsMap)
     )
-      return [];
+      return null;
     text = fs.readFileSync(path.join(found.packageDir, 'fonts.css'), 'utf8');
   } catch {
-    return [];
+    return null;
   }
   // The families the sheet loads; with the theme's build at hand, the sheet
   // is imported only while the build still names one of them.
@@ -293,9 +312,14 @@ export function baseFontsCss(ctx, data) {
   }
   if (built != null && families.length) {
     const css = built;
-    if (!families.some(f => css.includes(f))) return [];
+    if (!families.some(f => css.includes(f))) return null;
   }
-  return [sheet];
+  const remote = [
+    ...text.matchAll(
+      /@import\s+(?:url\(\s*)?["']?((?:[a-z]+:)?\/\/[^"')\s]+)/gi,
+    ),
+  ].map(m => m[1]);
+  return {spec: sheet, families, remote};
 }
 
 /**
@@ -1562,7 +1586,9 @@ export async function screenshot(
       ok: false,
       // Advice that can change the result: Playwright's browser only when
       // it is missing; a Chrome to check only when there is one.
-      reason: `No picture was taken (${failed.join('; ')}). ${
+      // What went wrong for this picture, and what can change it; the run
+      // that asked for it says which pictures were and were not taken.
+      reason: `${failed.join('; ')}. ${
         !pwFound
           ? `Install Playwright with its browser (${installLine(project.cwd, ['playwright'])}, then npx playwright install chromium), or`
           : pwMissing
@@ -1787,14 +1813,17 @@ export function writeAppCopyAt(cwd, slug, fontsCss) {
       : dir;
     const at = fs.existsSync(failed) ? failed : path.dirname(failed);
     const rel = path.relative(cwd, at).split(path.sep).join('/');
-    COPY_FAILED.set(
-      failKey,
-      code === 'EACCES' || code === 'EPERM' || code === 'EROFS'
+    const unwritable =
+      code === 'EACCES' || code === 'EPERM' || code === 'EROFS';
+    COPY_FAILED.set(failKey, {
+      why: unwritable
         ? `${rel} is not writable (${code})`
         : code === 'ENOSPC'
           ? `the disk is full (${code})`
           : `${rel} could not be written (${code})`,
-    );
+      // A folder that was not writable, to see whether it still is.
+      ...(unwritable ? {folder: at} : {}),
+    });
     return null;
   }
   COPY_FAILED.delete(failKey);
@@ -1819,10 +1848,7 @@ export function writeAppCopyAt(cwd, slug, fontsCss) {
  * @returns {{appCopyStale?: string}}
  */
 export function appCopyStale(cwd, slug) {
-  const blocker =
-    appCopyBlocker(cwd, slug) ??
-    COPY_FAILED.get(`${path.resolve(cwd)}\0${slug}`) ??
-    null;
+  const blocker = appCopyBlocker(cwd, slug) ?? copyFailure(cwd, slug) ?? null;
   return blocker
     ? {
         appCopyStale: `the app copy in src/themes/${slug}/ was not updated: ${blocker}. The app keeps the theme as it was until that is out of the way; then any set or show writes it.`,
@@ -1958,8 +1984,36 @@ export function appCopyBlocker(cwd, slug) {
 /** The build outputs of a theme, by their ending after `<theme>`. */
 const APP_COPY_BUILT = ['.css', '.css.d.ts', '.js', '.d.ts', '.variants.d.ts'];
 
-/** Why the last write of a theme's app copy failed, by app and theme. @type {Map<string, string>} */
+/**
+ * Why the last write of a theme's app copy failed, by app and theme, and
+ * the folder that was not writable when that was why.
+ * @type {Map<string, {why: string, folder?: string}>}
+ */
 const COPY_FAILED = new Map();
+
+/**
+ * Why the last write of a theme's app copy failed, while that still holds:
+ * a folder that was not writable and is now is no reason any more (a
+ * process that runs several commands, as an API caller does, reads the
+ * folder as it is now).
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {string | null}
+ */
+function copyFailure(cwd, slug) {
+  const key = `${path.resolve(cwd)}\0${slug}`;
+  const failed = COPY_FAILED.get(key);
+  if (!failed) return null;
+  if (failed.folder)
+    try {
+      fs.accessSync(failed.folder, fs.constants.W_OK);
+      COPY_FAILED.delete(key);
+      return null;
+    } catch {
+      // Still not writable.
+    }
+  return failed.why;
+}
 
 /** App copies written for the first time in this process, by app and theme. @type {Map<string, string[]>} */
 const FIRST_COPIES = new Map();

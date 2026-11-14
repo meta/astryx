@@ -24,6 +24,7 @@ import {cliVersion} from '../../foundation/release/run-context.mjs';
 import {AstryxError} from '../error.mjs';
 import {logger} from '../logger.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
+import {cssUnescape} from '../../foundation/text/css-escape.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {
   loadThemeExport,
@@ -32,10 +33,14 @@ import {
   themeBuildForReport,
 } from '../theme/build/build.mjs';
 import {
+  expandFontVars,
   fontShorthandFamilyList,
   namedFontFamilies,
 } from '../theme/build/font-warning.mjs';
-import {declarationValues} from '../../foundation/fonts/font-stylesheet.mjs';
+import {
+  customPropertyValues,
+  declarationValues,
+} from '../../foundation/fonts/font-stylesheet.mjs';
 import {
   MODE_WORDS,
   AUTO_SPREAD,
@@ -57,7 +62,14 @@ import {
   WRAPPED_PARTS,
   CARD_LIKE,
 } from './_tables.mjs';
-import {booleanWord, cleanDialValue, typoLimit, typoNear} from './_normal.mjs';
+import {TOP_BAR_COMPONENTS} from './_catalog.mjs';
+import {
+  baseWord,
+  booleanWord,
+  cleanDialValue,
+  typoLimit,
+  typoNear,
+} from './_normal.mjs';
 import {
   alphaOf,
   colorProblem,
@@ -94,6 +106,7 @@ import {
   baseResolved,
   baseThemeFile,
   installLine,
+  packageInstalled,
 } from './_project.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
@@ -701,12 +714,7 @@ export function fieldsMeant(data) {
   const mode = MODES.includes(typed)
     ? typed
     : (word ?? (typed ? near(typed, MODES) : null) ?? typed);
-  const likeTyped = String(data?.like ?? '')
-    .trim()
-    .toLowerCase()
-    // The package's name or the name with `theme` (theme-neutral,
-    // neutral-theme) is the base.
-    .replace(/^(@astryxdesign\/)?theme-|-theme$/g, '');
+  const likeTyped = baseWord(data?.like);
   const like = LIKE.includes(likeTyped)
     ? likeTyped
     : ((likeTyped ? near(likeTyped, LIKE) : null) ?? likeTyped);
@@ -993,17 +1001,18 @@ export function loadTheme(
     name,
     reason: 'do this instead',
   }));
+  /** @type {any} */
+  const data = settingsJson(fs.readFileSync(f.settings, 'utf8'));
+  // A step back when there is one; else `new` only for damage `new` itself
+  // keeps aside and makes again (settingsRemade): never a `new` it refuses.
   const recover = steps
     ? {
         text: `, or step back to the settings before the last change with ${P} undo ${slug} (the last change is then lost)`,
         run: [{name: `${P} undo ${slug}`, reason: 'do this instead'}],
       }
-    : {
-        text: `; or ${remakeText}`,
-        run: remakeRun,
-      };
-  /** @type {any} */
-  const data = settingsJson(fs.readFileSync(f.settings, 'utf8'));
+    : settingsRemade(data)
+      ? {text: `; or ${remakeText}`, run: remakeRun}
+      : {text: '', run: []};
   if (data === undefined)
     throw new AstryxError(
       `themes/${slug}/${slug}.settings.json is not valid JSON. Fix it by hand${recover.text}.`,
@@ -1263,6 +1272,28 @@ export function onBuiltIn(cwd, base, line) {
 }
 
 /**
+ * {@link onBuiltIn} with what each line is for: the install first, then
+ * the line, which works once it is installed (never offered as working
+ * now).
+ * @param {string} cwd
+ * @param {string} base
+ * @param {string} line
+ * @returns {Array<{name: string, reason: string}>}
+ */
+export function onBuiltInSteps(cwd, base, line) {
+  return onBuiltIn(cwd, base, line).map(name =>
+    name === line
+      ? {
+          name,
+          reason: baseInstalled(cwd, base)
+            ? 'do this instead'
+            : `then this, once @astryxdesign/theme-${base} is installed`,
+        }
+      : {name, reason: 'install it'},
+  );
+}
+
+/**
  * The first setting listed more than once, with every value it is listed
  * with, in order.
  * @param {any} data
@@ -1453,6 +1484,19 @@ export function dialWordOf(thing, value) {
 function readEntryWords(data) {
   /** @type {string[]} */
   const notes = [];
+  // `lifted` is written by the build: one that is no list of text is
+  // dropped, and the next build writes it again.
+  if (
+    data &&
+    data.lifted != null &&
+    (!Array.isArray(data.lifted) ||
+      data.lifted.some((/** @type {unknown} */ x) => typeof x !== 'string'))
+  ) {
+    notes.push(
+      `lifted was ${JSON.stringify(data.lifted)}, not a list of text; the build writes it again`,
+    );
+    delete data.lifted;
+  }
   for (const s of Array.isArray(data?.settings) ? data.settings : []) {
     if (!s || typeof s !== 'object' || typeof s.thing !== 'string') continue;
     if (typeof s.mode === 'string' && s.mode !== 'light' && s.mode !== 'dark') {
@@ -1488,8 +1532,12 @@ function readEntryWords(data) {
       ['dial', undefined, null, ''].includes(s.source) ||
       String(s.source).toLowerCase() === 'dial'
     ) {
+      // A corners size saved in rem is the px set saves it as.
       const word =
-        typeof s.value === 'string' ? dialWordOf(s.thing, s.value) : null;
+        typeof s.value !== 'string'
+          ? null
+          : (dialWordOf(s.thing, s.value) ??
+            (s.thing === 'corners' ? cornersPlain(s.value) : null));
       if (word && word !== s.value) {
         notes.push(
           `${s.thing} was saved as ${JSON.stringify(s.value)}, read as ${word}`,
@@ -1817,13 +1865,15 @@ export function valueProblem(s) {
  * One entry of the top-level `tokens` map in a theme's own source, as
  * written: its token (null for a computed key no read of the file can
  * resolve), the key as typed, the line that sets it, and its value's shape.
- * A `scope` entry names where a scope (`components`, `onDark`, `onLight`,
- * `adaptations`) starts; a `scoped` entry is a token one sets, with its
+ * A `chain` entry is another theme the file defines (`theme`, its name):
+ * its call, or a token its literal tokens map sets. A `scope` entry names
+ * where a scope (`components`, `onDark`, `onLight`, `adaptations`,
+ * `localTokens`) starts; a `scoped` entry is a token one sets, with its
  * scope path (`components.button.base`). A `duplicate` entry names a
  * second `tokens` key (with every line); a
  * `typography` entry is one typography field (its dotted key and value);
  * an `unresolved` entry says the map holds something only a build reads.
- * @typedef {{token: string | null, key: string, line: number | null, kind: 'text' | 'number' | 'pair' | 'object' | 'other' | 'duplicate' | 'typography' | 'unresolved' | 'scope' | 'scoped', scope?: string, value?: any, halves?: Array<string | number | undefined>, lines?: Array<number | null>, file?: string, overridden?: boolean, expression?: boolean, notToken?: boolean}} OwnTokenEntry
+ * @typedef {{token: string | null, key: string, line: number | null, kind: 'text' | 'number' | 'pair' | 'object' | 'other' | 'duplicate' | 'typography' | 'unresolved' | 'scope' | 'scoped' | 'chain', scope?: string, theme?: string, value?: any, halves?: Array<string | number | undefined>, lines?: Array<number | null>, file?: string, overridden?: boolean, expression?: boolean, notToken?: boolean}} OwnTokenEntry
  */
 
 /**
@@ -1952,6 +2002,47 @@ function ownPageTokens(
     ) ??
     (calls.length === 1 ? calls[0] : null);
   if (!chosen) return out;
+  // Every other theme the file defines (one the exported theme extends),
+  // by its name: the line of its call and of each token its literal
+  // tokens map sets.
+  if (detail)
+    for (const {call} of calls) {
+      if (call === chosen.call) continue;
+      const other = unwrap(call.arguments[0]);
+      if (other?.type !== 'ObjectExpression') continue;
+      /** @param {string} key */
+      const prop = key =>
+        other.properties.find(
+          (/** @type {any} */ p) =>
+            p.type === 'ObjectProperty' && !p.computed && keyOf(p.key) === key,
+        );
+      const theme = textOf(unwrap(prop('name')?.value));
+      if (!theme) continue;
+      detail.push({
+        token: null,
+        key: theme,
+        kind: 'chain',
+        theme,
+        line: call.loc?.start?.line ?? null,
+      });
+      const map = unwrap(prop('tokens')?.value);
+      for (const p of map?.type === 'ObjectExpression' ? map.properties : []) {
+        const k =
+          p.type !== 'ObjectProperty'
+            ? null
+            : p.computed
+              ? textOf(unwrap(p.key))
+              : keyOf(p.key);
+        if (k?.startsWith('--'))
+          detail.push({
+            token: k,
+            key: k,
+            kind: 'chain',
+            theme,
+            line: p.loc?.start?.line ?? null,
+          });
+      }
+    }
   const def = unwrap(chosen.call.arguments[0]);
   if (def?.type !== 'ObjectExpression') return out;
   // JavaScript keeps the last of two `tokens` keys: that one is read, and
@@ -1976,7 +2067,13 @@ function ownPageTokens(
         p.type === 'ObjectProperty' && !p.computed ? keyOf(p.key) : null;
       if (
         !scope ||
-        !['components', 'onDark', 'onLight', 'adaptations'].includes(scope)
+        ![
+          'components',
+          'onDark',
+          'onLight',
+          'adaptations',
+          'localTokens',
+        ].includes(scope)
       )
         continue;
       detail.push({
@@ -2259,11 +2356,14 @@ function ownPageTokens(
   if (detail) {
     /** @type {Map<string, number>} */
     const last = new Map();
+    /** A page token's entry, from the tokens map the build reads. @param {OwnTokenEntry} e */
+    const page = e => e.token && e.kind !== 'scoped' && e.kind !== 'chain';
     detail.forEach((e, i) => {
-      if (e.token) last.set(e.token, i);
+      if (page(e)) last.set(/** @type {string} */ (e.token), i);
     });
     detail.forEach((e, i) => {
-      if (e.token && last.get(e.token) !== i) e.overridden = true;
+      if (page(e) && last.get(/** @type {string} */ (e.token)) !== i)
+        e.overridden = true;
     });
   }
   // A value no read of the file can resolve (a call, an import) is read
@@ -2833,6 +2933,22 @@ export function partsOf(ctx, s) {
 export {modesOf};
 
 /**
+ * A corners value in the plain form the editor saves, typed or saved: a
+ * rung in any case is that rung; a size in px or rem, any way a CSS number
+ * is written, is that many px (a rem is 16px; 1000px and more is pill).
+ * Null for any other value.
+ * @param {string} v
+ * @returns {string | null}
+ */
+export function cornersPlain(v) {
+  const lower = String(v).trim().toLowerCase();
+  if (CORNERS.some(([n]) => n === lower)) return lower;
+  const px = /\d(px|rem)$/.test(lower) ? lengthPx(lower) : null;
+  if (px == null || px < 0) return null;
+  return px >= 1000 ? 'pill' : `${Math.round(px * 10000) / 10000}px`;
+}
+
+/**
  * A length in pixels: px as given, rem and em at 16px; null for anything
  * else (a percentage, calc(), a word).
  * @param {string} v
@@ -3043,6 +3159,37 @@ export function sourceChangedReason(slug) {
 
 /** The type tokens base themes set again for phones: families and weights. */
 export const PHONE_TYPE = /^--font-family|^--(text-[a-z0-9-]+|font)-weight/;
+
+/**
+ * The tokens the theme's last build sets for touch screens (in its rules
+ * for a coarse pointer), each with the last value it is given there.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {Map<string, string>}
+ */
+export function builtTouchTokens(cwd, slug) {
+  /** @type {Map<string, string>} */
+  const out = new Map();
+  try {
+    postcss
+      .parse(fs.readFileSync(themeFiles(cwd, slug).css, 'utf8'))
+      .walkAtRules('media', rule => {
+        if (!/pointer\s*:\s*coarse/i.test(rule.params)) return;
+        rule.walkDecls(/^--/, decl => {
+          out.set(decl.prop, decl.value);
+        });
+      });
+  } catch {
+    // Not built, or not readable: nothing known.
+  }
+  return out;
+}
+
+/**
+ * The screens a base theme's type rule is for (touch screens below the
+ * large breakpoint), as an adaptation rule's `when` writes them.
+ */
+export const PHONE_RULE_WHEN = {pointer: 'coarse', width: {below: 'lg'}};
 
 /**
  * Record in an editor theme's generated settings that they were built with
@@ -3578,6 +3725,24 @@ export function compileTheme(ctx, data, base) {
         v,
       ]),
     );
+  };
+  /**
+   * A part's shadow with the layers Core composes its own shadow from (the
+   * private variables in its resting declaration), over the theme's; a
+   * shadow of none keeps those layers alone. Any other part's is as given.
+   * @param {string} target @param {string} v
+   */
+  const withCoreShadowLayers = (target, v) => {
+    const at = ctx.C.MAP[target]?.at?.['box-shadow'] ?? {};
+    const rest = Object.entries(at).find(([k]) => !/:|selected=/.test(k))?.[1];
+    const layers = splitTop(String(rest ?? ''), ',')
+      .map(x => x.trim())
+      .filter(x => /^var\(\s*--_/.test(x));
+    const value = String(v).trim();
+    if (!layers.length || layers.every(l => value.includes(l))) return v;
+    return /^none$/i.test(value)
+      ? layers.join(', ')
+      : `${layers.join(', ')}, ${value}`;
   };
   /** Whether the base theme's own rule for the part writes a radius. */
   const baseWritesRadius = (
@@ -4241,6 +4406,11 @@ export function compileTheme(ctx, data, base) {
   };
   /** @param {Setting} s @param {string} target @param {string} prop @param {string} v */
   const putComp = (s, target, prop, v) => {
+    // A shadow on a part whose shadow Core composes from layers of its own
+    // (a card's selection ring and elevation) keeps those layers over the
+    // theme's: the theme's shadow is one more layer, never a list that
+    // drops the ring.
+    if (kebab(prop) === 'box-shadow') v = withCoreShadowLayers(target, v);
     const b = block(s, target);
     // A gradient background for one mode goes into the rule's block for
     // that mode as its image layers (with their positions, sizes and
@@ -4489,9 +4659,9 @@ export function compileTheme(ctx, data, base) {
   /** @type {Record<string, any>[]} */
   const fixedToViewport = [];
   for (const s of ordered) {
-    // A setting for the mode a one-mode theme does not have stays saved but
-    // does not apply (maskedSettings names it).
-    if (modeOnly && s.mode && s.mode !== modeOnly) continue;
+    // A setting for the mode a one-mode theme does not show still applies
+    // where Core draws that mode (a toast, a lightbox), as the theme's other
+    // halves of its colors do.
     const parts = partsOf(ctx, s);
     if (s.source === 'dial') {
       if (s.thing === 'corners') {
@@ -4808,16 +4978,25 @@ export function compileTheme(ctx, data, base) {
             !regionsWithOwnBackground.has(region)
           )
             pageParts.push(region);
+        // The see-through main area and the fixed attachment go with the
+        // page background: in its mode's block for a one-mode one, so the
+        // other mode keeps the content panel Core paints.
         if (ctx.project.target.has('layout-content')) {
           const lc = ((theme.components['layout-content'] ??= {}).base ??= {});
-          const main = (lc[':where(.astryx-app-shell [role="main"])'] ??= {});
+          const scope = s.mode ? (lc[`@${s.mode}`] ??= {}) : lc;
+          const main = (scope[':where(.astryx-app-shell [role="main"])'] ??=
+            {});
           if (!ownBackground(main)) main.backgroundColor = 'transparent';
         }
         // Written after every setting (below), so no background shorthand
         // in the same rule resets it.
         if (/gradient\(/.test(String(s.value)))
           for (const t of ['app-shell', ...pageParts])
-            fixedToViewport.push(block({...s, mode: undefined}, t));
+            fixedToViewport.push(
+              s.mode
+                ? modeBlock({...s, state: undefined}, t, s.mode)
+                : block({...s, mode: undefined}, t),
+            );
         (ctx.compileNotes ??= []).push(
           "the page background on app-shell also paints the shell's header and side nav (they stay opaque when content scrolls under them) and makes the main content area see-through; what is drawn inside keeps its colors, and in the default elevated layout the content panel keeps its own surface",
         );
@@ -5024,9 +5203,22 @@ export function compileTheme(ctx, data, base) {
         weights: {...(theme.typography.heading?.weights ?? {}), ...heading},
       };
   }
+  /**
+   * What a token shows in one mode where the theme sets no half for it:
+   * Core's own default when that is a reference to another token the base
+   * theme's value equals (a focus ring that follows the accent), so it keeps
+   * following what the theme sets there; else the base theme's value.
+   * @param {string} k @param {'light' | 'dark'} side
+   */
+  const shownHalf = (k, side) => {
+    const held = base[side][k];
+    const ref = /^var\((--[\w-]+)\)$/.exec(String(TOKENS[k] ?? '').trim());
+    if (ref && (held == null || base[side][ref[1]] === held)) return TOKENS[k];
+    return held ?? TOKENS[k];
+  };
   for (const [k, {light, dark}] of Object.entries(tok)) {
-    const l = light ?? base.light[k] ?? TOKENS[k];
-    const d = dark ?? base.dark[k] ?? TOKENS[k];
+    const l = light ?? shownHalf(k, 'light');
+    const d = dark ?? shownHalf(k, 'dark');
     // A pair only for a color: anything else (a shadow) is one value, the
     // one the theme's mode shows.
     theme.tokens[k] =
@@ -5067,7 +5259,7 @@ export function compileTheme(ctx, data, base) {
     theme.adaptations = {
       rules: [
         {
-          when: {pointer: 'coarse', width: {below: 'lg'}},
+          when: PHONE_RULE_WHEN,
           value: {tokens: phone},
         },
       ],
@@ -5292,18 +5484,6 @@ export function maskedSettings(data, ctx = null) {
       .filter(x => x.thing === 'headings')
       .map(x => x.axis ?? 'weight'),
   );
-  const only =
-    data.mode === 'light-only'
-      ? 'light'
-      : data.mode === 'dark-only'
-        ? 'dark'
-        : null;
-  for (const s of data.settings)
-    if (only && s.mode && s.mode !== only)
-      out.set(
-        s,
-        `saved for ${s.mode} mode, which a ${data.mode} theme does not have, so it does not apply`,
-      );
   // A part setting that a later setting on a group holding that part
   // covers: the later one is written after it, so it wins.
   data.settings.forEach((s, i) => {
@@ -6076,7 +6256,7 @@ export async function themeSourceRefusal(cwd, slug) {
  * @param {Ctx} ctx
  * @param {string} slug
  * @param {string | null} like the base theme, whose built tokens are `base`
- * @returns {Promise<{input: any, theme: any, error: Error | null, base: Map<string, string | null>} | null>}
+ * @returns {Promise<{input: any, theme: any, error: Error | null, chain: any[], base: Map<string, string | null>} | null>}
  */
 export async function ownThemeInput(ctx, slug, like) {
   const {cwd} = ctx.project;
@@ -6350,6 +6530,14 @@ export async function buildTheme(ctx, slug, data) {
     await step(() => {
       afterBuild?.(ctx, slug, data);
     });
+  // Every caller reports the build's notes, so the pictures it removed are
+  // named in the result of whatever command built (set, undo, show, a
+  // preview command).
+  if (removedPictures.length)
+    notes = [
+      ...notes,
+      `removed ${removedPictures.join(', ')}: ${removedPictures.length === 1 ? 'a picture' : 'pictures'} of ${slug} as it was before this build; ${P} show ${slug} --png takes new ones`,
+    ];
   return {warnings, lifted, notes, removedPictures};
 }
 
@@ -6608,6 +6796,8 @@ function nonTextToken(t, typeOf = (/** @type {string} */ _k) => 'other') {
  */
 export function describeValue(value) {
   if (typeof value === 'bigint') return `${value}n`;
+  if (typeof value === 'number' && !Number.isFinite(value))
+    return String(value);
   if (typeof value === 'symbol') return String(value);
   if (typeof value === 'function') return 'a function';
   if (value === undefined) return 'undefined';
@@ -6783,6 +6973,39 @@ export async function contrastProblems(ctx, data, res) {
       );
     }
   }
+  // Text of a part that sits in the app's top bar (one the census saw inside
+  // the header region, or one the preview's own top bar draws) is measured
+  // over the header's background too: a see-through background of its own
+  // shows the header through it, not the page.
+  /** @type {TextPair[]} */
+  const headerPairs = [];
+  const HEADER = 'app-shell-header';
+  const census = /** @type {any} */ (ctx).parts;
+  const grounds = [
+    ...new Map(
+      census.pairs
+        .filter((/** @type {TextPair} */ p) => p.bg.target === HEADER)
+        .map((/** @type {TextPair} */ p) => [
+          p.bg.tokens.join('+') || p.bg.raw,
+          p.bg,
+        ]),
+    ).values(),
+  ];
+  const inHeader = new Set([
+    ...(census.map[HEADER]?.contains ?? []),
+    ...TOP_BAR_COMPONENTS.map(kebab).filter(t => ctx.project.target.has(t)),
+  ]);
+  // A pair is in the top bar when the part whose background it sits on is
+  // one there too (a segmented item on its control's track), or it paints
+  // none of its own.
+  for (const p of census.pairs)
+    if (
+      inHeader.has(p.text) &&
+      p.bg.target !== HEADER &&
+      (p.bg.target == null || inHeader.has(p.bg.target))
+    )
+      for (const over of grounds)
+        headerPairs.push({...p, text: `${p.text} in the ${HEADER}`, over});
   const {problems, more, unchecked} = ctx.C.contrast(
     value,
     baseValue,
@@ -6795,12 +7018,12 @@ export async function contrastProblems(ctx, data, res) {
       page: m =>
         res[/** @type {'light' | 'dark'} */ (m)]['--color-background-body'],
     },
-    variantPairs,
+    [...variantPairs, ...headerPairs],
   );
   return [
     ...problems.map(
       x =>
-        `text in ${x.part} ("${x.sample}") is ${x.ratio}:1 in ${x.mode} (${x.fg} on ${x.bgPart ?? 'the page'}'s ${x.bg}); text needs 4.5:1`,
+        `text in ${x.part} ("${x.sample}") is ${x.ratio}:1 in ${x.mode} (${x.fg} on ${x.bgPart ?? 'the page'}'s ${x.bg}${x.over ? ` over ${x.over}` : ''}); text needs 4.5:1`,
     ),
     ...(more
       ? [`and ${more} more text pair${more > 1 ? 's' : ''} below 4.5:1`]
@@ -6996,6 +7219,17 @@ function stepText(text, cwd, radii) {
 export function readAsMeant(data, cwd, fixing) {
   readEntryWords(data);
   return [...entryNotes(data), ...readFields(data, cwd, fixing)];
+}
+
+/**
+ * Whether `new` makes a theme again over these settings, keeping the file
+ * aside: text that does not parse, or entries it cannot read (no thing, no
+ * value, no source). The one rule both `new` and the refusals that offer
+ * it read; any other damage is repaired by the lines its refusal names.
+ * @param {unknown} data the parsed file (undefined when it does not parse)
+ */
+export function settingsRemade(data) {
+  return data === undefined || !settingsEntriesOk(data);
 }
 
 /**
@@ -8237,10 +8471,6 @@ export async function commitTheme(
     );
   }
   notes.push(...built.notes);
-  if (built.removedPictures.length)
-    notes.push(
-      `removed ${built.removedPictures.join(', ')}: ${built.removedPictures.length === 1 ? 'a picture' : 'pictures'} of the look before this change; ${P} show ${slug} --png takes new ones`,
-    );
   // The change is saved from here on: a failure to check it is reported
   // as "saved, not checked", never as a failed change.
   /** @type {Record<'light' | 'dark', Record<string, string>>} */
@@ -8315,7 +8545,7 @@ export async function commitTheme(
  * @returns {string}
  */
 export function fontsourcePackageOf(family) {
-  const name = String(family).replace(/["']/g, '').trim();
+  const name = cssUnescape(String(family).replace(/["']/g, '')).trim();
   const open = Object.values(OPEN_FONTS).find(
     f =>
       f.family.replace(/["']/g, '').trim().toLowerCase() === name.toLowerCase(),
@@ -8342,11 +8572,14 @@ export function builtFontFamilies(ctx, slug) {
   /** @type {Map<string, string>} */
   const out = new Map();
   // Every family the build writes: the font tokens, a part's own
-  // font-family, and the families a `font` shorthand names last.
+  // font-family, the families a `font` shorthand names last, and a family
+  // held in the theme's own property that one of those reads.
+  // A var() of the theme's own property reads as each value it sets.
+  const own = customPropertyValues(css);
   const lists = [
     ...declarationValues(css, /^(--font-family-.*|font-family)$/),
     ...declarationValues(css, /^font$/).map(fontShorthandFamilyList),
-  ];
+  ].flatMap(value => expandFontVars(value, name => own.get(name) ?? []));
   for (const value of lists)
     for (const family of namedFontFamilies(value))
       if (!out.has(family.toLowerCase())) out.set(family.toLowerCase(), family);
@@ -8368,14 +8601,7 @@ export function fontPackages(ctx, data, {forNewApp = false} = {}) {
   /** @type {Array<{pkg: string, family: string, installed: boolean, of: Setting | null}>} */
   const out = [];
   /** @param {string} pkg */
-  const isInstalled = pkg => {
-    try {
-      ctx.project.req.resolve(`${pkg}/package.json`);
-      return true;
-    } catch {
-      return false;
-    }
-  };
+  const isInstalled = pkg => packageInstalled(ctx.project.cwd, pkg);
   /** An open font's package, which a new app installs. @param {string} pkg */
   const isOpen = pkg => Object.values(OPEN_FONTS).some(f => f.pkg === pkg);
   /** Whether a package loads its family where the fonts go. @param {string} pkg */

@@ -488,13 +488,18 @@ export function makeCompiler(project, parts) {
     extra = [],
   ) {
     /**
-     * The opaque colors the eye sees for a pair, or null with no fixed color.
+     * The opaque colors the eye sees for a pair, or null with no fixed color:
+     * a see-through background is drawn over what is beneath it (the region
+     * the part sits in, else the page).
      * @param {unknown} fg @param {unknown} bg @param {string} m
+     * @param {unknown} [beneath]
      */
-    const drawn = (fg, bg, m) => {
+    const drawn = (fg, bg, m, beneath = page(m)) => {
       /** @type {[number, number, number]} */
       const ground =
-        parseColor(page(m)) ?? (m === 'dark' ? [0, 0, 0] : [255, 255, 255]);
+        parseColor(beneath) ??
+        parseColor(page(m)) ??
+        (m === 'dark' ? [0, 0, 0] : [255, 255, 255]);
       const bgAlpha = alphaOf(bg);
       const back = parseColor(bg);
       const under =
@@ -503,7 +508,7 @@ export function makeCompiler(project, parts) {
       if (!under || !top) return null;
       return [compositeOver(top, alphaOf(fg), under), under];
     };
-    /** @type {Array<{part: string, mode: string, ratio: number, sample: string, fg: string, bgPart: string | null, bg: string}>} */
+    /** @type {Array<{part: string, mode: string, ratio: number, sample: string, fg: string, bgPart: string | null, bg: string, over: string | null}>} */
     const out = [];
     const seen = new Set();
     /** @type {Set<string>} */
@@ -518,6 +523,18 @@ export function makeCompiler(project, parts) {
       for (const m of modes) {
         const fg = value(p, 'fg', m);
         const whole = value(p, 'bg', m);
+        // The region a part sits in shows through its see-through background.
+        const region = p.over ? {...p, bg: p.over} : null;
+        const beneath = region ? value(region, 'bg', m) : page(m);
+        const baseBeneath = region ? baseValue(region, 'bg', m) : page(m);
+        // Over a region, only a see-through background shows it: an opaque
+        // one is measured as the pair itself already is.
+        if (
+          region &&
+          alphaOf(whole) >= 1 &&
+          !/gradient|url\(/.test(String(whole))
+        )
+          continue;
         // A gradient is measured at each of its color stops, the worst one
         // counting; an image, or a stop with no fixed color, is not checked.
         const stops = /gradient|url\(/.test(String(whole))
@@ -527,7 +544,10 @@ export function makeCompiler(project, parts) {
           if (whole !== baseValue(p, 'bg', m)) unchecked.add(String(whole));
           continue;
         }
-        const measured = stops.map(stop => ({stop, pair: drawn(fg, stop, m)}));
+        const measured = stops.map(stop => ({
+          stop,
+          pair: drawn(fg, stop, m, beneath),
+        }));
         if (stops.length > 1 && measured.some(x => !x.pair)) {
           if (whole !== baseValue(p, 'bg', m)) unchecked.add(String(whole));
           continue;
@@ -557,9 +577,14 @@ export function makeCompiler(project, parts) {
         }
         const r = ratio(pair[0], pair[1]);
         if (r >= 4.5) continue;
-        const was = drawn(baseValue(p, 'fg', m), baseValue(p, 'bg', m), m);
+        const was = drawn(
+          baseValue(p, 'fg', m),
+          baseValue(p, 'bg', m),
+          m,
+          baseBeneath,
+        );
         if (was && ratio(was[0], was[1]) <= r + 0.05) continue;
-        const key = `${p.text}|${fg}|${bg}|${m}`;
+        const key = `${p.text}|${fg}|${bg}|${beneath}|${m}`;
         if (seen.has(key)) continue;
         seen.add(key);
         out.push({
@@ -574,6 +599,12 @@ export function makeCompiler(project, parts) {
               ? String(fg)
               : (p.fg.tokens[0] ?? String(fg)),
           bgPart: p.bg.target,
+          // What shows through a see-through background, when it is the
+          // region the part sits in.
+          over:
+            region && alphaOf(bg) < 1
+              ? `${p.over?.target}'s ${beneath !== baseBeneath ? String(beneath) : (p.over?.tokens[0] ?? String(beneath))}`
+              : null,
           bg:
             stops.length > 1
               ? `${bg}, a stop of its gradient`

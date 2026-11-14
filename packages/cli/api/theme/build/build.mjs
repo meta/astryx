@@ -1208,7 +1208,7 @@ function assertThemeSourceFile(filePath, cwd, mode = {}) {
  * `familyInterception` make the build a family member's plan.
  * `colorModes` is the one color mode a calling command knows the theme has
  * (the theme editor, from its settings), written into the built module.
- * @typedef {{prepareFamily?: boolean, familyLoader?: any, familyInterception?: any, writeRoot?: string, claimedOutputs?: Map<string, string>, deferredWrites?: Array<Array<{dest: string, content: string}>>, commandWords?: {group: string, build: string}, colorModes?: ['light'] | ['dark'] | null, fontHelp?: FontHelp | null, loadedFonts?: ((family: string) => boolean) | null}} ThemeBuildHandOff
+ * @typedef {{prepareFamily?: boolean, familyLoader?: any, familyInterception?: any, writeRoot?: string, claimedOutputs?: Map<string, string>, deferredWrites?: Array<Array<{dest: string, content: string}>>, commandWords?: {group: string, build: string}, colorModes?: ['light'] | ['dark'] | null, fontHelp?: FontHelp | null, loadedFonts?: ((family: string) => boolean) | null, install?: string | null}} ThemeBuildHandOff
  */
 
 /**
@@ -3077,23 +3077,46 @@ export async function loadThemeExport(file, {cwd = process.cwd(), base} = {}) {
  * made of it. When Core refuses the input, the input the module gave for
  * the named theme (else its last) and Core's error; null when the module
  * does not load at all.
+ * `chain` holds the inputs of the themes it extends, nearest first, as far
+ * as each was made by a `defineTheme()` call this load saw.
  * @param {string} file
  * @param {{cwd?: string, name?: string}} [ctx]
- * @returns {Promise<{input: any, theme: any, error: Error | null} | null>}
+ * @returns {Promise<{input: any, theme: any, error: Error | null, chain: any[]} | null>}
  */
 export async function loadThemeInput(file, {cwd = process.cwd(), name} = {}) {
   const filePath = path.resolve(cwd, file);
   await selectCore(cwd, {projectOnly: false});
   const interception = interceptCore(_coreThemeModule, _coreRootModule);
+  /** @param {any} input */
+  const chainOf = input => {
+    const chain = [];
+    /** @type {Set<any>} */
+    const seen = new Set([input]);
+    let parent = interception.inputOf(input?.extends);
+    while (parent && typeof parent === 'object' && !seen.has(parent)) {
+      seen.add(parent);
+      chain.push(parent);
+      parent = interception.inputOf(parent.extends);
+    }
+    return chain;
+  };
   try {
     const {theme} = await extractThemeDefinition(filePath, interception);
-    return {input: interception.inputOf(theme) ?? null, theme, error: null};
+    const input = interception.inputOf(theme) ?? null;
+    return {input, theme, error: null, chain: chainOf(input)};
   } catch (e) {
     const given = interception.inputs;
     const input =
       given.filter(x => x && typeof x === 'object' && x.name === name).at(-1) ??
       given.at(-1);
-    return input ? {input, theme: null, error: /** @type {Error} */ (e)} : null;
+    return input
+      ? {
+          input,
+          theme: null,
+          error: /** @type {Error} */ (e),
+          chain: chainOf(input),
+        }
+      : null;
   }
 }
 
@@ -4792,7 +4815,8 @@ async function themeBuildInternal(
     ...new Set([
       ...collectUnloadedFonts(resolvedTheme),
       ...adaptationRuleValues(resolvedTheme).flatMap(
-        (/** @type {any} */ value) => collectUnloadedFonts(value),
+        (/** @type {any} */ value) =>
+          collectUnloadedFonts(value, resolvedTheme),
       ),
     ]),
   ].filter(family => !handOff.loadedFonts?.(family));
@@ -4964,6 +4988,7 @@ async function themeBuildInternal(
     unloadedFonts,
     fontNotices,
     fontHelp: handOff.fontHelp ?? null,
+    install: handOff.install ?? null,
   };
   // A batch or compact report prints this once for the whole run instead.
   if (report.trailers) report.trailers.push(trailer);
@@ -5002,6 +5027,9 @@ async function themeBuildInternal(
  * @property {string[]} unloadedFonts Font families the theme names but does not load.
  * @property {string[]} fontNotices One notice per unloaded font family, as printed.
  * @property {FontHelp | null} [fontHelp] How the caller loads fonts, when it does.
+ * @property {string | null} [install] How the app takes the theme, when the
+ *   caller wires it another way than importing these outputs (the editor's
+ *   app copy).
  */
 
 /**
@@ -5009,7 +5037,9 @@ async function themeBuildInternal(
  * @param {ThemeBuildTrailer} trailer
  */
 function printBuildTrailer(trailer) {
-  logger.log(`
+  if (trailer.install) logger.log(`\n${trailer.install}\n`);
+  else
+    logger.log(`
 Install in your app (paths are relative to a file in src/; adjust if yours lives elsewhere):
 
   import { Theme } from '@astryxdesign/core/theme';
@@ -5050,8 +5080,13 @@ Or with a <link> tag:
  */
 export function printBatchTrailer(trailers) {
   if (trailers.length === 0) return;
-  const [first] = trailers;
-  logger.log(`
+  // A theme the caller wires another way says how, once each.
+  for (const trailer of trailers)
+    if (trailer.install) logger.log(`\n${trailer.install}\n`);
+  const imported = trailers.filter(trailer => !trailer.install);
+  const [first] = imported;
+  if (first)
+    logger.log(`
 Install in your app (paths are relative to a file in src/; adjust if yours lives elsewhere):
 
   import { Theme } from '@astryxdesign/core/theme';
@@ -5072,9 +5107,9 @@ Or with a <link> tag:
     <App />
   </Theme>
 `);
-  if (trailers.length > 1) {
+  if (imported.length > 1) {
     logger.log('Each built theme imports the same way:');
-    for (const trailer of trailers) {
+    for (const trailer of imported) {
       logger.log(
         `  import { ${trailer.exportName} } from '${trailer.jsImport}'; import '${trailer.cssImport}';`,
       );

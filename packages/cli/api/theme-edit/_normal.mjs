@@ -249,11 +249,18 @@ export function normalizeEntry(thing, value) {
   if (quotedThing) {
     t = quotedThing[2].trim();
     pasted = true;
-    // Its value in JSON's double quotes is the value (`"#e11d48"`); a font
-    // list keeps its own quotes.
-    if (typeof v === 'string' && !/font/i.test(t)) {
-      const jv = /^\s*"([^"]*)"\s*,?\s*$/.exec(v);
-      if (jv) v = jv[1];
+    // Its value in JSON's double quotes is the string they hold
+    // (`"#e11d48"`, `"Inter, serif"`): the quotes are JSON's, for a font
+    // too; a family that needs its own quotes is written inside the string
+    // (`"\"Open Sans\", serif"`).
+    if (typeof v === 'string') {
+      const jv = /^\s*("(?:[^"\\]|\\.)*")\s*,?\s*$/.exec(v);
+      if (jv)
+        try {
+          v = String(JSON.parse(jv[1]));
+        } catch {
+          // Not a JSON string: read as typed.
+        }
     }
   }
   // Dash-like characters where a token's two dashes go (an em or en dash,
@@ -572,6 +579,55 @@ export function withoutCopyDebris(v) {
     .trim();
 }
 
+/** Number words, longest phrase first. */
+export const NUMBER_WORDS = wordTable(
+  /** @type {Record<string, number>} */ ({
+    zero: 0,
+    one: 1,
+    two: 2,
+    three: 3,
+    four: 4,
+    five: 5,
+    six: 6,
+    seven: 7,
+    eight: 8,
+    nine: 9,
+    ten: 10,
+    eleven: 11,
+    twelve: 12,
+    thirteen: 13,
+    fourteen: 14,
+    fifteen: 15,
+    sixteen: 16,
+    seventeen: 17,
+    eighteen: 18,
+    nineteen: 19,
+    twenty: 20,
+    thirty: 30,
+    forty: 40,
+    fifty: 50,
+    sixty: 60,
+    seventy: 70,
+    eighty: 80,
+    ninety: 90,
+    hundred: 100,
+  }),
+);
+
+/**
+ * A whole number as typed: digits with any white space at the ends and a
+ * zero fraction (`" 3"`, `"3.0"`), or a number word (`"three"`); else null.
+ * @param {unknown} text
+ * @returns {number | null}
+ */
+export function wholeNumberOf(text) {
+  const t = String(text ?? '')
+    .trim()
+    .toLowerCase();
+  if (/^[+-]?\d+(?:\.0+)?$/.test(t)) return Number(t);
+  return Object.hasOwn(NUMBER_WORDS, t) ? NUMBER_WORDS[t] : null;
+}
+
 /**
  * Words with a documented reading on a CSS property: the exact value each
  * one means. A repair may offer these for the word typed.
@@ -811,6 +867,24 @@ export function modeWord(text) {
       white: 'light',
     })[w] ?? null
   );
+}
+
+/**
+ * A base as written in any of its names: its package (`@astryxdesign/
+ * theme-neutral`, `theme-neutral`), its export (`neutralTheme`), or with
+ * the word theme (`neutral-theme`, `neutral theme`), in any case. The one
+ * reading `set`, `new` and the settings file share; the word as read (a
+ * base name or not).
+ * @param {unknown} v
+ * @returns {string}
+ */
+export function baseWord(v) {
+  return String(v ?? '')
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+    .toLowerCase()
+    .replace(/[\s_]+/g, '-')
+    .replace(/^(@astryxdesign\/)?theme-|-theme$/g, '');
 }
 
 /**
@@ -1112,6 +1186,14 @@ export function readsTyped({
   )
     return true;
   if (numbersEqual(o, t)) return true;
+  // Two bare numbers typed with a comma between, offered as the slash pair
+  // a grammar takes (`16,9` is `16 / 9`): the comma separated them.
+  {
+    const pair = /^\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*$/.exec(
+      String(typed).replace(/^(["'])(.*)\1$/, '$2'),
+    );
+    if (pair && o.replace(/\s+/g, '') === `${pair[1]}/${pair[2]}`) return true;
+  }
   // (5) A typo of a documented word in a list, item by item (`Inter,
   // san-serif` is `Inter, sans-serif`; `sytem` is the system font).
   {
@@ -1156,7 +1238,15 @@ export function readsTyped({
     if (o === light && DIALS[key] && !key.startsWith('--')) return true;
   }
   // A base named by its package (@astryxdesign/theme-butter is butter).
-  if (key === 'base' && t.replace(/^(@astryxdesign\/)?theme-/, '') === o)
+  if (
+    key === 'base' &&
+    [
+      t,
+      String(typed)
+        .trim()
+        .replace(/^(["'])(.*)\1$/, '$2'),
+    ].some(x => baseWord(x) === o)
+  )
     return true;
   // (2) A documented reading of the whole value.
   const whole = [t, t.replace(/\s+/g, '-'), t.replace(/[\s-]+/g, '')];

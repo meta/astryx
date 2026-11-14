@@ -12,8 +12,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {spawnSync} from 'node:child_process';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditSet, themeEditShow} from './theme-edit.mjs';
 import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
 import {
@@ -24,13 +23,18 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {runCli} from '../../test-utils/run-cli.mjs';
+
+// The renders are stood in for: these tests are about settings, files and
+// messages, not the rendered pages.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    await importOriginal(),
+  ),
+);
 
 /** @type {string} */
 let cwd;
-const BIN = path.resolve(
-  import.meta.dirname,
-  '../../clients/cli/bin/astryx.mjs',
-);
 
 beforeAll(() => {
   cwd = makeLinkedFixture('astryx-theme-hunt62-', FIXTURE_PACKAGES);
@@ -44,8 +48,7 @@ afterAll(() => {
 /** @param {string} rel */
 const read = rel => fs.readFileSync(path.join(cwd, rel), 'utf8');
 /** @param {string[]} args */
-const cli = args =>
-  spawnSync(process.execPath, [BIN, ...args], {cwd, encoding: 'utf8'});
+const cli = async args => await runCli([...args], cwd);
 
 describe('hunt62: what stops the app copy', () => {
   it('a file of yours at another name stays, and the copy is written around it', async () => {
@@ -109,7 +112,12 @@ describe('hunt62: the font stylesheet is always there', () => {
   it('compile writes the whole copy back, the font stylesheet too', async () => {
     await themeEditNew('g', {cwd, like: 'neutral'});
     fs.rmSync(path.join(cwd, 'src/themes/g'), {recursive: true});
-    const r = cli(['experimental', 'theme', 'compile', 'themes/g/g.theme.ts']);
+    const r = await cli([
+      'experimental',
+      'theme',
+      'compile',
+      'themes/g/g.theme.ts',
+    ]);
     expect(r.status).toBe(0);
     expect(fs.existsSync(path.join(cwd, 'src/themes/g/g.fonts.css'))).toBe(
       true,
@@ -119,13 +127,13 @@ describe('hunt62: the font stylesheet is always there', () => {
 
 describe('hunt62: true answers from the package commands and new', () => {
   it('eject says an editor theme has nothing to eject', async () => {
-    const r = cli(['experimental', 'theme', 'eject', 'a']);
+    const r = await cli(['experimental', 'theme', 'eject', 'a']);
     expect(r.stderr + r.stdout).toContain('its source is yours already');
   }, 120_000);
 
   it('a path names the theme', async () => {
     await themeEditShow('a', {cwd});
-    const r = cli(['experimental', 'theme', 'use', 'themes/a']);
+    const r = await cli(['experimental', 'theme', 'use', 'themes/a']);
     expect(r.stderr + r.stdout).toContain(
       "the theme commands take the theme's name: a",
     );

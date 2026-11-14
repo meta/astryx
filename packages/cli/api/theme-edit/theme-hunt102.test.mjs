@@ -9,8 +9,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {spawnSync} from 'node:child_process';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {
   makeLinkedFixture,
@@ -20,13 +19,18 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {runCli} from '../../test-utils/run-cli.mjs';
+
+// The renders are stood in for: these tests are about settings, files and
+// messages, not the rendered pages.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    await importOriginal(),
+  ),
+);
 
 /** @type {string} */
 let cwd;
-const BIN = path.resolve(
-  import.meta.dirname,
-  '../../clients/cli/bin/astryx.mjs',
-);
 
 beforeAll(() => {
   cwd = makeLinkedFixture('astryx-theme-hunt102-', FIXTURE_PACKAGES);
@@ -40,10 +44,9 @@ afterAll(() => {
 /** @param {string} rel */
 const read = rel => fs.readFileSync(path.join(cwd, rel), 'utf8');
 /** @param {string[]} args */
-const cli = args =>
-  spawnSync(process.execPath, [BIN, ...args], {cwd, encoding: 'utf8'});
-const compile = (/** @type {string[]} */ ...args) =>
-  cli(['experimental', 'theme', 'compile', ...args]);
+const cli = async args => await runCli([...args], cwd);
+const compile = async (/** @type {string[]} */ ...args) =>
+  await cli(['experimental', 'theme', 'compile', ...args]);
 
 /** A stand-in installed @fontsource/inter; returns its remover. */
 const installInter = () => {
@@ -76,7 +79,7 @@ describe('compile refuses a source that no longer carries its settings', () => {
     fs.writeFileSync(src, good.replace("name: 's8'", "name: 'brand'"));
     try {
       for (const args of [[], ['--check']]) {
-        const r = compile('themes/s8/s8.theme.ts', ...args);
+        const r = await compile('themes/s8/s8.theme.ts', ...args);
         expect(r.status, args.join(' ')).not.toBe(0);
         expect(r.stdout + r.stderr).toContain(
           "s8.theme.ts no longer names the theme 's8'",
@@ -93,7 +96,7 @@ describe('compile refuses a source that no longer carries its settings', () => {
           )
           .replace('extends: s8Settings', 'extends: other'),
       );
-      const r = compile('themes/s8/s8.theme.ts');
+      const r = await compile('themes/s8/s8.theme.ts');
       expect(r.status).not.toBe(0);
       expect(r.stdout + r.stderr).toContain('no longer extends s8Settings');
     } finally {
@@ -103,12 +106,12 @@ describe('compile refuses a source that no longer carries its settings', () => {
 
   it('a blank --out is refused', async () => {
     await themeEditNew('s11', {cwd});
-    const r = compile('themes/s11/s11.theme.ts', '--out', ' ');
+    const r = await compile('themes/s11/s11.theme.ts', '--out', ' ');
     expect(r.status).not.toBe(0);
     expect(r.stdout + r.stderr).toContain('--out is blank');
     expect(fs.existsSync(path.join(cwd, ' '))).toBe(false);
     // The stable build refuses it too.
-    const stable = cli([
+    const stable = await cli([
       'theme',
       'build',
       'themes/s11/s11.theme.ts',
@@ -134,7 +137,7 @@ describe('the app copy fonts follow the families the built theme uses', () => {
           "name: 'f10',\n  tokens: {'--font-family-body': 'Inter, sans-serif'},",
         ),
       );
-      const r = compile('themes/f10/f10.theme.ts');
+      const r = await compile('themes/f10/f10.theme.ts');
       expect(r.status).toBe(0);
       expect(read('src/themes/f10/f10.fonts.css')).toContain(
         '@fontsource/inter/index.css',
@@ -159,13 +162,21 @@ describe('the app copy fonts follow the families the built theme uses', () => {
         path.join(dir, 'other.fonts.css'),
         '@import "@fontsource/inter/index.css";\n',
       );
-      const stray = cli(['theme', 'build', 'src/themes/brand/brandTheme.ts']);
+      const stray = await cli([
+        'theme',
+        'build',
+        'src/themes/brand/brandTheme.ts',
+      ]);
       expect(stray.stdout + stray.stderr).toMatch(/not loaded[^\n]*Inter/);
       fs.writeFileSync(
         path.join(dir, 'brand.fonts.css'),
         '@import "@fontsource/inter/index.css";\n',
       );
-      const own = cli(['theme', 'build', 'src/themes/brand/brandTheme.ts']);
+      const own = await cli([
+        'theme',
+        'build',
+        'src/themes/brand/brandTheme.ts',
+      ]);
       expect(own.stdout + own.stderr).not.toMatch(/not loaded[^\n]*Inter/);
     } finally {
       remove();
@@ -180,7 +191,7 @@ describe('the app copy fonts follow the families the built theme uses', () => {
     try {
       await themeEditSet('f5', 'corners', 'pill', {cwd});
       expect(read('src/themes/f5/f5.fonts.css')).toContain('@fontsource/inter');
-      const r = cli(['theme', 'build', 'src/themes/f5/f5Theme.ts']);
+      const r = await cli(['theme', 'build', 'src/themes/f5/f5Theme.ts']);
       expect(r.stdout + r.stderr).not.toMatch(/not loaded[^\n]*Inter/);
     } finally {
       remove();
