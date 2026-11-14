@@ -107,13 +107,17 @@ describe('starter apps', () => {
 });
 
 describe('a workspace', () => {
-  it('from the root, the app below is named with its own folder', async () => {
+  it('from a project root, the app below is reached with --path, the theme kept', async () => {
     const aside = path.join(cwd, 'src/app-aside');
     fs.renameSync(path.join(cwd, 'src/app'), aside);
     try {
-      const e = await refusal(() => themeEditPreviewAdd(undefined, {cwd}));
-      expect(names(e)).toMatch(/^cd apps\/one && .*preview add$/m);
-      expect(names(e)).not.toMatch(/--path apps\//);
+      const e = await refusal(() =>
+        themeEditPreviewAdd(undefined, {cwd, theme: 't'}),
+      );
+      expect(names(e)).toMatch(
+        /preview add --theme t --path apps\/one\/src\/app\/theme-preview$/m,
+      );
+      expect(names(e)).toMatch(/preview app theme-app --theme t/);
     } finally {
       fs.renameSync(aside, path.join(cwd, 'src/app'));
     }

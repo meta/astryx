@@ -663,9 +663,11 @@ export const DENSITY_WORDS = wordTable(
  * comments), and the axes of a Google Fonts family spec (`Inter:wght@400`
  * is the family Inter).
  * @param {string} typed
+ * @param {{thousands?: boolean}} [opts] `thousands` for a setting whose
+ *   numbers are weights (see commaNumbers)
  * @returns {string}
  */
-export function typedReading(typed) {
+export function typedReading(typed, {thousands = false} = {}) {
   let t = String(typed ?? '')
     .replace(/\\(?:u\{?([0-9a-f]{4,6})\}?|x([0-9a-f]{2}))/gi, (_, u, x) =>
       String.fromCodePoint(parseInt(u ?? x, 16)),
@@ -674,6 +676,12 @@ export function typedReading(typed) {
     .normalize('NFKC')
     .trim();
   t = t
+    // A mode's label in any spelling (`dark mode: red`), before the
+    // trailing-label reading can take `mode: red` for one.
+    .replace(
+      /^\s*\{?\s*["']?(?:(?:light|dark)[\s_-]*mode|mode[\s_-]*(?:light|dark))["']?\s*[:=]\s*/i,
+      '',
+    )
     .replace(
       /\s+--(mode|state|on|when)(?:\s*=\s*|\s+)("[^"]*"|'[^']*'|\S+)/gi,
       '',
@@ -690,12 +698,16 @@ export function typedReading(typed) {
     );
   const spec = /^([a-z][a-z +]*):(?:ital,)?(?:wght|ital)@/i.exec(t);
   if (spec) t = spec[1].replace(/\+/g, ' ');
-  t = colorPair(t)
-    ? t
-    : t.replace(
-        /^\s*\{?\s*["']?(?:--)?[a-z][a-z0-9 _-]*["']?\s*[:=](?!\/\/)\s*/i,
-        '',
-      );
+  const labeledPair = colorPair(t);
+  t =
+    labeledPair &&
+    !colorProblem(labeledPair.light) &&
+    !colorProblem(labeledPair.dark)
+      ? t
+      : t.replace(
+          /^\s*\{?\s*["']?(?:--)?[a-z][a-z0-9 _-]*["']?\s*[:=](?!\/\/)\s*/i,
+          '',
+        );
   t = t
     .replace(/["']?\s*\}\s*$/, '')
     .replace(
@@ -711,6 +723,7 @@ export function typedReading(typed) {
       // a unit split off by a space (`20 px`) is its number's.
       .replace(/(\d)\.(?=[a-z%]|\s|$)/gi, '$1')
       .replace(/(\d)\s+(px|rem|em|pt|%)(?![a-z])/gi, '$1$2'),
+    thousands,
   )
     .replace(/\b0x([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})\b/gi, '#$1')
     .toLowerCase();
@@ -721,27 +734,31 @@ export function typedReading(typed) {
     .replace(/^[a-z]+(?:-[a-z]+)?-\[(.+)\]$/, '$1');
   // A light and a dark color typed as a pair (`light: red; dark: blue`,
   // `red / blue`) is that light-dark() pair.
+  // Both halves colors: `Inter, 600` is a family list, no pair.
   const pair = colorPair(t);
-  return pair ? `light-dark(${pair.light}, ${pair.dark})` : t;
+  return pair && !colorProblem(pair.light) && !colorProblem(pair.dark)
+    ? `light-dark(${pair.light}, ${pair.dark})`
+    : t;
 }
 
 /**
  * A text with each comma between digits, outside parentheses, read as a
- * number mark: before exactly three digits after a whole number other than
- * 0 (`1,000`), a thousands mark; otherwise (`1,5`, `0,500`) a decimal
- * point. Inside a function (`rgb(255,0,0)`) a comma separates arguments.
+ * number mark: a decimal point (`1,5rem`, `1,125rem`, `0,500`), or, only
+ * where the setting's numbers are whole thousands (a weight, 1 to 1000), a
+ * thousands mark before exactly three digits after a whole number other
+ * than 0 (`1,000`). Inside a function (`rgb(255,0,0)`) a comma separates
+ * arguments.
  * @param {string} text
+ * @param {boolean} [thousands] whether the setting's numbers are weights
  * @returns {string}
  */
-export function commaNumbers(text) {
-  // Only outside parentheses: inside a function (`rgb(255,0,0)`,
-  // `cubic-bezier(0,0,1,1)`) a comma separates its arguments.
+export function commaNumbers(text, thousands = false) {
   let depth = 0;
   let out = '';
   let plain = '';
   const flush = () => {
     out += plain.replace(/(\d+),(\d+)(?![\d.,])/g, (_, a, b) =>
-      b.length === 3 && !/^0+$/.test(a) ? `${a}${b}` : `${a}.${b}`,
+      thousands && b.length === 3 && !/^0+$/.test(a) ? `${a}${b}` : `${a}.${b}`,
     );
     plain = '';
   };
@@ -758,6 +775,13 @@ export function commaNumbers(text) {
   return out;
 }
 
+/**
+ * Whether a setting's numbers are weights (whole hundreds up to 1000).
+ * @param {string} thing
+ */
+export const weightSetting = thing =>
+  /^(font-weight|headings)$|^--font-weight/.test(String(thing).toLowerCase());
+
 /** The CSS functions a value is written in, whose names carry no value. */
 const FORM =
   /\b(?:light-dark|var|calc|(?:repeating-)?(?:linear|radial|conic)-gradient)\(/g;
@@ -770,16 +794,21 @@ const FORM =
  */
 function tokensOf(text) {
   return (
-    String(text)
-      .toLowerCase()
-      .replace(FORM, '(')
-      .match(/[a-z0-9.%]+/g) ?? []
+    String(text).toLowerCase().replace(FORM, '(').match(SIGNED_OR_WORD) ?? []
   );
 }
 
+/**
+ * A token: a number with its minus sign (a sign is one at the start, or
+ * after a space, a parenthesis or a comma: `-8px`, `calc(-1 * 4px)`, never
+ * the minus of `1rem-2px`), or a word or number.
+ */
+const SIGNED_OR_WORD =
+  /(?<![a-z0-9.%)])-(?=\.?\d)\d*\.?\d+(?:e[+-]?\d+)?[a-z%]*|[a-z0-9.%]+/g;
+
 /** @param {string} w */
 const numberOf = w => {
-  const m = /^(\d*\.?\d+(?:e[+-]?\d+)?)(px|rem|em|pt|%)?$/.exec(w);
+  const m = /^(-?\d*\.?\d+(?:e[+-]?\d+)?)(px|rem|em|pt|%)?$/.exec(w);
   return m ? {n: Number(m[1]), unit: m[2] ?? ''} : null;
 };
 
@@ -829,15 +858,19 @@ function numberReadings(w) {
  * @param {string} t the typed value, read
  */
 function numbersEqual(offered, t) {
-  const NUM = /[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?/gi;
+  // A number with its sign (see SIGNED_OR_WORD): -8px is never 8px.
+  const NUM =
+    /(?<![a-z0-9.%)])[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?|(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?/gi;
   const rest = offered
     .replace(NUM, '')
     .replace(/px|rem|em|%|[\s(),/*+-]|calc|var/g, '');
-  const want = offered.match(NUM)?.map(w => Math.abs(Number(w))) ?? [];
+  const want = offered.match(NUM)?.map(Number) ?? [];
   if (!want.length || rest) return false;
   const r2 = (/** @type {number} */ x) => String(Math.round(x * 100) / 100);
   const typedNumbers = (
-    t.match(/\d*\.?\d+(?:e[+-]?\d+)?(?:px|rem|em|pt|%)?/gi) ?? []
+    t.match(
+      /(?<![a-z0-9.%)])-?\d*\.?\d+(?:e[+-]?\d+)?(?:px|rem|em|pt|%)?|\d*\.?\d+(?:e[+-]?\d+)?(?:px|rem|em|pt|%)?/gi,
+    ) ?? []
   ).map(numberReadings);
   // The typed value is numbers only (any words in it are read elsewhere).
   if (
@@ -975,7 +1008,7 @@ const SCALED_DIALS = Object.keys(DIALS).filter(d =>
  * typo (typoOf). Several values of one kind typed for a setting that takes
  * one (`1.5 2`) may be read as the first.
  * @param {{offered: string, typed: string, thing?: string, typedThing?: string, saved?: Map<string, string[]>, mode?: string}} line
- * @returns {true | number[] | false}
+ * @returns {true | number[] | {oneOf: number[]} | false}
  */
 export function readsTyped({
   offered,
@@ -989,9 +1022,9 @@ export function readsTyped({
     .trim()
     .replace(/^(["'])(.*)\1$/, '$2')
     .toLowerCase();
-  const t = typedReading(typed);
   const key = String(thing).toLowerCase();
   const typedKey = String(typedThing || thing).toLowerCase();
+  const t = typedReading(typed, {thousands: weightSetting(typedKey)});
   const T = tokensOf(t);
   const O = tokensOf(o);
   // (1) The value typed.
@@ -1001,7 +1034,15 @@ export function readsTyped({
     O.every((w, i) => sameToken(w, T[i]))
   )
     return true;
-  if (O.length === 1 && T.length > 1 && O[0] === T.join('')) return true;
+  // Words joined into one name (`dark red` is darkred); numbers are never
+  // joined (`12 16px` is two sizes, not 1216px).
+  if (
+    O.length === 1 &&
+    T.length > 1 &&
+    T.every(w => /^[a-z]+$/.test(w)) &&
+    O[0] === T.join('')
+  )
+    return true;
   if (numbersEqual(o, t)) return true;
   const color = parseColor(t);
   if (
@@ -1040,9 +1081,11 @@ export function readsTyped({
       }
     for (const {things, min, max} of RANGES)
       if (names(things, key))
+        // Past an end is that end; a minus sign is no amount past the low
+        // end (-700 is no weight 1).
         if (
           (n.n > max && o === String(max)) ||
-          (n.n < min && o === String(min))
+          (n.n < min && n.n >= 0 && o === String(min))
         )
           return true;
     // A radius at or below zero is square; at or past half, or 1000px, pill.
@@ -1118,28 +1161,68 @@ export function readsTyped({
   // Part of the value: a run of its tokens, or a documented reading of one.
   // (currentcolor stands for the color another line of the refusal sets:
   // the shape of a border in both modes, its color in one.)
+  // Part of the value: its tokens in the order typed, the others carried
+  // by the refusal's other lines (`Inter, sans-serif` and `semibold` for
+  // `Inter 600, sans-serif`).
   const part = O.filter(w => w !== 'currentcolor');
   if (part.length && part.length < T.length)
     for (const same of [
       (/** @type {string} */ a, /** @type {string} */ b) => a === b,
       sameToken,
-    ])
-      for (let i = 0; i + part.length <= T.length; i += 1)
-        if (part.every((w, j) => same(w, T[i + j])))
-          return Array.from({length: part.length}, (_, j) => i + j);
-  for (const [i, w] of T.entries()) {
-    if (T.length < 2) break;
-    if (READINGS.get(w)?.has(o)) return [i];
-    const m = numberOf(w);
-    if (m)
-      for (const {things, table, domain} of NUMERIC_TABLES)
-        if (names(things, key) && m.n >= domain[0] && m.n <= domain[1]) {
-          const [rung] = table.reduce((a, b) =>
-            Math.abs(b[1] - m.n) < Math.abs(a[1] - m.n) ? b : a,
-          );
-          if (rung === o) return [i];
-        }
-  }
+    ]) {
+      /** @type {number[]} */
+      const at = [];
+      for (const w of part) {
+        const from = at.length ? at[at.length - 1] + 1 : 0;
+        const i = T.findIndex((x, k) => k >= from && same(w, x));
+        if (i < 0) break;
+        at.push(i);
+      }
+      if (at.length === part.length) return at;
+    }
+  // A documented reading of a run of its tokens (`extra bold` in `Inter
+  // extra bold` is heavy).
+  if (T.length > 1)
+    for (let k = T.length - 1; k >= 2; k -= 1)
+      for (let i = 0; i + k <= T.length; i += 1) {
+        const run = T.slice(i, i + k).join(' ');
+        if (
+          [run, run.replace(/\s+/g, '-'), run.replace(/\s+/g, '')].some(r =>
+            READINGS.get(r)?.has(o),
+          )
+        )
+          return Array.from({length: k}, (_, j) => i + j);
+      }
+  // A documented reading of one token (`900` or `black` is heavy): every
+  // token that reads as it is a candidate, and coversTyped gives the line
+  // the one the other lines leave.
+  /** @type {number[]} */
+  const oneOf = [];
+  if (T.length > 1)
+    for (const [i, w] of T.entries()) {
+      if (READINGS.get(w)?.has(o)) {
+        oneOf.push(i);
+        continue;
+      }
+      if (numberOf(w) && numbersEqual(o, w)) {
+        oneOf.push(i);
+        continue;
+      }
+      const m = numberOf(w);
+      if (m)
+        for (const {things, table, domain} of NUMERIC_TABLES)
+          if (names(things, key) && m.n >= domain[0] && m.n <= domain[1]) {
+            const [rung] = table.reduce((a, b) =>
+              Math.abs(b[1] - m.n) < Math.abs(a[1] - m.n) ? b : a,
+            );
+            if (rung === o) {
+              oneOf.push(i);
+              break;
+            }
+          }
+    }
+  if (oneOf.length === 1) return oneOf;
+  if (oneOf.length > 1) return {oneOf};
   return false;
 }
 
@@ -1148,21 +1231,31 @@ export function readsTyped({
  * value: each reads it whole, or the parts they carry cover every typed
  * token. A part alone (`all` for `all 200`, `bold` for `extra bold`) is not
  * offered.
- * @param {Array<true | number[] | false>} reads
+ * @param {Array<true | number[] | {oneOf: number[]} | false>} reads
  * @param {string} typed
+ * @param {string} [thing] the setting typed (its numbers' reading)
  */
-export function coversTyped(reads, typed) {
-  const T = tokensOf(typedReading(typed));
+export function coversTyped(reads, typed, thing = '') {
+  const T = tokensOf(typedReading(typed, {thousands: weightSetting(thing)}));
   // By token, counted: two lines may each carry one of two equal words
   // (`normal normal 16px serif`).
   /** @type {Map<string, number>} */
   const carried = new Map();
-  for (const r of reads)
-    if (Array.isArray(r))
-      for (const i of r) carried.set(T[i], (carried.get(T[i]) ?? 0) + 1);
+  /** @param {number} i */
+  const carry = i => carried.set(T[i], (carried.get(T[i]) ?? 0) + 1);
   /** @type {Map<string, number>} */
   const typedCount = new Map();
   for (const w of T) typedCount.set(w, (typedCount.get(w) ?? 0) + 1);
+  for (const r of reads) if (Array.isArray(r)) r.forEach(carry);
+  // A line whose one token may be any of several takes one the others
+  // left.
+  for (const r of reads)
+    if (r && typeof r === 'object' && !Array.isArray(r)) {
+      const left = r.oneOf.find(
+        i => (carried.get(T[i]) ?? 0) < (typedCount.get(T[i]) ?? 0),
+      );
+      carry(left ?? r.oneOf[0]);
+    }
   return [...typedCount].every(([w, n]) => (carried.get(w) ?? 0) >= n);
 }
 

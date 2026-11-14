@@ -103,7 +103,9 @@ describe('a damaged mode or base with a second bad value', () => {
     [
       j => {
         j.mode = 'Dark-Only';
-        j.settings[0].value = 'Pill ';
+        // A word set refuses in any case (a dial word in other letters is
+        // read as that word).
+        j.settings[0].value = 'blob';
       },
       'mode',
       'dark-only',

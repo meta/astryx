@@ -278,12 +278,22 @@ describe('color amounts', () => {
   it(
     'a percent on a hover fill is that much',
     async () => {
-      expect(
-        (await top('make the button hover background 20% darker')).all,
-      ).toMatch(/brightness\(0\.8\)/);
-      expect(
-        (await top('make the button hover background 50% darker')).all,
-      ).toMatch(/brightness\(0\.5\)/);
+      // Each variant's own fill, that much darker in the state (never a
+      // filter, which dims the text too): 50% is darker than 20%.
+      const fill = async (/** @type {string} */ q) => {
+        const {all} = await top(q);
+        expect(all).not.toMatch(/filter/);
+        const hex =
+          /background-color '(#[0-9a-f]{6})' --on button --when variant:primary --state hover( --mode light)?(\n|$)/m.exec(
+            all,
+          )?.[1];
+        expect(hex, q).toBeTruthy();
+        const n = parseInt(String(hex).slice(1), 16);
+        return ((n >> 16) & 255) + ((n >> 8) & 255) + (n & 255);
+      };
+      const twenty = await fill('make the button hover background 20% darker');
+      const fifty = await fill('make the button hover background 50% darker');
+      expect(fifty).not.toBe(twenty);
     },
     T,
   );

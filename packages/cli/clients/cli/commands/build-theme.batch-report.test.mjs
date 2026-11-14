@@ -329,12 +329,16 @@ describe('theme build report', () => {
       expect(r.status).toBe(0);
       expect(JSON.parse(r.stdout)).toEqual(JSON.parse(plain.stdout));
     }
-    expect(
-      JSON.parse(plain.stdout).data.results[0].receipt.data.notices,
-    ).toEqual([
-      'Font "Space Grotesk" is named by this theme but not loaded; add a <link> or @font-face in your app (recipe: astryx docs typography)',
-      'Font "JetBrains Mono" is named by this theme but not loaded; add a <link> or @font-face in your app (recipe: astryx docs typography)',
-    ]);
+    // The recipe is a command as this project runs the CLI, as in text.
+    const notices = JSON.parse(plain.stdout).data.results[0].receipt.data
+      .notices;
+    expect(notices).toHaveLength(2);
+    for (const [i, family] of ['Space Grotesk', 'JetBrains Mono'].entries())
+      expect(notices[i]).toMatch(
+        new RegExp(
+          `^Font "${family}" is named by this theme but not loaded; add a <link> or @font-face in your app \\(recipe: \\S.* docs typography\\)$`,
+        ),
+      );
 
     const check = await runCli(['theme', 'build', '--check', ...FILES], dir);
     expect(check.status).toBe(0);

@@ -183,13 +183,16 @@ describe('wrong writes that are no longer accepted', () => {
     T,
   );
   it(
-    'an except on a part how cannot pin is said, never invented',
+    'an except on a part keeps the radius it reads now',
     async test => {
       needsBase(test);
       const r = await answer('make containers rounder except selectable cards');
-      expect(r.commands.some(c => /selectable-card/.test(c))).toBe(false);
-      expect(r.commands.some(c => /--on containers/.test(c))).toBe(false);
-      expect(r.text).toMatch(/cannot be kept apart/);
+      expect(r.commands.some(c => /corners more --on containers/.test(c))).toBe(
+        true,
+      );
+      expect(
+        r.commands.some(c => /border-radius \S+ --on selectable-card/.test(c)),
+      ).toBe(true);
     },
     T,
   );

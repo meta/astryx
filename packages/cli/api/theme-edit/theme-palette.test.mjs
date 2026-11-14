@@ -2292,7 +2292,8 @@ describe('colors14', () => {
         themeEditSet('p', prop, value, {cwd, on: 'card'}),
       );
       expect(bad.code, `${prop} ${value}`).toBe('ERR_THEME_BAD_VALUE');
-      expect(bad.run[0], prop).toMatch(new RegExp(` set p ${prop} \\d`));
+      // A negative is no size of the other sign: how, never its positive.
+      expect(bad.run[0], prop).toMatch(new RegExp(` how ${prop}$`));
     }
     await themeEditSet('p', 'margin', '-4px', {cwd, on: 'card'});
     await themeEditUndo('p', {cwd, thing: 'margin', on: 'card'});

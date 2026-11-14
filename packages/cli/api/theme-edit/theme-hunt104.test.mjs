@@ -284,7 +284,7 @@ describe('the repair gate offers only lines that carry the whole typed value', (
     expect(typedReading('0,5')).toBe('0.5');
     expect(typedReading('rgb(255,0,0)')).toBe('rgb(255,0,0)');
     expect(typedReading('cubic-bezier(0,0,1,1)')).toBe('cubic-bezier(0,0,1,1)');
-    expect(typedReading('1,000')).toBe('1000');
+    expect(typedReading('1,000', {thousands: true})).toBe('1000');
     expect(readsTyped({offered: '5', typed: '0,5'})).toBe(false);
     expect(readsTyped({offered: 'bold', typed: 'extra bold'})).toEqual([1]);
     expect(coversTyped([[1]], 'extra bold')).toBe(false);

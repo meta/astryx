@@ -175,6 +175,11 @@ describe('spacing and scope', () => {
     });
     const r = await refusal(() => themeEditShow('m', {cwd}));
     expect(r.run[0]).toMatch(/set m mode both$/);
+    // The base that reads as no theme is refused with its own line, never
+    // dropped on the way.
+    const base = await refusal(() => themeEditSet('m', 'mode', 'both', {cwd}));
+    expect(base.run[0]).toMatch(/set m base none$/);
+    await themeEditSet('m', 'base', 'none', {cwd});
     await themeEditSet('m', 'mode', 'both', {cwd});
     await themeEditShow('m', {cwd});
     fs.rmSync(path.join(cwd, 'themes/m'), {recursive: true, force: true});

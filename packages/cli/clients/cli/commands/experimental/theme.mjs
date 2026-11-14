@@ -55,6 +55,9 @@ import {
   editorFollowCompile,
   editorThemesAt,
   typoOf,
+  editorAfterBuild,
+  editorFontHelp,
+  editorSourcePath,
   editorBuildExtra,
   editorLoadedFonts,
   editorColorModes,
@@ -680,9 +683,76 @@ function strayOption(command, rest) {
 }
 
 /**
+ * Refuse a boolean option written with a value (`--png=false`,
+ * `--only=true`, `--only false`), the one reading every editor command
+ * gives it: the option takes no value, so the same command is offered with
+ * the bare option (a true value) or without it (a false one). Null when no
+ * boolean option of the command has a value.
+ * @param {string} command the subcommand (`set`, `undo`, `new`, `show`, how's word)
+ * @param {import('@astryxdesign/cli/authoring').CommandDoc} doc the command's doc, which lists its options
+ * @returns {ReturnType<typeof cliError> | null}
+ */
+function booleanWithValue(command, doc) {
+  const booleans = [
+    '--json',
+    ...(doc.options ?? [])
+      .map(opt => String(opt.flag))
+      .filter(f => !/[<[]/.test(f))
+      .flatMap(f => f.split(/[\s,]+/).filter(w => w.startsWith('--'))),
+  ];
+  const argv = process.argv;
+  const at = argv.indexOf(command, argv.indexOf('editor') + 1);
+  if (at < 0) return null;
+  /** @type {string[]} */
+  const words = [];
+  /** @type {{written: string, flag: string} | null} */
+  let found = null;
+  for (let i = at + 1; i < argv.length; i += 1) {
+    const a = argv[i];
+    if (a === '--') {
+      words.push(...argv.slice(i));
+      break;
+    }
+    const eq = /^(--[a-z-]+)=(.*)$/i.exec(a);
+    const flag = (eq ? eq[1] : a).toLowerCase();
+    const next = argv[i + 1];
+    const spaced =
+      !eq && booleans.includes(flag) && /^(true|false)$/i.test(next ?? '');
+    if (booleans.includes(flag) && (eq || spaced)) {
+      const value = eq ? eq[2] : String(next);
+      if (spaced) i += 1;
+      found ??= {written: eq ? a : `${a} ${value}`, flag};
+      if (/^(true|yes|1)$/i.test(value) && flag !== '--json') words.push(flag);
+      continue;
+    }
+    if (a !== '--json') words.push(a);
+  }
+  if (!found) return null;
+  return cliError(
+    `${found.flag} takes no value ("${found.written}"): give it alone for yes, or leave it out.`,
+    {
+      suggestions: [
+        {
+          name: cmd(
+            `${EDITOR} ${command} ${words.map(w => (w.startsWith('--') ? w : quoteCommandArgument(w))).join(' ')}`.trim(),
+          ),
+          reason: 'do this instead',
+        },
+        {
+          name: cmd(`${EDITOR} ${command} --help`),
+          reason: 'every option it takes',
+        },
+      ],
+      code: ERROR_CODES.ERR_INVALID_OPTION,
+    },
+  );
+}
+
+/**
  * Refuse an option `show` does not take with a show that works: the same
- * show without it (`--png=false` is no --png, `--png=true` is --png), the
- * nearest option it takes, and its help. Null when there is none.
+ * show without it, the nearest option it takes, and its help (an option it
+ * takes written with a value is read by {@link booleanWithValue}). Null
+ * when there is none.
  * @param {string} name
  * @param {unknown[]} rest the words after the theme
  * @param {{png?: boolean, section?: string}} o the options read
@@ -690,21 +760,14 @@ function strayOption(command, rest) {
 function showStray(name, rest, o) {
   const stray = rest.map(String).find(w => w.startsWith('-'));
   if (stray == null) return null;
-  const [flag, value] = stray.split('=');
-  const takes = ['--png', '--section', '--json'];
-  const on = value != null && /^(true|yes|1)$/i.test(value);
-  const off = value != null && /^(false|no|0)$/i.test(value);
-  const near = takes
+  const [flag] = stray.split('=');
+  const near = ['--png', '--section', '--json']
     .map(t => ({t, d: levenshteinDistance(flag.toLowerCase(), t)}))
     .filter(x => x.d <= 2)
     .sort((a, b) => a.d - b.d)[0]?.t;
-  const meant = takes.includes(flag.toLowerCase()) ? flag.toLowerCase() : near;
-  const png =
-    (o.png && !(meant === '--png' && off)) || (meant === '--png' && on);
-  const json = meant === '--json' && on;
-  const line = `${EDITOR} show ${name}${o.section ? ` --section ${o.section}` : ''}${png ? ' --png' : ''}${json ? ' --json' : ''}`;
+  const line = `${EDITOR} show ${name}${o.section ? ` --section ${o.section}` : ''}${o.png ? ' --png' : ''}`;
   return cliError(
-    `unknown option '${stray}'${meant && meant !== flag ? ` (did you mean ${meant}?)` : value != null && meant === flag ? ` (${flag} takes no value)` : ''}.`,
+    `unknown option '${stray}'${near && near !== flag ? ` (did you mean ${near}?)` : ''}.`,
     {
       suggestions: [
         {name: cmd(line), reason: 'do this instead'},
@@ -893,6 +956,8 @@ export function registerExperimentalTheme(group, program) {
         run(
           program,
           () => {
+            const valued = booleanWithValue('new', newDoc);
+            if (valued) return valued;
             // An option new does not take (--force, --dry-run, -t) is refused
             // with new's help, as every editor command's unknown option is.
             const takes = new Set(
@@ -1042,6 +1107,7 @@ export function registerExperimentalTheme(group, program) {
           value = [pasted[2]];
         }
         return (
+          booleanWithValue('set', setDoc) ??
           strayOption('set', value) ??
           run(
             program,
@@ -1063,6 +1129,7 @@ export function registerExperimentalTheme(group, program) {
         /** @type {any} */ o,
         /** @type {any} */ c,
       ) =>
+        booleanWithValue('show', showDoc) ??
         showStray(name, (c?.args ?? []).slice(1), o) ??
         extraWords('show', (c?.args ?? []).slice(1)) ??
         // The sheet is limited to one section (the docs say so): a second
@@ -1111,6 +1178,7 @@ export function registerExperimentalTheme(group, program) {
         /** @type {any} */ o,
         /** @type {import('commander').Command} */ c,
       ) =>
+        booleanWithValue('undo', undoDoc) ??
         strayOption('undo', [which, ...(c?.args ?? []).slice(3)]) ??
         extraWords('undo', (c?.args ?? []).slice(3)) ??
         run(
@@ -1387,7 +1455,10 @@ export function registerExperimentalTheme(group, program) {
         // question); a picture is told by its extension here only to keep
         // option words after it for the count.
         const picture = /\.png$/i.test(rest[0] ?? '');
-        const stray = picture ? null : strayOption('how', rest.slice(1));
+        const stray = picture
+          ? null
+          : (booleanWithValue(howDoc.name.split(' ').pop() ?? 'how', howDoc) ??
+            strayOption('how', rest.slice(1)));
         if (stray) return stray;
         return run(
           program,
@@ -1440,6 +1511,9 @@ export function registerExperimentalTheme(group, program) {
       hold: editorThemeHold,
       loadedFonts: editorLoadedFonts,
       extraData: editorBuildExtra,
+      afterBuild: editorAfterBuild,
+      sourcePath: editorSourcePath,
+      fontHelp: editorFontHelp,
       colorModes: editorColorModes,
     },
   );

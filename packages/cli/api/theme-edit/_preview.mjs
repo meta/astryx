@@ -46,6 +46,7 @@ import {importPathOf, installLine} from './_project.mjs';
 import {COLOR_PROP_PARTS, DIRECT, P, wordTable} from './_tables.mjs';
 import {extractImportedPackages} from '../../foundation/discovery/template-needs.mjs';
 import {findNodeModulesPackage} from '../../foundation/fs/paths.mjs';
+import {themeFileImports} from '../../foundation/discovery/theme-discovery.mjs';
 import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
 
@@ -1859,6 +1860,22 @@ export function appCopyBlocker(cwd, slug) {
   const dir = path.join(cwd, 'src', 'themes', slug);
   const name = `${camel(slug)}Theme`;
   const rel = path.relative(cwd, dir).split(path.sep).join('/');
+  // The copy carries the built module whole, and a local theme imports
+  // only files of its own folder: a module that imports a file beside it
+  // (an icon registry of the theme's folder) would break in the app.
+  {
+    const built = themeFiles(cwd, slug).js;
+    /** @type {string[]} */
+    let specifiers;
+    try {
+      specifiers = themeFileImports(built);
+    } catch {
+      specifiers = [];
+    }
+    const local = specifiers.find(s => s.startsWith('.'));
+    if (local)
+      return `themes/${slug}/${path.basename(built)} imports ${local}, a file beside the theme, which the copy cannot carry (a local theme imports only files of its own folder); import it from a package instead`;
+  }
   // Nothing is written through a link on the way from the app to the copy
   // (src/, src/themes/, the copy's folder), as for themes/.
   for (const part of ['src', 'src/themes', rel]) {
@@ -2066,7 +2083,19 @@ export function runBrowser(script, args, bound = BROWSER_BOUND_MS, opts = {}) {
     const onStop = async sig => {
       stopping = true;
       for (const s of STOP_SIGNALS) process.removeListener(s, onStop);
+      // A second stop during the grace does not wait for it: the group is
+      // killed and the files removed at once, then the process ends.
+      /** @param {NodeJS.Signals} again */
+      const onAgain = again => {
+        for (const s of STOP_SIGNALS) process.removeListener(s, onAgain);
+        signalAll('SIGKILL');
+        remove([temp, ...drop]);
+        if (process.listenerCount(again) === 0)
+          process.kill(process.pid, again);
+      };
+      for (const s of STOP_SIGNALS) process.once(s, onAgain);
       await finish();
+      for (const s of STOP_SIGNALS) process.removeListener(s, onAgain);
       settle({status: null, signal: null, stderr, stoppedBy: sig});
       // Nothing else listening: the stop ends this process, as it would
       // have without this listener.

@@ -115,8 +115,12 @@ export function makeCompiler(project, parts) {
     const kept = (attrPart.includes('=') ? attrPart.split(',') : []).filter(
       kv => {
         const [k] = kv.split('=');
+        // (The place another component puts the part in, from the part
+        // data's context conditions, stays: it is never the part at rest.)
         return (
           k === 'selected' ||
+          k === 'current' ||
+          k === 'pressed' ||
           (['variant', 'status', 'tone', 'color'].includes(k) &&
             (attrs[k]?.length ?? 0) > 1)
         );
@@ -402,6 +406,10 @@ export function makeCompiler(project, parts) {
     const out = {};
     for (const p of TARGET.get(target)?.props ?? [])
       out[p] = fromDocs[p]?.length ? fromDocs[p] : (seen[p] ?? []);
+    // A state Core marks with more than one value (a checkbox's checked and
+    // indeterminate looks) is a condition --when names by value.
+    for (const st of TARGET.get(target)?.states ?? [])
+      if ((seen[st] ?? []).some(v => v !== st)) out[st] = seen[st];
     return out;
   }
 
