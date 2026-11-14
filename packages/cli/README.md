@@ -558,7 +558,8 @@ status  id - label - message - fix
         install @astryxdesign/theme-neutral`, then import its CSS or set astryx.theme.
 ...
 
-summary: pass 4, warn 2, fail 0, info 2
+summary
+pass: 4, warn: 2, fail: 0, info: 2
 
 No failures - but review the [warn] warnings above when you can.
 ```

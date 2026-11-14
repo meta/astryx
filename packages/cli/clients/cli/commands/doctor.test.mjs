@@ -492,11 +492,10 @@ describe('doctor — text output mirrors the JSON', () => {
           `${TOKEN[check.status].padEnd(column)}  ${tail.join(' - ')}`,
         );
       }
-      expect(lines).toContain(
-        `summary: ${Object.entries(summary)
-          .map(([key, count]) => `${key} ${count}`)
-          .join(', ')}`,
-      );
+      const summaryLine = Object.entries(summary)
+        .map(([key, count]) => `${key}: ${count}`)
+        .join(', ');
+      expect(lines[lines.indexOf('summary') + 1]).toBe(summaryLine);
     } finally {
       process.chdir(prevCwd);
       process.exitCode = prevExit;

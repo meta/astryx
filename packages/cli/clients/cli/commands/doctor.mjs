@@ -96,8 +96,9 @@ function printHuman(report) {
       layout: 'inline',
       format: {status: statusToken, fix: fix => `fix: ${fix}`},
     }),
-    text(
-      `summary: ${summaryFields.map(key => `${key} ${report.summary[key]}`).join(', ')}`,
+    section(
+      'summary',
+      summaryFields.map(key => `${key}: ${report.summary[key]}`).join(', '),
     ),
     text(closing),
   );
