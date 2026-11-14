@@ -263,6 +263,8 @@ export async function howTheme(ctx, cwd, name) {
  * @property {'light' | 'dark' | null} [mode] the mode the question names
  * @property {boolean} [bound] the question gives a bound ("smaller than 24px"): a space is checked against it too
  * @property {boolean} [contrast] the words ask about contrast ("too light to read"): text in dark mode moves the other way
+ * @property {string[]} [than] parts the question compares against ("darker than the page"): a color moves past theirs
+ * @property {boolean} [literal] a mode is named with lighter or darker: borders and the shared text color move as written
  * @property {'more' | 'less' | null} [shadowDir] the way a shadow's strength moves ("darker shadows": more)
  */
 
@@ -356,13 +358,15 @@ function measureNumber(v) {
  * modes.
  * @param {string} name a token or a property
  * @param {boolean} [contrast] the words ask about contrast
+ * @param {boolean} [literal] a mode is named with lighter or darker
  */
-const isForeground = (name, contrast = false) =>
+const isForeground = (name, contrast = false, literal = false) =>
   !/background|surface|fill|accent|overlay/.test(name) &&
-  (/border|outline/.test(name) ||
-    // The shared text tokens step by contrast with the page (how answers
-    // "lighter text" that way); a part's own color steps as written.
-    /^--color-text-/.test(name) ||
+  // Borders and the shared text tokens step by contrast with the page (how
+  // answers "lighter text" and "darker borders" that way), unless a mode is
+  // named; a part's own color steps as written.
+  ((!literal && /border|outline/.test(name)) ||
+    (!literal && /^--color-text-/.test(name)) ||
     (contrast && /text|^color$|on-/.test(name)));
 
 /**
@@ -451,10 +455,35 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
    * @param {string} part
    */
   const shown = (compiled, toks, part) => {
-    const own = partValues({
-      ...(base.components?.[part] ?? {}),
-      ...(compiled.components?.[part] ?? {}),
-    });
+    // Each rule of the part: the base theme's own declarations with the
+    // theme's on top, condition by condition (a theme rule that sets one
+    // property keeps the base rule's others).
+    /** @type {Record<string, Record<string, any>>} */
+    const rules = {};
+    for (const src of [
+      base.components?.[part] ?? {},
+      compiled.components?.[part] ?? {},
+    ])
+      for (const [when, rule] of Object.entries(src))
+        rules[when] =
+          rule && typeof rule === 'object' && !Array.isArray(rule)
+            ? {...(rules[when] ?? {}), ...rule}
+            : rule;
+    const own = partValues(rules);
+    // A token the part's own rule sets (a part-scoped dial's --spacing-4)
+    // is the value inside the part.
+    // A token a variant's rule sets holds in that variant, over the part's.
+    const scoped = (
+      /** @type {'light' | 'dark'} */ m,
+      /** @type {string} */ when,
+    ) => {
+      /** @type {Record<string, string>} */
+      const t = {...toks[m]};
+      for (const w of when === 'base' ? ['base'] : ['base', when])
+        for (const [k, v] of Object.entries(rules[w] ?? {}))
+          if (k.startsWith('--') && typeof v === 'string') t[k] = v;
+      return t;
+    };
     /** @type {Map<string, string>} */
     const raw = new Map(own);
     // The part at rest in its main variant is its `base` too (a set with no
@@ -487,8 +516,8 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
     const out = new Map();
     for (const [k, v] of raw)
       out.set(k, {
-        light: resolveIn(v, toks.light, 'light'),
-        dark: resolveIn(v, toks.dark, 'dark'),
+        light: resolveIn(v, scoped('light', k.split('|')[0]), 'light'),
+        dark: resolveIn(v, scoped('dark', k.split('|')[0]), 'dark'),
         raw: v,
       });
     return out;
@@ -635,6 +664,10 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
             return `${part}'s ${prop} would be ${after} in ${mode} mode, not none`;
           continue;
         }
+        // A shadow written where the part showed none it can read is a
+        // change.
+        if (fam === 'shadow' && before == null && !/^none$/i.test(after))
+          shadowMoved = true;
         if (before == null || typedFamilies.has(fam)) continue;
         // A shadow's strength moves the way asked, in each mode.
         if (fam === 'shadow' && intent.shadowDir) {
@@ -686,12 +719,25 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
           const x = painted(after, tn[mode], mode);
           const y = painted(before, tw[mode], mode);
           const want =
-            mode === 'dark' && isForeground(prop, intent.contrast)
+            mode === 'dark' &&
+            isForeground(prop, intent.contrast, intent.literal)
               ? !intent.lighter
               : intent.lighter;
           if (x && y && Math.abs(luminance(x) - luminance(y)) >= 0.5)
             if (want !== luminance(x) > luminance(y))
               return `${part}'s ${prop}${when !== 'base' ? ` (${when})` : ''} would get ${want ? 'darker' : 'lighter'} in ${mode} mode (${before} to ${after})`;
+          // "darker than the page": past the part compared against, in
+          // each mode it shows.
+          if (x && /^background/.test(prop))
+            for (const ref of intent.than ?? []) {
+              const refValue =
+                ref === 'page'
+                  ? resolveIn('var(--color-background-body)', tn[mode], mode)
+                  : shown(now, tn, ref).get('base||background-color')?.[mode];
+              const r = refValue ? painted(refValue, tn[mode], mode) : null;
+              if (r && want !== luminance(x) > luminance(r))
+                return `${part}'s ${prop}${when !== 'base' ? ` (${when})` : ''} would still be ${want ? 'darker' : 'lighter'} than the ${ref} in ${mode} mode (${after} on ${refValue})`;
+            }
           continue;
         }
         const dir = fam === 'opacity' ? intent.opacityDir : intent.dir;
@@ -774,7 +820,7 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
         const x = painted(after, tn[mode], mode);
         const y = painted(before, tw[mode], mode);
         const want =
-          mode === 'dark' && isForeground(tok, intent.contrast)
+          mode === 'dark' && isForeground(tok, intent.contrast, intent.literal)
             ? !intent.lighter
             : intent.lighter;
         if (x && y && Math.abs(luminance(x) - luminance(y)) >= 0.5)

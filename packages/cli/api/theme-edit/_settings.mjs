@@ -2621,6 +2621,18 @@ export function lengthPx(v) {
 /** @param {string} v */
 export const cornerPx = v =>
   CORNERS.find(([n]) => n === v)?.[1] ?? parseFloat(v);
+/**
+ * The base theme's body text size in px, read back from its built base
+ * size (14 when it writes none).
+ * @param {{light: Record<string, string>}} base
+ */
+export function baseTextPx(base) {
+  const v = base?.light?.['--font-size-base'];
+  return /^[\d.]+rem$/.test(v ?? '')
+    ? Math.round(Number.parseFloat(String(v)) * 16)
+    : 14;
+}
+
 /** @param {string} v */
 export const textPx = v => TEXT_SIZE.find(([n]) => n === v)?.[1] ?? Number(v);
 
@@ -3119,7 +3131,7 @@ export function compileTheme(ctx, data, base) {
     rem(base.light['--font-size-base']),
     rem(base.light['--font-size-2xl']),
   ];
-  const baseSize = b0 ? Math.round(b0 * 16) : 14;
+  const baseSize = baseTextPx(base);
   const baseRatio =
     b0 && b3 ? Math.round((b3 / b0) ** (1 / 3) * 100) / 100 : 1.2;
   /** @type {any} */

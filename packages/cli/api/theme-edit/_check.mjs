@@ -106,6 +106,7 @@ import {
   partRuleTokens,
   cssFamily,
   familySpaces,
+  baseTextPx,
   fontsourcePackageOf,
 } from './_settings.mjs';
 import {isColorToken} from './_compiler.mjs';
@@ -4158,7 +4159,10 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
             })(),
           },
         );
-      if (step) s.value = ladder(TEXT_SIZE, 'medium');
+      // With no text-size setting yet, a step starts from the size the base
+      // theme's body text shows (past the last rung, it asks for a size).
+      if (step)
+        s.value = ladder(TEXT_SIZE, ctx.base ? baseTextPx(ctx.base) : 'medium');
       else if (
         /^\d+\.\d+$/.test(v.trim()) &&
         Number(v) >= 10 &&
