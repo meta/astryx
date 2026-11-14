@@ -578,6 +578,8 @@ describe('render(): every write stays inside the current folder', () => {
       // A package whose exports send "." to its config, or a pattern a subpath matches.
       ['dot', {'package.json': '{"name":"dot","version":"1.0.0","exports":{".":{"import":"./esm.json","require":"./configs/base.json"}}}', 'configs/base.json': config}],
       ['star', {'package.json': '{"name":"star","version":"1.0.0","exports":{"./*":"./configs/*.json"}}', 'configs/strict.json': config}, 'star/strict'],
+      // Of two patterns, the one with the longer part before the `*` wins, as in Node.
+      ['order', {'package.json': '{"name":"order","version":"1.0.0","exports":{"./*.json":"./wrong/*.json","./a*":"./right/a*"}}', 'right/ab.json': config, 'wrong/ab.json': '{"compilerOptions": {"paths": {"@ui/*": ["${configDir}/src/nowhere/*"]}}}\n'}, 'order/ab.json'],
     ]) {
       const root = `ext-${name}`;
       put(`${root}/package.json`, `{"name":"${root}","private":true}`);
