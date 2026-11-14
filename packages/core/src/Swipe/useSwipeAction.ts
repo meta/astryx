@@ -1350,9 +1350,9 @@ export function useSwipeAction({
       root.style.removeProperty(SWIPE_TRAVEL_PROPERTY);
       root.style.removeProperty(SWIPE_CONFIRM_PROPERTY);
     };
-    // The model comes through its committed ref, and the rest is stable: one
-    // shared drag for the root's life.
-  }, [landed, modelRef, panels, presentedX]);
+    // The model and the latest options come through their committed refs, and
+    // the rest is stable: one shared drag for the root's life.
+  }, [landed, latestRef, modelRef, panels, presentedX]);
 
   // A touch tap on an open row's own content closes it and activates nothing,
   // as UIKit's dismissal does. The tap recognizes at the lift. The host keeps
