@@ -555,6 +555,8 @@ describe('a project whose only base is not Core', () => {
       expect(manifestOptions.find(o => o.flag.includes('--list')).available).toBe(true);
       const rootJson = astryx(['--json', 'help'], dir).json();
       expect(JSON.stringify(rootJson.data)).not.toContain('experimental theme editor');
+      const experimentalJson = astryx(['experimental', '--help', '--json'], dir).json();
+      expect(JSON.stringify(experimentalJson.data.subcommands)).not.toContain('editor set');
       const themeJson = astryx(['theme', '--help', '--json'], dir).json();
       expect(themeJson.data.description).not.toContain('experimental theme editor');
       const groupJson = astryx(['--json', 'experimental', 'theme'], dir);

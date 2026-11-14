@@ -99,7 +99,13 @@ export function buildHelpEnvelope(cmd) {
 
   const subcommands = cmd.commands
     .filter((s) => !(/** @type {any} */ (s))._hidden && commandAvailable(s, base))
-    .map((s) => ({name: s.name(), description: servedHelpDescription(s) || ''}));
+    // Off Core, a group's listing reads its summary, as text help does: its
+    // full description can name commands the base refuses.
+    .map((s) => ({
+      name: s.name(),
+      description:
+        (base != null && !base.core && s.summary()) || servedHelpDescription(s) || '',
+    }));
 
   return {
     apiVersion: API_VERSION,
