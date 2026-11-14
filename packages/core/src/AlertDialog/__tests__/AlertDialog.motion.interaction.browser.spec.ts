@@ -377,6 +377,16 @@ async function closeMidPresentation(page: Page) {
     // The page's clock as each animation on the dialog is made. The leave
     // reads the value on screen at its call, before it makes its fade.
     const madeAt = new Map<Animation, number>();
+    // The start time of each of those animations, read in the task that makes
+    // it. The animator dates an animation right after it makes it, and it can
+    // retire the animation before the next frame.
+    const startAt = new Map<Animation, number>();
+    const made = (animation: Animation, time: number) => {
+      madeAt.set(animation, time);
+      queueMicrotask(() => {
+        startAt.set(animation, Number(animation.startTime));
+      });
+    };
     const animate = Element.prototype.animate;
     Element.prototype.animate = function (
       this: Element,
@@ -385,7 +395,7 @@ async function closeMidPresentation(page: Page) {
       const time = performance.now();
       const animation = animate.apply(this, args);
       if (this === element) {
-        madeAt.set(animation, time);
+        made(animation, time);
       }
       return animation;
     };
@@ -397,7 +407,7 @@ async function closeMidPresentation(page: Page) {
         (this.effect as KeyframeEffect | null)?.target === element &&
         !madeAt.has(this)
       ) {
-        madeAt.set(this, time);
+        made(this, time);
       }
     };
     document.dispatchEvent(
@@ -407,19 +417,30 @@ async function closeMidPresentation(page: Page) {
         cancelable: true,
       }),
     );
-    // The leave starts in the effects of the commit that closes the alert.
+    // The leave starts in the effects of the commit that closes the alert. A
+    // loaded engine can run that commit late and retire the fade before its
+    // next frame. So the fade is found where it is made, on a timer, and not
+    // in the dialog's running animations at a frame.
+    const isFade = (animation: Animation) => {
+      const effect = animation.effect as KeyframeEffect | null;
+      return (
+        effect?.target === element &&
+        effect.pseudoElement == null &&
+        effect.getKeyframes().some(keyframe => 'opacity' in keyframe)
+      );
+    };
     const fade = await new Promise<Animation>((resolve, reject) => {
       const giveUp = performance.now() + 1000;
       const look = () => {
-        const found = opacityAnimations().find(
-          animation => animation !== present,
+        const found = [...madeAt.keys()].find(
+          animation => isFade(animation) && startAt.has(animation),
         );
         if (found != null) {
           resolve(found);
         } else if (performance.now() > giveUp) {
           reject(new Error('no fade after the close'));
         } else {
-          requestAnimationFrame(look);
+          setTimeout(look, 4);
         }
       };
       look();
@@ -432,7 +453,7 @@ async function closeMidPresentation(page: Page) {
     // The leave reads the value at its call. That instant lies between the
     // fade's start time and the moment the fade is made: Chromium dates the
     // start at the call, and WebKit at its last frame before the call's task.
-    const presentedAtClose = presentedAt(Number(fade.startTime));
+    const presentedAtClose = presentedAt(Number(startAt.get(fade)));
     const presentedByClose = presentedAt(Number(madeAt.get(fade)));
     const framesSeen: number[] = [];
     let openFrames = 0;
@@ -814,15 +835,22 @@ test.describe('under a finger', () => {
 
   test('closed right after opening, it turns back from where it is: the fade starts at the presented opacity and only falls', async ({
     page,
-  }) => {
+  }, testInfo) => {
     // A take in which the renderer painted no frame while the alert faded
-    // measured nothing: a loaded WebKit can stall for a second. Such a take
-    // is taken again.
+    // measured nothing. A loaded WebKit can stall for a second, and its fade
+    // can end before any frame. Such a take is taken again, and the report
+    // records each retake.
     let result = await closeMidPresentation(page);
+    const openFramesByTake = [result.openFrames];
     for (let take = 1; take < 3 && result.openFrames < 2; take += 1) {
+      testInfo.annotations.push({
+        type: 'retake',
+        description: `take ${take} painted ${result.openFrames} frames of the open alert while it faded`,
+      });
       result = await closeMidPresentation(page);
+      openFramesByTake.push(result.openFrames);
     }
-    const detail = JSON.stringify(result);
+    const detail = JSON.stringify({...result, openFramesByTake});
     // Closed mid-presentation.
     expect(result.presentedAtClose, detail).toBeGreaterThan(0.05);
     expect(result.presentedAtClose, detail).toBeLessThan(0.99);
