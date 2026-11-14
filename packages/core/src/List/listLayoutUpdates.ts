@@ -412,9 +412,9 @@ function markCrossings(
   });
 }
 
-// The handle carries the size-change module's calls under this key
-// (motion/animatedLayout writes them), so a List given no handle loads none of
-// that module.
+// The handle carries the size-change module's calls under this key, so a List
+// given no handle loads none of that module. motion/animatedLayout writes them
+// under the same key: the two keys must stay equal.
 const LIST_LAYOUT = sharedKey('animated-layout/list-layout', 1);
 
 /** The layout calls a handle carries, or null for a handle made without them. */
