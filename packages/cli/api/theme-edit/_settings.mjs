@@ -307,6 +307,20 @@ export function editorWrote(cwd, slug, file) {
 }
 
 /**
+ * Whether the pictures record names this file and it is unchanged since the
+ * editor wrote it. Only such a file is ever deleted: a stamp alone is not
+ * enough, since a byte copy of a picture (preview-before.png) carries the
+ * same stamp and is the person's.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {string} file
+ */
+export function editorRecorded(cwd, slug, file) {
+  const was = readWrittenRecord(cwd, slug)[path.basename(file)];
+  return Boolean(was) && was === contentHash(file);
+}
+
+/**
  * Adopt a picture an older editor took (before it recorded or stamped its
  * pictures) into the record: only while the theme has no record at all, the
  * name is one the editor writes, and the picture is the editor's 1280-pixel
@@ -6013,7 +6027,7 @@ export async function buildTheme(ctx, slug, data) {
           .filter(
             n =>
               /^(sheet|preview)(-[a-z-]+)?\.png$/.test(n) &&
-              editorWrote(cwd, slug, path.join(f.dir, n)),
+              editorRecorded(cwd, slug, path.join(f.dir, n)),
           )
       : [];
     for (const file of [

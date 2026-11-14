@@ -396,7 +396,7 @@ function absolute(result, root, from) {
    * in-app preview's stale entries. Every project path in them (a theme
    * file, an in-app preview folder) is made absolute, one style per line.
    */
-  const PROSE = new Set(['see', 'pictureProblem', 'previewStale']);
+  const PROSE = new Set(['see', 'pictureProblem', 'previewStale', 'wiring']);
   /** A project-relative path that names a file or folder there. @param {string} p */
   const inRoot = p => {
     const bare = p.replace(/\/+$/, '');

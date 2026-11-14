@@ -185,7 +185,7 @@ function editorLeftovers(dir, slug, damaged = false) {
   const named = (/** @type {string} */ n) =>
     n === NEW_MARKER ||
     EDITOR_SUFFIXES.some(x => n === `${slug}.${x}`) ||
-    /^(preview(-[a-z]+)?\.(html|png)|sheet(-[a-z-]+)?\.(html|png)|palette\.config\.json)$/.test(
+    /^(preview(-dark)?\.(html|png)|sheet(-[a-z-]+)?\.(html|png)|palette\.config\.json)$/.test(
       n,
     ) ||
     // The editor's temp names (writes, builds, pictures).
@@ -3308,6 +3308,16 @@ export async function themeEditShow(theme, options = {}) {
       if (!(e instanceof Error)) throw e;
       if (e instanceof AstryxError && e.code !== E.ERR_RENDER_FAILED) throw e;
       putBack(kept, tokensDir);
+      // A folder it cannot write is no render failure: the folder is named.
+      const code = /** @type {any} */ (e).code;
+      if (['EACCES', 'EPERM', 'EROFS'].includes(code)) {
+        const where = /** @type {any} */ (e).path;
+        return refuse(
+          E.ERR_WRITE_FAILED,
+          `${theme} cannot be shown: ${where ? `${shown(cwd, path.dirname(where))}/` : 'its theme folder'} cannot be written (${code}). Fix its permissions, then run the command again. Nothing was written.`,
+          {run: [`${P} show ${theme}`]},
+        );
+      }
       return refuse(
         E.ERR_RENDER_FAILED,
         `${theme} cannot be shown: ${renderCause(ctx.project, e.message)} ${[...kept.values()].some(Boolean) ? 'The build this show made again was put back as it was. ' : ''}Nothing was written.`,
@@ -3349,7 +3359,15 @@ export async function themeEditShow(theme, options = {}) {
           ],
           modes,
         )
-      : {files: [], problem: null};
+      : // Pictures asked for but not taken: said, never a quiet none.
+        {
+          files: [],
+          problem: png
+            ? readOnly
+              ? 'no picture was taken: show ran read-only (the project or its install cannot be written, so it could not hold the theme lock), and the pages the pictures are taken of were not made; run show --png where the project can be written'
+              : 'no picture was taken: React is not installed here, so the pages the pictures are taken of could not be made; install react and react-dom, then run show --png again'
+            : null,
+        };
   // The app copy follows the build there now, also when the build was
   // current and only the copy is missing (a theme made before it existed).
   if (!readOnly)

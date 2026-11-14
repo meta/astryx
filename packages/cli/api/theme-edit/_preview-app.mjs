@@ -1188,11 +1188,11 @@ function previewDir(cwd, where, opts = {}) {
   const candidates = routes.map(r => path.join(r, 'theme-preview'));
   const known = candidates.find(d => fs.existsSync(path.join(d, PREVIEW_DATA)));
   if (!known && opts.retry) {
-    // A preview added with --path is recorded with its theme, so a later
-    // command finds it without the flag instead of starting a second one.
-    const recorded = [
-      ...new Set(editedThemes(cwd).flatMap(t => recordedPreviews(cwd, t))),
-    ].filter(d => fs.existsSync(path.join(d, PREVIEW_DATA)));
+    // A preview added with --path is recorded with its theme, and one
+    // renamed by hand is found in the routes folders (as list, remove and
+    // see find it), so a later command uses it instead of starting a second
+    // one.
+    const recorded = allPreviews(cwd);
     if (recorded.length === 1) {
       inProjectOrRefuse(cwd, recorded[0], retry);
       if (opts.write)
@@ -3233,11 +3233,7 @@ export async function refreshPreviewRoute(cwd, slug) {
   // and any in the routes folders that wear the theme (a folder renamed by
   // hand, or one whose record was lost).
   const dirs = [
-    ...new Set([
-      ...(at ? [at.dir] : []),
-      ...recordedPreviews(cwd, slug),
-      ...previewsIn(cwd),
-    ]),
+    ...new Set([...(at ? [at.dir] : []), ...themePreviews(cwd, slug)]),
   ];
   let changed = false;
   /** @type {string[]} */
@@ -3480,11 +3476,7 @@ export function seeLine(cwd, slug, focus, notChecked = null, extra = {}) {
   const handEdited = [];
   /** Previews whose record is damaged. @type {string[]} */
   const damaged = [];
-  // The previews recorded for the theme, and any found in the routes
-  // folders that wear it (a folder renamed by hand), as remove finds them.
-  const dirs = [
-    ...new Set([...recordedPreviews(cwd, slug), ...previewsIn(cwd)]),
-  ];
+  const dirs = themePreviews(cwd, slug);
   for (const dir of dirs) {
     /** @type {any} */
     let data;
@@ -3647,9 +3639,10 @@ function skipReason(s) {
  * @param {string} cwd
  * @param {string[]} notes notes for the result
  * @param {string} flags the caller's other flags, for the suggestions
+ * @param {string | null} [appRoot] the app whose packages a page needs
  * @returns {Promise<Array<{name: string, displayName: string, why: string}>>}
  */
-async function rankedPages(words, cwd, notes, flags) {
+async function rankedPages(words, cwd, notes, flags, appRoot = null) {
   const kit =
     /** @type {import('../build/build.type.mjs').BuildKitResponse} */ (
       await build(words, {cwd})
@@ -3733,15 +3726,33 @@ async function rankedPages(words, cwd, notes, flags) {
   const label = name => listed.find(t => t.id === name)?.name ?? name;
   const suggest = (/** @type {string[]} */ list) =>
     list.slice(0, 3).map(n => `${PREVIEW} add --template ${n}${flags}`);
-  // With no page close, a few pages that need nothing more, and the list.
-  const fallback = [
-    ...suggest(
-      ['dashboard', 'settings', 'login'].filter(id =>
-        listed.some(t => t.id === id),
-      ),
-    ),
-    formatCliCommand('template --list --type page', cwd),
-  ];
+  // Only a page this app can show is suggested: one whose packages are
+  // installed and that needs no StyleX compiler, as add itself checks.
+  const showable = async (/** @type {string} */ id) => {
+    try {
+      const shownTemplate = /** @type {any} */ (
+        await template(id, {cwd, type: 'page'})
+      );
+      const needs = pageNeeds(appRoot ?? cwd, shownTemplate.data.source);
+      return (
+        !needs.missingPackages.length &&
+        !needs.notInstalled.length &&
+        !needs.stylexCompiler
+      );
+    } catch {
+      return false;
+    }
+  };
+  /** @param {string[]} ids */
+  const showableOf = async ids => {
+    /** @type {string[]} */
+    const out = [];
+    for (const id of ids) {
+      if (out.length >= 3) break;
+      if (await showable(id)) out.push(id);
+    }
+    return out;
+  };
   // No page relates when the ranking fell back to a frame with no direct
   // match, and no page the search found matches three words of the request
   // or two fifths of them.
@@ -3766,19 +3777,32 @@ async function rankedPages(words, cwd, notes, flags) {
         !found.some(
           (/** @type {any} */ r) => !frames.has(r.name) && termsMatched(r) >= 2,
         )));
-  if (unrelated)
+  if (unrelated) {
+    // With no page close, a few pages this app can show, and the list.
+    const offered = await showableOf(
+      pages.length
+        ? pages
+        : [
+            ...['dashboard', 'settings', 'login'],
+            ...listed.map(t => t.id),
+          ].filter(
+            (id, i, all) =>
+              all.indexOf(id) === i &&
+              listed.some(t => t.id === id) &&
+              !frames.has(id),
+          ),
+    );
     refuse(
       E.ERR_NOT_FOUND,
       `No page template relates to "${words}". Name a page to add it anyway.`,
       {
-        run: pages.length
-          ? [
-              ...suggest(pages),
-              formatCliCommand('template --list --type page', cwd),
-            ]
-          : fallback,
+        run: [
+          ...suggest(offered),
+          formatCliCommand('template --list --type page', cwd),
+        ],
       },
     );
+  }
   if (skippedFrames.length)
     notes.push(
       `left out ${skippedFrames.join(', ')}: app frames, not pages (add one with --template <id>)`,
@@ -4449,7 +4473,7 @@ async function addPreview(description, options, box) {
     const flags = `${tf}${pf}`;
     const picks = explicit
       ? [await namedTemplate(cwd, /** @type {string} */ (named), flags)]
-      : await rankedPages(words, cwd, notes, flags);
+      : await rankedPages(words, cwd, notes, flags, appRootOf(cwd, at.dir));
     for (const [i, pick] of picks.entries()) {
       if (add.length >= (explicit ? 1 : top)) break;
       const shownTemplate =
@@ -4653,10 +4677,17 @@ async function addPreview(description, options, box) {
     } catch {
       // A theme that does not load is reported where it is used.
     }
-  if (again)
-    notes.push(
-      `a default page's id brings back the default pages that are missing, as ${PREVIEW} add does`,
+  // What happened: only the page asked for; the others come with a bare
+  // add.
+  if (again) {
+    const stillMissing = DEFAULT_IDS.filter(
+      id => !data.pages.some(p => p.id === id),
     );
+    if (stillMissing.length)
+      notes.push(
+        `only ${askedId} was added; ${PREVIEW} add with no page brings back the other default pages that are missing (${stillMissing.join(', ')})`,
+      );
+  }
   notes.push(...typeScriptNotes(cwd, at.dir, added));
   if (
     askedId === COLORS_PAGE.id &&
@@ -5024,7 +5055,9 @@ export async function themeEditPreviewList(options = {}) {
   /** @type {string[]} */
   const notes = [];
   const themeMissing = Boolean(
-    data?.theme && !fs.existsSync(themeFiles(cwd, data.theme).dir),
+    data?.theme &&
+    !fs.existsSync(themeFiles(cwd, data.theme).dir) &&
+    !(at && themeElsewhere(cwd, at.dir, data.theme)),
   );
   if (at && fs.existsSync(path.join(at.dir, PENDING)))
     notes.push(
@@ -5113,7 +5146,92 @@ export async function themeEditPreviewList(options = {}) {
  * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditPreviewRemoveResponse>}
  */
 export async function themeEditPreviewRemove(page, options = {}) {
-  return reportingRecovery(box => removePreview(page, options, box));
+  try {
+    return await reportingRecovery(box => removePreview(page, options, box));
+  } catch (e) {
+    // Removing a page needs the theme the route wears; removing the whole
+    // preview needs none. Every refusal over a theme that does not load
+    // names it, wherever the theme was read.
+    const err = /** @type {any} */ (e);
+    const pf =
+      options.path != null
+        ? ` --path ${quoteCommandArgument(options.path)}`
+        : '';
+    const whole = `${PREVIEW} remove${pf}`;
+    if (
+      page != null &&
+      [E.ERR_THEME_INVALID, E.ERR_UNKNOWN_THEME, E.ERR_THEME_LOAD].includes(
+        err?.code,
+      ) &&
+      !(err.suggestions ?? []).some((/** @type {any} */ x) => x?.name === whole)
+    )
+      err.suggestions = [
+        {
+          name: whole,
+          reason:
+            'do this instead: removes the whole preview, which needs no theme',
+        },
+        ...(err.suggestions ?? []),
+      ];
+    throw e;
+  }
+}
+
+/**
+ * The theme folder a preview's route imports when it is outside this
+ * project's themes/ (a workspace app run from its own folder, its themes at
+ * the workspace root), or null.
+ * @param {string} cwd
+ * @param {string} dir the preview folder
+ * @param {string} slug
+ * @returns {string | null}
+ */
+function themeElsewhere(cwd, dir, slug) {
+  if (fs.existsSync(themeFiles(cwd, slug).dir)) return null;
+  /** @type {string} */
+  let route;
+  try {
+    route = fs.readFileSync(path.join(dir, 'page.tsx'), 'utf8');
+  } catch {
+    return null;
+  }
+  const esc = slug.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const m = new RegExp(`['"]([^'"]*themes/${esc})/${esc}[^'"]*['"]`).exec(
+    route,
+  );
+  if (!m || !m[1].startsWith('.')) return null;
+  const found = path.resolve(dir, m[1]);
+  return fs.existsSync(path.join(found, `${slug}.settings.json`))
+    ? found
+    : null;
+}
+
+/**
+ * The previews a theme may have: the ones recorded with it (added with
+ * --path) and every preview in the routes folders (one renamed by hand, or
+ * one whose record was lost). The one list `see`, a change's refresh and
+ * the preview commands read; each reads a preview's record for its theme.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {string[]}
+ */
+function themePreviews(cwd, slug) {
+  return [...new Set([...recordedPreviews(cwd, slug), ...previewsIn(cwd)])];
+}
+
+/**
+ * Every preview in the app, of any editor theme: the previews of each, by
+ * {@link themePreviews}, that are there.
+ * @param {string} cwd
+ * @returns {string[]}
+ */
+function allPreviews(cwd) {
+  return [
+    ...new Set([
+      ...editedThemes(cwd).flatMap(t => themePreviews(cwd, t)),
+      ...previewsIn(cwd),
+    ]),
+  ].filter(d => fs.existsSync(path.join(d, PREVIEW_DATA)));
 }
 
 /**
@@ -5367,6 +5485,20 @@ async function removePreview(page, options, box) {
     const wore = data.theme;
     /** @type {string | null} */
     let gone = null;
+    // A theme the route imports from outside this project folder (a
+    // workspace app run from its own folder) is not gone: the command is
+    // refused, naming where to run it, and nothing is rewritten away.
+    const away = wore ? themeElsewhere(cwd, at.dir, wore) : null;
+    if (away)
+      refuse(
+        E.ERR_INVALID_ARGUMENT,
+        `The preview wears ${wore}, whose theme folder is ${away}/, outside this project folder (${cwd}). Run the command from the folder that holds themes/${wore}/.`,
+        {
+          run: [
+            `cd ${quoteCommandArgument(path.dirname(path.dirname(away)))} && ${PREVIEW} remove ${quoteCommandArgument(String(page))} --path ${quoteCommandArgument(path.relative(path.dirname(path.dirname(away)), at.dir))}`,
+          ],
+        },
+      );
     if (wore && !fs.existsSync(themeFiles(cwd, wore).dir)) {
       gone = wore;
       data.theme = null;
@@ -5402,26 +5534,10 @@ async function removePreview(page, options, box) {
     let planned;
     /** @type {Awaited<ReturnType<typeof routeTheme>>} */
     let theme;
-    try {
-      theme = await routeTheme(cwd, at.dir, data, {build: false});
-      planned = await routeWrites(cwd, at.dir, data, theme, {gone});
-    } catch (e) {
-      const err = /** @type {any} */ (e);
-      if (
-        [E.ERR_THEME_INVALID, E.ERR_UNKNOWN_THEME, E.ERR_THEME_LOAD].includes(
-          err?.code,
-        )
-      )
-        err.suggestions = [
-          {
-            name: `${PREVIEW} remove${pf}`,
-            reason:
-              'do this instead: removes the whole preview, which needs no theme',
-          },
-          ...(err.suggestions ?? []),
-        ];
-      throw e;
-    }
+    // A theme that does not load is refused with the whole-preview remove
+    // named (themeEditPreviewRemove adds it to every such refusal).
+    theme = await routeTheme(cwd, at.dir, data, {build: false});
+    planned = await routeWrites(cwd, at.dir, data, theme, {gone});
     const elsewhere = `${PREVIEW} remove${pf}`;
     /** @type {Map<string, {rel: string, text: string, keepHash?: boolean}>} */
     const writes = new Map(move.writes.map(w => [w.rel, w]));
