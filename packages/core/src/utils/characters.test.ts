@@ -139,3 +139,97 @@ describe('code-point fallback (no Intl.Segmenter)', () => {
     expect(fallback.characterCount(FLAG)).toBe(2);
   });
 });
+
+describe('firstCharacter fast path', () => {
+  // Independent reference: the same segmenter the slow path uses, called
+  // directly so the fast path is checked against it, not against itself.
+  const reference = new Intl.Segmenter(undefined, {granularity: 'grapheme'});
+  const referenceFirst = (str: string): string => {
+    const first = reference.segment(str)[Symbol.iterator]().next();
+    return first.done ? '' : first.value.segment;
+  };
+
+  it('returns the first letter of an ASCII word', () => {
+    expect(firstCharacter('Alice')).toBe('A');
+  });
+
+  it('returns a single-character string as is', () => {
+    expect(firstCharacter('x')).toBe('x');
+  });
+
+  it('returns an empty string for an empty string', () => {
+    expect(firstCharacter('')).toBe('');
+  });
+
+  it('keeps precomposed accented letters whole', () => {
+    expect(firstCharacter('Zoë')).toBe('Z');
+    expect(firstCharacter('Ëmile')).toBe('Ë');
+    expect(firstCharacter('Łukasz')).toBe('Ł');
+  });
+
+  it('keeps a base letter with its combining accent', () => {
+    expect(firstCharacter(`${E_ACUTE}cole`)).toBe(E_ACUTE);
+  });
+
+  it('does not split CR LF', () => {
+    expect(firstCharacter('\r\nabc')).toBe('\r\n');
+    expect(firstCharacter('\r')).toBe('\r');
+  });
+
+  it('keeps emoji, joined emoji, and flags whole', () => {
+    expect(firstCharacter(`${EMOJI}a`)).toBe(EMOJI);
+    expect(firstCharacter(`${FAMILY}a`)).toBe(FAMILY);
+    expect(firstCharacter(`${FLAG}a`)).toBe(FLAG);
+  });
+
+  it('keeps a lone combining mark', () => {
+    expect(firstCharacter('́a')).toBe('́');
+  });
+
+  it('defers to the segmenter when the second unit is U+0300 or above', () => {
+    expect(firstCharacter('a‍')).toBe('a‍');
+    expect(firstCharacter('❤️')).toBe('❤️');
+    expect(firstCharacter('àb')).toBe('à');
+  });
+
+  it('matches Intl.Segmenter for every first unit below U+0300 and a spread of next units', () => {
+    const seconds = [
+      null,
+      0x00,
+      0x0a,
+      0x0d,
+      0x1f,
+      0x20,
+      0x41,
+      0x7f,
+      0x9f,
+      0xad,
+      0xe9,
+      0x2ff,
+      0x300,
+      0x301,
+      0x200d,
+      0x20e3,
+      0xfe0f,
+      0xd83d,
+      0xdc00,
+    ];
+    const tails = ['', 'a', '́', '\r\n'];
+    let checked = 0;
+    for (let first = 0; first < 0x300; first++) {
+      for (const second of seconds) {
+        for (const tail of tails) {
+          const str =
+            String.fromCharCode(first) +
+            (second === null ? '' : String.fromCharCode(second)) +
+            tail;
+          expect(firstCharacter(str), JSON.stringify(str)).toBe(
+            referenceFirst(str),
+          );
+          checked++;
+        }
+      }
+    }
+    expect(checked).toBe(0x300 * seconds.length * tails.length);
+  });
+});
