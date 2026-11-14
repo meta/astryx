@@ -41,6 +41,7 @@ import {writeWhole} from './_palette.mjs';
 import {
   fontOf,
   fontPackages,
+  fontsourcePackageOf,
   modesOf,
   nearest,
   refuse,
@@ -580,7 +581,7 @@ export function fontNotes(ctx, data) {
       continue;
     }
     notes.push(
-      `"${fontOf(s.value).family.replace(/^["']|["']$/g, '')}" is not a system font and no package loads it: the app must load it, or it falls back.${near ? ` The closest open font is ${near}: ${P} set ${data.name} font ${near}${s.on ? ` --on ${s.on}` : ''}` : ''}`,
+      `"${named}" is not a system font and no package loads it: the app must load it, or it falls back. If Fontsource publishes it, ${installLine(ctx.project.cwd, [fontsourcePackageOf(named)])} installs its package, which the previews and the app copy then load.${near ? ` The closest open font is ${near}: ${P} set ${data.name} font ${near}${s.on ? ` --on ${s.on}` : ''}` : ''}`,
     );
   }
   return notes;
