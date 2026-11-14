@@ -71,13 +71,16 @@ export function readDurations(file = DURATIONS) {
  * pull request's `test-node (2/5)` or a Main run's `test-node (2)`.
  */
 const NODE_LEG_JOB = /^test-node \(\d+(?:\/\d+)?\)$/;
+/** A swizzle-proof leg's job name, such as `swizzle-proof (3/8)`. */
+const SWIZZLE_PROOF_JOB = /^swizzle-proof \(\d+(?:\/\d+)?\)$/;
 
 /**
  * Seconds per Node test file from Vitest's default reporter lines. A whole
  * run's log (`gh run view --log`) names each line's job in its first
  * tab-separated column: only the Node legs' lines count, since other jobs (the
  * build job runs its own `--project node` tests, which the Node legs skip)
- * would book time no leg spends. A single leg's own log has no job column.
+ * would book time no leg spends. The swizzle-proof legs' lines count for the
+ * slice files, which run there. A single leg's own log has no job column.
  */
 export function recordDurations(text) {
   const seconds = {};
@@ -86,7 +89,11 @@ export function recordDurations(text) {
   const plain = text.replace(/(?:\x1b|\^\[)\[[0-9;]*m/g, '');
   for (const line of plain.split('\n')) {
     const columns = line.split('\t');
-    if (columns.length >= 3 && !NODE_LEG_JOB.test(columns[0])) continue;
+    if (columns.length >= 3 && !NODE_LEG_JOB.test(columns[0])) {
+      if (!SWIZZLE_PROOF_JOB.test(columns[0])) continue;
+      const file = /\s(\S+\.test\.mjs)\s/.exec(line)?.[1] ?? '';
+      if (!SWIZZLE_PROOF.test(file)) continue;
+    }
     const match =
       /[✓❯×]\s+\|?node\|?\s+(\S+\.(?:test|spec)\.[cm]?[jt]sx?)\s+\(\d+ tests?[^)]*\)\s+(\d+(?:\.\d+)?)(ms|s)\s*$/.exec(
         line,

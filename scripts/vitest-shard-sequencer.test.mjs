@@ -361,6 +361,21 @@ describe('duration-balanced Node legs', () => {
     });
   });
 
+  it('books the slice files from the swizzle-proof legs, where they run, and nothing else there', () => {
+    const log = [
+      'swizzle-proof (3/8)\tRun this slice of the swizzle proof\t2026-11-14T11:04:57.18Z  ✓  node  packages/cli/test/swizzle-proof/swizzle-proof.3.test.mjs (1 test) 338400ms',
+      'swizzle-proof (5/8)\tRun this slice of the swizzle proof\t2026-11-14T11:04:57.18Z ^[[32m✓^[[39m ^[[30m^[[46m node ^[[49m^[[39m packages/cli/test/swizzle-proof/swizzle-proof.5.test.mjs ^[[2m(1 test)^[[22m^[[33m 122349^[[2mms^[[22m^[[39m',
+      // Any other file in that job is no Node leg's time.
+      'swizzle-proof (5/8)\tBuild core package\t2026-11-14T11:01:57.18Z  ✓  node  packages/cli/other.test.mjs (2 tests) 5000ms',
+      'test-node (1/5)\tRun tests\t2026-11-14T11:04:57.18Z  ✓  node  packages/cli/a.test.mjs (4 tests) 1200ms',
+    ].join('\n');
+    expect(recordDurations(log)).toEqual({
+      'packages/cli/test/swizzle-proof/swizzle-proof.3.test.mjs': 338.4,
+      'packages/cli/test/swizzle-proof/swizzle-proof.5.test.mjs': 122.3,
+      'packages/cli/a.test.mjs': 1.2,
+    });
+  });
+
   it('reads colour codes spelled out, as `gh run view --log` prints them', () => {
     const log =
       'test-node (1/5)\tstep\t2026-11-11T07:54:35.11Z ^[[32m✓^[[39m ^[[30m^[[46m node ^[[49m^[[39m packages/cli/a.test.mjs ^[[2m(12 tests)^[[22m^[[33m 542123^[[2mms^[[22m^[[39m';
