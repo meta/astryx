@@ -27,7 +27,6 @@ InputGroupInternalContext InputGroupInternalContext InputGroup/InputGroup.doc.mj
 InternationalizationContext InternationalizationContext i18n/InternationalizationProvider.doc.mjs i18n/InternationalizationContext.ts
 ItemDescriptionContext ItemDescriptionContext Item/Item.doc.mjs Item/ItemDescriptionContext.tsx
 ItemMarkerColumnsContext ItemMarkerColumnsContext Item/Item.doc.mjs Item/ItemMarkerColumnsContext.tsx
-ItemSwipeLayer ItemSwipeLayer Item/Item.doc.mjs Item/ItemSwipeLayer.tsx
 LayerContext LayerContext Layer/Layer.doc.mjs Layer/LayerContext.ts
 LayerDepthContext LayerDepthContext Layer/Layer.doc.mjs Layer/LayerDepthContext.tsx
 LayerProvider LayerProvider Layer/Layer.doc.mjs Layer/LayerProvider.tsx
@@ -295,7 +294,7 @@ useSettledOpen useSettledOpen hooks/useAnimatedLayout.doc.mjs hooks/useSettledOp
 useSheetGestures useSheetGestures BottomSheet/BottomSheet.doc.mjs BottomSheet/useSheetGestures.ts
 useSliderTouch useSliderTouch Slider/Slider.doc.mjs Slider/useSliderTouch.ts
 useSpeechRecognition useSpeechRecognition Chat/Chat.doc.mjs Chat/useSpeechRecognition.ts
-useSwipeAction useSwipeAction Item/Item.doc.mjs Item/useSwipeAction.ts
+useSwipeAction useSwipeAction Swipe/createSwipe.doc.mjs Swipe/useSwipeAction.ts
 useSwitchTouch useSwitchTouch Switch/Switch.doc.mjs Switch/useSwitchTouch.ts
 useTableCellStyles useTableCellStyles Table/Table.doc.mjs Table/useTableCellStyles.ts
 useTableColumnSettingsState useTableColumnSettingsState Table/plugins/columnSettings/useTableColumnSettingsState.doc.mjs Table/plugins/columnSettings/useTableColumnSettingsState.tsx

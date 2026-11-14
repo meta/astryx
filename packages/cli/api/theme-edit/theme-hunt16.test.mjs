@@ -199,7 +199,8 @@ describe('corrected new commands keep every option', () => {
     ],
     [
       ['new', 'z', '--accent', '#ggg', '--mode', 'light-only', '--png'],
-      / new z .*--accent '#7c3aed'.* --png$/,
+      // Never a stock color the user did not type: the same new without it.
+      / new z --mode light-only --png$/,
     ],
   ])(
     '%j',

@@ -33,7 +33,7 @@ export const docsDense = {
       section: 'Dark mode',
       title: 'Dark mode',
       content: [
-        {type: 'prose', text: "[light, dark] tuples, mode='system'. {@link generic:use-a-theme} for full guide."},
+        {type: 'prose', text: "[light, dark] tuples, mode='system'. A one-mode theme exports `colorModes`; wire `mode={themeModes[defaultThemeSlug] ?? 'system'}`. {@link generic:use-a-theme} for full guide."},
       ],
     },
     {

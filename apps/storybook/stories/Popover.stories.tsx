@@ -11,6 +11,7 @@ import {ResizeHandle, useResizable} from '@astryxdesign/core/Resizable';
 import {Token} from '@astryxdesign/core/Token';
 import {Link} from '@astryxdesign/core/Link';
 import {List, ListItem} from '@astryxdesign/core/List';
+import {createSwipe} from '@astryxdesign/core/Swipe';
 import {VStack, HStack} from '@astryxdesign/core/Layout';
 import {Text, Heading} from '@astryxdesign/core/Text';
 import {Switch} from '@astryxdesign/core/Switch';
@@ -369,6 +370,19 @@ function ResizablePanel() {
  * handle and rows with swipe actions. On a touch screen each follows the
  * finger while the Popover is open.
  */
+/** The message rows' swipe actions, defined once at module scope. */
+const messageSwipe = createSwipe({
+  trailing: [
+    {id: 'archive', label: 'Archive', onActivate: () => {}, variant: 'neutral'},
+    {
+      id: 'delete',
+      label: 'Delete',
+      onActivate: () => {},
+      variant: 'destructive',
+    },
+  ],
+});
+
 export const OverPageControls: Story = {
   tags: ['!autodocs'],
   render: () => (
@@ -388,16 +402,7 @@ export const OverPageControls: Story = {
             key={label}
             label={label}
             onClick={() => {}}
-            swipeActions={{
-              trailing: [
-                {label: 'Archive', onActivate: () => {}, variant: 'neutral'},
-                {
-                  label: 'Delete',
-                  onActivate: () => {},
-                  variant: 'destructive',
-                },
-              ],
-            }}
+            swipe={messageSwipe}
           />
         ))}
       </List>

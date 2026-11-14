@@ -121,7 +121,8 @@ import {doc as themePaletteGenerateFn} from '../../../api/theme/themePaletteGene
  * @property {(err: import('../../../api/error.mjs').AstryxError, cwd: string) => import('../../../api/error.mjs').AstryxError | null} [explain] - A clearer refusal for this group, or null.
  * @property {(files: string[], options: {cwd: string, check?: boolean, family?: boolean, iconsSpecifier?: string, out?: string}) => Promise<import('../../../api/error.mjs').AstryxError | null>} [preflight] - A refusal before a build starts, or null.
  * @property {(files: string[], options: {cwd: string}) => Promise<() => Promise<void>>} [hold] - Locks held while a build or check runs; resolves to their release.
- * @property {(file: string, cwd: string, opts: {check: boolean}) => Record<string, unknown> | null} [extraData] - Fields a group adds to a build's result data (the editor's `appCopyStale`).
+ * @property {(file: string, cwd: string, opts: {check: boolean, upToDate?: boolean}) => Record<string, unknown> | null | Promise<Record<string, unknown> | null>} [extraData] - Fields a group adds to a build's result data (the editor's `appCopyStale`); in a check, `upToDate: false` fails it.
+ * @property {(file: string, cwd: string) => (['light'] | ['dark'] | null)} [colorModes] - The one color mode a theme file has that the file itself cannot say, for the build to write into the built module.
  * @property {(file: string, cwd: string) => ((family: string) => boolean) | null} [loadedFonts] - Font families the app loads for a theme file that the file itself cannot say, so the build does not name them as unloaded.
  * @property {(file: string, cwd: string) => {name: string, reason: string} | null} [missingSource] - For a source file that is not there, this group's way to write it again, or null.
  * @property {(options: {targetPath?: string, overwrite?: boolean, cwd?: string}) => import('../../../api/theme/theme.type.mjs').ThemeTemplateResponse} [template] - This group's template write, in place of `themeTemplate`.
@@ -632,6 +633,7 @@ function printThemeApp(result) {
         'stylesheet',
         'fontStylesheet',
         'source',
+        'mode',
       ],
       layout: 'stacked',
     }),
@@ -644,6 +646,7 @@ function printThemeApp(result) {
           slug: change.slug,
           changed: change.changed,
           firstAdd: change.firstAdd,
+          ...(change.wireModes ? {wireModes: true} : {}),
         },
       ],
       {
@@ -654,20 +657,40 @@ function printThemeApp(result) {
           'slug',
           'changed',
           'firstAdd',
+          'wireModes',
         ],
         layout: 'stacked',
       },
     ),
   );
   for (const note of result.data.notes ?? []) emit(text(`[note] ${note}`));
-  if (!change.firstAdd) return;
   const stem = path.basename(modulePath, path.extname(modulePath));
+  if (!change.firstAdd) {
+    // The module now lists one-mode themes' modes: the app's wiring, made
+    // without them, passes the selected theme's mode from now on.
+    if (change.wireModes)
+      emit(
+        text(
+          "The theme module now exports themeModes. Pass the selected theme's mode to Theme in the app root:",
+        ),
+        code(
+          "import {Theme} from '@astryxdesign/core/theme';\n" +
+            `import {themes, defaultThemeSlug, themeModes} from './${stem}';\n\n` +
+            "<Theme theme={themes[defaultThemeSlug]} mode={themeModes[defaultThemeSlug] ?? 'system'}>\n  <App />\n</Theme>",
+        ),
+      );
+    return;
+  }
+  // With a theme of one color mode added, the generated module lists each
+  // such theme's mode in `themeModes`, and the wiring passes the selected
+  // theme's (none for a two-mode theme, which follows the system).
+  const modes = result.data.themes.some(t => t.mode);
   emit(
     text('Wire the generated module once in the app root:'),
     code(
       "import {Theme} from '@astryxdesign/core/theme';\n" +
-        `import {themes, defaultThemeSlug} from './${stem}';\n\n` +
-        '<Theme theme={themes[defaultThemeSlug]}>\n  <App />\n</Theme>',
+        `import {themes, defaultThemeSlug${modes ? ', themeModes' : ''}} from './${stem}';\n\n` +
+        `<Theme theme={themes[defaultThemeSlug]}${modes ? " mode={themeModes[defaultThemeSlug] ?? 'system'}" : ''}>\n  <App />\n</Theme>`,
     ),
   );
 }
@@ -1351,7 +1374,17 @@ function registerThemeCommands(theme, program, docs, words) {
             Boolean(loads) && fonts.length > 0 && fonts.every(f => loads?.(f))
           );
         };
-        if (loads && !deferred) {
+        // A check whose result a group may still fail holds its lines
+        // until the group has looked.
+        /** @type {Array<string | undefined> | null} */
+        let held = null;
+        if (options.check && words.extraData && !deferred) {
+          held = [];
+          logger.log = (/** @type {string | undefined} */ message) => {
+            held?.push(message);
+          };
+        }
+        if (loads && !deferred && !held) {
           logger.log = (/** @type {string | undefined} */ message) => {
             if (
               typeof message === 'string' &&
@@ -1383,6 +1416,7 @@ function registerThemeCommands(theme, program, docs, words) {
             claimedOutputs,
             deferredWrites: deferred ? writes : undefined,
             commandWords: words,
+            colorModes: words.colorModes?.(entry.file, process.cwd()) ?? null,
           };
           let result;
           if (report) {
@@ -1438,11 +1472,27 @@ function registerThemeCommands(theme, program, docs, words) {
                   namesOnlyLoaded(m)
                 ),
             );
-          // A group may add to a build's result (the editor's app copy note).
-          const extra = words.extraData?.(entry.file, process.cwd(), {
+          // A group may add to a build's result (the editor's app copy:
+          // what keeps it behind, and in a check whether it is current).
+          const extra = await words.extraData?.(entry.file, process.cwd(), {
             check: Boolean(options.check),
+            upToDate: /** @type {any} */ (result)?.data?.upToDate,
           });
           if (extra && result?.data) Object.assign(result.data, extra);
+          // A check the group failed says so where the check said ok.
+          if (held) {
+            logger.log = log;
+            for (const line of held)
+              log.call(
+                logger,
+                extra?.upToDate === false &&
+                  typeof line === 'string' &&
+                  /^\s*\[ok\]/.test(line)
+                  ? `[fail] ${String(extra.appCopyStale ?? 'not up to date')}`
+                  : line,
+              );
+            held = null;
+          }
           results.push({file: entry.file, receipt: result ?? null});
           if (deferred) built.push({writes, lines});
           if (
@@ -1456,6 +1506,8 @@ function registerThemeCommands(theme, program, docs, words) {
         } catch (e) {
           logger.log = log;
           logger.warn = warn;
+          for (const line of held ?? []) log.call(logger, line);
+          held = null;
           const err =
             /** @type {import('../../../api/error.mjs').AstryxError} */ (e);
           // Stop at the first failure, as a shell loop under `set -e` does.

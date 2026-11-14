@@ -187,7 +187,9 @@ describe('N66/N67/N62/N69: entry repair', () => {
       ['text-size', '18'],
     ],
   ])('%j is %j', ([thing, value], [t, v]) => {
-    expect(normalizeEntry(thing, value)).toEqual({thing: t, value: v});
+    // A second declaration it drops is named apart (`dropped`).
+    const {thing: gotThing, value: gotValue} = normalizeEntry(thing, value);
+    expect({thing: gotThing, value: gotValue}).toEqual({thing: t, value: v});
   });
 
   it('keeps a value with no debris as typed', () => {

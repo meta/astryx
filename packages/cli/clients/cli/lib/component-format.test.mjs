@@ -1,7 +1,13 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect} from 'vitest';
-import {formatBrief, formatCompact, formatFull} from './component-format.mjs';
+import {
+  formatBestPractices,
+  formatBrief,
+  formatCompact,
+  formatFull,
+  formatProps,
+} from './component-format.mjs';
 
 describe('component accessibility guidance', () => {
   const docs = {
@@ -63,15 +69,42 @@ describe('formatFull sub-component rendering', () => {
     };
     const out = formatFull(docs);
 
-    expect(out).toContain('### XDSRadioListItem');
+    expect(out).toContain('XDSRadioListItem');
     expect(out).not.toContain('undefined');
     // Points the reader at the sub-component's own docs instead of a blank.
     expect(out).toMatch(
-      /(?:astryx|@astryxdesign\/cli(?:@\S+)?) component XDSRadioListItem/,
+      /^See `(?:\S+ )*(?:astryx|@astryxdesign\/cli(?:@\S+)?) component XDSRadioListItem` for its props and usage\.$/m,
     );
+    expect(out).not.toContain('### XDSRadioListItem');
   });
 
-  it('renders a full props table for a sub-component that has inline props', () => {
+  it('names consecutive bare sub-components on one line, in order', () => {
+    const docs = {
+      name: 'Table',
+      description: 'Rows and columns.',
+      components: [
+        {name: 'TableHeader'},
+        {name: 'TableBody'},
+        {name: 'TableRow', description: 'One row of cells.'},
+        {name: 'TableCell'},
+        {name: 'useTableSortable'},
+      ],
+    };
+    for (const out of [formatFull(docs), formatCompact(docs, 'Table', '')]) {
+      const lines = out.split('\n');
+      const shared = lines.filter(l => l.startsWith('Read each with'));
+      expect(shared).toHaveLength(2);
+      expect(shared[0]).toMatch(/: TableHeader, TableBody\.$/);
+      expect(shared[1]).toMatch(/: TableCell, useTableSortable\.$/);
+      expect(out).not.toContain('### TableHeader');
+      // A sub-component with its own text keeps its heading, between the two runs.
+      const row = lines.indexOf('### TableRow');
+      expect(row).toBeGreaterThan(lines.indexOf(shared[0]));
+      expect(row).toBeLessThan(lines.indexOf(shared[1]));
+    }
+  });
+
+  it('renders a full props list for a sub-component that has inline props', () => {
     const docs = {
       name: 'ButtonGroup',
       description: 'Groups buttons.',
@@ -94,7 +127,9 @@ describe('formatFull sub-component rendering', () => {
 
     expect(out).toContain('### XDSButtonGroup');
     expect(out).toContain('Connected button styling.');
-    expect(out).toContain('| `label` |');
+    expect(out).toContain(
+      '- `label`: `string` **(required)** - Accessible label.',
+    );
     expect(out).not.toContain('undefined');
     // With real props, it should NOT emit the "see docs" pointer.
     expect(out).not.toContain('astryx component XDSButtonGroup');
@@ -145,19 +180,11 @@ describe('formatFull theming override keys', () => {
   });
 });
 
-/** Pipes that actually separate cells — a `\|` is content, not a separator. */
-function cellPipes(row) {
-  return (row.match(/(?<!\\)\|/g) || []).length;
-}
-
-describe('markdown table cells escape their pipes', () => {
-  // A prop type is a union, and a union is spelled with `|` — the very
-  // character GFM uses to separate cells. Backticks do not protect it: a row
-  // with more cells than the header has columns gets its excess *discarded*,
-  // so an unescaped `gap: 0 | 0.5 | ...` silently eats its own Default and
-  // Description columns. See packages/core/src/Markdown/parser.ts, which
-  // splits on unescaped pipes and preserves `\|` as literal.
-  it('keeps a union-typed prop row at four cells', () => {
+describe('prop lists keep union types whole', () => {
+  // A prop type is a union, spelled with `|`. In a list item the pipes are
+  // plain text, so the type, default and description stay on one line as
+  // written, with nothing escaped.
+  it('prints a union-typed prop on one line with its default and description', () => {
     const docs = {
       name: 'Grid',
       description: 'A grid.',
@@ -170,19 +197,29 @@ describe('markdown table cells escape their pipes', () => {
         },
       ],
     };
-    const row = formatFull(docs)
+    const line = formatFull(docs)
       .split('\n')
-      .find(l => l.startsWith('| `gap`'));
+      .find(l => l.startsWith('- `gap`'));
 
-    // A 4-column row has exactly 5 separators. Unescaped, this row had 15.
-    expect(cellPipes(row)).toBe(5);
-    expect(row).toContain('\\|');
-    // The columns the unescaped pipes were swallowing.
-    expect(row).toContain('`2`');
-    expect(row).toContain('Spacing between all items.');
+    expect(line).toBe(
+      '- `gap`: `0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10` = `2` - Spacing between all items.',
+    );
   });
 
-  it('escapes pipes in a description too', () => {
+  it('prints no separator or placeholder for a prop with no description', () => {
+    const docs = {
+      name: 'Tag',
+      description: 'A tag.',
+      props: [{name: 'label', type: 'string', required: true}],
+    };
+    const line = formatFull(docs)
+      .split('\n')
+      .find(l => l.startsWith('- `label`'));
+
+    expect(line).toBe('- `label`: `string` **(required)**');
+  });
+
+  it('keeps pipes in a description as written', () => {
     const docs = {
       name: 'AppShell',
       description: 'A shell.',
@@ -190,15 +227,18 @@ describe('markdown table cells escape their pipes', () => {
         {
           name: 'mobileNav',
           type: 'ReactNode',
-          description: "Config. breakpoint is 'sm' | 'md' | 'lg' | 'none'.",
+          description:
+            "Collapses below breakpoint 'sm' | 'md' | 'lg' | 'none'.",
         },
       ],
     };
-    const row = formatFull(docs)
+    const line = formatFull(docs)
       .split('\n')
-      .find(l => l.startsWith('| `mobileNav`'));
+      .find(l => l.startsWith('- `mobileNav`'));
 
-    expect(cellPipes(row)).toBe(5);
+    expect(line).toBe(
+      "- `mobileNav`: `ReactNode` - Collapses below breakpoint 'sm' | 'md' | 'lg' | 'none'.",
+    );
   });
 });
 
@@ -340,5 +380,92 @@ describe('example kind', () => {
     const out = formatBrief(docs, 'Widget');
     expect(out).toContain('<Widget label="Hi" />');
     expect(out).not.toContain('createWidgetStore');
+  });
+});
+
+describe('prop descriptions in a component read', () => {
+  const long =
+    'Whether the details collapse. On by default, starting collapsed. `false` keeps them always visible, with no toggle and no animation, in every layout and at every size. `{defaultIsOpen: true}` starts open, and `{isOpen, onOpenChange}` makes it controlled, like any other collapsible region in the system.';
+  const docs = {
+    name: 'Notice',
+    description: 'A notice.',
+    props: [
+      {
+        name: 'collapsible',
+        type: 'boolean',
+        default: 'true',
+        description: long,
+      },
+      {name: 'title', type: 'string', description: 'The main message.'},
+    ],
+  };
+  const propsCommand = 'component Notice --props';
+
+  it('prints the first sentence and names the command that prints them whole', () => {
+    const out = formatFull(docs, {propsCommand});
+
+    expect(out).toContain(
+      '- `collapsible`: `boolean` = `true` - Whether the details collapse.\n',
+    );
+    expect(out).toContain('- `title`: `string` - The main message.');
+    expect(out).toMatch(
+      /Each prop description's first sentence; `.* component Notice --props` prints them whole\./,
+    );
+  });
+
+  it('prints every description whole in the --props view', () => {
+    expect(formatProps(docs, 'Notice')).toContain(
+      `- \`collapsible\`: \`boolean\` = \`true\` - ${long}`,
+    );
+  });
+
+  it('prints descriptions whole when the read names no --props command', () => {
+    const out = formatFull(docs);
+
+    expect(out).toContain(long);
+    expect(out).not.toContain('first sentence');
+  });
+
+  it('prints descriptions whole when the cut saves less than the pointer costs', () => {
+    const short = {
+      ...docs,
+      props: [
+        {name: 'title', type: 'string', description: 'The message. Short.'},
+      ],
+    };
+    const out = formatFull(short, {propsCommand});
+
+    expect(out).toContain('- `title`: `string` - The message. Short.');
+    expect(out).not.toContain('first sentence');
+  });
+});
+
+describe('formatBestPractices', () => {
+  it("labels each run of Do and Don't items and keeps their order", () => {
+    const lines = formatBestPractices([
+      {guidance: true, description: 'Use one primary action.'},
+      {guidance: true, description: 'Write clear labels.'},
+      {guidance: false, description: 'Stack two primary buttons.'},
+      {guidance: true, description: 'Show progress.'},
+    ]);
+
+    expect(lines).toEqual([
+      '## Best Practices\n',
+      'Do:',
+      '- Use one primary action.',
+      '- Write clear labels.',
+      '',
+      "Don't:",
+      '- Stack two primary buttons.',
+      '',
+      'Do:',
+      '- Show progress.',
+      '',
+    ]);
+  });
+
+  it('prints nothing when there are no practices', () => {
+    expect(formatBestPractices([])).toEqual([]);
+    expect(formatBestPractices(undefined)).toEqual([]);
   });
 });

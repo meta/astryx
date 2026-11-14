@@ -604,6 +604,11 @@
       "types": "./dist/Stepper/index.d.ts",
       "default": "./dist/Stepper/index.js"
     },
+    "./Swipe": {
+      "source": "./src/Swipe/index.ts",
+      "types": "./dist/Swipe/index.d.ts",
+      "default": "./dist/Swipe/index.js"
+    },
     "./Switch": {
       "source": "./src/Switch/index.ts",
       "types": "./dist/Switch/index.d.ts",

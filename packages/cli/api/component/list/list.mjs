@@ -22,7 +22,10 @@ import {
   resolveImportPath,
   resolveIntegrationImportPath,
 } from '../../../foundation/discovery/component-discovery.mjs';
-import {discoverExternalPackages} from '../../../foundation/fs/paths.mjs';
+import {EXACT_CODEC} from '../../../foundation/fs/exact-codec.mjs';
+import {persistedGather} from '../../../foundation/fs/gather-cache.mjs';
+import {CLI_ROOT, discoverExternalPackages, realDir} from '../../../foundation/fs/paths.mjs';
+import {hostedRun} from '../../../foundation/runtime/package-root.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {AstryxError} from '../../error.mjs';
 import {
@@ -162,10 +165,50 @@ async function replacementEntry(replacement, detail, {zh, dense, lang}) {
  * @param {string|null} opts.lang
  * @returns {Promise<ComponentListResponse>}
  */
-export async function componentList(
-  coreDir,
-  {cwd, category, detail, zh, dense, lang},
-) {
+export async function componentList(coreDir, opts) {
+  const {cwd, category, detail, zh, dense, lang} = opts;
+  // A function of the files it reads (Core's component folders and docs, the
+  // integrations and their docs), which the kept gather stamps: a later run
+  // with every one unchanged reads the list back.
+  return /** @type {ComponentListResponse} */ (
+    await persistedGather(
+      [
+        'component-list',
+        realDir(cwd),
+        coreDir,
+        CLI_ROOT,
+        hostedRun()?.integrations ?? [],
+        category ?? null,
+        detail,
+        zh,
+        dense,
+        lang,
+      ],
+      () => componentListNow(coreDir, opts),
+      COMPONENT_LIST_CODEC,
+    )
+  );
+}
+
+/** The component list, kept exactly, with the envelope's shape. */
+const COMPONENT_LIST_CODEC = {
+  ...EXACT_CODEC,
+  valid: (/** @type {any} */ value) =>
+    value != null &&
+    value.type === 'component.list' &&
+    value.data != null &&
+    typeof value.data.detail === 'string' &&
+    value.data.components != null &&
+    typeof value.data.components === 'object',
+};
+
+/**
+ * componentList, worked out now.
+ * @param {string} coreDir
+ * @param {Parameters<typeof componentList>[1]} options
+ * @returns {Promise<ComponentListResponse>}
+ */
+async function componentListNow(coreDir, {cwd, category, detail, zh, dense, lang}) {
   const components = discoverComponents(coreDir);
   // An active integration replacement takes its Core component's slot in
   // every list view (spec:AST-035 FR11); the Core original stays reachable

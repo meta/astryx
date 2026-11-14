@@ -66,9 +66,11 @@ describe('a check fails when the app copy is behind, saying why', () => {
       'themes/c1/c1.theme.ts',
       '--check',
     ]);
+    // The documented check result: upToDate false, the code, and why.
     const out = JSON.parse(j.stdout);
-    expect(out.code).toBe('ERR_THEME_STALE');
-    expect(out.data?.upToDate).not.toBe(true);
+    expect(out.data.code).toBe('ERR_THEME_STALE');
+    expect(out.data.upToDate).toBe(false);
+    expect(out.data.appCopyStale).toContain('is not up to date');
   }, 240_000);
 
   it('one copy file deleted fails --check, and a no-op set writes it back', async () => {
@@ -100,9 +102,11 @@ describe('a check never passes over a copy behind its build', () => {
       '--check',
     ]);
     expect(j.status).toBe(1);
+    // The documented check result: upToDate false, the code, and why.
     const out = JSON.parse(j.stdout);
-    expect(out.code).toBe('ERR_THEME_STALE');
-    expect(out.data?.upToDate).not.toBe(true);
+    expect(out.data.code).toBe('ERR_THEME_STALE');
+    expect(out.data.upToDate).toBe(false);
+    expect(out.data.appCopyStale).toContain('is not up to date');
   }, 240_000);
 
   it('a copy left behind while its folder was read-only fails --check once it is writable again', async () => {
@@ -140,6 +144,12 @@ describe('compile --json says what the text says', () => {
     ]);
     const out = JSON.parse(j.stdout);
     expect(JSON.stringify(out.data.notices ?? [])).not.toContain('"Inter"');
+    // The compile above wrote the copy from the fonts the theme loads now
+    // (none installed here); the sheet is set again as the app loads them.
+    fs.writeFileSync(
+      sheet,
+      `${head}\n@import "@fontsource/inter/index.css";\n`,
+    );
     const full = cli([
       'experimental',
       'theme',

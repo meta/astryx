@@ -115,15 +115,22 @@ const CHECK_CODEC = {
  * A doctor check that reads only files, kept between runs through the kept
  * gather (foundation/fs/gather-cache.mjs): a later `doctor` with every file,
  * folder, module and environment variable it read unchanged reads the check
- * back. Only the docs checks go through here; a check that depends on the
- * time, the network or anything else the stamps do not see never does.
+ * back. Only the docs checks and the theme-wiring scan go through here; a
+ * check that depends on the time, the network or anything else the stamps do
+ * not see never does.
  * @template T
  * @param {{name: string, cwd: string, coreDir: string | null}} where - The
  *   check, the project folder, and the Core folder the project loads.
  * @param {() => Promise<T>} check
+ * @param {{encode: (value: any) => any, decode: (stored: any) => any, valid?: (value: any) => boolean}} [codec]
+ *   How the value is kept: a check record unless given.
  * @returns {Promise<T>}
  */
-export function keptFileCheck({name, cwd, coreDir}, check) {
+export function keptFileCheck(
+  {name, cwd, coreDir},
+  check,
+  codec = CHECK_CODEC,
+) {
   // Only a recorded run (a plain `doctor` from the bin) reads or keeps one: a
   // hosted run names its commands its own way, so it always checks.
   if (!recordedRun()) return check();
@@ -131,9 +138,32 @@ export function keptFileCheck({name, cwd, coreDir}, check) {
     // With the command name the checks print commands with.
     ['doctor-check', name, cwd, coreDir, getCliInvocation(cwd)],
     check,
-    CHECK_CODEC,
+    codec,
   );
 }
+
+/**
+ * The theme-wiring scan's result ({@link themeImportWiring}), kept exactly,
+ * with its shape.
+ */
+export const THEME_WIRING_CODEC = {
+  encode: (/** @type {any} */ value) => value,
+  decode: (/** @type {any} */ value) => value,
+  valid: (/** @type {any} */ value) =>
+    value != null &&
+    Array.isArray(value.wired) &&
+    Array.isArray(value.unconfirmed) &&
+    value.wired.every(
+      (/** @type {any} */ w) =>
+        w != null &&
+        typeof w.slug === 'string' &&
+        typeof w.owner === 'string' &&
+        typeof w.file === 'string',
+    ) &&
+    value.unconfirmed.every(
+      (/** @type {any} */ u) => u != null && typeof u.file === 'string',
+    ),
+};
 
 /**
  * Package written to the generated app record for one discovered theme.

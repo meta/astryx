@@ -92,6 +92,9 @@
  * @property {string} stylesheet production stylesheet import
  * @property {string} [fontStylesheet] package-owned font stylesheet import
  * @property {'bundled'|'package'|'local'} source
+ * @property {'light'|'dark'} [mode] the one color mode the theme has, when its
+ *   built module exports one (`colorModes`); the generated module then lists
+ *   it in `themeModes`. Absent for a theme with both modes.
  */
 
 /**
@@ -103,7 +106,10 @@
  * `notes` is present only when the command did more than its change says:
  * it chose between a local and a package theme with one slug, replaced a
  * recorded owner, or dropped a recorded theme whose source is gone.
- * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean}, notes?: string[]}} data
+ * `change.wireModes` is present when the module lists a theme's one color
+ * mode (`themeModes`) for the first time after the app was wired: the app's
+ * `Theme` then takes `mode={themeModes[defaultThemeSlug] ?? 'system'}`.
+ * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean, wireModes?: true}, notes?: string[]}} data
  */
 
 /**

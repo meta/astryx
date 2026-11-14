@@ -16,7 +16,7 @@ export const doc = {
   summary:
     'Render a page to one self-contained HTML file, or turn a rendered file back into a page.',
   description:
-    "Renders the page module's default export on the server with the project's own React and Astryx components (outside a project, with the Astryx, React and StyleX the CLI runs with), and writes ONE static HTML file that needs nothing beside it: the page's own StyleX styles are compiled, Core's stylesheets are cut to the rules the markup uses (layer order, custom properties and keyframes kept), local images become data: URIs, and the page's source is embedded so it can be given back exactly. The file runs no script and loads nothing from the network, so it works inside a sandboxed frame with a strict content security policy, and its colors follow the viewer's light or dark scheme. Warnings name anything that may differ from what the author meant, such as a component that did not render the text it was given. With `reverse`, it writes the embedded source back byte for byte, and only the files a render embeds: the page and the local modules, stylesheets, JSON files and images it imports, into a new folder; a file with Astryx markup but no embedded source is rebuilt from its component class names and data attributes (text and layout only); any other file is refused. Experimental: it may change or be removed in a patch release.",
+    "Renders the page module's default export on the server with the project's own React and Astryx components (outside a project, with the Astryx, React and StyleX the CLI runs with), and writes ONE static HTML file that needs nothing beside it: the page's own StyleX styles are compiled, Core's stylesheets are cut to the rules the markup uses (layer order, custom properties and keyframes kept), local images become data: URIs, and the page's source is embedded so it can be given back exactly. The file runs no script and loads nothing from the network, so it works inside a sandboxed frame with a strict content security policy, and its colors follow the viewer's light or dark scheme. Warnings name anything that may differ from what the author meant, such as a component that did not render the text it was given. The file opens with a plain note for its next reader, a person or an agent: the CLI version and render format that made it, the page's path, the files it carries, the packages and versions it rendered with, and the exact commands that give the page back and render it again; the embedded source records the same facts and the markup as rendered. With `reverse` (the way back, or unrender), it writes the embedded source back byte for byte, and only the files a render embeds: the page and the local modules, stylesheets, JSON files and images it imports, into a new folder; it also reports the render format, the CLI version and packages that rendered the file, and whether someone changed the markup after the render, naming each run of text that changed and where the old text sits in the restored source (the restored files stay the page as rendered); a file with Astryx markup but no embedded source is rebuilt from its component class names and data attributes (text and layout only); any other file is refused. Experimental: it may change or be removed in a patch release.",
   importPath: '@astryxdesign/cli/api/experimental',
   signature:
     'render(file: string, options?: RenderOptions): Promise<RenderPageResponse | RenderReverseResponse>',
@@ -29,6 +29,9 @@ export const doc = {
     'snapshot',
     'self-contained',
     'reverse',
+    'unrender',
+    'restore',
+    'round trip',
   ],
   params: [
     {
@@ -77,7 +80,7 @@ export const doc = {
     {
       type: 'render.reverse',
       description:
-        "How the page came back (`embedded`, exact; or `rebuilt`, text and layout only), the files written, and for a rebuilt page the components it uses and what could not be rebuilt.",
+        "How the page came back (`embedded`, exact; or `rebuilt`, text and layout only), the files written; for an embedded page the render format, the CLI version and packages that rendered it, and whether its markup changed after the render, with each text change; for a rebuilt page the components it uses and what could not be rebuilt.",
     },
   ],
   throws: [
@@ -101,7 +104,11 @@ export const doc = {
       code: 'ERR_RENDER_NOT_ASTRYX',
       when: 'reversing a file a render did not write, with no embedded source and no Astryx markup; the suggestion is `astryx build "<what the page is>"`',
     },
-    {code: 'ERR_RENDER_SOURCE_DAMAGED', when: 'reversing a file a render wrote whose embedded source was removed (and that has no Astryx components to rebuild from), a file whose embedded source is damaged, lists a path twice, carries a module, stylesheet or JSON file the page does not reach through its imports, or an image, font or media file whose bytes are not one, or carries a file a render never embeds (a dotfile or dot-folder, `node_modules`, a package manifest, lockfile or tool configuration, or any kind but a page module, stylesheet, JSON or image)'},
+    {code: 'ERR_RENDER_SOURCE_DAMAGED', when: 'reversing a file a render wrote whose embedded source was removed (and that has no Astryx components to rebuild from), a file whose embedded source is cut short or damaged (or names a CLI version that is not a release version), lists a path twice, carries a module, stylesheet or JSON file the page does not reach through its imports, or an image, font or media file whose bytes are not one, or carries a file a render never embeds (a dotfile or dot-folder, `node_modules`, a package manifest, lockfile or tool configuration, or any kind but a page module, stylesheet, JSON or image)'},
+    {
+      code: 'ERR_RENDER_NEWER_FORMAT',
+      when: 'reversing a file in a newer render format than this CLI reads; the message and the suggestion name the CLI version that wrote it',
+    },
     {code: 'ERR_PATH_TRAVERSAL', when: 'a file would be written outside the current folder (symlinks followed), or through a symbolic link: `out`, or with `reverse` the page or an embedded file; or, with `reverse`, a file other than the page would go into a folder that already exists'},
   ],
   examples: [

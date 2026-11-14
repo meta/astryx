@@ -444,6 +444,26 @@ describe('component dispatcher — scoped --package routes all projections', () 
   );
 
   it(
+    'a scoped read points to a --props command with the same scope',
+    async () => {
+      const scoped = await runCli(
+        ['component', 'Button', '--package', CORE],
+        cwd,
+      );
+      expect(scoped.status).toBe(0);
+      expect(scoped.stdout).toContain(
+        `component Button --package ${CORE} --props\` prints them whole.`,
+      );
+
+      const bare = await runCli(['component', 'Button'], cwd);
+      expect(bare.stdout).toContain(
+        'component Button --props` prints them whole.',
+      );
+    },
+    SLOW,
+  );
+
+  it(
     "--props carries a prop doc's stability marker (Drawer's experimental prop)",
     async () => {
       const r = await component('Drawer', {cwd, props: true});
@@ -459,7 +479,7 @@ describe('component dispatcher — scoped --package routes all projections', () 
   );
 
   it(
-    '--props --json and the text props table both show the stability marker',
+    '--props --json and the text props list both show the stability marker',
     async () => {
       const json = await runCli(
         ['component', 'Drawer', '--props', '--json'],
@@ -476,9 +496,9 @@ describe('component dispatcher — scoped --package routes all projections', () 
       expect(text.status).toBe(0);
       const rows = text.stdout
         .split('\n')
-        .filter(line => line.startsWith('| `'));
+        .filter(line => line.startsWith('- `'));
       const experimentalRow = rows.find(line =>
-        line.startsWith('| `experimental` |'),
+        line.startsWith('- `experimental`:'),
       );
       expect(experimentalRow).toContain('**(experimental)**');
       expect(

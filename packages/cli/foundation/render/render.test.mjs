@@ -9,7 +9,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {describe, expect, it} from 'vitest';
 import {classesIn, cutCss, layerOrderOf, requiredClasses} from './css-cut.mjs';
-import {readSourceBlock, sourceBlock} from './source-block.mjs';
+import {readSourceBlock, renderedHeadOf, renderedMarkupOf, sourceBlock} from './source-block.mjs';
 import {isAstryxMarkup, parseHtml} from './html-reader.mjs';
 import {renderPage} from './render-page.mjs';
 import {makeLinkedFixture, removeLinkedFixture} from '../../test-utils/linked-fixture.mjs';
@@ -81,8 +81,47 @@ describe('the embedded source', () => {
   it('reports a damaged block', () => {
     const block = sourceBlock('p.tsx', [{path: 'p.tsx', bytes: Buffer.from('a')}]);
     expect(readSourceBlock(block.replace(/"sha256":"[0-9a-f]/, '"sha256":"Z'))).toMatchObject({found: true});
-    expect('damaged' in readSourceBlock(block.replace('"version":1', '"version":2'))).toBe(true);
+    expect(readSourceBlock(block.replace('"version":1', '"version":2'))).toEqual({found: true, newer: {format: 2, cli: null}});
+    expect('damaged' in readSourceBlock(block.replace('"version":1', '"version":"one"'))).toBe(true);
+    expect('damaged' in readSourceBlock(block.replace('"version":1', '"version":0'))).toBe(true);
     expect(readSourceBlock('<p>none</p>')).toEqual({found: false});
+  });
+});
+
+describe('the parts of a rendered file a reverse compares', () => {
+  it('finds the title, the style and the body as a browser does: outside comments and style text', () => {
+    const style = '<style>.t::before{content:"</head><body><!-- x -->"}</style>';
+    const html =
+      '<!doctype html><html><head><meta charset="utf-8">\n<!-- Page: src/<body>/page.tsx -->\n' +
+      `<title>Report</title>${style}</head><body class="x">Markup<script type="application/x-astryx-source">{}</script></body></html>`;
+    expect(renderedHeadOf(html)).toEqual({title: 'Report', style});
+    expect(renderedMarkupOf(html)).toBe('Markup');
+  });
+
+  it('reads <!--> and <!---> as whole comments, in the page and in its head alike', () => {
+    const p = /** @type {any} */ (parseHtml('<p>a<!-->b<!--->c<!---->d</p>').children[0]);
+    expect(p.children.map((/** @type {{text: string}} */ c) => c.text).join('')).toBe('abcd');
+    expect(renderedHeadOf('<html><head><!--><title>T</title><!---><style>s</style></head><body>M')).toEqual({
+      title: 'T',
+      style: '<style>s</style>',
+    });
+  });
+
+  it('reads crafted markup in time that grows with its length', () => {
+    const started = Date.now();
+    for (const html of ['<html><head>' + '<a '.repeat(32000), '<html><head>' + '<style>a</style>'.repeat(20000) + '<body>x']) {
+      parseHtml(html);
+      renderedHeadOf(html);
+      renderedMarkupOf(html);
+      readSourceBlock(html);
+    }
+    expect(Date.now() - started).toBeLessThan(1500);
+  });
+
+  it('reads a file a released CLI wrote, with no note', () => {
+    const html = '<!doctype html><html><head><title>A &amp; B</title><style>a{}</style></head><body><p>M</p><script type="application/x-astryx-source">{}</script></body></html>';
+    expect(renderedHeadOf(html)).toEqual({title: 'A &amp; B', style: '<style>a{}</style>'});
+    expect(renderedMarkupOf(html)).toBe('<p>M</p>');
   });
 });
 
@@ -93,6 +132,14 @@ describe('the HTML reader', () => {
     expect(body.tag).toBe('body');
     expect(body.children[0].attrs).toEqual({class: 'astryx-card', 'data-x': '1'});
     expect(body.children[0].children[0].text).toBe('a & b');
+  });
+
+  it('reads a self-closing SVG title as empty, and keeps the text after it', () => {
+    const doc = parseHtml('<div><svg><title/><path d="M0 0"/></svg><p>after</p></div>');
+    const div = /** @type {any} */ (doc.children[0]);
+    const [svg, p] = div.children;
+    expect(svg.children[0]).toEqual({tag: 'title', attrs: {}, children: []});
+    expect(p.children[0].text).toBe('after');
   });
 
   it('tells Astryx markup from other HTML', () => {

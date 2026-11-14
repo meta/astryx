@@ -3,6 +3,7 @@
 import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {Lightbox, useLightbox} from '@astryxdesign/core/Lightbox';
+import {SAMPLE_IMAGES} from './assets/samples/samples';
 
 const meta: Meta<typeof Lightbox> = {
   title: 'Core/Lightbox',
@@ -13,20 +14,20 @@ const meta: Meta<typeof Lightbox> = {
 export default meta;
 type Story = StoryObj<typeof Lightbox>;
 
-const SAMPLE_IMAGE = 'https://picsum.photos/id/10/1200/800';
+const SAMPLE_IMAGE = SAMPLE_IMAGES.forest1200x800;
 const GALLERY_MEDIA = [
   {
-    src: 'https://picsum.photos/id/10/1200/800',
+    src: SAMPLE_IMAGES.forest1200x800,
     alt: 'Forest path',
     caption: 'A winding path through the forest',
   },
-  {src: 'https://picsum.photos/id/15/1200/800', alt: 'Mountain lake'},
+  {src: SAMPLE_IMAGES.lake1200x800, alt: 'Mountain lake'},
   {
-    src: 'https://picsum.photos/id/20/1200/800',
+    src: SAMPLE_IMAGES.beach1200x800,
     alt: 'Beach sunset',
     caption: 'Golden hour at the beach',
   },
-  {src: 'https://picsum.photos/id/25/1200/800', alt: 'City skyline'},
+  {src: SAMPLE_IMAGES.city1200x800, alt: 'City skyline'},
 ];
 
 export const Default: Story = {
