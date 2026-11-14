@@ -2391,6 +2391,24 @@ export default function Page() {
     );
   }, 60_000);
 
+  it("names the hook imported from Core's root entry, and an optional matchMedia call", async () => {
+    put(
+      'screen-query-root.tsx',
+      `import {useEffect, useState} from 'react';
+import {useMediaQuery} from '@astryxdesign/core';
+export default function Page() {
+  const wide = useMediaQuery('(min-width: 1024px)');
+  const [motion, setMotion] = useState(true);
+  useEffect(() => setMotion(!window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches), []);
+  return <main>{wide ? 'Wide' : 'Narrow'}{motion ? '' : ' still'}</main>;
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('screen-query-root.tsx', {cwd: dir}));
+    const warning = result.data.warnings.find((/** @type {any} */ w) => w.code === 'screen-query');
+    expect(warning?.message).toContain("The page asks useMediaQuery('(min-width: 1024px)'), matchMedia('(prefers-reduced-motion: reduce)') in JavaScript");
+  }, 60_000);
+
   it('says nothing for a page that asks no media query, or calls a function of its own named like the hook', async () => {
     put(
       'no-screen-query.tsx',

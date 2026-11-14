@@ -97,13 +97,13 @@ const fnTexts = {};
 /** @type {{call: string, file: string, line: number}[]} */
 const screenQueries = [];
 
-/** The module Core's media query hook comes from. */
-const MEDIA_QUERY_HOOK = {source: '@astryxdesign/core/hooks', name: 'useMediaQuery'};
+/** Core's media query hook, and the entries that export it. */
+const MEDIA_QUERY_HOOK = {sources: new Set(['@astryxdesign/core', '@astryxdesign/core/hooks']), name: 'useMediaQuery'};
 
 /**
  * The call a page makes to ask a media query in JavaScript, as the warning
  * names it: Core's `useMediaQuery`, or `matchMedia` (bare or on an object such
- * as `window`), with its query.
+ * as `window`, optional calls included), with its query.
  * @param {any} p a call expression
  * @returns {string | null}
  */
@@ -116,12 +116,16 @@ function screenQuery(p) {
     if (!binding && callee.name === 'matchMedia') name = 'matchMedia';
     else if (
       spec?.isImportSpecifier() &&
-      spec.parentPath.node.source.value === MEDIA_QUERY_HOOK.source &&
+      MEDIA_QUERY_HOOK.sources.has(spec.parentPath.node.source.value) &&
       (spec.node.imported.name ?? spec.node.imported.value) === MEDIA_QUERY_HOOK.name
     ) {
       name = MEDIA_QUERY_HOOK.name;
     }
-  } else if (callee.type === 'MemberExpression' && !callee.computed && callee.property.name === 'matchMedia') {
+  } else if (
+    (callee.type === 'MemberExpression' || callee.type === 'OptionalMemberExpression') &&
+    !callee.computed &&
+    callee.property.name === 'matchMedia'
+  ) {
     name = 'matchMedia';
   }
   if (!name) return null;
@@ -572,7 +576,7 @@ function pagePlugin(filename) {
           );
         }
       },
-      CallExpression(/** @type {any} */ p) {
+      'CallExpression|OptionalCallExpression'(/** @type {any} */ p) {
         const call = screenQuery(p);
         if (call) screenQueries.push({call, file: filename, line: p.node.loc?.start.line ?? 0});
       },
