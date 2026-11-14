@@ -63,7 +63,7 @@ import {
 const projects = new Map();
 
 /** Bump when the shape of the cached component docs changes. */
-const DOCS_VERSION = 6;
+const DOCS_VERSION = 7;
 
 /**
  * The theme editor's cache folder for a project: the `.cache/astryx-theme`
@@ -112,9 +112,63 @@ export function installLine(cwd, packages) {
   return `${pm === 'npm' || pm === 'npx' ? 'npm install' : `${pm} add`} ${packages.join(' ')}`;
 }
 
+/**
+ * The project's package manager command that lists every installed copy of
+ * a package and what pulled each in.
+ * @param {string} cwd
+ * @param {string} pkg
+ */
+export function copiesLine(cwd, pkg) {
+  const pm = detectPackageManager(cwd);
+  return pm === 'npm' || pm === 'npx'
+    ? `npm ls ${pkg} --all`
+    : pm === 'bun'
+      ? `bun pm ls --all | grep ${pkg}@`
+      : `${pm} why ${pkg}`;
+}
+
 /** @param {string} type @returns {string[]} */
 export const literals = type =>
   [...String(type ?? '').matchAll(/'([^']+)'/g)].map(m => m[1]);
+
+/**
+ * The Core module a component's doc sits in, when that module exports the
+ * component under its name: a part re-exported under a name of its own
+ * (`DropdownMenuItem as ContextMenuItem` in ContextMenu) has no file named
+ * for it, so the name alone does not find its module. Null otherwise.
+ * @param {string} coreDir
+ * @param {string} docFile
+ * @param {string} name
+ * @returns {string | null}
+ */
+function moduleOfDoc(coreDir, docFile, name) {
+  const top = path
+    .relative(path.join(coreDir, 'src'), docFile)
+    .split(path.sep)[0];
+  if (!top || top.startsWith('..')) return null;
+  try {
+    const exportsMap = JSON.parse(
+      fs.readFileSync(path.join(coreDir, 'package.json'), 'utf8'),
+    ).exports;
+    if (!exportsMap || !Object.hasOwn(exportsMap, `./${top}`)) return null;
+    const index = ['index.ts', 'index.tsx']
+      .map(f => path.join(coreDir, 'src', top, f))
+      .find(f => fs.existsSync(f));
+    if (!index) return null;
+    const text = fs.readFileSync(index, 'utf8');
+    // Named in one of its export lists, as itself or as an alias.
+    const named = [...text.matchAll(/export\s*(?:type\s*)?\{([^}]*)\}/g)].some(
+      m =>
+        m[1]
+          .split(',')
+          .map(x => x.trim().replace(/^type\s+/, ''))
+          .some(x => x === name || new RegExp(`\\bas\\s+${name}$`).test(x)),
+    );
+    return named ? `@astryxdesign/core/${top}` : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Every component doc under Core's src folder: playground defaults and the
@@ -159,7 +213,10 @@ async function readComponents(coreDir) {
         ]),
       );
       out[doc.name] = {
-        importPath: resolveImportPath(coreDir, doc.name),
+        importPath:
+          resolveImportPath(coreDir, doc.name) === '@astryxdesign/core'
+            ? (moduleOfDoc(coreDir, full, doc.name) ?? '@astryxdesign/core')
+            : resolveImportPath(coreDir, doc.name),
         category: typeof doc.category === 'string' ? doc.category : '',
         description: typeof doc.description === 'string' ? doc.description : '',
         defaults: pg?.defaults ?? null,

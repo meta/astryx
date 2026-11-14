@@ -579,6 +579,55 @@ export function withoutCopyDebris(v) {
     .trim();
 }
 
+/** Number words, longest phrase first. */
+export const NUMBER_WORDS = wordTable(
+  /** @type {Record<string, number>} */ ({
+    zero: 0,
+    one: 1,
+    two: 2,
+    three: 3,
+    four: 4,
+    five: 5,
+    six: 6,
+    seven: 7,
+    eight: 8,
+    nine: 9,
+    ten: 10,
+    eleven: 11,
+    twelve: 12,
+    thirteen: 13,
+    fourteen: 14,
+    fifteen: 15,
+    sixteen: 16,
+    seventeen: 17,
+    eighteen: 18,
+    nineteen: 19,
+    twenty: 20,
+    thirty: 30,
+    forty: 40,
+    fifty: 50,
+    sixty: 60,
+    seventy: 70,
+    eighty: 80,
+    ninety: 90,
+    hundred: 100,
+  }),
+);
+
+/**
+ * A whole number as typed: digits with any white space at the ends and a
+ * zero fraction (`" 3"`, `"3.0"`), or a number word (`"three"`); else null.
+ * @param {unknown} text
+ * @returns {number | null}
+ */
+export function wholeNumberOf(text) {
+  const t = String(text ?? '')
+    .trim()
+    .toLowerCase();
+  if (/^[+-]?\d+(?:\.0+)?$/.test(t)) return Number(t);
+  return Object.hasOwn(NUMBER_WORDS, t) ? NUMBER_WORDS[t] : null;
+}
+
 /**
  * Words with a documented reading on a CSS property: the exact value each
  * one means. A repair may offer these for the word typed.

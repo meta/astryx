@@ -10,6 +10,7 @@
  * @position api/theme-edit — imported only by _adapter.mjs
  */
 
+import {typoNear, wholeNumberOf} from './_normal.mjs';
 import {parse as parseModule} from '@babel/parser';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -693,9 +694,7 @@ function typeScriptNotes(cwd, dir, added) {
           `the app has no TypeScript, and the preview's files are .tsx, so the next build sets it up; to do it now: ${installLine(cwd, ['typescript', '@types/react', '@types/node']).replace(/ (add|install) /, ' $1 -D ')}`,
         ];
   }
-  const templates = added.filter(
-    id => !['overview', 'components', COLORS_PAGE.id].includes(id),
-  );
+  const templates = added.filter(id => !DEFAULT_PAGE_IDS.includes(id));
   if (options.noUncheckedIndexedAccess !== true || !templates.length) return [];
   const files = templates.map(id =>
     shown(cwd, path.join(dir, PAGES_DIR, `${id}.tsx`)),
@@ -3232,11 +3231,13 @@ async function buildWorn(cwd, theme, options, notes) {
   const slug = theme.name;
   /** @type {string | null} */
   let why = null;
+  /** What the build reports (the pictures it removed). @type {string[]} */
+  let built = [];
   const build = async () => {
     const t = loadTheme(cwd, slug);
     why = staleBuild(cwd, slug, t);
     if (!why) return;
-    await buildTheme(await context(cwd), slug, t);
+    built = (await buildTheme(await context(cwd), slug, t)).notes;
   };
   await (typeof options?.lockTheme === 'function'
     ? options.lockTheme(slug, build)
@@ -3244,6 +3245,7 @@ async function buildWorn(cwd, theme, options, notes) {
   if (why)
     notes.push(
       `built ${shown(cwd, themeFiles(cwd, slug).dir)}/ first: its build was not current (${why})`,
+      ...built,
     );
 }
 
@@ -3253,6 +3255,13 @@ const COLORS_PAGE = wordTable({
   label: 'Colors',
   file: `${PAGES_DIR}/colors`,
 });
+
+/** The default pages a preview starts with, which `--template` adds back. */
+const DEFAULT_PAGE_IDS = Object.freeze([
+  'overview',
+  'components',
+  COLORS_PAGE.id,
+]);
 
 /**
  * The Colors page source of a theme, and whether the theme has generated
@@ -4363,10 +4372,10 @@ async function namedTemplate(cwd, id, flags) {
     /** @type {any} */ (await template(undefined, {list: true, cwd})).data
   );
   const other = all.find(t => t.id === id);
-  const near = nearest(
-    id.toLowerCase(),
-    pages.map(t => t.id),
-    5,
+  // Every page --template adds is a candidate: the default pages too, which
+  // the template list never shows.
+  const near = [...DEFAULT_PAGE_IDS, ...pages.map(t => t.id)].filter(n =>
+    typoNear(id, n),
   );
   refuse(
     E.ERR_UNKNOWN_TEMPLATE,
@@ -4492,9 +4501,8 @@ async function addPreview(description, options, box) {
       : '';
   // A default page's id (overview, components, colors), as `remove` takes
   // it, adds exactly that page back (or is refused, saying why).
-  const DEFAULT_IDS = ['overview', 'components', COLORS_PAGE.id];
   const isDefault = (/** @type {unknown} */ v) =>
-    typeof v === 'string' && DEFAULT_IDS.includes(v.trim().toLowerCase());
+    typeof v === 'string' && DEFAULT_PAGE_IDS.includes(v.trim().toLowerCase());
   // Beside another page asked for, it is refused below (drop one).
   const blank = (/** @type {unknown} */ v) => v == null || !String(v).trim();
   const askedId = [description, options.template]
@@ -4536,16 +4544,24 @@ async function addPreview(description, options, box) {
       },
     );
   const top = options.top == null ? 1 : Number(String(options.top));
-  if (options.top != null && !/^[1-3]$/.test(String(options.top)))
+  if (options.top != null && !/^[1-3]$/.test(String(options.top))) {
+    // The way on is read from what was typed: its exact reading (3 for
+    // "3.0", " 3" or "three"), the nearest bound for an amount out of
+    // range, else the default.
+    const typed = wholeNumberOf(options.top);
+    const offer = typed == null ? 1 : Math.min(3, Math.max(1, typed));
     refuse(
       E.ERR_INVALID_ARGUMENT,
       `--top takes 1, 2 or 3, not "${String(options.top)}".`,
       {
         run: said
-          ? [`${PREVIEW} add ${quoteCommandArgument(said)} --top 2${tf}${pf}`]
+          ? [
+              `${PREVIEW} add ${quoteCommandArgument(said)}${offer === 1 ? '' : ` --top ${offer}`}${tf}${pf}`,
+            ]
           : await example(),
       },
     );
+  }
   if (options.top != null && !said)
     refuse(
       E.ERR_INVALID_ARGUMENT,
@@ -4936,7 +4952,7 @@ async function addPreview(description, options, box) {
   // What happened: only the page asked for; the others come with a bare
   // add.
   if (again) {
-    const stillMissing = DEFAULT_IDS.filter(
+    const stillMissing = DEFAULT_PAGE_IDS.filter(
       id => !data.pages.some(p => p.id === id),
     );
     if (stillMissing.length)
@@ -5040,9 +5056,10 @@ export async function themeEditPreviewApp(dir, options = {}) {
           {run: [`${P} show ${slug}`]},
         );
     } else if (why) {
-      await buildTheme(ctx, slug, theme);
+      const built = await buildTheme(ctx, slug, theme);
       notes.push(
         `built ${shown(cwd, from.dir)}/ first: its build was not current (${why}), and the app gets a current copy`,
+        ...built.notes,
       );
     }
     const to = themeFiles('', slug);

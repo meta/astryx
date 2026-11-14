@@ -154,9 +154,15 @@ import {
 import {appWiring, refreshPreviewRoute, seeLine} from './_preview-app.mjs';
 /** The preview command, as a person runs it. */
 const PREVIEW_CMD = `${P.replace(/ editor$/, '')} preview`;
-import {baseInstalled, baseResolved, installLine} from './_project.mjs';
+import {
+  baseInstalled,
+  baseResolved,
+  copiesLine,
+  installLine,
+} from './_project.mjs';
 import {reactMissing} from './_parts.mjs';
 import {
+  reactCopies,
   renderCause,
   requireProject,
   context,
@@ -4410,6 +4416,21 @@ function misplacedFirst(e, slug, data) {
 }
 
 /**
+ * The command that leads to the fix of a render that failed: installing
+ * React when it is missing, listing React's copies when the app and Core
+ * resolve two (the message says which), and otherwise doctor's install
+ * checks.
+ * @param {any} ctx
+ * @param {string} cwd
+ */
+function renderFix(ctx, cwd) {
+  if (ctx.uncheckedCode === 'ERR_RENDER_MISSING_DEPENDENCY')
+    return [installLine(cwd, ['react', 'react-dom'])];
+  if (reactCopies(ctx.project)) return [copiesLine(cwd, 'react')];
+  return [`${getCliInvocation(cwd)} doctor`];
+}
+
+/**
  * Every setting of a theme, key resolved values, problems it caused, the
  * sample page and the theme-building page with every component.
  * @experimental
@@ -4424,6 +4445,8 @@ export async function themeEditShow(theme, options = {}) {
   const readOnly = Boolean(/** @type {any} */ (options).readOnly);
   requireProject(cwd);
   const section = checkSection(options.section, theme);
+  /** What each build this show makes reports (the pictures it removed). @type {string[]} */
+  const rebuiltNotes = [];
   /** @type {import('./_settings.mjs').ThemeData} */
   let data;
   try {
@@ -4452,14 +4475,7 @@ export async function themeEditShow(theme, options = {}) {
       E.ERR_RENDER_FAILED,
       `${theme} cannot be shown: ${ctx.unchecked} Nothing was written.`,
       {
-        // Only a missing React is fixed by installing it; two copies or a
-        // component that throws are named in the message.
-        run:
-          ctx.uncheckedCode === 'ERR_RENDER_MISSING_DEPENDENCY'
-            ? [installLine(cwd, ['react', 'react-dom'])]
-            : // Two copies of React and other install problems are named by
-              // doctor; the same show would fail the same way.
-              [`${getCliInvocation(cwd)} doctor`],
+        run: renderFix(ctx, cwd),
       },
     );
   const f = themeFiles(cwd, theme);
@@ -4525,7 +4541,7 @@ export async function themeEditShow(theme, options = {}) {
     const refs = path.join(tokensDir, `${theme}.palette-refs.ts`);
     if (!kept.has(refs)) kept.set(refs, null);
     try {
-      await buildTheme(ctx, theme, data);
+      rebuiltNotes.push(...(await buildTheme(ctx, theme, data)).notes);
     } catch (e) {
       putBack(kept, tokensDir);
       if (e instanceof AstryxError && e.code !== E.ERR_THEME_LOAD) throw e;
@@ -4573,7 +4589,7 @@ export async function themeEditShow(theme, options = {}) {
         },
       );
     unreadable = `${theme}.js could not be read (${e instanceof Error ? e.message.split('\n')[0] : String(e)}), so it was built again from the settings`;
-    await buildTheme(ctx, theme, data);
+    rebuiltNotes.push(...(await buildTheme(ctx, theme, data)).notes);
     return resolvedTokens(ctx, theme);
   });
   const ownOverNotes = ownOverSettingNotes(cwd, theme, data);
@@ -4611,7 +4627,7 @@ export async function themeEditShow(theme, options = {}) {
       return refuse(
         E.ERR_RENDER_FAILED,
         `${theme} cannot be shown: ${renderCause(ctx.project, e.message)} ${[...kept.values()].some(Boolean) ? 'The build this show made again was put back as it was. ' : ''}Nothing was written.`,
-        {run: [`${getCliInvocation(cwd)} doctor`]},
+        {run: renderFix(ctx, cwd)},
       );
     }
   };
@@ -4701,6 +4717,7 @@ export async function themeEditShow(theme, options = {}) {
           });
       })(),
       notes: [
+        ...rebuiltNotes,
         ...misplacedNotes(theme, data),
         ...(noReact
           ? [
