@@ -548,7 +548,7 @@ describe('build kit — every page starts from a template', () => {
   it('starts a part that reads as a whole page from a page template', async () => {
     const r = await build('a sortable list of tasks with priority and assignee', {cwd: REPO});
     if (r.type !== 'build.kit') throw new Error(r.type);
-    expect(r.data.start).toMatchObject({name: 'table-grouped', basis: 'closest'});
+    expect(r.data.start).toMatchObject({name: 'table-page', basis: 'closest'});
   });
 
   it('keeps the shell for a part and for a change to an existing page', async () => {
@@ -570,7 +570,7 @@ describe('build kit — every page starts from a template', () => {
 
   it('starts a page the words describe from its template', async () => {
     for (const [idea, name] of [
-      ['a weekly report of sales by region', 'dashboard-scorecard'],
+      ['a weekly report of sales by region', 'dashboard'],
       ['a pricing page with three plans and a comparison table', 'table-comparison'],
     ]) {
       const r = await build(idea, {cwd: REPO});
