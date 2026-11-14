@@ -123,7 +123,7 @@ import {doc as themePaletteGenerateFn} from '../../../api/theme/themePaletteGene
  * @property {(files: string[], options: {cwd: string}) => Promise<() => Promise<void>>} [hold] - Locks held while a build or check runs; resolves to their release.
  * @property {(file: string, cwd: string, opts: {check: boolean, upToDate?: boolean}) => Record<string, unknown> | null | Promise<Record<string, unknown> | null>} [extraData] - Fields a group adds to a build's result data (the editor's `appCopyStale`); in a check, `upToDate: false` fails it.
  * @property {(file: string, cwd: string) => (['light'] | ['dark'] | null)} [colorModes] - The one color mode a theme file has that the file itself cannot say, for the build to write into the built module.
- * @property {(file: string, cwd: string) => ((family: string) => boolean) | null} [loadedFonts] - Font families the app loads for a theme file that the file itself cannot say, so the build does not name them as unloaded.
+ * @property {(file: string, cwd: string) => ((family: string) => boolean) | null | Promise<((family: string) => boolean) | null>} [loadedFonts] - Font families the app loads for a theme file that the file itself cannot say, so the build does not name them as unloaded.
  * @property {(file: string, cwd: string) => {name: string, reason: string} | null} [missingSource] - For a source file that is not there, this group's way to write it again, or null.
  * @property {(options: {targetPath?: string, overwrite?: boolean, cwd?: string}) => import('../../../api/theme/theme.type.mjs').ThemeTemplateResponse} [template] - This group's template write, in place of `themeTemplate`.
  */
@@ -1359,7 +1359,8 @@ function registerThemeCommands(theme, program, docs, words) {
         // A group may know fonts the app loads that the theme file cannot
         // say (the editor's app copy stylesheet): those are not named as
         // unloaded, in the notices, the trailer or the full help.
-        const loads = words.loadedFonts?.(entry.file, process.cwd()) ?? null;
+        const loads =
+          (await words.loadedFonts?.(entry.file, process.cwd())) ?? null;
         /** @param {string} msg */
         const namesOnlyLoaded = msg => {
           // The families the notice names: on its first line, after the

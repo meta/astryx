@@ -1678,7 +1678,7 @@ function appCopyFiles(cwd, slug, fontsCss) {
     // theme's fonts change (none: a comment only).
     [`${slug}.fonts.css`]: fonts.length
       ? `${head('/*', '*/')}${fonts.map(c => `@import ${JSON.stringify(c)};`).join('\n')}\n`
-      : `${head('/*', '*/')}/* No font stylesheets: the theme uses fonts the system has. */\n`,
+      : `${head('/*', '*/')}/* No font stylesheets: no installed package loads the theme's fonts. A font the system does not have shows only once its package is installed (experimental theme editor show ${slug} names it). */\n`,
   };
   return files;
 }
