@@ -44,7 +44,7 @@ export const AT_LIMIT_SLACK_MS = 30_000;
 // One line per workflow: ci-admission.test.mjs reads each estimate from it.
 // prettier-ignore
 const ESTIMATE = {
-  '.github/workflows/ci.yml': run => (run.event === 'workflow_dispatch' ? 39 : 18),
+  '.github/workflows/ci.yml': run => (run.event === 'workflow_dispatch' ? 39 : 20),
   '.github/workflows/deploy.yml': run => (run.event === 'push' ? 4 : 14),
   '.github/workflows/review-signal.yml': () => 2,
   '.github/workflows/audits-at-head.yml': () => 10,
