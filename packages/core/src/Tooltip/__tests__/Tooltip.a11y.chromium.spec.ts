@@ -69,6 +69,11 @@ async function mountState(
           exact: true,
         });
   await expect(subject).toBeVisible();
+  // The tooltip's layer loads after first paint (component:Tooltip FR14).
+  // The pattern's checks run on the loaded tooltip.
+  await page
+    .getByRole('tooltip', {includeHidden: true})
+    .waitFor({state: 'attached'});
   return {
     subject,
     related: {

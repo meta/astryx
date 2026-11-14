@@ -456,7 +456,7 @@ export const FullAIChat: StoryObj = {
           <>
             <ProgressBar
               ref={contextTooltip.ref}
-              aria-describedby={contextTooltip.describedBy}
+              aria-describedby={contextTooltip.describedBy || undefined}
               label="Context"
               value={12}
               variant="neutral"

@@ -2431,7 +2431,7 @@ export function Selector<T extends SelectorOptionType>(
               ref={statusTooltip.ref}
               type="button"
               aria-label={t(STATUS_BUTTON_LABEL_KEY[status.type])}
-              aria-describedby={statusTooltip.describedBy}
+              aria-describedby={statusTooltip.describedBy || undefined}
               {...keepOpenProps}
               onClick={e => e.stopPropagation()}
               {...stylex.props(
