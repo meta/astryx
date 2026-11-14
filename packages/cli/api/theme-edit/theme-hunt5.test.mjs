@@ -87,10 +87,11 @@ describe('corners', () => {
       expect(r.data.setting.value, typed).toBe(stored);
       await themeEditUndo('t', {cwd});
     }
+    // A rem is that many 16px, saved in px.
     expect(
-      (await refusal(() => themeEditSet('t', 'corners', '1.5rem', {cwd})))
-        .run[0],
-    ).toMatch(/corners 24px$/);
+      (await themeEditSet('t', 'corners', '1.5rem', {cwd})).data.setting.value,
+    ).toBe('24px');
+    await themeEditUndo('t', {cwd});
     expect(
       (await refusal(() => themeEditSet('t', 'corners', '50%', {cwd}))).run[0],
     ).toMatch(/corners pill$/);
@@ -174,6 +175,11 @@ describe('spacing and scope', () => {
     });
     const r = await refusal(() => themeEditShow('m', {cwd}));
     expect(r.run[0]).toMatch(/set m mode both$/);
+    // The base that reads as no theme is refused with its own line, never
+    // dropped on the way.
+    const base = await refusal(() => themeEditSet('m', 'mode', 'both', {cwd}));
+    expect(base.run[0]).toMatch(/set m base none$/);
+    await themeEditSet('m', 'base', 'none', {cwd});
     await themeEditSet('m', 'mode', 'both', {cwd});
     await themeEditShow('m', {cwd});
     fs.rmSync(path.join(cwd, 'themes/m'), {recursive: true, force: true});

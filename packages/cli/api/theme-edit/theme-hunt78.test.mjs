@@ -136,7 +136,8 @@ describe('a question about a value answers with the value', () => {
   it.each([
     ['how much padding do buttons have', /button has padding \S+ now/],
     ['how rounded are cards', /card has border-radius \S+ now/],
-    ['what color is the button', /button has color \S+ now/],
+    // A part with a fill: its fill, unless the words name its text.
+    ['what color is the button', /button has background-color \S+ now/],
   ])(
     '%s',
     async (q, want) => {
@@ -156,18 +157,21 @@ describe('except keeps every excepted part, variant and state', () => {
         'double the corner radius of everything except cards',
       );
       expect(
-        r.commands.some(c => /^set q border-radius \S+ --on card$/.test(c)),
+        r.commands.some(c =>
+          /^set q (border-radius|--radius-[a-z]+) \S+ --on card$/.test(c),
+        ),
       ).toBe(true);
     },
     T,
   );
   it(
-    'all text bigger keeps the button text size',
+    'all text bigger except buttons says the button size differs by screen',
     async () => {
+      // Phones keep their own base text sizes while the dial moves the
+      // others: one size on the button would change it on phones.
       const r = await answer('make all text bigger except buttons');
-      expect(r.commands.some(c => /font-size \S+ --on button/.test(c))).toBe(
-        true,
-      );
+      expect(r.commands.some(c => /--on button/.test(c))).toBe(false);
+      expect(r.text).toMatch(/differs by screen/);
     },
     T,
   );
