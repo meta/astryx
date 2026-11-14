@@ -39,12 +39,13 @@ export const AT_LIMIT_SPACING_MS = 10 * 60_000;
 export const AT_LIMIT_SLACK_MS = 30_000;
 // The most jobs a run holds at once, by workflow: ci.yml's release-check and
 // Main's runs (a push's fast checks or a unit run) from their `peak`
-// (ci-admission.test.mjs), a pull-request ci.yml run from its measured most,
-// every other workflow's run one or two slim jobs.
+// (ci-admission.test.mjs), a pull-request ci.yml run from its measured most
+// with its legs at full width (`peak` plus each `leg-widths` job's
+// `full - tight`), every other workflow's run one or two slim jobs.
 // One line per workflow: ci-admission.test.mjs reads each estimate from it.
 // prettier-ignore
 const ESTIMATE = {
-  '.github/workflows/ci.yml': run => (run.event === 'workflow_dispatch' ? 39 : 21),
+  '.github/workflows/ci.yml': run => (run.event === 'workflow_dispatch' ? 39 : 30),
   '.github/workflows/deploy.yml': run => (run.event === 'push' ? 4 : 14),
   '.github/workflows/review-signal.yml': () => 2,
   '.github/workflows/audits-at-head.yml': () => 10,
