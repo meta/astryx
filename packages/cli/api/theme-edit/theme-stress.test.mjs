@@ -238,9 +238,9 @@ describe('how', () => {
       "color 'var(--color-text-accent)' --on button --when variant:secondary",
     );
     expect(commands).toContain(
-      "background '#ffffff' --on button --when variant:secondary",
+      "background-color '#ffffff' --on button --when variant:secondary",
     );
-    expect(commands).not.toContain("color '#ffffff'");
+    expect(commands).not.toMatch(/(^|\s)color '#ffffff'/);
   });
 });
 
@@ -420,7 +420,7 @@ describe('round 3', () => {
     );
     expect([...fill.understood.aspects].sort()).toEqual(['background', 'text']);
     const f = fill.results.map((/** @type {any} */ x) => x.commands).flat();
-    expect(f.join('\n')).toContain("background '#e5e7eb' --on button");
+    expect(f.join('\n')).toContain("background-color '#e5e7eb' --on button");
     expect(f.join('\n')).toContain("color '#111827' --on button");
   });
 

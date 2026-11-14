@@ -757,7 +757,9 @@ export function commaNumbers(text, thousands = false) {
   let out = '';
   let plain = '';
   const flush = () => {
-    out += plain.replace(/(\d+),(\d+)(?![\d.,])/g, (_, a, b) =>
+    // (A number starts a word: the digits of a hex color or of a word
+    // before a comma are no number.)
+    out += plain.replace(/(?<![\w#.])(\d+),(\d+)(?![\d.,])/g, (_, a, b) =>
       thousands && b.length === 3 && !/^0+$/.test(a) ? `${a}${b}` : `${a}.${b}`,
     );
     plain = '';

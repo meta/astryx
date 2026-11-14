@@ -321,7 +321,9 @@ describe('scope words', () => {
       expect(
         (await answer('make inputs with errors have a red background'))
           .commands[0],
-      ).toMatch(/^set q background '#dc2626' --on inputs --when status:error$/);
+      ).toMatch(
+        /^set q background-color '#dc2626' --on inputs --when status:error$/,
+      );
     },
     T,
   );
@@ -449,11 +451,11 @@ describe('"like" and "as" compare only in comparison forms', () => {
       // A value for that part.
       [
         'use red as the button background',
-        "set q background '#dc2626' --on button",
+        "set q background-color '#dc2626' --on button",
       ],
       [
         'use navy as the card background',
-        "set q background '#1e3a8a' --on card",
+        "set q background-color '#1e3a8a' --on card",
       ],
       ['use 8px as the button radius', 'set q border-radius 8px --on button'],
       ['use 12px as the card padding', 'set q padding 12px --on card'],

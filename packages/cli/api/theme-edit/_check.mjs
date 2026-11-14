@@ -5704,7 +5704,9 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
       }
       refuse(
         E.ERR_THEME_NO_MODE,
-        `--mode works on plain colors; ${prop} ${prop === 'box-shadow' || prop === 'border' ? 'mixes a color with sizes' : 'is not a color'}, so it cannot differ between light and dark.`,
+        prop === 'box-shadow' || prop === 'border'
+          ? `--mode takes a plain color; ${prop} mixes a color with sizes, so --mode cannot hold it. Its color can still differ between light and dark: write it in the value as light-dark(<light>, <dark>).`
+          : `--mode works on plain colors; ${prop} is not a color, so it cannot differ between light and dark.`,
         {
           run: alt
             ? [
