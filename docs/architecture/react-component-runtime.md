@@ -355,18 +355,22 @@ those contracts.
   and a drag does not dismiss; the close button, Escape and the backdrop work
   as always; a resize handle pulled past its pane's limit stops at the limit,
   with no overshoot; a date or time wheel turns by its keys, a mouse wheel's
-  notches and a click on a row, at once, with no drag, no coast and no snap. A
-  gesture in that window does not start the load. The bundler keeps one copy
-  per page however many components use them. If the runtime's chunk fails to
-  load, the page stays as it is before the load: components work by taps,
-  clicks and keys, and no gesture retries the load.
+  notches and a click on a row, at once, with no drag, no coast and no snap;
+  Chat's dock moves with the layout at once instead of riding the on-screen
+  keyboard's slide. A gesture in that window does not start the load. The
+  bundler keeps one copy per page however many components use them. If the
+  runtime's chunk fails to load, the page stays as it is before the load:
+  components work by taps, clicks and keys, and no gesture retries the load.
   `utils/touchRuntimeModules.tsx` is the one module the loader's `import()`
   targets; it gathers the touch runtime, so the loader names a single chunk.
   `motion/settleThreshold.ts` holds `SETTLE_THRESHOLD` apart from the
   animator, so a component that reads the threshold statically does not pull
-  in the deferred runtime. `motion/motionQueries.ts` holds the reduced-motion
-  and coarse-pointer queries apart from the animator, and
-  `gestures/scrollType.ts` holds the wheel's scroll reading apart from the
+  in the deferred runtime. `utils/deferredMotionEngine.ts` places an element
+  by its translate until the runtime loads and then hands that place to a
+  motion engine from the runtime, so the date and time wheels and Chat's
+  keyboard ride read it without loading the runtime. `motion/motionQueries.ts`
+  holds the reduced-motion and coarse-pointer queries apart from the animator,
+  and `gestures/scrollType.ts` holds the wheel's scroll reading apart from the
   gesture host, so the reduced-motion policy and a wheel read them without
   loading the runtime. `hooks/pagerIndex.ts` holds a looping pager's index
   arithmetic apart from the pager, so the date and time wheels read it without
@@ -375,11 +379,10 @@ those contracts.
   finds its neighbours without loading gesture code. Gap: these modules still
   import the shared touch modules statically, so a page that renders them
   carries the touch runtime in its first load: Slider
-  (`sliderTouchController`) and Chat (`useChatKeyboard`).
-  `@astryx/no-static-touch-runtime` reports any other static path from a
-  component into these modules; its allowlist names exactly these imports and
-  shrinks as they move behind the loader. A surface revealed by interaction
-  that a component loads with `import()` under
+  (`sliderTouchController`). `@astryx/no-static-touch-runtime` reports any
+  other static path from a component into these modules; its allowlist names
+  exactly these imports and shrinks as they move behind the loader. A surface
+  revealed by interaction that a component loads with `import()` under
   `architecture:component-import-boundaries` INV1 imports these modules
   statically too; the bundler still keeps one copy per page. That `import()`
   targets the surface module, never one of these modules, and it is not a

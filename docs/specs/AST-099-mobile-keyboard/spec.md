@@ -148,31 +148,33 @@ app to turn on.
   from a top-level document.
 - **FR8 — Browsers that report the keyboard ride it smoothly.** In a browser
   that reports the on-screen keyboard's geometry itself, such as Chrome on
-  Android, the keyboard height comes from FR2's visual-viewport
-  measurement there too (DEC-4), and Core's
-  keyboard-aware surfaces ride the keyboard on show and on hide: they move with
-  the keyboard's slide, within one frame of it on the measured keyboards, with
-  no one-step jump and no surface left under the keyboard, no JavaScript per
-  frame, and one layout commit at rest (FR3). Two exceptions apply (DEC-6). In
-  Chrome on Android, at the keyboard's first report the content is placed in
-  one frame so the focused field's bottom sits just above the keyboard's top,
-  then rides the rest of the keyboard's slide. Chrome pans the page itself if
-  the field is still below the keyboard about 100–170 ms after the report, so
-  a slide cannot be relied on. In Chrome on Android, a hide nothing on the
-  page predicts, such as Back, is reported partway through the keyboard's
-  slide; the content rides down from that report. Under reduced motion nothing
-  travels with the keyboard, and the change follows `design:reduced-motion`
-  DR2, a cross-fade on a touch screen. A Lab surface commits the resting value without riding
-  (`architecture:react-component-runtime` INV11). Astryx never overrides
-  the app's own viewport setting. Where the app sets
+  Android, the keyboard height comes from FR2's visual-viewport measurement
+  there too (DEC-4), and Core's keyboard-aware surfaces ride the keyboard on
+  show and on hide: they move with the keyboard's slide, within one frame of
+  it on the measured keyboards, with no one-step jump and no surface left
+  under the keyboard, no JavaScript per frame, and one layout commit at rest
+  (FR3). Two exceptions apply (DEC-6). In Chrome on Android, at the keyboard's
+  first report the content is placed in one frame so the focused field's
+  bottom sits just above the keyboard's top, then rides the rest of the
+  keyboard's slide. Chrome pans the page itself if the field is still below
+  the keyboard about 100–170 ms after the report, so a slide cannot be relied
+  on. In Chrome on Android, a hide nothing on the page predicts, such as Back,
+  is reported partway through the keyboard's slide; the content rides down
+  from that report. Under reduced motion nothing travels with the keyboard,
+  and the change follows `design:reduced-motion` DR2, a cross-fade on a touch
+  screen. A Lab surface commits the resting value without riding
+  (`architecture:react-component-runtime` INV11). Astryx never overrides the
+  app's own viewport setting. Where the app sets
   `interactive-widget=resizes-content`, which Astryx documents and does not
-  set, Chrome on Android shrinks the layout viewport with the keyboard, so
-  FR2 reads 0: a keyboard-aware field's keyboard height is 0 there and it
-  does not ride, since the browser has already made the room. Everywhere
-  else, keyboard-aware surfaces ride the visual-viewport height (DEC-4).
-  An Android browser without a keyboard geometry API
-  that shrinks only its visual viewport, such as Firefox for Android, gets
-  FR2–FR5 under FR6.
+  set, Chrome on Android shrinks the layout viewport with the keyboard, so FR2
+  reads 0: a keyboard-aware field's keyboard height is 0 there and it does not
+  ride, since the browser has already made the room. Everywhere else,
+  keyboard-aware surfaces ride the visual-viewport height (DEC-4). An Android
+  browser without a keyboard geometry API that shrinks only its visual
+  viewport, such as Firefox for Android, gets FR2–FR5 under FR6. Until the
+  shared touch runtime has loaded (`architecture:react-component-runtime`
+  INV13), Chat's dock moves with the layout at once instead of riding the
+  on-screen keyboard's slide.
 - **FR9 — Every Core field that brings up the keyboard stays above it.** When
   the on-screen keyboard opens, a focused Core text-entry field stays visible
   above it, with nothing for the app to do, when it renders in the page's
@@ -379,7 +381,8 @@ No covered field meets FR9 on `main`. Each gap below is open.
 - **Gap 13 — A field focused before the touch runtime loads.** Until the shared
   loader has run (after first paint, at idle within its cap; `spec:AST-080`
   DEC-5), a focused field keeps the browser's own reveal and does not ride the
-  keyboard.
+  keyboard, and Chat's dock moves with the layout at once instead of riding
+  the keyboard's slide.
 
 ### Follow-up
 

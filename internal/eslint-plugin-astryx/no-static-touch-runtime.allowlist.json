@@ -8,10 +8,6 @@
     "Slider/sliderTouchController.ts -> motion/animator.ts": {
       "why": "The thumb's lift and coast play on the animator.",
       "removedBy": "touch-loader follow-up 8: Slider's touch controller comes with the touch loader"
-    },
-    "Chat/useChatKeyboard.ts -> motion/animator.ts": {
-      "why": "The composer's ride on the on-screen keyboard plays on the animator.",
-      "removedBy": "touch-loader follow-up 9: Chat's keyboard ride comes with the touch loader"
     }
   }
 }
