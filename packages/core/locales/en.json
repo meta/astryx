@@ -831,6 +831,10 @@
     "defaultMessage": "Link copied",
     "description": "Accessible name on the Markdown heading copy button and text announced to a polite live region for ~1.5s after a successful copy. Sentence meaning \"Link copied\"; pairs with `markdownHeadingLinks.copy`."
   },
+  "@astryx.markdownHeadingLinks.copyFailed": {
+    "defaultMessage": "Failed to copy value to clipboard.",
+    "description": "Accessible name on the Markdown heading copy button and text announced once to the assertive live region after the clipboard write fails; the name shows for ~1.5s. Pairs with `markdownHeadingLinks.copy` and `markdownHeadingLinks.copied`."
+  },
   "@astryx.markdownHeadingLinks.copy": {
     "defaultMessage": "Copy link to {heading}",
     "description": "Accessible name on the Markdown heading copy button in its default state. `{heading}` is the heading's plain text, or its generated id when the text is empty; pairs with `markdownHeadingLinks.copied`."

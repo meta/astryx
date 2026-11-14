@@ -976,7 +976,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Install createMarkdownHeadingLinks() through plugins to add all-depth stable IDs and inline trailing # copy buttons to built-in headings. useContainerReveal keeps each button hidden at fine-pointer rest and keyboard/touch reachable. Unmodified activation copies the canonical URL without navigation, hash mutation, or scrolling and shows a 1.5-second check; failures stay silent. Pass the same plugin entry to Markdown-derived Outline; use headingIdPrefix for multiple instances.',
+          'Install createMarkdownHeadingLinks() through plugins to add all-depth stable IDs and inline trailing # copy buttons to built-in headings. useContainerReveal keeps each button hidden at fine-pointer rest and keyboard/touch reachable. Unmodified activation copies the canonical URL without navigation, hash mutation, or scrolling and shows a 1.5-second check; a failed copy shows a cross and the name "Failed to copy value to clipboard." for the same time and announces it once. Pass the same plugin entry to Markdown-derived Outline; use headingIdPrefix for multiple instances.',
       },
       {
         guidance: false,
