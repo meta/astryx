@@ -8,12 +8,12 @@
  *   input button's value, its visible text (`aria-hidden` left out, an inner
  *   image's alt, `aria-label` or svg title counted), then `title`
  * @position Internal utility, not exported from the package: DropdownMenu
- *   names a menu after a custom trigger, and SideNav finds a re-rendered
+ *   names a menu after a custom trigger and a level after a node label, and SideNav finds a re-rendered
  *   header or footer control again by name (`component:SideNav` AR3)
  */
 
 /** Text an assistive technology reads from `element`, `aria-hidden` left out. */
-function visibleText(element: Element): string {
+export function visibleText(element: Element): string {
   const copy = element.cloneNode(true) as Element;
   for (const hidden of copy.querySelectorAll('[aria-hidden="true"]')) {
     hidden.remove();

@@ -139,3 +139,35 @@ export const RowStates: Story = {
     ).toHaveAttribute('aria-disabled', 'true');
   },
 };
+
+/**
+ * A drilled-in sub-menu whose label is a node (emphasized text) and has a
+ * description, with a view nested in it: the nested view's Back row is named
+ * after the node label.
+ */
+export const NodeLabelDrillIn: Story = {
+  tags: ['!autodocs', '!visual-theme-matrix'],
+  render: () => (
+    <DropdownMenu
+      button={{label: 'Actions'}}
+      isMenuOpen
+      onOpenChange={() => {}}
+      menuWidth={280}
+      presentation="popover">
+      <DropdownMenuItem label="Rename" onClick={() => {}} />
+      <DropdownMenuSubMenu
+        label={
+          <>
+            <em>Move</em> to
+          </>
+        }
+        description="Pick a folder"
+        presentation="drill-in">
+        <DropdownMenuItem label="Folder A" onClick={() => {}} />
+        <DropdownMenuSubMenu label="Archive" presentation="drill-in">
+          <DropdownMenuItem label="2025" onClick={() => {}} />
+        </DropdownMenuSubMenu>
+      </DropdownMenuSubMenu>
+    </DropdownMenu>
+  ),
+};
