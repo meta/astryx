@@ -23,6 +23,44 @@ import {doc as upgradeFn} from '../../../api/upgrade/upgrade.doc.mjs';
 import {NO_RESULT_SET, resultSet} from '../../../foundation/debug/index.mjs';
 
 /**
+ * The codemod list as text: a heading that says how many codemods there are
+ * and names their package when they share one, then each version with one
+ * line per codemod, its name and title, and `(optional)` on a codemod that
+ * runs only on request. When codemods come from more than one package, every
+ * line names its package.
+ * @param {import('../../../api/upgrade/upgrade.type.mjs').UpgradeListResponse['data']} codemods
+ * @returns {import('../formatters/index.mjs').Block[]}
+ */
+function codemodListBlocks(codemods) {
+  const packages = new Set(codemods.map(c => c.package));
+  const shared = packages.size === 1 ? [...packages][0] : null;
+  /** @type {Map<string, typeof codemods>} */
+  const byVersion = new Map();
+  for (const c of codemods) {
+    byVersion.set(c.version, [...(byVersion.get(c.version) ?? []), c]);
+  }
+  const count = `${codemods.length} codemod${codemods.length === 1 ? '' : 's'}`;
+  return [
+    section(
+      'Available codemods',
+      `${count}${shared ? ` from ${shared}` : ''}, oldest first`,
+    ),
+    ...[...byVersion].flatMap(([version, group]) => [
+      section(version),
+      records(
+        group.map(c => ({
+          name: c.name,
+          title: c.title,
+          optional: c.optional ? '(optional)' : undefined,
+          package: shared ? undefined : c.package,
+        })),
+        {fields: ['name', 'title', 'optional', 'package'], layout: 'inline'},
+      ),
+    ]),
+  ];
+}
+
+/**
  * @param {import('commander').Command} program
  */
 export function registerUpgrade(program) {
@@ -79,13 +117,10 @@ export function registerUpgrade(program) {
         if (json) jsonOut(result);
         else if (result.type === 'upgrade.list') {
           // Render the list from the result, not the API logger, so the text
-          // carries the same fields the JSON does (name, title, version, optional).
-          emit(
-            section('Available codemods'),
-            records(result.data, {
-              fields: ['name', 'package', 'title', 'version', 'optional'],
-            }),
-          );
+          // carries the same fields the JSON does. One line per codemod under
+          // its version: the list gains a line per codemod each release, not a
+          // five-line record.
+          emit(...codemodListBlocks(result.data));
         }
 
         const registrySummary =

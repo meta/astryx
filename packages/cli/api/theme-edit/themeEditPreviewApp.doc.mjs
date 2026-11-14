@@ -57,7 +57,7 @@ export const doc = {
     },
     {
       code: 'ERR_PATH_TRAVERSAL',
-      when: '`dir` is outside the current folder, or a file it writes leads outside it through a link',
+      when: '`dir` is outside the project folder, or a file it writes leads outside it through a link',
     },
     {
       code: 'ERR_UNKNOWN_THEME',
