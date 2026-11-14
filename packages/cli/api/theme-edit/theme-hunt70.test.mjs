@@ -42,6 +42,26 @@ const read = rel => fs.readFileSync(path.join(cwd, rel), 'utf8');
 /** @param {string[]} args */
 const cli = args =>
   spawnSync(process.execPath, [BIN, ...args], {cwd, encoding: 'utf8'});
+
+/** Install a stand-in @fontsource/inter for the fixture; returns its remover. */
+const installInter = () => {
+  const pkg = path.join(path.dirname(cwd), 'node_modules/@fontsource/inter');
+  fs.mkdirSync(pkg, {recursive: true});
+  fs.writeFileSync(
+    path.join(pkg, 'package.json'),
+    JSON.stringify({
+      name: '@fontsource/inter',
+      version: '5.0.0',
+      exports: {
+        '.': './index.css',
+        './index.css': './index.css',
+        './package.json': './package.json',
+      },
+    }),
+  );
+  fs.writeFileSync(path.join(pkg, 'index.css'), '/* inter */\n');
+  return () => fs.rmSync(pkg, {recursive: true, force: true});
+};
 /** @param {any} r */
 const stale = r => /** @type {any} */ (r.data).appCopyStale;
 
@@ -175,19 +195,20 @@ describe('hunt70: compile of the copy, its lock and its fonts', () => {
   it('a font the copy font stylesheet loads is not named as not loaded', async () => {
     await themeEditNew('n2', {cwd});
     await themeEditSet('n2', 'font', 'Inter', {cwd});
-    const sheet = path.join(cwd, 'src/themes/n2/n2.fonts.css');
-    const head = read('src/themes/n2/n2.fonts.css').split('\n')[0];
-    fs.writeFileSync(
-      sheet,
-      `${head}\n@import "@fontsource/inter/index.css";\n`,
-    );
-    const r = cli([
-      'experimental',
-      'theme',
-      'compile',
-      'themes/n2/n2.theme.ts',
-    ]);
-    expect(r.stdout + r.stderr).not.toMatch(/not loaded: [^\n]*Inter/);
+    // The package installed: the copy this compile writes loads it.
+    const remove = installInter();
+    try {
+      const r = cli([
+        'experimental',
+        'theme',
+        'compile',
+        'themes/n2/n2.theme.ts',
+      ]);
+      expect(read('src/themes/n2/n2.fonts.css')).toContain('@fontsource/inter');
+      expect(r.stdout + r.stderr).not.toMatch(/not loaded: [^\n]*Inter/);
+    } finally {
+      remove();
+    }
   }, 240_000);
 });
 

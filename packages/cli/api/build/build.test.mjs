@@ -548,7 +548,7 @@ describe('build kit — every page starts from a template', () => {
   it('starts a part that reads as a whole page from a page template', async () => {
     const r = await build('a sortable list of tasks with priority and assignee', {cwd: REPO});
     if (r.type !== 'build.kit') throw new Error(r.type);
-    expect(r.data.start).toMatchObject({name: 'table-grouped', basis: 'closest'});
+    expect(r.data.start).toMatchObject({name: 'table-page', basis: 'closest'});
   });
 
   it('keeps the shell for a part and for a change to an existing page', async () => {
@@ -570,7 +570,7 @@ describe('build kit — every page starts from a template', () => {
 
   it('starts a page the words describe from its template', async () => {
     for (const [idea, name] of [
-      ['a weekly report of sales by region', 'dashboard-scorecard'],
+      ['a weekly report of sales by region', 'dashboard'],
       ['a pricing page with three plans and a comparison table', 'table-comparison'],
     ]) {
       const r = await build(idea, {cwd: REPO});
@@ -579,13 +579,21 @@ describe('build kit — every page starts from a template', () => {
     }
   });
 
-  it('starts a component in a container from a template with that frame', async () => {
-    // "in a modal": the modal is the frame, so the dialog template leads
-    // instead of the app shell.
+  it('starts a page in a frame from the template with that frame', async () => {
+    // "in a dialog" holds the checkout form, the page the idea names, so the
+    // dialog template leads.
+    const r = await build('a checkout form in a dialog', {cwd: REPO});
+    expect(r.type).toBe('build.kit');
+    if (r.type !== 'build.kit') return;
+    expect(r.data.start?.name).toBe('form-wizard-dialog');
+  });
+
+  it('starts a part in a frame from the app shell', async () => {
+    // The modal holds saved drafts, a part, not a page family.
     const r = await build('saved drafts in a modal with resume and delete row actions', {cwd: REPO});
     expect(r.type).toBe('build.kit');
     if (r.type !== 'build.kit') return;
-    expect(r.data.start?.name).toBe('settings-dialog');
+    expect(r.data.start?.name).toBe('shell-top-nav');
   });
 
   it('does not start from a template named only by a word that modifies another', async () => {
@@ -595,4 +603,74 @@ describe('build kit — every page starts from a template', () => {
     if (r.type !== 'build.kit') return;
     expect(r.data.start?.name).not.toMatch(/^product-/);
   });
+});
+
+// A host locale moves names only when Node carries that locale's collation
+// data (official builds do; an English-only ICU build does not).
+const HOST_LOCALES = ['cs_CZ.UTF-8', 'haw_US.UTF-8', 'tr_TR.UTF-8'];
+const hasLocaleData =
+  Intl.Collator.supportedLocalesOf(['cs', 'haw', 'tr']).length === 3;
+
+describe('build is deterministic', () => {
+  // Made-up phrases. Several are close to exact ties between templates, and
+  // "data table" and "checkout page" order differently under a Hawaiian
+  // collation when names sort by the host locale.
+  const ideas = [
+    'code editor',
+    'item detail page',
+    'settings in a modal dialog',
+    'ide with a file tree',
+    'chat',
+    'inbox table with filters',
+    'yearly report with charts',
+    'data table',
+    'checkout page',
+  ];
+  /** @param {any} r */
+  const answer = r => ({
+    start: r.data?.start?.name ?? null,
+    basis: r.data?.start?.basis ?? null,
+    alternatives: (r.data?.start?.alternatives ?? []).map(a => a.name),
+    blocks: (r.data?.blocks ?? []).map(b => b.name),
+  });
+  const answers = async () => {
+    const out = [];
+    for (const idea of ideas) out.push(answer(await build(idea, {cwd: REPO})));
+    return out;
+  };
+
+  it('gives the same answers twice in one process', async () => {
+    const first = await answers();
+    expect(await answers()).toEqual(first);
+  }, 120000);
+
+  it.skipIf(!hasLocaleData)(
+    'gives the same answers under every host locale',
+    async () => {
+      const {spawnSync} = await import('node:child_process');
+      const url = new URL('./build.mjs', import.meta.url).href;
+      const script = `import {build} from ${JSON.stringify(url)};
+        const out = [];
+        for (const idea of ${JSON.stringify(ideas)}) {
+          const d = (await build(idea, {cwd: ${JSON.stringify(REPO)}})).data ?? {};
+          out.push({start: d.start?.name ?? null, basis: d.start?.basis ?? null,
+            alternatives: (d.start?.alternatives ?? []).map(a => a.name),
+            blocks: (d.blocks ?? []).map(b => b.name)});
+        }
+        console.log(JSON.stringify(out));`;
+      /** @param {string} lang */
+      const under = lang => {
+        const res = spawnSync(
+          process.execPath,
+          ['--input-type=module', '-e', script],
+          {encoding: 'utf8', env: {...process.env, LANG: lang, LC_ALL: lang}},
+        );
+        expect(res.status, res.stderr).toBe(0);
+        return JSON.parse(res.stdout.trim().split('\n').pop() ?? '[]');
+      };
+      const expected = under('en_US.UTF-8');
+      for (const lang of HOST_LOCALES) expect(under(lang), lang).toEqual(expected);
+    },
+    180000,
+  );
 });

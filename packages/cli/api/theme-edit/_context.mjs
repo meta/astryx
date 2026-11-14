@@ -40,18 +40,24 @@ import {partData} from './_parts.mjs';
 import {writeWhole} from './_palette.mjs';
 import {
   fontOf,
+  builtFontFamilies,
   fontPackages,
+  fontsourcePackageOf,
   modesOf,
   nearest,
   refuse,
-  adoptOlderPicture,
   editorWrote,
   recordWritten,
   themeFiles,
   refuseThemesNotFolder,
   shown,
 } from './_settings.mjs';
-import {SHOWCASE_GROUPS, renderPreview, screenshot} from './_preview.mjs';
+import {
+  SHOWCASE_GROUPS,
+  newPictureRun,
+  renderPreview,
+  screenshot,
+} from './_preview.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 
 const E = ERROR_CODES;
@@ -385,8 +391,10 @@ const notChecked = cause =>
 export async function pictures(project, shots, modes) {
   /** @type {string[]} */
   const files = [];
-  /** @type {string[]} */
-  const cut = [];
+  /** What a later browser's success says of an earlier one. @type {string[]} */
+  const notes = [];
+  /** One run for every picture: a browser that failed is not tried again. */
+  const run = newPictureRun();
   /** @param {string} png @param {'light' | 'dark'} m */
   const outOf = (png, m) =>
     modes.length > 1 && m === 'dark' ? png.replace(/\.png$/, '-dark.png') : png;
@@ -399,21 +407,17 @@ export async function pictures(project, shots, modes) {
       : null;
   };
   // A picture is written only over a picture the editor took, unchanged
-  // since: a file of the user's by that name blocks every picture, and is
-  // named.
-  /** Pictures an older editor took, now recorded. @type {string[]} */
-  const adopted = [];
+  // since: a file of the user's by that name (a screenshot of the same
+  // size included) blocks every picture, and is named.
   const blocked = shots
     .flatMap(({png}) => modes.map(m => outOf(png, m)))
     .filter(out => {
       const slug = themeOf(out);
-      if (!slug || !fs.existsSync(out) || editorWrote(project.cwd, slug, out))
-        return false;
-      if (adoptOlderPicture(project.cwd, slug, out)) {
-        adopted.push(path.relative(project.cwd, out));
-        return false;
-      }
-      return true;
+      return (
+        Boolean(slug) &&
+        fs.existsSync(out) &&
+        !editorWrote(project.cwd, /** @type {string} */ (slug), out)
+      );
     });
   if (blocked.length)
     return {
@@ -460,7 +464,7 @@ export async function pictures(project, shots, modes) {
           problem: `${path.relative(project.cwd, path.dirname(out))}/ cannot be written (${/** @type {any} */ (e)?.code ?? 'no access'}), so no picture was taken; fix its permissions, then run the command again`,
         };
       }
-      const r = await screenshot(project, html, part, m);
+      const r = await screenshot(project, html, part, m, run);
       if (!r.ok) {
         fs.rmSync(part, {force: true});
         return {files, problem: r.reason};
@@ -491,31 +495,20 @@ export async function pictures(project, shots, modes) {
         }
         recordWritten(project.cwd, slug, [out]);
       }
-      if (r.cut) cut.push(r.file);
+      if (r.note && !notes.includes(r.note)) notes.push(r.note);
     }
   }
-  const adoptedNote = adopted.length
-    ? `${adopted.join(', ')} ${adopted.length === 1 ? 'was' : 'were'} taken by an earlier version of the editor and ${adopted.length === 1 ? 'is' : 'are'} now recorded as its own`
-    : null;
   return {
     files,
-    // A picture of the window shows the top of a longer page only.
-    problem:
-      [
-        adoptedNote,
-        cut.length
-          ? `${cut.join(', ')} show${cut.length === 1 ? 's' : ''} the top 2400 pixels of the page only (Chrome takes the window, not the whole page); open the .html beside ${cut.length === 1 ? 'it' : 'them'} to see all of it, or install Playwright (${installLine(project.cwd, ['playwright'])}) for whole-page pictures`
-          : null,
-      ]
-        .filter(Boolean)
-        .join('; ') || null,
+    // Pictures were taken; a note says why an earlier browser did not.
+    problem: notes.join('; ') || null,
   };
 }
 
 /**
- * Font notes for the settings: the import line for an open font, the
- * install line when its package is missing, and a warning for a family no
- * package loads, naming the closest open font.
+ * Font notes for the families the theme builds: the import line for an
+ * open font, the install line when its package is missing, and a warning
+ * for a family no package loads, naming the closest open font.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {import('./_settings.mjs').ThemeData} data
  * @returns {string[]}
@@ -550,9 +543,16 @@ export function fontNotes(ctx, data) {
         first.replace(/["']/g, '').trim().toLowerCase() === f,
     );
   };
+  // A font setting whose family the build no longer uses (the theme's own
+  // source sets every place it went) gets no note: nothing shows it.
+  const built = builtFontFamilies(ctx, data.name);
   for (const s of data.settings) {
     if (
       s.thing !== 'font' ||
+      (built &&
+        !built.has(
+          fontOf(s.value).family.replace(/["']/g, '').trim().toLowerCase(),
+        )) ||
       SYSTEM_FONTS.includes(s.value) ||
       isDesktopFamily(fontOf(s.value).family.replace(/["']/g, '')) ||
       OPEN_FONTS[s.value] ||
@@ -580,7 +580,7 @@ export function fontNotes(ctx, data) {
       continue;
     }
     notes.push(
-      `"${fontOf(s.value).family.replace(/^["']|["']$/g, '')}" is not a system font and no package loads it: the app must load it, or it falls back.${near ? ` The closest open font is ${near}: ${P} set ${data.name} font ${near}${s.on ? ` --on ${s.on}` : ''}` : ''}`,
+      `"${named}" is not a system font and no package loads it: the app must load it, or it falls back. If Fontsource publishes it, ${installLine(ctx.project.cwd, [fontsourcePackageOf(named)])} installs its package, which the previews and the app copy then load.${near ? ` The closest open font is ${near}: ${P} set ${data.name} font ${near}${s.on ? ` --on ${s.on}` : ''}` : ''}`,
     );
   }
   return notes;
@@ -621,30 +621,36 @@ export function styledChanges(before, after, base) {
           : p.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`);
       for (const prop of new Set([...Object.keys(x), ...Object.keys(y)])) {
         if (JSON.stringify(x[prop]) === JSON.stringify(y[prop])) continue;
-        // Writing what the base theme already shows there changes nothing.
         const shown = base?.components?.[target]?.[key]?.[prop];
-        if (
-          x[prop] === undefined &&
-          shown !== undefined &&
-          plain(shown) === plain(y[prop])
-        )
-          continue;
+        /**
+         * Whether a write only repeats what the base theme already shows
+         * there, which changes nothing.
+         * @param {any} was @param {any} now @param {any} baseValue
+         */
+        const repeatsBase = (was, now, baseValue) =>
+          was === undefined &&
+          baseValue !== undefined &&
+          typeof baseValue !== 'object' &&
+          plain(baseValue) === plain(now);
         const where = `${target}${key === 'base' ? '' : ` ${key}`}`;
-        // A state block (`:hover`) lists each property it changes.
+        // A block (a state, `:hover`) lists each property it changes.
         if (
-          prop.startsWith(':') &&
-          ((y[prop] && typeof y[prop] === 'object') ||
-            (x[prop] && typeof x[prop] === 'object'))
+          (y[prop] && typeof y[prop] === 'object') ||
+          (x[prop] && typeof x[prop] === 'object')
         ) {
           const xs = x[prop] ?? {};
           const ys = y[prop] ?? {};
           for (const p of new Set([...Object.keys(xs), ...Object.keys(ys)]))
-            if (JSON.stringify(xs[p]) !== JSON.stringify(ys[p]))
+            if (
+              JSON.stringify(xs[p]) !== JSON.stringify(ys[p]) &&
+              !repeatsBase(xs[p], ys[p], shown?.[p])
+            )
               out.push(
                 `${where} ${prop}: ${cssName(p)} ${ys[p] === undefined ? '(removed)' : String(ys[p])}`,
               );
           continue;
         }
+        if (repeatsBase(x[prop], y[prop], shown)) continue;
         out.push(
           `${where}: ${cssName(prop)} ${y[prop] === undefined ? '(removed)' : typeof y[prop] === 'string' ? y[prop] : JSON.stringify(y[prop])}`,
         );
