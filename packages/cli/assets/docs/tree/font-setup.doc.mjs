@@ -45,7 +45,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: "Three font roles: body (UI text), heading (titles and headings), and code (monospace). By default, body and heading share the same system font stack; code uses a monospace stack. Custom themes can assign different families per role. A heading with no family takes the body's whole font list; with its own family, only its own fallbacks; fallbacks with no family build nothing.",
+          text: 'Three font roles: body (UI text), heading (titles and headings), and code (monospace). By default, body and heading share the same system font stack; code uses a monospace stack. Custom themes can assign different families per role; how a heading falls back to the body font is in {@link generic:fonts-and-assets}.',
         },
         {
           type: 'token-ref',
