@@ -221,6 +221,18 @@ describe('render --reverse says what changed after the render', () => {
     ]);
   });
 
+  it('reads a copy whose line ends changed on the way as not edited, as a browser reads it', async () => {
+    for (const [name, ends] of [['crlf', '\r\n'], ['cr', '\r']]) {
+      put(`line-ends-${name}.html`, html.replace(/\n/g, ends));
+      const result = /** @type {any} */ (await render(`line-ends-${name}.html`, {cwd: dir, reverse: true, out: `line-ends-${name}-back/report.tsx`}));
+      expect(result.data).toMatchObject({exact: true, edited: false, stylesEdited: false});
+    }
+    // An edit in such a copy is still one.
+    put('line-ends-edited.html', html.replace(/\n/g, '\r\n').replace('Q3 report', 'Q4 report'));
+    const edited = /** @type {any} */ (await render('line-ends-edited.html', {cwd: dir, reverse: true, out: 'line-ends-edited-back/report.tsx'}));
+    expect(edited.data.edits).toEqual([{was: 'Q3 report', now: 'Q4 report', file: 'line-ends-edited-back/report.tsx', line: 7}]);
+  });
+
   it('reports text added and removed after the render, and an edit with no text change', async () => {
     put('added.html', editBody(html, body => body.replace('</main>', '<p>Footnote</p></main>').replace('Revenue grew in every region.', '')));
     const added = /** @type {any} */ (await render('added.html', {cwd: dir, reverse: true, out: 'added-back/report.tsx'}));

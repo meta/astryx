@@ -19,6 +19,7 @@ import {
 } from '../../foundation/render/render-page.mjs';
 import {
   RENDER_FORMAT,
+  asParsed,
   readSourceBlock,
   recordedText,
   renderedHeadOf,
@@ -426,12 +427,15 @@ function packagesOf(source) {
 function pageChanges(source, html, modules) {
   const recorded = source.markup;
   if (!recorded || typeof recorded.sha256 !== 'string') return {};
-  const now = renderedMarkupOf(html);
+  // The page as a browser reads it, so a copy whose line ends changed on the
+  // way is no edit.
+  const markupNow = renderedMarkupOf(html);
+  const now = markupNow === null ? null : asParsed(markupNow);
   const head = renderedHeadOf(html);
   const text = recordedText(recorded);
-  const titleNow = head.title === null ? null : decode(head.title);
+  const titleNow = head.title === null ? null : asParsed(decode(head.title));
   const titleEdited = typeof text?.title === 'string' && titleNow !== text.title;
-  const stylesEdited = typeof recorded.style === 'string' ? head.style === null || sha256(head.style) !== recorded.style : undefined;
+  const stylesEdited = typeof recorded.style === 'string' ? head.style === null || sha256(asParsed(head.style)) !== recorded.style : undefined;
   const markupEdited = now === null || sha256(now) !== recorded.sha256;
   const styles = stylesEdited === undefined ? {} : {stylesEdited};
   if (!markupEdited && !titleEdited && !stylesEdited) return {edited: false, ...styles};
