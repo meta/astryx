@@ -4,7 +4,7 @@
 
 /**
  * @file useChatStreamScroll.ts
- * @input Uses React refs, state, callbacks, useMediaQuery, the page-scroller
+ * @input Uses React refs, state, callbacks, useReducesMotion, the page-scroller
  *   rules, and the input stream's document scroll events when the page itself
  *   scrolls
  * @output Exports useChatStreamScroll hook for AI chat scroll behavior
@@ -17,8 +17,9 @@
  * - The first fill positions instantly (whether content is present at
  *   mount or arrives async); only subsequent growth springs
  * - `scrollToBottom({behavior: 'instant'})` jumps in one frame, no animation
- * - Under `prefers-reduced-motion`, every spring path falls back to the
- *   same instant jump — following still works, it just doesn't animate
+ * - Under reduced motion (the person's setting, or a theme's
+ *   `reducedMotion: 'always'`), every spring path falls back to the same
+ *   instant jump — following still works, it just doesn't animate
  * - Fractional spring position is retained between frames so browsers that
  *   round scrollTop do not strand the animation short of the bottom
  *
@@ -34,7 +35,7 @@
  */
 
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {useMediaQuery} from '../hooks/useMediaQuery';
+import {useReducesMotion} from '../hooks/useReducesMotion';
 import {setScrollAnchoringOff} from '../privateAttributes/scrollAnchoring.stylex';
 import {subscribeInput} from '../utils/inputStream';
 import {
@@ -269,9 +270,8 @@ export function useChatStreamScroll({
     lastScrollTopRef.current = el.scrollTop;
   }, [scrollRef]);
 
-  const prefersReducedMotion = useMediaQuery(
-    '(prefers-reduced-motion: reduce)',
-  );
+  // The setting, live, or a theme's reducedMotion: 'always'.
+  const reducesMotion = useReducesMotion();
 
   // Every spring entry point (scrollToBottom, lock, scrollIfLocked growth
   // follow) funnels through here, so this one branch covers them all.
@@ -279,7 +279,7 @@ export function useChatStreamScroll({
     if (!lockedRef.current) {
       return;
     }
-    if (prefersReducedMotion) {
+    if (reducesMotion) {
       jumpToBottom();
       return;
     }
@@ -289,7 +289,7 @@ export function useChatStreamScroll({
       springPositionRef.current = scrollRef.current?.scrollTop;
       rafRef.current = requestAnimationFrame(animate);
     }
-  }, [animate, jumpToBottom, prefersReducedMotion, scrollRef]);
+  }, [animate, jumpToBottom, reducesMotion, scrollRef]);
 
   // --- Public API ---
 

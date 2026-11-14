@@ -8,6 +8,17 @@ import {
   type UseChatStreamScrollOptions,
   type UseChatStreamScrollReturn,
 } from './useChatStreamScroll';
+import {defineTheme} from '../theme/defineTheme';
+import {ALWAYS_TEMPO} from '../theme/reducedMotionAlways.testing';
+import {Theme} from '../theme/Theme';
+
+// No public theme can set reducedMotion yet: a theme with ALWAYS_TEMPO
+// resolves to 'always' through this mock.
+vi.mock('../theme/themeMotion', async importOriginal => {
+  const {resolvingAlways} =
+    await import('../theme/reducedMotionAlways.testing');
+  return resolvingAlways(await importOriginal());
+});
 
 // ---------------------------------------------------------------------------
 // Test infrastructure
@@ -191,6 +202,28 @@ describe("useChatStreamScroll — scrollToBottom({behavior: 'instant'})", () => 
 });
 
 describe('useChatStreamScroll — prefers-reduced-motion', () => {
+  it("under a theme with reducedMotion: 'always', streaming growth jumps with the setting off", () => {
+    const still = defineTheme({
+      name: 'ChatStill',
+      motion: {tempo: ALWAYS_TEMPO},
+    });
+    const api: {current: UseChatStreamScrollReturn | null} = {current: null};
+    const el = render(
+      <Theme theme={still}>
+        <Harness api={api} />
+      </Theme>,
+    ).getByTestId('scroller');
+    setGeometry(el, {scrollHeight: 1000, clientHeight: 400});
+    flushRaf(); // consume the mount jump
+    expect(el.scrollTop).toBe(600);
+
+    setGeometry(el, {scrollHeight: 1400, clientHeight: 400});
+    rafQueue = [];
+    act(() => api.current!.scrollIfLocked());
+    expect(el.scrollTop).toBe(1000);
+    expect(rafQueue).toHaveLength(0);
+  });
+
   it('streaming growth jumps synchronously instead of springing', () => {
     stubReducedMotion();
     const {api, el} = renderHook();
