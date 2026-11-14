@@ -407,18 +407,6 @@ function writeRestore(writes, folder, cwd, overwrite) {
   return true;
 }
 
-/**
- * The refusal for a restore whose new folder another run created first.
- * @param {string} folder
- * @param {string} cwd
- */
-const folderTaken = (folder, cwd) =>
-  new AstryxError(
-    `${shown(cwd, folder)} appeared while this restore ran; nothing was written. Restore into another folder with --out.`,
-    [],
-    ERROR_CODES.ERR_FILE_EXISTS,
-  );
-
 /** @param {unknown} e */
 function asAstryxError(e) {
   if (e instanceof RenderError) {
@@ -734,8 +722,11 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       }
     });
     // A restore without --out picks the first folder name no folder has.
-    // When another run takes that name first, this one takes the next: each
-    // name it loses exists from then on, so every pass picks a new one.
+    // When another run creates the new folder first, this one plans again:
+    // without --out it takes the next name; with --out its files go into the
+    // folder still new under it, or meet every check a restore into folders
+    // that exist meets. A folder that appears exists from then on, so every
+    // pass plans for a new one.
     for (;;) {
       // Without --out, the page and the files it imports come back into a new
       // folder beside the HTML file, named after it (`report.html` gives
@@ -842,12 +833,7 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       refuseRunnable(writes.map(w => w.file), cwd, input);
       refuseExisting(writes.filter(w => !isInside(w.file, home)).map(w => w.file));
       refuseProtected(writes.map(w => w.file), cwd, home);
-      if (!writeRestore(writes, home, cwd, overwrite)) {
-        // Another run took the folder's name first: a restore without --out
-        // takes the next one.
-        if (output) throw folderTaken(/** @type {string} */ (home), cwd);
-        continue;
-      }
+      if (!writeRestore(writes, home, cwd, overwrite)) continue;
       const renderedBy = renderedByOf(source, html);
       const packages = packagesOf(source);
       const modules = writes
@@ -901,7 +887,7 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       ERROR_CODES.ERR_RENDER_NOT_ASTRYX,
     );
   }
-  // As above: a name another run takes first exists from then on.
+  // As above: a folder another run creates first exists from then on.
   for (;;) {
     const folder = output ? null : restoreFolder(input);
     const target = output ?? path.join(/** @type {string} */ (folder), 'page.tsx');
@@ -916,10 +902,7 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       [path.dirname(target), path.dirname(input), cwd].find(d => resolvesCore(d)) ?? cwd;
     const rebuilt = rebuildPage(html, from);
     refuseProtected([target], cwd, home);
-    if (!writeRestore([{file: target, bytes: Buffer.from(rebuilt.source)}], home, cwd, overwrite)) {
-      if (output) throw folderTaken(/** @type {string} */ (home), cwd);
-      continue;
-    }
+    if (!writeRestore([{file: target, bytes: Buffer.from(rebuilt.source)}], home, cwd, overwrite)) continue;
     return {
       input: shown(cwd, input),
       mode: 'rebuilt',
