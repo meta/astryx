@@ -343,6 +343,40 @@ describe.skipIf(!hasModuleHooks)('storing a kept value', () => {
     expect(EXACT_CODEC.decode(stored.value)).toEqual(value);
   });
 
+  it('stores a derived value as the text its check read, inside the entry a whole-entry write gives', async () => {
+    const value = {
+      rows: [
+        ['a', 1],
+        ['b', undefined],
+      ],
+      note: 'derived',
+    };
+    await cache.recordRun(async () => {
+      await cache.persistedGather(
+        ['store-test', 'base-of-derived'],
+        async () => 'base',
+        identity,
+      );
+      cache.persistedDerived(['store-test-derived'], () => value, EXACT_CODEC);
+    });
+    const file = fs
+      .readdirSync(STORE)
+      .map(name => path.join(STORE, name))
+      .find(f => fs.readFileSync(f, 'utf8').includes('store-test-derived'));
+    if (!file) throw new Error('not stored');
+    const text = fs.readFileSync(file, 'utf8');
+    const stored = JSON.parse(text);
+    expect(text).toBe(
+      JSON.stringify({
+        format: stored.format,
+        derived: true,
+        key: stored.key,
+        value: EXACT_CODEC.encode(value),
+      }),
+    );
+    expect(EXACT_CODEC.decode(stored.value)).toEqual(value);
+  });
+
   it('never stores a value that does not read back exactly', async () => {
     // Refused by the exact codec, and by a plain one's round trip.
     await keep('exact-nan', {n: Number.NaN}, EXACT_CODEC);
