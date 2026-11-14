@@ -1,8 +1,10 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file The page template a kit starts from: the page ranker's pick when it has
- * the evidence to lead, the template a part lives in, else the app shell.
+ * @file The page template a kit starts from: for a whole page, the page the
+ * word weights and the page-pick model choose from the ranker's list; for a
+ * part or an edit, where the ranker's placement rules put it; else the app
+ * shell.
  */
 
 import {loadWeights} from '../_adapter.mjs';
@@ -113,12 +115,13 @@ function liftFromShell(ranked, kind, catalog, idea) {
 }
 
 /**
- * The template to start from: the ready page the ranker puts first when it
- * has the evidence to lead, else the first fallback shell the project can
+ * The template to start from: for a whole page, the ready page the word
+ * weights and the page-pick model choose (weighStart); for a part or an edit,
+ * the ranker's placement; else the first fallback shell the project can
  * scaffold. Null only when the project has no page template to offer at all.
  *
- * `direct` means two independent signals agree: the ranker's pick is also
- * search's direct match. The ranker sees only ready templates, so a template
+ * `direct` means two independent signals agree: the start is also search's
+ * direct match. The ranker sees only ready templates, so a template
  * still marked not ready is never the start; when search matched one directly
  * the reason names it, so the reader knows why the kit starts elsewhere.
  *
@@ -149,8 +152,9 @@ export function chooseStart(ranked, kind, pages, directMatch, catalog, idea) {
       : place[0].toUpperCase() + place.slice(1);
   const proposed = pickStart(ranked, kind);
   // The checked-in word weights (weights.mjs), blended with the ranker's
-  // scores, decide the start of a whole page. A part or an edit starts where
-  // the ranker's placement rules put it (spec:AST-048/FR3).
+  // scores, decide the start of a whole page, so it can differ from the
+  // ranker's own pick, its head-noun family included. A part or an edit starts
+  // where the ranker's placement rules put it (spec:AST-048/FR3).
   const weighed =
     kind === 'page'
       ? weighStart(idea, ranked, proposed, catalog, {

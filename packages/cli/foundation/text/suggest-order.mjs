@@ -18,6 +18,7 @@
  */
 
 import {levenshteinDistance} from './levenshtein.mjs';
+import {compareText} from './compare-text.mjs';
 
 /**
  * The score of a near name (nearNameSlips), less a little per slip: above any
@@ -481,7 +482,7 @@ export function rankComponentSuggestions(
         a.keywordAt - b.keywordAt ||
         a.distance - b.distance ||
         b.lead - a.lead ||
-        a.name.localeCompare(b.name),
+        compareText(a.name, b.name),
     )
     .map(({name, score, reason}) => ({name, score, reason}));
 }

@@ -72,9 +72,13 @@ const RUNNERS = {
       'require(mdn-data/css/properties.json)',
     ],
   },
+  'api/theme-edit/_playwright-picture.mjs': {
+    runs: 'the Playwright the project has installed, in its own process, to picture a preview only with --png',
+    sites: ['import(<computed>)'],
+  },
   'api/theme-edit/_preview.mjs': {
-    runs: 'a Playwright the project has installed, or a Chrome found on the machine, to picture a preview only with --png',
-    sites: ['child_process.spawn', 'import(<computed>)'],
+    runs: 'the picture process for a Playwright the project has installed, or a Chrome found on the machine, only with --png',
+    sites: ['child_process.spawn'],
   },
   'api/theme-edit/_project.mjs': {
     runs: "the project's installed Core theme module and a built-in theme it builds on, to check and resolve tokens",
@@ -360,6 +364,10 @@ const RUNNERS = {
   'foundation/agent-docs/agent-docs.mjs': {
     runs: 'git, sl or hg, to read whether the repository ignores an untracked agent file',
     sites: ['child_process.spawnSync'],
+  },
+  'foundation/fonts/font-stylesheet.mjs': {
+    runs: 'postcss, the first time a font stylesheet is read, so commands that read none do not load it',
+    sites: ['require(postcss)'],
   },
   'foundation/fs/gather-cache.mjs': {
     runs: 'nothing; a module hook that notes each module a search or build loads, with its state, and loads it unchanged',

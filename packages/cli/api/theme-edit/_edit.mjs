@@ -14,8 +14,13 @@ import * as fs from 'node:fs';
 import {coversProperty} from './_css.mjs';
 import * as path from 'node:path';
 import {AstryxError} from '../error.mjs';
-import {readSetLine, vetSuggestions} from './_vet.mjs';
-import {colorPair, offersTyped} from './_normal.mjs';
+import {
+  followLine,
+  readSetLine,
+  splitCommand,
+  vetSuggestions,
+} from './_vet.mjs';
+import {allowedLine, colorPair, withoutCopyDebris} from './_normal.mjs';
 import {
   AUTO_SPREAD,
   CORNERS,
@@ -80,7 +85,7 @@ import {
   ownSourceTokens,
   ownSourceTokenValues,
   ownTokenEntries,
-  evaluatedOwnTokens,
+  evaluatedTheme,
   nonTextMessage,
   ownPartTokens,
   PHONE_TYPE,
@@ -185,7 +190,7 @@ function editorLeftovers(dir, slug, damaged = false) {
   const named = (/** @type {string} */ n) =>
     n === NEW_MARKER ||
     EDITOR_SUFFIXES.some(x => n === `${slug}.${x}`) ||
-    /^(preview(-[a-z]+)?\.(html|png)|sheet(-[a-z-]+)?\.(html|png)|palette\.config\.json)$/.test(
+    /^(preview(-dark)?\.(html|png)|sheet(-[a-z-]+)?\.(html|png)|palette\.config\.json)$/.test(
       n,
     ) ||
     // The editor's temp names (writes, builds, pictures).
@@ -505,6 +510,18 @@ export async function themeEditNew(name, options = {}) {
   // Every check comes before the first change to the folder: the settings,
   // and a source of the user's own kept from before (it must still extend
   // the settings, or the build fails after the folder was cleared).
+  try {
+    applyNewSettings(
+      ctx,
+      name,
+      structuredClone(data),
+      settings,
+      png,
+      likeFixed ?? undefined,
+    );
+  } catch (e) {
+    throw await followNewLine(e, ctx, name, data);
+  }
   applyNewSettings(ctx, name, data, settings, png, likeFixed ?? undefined);
   if (left?.keep.some(p => path.basename(p) === `${name}.theme.ts`))
     refuseThemeSource(cwd, name);
@@ -644,6 +661,77 @@ export async function themeEditNew(name, options = {}) {
       wiring: appWiring(ctx, name, data),
     },
   };
+}
+
+/**
+ * A refused `new` whose suggestions include another `new` of the theme:
+ * that line is checked as `new` checks its dial flags (in memory, nothing
+ * written), and each repair a refusal of it offers is folded in, so the one
+ * line fixes or drops every bad flag. It comes first.
+ * @param {unknown} e
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data the theme before any dial
+ * @returns {Promise<unknown>}
+ */
+async function followNewLine(e, ctx, slug, data) {
+  if (!(e instanceof AstryxError)) return e;
+  const prefix = `${P} new ${slug}`;
+  const isNew = (/** @type {string} */ n) =>
+    n === prefix || n.startsWith(`${prefix} `);
+  const first = (e.suggestions ?? []).find(x => isNew(x.name));
+  if (!first) return e;
+  const followed = await followLine(
+    first.name,
+    line => {
+      const args = splitCommand(line.slice(prefix.length));
+      if (!args) return null;
+      /** @type {Record<string, string | string[]>} */
+      const settings = {};
+      /** @type {string | undefined} */
+      let like;
+      let png = false;
+      for (let j = 0; j < args.length; j += 1) {
+        const m = /^--([a-z-]+)$/.exec(args[j]);
+        if (m?.[1] === 'png') png = true;
+        else if (m && args[j + 1] != null) {
+          const v = args[(j += 1)];
+          if (m[1] === 'like') like = v;
+          else {
+            const had = settings[m[1]];
+            settings[m[1]] = had == null ? v : [...[had].flat(), v];
+          }
+        } else return null;
+      }
+      try {
+        applyNewSettings(
+          ctx,
+          slug,
+          structuredClone(data),
+          settings,
+          png,
+          like ?? data.like,
+        );
+        return null;
+      } catch (again) {
+        if (again instanceof AstryxError) return again;
+        throw again;
+      }
+    },
+    isNew,
+  );
+  if (followed.line === first.name) return e;
+  e.suggestions = [
+    {
+      ...first,
+      name: followed.line,
+      reason: `do this instead: every flag fixed${followed.why ? `, but this still needs a fix: ${followed.why}` : ''}`,
+    },
+    ...(e.suggestions ?? []).filter(
+      x => x !== first && x.name !== followed.line,
+    ),
+  ];
+  return e;
 }
 
 /**
@@ -1108,7 +1196,61 @@ function modeWiringNotes(slug, before, after) {
  * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditChangeResponse>}
  */
 export async function themeEditSet(theme, thing, value, options = {}) {
-  return change('set', theme, thing, value, options);
+  try {
+    return await change('set', theme, thing, value, options);
+  } catch (e) {
+    throw await swappedOrder(e, 'set', [theme, thing, value], options);
+  }
+}
+
+/**
+ * A refused theme name when the theme was typed after the setting (`set
+ * --color-accent '#123457' t`): the same command with the theme first,
+ * checked by that command, comes first, and no `new` of the setting's name
+ * is offered.
+ * @param {unknown} e
+ * @param {'set' | 'undo'} sub
+ * @param {Array<string | undefined>} words the positionals as typed
+ * @param {{cwd?: string, on?: string, when?: string, state?: string, mode?: string, only?: boolean}} options
+ * @returns {Promise<unknown>}
+ */
+async function swappedOrder(e, sub, words, options) {
+  if (
+    !(e instanceof AstryxError) ||
+    (e.code !== E.ERR_INVALID_ARGUMENT && e.code !== E.ERR_UNKNOWN_THEME)
+  )
+    return e;
+  const cwd = options.cwd ?? process.cwd();
+  const [first, ...rest] = words.map(w => (w == null ? '' : String(w)));
+  if (slugOk(first) && fs.existsSync(themeFiles(cwd, first).settings)) return e;
+  const at = rest.findIndex(
+    w => slugOk(w) && fs.existsSync(themeFiles(cwd, w).settings),
+  );
+  if (at < 0) return e;
+  const theme = rest[at];
+  const moved = [first, ...rest.filter((_, i) => i !== at)].filter(
+    w => w !== '',
+  );
+  const flags = [
+    ...(options.on ? ['--on', options.on] : []),
+    ...(options.when ? ['--when', options.when] : []),
+    ...(options.state ? ['--state', options.state] : []),
+    ...(options.mode ? ['--mode', options.mode] : []),
+  ];
+  const line = `${P} ${sub} ${theme} ${[...moved, ...flags]
+    .map(w => quoteCommandArgument(w))
+    .join(' ')}${options.only ? ' --only' : ''}`;
+  const followed = await followChangeLine(sub, theme, line, cwd);
+  e.suggestions = [
+    {
+      name: followed.line,
+      reason: `do this instead: ${theme} is the theme, so it comes first${followed.why ? `, but this still needs a fix: ${followed.why}` : ''}`,
+    },
+    ...(e.suggestions ?? []).filter(
+      x => x.name !== followed.line && !x.name.startsWith(`${P} new `),
+    ),
+  ];
+  return e;
 }
 
 /**
@@ -1125,7 +1267,14 @@ function refuseStoredTokens(ctx, slug, data, skip) {
   // A repair offers only the value it holds, cleaned: never a stock value
   // the saved setting did not hold.
   for (const b of bad) {
-    if (b.fix && !offersTyped(String(b.fix), String(b.setting.value)))
+    if (
+      b.fix &&
+      !allowedLine({
+        offered: String(b.fix),
+        typed: String(b.setting.value),
+        thing: b.setting.thing,
+      })
+    )
       delete b.fix;
     // A light and a dark color saved as one (`red / blue`) is that pair.
     const pair =
@@ -1200,7 +1349,7 @@ function refuseStoredTokens(ctx, slug, data, skip) {
           ? [
               // The value the check suggests for this value, else a stock
               // one of the token's type.
-              `${P} set ${slug} ${one.setting.thing} ${quoteCommandArgument(String(one.fix))}`,
+              `${P} set ${slug} ${one.setting.thing} ${quoteCommandArgument(String(one.fix))}${one.setting.mode ? ` --mode ${one.setting.mode}` : ''}`,
             ]
           : one && one.fix && one.setting.source === 'dial'
             ? [
@@ -1237,11 +1386,11 @@ export async function editorStoredRefusal(root, slug) {
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
- * @returns {Promise<Array<{token: string, value: string, why: string, line: number | null}>>}
+ * @returns {Promise<Array<{token: string, value: string, why: string, line: number | null, file?: string | null}>>}
  */
 async function ownTokenProblems(ctx, slug, data) {
   const {cwd} = ctx.project;
-  /** @type {Array<{token: string, value: string, why: string, line: number | null}>} */
+  /** @type {Array<{token: string, value: string, why: string, line: number | null, file?: string | null}>} */
   const out = [];
   const known = ctx.project.core.tokenDefaults;
   /** @param {string} token @param {string} value @returns {string | null} */
@@ -1254,151 +1403,164 @@ async function ownTokenProblems(ctx, slug, data) {
       return e.message.replace(/ Nothing was changed\.$/, '');
     }
   };
-  // The tokens map as written, entry by entry, with the line that sets
-  // each: every value is checked as `set` checks it (each half of a
-  // [light, dark] pair; a number is not text, as show says), and what only
-  // a build can read (an imported module, an expression) is read from a
-  // build made now, so nothing ships unchecked.
-  const entries = ownTokenEntries(cwd, slug);
-  const needsBuild = entries.some(
-    e => e.kind === 'unresolved' || (e.kind === 'other' && e.token),
-  );
-  const evaluated = needsBuild ? await evaluatedOwnTokens(ctx, slug) : null;
-  const seen = new Set();
+  /** The file an entry is in, as the project names it; null for the theme file. @param {{file?: string}} e */
+  const fileOf = e => (e.file ? path.relative(cwd, e.file) : null);
+  // Every value is judged as a build made now writes it (an import, an
+  // expression, a spread or a computed key is its evaluated value). The
+  // source is read only to name the file and line that hold each value,
+  // and for the two facts a build erases: a `tokens` key given twice
+  // (JavaScript keeps the last) and a [light, dark] pair with other than
+  // two values (the build drops the rest).
+  const entries = ownTokenEntries(cwd, slug).filter(e => !e.overridden);
+  const built = await evaluatedTheme(ctx, slug);
+  const tokensLine = entries.find(e => e.kind === 'unresolved')?.line ?? null;
+  /** Where the build's value for a token comes from. @param {string} token */
+  const whereOf = token => {
+    const e = entries.find(x => x.token === token);
+    return e ? {line: e.line, file: fileOf(e)} : {line: tokensLine, file: null};
+  };
   for (const e of entries) {
-    if (e.kind === 'duplicate') {
+    if (e.kind === 'duplicate')
       out.push({
         token: 'tokens',
         value: '',
         why: `defineTheme is given tokens twice (lines ${(e.lines ?? []).join(' and ')}); the build keeps only the last, so the first does nothing: merge them into one`,
         line: e.line,
+        file: fileOf(e),
       });
-      continue;
-    }
-    if (e.kind === 'typography') {
-      const why = typographyProblem(e.key, e.value);
-      if (why)
-        out.push({
-          token: `typography.${e.key}`,
-          value: e.value == null ? '' : String(e.value),
-          why,
-          line: e.line,
-        });
-      continue;
-    }
-    if (e.kind === 'unresolved') continue;
-    if (e.token == null) {
-      out.push({
-        token: e.key,
-        value: '',
-        why: `the key ${e.key} is computed, so the editor cannot read which token it sets and has not checked its value; write the token's name as text, such as '--radius-page'`,
-        line: e.line,
-      });
-      continue;
-    }
-    const token = e.token;
-    seen.add(token);
-    if (!(token in known)) continue;
-    if (e.kind === 'object') {
-      out.push({
-        token,
-        value: '',
-        why: nonTextMessage(ctx, slug, [token, e.value, 'object']),
-        line: e.line,
-      });
-      continue;
-    }
-    if (e.kind === 'number') {
-      out.push({
-        token,
-        value: String(e.value),
-        why: nonTextMessage(ctx, slug, [token, e.value]),
-        line: e.line,
-      });
-      continue;
-    }
-    if (e.kind === 'text') {
-      const why = refused(token, String(e.value));
-      if (why) out.push({token, value: String(e.value), why, line: e.line});
-      continue;
-    }
-    if (e.kind === 'pair') {
+    else if (
+      e.kind === 'pair' &&
+      e.token &&
+      e.token in known &&
+      (e.halves ?? []).length !== 2
+    ) {
       const halves = e.halves ?? [];
-      if (halves.length === 2 && halves.some(h => typeof h !== 'string')) {
+      out.push({
+        token: e.token,
+        value: `[${halves.map(h => (h === undefined ? '…' : JSON.stringify(h))).join(', ')}]`,
+        why: `a [light, dark] pair holds exactly two values in quotes, and this holds ${halves.length}; the build would write ${halves.length < 2 ? 'light-dark() with an undefined half' : 'the first two and drop the rest'}`,
+        line: e.line,
+        file: fileOf(e),
+      });
+    }
+  }
+  if (!built) return out;
+  const named = new Set(out.map(b => b.token));
+  // A family or size the typography builds is judged with the typography.
+  const typo = entries.filter(e => e.kind === 'typography');
+  const roles = new Set(typo.map(e => e.key.split('.')[0]));
+  /** @param {string} token */
+  const byTypography = token => {
+    const role = /^--font-family-([a-z]+)$/.exec(token)?.[1];
+    if (role)
+      return roles.has(role) || (role === 'heading' && roles.has('body'));
+    return roles.has('scale') && /^--(font-size|text)-/.test(token);
+  };
+  for (const token of built.own.keys()) {
+    if (!(token in known) || named.has(token) || byTypography(token)) continue;
+    const shape = built.shapes.get(token) ?? {kind: 'other'};
+    const at = whereOf(token);
+    if (
+      shape.kind === 'number' ||
+      shape.kind === 'object' ||
+      shape.kind === 'pair'
+    ) {
+      const bad =
+        shape.kind === 'object'
+          ? /** @type {[string, unknown, 'object']} */ ([
+              token,
+              shape.value,
+              'object',
+            ])
+          : /** @type {[string, unknown]} */ ([
+              token,
+              shape.kind === 'pair' ? shape.halves : shape.value,
+            ]);
+      // A pair of two text values is the light-dark() the build writes,
+      // judged below; any other pair, a number or an object is no text.
+      if (!(
+        shape.kind === 'pair' &&
+        (shape.halves ?? []).every(h => typeof h === 'string')
+      )) {
         out.push({
           token,
           value: '',
-          why: nonTextMessage(ctx, slug, [token, halves]),
-          line: e.line,
+          why: nonTextMessage(ctx, slug, bad),
+          ...at,
         });
         continue;
       }
-      // A pair is exactly two values in quotes: one or none builds
-      // light-dark(red, undefined), a third is dropped.
-      if (halves.length !== 2) {
-        out.push({
-          token,
-          value: `[${halves.map(h => (h === undefined ? '' : JSON.stringify(h))).join(', ')}]`,
-          why: `a [light, dark] pair holds exactly two values in quotes, and this holds ${halves.length}; the build would write ${halves.length < 2 ? 'light-dark() with an undefined half' : 'the first two and drop the rest'}`,
-          line: e.line,
-        });
-        continue;
-      }
-      if (!isColorToken(token)) continue;
-      halves.forEach((h, i) => {
-        const why = refused(token, String(h));
-        if (why)
-          out.push({
-            token,
-            value: String(h),
-            why: `its ${i === 0 ? 'light' : 'dark'} half: ${why}`,
-            line: e.line,
-          });
-      });
-      continue;
     }
-    // An expression ('ban' + 'ana', a ternary, a template with ${}): the
-    // value a build makes of it, else named as not checked.
-    const v = evaluated?.get(token);
+    const value = built.own.get(token);
+    if (value == null) continue;
     // A pair on a token that is not a color is the pair refusal's.
-    if (
-      typeof v === 'string' &&
-      /^light-dark\(/i.test(v) &&
-      !isColorToken(token)
-    )
-      continue;
-    if (typeof v === 'string') {
-      const why = refused(token, v);
-      if (why) out.push({token, value: v, why, line: e.line});
-    } else
+    if (/^light-dark\(/i.test(value) && !isColorToken(token)) continue;
+    const why = refused(token, value);
+    if (why) out.push({token, value, why, ...at});
+  }
+  // Typography as the build was given it (each field the source sets, by
+  // its evaluated value), then the families and sizes the build writes.
+  /** @type {Set<string>} */
+  const flagged = new Set();
+  for (const e of typo) {
+    const value = e.key
+      .split('.')
+      .reduce(
+        (/** @type {any} */ o, /** @type {string} */ k) => o?.[k],
+        built.typography,
+      );
+    const why = typographyProblem(e.key, value);
+    if (why) {
+      flagged.add(e.key.split('.')[0]);
       out.push({
-        token,
-        value: '',
-        why: 'its value is an expression the editor could not evaluate, so it has not been checked; write it as text in quotes',
+        token: `typography.${e.key}`,
+        value: value == null ? '' : String(value),
+        why,
         line: e.line,
+        file: fileOf(e),
+      });
+    }
+  }
+  for (const role of ['body', 'heading', 'code']) {
+    const at = typo.find(e => e.key.startsWith(`${role}.`));
+    if (!at || flagged.has(role)) continue;
+    const token = `--font-family-${role}`;
+    const v = built.tops.get(token);
+    const why = v == null ? null : refused(token, v);
+    if (why && v != null)
+      out.push({
+        token: `typography.${role} (builds ${token})`,
+        value: v,
+        why,
+        line: at.line,
+        file: fileOf(at),
       });
   }
-  // A value the map gives another way (a spread of an imported module, a
-  // call), as a build made now evaluates it, else as the current build or
-  // the file shows it. A family the build shows that the map does not
-  // name came from typography, checked above.
-  const others =
-    evaluated ?? new Map(Object.entries(ownSourceTokenValues(cwd, slug)));
-  const tokensLine = entries.find(e => e.kind === 'unresolved')?.line ?? null;
-  for (const [token, value] of others) {
-    if (seen.has(token) || !(token in known) || value == null) continue;
-    if (/^light-dark\(/i.test(value) && !isColorToken(token)) continue;
-    if (!evaluated && /^--font-family-/.test(token)) continue;
-    const why = refused(token, value);
-    if (why) out.push({token, value, why, line: tokensLine});
+  const scale = typo.find(e => e.key.startsWith('scale.'));
+  if (scale && !flagged.has('scale')) {
+    const broken = [...built.tops].find(
+      ([k, v]) =>
+        /^--font-size-/.test(k) && /NaN|Infinity|^-/.test(String(v ?? '')),
+    );
+    if (broken)
+      out.push({
+        token: `typography.scale (builds ${broken[0]})`,
+        value: String(broken[1]),
+        why: typo.some(e => e.key === 'scale.base')
+          ? 'the type scale builds a size no page can use; the base is a positive number of pixels (such as 16) and the ratio a number above 1 and at most 4'
+          : 'the type scale is given no base, and Core needs one with the ratio: it builds sizes no page can use; add the body size in pixels, such as scale: {base: 16, ratio: …}',
+        line: scale.line,
+        file: fileOf(scale),
+      });
   }
   return out;
 }
 
 /**
  * What is wrong with one typography field of a theme's own source, or
- * null: a family is one family name (Core quotes it whole), the scale's
- * ratio is above 1 and at most 4, its base a positive size.
+ * null: a family is one family name without quotes (Core quotes it whole)
+ * and with nothing CSS would read as the end of the value; the scale's
+ * ratio is above 1 and at most 4, its base a positive number of pixels.
  * @param {string} key the dotted field (`body.family`, `scale.ratio`)
  * @param {unknown} value
  * @returns {string | null}
@@ -1409,6 +1571,11 @@ function typographyProblem(key, value) {
     if (typeof value !== 'string')
       return 'a typography family is a family name in quotes, such as "Inter"';
     const v = value.trim();
+    if (/[;{}<>]/.test(v))
+      return `"${v}" holds a ; { } < or >, so the CSS writer drops the whole declaration; give the family name alone, such as "Inter"`;
+    const quoted = /^(["'])(.*)\1$/.exec(v);
+    if (quoted)
+      return `the family is written in quotes, and Core adds its own, so it builds ${JSON.stringify(`"${v}"`)}, a name no font has; write it without them: family: '${quoted[2]}'`;
     // Core quotes a family with a space whole, so a list here is one
     // family by that whole name, which exists nowhere.
     if (v.includes(','))
@@ -1430,9 +1597,13 @@ function typographyProblem(key, value) {
     return null;
   }
   if (field === 'base') {
-    const n = typeof value === 'number' ? value : parseFloat(String(value));
-    if (!Number.isFinite(n) || n <= 0)
-      return `the type scale's base is the body size, a positive number of pixels (such as 16); ${JSON.stringify(value)} makes sizes no page can use`;
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) {
+      // A size with a unit builds NaNrem: the number of pixels it means.
+      const m = /^\s*([0-9.]+)\s*(px|rem|em)\s*$/i.exec(String(value));
+      const px = m ? Number(m[1]) * (/^r?em$/i.test(m[2]) ? 16 : 1) : null;
+      return `the type scale's base is the body size, a positive number of pixels${px ? `, so ${JSON.stringify(value)} is base: ${px}` : ' (such as 16)'}; ${JSON.stringify(value)} builds sizes no page can use${m ? ' (NaNrem)' : ''}`;
+    }
     return null;
   }
   return null;
@@ -1461,13 +1632,14 @@ async function refuseOwnTokenValues(ctx, slug, data) {
 async function ownTokenRefusal(ctx, slug, data) {
   const bad = await ownTokenProblems(ctx, slug, data);
   if (!bad.length) return null;
-  const file = `themes/${slug}/${slug}.theme.ts`;
+  const own = `themes/${slug}/${slug}.theme.ts`;
+  const file = bad[0].file ?? own;
   return new AstryxError(
-    `${file} gives ${bad.length === 1 ? 'a token a value' : `${bad.length} tokens values`} the editor refuses, which the build would write as it is: ${bad
+    `${own} gives ${bad.length === 1 ? 'a token a value' : `${bad.length} tokens values`} the editor refuses, which the build would write as it is: ${bad
       .slice(0, 3)
       .map(
         b =>
-          `${b.token}${b.value ? `: "${b.value}"` : ''}${b.line ? ` (line ${b.line})` : ''}: ${b.why}`,
+          `${b.token}${b.value ? `: "${b.value}"` : ''}${b.file ? ` (in ${b.file}${b.line ? `, line ${b.line}` : ''})` : b.line ? ` (line ${b.line})` : ''}: ${b.why.replace(/\.+$/, '')}`,
       )
       .join(
         '; ',
@@ -1582,8 +1754,10 @@ function looseObject(text) {
  * @param {string} slug
  * @param {string} thing
  * @param {unknown} typed
+ * @param {import('./_settings.mjs').ThemeData} [data] the theme, whose saved
+ *   values a keep line may carry
  */
-function carryTyped(e, sub, slug, thing, typed) {
+function carryTyped(e, sub, slug, thing, typed, data) {
   if (
     sub !== 'set' ||
     !(e instanceof AstryxError) ||
@@ -1597,29 +1771,110 @@ function carryTyped(e, sub, slug, thing, typed) {
   const same = (/** @type {string} */ x) =>
     x.replace(/^-+/, '').toLowerCase() ===
     String(thing).replace(/^-+/, '').toLowerCase();
-  const kept = e.suggestions.filter(x => {
+  // Every set line, of this setting or another (a dial's other name, a
+  // label, a theme-wide equivalent), offers a value only through the
+  // allowlist of exact readings: never a stock, reset or nearest value.
+  // Another setting's line may carry words of the thing typed too (an
+  // object or a label typed as the thing).
+  const typedText = `${String(thing)} ${typed}`;
+  const saved = data
+    ? [
+        data.like ?? '',
+        data.mode ?? '',
+        ...data.settings.map(x => String(x.value ?? '')),
+      ].join(' ')
+    : '';
+  /** @type {Set<string>} */
+  const dropped = new Set();
+  const lines = e.suggestions.filter(x => {
     const m = head.exec(x.name);
     if (!m) return true;
     const v = m[3] ?? m[4];
-    // A stock value on another setting's line (the typed thing held an
-    // object or a label) is no more the input's than on this one.
-    if (!same(m[1] ?? m[2]))
-      return /^\s*[{"']/.test(String(thing))
-        ? offersTyped(v, `${String(thing)} ${typed}`)
-        : true;
-    return offersTyped(v, typed);
+    if (
+      allowedLine({
+        offered: v,
+        typed: same(m[1] ?? m[2]) ? typed : typedText,
+        thing: m[1] ?? m[2],
+        saved,
+      })
+    )
+      return true;
+    dropped.add(v.replace(/^'(.*)'$/, '$1').toLowerCase());
+    return false;
   });
-  if (kept.length === e.suggestions.length) return e;
-  e.suggestions = kept.some(x => / (set|undo|new) /.test(` ${x.name} `))
+  // A value named as a did-you-mean goes with its line.
+  const kept = lines.filter(
+    x => !(x.reason === 'did you mean' && dropped.has(x.name.toLowerCase())),
+  );
+  // A refusal always names a command that works: with no set, undo, new or
+  // how line left, how for the setting.
+  const runnable = kept.some(
+    x => x.reason !== 'did you mean' && !/ --help$/.test(x.name),
+  );
+  if (kept.length === e.suggestions.length && runnable) return e;
+  e.suggestions = runnable
     ? kept
     : [
-        ...kept,
+        ...kept.filter(x => !/ --help$/.test(x.name)),
         {
           name: `${P} how ${quoteCommandArgument(String(thing))}`,
           reason: 'what it takes',
         },
       ];
   return e;
+}
+
+/**
+ * A theme's settings file as written, for the values a keep line may carry
+ * when the theme does not load (a damaged entry); null when it cannot be
+ * read.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {import('./_settings.mjs').ThemeData | undefined}
+ */
+function savedAsWritten(cwd, slug) {
+  try {
+    const j = JSON.parse(
+      fs
+        .readFileSync(themeFiles(cwd, slug).settings, 'utf8')
+        .replace(/^\uFEFF/, ''),
+    );
+    return j && Array.isArray(j.settings) ? j : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The lines of a repair that work: each run through set's own check (in
+ * memory) and offered only when set takes it as offered and its value
+ * passes the allowlist of exact readings of what was typed. With none
+ * left, how for the thing.
+ * @param {'set' | 'undo'} sub
+ * @param {string} slug
+ * @param {string[]} lines
+ * @param {string} cwd
+ * @param {string} typed
+ * @param {string} thing
+ * @returns {Promise<string[]>}
+ */
+async function workingLines(sub, slug, lines, cwd, typed, thing) {
+  /** @type {string[]} */
+  const out = [];
+  for (const line of lines) {
+    // The line as set takes it (a repair set offers for it folded in).
+    const followed = await followChangeLine(sub, slug, line, cwd);
+    if (followed.why) continue;
+    const read = readSetLine(followed.line, slug);
+    if (
+      sub === 'set' &&
+      read &&
+      !allowedLine({offered: read.value, typed, thing: read.thing})
+    )
+      continue;
+    out.push(followed.line);
+  }
+  return out.length ? out : [`${P} how ${quoteCommandArgument(thing)}`];
 }
 
 /**
@@ -1647,48 +1902,36 @@ async function followChangeLine(sub, slug, line, cwd) {
     return {line, why: null};
   }
   const prefix = `${P} ${sub} ${slug} `;
-  let now = line;
-  for (let i = 0; i < 6; i += 1) {
-    const read = readSetLine(
-      sub === 'undo' ? now.replace(`${P} undo `, `${P} set `) : now,
-      slug,
-    );
-    if (!read) return {line: now, why: null};
-    try {
-      const s = checkSetting(
-        ctx,
+  return followLine(
+    line,
+    now => {
+      const read = readSetLine(
+        sub === 'undo' ? now.replace(`${P} undo `, `${P} set `) : now,
         slug,
-        structuredClone(data),
-        read.thing,
-        read.value,
-        read.flags,
-        sub === 'undo',
       );
-      if (sub === 'undo' && !data.settings.some(x => keyOf(x) === keyOf(s)))
-        return {
-          line: now,
-          why: `${slug} does not set ${describe({...s, value: '?'}).replace(' = ?', '')}`,
-        };
-      return {line: now, why: null};
-    } catch (e) {
-      const next =
-        e instanceof AstryxError
-          ? (e.suggestions ?? []).find(
-              x => x.name.startsWith(prefix) && x.name !== now,
+      if (!read) return null;
+      try {
+        const s = checkSetting(
+          ctx,
+          slug,
+          structuredClone(data),
+          read.thing,
+          read.value,
+          read.flags,
+          sub === 'undo',
+        );
+        return sub === 'undo' && !data.settings.some(x => keyOf(x) === keyOf(s))
+          ? new AstryxError(
+              `${slug} does not set ${describe({...s, value: '?'}).replace(' = ?', '')}`,
             )
-          : undefined;
-      if (!next)
-        return {
-          line: now,
-          why:
-            e instanceof Error
-              ? e.message.replace(/\s*Nothing was changed\.$/, '')
-              : String(e),
-        };
-      now = next.name;
-    }
-  }
-  return {line: now, why: null};
+          : null;
+      } catch (e) {
+        if (e instanceof AstryxError) return e;
+        throw e;
+      }
+    },
+    name => name.startsWith(prefix),
+  );
 }
 
 /**
@@ -1730,12 +1973,22 @@ async function change(sub, slug, thing, value, options) {
         E.ERR_INVALID_ARGUMENT,
         `This holds ${Object.keys(obj).length} settings; ${sub} changes one at a time.`,
         {
-          run: Object.entries(obj)
-            .slice(0, 6)
-            .map(
-              ([k, x]) =>
-                `${P} ${sub} ${slug} ${quoteCommandArgument(k)}${sub === 'set' ? ` ${quoteCommandArgument(String(x))}` : ''}`,
-            ),
+          // Each entry as its own line, a nested value (`{"$value": …}`, a
+          // light and dark pair) written back as typed; each line checked,
+          // and one set refuses is left out.
+          run: await workingLines(
+            sub,
+            slug,
+            Object.entries(obj)
+              .slice(0, 6)
+              .map(
+                ([k, x]) =>
+                  `${P} ${sub} ${slug} ${quoteCommandArgument(k)}${sub === 'set' ? ` ${quoteCommandArgument(String(normalizeEntry(k, x != null && typeof x === 'object' ? JSON.stringify(x) : String(x)).value ?? ''))}` : ''}`,
+              ),
+            options.cwd ?? process.cwd(),
+            objectText,
+            'settings',
+          ),
         },
       );
   }
@@ -1745,15 +1998,17 @@ async function change(sub, slug, thing, value, options) {
   if (typeof value === 'string' && /\s--(mode|state|on|when)\b/.test(value)) {
     /** @type {Record<string, string>} */
     const lifted = {};
-    const bare = value
-      .replace(
+    // The rest is cleaned as any value is (a trailing `;`, `!important`,
+    // a comment).
+    const bare = withoutCopyDebris(
+      value.replace(
         /\s+--(mode|state|on|when)(?:\s*=\s*|\s+)("[^"]*"|'[^']*'|\S+)/g,
         (_, f, x) => {
           lifted[f] = x.replace(/^(["'])(.*)\1$/, '$2');
           return '';
         },
-      )
-      .trim();
+      ),
+    );
     if (bare && Object.keys(lifted).length) {
       const opts = /** @type {Record<string, unknown>} */ ({
         ...options,
@@ -1769,9 +2024,18 @@ async function change(sub, slug, thing, value, options) {
           .map(f => `--${f}`)
           .join(' and ')} inside the value; a flag goes outside the quotes.`,
         {
-          run: [
-            `${P} ${sub} ${slug} ${quoteCommandArgument(String(thing))}${sub === 'set' ? ` ${quoteCommandArgument(bare)}` : ''}${flagText}${options.only ? ' --only' : ''}`,
-          ],
+          // The line is checked as set checks it; one set refuses is left
+          // out, and how is named instead.
+          run: await workingLines(
+            sub,
+            slug,
+            [
+              `${P} ${sub} ${slug} ${quoteCommandArgument(String(thing))}${sub === 'set' ? ` ${quoteCommandArgument(bare)}` : ''}${flagText}${options.only ? ' --only' : ''}`,
+            ],
+            options.cwd ?? process.cwd(),
+            value,
+            String(thing),
+          ),
         },
       );
     }
@@ -1886,6 +2150,7 @@ async function change(sub, slug, thing, value, options) {
         slug,
         typedThing,
         typedValue,
+        seen.data ?? savedAsWritten(options.cwd ?? process.cwd(), slug),
       ),
       seen.data?.name ?? slug,
       seen.data,
@@ -2029,8 +2294,9 @@ async function changeOnce(
             (x.on ?? null) === (flags.on ?? null) &&
             (x.when ?? null) === (flags.when ?? null) &&
             (x.state ?? null) === (flags.state ?? null) &&
-            Boolean(x.only) === Boolean(flags.only) &&
-            (entryDamage(x) === 'source'
+            (entryDamage(x) === 'only' ||
+              Boolean(x.only) === Boolean(flags.only)) &&
+            (entryDamage(x) === 'source' || entryDamage(x) === 'only'
               ? (x.mode ?? null) === (flags.mode ?? null)
               : entryDamage(x) === 'mode' && !flags.mode),
         )
@@ -2205,6 +2471,24 @@ async function changeOnce(
   // this change's to report.
   const notesBefore = new Set(buildNotes(ctx));
   if (sub === 'set' && (s.thing === 'base' || s.thing === 'mode')) {
+    // A built-in base this project has not installed: install it, then the
+    // same set, whichever letters it was typed in.
+    if (
+      s.thing === 'base' &&
+      s.value !== 'none' &&
+      !baseInstalled(cwd, s.value)
+    )
+      refuse(
+        E.ERR_UNKNOWN_THEME,
+        `The ${s.value} theme is not installed, so ${slug} cannot build on it. Install @astryxdesign/theme-${s.value}, then set the base again, or build on no theme.`,
+        {
+          run: [
+            installLine(cwd, [`@astryxdesign/theme-${s.value}`]),
+            `${P} set ${slug} base ${s.value}`,
+            `${P} set ${slug} base none`,
+          ],
+        },
+      );
     const before = s.thing === 'base' ? (data.like ?? 'none') : data.mode;
     if (s.thing === 'base') {
       if (s.value === 'none') delete data.like;
@@ -3285,6 +3569,16 @@ export async function themeEditShow(theme, options = {}) {
       if (!(e instanceof Error)) throw e;
       if (e instanceof AstryxError && e.code !== E.ERR_RENDER_FAILED) throw e;
       putBack(kept, tokensDir);
+      // A folder it cannot write is no render failure: the folder is named.
+      const code = /** @type {any} */ (e).code;
+      if (['EACCES', 'EPERM', 'EROFS'].includes(code)) {
+        const where = /** @type {any} */ (e).path;
+        return refuse(
+          E.ERR_WRITE_FAILED,
+          `${theme} cannot be shown: ${where ? `${shown(cwd, path.dirname(where))}/` : 'its theme folder'} cannot be written (${code}). Fix its permissions, then run the command again. Nothing was written.`,
+          {run: [`${P} show ${theme}`]},
+        );
+      }
       return refuse(
         E.ERR_RENDER_FAILED,
         `${theme} cannot be shown: ${renderCause(ctx.project, e.message)} ${[...kept.values()].some(Boolean) ? 'The build this show made again was put back as it was. ' : ''}Nothing was written.`,
@@ -3326,7 +3620,15 @@ export async function themeEditShow(theme, options = {}) {
           ],
           modes,
         )
-      : {files: [], problem: null};
+      : // Pictures asked for but not taken: said, never a quiet none.
+        {
+          files: [],
+          problem: png
+            ? readOnly
+              ? 'no picture was taken: show ran read-only (the project or its install cannot be written, so it could not hold the theme lock), and the pages the pictures are taken of were not made; run show --png where the project can be written'
+              : 'no picture was taken: React is not installed here, so the pages the pictures are taken of could not be made; install react and react-dom, then run show --png again'
+            : null,
+        };
   // The app copy follows the build there now, also when the build was
   // current and only the copy is missing (a theme made before it existed).
   if (!readOnly)
@@ -3494,6 +3796,10 @@ function dialWrites(ctx, data, dial, base) {
  * @returns {string}
  */
 function nowApplies(ctx, data, removed, base) {
+  // Vibrancy has no base theme value: the colors are made again at the
+  // default.
+  if (removed.source === 'dial' && removed.thing === 'vibrancy')
+    return `the default vibrancy, ${VIBRANCY_DEFAULT}`;
   // A token the theme's own source sets shows its value, whatever else
   // the settings give it.
   if (removed.source === 'token' && !removed.on && !removed.when) {
@@ -3728,8 +4034,28 @@ function ownPhoneNotes(cwd, slug, data) {
       .filter(x => x.source === 'token' && !x.on && !x.when && !x.state)
       .map(x => x.thing),
   );
+  // A family or size the theme's typography sets is kept on phones (the
+  // base theme's rule for those screens keeps the theme's typography); only
+  // one the tokens map sets is lost there.
+  const entries = ownTokenEntries(cwd, slug);
+  const roles = new Set(
+    entries.filter(e => e.kind === 'typography').map(e => e.key.split('.')[0]),
+  );
+  const inMap = new Set(
+    entries.filter(e => e.token && !e.overridden).map(e => e.token),
+  );
+  /** @param {string} k */
+  const fromTypography = k => {
+    const role = /^--font-family-([a-z]+)$/.exec(k)?.[1];
+    if (role)
+      return roles.has(role) || (role === 'heading' && roles.has('body'));
+    return roles.has('scale') && !/^--font-family-/.test(k);
+  };
   const lost = ownSourceTokens(cwd, slug).filter(
-    k => PHONE_TYPE.test(k) && !exact.has(k),
+    k =>
+      PHONE_TYPE.test(k) &&
+      !exact.has(k) &&
+      (!fromTypography(k) || inMap.has(k)),
   );
   if (!lost.length) return [];
   const families = lost.filter(k => /^--font-family-/.test(k));
@@ -4041,7 +4367,14 @@ function colorFiles(slug) {
  */
 export async function themeEditUndo(theme, options = {}) {
   try {
-    return await undoTheme(theme, options);
+    return await undoTheme(theme, options).catch(async e => {
+      throw await swappedOrder(
+        e,
+        'undo',
+        [theme, options.thing, options.value],
+        options,
+      );
+    });
   } catch (e) {
     // A theme name typed in another form (tTheme, T, brand_dark, themes/t):
     // the same undo with the theme's name comes first, never a look at the

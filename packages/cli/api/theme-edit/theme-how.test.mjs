@@ -499,7 +499,9 @@ const QUESTIONS = [
   [
     'rounder corners but not on inputs',
     {
-      top: /^set q corners more && set q border-radius \S+ --on inputs$/,
+      // Each member that shows a radius of its own keeps it; a member that
+      // takes its corners from a part inside it gets no invented one.
+      top: /^set q corners more( && set q border-radius \S+ --on [a-z-]+ --only)+$/,
       adds: /text-input\.base\.borderRadius=/,
     },
   ],
@@ -4302,7 +4304,9 @@ describe('how lookups', () => {
     const {data} = await themeEditHow('make it look like Apple', {cwd});
     expect(data.results).toEqual([]);
     expect(data.hint).toMatch(/No match/);
-    expect(data.run[0]).toContain('--list parts');
+    // The help that lists the asks it understands comes first.
+    expect(data.run[0]).toMatch(/ how --help$/);
+    expect(data.run[1]).toContain('--list parts');
   });
 });
 

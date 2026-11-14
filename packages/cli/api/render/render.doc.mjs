@@ -80,7 +80,7 @@ export const doc = {
     {
       type: 'render.reverse',
       description:
-        "How the page came back (`embedded`, exact; or `rebuilt`, text and layout only), the files written; for an embedded page the render format, the CLI version and packages that rendered it, and whether its markup changed after the render, with each text change; for a rebuilt page the components it uses and what could not be rebuilt.",
+        "How the page came back (`embedded`, exact; or `rebuilt`, text and layout only), the files written; for an embedded page the path-alias imports no alias here names (`aliased`), the render format, the CLI version and packages that rendered it, and whether its markup changed after the render, with each text change; for a rebuilt page the components it uses and what could not be rebuilt.",
     },
   ],
   throws: [

@@ -25,12 +25,25 @@ export const PAGE_EXTENSIONS = ['.tsx', '.jsx', '.ts', '.js', '.mjs'];
  */
 export const MODULE_EXTENSIONS = [...PAGE_EXTENSIONS, '.mts', '.cts', '.cjs'];
 
-/** JSON files that configure a project or a tool rather than hold page data. */
+/**
+ * JSON files that configure a project or a tool rather than hold page data,
+ * by the names tools read: a manifest or a tool's own file (`package.json`,
+ * `turbo.json`, `project.json`, ...), a TypeScript or JavaScript project
+ * (`tsconfig.json`, `tsconfig.app.json`, `jsconfig.json`), a `*.config.json`,
+ * and a lockfile. Page data may have any other name (`config.json`,
+ * `chart-config.json`). An rc file a tool reads is a dotfile, which no render
+ * carries.
+ */
 const CONFIG_JSON =
-  /^(package|package-lock|composer|deno|turbo|vercel|nx|lerna|app|bower|now|netlify|firebase|renovate|project|workspace|angular|biome|components)\.jsonc?$|config|(^|[._-])rc\.jsonc?$|(^|[._-])lock\.jsonc?$/i;
+  /^(package|package-lock|composer|deno|turbo|vercel|nx|lerna|app|bower|now|netlify|firebase|renovate|project|workspace|angular|biome|components)\.jsonc?$|^(ts|js)config(\.[^.]+)*\.jsonc?$|\.config\.jsonc?$|(^|[._-])lock\.jsonc?$/i;
 
-/** Tool configuration modules: `vite.config.ts`, `astryx.config.mjs`, `next.config.js`, `.eslintrc.js`, ... */
-const CONFIG_MODULE = /(^|\.)config\.[cm]?[jt]sx?$|^[a-z0-9-]+rc\.[cm]?[jt]s$/i;
+/**
+ * Tool configuration modules, by the names tools read: `vite.config.ts`,
+ * `astryx.config.mjs`, `next.config.js`. A module named `config.ts` or
+ * `arc.ts` is the page's own; an rc module a tool reads (`.eslintrc.js`) is
+ * a dotfile, which no render carries.
+ */
+const CONFIG_MODULE = /\.config\.[cm]?[jt]sx?$/i;
 
 /** Any script module. */
 const SCRIPT = /\.(c|m)?[jt]sx?$/i;
