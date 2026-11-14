@@ -253,10 +253,10 @@ export interface BaseTypeaheadProps<T extends SearchableItem> extends Omit<
 
   /**
    * The typed query. When set, the field is controlled: it shows this text
-   * and reports every change through `onChangeQuery`, including a pick, a
-   * clear, and entering edit mode. Hold this value after a pick to keep the
-   * text. A change from outside does not move focus. It does not open the
-   * listbox or announce a result count unless the field has focus.
+   * and reports every change through `onChangeQuery`, including a pick and
+   * a clear. Hold this value after a pick to keep the text. A change from
+   * outside does not move focus. It does not open the listbox or announce a
+   * result count unless the field has focus.
    */
   query?: string;
 
@@ -266,8 +266,8 @@ export interface BaseTypeaheadProps<T extends SearchableItem> extends Omit<
   defaultQuery?: string;
 
   /**
-   * Query change callback. Fires for every text change, including a pick, a
-   * clear, and entering edit mode, so a controlled field stays in sync.
+   * Query change callback. Fires for every text change, including a pick and
+   * a clear, so a controlled field stays in sync.
    */
   onChangeQuery?: (query: string) => void;
 

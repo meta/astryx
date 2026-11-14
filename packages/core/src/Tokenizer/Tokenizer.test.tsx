@@ -2786,6 +2786,39 @@ describe('Tokenizer', () => {
       expect(bootstrap.mock.calls.length).toBe(bootstrapCallsAtPick);
     });
 
+    it('keeps the Added announcement when the app echoes an empty query after a pick with default props', async () => {
+      function Controlled() {
+        const [query, setQuery] = useState('');
+        const [value, setValue] = useState<SearchableItem[]>([]);
+        return (
+          <Tokenizer
+            label="Members"
+            searchSource={userSource}
+            value={value}
+            onChange={setValue}
+            query={query}
+            onChangeQuery={setQuery}
+          />
+        );
+      }
+      render(<Controlled />);
+      const input = screen.getByRole('combobox');
+      fireEvent.focus(input);
+      fireEvent.change(input, {target: {value: 'Ali'}});
+      await waitFor(() => {
+        expect(
+          screen.getByRole('option', {name: 'Alice', hidden: true}),
+        ).toBeInTheDocument();
+      });
+      fireEvent.click(
+        screen.getByRole('option', {name: 'Alice', hidden: true}),
+      );
+      await waitFor(() => {
+        expect(politeRegion()?.textContent).toMatch(/Added Alice/);
+      });
+      expect(input).toHaveValue('');
+    });
+
     it('announces addition politely when creating a token with hasCreate', async () => {
       const emptySource: SearchSource = {
         search: () => [],
