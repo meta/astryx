@@ -403,9 +403,9 @@ describe('Node-tooling CI routing', () => {
       ],
     ]);
     for (const [name, command] of familyCommands) {
-      const ownerStep = step(ci.jobs['test-node'], name);
-      // One leg of the sharded Node lane owns the theme-family contract.
-      expect(ownerStep.if).toBe(`matrix.shard == 1 && ${BROAD_ONLY}`);
+      const ownerStep = step(ci.jobs['node-browser-contracts'], name);
+      // The Node browser contracts job owns the theme-family contract.
+      expect(ownerStep.if).toBe(BROAD_ONLY);
       if (command.startsWith('timeout'))
         expect(ownerStep.run).toContain(command);
       else expect(ownerStep.run).toBe(command);
@@ -465,6 +465,9 @@ describe('Node-tooling CI routing', () => {
       'release-bump',
       'test-ui',
       'test-node',
+      'node-browser-contracts',
+      'swizzle-proof-scope',
+      'swizzle-proof',
       'test-build',
       'test-native-swift',
       'pr-interaction',
@@ -498,6 +501,11 @@ describe('Node-tooling CI routing', () => {
       TOOLING_ONLY: '${{ steps.scope.outputs.tooling_only }}',
       TEST_UI_RESULT: '${{ needs.test-ui.result }}',
       TEST_NODE_RESULT: '${{ needs.test-node.result }}',
+      NODE_BROWSER_CONTRACTS_RESULT:
+        '${{ needs.node-browser-contracts.result }}',
+      SWIZZLE_PROOF_SCOPE_RESULT: '${{ needs.swizzle-proof-scope.result }}',
+      SWIZZLE_PROOF_MODE: '${{ needs.swizzle-proof-scope.outputs.mode }}',
+      SWIZZLE_PROOF_RESULT: '${{ needs.swizzle-proof.result }}',
       TEST_BUILD_RESULT: '${{ needs.test-build.result }}',
       TEST_NATIVE_SWIFT_RESULT: '${{ needs.test-native-swift.result }}',
       PR_INTERACTION_RESULT: '${{ needs.pr-interaction.result }}',

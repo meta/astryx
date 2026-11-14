@@ -53,6 +53,14 @@ export const RENDER_FORMAT = 1;
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 
 /**
+ * Text as a browser's HTML parser reads it: a CR LF pair or a lone CR is a
+ * line feed. A copy whose line ends a mailer, an editor or git changed reads
+ * the same.
+ * @param {string} text
+ */
+export const asParsed = text => text.replace(/\r\n?/g, '\n');
+
+/**
  * The data block for a page's files.
  * @param {string} entry the page's file name
  * @param {{path: string, bytes: Buffer}[]} files the page first
