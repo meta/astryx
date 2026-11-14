@@ -66,13 +66,16 @@ runs:
 
           // The workflow file this run comes from, as a listed run names it.
           const workflowPath = process.env.GITHUB_WORKFLOW_REF.split('@')[0].slice(`${owner}/${repo}/`.length);
+          const workflowFile = workflowPath.split('/').pop();
           let runs;
           try {
-            // A branch's unfinished runs are its newest, so the first page holds them.
+            // This workflow's unfinished runs for the branch are its newest,
+            // so the first page holds them.
             runs = (
-              await github.rest.actions.listWorkflowRunsForRepo({
+              await github.rest.actions.listWorkflowRuns({
                 owner,
                 repo,
+                workflow_id: workflowFile,
                 event: 'pull_request',
                 branch: pr.head.ref,
                 per_page: 100,

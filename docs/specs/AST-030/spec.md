@@ -421,6 +421,13 @@ they are separately named.
   waiting never fails a job, so every required context reports as before. A
   tool that grants CI capacity reads it through the same count admission uses
   (`.github/actions/ci-admission/count.mjs`), with no count of its own. The contributor class of FR29 is granted by the capacity tool before this admission; its runs are then admitted like any pull request run.
+  A run for a head that is no longer its pull request's head passes no
+  required context. When its waiting job ends, a pull-request run from this
+  repository cancels each unfinished CI run of its pull request for another
+  head, itself last; it never cancels a run for the current head, and a fork's
+  run cancels nothing. A run whose own head is superseded stops before it
+  waits, and `build`, `test` and `docsite-test` fail with the reason. A re-run
+  of only the failed jobs reads the head again in those three contexts.
 - **FR17 — A pull request runs CI when it is ready and a maintainer can vouch
   for it.** A draft pull request runs no CI, and marking it ready for review
   starts its pull-request run, which runs what the change reaches (FR13,

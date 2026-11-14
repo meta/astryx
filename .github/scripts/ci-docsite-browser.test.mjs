@@ -307,9 +307,11 @@ describe('docsite-test, the required join', () => {
         PR_REPORT_GATE,
       ),
     );
-    expect(join.steps.slice(0, 4).map(s => s.name)).toEqual([
+    expect(join.steps.slice(0, 6).map(s => s.name)).toEqual([
       'Require a branch in this repository or the ci:run label',
       'Stop when CI is full',
+      'Check out the superseded-runs action',
+      "Check the pull request's head",
       'Stop for a superseded head',
       'Heavy CI deferred',
     ]);

@@ -281,11 +281,13 @@ jobs:
   # takes a concurrency group of its own, so a new push does not cancel it:
   # the run for the new head does it here. It is the one job with
   # `actions: write` for this, and it runs only for a pull request from this
-  # repository, since a fork's token is read-only. No job needs it, and no
-  # required context reads it, so its own failure fails nothing else. It
-  # starts with the run, so the pull-request peak counts it.
+  # repository, since a fork's token is read-only. It starts once `room` ends,
+  # whether `room` found room or stopped this run for a superseded head, so
+  # it takes room like every other job. No job needs it, and no required
+  # context reads it, so its own failure fails nothing else.
   superseded-runs:
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
+    needs: [room]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: ubuntu-slim
     timeout-minutes: 5
     continue-on-error: true
@@ -902,7 +904,11 @@ jobs:
     needs: [room, admission, heavy-ci, docsite-build, docsite-browser]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' && !startsWith(github.base_ref, 'release/v') && !cancelled()) }}
     runs-on: ubuntu-slim
-    permissions: {}
+    # contents and pull-requests read the pull request's head on a re-run
+    # of the failed jobs.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - name: Require a branch in this repository or the ci:run label
         if: ${{ github.event_name == 'pull_request' && !(github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')) }}
@@ -916,8 +922,24 @@ jobs:
           echo "::error title=CI is full::CI is full: re-run all jobs or push later. The run found no room under the CI ceiling."
           exit 1
 
+      # A re-run of only the failed jobs keeps room's earlier look, so this
+      # check reads the pull request's head again.
+      - name: Check out the superseded-runs action
+        if: github.event_name == 'pull_request' && needs.room.outputs.attempt != github.run_attempt
+        uses: actions/checkout@v7
+        timeout-minutes: 8
+        with:
+          sparse-checkout: .github/actions/superseded-runs
+          path: .superseded-runs
+          persist-credentials: false
+
+      - name: Check the pull request's head
+        id: head
+        if: github.event_name == 'pull_request' && needs.room.outputs.attempt != github.run_attempt
+        uses: ./.superseded-runs/.github/actions/superseded-runs
+
       - name: Stop for a superseded head
-        if: needs.room.outputs.superseded == 'true'
+        if: needs.room.outputs.superseded == 'true' || steps.head.outputs.superseded == 'true'
         run: |
           echo "::error title=Superseded head::This run's head is no longer the pull request's head. The run for the current head reports this check."
           exit 1
@@ -1651,8 +1673,24 @@ jobs:
           echo "::error title=CI is full::CI is full: re-run all jobs or push later. The run found no room under the CI ceiling."
           exit 1
 
+      # A re-run of only the failed jobs keeps room's earlier look, so this
+      # check reads the pull request's head again.
+      - name: Check out the superseded-runs action
+        if: github.event_name == 'pull_request' && needs.room.outputs.attempt != github.run_attempt
+        uses: actions/checkout@v7
+        timeout-minutes: 8
+        with:
+          sparse-checkout: .github/actions/superseded-runs
+          path: .superseded-runs
+          persist-credentials: false
+
+      - name: Check the pull request's head
+        id: head
+        if: github.event_name == 'pull_request' && needs.room.outputs.attempt != github.run_attempt
+        uses: ./.superseded-runs/.github/actions/superseded-runs
+
       - name: Stop for a superseded head
-        if: needs.room.outputs.superseded == 'true'
+        if: needs.room.outputs.superseded == 'true' || steps.head.outputs.superseded == 'true'
         run: |
           echo "::error title=Superseded head::This run's head is no longer the pull request's head. The run for the current head reports this check."
           exit 1
@@ -2337,7 +2375,11 @@ jobs:
     needs: [room, admission, heavy-ci, build-storybook, typecheck]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' && !cancelled() && (needs.build-storybook.result != 'skipped' || needs.room.outputs.full == 'true' || needs.room.outputs.superseded == 'true' || needs.heavy-ci.outputs.deferred == 'true' || github.event_name == 'pull_request' && !(github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')))) }}
     runs-on: ubuntu-slim
-    permissions: {}
+    # contents and pull-requests read the pull request's head on a re-run
+    # of the failed jobs.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - name: Require a branch in this repository or the ci:run label
         if: ${{ github.event_name == 'pull_request' && !(github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')) }}
@@ -2350,8 +2392,24 @@ jobs:
           echo "::error title=CI is full::CI is full: re-run all jobs or push later. The run found no room under the CI ceiling."
           exit 1
 
+      # A re-run of only the failed jobs keeps room's earlier look, so this
+      # check reads the pull request's head again.
+      - name: Check out the superseded-runs action
+        if: github.event_name == 'pull_request' && needs.room.outputs.attempt != github.run_attempt
+        uses: actions/checkout@v7
+        timeout-minutes: 8
+        with:
+          sparse-checkout: .github/actions/superseded-runs
+          path: .superseded-runs
+          persist-credentials: false
+
+      - name: Check the pull request's head
+        id: head
+        if: github.event_name == 'pull_request' && needs.room.outputs.attempt != github.run_attempt
+        uses: ./.superseded-runs/.github/actions/superseded-runs
+
       - name: Stop for a superseded head
-        if: needs.room.outputs.superseded == 'true'
+        if: needs.room.outputs.superseded == 'true' || steps.head.outputs.superseded == 'true'
         run: |
           echo "::error title=Superseded head::This run's head is no longer the pull request's head. The run for the current head reports this check."
           exit 1

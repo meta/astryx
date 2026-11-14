@@ -121,6 +121,7 @@ describe('where runs wait', () => {
           'room',
           'admission',
           'ci-full',
+          // It cancels runs for a superseded head once room ends.
           'superseded-runs',
           BESIDE,
           DEFERRAL,

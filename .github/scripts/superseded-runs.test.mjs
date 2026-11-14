@@ -93,8 +93,12 @@ async function sweep({
         },
       },
       actions: {
-        listWorkflowRunsForRepo: async ({event, branch}) => {
-          expect([event, branch]).toEqual(['pull_request', 'fix/a']);
+        listWorkflowRuns: async ({workflow_id, event, branch}) => {
+          expect([workflow_id, event, branch]).toEqual([
+            'ci.yml',
+            'pull_request',
+            'fix/a',
+          ]);
           result.listed++;
           return {data: {workflow_runs: runs}};
         },
@@ -221,7 +225,10 @@ describe('the superseded-runs action', () => {
  * to `{result, outputs}`; a condition with no status-check function also
  * needs every needed job to have succeeded.
  */
-function evaluate(condition, {github, needs, jobNeeds = [], cancelled}) {
+function evaluate(
+  condition,
+  {github, needs, steps = {}, jobNeeds = [], cancelled},
+) {
   const expression = String(condition)
     .replace(/^\$\{\{\s*|\s*\}\}$/g, '')
     .replace(/\.labels\.\*\.name/g, '.labels.map(l => l.name)')
@@ -237,6 +244,7 @@ function evaluate(condition, {github, needs, jobNeeds = [], cancelled}) {
     Function(
       'github',
       'needs',
+      'steps',
       'inputs',
       'always',
       'cancelled',
@@ -249,6 +257,7 @@ function evaluate(condition, {github, needs, jobNeeds = [], cancelled}) {
     )(
       github,
       all,
+      new Proxy(steps, {get: (target, key) => target[key] ?? {outputs: {}}}),
       {},
       () => true,
       () => cancelled,
@@ -284,23 +293,35 @@ const github = ({fork = false} = {}) => ({
  * skipped. A job that does not start in a cancelled run is cancelled; one that
  * starts concludes with its first failing step.
  */
-function conclusion(id, {fork, cancelled}) {
+function conclusion(id, {fork, cancelled, rerunFailed, headNow = 'old'}) {
   const job = ci.jobs[id];
-  const needs = {
-    room: {result: 'failure', outputs: {superseded: 'true'}},
-    'heavy-ci': {result: 'skipped', outputs: {}},
-  };
+  // A re-run of the failed jobs keeps room's first-attempt look, which saw
+  // the head current; every other superseded run's room stopped it.
+  const needs = rerunFailed
+    ? {room: {result: 'success', outputs: {superseded: 'false', attempt: '1'}}}
+    : {
+        room: {result: 'failure', outputs: {superseded: 'true', attempt: '2'}},
+        'heavy-ci': {result: 'skipped', outputs: {}},
+      };
   for (const need of [job.needs ?? []].flat())
-    needs[need] ??= {result: 'skipped', outputs: {}};
-  const context = {github: github({fork}), needs, cancelled};
+    needs[need] ??= {
+      result: rerunFailed ? 'success' : 'skipped',
+      outputs: {},
+    };
+  const steps = {};
+  const context = {github: github({fork}), needs, steps, cancelled};
   if (!evaluate(job.if, {...context, jobNeeds: job.needs ?? []}))
     return cancelled ? 'cancelled' : 'skipped';
-  const failing = job.steps.find(
-    step =>
-      (step.if == null || evaluate(step.if, context)) &&
-      /\bexit 1\s*$/.test(step.run ?? ''),
-  );
-  return failing ? `failure: ${failing.name}` : 'success';
+  for (const step of job.steps) {
+    if (step.if != null && !evaluate(step.if, context)) continue;
+    // The head check reads the pull request's head as it is now.
+    if (step.uses?.endsWith('/.github/actions/superseded-runs'))
+      steps[step.id] = {
+        outputs: {superseded: headNow === 'old' ? 'true' : 'false'},
+      };
+    if (/\bexit 1\s*$/.test(step.run ?? '')) return `failure: ${step.name}`;
+  }
+  return 'success';
 }
 
 describe('a superseded run in ci.yml', () => {
@@ -324,7 +345,18 @@ describe('a superseded run in ci.yml', () => {
 
   it('cancels from one pull-request job, the only new holder of actions: write', () => {
     const job = ci.jobs['superseded-runs'];
-    expect(job.needs).toBeUndefined();
+    // It starts once room ends: after room found room, or right after room
+    // stopped this run for a superseded head, so the run cancels itself.
+    expect(job.needs).toEqual(['room']);
+    for (const result of ['success', 'failure'])
+      expect(
+        evaluate(job.if, {
+          github: github(),
+          needs: {room: {result, outputs: {}}},
+          jobNeeds: job.needs,
+        }),
+        result,
+      ).toBe(true);
     expect(job.permissions).toEqual({
       actions: 'write',
       contents: 'read',
@@ -372,6 +404,25 @@ describe('a superseded run in ci.yml', () => {
       }
     },
   );
+
+  it("fails every required context of a re-run of only the failed jobs on an older head, which keeps room's earlier look", () => {
+    for (const id of REQUIRED) {
+      expect(conclusion(id, {rerunFailed: true}), id).toBe(
+        'failure: Stop for a superseded head',
+      );
+      // The same re-run on the current head passes the check.
+      expect(
+        conclusion(id, {rerunFailed: true, headNow: 'current'}),
+        id,
+      ).not.toBe('failure: Stop for a superseded head');
+      const check = ci.jobs[id].steps.find(step => step.id === 'head');
+      expect(check.uses, id).toBe(
+        './.superseded-runs/.github/actions/superseded-runs',
+      );
+      expect(check.with?.cancel, id).toBeUndefined();
+      expect(ci.jobs[id].permissions['pull-requests'], id).toBe('read');
+    }
+  });
 
   it('builds nothing behind a superseded room: every job that guards on a full room guards on a superseded one', () => {
     for (const [id, job] of Object.entries(ci.jobs)) {
