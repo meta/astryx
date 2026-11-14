@@ -60,10 +60,10 @@ import {
 const HOVER_BRIDGE_DELAY = 100;
 
 const styles = stylex.create({
-  // Base container styles - inverted colors for high contrast
+  // Base container styles: the theme's inverted surface (as Toast's), with
+  // the page surface's color as its text
   container: {
-    // Inverted color palette: dark background, light text
-    backgroundColor: colorVars['--color-text-primary'],
+    backgroundColor: colorVars['--color-background-inverted'],
     color: colorVars['--color-background-surface'],
     borderRadius: radiusVars['--radius-container'],
     // Typography
