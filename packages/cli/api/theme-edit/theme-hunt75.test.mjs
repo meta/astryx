@@ -43,6 +43,26 @@ const read = rel => fs.readFileSync(path.join(cwd, rel), 'utf8');
 /** @param {string[]} args @param {string} [at] */
 const cli = (args, at = cwd) =>
   spawnSync(process.execPath, [BIN, ...args], {cwd: at, encoding: 'utf8'});
+
+/** Install a stand-in @fontsource/inter for the fixture; returns its remover. */
+const installInter = () => {
+  const pkg = path.join(path.dirname(cwd), 'node_modules/@fontsource/inter');
+  fs.mkdirSync(pkg, {recursive: true});
+  fs.writeFileSync(
+    path.join(pkg, 'package.json'),
+    JSON.stringify({
+      name: '@fontsource/inter',
+      version: '5.0.0',
+      exports: {
+        '.': './index.css',
+        './index.css': './index.css',
+        './package.json': './package.json',
+      },
+    }),
+  );
+  fs.writeFileSync(path.join(pkg, 'index.css'), '/* inter */\n');
+  return () => fs.rmSync(pkg, {recursive: true, force: true});
+};
 /** @param {any} r */
 const stale = r => /** @type {any} */ (r.data).appCopyStale;
 const compile = (/** @type {string[]} */ ...args) =>
@@ -129,12 +149,8 @@ describe('compile --json says what the text says', () => {
   it('carries appCopyStale, and leaves fonts the copy loads out of its notices and the full help', async () => {
     await themeEditNew('j1', {cwd});
     await themeEditSet('j1', 'font', 'Inter', {cwd});
-    const sheet = path.join(cwd, 'src/themes/j1/j1.fonts.css');
-    const head = read('src/themes/j1/j1.fonts.css').split('\n')[0];
-    fs.writeFileSync(
-      sheet,
-      `${head}\n@import "@fontsource/inter/index.css";\n`,
-    );
+    // The package installed: the copy this compile writes loads it.
+    const remove = installInter();
     const j = cli([
       '--json',
       'experimental',
@@ -144,12 +160,6 @@ describe('compile --json says what the text says', () => {
     ]);
     const out = JSON.parse(j.stdout);
     expect(JSON.stringify(out.data.notices ?? [])).not.toContain('"Inter"');
-    // The compile above wrote the copy from the fonts the theme loads now
-    // (none installed here); the sheet is set again as the app loads them.
-    fs.writeFileSync(
-      sheet,
-      `${head}\n@import "@fontsource/inter/index.css";\n`,
-    );
     const full = cli([
       'experimental',
       'theme',
@@ -158,6 +168,7 @@ describe('compile --json says what the text says', () => {
       '--detail',
       'full',
     ]);
+    remove();
     expect(full.stdout + full.stderr).not.toMatch(/not load[^\n]*Inter/);
     fs.writeFileSync(path.join(cwd, 'src/themes/j1/j1Theme.ts'), '// mine\n');
     const blocked = JSON.parse(
@@ -181,9 +192,10 @@ describe('each copy follows its own build', () => {
     await themeEditNew('c4b', {cwd});
     await themeEditSet('c4a', 'corners', 'pill', {cwd});
     fs.writeFileSync(path.join(cwd, 'src/themes/c4a/c4a.css'), '/* old */\n');
-    fs.writeFileSync(
+    // A source that still carries its settings but fails to build.
+    fs.appendFileSync(
       path.join(cwd, 'themes/c4b/c4b.theme.ts'),
-      'not a theme(\n',
+      '\nconst broken = (;\n',
     );
     const r = compile('themes/c4a/c4a.theme.ts', 'themes/c4b/c4b.theme.ts');
     expect(r.status).not.toBe(0);

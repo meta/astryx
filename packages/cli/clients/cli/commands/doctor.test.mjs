@@ -19,7 +19,10 @@ import {
   checkPackageManager,
 } from '../../../api/doctor/doctor.mjs';
 import {MIN_NODE_VERSION} from '../../../foundation/env/node-version.mjs';
-import {CLI_VERSION, linkThisCliAsProjectCli} from '../../../test-utils/release-fixtures.mjs';
+import {
+  CLI_VERSION,
+  linkThisCliAsProjectCli,
+} from '../../../test-utils/release-fixtures.mjs';
 import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
 
 let tmpDir;
@@ -102,7 +105,10 @@ describe('doctor — individual checks', () => {
   });
 
   it('app themes: reports unmanaged state as one INFO check', async () => {
-    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app","dependencies":{"@astryxdesign/core":"*"}}\n');
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      '{"name":"app","dependencies":{"@astryxdesign/core":"*"}}\n',
+    );
     const result = await runChecks({cwd: tmpDir});
     const themeChecks = result.checks.filter(check =>
       check.id.startsWith('theme-'),
@@ -140,7 +146,10 @@ describe('doctor — individual checks', () => {
     );
     const configPath = path.join(fixtureDir, 'astryx.config.mjs');
     try {
-      fs.writeFileSync(configPath, 'throw new Error("boom");\nexport default {};');
+      fs.writeFileSync(
+        configPath,
+        'throw new Error("boom");\nexport default {};',
+      );
       const res = await checkConfig({cwd: fixtureDir, configPath});
       expect(res.status).toBe('fail');
       expect(res.fix).toBeTruthy();
@@ -189,7 +198,10 @@ describe('doctor — individual checks', () => {
   });
 
   it('agent-docs: at the top of a home settings folder, the fix moves the project or edits by hand, never init', () => {
-    const saved = {HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE};
+    const saved = {
+      HOME: process.env.HOME,
+      USERPROFILE: process.env.USERPROFILE,
+    };
     process.env.HOME = tmpDir;
     process.env.USERPROFILE = tmpDir;
     try {
@@ -197,9 +209,12 @@ describe('doctor — individual checks', () => {
       fs.mkdirSync(project);
       fs.writeFileSync(path.join(project, 'package.json'), '{"name":"dots"}');
       for (const content of [null, '# Agents\nno markers here\n']) {
-        if (content != null) fs.writeFileSync(path.join(project, 'AGENTS.md'), content);
+        if (content != null)
+          fs.writeFileSync(path.join(project, 'AGENTS.md'), content);
         const res = checkAgentDocs({cwd: project});
-        expect(res.fix).toContain('Agent docs are not written into the home folder');
+        expect(res.fix).toContain(
+          'Agent docs are not written into the home folder',
+        );
         expect(res.fix).toContain(
           'Move the project into a folder of its own, or edit the Astryx block in its agent file by hand.',
         );
@@ -214,7 +229,10 @@ describe('doctor — individual checks', () => {
   });
 
   it('agent-docs: WARN when docs exist without XDS markers', () => {
-    fs.writeFileSync(path.join(tmpDir, 'AGENTS.md'), '# AGENTS\nno markers here');
+    fs.writeFileSync(
+      path.join(tmpDir, 'AGENTS.md'),
+      '# AGENTS\nno markers here',
+    );
     const res = checkAgentDocs({cwd: tmpDir});
     expect(res.status).toBe('warn');
   });
@@ -254,7 +272,10 @@ describe('doctor — individual checks', () => {
     );
     const functions = path.join(tmpDir, 'functions');
     fs.mkdirSync(path.join(functions, 'src'), {recursive: true});
-    fs.writeFileSync(path.join(functions, 'package.json'), '{"name":"functions"}');
+    fs.writeFileSync(
+      path.join(functions, 'package.json'),
+      '{"name":"functions"}',
+    );
 
     expect(checkAgentDocs({cwd: path.join(functions, 'src')})).toMatchObject({
       status: 'pass',
@@ -274,20 +295,29 @@ describe('doctor — individual checks', () => {
   });
 
   it('agent-docs: FAIL when GEMINI.md imports an AGENTS.md that holds no block', () => {
-    const geminiImport = '<!-- ASTRYX:START -->\n@./AGENTS.md\n<!-- ASTRYX:END -->\n';
+    const geminiImport =
+      '<!-- ASTRYX:START -->\n@./AGENTS.md\n<!-- ASTRYX:END -->\n';
     fs.writeFileSync(path.join(tmpDir, 'GEMINI.md'), geminiImport);
     expect(checkAgentDocs({cwd: tmpDir})).toMatchObject({
       status: 'fail',
-      message: expect.stringMatching(/^GEMINI\.md imports AGENTS\.md, which holds no Astryx block/),
+      message: expect.stringMatching(
+        /^GEMINI\.md imports AGENTS\.md, which holds no Astryx block/,
+      ),
       fix: expect.stringMatching(/init --features agents/),
     });
 
     // A copy elsewhere does not mend it: Codex and Gemini CLI still get none.
-    fs.writeFileSync(path.join(tmpDir, 'CLAUDE.md'), '<!-- ASTRYX:START -->\nstuff\n<!-- ASTRYX:END -->\n');
+    fs.writeFileSync(
+      path.join(tmpDir, 'CLAUDE.md'),
+      '<!-- ASTRYX:START -->\nstuff\n<!-- ASTRYX:END -->\n',
+    );
     fs.writeFileSync(path.join(tmpDir, 'AGENTS.md'), '# Agents\n');
     expect(checkAgentDocs({cwd: tmpDir}).status).toBe('fail');
 
-    fs.writeFileSync(path.join(tmpDir, 'AGENTS.md'), '<!-- ASTRYX:START -->\nstuff\n<!-- ASTRYX:END -->\n');
+    fs.writeFileSync(
+      path.join(tmpDir, 'AGENTS.md'),
+      '<!-- ASTRYX:START -->\nstuff\n<!-- ASTRYX:END -->\n',
+    );
     expect(checkAgentDocs({cwd: tmpDir})).toMatchObject({
       status: 'pass',
       message: 'Astryx agent docs section present in AGENTS.md, CLAUDE.md.',
@@ -368,7 +398,10 @@ describe('doctor — runChecks / report', () => {
   });
 
   it('reports a FAIL for core in a project that declares Core but installs none', async () => {
-    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app","dependencies":{"@astryxdesign/core":"*"}}\n');
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      '{"name":"app","dependencies":{"@astryxdesign/core":"*"}}\n',
+    );
     const report = await runChecks({cwd: tmpDir});
     expect(find(report.checks, 'core-installed').status).toBe('fail');
     expect(report.summary.fail).toBeGreaterThan(0);
@@ -414,7 +447,10 @@ describe('doctor — command', () => {
   });
 
   it('sets exit code 1 when a check FAILs (Core declared, not installed)', async () => {
-    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app","dependencies":{"@astryxdesign/core":"*"}}\n');
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      '{"name":"app","dependencies":{"@astryxdesign/core":"*"}}\n',
+    );
     const prevCwd = process.cwd();
     const prevExit = process.exitCode;
     process.exitCode = undefined;
@@ -431,10 +467,9 @@ describe('doctor — command', () => {
 });
 
 describe('doctor — text output mirrors the JSON', () => {
-  /** @param {string} line */
-  const field = line => /^(\w+):\s+(.*)$/.exec(line)?.slice(1) ?? [line, ''];
+  const TOKEN = {pass: '[ok]', warn: '[warn]', fail: '[fail]', info: '[info]'};
 
-  it('prints every check and summary field under its JSON key', async () => {
+  it('prints each check on one line, every field in legend order, and the summary on one line', async () => {
     const prevCwd = process.cwd();
     const prevExit = process.exitCode;
     process.chdir(tmpDir);
@@ -443,28 +478,24 @@ describe('doctor — text output mirrors the JSON', () => {
       const {checks, summary} = JSON.parse(logCalls.join('\n')).data;
       logCalls = [];
       await createProgram().parseAsync(['node', 'astryx', 'doctor']);
-      const blocks = logCalls
-        .join('\n')
-        .split(/\n{2,}/)
-        .map(block => block.split('\n').map(field));
+      // A wrapped record continues on indented lines; join them back.
+      const lines = logCalls.join('\n').replace(/\n +/g, ' ').split('\n');
 
+      expect(lines[1]).toBe('Each check: status, id, label, message, fix');
+      const column = Math.max(
+        ...checks.map(check => TOKEN[check.status].length),
+      );
       for (const check of checks) {
-        const block = blocks.find(fields =>
-          fields.some(([key, value]) => key === 'id' && value === check.id),
+        const tail = [check.id, check.label, check.message];
+        if (check.fix) tail.push(`fix: ${check.fix}`);
+        expect(lines, `no text line for check ${check.id}`).toContain(
+          `${TOKEN[check.status].padEnd(column)}  ${tail.join(' - ')}`,
         );
-        expect(block, `no text record for check ${check.id}`).toBeDefined();
-        expect(
-          /** @type {string[][]} */ (block).map(([key]) => key).sort(),
-        ).toEqual(Object.keys(check).sort());
       }
-
-      const heading = blocks.findIndex(
-        fields => fields.length === 1 && fields[0][0] === 'summary',
-      );
-      expect(heading, 'no summary section').toBeGreaterThan(-1);
-      expect(blocks[heading + 1]).toEqual(
-        Object.entries(summary).map(([key, count]) => [key, String(count)]),
-      );
+      const summaryLine = Object.entries(summary)
+        .map(([key, count]) => `${key}: ${count}`)
+        .join(', ');
+      expect(lines[lines.indexOf('summary') + 1]).toBe(summaryLine);
     } finally {
       process.chdir(prevCwd);
       process.exitCode = prevExit;

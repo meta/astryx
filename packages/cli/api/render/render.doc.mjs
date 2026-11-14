@@ -80,7 +80,7 @@ export const doc = {
     {
       type: 'render.reverse',
       description:
-        "How the page came back (`embedded`, exact; or `rebuilt`, text and layout only), the files written; for an embedded page the render format, the CLI version and packages that rendered it, and whether its markup changed after the render, with each text change; for a rebuilt page the components it uses and what could not be rebuilt.",
+        "How the page came back (`embedded`, exact; or `rebuilt`, text and layout only), the files written; for an embedded page the path-alias imports no alias here names (`aliased`), the render format, the CLI version and packages that rendered it, and whether its markup changed after the render, with each text change; for a rebuilt page the components it uses and what could not be rebuilt.",
     },
   ],
   throws: [
@@ -90,6 +90,7 @@ export const doc = {
       when: 'the file or `out` has the wrong kind of extension, `out` is the input itself, `title` is given with `reverse`, or `overwrite` without it; with `reverse`, the page would land under a configuration name (`vite.config.ts`) or where a test, story or benchmark runner would run it (judged from the repository root)',
     },
     {code: 'ERR_FILE_NOT_FOUND', when: 'the file, or a local file the page imports, does not exist'},
+    {code: 'ERR_READ_FAILED', when: 'the file is there but cannot be read: no read permission, a folder or a pipe given as the file, or another file-system error; the message names the reason'},
     {code: 'ERR_FILE_EXISTS', when: 'rendering would replace an existing file a render did not write, reversing would replace an existing file and `overwrite` is not set, or an existing file the project protects (generated, vendored or ignored) would be replaced, which `overwrite` never does'},
     {code: 'ERR_WRITE_FAILED', when: 'a file cannot be written, such as when `out` names a folder; with `reverse`, every file is written or none is'},
     {code: 'ERR_RENDER_COMPILE', when: 'the page does not compile, or a stylesheet it imports is not valid CSS (the message names the file)'},
@@ -104,7 +105,7 @@ export const doc = {
       code: 'ERR_RENDER_NOT_ASTRYX',
       when: 'reversing a file a render did not write, with no embedded source and no Astryx markup; the suggestion is `astryx build "<what the page is>"`',
     },
-    {code: 'ERR_RENDER_SOURCE_DAMAGED', when: 'reversing a file a render wrote whose embedded source was removed (and that has no Astryx components to rebuild from), a file whose embedded source is cut short or damaged (or names a CLI version that is not a release version), lists a path twice, carries a module, stylesheet or JSON file the page does not reach through its imports, or an image, font or media file whose bytes are not one, or carries a file a render never embeds (a dotfile or dot-folder, `node_modules`, a package manifest, lockfile or tool configuration, or any kind but a page module, stylesheet, JSON or image)'},
+    {code: 'ERR_RENDER_SOURCE_DAMAGED', when: 'reversing a file a render wrote whose embedded source was removed (and that has no Astryx components to rebuild from), a file a render wrote that ends before its embedded source, a file that holds merge conflict markers, a file whose embedded source is cut short or damaged (or names a CLI version that is not a release version), lists a path twice, carries a module, stylesheet or JSON file the page does not reach through its imports, or an image, font or media file whose bytes are not one, or carries a file a render never embeds (a dotfile or dot-folder, `node_modules`, a package manifest, lockfile or tool configuration, or any kind but a module, stylesheet, JSON or image)'},
     {
       code: 'ERR_RENDER_NEWER_FORMAT',
       when: 'reversing a file in a newer render format than this CLI reads; the message and the suggestion name the CLI version that wrote it',

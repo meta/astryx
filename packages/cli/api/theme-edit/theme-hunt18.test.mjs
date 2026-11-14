@@ -78,8 +78,13 @@ describe('L1: an invalid name suggests a name new takes', () => {
 describe('L2: new on an existing theme', () => {
   it('suggests the base asked for, and a free name', async () => {
     const err = await refusal(() => themeEditNew('t', {cwd, like: 'butter'}));
+    // butter is not installed in this app: its install line comes before
+    // the commands that build on it.
     expect(names(err)).toEqual([
       expect.stringMatching(/ show t$/),
+      expect.stringMatching(
+        /(npm install|(pnpm|yarn|bun) add) @astryxdesign\/theme-butter$/,
+      ),
       expect.stringMatching(/ set t base butter$/),
       expect.stringMatching(/ new t-2 --like butter$/),
     ]);

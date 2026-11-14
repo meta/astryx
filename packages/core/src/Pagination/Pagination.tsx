@@ -4,26 +4,20 @@
 
 /**
  * @file Pagination.tsx
- * @input Uses React, StyleX, Button, Icon, Selector, Text; page number buttons delegate to Button.
- *   Compact first/last buttons cancel the inside control gap with logical token margins.
- *   Prev/next and first/last chevrons mirror under RTL via the shared rtlStyles.mirror
- *   (CSS scaleX), not a JS direction read. The input and compact variants use the
- *   chevronsLeft/chevronsRight (first/last) icons.
- * @output Exports Pagination component, PaginationProps, PaginationVariant, PaginationSize types
+ * @input React, StyleX, Button, Icon, NumberInput, Selector, and Text. Button renders each
+ *   control, as a link with getPageHref. useFocusAcrossSwap keeps focus on a control whose
+ *   element Button replaces. rtlStyles.mirror mirrors the chevrons under RTL in CSS.
+ * @output Exports Pagination, generatePageRange, PaginationProps, PaginationVariant, PaginationSize
  * @position Core implementation; consumed by index.ts, tested by Pagination.test.tsx
  *
  * SYNC: When modified, update these files to stay in sync:
- * - /packages/core/src/Pagination/Pagination.test.tsx (tests for new/changed behavior)
- * - /packages/core/src/Pagination/index.ts (exports if types change)
- * - /apps/storybook/stories/Pagination.stories.tsx (storybook stories)
- * - /packages/cli/assets/templates/blocks/components/Pagination/ (showcase blocks)
- *
- * Last synced props: page, onChange, changeAction, totalItems, totalPages, hasMore,
- *   pageSize, pageSizeOptions, onPageSizeChange, variant, pageLabel,
- *   hasFirstLast, step, siblingCount, size, isDisabled, label, data-testid, xstyle
+ * - /packages/core/src/Pagination/Pagination.test.tsx
+ * - /packages/core/src/Pagination/index.ts
+ * - /apps/storybook/stories/Pagination.stories.tsx
+ * - /packages/cli/assets/templates/blocks/components/Pagination/
  */
 
-import {useOptimistic, useState, useTransition} from 'react';
+import {useEffect, useOptimistic, useRef, useState, useTransition} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
@@ -35,6 +29,7 @@ import {
   typeScaleVars,
 } from '../theme/tokens.stylex';
 import {Button} from '../Button';
+import {isModifiedClick} from '../DropdownMenu/menuItemRoles';
 import {Icon} from '../Icon';
 import {NumberInput} from '../NumberInput';
 import {Selector} from '../Selector';
@@ -43,9 +38,11 @@ import {useAnnounce} from '../hooks/useAnnounce';
 import {useListFocus} from '../hooks/useListFocus';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {focusForLastInput} from '../utils/focusReturn';
+import {useFocusAcrossSwap} from '../utils/useFocusAcrossSwap';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {mergeProps, rtlStyles} from '../utils';
 import type {BaseProps} from '../BaseProps';
+import type {LinkComponentType} from '../Link/types';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import type {PaginationVariantMap} from './index';
@@ -78,13 +75,35 @@ export interface PaginationProps extends Omit<
   // --- Core (required) ---
   /** Current page number (1-based). Page 1 is the first page. */
   page: number;
-  /** Called when the page changes. */
+  /**
+   * Called when the page changes. With `getPageHref` it also runs when a page
+   * link is activated: use it there for state or analytics, and do not
+   * navigate in it, because the link navigates.
+   */
   onChange: (page: number) => void;
   /**
    * Async action on page change. Fires after onChange.
    * Uses React transitions for built-in loading state.
    */
   changeAction?: (page: number) => void | Promise<void>;
+  /**
+   * Returns the URL of a page. When set, the page number, previous, next,
+   * first and last controls render as links to that URL, and `onChange` still
+   * runs when one is activated. `pageSize` is the current page size when
+   * `pageSize` or `pageSizeOptions` is set. The dots, the page box and the
+   * page-size selector are not links. For a page-size choice, navigate in
+   * `onPageSizeChange`, not in the `onChange(1)` that follows. When `onChange`
+   * navigates for the dots or the page box, leave this unset in the `dots`
+   * and `input` variants, or their arrow links navigate twice. In cursor
+   * pagination, map the page before or after the current one to the cursor's
+   * URL.
+   */
+  getPageHref?: (page: number, pageSize?: number) => string;
+  /**
+   * Custom link component for the links `getPageHref` makes.
+   * Overrides the provider-level default set by LinkProvider.
+   */
+  as?: LinkComponentType;
 
   // --- Data shape (provide one) ---
   /**
@@ -362,6 +381,30 @@ export function generatePageRange(
   return pages;
 }
 
+/**
+ * Whether a click on a page link navigates this document. A modifier key or a
+ * `target` other than `_self` opens the URL elsewhere. A link with a rejected
+ * URL has no `href` and opens nothing.
+ */
+function navigatesHere(event: React.MouseEvent<HTMLElement>): boolean {
+  const link = event.currentTarget;
+  const target = link.getAttribute('target');
+  return (
+    !link.matches('a:not([href])') &&
+    !isModifiedClick(event) &&
+    (!target || target.toLowerCase() === '_self')
+  );
+}
+
+/**
+ * Button replaces the element when the control starts or stops being a link.
+ * The new element takes the focus.
+ */
+function PaginationButton(props: React.ComponentProps<typeof Button>) {
+  const ref = useFocusAcrossSwap<HTMLButtonElement>();
+  return <Button {...props} ref={ref} />;
+}
+
 // =============================================================================
 // Component
 // =============================================================================
@@ -387,10 +430,12 @@ export function Pagination({
   page,
   onChange,
   changeAction,
+  getPageHref,
+  as,
   totalItems,
   totalPages: totalPagesProp,
   hasMore,
-  pageSize: pageSizeProp = 10,
+  pageSize: pageSizeProp,
   pageSizeOptions,
   onPageSizeChange,
   variant = 'pages',
@@ -425,9 +470,15 @@ export function Pagination({
   // type level but yield Infinity/NaN page counts, and
   // Array.from({length: Infinity}) crashes the dots variant. Coerce to a
   // positive integer; non-finite values fall back to the default.
-  const pageSize = Number.isFinite(pageSizeProp)
-    ? Math.max(1, Math.floor(pageSizeProp))
-    : 10;
+  const pageSize =
+    pageSizeProp != null && Number.isFinite(pageSizeProp)
+      ? Math.max(1, Math.floor(pageSizeProp))
+      : 10;
+  const hasPageSizeOptions =
+    pageSizeOptions != null && pageSizeOptions.length > 0;
+  // A caller that sets no page size has none in its URLs.
+  const hrefPageSize =
+    pageSizeProp !== undefined || hasPageSizeOptions ? pageSize : undefined;
 
   // Prev/next stride. Same guard as pageSize: non-integer or < 1 falls back to
   // a single-page step so a bad value never freezes or reverses navigation.
@@ -455,6 +506,15 @@ export function Pagination({
   // Track the page optimistically so rapid prev/next clicks advance from the
   // in-flight target instead of stalling on the last committed page.
   const [optimisticPage, setOptimisticPage] = useOptimistic(page);
+  // A link click changes the page before the browser follows the link's URL.
+  // Previous and Next count from the page of the click until that click is
+  // over, so the browser follows the URL that was clicked.
+  const [clickedFromPage, setClickedFromPage] = useState<number | null>(null);
+  const linkPage = clickedFromPage ?? optimisticPage;
+  const countFromCurrentPage = () => setClickedFromPage(null);
+  const clickOverTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  // Releases the timer that waits for the click to be over on unmount.
+  useEffect(() => () => clearTimeout(clickOverTimerRef.current), []);
   // A kept rejected entry widens the page box to fit the status icon beside
   // the typed text.
   const [isPageEntryRejected, setIsPageEntryRejected] = useState(false);
@@ -550,28 +610,30 @@ export function Pagination({
       : lower;
   };
 
-  const handlePrevious = () => {
-    if (hasPrevious) {
-      handlePageChange(clampPage(optimisticPage - step));
-    }
-  };
-
-  const handleNext = () => {
-    if (hasNext) {
-      handlePageChange(clampPage(optimisticPage + step));
-    }
-  };
-
-  const handleFirst = () => {
-    if (hasPrevious) {
-      handlePageChange(1);
-    }
-  };
-
-  const handleLast = () => {
-    if (hasNext && computedTotalPages != null) {
-      handlePageChange(computedTotalPages);
-    }
+  // An unavailable or disabled control gets no URL. Its Button is disabled,
+  // so its click handler does not run.
+  const controlProps = (target: number, isAvailable: boolean) => {
+    const href =
+      isAvailable && !isDisabled
+        ? getPageHref?.(target, hrefPageSize)
+        : undefined;
+    return {
+      href,
+      as,
+      onClick: (event: React.MouseEvent<HTMLElement>) => {
+        if (href != null) {
+          // A link click that opens the URL elsewhere changes no page here.
+          if (!navigatesHere(event)) {
+            return;
+          }
+          setClickedFromPage(linkPage);
+          clearTimeout(clickOverTimerRef.current);
+          // The browser follows the link before the next task starts.
+          clickOverTimerRef.current = setTimeout(countFromCurrentPage, 0);
+        }
+        handlePageChange(target);
+      },
+    };
   };
 
   const handlePageSizeChange = (value: string) => {
@@ -644,7 +706,7 @@ export function Pagination({
               }
               const isActive = item === optimisticPage;
               return (
-                <Button
+                <PaginationButton
                   key={item}
                   label={t('@astryx.pagination.goToPage', {page: item})}
                   aria-label={t('@astryx.pagination.goToPage', {
@@ -652,12 +714,12 @@ export function Pagination({
                   })}
                   variant="ghost"
                   size={buttonSize}
-                  onClick={() => handlePageChange(item)}
+                  {...controlProps(item, true)}
                   isDisabled={isDisabled}
                   aria-current={isActive ? 'page' : undefined}
                   xstyle={isActive && styles.activePage}>
                   {item}
-                </Button>
+                </PaginationButton>
               );
             })}
           </>
@@ -840,7 +902,7 @@ export function Pagination({
       {...rest}
       aria-label={label}
       data-testid={testId}>
-      {pageSizeOptions != null && pageSizeOptions.length > 0 && (
+      {hasPageSizeOptions && (
         <div {...stylex.props(styles.pageSizeSelector)}>
           <Selector
             label={itemsPerPageLabel}
@@ -857,9 +919,14 @@ export function Pagination({
           />
         </div>
       )}
-      <div {...stylex.props(styles.controls)}>
+      <div
+        {...stylex.props(styles.controls)}
+        // A key or pointer press can arrive before that task. The click that
+        // it starts counts from the current page too.
+        onKeyDownCapture={countFromCurrentPage}
+        onPointerDownCapture={countFromCurrentPage}>
         {showFirstLast && (
-          <Button
+          <PaginationButton
             label={firstLabel}
             tooltip={isDisabled || !hasPrevious ? undefined : firstLabel}
             variant="ghost"
@@ -871,14 +938,14 @@ export function Pagination({
                 xstyle={rtlStyles.mirror}
               />
             }
-            onClick={handleFirst}
+            {...controlProps(1, hasPrevious)}
             isDisabled={isDisabled || !hasPrevious}
             isIconOnly
             xstyle={variant === 'compact' && styles.compactFirst}
           />
         )}
 
-        <Button
+        <PaginationButton
           label={previousLabel}
           tooltip={isDisabled || !hasPrevious ? undefined : previousLabel}
           variant="ghost"
@@ -890,14 +957,14 @@ export function Pagination({
               xstyle={rtlStyles.mirror}
             />
           }
-          onClick={handlePrevious}
+          {...controlProps(clampPage(linkPage - step), hasPrevious)}
           isDisabled={isDisabled || !hasPrevious}
           isIconOnly
         />
 
         {renderIndicator()}
 
-        <Button
+        <PaginationButton
           label={nextLabel}
           tooltip={isDisabled || !hasNext ? undefined : nextLabel}
           variant="ghost"
@@ -909,13 +976,13 @@ export function Pagination({
               xstyle={rtlStyles.mirror}
             />
           }
-          onClick={handleNext}
+          {...controlProps(clampPage(linkPage + step), hasNext)}
           isDisabled={isDisabled || !hasNext}
           isIconOnly
         />
 
         {showFirstLast && (
-          <Button
+          <PaginationButton
             label={lastLabel}
             tooltip={isDisabled || !hasNext ? undefined : lastLabel}
             variant="ghost"
@@ -927,7 +994,7 @@ export function Pagination({
                 xstyle={rtlStyles.mirror}
               />
             }
-            onClick={handleLast}
+            {...controlProps(computedTotalPages ?? optimisticPage, hasNext)}
             isDisabled={isDisabled || !hasNext}
             isIconOnly
             xstyle={variant === 'compact' && styles.compactLast}
