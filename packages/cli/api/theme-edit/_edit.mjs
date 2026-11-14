@@ -2471,6 +2471,24 @@ async function changeOnce(
   // this change's to report.
   const notesBefore = new Set(buildNotes(ctx));
   if (sub === 'set' && (s.thing === 'base' || s.thing === 'mode')) {
+    // A built-in base this project has not installed: install it, then the
+    // same set, whichever letters it was typed in.
+    if (
+      s.thing === 'base' &&
+      s.value !== 'none' &&
+      !baseInstalled(cwd, s.value)
+    )
+      refuse(
+        E.ERR_UNKNOWN_THEME,
+        `The ${s.value} theme is not installed, so ${slug} cannot build on it. Install @astryxdesign/theme-${s.value}, then set the base again, or build on no theme.`,
+        {
+          run: [
+            installLine(cwd, [`@astryxdesign/theme-${s.value}`]),
+            `${P} set ${slug} base ${s.value}`,
+            `${P} set ${slug} base none`,
+          ],
+        },
+      );
     const before = s.thing === 'base' ? (data.like ?? 'none') : data.mode;
     if (s.thing === 'base') {
       if (s.value === 'none') delete data.like;

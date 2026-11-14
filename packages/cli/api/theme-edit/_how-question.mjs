@@ -7851,8 +7851,10 @@ export function draftAnswer(ctx, env, question) {
         const bwNowPx = bwM
           ? Number(bwM[1]) * (bwM[2] === 'rem' ? 16 : 1)
           : null;
-        const thicker = /\b(thick(er)?)\b/.test(c.text) || c.dir === 'more';
-        const thinner = /\bthin(ner)?\b/.test(c.text) || c.dir === 'less';
+        // "thicker" and "thinner" step from the width now; "a thick
+        // border" and "a thin border" name a width: 2px and 1px.
+        const thicker = /\bthicker\b/.test(c.text) || c.dir === 'more';
+        const thinner = /\bthinner\b/.test(c.text) || c.dir === 'less';
         const width =
           c.lengths[0] ??
           (thicker
@@ -7863,7 +7865,11 @@ export function draftAnswer(ctx, env, question) {
               ? bwNowPx != null
                 ? `${Math.max(0.5, bwNowPx <= 1 ? bwNowPx / 2 : bwNowPx - 1)}px`
                 : '1px'
-              : null);
+              : /\bthick\b/.test(c.text)
+                ? '2px'
+                : /\bthin\b/.test(c.text)
+                  ? '1px'
+                  : null);
         const keptColor = bcRead
           ? `var(${bcRead.token})`
           : 'var(--color-border)';
