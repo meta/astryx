@@ -29,6 +29,15 @@ export interface BaseTemplateDoc extends AuthoredDocGraphFields {
   /** Search keywords for CLI discovery: the ideas, domains, and other names a
    *  builder might use for what this template serves (e.g. `['monitoring',
    *  'uptime', 'on-call']` for a service-health dashboard). Lowercase.
+   *  One keyword names one concept: write a list of words as separate
+   *  keywords (`['kpi', 'tiles']`, not `'kpi tiles'`). Write several words as
+   *  one keyword only for a term the words do not mean apart, such as
+   *  `'table of contents'` or `'reading pane'`: when `astryx build` chooses
+   *  the start and its alternatives, such a keyword counts only when the
+   *  request names the whole phrase, in order, never through its words
+   *  alone. Inside a phrase, build skips search's
+   *  stopwords and one-letter words, so `'sign in'` matches as `'sign'` and
+   *  `'on-call'` as `'call'`.
    *  `astryx search` matches them as it matches the description, and
    *  `astryx build` ranks page templates on them, so the `description` can
    *  stay a description of the layout. Integration templates need
