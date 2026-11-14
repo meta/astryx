@@ -137,10 +137,12 @@ describe('the copy is no compile target or --out', () => {
   it('an --out at the copy folder is refused, suggesting the compile without it', async () => {
     await themeEditNew('e8', {cwd});
     const before = read('src/themes/e8/e8.css');
+    // Another case names the same folder only on a case-insensitive disk.
+    const caseInsensitive = fs.existsSync(path.join(cwd, 'SRC/themes/e8'));
     for (const out of [
       'src/themes/e8',
       'src/themes/e8/',
-      'src/themes/E8/e8.css',
+      caseInsensitive ? 'src/themes/E8/e8.css' : 'src/themes/e8/x.css',
     ]) {
       const r = compile('themes/e8/e8.theme.ts', '--out', out);
       expect(r.status, out).not.toBe(0);

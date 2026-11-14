@@ -44,6 +44,11 @@ assets/self-audit.generated.json
 # Written at prepack (scripts/generate-manifest.mjs); never committed.
 clients/cli/manifest.generated.json
 
+# Search's catalog for a project that adds nothing to it, written at `prepack`
+# by scripts/generate-search-catalog.mjs so the published package reads it for
+# an unchanged CLI and Core. Not committed: a checkout gathers.
+assets/search-catalog.generated.json
+
 # The id of the published package's exact contents, written last at `prepack`
 # by scripts/generate-build-id.mjs. A checkout has none, so it keeps no
 # gathered catalogs between runs (foundation/fs/gather-cache.mjs).

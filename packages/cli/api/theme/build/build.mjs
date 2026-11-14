@@ -329,7 +329,9 @@ function importTarget(dir, subpath) {
 /** @param {string} file @returns {string} its real path, or itself */
 function realOrSelf(file) {
   try {
-    return fs.realpathSync(file);
+    // The native form spells a path as the disk does (its own case on a
+    // case-insensitive disk), so two spellings of one file compare equal.
+    return fs.realpathSync.native(file);
   } catch {
     return file;
   }
@@ -1206,7 +1208,14 @@ function assertThemeSourceFile(filePath, cwd, mode = {}) {
  * `familyInterception` make the build a family member's plan.
  * `colorModes` is the one color mode a calling command knows the theme has
  * (the theme editor, from its settings), written into the built module.
- * @typedef {{prepareFamily?: boolean, familyLoader?: any, familyInterception?: any, writeRoot?: string, claimedOutputs?: Map<string, string>, deferredWrites?: Array<Array<{dest: string, content: string}>>, commandWords?: {group: string, build: string}, colorModes?: ['light'] | ['dark'] | null}} ThemeBuildHandOff
+ * @typedef {{prepareFamily?: boolean, familyLoader?: any, familyInterception?: any, writeRoot?: string, claimedOutputs?: Map<string, string>, deferredWrites?: Array<Array<{dest: string, content: string}>>, commandWords?: {group: string, build: string}, colorModes?: ['light'] | ['dark'] | null, fontHelp?: FontHelp | null}} ThemeBuildHandOff
+ */
+
+/**
+ * How a caller that loads a theme's fonts itself (the editor's app copy)
+ * says to load a family: the notice per family and the recipe in place of
+ * the generic one.
+ * @typedef {{notice: (family: string) => string, recipe: (families: string[]) => string}} FontHelp
  */
 
 /**
@@ -2763,7 +2772,7 @@ function isSyncLoaderLimitation(error) {
  * @returns {Promise<{theme: any, exportName: string, degraded: {topLevelAwait: boolean, commonJs: boolean}, colorModes: ["light"] | ["dark"] | null}>}
  */
 // prettier-ignore
-async function importThemeModule(filePath, interception, /** @type {any} */ loader = undefined) {
+async function importThemeModule(filePath, interception, /** @type {any} */ loader = undefined, /** @type {string | undefined} */ pick = undefined) {
   const jiti =
     loader ??
     createJiti(import.meta.url, {
@@ -2830,6 +2839,12 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
   );
   const hasDefault = isModule && Object.hasOwn(mod, 'default');
   const defaultExport = hasDefault ? mod.default : undefined;
+  // A caller that already knows which export a build reads (from a load
+  // as the build loads it) reads that one.
+  if (pick !== undefined && isModule && Object.hasOwn(mod, pick)) {
+    if (isThemeObject(mod[pick]))
+      return {theme: mod[pick], exportName: pick, degraded, colorModes};
+  }
   if (isThemeObject(defaultExport)) {
     return {theme: defaultExport, exportName: 'default', degraded, colorModes};
   }
@@ -2940,15 +2955,88 @@ function isThemeObject(value) {
  * @returns {Promise<{theme: any, exportName?: string, degraded: {topLevelAwait: boolean, commonJs: boolean}, colorModes?: ['light'] | ['dark'] | null}>}
  */
 // prettier-ignore
-async function extractThemeDefinition(filePath, interception, /** @type {any} */ loader = undefined) {
+async function extractThemeDefinition(filePath, interception, /** @type {any} */ loader = undefined, /** @type {string | undefined} */ pick = undefined) {
   try {
-    return await importThemeModule(filePath, interception, loader);
+    return await importThemeModule(filePath, interception, loader, pick);
   } catch (jitiError) {
     const je = /** @type {Error} */ (jitiError);
     throw new Error(
       `Failed to load theme from ${filePath}: ${themeLoadReason(je)}`,
       {cause: jitiError},
     );
+  }
+}
+
+/**
+ * The Core interception a standalone build loads a theme module with: none
+ * when the selected Core generates adaptations itself and the theme's folder
+ * resolves a Core of its own; else imports of Core are handed the selected
+ * Core.
+ * @param {string} filePath
+ */
+function standaloneInterception(filePath) {
+  return _generateAdaptationCSS && themeFolderResolvesCore(filePath)
+    ? undefined
+    : interceptCore(_coreThemeModule, _coreRootModule);
+}
+
+/**
+ * Load a theme module as a standalone build of it loads it (the Core the
+ * build selects, the same loader and interception) and name the export the
+ * build reads, with the theme its definition extends (`parent`, the exact
+ * authored `extends` value, after every spread and repeated key). Callers
+ * that must agree with the build on which theme a module defines read it
+ * here, never from the module's text.
+ * @param {string} file
+ * @param {{cwd?: string}} [ctx]
+ * @returns {Promise<{theme: any, exportName: string, parent: any}>}
+ */
+export async function loadThemeExport(file, {cwd = process.cwd()} = {}) {
+  const filePath = path.resolve(cwd, file);
+  await selectCore(cwd, {projectOnly: false});
+  const interception = standaloneInterception(filePath);
+  const {theme, exportName = 'default'} = await extractThemeDefinition(
+    filePath,
+    interception,
+  );
+  if (interception)
+    return {theme, exportName, parent: interception.parentOf(theme)};
+  // A build without interception records no parent: the same export is
+  // read again through a recorder.
+  const recorder = interceptCore(_coreThemeModule, _coreRootModule);
+  const again = await extractThemeDefinition(
+    filePath,
+    recorder,
+    undefined,
+    exportName,
+  );
+  return {theme, exportName, parent: recorder.parentOf(again.theme)};
+}
+
+/**
+ * The input a theme module gives `defineTheme()` for the theme a build of
+ * it reads, evaluated as the build evaluates the module (an import, an
+ * expression, a spread or a computed key is its value), with the theme Core
+ * made of it. When Core refuses the input, the input the module gave for
+ * the named theme (else its last) and Core's error; null when the module
+ * does not load at all.
+ * @param {string} file
+ * @param {{cwd?: string, name?: string}} [ctx]
+ * @returns {Promise<{input: any, theme: any, error: Error | null} | null>}
+ */
+export async function loadThemeInput(file, {cwd = process.cwd(), name} = {}) {
+  const filePath = path.resolve(cwd, file);
+  await selectCore(cwd, {projectOnly: false});
+  const interception = interceptCore(_coreThemeModule, _coreRootModule);
+  try {
+    const {theme} = await extractThemeDefinition(filePath, interception);
+    return {input: interception.inputOf(theme) ?? null, theme, error: null};
+  } catch (e) {
+    const given = interception.inputs;
+    const input =
+      given.filter(x => x && typeof x === 'object' && x.name === name).at(-1) ??
+      given.at(-1);
+    return input ? {input, theme: null, error: /** @type {Error} */ (e)} : null;
   }
 }
 
@@ -3958,10 +4046,7 @@ async function themeBuildInternal(
   // shared loader so exact authored parent identity stays CLI-private instead
   // of becoming a public DefinedTheme field.
   const interception =
-    handOff.familyInterception ??
-    (_generateAdaptationCSS && themeFolderResolvesCore(filePath)
-      ? undefined
-      : interceptCore(_coreThemeModule, _coreRootModule));
+    handOff.familyInterception ?? standaloneInterception(filePath);
 
   // Extract theme definition
   let themeDef;
@@ -4793,12 +4878,19 @@ async function themeBuildInternal(
   // permanently in violation of its own "compiles with no warnings" guard).
   // Adaptation rules are resolved theme writes in their own right, so a family
   // named only inside one needs the same notice as one named at the root.
+  // The result names the recipe's command bare, as every machine-read
+  // command is; the printed note starts it the way this project runs the CLI.
+  /** @param {string} family @param {string} recipe */
+  const fontNotice = (family, recipe) =>
+    handOff.fontHelp?.notice(family) ??
+    `Font "${family}" is named by this theme but not loaded; add a <link> or @font-face in your app (recipe: ${recipe})`;
   /** @type {string[]} */
   const fontNotices = [];
   for (const family of unloadedFonts) {
-    const msg = `Font "${family}" is named by this theme but not loaded; add a <link> or @font-face in your app (recipe: astryx docs typography)`;
-    noticeMessages.push(msg);
-    fontNotices.push(msg);
+    noticeMessages.push(fontNotice(family, 'astryx docs typography'));
+    fontNotices.push(
+      fontNotice(family, formatCliCommand('docs typography', cwd)),
+    );
   }
 
   /** @type {ThemeBuildTrailer} */
@@ -4809,6 +4901,7 @@ async function themeBuildInternal(
     cssImport,
     unloadedFonts,
     fontNotices,
+    fontHelp: handOff.fontHelp ?? null,
   };
   // A batch or compact report prints this once for the whole run instead.
   if (report.trailers) report.trailers.push(trailer);
@@ -4845,7 +4938,8 @@ async function themeBuildInternal(
  * @property {string} jsImport Import specifier of the built JS module.
  * @property {string} cssImport Import specifier of the built CSS.
  * @property {string[]} unloadedFonts Font families the theme names but does not load.
- * @property {string[]} fontNotices One notice per unloaded font family.
+ * @property {string[]} fontNotices One notice per unloaded font family, as printed.
+ * @property {FontHelp | null} [fontHelp] How the caller loads fonts, when it does.
  */
 
 /**
@@ -4876,7 +4970,13 @@ Or with a <link> tag:
 `);
   for (const msg of trailer.fontNotices) logger.log(`  note: ${msg}`);
   if (trailer.unloadedFonts.length > 0) {
-    logger.log(formatFontLoadingHelp(trailer.themeName, trailer.unloadedFonts));
+    logger.log(
+      formatFontLoadingHelp(
+        trailer.themeName,
+        trailer.unloadedFonts,
+        trailer.fontHelp?.recipe,
+      ),
+    );
   }
 }
 
@@ -4919,7 +5019,10 @@ Or with a <link> tag:
     }
   }
   const fonts = groupUnloadedFonts(trailers);
-  if (fonts.length > 0) logger.log(formatBatchFontLoadingHelp(fonts));
+  // One caller's recipe serves the batch only when every theme takes it.
+  const help = trailers.every(t => t.fontHelp) ? trailers[0].fontHelp : null;
+  if (fonts.length > 0)
+    logger.log(formatBatchFontLoadingHelp(fonts, help?.recipe));
 }
 
 /**
@@ -5474,11 +5577,18 @@ Or load the same stylesheet natively:
   const unloadedFonts = [
     ...new Set(members.flatMap(member => member.unloadedFonts)),
   ];
-  const notices = unloadedFonts.map(
-    family =>
-      `Font "${family}" is named by this theme family but not loaded; add a <link> or @font-face in your app (recipe: astryx docs typography)`,
+  /** @param {string} family @param {string} recipe */
+  const familyNotice = (family, recipe) =>
+    `Font "${family}" is named by this theme family but not loaded; add a <link> or @font-face in your app (recipe: ${recipe})`;
+  // The result names the command bare; the printed note as this project
+  // runs the CLI.
+  const notices = unloadedFonts.map(family =>
+    familyNotice(family, 'astryx docs typography'),
   );
-  for (const notice of notices) logger.log(`  note: ${notice}`);
+  for (const family of unloadedFonts)
+    logger.log(
+      `  note: ${familyNotice(family, formatCliCommand('docs typography', cwd))}`,
+    );
   return {
     type: 'theme.build',
     data: {
