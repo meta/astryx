@@ -47,9 +47,8 @@ function listRunner(core) {
     JSON.stringify(pathToFileURL(path.join(CLI_ROOT, rel)).href);
   return `const {recordReads} = await import(${at('foundation/fs/read-record.mjs')});
 const {withListingCache} = await import(${at('foundation/fs/listing-cache.mjs')});
-const {inputState} = await import(${at('foundation/discovery/stored-self-audit.mjs')});
+const {selfAuditInputs} = await import(${at('foundation/discovery/stored-self-audit.mjs')});
 const {discoverComponents, resolveImportPath} = await import(${at('foundation/discovery/component-discovery.mjs')});
-const path = await import('node:path');
 const core = ${JSON.stringify(core)};
 const seen = new Map();
 const value = await recordReads(seen, async () => withListingCache(() => {
@@ -58,12 +57,7 @@ const value = await recordReads(seen, async () => withListingCache(() => {
   for (const name of Object.values(groups).flat()) imports[name] = resolveImportPath(core, name);
   return {groups, imports};
 }));
-const inputs = {};
-for (const file of [...seen.keys()].sort()) {
-  const rel = path.relative(core, file);
-  if (rel.startsWith('..') || path.isAbsolute(rel)) continue;
-  inputs[rel.split(path.sep).join('/') || '.'] = inputState(file, ${CORE_FOLDER_SKIP});
-}
+const inputs = selfAuditInputs(seen.keys(), {root: core, skip: ${CORE_FOLDER_SKIP}});
 process.stdout.write(JSON.stringify({inputs, ...value}));`;
 }
 
@@ -72,6 +66,9 @@ process.stdout.write(JSON.stringify({inputs, ...value}));`;
  * @returns {string}
  */
 export function componentListText() {
+  // A leftover store would answer the run below: the list is worked out from
+  // the current code alone.
+  fs.rmSync(COMPONENT_LIST_FILE, {force: true});
   const stage = fs.mkdtempSync(
     path.join(os.tmpdir(), 'astryx-component-list-'),
   );
