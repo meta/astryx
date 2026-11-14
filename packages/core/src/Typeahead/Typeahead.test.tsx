@@ -227,6 +227,33 @@ describe('BaseTypeahead', () => {
     });
   });
 
+  it('announces every match, not only the rows maxMenuItems shows', async () => {
+    const projects = Array.from({length: 40}, (_, index) => ({
+      id: `project-${index}`,
+      label: `Project ${index}`,
+    }));
+    render(
+      <BaseTypeahead
+        searchSource={{search: () => projects, bootstrap: () => []}}
+        value={null}
+        onChange={() => {}}
+        debounceMs={0}
+      />,
+    );
+    fireEvent.change(screen.getByRole('combobox'), {
+      target: {value: 'Project'},
+    });
+
+    await waitFor(() => {
+      const region = document.querySelector(
+        '[data-astryx-live-region="polite"]',
+      );
+      expect(region?.textContent).toBe('40 results');
+    });
+    // The list still shows only the first ten.
+    expect(document.querySelectorAll('[role="option"]')).toHaveLength(10);
+  });
+
   it('announces the plural result count', async () => {
     render(
       <InternationalizationProvider
