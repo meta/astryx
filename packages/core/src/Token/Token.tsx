@@ -28,6 +28,7 @@ import {
   easeVars,
   fontWeightVars,
   typeScaleVars,
+  focusVars,
 } from '../theme/tokens.stylex';
 import {Icon} from '../Icon';
 import {mergeProps} from '../utils';
@@ -187,6 +188,12 @@ const styles = stylex.create({
     outline: 'none',
     overflow: 'hidden',
     minWidth: 0,
+  },
+  removeRingInset: {
+    outlineOffset: {
+      default: '0',
+      ':focus-visible': `calc(-1 * ${focusVars['--focus-outline-width']})`,
+    },
   },
   removeButton: {
     display: 'inline-flex',
@@ -350,7 +357,10 @@ export function Token({
       // Focusable while disabled (spec:AST-085 FR1), but inert (FR2).
       aria-disabled={isDisabled || undefined}
       {...(isDisabled ? disabledInteractionProps() : null)}
-      {...focusOutlineProps.focusVisible(styles.removeButton)}>
+      {...focusOutlineProps.focusVisible(
+        styles.removeButton,
+        styles.removeRingInset,
+      )}>
       <Icon icon="close" size="xsm" color="inherit" />
     </button>
   );
