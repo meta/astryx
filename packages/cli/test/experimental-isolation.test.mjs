@@ -154,6 +154,8 @@ const ICON_SET_READERS = {
   'api/discover/_adapter.mjs':
     'reads sets only with the opt-in, and strips the root before collecting identities',
   // Readers behind a gated reader.
+  'api/docs/_entry-names.mjs':
+    "whether a loaded integration names a root, so the docs tree may hold more than the CLI's own; it reads the sets only through project.iconSets()",
   'api/doctor/doctor.mjs': 'project.iconSets()',
   'api/template/_adapter.mjs': 'project.iconSets()',
   'foundation/doc-compiler/inputs.mjs': 'project.iconSets()',

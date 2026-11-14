@@ -46,6 +46,10 @@ export const PREPACK_FILES = [
     script: 'scripts/generate-self-audit.mjs',
   },
   {
+    file: 'assets/docs-routes.generated.json',
+    script: 'scripts/generate-docs-routes.mjs',
+  },
+  {
     file: 'clients/cli/manifest.generated.json',
     script: 'scripts/generate-manifest.mjs',
   },
@@ -65,7 +69,11 @@ const PREPACK_STAGES = [
     'scripts/generate-stored-docs.mjs',
     'scripts/generate-command-list.mjs',
   ],
-  ['scripts/generate-self-audit.mjs', 'scripts/generate-manifest.mjs'],
+  [
+    'scripts/generate-self-audit.mjs',
+    'scripts/generate-docs-routes.mjs',
+    'scripts/generate-manifest.mjs',
+  ],
   ['scripts/generate-build-id.mjs'],
 ];
 

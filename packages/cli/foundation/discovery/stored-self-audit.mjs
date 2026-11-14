@@ -12,6 +12,8 @@
  *   always audits.
  * @position Read by api/doctor/doctor.mjs. These audits read only the
  *   package's own files, so their answer is fixed until one of them changes.
+ *   The CLI's docs routes stored at publish (api/docs/_entry-names.mjs) are
+ *   checked by the same input states.
  */
 
 import * as fs from 'node:fs';
@@ -110,10 +112,27 @@ export function storedSelfAudit(name) {
   /** @type {{inputs: Record<string, string>, value: unknown} | undefined} */
   const entry = readStore(SELF_AUDIT_FILE).get(name);
   if (!entry) return undefined;
-  for (const [rel, state] of Object.entries(entry.inputs)) {
-    if (inputState(path.join(CLI_ROOT, ...rel.split('/'))) !== state) {
-      return undefined;
-    }
+  return inputsUnchanged(entry.inputs) ? entry.value : undefined;
+}
+
+/**
+ * Whether every input, by path in the package ({@link selfAuditInputs}), is
+ * in the state stored for it.
+ * @param {Record<string, string>} inputs
+ * @returns {boolean}
+ */
+export function inputsUnchanged(inputs) {
+  for (const [rel, state] of Object.entries(inputs)) {
+    if (inputState(inputPath(rel)) !== state) return false;
   }
-  return entry.value;
+  return true;
+}
+
+/**
+ * An input's path, from its path in the package.
+ * @param {string} rel
+ * @returns {string}
+ */
+export function inputPath(rel) {
+  return path.join(CLI_ROOT, ...rel.split('/'));
 }

@@ -266,10 +266,13 @@ export function withOtherCommand(
  *   cwd?: string,
  *   coreDir?: string | null,
  *   integrations?: import('../integrations/integrations.mjs').LoadedIntegration[],
- *   docsNames?: (cwd: string) => Promise<string[]>,
+ *   docsNames?: (
+ *     cwd: string,
+ *     integrations: import('../integrations/integrations.mjs').LoadedIntegration[],
+ *   ) => Promise<string[]>,
  * }} context `coreDir` and `integrations` are the ones the lookup found, if
- *   any. `docsNames` gives every route `astryx docs` reads; without it, no
- *   docs route is a hint
+ *   any. `docsNames` gives every route `astryx docs` reads in the project
+ *   with these integrations; without it, no docs route is a hint
  * @returns {Promise<Found | null>}
  */
 export async function findOtherCommand(
@@ -367,7 +370,7 @@ export async function findOtherCommand(
         return {
           docs:
             docsNames && (await docNamed(docsDirs, segment))
-              ? await docsNames(cwd)
+              ? await docsNames(cwd, await integrationsOnce())
               : [],
         };
       },

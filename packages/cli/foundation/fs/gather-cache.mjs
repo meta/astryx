@@ -26,7 +26,8 @@
  *   its theme-wiring scan,
  *   in a run that records modules and variables to its end, and, through
  *   `persistedSummary`, by kept-tree.mjs for the lookup commands' not-found hint's
- *   summaries of folder trees, each kept while every path it stamped is
+ *   summaries of folder trees and by the docs lookup (api/docs/_entry-names.mjs)
+ *   for the routes that hint reads, each kept while every path it stamped is
  *   unchanged, in any command. The commands whose runs keep the other
  *   entries are `search`, `build`, `component`, `template`, `theme`,
  *   `discover`, `docs` and `doctor`. The first such run on a machine makes the
@@ -804,13 +805,58 @@ function settled(stamps) {
  * @returns {T}
  */
 export function persistedSummary(key, make) {
+  const at = summaryAt(key);
+  if (!at) return make().value;
+  const stored = storedSummary(at);
+  if (stored) return stored.value;
+  const {value, stamps} = make();
+  storeSummary(at, value, stamps);
+  return value;
+}
+
+/**
+ * {@link persistedSummary} for a summary that `make` works out
+ * asynchronously.
+ * @template T
+ * @param {unknown[]} key
+ * @param {() => Promise<{value: T, stamps: [string, string][]}>} make
+ * @returns {Promise<T>}
+ */
+export async function persistedSummaryAsync(key, make) {
+  const at = summaryAt(key);
+  if (!at) return (await make()).value;
+  const stored = storedSummary(at);
+  if (stored) return stored.value;
+  const {value, stamps} = await make();
+  storeSummary(at, value, stamps);
+  return value;
+}
+
+/**
+ * Where the summary for `key` is kept, or null where none is kept.
+ * @param {unknown[]} key
+ * @returns {{dir: string, file: string, entry: string} | null}
+ */
+function summaryAt(key) {
   const id = withoutRecording(buildId);
   const dir =
     id == null || runsUnderPnp() ? null : withoutRecording(gatherCacheDir);
-  if (id == null || dir == null) return make().value;
+  if (id == null || dir == null) return null;
   const summaryKey = ['summary', ...key];
-  const file = entryFile(dir, summaryKey, id);
-  const entry = entryKey(summaryKey, id);
+  return {
+    dir,
+    file: entryFile(dir, summaryKey, id),
+    entry: entryKey(summaryKey, id),
+  };
+}
+
+/**
+ * The kept summary at `at`, while every path it stamped has its stamp, else
+ * undefined.
+ * @param {{file: string, entry: string}} at
+ * @returns {{value: any} | undefined}
+ */
+function storedSummary({file, entry}) {
   try {
     const stored = JSON.parse(
       withoutRecording(() => fs.readFileSync(file, 'utf-8')),
@@ -832,33 +878,41 @@ export function persistedSummary(key, make) {
       } catch {
         // An entry that cannot be touched is evicted sooner; nothing more.
       }
-      return stored.value;
+      return {value: stored.value};
     }
   } catch {
-    // No usable entry: made below.
+    // No usable entry: made again.
   }
-  const {value, stamps} = make();
-  if (settled(stamps)) {
-    withoutRecording(() => {
-      try {
-        const text = JSON.stringify({
-          format: FORMAT,
-          summary: true,
-          key: entry,
-          stamps,
-          value,
-        });
-        if (!isDeepStrictEqual(JSON.parse(text).value, value)) return;
-        const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
-        fs.writeFileSync(temp, text, {mode: 0o600, flag: 'wx'});
-        fs.renameSync(temp, file);
-        evictOldest(dir, isEntry);
-      } catch {
-        // A summary that cannot be stored is made again next time.
-      }
-    });
-  }
-  return value;
+  return undefined;
+}
+
+/**
+ * Keep `value` at `at` with its stamps, unless a stamp is too young or the
+ * value does not read back the same. Silent on any failure.
+ * @param {{dir: string, file: string, entry: string}} at
+ * @param {unknown} value
+ * @param {[string, string][]} stamps
+ */
+function storeSummary({dir, file, entry}, value, stamps) {
+  if (!settled(stamps)) return;
+  withoutRecording(() => {
+    try {
+      const text = JSON.stringify({
+        format: FORMAT,
+        summary: true,
+        key: entry,
+        stamps,
+        value,
+      });
+      if (!isDeepStrictEqual(JSON.parse(text).value, value)) return;
+      const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
+      fs.writeFileSync(temp, text, {mode: 0o600, flag: 'wx'});
+      fs.renameSync(temp, file);
+      evictOldest(dir, isEntry);
+    } catch {
+      // A summary that cannot be stored is made again next time.
+    }
+  });
 }
 
 /**
