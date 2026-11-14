@@ -130,7 +130,7 @@ describe('preview add', () => {
     );
     expect(made.message).toContain('has no root layout');
     expect(fs.existsSync(path.join(cwd, 'app'))).toBe(false);
-    // A workspace root names the Next app below it, with a --path into it.
+    // A project root names the Next app below it, reached with --path.
     const web = path.join(cwd, 'apps/web');
     fs.mkdirSync(path.join(web, 'src/app'), {recursive: true});
     fs.writeFileSync(

@@ -128,6 +128,7 @@ function extendedFile(spec, fromDir) {
  * @property {Record<string, unknown>} options - Compiler options, the extending config's winning key by key.
  * @property {string} baseUrlDir - The folder of the config that writes `baseUrl`.
  * @property {string} pathsDir - The folder of the config that writes `paths`.
+ * @property {string | null} pathsFile - The config that writes `paths`, if any does.
  * @property {{list: unknown[], dir: string} | null} files - `files`, from the nearest config that writes it, with that config's folder.
  * @property {{list: unknown[], dir: string} | null} include - `include`, likewise.
  * @property {{list: unknown[], dir: string} | null} exclude - `exclude`, likewise.
@@ -150,7 +151,7 @@ function readConfig(file, seen = new Set()) {
   /** @type {Record<string, unknown>} */
   const options = path.basename(file) === 'jsconfig.json' ? {allowJs: true} : {};
   /** @type {ReadConfig} */
-  const config = {options, baseUrlDir: dir, pathsDir: dir, files: null, include: null, exclude: null, references: []};
+  const config = {options, baseUrlDir: dir, pathsDir: dir, pathsFile: null, files: null, include: null, exclude: null, references: []};
   const bases = Array.isArray(json.extends) ? json.extends : json.extends === undefined ? [] : [json.extends];
   for (const spec of bases) {
     const baseFile = extendedFile(spec, dir);
@@ -158,14 +159,20 @@ function readConfig(file, seen = new Set()) {
     if (!base) continue;
     Object.assign(config.options, base.options);
     if ('baseUrl' in base.options) config.baseUrlDir = base.baseUrlDir;
-    if ('paths' in base.options) config.pathsDir = base.pathsDir;
+    if ('paths' in base.options) {
+      config.pathsDir = base.pathsDir;
+      config.pathsFile = base.pathsFile;
+    }
     for (const key of /** @type {const} */ (['files', 'include', 'exclude'])) config[key] = base[key] ?? config[key];
   }
   const own = json.compilerOptions && typeof json.compilerOptions === 'object' ? json.compilerOptions : {};
   for (const [key, value] of Object.entries(own)) {
     config.options[key] = value;
     if (key === 'baseUrl') config.baseUrlDir = dir;
-    if (key === 'paths') config.pathsDir = dir;
+    if (key === 'paths') {
+      config.pathsDir = dir;
+      config.pathsFile = file;
+    }
   }
   for (const key of /** @type {const} */ (['files', 'include', 'exclude'])) {
     if (Array.isArray(json[key])) config[key] = {list: json[key], dir};
@@ -270,31 +277,32 @@ function patternsOf(config, configDir) {
 }
 
 /**
- * The path patterns that apply to a file, which need not exist yet: from the
+ * The config TypeScript reads for a file, which need not exist yet: the
  * nearest tsconfig.json (else jsconfig.json) in its folder or above, read
  * through `extends`. When that config does not take the file as its own, a
- * project it references (at any depth) that does lends its patterns, as
- * TypeScript finds a file's project behind a solution-style config.
+ * project it references (at any depth) that does, as TypeScript finds a
+ * file's project behind a solution-style config; when none does, the nearest
+ * config still.
  * @param {string} file absolute
- * @returns {PathPattern[]}
+ * @returns {{file: string, config: ReadConfig} | null}
  */
-export function pathsFor(file) {
+function configFor(file) {
   /** @type {string | null} */
   let nearest = null;
   for (let d = path.dirname(file); !nearest; d = path.dirname(d)) {
     nearest = CONFIG_NAMES.map(name => path.join(d, name)).find(isFile) ?? null;
     if (path.dirname(d) === d) break;
   }
-  if (!nearest) return [];
+  if (!nearest) return null;
   const visited = new Set();
-  /** @type {(configFile: string) => {config: ReadConfig, dir: string} | null} */
+  /** @type {(configFile: string) => {file: string, config: ReadConfig} | null} */
   const owning = configFile => {
     if (visited.has(configFile)) return null;
     visited.add(configFile);
     const config = readConfig(configFile);
     if (!config) return null;
     const dir = path.dirname(configFile);
-    if (includesFile(config, dir, file)) return {config, dir};
+    if (includesFile(config, dir, file)) return {file: configFile, config};
     for (const ref of config.references) {
       if (typeof ref.path !== 'string') continue;
       const target = path.resolve(dir, ref.path);
@@ -305,11 +313,44 @@ export function pathsFor(file) {
     return null;
   };
   const found = owning(nearest);
-  if (found) return patternsOf(found.config, found.dir);
-  // No project takes the file as its own: the nearest config's patterns
-  // still apply, as they always did for a page outside its `include`.
+  if (found) return found;
+  // No project takes the file as its own: the nearest config still applies,
+  // as it always did for a page outside its `include`.
   const config = readConfig(nearest);
-  return config ? patternsOf(config, path.dirname(nearest)) : [];
+  return config ? {file: nearest, config} : null;
+}
+
+/**
+ * The path patterns that apply to a file, which need not exist yet: those of
+ * the config TypeScript reads for it (see configFor).
+ * @param {string} file absolute
+ * @returns {PathPattern[]}
+ */
+export function pathsFor(file) {
+  const found = configFor(file);
+  return found ? patternsOf(found.config, path.dirname(found.file)) : [];
+}
+
+/**
+ * Where `paths` entries for a file belong: the config TypeScript reads for
+ * it, else a new `tsconfig.json` in `fallbackDir`; the folder the entries'
+ * targets resolve from there (its `baseUrl`, else that config's own folder,
+ * which writes the entries); and the patterns it has now, its own or
+ * inherited through `extends` (a `paths` of its own replaces inherited ones).
+ * @param {string} file absolute, which need not exist yet
+ * @param {string} fallbackDir absolute: where a project with no config would add one
+ * @returns {{config: string, base: string, current: PathPattern[]}}
+ */
+export function pathsHomeFor(file, fallbackDir) {
+  const found = configFor(file);
+  if (!found) return {config: path.join(fallbackDir, 'tsconfig.json'), base: fallbackDir, current: []};
+  const configDir = path.dirname(found.file);
+  const {baseUrl} = found.config.options;
+  return {
+    config: found.file,
+    base: typeof baseUrl === 'string' ? configPath(baseUrl, found.config.baseUrlDir, configDir) : configDir,
+    current: patternsOf(found.config, configDir),
+  };
 }
 
 /**

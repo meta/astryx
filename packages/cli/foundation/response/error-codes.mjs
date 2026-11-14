@@ -331,7 +331,7 @@ export const ERROR_CODES = Object.freeze({
    * carries a file a
    * render never embeds (a dotfile, node_modules, a manifest, lockfile or
    * tool configuration, a file a test, story or benchmark runner would run,
-   * or any kind but a page module, stylesheet, JSON file or image). Nothing
+   * or any kind but a module, stylesheet, JSON file or image). Nothing
    * was written.
    */
   ERR_RENDER_SOURCE_DAMAGED: 'ERR_RENDER_SOURCE_DAMAGED',

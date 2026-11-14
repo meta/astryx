@@ -55,7 +55,8 @@ describe('a typed value is offered as typed', () => {
       ['b', 'text-size', 'calc(1rem + 2px)', {}, / set b text-size 18$/],
       ['b', 'text-size', '1.5', {}, / how text-size$/],
       ['b', 'corners', '0.5', {}, / how corners$/],
-      ['b', 'accent', 'navyblue', {}, / set b accent navy$/],
+      // navyblue is no CSS color name: no part of it is guessed.
+      ['b', 'accent', 'navyblue', {}, / how accent$/],
       [
         'b',
         'corners',

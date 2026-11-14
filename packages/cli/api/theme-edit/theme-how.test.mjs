@@ -194,8 +194,9 @@ const QUESTIONS = [
     {
       parts: ['app-shell-header'],
       aspects: ['text'],
-      top: /^set q color '#ffffff' --on app-shell-header$/,
-      adds: /app-shell-header\.base\.color=#ffffff/,
+      // The title and items inside read the text tokens themselves.
+      top: /^set q --color-text-primary '#ffffff' --on app-shell-header/,
+      adds: /app-shell-header\.base\.--color-text-primary=#ffffff/,
     },
   ],
   [
@@ -290,7 +291,10 @@ const QUESTIONS = [
   ],
   [
     'hover color for buttons a bit darker',
-    {top: /--on button --state hover$/, adds: /button\.base\.:hover\./},
+    {
+      top: /--on button --when variant:\w+ --state hover( --mode (light|dark))?$/,
+      adds: /button\.variant:\w+\.:hover\./,
+    },
   ],
   ['table rows striped', {parts: ['table-row'], top: null}],
   [
@@ -448,14 +452,14 @@ const QUESTIONS = [
     'make the buttons a bit rounder',
     {
       top: /^set q corners more --on button$/,
-      adds: /button\.base\.borderRadius=12px/,
+      adds: /button\.base\.--radius-element=12px/,
     },
   ],
   [
     'pill shaped buttons',
     {
       top: /^set q corners pill --on button$/,
-      adds: /button\.base\.borderRadius=9999px/,
+      adds: /button\.base\.--radius-element=9999px/,
     },
   ],
   [
@@ -484,7 +488,7 @@ const QUESTIONS = [
     'small buttons 6px, large stay pill',
     {
       top: /border-radius 6px --on button --when size:sm && set q corners pill --on button --when size:lg$/,
-      adds: /button\.size:sm\.borderRadius=6px/,
+      adds: /button\.size:sm\.--radius-element=6px/,
     },
   ],
   [
@@ -499,8 +503,10 @@ const QUESTIONS = [
   [
     'rounder corners but not on inputs',
     {
-      top: /^set q corners more && set q border-radius \S+ --on inputs$/,
-      adds: /text-input\.base\.borderRadius=/,
+      // Each member that shows a radius of its own keeps the corner token
+      // it reads; a member that takes its corners from a part inside it
+      // gets no invented one.
+      top: /^set q corners more( && set q --radius-[a-z]+ \S+ --on [a-z-]+ --only)+$/,
     },
   ],
   [
@@ -514,7 +520,7 @@ const QUESTIONS = [
     'cards: 8px radius; buttons: 4px radius; inputs: 2px',
     {
       top: /--on card && set q border-radius 4px --on button && set q border-radius 2px --on inputs$/,
-      adds: /button\.base\.borderRadius=4px/,
+      adds: /button\.base\.--radius-element=4px/,
     },
   ],
   // spacing
@@ -664,7 +670,7 @@ const QUESTIONS = [
   [
     'make the header dark with white text and a bottom border',
     {
-      top: /background '#1f2937' --on app-shell-header && set q color '#ffffff'/,
+      top: /background '#1f2937' --on app-shell-header && set q --color-text-primary '#ffffff'/,
       adds: /borderBottom=/,
     },
   ],
@@ -677,7 +683,7 @@ const QUESTIONS = [
     {
       parts: ['button'],
       top: /^set q corners more --on button$/,
-      adds: /button\.base\.borderRadius=/,
+      adds: /button\.base\.--radius-element=/,
     },
   ],
   [
@@ -688,7 +694,7 @@ const QUESTIONS = [
     'Make The Buttons ROUNDER',
     {
       top: /^set q corners more --on button$/,
-      adds: /button\.base\.borderRadius=/,
+      adds: /button\.base\.--radius-element=/,
     },
   ],
   [
@@ -696,7 +702,7 @@ const QUESTIONS = [
     {
       parts: ['button'],
       top: /--on button$/,
-      adds: /button\.base\.borderRadius=/,
+      adds: /button\.base\.--radius-element=/,
     },
   ],
   [
@@ -704,7 +710,7 @@ const QUESTIONS = [
     {
       parts: ['button'],
       top: /--on button$/,
-      adds: /button\.base\.borderRadius=/,
+      adds: /button\.base\.--radius-element=/,
     },
   ],
   [
@@ -736,7 +742,7 @@ const QUESTIONS = [
     'make primary button 10px radius',
     {
       top: /^set q border-radius 10px --on button --when variant:primary$/,
-      adds: /button\.variant:primary\.borderRadius=10px/,
+      adds: /button\.variant:primary\.--radius-element=10px/,
     },
   ],
   ['modern', {top: null}],
@@ -1293,7 +1299,7 @@ const QUESTIONS_2 = [
     'make the buttnos roudner',
     {
       top: /^set q corners more --on button$/,
-      adds: /button\.base\.borderRadius=12px/,
+      adds: /button\.base\.--radius-element=12px/,
     },
   ],
   [
@@ -1315,7 +1321,7 @@ const QUESTIONS_2 = [
     'bttn pill',
     {
       top: /^set q corners pill --on button$/,
-      adds: /button\.base\.borderRadius=9999px/,
+      adds: /button\.base\.--radius-element=9999px/,
     },
   ],
   [
@@ -1329,14 +1335,17 @@ const QUESTIONS_2 = [
     'botões mais arredondados',
     {
       top: /^set q corners more --on button$/,
-      adds: /button\.base\.borderRadius/,
+      adds: /button\.base\.--radius-element/,
     },
   ],
   [
     'pulsanti arrotondati',
-    {top: /--on button$/, adds: /button\.base\.borderRadius/},
+    {top: /--on button$/, adds: /button\.base\.--radius-element/},
   ],
-  ['버튼을 둥글게', {top: /--on button$/, adds: /button\.base\.borderRadius/}],
+  [
+    '버튼을 둥글게',
+    {top: /--on button$/, adds: /button\.base\.--radius-element/},
+  ],
   [
     'ボタンを青く',
     {
@@ -1351,7 +1360,7 @@ const QUESTIONS_2 = [
     'pill buttons and pill buttons',
     {
       top: /^set q corners pill --on button$/,
-      adds: /button\.base\.borderRadius=9999px/,
+      adds: /button\.base\.--radius-element=9999px/,
     },
   ],
 ];
@@ -1521,7 +1530,7 @@ const QUESTIONS_3 = [
     '- rounder buttons\n- no shadow on cards',
     {
       top: /^set q corners more --on button && set q box-shadow none --on card$/,
-      adds: /button\.base\.borderRadius=12px[\s\S]*card\.base\.boxShadow=none/,
+      adds: /button\.base\.--radius-element=12px[\s\S]*card\.base\.boxShadow=none/,
     },
   ],
   [
@@ -1679,10 +1688,9 @@ const QUESTIONS_3 = [
   ],
   [
     'Can you please make the tooltip darker? Thanks!',
-    {
-      top: /^set q filter 'brightness\(0\.85\)' --on tooltip$/,
-      adds: /tooltip\.base\.filter/,
-    },
+    // A color ask never answers with a filter, which dims the text too; the
+    // tooltip's fill is not read, so the answer asks for a color.
+    {top: null, text: /has not read the fill of tooltip/},
   ],
   [
     'make inputs taller (44px)',
@@ -1723,7 +1731,9 @@ const QUESTIONS_3 = [
   // parts
   [
     'the table has zebra rows #f9fafb and a header #f3f4f6',
-    {top: /^set q background '#f3f4f6' --on table-header-cell$/},
+    {
+      top: /^set q --color-background-muted '#f9fafb' --on table-row && set q background '#f3f4f6' --on table-header-cell$/,
+    },
   ],
   [
     'the error banner is #fef2f2 with #991b1b text',
@@ -1895,7 +1905,8 @@ const QUESTIONS_F = [
   ['buttons are not rounded enough', {top: /^set q corners more --on button$/}],
   [
     'nothing should be rounded except avatars',
-    {top: /^set q corners square && set q border-radius 9999px --on avatar$/},
+    // The avatar keeps the corner token it reads, so its own corners stay.
+    {top: /^set q corners square && set q --radius-full 9999px --on avatar$/},
   ],
   [
     'the shadows are too strong',
@@ -2364,10 +2375,8 @@ const QUESTIONS_G = [
   // answer names the parts inside that show one.
   [
     'list rounder',
-    {
-      top: null,
-      text: /list has no background, border or shadow of its own[\s\S]*item/,
-    },
+    // A list draws no edge of its own; its items draw the rounded edges.
+    {top: /^set q corners more --on list-item$/},
   ],
   ['footer rounder', {top: /^set q corners more --on layout-footer$/}],
   // a word for a component how has no part for: the closest parts
@@ -2931,7 +2940,9 @@ const QUESTIONS_I = [
   ],
   [
     'hover on buttons does nothing visible',
-    {top: /--on button --state hover$/},
+    {
+      top: /--on button --when variant:\w+ --state hover( --mode (light|dark))?$/,
+    },
   ],
   // tool questions
   ['how do I rename my theme', {top: null, text: /no command renames a theme/}],
@@ -3111,7 +3122,9 @@ const QUESTIONS_J = [
   ],
   [
     'when I click a button it should get darker',
-    {top: /--on button --state active$/},
+    {
+      top: /--on button --when variant:\w+ --state active( --mode (light|dark))?$/,
+    },
   ],
   [
     'after I check a checkbox it should be green',
@@ -3219,7 +3232,7 @@ const QUESTIONS_K = [
   [
     'only in dark mode and only on cards, darker background',
     {
-      top: /^set q background '#[0-9a-f]{6}' --on card( --when variant:default)? --mode dark( && .*)?$/,
+      top: /^set q background(-color)? '#[0-9a-f]{6}' --on card( --when variant:default)? --mode dark( && .*)?$/,
     },
   ],
   [
@@ -3728,7 +3741,10 @@ const QUESTIONS_R = [
   ['squre corners', /^set q corners square$/],
   ['eckiger corners', /^set q corners square$/],
   ['cards look flat', /^set q box-shadow 'var\(--shadow-[a-z]+\)' --on card$/],
-  ['buttons darker while being clicked', /--on button --state active$/],
+  [
+    'buttons darker while being clicked',
+    /--on button --when variant:\w+ --state active( --mode (light|dark))?$/,
+  ],
 ];
 
 describe('how answers final-10 questions', () => {
@@ -4034,7 +4050,8 @@ describe('how reads muted, "less X" and sarcasm', () => {
     ['great, even more shadows, just what I wanted', null],
     ['oh sure, let us make every corner a circle', null],
     ['buttons as round as a bowling ball, nice', null],
-    ['the tooltips are too dark, I hate it', /brightness\(1\.15\)/],
+    // (Dislike is an ask for the other way: lighter.)
+    ['the cards are too dark, I hate it', /lighter|--on card/],
     [
       'quit with the big gaps in the sidebar',
       /^set q spacing less --on side-nav$/,
@@ -4144,7 +4161,7 @@ const QUESTIONS_Y = [
   ],
   [
     'I need: 1. accent #7c3aed 2. pill badges 3. no borders on tables 4. tooltips darker 5. links green',
-    /--on table-row && set q filter 'brightness\(0\.85\)' --on tooltip/,
+    /^(?!.*filter).*--on table-row/,
   ],
   [
     'Specifically she wants the cards to have softer corners (maybe around 12px), the primary buttons should use our brand blue which is #0057ff, and the page background should be a very light gray',
@@ -4172,6 +4189,26 @@ describe('how answers final-14 fixes', () => {
 });
 
 describe('how lookups', () => {
+  it('names the same states for a state a part lacks as set and how <part> do', async () => {
+    const {data} = await themeEditHow('checked rows in the table tinted blue', {
+      cwd,
+      theme: 'q',
+    });
+    const said = /its states: ([^)]*)\)/.exec(
+      (data.results ?? []).map((/** @type {any} */ r) => r.text).join('\n'),
+    )?.[1];
+    const part = (await themeEditHow('table-row', {cwd, theme: 'q'})).data;
+    const r = await refusal(() =>
+      themeEditSet('q', 'background', '#dbeafe', {
+        cwd,
+        on: 'table-row',
+        state: 'checked',
+      }),
+    );
+    expect(said).toBe(part.states.join(', '));
+    expect(r.message).toContain(`States: ${said}.`);
+  });
+
   it('maps what a part reads under to the flags set takes, or says why none does', async () => {
     const button = (await themeEditHow('button', {cwd, theme: 'q'})).data;
     const when = button.reads.background.flatMap(
@@ -4302,7 +4339,9 @@ describe('how lookups', () => {
     const {data} = await themeEditHow('make it look like Apple', {cwd});
     expect(data.results).toEqual([]);
     expect(data.hint).toMatch(/No match/);
-    expect(data.run[0]).toContain('--list parts');
+    // The help that lists the asks it understands comes first.
+    expect(data.run[0]).toMatch(/ how --help$/);
+    expect(data.run[1]).toContain('--list parts');
   });
 });
 

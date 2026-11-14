@@ -114,9 +114,11 @@ describe('the measured check sees every variant, state and mode', () => {
       const {first} = await answer(
         'make the button hover darker except primary buttons',
       );
-      expect(first).toContain(
-        'set q filter none --on button --when variant:primary --state hover',
-      );
+      // The primary variant's own hover step is dropped; the others stay.
+      expect(first.some(c => /--when variant:primary/.test(c))).toBe(false);
+      expect(
+        first.some(c => /--when variant:secondary --state hover/.test(c)),
+      ).toBe(true);
     },
     T,
   );

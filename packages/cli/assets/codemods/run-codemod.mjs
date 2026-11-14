@@ -487,6 +487,19 @@ export function runCodeCodemod(
   const declinedCandidates = [];
   /** @type {Array<{filePath: string, relativePath: string, result: string}>} */
   const candidates = [];
+  // One jscodeshift per parser for all the files: binding a parser builds a
+  // new copy of jscodeshift's helpers, and the copies are all alike.
+  /** @type {Map<string, any>} */
+  const bound = new Map();
+  /** @param {string} parser */
+  const boundTo = parser => {
+    let j = bound.get(parser);
+    if (j == null) {
+      j = jscodeshift.withParser(parser);
+      bound.set(parser, j);
+    }
+    return j;
+  };
 
   // Transform and validate every candidate before any write. This lets a
   // protection source changed by this entry govern every other staged output.
@@ -499,7 +512,7 @@ export function runCodeCodemod(
       const source =
         contents?.get(filePath) ?? fs.readFileSync(filePath, 'utf-8');
       const parser = ext === '.tsx' || ext === '.ts' ? 'tsx' : 'babel';
-      const j = jscodeshift.withParser(parser);
+      const j = boundTo(parser);
       // Only source files: a stylesheet can happen to parse as JavaScript
       // (`a.b` then `{ color: white; }`), yet its transform still changes it.
       if (
