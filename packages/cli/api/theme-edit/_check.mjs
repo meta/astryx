@@ -127,6 +127,7 @@ import {
   documentNumericTable,
   documentRange,
   withoutCopyDebris,
+  commaNumbers,
 } from './_normal.mjs';
 
 export {
@@ -654,7 +655,7 @@ function mathSpaced(v) {
 function numberMeant(v, name, ok) {
   const t = v.trim();
   const plain = typedPlain(t).replace(/(\d)\.$/, '$1');
-  const comma = plain.replace(/^([+-]?\d+),(\d+)/, '$1.$2');
+  const comma = commaNumbers(plain);
   const tries = [
     /^[\doO.]+$/.test(plain) && /\d/.test(plain)
       ? plain.replace(/[oO]/g, '0')
@@ -1797,14 +1798,29 @@ function propertyProblem(prop, value) {
         ? withPx.replace(/(^|[\s/(,])-(?=\.?\d)/g, '$1')
         : null) ??
       (takes(joined) && joined !== v ? joined : null) ??
-      // Several values on a property that takes one (padding-top with four):
-      // the first of them, when it is one the property takes. Not when the
-      // rest are words (`2 spacing units` is no 2px).
+      // A comma between digits is a decimal point (1,5rem is 1.5rem), never
+      // a split into layers.
+      (takes(commaNumbers(v)) && commaNumbers(v) !== v
+        ? commaNumbers(v)
+        : null) ??
+      // Several values of one kind on a property that takes one
+      // (padding-top with four lengths): the first as typed, with px only
+      // when the property takes no bare number. Never one value of a
+      // shorthand of several kinds (`all 200` for transition).
       (() => {
-        const all = splitTop((withPx ?? joined).trim(), ' ');
-        if (all.slice(1).some(x => /^[a-z]/i.test(x))) return null;
+        const all = splitTop(v.trim(), ' ');
+        /** @param {string} x */
+        const kind = x =>
+          /^[+-]?(?:\d+\.?\d*|\.\d+)(px|rem|em|%)?$/i.exec(x)?.[1] ??
+          (/^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(x) ? '' : null);
+        if (
+          all.length < 2 ||
+          all.some(x => kind(x) === null || kind(x) !== kind(all[0]))
+        )
+          return null;
         const first = all[0];
-        return pxFits && first && first !== v && takes(first) ? first : null;
+        const px = kind(first) === '' ? `${first}px` : null;
+        return takes(first) ? first : pxFits && px && takes(px) ? px : null;
       })() ??
       (near && takes(near) ? near : null) ??
       // Layers typed with one too many or an empty one (`url(a.png), red,
@@ -1920,6 +1936,28 @@ documentReadings(TEXT_SIZE.map(([name, px]) => [name, `${px}px`]));
 documentReadings(Object.entries(HEADING_TRACKING));
 // `bold` given a no (false, off) is the normal weight.
 documentReadings(['false', 'off', 'no', 'none'].map(w => [w, 'normal']));
+/**
+ * The CSS absolute-size keywords that are no text-size rung, as the px
+ * CSS gives each at a 16px root.
+ */
+const CSS_SIZE_KEYWORDS = wordTable(
+  /** @type {Record<string, number>} */ ({
+    'xx-small': 9,
+    'x-small': 10,
+    'x-large': 24,
+    'xx-large': 32,
+    'xxx-large': 48,
+  }),
+);
+documentReadings(
+  Object.entries(CSS_SIZE_KEYWORDS)
+    .filter(([, px]) => px >= 10 && px <= 32)
+    .map(([w, px]) => [w, String(px)]),
+);
+// A weight word read as the headings rung its number is nearest.
+documentReadings(
+  Object.entries(WEIGHT_WORDS).map(([w, n]) => [w, weightRung(Number(n))]),
+);
 /** Words for no rounding: corners square. */
 const NO_ROUNDING = ['0', '0%', 'none', 'sharp', 'zero', 'no', 'flat'];
 /** Words for no space: spacing's tightest rung. */
@@ -2251,8 +2289,22 @@ export function checkSetting(
     )
   ) {
     const pair = colorPair(value);
-    if (pair && !colorProblem(pair.light) && !colorProblem(pair.dark))
+    if (pair && !colorProblem(pair.light) && !colorProblem(pair.dark)) {
+      // A theme with one mode shows one half: that half is the line, as
+      // for a color token.
+      const only = oneModeOfTheme(data);
+      if (only)
+        refuse(
+          E.ERR_THEME_BAD_VALUE,
+          `"${value}" is a light and a dark color; this theme is ${only} only, so it shows the ${only} one.`,
+          {
+            run: [
+              setLine(slug, thing, pair[only], {...flags, mode: undefined}),
+            ],
+          },
+        );
       value = `light-dark(${pair.light}, ${pair.dark})`;
+    }
   }
   if (
     !unset &&
@@ -3612,7 +3664,14 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           ...Object.keys(HEADING_WEIGHTS),
           ...Object.keys(HEADING_TRACKING),
         ];
-        const weight = /^\d+(\.\d+)?$/.test(lower) ? Number(lower) : null;
+        // A weight word (extra bold, ultra-bold) is its number, read as
+        // the rung nearest it (800 is heavy).
+        const weightWord = WEIGHT_WORDS[lower.replace(/[\s-]+/g, '')];
+        const weight = /^\d+(\.\d+)?$/.test(lower)
+          ? Number(lower)
+          : weightWord
+            ? Number(weightWord)
+            : null;
         const meant =
           words.find(w => w === lower) ??
           (weight != null ? weightRung(weight) : nearest(lower, words)[0]);
@@ -4104,7 +4163,11 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           E.ERR_THEME_BAD_VALUE,
           `text-size takes ${DIALS['text-size'].values} (a number is the body size in pixels, 10 to 32), not "${v}".`,
           (() => {
-            // A rung in other letter case (Medium) or with px is that rung.
+            // A rung in other letter case (Medium) or with px is that rung;
+            // a CSS size keyword (x-large) is the size CSS gives it.
+            const keyword = CSS_SIZE_KEYWORDS[v.trim().toLowerCase()];
+            if (keyword != null && keyword >= 10 && keyword <= 32)
+              return {run: [`${P} set ${slug} text-size ${keyword}`]};
             const near =
               TEXT_SIZE.find(([n]) => n === v.trim().toLowerCase())?.[0] ??
               nearest(

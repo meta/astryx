@@ -68,8 +68,10 @@ const CASES =
       'font',
       'Inter bold italic',
       {},
-      [/ set b font Inter$/, / set b headings bold$/],
-      null,
+      // italic has no theme-wide setting: the lines would leave it out, so
+      // none is offered.
+      [/ how font$/],
+      / set b font Inter$/,
     ],
     // Stock examples are never offered.
     [

@@ -20,7 +20,13 @@ import {
   splitCommand,
   vetSuggestions,
 } from './_vet.mjs';
-import {allowedLine, colorPair, withoutCopyDebris} from './_normal.mjs';
+import {
+  allowedLine,
+  colorPair,
+  coversTyped,
+  readsTyped,
+  withoutCopyDebris,
+} from './_normal.mjs';
 import {
   AUTO_SPREAD,
   CORNERS,
@@ -1272,6 +1278,7 @@ function refuseStoredTokens(ctx, slug, data, skip) {
         offered: String(b.fix),
         typed: String(b.setting.value),
         thing: b.setting.thing,
+        mode: b.setting.mode ?? '',
       })
     )
       delete b.fix;
@@ -1797,38 +1804,38 @@ function carryTyped(e, sub, slug, thing, typed, data) {
   const head = new RegExp(
     `^.* set \\S+ (?:'([^']+)'|(\\S+)) (?:'((?:[^']|'\\\\'')*)'|(\\S+))`,
   );
-  const same = (/** @type {string} */ x) =>
-    x.replace(/^-+/, '').toLowerCase() ===
-    String(thing).replace(/^-+/, '').toLowerCase();
   // Every set line, of this setting or another (a dial's other name, a
-  // label, a theme-wide equivalent), offers a value only through the
-  // allowlist of exact readings: never a stock, reset or nearest value.
-  // Another setting's line may carry words of the thing typed too (an
-  // object or a label typed as the thing).
-  const typedText = `${String(thing)} ${typed}`;
-  const saved = data
-    ? [
-        data.like ?? '',
-        data.mode ?? '',
-        ...data.settings.map(x => String(x.value ?? '')),
-      ].join(' ')
-    : '';
+  // label, a theme-wide equivalent), offers a value only through the gate's
+  // declared sources (readsTyped): never a stock, reset or nearest value.
+  // A line that carries only part of the value is offered only when the
+  // refusal's lines together carry all of it (a family and its weight).
+  // With no value typed, the thing held it (`accent: red`).
+  const typedText = typed.trim() ? typed : String(thing);
+  /** @type {Map<string, string[]>} */
+  const saved = new Map();
+  for (const x of data?.settings ?? [])
+    saved.set(x.thing, [...(saved.get(x.thing) ?? []), String(x.value ?? '')]);
+  if (data?.like) saved.set('base', [data.like]);
+  if (data?.mode) saved.set('mode', [data.mode]);
+  const reads = e.suggestions.map(x => {
+    const m = head.exec(x.name);
+    if (!m) return /** @type {true | number[] | false} */ (true);
+    return readsTyped({
+      offered: m[3] ?? m[4],
+      typed: typedText,
+      thing: (m[1] ?? m[2]).replace(/^'(.*)'$/, '$1'),
+      typedThing: String(thing),
+      saved,
+      mode: / --mode (light|dark)\b/.exec(x.name)?.[1] ?? '',
+    });
+  });
+  const covered = coversTyped(reads, typedText);
   /** @type {Set<string>} */
   const dropped = new Set();
-  const lines = e.suggestions.filter(x => {
+  const lines = e.suggestions.filter((x, i) => {
+    if (reads[i] === true || (Array.isArray(reads[i]) && covered)) return true;
     const m = head.exec(x.name);
-    if (!m) return true;
-    const v = m[3] ?? m[4];
-    if (
-      allowedLine({
-        offered: v,
-        typed: same(m[1] ?? m[2]) ? typed : typedText,
-        thing: m[1] ?? m[2],
-        saved,
-      })
-    )
-      return true;
-    dropped.add(v.replace(/^'(.*)'$/, '$1').toLowerCase());
+    if (m) dropped.add(String(m[3] ?? m[4]).toLowerCase());
     return false;
   });
   // A value named as a did-you-mean goes with its line.
@@ -1881,7 +1888,8 @@ function savedAsWritten(cwd, slug) {
  * left, how for the thing.
  * @param {'set' | 'undo'} sub
  * @param {string} slug
- * @param {string[]} lines
+ * @param {Array<string | [string, string]>} lines each line, or each line
+ *   with the typed text it carries (an entry of a pasted object)
  * @param {string} cwd
  * @param {string} typed
  * @param {string} thing
@@ -1890,7 +1898,8 @@ function savedAsWritten(cwd, slug) {
 async function workingLines(sub, slug, lines, cwd, typed, thing) {
   /** @type {string[]} */
   const out = [];
-  for (const line of lines) {
+  for (const item of lines) {
+    const [line, own] = Array.isArray(item) ? item : [item, typed];
     // The line as set takes it (a repair set offers for it folded in).
     const followed = await followChangeLine(sub, slug, line, cwd);
     if (followed.why) continue;
@@ -1898,7 +1907,12 @@ async function workingLines(sub, slug, lines, cwd, typed, thing) {
     if (
       sub === 'set' &&
       read &&
-      !allowedLine({offered: read.value, typed, thing: read.thing})
+      !allowedLine({
+        offered: read.value,
+        typed: own,
+        thing: read.thing,
+        mode: String(read.flags?.mode ?? ''),
+      })
     )
       continue;
     out.push(followed.line);
@@ -2010,10 +2024,18 @@ async function change(sub, slug, thing, value, options) {
             slug,
             Object.entries(obj)
               .slice(0, 6)
-              .map(
-                ([k, x]) =>
-                  `${P} ${sub} ${slug} ${quoteCommandArgument(k)}${sub === 'set' ? ` ${quoteCommandArgument(String(normalizeEntry(k, x != null && typeof x === 'object' ? JSON.stringify(x) : String(x)).value ?? ''))}` : ''}`,
-              ),
+              .map(([k, x]) => {
+                const entry =
+                  x != null && typeof x === 'object'
+                    ? JSON.stringify(x)
+                    : String(x);
+                const read = String(normalizeEntry(k, entry).value ?? '');
+                // Each line with the entry it carries, as typed.
+                return /** @type {[string, string]} */ ([
+                  `${P} ${sub} ${slug} ${quoteCommandArgument(k)}${sub === 'set' ? ` ${quoteCommandArgument(read)}` : ''}`,
+                  read,
+                ]);
+              }),
             options.cwd ?? process.cwd(),
             objectText,
             'settings',
@@ -2100,9 +2122,24 @@ async function change(sub, slug, thing, value, options) {
         ...(options.when ? [`--when ${options.when}`] : []),
         ...(options.state ? [`--state ${options.state}`] : []),
       ].join(' ');
+      // Its line goes through the one gate as a repair does: checked as set
+      // checks it (a repair set offers for it folded in) and carrying what
+      // was pasted; else no line is named.
+      const [line] = m
+        ? await workingLines(
+            'set',
+            slug,
+            [
+              `${P} set ${slug} ${quoteCommandArgument(m[1].trim())} ${quoteCommandArgument(m[2].trim())}${flags ? ` ${flags}` : ''}`,
+            ],
+            options.cwd ?? process.cwd(),
+            m[2].trim(),
+            m[1].trim(),
+          )
+        : [];
       /** @type {any} */ (r.data).notes = [
         ...(r.data.notes ?? []),
-        `the pasted text also held "${dropped}", which this did not set${m ? `: ${P} set ${slug} ${quoteCommandArgument(m[1].trim())} ${quoteCommandArgument(m[2].trim())}${flags ? ` ${flags}` : ''} sets it` : ''}`,
+        `the pasted text also held "${dropped}", which this did not set${line && / set /.test(line) ? `: ${line} sets it` : ''}`,
       ];
     }
     // A mode or base entry in the settings list does nothing: said after
