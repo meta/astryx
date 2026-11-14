@@ -10,7 +10,7 @@ export const doc = {
   namespace: 'cli/commands',
   summary: 'Remove a theme from the app',
   description:
-    'Removes one added theme from the generated module and regenerates the whole module. While other themes are added, choose another default with theme use before removing the current default. Removing the only added theme deletes the module and prints the lines the app root must drop; a module with changes the CLI did not write stays. A theme whose local folder or package is gone can be removed, and theme use still works when the default is the one that is gone.',
+    'Removes one added theme from the generated module and regenerates the whole module. While other themes are added, choose another default with theme use before removing the current default. Removing the only added theme removes the module file and prints the lines the app root must drop; a module with changes the CLI did not write stays. A theme whose local folder or package is gone can be removed, and theme use still works when the default is the one that is gone.',
   fn: 'themeRemove',
   args: [{name: 'slug', param: 'slug', required: true}],
   examples: [
@@ -20,7 +20,7 @@ export const doc = {
   exitCodes: [
     {
       code: 0,
-      when: 'the module is regenerated without the theme, or deleted with the only added theme',
+      when: 'the module is regenerated without the theme, or removed with the only added theme',
     },
     {
       code: 1,

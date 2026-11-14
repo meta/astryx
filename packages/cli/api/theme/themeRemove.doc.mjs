@@ -11,7 +11,7 @@ export const doc = {
   displayName: 'themeRemove()',
   summary: "Remove a theme from an app's generated theme module.",
   description:
-    'Reads the generated module record, removes one added theme, and regenerates the whole module. The default cannot be removed while other themes are added: themeUse selects another one first. The only added theme can be removed: that deletes the module when it is exactly what the CLI wrote.',
+    'Reads the generated module record, removes one added theme, and regenerates the whole module. The default cannot be removed while other themes are added: themeUse selects another one first. The only added theme can be removed: that removes the module file when it is exactly what the CLI wrote.',
   importPath: '@astryxdesign/cli/api',
   signature:
     'themeRemove(slug: string, options?: {cwd?: string}): Promise<ThemeAppResponse>',
@@ -33,7 +33,7 @@ export const doc = {
     {
       type: 'theme.app',
       description:
-        'Every remaining theme and its imports, the default slug, the generated module path, and the remove change. While other themes are added, the default is not removed: choose another with themeUse first, which also works when the folder or package of the default is gone. Other added themes whose local folder or package is gone are left out, with a note in data.notes. When the only added theme is removed, the module is deleted: themes is empty, default is an empty string, and change.moduleRemoved is true (change.themeModes is true when the deleted module exported themeModes).',
+        'Every remaining theme and its imports, the default slug, the generated module path, and the remove change. While other themes are added, the default is not removed: choose another with themeUse first, which also works when the folder or package of the default is gone. Other added themes whose local folder or package is gone are left out, with a note in data.notes. When the only added theme is removed, the module file goes too: themes is empty, default is an empty string, and change.moduleRemoved is true (change.themeModes is true when that module exported themeModes).',
     },
   ],
   throws: [
@@ -47,7 +47,7 @@ export const doc = {
     },
     {
       code: 'ERR_WRITE_FAILED',
-      when: 'the generated module cannot be written or deleted',
+      when: 'the generated module cannot be written or removed',
     },
   ],
   examples: [{label: 'Remove a theme', code: "await themeRemove('ocean');"}],

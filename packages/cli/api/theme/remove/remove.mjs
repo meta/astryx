@@ -5,8 +5,8 @@
 import {removeThemeFromApp} from '../_adapter.mjs';
 
 /**
- * Remove one added theme and regenerate the app module, or delete the module
- * when it was the only added theme.
+ * Remove one added theme and regenerate the app module, or remove the module
+ * file when it was the only added theme.
  * @param {string} slug
  * @param {{cwd?: string}} [options]
  * @returns {Promise<import('../theme.type.mjs').ThemeAppResponse>}

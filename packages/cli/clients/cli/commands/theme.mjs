@@ -741,14 +741,12 @@ function printThemeApp(result) {
   if (change.moduleRemoved) {
     emit(
       text(
-        `Removed ${change.slug}, the only added theme, and deleted ${modulePath}. In the app root, delete the module's import and keep only the children of its Theme wrapper:`,
+        `Removed ${change.slug}, the only added theme, and deleted ${modulePath}. Undo its wiring in the app root: delete the module's import (and the Theme import when nothing else uses Theme), and keep only the children of the Theme wrapper:`,
       ),
       code(
-        `import {themes, defaultThemeSlug${change.themeModes ? ', themeModes' : ''}} from './${stem}';\n\n` +
+        "import {Theme} from '@astryxdesign/core/theme';\n" +
+          `import {themes, defaultThemeSlug${change.themeModes ? ', themeModes' : ''}} from './${stem}';\n\n` +
           `<Theme theme={themes[defaultThemeSlug]}${change.themeModes ? " mode={themeModes[defaultThemeSlug] ?? 'system'}" : ''}>\n  <App />\n</Theme>`,
-      ),
-      text(
-        "Also delete `import {Theme} from '@astryxdesign/core/theme';` when nothing else in that file uses Theme.",
       ),
     );
     return;
