@@ -73,6 +73,9 @@ const anatomy = [
 
 export const docs = {
   name: 'TextArea',
+  playground: {
+    defaults: {label: 'Notes', value: 'Some notes'},
+  },
   displayName: 'Text Area',
   category: 'Form Controls',
   keywords: [

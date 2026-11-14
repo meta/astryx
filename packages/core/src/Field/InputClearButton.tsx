@@ -23,7 +23,7 @@ import {BUTTON_HIT_AREA, ButtonHitAreaContext} from '../Button/buttonHitArea';
 import {clampedHitInsets, type HitInsets, type HitRect} from '../utils/hitArea';
 import type {TouchHitAreaOptions} from '../utils/touchHitArea';
 import {Icon} from '../Icon/Icon';
-import {themeProps} from '../utils/themeProps';
+import {pickDataAttributes, themeProps} from '../utils/themeProps';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -120,12 +120,14 @@ function renderInputClearButton({
   onClickCapture,
   xstyle,
   iconClassName,
+  ...rest
 }: InputClearButtonRenderProps): ReactNode {
   const {className: iconTargetClassName} = themeProps('input-clear-icon');
   const {className: buttonTargetClassName} = themeProps('input-clear-button');
   return (
     <ButtonHitAreaContext value={CLEAR_BUTTON_HIT_AREA}>
       <Button
+        {...pickDataAttributes(rest)}
         variant="ghost"
         size="sm"
         label={label}

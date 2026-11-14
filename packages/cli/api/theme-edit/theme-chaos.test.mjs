@@ -337,7 +337,7 @@ beforeAll(async () => {
   writeFixtureBaseTheme(cwd, 'neutral');
   fs.writeFileSync(
     path.join(cwd, 'package.json'),
-    `${JSON.stringify({name: 'app', private: true, type: 'module'})}\n`,
+    `${JSON.stringify({name: 'app', private: true, type: 'module', dependencies: {'@astryxdesign/core': '*'}})}\n`,
   );
   fs.mkdirSync(path.join(cwd, 'src/app'), {recursive: true});
   // A routes folder has a root layout, which loads Core's stylesheet.
@@ -655,10 +655,12 @@ describe('known chaos findings', () => {
     expect(x.r.body?.code).toBe('ERR_MISSING_ARGUMENT');
   }, 120_000);
 
-  it('F6: mode dark-only changes the built theme', async () => {
+  it('F6 (now one-mode by <Theme mode>): mode dark-only says where the mode goes and keeps the colors', async () => {
+    // Core has no mode inside a theme: the theme keeps both halves of its
+    // colors and the app's <Theme> is given mode="dark".
     await run(['editor', 'new', 'km', '--accent', '#e11d48']);
     const x = await step(['editor', 'set', 'km', 'mode', 'dark-only']);
-    expect(x.changed.filter(k => k.endsWith('/km.css'))).not.toEqual([]);
+    expect(JSON.stringify(x.r.body)).toContain('mode=\\"dark\\"');
   }, 120_000);
 
   it('F9: undo after a color restores the palette files exactly', async () => {

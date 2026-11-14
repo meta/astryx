@@ -101,15 +101,33 @@ async function fadedSides(strip: Locator): Promise<Sides> {
   });
 }
 
+/**
+ * Scrolls the strip to `place` and waits until it is there. WebKit can drop a
+ * scroll request that comes right after mount or under load, so the request
+ * repeats until the scroll position arrives. The fades are read only after
+ * that, so a dropped request never reads as a wrong fade.
+ */
 async function scrollStrip(strip: Locator, place: 'start' | 'middle' | 'end') {
-  await strip.evaluate((element, where) => {
-    const max = element.scrollWidth - element.clientWidth;
-    const offset =
-      where === 'start' ? 0 : where === 'end' ? max : Math.round(max / 2);
-    // RTL scroll offsets run negative from the inline start.
-    const sign = getComputedStyle(element).direction === 'rtl' ? -1 : 1;
-    element.scrollLeft = sign * offset;
-  }, place);
+  await expect
+    .poll(async () =>
+      strip.evaluate((element, where) => {
+        const max = element.scrollWidth - element.clientWidth;
+        const offset =
+          where === 'start' ? 0 : where === 'end' ? max : Math.round(max / 2);
+        const isThere = () =>
+          Math.abs(Math.abs(element.scrollLeft) - offset) <= 1;
+        if (isThere()) {
+          return true;
+        }
+        // RTL scroll offsets run negative from the inline start.
+        const sign = getComputedStyle(element).direction === 'rtl' ? -1 : 1;
+        element.scrollTo({left: sign * offset, behavior: 'instant'});
+        // The next poll confirms the position, so a scroll that is accepted
+        // and then undone is not counted.
+        return false;
+      }, place),
+    )
+    .toBe(true);
 }
 
 async function scrollRange(strip: Locator) {

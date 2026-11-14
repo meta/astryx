@@ -218,8 +218,10 @@ export async function loadAutolinkCandidates({
  * rest of that package's contributions — including the load-error marker
  * `loadIntegrations` returns for it. A CONFIGURED integration is the opposite
  * case: the project named it, so its failure is an issue the project owns and
- * can act on. An autolinked one is a dependency's own packaging bug, which the
- * consuming project can neither fix nor silence, and which
+ * can act on. An autolinked one is dropped here either way; the project reports
+ * it only when a package the dependency requires is missing (a broken install
+ * it can repair, INV14). Otherwise it is the dependency's own packaging bug,
+ * which the consuming project can neither fix nor silence, and which
  * `astryx doctor integration validate <package>` reports on demand.
  *
  * One package reached twice (an alias beside the package it aliases, at the

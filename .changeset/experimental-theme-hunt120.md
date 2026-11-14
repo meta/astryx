@@ -1,0 +1,7 @@
+---
+'@astryxdesign/cli': patch
+---
+
+[experimental] `astryx experimental theme editor`: every `new` a refusal offers is checked as `new` checks its options before it is offered (a value never typed, such as a stock font, is not offered; a flag new refuses is left out and named; a line still refused is not offered), and a change of another dial is named for after the theme is made. `new` with no name offers a free name; a built-in theme among the extra words (`new t3 like neutral`, `new neutral t3`) is the base. set, undo, new, how and show read their options one way: in other letters, with one dash or a typed dash, or one slip off (`--On`, `-only`, `--olny`) they are named and the command offered with them. A token typed after its value and `set t neutral base` lead with the set in the right order; a repair never adds a part that was not typed; a swapped line that needs an install leads with the install. A base that reads as nothing is set back to the base the theme was built on, never to none. A font dial word on a part's font-family gives the family stack it stands for. A theme whose settings files are both gone but whose history or source the editor wrote is made again on its base, and undo then steps back. A part saved in other letters or as a one-item list is that part. undo of a misspelt setting leads with the one of the scope typed, and `undo <setting> <theme>` gives the reason with the theme first.
+
+@josephfarina

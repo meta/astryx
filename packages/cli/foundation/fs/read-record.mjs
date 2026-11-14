@@ -233,7 +233,25 @@ export function recordStates(states) {
   const runs = reads.getStore();
   if (!runs) return;
   for (const [file, state] of states) {
-    for (const seen of runs) if (!seen.has(file)) seen.set(file, state);
+    for (const seen of runs) keepState(seen, file, state);
+  }
+}
+
+/**
+ * Keep `state` as the state read of `file`, one state per path: the first
+ * one, except that a folder only probed takes a full stamp read later. The
+ * listing counts, as when a run lists a folder it probed (see `note`).
+ * @param {Map<string, string>} seen
+ * @param {string} file
+ * @param {string} state
+ */
+export function keepState(seen, file, state) {
+  const had = seen.get(file);
+  if (
+    had === undefined ||
+    (had.startsWith('dir:') && !state.startsWith('dir:'))
+  ) {
+    seen.set(file, state);
   }
 }
 

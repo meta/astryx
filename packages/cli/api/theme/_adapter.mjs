@@ -16,10 +16,11 @@ import {createRequire} from 'node:module';
 import {
   findCarriedCoreDir,
   findPackageRoot,
+  projectWritePath,
   requireCoreDir,
 } from '../../foundation/fs/paths.mjs';
 import {tryLock, userCacheDir} from '../../foundation/release/cache.mjs';
-import {Project} from '../../foundation/config/project.mjs';
+import {Project, providerLedgerOf} from '../../foundation/config/project.mjs';
 import {
   BUNDLED_THEME_PACKAGE,
   THEMES_DIR,
@@ -60,6 +61,7 @@ import {
 import {fsErrorMessage} from '../../foundation/fs/fs-error.mjs';
 import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
 import {analyzeTemplateNeeds} from '../../foundation/discovery/template-needs.mjs';
+import {compareText} from '../../foundation/text/compare-text.mjs';
 
 export {BUNDLED_THEME_PACKAGE, THEMES_DIR};
 
@@ -136,9 +138,23 @@ async function availableThemeState(cwd, {includeLocal = true} = {}) {
     // One broken local folder must not hide every other theme: it is
     // skipped with its reason, and only a lookup of that slug fails.
     const themes = await project.themes({includeLocal, skipBrokenLocal: true});
+    // An installed dependency whose manifest could not load for want of a
+    // package it requires has an issue too (INV14), but nothing of it was
+    // ever discovered: a lookup in it stays an unknown theme, as before.
+    const unloaded = new Set(
+      [...providerLedgerOf(project).values()].flatMap(entry =>
+        entry.outcome === 'load-failed' &&
+        entry.candidate.source === 'autolinked'
+          ? [entry.candidate.spec ?? entry.label]
+          : [],
+      ),
+    );
     return {
       themes,
-      issues: await project.issues(),
+      issues: (await project.issues()).filter(
+        issue =>
+          !(issue.code === 'integration_error' && unloaded.has(issue.package)),
+      ),
       skipped: project.skippedLocalThemes(),
     };
   } catch (error) {
@@ -645,8 +661,10 @@ function themeDescriptorName(file) {
  * @param {{cwd: string, targetPath?: string, overwrite?: boolean, takenSlugs?: Set<string>}} options
  *   `takenSlugs`: the slugs of the themes the project can use, which a fork's
  *   new folder name may not take
- * @returns {{outputDir: string, files: string[]}} the project-relative output
- *   directory and the files written, named as the fork names them
+ * @returns {{outputDir: string, files: string[], editorFolder: string | null}}
+ *   the output directory relative to the working folder, the files written,
+ *   named as the fork names them, and the folder the theme editor made that
+ *   holds the fork, relative to the working folder, or null
  */
 export function ejectThemeFiles(
   theme,
@@ -655,15 +673,17 @@ export function ejectThemeFiles(
   // The fork lands in the project, as list and add read it: the default root
   // is the project's, and a relative [path] is read from the working folder
   // but must stay inside the project.
-  const projectDir = findPackageRoot(cwd) ?? path.resolve(cwd);
-  // A Windows-style path names the same folders on every platform, as
-  // compile reads it; a folder name with a backslash in it is never meant.
-  const targetPath = typedPath?.replace(/\\/g, '/');
-  const target = !targetPath
-    ? defaultEjectTarget(theme.slug)
-    : path.isAbsolute(targetPath)
-      ? targetPath
-      : path.relative(projectDir, path.resolve(cwd, targetPath)) || '.';
+  // Read as every theme command reads a path it writes; a backslash
+  // separates folders on every platform.
+  const {
+    projectDir,
+    typed: targetPath,
+    relative: target,
+  } = projectWritePath(
+    cwd,
+    typedPath || undefined,
+    defaultEjectTarget(theme.slug),
+  );
   let resolvedDir;
   try {
     resolvedDir = assertWithin(target, projectDir, {
@@ -830,7 +850,33 @@ export function ejectThemeFiles(
     throw new AstryxError(message, undefined, ERROR_CODES.ERR_WRITE_FAILED);
   }
 
-  return {outputDir: path.relative(cwd, resolvedDir) || '.', files: names};
+  const editorDir = enclosingEditorFolder(resolvedDir, projectDir);
+  return {
+    outputDir: path.relative(cwd, resolvedDir) || '.',
+    files: names,
+    editorFolder:
+      editorDir == null ? null : path.relative(cwd, editorDir) || '.',
+  };
+}
+
+/**
+ * The nearest folder above `dir`, up to the project root, that the theme
+ * editor made, or null. Eject refuses the editor's folder itself; a subfolder
+ * of it is written as released CLIs did, with a warning.
+ * @param {string} dir
+ * @param {string} projectDir
+ * @returns {string | null}
+ */
+function enclosingEditorFolder(dir, projectDir) {
+  const root = path.resolve(projectDir);
+  let current = path.resolve(dir);
+  while (current !== root) {
+    const parent = path.dirname(current);
+    if (parent === current) return null;
+    current = parent;
+    if (editorThemeRecord(current)) return current;
+  }
+  return null;
 }
 
 /**
@@ -960,7 +1006,7 @@ export function themeCommandsFor(command, slug, available, cwd) {
       (a, b) =>
         levenshteinDistance(needle, a.slug.toLowerCase()) -
           levenshteinDistance(needle, b.slug.toLowerCase()) ||
-        a.slug.localeCompare(b.slug),
+        compareText(a.slug, b.slug),
     )
     .slice(0, 5)
     .map(theme => ({
@@ -1141,6 +1187,7 @@ async function writeThemeApp(
         stylesheet: theme.stylesheet,
         ...(theme.fontStylesheet ? {fontStylesheet: theme.fontStylesheet} : {}),
         source: theme.source,
+        ...(theme.mode ? {mode: theme.mode} : {}),
       })),
       default: defaultSlug,
       modulePath: prepared.module.path,
@@ -1149,6 +1196,15 @@ async function writeThemeApp(
         slug,
         changed,
         firstAdd: action === 'add' && !state.configured,
+        // The module lists one-mode themes' modes for the first time, after
+        // the app was wired without them: the wiring takes the mode now.
+        ...(state.configured &&
+        /\bexport const themeModes\b/.test(prepared.moduleContents) &&
+        !/\bexport const themeModes\b/.test(
+          String(prepared.module.expectedOriginal ?? ''),
+        )
+          ? {wireModes: true}
+          : {}),
       },
       ...(notes.length > 0 ? {notes} : {}),
     },

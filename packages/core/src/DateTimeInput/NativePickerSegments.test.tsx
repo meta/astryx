@@ -576,9 +576,11 @@ describe('DateTimeInput nativePicker', () => {
     );
 
     fireEvent.change(getNativeDateInput(), {target: {value: '2026-03-15'}});
+    expect(getNativeDateInput()).not.toHaveAttribute('aria-invalid');
+    fireEvent.keyDown(getNativeDateInput(), {key: 'Enter'});
 
     expect(onChange).not.toHaveBeenCalled();
-    expect(screen.getByText('Invalid date')).toBeInTheDocument();
+    expect(screen.getByText('Enter an available date')).toBeInTheDocument();
     expect(getNativeDateInput()).toHaveAttribute('aria-invalid', 'true');
   });
 
@@ -614,6 +616,7 @@ describe('DateTimeInput nativePicker', () => {
     );
     const {rerender} = render(<Discardable>{field('Meeting')}</Discardable>);
     fireEvent.change(getNativeDateInput(), {target: {value: '2026-03-15'}});
+    fireEvent.keyDown(getNativeDateInput(), {key: 'Enter'});
     expect(getNativeDateInput()).toHaveAttribute('aria-invalid', 'true');
 
     await discardRender(
@@ -622,7 +625,7 @@ describe('DateTimeInput nativePicker', () => {
     );
     rerender(<Discardable>{field('Meeting start')}</Discardable>);
 
-    expect(screen.getByText('Invalid date')).toBeInTheDocument();
+    expect(screen.getByText('Enter an available date')).toBeInTheDocument();
     expect(getNativeDateInput()).toHaveAttribute('aria-invalid', 'true');
   });
 
@@ -702,7 +705,7 @@ describe('DateTimeInput nativePicker', () => {
     expect(onChange).toHaveBeenCalledOnce();
   });
 
-  it('announces the same rejected date again after the picker closes', () => {
+  it('keeps a rejected date shown after the picker closes, and the same date adds none', () => {
     stubPointer(true);
     const onChange = vi.fn();
     render(
@@ -717,13 +720,16 @@ describe('DateTimeInput nativePicker', () => {
     fireEvent.focus(dateInput);
     fireEvent.change(dateInput, {target: {value: '2026-03-15'}});
     fireEvent.blur(dateInput);
-    expect(screen.queryByText('Invalid date')).not.toBeInTheDocument();
+    expect(dateInput).toHaveValue('');
+    expect(screen.getByText('Enter an available date')).toBeInTheDocument();
+    expect(dateInput).toHaveAttribute('aria-invalid', 'true');
 
     fireEvent.focus(dateInput);
     fireEvent.change(dateInput, {target: {value: '2026-03-15'}});
+    fireEvent.blur(dateInput);
 
     expect(onChange).not.toHaveBeenCalled();
-    expect(screen.getByText('Invalid date')).toBeInTheDocument();
+    expect(screen.getAllByText('Enter an available date')).toHaveLength(1);
   });
 
   it('observes native date and time events that bypass React change handling', () => {

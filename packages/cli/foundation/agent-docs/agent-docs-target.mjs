@@ -5,15 +5,20 @@
  * @input The folder a run starts in, the home folder, and the package.json
  *   files and repository markers above the folder
  * @output AgentDocsHomeError, assertAgentDocsTarget, resolveAgentDocsRoot and
- *   agentDocsTargetDir, with the realDir and REPOSITORY_MARKERS helpers
- * @position The folder agent docs go to. It imports node builtins only, so the
- *   per-command setup nudge (clients/cli/index.mjs) loads it without
- *   agent-docs.mjs's discovery and config. agent-docs.mjs re-exports it.
+ *   agentDocsTargetDir, with the REPOSITORY_MARKERS helper (and realDir,
+ *   re-exported from ../fs/paths.mjs)
+ * @position The folder agent docs go to. It imports node builtins and the
+ *   CLI's paths module only, so the per-command setup nudge
+ *   (clients/cli/index.mjs) loads it without agent-docs.mjs's discovery and
+ *   config. agent-docs.mjs re-exports it.
  */
 
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import {realDir} from '../fs/paths.mjs';
+
+export {realDir};
 
 /**
  * Thrown when agent docs would be written into the home folder, or into a
@@ -31,19 +36,6 @@ export class AgentDocsHomeError extends Error {
     this.name = 'AgentDocsHomeError';
     /** The refused folder. */
     this.dir = dir;
-  }
-}
-
-/**
- * `p` resolved, through symlinks when it exists.
- * @param {string} p
- * @returns {string}
- */
-export function realDir(p) {
-  try {
-    return fs.realpathSync(path.resolve(p));
-  } catch {
-    return path.resolve(p);
   }
 }
 
