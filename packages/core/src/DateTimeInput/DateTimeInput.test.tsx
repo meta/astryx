@@ -2672,6 +2672,72 @@ describe('DateTimeInput', () => {
       }
     });
 
+    it('cancels a deferred show when the field unmounts before its frame', () => {
+      // The show waits one frame after a press's click. A field that unmounts
+      // in that frame must not open a list for a field that is gone.
+      const frames = new Map<number, FrameRequestCallback>();
+      let nextFrame = 0;
+      const request = vi
+        .spyOn(window, 'requestAnimationFrame')
+        .mockImplementation(callback => {
+          nextFrame += 1;
+          frames.set(nextFrame, callback);
+          return nextFrame;
+        });
+      const cancel = vi
+        .spyOn(window, 'cancelAnimationFrame')
+        .mockImplementation(id => {
+          frames.delete(id);
+        });
+      try {
+        const {unmount} = render(
+          <DateTimeInput
+            label="Meeting"
+            value={'2026-03-15T09:00' as ISODateTimeString}
+            timeOptionInterval={60}
+            onChange={() => {}}
+          />,
+        );
+        const timeInput = screen.getByLabelText('Meeting time');
+        fireEvent.pointerDown(timeInput);
+        fireEvent.click(timeInput);
+        expect(timeInput).toHaveAttribute('aria-expanded', 'false');
+        const pending = frames.size;
+        expect(pending).toBeGreaterThan(0);
+
+        unmount();
+        // Every frame the field asked for is cancelled, so none runs.
+        expect(frames.size).toBeLessThan(pending);
+        for (const callback of frames.values()) {
+          callback(performance.now());
+        }
+        expect(document.querySelector('[role="listbox"]')).toBeNull();
+      } finally {
+        request.mockRestore();
+        cancel.mockRestore();
+      }
+    });
+
+    it('opens on a later press after a press that never became a click', async () => {
+      // A press that ends without a click leaves the press flag set. The next
+      // press's click still opens the list, one frame later.
+      render(
+        <DateTimeInput
+          label="Meeting"
+          value={'2026-03-15T09:00' as ISODateTimeString}
+          timeOptionInterval={60}
+          onChange={() => {}}
+        />,
+      );
+      const timeInput = screen.getByLabelText('Meeting time');
+      fireEvent.pointerDown(timeInput);
+      fireEvent.pointerDown(timeInput);
+      fireEvent.click(timeInput);
+      await waitFor(() => {
+        expect(timeInput).toHaveAttribute('aria-expanded', 'true');
+      });
+    });
+
     it('activates the first option when the field has a date but no time', () => {
       // The state you land in after picking a date and no time yet. With no
       // active option, ArrowUp and Enter both did nothing at all.
