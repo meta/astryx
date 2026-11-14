@@ -209,6 +209,52 @@ describe('useClipboardCopy (internal)', () => {
     expect(result.current.isCopied).toBe(true);
   });
 
+  it('sets no state, starts no timer and announces nothing for a write that settles after unmount', async () => {
+    vi.useFakeTimers();
+    const onError = vi.fn();
+    let reject: (reason: unknown) => void = () => {};
+    let resolve: () => void = () => {};
+    const writeText = vi
+      .fn()
+      .mockImplementationOnce(
+        async () =>
+          new Promise<void>((_, onReject) => {
+            reject = onReject;
+          }),
+      )
+      .mockImplementationOnce(
+        async () =>
+          new Promise<void>(onResolve => {
+            resolve = onResolve;
+          }),
+      );
+    Object.assign(navigator, {clipboard: {writeText}});
+    const {result, unmount} = renderHook(() =>
+      useClipboardCopy({
+        announce: 'Copied',
+        announceFailure: 'Failed',
+        onError,
+      }),
+    );
+    const failing = result.current.copy('x');
+    const succeeding = result.current.copy('y');
+    unmount();
+    await act(async () => {
+      reject(error);
+      resolve();
+      expect(await failing).toBe(false);
+      expect(await succeeding).toBe(true);
+    });
+    // The caller still hears about the failure.
+    expect(onError).toHaveBeenCalledWith(error);
+    expect(vi.getTimerCount()).toBe(0);
+    act(() => {
+      vi.advanceTimersByTime(50);
+    });
+    expect(assertiveRegion()?.textContent ?? '').not.toContain('Failed');
+    expect(politeRegion()?.textContent ?? '').not.toContain('Copied');
+  });
+
   it('keeps the public hook to copy and isCopied', () => {
     const {result} = renderHook(() => useClipboard());
     expect(Object.keys(result.current).sort()).toEqual(['copy', 'isCopied']);

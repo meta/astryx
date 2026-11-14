@@ -587,6 +587,13 @@ contracts.
   `@astryxdesign/core/internal/shared-context`, so a Lab component's context
   reaches a swizzled copy's provider under one shared key (`spec:AST-110`
   FR3).
+- `packages/core/src/hooks/useClipboard.ts` `useClipboardCopy` — the body of
+  the public `useClipboard` plus the failed-write state a copy control shows:
+  `isFailed` for the copied state's reset time, an optional assertive failure
+  announcement, and `onError`. A write that settles after its caller unmounts
+  sets no state, starts no timer and announces nothing (INV5). Internal: never
+  in `hooks/index.ts` or the package entry; Lab imports it from
+  `@astryxdesign/core/internal/clipboard-copy`.
 
 ## Deciding specs
 
