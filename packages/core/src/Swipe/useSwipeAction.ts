@@ -15,61 +15,6 @@
  * @position Internal to swipe actions, through SwipeActionsLayer (the only
  *   module that imports it); tested through Item.test.tsx, the interaction
  *   proofs, and swipeRelease.test.ts for the release rules
- *
- * A row's swipe runs the shared drag path every followed pan runs: the
- * splitter, the pan, the snap-point drag and the animator. The row declares its
- * stops per side: rest, the open width, and out past the row's edge for a full
- * swipe. It also declares its actions. The drag draws the row's travel into one
- * custom property on the root, which every part of the panel reads
- * (SwipeActionsLayer). A settle writes its end there at once, and each part
- * plays the way there on the compositor, all on one clock.
- *
- * What a drag does depends on what drives it:
- *
- * - A trackpad's horizontal swipe follows the fingers one for one from its
- *   first event past the pan's 8 px start. Its release settles to the nearest
- *   stop by position and velocity (Core's one release policy), from the
- *   fingers' speed at their last move.
- * - A finger's or a pen's drag begins at the row's 8 px claim. From then until
- *   the release, the row is at the finger's travel since touch-down. The full
- *   swipe confirms on UIKit's measure, from UIKit's 25 px dead zone. The row
- *   then runs ahead to the confirmation offset and keeps that lead. The
- *   release goes by UIKit's rule (resolveRelease, below), on UIKit's settle spring
- *   from the row's own velocity.
- *
- * Either way a drag stays on its side: within one gesture an open row only
- * closes, never passing rest to its other side. Dragged past the confirm point,
- * when the side's outermost entry can fire, a full swipe confirms. On a side
- * with two or more entries, only a drag from the open row confirms, or one
- * that lands on its outermost entry. The row
- * runs ahead to UIKit's confirmation offset, and the outermost entry covers the
- * space. The panel reads that from a second custom property, the confirm;
- * backing out undoes it. A lift still confirmed slides the row out and fires
- * the outermost entry, at any speed. Speed alone never fires one, so a full
- * swipe is the one stop a flick never reaches. Whenever the row slides out (a
- * full swipe, or a tapped entry with `hasRemoval`), the entry fires once the
- * row's content has left its box. Then the row springs back, or holds out when
- * the entry has `hasRemoval`.
- *
- * A mouse drag and a mouse wheel's notches never swipe a row: the pan takes
- * touches, pens and a trackpad's scroll. A finger that lands while another is
- * down, on the row or anywhere else, never starts the pan: the page pinches.
- *
- * An open row closes on a pointer landing outside it. It counts as open while
- * resting, or while settling to rest open: UIKit counts a row open from the
- * release that opens it. It also closes on a scroll of anything that holds it
- * while focus is outside its open panel. Escape closes it with focus inside it.
- * A touch tap on its own content closes it too, and activates nothing on the
- * row. A mouse's or a pen's press on it reaches the row.
- *
- * Under Reduce Motion the drag itself is direct manipulation and follows one
- * for one. But what a release, a confirm or a close starts never travels or
- * springs. After a finger, the row lands at the bottom of an opacity dip. A
- * pen's or a trackpad's lands at once on a fine primary pointer.
- *
- * Directions are logical: `leading` is uncovered by a drag toward the inline
- * end, and sits at the inline start. `trailing` is the reverse. Both are read
- * against the root's computed `direction` when the drag begins.
  */
 
 import type {KeyboardEvent as ReactKeyboardEvent} from 'react';
@@ -578,6 +523,62 @@ function focusRowContent(root: HTMLElement): void {
   }
 }
 
+/**
+ * A row's swipe runs the shared drag path every followed pan runs: the
+ * splitter, the pan, the snap-point drag and the animator. The row declares its
+ * stops per side: rest, the open width, and out past the row's edge for a full
+ * swipe. It also declares its actions. The drag draws the row's travel into one
+ * custom property on the root, which every part of the panel reads
+ * (SwipeActionsLayer). A settle writes its end there at once, and each part
+ * plays the way there on the compositor, all on one clock.
+ *
+ * What a drag does depends on what drives it:
+ *
+ * - A trackpad's horizontal swipe follows the fingers one for one from its
+ *   first event past the pan's 8 px start. Its release settles to the nearest
+ *   stop by position and velocity (Core's one release policy), from the
+ *   fingers' speed at their last move.
+ * - A finger's or a pen's drag begins at the row's 8 px claim. From then until
+ *   the release, the row is at the finger's travel since touch-down. The full
+ *   swipe confirms on UIKit's measure, from UIKit's 25 px dead zone. The row
+ *   then runs ahead to the confirmation offset and keeps that lead. The
+ *   release goes by UIKit's rule (resolveRelease, above), on UIKit's settle spring
+ *   from the row's own velocity.
+ *
+ * Either way a drag stays on its side: within one gesture an open row only
+ * closes, never passing rest to its other side. Dragged past the confirm point,
+ * when the side's outermost entry can fire, a full swipe confirms. On a side
+ * with two or more entries, only a drag from the open row confirms, or one
+ * that lands on its outermost entry. The row
+ * runs ahead to UIKit's confirmation offset, and the outermost entry covers the
+ * space. The panel reads that from a second custom property, the confirm;
+ * backing out undoes it. A lift still confirmed slides the row out and fires
+ * the outermost entry, at any speed. Speed alone never fires one, so a full
+ * swipe is the one stop a flick never reaches. Whenever the row slides out (a
+ * full swipe, or a tapped entry with `hasRemoval`), the entry fires once the
+ * row's content has left its box. Then the row springs back, or holds out when
+ * the entry has `hasRemoval`.
+ *
+ * A mouse drag and a mouse wheel's notches never swipe a row: the pan takes
+ * touches, pens and a trackpad's scroll. A finger that lands while another is
+ * down, on the row or anywhere else, never starts the pan: the page pinches.
+ *
+ * An open row closes on a pointer landing outside it. It counts as open while
+ * resting, or while settling to rest open: UIKit counts a row open from the
+ * release that opens it. It also closes on a scroll of anything that holds it
+ * while focus is outside its open panel. Escape closes it with focus inside it.
+ * A touch tap on its own content closes it too, and activates nothing on the
+ * row. A mouse's or a pen's press on it reaches the row.
+ *
+ * Under Reduce Motion the drag itself is direct manipulation and follows one
+ * for one. But what a release, a confirm or a close starts never travels or
+ * springs. After a finger, the row lands at the bottom of an opacity dip. A
+ * pen's or a trackpad's lands at once on a fine primary pointer.
+ *
+ * Directions are logical: `leading` is uncovered by a drag toward the inline
+ * end, and sits at the inline start. `trailing` is the reverse. Both are read
+ * against the root's computed `direction` when the drag begins.
+ */
 export function useSwipeAction({
   behavior,
   sides,
