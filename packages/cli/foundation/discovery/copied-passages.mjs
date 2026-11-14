@@ -13,6 +13,7 @@
 import fs from 'node:fs';
 
 import {builtinGuideFiles, loadTopicModule} from './docs-discovery.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 /** The shortest run of identical words reported as a copy. */
 export const PASSAGE_WORDS = 10;
@@ -613,7 +614,7 @@ export async function findCopiedPassages(discovered) {
       // name sorts first, so the advice is the same on every run.
       const firstKeeps =
         firstFit > secondFit ||
-        (firstFit === secondFit && first.name.localeCompare(second.name) < 0);
+        (firstFit === secondFit && compareText(first.name, second.name) < 0);
       if (firstKeeps && otherRuns.length) {
         topic = second;
         owner = first;

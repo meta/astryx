@@ -47,6 +47,7 @@ import {COLOR_PROP_PARTS, DIRECT, P, wordTable} from './_tables.mjs';
 import {extractImportedPackages} from '../../foundation/discovery/template-needs.mjs';
 import {findNodeModulesPackage} from '../../foundation/fs/paths.mjs';
 import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
+import {compareText} from '../../foundation/text/compare-text.mjs';
 
 const TEMPLATES_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -163,7 +164,7 @@ export function showcaseItems(project, group) {
   };
   const chosen = items
     .filter(it => !group || it.group === group)
-    .sort((a, b) => order(a) - order(b) || a.name.localeCompare(b.name));
+    .sort((a, b) => order(a) - order(b) || compareText(a.name, b.name));
   /** @type {Record<string, string>} */
   const imports = {};
   for (const n of elementNames(chosen.map(i => i.tree))) {

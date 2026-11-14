@@ -604,3 +604,73 @@ describe('build kit — every page starts from a template', () => {
     expect(r.data.start?.name).not.toMatch(/^product-/);
   });
 });
+
+// A host locale moves names only when Node carries that locale's collation
+// data (official builds do; an English-only ICU build does not).
+const HOST_LOCALES = ['cs_CZ.UTF-8', 'haw_US.UTF-8', 'tr_TR.UTF-8'];
+const hasLocaleData =
+  Intl.Collator.supportedLocalesOf(['cs', 'haw', 'tr']).length === 3;
+
+describe('build is deterministic', () => {
+  // Made-up phrases. Several are close to exact ties between templates, and
+  // "data table" and "checkout page" order differently under a Hawaiian
+  // collation when names sort by the host locale.
+  const ideas = [
+    'code editor',
+    'item detail page',
+    'settings in a modal dialog',
+    'ide with a file tree',
+    'chat',
+    'inbox table with filters',
+    'yearly report with charts',
+    'data table',
+    'checkout page',
+  ];
+  /** @param {any} r */
+  const answer = r => ({
+    start: r.data?.start?.name ?? null,
+    basis: r.data?.start?.basis ?? null,
+    alternatives: (r.data?.start?.alternatives ?? []).map(a => a.name),
+    blocks: (r.data?.blocks ?? []).map(b => b.name),
+  });
+  const answers = async () => {
+    const out = [];
+    for (const idea of ideas) out.push(answer(await build(idea, {cwd: REPO})));
+    return out;
+  };
+
+  it('gives the same answers twice in one process', async () => {
+    const first = await answers();
+    expect(await answers()).toEqual(first);
+  }, 120000);
+
+  it.skipIf(!hasLocaleData)(
+    'gives the same answers under every host locale',
+    async () => {
+      const {spawnSync} = await import('node:child_process');
+      const url = new URL('./build.mjs', import.meta.url).href;
+      const script = `import {build} from ${JSON.stringify(url)};
+        const out = [];
+        for (const idea of ${JSON.stringify(ideas)}) {
+          const d = (await build(idea, {cwd: ${JSON.stringify(REPO)}})).data ?? {};
+          out.push({start: d.start?.name ?? null, basis: d.start?.basis ?? null,
+            alternatives: (d.start?.alternatives ?? []).map(a => a.name),
+            blocks: (d.blocks ?? []).map(b => b.name)});
+        }
+        console.log(JSON.stringify(out));`;
+      /** @param {string} lang */
+      const under = lang => {
+        const res = spawnSync(
+          process.execPath,
+          ['--input-type=module', '-e', script],
+          {encoding: 'utf8', env: {...process.env, LANG: lang, LC_ALL: lang}},
+        );
+        expect(res.status, res.stderr).toBe(0);
+        return JSON.parse(res.stdout.trim().split('\n').pop() ?? '[]');
+      };
+      const expected = under('en_US.UTF-8');
+      for (const lang of HOST_LOCALES) expect(under(lang), lang).toEqual(expected);
+    },
+    180000,
+  );
+});
