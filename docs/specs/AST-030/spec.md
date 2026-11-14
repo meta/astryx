@@ -604,8 +604,11 @@ they are separately named.
   release scope.** A release interaction check's throwaway pull request, on an
   `interaction-check/` branch that the release tooling creates for a named
   release attempt, runs WebKit's release scope (DEC-24): the touch and gesture
-  subset, or the full WebKit browser spec scope after a failed or stale weekly
-  full run and at every minor release. The workflow
+  subset plus, on a shared-surface hit, the interaction specs of components
+  that import the changed shared module; or the full WebKit browser spec scope
+  when that set exceeds 50% of WebKit specs, after a failed or stale weekly
+  full run, and at every minor release. The import graph is read at the
+  release's own commit; when it cannot be read, the full suite runs. The workflow
   verifies the branch prefix, the creator identity and that the head repository
   is this one, so a pull request that only picks the prefix, or comes from a
   fork, does not qualify. The creator check matches the shared automation
