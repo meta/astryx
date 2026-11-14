@@ -42,7 +42,6 @@ import {NumberInput} from '../NumberInput';
 import {Selector} from '../Selector';
 import {Text} from '../Text';
 import {useAnnounce} from '../hooks/useAnnounce';
-import {useDevWarning} from '../hooks/useDevWarning';
 import {useListFocus} from '../hooks/useListFocus';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {focusForLastInput} from '../utils/focusReturn';
@@ -83,13 +82,11 @@ export interface PaginationProps extends Omit<
   /** Current page number (1-based). Page 1 is the first page. */
   page: number;
   /**
-   * Called when the page changes. Pass it, or `changeAction`, unless
-   * `getPageHref` makes every control a link: a control with no link and no
-   * callback is disabled. When a link was activated, `event` is its click
-   * event: the link owns the navigation, so do not navigate again. A control
-   * that is not a link passes no event.
+   * Called when the page changes. With `getPageHref` it also runs when a page
+   * link is activated: use it there for state or analytics, and do not
+   * navigate in it, because the link navigates.
    */
-  onChange?: (page: number, event?: React.MouseEvent<HTMLElement>) => void;
+  onChange: (page: number) => void;
   /**
    * Async action on page change. Fires after onChange.
    * Uses React transitions for built-in loading state.
@@ -97,13 +94,15 @@ export interface PaginationProps extends Omit<
   changeAction?: (page: number) => void | Promise<void>;
   /**
    * Returns the URL of a page. When set, the page number, previous, next,
-   * first and last controls render as links to that URL. `pageSize` is the
-   * current page size when `pageSize` or `pageSizeOptions` is set. The dots,
-   * the page box and the page-size selector are not links. The dots and the
-   * page box call `onChange`; the page-size selector calls
-   * `onPageSizeChange(size)` and then `onChange(1)`. Navigate there, once for
-   * each change. In cursor pagination, map the page before or after the
-   * current one to the cursor's URL.
+   * first and last controls render as links to that URL, and `onChange` still
+   * runs when one is activated. `pageSize` is the current page size when
+   * `pageSize` or `pageSizeOptions` is set. The dots, the page box and the
+   * page-size selector are not links. For a page-size choice, navigate in
+   * `onPageSizeChange`, not in the `onChange(1)` that follows. When `onChange`
+   * navigates for the dots or the page box, leave this unset in the `dots`
+   * and `input` variants, or their arrow links navigate twice. In cursor
+   * pagination, map the page before or after the current one to the cursor's
+   * URL.
    */
   getPageHref?: (page: number, pageSize?: number) => string;
   /**
@@ -484,33 +483,6 @@ export function Pagination({
       ? getPageHref(target, hrefPageSize)
       : undefined;
 
-  // The dots and the page box change the page only through a callback.
-  const hasPageCallback = onChange != null || changeAction != null;
-  const hasPageSizeCallback = onPageSizeChange != null || hasPageCallback;
-  useDevWarning(
-    'Pagination',
-    'pass onChange, or getPageHref to render the page controls as links. ' +
-      'A control with no link and no callback is disabled.',
-    getPageHref == null && !hasPageCallback,
-  );
-  useDevWarning(
-    'Pagination',
-    'the dots and the page box are not links, so getPageHref does not reach ' +
-      'them. Without onChange or changeAction they are disabled. Pass ' +
-      'onChange and navigate there, or use a variant whose controls are all ' +
-      'links.',
-    getPageHref != null &&
-      !hasPageCallback &&
-      (variant === 'dots' || variant === 'input'),
-  );
-  useDevWarning(
-    'Pagination',
-    'the page-size selector is not a link, so getPageHref does not reach ' +
-      'it. Without a callback it is disabled. Pass onPageSizeChange, and ' +
-      'onChange for the change to page 1 that follows.',
-    getPageHref != null && hasPageSizeOptions && !hasPageSizeCallback,
-  );
-
   // Prev/next stride. Same guard as pageSize: non-integer or < 1 falls back to
   // a single-page step so a bad value never freezes or reverses navigation.
   const step = Number.isInteger(stepProp) && stepProp >= 1 ? stepProp : 1;
@@ -569,12 +541,6 @@ export function Pagination({
       ? optimisticPage < computedTotalPages
       : (hasMore ?? false);
 
-  // A control with no link and no callback changes nothing, so it is disabled.
-  const isDotsDisabled = isDisabled || !hasPageCallback;
-  // The page box also needs a known page count to hold an entry in range.
-  const isInputDisabled =
-    isDisabled || !hasPageCallback || computedTotalPages == null;
-
   if (totalItems != null && totalItems <= 0) {
     return null;
   }
@@ -585,21 +551,13 @@ export function Pagination({
   // Interruptible: re-clicking before the transition settles starts a fresh one
   // with the next optimistic page rather than being dropped, so there is no
   // re-entry guard.
-  const handlePageChange = (
-    newPage: number,
-    linkEvent?: React.MouseEvent<HTMLElement>,
-  ) => {
+  const handlePageChange = (newPage: number) => {
     if (isDisabled) {
       return;
     }
     // Keep onChange urgent so controlled page state updates in the same commit
     // as the click; only the optimistic indicator and changeAction defer.
-    // Only a link passes an event, so a caller can tell that it navigates.
-    if (linkEvent != null) {
-      onChange?.(newPage, linkEvent);
-    } else {
-      onChange?.(newPage);
-    }
+    onChange(newPage);
     announce(
       computedTotalPages != null
         ? t('@astryx.pagination.pageOfTotal', {
@@ -621,7 +579,7 @@ export function Pagination({
   // into the group is a no-op.
   const handleDotsFocus = (e: React.FocusEvent) => {
     handleDotsRovingFocus(e);
-    if (isDotsDisabled) {
+    if (isDisabled) {
       return;
     }
     const focused = (e.target as HTMLElement | null)?.closest<HTMLElement>(
@@ -647,29 +605,17 @@ export function Pagination({
   };
 
   // The props that make a Button control change to `target`, as a link when
-  // links are on. An unavailable control gets no URL and changes no page.
-  // A disabled control shows no tooltip.
-  const controlProps = (
-    target: number,
-    isAvailable: boolean,
-    tooltip?: string,
-  ) => {
+  // links are on. An unavailable control gets no URL. Its Button is disabled,
+  // so its click handler does not run.
+  const controlProps = (target: number, isAvailable: boolean) => {
     const href = isAvailable ? pageHref(target) : undefined;
-    const isControlDisabled =
-      isDisabled || !isAvailable || (href == null && !hasPageCallback);
     return {
       href,
       as,
-      isDisabled: isControlDisabled,
-      tooltip: isControlDisabled ? undefined : tooltip,
       onClick: (event: React.MouseEvent<HTMLElement>) => {
-        if (!isAvailable) {
-          return;
-        }
-        if (href == null) {
+        // A link click that opens the URL elsewhere changes no page here.
+        if (href == null || navigatesHere(event)) {
           handlePageChange(target);
-        } else if (navigatesHere(event)) {
-          handlePageChange(target, event);
         }
       },
     };
@@ -689,7 +635,7 @@ export function Pagination({
   // integer-only semantics, so it only ever hands back a valid page here.
   // Navigation is page-based via onChange.
   const handleInputCommit = (nextPage: number) => {
-    if (isInputDisabled || nextPage === optimisticPage) {
+    if (isDisabled || nextPage === optimisticPage) {
       return;
     }
     handlePageChange(nextPage);
@@ -754,6 +700,7 @@ export function Pagination({
                   variant="ghost"
                   size={buttonSize}
                   {...controlProps(item, true)}
+                  isDisabled={isDisabled}
                   aria-current={isActive ? 'page' : undefined}
                   xstyle={isActive && styles.activePage}>
                   {item}
@@ -838,7 +785,7 @@ export function Pagination({
                   onMouseDown={e => e.preventDefault()}
                   // Disabled dots stay focusable (spec:AST-085 FR1); the page
                   // only follows focus while enabled (handleDotsFocus).
-                  aria-disabled={isDotsDisabled || undefined}
+                  aria-disabled={isDisabled || undefined}
                   {...mergeProps(
                     themeProps('pagination-dot', {
                       active: isActive ? 'active' : null,
@@ -848,7 +795,7 @@ export function Pagination({
                       styles.dot,
                       isSm && styles.dotSm,
                       isActive && styles.dotActive,
-                      isDotsDisabled && styles.dotDisabled,
+                      isDisabled && styles.dotDisabled,
                     ),
                   )}
                 />
@@ -859,6 +806,12 @@ export function Pagination({
       }
 
       case 'input': {
+        // The editable box needs a known page count to clamp against; in
+        // cursor/hasMore mode (no total) there is no valid range, so the box is
+        // disabled rather than accepting entries it can't resolve — matching the
+        // convention that a typeable page box requires a known total.
+        const isInputDisabled = isDisabled || computedTotalPages == null;
+
         const pageBoxWidth = isSm
           ? sizeVars['--size-element-sm']
           : sizeVars['--size-element-md'];
@@ -943,7 +896,7 @@ export function Pagination({
             value={String(pageSize)}
             onChange={handlePageSizeChange}
             size={buttonSize}
-            isDisabled={isDisabled || !hasPageSizeCallback}
+            isDisabled={isDisabled}
             // `width`, not `xstyle`: Selector's xstyle lands on the trigger
             // box, while `width` sizes the whole field — which is what the
             // removed wrapper did.
@@ -955,6 +908,7 @@ export function Pagination({
         {showFirstLast && (
           <Button
             label={firstLabel}
+            tooltip={isDisabled || !hasPrevious ? undefined : firstLabel}
             variant="ghost"
             size={buttonSize}
             icon={
@@ -964,7 +918,8 @@ export function Pagination({
                 xstyle={rtlStyles.mirror}
               />
             }
-            {...controlProps(1, hasPrevious, firstLabel)}
+            {...controlProps(1, hasPrevious)}
+            isDisabled={isDisabled || !hasPrevious}
             isIconOnly
             xstyle={variant === 'compact' && styles.compactFirst}
           />
@@ -972,6 +927,7 @@ export function Pagination({
 
         <Button
           label={previousLabel}
+          tooltip={isDisabled || !hasPrevious ? undefined : previousLabel}
           variant="ghost"
           size={buttonSize}
           icon={
@@ -981,11 +937,8 @@ export function Pagination({
               xstyle={rtlStyles.mirror}
             />
           }
-          {...controlProps(
-            clampPage(optimisticPage - step),
-            hasPrevious,
-            previousLabel,
-          )}
+          {...controlProps(clampPage(optimisticPage - step), hasPrevious)}
+          isDisabled={isDisabled || !hasPrevious}
           isIconOnly
         />
 
@@ -993,6 +946,7 @@ export function Pagination({
 
         <Button
           label={nextLabel}
+          tooltip={isDisabled || !hasNext ? undefined : nextLabel}
           variant="ghost"
           size={buttonSize}
           icon={
@@ -1002,17 +956,15 @@ export function Pagination({
               xstyle={rtlStyles.mirror}
             />
           }
-          {...controlProps(
-            clampPage(optimisticPage + step),
-            hasNext,
-            nextLabel,
-          )}
+          {...controlProps(clampPage(optimisticPage + step), hasNext)}
+          isDisabled={isDisabled || !hasNext}
           isIconOnly
         />
 
         {showFirstLast && (
           <Button
             label={lastLabel}
+            tooltip={isDisabled || !hasNext ? undefined : lastLabel}
             variant="ghost"
             size={buttonSize}
             icon={
@@ -1022,11 +974,8 @@ export function Pagination({
                 xstyle={rtlStyles.mirror}
               />
             }
-            {...controlProps(
-              computedTotalPages ?? optimisticPage,
-              hasNext,
-              lastLabel,
-            )}
+            {...controlProps(computedTotalPages ?? optimisticPage, hasNext)}
+            isDisabled={isDisabled || !hasNext}
             isIconOnly
             xstyle={variant === 'compact' && styles.compactLast}
           />

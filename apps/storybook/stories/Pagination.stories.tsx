@@ -197,6 +197,7 @@ export const PageLinks: Story = {
   name: 'Page links',
   render: () => (
     // The page numbers, Previous and Next are links: open one in a new tab.
+    // onChange keeps the page in state, and the link navigates.
     <PaginationDemo
       page={1}
       totalItems={200}
