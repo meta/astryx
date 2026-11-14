@@ -155,7 +155,7 @@ describe('hunt70: what stops the copy, said', () => {
 });
 
 describe('hunt70: compile of the copy, its lock and its fonts', () => {
-  it('compiling the copy source writes the copy again from themes/', async () => {
+  it('the copy source is refused as a compile target, naming the theme to compile', async () => {
     await themeEditNew('n4', {cwd});
     await themeEditSet('n4', 'corners', 'pill', {cwd});
     fs.writeFileSync(path.join(cwd, 'src/themes/n4/n4.css'), '/* old */\n');
@@ -165,8 +165,11 @@ describe('hunt70: compile of the copy, its lock and its fonts', () => {
       'compile',
       'src/themes/n4/n4Theme.ts',
     ]);
-    expect(r.status).toBe(0);
-    expect(read('src/themes/n4/n4.css')).not.toBe('/* old */\n');
+    // The copy's source is no compile target: the theme is, and the copy
+    // follows it.
+    expect(r.status).not.toBe(0);
+    expect(r.stdout + r.stderr).toContain("is part of n4's app copy");
+    expect(r.stdout + r.stderr).toContain('themes/n4/n4.theme.ts');
   }, 240_000);
 
   it('a font the copy font stylesheet loads is not named as not loaded', async () => {

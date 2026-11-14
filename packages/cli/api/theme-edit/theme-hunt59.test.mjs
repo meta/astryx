@@ -146,3 +146,35 @@ describe('hunt59: a change that fails after its build', () => {
     expect(read('src/themes/c/c.css')).toBe(before);
   }, 240_000);
 });
+
+describe('a one-mode theme in the app', () => {
+  it('exports its one mode from the build and the copy, so theme add wires it in that mode', async test => {
+    if (unbuilt) return test.skip();
+    await themeEditSet('c', 'mode', 'dark-only', {cwd});
+    try {
+      for (const f of ['themes/c/c.js', 'src/themes/c/c.js'])
+        expect(read(f)).toContain('export const colorModes = ["dark"];');
+      expect(read('src/themes/c/cTheme.ts')).toContain(
+        'export {cTheme, colorModes} from',
+      );
+      // A stable build of the copy writes the same module.
+      const check = buildCopy({check: true});
+      expect(/** @type {any} */ (check.data).stale).toEqual([]);
+      const r = spawnSync(
+        process.execPath,
+        [BIN, '--json', 'theme', 'add', 'c'],
+        {cwd, encoding: 'utf8'},
+      );
+      expect(r.status, r.stderr).toBe(0);
+      const entry = JSON.parse(r.stdout).data.themes.find(
+        (/** @type {any} */ t) => t.slug === 'c',
+      );
+      expect(entry.mode).toBe('dark');
+    } finally {
+      await themeEditSet('c', 'mode', 'both', {cwd});
+    }
+    // Both modes again: no export anywhere.
+    expect(read('themes/c/c.js')).not.toContain('colorModes');
+    expect(read('src/themes/c/cTheme.ts')).not.toContain('colorModes');
+  }, 240_000);
+});
