@@ -66,20 +66,21 @@ const CASES =
       [/ set b font-family 'Inter, "Serifa"' --on heading$/],
       null,
     ],
-    // A ratio's comma separates its numbers.
+    // A comma between a ratio's numbers is a decimal comma, as aspect-ratio
+    // takes the decimal (the one comma rule): never the pair.
     [
       'aspect-ratio',
       '16,9',
       {on: 'card'},
-      [/ set b aspect-ratio '16 \/ 9' --on card$/],
-      /16\.9/,
+      [/ set b aspect-ratio 16\.9 --on card$/],
+      /16 \/ 9/,
     ],
     [
       'aspect-ratio',
       '4,3',
       {on: 'card'},
-      [/ set b aspect-ratio '4 \/ 3' --on card$/],
-      /4\.3/,
+      [/ set b aspect-ratio 4\.3 --on card$/],
+      /4 \/ 3/,
     ],
     // A base in any of its names.
     ['base', 'neutral-theme', {}, [/ set b base neutral$/], / base none$/],

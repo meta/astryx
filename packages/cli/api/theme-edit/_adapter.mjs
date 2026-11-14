@@ -104,7 +104,9 @@ export {
   newFlagList,
   checkedChangeLine as editorCheckedLine,
   checkedNewLines as editorCheckedNewLines,
+  checkedShowLines as editorCheckedShowLines,
 } from './_edit.mjs';
+export {splitCommand} from './_vet.mjs';
 import {themeEditHow as howAt} from './_how.mjs';
 
 /**

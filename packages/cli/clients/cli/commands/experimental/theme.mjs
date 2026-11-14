@@ -56,6 +56,8 @@ import {
   newFlagList,
   editorCheckedLine,
   editorCheckedNewLines,
+  editorCheckedShowLines,
+  splitCommand,
   booleanWord,
   editorCompileProblem,
   editorFollowCompile,
@@ -871,9 +873,14 @@ function optionsAsWritten(
  * commander refuses): the option meant, or the command without the empty
  * option, with the command that works, else what the command takes and its
  * help. Undefined for any other command.
+ * Each offered command is checked as that command checks it (set and undo
+ * by their own checks, new by new's, show's section by show's), so a line
+ * offered is one that works; leaving out an option that narrows what the
+ * command acts on (--on, --when, --state, --mode, --path, --like, --theme)
+ * would widen it, so that line is never offered.
  * @param {any} c the command commander refused
  * @param {string} [code] commander's code for the refusal
- * @returns {{message: string, suggestions: Array<{name: string, reason: string}>} | undefined}
+ * @returns {Promise<{message: string, suggestions: Array<{name: string, reason: string}>} | undefined> | undefined}
  */
 function unknownThemeOption(c, code = 'commander.unknownOption') {
   const sub = c?.name?.();
@@ -896,26 +903,126 @@ function unknownThemeOption(c, code = 'commander.unknownOption') {
           })[sub]
         : undefined;
   if (!doc) return undefined;
+  return themeOptionAnswer(c, code, sub, group, doc);
+}
+
+/**
+ * The commands that carry out a line the option reader built, each checked
+ * as its own command checks it: set and undo by their checks (a repair
+ * folded in), new by new's (its own repairs offered), show's --section by
+ * show's; none when the command refuses it with no repair.
+ * @param {string} group
+ * @param {string} sub
+ * @param {string} line
+ * @returns {Promise<Array<{name: string, reason: string}>>}
+ */
+async function checkedOptionLines(group, sub, line) {
+  const cwd = process.cwd();
+  const offer = (/** @type {string} */ l) => [
+    {name: cmd(l), reason: 'do this instead'},
+  ];
+  if (group === 'editor' && (sub === 'set' || sub === 'undo')) {
+    const checked = await editorCheckedLine(sub, line, cwd);
+    return checked ? offer(checked) : [];
+  }
+  if (group === 'editor' && sub === 'new') {
+    const words = splitCommand(line.slice(`${EDITOR} new `.length)) ?? [];
+    const [name, ...rest] = words;
+    /** @type {Record<string, string | string[]>} */
+    const settings = {};
+    let like;
+    let png = false;
+    for (let i = 0; i < rest.length; i += 1) {
+      const m = /^--([a-z-]+)$/.exec(rest[i]);
+      if (!m) continue;
+      if (m[1] === 'png') png = true;
+      else if (rest[i + 1] != null) {
+        const v = rest[(i += 1)];
+        if (m[1] === 'like') like = v;
+        else
+          settings[m[1]] =
+            settings[m[1]] == null ? v : [...[settings[m[1]]].flat(), v];
+      }
+    }
+    const lines = await editorCheckedNewLines(line, name, {
+      cwd,
+      ...(like != null ? {like} : {}),
+      settings,
+      png,
+    });
+    return lines.map(x => ({
+      name: cmd(x.name),
+      reason: x.reason ?? 'do this instead',
+    }));
+  }
+  if (group === 'editor' && sub === 'show') {
+    const lines = editorCheckedShowLines(line);
+    return lines.map(x => ({
+      name: cmd(x.name),
+      reason: x.reason ?? 'do this instead',
+    }));
+  }
+  return offer(line);
+}
+
+/** Options whose absence widens what a command acts on, or changes it. */
+const NARROWING_OPTIONS = Object.freeze([
+  'on',
+  'when',
+  'state',
+  'mode',
+  'path',
+  'like',
+  'theme',
+]);
+
+/**
+ * {@link unknownThemeOption}'s answer for a theme command.
+ * @param {any} c
+ * @param {string} code
+ * @param {string} sub
+ * @param {string} group
+ * @param {import('@astryxdesign/cli/authoring').CommandDoc} doc
+ * @returns {Promise<{message: string, suggestions: Array<{name: string, reason: string}>} | undefined>}
+ */
+async function themeOptionAnswer(c, code, sub, group, doc) {
   const head = `${group === 'preview' ? `${PREFIX} preview` : EDITOR} ${sub}`;
   const help = {name: cmd(`${head} --help`), reason: 'every option it takes'};
   const read = optionsAsWritten(sub, doc, {group, head});
   // An option given no value is left out of the offered command, unless
-  // leaving it out widens what the command removes (a preview remove
-  // without its page removes the whole preview).
+  // leaving it out widens what the command acts on (a set without its part
+  // styles the whole theme; a preview remove without its page removes the
+  // whole preview).
+  const valued = (doc.options ?? [])
+    .filter(o => /</.test(String(o.flag)))
+    .flatMap(o =>
+      String(o.flag)
+        .split(/[\s,]+/)
+        .filter(w => w.startsWith('--'))
+        .map(w => w.slice(2)),
+    );
+  const argv = process.argv;
+  const at = argv.indexOf(sub, argv.indexOf(group) + 1);
+  const emptied = argv
+    .slice(at + 1)
+    .filter(
+      (w, i, rest) =>
+        /^--[a-z-]+$/.test(w) &&
+        valued.includes(w.slice(2)) &&
+        (rest[i + 1] == null || rest[i + 1].startsWith('-')),
+    )
+    .map(w => w.slice(2));
   const widens =
     code === 'commander.optionMissingArgument' &&
-    group === 'preview' &&
-    sub === 'remove';
-  if (read)
-    return {
-      message: `${read.why}.`,
-      suggestions: [
-        ...(read.line && !widens
-          ? [{name: cmd(read.line), reason: 'do this instead'}]
-          : []),
-        help,
-      ],
-    };
+    (emptied.some(o => NARROWING_OPTIONS.includes(o)) ||
+      (group === 'preview' && sub === 'remove'));
+  if (read) {
+    const lines =
+      read.line && !widens
+        ? await checkedOptionLines(group, sub, read.line)
+        : [];
+    return {message: `${read.why}.`, suggestions: [...lines, help]};
+  }
   if (code === 'commander.excessArguments' && group === 'preview')
     return previewExtraWords(sub, doc, head);
   if (code !== 'commander.unknownOption' || group !== 'preview')
@@ -925,7 +1032,6 @@ function unknownThemeOption(c, code = 'commander.unknownOption') {
       .split(/[\s,]+/)
       .filter(w => w.startsWith('--')),
   );
-  const argv = process.argv;
   const from = argv.indexOf(sub, argv.indexOf('preview') + 1);
   const stray = argv
     .slice(from + 1)
@@ -958,12 +1064,14 @@ function unknownThemeOption(c, code = 'commander.unknownOption') {
  * The refusal of options not written as the command takes them, with the
  * command as meant when there is one.
  * @param {string} command
- * @param {{why: string, line: string | null}} read
+ * @param {{why: string, line: string | null, lines?: Array<{name: string, reason: string}>}} read
+ *   `lines`: the commands that carry out the line, checked
  */
 function optionsRefusal(command, read) {
   return cliError(`${read.why}.`, {
     suggestions: [
-      ...(read.line ? [{name: cmd(read.line), reason: 'do this instead'}] : []),
+      ...(read.lines ??
+        (read.line ? [{name: cmd(read.line), reason: 'do this instead'}] : [])),
       {
         name: cmd(`${EDITOR} ${command} --help`),
         reason: 'every option it takes',
@@ -984,19 +1092,20 @@ function readOptions(command, doc) {
 }
 
 /**
- * {@link readOptions} for `set` and `undo`, whose line is checked as every
- * offered line is (the command's own check, a repair it offers folded in):
- * a line set or undo refuses with no repair is not offered.
- * @param {'set' | 'undo'} command
+ * {@link readOptions} with its line checked as every offered line is, by
+ * the command's own checks (set and undo with a repair folded in, new with
+ * new's repairs, show's section by show's): a line the command refuses with
+ * no repair is not offered.
+ * @param {string} command
  * @param {import('@astryxdesign/cli/authoring').CommandDoc} doc
  */
 async function readOptionsChecked(command, doc) {
   const read = optionsAsWritten(command, doc);
   if (!read) return null;
-  const line = read.line
-    ? await editorCheckedLine(command, read.line, process.cwd())
-    : null;
-  return optionsRefusal(command, {...read, line});
+  const lines = read.line
+    ? await checkedOptionLines('editor', command, read.line)
+    : [];
+  return optionsRefusal(command, {...read, lines});
 }
 
 /**
@@ -1265,7 +1374,7 @@ export function registerExperimentalTheme(group, program) {
   const newCli = explained(
     defineCommand(editor, newDoc, {
       fn: newFn,
-      action: (
+      action: async (
         /** @type {string} */ name,
         /** @type {any} */ o,
         /** @type {any} */ cmd,
@@ -1273,7 +1382,7 @@ export function registerExperimentalTheme(group, program) {
         // An option given a value is refused before the run, as for every
         // other editor command: a refusal inside run is thrown, never
         // printed there.
-        readOptions('new', newDoc) ??
+        (await readOptionsChecked('new', newDoc)) ??
         run(
           program,
           async () => {
@@ -1538,12 +1647,12 @@ export function registerExperimentalTheme(group, program) {
   explained(
     defineCommand(editor, showDoc, {
       fn: showFn,
-      action: (
+      action: async (
         /** @type {string} */ name,
         /** @type {any} */ o,
         /** @type {any} */ c,
       ) =>
-        readOptions('show', showDoc) ??
+        (await readOptionsChecked('show', showDoc)) ??
         showStray(name, (c?.args ?? []).slice(1), o) ??
         extraWords('show', showDoc, (c?.args ?? []).slice(1)) ??
         // The sheet is limited to one section (the docs say so): a second

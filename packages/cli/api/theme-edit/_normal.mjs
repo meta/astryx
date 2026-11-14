@@ -806,11 +806,12 @@ export function typedReading(typed, {thousands = false} = {}) {
 
 /**
  * A text with each comma between digits, outside parentheses, read as a
- * number mark: a decimal point (`1,5rem`, `1,125rem`, `0,500`), or, only
- * where the setting's numbers are whole thousands (a weight, 1 to 1000), a
+ * number mark: a decimal point (`1,5rem`, `1,125rem`, `0,500`), or a
  * thousands mark before exactly three digits after a whole number other
- * than 0 (`1,000`). Inside a function (`rgb(255,0,0)`) a comma separates
- * arguments.
+ * than 0 (`1,000`) where the setting's numbers are whole thousands (a
+ * weight, 1 to 1000) or the number is a pixel length (`1,200px`: no pixel
+ * length is written to a thousandth). Inside a function (`rgb(255,0,0)`) a
+ * comma separates arguments.
  * @param {string} text
  * @param {boolean} [thousands] whether the setting's numbers are weights
  * @returns {string}
@@ -822,8 +823,12 @@ export function commaNumbers(text, thousands = false) {
   const flush = () => {
     // (A number starts a word: the digits of a hex color or of a word
     // before a comma are no number.)
-    out += plain.replace(/(?<![\w#.])(\d+),(\d+)(?![\d.,])/g, (_, a, b) =>
-      thousands && b.length === 3 && !/^0+$/.test(a) ? `${a}${b}` : `${a}.${b}`,
+    out += plain.replace(
+      /(?<![\w#.])(\d+),(\d+)(?![\d.,])(?=(px\b)?)/gi,
+      (_, a, b, px) =>
+        (thousands || px) && b.length === 3 && !/^0+$/.test(a)
+          ? `${a}${b}`
+          : `${a}.${b}`,
     );
     plain = '';
   };
@@ -853,6 +858,22 @@ export const thousandsSetting = thing => {
     (/^[a-z][a-z-]*$/.test(t) && takesWholeNumbersOnly(t))
   );
 };
+
+/**
+ * A state as CSS writes it, from any case or spelling of its words
+ * (`Hover`, `:hover`, `focusVisible`, `focus_visible`, `focus visible`): the
+ * one state reader, for a typed `--state` and a saved entry's state alike.
+ * @param {string} text
+ * @returns {string}
+ */
+export function stateSpelling(text) {
+  return String(text)
+    .trim()
+    .replace(/^:+/, '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+    .replace(/[\s_]+/g, '-')
+    .toLowerCase();
+}
 
 /**
  * The one mode a word names, or null: light or dark, written as a mode

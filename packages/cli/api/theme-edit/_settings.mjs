@@ -73,6 +73,8 @@ import {
   normalizeEntry,
   typoLimit,
   typoNear,
+  commaNumbers,
+  stateSpelling,
 } from './_normal.mjs';
 import {
   alphaOf,
@@ -596,13 +598,19 @@ export function negates(x) {
  * that does what the person wanted.
  * @param {string} code
  * @param {string} message
- * @param {{run?: string[], didYouMean?: string[], fix?: string, also?: string[]}} [extra]
+ * @param {{run?: Array<string | {name: string, reason: string}>, didYouMean?: string[], fix?: string, also?: string[]}} [extra]
  * @returns {never}
  */
 export function refuse(code, message, extra = {}) {
   /** @type {Array<{name: string, reason: string}>} */
   const suggestions = [];
   for (const r of extra.run ?? []) {
+    // A line with what it is for already (an install step and the line
+    // that works once it is installed: onBuiltInSteps) is kept as it is.
+    if (typeof r !== 'string') {
+      suggestions.push(r);
+      continue;
+    }
     const [cmd, comment] = r.split(/\s{2,}#\s*/);
     suggestions.push({
       name: cmd.trim(),
@@ -683,7 +691,10 @@ export function themeNameReadings(s) {
     .replace(/[\\/]+/g, '/')
     .replace(/^(\.\.?\/)+/, '')
     .replace(/^.*themes\//i, '')
-    .replace(/\/.*$/, '')
+    // A path names the theme its last part does (`@scope/brand`,
+    // `./x/brand`, `brand/brand.theme.ts`).
+    .replace(/\/+$/, '')
+    .replace(/^.*\//, '')
     .replace(
       /\.(theme\.ts|settings\.(json|ts)|history\.json|css\.d\.ts|d\.ts|doc\.mjs|fonts\.css|css|mjs|js|tsx?)$/i,
       '',
@@ -713,7 +724,8 @@ export function themeNameReadings(s) {
  */
 export function vibrancyMeant(dial, v) {
   if (dial !== 'vibrancy') return v;
-  const m = /^(\d*\.?\d+)\s*(%?)$/.exec(v.trim());
+  // A comma between digits as the one comma rule reads it (0,5).
+  const m = /^(\d*\.?\d+)\s*(%?)$/.exec(commaNumbers(v.trim()));
   if (!m) return v;
   const n = Number(m[1]);
   const scaled = !m[2] && n > 0 && n < 1 ? n * 100 : n;
@@ -1204,14 +1216,16 @@ export function loadTheme(
       {damaged: bad, aboutSaved: true},
     );
   }
-  // A bad mode or base is fixed by setting it.
-  // A value written in other letters (Dark-Only, Neutral) is the one meant.
-  const {mode: modeMeant, like: likeMeant} = fieldsMeant(data);
-  const fieldFix = /^(it has no mode|mode ")/.test(problem ?? '')
-    ? `${P} set ${slug} mode ${['both', 'light-only', 'dark-only'].includes(modeMeant) ? modeMeant : 'both'}`
+  // A bad mode or base is fixed by setting it, with the one repair every
+  // command gives that damage.
+  const damagedField = /^(it has no mode|mode ")/.test(problem ?? '')
+    ? 'mode'
     : /^base "/.test(problem ?? '')
-      ? `${P} set ${slug} base ${LIKE.includes(likeMeant) && baseInstalled(cwd, likeMeant) ? likeMeant : (builtOnBase(cwd, slug) ?? 'none')}`
+      ? 'base'
       : null;
+  const fieldFix = damagedField
+    ? savedFieldRepairs(data, cwd, slug, damagedField)
+    : null;
   // A damaged mode or base and a bad value in the list: setting the field
   // is refused while the list holds the bad value, but fixing that entry
   // saves the field as meant too, so its fix comes first. Never a bare
@@ -1232,10 +1246,10 @@ export function loadTheme(
       !valueProblem({...alsoBad, value: cleaned})
         ? cleaned
         : null;
-    const field = /^base "/.test(problem) ? 'base' : 'mode';
-    const fieldValue = fieldFix.split(' ').pop();
+    const field = damagedField;
+    const fieldValue = fieldFix.values.length === 1 ? fieldFix.values[0] : null;
     throw new AstryxError(
-      `themes/${slug}/${slug}.settings.json: ${problem}, and ${settingsProblem(data, alsoBad.thing) ?? `${alsoBad.thing} "${alsoBad.value}" is not a value it takes`}. Fix that setting first: ${meant ? 'either command below does' : 'the command below does'}, and saves the ${field} as ${fieldValue}. Nothing was changed.`,
+      `themes/${slug}/${slug}.settings.json: ${problem}, and ${settingsProblem(data, alsoBad.thing) ?? `${alsoBad.thing} "${alsoBad.value}" is not a value it takes`}. Fix that setting first: ${meant ? 'either command below does' : 'the command below does'}${fieldValue ? `, and saves the ${field} as ${fieldValue}` : `; then set the ${field} again`}. Nothing was changed.`,
       [
         ...(meant
           ? [
@@ -1258,49 +1272,33 @@ export function loadTheme(
   const twice = problem?.includes(' is listed twice (')
     ? duplicated(data)
     : null;
-  // A base written in other letters or with a typo of a built-in base
-  // this project has not installed: that base, read as every reader reads
-  // it, installed first (the one install helper), never the one it was
-  // built on.
-  const baseToInstall =
-    /^base "/.test(problem ?? '') &&
-    LIKE.includes(likeMeant) &&
-    !baseInstalled(cwd, likeMeant)
-      ? likeMeant
-      : null;
   if (problem)
     throw new AstryxError(
-      baseToInstall
-        ? `themes/${slug}/${slug}.settings.json: base "${data.like}" reads as ${baseToInstall}, which this project has not installed. Install it, then set the base again. Nothing was changed.`
+      fieldFix?.uninstalled
+        ? `themes/${slug}/${slug}.settings.json: base "${data.like}" reads as ${fieldFix.uninstalled}, which this project has not installed. Install it, then set the base again. Nothing was changed.`
         : `themes/${slug}/${slug}.settings.json: ${problem}. ${fieldFix ? 'Set it again' : twice ? `Set it to one of its values or undo it, or fix it by hand${recover.text}` : `Fix it by hand${recover.text}`}. Nothing was changed.`,
-      baseToInstall
-        ? onBuiltInSteps(
-            cwd,
-            baseToInstall,
-            `${P} set ${slug} base ${baseToInstall}`,
-          )
-        : fieldFix
-          ? [{name: fieldFix, reason: 'do this instead'}]
-          : twice
-            ? [
-                ...twice.values
-                  .filter(
-                    v =>
-                      typeof v === 'string' &&
-                      !valueProblem({...twice.setting, value: v}),
-                  )
-                  .slice(0, 2)
-                  .map(v => ({
-                    name: `${P} set ${slug} ${setArgs(twice.setting, String(v))}`,
-                    reason: `keep ${v}`,
-                  })),
-                {
-                  name: `${P} undo ${slug} ${undoArgs(twice.setting)}`,
-                  reason: 'remove both',
-                },
-                ...recover.run,
-              ]
-            : recover.run,
+      fieldFix
+        ? fieldFix.run
+        : twice
+          ? [
+              ...twice.values
+                .filter(
+                  v =>
+                    typeof v === 'string' &&
+                    !valueProblem({...twice.setting, value: v}),
+                )
+                .slice(0, 2)
+                .map(v => ({
+                  name: `${P} set ${slug} ${setArgs(twice.setting, String(v))}`,
+                  reason: `keep ${v}`,
+                })),
+              {
+                name: `${P} undo ${slug} ${undoArgs(twice.setting)}`,
+                reason: 'remove both',
+              },
+              ...recover.run,
+            ]
+          : recover.run,
       ERROR_CODES.ERR_THEME_INVALID,
     );
   return data;
@@ -1597,6 +1595,29 @@ function readEntryWords(data) {
         );
         s.mode = read;
       }
+    }
+    // A state saved in other letters or with its colon (`Hover`, `:hover`)
+    // is that state, as a typed --state is read (the one state reader).
+    if (typeof s.state === 'string' && stateSpelling(s.state) !== s.state) {
+      const read = stateSpelling(s.state);
+      notes.push(
+        `${s.thing} was saved with state ${JSON.stringify(s.state)}, read as ${read}`,
+      );
+      s.state = read;
+    }
+    // A dial other than a color is the same in light and dark: one saved
+    // for one mode applies to both, and is read that way, so setting it
+    // replaces that entry.
+    if (
+      s.source === 'dial' &&
+      (s.mode === 'light' || s.mode === 'dark') &&
+      DIALS[s.thing] &&
+      !PALETTE_DIALS.includes(s.thing)
+    ) {
+      notes.push(
+        `${s.thing} was saved for ${s.mode} only, read as both modes: it is the same in light and dark`,
+      );
+      delete s.mode;
     }
     // A part saved in other letters, with spaces around it, or as a list
     // of that one part (`Card`, ` card`, `["card"]`) is that part: part
@@ -7488,6 +7509,58 @@ export function entriesReadable(data) {
 }
 
 /**
+ * The lines that set a damaged saved mode or base again: the one repair
+ * every command gives that damage (show, compile and each change). The
+ * value it reads as when there is one, else each value it can be (each
+ * mode; the base the theme was built on, when its module or history still
+ * says it, else each installed base), never a default that would drop what
+ * the file held. A built-in base not installed comes after its install.
+ * @param {any} data
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {'mode' | 'base'} field
+ * @returns {{values: string[], uninstalled: string | null, run: Array<{name: string, reason: string}>}}
+ */
+export function savedFieldRepairs(data, cwd, slug, field) {
+  const MODES = ['both', 'light-only', 'dark-only'];
+  const meant = fieldsMeant(data);
+  const values =
+    field === 'mode'
+      ? MODES.includes(meant.mode)
+        ? [meant.mode]
+        : MODES
+      : LIKE.includes(meant.like)
+        ? [meant.like]
+        : (b => (b ? [b] : LIKE.filter(x => baseInstalled(cwd, x))))(
+            builtOnBase(cwd, slug),
+          );
+  return {
+    values,
+    // A base read as one built-in base this project has not installed:
+    // the refusal says so, and its install comes first.
+    uninstalled:
+      field === 'base' &&
+      values.length === 1 &&
+      LIKE.includes(values[0]) &&
+      !baseInstalled(cwd, values[0])
+        ? values[0]
+        : null,
+    run: values.length
+      ? values.flatMap(v =>
+          field === 'base' && LIKE.includes(v)
+            ? onBuiltInSteps(cwd, v, `${P} set ${slug} base ${v}`)
+            : [
+                {
+                  name: `${P} set ${slug} ${field} ${v}`,
+                  reason: 'do this instead',
+                },
+              ],
+        )
+      : [{name: `${P} how ${field}`, reason: 'do this instead'}],
+  };
+}
+
+/**
  * Read a damaged mode or base the way a change reads it, in place: one
  * written in other letters, as a package name, as a mode word or with a
  * typo (`Dark-Only`, `@astryxdesign/theme-neutral`, `light`, `neutrl`) is
@@ -7512,34 +7585,19 @@ export function readFields(data, cwd, fixing, slug) {
   // a default that would drop what the file held.
   // A refusal about what the file holds, not what was typed: its lines
   // set the field again, and are not read against the typed value.
-  const damaged = (
-    /** @type {string} */ field,
-    /** @type {string[]} */ fixes,
-  ) => {
+  const damaged = (/** @type {'mode' | 'base'} */ field) => {
+    const fix = savedFieldRepairs(
+      data,
+      cwd,
+      /** @type {string} */ (slug),
+      field,
+    );
     throw Object.assign(
       new AstryxError(
-        // A base read as a built-in one this project has not installed says
-        // so, as show's refusal does.
-        field === 'base' &&
-          fixes.length === 1 &&
-          LIKE.includes(fixes[0]) &&
-          !baseInstalled(cwd, fixes[0])
-          ? `themes/${slug}/${slug}.settings.json: base "${data.like}" reads as ${fixes[0]}, which this project has not installed. Install it, then set the base again. Nothing was changed.`
+        fix.uninstalled
+          ? `themes/${slug}/${slug}.settings.json: base "${data.like}" reads as ${fix.uninstalled}, which this project has not installed. Install it, then set the base again. Nothing was changed.`
           : `themes/${slug}/${slug}.settings.json: ${field === 'mode' ? 'mode' : 'base'} "${field === 'mode' ? data.mode : data.like}" is no value the editor reads, and a change never drops it. Set it again. Nothing was changed.`,
-        // A base line for a built-in base not installed goes after its
-        // install (the one install helper).
-        fixes.length
-          ? fixes.flatMap(fix =>
-              field === 'base' && LIKE.includes(fix)
-                ? onBuiltInSteps(cwd, fix, `${P} set ${slug} base ${fix}`)
-                : [
-                    {
-                      name: `${P} set ${slug} ${field} ${fix}`,
-                      reason: 'do this instead',
-                    },
-                  ],
-            )
-          : [{name: `${P} how ${field}`, reason: 'do this instead'}],
+        fix.run,
         ERROR_CODES.ERR_THEME_INVALID,
       ),
       {aboutSaved: true},
@@ -7555,7 +7613,7 @@ export function readFields(data, cwd, fixing, slug) {
       );
       data.mode = meant.mode;
     } else if (slug && data.mode != null && String(data.mode).trim()) {
-      damaged('mode', ['both', 'light-only', 'dark-only']);
+      damaged('mode');
     } else {
       data.mode = 'both';
       notes.push('mode was missing or damaged, so it is both again');
@@ -7569,16 +7627,7 @@ export function readFields(data, cwd, fixing, slug) {
       );
       data.like = meant.like;
     } else if (slug) {
-      // The base the theme was built on, when its module or history still
-      // says it; else each installed base.
-      damaged(
-        'base',
-        LIKE.includes(meant.like)
-          ? [meant.like]
-          : (b => (b ? [b] : LIKE.filter(x => baseInstalled(cwd, x))))(
-              builtOnBase(cwd, slug),
-            ),
-      );
+      damaged('base');
     } else {
       delete data.like;
       notes.push('base was not a built-in theme, so it is none again');

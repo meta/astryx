@@ -12,7 +12,7 @@
 import {AstryxError} from '../error.mjs';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {partForWord} from './_part-words.mjs';
+import {partForWord, partWords} from './_part-words.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {cssUnescape} from '../../foundation/text/css-escape.mjs';
 import {baseInstalled, baseThemeFile} from './_project.mjs';
@@ -70,6 +70,7 @@ import {
   COLOR_NAMES,
   colorProblem,
   isColorValue,
+  colorAsCssReads,
   isNumber,
   isSafeValue,
   withoutCssEscapes,
@@ -128,6 +129,7 @@ import {
   withoutDebris,
   typoOf,
   typoNear,
+  stateSpelling,
   modeWord,
   documentTypoWords,
   PROPERTY_WORDS,
@@ -414,7 +416,8 @@ const YES_NO = /^(true|yes|on|none|false|off|no)$/i;
  * @returns {string | null}
  */
 function cornersRead(v) {
-  const lower = String(v).trim().toLowerCase();
+  // A comma between digits as the one comma rule reads it (0,5rem).
+  const lower = commaNumbers(String(v).trim().toLowerCase());
   if (CORNERS.some(([n]) => n === lower)) return lower;
   if (/^(0|none|sharp|zero|flat)$/.test(lower)) return 'square';
   if (/^[+-]?\d*\.?\d+$/.test(lower)) return null;
@@ -592,6 +595,12 @@ function valueMeant(type, value) {
     const listed = familyListMeant(p);
     if (listed && !fams?.length) out.push(listed);
   }
+  // A comma rgb() or hsl() CSS does not take as written: the same channels
+  // in the syntax CSS reads them in.
+  if (type === 'color') {
+    const asRead = colorAsCssReads(p);
+    if (asRead) out.push(asRead);
+  }
   return [...new Set(out)].filter(x => x && x !== value.trim());
 }
 
@@ -634,14 +643,12 @@ function sizeMeant(v, ok) {
     // A unit split off by a space (`16 px`); two numbers (`12 16px`) are
     // never joined into one.
     t.replace(/(\d)\s+(?=[a-z%])/gi, '$1'),
-    t
-      .replace(/^([+-]?\d+),(\d+)/, '$1.$2')
-      .replace(/(\d)\s+(?=[a-z%])/gi, '$1'),
+    // A comma between digits as the one comma rule reads it (a decimal
+    // comma, or a thousands mark in a pixel length: 1,200px).
+    commaNumbers(t).replace(/(\d)\s+(?=[a-z%])/gi, '$1'),
     mathSpaced(t),
   ];
-  const m = /^([+-]?\d*\.?\d+)\s*([a-z%]+)$/i.exec(
-    t.replace(/^([+-]?\d+),(\d+)/, '$1.$2'),
-  );
+  const m = /^([+-]?\d*\.?\d+)\s*([a-z%]+)$/i.exec(commaNumbers(t));
   if (m) {
     // A unit typed with a letter too many (pxx, remm, pxs).
     const unit = [...SIZE_UNITS]
@@ -2014,11 +2021,15 @@ function checkCycle(thing, value, TOKENS, data, cwd, scope = {}) {
 }
 
 /**
- * The CSS color name nearest a word typed as a color (`banan` is not one,
- * `rd` is red), or null when none is near.
+ * The color a value typed as one most likely meant: a comma rgb() or hsl()
+ * CSS does not take as written, in the syntax CSS reads its channels in
+ * (`hsl(0, 100, 50)` is `hsl(0 100 50)`), else the CSS color name nearest a
+ * word (`banan` is not one, `rd` is red); null when none is near.
  * @param {string} v
  */
 function nearestColorName(v) {
+  const asRead = colorAsCssReads(v);
+  if (asRead) return asRead;
   const w = v.trim().toLowerCase();
   if (!/^[a-z]+$/.test(w)) return null;
   return nearest(w, COLOR_NAMES)[0] ?? null;
@@ -2142,12 +2153,15 @@ function propertyProblem(prop, value) {
       // other sign: the mirrored value is never offered.
       (takes(joined) && joined !== v ? joined : null) ??
       // A comma between two bare numbers that the grammar pairs with a
-      // slash (`aspect-ratio 16,9`, `grid-row 2,4`) separates them: the
-      // pair, never a decimal (16.9), when both are whole numbers of 1 or
-      // more; any other comma between digits (`0,75`) is a decimal comma.
+      // slash (`grid-row 2,4`) separates them only when both are whole
+      // numbers of 1 or more and the property does not take the number a
+      // decimal comma makes (`aspect-ratio 1,5` is 1.5, which it takes);
+      // any other comma between digits (`0,75`) is a decimal comma.
       (() => {
         const pair = /^\s*([1-9]\d*)\s*,\s*([1-9]\d*)\s*$/.exec(v);
-        return pair && takes(`${pair[1]} / ${pair[2]}`)
+        return pair &&
+          takes(`${pair[1]} / ${pair[2]}`) &&
+          !takes(`${pair[1]}.${pair[2]}`)
           ? `${pair[1]} / ${pair[2]}`
           : null;
       })() ??
@@ -3102,7 +3116,10 @@ export function checkSetting(
           {
             // Only setting names: a part or a state is never a value.
             didYouMean: nearest(label.word, Object.keys(DIALS)),
-            run: [`${P} set ${slug} ${thing} ${q(rest)}${scope}`],
+            // The words after an unknown label are no value the person
+            // gave (a typo before the colon, or a family with a colon in
+            // it): only a known name is ever taken off. What it takes.
+            run: [`${HOW} ${thing}`],
           },
         );
     }
@@ -3393,13 +3410,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
   if (flags.when) s.when = flags.when.trim();
   // A state in any case or spelling of its words (focusVisible,
   // focus_visible, 'focus visible') is the state, written as CSS writes it.
-  if (flags.state)
-    s.state = flags.state
-      .trim()
-      .replace(/^:+/, '')
-      .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
-      .replace(/[\s_]+/g, '-')
-      .toLowerCase();
+  if (flags.state) s.state = stateSpelling(flags.state);
   if (flags.only) s.only = true;
   if (flags.mode) {
     // Read as any value is: invisible or no-break spaces, quotes around
@@ -3593,10 +3604,23 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
       // only the whole value as one word, never one word inside a longer
       // name (nmber-input is no word for inputs).
       const byWord = /^[a-z]+$/.test(lower) ? partForWord(lower) : null;
-      // A typo of one whole part or group name is that name.
-      const typoParts = [...TARGET.keys(), ...Object.keys(FAMILIES)].filter(
-        n => n !== lower && n !== dashed && typoNear(dashed, n),
-      );
+      // A typo of a whole part or group name, or of a word how reads as
+      // one (sidebar, checkbox, toggle), is the part the nearest of them
+      // names, when the nearest name one part.
+      const typoParts = (() => {
+        const words = partWords();
+        const candidates = [
+          ...TARGET.keys(),
+          ...Object.keys(FAMILIES),
+          ...[...words]
+            .filter(([, on]) => TARGET.has(on) || FAMILIES[on])
+            .map(([w]) => w),
+        ].filter(n => n !== lower && n !== dashed);
+        // The one typo ranker (closestOf), each word read as its part.
+        return [
+          ...new Set(closestOf(dashed, candidates).map(n => words.get(n) ?? n)),
+        ];
+      })();
       // A plain plural of a part (cards, dialogs, tabs) is that part.
       const singular = [lower, dashed]
         .flatMap(w => [
@@ -4568,12 +4592,14 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
           // A bare number (0.5, as a pasted --radius: 0.5rem loses its
           // unit) has no unit to read it by: no size is guessed.
           const bareNumber = /^[+-]?\d*\.?\d+$/.test(lower);
+          // A comma between digits as the one comma rule reads it
+          // (0,5rem is 0.5rem).
           const len =
             calcPx != null && Number.isFinite(calcPx)
               ? calcPx
               : bareNumber
                 ? null
-                : lengthPx(lower);
+                : lengthPx(commaNumbers(lower));
           const pct = /^(\d+(?:\.\d+)?)%$/.exec(lower);
           // Tailwind's names, and rounding said with a negation: what they
           // mean (rounded-none and not round are square, rounded-full is
@@ -4666,7 +4692,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
       }
       // A scale typed as a number (x0.75, 0.75, 75%) names the rung nearest
       // that factor.
-      const factor = /^x?(\d*\.?\d+)(%)?$/i.exec(v);
+      const factor = /^x?(\d*\.?\d+)(%)?$/i.exec(commaNumbers(v));
       const nearFactor = factor
         ? SPACING.reduce((a, b) =>
             Math.abs(b[1] - Number(factor[1]) / (factor[2] ? 100 : 1)) <
@@ -4939,7 +4965,8 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
           .replace(/^(["'])(.*)\1$/, '$2')
           .trim();
         const word = bare.toLowerCase();
-        const n = cssNumber(bare);
+        // A comma between digits as the one comma rule reads it (0,5).
+        const n = cssNumber(commaNumbers(bare));
         // A fraction of one (0.5) is that share of the scale (50), as a
         // number with no unit from 0 to 1 is read.
         const scaled =
