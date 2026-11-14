@@ -173,11 +173,10 @@ describe('duration-balanced Node legs', () => {
     expect(ids.sort()).toEqual(
       [...ui, ...node].map(item => item.moduleId).sort(),
     );
-    const expected = partitionByDuration(
-      node.map(item => path.relative(ROOT, item.moduleId)),
-      count,
-      recorded,
-    );
+    const files = node.map(item => path.relative(ROOT, item.moduleId));
+    const expected = partitionByDuration(files, count, recorded, {
+      idle: await idleSwizzleSlices(files),
+    });
     for (const [index, leg] of legs.entries()) {
       expect(
         leg
@@ -197,12 +196,11 @@ describe('duration-balanced Node legs', () => {
       moduleId: path.join(ROOT, file),
     }));
     const count = 5;
-    const expected = partitionByDuration(
-      node.map(item => path.relative(ROOT, item.moduleId)),
-      count,
-      recorded,
-      {legOneSeconds: readLegOneSeconds()},
-    );
+    const files = node.map(item => path.relative(ROOT, item.moduleId));
+    const expected = partitionByDuration(files, count, recorded, {
+      legOneSeconds: readLegOneSeconds(),
+      idle: await idleSwizzleSlices(files),
+    });
     for (let index = 1; index <= count; index += 1) {
       const sequencer = new DurationShardSequencer({
         config: {root: ROOT, shard: {index, count}},
@@ -352,6 +350,23 @@ describe('duration-balanced Node legs', () => {
     });
     expect(Math.max(...heavyPerLeg(legs))).toBeLessThanOrEqual(2);
     expect(legs.flat().sort()).toEqual([...files].sort());
+  });
+
+  it('books the swizzle-proof slices idle exactly when the change reaches no component', async () => {
+    const slices = slowest.filter(file =>
+      /swizzle-proof\.\d+\.test\.mjs$/.test(file),
+    );
+    expect(slices.length).toBeGreaterThan(0);
+    const files = ['a.test.mjs', ...slices];
+    vi.stubEnv('SWIZZLE_PROOF_CHANGED', 'docs/README.md');
+    expect([...(await idleSwizzleSlices(files))].sort()).toEqual(
+      [...slices].sort(),
+    );
+    vi.stubEnv('SWIZZLE_PROOF_CHANGED', 'packages/core/src/Button/Button.tsx');
+    expect([...(await idleSwizzleSlices(files))]).toEqual([]);
+    vi.stubEnv('SWIZZLE_PROOF_CHANGED', 'docs/README.md');
+    vi.stubEnv('SWIZZLE_PROOF_ALL', '1');
+    expect([...(await idleSwizzleSlices(files))]).toEqual([]);
   });
 
   it('reads no swizzle-proof scope when no slice is in the run', async () => {
