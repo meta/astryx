@@ -76,8 +76,16 @@
    * tools (e.g. LightningCSS) which polyfill light-dark() for older browsers
    * inject their toggle-variable initialization in the same CSS bundle.
    * XDSTheme overrides color-scheme per-wrapper as needed.
+   *
+   * html takes the --font-family-body token, and body inherits it. Text that
+   * a library adds to the body outside a Theme wrapper (a hidden span that
+   * measures a label, a portal) then uses the font that the token names at
+   * the page root. Where no stylesheet defines the token, the declaration has
+   * no value and html keeps the browser's default font. An app's own html or
+   * body font wins.
    */
   :where(html) {
+    font-family: var(--font-family-body);
     line-height: 1.5;
     -webkit-text-size-adjust: 100%;
     tab-size: 4;
@@ -87,16 +95,9 @@
   /*
    * Remove default body margin and set font smoothing for sharper text
    * rendering on macOS/iOS.
-   *
-   * The body takes the theme's body font. Libraries add text straight to the
-   * body (hidden spans that measure labels, portals without a Theme wrapper).
-   * Without this rule that text gets the browser default serif. The fallback
-   * repeats the token's own default for a page that loads only the reset.
    */
   :where(body) {
     margin: 0;
-    font-family: var(--font-family-body, -apple-system, BlinkMacSystemFont,
-      'Segoe UI', Roboto, Helvetica, Arial, sans-serif);
     line-height: inherit;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;

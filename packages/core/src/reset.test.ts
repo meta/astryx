@@ -203,22 +203,18 @@ describe('reset.css pseudo-element rules', () => {
     );
   });
 
-  it('gives the body the --font-family-body token, with its default', () => {
-    // Libraries add text straight to the body: hidden spans that measure
-    // labels, and portals without a Theme wrapper. That text must get the
-    // theme's body font, not the browser default serif. A page that loads
-    // only the reset gets the token's own default stack.
-    const tokens = fs.readFileSync(
-      path.resolve(__dirname, './theme/tokens.stylex.ts'),
-      'utf-8',
-    );
-    const tokenDefault = tokens.match(/'--font-family-body':\s*'([^']+)'/)?.[1];
-    expect(tokenDefault).toMatch(/sans-serif$/);
-    const body = ruleBlocks.find(({selector}) => selector === ':where(body)');
-    const fontFamily = body?.body
-      .match(/font-family:\s*([^;]+);/)?.[1]
-      .replace(/\s+/g, ' ')
-      .replaceAll("'", '"');
-    expect(fontFamily).toBe(`var(--font-family-body, ${tokenDefault})`);
+  it('gives html the --font-family-body token, and body inherits it', () => {
+    // Text that a library adds to the body outside a Theme wrapper must get
+    // the theme's body font. html carries it, so an app that sets its own
+    // html font still reaches body text. No fallback: where no stylesheet
+    // defines the token, html keeps the browser's default font, as before.
+    // reset.font.a11y.chromium.spec.ts measures the result in Chromium.
+    const fontFamilyOf = (selector: string) =>
+      ruleBlocks
+        .filter(block => block.selector === selector)
+        .map(({body}) => body.match(/font-family:\s*([^;]+);/)?.[1])
+        .find(Boolean);
+    expect(fontFamilyOf(':where(html)')).toBe('var(--font-family-body)');
+    expect(fontFamilyOf(':where(body)')).toBeUndefined();
   });
 });
