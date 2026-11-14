@@ -32,7 +32,7 @@ import {SAMPLE_PAGE, elementNames, pageSource} from './_catalog.mjs';
 import {removeOnStop} from '../../foundation/fs/stop-cleanup.mjs';
 
 /** Bump when the shape of the cached part data changes. */
-const PART_DATA_VERSION = 10;
+const PART_DATA_VERSION = 11;
 
 /**
  * Flags that change what a component does or whether it shows, not how it
@@ -53,6 +53,8 @@ const LIFECYCLE_FLAGS = new Set([
  * @property {Record<string, string[]>} inside - tokens read by unnamed elements inside the part -> properties
  * @property {Record<string, string[]>} attrs - data attributes seen on the part
  * @property {string[]} contains - parts rendered inside it
+ * @property {string[]} [tags] - the elements it is rendered as (`tr` for a table row)
+ * @property {string[]} [innerCorners] - the radius tokens of the corners Core draws by place on the parts directly inside it (a button group's end buttons)
  * @property {Record<string, Record<string, string>>} [inline] - state ('' for always) -> property -> the token Core paints it with as an inline style, which no theme rule can replace
  */
 
@@ -857,7 +859,7 @@ function resolvePrivate(v, env, tokens, depth = 0) {
  * @returns {{map: Record<string, PartRecord>, pairs: TextPair[]}}
  */
 export function walkMarkup(html, decls, tokens) {
-  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>}>} */
+  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, tags: Set<string>, innerCorners: Set<string>}>} */
   const map = {};
   /** @type {Array<{env: Record<string, string>, target: string | null, fg: PaintSide | null, bg: PaintSide | null}>} */
   const stack = [{env: {}, target: null, fg: null, bg: null}];
@@ -926,6 +928,8 @@ export function walkMarkup(html, decls, tokens) {
         inside: {},
         attrs: {},
         contains: new Set(),
+        tags: new Set(),
+        innerCorners: new Set(),
       });
       if (ownsTarget)
         for (const [k, v] of Object.entries(dataAttrs))
@@ -975,6 +979,18 @@ export function walkMarkup(html, decls, tokens) {
     for (const t of ownsTarget ? named.map(c => c.slice(7)) : [])
       for (const anc of stack)
         if (anc.target && anc.target !== t) map[anc.target].contains.add(t);
+    if (ownsTarget) {
+      for (const t of named) map[t.slice(7)].tags.add(tag.toLowerCase());
+      // Corners Core draws on a part by its place among its siblings (a
+      // button group's first and last buttons): the radius token they read
+      // is the enclosing part's corners.
+      if (parent.target && !named.includes(`astryx-${parent.target}`))
+        for (const d of own)
+          if (/^border-(start|end)-(start|end)-radius$/.test(d.prop))
+            for (const tok of expand(d.value, env, tokens))
+              if (/^--radius-/.test(tok))
+                map[parent.target].innerCorners.add(tok);
+    }
     if (!selfClose && !VOID.has(tag.toLowerCase()))
       stack.push({env, target, fg, bg});
   }
@@ -1004,6 +1020,8 @@ export function walkMarkup(html, decls, tokens) {
         Object.entries(v.attrs).map(([k, s]) => [k, [...s]]),
       ),
       contains: [...v.contains],
+      tags: [...v.tags],
+      innerCorners: [...v.innerCorners],
     };
   }
   return {map: out, pairs: [...pairs.values()]};

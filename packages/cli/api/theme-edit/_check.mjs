@@ -108,6 +108,7 @@ import {
   baseTextPx,
   fontsourcePackageOf,
   dialWordOf,
+  paddedParts,
 } from './_settings.mjs';
 import {isColorToken} from './_compiler.mjs';
 import {
@@ -5397,6 +5398,27 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
         refuse(
           E.ERR_THEME_NO_EFFECT,
           `${part} draws no border of its own; its edges are the borders of ${inner.join(' and ')}, so set ${prop} on ${inner.length > 1 ? 'those parts' : 'that part'}.`,
+          {
+            run: inner.map(t =>
+              setLine(slug, prop, v, {...s, on: t, only: undefined}),
+            ),
+          },
+        );
+    }
+    // Padding on a part Core renders as a box CSS draws no padding on (a
+    // table row): the parts inside it with padding of their own take it.
+    if (
+      !unset &&
+      /^padding(-|$)/.test(prop) &&
+      !s.state &&
+      partsOf(ctx, s).length === 1
+    ) {
+      const part = partsOf(ctx, s)[0];
+      const inner = paddedParts(ctx, part).filter(t => t !== part);
+      if (inner.length)
+        refuse(
+          E.ERR_THEME_NO_EFFECT,
+          `${part} is drawn as a table row, row group or column, which CSS draws no padding on; its space is the padding of ${inner.join(' and ')}, so set ${prop} on ${inner.length > 1 ? 'those parts' : 'that part'}.`,
           {
             run: inner.map(t =>
               setLine(slug, prop, v, {...s, on: t, only: undefined}),

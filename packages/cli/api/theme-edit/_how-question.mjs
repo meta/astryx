@@ -36,6 +36,7 @@ import {PALETTE_DIALS, isGraySeed, seedOf} from './_palette.mjs';
 import {
   cornerParts,
   focusStateOf,
+  paddedParts,
   innerTextTokens,
   lengthPx,
   partRuleTokens,
@@ -6307,7 +6308,16 @@ export function draftAnswer(ctx, env, question) {
           : /^(vertical|block)/.test(side)
             ? 'padding-block'
             : 'padding-inline';
-      const steps = c.parts.slice(0, 3).map(p => {
+      // Padding on a table row (a box CSS draws no padding on) is its
+      // cells'.
+      const onParts = /^padding/.test(prop)
+        ? c.parts.flatMap(p =>
+            FAMILIES[p.on]
+              ? [p]
+              : paddedParts(ctx, one(p.on)).map(on => ({...p, on})),
+          )
+        : c.parts;
+      const steps = onParts.slice(0, 3).map(p => {
         const {noState: _n, ...f} = flagsFor(c, p);
         return {p, f, st: set(prop, named.value, {...f, ...modeOf(c)})};
       });
