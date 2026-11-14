@@ -129,9 +129,8 @@ function splitAttributeLine(line) {
     if (escaped) {
       const octal = quoted ? /^[0-7]{1,3}/.exec(text.slice(index)) : null;
       if (octal) {
-        // Git's quoted-path octal escapes encode the original path bytes, not
-        // Unicode code points. Decode consecutive escapes together so a UTF-8
-        // filename such as `caf\303\251.js` becomes `café.js`.
+        // Git's quoted-path octal escapes encode path bytes, not code points.
+        // `caf\303\251.js` is the UTF-8 spelling of `café.js`.
         const bytes = [Number.parseInt(octal[0], 8)];
         let cursor = index + octal[0].length;
         while (text[cursor] === '\\') {
