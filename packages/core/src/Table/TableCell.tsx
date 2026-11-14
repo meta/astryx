@@ -25,7 +25,10 @@ import {
 } from '../theme/tokens.stylex';
 import type {StyleXStyles} from '../theme/types';
 import type {TableContextActions} from './types';
-import {wrapInTableContextMenu} from './tableContextMenu';
+import {
+  hasTableContextActions,
+  wrapInTableContextMenu,
+} from './tableContextMenu';
 import {
   overflowStyles,
   wrapStyles,
@@ -219,9 +222,7 @@ export function TableCell({
 }: TableCellProps) {
   const ctx = useTableContext();
 
-  const hasContextMenu =
-    typeof contextMenuActions === 'function' ||
-    (Array.isArray(contextMenuActions) && contextMenuActions.length > 0);
+  const hasContextMenu = hasTableContextActions(contextMenuActions);
 
   // When the cell owns a context menu, its density padding is relocated onto
   // the right-click trigger wrapper (see `content` below) so the entire cell —

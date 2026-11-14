@@ -293,7 +293,7 @@ export function validateOutput(result, source, j, {parse = true} = {}) {
  * with the same `(file, api) => string | null | undefined` contract used by a
  * `type: 'config'` codemod.
  *
- * @param {{name: string, transform: import('../../authoring/codemod/type').CodemodTransform, meta: {title: string, description?: string, fileExtensions?: string[], codemodType?: string}, optional?: boolean}} transformEntry
+ * @param {{name: string, transform: import('../../authoring/codemod/type').CodemodTransform, meta: {title: string, description?: string, fileExtensions?: string[], codemodType?: string, mentions?: string[]}, optional?: boolean}} transformEntry
  * @param {string} version
  * @returns {import('../../authoring/codemod/type').CodemodEntry}
  */
@@ -308,6 +308,7 @@ function toUnifiedEntry(transformEntry, version) {
       transform,
       fileExtensions: meta.fileExtensions,
       isOptional: !!optional,
+      ...(meta.mentions ? {mentions: meta.mentions} : {}),
     },
     package: 'core',
     version,
@@ -498,7 +499,7 @@ async function runProjectCodemod(
 /**
  * Run codemods against source files.
  *
- * @param {Array<{version: string, transforms: Array<{name: string, transform: import('../../authoring/codemod/type').CodemodTransform, meta: {title: string, description?: string, fileExtensions?: string[], codemodType?: string}, optional?: boolean}>}>} versionManifests
+ * @param {Array<{version: string, transforms: Array<{name: string, transform: import('../../authoring/codemod/type').CodemodTransform, meta: {title: string, description?: string, fileExtensions?: string[], codemodType?: string, mentions?: string[]}, optional?: boolean}>}>} versionManifests
  * @param {object} options
  * @param {boolean} options.apply - Write changes to disk
  * @param {string} options.path - Source directory to scan
@@ -509,7 +510,7 @@ async function runProjectCodemod(
  * @param {{root: string, classify: (file: string) => import('../../foundation/fs/file-protection.mjs').FileProtection[]}} [options.protection] - Preloaded protection resolver
  * @param {boolean} [options.coversTarget] - False when these codemods stop before the installed target (the CLI is older than Core), so a run with no changes does not say the code is up to date. Default true.
  * @param {unknown[]} [options.outcomes] - Findings the transforms reported instead of changing a file (manual migrations, files to regenerate), filled while the run goes. A run with any does not say the code is up to date; the caller lists them.
- * @returns {Promise<{totalFilesChanged: number, totalTransformsApplied: number, totalValidationBlocked: number, changedFiles: string[], writtenFiles: string[], stagedContents: Map<string, string>, protectedFiles: import('../../authoring/codemod/type').CodemodRunResult['protectedFiles'], declinedCandidates: NonNullable<import('../../authoring/codemod/type').CodemodRunResult['declinedCandidates']>, errors: Array<{file: string, codemod: string, error: string}>, skippedOptional: Array<{name: string, meta: {title: string, description?: string, fileExtensions?: string[], codemodType?: string}, version: string}>} | {ok: false, reason: string, resolvedPath: string}>}
+ * @returns {Promise<{totalFilesChanged: number, totalTransformsApplied: number, totalValidationBlocked: number, changedFiles: string[], writtenFiles: string[], stagedContents: Map<string, string>, protectedFiles: import('../../authoring/codemod/type').CodemodRunResult['protectedFiles'], declinedCandidates: NonNullable<import('../../authoring/codemod/type').CodemodRunResult['declinedCandidates']>, errors: Array<{file: string, codemod: string, error: string}>, skippedOptional: Array<{name: string, meta: {title: string, description?: string, fileExtensions?: string[], codemodType?: string, mentions?: string[]}, version: string}>} | {ok: false, reason: string, resolvedPath: string}>}
  */
 export async function runCodemods(
   versionManifests,
@@ -593,7 +594,7 @@ export async function runCodemods(
   const protectedFiles = [];
   /** @type {NonNullable<import('../../authoring/codemod/type').CodemodRunResult['declinedCandidates']>} */
   const declinedCandidates = [];
-  /** @type {Array<{name: string, meta: {title: string, description?: string, fileExtensions?: string[], codemodType?: string}, version: string}>} */
+  /** @type {Array<{name: string, meta: {title: string, description?: string, fileExtensions?: string[], codemodType?: string, mentions?: string[]}, version: string}>} */
   const skippedOptional = [];
   for (const {version, transforms} of versionManifests) {
     log.step(`Applying v${version} codemods...`);

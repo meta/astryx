@@ -33,14 +33,17 @@ export const doc = {
     {
       type: 'theme.app',
       description:
-        'Every remaining theme and its imports, the default slug, the generated module path, and the remove change.',
+        'Every remaining theme and its imports, the default slug, the generated module path, and the remove change. The default is never removed: choose another with themeUse first, which also works when the folder or package of the default is gone. Other added themes whose local folder or package is gone are left out, with a note in data.notes.',
     },
   ],
   throws: [
-    {code: 'ERR_UNKNOWN_THEME', when: 'the theme is not added'},
+    {
+      code: 'ERR_UNKNOWN_THEME',
+      when: 'the theme is not added; the suggestion is `theme add <slug>` when a theme with that slug is available, else `theme list`',
+    },
     {
       code: 'ERR_THEME_INVALID',
-      when: 'the theme is the default or generated state is invalid',
+      when: 'the theme is the default (the suggestions name `theme use` with up to three other added themes, or `theme list` when it is the only one), generated state is invalid, or the slug is not added and names a local theme folder that is broken',
     },
     {code: 'ERR_WRITE_FAILED', when: 'the generated module cannot be written'},
   ],

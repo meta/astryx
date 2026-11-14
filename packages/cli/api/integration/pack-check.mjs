@@ -49,7 +49,7 @@ import {
 } from '../../foundation/discovery/docs-discovery.mjs';
 import {discoverIntegrationThemes} from '../../foundation/discovery/theme-discovery.mjs';
 import {inspectPackageExport} from '../../foundation/discovery/package-exports.mjs';
-import {parse as parseModule} from '@babel/parser';
+import {babelParse as parseModule} from '../../foundation/runtime/lazy-dependencies.mjs';
 import {moduleExportsName} from '../../foundation/discovery/module-exports.mjs';
 import {
   ThemeImportError,
@@ -57,7 +57,7 @@ import {
 } from '../../foundation/discovery/theme-imports.mjs';
 import {
   normalizeThemeBuildForCompare,
-  themeBuild,
+  themeBuildWithHandOff,
 } from '../theme/build/build.mjs';
 import {
   discoverIntegrationComponents,
@@ -641,8 +641,12 @@ async function validateIncompleteThemeExports(
     if (outputs.some(output => output.kind !== 'font stylesheet')) {
       // The scratch directory is the write root; the package stays the cwd,
       // so the build selects the package's Core and its paths as before.
-      const scratchBuild = {out: expectedCss, __writeRoot: expectedDir};
-      const receipt = await themeBuild(source, scratchBuild, {cwd: packageDir});
+      const receipt = await themeBuildWithHandOff(
+        source,
+        {out: expectedCss},
+        {cwd: packageDir},
+        {writeRoot: expectedDir},
+      );
       if (receipt == null || receipt.type !== 'theme.build') {
         throw new Error('the theme build produced no complete receipt');
       }
@@ -1079,10 +1083,12 @@ async function validatePackedThemeExports(
     try {
       // The scratch directory is the write root; the package stays the cwd,
       // so the build selects the package's Core and its paths as before.
-      const scratchBuild = {out: expectedCss, __writeRoot: expectedDir};
-      const receipt = await themeBuild(source, scratchBuild, {
-        cwd: localIntegration.__packageDir,
-      });
+      const receipt = await themeBuildWithHandOff(
+        source,
+        {out: expectedCss},
+        {cwd: localIntegration.__packageDir},
+        {writeRoot: expectedDir},
+      );
       if (receipt == null || receipt.type !== 'theme.build') {
         issues.push(
           error(

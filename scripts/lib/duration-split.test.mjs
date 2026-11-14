@@ -7,6 +7,7 @@ import {describe, expect, it} from 'vitest';
 import {
   assertEachOnce,
   costOf,
+  fitLegsToBudget,
   medianOf,
   slowestFirst,
   splitByDuration,
@@ -82,5 +83,74 @@ describe('splitting test files by recorded time', () => {
       '.github/scripts/a11y-pr-contracts.mjs',
     ])
       expect(read(file), file).not.toMatch(/known\[Math\.floor/);
+  });
+});
+
+describe('fitting legs to a budget', () => {
+  const cost = seconds => item => seconds[item];
+
+  it('keeps every leg within the budget, each item once', () => {
+    const seconds = {a: 300, b: 300, c: 300, d: 200, e: 100};
+    const plan = fitLegsToBudget(Object.keys(seconds), cost(seconds), {
+      budget: 600,
+    });
+    expect(plan.shares.flat().sort()).toEqual(Object.keys(seconds).sort());
+    expect(plan.longest).toBeLessThanOrEqual(600);
+    expect(plan.count).toBe(2);
+  });
+
+  it('gives an item over the budget a leg of its own without raising the others', () => {
+    const seconds = {long: 900, a: 400, b: 400, c: 400};
+    const plan = fitLegsToBudget(Object.keys(seconds), cost(seconds), {
+      budget: 720,
+    });
+    expect(plan.shares).toContainEqual(['long']);
+    for (const leg of plan.shares.filter(each => !each.includes('long')))
+      expect(
+        leg.reduce((sum, item) => sum + seconds[item], 0),
+      ).toBeLessThanOrEqual(720);
+  });
+
+  it('stops at maxLegs even when a leg is still over', () => {
+    const seconds = {a: 500, b: 500, c: 500};
+    const plan = fitLegsToBudget(Object.keys(seconds), cost(seconds), {
+      budget: 600,
+      maxLegs: 2,
+    });
+    expect(plan.count).toBe(2);
+    expect(plan.longest).toBe(1000);
+  });
+
+  it('starts from the count it is given', () => {
+    const seconds = {a: 10, b: 10, c: 10};
+    const plan = fitLegsToBudget(Object.keys(seconds), cost(seconds), {
+      budget: 600,
+      start: 3,
+    });
+    expect(plan.count).toBe(3);
+  });
+
+  it('never plans more legs than maxLegs, even when the items over the budget fill them', () => {
+    const seconds = {A: 700, B: 700, C: 700, d: 10};
+    const plan = fitLegsToBudget(Object.keys(seconds), cost(seconds), {
+      budget: 600,
+      maxLegs: 3,
+    });
+    expect(plan.count).toBe(3);
+    expect(plan.shares.flat().sort()).toEqual(['A', 'B', 'C', 'd']);
+  });
+
+  it('never plans more legs than maxLegs when every item is over the budget', () => {
+    for (const names of [
+      ['A', 'B', 'C', 'D'],
+      ['A', 'B', 'C', 'D', 'E'],
+    ]) {
+      const plan = fitLegsToBudget(names, () => 700, {
+        budget: 600,
+        maxLegs: 3,
+      });
+      expect(plan.count, names.join('')).toBe(3);
+      expect(plan.shares.flat().sort()).toEqual(names);
+    }
   });
 });

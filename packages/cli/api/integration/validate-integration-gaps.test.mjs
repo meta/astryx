@@ -137,14 +137,17 @@ async function listedOf(dir) {
 }
 
 /**
- * The example notes, which nearly every fixture here draws (a component with
- * no example template); authoring-checks.test.mjs covers them.
+ * The example and listing notes, which nearly every fixture here draws (a
+ * component with no example template, a package with no logo);
+ * authoring-checks.test.mjs and package-listing-check.test.mjs cover them.
  */
 const EXAMPLE_CODES = new Set([
   'component_without_example',
   'template_category',
   'showcase_not_standalone',
   'template_asset_not_packed',
+  'package_without_logo',
+  'package_without_example',
 ]);
 
 /**

@@ -38,7 +38,8 @@
  * astryx --json theme build <file> --check
  * @typedef {object} ThemeBuildCheckResponse
  * @property {'theme.build.check'} type
- * @property {{name: string, upToDate: boolean, stale: Array<{path: string, reason: 'missing' | 'outdated'}>, checked: string[]}} data
+ * @property {{name: string, upToDate: boolean, stale: Array<{path: string, reason: 'missing' | 'outdated'}>, checked: string[], code?: 'ERR_THEME_STALE'}} data
+ *   `code` is set when the outputs are stale or missing (exit 1).
  */
 
 /**
@@ -79,7 +80,7 @@
  * @typedef {object} ThemeListResponse
  * @property {'theme.list'} type
  * @property {ThemeListEntry[]} data
- * @property {{unmigratedCopies: ThemeUnmigratedCopy[]}} [meta] descriptor-less released copies that are not listed as themes
+ * @property {{unmigratedCopies: ThemeUnmigratedCopy[], skippedThemes?: Array<{slug: string, path: string, reason: string}>}} [meta] descriptor-less released copies that are not listed as themes; local theme folders left out because they are broken
  */
 
 /**
@@ -91,6 +92,9 @@
  * @property {string} stylesheet production stylesheet import
  * @property {string} [fontStylesheet] package-owned font stylesheet import
  * @property {'bundled'|'package'|'local'} source
+ * @property {'light'|'dark'} [mode] the one color mode the theme has, when its
+ *   built module exports one (`colorModes`); the generated module then lists
+ *   it in `themeModes`. Absent for a theme with both modes.
  */
 
 /**
@@ -99,7 +103,13 @@
  * @property {'theme.app'} type
  * @property {string} [package] npm package that owns the theme `theme add`
  *   added. Omitted for a local theme, and for remove and use.
- * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean}}} data
+ * `notes` is present only when the command did more than its change says:
+ * it chose between a local and a package theme with one slug, replaced a
+ * recorded owner, or dropped a recorded theme whose source is gone.
+ * `change.wireModes` is present when the module lists a theme's one color
+ * mode (`themeModes`) for the first time after the app was wired: the app's
+ * `Theme` then takes `mode={themeModes[defaultThemeSlug] ?? 'system'}`.
+ * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean, wireModes?: true}, notes?: string[]}} data
  */
 
 /**
@@ -109,7 +119,10 @@
  * `maintained` describes the selected source theme. The ejected descriptor is
  * always written with `maintained: false` because the app owns the fork.
  * `package` is the source selector; bundled themes retain `@astryxdesign/cli`.
- * @property {{slug: string, displayName: string, maintained: boolean, package: string, outputDir: string, entry: string, exportName: string, files: string[]}} data
+ * `missingPackages` names the packages the fork imports that the app does not
+ * declare (empty when none); `installCommand` installs them, and is null when
+ * none are missing or the package manager is undetermined.
+ * @property {{slug: string, displayName: string, maintained: boolean, package: string, outputDir: string, entry: string, exportName: string, files: string[], missingPackages: string[], installCommand: string | null}} data
  */
 
 /**
@@ -118,7 +131,11 @@
  * re-run, and an edited template is the consumer's file to keep.
  * @typedef {object} ThemeTemplateResponse
  * @property {'theme.template'} type
- * @property {{path: string, written: boolean, reason: 'exists' | null}} data
+ * @property {{path: string, written: boolean, reason: 'exists' | null, overwritable?: boolean, alternative?: string | null}} data
+ *   When the file was left as is, `overwritable` says whether `--overwrite`
+ *   would replace it (a copy of the template or a theme source, outside a
+ *   theme the editor made), and `alternative` is a free path for the template
+ *   when it would not.
  */
 
 /**
@@ -168,6 +185,22 @@
  */
 
 /**
+ * Mutes the dark edge of every chromatic family. Their dark ramps keep
+ * `edgeMultiplier` of their in-gamut chroma through `throughStop`, then
+ * recover along a smoothstep to the standard recipe at `recoverAtStop`. Light
+ * ramps, neutral families, and the black and white endpoints do not change.
+ * @typedef {object} TonalPaletteDarkChromaTaper
+ * @property {number} edgeMultiplier Share of chroma, from 0 to 1, that the
+ * dark edge keeps.
+ * @property {number} throughStop Last stop that takes the full edge
+ * multiplier; must be a requested stop.
+ * @property {number} recoverAtStop First stop back on the standard recipe;
+ * must be a requested stop after `throughStop`.
+ * @property {Record<string, number>} [familyMultipliers] Edge multipliers,
+ * from 0 to 1, by chromatic family id, in place of `edgeMultiplier`.
+ */
+
+/**
  * @typedef {object} TonalPaletteGenerationInput
  * @property {TonalPaletteFamilyInput[]} families
  * @property {number} [vibrancy] Chroma control from 0 (most muted) through 50
@@ -177,6 +210,8 @@
  * `warm-v1` and `cool-v1` add a slight tint, and `custom` derives the hue from
  * the family's own seed. Defaults to `neutral-v1`.
  * @property {'light-only' | 'dark-only' | 'light-and-dark'} [modeStrategy]
+ * @property {TonalPaletteDarkChromaTaper} [darkChromaTaper] Mutes the dark
+ * edge of the chromatic families.
  * @property {number[]} [stops] Ordered stops shared by every requested family;
  * defaults to 0 through 100 in increments of 5. Decimal stops are supported,
  * and authors may omit the repeated black and white endpoints.
@@ -234,6 +269,9 @@
  * @property {number} vibrancy
  * @property {'neutral-v1' | 'warm-v1' | 'cool-v1' | 'custom'} neutralProfile
  * @property {'light-only' | 'dark-only' | 'light-and-dark'} modeStrategy
+ * @property {Required<TonalPaletteDarkChromaTaper>} [darkChromaTaper] The
+ * requested taper, with `familyMultipliers` filled in; present only when the
+ * request has a taper.
  * @property {number[]} stops
  * @property {Array<{id: string, name: string, seed: string, kind: 'chromatic' | 'neutral', anchors: TonalPaletteAnchor[]}>} families
  */

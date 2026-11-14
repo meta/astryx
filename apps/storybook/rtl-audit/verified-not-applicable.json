@@ -183,7 +183,7 @@
   },
   {
     "component": "core/List",
-    "reason": "List delegates marker placement and bidi ordering to semantic ol/ul elements and uses logical indentation and spacing. Item content is caller-owned; the component adds no directional controls, physical positioning, transforms, scrolling, dragging, or overlays."
+    "reason": "List delegates marker placement and bidi ordering to semantic ol/ul elements and places markers, row padding, edge treatments, and the reorder handle with logical properties. Its reorder, autoscroll, and animated row changes move rows only in the block axis, with Up and Down keys, and its reorder hint is a shared anchored layer. It owns no left/right glyph, physical inline placement, inline-axis ordering or scrolling, or horizontal keyboard behavior."
   },
   {
     "component": "core/Markdown",

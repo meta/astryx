@@ -2731,3 +2731,61 @@ test(
     expect(Math.max(...frames.map(f => f.top))).toBeGreaterThan(width * 0.5);
   },
 );
+
+test.describe('a tap that wobbles keeps its click', () => {
+  test('a tap on a pushed screen\u2019s row that drifts 3 px toward the back swipe keeps every move, and Chromium runs its click: the content back swipe waits out a tap\u2019s wobble (spec:AST-094 FR19, DEC-30)', async ({
+    page,
+  }) => {
+    // A pushed screen: the content back swipe can pop it.
+    const {driver, topTitle} = await openStack(page, 'pushed');
+    expect(await topTitle()).toBe('About');
+    await page.evaluate(() => {
+      const moves: {travel: number; cancelled: boolean}[] = [];
+      (window as unknown as {__wobble: typeof moves}).__wobble = moves;
+      let startX = 0;
+      window.addEventListener(
+        'touchstart',
+        event => {
+          startX = event.touches[0]?.clientX ?? 0;
+        },
+        {passive: true},
+      );
+      window.addEventListener(
+        'touchmove',
+        event => {
+          moves.push({
+            travel: Math.round((event.touches[0]?.clientX ?? 0) - startX),
+            cancelled: event.defaultPrevented,
+          });
+        },
+        {passive: true},
+      );
+    });
+    const at = await rowCenter(page, 'Done');
+    await driver.play([
+      {t: 0, fingers: [{id: 0, x: at.x, y: at.y}]},
+      {t: 30, fingers: [{id: 0, x: at.x + 2, y: at.y}]},
+      {t: 60, fingers: [{id: 0, x: at.x + 3, y: at.y}]},
+      {t: 90, fingers: []},
+    ]);
+    // WebKit ends a touch's click when one of its moves is cancelled;
+    // Chromium sends no move inside its 15 px slop.
+    const moves = await page.evaluate(
+      () =>
+        (
+          window as unknown as {
+            __wobble: {travel: number; cancelled: boolean}[];
+          }
+        ).__wobble,
+    );
+    if (driver.engine === 'webkit') {
+      // WebKit sends the wobble's moves; each reaches the page uncancelled.
+      expect(moves.length, JSON.stringify(moves)).toBeGreaterThan(0);
+    }
+    expect(moves.filter(({cancelled}) => cancelled)).toEqual([]);
+    if (driver.engine === 'chromium') {
+      // Chromium makes the play's click: Done pops to the root.
+      await expect.poll(topTitle).toBe('Settings');
+    }
+  });
+});

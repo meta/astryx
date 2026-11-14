@@ -19,6 +19,9 @@ export const meta = {
     'AvatarStatusDot, Icon, SVGIcon, ProgressBar, and Badge JSX elements. ' +
     'Indirect values are left unchanged for manual migration.',
   pr: '#996',
+  // A file changes only through a JSX `variant` or `color` prop
+  // (assets/codemods/run-codemod.mjs).
+  mentions: ['variant', 'color'],
 };
 
 const CORE_IMPORT_RE = /^@(astryxdesign|xds)\/core(?:\/|$)/;

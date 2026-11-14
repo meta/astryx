@@ -100,6 +100,14 @@ export const doc = {
       example: "'https://widgets.acme.dev'",
     },
     {
+      name: 'logo',
+      type: '{ light: string; dark?: string }',
+      description:
+        "The square logo catalogs show beside your package's name: paths, relative to the package root, to images the package ships. Each is a PNG, JPEG or WebP image, or a shapes-only SVG, of at most 512 KB, whose extension (`.png`, `.jpg`, `.jpeg`, `.webp`, `.svg`) names its format. Set `dark` for a version drawn for dark backgrounds; without it, `light` is used everywhere. `{@command integration check}` notes a logo that is missing, not one of those images, or not packed. In an SVG, no attribute value may hold `<`, `>`, `&` or `\\`, so write `and` rather than `&amp;` in a label. A package.json `marketplace.logo` is also read when this field is not set.",
+      example:
+        "{ light: './marketplace/logo.svg', dark: './marketplace/logo-dark.svg' }",
+    },
+    {
       name: 'cliCommand',
       type: 'string',
       description:

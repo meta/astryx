@@ -14,7 +14,7 @@ export const doc = {
   stability: 'experimental',
   summary: 'Remove a non-default theme from the app',
   description:
-    'Removes one added theme from the generated module and regenerates the whole module. Choose another default with theme use before removing the current default.',
+    'Removes one added theme from the generated module and regenerates the whole module. Choose another default with `astryx experimental theme use` before removing the current default.',
   fn: 'themeRemove',
   args: [
     {

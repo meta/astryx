@@ -7,12 +7,11 @@
  * @input The address being entered, a refused-address message, and the
  *   caller's apply, remove, and cancel handlers
  * @output Exports LinkForm, the link URL form, and REMOVE_LINK_GLYPH
- * @position Internal to RichText. RichTextEditorToolbar's link popover and
- *   RichTextEditorLinkPopoverPlugin's Edit view both render this one form, so
- *   adding and editing a link look and work the same in both.
+ * @position Internal to RichText. RichTextEditorToolbar's link popover
+ *   renders this form, so adding and editing a link share one form.
  */
 
-import {useEffect, useRef} from 'react';
+import {useRef} from 'react';
 import {IconButton} from '@astryxdesign/core/IconButton';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {HStack, StackItem} from '@astryxdesign/core/Layout';
@@ -55,6 +54,11 @@ export interface LinkFormProps {
   onApply: () => boolean;
   onRemove: () => void;
   onCancel: () => void;
+  /**
+   * Whether the field takes focus as the form mounts. A form inside a Popover
+   * leaves this off: the Popover's focus entry focuses the field.
+   */
+  hasAutoFocus?: boolean;
 }
 
 /**
@@ -72,15 +76,10 @@ export function LinkForm({
   onApply,
   onRemove,
   onCancel,
+  hasAutoFocus = false,
 }: LinkFormProps) {
   const t = useTranslator();
   const inputRef = useRef<HTMLInputElement | null>(null);
-  // The field takes focus as the form opens, a frame later so the popover is
-  // shown by then.
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => inputRef.current?.focus());
-    return () => cancelAnimationFrame(frame);
-  }, []);
   const apply = () => {
     if (!onApply()) {
       inputRef.current?.focus();
@@ -109,6 +108,7 @@ export function LinkForm({
           ref={inputRef}
           label={t('@astryx.richTextEditor.link.url')}
           isLabelHidden
+          hasAutoFocus={hasAutoFocus}
           value={url}
           size={size}
           width="100%"

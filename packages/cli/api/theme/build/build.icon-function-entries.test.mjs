@@ -25,6 +25,24 @@ import {
   removeLinkedFixture,
 } from '../../../test-utils/linked-fixture.mjs';
 
+/**
+ * The temp folder's entries, the fixture's own package.json aside: that
+ * file is the one the linked fixture writes (it lists Core, nothing else),
+ * checked unchanged, so a build that wrote any package.json still fails.
+ * @param {string} dir
+ * @returns {string[]}
+ */
+function ownEntries(dir) {
+  const pkg = path.join(dir, 'package.json');
+  if (fs.existsSync(pkg))
+    expect(JSON.parse(fs.readFileSync(pkg, 'utf8'))).toEqual({
+      private: true,
+      type: 'module',
+      dependencies: {'@astryxdesign/core': '*'},
+    });
+  return fs.readdirSync(dir).filter(f => f !== 'package.json');
+}
+
 const SIZES = ['xsm', 'sm', 'md', 'lg'];
 
 let tmpDir;
@@ -501,6 +519,6 @@ export default defineTheme({name: 'inline-functions', tokens: {}, ${iconsField}}
     await expect(
       themeBuild('inline.mjs', {}, {cwd: tmpDir}),
     ).rejects.toMatchObject({code: 'ERR_THEME_INVALID'});
-    expect(fs.readdirSync(tmpDir).sort()).toEqual(['icons.mjs', 'inline.mjs']);
+    expect(ownEntries(tmpDir).sort()).toEqual(['icons.mjs', 'inline.mjs']);
   });
 });

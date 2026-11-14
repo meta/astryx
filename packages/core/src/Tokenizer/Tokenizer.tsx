@@ -118,6 +118,8 @@ import type {
 import {composeEventHandlers, mergeProps} from '../utils';
 import {getInputARIA, joinAriaIDs} from '../utils/inputAria';
 import {isFocusDetached} from '../utils/isFocusDetached';
+import {removeControlOf} from '../privateAttributes/tokenRemove.stylex';
+import {useTapStop} from '../Layer/useTouchTrigger';
 import {themeProps} from '../utils/themeProps';
 import type {SheetDraftChange} from '../internal/sheetDraft';
 import type {TokenizerBottomSheetProps} from './TokenizerBottomSheet';
@@ -429,6 +431,10 @@ const TRACK_FADE_FROM_RIGHT = `linear-gradient(to left, transparent ${TOKEN_ROW_
 // Kept in sync with useEndLaneReserve: wrapperWithTokens reads the custom
 // property directly, to keep token rows and the input short of the lane.
 const END_LANE_RESERVE_VAR = '--_tokenizer-end-lane-reserve';
+const INPUT_TEXT_INSET = `calc(${spacingVars['--spacing-2']} - ${spacingVars['--spacing-1']} + 1px)`;
+// The content width an empty, focused input has beyond its inset, so its
+// caret has room to draw.
+const INPUT_CARET_ROOM = '2px';
 
 const styles = stylex.create({
   wrapper: {
@@ -504,14 +510,17 @@ const styles = stylex.create({
     boxSizing: 'border-box',
     zIndex: 0,
     // The input follows the last token in flow, so a focused empty input's
-    // caret sits where typed text will start. Empty, it asks only for that
-    // inset, and only while focused and editable: blurred or read-only (a
-    // disabled field with a disabledMessage stays focusable), it claims no
+    // caret sits where typed text will start. Empty, it takes only that inset
+    // from the row, and only while focused and editable: blurred or read-only
+    // (a disabled field with a disabledMessage stays focusable), it claims no
     // room at all, not even the column gap, so it never grows the field a
     // blank row. Typing restores the full editing width, which may wrap.
     minWidth: {
       default: '40px',
-      ':placeholder-shown': 0,
+      ':placeholder-shown:is(:not(:focus), :read-only)': 0,
+      // In a field with no spare room on the row, a zero-width content box
+      // hides the caret.
+      ':placeholder-shown:focus:not(:read-only)': `calc(${INPUT_TEXT_INSET} + ${INPUT_CARET_ROOM})`,
     },
     flex: {
       default: '1 1 40px',
@@ -522,10 +531,16 @@ const styles = stylex.create({
       default: 0,
       ':placeholder-shown:is(:not(:focus), :read-only)': `calc(-1 * ${spacingVars['--spacing-1']})`,
     },
+    // Gives the caret room back to the row, so the field keeps its width and
+    // the input does not wrap.
+    marginInlineEnd: {
+      default: 0,
+      ':placeholder-shown:focus:not(:read-only)': `calc(-1 * ${INPUT_CARET_ROOM})`,
+    },
     // Restore normal text inset when input follows tokens, since the
     // wrapper padding is reduced for border concentricity.
     paddingInlineStart: {
-      default: `calc(${spacingVars['--spacing-2']} - ${spacingVars['--spacing-1']} + 1px)`,
+      default: INPUT_TEXT_INSET,
       ':placeholder-shown:is(:not(:focus), :read-only)': 0,
     },
     // wrapperWithTokens already keeps the in-flow input short of the lane.
@@ -1102,6 +1117,66 @@ export function Tokenizer<T extends SearchableItem>({
       : {owner: 'content'},
   });
 
+  // Focus a pointer puts on a token's own control stays there: the
+  // person chose that control. The shared tracker says which input moved it.
+  const {ref: modalityRef, readModality} = useInteractionModalityTracking();
+  // The last press that started inside the field. A touch keyboard rises
+  // whenever the field focuses its input during a tap. So a tap on a token's
+  // remove button moves focus to the input only if the input already had it.
+  // `readModality()` tells whether that press is still the latest interaction
+  // in the field's document; a key press since then restores the keyboard
+  // rules.
+  const lastPressRef = useRef<{
+    inputHadFocus: boolean;
+    isFinger: boolean;
+    pressedTokenRemove: Element | null;
+  } | null>(null);
+  // The touch keyboard is down while the input is unfocused. Only a finger's
+  // press counts: a pen's press keeps the default focus rules, as a mouse's
+  // does.
+  const wasKeyboardDown = useCallback(() => {
+    const press = lastPressRef.current;
+    return (
+      press != null &&
+      press.isFinger &&
+      !press.inputHadFocus &&
+      readModality() === 'pointer'
+    );
+  }, [readModality]);
+  // A finger's tap on a token's remove button with the keyboard down keeps
+  // focus out of the field. Chrome focuses a pressed button on the tap's
+  // compatibility mouse events. That focus would expand an `unfocusedInline`
+  // field and remount the control under the finger. Cancelling it, as
+  // InputClearButton does, leaves the field as it was. The stop sees every
+  // press, so a press that turns into a scroll leaves no arm behind.
+  const {onPointerDown: armTapStop, onMouseDown: stopTap} =
+    useTapStop('mousedown');
+  const handlePointerDownCapture = useCallback(
+    (e: React.PointerEvent) => {
+      armTapStop(e);
+      lastPressRef.current = {
+        inputHadFocus:
+          inputRef.current != null &&
+          inputRef.current.ownerDocument.activeElement === inputRef.current,
+        isFinger: e.pointerType === 'touch',
+        pressedTokenRemove: removeControlOf(e.target),
+      };
+    },
+    [armTapStop],
+  );
+  const handleMouseDownCapture = useCallback(
+    (e: React.MouseEvent) => {
+      if (removeControlOf(e.target) != null && wasKeyboardDown()) {
+        stopTap(e);
+      }
+    },
+    [stopTap, wasKeyboardDown],
+  );
+  // The press record ends with its tap: after the click's task, or when the
+  // browser takes the press over for a scroll.
+  const endPress = useCallback(() => {
+    lastPressRef.current = null;
+  }, []);
   // `adaptive` resolves through the policy the selection controls share. An
   // open sheet keeps its presentation until it closes. A resolution change
   // during a task does not replace the open surface.
@@ -1152,9 +1227,6 @@ export function Tokenizer<T extends SearchableItem>({
   // handing focus from one control to the other — so the receiving control
   // does not report it as focus entering from outside.
   const isHandingOffFocusRef = useRef(false);
-  // Focus a pointer puts on a token's own control stays there: the
-  // person chose that control. The shared tracker says which input moved it.
-  const {ref: modalityRef, readModality} = useInteractionModalityTracking();
   // True while the menu returns focus after it closes. That focus stays on
   // the token the menu returns to.
   const isMenuFocusReturnRef = useRef(false);
@@ -1471,7 +1543,9 @@ export function Tokenizer<T extends SearchableItem>({
         // it: it is the keyboard path to its hidden tokens.
         // In a grouped row, a move to the input also scrolls the strip to its
         // end before the press releases, so a press on a token's remove
-        // button keeps its focus too.
+        // button keeps its focus too. A finger's tap on a remove button with
+        // the keyboard down keeps focus out of the input. Focusing it would
+        // raise the keyboard for a removal.
         if (
           e.target !== inputRef.current &&
           e.target !== trackRef.current &&
@@ -1481,7 +1555,8 @@ export function Tokenizer<T extends SearchableItem>({
               (e.target instanceof Node &&
                 trackRef.current?.contains(e.target) === true))
           ) &&
-          !isMenuFocusReturnRef.current
+          !isMenuFocusReturnRef.current &&
+          !(removeControlOf(e.target) != null && wasKeyboardDown())
         ) {
           inputRef.current?.focus();
         }
@@ -1494,6 +1569,7 @@ export function Tokenizer<T extends SearchableItem>({
       onFocus,
       readModality,
       findTokenControl,
+      wasKeyboardDown,
     ],
   );
 
@@ -1693,10 +1769,31 @@ export function Tokenizer<T extends SearchableItem>({
       if (!options?.silent) {
         announce(t('@astryx.tokenizer.tokenRemoved', {label: item.label}));
       }
-      inputRef.current?.focus();
+      // Focusing the input inside a keyboard-down tap would raise the
+      // keyboard. The sheet's own removals (`silent`) leave focus to the
+      // sheet.
+      const pressed =
+        !options?.silent && wasKeyboardDown()
+          ? (lastPressRef.current?.pressedTokenRemove ?? null)
+          : null;
+      if (pressed == null) {
+        inputRef.current?.focus();
+        return true;
+      }
+      // A token that held focus, on its remove button or on another of its
+      // controls, unmounts with focus inside it. Focus then moves to the
+      // input, as for every other removal. Focus anywhere else stays where it
+      // is. A built-in token's only control is its remove button.
+      const active = pressed.ownerDocument.activeElement;
+      const token =
+        [...tokenSlotsRef.current].find(slot => slot.contains(pressed)) ??
+        pressed;
+      if (active != null && token.contains(active)) {
+        inputRef.current?.focus();
+      }
       return true;
     },
-    [value, onChange, isDisabled, canRemoveItem, announce, t],
+    [value, onChange, isDisabled, canRemoveItem, announce, t, wasKeyboardDown],
   );
 
   // A composing component that words its own Clear all (PowerSearch) provides
@@ -1839,6 +1936,8 @@ export function Tokenizer<T extends SearchableItem>({
       role="group"
       aria-label={label}
       onClick={handleWrapperClick}
+      onPointerDownCapture={handlePointerDownCapture}
+      onMouseDownCapture={handleMouseDownCapture}
       // The control a click activates is recorded while the click passes
       // down through the field, before the token's own handler runs. The
       // record ends with the click's task, also when the token's handler
@@ -1853,7 +1952,16 @@ export function Tokenizer<T extends SearchableItem>({
             }
           }, 0);
         }
+        const press = lastPressRef.current;
+        if (press != null) {
+          setTimeout(() => {
+            if (lastPressRef.current === press) {
+              endPress();
+            }
+          }, 0);
+        }
       }}
+      onPointerCancelCapture={endPress}
       onFocusCapture={handleFocusCapture}
       onBlurCapture={handleBlurCapture}
       // Keys on the field's other controls (clear button, tokens) reach a

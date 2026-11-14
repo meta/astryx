@@ -71,7 +71,7 @@ import {
   ToolbarLinkPopover,
   isInsertLink,
   useToolbarLink,
-} from './ToolbarLinkPopover';
+} from './internal/ToolbarLinkPopover';
 import {useEditorFocusAndDrag} from './useEditorFocusAndDrag';
 
 export interface RichTextEditorSelectionToolbarProps extends BaseProps<HTMLDivElement> {

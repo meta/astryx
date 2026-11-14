@@ -36,9 +36,13 @@
  * @position consumed by the bare `astryx --json` action and the `manifest` command
  */
 
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {API_VERSION} from '../../../foundation/response/json.mjs';
 import {commandDocsOf} from './define-command.mjs';
 import {doc as manifestDoc} from '../commands/manifest.doc.mjs';
+import {compareText} from '../../../foundation/text/compare-text.mjs';
 
 /**
  * What a run may do beyond the command it was asked for (spec AST-081;
@@ -63,6 +67,10 @@ const CLI_LAYER_RESPONSE_TYPES = {
   manifest: ['manifest'],
   'theme build': ['theme.build.batch'],
   'theme add': ['theme.list'],
+  // The experimental theme groups answer a bare --json with their help.
+  'experimental theme': ['help'],
+  'experimental theme editor': ['help'],
+  'experimental theme preview': ['help'],
 };
 
 /**
@@ -215,7 +223,7 @@ function describeCommand(cmd, root, jsonSupported) {
   // `.command()` calls silently changes the output.
   if (subcommands.length > 0) {
     entry.subcommands = subcommands.sort((a, b) =>
-      /** @type {any} */ (a).name.localeCompare(/** @type {any} */ (b).name),
+      compareText(/** @type {any} */ (a).name, /** @type {any} */ (b).name),
     );
   }
 
@@ -254,6 +262,36 @@ function flattenCommands(commands) {
 }
 
 /**
+ * Where the published package keeps its manifest: the `data` of `astryx
+ * manifest --json` as the fully loaded CLI builds it. `prepack` writes it
+ * (scripts/generate-manifest.mjs), so the published `manifest` needs no other
+ * command loaded. A checkout has none and builds it.
+ */
+export const MANIFEST_FILE = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+  'manifest.generated.json',
+);
+
+/** @type {import('./manifest').CLIManifest | null | undefined} */
+let storedManifestData;
+
+/**
+ * The stored manifest, or null when there is none or it cannot be read.
+ * @returns {import('./manifest').CLIManifest | null}
+ */
+export function storedManifest() {
+  if (storedManifestData === undefined) {
+    try {
+      storedManifestData = JSON.parse(fs.readFileSync(MANIFEST_FILE, 'utf-8'));
+    } catch {
+      storedManifestData = null;
+    }
+  }
+  return storedManifestData ?? null;
+}
+
+/**
  * Build the full capability manifest from a configured Commander program.
  *
  * @param {import('commander').Command} program  the root program
@@ -270,7 +308,7 @@ export function buildManifest(program, opts = {}) {
     (program.commands || [])
       .map(cmd => describeCommand(cmd, program, jsonSupported))
       .filter(Boolean)
-  ).sort((a, b) => a.name.localeCompare(b.name));
+  ).sort((a, b) => compareText(a.name, b.name));
 
   return {
     name: 'astryx',

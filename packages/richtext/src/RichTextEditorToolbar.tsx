@@ -12,9 +12,8 @@
  * @output Exports RichTextEditorToolbar (a compact formatting toolbar with a
  *   RichText-owned 4px control gutter, a horizontally scrollable action row,
  *   and a link popover anchored to its Link button) and
- *   RichTextEditorToolbarProps, plus the inline formats, their labels, the
- *   formats a selection carries, the format command, and the glyph resolver,
- *   which the package shares internally.
+ *   RichTextEditorToolbarProps, plus format and glyph helpers RichText shares
+ *   internally.
  * @position @astryxdesign/richtext. Drop into RichTextEditor's `toolbar` slot to
  *   add a flush top formatting toolbar. Themed via Astryx Toolbar, Selector,
  *   IconButton, and ToggleButton, so it inherits the active theme. Base props
@@ -105,16 +104,13 @@ import {
   ToolbarLinkPopover,
   isInsertLink,
   useToolbarLink,
-} from './ToolbarLinkPopover';
+} from './internal/ToolbarLinkPopover';
 import {$selectedExtensionNodesOnly} from './markdownExtensionNode';
 
 /** Block types exposed by the toolbar's format selector. */
 type BlockType =
   'paragraph' | 'h1' | 'h2' | 'h3' | 'quote' | 'bullet' | 'number';
 
-// A vertical Divider's default 100% height needs a definite parent height.
-// Toolbar slots are sized by their controls instead, so let flexbox stretch
-// these group separators across the slot's resolved height.
 // The link popover's anchor: a box around the Link button that takes no
 // space of its own.
 const linkAnchorStyles = stylex.create({
@@ -124,6 +120,9 @@ const linkAnchorStyles = stylex.create({
   },
 });
 
+// A vertical Divider's default 100% height needs a definite parent height.
+// Toolbar slots are sized by their controls instead, so let flexbox stretch
+// these group separators across the slot's resolved height.
 const toolbarDividerStyles = stylex.create({
   vertical: {
     alignSelf: 'stretch',

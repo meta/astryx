@@ -4,7 +4,7 @@
  * @file Grades one workspace: type check, build, then the task probe in Chromium.
  * @input a workspace, its arm, its task, and a shared browser
  * @output a pass or fail with the reason, probe steps, screenshots, axe counts
- * @position Called by the self-test in run.mjs
+ * @position Called by run.mjs after each agent run, and by its self-test
  */
 
 import fs from 'node:fs';

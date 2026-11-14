@@ -25,7 +25,7 @@ import type {BaseProps} from '../BaseProps';
 import {RadioListContext} from './RadioList';
 import {RadioListReasonContext} from './RadioListReasonContext';
 import {joinAriaIDs} from '../utils/inputAria';
-import {colorVars, radiusVars} from '../theme/tokens.stylex';
+import {radiusVars} from '../theme/tokens.stylex';
 import {isRenderable} from '../utils/isRenderable';
 import {mergeProps} from '../utils/mergeProps';
 import {rtlStyles} from '../utils/rtlStyles';
@@ -40,20 +40,19 @@ import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {useIndicator} from '../Indicator/useIndicator';
 import {Item, type ItemAlign} from '../Item/Item';
 import {themeProps} from '../utils/themeProps';
-import {rowPressLayerStyles} from '../privateAttributes/press.stylex';
+import {
+  indicatorPressPaintStyles,
+  rowPressLayerStyles,
+  rowPressPaintStyles,
+} from '../privateAttributes/press.stylex';
 
 // Registered here, not in the press controller, so a page with no box carries
 // none of its code.
 registerBoxHold();
 
-// The touch press's paint, declared by the shared overlay styles on the
-// element the controller writes to (`pressedAlpha`) at the press's strength,
-// 1 while on and 1 → 0 over the release, and inherited resolved by the layer
-// that paints it. See interactionOverlay.stylex.ts.
-const pressedOverlayImage = 'var(--_press-paint-image)';
-
-// The mouse press's paint, declared on the row and inherited by the layer
-// over the circle. Internal: not a theme hook.
+// The paint of a press the controller does not paint, declared on the row
+// (`rowPressPaintStyles.radioRow`) and inherited by the layer over the circle.
+// Internal: not a theme hook.
 const ROW_PRESS = '--_radio-row-press';
 
 const styles = stylex.create({
@@ -65,17 +64,19 @@ const styles = stylex.create({
     flexShrink: 0,
     isolation: 'isolate',
   },
-  // The row remains the large press target, but nested links and buttons keep
-  // their independent action and do not make the radio appear pressed: the
-  // row declares the mouse press's paint (`rowStyles.press`) and this layer
-  // reads it. This owner-drawn layer also survives a theme replacing the
-  // indicator component.
-  // Two pointers, two press models (see interactionOverlay.stylex.ts): a
-  // mouse keeps `:active`; under a coarse pointer that arm is dropped and the
-  // touch press controller writes `data-astryx-press` on the row, which this layer
-  // reads off the same scope marker as the hover tint. The controller paints
-  // the innermost pressable, so a nested link or button takes the press
-  // itself and the row never carries the attribute for it.
+  // The row remains the large press target. Nested controls keep their own
+  // action and do not make the radio look pressed. The row declares the paint
+  // of a press the controller does not paint (`rowPressPaintStyles.radioRow`),
+  // and this layer reads it. This owner-drawn layer also survives a theme
+  // replacing the indicator component.
+  // The press controller writes its press attribute on the row for every
+  // pointer: a finger, a mouse and a pen. Its image layer
+  // (`indicatorPressPaintStyles.image`) reads it off the same scope marker as
+  // the hover tint. The controller paints the innermost pressable.
+  // A press on a control nested in the row is that control's. The row's
+  // container rule (cancelNestedPress) ends the row's paint at once.
+  // `:active` paints only a press the controller does not paint, and under a
+  // coarse pointer it is dropped.
   indicatorPressOverlay: {
     '::after': {
       content: '""',
@@ -84,22 +85,6 @@ const styles = stylex.create({
       borderRadius: radiusVars['--radius-full'],
       pointerEvents: 'none',
       backgroundColor: `var(${ROW_PRESS}, transparent)`,
-      // The touch press, as an image layer over the colour: an image change is
-      // discrete, so no transition can delay the onset, and the strength the
-      // row's `pressedAlpha` arms own (1 while on, 1 → 0 over the release) is
-      // what moves. Coarse pointers only, like the drop above.
-      backgroundImage: {
-        default: null,
-        [stylex.when.ancestor('[data-astryx-press="on"]', indicatorScope)]: {
-          default: null,
-          '@media (pointer: coarse)': pressedOverlayImage,
-        },
-        [stylex.when.ancestor('[data-astryx-press="fading"]', indicatorScope)]:
-          {
-            default: null,
-            '@media (pointer: coarse)': pressedOverlayImage,
-          },
-      },
     },
   },
   input: {
@@ -157,22 +142,6 @@ const rowStyles = stylex.create({
     // Suppress Item's interactive hover/press background so the resting and
     // hovered row look identical by default (a theme can restyle either).
     backgroundColor: 'transparent',
-  },
-  // The mouse press (a finger's lives on `data-astryx-press`): the row is
-  // pressed, but not through a nested link or button, which keep their own
-  // action. The `:has()` is on the row itself and reaches no descendant
-  // selector, so a change inside the row re-checks the row alone; the circle's
-  // layer reads the paint through inheritance rather than a relation that
-  // would restyle everything under the row.
-  press: {
-    [ROW_PRESS]: {
-      default: null,
-      ':active:not(:has(a:active,button:active,[role="button"]:active,[role="link"]:active))':
-        {
-          default: colorVars['--color-overlay-pressed'],
-          '@media (pointer: coarse)': 'transparent',
-        },
-    },
   },
 });
 
@@ -331,6 +300,7 @@ export function RadioListItem({
         styles.radioWrapper,
         wrapperSizeStyles[size],
         !isDisabled && styles.indicatorPressOverlay,
+        !isDisabled && indicatorPressPaintStyles.image,
       )}
       {...focusProps}>
       <input
@@ -438,7 +408,7 @@ export function RadioListItem({
           // styles so it wins within the base layer; a `radio-list-item` theme
           // still overrides it from the higher `astryx-theme` layer.
           rowStyles.root,
-          !isDisabled && rowStyles.press,
+          !isDisabled && rowPressPaintStyles.radioRow,
           !isDisabled && touchHitAreaStyles.layer,
           xstyle,
         ] as StyleXStyles

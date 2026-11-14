@@ -18,5 +18,7 @@ export type {
   TimeInputPresentation,
   TimeInputStatus,
   TimeInputStatusType,
+  TimeInputEntryError,
+  EntryErrorBehavior,
 } from './TimeInput';
 export type {ISOTimeString} from '../utils';
