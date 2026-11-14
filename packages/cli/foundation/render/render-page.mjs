@@ -864,7 +864,8 @@ export async function renderPage(entry, options = {}) {
   for (const asset of ctx.localAssets) carryAsset(asset, 'shown inline');
   // A carried module or stylesheet can name an image, font or media file by
   // a relative path. --reverse expects each such file back, also when this
-  // render does not show it.
+  // render does not show it, when it lies inside the folder that holds the
+  // carried files (a name that climbs out of it is not the page's file).
   let named = dir;
   for (const f of files) {
     while (path.relative(named, f).startsWith('..')) named = path.dirname(named);
@@ -881,6 +882,7 @@ export async function renderPage(entry, options = {}) {
     }
     for (const ref of assetRefsOf(text, file)) {
       const asset = path.resolve(path.dirname(file), ref);
+      if (path.relative(named, asset).startsWith('..')) continue;
       if (fs.statSync(asset, {throwIfNoEntry: false})?.isFile()) {
         carryAsset(asset, `named in ${path.relative(dir, file).split(path.sep).join('/')}`);
       }

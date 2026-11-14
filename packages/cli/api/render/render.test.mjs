@@ -482,6 +482,18 @@ describe('render(): every write stays inside the current folder', () => {
     expect(again.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('missing-asset');
   }, 60_000);
 
+  it('leaves out a named image outside the folder that holds the carried files, so the layout stays', async () => {
+    // A page under a tests/ folder: were the layout to move above it, its
+    // module would land under tests/, which a render never carries.
+    put('shared/far.png', PNG);
+    put('up/tests/icons.ts', "export const icons = {far: '../../shared/far.png'};\n");
+    put('up/tests/page.tsx', "import {icons} from './icons';\nexport default function Page() {\n  return <p>{Object.keys(icons).join(', ')}</p>;\n}\n");
+    const result = /** @type {any} */ (await render('up/tests/page.tsx', {cwd: dir}));
+    expect(result.data.files).toEqual(['page.tsx', 'icons.ts']);
+    const back = /** @type {any} */ (await render('up/tests/page.html', {cwd: dir, reverse: true, out: 'up-back/page.tsx'}));
+    expect(back.data).toMatchObject({exact: true, files: ['up-back/page.tsx', 'up-back/icons.ts']});
+  }, 60_000);
+
   it('leaves out a named image larger than a render carries, and says so', async () => {
     put('named-big/huge.png', Buffer.concat([PNG, Buffer.alloc(9 * 1024 * 1024)]));
     put('named-big/icons.ts', "export const icons = {big: './huge.png'};\n");
