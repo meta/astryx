@@ -38,7 +38,7 @@ const MAX_LISTED = 24;
  * @property {string | null} cli - The CLI version that rendered the file.
  * @property {number} format - The render format of the embedded source.
  * @property {string} file - The rendered file's name.
- * @property {string} page - The page's path from its project's root.
+ * @property {string} page - The page's path from its project's root; outside a project, its path among the files it carries.
  * @property {string} restored - Where --reverse writes the page by default, from the rendered file's folder.
  * @property {string[]} files - The embedded files, page first.
  * @property {Record<string, string>} packages - The packages the page rendered with, by name: their versions.

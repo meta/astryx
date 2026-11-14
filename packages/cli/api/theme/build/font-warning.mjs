@@ -60,6 +60,11 @@ const SYSTEM_FAMILIES = new Set([
   'segoe ui',
   'segoe ui emoji',
   'segoe ui symbol',
+  // The weights Windows ships as families of their own.
+  'segoe ui light',
+  'segoe ui semilight',
+  'segoe ui semibold',
+  'segoe ui black',
   'roboto',
   'helvetica',
   'helvetica neue',
@@ -127,6 +132,20 @@ function splitFamilies(value) {
     families.push(name);
   }
   return families;
+}
+
+/**
+ * The font families a CSS font-family value names that something has to
+ * load: its names without generics, CSS-wide keywords, `var()` references
+ * or known system families.
+ * @param {string} value
+ * @returns {string[]}
+ */
+export function loadableFontFamilies(value) {
+  return splitFamilies(value).filter(family => {
+    const key = family.toLowerCase();
+    return !GENERIC_KEYWORDS.has(key) && !SYSTEM_FAMILIES.has(key);
+  });
 }
 
 /**

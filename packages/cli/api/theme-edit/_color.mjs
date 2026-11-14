@@ -179,6 +179,14 @@ const NAMED = wordTable(
 /** The CSS named colors, for suggestions. */
 export const COLOR_NAMES = Object.keys(NAMED);
 
+/**
+ * The hex a CSS color name is, or null.
+ * @param {string} name
+ * @returns {string | null}
+ */
+export const namedColorHex = name =>
+  Object.hasOwn(NAMED, name) ? NAMED[name] : null;
+
 /** Color keywords that are valid colors but have no fixed value. */
 const KEYWORDS = ['transparent', 'currentcolor', ...CSS_WIDE];
 
@@ -442,6 +450,20 @@ const polar = (c, h) => [
 ];
 
 /**
+ * The colors written inside a value (a shadow's layers, a gradient's
+ * stops): each hex color and each color function, in order.
+ * @param {string} value
+ * @returns {string[]}
+ */
+export function colorsIn(value) {
+  return [...String(value ?? '').matchAll(COLOR_IN_VALUE)].map(m => m[0]);
+}
+
+/** One color written inside a value: a hex color or a color function. */
+export const COLOR_IN_VALUE =
+  /#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\((?:[^()]|\([^()]*\))*\)/gi;
+
+/**
  * The opacity of a CSS color, 0 to 1: the alpha of an 8- or 4-digit hex,
  * `rgba()`/`hsla()`, or a `/ alpha` part; 0 for `transparent`; 1 otherwise.
  * @param {unknown} value
@@ -514,7 +536,33 @@ export function mixSide(side) {
     if (w == null) return null;
     const plain = /^calc\(\s*(.*?)\s*\)$/i.exec(w)?.[1] ?? w;
     const n = cssNumber(plain);
-    return n?.unit === '%' ? n.value : null;
+    if (n) return n.unit === '%' ? n.value : null;
+    // Math of two terms that gives a percentage: percentages added or
+    // taken away (`25% + 25%`), a percentage scaled by a number
+    // (`50% * 1`, `100% / 2`).
+    const m = /^(\S+)\s*([*/+-])\s*(\S+)$/.exec(plain);
+    if (!m) return null;
+    const [a, b] = [cssNumber(m[1]), cssNumber(m[3])];
+    if (!a || !b) return null;
+    const pct = (/** @type {{unit: string}} */ x) => x.unit === '%';
+    const plainNum = (/** @type {{unit: string}} */ x) => x.unit === '';
+    const r =
+      m[2] === '+' || m[2] === '-'
+        ? pct(a) && pct(b)
+          ? m[2] === '+'
+            ? a.value + b.value
+            : a.value - b.value
+          : null
+        : m[2] === '*'
+          ? pct(a) && plainNum(b)
+            ? a.value * b.value
+            : plainNum(a) && pct(b)
+              ? a.value * b.value
+              : null
+          : pct(a) && plainNum(b) && b.value !== 0
+            ? a.value / b.value
+            : null;
+    return r != null && Number.isFinite(r) ? r : null;
   };
   if (words.length < 2) return {color: side.trim(), pct: null};
   const last = share(words.at(-1));

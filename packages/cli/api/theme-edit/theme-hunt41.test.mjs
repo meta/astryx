@@ -137,7 +137,12 @@ describe('hunt41 N4: a base typed as its package name', () => {
         /(npm install|(pnpm|yarn|bun) add) @astryxdesign\/theme-butter$/,
       );
     }
-    for (const v of ['theme-butter', 'Butter', '@astryxdesign/theme-butter']) {
+    for (const v of [
+      'butter',
+      'theme-butter',
+      'Butter',
+      '@astryxdesign/theme-butter',
+    ]) {
       const err = await refusal(() => themeEditSet('t', 'base', v, {cwd}));
       expect(err.run.join('\n'), v).toMatch(/ set t base butter$/m);
       expect(err.run[0], v).toMatch(/@astryxdesign\/theme-butter$/);

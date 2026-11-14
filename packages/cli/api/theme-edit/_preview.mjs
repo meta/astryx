@@ -14,6 +14,8 @@
 
 import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
+import {declarationValues} from '../../foundation/fonts/font-stylesheet.mjs';
+import {loadableFontFamilies} from '../theme/build/font-warning.mjs';
 import * as path from 'node:path';
 import {spawn} from 'node:child_process';
 import * as os from 'node:os';
@@ -33,12 +35,13 @@ import {
 } from './_parts.mjs';
 import {OVERVIEW_SECTIONS} from './_overview.mjs';
 import {
-  folderIsEmpty,
   camel,
+  folderIsEmpty,
   fontPackages,
+  fontsourcePackageOf,
   modesOf,
-  themeFiles,
   shown,
+  themeFiles,
 } from './_settings.mjs';
 import {writeWhole} from './_palette.mjs';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
@@ -47,6 +50,7 @@ import {COLOR_PROP_PARTS, DIRECT, P, wordTable} from './_tables.mjs';
 import {extractImportedPackages} from '../../foundation/discovery/template-needs.mjs';
 import {findNodeModulesPackage} from '../../foundation/fs/paths.mjs';
 import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
+import {compareText} from '../../foundation/text/compare-text.mjs';
 
 const TEMPLATES_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -163,7 +167,7 @@ export function showcaseItems(project, group) {
   };
   const chosen = items
     .filter(it => !group || it.group === group)
-    .sort((a, b) => order(a) - order(b) || a.name.localeCompare(b.name));
+    .sort((a, b) => order(a) - order(b) || compareText(a.name, b.name));
   /** @type {Record<string, string>} */
   const imports = {};
   for (const n of elementNames(chosen.map(i => i.tree))) {
@@ -1408,6 +1412,14 @@ export function previewRouteSource({
 /** @param {string} slug */
 const camelName = camel;
 
+/** The script that takes one picture through the project's Playwright. */
+const PLAYWRIGHT_PICTURE = fileURLToPath(
+  new URL('./_playwright-picture.mjs', import.meta.url),
+);
+
+/** How long a browser may take for one picture before it is stopped. */
+const BROWSER_BOUND_MS = 60_000;
+
 /**
  * A PNG of an HTML file, with a Playwright the project has installed, else
  * a Chrome or Chromium found on the machine. Not ok with a reason when
@@ -1422,6 +1434,10 @@ const camelName = camel;
 export async function screenshot(project, html, png, mode) {
   /** What was found and why it could not take the picture. @type {string[]} */
   const failed = [];
+  /** Whether a Playwright was found without its own browser installed. */
+  let pwMissing = false;
+  /** Whether a Playwright was found at all. */
+  let pwFound = false;
   /** The first line of an error, with no path of this machine. @param {unknown} e */
   const firstLine = e =>
     String(/** @type {any} */ (e)?.message ?? e ?? '')
@@ -1430,6 +1446,30 @@ export async function screenshot(project, html, png, mode) {
       .find(Boolean)
       ?.split(project.cwd)
       .join('.') ?? 'it stopped with no message';
+  /**
+   * Why a browser did not start: Playwright's first line names only the
+   * call ("browserType.launch: Target … closed"); the cause, such as a
+   * missing library, is in a later line, so that line comes too.
+   */
+  const causeOf = (/** @type {string} */ text) => {
+    const head = firstLine(text);
+    const rest = String(text ?? '')
+      .split('\n')
+      .slice(1)
+      .map(l => l.replace(/^[\s=<>-]+/, '').trim())
+      .filter(Boolean)
+      .find(l =>
+        /error|cannot|can't|missing|not found|while loading|no such|failed|denied/i.test(
+          l,
+        ),
+      );
+    return rest ? `${head} (${rest.split(project.cwd).join('.')})` : head;
+  };
+  // The project's Playwright, its own browser first and the system Chrome
+  // when that one is missing or does not start. Each run is a process of
+  // its own under the browser runner: one temp folder, one time bound and
+  // one stop for every browser the editor starts.
+  const sys = chromeBinary();
   for (const pkg of ['playwright', 'playwright-core']) {
     /** @type {string} */
     let entry;
@@ -1438,26 +1478,34 @@ export async function screenshot(project, html, png, mode) {
     } catch {
       continue;
     }
-    try {
-      const pw = await import(pathToFileURL(entry).href);
-      const chromium = pw.chromium ?? pw.default?.chromium;
-      const browser = await chromium.launch(
-        chromeBinary() ? {executablePath: chromeBinary()} : {},
+    pwFound = true;
+    const deadline = Date.now() + BROWSER_BOUND_MS;
+    for (const exe of sys ? [null, sys] : [null]) {
+      const r = await runBrowser(
+        process.execPath,
+        [PLAYWRIGHT_PICTURE, entry, html, png, mode, ...(exe ? [exe] : [])],
+        Math.max(1, deadline - Date.now()),
+        {profileArg: false},
       );
-      try {
-        const page = await browser.newPage({
-          viewport: {width: 1280, height: 900},
-          colorScheme: mode,
-        });
-        await page.goto(pathToFileURL(html).href, {waitUntil: 'load'});
-        await page.screenshot({path: png, fullPage: true});
-      } finally {
-        await browser.close();
-      }
-      return {ok: true, file: shown(project.cwd, png)};
-    } catch (e) {
-      // This Playwright could not launch its browser: try Chrome directly.
-      failed.push(`${pkg}: ${firstLine(e)}`);
+      if (r.stoppedBy)
+        return {
+          ok: false,
+          stopped: r.stoppedBy,
+          reason: `the pictures were stopped (${r.stoppedBy}) before the browser finished`,
+        };
+      if (r.timedOut)
+        return {
+          ok: false,
+          reason: `the browser did not finish the picture within ${BROWSER_BOUND_MS / 1000} seconds, so it was stopped; run the command again, or open the .html beside the picture to look without one`,
+        };
+      if (r.status === 0 && fs.existsSync(png))
+        return {ok: true, file: shown(project.cwd, png)};
+      const text = r.error ? String(r.error.message) : r.stderr;
+      if (!exe && /Executable doesn't exist|playwright install/i.test(text))
+        pwMissing = true;
+      failed.push(
+        `${pkg}${exe ? ` with ${exe}` : sys ? ' with its own browser' : ''}: ${causeOf(text)}`,
+      );
     }
   }
   const chrome = chromeBinary();
@@ -1514,7 +1562,16 @@ export async function screenshot(project, html, png, mode) {
   if (failed.length)
     return {
       ok: false,
-      reason: `A browser was found, but it could not take the picture (${failed.join('; ')}). Give Playwright its browser (npx playwright install chromium), or check that ${chrome ?? 'Google Chrome or Chromium'} starts on this machine. The HTML preview needs neither.`,
+      // Advice that can change the result: Playwright's browser only when
+      // it is missing, else the browsers that were tried.
+      // A Chrome to check only when there is one; else one to install.
+      reason: `A browser was found, but it could not take the picture (${failed.join('; ')}). ${
+        !pwFound
+          ? `Install Playwright with its browser (${installLine(project.cwd, ['playwright'])}, then npx playwright install chromium), or`
+          : pwMissing
+            ? 'Give Playwright its browser (npx playwright install chromium), or'
+            : "Playwright's own browser did not start (the reason is above):"
+      } ${chrome ? `check that ${chrome} starts on this machine` : 'install Google Chrome or Chromium'}. The HTML preview needs neither.`,
     };
   return {
     ok: false,
@@ -1537,11 +1594,23 @@ function chromeBinary() {
     'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
   ];
-  for (const f of fixed) if (fs.existsSync(f)) return f;
+  // Only a file that runs: a folder or a file with no execute permission
+  // by a browser's name is passed over, and the search goes on.
+  /** @param {string} f */
+  const runs = f => {
+    try {
+      if (!fs.statSync(f).isFile()) return false;
+      if (process.platform !== 'win32') fs.accessSync(f, fs.constants.X_OK);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  for (const f of fixed) if (runs(f)) return f;
   for (const dir of (process.env.PATH ?? '').split(path.delimiter)) {
     for (const n of names) {
       const f = path.join(dir, n);
-      if (dir && fs.existsSync(f)) return f;
+      if (dir && runs(f)) return f;
     }
   }
   return null;
@@ -1561,12 +1630,34 @@ import {builtColorMode} from '../../foundation/discovery/theme-imports.mjs';
  * @returns {string[]}
  */
 export function copyFontsCss(ctx, slug, data) {
-  return themeImports(
+  const css = themeImports(
     ctx,
     slug,
     data,
     path.join(ctx.project.cwd, 'src', 'themes', slug),
   ).css.slice(1);
+  // A family the built theme uses that its settings do not name (set in
+  // the theme's own source, by a token or typography): its installed
+  // @fontsource package loads it too.
+  /** @type {string} */
+  let built;
+  try {
+    built = fs.readFileSync(themeFiles(ctx.project.cwd, slug).css, 'utf8');
+  } catch {
+    return css;
+  }
+  for (const value of declarationValues(built, /^--font-family-/))
+    for (const family of loadableFontFamilies(value)) {
+      const pkg = fontsourcePackageOf(family);
+      if (css.some(c => c.startsWith(`${pkg}/`))) continue;
+      try {
+        ctx.project.req.resolve(`${pkg}/package.json`);
+        css.push(`${pkg}/index.css`);
+      } catch {
+        // Not installed: nothing to import.
+      }
+    }
+  return css;
 }
 
 /**
@@ -1638,7 +1729,7 @@ function appCopyFiles(cwd, slug, fontsCss) {
     // theme's fonts change (none: a comment only).
     [`${slug}.fonts.css`]: fonts.length
       ? `${head('/*', '*/')}${fonts.map(c => `@import ${JSON.stringify(c)};`).join('\n')}\n`
-      : `${head('/*', '*/')}/* No font stylesheets: the theme uses fonts the system has. */\n`,
+      : `${head('/*', '*/')}/* No font stylesheets: no installed package loads the theme's fonts. A font the system does not have shows only once its package is installed (experimental theme editor show ${slug} names it). */\n`,
   };
   return files;
 }
@@ -1903,20 +1994,29 @@ export function takeFirstAppCopy(cwd, slug) {
  * @param {string} bin
  * @param {string[]} args
  * @param {number} [bound] milliseconds before the browser is stopped
+ * @param {{profileArg?: boolean}} [opts] `profileArg`: give Chrome the
+ *   temp folder as its profile (`--user-data-dir`); off for a process that
+ *   starts its browser itself, which still gets the folder as its temp
  * @returns {Promise<{status: number | null, signal: string | null, stderr: string, error?: Error, stoppedBy?: string, timedOut?: boolean}>}
  */
-export function runBrowser(bin, args, bound = 60_000) {
+export function runBrowser(
+  bin,
+  args,
+  bound = BROWSER_BOUND_MS,
+  {profileArg = true} = {},
+) {
   return new Promise(resolve => {
     /** @type {string | undefined} */
     let stoppedBy;
     let stderr = '';
-    // A profile folder of its own, removed on every way out (done, failed,
-    // timed out, stopped): Chrome leaves its org.chromium.* folders in the
-    // system temp folder otherwise.
+    // A temp folder of its own, removed on every way out (done, failed,
+    // timed out, stopped): Chrome leaves its org.chromium.* folders and
+    // Playwright its profile and artifacts folders in the system temp
+    // folder otherwise.
     /** @type {string | null} */
     let profile = null;
     try {
-      profile = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-chrome-'));
+      profile = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-browser-'));
     } catch {
       // No temp folder: Chrome's own default.
     }
@@ -1931,10 +2031,15 @@ export function runBrowser(bin, args, bound = 60_000) {
     process.once('exit', dropProfile);
     const child = spawn(
       bin,
-      [...(profile ? [`--user-data-dir=${profile}`] : []), ...args],
+      [
+        ...(profile && profileArg ? [`--user-data-dir=${profile}`] : []),
+        ...args,
+      ],
       {
         stdio: ['ignore', 'ignore', 'pipe'],
-        env: profile ? {...process.env, TMPDIR: profile} : process.env,
+        env: profile
+          ? {...process.env, TMPDIR: profile, TMP: profile, TEMP: profile}
+          : process.env,
         // A group of its own, so a stop takes Chrome's helper processes
         // with it, before its profile folder is removed.
         detached: process.platform !== 'win32',

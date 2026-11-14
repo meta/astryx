@@ -142,3 +142,35 @@ export function vetSuggestions(e, ctx, slug, data) {
     : [{name: `${P} set --help`, reason: 'see what set takes'}];
   return e;
 }
+
+/**
+ * Follow a suggested command before it is offered: `check` runs the line as
+ * its command would (in memory, nothing written) and gives null when it
+ * runs, else the refusal. The refusal's own repair (its first suggestion
+ * `isRepair` takes that was not tried) replaces the line, until the line
+ * runs or no repair is offered; `why` then names what is still refused.
+ * Every refusal-suggested `set`, `undo`, `new` and `compile` that is a
+ * repair of a typed command goes through here.
+ * @param {string} line
+ * @param {(line: string) => Promise<AstryxError | null> | AstryxError | null} check
+ * @param {(name: string) => boolean} isRepair
+ * @returns {Promise<{line: string, why: string | null}>}
+ */
+export async function followLine(line, check, isRepair) {
+  const tried = new Set([line]);
+  let now = line;
+  for (;;) {
+    const refused = await check(now);
+    if (!refused) return {line: now, why: null};
+    const next = (refused.suggestions ?? []).find(
+      x => isRepair(x.name) && !tried.has(x.name),
+    );
+    if (!next)
+      return {
+        line: now,
+        why: refused.message.replace(/\s*Nothing was changed\.$/, ''),
+      };
+    now = next.name;
+    tried.add(now);
+  }
+}

@@ -9,7 +9,9 @@
  * @position packages/cli/api/theme-edit — pure helpers, no environment access
  */
 
-import {DIALS} from './_tables.mjs';
+import {DIALS, wordTable} from './_tables.mjs';
+import {namedColorHex} from './_color.mjs';
+import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 
 /**
  * A value as CSS reads it, for every value type: every Unicode space
@@ -158,7 +160,16 @@ export function escapesMeant(thing, value) {
     try {
       j = JSON.parse(t);
     } catch {
-      return v;
+      // A list in single quotes, as a JS config writes it (`['Inter',
+      // 'serif']`): read like the JSON one.
+      const items =
+        /^\[\s*('(?:[^'\\]|\\.)*'\s*(?:,\s*'(?:[^'\\]|\\.)*'\s*)*),?\s*\]$/.exec(
+          t,
+        );
+      if (!items) return v;
+      j = [...items[1].matchAll(/'((?:[^'\\]|\\.)*)'/g)].map(x =>
+        x[1].replace(/\\(.)/g, '$1'),
+      );
     }
     /** @param {any} x */
     const text = x =>
@@ -531,7 +542,7 @@ export function colorPair(value) {
       .replace(/^(["'])(.*)\1$/, '$2')
       .trim();
   const labeled =
-    /^\{?\s*["']?(light|dark)["']?\s*[:=]\s*(.+?)\s*[;,]\s*["']?(light|dark)["']?\s*[:=]\s*(.+?)\s*;?\s*\}?$/i.exec(
+    /^\{?\s*["']?(light|dark)["']?\s*[:=]\s*(.+?)\s*(?:[;,]\s*|\s+)["']?(light|dark)["']?\s*[:=]\s*(.+?)\s*;?\s*\}?$/i.exec(
       v,
     );
   if (labeled && labeled[1].toLowerCase() !== labeled[3].toLowerCase()) {
@@ -547,66 +558,484 @@ export function colorPair(value) {
 }
 
 /**
- * The stock values a repair would put in when it could read nothing from
- * the input: the example of each value type, and the dials' defaults. A
- * line with one of these is offered only when the input held it.
+ * A value without the debris a copy brings along: a trailing `;`, a
+ * `!important`, a comment. One of the exact cleanups a repair may offer.
+ * @param {string} v
+ * @returns {string}
  */
-export const STOCK_VALUES = new Set([
-  '#1f2937',
-  '#7c3aed',
-  '#ffffff',
-  'inter',
-  'inter, sans-serif',
-  'system',
-  '1px',
-  '6px',
-  '12px',
-  '16',
-  '600',
-  '1.4',
-  '150ms',
-  'solid',
-  // The dials' fallback words and the size tokens' Core defaults, offered
-  // when nothing could be read.
-  'medium',
-  'roomy',
-  'compact',
-  'round',
-  'light-dark(#1f2937, #f9fafb)',
-]);
+export function withoutCopyDebris(v) {
+  return String(v)
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\s*!\s*important\b/gi, '')
+    .replace(/[\s;]+$/, '')
+    .trim();
+}
+
+/**
+ * Words with a documented reading on a CSS property: the exact value each
+ * one means. A repair may offer these for the word typed.
+ * @type {Record<string, Record<string, string>>}
+ */
+export const PROPERTY_WORDS = wordTable({
+  opacity: {
+    half: '0.5',
+    'half-transparent': '0.5',
+    opaque: '1',
+    solid: '1',
+  },
+  'text-transform': {
+    caps: 'uppercase',
+    'all-caps': 'uppercase',
+    upper: 'uppercase',
+    lower: 'lowercase',
+    title: 'capitalize',
+    'no-caps': 'none',
+  },
+  'border-radius': {
+    round: '9999px',
+    rounded: '9999px',
+    pill: '9999px',
+    circle: '50%',
+    square: '0',
+  },
+});
+
+/** Weight words beyond the headings dial's, as their numbers. */
+export const WEIGHT_WORDS = wordTable(
+  /** @type {Record<string, string>} */ ({
+    thin: '100',
+    extralight: '200',
+    light: '300',
+    regular: '400',
+    normal: '400',
+    medium: '500',
+    semibold: '600',
+    bold: '700',
+    heavy: '800',
+    extrabold: '800',
+    ultrabold: '800',
+    black: '900',
+  }),
+);
+
+/**
+ * Tailwind's radius classes, as the corners value each one is.
+ * @type {Record<string, string>}
+ */
+export const TAILWIND_RADIUS = wordTable({
+  'rounded-none': 'square',
+  'rounded-sm': '2px',
+  rounded: '4px',
+  'rounded-md': '6px',
+  'rounded-lg': '8px',
+  'rounded-xl': '12px',
+  'rounded-2xl': '16px',
+  'rounded-3xl': '24px',
+  'rounded-full': 'pill',
+});
+
+/** Words for more or less room, as the spacing rung each one means. */
+export const DENSITY_WORDS = wordTable(
+  /** @type {Record<string, string>} */ ({
+    airy: 'roomy',
+    loose: 'roomy',
+    relaxed: 'roomy',
+    comfortable: 'roomy',
+    open: 'roomy',
+    sparse: 'roomy',
+    generous: 'roomy',
+    dense: 'compact',
+    cramped: 'compact',
+    condensed: 'compact',
+    packed: 'compact',
+  }),
+);
+
+/**
+ * The words of a typed value, as a repair may carry them: lower case, with
+ * quotes, escapes (`\u0020`), a `#` or `0x` before a hex, and a unit after
+ * a number taken off; and each run of neighbor words joined (`dark red` is
+ * also `darkred`).
+ * @param {string} typed
+ * @returns {Set<string>}
+ */
+function typedWords(typed) {
+  const text = String(typed)
+    .replace(/\\(?:u\{?([0-9a-f]{4,6})\}?|x([0-9a-f]{2}))/gi, (_, u, x) =>
+      String.fromCodePoint(parseInt(u ?? x, 16)),
+    )
+    .toLowerCase();
+  const words = text.match(/[a-z0-9.%]+/g) ?? [];
+  /** @type {Set<string>} */
+  const out = new Set();
+  const add = (/** @type {string} */ w) => {
+    out.add(w);
+    out.add(w.replace(/^0x/, ''));
+    const n = /^([0-9.]+)(px|rem|em|%)?$/.exec(w);
+    if (n) out.add(n[1]);
+  };
+  words.forEach(add);
+  for (let i = 0; i < words.length; i += 1)
+    for (let j = i + 2; j <= Math.min(words.length, i + 4); j += 1)
+      out.add(words.slice(i, j).join(''));
+  return out;
+}
 
 /**
  * Whether a suggested value carries what was typed: each of its words and
- * numbers is in the typed text (cleaned: case, quotes, escapes), apart from
- * a unit added to a bare number and the words of the CSS form it is written
- * in (`light-dark()`, `var()`, `calc()`, a generic family). A stock value
- * the input never held (a gray, a violet, `system`, `small`) does not.
+ * numbers is a word of the typed text (cleaned: case, quotes, escapes), or
+ * neighbor words of it joined, apart from a unit added to a bare number
+ * and the words of the CSS form it is written in (`light-dark()`, `var()`,
+ * `calc()`). A word only inside a typed word does not count (`round` is not
+ * in `rounded-lg`, `red` is not `darkred`).
  * @param {string} offered
  * @param {string} typed
  */
 export function carriesTyped(offered, typed) {
-  const flat = String(typed)
-    .toLowerCase()
-    .replace(/\\(?=[#"' ])/g, '')
-    .replace(/[\s"'\u201C\u201D\u2018\u2019\u300C\u300D]/g, '');
-  const FORM = new Set(['light', 'dark', 'var', 'calc', 'px', 'rem', 'em']);
+  const have = typedWords(typed);
+  // The words of the CSS form a value is written in.
+  const FORM = new Set([
+    'light',
+    'dark',
+    'var',
+    'calc',
+    'px',
+    'rem',
+    'em',
+    'linear',
+    'radial',
+    'conic',
+    'gradient',
+  ]);
   return (
     String(offered)
       .toLowerCase()
-      .match(/[a-z0-9.]+/g) ?? []
+      .match(/[a-z0-9.%]+/g) ?? []
   )
     .map(w => w.replace(/^([0-9.]+)(px|rem|em)$/, '$1'))
     .filter(w => !FORM.has(w))
-    .every(w => flat.includes(w));
+    .every(w => have.has(w));
 }
 
 /**
- * Whether a repair may offer `offered` for `typed`: a stock value only when
- * the input held it; any other value (one read from the input, or mapped
- * from it by a documented rule) may be.
+ * Whether a repair may offer `offered` for `typed`: only through the
+ * allowlist of exact readings that keep the meaning. The value carries
+ * what was typed (quotes, labels, debris and a unit's absence aside), or
+ * is the documented reading of the word typed (a Tailwind radius class, a
+ * property word, a weight word, a density word, a share of one as a
+ * percent, rounding said with a negation as square). Anything else (a
+ * stock example, a reset, a nearest spelling) is not offered.
  * @param {string} offered
  * @param {string} typed
  */
-export const offersTyped = (offered, typed) =>
-  !STOCK_VALUES.has(String(offered).toLowerCase()) ||
-  carriesTyped(offered, typed);
+export function allowedOffer(offered, typed) {
+  const o = String(offered)
+    .trim()
+    .replace(/^(["'])(.*)\1$/, '$2')
+    .toLowerCase();
+  const t = String(typed)
+    .trim()
+    .replace(/^(["'])(.*)\1$/, '$2')
+    .replace(/;+\s*$/, '')
+    .trim()
+    .toLowerCase();
+  if (carriesTyped(o, t)) return true;
+  const key = t.replace(/^[a-z-]+\s*:\s*/, '');
+  // A documented reading of the whole value or of one of its words.
+  const keys = [
+    key,
+    key.replace(/\s+/g, '-'),
+    key.replace(/[\s-]+/g, ''),
+    ...key.split(/\s+/),
+  ];
+  if (keys.some(k => READINGS.get(k)?.has(o))) return true;
+  if (numbersEqual(o, t)) return true;
+  // An rgb() color typed, as its opaque hex.
+  const rgb = /rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)/.exec(t);
+  if (
+    rgb &&
+    o ===
+      `#${rgb
+        .slice(1, 4)
+        .map(x => Math.min(255, Number(x)).toString(16).padStart(2, '0'))
+        .join('')}`
+  )
+    return true;
+  // A CSS color name typed, as its hex.
+  if (
+    /^#[0-9a-f]{3,8}$/.test(o) &&
+    (t.match(/[a-z]+/g) ?? []).some(w => namedColorHex(w) === o)
+  )
+    return true;
+  // A radius at or below zero is square; at or past half, or 1000px, pill.
+  const len = /^([+-]?\d*\.?\d+)(px|%)?$/.exec(key);
+  if (len) {
+    const n = Number(len[1]);
+    if (o === 'square' && n <= 0) return true;
+    if (o === 'pill' && ((len[2] === '%' && n >= 50) || n >= 1000)) return true;
+  }
+
+  // Rounding said with a negation (not round, unrounded, rounded-none).
+  if (
+    o === 'square' &&
+    /round/.test(key) &&
+    /(^|[\s-])(not|no|non|without|never|less)([\s-]|$)|^un|-none$/.test(key)
+  )
+    return true;
+  return false;
+}
+
+/**
+ * Documented readings: each typed word and the exact value it means,
+ * registered by the table that documents it (a dial's words, a Tailwind
+ * class, a property word). A repair may offer only these for a word that
+ * was not typed as the value.
+ * @type {Map<string, Set<string>>}
+ */
+const READINGS = new Map();
+
+/**
+ * Register a documented table's readings with the repair allowlist.
+ * @param {Iterable<[string, string]>} pairs typed word, value it means
+ */
+export function documentReadings(pairs) {
+  for (const [w, v] of pairs) {
+    const k = String(w).trim().toLowerCase();
+    if (!READINGS.has(k)) READINGS.set(k, new Set());
+    /** @type {Set<string>} */ (READINGS.get(k)).add(String(v).toLowerCase());
+  }
+}
+
+/**
+ * Documented numeric tables (a rung and its number), each for the settings
+ * that document it, registered where it is defined: a number typed for one
+ * of those settings may be offered as its nearest rung.
+ * @type {Array<{things: string[], table: Array<[string, number]>, domain: [number, number]}>}
+ */
+const NUMERIC_TABLES = [];
+
+/**
+ * Register a documented numeric table with the repair allowlist.
+ * @param {string[]} things the settings whose values the table reads (a
+ *   name ending in `*` names every setting it starts)
+ * @param {Array<[string, number]>} table
+ * @param {[number, number]} [domain] the numbers the table reads (by
+ *   default every number)
+ */
+export function documentNumericTable(
+  things,
+  table,
+  domain = [-Infinity, Infinity],
+) {
+  if (table.length) NUMERIC_TABLES.push({things, table, domain});
+}
+
+/**
+ * Documented ranges: a number typed past either end of a setting's range
+ * may be offered as that end.
+ * @type {Array<{things: string[], min: number, max: number}>}
+ */
+const RANGES = [];
+
+/**
+ * Register a setting's documented range with the repair allowlist.
+ * @param {string[]} things as for documentNumericTable
+ * @param {number} min
+ * @param {number} max
+ */
+export function documentRange(things, min, max) {
+  RANGES.push({things, min, max});
+}
+
+/**
+ * Whether a registered setting list names a setting.
+ * @param {string[]} things
+ * @param {string} key
+ */
+const names = (things, key) =>
+  things.some(t =>
+    t.endsWith('*') ? key.startsWith(t.slice(0, -1)) : t === key,
+  );
+
+/**
+ * Values a setting documents as its own fallback or other direction, which
+ * a refusal may offer whatever was typed: no base, the modes, a step the
+ * other way.
+ * @type {Record<string, string[]>}
+ */
+const DECLARED_VALUES = wordTable({
+  base: ['none'],
+  mode: ['both', 'light-only', 'dark-only'],
+});
+
+/**
+ * The one gate a suggested line's value goes through. Its value comes from
+ * one of the declared sources: (1) the value typed, under the exact
+ * transformations of allowedOffer; (2) a documented table registered with
+ * documentReadings or documentNumericTable; (3) the theme's own saved
+ * values (a keep or unlock line); (4) the setting's documented fallback or
+ * other-direction step; (5) the correction of a typo of the value typed
+ * (typoOf: underlin is underline).
+ * @param {{offered: string, typed: string, thing: string, saved?: string}} line
+ */
+export function allowedLine({offered, typed, thing, saved = ''}) {
+  const o = String(offered)
+    .trim()
+    .replace(/^(["'])(.*)\1$/, '$2')
+    .toLowerCase();
+  if (allowedOffer(o, typed)) return true;
+  if (saved && allowedOffer(o, saved)) return true;
+  const key = String(thing).toLowerCase();
+  if (Object.hasOwn(DECLARED_VALUES, key) && DECLARED_VALUES[key].includes(o))
+    return true;
+  const t = String(typed).trim().toLowerCase();
+  // A step (more, less) is worked out from the theme as it is: the value
+  // it gives is the theme's own, never a stock one.
+  if (/(^|\s)(more|less)$/.test(t)) return true;
+  // A number typed for a setting with a documented numeric table, read as
+  // the rung nearest it (900 is the heavy weight, 1.3 the editorial type
+  // scale, 101 the most vivid 100).
+  for (const {things, table, domain} of NUMERIC_TABLES)
+    if (names(things, key))
+      for (const m of t.matchAll(/\d*\.?\d+/g)) {
+        const n = Number(m[0]);
+        if (n < domain[0] || n > domain[1]) continue;
+        const [rung] = table.reduce((a, b) =>
+          Math.abs(b[1] - n) < Math.abs(a[1] - n) ? b : a,
+        );
+        if (rung === o) return true;
+      }
+  // A number past a documented range, as the end it passed.
+  for (const {things, min, max} of RANGES)
+    if (names(things, key))
+      for (const m of t.matchAll(/-?\d*\.?\d+/g)) {
+        const n = Number(m[0]);
+        if ((n > max && o === String(max)) || (n < min && o === String(min)))
+          return true;
+      }
+  return typoOf(t, o);
+}
+
+documentReadings([
+  ['more', 'less'],
+  ['less', 'more'],
+]);
+documentReadings(Object.entries(TAILWIND_RADIUS));
+documentReadings(Object.values(PROPERTY_WORDS).flatMap(m => Object.entries(m)));
+documentReadings(Object.entries(WEIGHT_WORDS));
+documentReadings(Object.entries(WEIGHT_WORDS).map(([w, n]) => [n, w]));
+documentReadings(Object.entries(DENSITY_WORDS));
+
+/**
+ * Whether every number of `offered` is a number of `typed` written another
+ * exact way: other digits (full-width), a comma for the decimal point, an
+ * exponent, rem or em as px (x16), pt as px (x4/3), a percent as a share
+ * of one, or a share of one as a percent. The rest of `offered` is units
+ * and form words only.
+ * @param {string} offered
+ * @param {string} typed
+ */
+function numbersEqual(offered, typed) {
+  const NUM = /[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?/gi;
+  const rest = offered
+    .replace(NUM, '')
+    .replace(/px|rem|em|%|[\s(),/*+-]|calc|var/g, '');
+  const want = offered.match(NUM);
+  if (!want || rest) return false;
+  // A letter O written for a zero inside a number (7OO) is the zero.
+  const nfkc = typed
+    .normalize('NFKC')
+    .replace(/(\d)([oO]+)/g, (_, d, os) => d + '0'.repeat(os.length));
+  // A comma is a decimal point (1,5rem), or before three digits a
+  // thousands mark (1,000): both readings.
+  const text = `${nfkc.replace(/(\d),(\d)/g, '$1.$2')} ${nfkc.replace(/(\d),(\d{3})\b/g, '$1$2')}`;
+  /** @type {Set<string>} */
+  const have = new Set();
+  const r2 = (/** @type {number} */ x) => String(Math.round(x * 100) / 100);
+  for (const m of text.matchAll(
+    /([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)\s*(px|rem|em|pt|%)?/gi,
+  )) {
+    const n = Number(m[1]);
+    if (!Number.isFinite(n)) continue;
+    const unit = (m[2] ?? '').toLowerCase();
+    have.add(r2(n));
+    if (unit === 'rem' || unit === 'em') have.add(r2(n * 16));
+    if (unit === 'pt') have.add(r2((n * 4) / 3));
+    // A percent as a share of one, or of the 16px base size.
+    if (unit === '%') {
+      have.add(r2(n / 100));
+      have.add(r2((n * 16) / 100));
+    }
+    if (!unit && n > 0 && n < 1) have.add(r2(n * 100));
+  }
+  // A calc() of lengths that adds and subtracts only, worked out in px.
+  const sum = /^\s*calc\(([^()]*)\)/i.exec(nfkc);
+  // One length times or over a plain number (calc(4px*2)).
+  const scale = sum
+    ? /^\s*(\d*\.?\d+)\s*(px|rem|em)?\s*([*/])\s*(\d*\.?\d+)\s*$/i.exec(sum[1])
+    : null;
+  if (scale) {
+    const a = Number(scale[1]) * (/r?em/i.test(scale[2] ?? '') ? 16 : 1);
+    have.add(
+      r2(scale[3] === '*' ? a * Number(scale[4]) : a / Number(scale[4])),
+    );
+  }
+  if (sum && !/[*/]/.test(sum[1])) {
+    let total = 0;
+    for (const m of sum[1].matchAll(/([+-]?)\s*(\d*\.?\d+)\s*(px|rem|em)?/gi)) {
+      const x = Number(m[2]) * (/r?em/i.test(m[3] ?? '') ? 16 : 1);
+      total += m[1] === '-' ? -x : x;
+    }
+    have.add(r2(total));
+  }
+  return want.every(
+    w => have.has(r2(Math.abs(Number(w)))) || have.has(r2(Number(w))),
+  );
+}
+
+/**
+ * Whether a repair may offer `offered` for `typed`: the one gate every
+ * suggested value goes through (the allowlist above).
+ * @param {string} offered
+ * @param {string} typed
+ */
+export const offersTyped = (offered, typed) => allowedOffer(offered, typed);
+
+/**
+ * Whether a typed word is a typo of a word: both words of four letters or
+ * more, within one edit for a typed word of five letters or fewer and two
+ * for a longer one (`nnone` is none, `normall` normal; `line` is no none).
+ * @param {string} typed
+ * @param {string} word
+ */
+export function typoOf(typed, word) {
+  const t = String(typed).trim().toLowerCase();
+  const w = String(word).trim().toLowerCase();
+  return (
+    /^[a-z][a-z-]{3,}$/.test(t) && /^[a-z][a-z-]{3,}$/.test(w) && typoNear(t, w)
+  );
+}
+
+/**
+ * The edits a typo of a typed word may hold: one for a word of five letters
+ * or fewer, two for a longer one. Every typo reading of the editor (a value,
+ * a setting, a part, a state, a theme or token name) uses this limit.
+ * @param {string} typed
+ */
+export const typoLimit = typed => (String(typed).trim().length <= 5 ? 1 : 2);
+
+/**
+ * Whether `word` is within the typo limit of `typed` (two letters swapped
+ * count as one edit, as typed: flxe is flex).
+ * @param {string} typed
+ * @param {string} word
+ */
+export function typoNear(typed, word) {
+  const t = String(typed).trim().toLowerCase();
+  const limit = typoLimit(t);
+  return (
+    levenshteinDistance(t, String(word).trim().toLowerCase(), limit, {
+      swaps: true,
+    }) <= limit
+  );
+}

@@ -30,7 +30,10 @@ import {
   text,
 } from '../../formatters/index.mjs';
 import {cliError} from '../../lib/cli-error.mjs';
-import {editorMissingArgument} from '../../lib/json-shim.mjs';
+import {
+  editorMissingArgument,
+  setEditorThemeList,
+} from '../../lib/json-shim.mjs';
 import {AstryxError} from '../../../../api/error.mjs';
 import {defineCommand} from '../../lib/define-command.mjs';
 import {
@@ -49,6 +52,8 @@ import {
   dialValueFits,
   newFlagList,
   editorCompileProblem,
+  editorFollowCompile,
+  editorThemesAt,
   editorBuildExtra,
   editorLoadedFonts,
   editorColorModes,
@@ -675,6 +680,42 @@ function strayOption(command, rest) {
 }
 
 /**
+ * Refuse an option `show` does not take with a show that works: the same
+ * show without it (`--png=false` is no --png, `--png=true` is --png), the
+ * nearest option it takes, and its help. Null when there is none.
+ * @param {string} name
+ * @param {unknown[]} rest the words after the theme
+ * @param {{png?: boolean, section?: string}} o the options read
+ */
+function showStray(name, rest, o) {
+  const stray = rest.map(String).find(w => w.startsWith('-'));
+  if (stray == null) return null;
+  const [flag, value] = stray.split('=');
+  const takes = ['--png', '--section', '--json'];
+  const on = value != null && /^(true|yes|1)$/i.test(value);
+  const off = value != null && /^(false|no|0)$/i.test(value);
+  const near = takes
+    .map(t => ({t, d: levenshteinDistance(flag.toLowerCase(), t)}))
+    .filter(x => x.d <= 2)
+    .sort((a, b) => a.d - b.d)[0]?.t;
+  const meant = takes.includes(flag.toLowerCase()) ? flag.toLowerCase() : near;
+  const png =
+    (o.png && !(meant === '--png' && off)) || (meant === '--png' && on);
+  const json = meant === '--json' && on;
+  const line = `${EDITOR} show ${name}${o.section ? ` --section ${o.section}` : ''}${png ? ' --png' : ''}${json ? ' --json' : ''}`;
+  return cliError(
+    `unknown option '${stray}'${meant && meant !== flag ? ` (did you mean ${meant}?)` : value != null && meant === flag ? ` (${flag} takes no value)` : ''}.`,
+    {
+      suggestions: [
+        {name: cmd(line), reason: 'do this instead'},
+        {name: cmd(`${EDITOR} show --help`), reason: 'every option it takes'},
+      ],
+      code: ERROR_CODES.ERR_INVALID_OPTION,
+    },
+  );
+}
+
+/**
  * A refusal for words after what a command takes, which would otherwise be
  * dropped without a word; null when there are none.
  * @param {string} command
@@ -797,11 +838,31 @@ function defineGroup(parent, doc) {
 }
 
 /**
+ * A preview command's result, once it is in: this client owns its process,
+ * so a stop that lands while the result is printed is held, and a printed
+ * ok never ends with exit 130. The API itself leaves no listener behind.
+ * @template T
+ * @param {Promise<T>} result
+ * @returns {Promise<T>}
+ */
+async function resultStands(result) {
+  const r = await result;
+  for (const sig of /** @type {const} */ (['SIGINT', 'SIGTERM']))
+    if (!process.listeners(sig).includes(heldStop)) process.on(sig, heldStop);
+  return r;
+}
+
+/** A stop after a preview command finished: its result stands. */
+function heldStop() {}
+
+/**
  * Register `theme` and its subcommands under the `experimental` group.
  * @param {import('commander').Command} group the `experimental` command
  * @param {import('commander').Command} program the root program
  */
 export function registerExperimentalTheme(group, program) {
+  // A command run with no theme names the app's only theme.
+  setEditorThemeList(editorThemesAt);
   const theme = defineGroup(group, groupDoc);
   explained(theme, groupDoc);
   theme.addHelpText(
@@ -843,6 +904,35 @@ export function registerExperimentalTheme(group, program) {
                 (/** @type {string} */ w) =>
                   /^-/.test(w) && !takes.has(w.split('=')[0]),
               );
+            // `--base` is the dial new takes as --like.
+            if (stray && stray.split('=')[0] === '--base') {
+              const args = (cmd?.args ?? []).slice(1).map(String);
+              const at = args.indexOf(stray);
+              const value = stray.includes('=')
+                ? stray.slice(stray.indexOf('=') + 1)
+                : args[at + 1];
+              return cliError(
+                `new takes the base theme as --like, not --base.`,
+                {
+                  suggestions: value
+                    ? [
+                        {
+                          name: cliLine(
+                            `${EDITOR} new ${quoteCommandArgument(name)}${newFlagLine({...o, like: value})}`,
+                          ),
+                          reason: 'do this instead',
+                        },
+                      ]
+                    : [
+                        {
+                          name: cliLine(`${EDITOR} new --help`),
+                          reason: 'every option it takes',
+                        },
+                      ],
+                  code: ERROR_CODES.ERR_INVALID_OPTION,
+                },
+              );
+            }
             if (stray)
               return cliError(`unknown option '${stray}'.`, {
                 suggestions: [
@@ -933,7 +1023,11 @@ export function registerExperimentalTheme(group, program) {
         if (!value.length) {
           // Any thing, a token or a dial, with `:` or `=` (`accent: red`,
           // `--color-accent=#e11d48`).
-          const pasted = /^(\S+?)\s*[:=]\s*(.+?);?\s*$/.exec(thing);
+          // A thing and its value in one word (`'corners pill'`) are the
+          // same as given apart.
+          const pasted =
+            /^(\S+?)\s*[:=]\s*(.+?);?\s*$/.exec(thing) ??
+            /^\s*(\S+)\s+(.+?)\s*$/.exec(thing);
           if (!pasted)
             return missingSetValue(
               editor.commands.find(c => c.name() === 'set'),
@@ -963,6 +1057,7 @@ export function registerExperimentalTheme(group, program) {
         /** @type {any} */ o,
         /** @type {any} */ c,
       ) =>
+        showStray(name, (c?.args ?? []).slice(1), o) ??
         extraWords('show', (c?.args ?? []).slice(1)) ??
         // The sheet is limited to one section (the docs say so): a second
         // --section is refused, never kept over the first in silence.
@@ -996,6 +1091,8 @@ export function registerExperimentalTheme(group, program) {
         ),
     }),
     showDoc,
+    // An unknown option reaches the action, which names a show that works.
+    {tokens: true},
   );
 
   explained(
@@ -1048,13 +1145,15 @@ export function registerExperimentalTheme(group, program) {
           program,
           () =>
             previewFlagsOnce('add', ['theme', 'template', 'top', 'path']) ??
-            themeEditPreviewAdd([words ?? []].flat().join(' ') || undefined, {
-              cwd: process.cwd(),
-              theme: o.theme,
-              template: o.template,
-              top: o.top,
-              path: o.path,
-            }),
+            resultStands(
+              themeEditPreviewAdd([words ?? []].flat().join(' ') || undefined, {
+                cwd: process.cwd(),
+                theme: o.theme,
+                template: o.template,
+                top: o.top,
+                path: o.path,
+              }),
+            ),
           r => {
             const {matched, skipped, ...rest} = r.data;
             return [
@@ -1095,10 +1194,12 @@ export function registerExperimentalTheme(group, program) {
           program,
           () =>
             previewFlagsOnce('app', ['theme']) ??
-            themeEditPreviewApp(dir, {
-              cwd: process.cwd(),
-              theme: o.theme,
-            }),
+            resultStands(
+              themeEditPreviewApp(dir, {
+                cwd: process.cwd(),
+                theme: o.theme,
+              }),
+            ),
           r => [
             `[ok] new app in ${r.data.folder} with the theme preview`,
             ...project(/** @type {any} */ (r.data)),
@@ -1179,7 +1280,9 @@ export function registerExperimentalTheme(group, program) {
           program,
           () =>
             previewFlagsOnce('remove', ['path']) ??
-            themeEditPreviewRemove(page, {cwd: process.cwd(), path: o.path}),
+            resultStands(
+              themeEditPreviewRemove(page, {cwd: process.cwd(), path: o.path}),
+            ),
           r => [
             r.data.pages.length
               ? `[ok] removed ${page} from the theme preview`
@@ -1325,6 +1428,7 @@ export function registerExperimentalTheme(group, program) {
       build: 'compile',
       explain: editorThemeRefusal,
       preflight: editorCompileProblem,
+      follow: editorFollowCompile,
       missingSource: editorMissingSource,
       template: editorThemeTemplate,
       hold: editorThemeHold,
