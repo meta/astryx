@@ -112,6 +112,7 @@ import {
   folderIsEmpty,
   dialValueFits,
   holdAfterBuild,
+  setArgs,
 } from './_settings.mjs';
 import {checkSetting, normalizeEntry, storedProblems} from './_check.mjs';
 import {MODAL, isColorToken} from './_compiler.mjs';
@@ -1328,6 +1329,18 @@ async function swappedThingValue(e, slug, thing, value, options) {
     options.cwd ?? process.cwd(),
   );
   if (followed.why) return e;
+  // The swapped reading holds only when set takes the value typed as the
+  // setting, with the scope typed, and the line carries the thing typed
+  // as its value (the one gate): never a sample command from a refusal of
+  // the swapped line (`bold` is no setting, and no part was named).
+  const read = readSetLine(followed.line, slug);
+  if (
+    !read ||
+    read.thing.toLowerCase() !== String(value).trim().toLowerCase() ||
+    (read.flags?.on ?? undefined) !== (options.on ?? undefined) ||
+    !allowedLine({offered: read.value, typed: String(thing), thing: read.thing})
+  )
+    return e;
   e.suggestions = [
     {
       name: followed.line,
@@ -1336,6 +1349,64 @@ async function swappedThingValue(e, slug, thing, value, options) {
     ...(e.suggestions ?? []).filter(x => x.name !== followed.line),
   ];
   return e;
+}
+
+/**
+ * A refusal of a saved entry whose value the editor no longer accepts,
+ * with the repair `set` offers for that value as typed (a typo, a unit, a
+ * label read as set reads them) beside the undo: the line is followed as
+ * set takes it, with the saved entry not checked while the theme is read,
+ * and offered only when it carries the saved value (the one gate).
+ * @param {unknown} e
+ * @param {string} slug
+ * @param {string} cwd
+ */
+async function withSavedRepair(e, slug, cwd) {
+  const bad = /** @type {any} */ (e)?.damaged;
+  if (
+    !(e instanceof AstryxError) ||
+    !bad ||
+    typeof bad.value !== 'string' ||
+    ['mode', 'base'].includes(bad.thing)
+  )
+    return e;
+  const line = `${P} set ${slug} ${setArgs(bad, bad.value)}`;
+  const followed = await followChangeLine('set', slug, line, cwd, bad);
+  if (followed.why || followed.line === line) return e;
+  const read = readSetLine(followed.line, slug);
+  if (
+    !read ||
+    read.thing !== bad.thing ||
+    !allowedLine({offered: read.value, typed: bad.value, thing: read.thing})
+  )
+    return e;
+  const list = e.suggestions ?? [];
+  // A set line the refusal already offers (the value cleaned) stands.
+  if (list.some(x => x.name.startsWith(`${P} set ${slug} `))) return e;
+  const at = list.findIndex(x => x.name.startsWith(`${P} undo ${slug} `));
+  e.suggestions = [
+    ...list.slice(0, at + 1),
+    {name: followed.line, reason: 'or set the value it holds, as set reads it'},
+    ...list.slice(at + 1),
+  ];
+  return e;
+}
+
+/**
+ * A `set` or `undo` command line as set or undo takes it (a repair either
+ * offers folded in, see followChangeLine), or null when it is refused with
+ * no repair: the check every offered line passes, for lines the CLI builds
+ * (a flag written with a value).
+ * @param {'set' | 'undo'} sub
+ * @param {string} line the whole command, `astryx experimental theme editor set <theme> …`
+ * @param {string} cwd
+ * @returns {Promise<string | null>}
+ */
+export async function checkedChangeLine(sub, line, cwd) {
+  const slug = splitCommand(line.slice(`${P} ${sub} `.length))?.[0];
+  if (!line.startsWith(`${P} ${sub} `) || !slug) return null;
+  const followed = await followChangeLine(sub, slug, line, cwd);
+  return followed.why ? null : followed.line;
 }
 
 /**
@@ -2073,6 +2144,9 @@ function carryTyped(e, sub, slug, thing, typed, data) {
   if (
     sub !== 'set' ||
     !(e instanceof AstryxError) ||
+    // A refusal about what the settings file holds: its lines carry the
+    // saved value (checked where they are made), not the typed one.
+    /** @type {any} */ (e).aboutSaved ||
     typeof typed !== 'string' ||
     !e.suggestions?.length
   )
@@ -2250,15 +2324,17 @@ async function workingLines(sub, slug, lines, cwd, typed, thing) {
  * @param {string} slug
  * @param {string} line
  * @param {string} cwd
+ * @param {Partial<import('./_settings.mjs').Setting>} [skip] a saved entry
+ *   the line replaces, whose value is not checked when the theme is read
  * @returns {Promise<{line: string, why: string | null}>}
  */
-async function followChangeLine(sub, slug, line, cwd) {
+async function followChangeLine(sub, slug, line, cwd, skip) {
   /** @type {import('./_settings.mjs').ThemeData} */
   let data;
   /** @type {import('./_settings.mjs').Ctx} */
   let ctx;
   try {
-    data = loadTheme(cwd, slug);
+    data = loadTheme(cwd, slug, skip);
     ctx = /** @type {import('./_settings.mjs').Ctx} */ (await context(cwd));
     ctx.base = await baseResolved(ctx.project, data.like);
   } catch {
@@ -2323,6 +2399,9 @@ async function change(sub, slug, thing, value, options) {
         : /^\s*\{?\s*["']/.test(thing) && /["']\s*:/.test(String(value))
           ? `${thing}:${value}`
           : null;
+  // A pasted object of one entry is that entry, as read below: its repair
+  // carries the entry's value, and how names its setting.
+  let oneEntry = false;
   if (objectText != null) {
     /** @type {any} */
     let obj = null;
@@ -2331,6 +2410,9 @@ async function change(sub, slug, thing, value, options) {
     } catch {
       // Not an object: read as typed.
     }
+    oneEntry = Boolean(
+      obj && typeof obj === 'object' && Object.keys(obj).length === 1,
+    );
     if (obj && typeof obj === 'object' && Object.keys(obj).length > 1)
       refuse(
         E.ERR_INVALID_ARGUMENT,
@@ -2539,8 +2621,8 @@ async function change(sub, slug, thing, value, options) {
           : await vetLoadRefusal(e, options.cwd ?? process.cwd(), slug),
         sub,
         slug,
-        typedThing,
-        typedValue,
+        oneEntry ? thing : typedThing,
+        oneEntry ? value : typedValue,
         seen.data ?? savedAsWritten(options.cwd ?? process.cwd(), slug),
       ),
       seen.data?.name ?? slug,
@@ -2583,7 +2665,13 @@ async function changeOnce(
     // source means nothing.
     ...(sub === 'undo' ? {removing: true} : {}),
   });
-  const data = loadTheme(cwd, slug, target);
+  /** @type {import('./_settings.mjs').ThemeData} */
+  let data;
+  try {
+    data = loadTheme(cwd, slug, target);
+  } catch (e) {
+    throw await withSavedRepair(e, slug, cwd);
+  }
   /** @type {string[]} */
   // A damaged mode or base the command does not set itself is read as
   // meant, or goes back to its default, so the theme loads again.

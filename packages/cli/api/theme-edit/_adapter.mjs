@@ -94,7 +94,7 @@ setAfterBuild(writeAppCopy);
 import {LOCAL_THEME_ROOT} from '../../foundation/config/theme-state.mjs';
 
 export {parsePoints} from './_how.mjs';
-export {newFlagList} from './_edit.mjs';
+export {newFlagList, checkedChangeLine as editorCheckedLine} from './_edit.mjs';
 import {themeEditHow as howAt} from './_how.mjs';
 
 /**
@@ -893,7 +893,7 @@ export function editorThemeRefusal(err, cwd) {
 }
 
 /** The shared typo rule, for a typed subcommand. */
-export {typoOf} from './_normal.mjs';
+export {typoOf, booleanWord} from './_normal.mjs';
 
 /**
  * The editor themes of the app the folder `cwd` is in, by name; none when

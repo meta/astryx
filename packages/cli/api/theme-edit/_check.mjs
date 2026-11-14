@@ -121,6 +121,8 @@ import {
   withoutDebris,
   typoOf,
   typoNear,
+  modeWord,
+  documentTypoWords,
   PROPERTY_WORDS,
   WEIGHT_WORDS,
   TAILWIND_RADIUS,
@@ -995,6 +997,8 @@ const GENERIC_FAMILIES = [
   'ui-monospace',
   'ui-rounded',
 ];
+documentTypoWords(GENERIC_FAMILIES);
+documentTypoWords([...Object.keys(FONTS), ...Object.keys(OPEN_FONTS)]);
 
 /** The theme-wide dial or token for a CSS property typed with no part. */
 const WHOLE_THEME_EQUIVALENT = /** @type {Record<string, string>} */ ({
@@ -1010,25 +1014,36 @@ const WHOLE_THEME_EQUIVALENT = /** @type {Record<string, string>} */ ({
 const NUMBERISH = /^[+-]?(\d+\.?\d*|\.\d+)(px|rem|em|pt|%)?$/i;
 
 /**
- * What is wrong with a typed family list that names a weight, a size or a
- * quoted generic where a family goes, or null. Each family of the list is
- * read on its own: a number or a size (`600`, `18px`) is no family; a
- * weight after a family's name (`Inter 600`, `Inter extra-bold`, in any
- * form the weight table reads) is that family and a weight; a generic in
- * quotes (`'sans-serif'`) is a family named so, not the generic. `families`
- * is the list meant (empty when no family is left), `rung` the headings
- * weight nearest a weight given, `size` whether a size was given.
- * A weight word ending a family's name is part of the name unless the
- * whole name is no family the editor knows and the name without the word
- * is (see knownFamily: `Arial Black`, `Archivo Black` and `Segoe UI
- * Semibold` are families; `Inter ExtraBold` is Inter and a weight); a
- * weight number never is.
+ * What is wrong with a typed family list, or null. Each family of the list
+ * is read on its own, from its end:
+ * - a size (`18px`, `Inter 16px`) is no family; a number is a weight only
+ *   as a whole hundred (100 to 1000), and any other bare number
+ *   (`Lato, 16`) is neither a weight nor a family;
+ * - a weight (`600`, `ExtraBold`, `extra bold`, any form the weight table
+ *   reads) or a style (`Italic`, `Oblique`) after a family's name is that
+ *   family and the weight or style; a weight or style WORD is part of the
+ *   name unless the whole name is no family the editor knows and the name
+ *   without it is (knownFamily: `Arial Black` and `Segoe UI Semibold` are
+ *   families; `Inter ExtraBold` and `Inter Italic` are Inter and a word);
+ * - a generic in quotes (`'sans-serif'`) is a family named so, and a
+ *   family the editor does not know that is a typo of a generic
+ *   (`sansserif`, `serf`, `system ui`) is that generic;
+ * - with `presets` (the font dial), a lone family that is a typo of a
+ *   preset (`sytem`, `robto`) is that preset.
+ * Only weight, style and size words (`16px bold`, `italic bold`) are a font
+ * shorthand, read where the font dial reads one: null. `families` is the
+ * list meant (empty when no family is left), `rung` the headings weight
+ * nearest a weight given, `textSize` the text-size a size reads as, and
+ * `style` a style given.
  * @param {string} value
  * @param {any} ctx
- * @returns {{why: string, families: string, rung: string | null, size: boolean, textSize: number | null} | null}
+ * @param {boolean} [presets] whether a preset name is read (the font dial)
+ * @returns {{why: string, families: string, rung: string | null, size: boolean, textSize: number | null, style: string | null} | null}
  */
-function fontListProblem(value, ctx) {
-  const pieces = familyPieces(pastedFont(value) ?? value);
+function fontListProblem(value, ctx, presets = false) {
+  // Copy debris (a trailing `;`, `!important`, a comment) is read away
+  // first, as it is for any value.
+  const pieces = familyPieces(withoutCopyDebris(pastedFont(value) ?? value));
   if (!pieces) return null;
   const weightOf = (/** @type {string} */ w) => {
     const k = w.toLowerCase().replace(/[\s_-]+/g, '');
@@ -1041,82 +1056,154 @@ function fontListProblem(value, ctx) {
           ? Number(WEIGHT_WORDS[k])
           : null;
   };
+  const STYLE = /^(italic|oblique)$/i;
+  const bare = (/** @type {string} */ w) =>
+    w.toLowerCase().replace(/[\s_-]+/g, '');
+  /** The generic a family the editor does not know is a typo of. */
+  const genericOf = (/** @type {string} */ name) => {
+    // Written with no dash or a space (sansserif, system ui): that generic.
+    const exact = GENERIC_FAMILIES.find(g => bare(g) === bare(name));
+    if (exact) return exact;
+    const hits = GENERIC_FAMILIES.filter(g => typoNear(name.toLowerCase(), g));
+    return hits.length === 1 ? hits[0] : null;
+  };
+
   /** @type {string[]} */
   const kept = [];
   /** @type {number | null} */
   let weight = null;
+  let number = false;
   let size = false;
   /** @type {string | null} */
   let sizeTyped = null;
+  /** @type {string | null} */
+  let style = null;
   let quotedGeneric = false;
+  let misspelled = false;
   for (const p of pieces) {
     const name = p.name.trim();
     if (!name) continue;
-    if (p.quoted && GENERIC_FAMILIES.includes(name.toLowerCase())) {
-      quotedGeneric = true;
-      kept.push(name.toLowerCase());
+    if (p.quoted) {
+      if (GENERIC_FAMILIES.includes(name.toLowerCase())) {
+        quotedGeneric = true;
+        kept.push(name.toLowerCase());
+      } else kept.push(/[^a-z0-9-]/i.test(name) ? JSON.stringify(name) : name);
       continue;
     }
     // A number or size alone is read where the setting reads one (a
     // size for text-size, a weight for headings); in a list of several it
     // is a family that is not one.
-    if (!p.quoted && NUMBERISH.test(name)) {
+    if (NUMBERISH.test(name)) {
       if (pieces.length < 2) return null;
       if (/[a-z%]$/i.test(name)) {
         size = true;
         sizeTyped ??= name;
-      } else weight ??= Number(name);
+      } else if (weightOf(name) != null) weight ??= weightOf(name);
+      else number = true;
       continue;
     }
-    // A weight (and a style) after the family's name: the words before it.
+    // A preset named by its key on the font dial (dm-sans, mono) is that
+    // preset.
+    const PRESETS = [...Object.keys(FONTS), ...Object.keys(OPEN_FONTS)];
+    if (presets && PRESETS.includes(name.toLowerCase())) {
+      kept.push(name);
+      continue;
+    }
+    // A family the editor knows is that family, whatever its last word
+    // (Arial Black, Source Serif 4).
+    if (knownFamily(ctx, name)) {
+      kept.push(name);
+      continue;
+    }
+    // Weight, style, size and number words after the name, read from the
+    // end; a weight of two words (extra bold) first.
     const words = name.split(/\s+/);
     let end = words.length;
-    if (!p.quoted && /^(italic|oblique)$/i.test(words[end - 1] ?? '')) end -= 1;
-    // A weight of two words (extra bold) or one (600, ExtraBold).
-    const two = end >= 3 ? weightOf(words.slice(end - 2, end).join('')) : null;
-    const one = end >= 2 ? weightOf(words[end - 1]) : null;
-    const at =
-      !p.quoted && two != null
-        ? end - 2
-        : !p.quoted && one != null
-          ? end - 1
-          : -1;
-    // Only weight and style words before it (`bold bold`, `italic bold`),
-    // or a size among them (`16px bold`): a font shorthand, read where the
-    // font dial reads one, not a list.
+    /** @type {Array<{kind: string, text: string, value?: number}>} */
+    const tail = [];
+    while (end > 0) {
+      // A known family before the words read so far keeps its own last
+      // word (Arial Black 900 is Arial Black and 900).
+      if (end < words.length && knownFamily(ctx, words.slice(0, end).join(' ')))
+        break;
+      const two =
+        end >= 2 ? weightOf(words.slice(end - 2, end).join('')) : null;
+      const w = words[end - 1];
+      if (two != null && end >= 3) {
+        tail.unshift({
+          kind: 'weight',
+          text: words.slice(end - 2, end).join(' '),
+          value: two,
+        });
+        end -= 2;
+      } else if (STYLE.test(w)) {
+        tail.unshift({kind: 'style', text: w.toLowerCase()});
+        end -= 1;
+      } else if (weightOf(w) != null) {
+        tail.unshift({
+          kind: 'weight',
+          text: w,
+          value: /** @type {number} */ (weightOf(w)),
+        });
+        end -= 1;
+      } else if (NUMBERISH.test(w) && /[a-z%]$/i.test(w)) {
+        tail.unshift({kind: 'size', text: w});
+        end -= 1;
+        // A bare number that is no weight is part of the name (Source Sans
+        // 3); only a separate list item is a number that is no family.
+      } else break;
+    }
+    const base = words.slice(0, end).join(' ');
+    // Only those words: a font shorthand, not a list.
+    if (!base) return null;
+    if (!tail.length) {
+      // A family the editor does not know that is a typo of a generic, or
+      // (on the font dial, alone) of a preset: that name.
+      const generic = genericOf(name);
+      const preset =
+        presets && pieces.length === 1 && !generic
+          ? (() => {
+              const hits = PRESETS.filter(k => typoNear(bare(name), bare(k)));
+              return hits.length === 1 ? hits[0] : null;
+            })()
+          : null;
+      if (generic || preset) {
+        misspelled = true;
+        kept.push(/** @type {string} */ (generic ?? preset));
+      } else kept.push(name);
+      continue;
+    }
+    // Words only (no number or size): part of the name unless the whole
+    // name is unknown and the name without them is known.
     if (
-      at > 0 &&
-      (words
-        .slice(0, at)
-        .every(
-          w =>
-            weightOf(w) != null ||
-            /^(italic|oblique|normal|small-caps)$/i.test(w),
-        ) ||
-        words.slice(0, at).some(w => NUMBERISH.test(w)))
-    )
-      return null;
-    // A weight word that is part of the family's name: the family as typed.
-    const base = at > 0 ? words.slice(0, at).join(' ') : '';
-    const named = words.slice(0, end).join(' ');
-    if (
-      at > 0 &&
-      !/^\d+$/.test(words[at]) &&
-      !(!knownFamily(ctx, named) && knownFamily(ctx, base))
+      tail.every(
+        t =>
+          t.kind === 'style' || (t.kind === 'weight' && !/^\d+$/.test(t.text)),
+      ) &&
+      !(!knownFamily(ctx, name) && knownFamily(ctx, base))
     ) {
       kept.push(name);
       continue;
     }
-    if (at > 0) {
-      weight ??= two ?? one;
-      kept.push(words.slice(0, at).join(' '));
-      continue;
+    for (const t of tail) {
+      if (t.kind === 'weight') weight ??= t.value ?? null;
+      else if (t.kind === 'style') style ??= t.text;
+      else if (t.kind === 'size') {
+        size = true;
+        sizeTyped ??= t.text;
+      } else number = true;
     }
-    kept.push(
-      p.quoted && /[^a-z0-9-]/i.test(name) ? JSON.stringify(name) : name,
-    );
+    kept.push(base);
   }
-  if (weight == null && !size && !quotedGeneric) return null;
+  if (
+    weight == null &&
+    !size &&
+    !style &&
+    !number &&
+    !quotedGeneric &&
+    !misspelled
+  )
+    return null;
   const rung =
     weight != null
       ? Object.entries(HEADING_WEIGHTS).reduce((a, b) =>
@@ -1131,11 +1218,18 @@ function fontListProblem(value, ctx) {
         ? 'holds a weight where a family goes, so the browser reads it as a family named that and falls back'
         : size
           ? 'holds a size where a family goes, so the browser reads it as a family named that and falls back'
-          : 'quotes a generic family, which makes it a family named that, so there is no generic to fall back to',
+          : style
+            ? 'holds a style where a family goes, so the browser reads it as a family named that and falls back'
+            : number
+              ? 'holds a number where a family goes (a weight is a whole hundred, a size has a unit), so the browser reads it as a family named that and falls back'
+              : quotedGeneric
+                ? 'quotes a generic family, which makes it a family named that, so there is no generic to fall back to'
+                : 'misspells a generic family or font, so the browser reads it as a family named that and falls back',
     families: kept.join(', '),
     rung,
     size,
     textSize: sizeTyped ? textSizePx(sizeTyped) : null,
+    style,
   };
 }
 
@@ -2390,13 +2484,13 @@ export function checkSetting(
     thing.startsWith('--font-family');
   const listProblem =
     !unset && typeof value === 'string' && fontish
-      ? fontListProblem(value, ctx)
+      ? fontListProblem(value, ctx, thing === 'font')
       : null;
   if (listProblem) {
     const on = flags.on ? ` --on ${flags.on}` : '';
     refuse(
       E.ERR_THEME_BAD_VALUE,
-      `"${String(value).trim()}" ${listProblem.why}. ${thing} takes the families${listProblem.families ? ` (${listProblem.families})` : ''}; ${listProblem.size ? 'a size is set with text-size or a --font-size-* token' : 'a weight is set with headings, font-weight or a --font-weight-* token'}.`,
+      `"${String(value).trim()}" ${listProblem.why}. ${thing} takes the families${listProblem.families ? ` (${listProblem.families})` : ''}${listProblem.size ? '; a size is set with text-size or a --font-size-* token' : listProblem.rung ? '; a weight is set with headings, font-weight or a --font-weight-* token' : listProblem.style ? '; a style is set with font-style on a part' : ''}.`,
       {
         run: [
           ...(listProblem.families
@@ -2409,6 +2503,9 @@ export function checkSetting(
             : []),
           ...(thing === 'font' && listProblem.textSize != null
             ? [`${P} set ${slug} text-size ${listProblem.textSize}`]
+            : []),
+          ...(thing === 'font-family' && flags.on && listProblem.style
+            ? [`${P} set ${slug} font-style ${listProblem.style}${on}`]
             : []),
           ...(listProblem.families
             ? []
@@ -3051,18 +3148,10 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
       .trim()
       .toLowerCase();
     if (mode !== 'light' && mode !== 'dark') {
-      // A word for one of the two (night, day) is that one; never the
-      // nearest spelling, which can be the other (night → light).
-      const meant = {
-        night: 'dark',
-        nighttime: 'dark',
-        dim: 'dark',
-        black: 'dark',
-        day: 'light',
-        daytime: 'light',
-        bright: 'light',
-        white: 'light',
-      }[mode];
+      // A word that names one of the two (dark-only, darkmode, night) is
+      // that one, by the one mode reader; never the nearest spelling, which
+      // can be the other (night → light).
+      const meant = modeWord(mode);
       const near = meant ? [meant] : nearest(mode, ['light', 'dark']);
       // The line for that one mode: for a dial, the one `--mode dark` itself
       // offers (the color token for that mode), never the both-modes dial.
@@ -5080,7 +5169,13 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
     }
     return s;
   }
-  const prop = kebab(thing);
+  // A property in camel case, or with `_` or spaces for its dashes
+  // (backgroundColor, font_size, "border radius"), is that property: one
+  // reading, so each form gets the same answer.
+  const spelled = kebab(thing.trim())
+    .replace(/[_\s]+/g, '-')
+    .replace(/-+/g, '-');
+  const prop = cssProperties().has(spelled) ? spelled : kebab(thing);
   // A token typed without its leading dashes (color-accent,
   // text-body-size): the token, when no CSS property has that name.
   if (
@@ -5568,7 +5663,10 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
         run: [
           unset
             ? `${P} undo ${slug} ${meant}${onFlag}`
-            : `${P} set ${slug} ${meant} ${quoteCommandArgument(v || exampleOf(groupOfPropType(meant), meant))}${onFlag || ' --on card'}`,
+            : // The scope typed, never a part nobody named: with no --on,
+              // set's own answer for the property (its whole-theme dial or
+              // token) is folded in when the line is vetted.
+              `${P} set ${slug} ${meant} ${quoteCommandArgument(v || exampleOf(groupOfPropType(meant), meant))}${onFlag}`,
         ],
       },
     );
