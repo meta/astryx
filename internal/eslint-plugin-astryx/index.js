@@ -24,6 +24,7 @@
  * - no-light-dark-outside-theme: Flags CSS light-dark() in component source (a light/dark decision belongs to the theme layer, where a token pair reaches both schemes in every theme)
  * - no-core-internal-import: Keeps Core's internal subpaths (@astryxdesign/core/internal/*) inside Core and Lab
  * - no-internal-barrel-import: Flags a package-internal relative import that resolves to a folder's index (a barrel) instead of the defining module
+ * - no-static-touch-runtime: Flags a Core component's static import that reaches the shared touch runtime (the animator or the gesture host), which loads after first paint through the touch loader
  * - no-prevent-default-in-passive-react-handler: Flags preventDefault() on the event in a React onWheel/onTouchStart/onTouchMove handler (React attaches those listeners as passive, so the call is ignored)
  * - no-raw-private-attribute: Flags a private data-astryx-* attribute written by hand outside its owner module in packages/<package>/src/privateAttributes (INV23 lists the public ones)
  * - no-comment-provenance: Flags record and claim ids, pull request and issue references, date stamps, and quoted MUST/SHALL text in source comments (the record links the code; `pnpm specs:for <path>` finds it)
@@ -62,6 +63,7 @@ import copyrightHeaderRule from './copyright-header.js';
 import noRawConsoleCliRule from './no-raw-console-cli.js';
 import noCoreInternalImportRule from './no-core-internal-import.js';
 import noInternalBarrelImportRule from './no-internal-barrel-import.js';
+import noStaticTouchRuntimeRule from './no-static-touch-runtime.js';
 import requireBasePropsRule from './require-base-props.js';
 import requireRefPropRule from './require-ref-prop.js';
 import requireBasePropsPassthroughRule from './require-baseprops-passthrough.js';
@@ -372,6 +374,7 @@ const plugin = {
     'no-raw-console-cli': noRawConsoleCliRule,
     'no-core-internal-import': noCoreInternalImportRule,
     'no-internal-barrel-import': noInternalBarrelImportRule,
+    'no-static-touch-runtime': noStaticTouchRuntimeRule,
     'no-hardcoded-i18n-string': noHardcodedI18nStringRule,
     'i18n-key-format': i18nKeyFormatRule,
     'require-table-section': requireTableSectionRule,

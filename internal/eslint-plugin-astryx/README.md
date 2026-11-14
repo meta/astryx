@@ -213,6 +213,34 @@ removes them; remove an entry when you fix its import, and never add one.
 rewrites the list from the source (`--check` verifies it), for example after
 merging `main` into this rule's own branch or after a codemod.
 
+### `@astryx/no-static-touch-runtime`
+
+Keeps the shared touch runtime, the animator (`motion/animator`) and the
+gesture host (`gestures/GestureHost`), out of every Core component's first
+load. The runtime loads once per page after first paint through the touch
+loader (`utils/touchRuntime.ts`). The rule walks Core's static import graph
+from each component entry (`packages/core/src/<Component>/index.ts`). Inside
+component folders it follows every static import. It reports the import where
+a component file reaches a shared module that reaches the runtime. Type-only
+imports and `import()` are not edges, so a runtime part that only the loader
+reaches may use the runtime freely. A folder a caller opts into, such as
+`SnapPaging` or `Swipe` (`createSwipe`), is a shared module, not a component
+entry.
+
+The imports that reach the runtime today are listed in
+`no-static-touch-runtime.allowlist.json`, each with why it reaches the runtime
+and the change that removes it. Remove an entry when its import moves behind
+the loader, and never add one. `no-static-touch-runtime.test.mjs` fails when an
+import reaches the runtime without an entry, and when an entry no longer does,
+so the list only shrinks.
+
+The rule reads other files: a change in a shared module can make a component
+file fail without the component changing. ESLint's `--cache` skips unchanged
+files, so `pnpm lint` can miss such a result locally; run
+`eslint --no-cache` on the component, or rely on pull request CI, which lints
+without a cache. An editor's ESLint server sees a change in any Core file
+within a second.
+
 ### `@astryx/no-raw-private-attribute`
 
 Reports a private `data-astryx-*` attribute written by hand outside its owner
