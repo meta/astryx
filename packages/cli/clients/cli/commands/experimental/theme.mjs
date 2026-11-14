@@ -60,6 +60,7 @@ import {
   typoOf,
   editorAfterBuild,
   editorFontHelp,
+  editorInstall,
   editorSourcePath,
   editorBuildExtra,
   editorLoadedFonts,
@@ -1600,6 +1601,7 @@ export function registerExperimentalTheme(group, program) {
       afterBuild: editorAfterBuild,
       sourcePath: editorSourcePath,
       fontHelp: editorFontHelp,
+      install: editorInstall,
       colorModes: editorColorModes,
     },
   );

@@ -126,6 +126,7 @@ import {doc as themePaletteGenerateFn} from '../../../api/theme/themePaletteGene
  * @property {(files: string[], options: {cwd: string, check?: boolean, family?: boolean, iconsSpecifier?: string, out?: string}) => Promise<import('../../../api/error.mjs').AstryxError | null>} [preflight] - A refusal before a build starts, or null.
  * @property {(err: import('../../../api/error.mjs').AstryxError, cwd: string) => Promise<import('../../../api/error.mjs').AstryxError>} [follow] - The refusal with its first suggested build checked and repaired as the build would check it.
  * @property {(file: string, cwd: string) => import('../../../api/theme/build/build.mjs').FontHelp | null} [fontHelp] - How a group says to load a theme's fonts when it loads them itself (the editor's app copy).
+ * @property {(file: string, cwd: string) => string | null} [install] - How the app takes a theme a group wires another way than importing the build's outputs (the editor's app copy), for the full report.
  * @property {(file: string, cwd: string) => string | null} [sourcePath] - The path a source builds under, when not the typed one; null to keep it.
  * @property {(files: string[], cwd: string) => Promise<Record<string, Record<string, unknown>>>} [afterBuild] - Writes a group makes once a build's outputs are written (the editor's app copy), with what each did, by file, for its result.
  * @property {(files: string[], options: {cwd: string, check?: boolean, out?: string}) => Promise<() => Promise<void>>} [hold] - Locks held while a build or check runs; resolves to their release.
@@ -251,17 +252,22 @@ function themeError(err, words = THEME_WORDS, fallback = []) {
 }
 
 /**
- * Add a group's fields to a build's result data. Its warnings join the
- * build's own, and are printed as the build's are (`--json` prints none).
+ * Add a group's fields to a build's result data. Its warnings and notices
+ * join the build's own, and are printed as the build's are (`--json`
+ * prints none).
  * @param {Record<string, any>} data
  * @param {Record<string, unknown>} extra
  */
 function mergeResultData(data, extra) {
-  const {warnings, ...rest} = /** @type {any} */ (extra);
+  const {warnings, notices, ...rest} = /** @type {any} */ (extra);
   Object.assign(data, rest);
   if (Array.isArray(warnings) && warnings.length > 0) {
     data.warnings = [...(data.warnings ?? []), ...warnings];
     for (const w of warnings) logger.warn(`Warning: ${w}`);
+  }
+  if (Array.isArray(notices) && notices.length > 0) {
+    data.notices = [...(data.notices ?? []), ...notices];
+    for (const n of notices) logger.log(`[note] ${n}`);
   }
 }
 
@@ -1548,6 +1554,7 @@ function registerThemeCommands(theme, program, docs, words) {
             commandWords: words,
             colorModes: words.colorModes?.(entry.file, process.cwd()) ?? null,
             fontHelp: words.fontHelp?.(entry.file, process.cwd()) ?? null,
+            install: words.install?.(entry.file, process.cwd()) ?? null,
             loadedFonts: loads,
           };
           let result;
