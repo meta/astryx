@@ -482,7 +482,7 @@
     "packages/cli/api/theme-edit/theme-edit-leaves.test.mjs": 0,
     "packages/cli/api/theme-edit/theme-edit.test.mjs": 22.1,
     "packages/cli/api/theme-edit/theme-editor-refusals.behavior.test.mjs": 9.1,
-    "packages/cli/api/theme-edit/theme-how.test.mjs": 33.1,
+    "packages/cli/api/theme-edit/theme-how.test.mjs": 131.2,
     "packages/cli/api/theme-edit/theme-hunt.test.mjs": 29.8,
     "packages/cli/api/theme-edit/theme-hunt10.test.mjs": 7.1,
     "packages/cli/api/theme-edit/theme-hunt11.test.mjs": 5.3,

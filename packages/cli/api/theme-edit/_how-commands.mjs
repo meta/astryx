@@ -21,7 +21,13 @@ import {
   themeFiles,
 } from './_settings.mjs';
 import {FAMILIES, GROUPS, LIKE, P} from './_tables.mjs';
-import {alphaOf, colorsIn, parseColor, splitTop} from './_color.mjs';
+import {
+  COLOR_IN_VALUE,
+  alphaOf,
+  colorsIn,
+  parseColor,
+  splitTop,
+} from './_color.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 
 /** The theme name commands use when the app has no theme yet. */
@@ -372,6 +378,23 @@ function shadowStrength(v) {
     );
 }
 
+/**
+ * A shadow as it renders: each color written in one form (hex with its
+ * alpha), so two spellings of the same shadow compare equal.
+ * @param {string} v
+ */
+function shadowLook(v) {
+  return String(v)
+    .replace(COLOR_IN_VALUE, c => {
+      const rgb = parseColor(c);
+      if (!rgb) return c;
+      const a = Math.round(alphaOf(c) * 255);
+      return `rgb(${rgb.slice(0, 3).join(' ')} / ${a})`;
+    })
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 /** @param {number[]} c */
 const luminance = c => c[0] * 0.299 + c[1] * 0.587 + c[2] * 0.114;
 
@@ -508,6 +531,9 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
     }
   }
   const typed = new Set(intent.typed.map(x => x.toLowerCase()));
+  // A shadow ask is answered only by a shadow that looks different: an
+  // opaque color written with alpha ff, or clamped there, is no change.
+  let shadowMoved = !intent.shadowDir;
   if (steps.some(st => typed.has(String(st.value ?? '').toLowerCase())))
     return null;
   // The subject's changed values: family, direction, removal.
@@ -566,6 +592,7 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
           const y = shadowStrength(before);
           if (Math.abs(x - y) > 1e-6 && (intent.shadowDir === 'more') !== x > y)
             return `${part}'s ${prop} would get ${intent.shadowDir === 'more' ? 'weaker' : 'stronger'} in ${mode} mode`;
+          if (shadowLook(after) !== shadowLook(before)) shadowMoved = true;
           continue;
         }
         // "more transparent": the color's alpha goes down, "more opaque" up.
@@ -676,6 +703,7 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
         const y = shadowStrength(before);
         if (Math.abs(x - y) > 1e-6 && (intent.shadowDir === 'more') !== x > y)
           return `${tok} would get ${intent.shadowDir === 'more' ? 'weaker' : 'stronger'} in ${mode} mode`;
+        if (shadowLook(after) !== shadowLook(before)) shadowMoved = true;
         continue;
       }
       if (fam === 'color' && intent.opacityDir) {
@@ -711,6 +739,8 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
         return `${tok} would move the other way in ${mode} mode (${before} to ${after})`;
     }
   }
+  if (!shadowMoved && steps.some(st => familyOf(st.thing) === 'shadow'))
+    return 'the shadows would look the same as they do now (a shadow color at full strength gets no stronger; a bigger or blurrier shadow can)';
   return null;
 }
 

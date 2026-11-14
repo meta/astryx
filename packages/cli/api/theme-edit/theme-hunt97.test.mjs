@@ -196,4 +196,36 @@ describe('shadows written as 8-digit hex colors', () => {
     },
     T,
   );
+  it(
+    'chocolate: a mode-only ask scales that mode and leaves the other as it is',
+    async test => {
+      if (unbuilt) {
+        console.warn(`skipped: ${unbuilt}`);
+        return test.skip();
+      }
+      /** @param {string} q */
+      const halves = async q => {
+        const {first} = await answer(q, 'c');
+        expect(first.length).toBeGreaterThan(0);
+        return first.flatMap(c =>
+          [
+            ...c.matchAll(
+              /light-dark\(#[0-9a-f]{6}([0-9a-f]{2}), #[0-9a-f]{6}([0-9a-f]{2})\)/gi,
+            ),
+          ].map(m => [Number.parseInt(m[1], 16), Number.parseInt(m[2], 16)]),
+        );
+      };
+      const darkOnly = await halves('make shadows darker in dark mode');
+      expect(darkOnly.length).toBeGreaterThan(0);
+      expect(darkOnly.every(([light, dark]) => dark > light)).toBe(true);
+      const lightOnly = await halves('make shadows lighter in light mode');
+      expect(lightOnly.length).toBe(darkOnly.length);
+      expect(lightOnly.every(([light, dark]) => light < dark)).toBe(true);
+      // The mode not named keeps the alpha it has now in both answers.
+      expect(darkOnly.map(([light]) => light)).toEqual(
+        lightOnly.map(([, dark]) => dark),
+      );
+    },
+    T,
+  );
 });

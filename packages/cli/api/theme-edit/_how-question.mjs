@@ -964,11 +964,28 @@ export function shadowAlphaScaled(value, k, mode = null) {
       withAlpha(c, Math.max(0, Math.min(1, alphaOf(c) * k))),
     );
   if (!mode) return scale(value);
-  return value.replace(
-    /light-dark\(((?:[^(),]|\([^()]*\))*),\s*((?:[^(),]|\([^()]*\))*)\)/g,
-    (_m, a, b) =>
-      `light-dark(${mode === 'light' ? scale(a) : a}, ${mode === 'dark' ? scale(b) : b})`,
-  );
+  // A named mode: that half of each light-dark() color; a color written as
+  // one value becomes a light-dark() pair with only that mode's half scaled.
+  const PAIR =
+    /light-dark\(((?:[^(),]|\([^()]*\))*),\s*((?:[^(),]|\([^()]*\))*)\)/g;
+  return value
+    .split(/(light-dark\((?:[^(),]|\([^()]*\))*,\s*(?:[^(),]|\([^()]*\))*\))/g)
+    .map(piece =>
+      /^light-dark\(/.test(piece)
+        ? piece.replace(
+            PAIR,
+            (_m, a, b) =>
+              `light-dark(${mode === 'light' ? scale(a) : a}, ${mode === 'dark' ? scale(b) : b})`,
+          )
+        : piece.replace(COLOR_IN_VALUE, c => {
+            const scaled = scale(c);
+            if (scaled === c) return c;
+            return mode === 'dark'
+              ? `light-dark(${c}, ${scaled})`
+              : `light-dark(${scaled}, ${c})`;
+          }),
+    )
+    .join('');
 }
 
 /**
