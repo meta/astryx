@@ -395,10 +395,11 @@ works on is `spec:AST-040` FR9's.
     name summaries of folder trees, and doctor's file-only docs checks and
     theme-wiring scan, which doctor keeps only while the folder exists), a
     folder only the user can
-    reach (made `0700` by the first run of one of those commands other than
-    `doctor`, which keeps its gathers at once; used only while it is a real
-    folder the user owns and others cannot open, never where the system has
-    no user ids), each
+    reach (made `0700` by the first run that keeps a gather: `search` or
+    `build`, or another of those commands where an integration can load,
+    never `doctor`; that run keeps its gathers at once; used only while it is
+    a real folder the user owns and others cannot open, never where the
+    system has no user ids), each
     kept value used only while every input its gather read is unchanged; a
     run under Yarn Plug'n'Play's loader, such as `yarn astryx`, keeps and
     uses no catalog; `doctor` lists that folder and its size in an info row,
