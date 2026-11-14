@@ -37,7 +37,7 @@ import {findNodeModulesPackage} from '../fs/paths.mjs';
 /** How long one page may take to render before it is stopped. */
 export const RENDER_TIMEOUT_MS = 60_000;
 
-export {PAGE_EXTENSIONS} from './embedded-files.mjs';
+export {MODULE_EXTENSIONS, PAGE_EXTENSIONS} from './embedded-files.mjs';
 
 /**
  * @typedef {object} RenderWarning

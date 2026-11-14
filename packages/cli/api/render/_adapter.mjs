@@ -13,6 +13,7 @@ import {createRequire} from 'node:module';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
+  MODULE_EXTENSIONS,
   PAGE_EXTENSIONS,
   RenderError,
   renderPage,
@@ -623,7 +624,7 @@ export function reverseToFile({cwd, input, output, overwrite}) {
     const renderedBy = renderedByOf(source, html);
     const packages = packagesOf(source);
     const modules = writes
-      .filter(w => PAGE_EXTENSIONS.includes(path.extname(w.file).toLowerCase()))
+      .filter(w => MODULE_EXTENSIONS.includes(path.extname(w.file).toLowerCase()))
       .map(w => ({file: shown(cwd, w.file), text: w.bytes.toString('utf8')}));
     return {
       input: shown(cwd, input),

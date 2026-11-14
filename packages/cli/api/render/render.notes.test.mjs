@@ -386,6 +386,21 @@ export default function Page() {
     expect(back.data.files).toEqual(expect.arrayContaining(['reach-back/types.ts', 'reach-back/rows.js']));
     expect(back.data).toMatchObject({exact: false, missing: ['../sheets/site.scss']});
   });
+  it('carries the .mts, .cts and .cjs modules a page imports, and gives them back', async () => {
+    put('kinds/lib/a.mts', "export const a = 'from mts';\n");
+    put('kinds/lib/b.cjs', "exports.b = 'from cjs';\n");
+    put('kinds/lib/c.cts', "export const c = 'from cts';\n");
+    put(
+      'kinds/page.tsx',
+      "import {a} from './lib/a.mts';\nimport {b} from './lib/b.cjs';\nimport {c} from './lib/c.cts';\nexport default function Page() {\n  return <p>{a} {b} {c}</p>;\n}\n",
+    );
+    const result = /** @type {any} */ (await render('kinds/page.tsx', {cwd: dir}));
+    expect(result.data.files).toEqual(expect.arrayContaining(['page.tsx', 'lib/a.mts', 'lib/b.cjs', 'lib/c.cts']));
+    expect(read('kinds/page.html')).toContain('from mts from cjs from cts');
+    const back = /** @type {any} */ (await render('kinds/page.html', {cwd: dir, reverse: true, out: 'kinds-back/page.tsx'}));
+    expect(back.data.exact).toBe(true);
+    for (const name of ['lib/a.mts', 'lib/b.cjs', 'lib/c.cts']) expect(read(`kinds-back/${name}`)).toBe(read(`kinds/${name}`));
+  });
 });
 
 describe('text edits', () => {
