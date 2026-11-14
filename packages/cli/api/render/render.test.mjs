@@ -357,6 +357,49 @@ describe('render(): every write stays inside the current folder', () => {
     expect(await codeOf(() => render('aliased/src/bad.tsx', {cwd: dir}))).toBe('ERR_FILE_NOT_FOUND');
   }, 60_000);
 
+  it('reads the aliases of the referenced project that holds the page, behind a solution-style tsconfig.json', async () => {
+    const vite = (/** @type {string} */ name) => {
+      put(`${name}/package.json`, `{"name":"${name}","private":true}`);
+      put(`${name}/tsconfig.json`, '{\n  "files": [],\n  "references": [{"path": "./tsconfig.app.json"}, {"path": "./tsconfig.node.json"}]\n}\n');
+      put(`${name}/tsconfig.app.json`, '{\n  "compilerOptions": {"paths": {"@/*": ["./src/*"]}},\n  "include": ["src"],\n}\n');
+      put(`${name}/tsconfig.node.json`, '{"compilerOptions": {"paths": {"@/*": ["./config/*"]}}, "include": ["vite.config.ts"]}\n');
+    };
+    vite('solution');
+    put('solution/src/components/Header.tsx', 'export function Header() { return <p>Solution header</p>; }\n');
+    put('solution/src/pages/page.tsx', "import {Header} from '@/components/Header';\nexport default function Page() { return <Header />; }\n");
+    const r = /** @type {any} */ (await render('solution/src/pages/page.tsx', {cwd: dir}));
+    expect(r.data.files).toEqual(['pages/page.tsx', 'components/Header.tsx']);
+    expect(fs.readFileSync(path.join(dir, 'solution/src/pages/page.html'), 'utf8')).toContain('Solution header');
+    // A project laid out the same way takes it back where its own alias points.
+    vite('solution-to');
+    fs.copyFileSync(path.join(dir, 'solution/src/pages/page.html'), path.join(dir, 'solution-to/page.html'));
+    const back = /** @type {any} */ (await render('page.html', {cwd: path.join(dir, 'solution-to'), reverse: true, out: 'src/pages/page.tsx'}));
+    expect(back.data).toMatchObject({exact: true, files: ['src/pages/page.tsx', 'src/components/Header.tsx']});
+  }, 60_000);
+
+  it('reads aliases through extends: a path without .json, a package, and a list whose later config wins', async () => {
+    // A base config above the project: its baseUrl is read from its own folder.
+    put('ext/tsconfig.base.json', '{"compilerOptions": {"baseUrl": "apps/web", "paths": {"@data/*": ["src/data/*"]}}}\n');
+    put('ext/apps/web/package.json', '{"name":"web","private":true}');
+    put('ext/apps/web/tsconfig.json', '{"extends": "../../tsconfig.base"}\n');
+    put('ext/apps/web/src/data/rows.ts', "export const rows = ['North', 'South'];\n");
+    put('ext/apps/web/src/pages/page.tsx', "import {rows} from '@data/rows';\nexport default function Page() { return <ul>{rows.map(r => <li key={r}>{r}</li>)}</ul>; }\n");
+    const web = /** @type {any} */ (await render('ext/apps/web/src/pages/page.tsx', {cwd: dir}));
+    expect(web.data.files).toEqual(['pages/page.tsx', 'data/rows.ts']);
+    // A package's config, after one of the project's own: the later one wins,
+    // and ${configDir} is the folder of the config the project reads.
+    put('ext-pkg/package.json', '{"name":"ext-pkg","private":true}');
+    put('ext-pkg/node_modules/@acme/tsconfig/package.json', '{"name":"@acme/tsconfig","version":"1.0.0"}');
+    put('ext-pkg/node_modules/@acme/tsconfig/base.json', '{"compilerOptions": {"paths": {"@ui/*": ["${configDir}/src/ui/*"]}}}\n');
+    put('ext-pkg/tsconfig.first.json', '{"compilerOptions": {"paths": {"@ui/*": ["./elsewhere/*"]}}}\n');
+    put('ext-pkg/tsconfig.json', '{"extends": ["./tsconfig.first.json", "@acme/tsconfig/base.json"]}\n');
+    put('ext-pkg/src/ui/Panel.tsx', 'export function Panel() { return <section>Panel from the package alias</section>; }\n');
+    put('ext-pkg/src/page.tsx', "import {Panel} from '@ui/Panel';\nexport default function Page() { return <Panel />; }\n");
+    const pkg = /** @type {any} */ (await render('ext-pkg/src/page.tsx', {cwd: dir}));
+    expect(pkg.data.files).toEqual(['page.tsx', 'ui/Panel.tsx']);
+    expect(fs.readFileSync(path.join(dir, 'ext-pkg/src/page.html'), 'utf8')).toContain('Panel from the package alias');
+  }, 60_000);
+
   it('gives back a page that imports through an alias where this project\'s alias points', async () => {
     put('aliased-src/tsconfig.json', '{"compilerOptions": {"baseUrl": ".", "paths": {"@/*": ["./src/*"]}}}\n');
     put('aliased-src/package.json', '{"name":"aliased-src","private":true}');
