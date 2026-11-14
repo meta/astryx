@@ -19,7 +19,10 @@
  * existing table"), unless the idea asks for a new page ("a new dashboard like
  * the existing dashboard", "clone the existing dashboard as a new page"). A
  * bare "existing" phrase that names a page ("existing reports dashboard with a
- * date filter") reads as the builder's own page.
+ * date filter") reads as the builder's own page. An idea that opens with "add"
+ * puts a piece into a page the builder already has (FR9), so it is a change
+ * too, unless its head names a page ("add a settings page") or it asks
+ * for a new page ("add a new dashboard").
  */
 
 import {stem} from '../../search/search.mjs';
@@ -52,6 +55,12 @@ const PAGE_PIECES = 3;
 const EXISTING = /\bexisting\b/i;
 
 /**
+ * The word that opens an idea adding a piece to a page the builder already
+ * has (spec:AST-048/FR9).
+ */
+const ADDS = /^\s*add\b/i;
+
+/**
  * The word that marks an idea asking for a new page ("a new dashboard", "as a
  * new page"), which is never a change to one the builder has.
  */
@@ -71,6 +80,12 @@ export function ideaKind(query, pages, components) {
   const text = String(query);
   const familyWords = familyWordsOf(pages);
   if (changesExistingPage(text, familyWords, components)) return 'edit';
+  if (
+    ADDS.test(text) &&
+    !namesPage(text.split(HEAD_END)[0] ?? '', familyWords) &&
+    !asksNewPage(text.toLowerCase().split(PHRASE_END), familyWords)
+  )
+    return 'edit';
   // The head's last word, page words included: "calendar" is the noun of "a
   // calendar", "page" the noun of "a calendar page". An overlay frame names
   // where the thing lives, not the thing: "drafts" is the noun of "drafts in
@@ -88,6 +103,19 @@ export function ideaKind(query, pages, components) {
   return components.some(c => componentTerms(c).includes(noun))
     ? 'part'
     : 'page';
+}
+
+/**
+ * Whether a head names a page: it ends on a word search drops, such as "page",
+ * after a word that names a page family ("add a settings page").
+ * @param {string} head
+ * @param {Map<string, string>} familyWords
+ * @returns {boolean}
+ */
+function namesPage(head, familyWords) {
+  const words = head.toLowerCase().match(/[a-z0-9]+/g) ?? [];
+  const last = words[words.length - 1] ?? '';
+  return terms(last).length === 0 && terms(head).some(t => familyWords.has(t));
 }
 
 /**

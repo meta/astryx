@@ -355,6 +355,16 @@ describe('ideaKind: a part of a page, told by the components the system ships', 
     expect(kind('reuse the existing tooltip on the chart')).toBe('edit');
   });
 
+  it('takes an idea that opens with "add" as an edit', () => {
+    expect(kind('add a filter row above the table')).toBe('edit');
+    expect(kind('add a date picker to the settings page')).toBe('edit');
+    // A head that names a page, or a new page, is still a page; "add" inside
+    // an idea opens nothing.
+    expect(kind('add a settings page')).toBe('page');
+    expect(kind('add a new settings page')).toBe('page');
+    expect(kind('a settings page where admins add users')).toBe('page');
+  });
+
   it('does not take "existing" that names no page or part as an edit', () => {
     expect(kind('a new settings page inspired by the existing one')).toBe(
       'page',
