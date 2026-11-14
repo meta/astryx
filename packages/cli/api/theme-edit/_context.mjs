@@ -613,30 +613,36 @@ export function styledChanges(before, after, base) {
           : p.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`);
       for (const prop of new Set([...Object.keys(x), ...Object.keys(y)])) {
         if (JSON.stringify(x[prop]) === JSON.stringify(y[prop])) continue;
-        // Writing what the base theme already shows there changes nothing.
         const shown = base?.components?.[target]?.[key]?.[prop];
-        if (
-          x[prop] === undefined &&
-          shown !== undefined &&
-          plain(shown) === plain(y[prop])
-        )
-          continue;
+        /**
+         * Whether a write only repeats what the base theme already shows
+         * there, which changes nothing.
+         * @param {any} was @param {any} now @param {any} baseValue
+         */
+        const repeatsBase = (was, now, baseValue) =>
+          was === undefined &&
+          baseValue !== undefined &&
+          typeof baseValue !== 'object' &&
+          plain(baseValue) === plain(now);
         const where = `${target}${key === 'base' ? '' : ` ${key}`}`;
-        // A state block (`:hover`) lists each property it changes.
+        // A block (a state, `:hover`) lists each property it changes.
         if (
-          prop.startsWith(':') &&
-          ((y[prop] && typeof y[prop] === 'object') ||
-            (x[prop] && typeof x[prop] === 'object'))
+          (y[prop] && typeof y[prop] === 'object') ||
+          (x[prop] && typeof x[prop] === 'object')
         ) {
           const xs = x[prop] ?? {};
           const ys = y[prop] ?? {};
           for (const p of new Set([...Object.keys(xs), ...Object.keys(ys)]))
-            if (JSON.stringify(xs[p]) !== JSON.stringify(ys[p]))
+            if (
+              JSON.stringify(xs[p]) !== JSON.stringify(ys[p]) &&
+              !repeatsBase(xs[p], ys[p], shown?.[p])
+            )
               out.push(
                 `${where} ${prop}: ${cssName(p)} ${ys[p] === undefined ? '(removed)' : String(ys[p])}`,
               );
           continue;
         }
+        if (repeatsBase(x[prop], y[prop], shown)) continue;
         out.push(
           `${where}: ${cssName(prop)} ${y[prop] === undefined ? '(removed)' : typeof y[prop] === 'string' ? y[prop] : JSON.stringify(y[prop])}`,
         );

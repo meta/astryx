@@ -4023,8 +4023,11 @@ export function compileTheme(ctx, data, base) {
       // The part's own background being an image (a gradient) covers any
       // color under it: the color is written, and the result says it does
       // not show.
+      // A color given beside its own image in one background (`linear-
+      // gradient(…), ivory`) is that image's bottom layer, never covered by
+      // it.
       const plainImage =
-        css === 'background-color'
+        css === 'background-color' && !ownImageLayer(s)
           ? ['background', 'backgroundImage']
               .map(k => b[k])
               .find(y => typeof y === 'string' && /gradient\(|url\(/i.test(y))
@@ -4136,6 +4139,7 @@ export function compileTheme(ctx, data, base) {
     if (
       mode &&
       colorFamily(prop) === 'background-color' &&
+      !ownImageLayer(s) &&
       ['background', 'backgroundImage'].some(
         k => typeof b[k] === 'string' && /gradient\(|url\(/i.test(b[k]),
       )
@@ -4254,12 +4258,12 @@ export function compileTheme(ctx, data, base) {
   );
   // Dials first, then exact tokens and part properties: an exact setting
   // always wins over a dial, whatever the order they were made in.
-  // A font for one role (body, heading, code) comes after the whole-theme
-  // font, so the role keeps its own font whatever the order.
-  const roleFont = (/** @type {Setting} */ x) => x.thing === 'font' && !!x.on;
+  // A dial on a part (a font for one role, corners on cards) comes after
+  // the whole-theme dials, so the part keeps its own whatever the order.
+  const onPart = (/** @type {Setting} */ x) => !!x.on;
   const ordered = [
-    ...data.settings.filter(x => x.source === 'dial' && !roleFont(x)),
-    ...data.settings.filter(x => x.source === 'dial' && roleFont(x)),
+    ...data.settings.filter(x => x.source === 'dial' && !onPart(x)),
+    ...data.settings.filter(x => x.source === 'dial' && onPart(x)),
     ...data.settings.filter(x => x.source !== 'dial'),
   ];
   // The shell regions a setting gives a background of their own keep it
@@ -4289,7 +4293,7 @@ export function compileTheme(ctx, data, base) {
         /** @param {string} token */
         const derived = token => `${radiusAt(base, s.value, token)}px`;
         if (parts.length)
-          for (const t of parts) {
+          for (const t of parts.flatMap(p => cornerParts(ctx, p))) {
             // A rung on a part gives what the whole-theme rung gives the
             // radius token the part reads; an exact size is as given.
             putComp(
@@ -4300,30 +4304,33 @@ export function compileTheme(ctx, data, base) {
             );
           }
         else {
-          for (const token of [
-            '--radius-element',
-            '--radius-inner',
-            '--radius-container',
-            '--radius-page',
-          ])
+          for (const token of DIAL_RADII)
             // The radii the build already shows for this corners value (a
             // build by an earlier editor, or a step back) are kept, as the
             // colors are: they change only when corners or the base does.
             putTok(token, ctx.keepRadii?.[token] ?? derived(token));
-          // A part rule of the base theme that gives a radius of its own
-          // (not one of the radius tokens) would keep it over the dial: the
-          // rule is given the radius token the part reads, so every part
-          // follows the dial.
-          for (const [t, when] of basePinnedRadii(
+          // A part rule of the base theme that gives a radius other than the
+          // dial token the part reads (a length, or a token the dial never
+          // moves, such as --radius-full) would keep it over the dial: the
+          // rule is given that dial token, so the part follows the dial. A
+          // part Core rounds with a token the dial never moves (a badge's
+          // --radius-full) keeps its base radius.
+          for (const [t, when, radius] of baseRadii(
             /** @type {{components?: Record<string, any>}} */ (base),
-          ))
-            if (ctx.project.target.has(t))
+          )) {
+            const token = radiusTokenOf(ctx, t, when);
+            if (
+              ctx.project.target.has(t) &&
+              DIAL_RADII.includes(token) &&
+              radius !== `var(${token})`
+            )
               putComp(
                 {...s, mode: undefined, when},
                 t,
                 'borderRadius',
-                `var(${radiusTokenOf(ctx, t, when)})`,
+                `var(${token})`,
               );
+          }
         }
       } else if (PALETTE_DIALS.includes(s.thing) || s.thing === 'vibrancy') {
         // The palette mapping above sets these tokens.
@@ -4612,6 +4619,13 @@ export function compileTheme(ctx, data, base) {
               putComp(scope, t, tok, s.value);
           continue;
         }
+        // A part whose text is drawn by elements inside it that read a text
+        // color token themselves (a top nav heading's title) takes the color
+        // in those tokens too, on the part alone, so that text shows it.
+        if (kebab(s.thing) === 'color')
+          for (const tok of innerTextTokens(ctx.C, t))
+            if (!new RegExp(`var\\(\\s*${tok}\\s*[,)]`).test(String(s.value)))
+              putComp(s, t, tok, s.value);
         // A padding on a part whose box reads Core's padding variables is
         // resolved with the rest of that part's padding, below.
         if (padVars(t) && /^padding(-|$)/.test(kebab(s.thing))) {
@@ -4907,14 +4921,13 @@ export function maskLayers(value, mode) {
 }
 
 /**
- * The part rules of a base theme that give a border radius of their own,
- * not a radius token: each as its part and the rule's --when (undefined
- * for the plain rule).
+ * The part rules of a base theme that give a border radius: each as its
+ * part, the rule's --when (undefined for the plain rule) and the radius.
  * @param {{components?: Record<string, any>}} base
- * @returns {Array<[string, string | undefined]>}
+ * @returns {Array<[string, string | undefined, string]>}
  */
-function basePinnedRadii(base) {
-  /** @type {Array<[string, string | undefined]>} */
+function baseRadii(base) {
+  /** @type {Array<[string, string | undefined, string]>} */
   const out = [];
   for (const [t, rules] of Object.entries(base.components ?? {}))
     for (const [key, rule] of Object.entries(
@@ -4922,10 +4935,21 @@ function basePinnedRadii(base) {
     )) {
       if (key !== 'base' && !/^[\w-]+:[\w-]+$/.test(key)) continue;
       const r = rule?.borderRadius;
-      if (typeof r === 'string' && !/var\(\s*--radius-/.test(r))
-        out.push([t, key === 'base' ? undefined : key]);
+      if (typeof r === 'string')
+        out.push([t, key === 'base' ? undefined : key, r.trim()]);
     }
   return out;
+}
+
+/**
+ * Whether a setting's own value is a background with an image layer, so any
+ * color it writes is that background's bottom layer.
+ * @param {Setting} s
+ */
+function ownImageLayer(s) {
+  return (
+    kebab(s.thing) === 'background' && /gradient\(|url\(/i.test(String(s.value))
+  );
 }
 
 /**
@@ -6666,6 +6690,34 @@ export function focusStateOf(ctx, part) {
   return null;
 }
 
+/** The radius tokens the corners dial moves. */
+export const DIAL_RADII = [
+  '--radius-element',
+  '--radius-inner',
+  '--radius-container',
+  '--radius-page',
+];
+
+/**
+ * The parts that draw a part's corners: the part itself, or, when Core gives
+ * it no radius of its own, the parts inside it that it has (a date-time
+ * input's date and time boxes).
+ * @param {Ctx} ctx
+ * @param {string} part
+ * @returns {string[]}
+ */
+export function cornerParts(ctx, part) {
+  const rec = ctx.C.MAP[part];
+  if (!rec || rec.own?.['border-radius']) return [part];
+  const inner = (rec.contains ?? []).filter(
+    (/** @type {string} */ t) =>
+      ctx.C.MAP[t]?.own?.['border-radius'] &&
+      t.startsWith(`${part}-`) &&
+      ctx.project.target.has(t),
+  );
+  return inner.length ? inner : [part];
+}
+
 /**
  * The radius token a part's resting corners read. A part the census saw
  * closed (a menu, a popover) has none recorded: a container or menu reads
@@ -6726,6 +6778,47 @@ export function stateKey(state, wrapsControl = false) {
   return wrapsControl
     ? ':is(:disabled,[aria-disabled="true"],:has(:is(input,button,select,textarea):is(:disabled,[aria-disabled="true"])))'
     : ':is(:disabled,[aria-disabled="true"])';
+}
+
+/**
+ * The text color tokens Core's elements inside a part read for their own
+ * color (a top nav heading's title span reads --color-text-primary itself),
+ * so a color set on the part never reaches that text. Only the main and
+ * supporting text colors count: the disabled, placeholder and accent ones
+ * mark a state or a role, not the part's text. With `deep`, the parts inside
+ * it count too (a top nav's heading and items).
+ * @param {{MAP: Record<string, any>}} C
+ * @param {string} part
+ * @param {boolean} [deep]
+ * @returns {string[]}
+ */
+export function innerTextTokens(C, part, deep = false) {
+  const TEXT_ROLES = ['--color-text-primary', '--color-text-secondary'];
+  /** @type {Set<string>} */
+  const out = new Set();
+  /** @param {Record<string, string[]> | undefined} reads */
+  const add = reads => {
+    for (const [tok, props] of Object.entries(reads ?? {}))
+      if (TEXT_ROLES.includes(tok) && props.includes('color')) out.add(tok);
+  };
+  const rec = C.MAP[part];
+  add(rec?.inside);
+  if (deep)
+    for (const inner of rec?.contains ?? []) {
+      const r = C.MAP[inner];
+      add(r?.inside);
+      // A part's own color counts where it reads the token always, not
+      // only in a variant or a state.
+      for (const [tok, conds] of Object.entries(r?.own?.color?.tokens ?? {}))
+        if (
+          TEXT_ROLES.includes(tok) &&
+          /** @type {string[]} */ (conds).some(
+            w => !w.trim() || w.trim() === 'always',
+          )
+        )
+          out.add(tok);
+    }
+  return [...out].sort();
 }
 
 /**

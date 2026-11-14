@@ -33,7 +33,7 @@ import {
   wordTable,
 } from './_tables.mjs';
 import {PALETTE_DIALS, isGraySeed, seedOf} from './_palette.mjs';
-import {focusStateOf, partRuleTokens} from './_settings.mjs';
+import {focusStateOf, innerTextTokens, partRuleTokens} from './_settings.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {cssProperties, keywordsOf, matchValue, splitTop} from './_css.mjs';
 
@@ -9087,6 +9087,21 @@ export function draftAnswer(ctx, env, question) {
               ],
             ],
           };
+        // A part holding parts whose text reads the text color tokens
+        // itself (a top nav's heading and items), where a color property
+        // never reaches that text: those tokens, on the part.
+        const inner = innerTextTokens(C, one(on), true);
+        if (
+          inner.length &&
+          !innerTextTokens(C, one(on)).length &&
+          !f.state &&
+          !f.when
+        )
+          return {
+            text: `text color${where}: ${inner.join(' and ')} on ${on}, the text color tokens the parts inside it read`,
+            options: [inner.map(tok => set(tok, color, {on, ...modeOf(c)}))],
+            sequence: inner.length > 1,
+          };
         return {
           text: `text color${where}: color`,
           options: [[set('color', color, {...f, ...modeOf(c)})]],
@@ -9384,6 +9399,41 @@ export function draftAnswer(ctx, env, question) {
               text: `${lighter ? 'a lighter' : 'a darker'} background${where}: ${ownShifted} (now ${ownFill})`,
               options: [[set('background-color', ownShifted, f)]],
             };
+          // In a state, the token the part fills with there (a table row's
+          // hover overlay), stepped from its value in each mode and set on
+          // the part: Core reads it only in that state.
+          // A part whose variants each fill differently keeps the per-part
+          // step below: one token would not suit every variant.
+          const stateRead =
+            f.state && !C.variantValues(one(on))?.variant?.length
+              ? reads.find(
+                  r =>
+                    /^--color-/.test(r.token) &&
+                    r.when.some(w =>
+                      new RegExp(`:${f.state}(?![-\\w])`).test(w),
+                    ),
+                )?.token
+              : null;
+          if (stateRead) {
+            const steps = perMode(
+              stateRead,
+              stateRead,
+              {...f, state: undefined},
+              (now, m) =>
+                shiftKeepAlpha(
+                  now,
+                  lighter ? amount : -amount,
+                  current('--color-background-body', m),
+                ),
+              c,
+            );
+            if (steps.length)
+              return {
+                text: `${lighter ? 'a lighter' : 'a darker'} ${on}${where}: ${stateRead}, the fill ${on} shows there, stepped from its value now${modesSaid(steps)}`,
+                options: [steps],
+                sequence: steps.length > 1,
+              };
+          }
           // A part with no recorded fill: what its color is now is unknown,
           // so a brightness filter makes it darker or lighter from there.
           // The amount asked holds there too: "20% darker" is brightness 0.8.

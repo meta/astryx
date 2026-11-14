@@ -3179,6 +3179,21 @@ async function changeOnce(
         : null
     : null;
   if (s.note) notes.push(s.note);
+  // A group kept alike (inputs share one height) loses that when one member
+  // changes its height alone.
+  const family = s.on && s.only ? familyOf(s.on) : null;
+  if (
+    family &&
+    AUTO_SPREAD.includes(family) &&
+    (s.thing === 'spacing' ||
+      /^--size-element-/.test(s.thing) ||
+      /^(min-|max-)?(height|block-size)$|^padding(-block(-start|-end)?|-top|-bottom)?$/.test(
+        s.thing,
+      ))
+  )
+    notes.push(
+      `${s.on} alone now differs in height from the rest of ${family}, which are kept alike; --on ${family} changes them together`,
+    );
   // A token the theme's own source sets itself wins over what this dial
   // writes, as an exact setting does.
   const ownWins = ownSourceTokens(cwd, slug).filter(

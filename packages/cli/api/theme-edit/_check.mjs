@@ -93,6 +93,7 @@ import {
   lengthPx,
   radiusAt,
   radiusTokenOf,
+  cornerParts,
   focusStateOf,
   valueProblem,
   partComponentDocs,
@@ -2057,6 +2058,37 @@ function oneModeOfTheme(data) {
 }
 
 /**
+ * The states `set` takes on a part: the ones its doc lists and the ones
+ * every part takes, less any a change in it is refused for while the same
+ * change without it passes (a state that never applies there). `how` lists
+ * these, and a state that is not one names them.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {any} data
+ * @param {string} part
+ * @returns {string[]}
+ */
+export function settableStates(ctx, slug, data, part) {
+  const t = ctx.project.target.get(part);
+  if (!t) return [];
+  const takes = (/** @type {string | undefined} */ state) => {
+    try {
+      checkSetting(ctx, slug, data, 'opacity', '1', {
+        on: part,
+        ...(state ? {state} : {}),
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const plain = takes(undefined);
+  return [...new Set([...t.states, ...COMMON_STATES])].filter(
+    state => !plain || takes(state),
+  );
+}
+
+/**
  * Check one setting and give it back ready to store, or refuse. What it
  * accepts, the settings loader takes too: the loader's own check runs last,
  * so a saved setting never blocks the theme.
@@ -2857,12 +2889,18 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         .toLowerCase(),
     )
   )
+    // A token takes no keyword in any mode (it would be left empty), so for
+    // a token only the color is offered.
     refuse(
       E.ERR_THEME_NO_MODE,
-      `"${String(v).trim()}" is a CSS keyword, which applies in both modes, so it takes no --mode. Give the ${s.mode} color, or set ${thing} ${String(v).trim()} for both modes.`,
+      String(thing).startsWith('--')
+        ? `"${String(v).trim()}" is a CSS keyword, which applies in both modes, so it takes no --mode; and a token never takes one. Give the ${s.mode} color.`
+        : `"${String(v).trim()}" is a CSS keyword, which applies in both modes, so it takes no --mode. Give the ${s.mode} color, or set ${thing} ${String(v).trim()} for both modes.`,
       {
         run: [
-          `${P} set ${slug} ${thing} ${String(v).trim()}${onFlag}${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}`,
+          String(thing).startsWith('--')
+            ? `${HOW} ${thing}`
+            : `${P} set ${slug} ${thing} ${String(v).trim()}${onFlag}${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}`,
         ],
       },
     );
@@ -2899,7 +2937,15 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         (x.when ?? null) === (s.when ?? null) &&
         (x.state ?? null) === (s.state ?? null),
     );
-  if (s.mode && data.mode !== 'both' && !unset && !sameModeEntry)
+  if (s.mode && data.mode !== 'both' && !unset && !sameModeEntry) {
+    // What takes no --mode in any theme (a size, a font, a keyword) is
+    // refused for that, with the command that drops --mode: a theme with
+    // both modes would refuse it too, so its mode is no way out.
+    try {
+      checkSetting(ctx, slug, {...data, mode: 'both'}, thing, v, flags);
+    } catch (e) {
+      if (/** @type {any} */ (e)?.code === E.ERR_THEME_NO_MODE) throw e;
+    }
     refuse(
       E.ERR_THEME_NO_MODE,
       `This theme is ${data.mode}; --mode is for themes with both modes.`,
@@ -2914,6 +2960,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         ],
       },
     );
+  }
   if ((s.when || s.state) && !s.on)
     refuse(E.ERR_MISSING_ARGUMENT, '--when and --state need --on <part>.', {
       run: [`${HOW} --list parts`],
@@ -3153,7 +3200,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
     if (s.state && !states.includes(s.state))
       refuse(
         E.ERR_THEME_UNKNOWN_STATE,
-        `"${s.state}" is not a state of ${s.on}. States: ${states.join(', ')}.`,
+        `"${s.state}" is not a state of ${s.on}. States: ${settableStates(ctx, slug, data, s.on).join(', ') || 'none'}.`,
         {
           ...(meant ? {didYouMean: [meant]} : {}),
           run: [
@@ -4712,7 +4759,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         const instead = /reads: ([^.]+)\./.exec(
           String(/** @type {any} */ (hard[0][1])?.message ?? ''),
         )?.[1];
-        s.note = `${readers.length ? `${readers.join(', ')} read ${thing} and take this change; ` : ''}the editor's render of ${hard.map(([t]) => t).join(', ')} did not read it${instead ? ` (${hard[0][0]} reads ${instead})` : ''}, so those stay as they were; each part is rendered once, with its default props, so a variant that reads it may be missed`;
+        s.note = `${readers.length ? `${readers.join(', ')} read ${thing} and take this change; ` : ''}the editor's render of ${hard.map(([t]) => t).join(', ')} did not read it${instead ? ` (${hard[0][0]} reads ${instead})` : ''}, so those stay as they were; each part is rendered with its default props, each variant value and each look flag, so a state or a combination that reads it may be missed`;
       }
       if (!s.note && recorded.length) {
         const fed = C.feeds(recorded[0][0], thing);
@@ -4750,7 +4797,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       // token is set as asked, and the result says nothing was seen
       // reading it.
       else if (r)
-        s.note = `no part the editor rendered reads ${thing} (each part is rendered once, with its default props, so a variant that reads it may be missed); it is set as asked, and reaches any part that reads it`;
+        s.note = `no part the editor rendered reads ${thing} (each part is rendered with its default props, each variant value and each look flag, so a state or a combination that reads it may be missed); it is set as asked, and reaches any part that reads it`;
     }
     return s;
   }
@@ -5135,25 +5182,25 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
     // value set for both modes); with none to keep, the setting would
     // change that mode too. Without a state, the other mode keeps the
     // part's plain color.
+    /** Whether a part keeps a value of its own in the other mode. */
+    const keepsOther = (/** @type {string} */ t) =>
+      Boolean(partDefault(ctx, t, camel(prop), s.when, s.state)) ||
+      // The base theme's own value there (in the state, else at rest) is
+      // what the other mode keeps.
+      [`:${s.state}`, null].some(st =>
+        baseRuleHas(
+          ctx.project.cwd,
+          data.like,
+          t,
+          s.when ?? 'base',
+          st,
+          camel(prop),
+        ),
+      );
+    const cannotKeep =
+      s.mode && s.state ? partsOf(ctx, s).filter(t => !keepsOther(t)) : [];
     if (
-      s.mode &&
-      s.state &&
-      !partsOf(ctx, s).every(
-        t =>
-          partDefault(ctx, t, camel(prop), s.when, s.state) ||
-          // The base theme's own value there (in the state, else at rest)
-          // is what the other mode keeps.
-          [`:${s.state}`, null].some(st =>
-            baseRuleHas(
-              ctx.project.cwd,
-              data.like,
-              t,
-              s.when ?? 'base',
-              st,
-              camel(prop),
-            ),
-          ),
-      ) &&
+      cannotKeep.length &&
       !data.settings.some(
         x =>
           x.thing === prop &&
@@ -5162,16 +5209,30 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           x.state === s.state &&
           x.mode !== s.mode,
       )
-    )
+    ) {
+      const flagsTail = `${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}`;
+      // The part named keeps its own when only other members of its group
+      // cannot: --only writes it alone, its mode kept.
+      const onlyThis =
+        s.on &&
+        !cannotKeep.includes(s.on) &&
+        familyOf(s.on) &&
+        AUTO_SPREAD.includes(/** @type {string} */ (familyOf(s.on)));
       refuse(
         E.ERR_THEME_NO_MODE,
-        `${s.on} has no ${prop}${s.state ? ` when ${s.state}` : ''}${s.when ? ` for ${s.when}` : ''} of its own for the ${s.mode === 'light' ? 'dark' : 'light'} mode to keep, so a ${s.mode}-only value would change it too. Set it for both modes.`,
+        `${cannotKeep.slice(0, 3).join(', ')}${cannotKeep.length > 3 ? ` and ${cannotKeep.length - 3} more` : ''} ${cannotKeep.length > 1 ? 'have' : 'has'} no ${prop}${s.state ? ` when ${s.state}` : ''}${s.when ? ` for ${s.when}` : ''} of ${cannotKeep.length > 1 ? 'their' : 'its'} own for the ${s.mode === 'light' ? 'dark' : 'light'} mode to keep, so a ${s.mode}-only value would change it too.${onlyThis ? ` ${s.on} has one: set it alone with --only.` : ' Set it for both modes.'}`,
         {
           run: [
-            `${P} set ${slug} ${prop} ${quoteCommandArgument(v)} --on ${s.on}${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}`,
+            ...(onlyThis
+              ? [
+                  `${P} set ${slug} ${prop} ${quoteCommandArgument(v)} --on ${s.on} --only${flagsTail} --mode ${s.mode}`,
+                ]
+              : []),
+            `${P} set ${slug} ${prop} ${quoteCommandArgument(v)} --on ${s.on}${flagsTail}`,
           ],
         },
       );
+    }
     return s;
   }
   // A property written with _ or spaces, a trailing colon, or in camel
@@ -5258,6 +5319,13 @@ function refuseInvisibleCorners(ctx, slug, s, data) {
   if (ctx.unchecked) return;
   const parts = partsOf(ctx, s);
   if (!parts.length || parts.some(t => ctx.C.showsCorners(t))) return;
+  // The corners dial on a part whose corners are drawn by parts of its own
+  // inside it (a date-time input's date and time boxes) rounds those.
+  if (
+    s.thing === 'corners' &&
+    parts.some(t => cornerParts(ctx, t).some(x => x !== t))
+  )
+    return;
   // An edge the theme gives the part itself shows its corners too.
   const edged = data.settings.some(
     x =>
