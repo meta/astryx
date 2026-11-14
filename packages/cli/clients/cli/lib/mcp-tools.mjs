@@ -1,27 +1,25 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file The MCP tools of `astryx mcp`, read from the CLI's own commands.
+ * @file The MCP tools of `astryx mcp`: the CLI's manifest, in MCP's shape.
  *
- * Each command that answers with --json and declares `outsideProject` is one
- * tool. A group that only holds subcommands declares no `outsideProject`, so it
- * is no tool. The tool takes the command's arguments, its options, and the
- * root options, under their CLI names, and a call becomes the command line
- * that runs it. The Commander program that prints --help and the manifest is
- * the only input, so the tools change when the commands change.
+ * Each command the manifest lists as answering with --json, with an
+ * `outsideProject`, is one tool; a group that only holds subcommands has no
+ * `outsideProject`, so it is no tool. A tool's inputs are the command's
+ * arguments and options, and the root options, under their CLI names, and a
+ * call becomes the command line that runs it. The manifest is the only input,
+ * so the tools are the commands of this CLI, and nothing else.
  *
- * @input the full Commander program, the commands that accept --json, and
- *   the folder served
- * @output tool descriptors for tools/list; the arguments a tools/call runs;
+ * @input the CLI's manifest (`astryx manifest --json`'s data); the folder served
+ * @output tool descriptors for tools/list; the command line a tools/call runs;
  *   the server instructions
- * @position clients/cli/lib — read by lib/mcp-server.mjs
+ * @position clients/cli/lib — read by commands/mcp.mjs and lib/mcp-server.mjs
  */
 
 import * as path from 'node:path';
+import {Option} from 'commander';
 import {isAstryxPromptInReach} from '../../../foundation/agent-docs/agent-doc-state.mjs';
 import {renderAgentDocsBlock} from '../../../foundation/agent-docs/agent-docs.mjs';
-import {routeSegment} from '../../../foundation/discovery/docs-section-key.mjs';
-import {commandDocsOf} from './define-command.mjs';
 
 /**
  * Root options that are not tool inputs. `--json` is how every tool runs its
@@ -32,9 +30,6 @@ export const RUN_OPTIONS = Object.freeze(['--json', '--version']);
 
 /** The input that names the folder a command runs in. */
 export const CWD_INPUT = 'cwd';
-
-/** A tool name, as MCP clients accept it. */
-const TOOL_NAME = /^[A-Za-z0-9_-]{1,64}$/;
 
 /**
  * @typedef {object} McpArgument
@@ -63,179 +58,109 @@ const TOOL_NAME = /^[A-Za-z0-9_-]{1,64}$/;
  */
 
 /**
- * The words of `cmd` below the root program.
- * @param {import('commander').Command} cmd
- * @returns {string[]}
+ * Every command in a manifest's tree, depth first.
+ * @param {import('./manifest').ManifestCommand[]} commands
+ * @returns {import('./manifest').ManifestCommand[]}
  */
-function commandWords(cmd) {
-  /** @type {string[]} */
-  const words = [];
-  /** @type {import('commander').Command | null} */
-  let c = cmd;
-  while (c?.parent) {
-    words.unshift(c.name());
-    c = c.parent;
+function flatten(commands) {
+  return commands.flatMap(c => [c, ...flatten(c.subcommands ?? [])]);
+}
+
+/**
+ * How a manifest option is given on the command line, read by Commander from
+ * its flag. An option whose default is a list collects one value each time it
+ * is given, as `upgrade --integration` does.
+ * @param {import('./manifest').ManifestOption} manifestOption
+ * @returns {McpOption}
+ */
+function optionEntry(manifestOption) {
+  const option = new Option(manifestOption.flag);
+  if (!option.long) {
+    throw new Error(`${manifestOption.flag} has no long flag, so it has no tool input name`);
   }
-  return words;
-}
-
-/**
- * Every command below `cmd`, depth first, without help and hidden commands.
- * @param {import('commander').Command} cmd
- * @returns {import('commander').Command[]}
- */
-function commandsBelow(cmd) {
-  return (cmd.commands ?? [])
-    .filter(sub => !(/** @type {any} */ (sub)._hidden) && sub.name() !== 'help')
-    .flatMap(sub => [sub, ...commandsBelow(sub)]);
-}
-
-/**
- * Whether an option takes a list: it is variadic, or its default is a list,
- * as `upgrade --integration` collects each flag it is given.
- * @param {import('commander').Option} option
- * @returns {boolean}
- */
-function takesList(option) {
-  return (option.required || option.optional) && (option.variadic || Array.isArray(option.defaultValue));
+  const takes = option.required ? 'value' : option.optional ? 'optional-value' : 'flag';
+  return {
+    key: option.long.slice(2),
+    long: option.long,
+    takes,
+    variadic: takes !== 'flag' && (option.variadic || Array.isArray(manifestOption.default)),
+  };
 }
 
 /**
  * The input property for one option.
- * @param {import('commander').Option} option
- * @param {{choices?: string[]}} [docOption] the CommandDoc's own entry
+ * @param {import('./manifest').ManifestOption} manifestOption
+ * @param {McpOption} entry
+ * @param {boolean} describe whether the property carries the option's text;
+ *   the server instructions give the root options' text once
  * @returns {Record<string, unknown>}
  */
-function optionSchema(option, docOption) {
-  const description = option.description;
-  const choices = option.argChoices ?? docOption?.choices;
+function optionSchema(manifestOption, entry, describe) {
   /** @type {Record<string, unknown>} */
-  let value;
-  if (!option.required && !option.optional) {
-    value = {type: 'boolean'};
-  } else if (choices?.length) {
-    value = {type: 'string', enum: [...choices]};
-  } else {
-    value = {type: 'string'};
-  }
-  if (takesList(option)) value = {type: 'array', items: value};
-  else if (option.optional) {
-    // `--flag [value]`: the flag alone, or the flag with a value.
-    value = {anyOf: [{type: 'boolean'}, value]};
-  }
-  /** @type {Record<string, unknown>} */
-  const schema = {...value};
-  if (description) schema.description = description;
-  if (option.defaultValue !== undefined) schema.default = option.defaultValue;
-  return schema;
-}
-
-/**
- * The input property for a root option. The server instructions describe
- * root options once, as the root help does.
- * @param {import('commander').Option} option
- * @returns {Record<string, unknown>}
- */
-function rootOptionSchema(option) {
-  const {description: _description, ...schema} = optionSchema(option);
-  return schema;
-}
-
-/**
- * Describe `option` for building its command line.
- * @param {import('commander').Option} option
- * @returns {McpOption}
- */
-function optionEntry(option) {
-  if (!option.long) {
-    throw new Error(
-      `${option.flags} has no long flag, so it has no tool input name`,
-    );
+  let value = {type: 'boolean'};
+  if (entry.takes !== 'flag') {
+    value = manifestOption.choices?.length
+      ? {type: 'string', enum: [...manifestOption.choices]}
+      : {type: 'string'};
+    if (entry.variadic) value = {type: 'array', items: value};
+    else if (entry.takes === 'optional-value') value = {anyOf: [{type: 'boolean'}, value]};
   }
   return {
-    key: option.long.slice(2),
-    long: option.long,
-    takes: option.required
-      ? 'value'
-      : option.optional
-        ? 'optional-value'
-        : 'flag',
-    variadic: takesList(option),
+    ...value,
+    ...(describe && manifestOption.description ? {description: manifestOption.description} : {}),
+    ...(manifestOption.default !== undefined ? {default: manifestOption.default} : {}),
   };
 }
 
 /**
- * The MCP tool for one command.
- * @param {import('commander').Command} cmd
- * @param {import('commander').Option[]} rootOptions
+ * The root options a tool takes as inputs.
+ * @param {import('./manifest').CLIManifest} manifest
+ * @returns {import('./manifest').ManifestOption[]}
+ */
+function toolRootOptions(manifest) {
+  return manifest.globalOptions.filter(
+    o => !RUN_OPTIONS.includes(new Option(o.flag).long ?? ''),
+  );
+}
+
+/**
+ * The MCP tool for one manifest command.
+ * @param {import('./manifest').ManifestCommand} command
+ * @param {import('./manifest').ManifestOption[]} rootOptions
  * @returns {McpTool}
  */
-function toolOf(cmd, rootOptions) {
-  const words = commandWords(cmd);
-  const name = words.join('_');
-  if (!TOOL_NAME.test(name)) {
-    throw new Error(`"${words.join(' ')}" gives the tool name "${name}", which MCP does not accept`);
-  }
-  const docs = commandDocsOf(cmd);
+function toolOf(command, rootOptions) {
+  const words = command.name.split(' ');
   /** @type {Record<string, Record<string, unknown>>} */
   const properties = {};
   /** @type {string[]} */
   const required = [];
-  /**
-   * @param {string} key
-   * @param {Record<string, unknown>} schema
-   */
-  const addProperty = (key, schema) => {
-    if (Object.hasOwn(properties, key)) {
-      throw new Error(`"${words.join(' ')}" has two inputs named "${key}"`);
-    }
-    properties[key] = schema;
-  };
-
-  const declared = /** @type {any[]} */ (
-    /** @type {any} */ (cmd).registeredArguments ?? []
-  );
-  /** @type {McpArgument[]} */
-  const args = declared.map(arg => {
-    const key = String(arg.name());
-    const docArg = docs?.doc.args?.find(a => a.name === key);
-    const description =
-      arg.description ||
-      docs?.fn?.params?.find(p => p.name === docArg?.param)?.description ||
-      '';
-    /** @type {Record<string, unknown>} */
+  const args = command.arguments.map(arg => {
     const item = {type: 'string'};
-    addProperty(key, {
+    properties[arg.name] = {
       ...(arg.variadic ? {type: 'array', items: item} : item),
-      ...(description ? {description} : {}),
-    });
-    if (arg.required) required.push(key);
-    return {key, required: arg.required === true, variadic: arg.variadic === true};
+      ...(arg.description ? {description: arg.description} : {}),
+    };
+    if (arg.required) required.push(arg.name);
+    return {key: arg.name, required: arg.required, variadic: arg.variadic};
   });
-
   /** @type {McpOption[]} */
   const options = [];
-  for (const option of cmd.options ?? []) {
-    if (option.hidden) continue;
-    const entry = optionEntry(option);
-    const docOption = docs?.doc.options?.find(o => o.flag === option.flags);
-    addProperty(entry.key, optionSchema(option, docOption));
-    if (option.mandatory) required.push(entry.key);
-    options.push(entry);
-  }
-  for (const option of rootOptions) {
-    const entry = optionEntry(option);
-    addProperty(entry.key, rootOptionSchema(option));
+  for (const [manifestOption, describe] of [
+    ...command.options.map(o => /** @type {const} */ ([o, true])),
+    ...rootOptions.map(o => /** @type {const} */ ([o, false])),
+  ]) {
+    const entry = optionEntry(manifestOption);
+    properties[entry.key] = optionSchema(manifestOption, entry, describe);
     options.push(entry);
   }
   // The server instructions describe it once.
-  addProperty(CWD_INPUT, {type: 'string'});
-
+  properties[CWD_INPUT] = {type: 'string'};
   return {
-    name,
+    name: words.join('_'),
     words,
-    title: `astryx ${words.join(' ')}`,
-    description: cmd.description(),
+    title: `astryx ${command.name}`,
+    description: command.description,
     inputSchema: {
       type: 'object',
       properties,
@@ -248,56 +173,17 @@ function toolOf(cmd, rootOptions) {
 }
 
 /**
- * The root options a tool takes as inputs.
- * @param {import('commander').Command} program
- * @returns {import('commander').Option[]}
- */
-export function toolRootOptions(program) {
-  return (program.options ?? []).filter(
-    option => !option.hidden && !RUN_OPTIONS.includes(option.long ?? ''),
-  );
-}
-
-/**
- * The MCP tools of the CLI: one per command that answers with --json and
- * declares `outsideProject`, in the manifest's order.
+ * The MCP tools of the CLI: one per command the manifest lists as answering
+ * with --json, with an `outsideProject`, in the manifest's order.
  *
- * @param {import('commander').Command} program the root, with every command
- *   loaded
- * @param {{jsonSupported: Set<string>}} context
+ * @param {import('./manifest').CLIManifest} manifest
  * @returns {McpTool[]}
  */
-export function mcpTools(program, {jsonSupported}) {
-  const rootOptions = toolRootOptions(program);
-  const tools = commandsBelow(program)
-    .filter(cmd => {
-      const words = commandWords(cmd);
-      return (
-        jsonSupported.has(words.join(' ')) &&
-        commandDocsOf(cmd)?.doc.outsideProject != null
-      );
-    })
-    .map(cmd => toolOf(cmd, rootOptions))
-    .sort((a, b) => a.title.localeCompare(b.title));
-  const names = new Set();
-  for (const tool of tools) {
-    if (names.has(tool.name)) {
-      throw new Error(`two commands give the tool name "${tool.name}"`);
-    }
-    names.add(tool.name);
-  }
-  return tools;
-}
-
-/**
- * The docs route of one tool, as an example: the route help prints in its
- * `More:` line.
- * @param {McpTool[]} tools
- * @returns {string}
- */
-function docsExample(tools) {
-  const tool = tools.find(t => t.words.length > 1) ?? tools[0];
-  return tool ? `: ${tool.name} is cli/commands/${routeSegment(tool.words.join(' '))}` : '';
+export function mcpTools(manifest) {
+  const rootOptions = toolRootOptions(manifest);
+  return flatten(manifest.commands)
+    .filter(command => command.json && command.outsideProject)
+    .map(command => toolOf(command, rootOptions));
 }
 
 /**
@@ -324,33 +210,24 @@ export async function projectAgentText(root) {
 }
 
 /**
- * What a client shows the model once: the project's agent text, what the
- * tools are, how a tool name and its inputs map to the command line, and the
- * root options, as the root help gives them.
+ * What a client shows the model once: the project's agent text, the CLI's
+ * description, the rule from a tool to its command, and the root options, as
+ * the root help gives them.
  *
- * @param {import('commander').Command} program
- * @param {McpTool[]} tools
+ * @param {import('./manifest').CLIManifest} manifest
  * @param {{agentText?: string | null}} [context] from projectAgentText()
  * @returns {string}
  */
-export function mcpInstructions(program, tools, {agentText = null} = {}) {
-  const example =
-    tools.find(tool => tool.words.length > 1 && tool.args.length > 0) ??
-    tools[0];
-  const exampleLine = example
-    ? ` For example, \`astryx ${example.words.join(' ')} <${example.args[0]?.key ?? ''}>\` is the tool ${example.name}.`
-    : '';
-  const rootLines = toolRootOptions(program).map(
-    option => `  ${option.flags}  ${option.description}`,
-  );
+export function mcpInstructions(manifest, {agentText = null} = {}) {
+  const rootLines = toolRootOptions(manifest).map(o => `  ${o.flag}  ${o.description}`);
   return [
     ...(agentText ? [agentText] : []),
-    program.description(),
+    manifest.description,
     'Each tool runs one astryx command in this folder with --json and answers with its JSON output unchanged. ' +
-      `A tool name is the command's words joined by _, and its inputs are the command's arguments and options under their CLI names: a value option takes a string, and a list takes an array of strings.${exampleLine}`,
+      "A tool name is the command's words joined by _ (theme build is theme_build), and its inputs are the command's arguments and options under their CLI names: a value option takes a string, and a list takes an array of strings.",
     ['Every tool also takes the root options, which change only the reads their text names:', ...rootLines].join('\n'),
     `and ${CWD_INPUT}, the folder to run the command in, inside this one (default: this one).`,
-    `A command's full docs (its examples, exit codes and notes) are the docs tool with topic cli/commands/<tool name, - for _>${docsExample(tools)}.`,
+    "A command's full docs are the docs tool with topic cli/commands/<the command's words joined by ->.",
   ].join('\n\n');
 }
 

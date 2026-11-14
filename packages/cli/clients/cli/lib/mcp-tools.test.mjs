@@ -34,8 +34,8 @@ let manifest;
 
 beforeAll(async () => {
   program = await createProgram();
-  tools = mcpTools(program, {jsonSupported: JSON_SUPPORTED});
   manifest = buildManifest(program, {jsonSupported: JSON_SUPPORTED});
+  tools = mcpTools(manifest);
 });
 
 /**
@@ -124,10 +124,13 @@ describe('mcpTools', () => {
     }
   });
 
-  it('offers the choices a CommandDoc declares as an enum', () => {
+  it('offers the choices the manifest lists as an enum, and only those', () => {
     const search = /** @type {import('./mcp-tools.mjs').McpTool} */ (tools.find(t => t.name === 'search'));
-    const type = /** @type {any} */ (search.inputSchema).properties.type;
-    expect(type.enum).toEqual(['component', 'hook', 'doc', 'template', 'theme']);
+    const properties = /** @type {any} */ (search.inputSchema).properties;
+    expect(properties.lang.enum).toEqual(['en', 'zh', 'dense']);
+    // A CommandDoc's choices stay in the option's text, as in help; the
+    // command checks the value.
+    expect(properties.type).toEqual({type: 'string', description: expect.stringContaining('component|hook')});
   });
 });
 
@@ -170,12 +173,12 @@ describe('projectAgentText', () => {
 
 describe('mcpInstructions', () => {
   it('opens with the project agent text when it is given one', () => {
-    const text = mcpInstructions(program, tools, {agentText: 'Astryx v9 · 1 components'});
+    const text = mcpInstructions(manifest, {agentText: 'Astryx v9 · 1 components'});
     expect(text.startsWith('Astryx v9 · 1 components\n\n')).toBe(true);
   });
 
   it('names every root option a tool takes and the rule from tool to command', () => {
-    const text = mcpInstructions(program, tools);
+    const text = mcpInstructions(manifest);
     expect(text).toContain(program.description());
     for (const option of program.options) {
       if (RUN_OPTIONS.includes(option.long ?? '')) continue;
