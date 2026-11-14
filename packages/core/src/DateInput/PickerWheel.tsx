@@ -26,7 +26,7 @@ import {
   useState,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {scrollTypeOf} from '../gestures/GestureHost';
+import {scrollTypeOf} from '../gestures/scrollType';
 import {PanGestureRecognizer} from '../gestures/PanGestureRecognizer';
 import {TapGestureRecognizer} from '../gestures/TapGestureRecognizer';
 import {useGestureRecognizer} from '../gestures/useGestureRecognizer';
