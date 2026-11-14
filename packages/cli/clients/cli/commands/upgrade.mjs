@@ -13,7 +13,7 @@
  */
 
 import {jsonOut, jsonError} from '../../../foundation/response/json.mjs';
-import {emit, section, text} from '../formatters/index.mjs';
+import {emit, section, records} from '../formatters/index.mjs';
 import {logger} from '../../../api/logger.mjs';
 import {AstryxError} from '../../../api/error.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
@@ -26,31 +26,40 @@ import {NO_RESULT_SET, resultSet} from '../../../foundation/debug/index.mjs';
  * @param {import('commander').Command} program
  */
 /**
- * The codemod list as text: a header naming how many there are and the
- * package when they share one, then each version with one line per codemod,
- * its name and title, and `(optional)` on the ones that run only on request.
- * A codemod from another package names its package on its line.
+ * The codemod list as text: a heading that says how many codemods there are
+ * and names their package when they share one, then each version with one
+ * line per codemod, its name and title, and `(optional)` on a codemod that
+ * runs only on request. A codemod from another package names its package.
  * @param {import('../../../api/upgrade/upgrade.type.mjs').UpgradeListResponse['data']} codemods
- * @returns {string}
+ * @returns {import('../formatters/index.mjs').Block[]}
  */
-function formatCodemodList(codemods) {
+function codemodListBlocks(codemods) {
   const packages = new Set(codemods.map(c => c.package));
   const shared = packages.size === 1 ? [...packages][0] : null;
-  const lines = [
-    `${codemods.length} codemod${codemods.length === 1 ? '' : 's'}${shared ? ` from ${shared}` : ''}, oldest first:`,
-  ];
-  let version = '';
+  /** @type {Map<string, typeof codemods>} */
+  const byVersion = new Map();
   for (const c of codemods) {
-    if (c.version !== version) {
-      version = c.version;
-      lines.push(version);
-    }
-    const pkg = shared ? '' : ` (${c.package})`;
-    lines.push(
-      `  ${c.name}: ${c.title}${c.optional ? ' (optional)' : ''}${pkg}`,
-    );
+    byVersion.set(c.version, [...(byVersion.get(c.version) ?? []), c]);
   }
-  return lines.join('\n');
+  const count = `${codemods.length} codemod${codemods.length === 1 ? '' : 's'}`;
+  return [
+    section(
+      'Available codemods',
+      `${count}${shared ? ` from ${shared}` : ''}, oldest first`,
+    ),
+    ...[...byVersion].flatMap(([version, group]) => [
+      section(version),
+      records(
+        group.map(c => ({
+          name: c.name,
+          title: c.title,
+          optional: c.optional ? '(optional)' : undefined,
+          package: shared ? undefined : c.package,
+        })),
+        {fields: ['name', 'title', 'optional', 'package'], layout: 'inline'},
+      ),
+    ]),
+  ];
 }
 
 export function registerUpgrade(program) {
@@ -110,10 +119,7 @@ export function registerUpgrade(program) {
           // carries the same fields the JSON does. One line per codemod under
           // its version: the list gains a line per codemod each release, not a
           // five-line record.
-          emit(
-            section('Available codemods'),
-            text(formatCodemodList(result.data)),
-          );
+          emit(...codemodListBlocks(result.data));
         }
 
         const registrySummary =
