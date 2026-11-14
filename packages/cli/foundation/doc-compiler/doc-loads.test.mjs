@@ -74,24 +74,25 @@ const RUNNERS = {
   },
   'api/theme-edit/_preview.mjs': {
     runs: 'a Playwright the project has installed, or a Chrome found on the machine, to picture a preview only with --png',
-    sites: ['child_process.spawnSync', 'import(<computed>)'],
+    sites: ['child_process.spawn', 'import(<computed>)'],
   },
   'api/theme-edit/_project.mjs': {
     runs: "the project's installed Core theme module and a built-in theme it builds on, to check and resolve tokens",
-    sites: ['createRequire', 'import(<computed>) ×2', 'require'],
+    sites: ['import(<computed>) ×2', 'require'],
   },
   'api/theme-edit/_settings.mjs': {
     runs: 'the built theme module, to read its resolved tokens after a build',
     sites: ['import(<computed>)'],
   },
   'api/theme/build/build.mjs': {
-    runs: "theme source modules, through jiti; the project's installed Core, and a Core's root entry once a theme imports it",
+    runs: "theme source modules, through jiti, with the stylesheets their modules import loaded as empty modules; the project's installed Core, and a Core's root entry once a theme imports it",
     sites: [
       '.evalModule() ×2',
       '.import()',
       'createJiti ×5',
       'import(<computed>) ×2',
       'require(<computed>)',
+      'withEmptyStylesheets ×5',
     ],
   },
   'api/theme/build/core-interception.mjs': {
@@ -441,8 +442,14 @@ const RUNNERS = {
     sites: ['import(<computed>)'],
   },
   'foundation/fs/module-loader.mjs': {
-    runs: 'user modules (config, manifests, handlers, codemods): natively or through jiti, and a fresh read again after dropping a CommonJS module from the require cache',
-    sites: ['.import() ×3', 'importUrl ×2', 'require(jiti)', 'require.cache'],
+    runs: 'user modules (config, manifests, handlers, codemods): natively or through jiti, and a fresh read again after dropping a CommonJS module from the require cache; during a theme module load only, a module hook that loads each stylesheet the theme imports as an empty module',
+    sites: [
+      '.import() ×3',
+      'importUrl ×2',
+      'module.registerHooks',
+      'require(jiti)',
+      'require.cache',
+    ],
   },
   'foundation/fs/read-record.mjs': {
     runs: "nothing; it wraps node:fs's read calls to record the paths an operation reads, and republishes them to ESM imports",

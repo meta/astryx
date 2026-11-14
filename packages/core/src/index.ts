@@ -74,6 +74,7 @@ export * from './InfoTip';
 export * from './Indicator';
 export * from './InputGroup';
 export * from './Item';
+export * from './Swipe';
 export * from './Text';
 export * from './TextInput';
 export * from './TabList';

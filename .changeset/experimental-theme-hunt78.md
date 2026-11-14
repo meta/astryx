@@ -1,0 +1,7 @@
+---
+'@astryxdesign/cli': patch
+---
+
+[experimental] `astryx experimental theme editor how` checks its answer against what the question means: a part the question only compares against ("rounder than buttons", "darker than the page") is never changed, and the answer says so; a prohibition ("don't make the cards bigger", "buttons should not be rounder") changes nothing and says what stays; a question about a value ("how much padding do buttons have", "what color is the button") answers with the value now. Comparisons write onto the first part only, with a typed offset ("4px rounder than buttons"), its variant and state, and the property the words name ("button text the same color as the card text", "input border the same color as the button background"); two parts that should match copy one value, or say they already match. "Except" keeps an exact radius change, a text size change, a variant beside a part, small and muted ones, and a state. A side border ("remove the top border"), close icons and header titles, "inputs with errors", a heading level ("red h1"), a part's own radius, text colors for two button variants, an elided second clause ("… and darker when pressed", "… and half on ghost ones") and "buttons inside cards" (the container is kept, and the answer says the part changes everywhere) are read as asked. A theme name typed in another case keeps the question.
+
+@josephfarina

@@ -6,6 +6,7 @@
  */
 
 import {spawn, spawnSync} from 'node:child_process';
+import {randomUUID} from 'node:crypto';
 import * as fs from 'node:fs';
 import {createRequire} from 'node:module';
 import * as os from 'node:os';
@@ -204,6 +205,193 @@ describe('render(): page to one HTML file', () => {
     expect(await codeOf(() => render('damaged.html', {cwd: dir, reverse: true}))).toBe(
       'ERR_RENDER_SOURCE_DAMAGED',
     );
+  });
+
+  it('refuses a rendered file cut short before its embedded source, instead of rebuilding part of the page', async () => {
+    put('cut-short.html', html.slice(0, html.indexOf('<script type="application/x-astryx-source"') - 40));
+    /** @type {any} */
+    let refused;
+    try {
+      await render('cut-short.html', {cwd: dir, reverse: true, out: 'cut-short-back/page.tsx'});
+    } catch (e) {
+      refused = e;
+    }
+    expect(refused?.code).toBe('ERR_RENDER_SOURCE_DAMAGED');
+    expect(refused.message).toContain('cut-short.html is cut short');
+    expect(fs.existsSync(path.join(dir, 'cut-short-back'))).toBe(false);
+    // A whole file a host added to after </html> is not cut short.
+    put('added-to.html', `${html}<script>track()</script>\n`);
+    const back = /** @type {any} */ (await render('added-to.html', {cwd: dir, reverse: true, out: 'added-to-back/page.tsx'}));
+    expect(back.data).toMatchObject({mode: 'embedded', exact: true});
+  });
+
+  it('refuses a file a merge left with conflict markers, instead of choosing a side', async () => {
+    const lines = html.split('\n');
+    const at = lines.findIndex(line => line.includes('application/x-astryx-source'));
+    put('conflicted.html', [...lines.slice(0, at), '<<<<<<< HEAD', lines[at], '=======', lines[at], '>>>>>>> theirs', ...lines.slice(at + 1)].join('\n'));
+    /** @type {any} */
+    let refused;
+    try {
+      await render('conflicted.html', {cwd: dir, reverse: true, out: 'conflicted-back/page.tsx'});
+    } catch (e) {
+      refused = e;
+    }
+    expect(refused?.code).toBe('ERR_RENDER_SOURCE_DAMAGED');
+    expect(refused.message).toContain('merge conflict markers');
+    expect(fs.existsSync(path.join(dir, 'conflicted-back'))).toBe(false);
+    // A page that is not an Astryx page is still named as such.
+    put('plain-conflicted.html', '<html><body>\n<<<<<<< HEAD\n<p>a</p>\n=======\n<p>b</p>\n>>>>>>> theirs\n</body></html>\n');
+    expect(await codeOf(() => render('plain-conflicted.html', {cwd: dir, reverse: true}))).toBe('ERR_RENDER_NOT_ASTRYX');
+  });
+
+  it('gives back a file whose markup a hand edit left with an open comment, and says it was edited', async () => {
+    put('open-comment.html', html.replace('</h1>', '</h1><!-- todo: reword'));
+    const back = /** @type {any} */ (await render('open-comment.html', {cwd: dir, reverse: true, out: 'open-comment-back/page.tsx'}));
+    expect(back.data).toMatchObject({mode: 'embedded', exact: true, edited: true});
+    expect(fs.readFileSync(path.join(dir, 'open-comment-back/page.tsx'), 'utf8')).toBe(PAGE);
+  });
+
+  it('gives back a file a minifier rewrote: comments gone, the tag unquoted, its attributes reordered', async () => {
+    const minified = html
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace('<script type="application/x-astryx-source">', '<script data-kind=source type=application/x-astryx-source>');
+    put('minified.html', minified);
+    const back = /** @type {any} */ (await render('minified.html', {cwd: dir, reverse: true, out: 'minified-back/page.tsx'}));
+    expect(back.data).toMatchObject({mode: 'embedded', exact: true, edited: false});
+    expect(fs.readFileSync(path.join(dir, 'minified-back/page.tsx'), 'utf8')).toBe(PAGE);
+  });
+});
+
+describe('render(): every write takes its place in one step', () => {
+  const BIN = path.join(CLI_DIR, 'clients/cli/bin/astryx.mjs');
+  /**
+   * Run the CLI in a process of its own.
+   * @param {string[]} args
+   * @returns {Promise<{code: number | null, out: string}>}
+   */
+  const cliRun = args =>
+    new Promise(resolve => {
+      const child = spawn(process.execPath, [BIN, '--json', ...args], {cwd: dir, stdio: ['ignore', 'pipe', 'ignore']});
+      let out = '';
+      child.stdout.on('data', chunk => (out += chunk));
+      child.on('close', code => resolve({code, out}));
+    });
+
+  it('replaces a rendered file in one step: a reader that has the old file open keeps reading all of it', async () => {
+    put('swap-a.tsx', 'export default function A() {\n  return <p>First page</p>;\n}\n');
+    put('swap-b.tsx', 'export default function B() {\n  return <p>Second page</p>;\n}\n');
+    await render('swap-a.tsx', {cwd: dir, out: 'swap.html'});
+    const file = path.join(dir, 'swap.html');
+    const before = fs.readFileSync(file);
+    const fd = fs.openSync(file, 'r');
+    try {
+      await render('swap-b.tsx', {cwd: dir, out: 'swap.html'});
+      const held = Buffer.alloc(before.length + 1);
+      expect(held.subarray(0, fs.readSync(fd, held, 0, held.length, 0))).toEqual(before);
+    } finally {
+      fs.closeSync(fd);
+    }
+    expect(fs.readFileSync(file, 'utf8')).toContain('Second page');
+  }, 60_000);
+
+  it('restores one file from many processes at once: each run gets a folder of its own, whole', async () => {
+    const runs = await Promise.all(Array.from({length: 8}, () => cliRun(['experimental', 'render', '--reverse', 'page.html'])));
+    expect(runs.map(r => r.code)).toEqual(Array(8).fill(0));
+    const pages = runs.map(r => JSON.parse(r.out).data.output);
+    expect(new Set(pages.map(p => path.dirname(p))).size).toBe(8);
+    for (const p of pages) expect(fs.readFileSync(path.join(dir, p), 'utf8')).toBe(PAGE);
+  }, 120_000);
+
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'leaves a file this user cannot write as it is, and keeps the permission bits of a file it replaces',
+    async () => {
+      await render('page.tsx', {cwd: dir, out: 'modes.html'});
+      const file = path.join(dir, 'modes.html');
+      fs.chmodSync(file, 0o444);
+      expect(await codeOf(() => render('page.tsx', {cwd: dir, out: 'modes.html'}))).toBe('ERR_WRITE_FAILED');
+      fs.chmodSync(file, 0o640);
+      await render('page.tsx', {cwd: dir, out: 'modes.html'});
+      expect(fs.statSync(file).mode & 0o777).toBe(0o640);
+    },
+    60_000,
+  );
+
+  it('lands every copy but the page at its target in the one new folder: a copy an alias places is refused outside it', async () => {
+    put('alias-loop/tsconfig.json', '{"compilerOptions": {"paths": {"@/*": ["./src/*"]}}}\n');
+    put('alias-loop/package.json', '{"name":"alias-loop","private":true}');
+    put('alias-loop/src/lib/helper.ts', "import {title} from '@/app/page';\nexport const label = 'Helper';\nexport const echo = () => title;\n");
+    const page = "import {label} from '../lib/helper';\nexport const title = 'Loop';\nexport default function Page() { return <p>{label}</p>; }\n";
+    put('alias-loop/src/app/page.tsx', page);
+    const cwd = path.join(dir, 'alias-loop');
+    await render('src/app/page.tsx', {cwd});
+    /** @type {any} */
+    let refused;
+    try {
+      await render('src/app/page.html', {cwd, reverse: true, out: 'restored/app/page.tsx'});
+    } catch (e) {
+      refused = e;
+    }
+    expect(refused?.code).toBe('ERR_PATH_TRAVERSAL');
+    expect(refused.message).toContain('src/app/page.tsx');
+    expect(fs.existsSync(path.join(cwd, 'restored'))).toBe(false);
+    expect(fs.readFileSync(path.join(cwd, 'src/app/page.tsx'), 'utf8')).toBe(page);
+  }, 60_000);
+
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)('names the folder that takes no new file, not a temporary one', async () => {
+    fs.mkdirSync(path.join(dir, 'locked'), {recursive: true});
+    fs.chmodSync(path.join(dir, 'locked'), 0o555);
+    /** @type {any} */
+    let refused;
+    try {
+      await render('page.tsx', {cwd: dir, out: 'locked/page.html'});
+    } catch (e) {
+      refused = e;
+    } finally {
+      fs.chmodSync(path.join(dir, 'locked'), 0o755);
+    }
+    expect(refused?.code).toBe('ERR_WRITE_FAILED');
+    expect(refused.message).toBe('Could not write locked/page.html: locked does not take a new file (EACCES); nothing was written.');
+  }, 60_000);
+
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'a restore with --overwrite replaces a file this user cannot write, as it did',
+    async () => {
+      const solo = 'export default function Solo() {\n  return <p>Solo</p>;\n}\n';
+      put('solo.tsx', solo);
+      await render('solo.tsx', {cwd: dir});
+      const file = put('read-only-back/solo.tsx', 'old\n');
+      fs.chmodSync(file, 0o444);
+      await render('solo.html', {cwd: dir, reverse: true, out: 'read-only-back/solo.tsx', overwrite: true});
+      expect(fs.readFileSync(file, 'utf8')).toBe(solo);
+    },
+    60_000,
+  );
+
+  it('removes a temporary that a stopped run in this process space left beside its target, and keeps any other', async () => {
+    const {pidSpace} = await import('../../foundation/release/cache.mjs');
+    const space = `${os.hostname()}-${/\[(\d+)\]/.exec(pidSpace() ?? '')?.[1] ?? 'x'}`;
+    // A process id no system gives out, so its run is gone.
+    const left = path.join(dir, `.stale.html.tmp-${space}-999999999-${randomUUID()}`);
+    const running = path.join(dir, `.stale.html.tmp-${space}-${process.pid}-${randomUUID()}`);
+    // A run in another process-ID namespace cannot be seen from here, so its
+    // temporary stays, whatever its process id.
+    const elsewhere = path.join(dir, `.stale.html.tmp-${os.hostname()}-1-999999999-${randomUUID()}`);
+    const leftFolder = path.join(dir, `.page-restored.tmp-${space}-999999999-${randomUUID()}`);
+    for (const temporary of [left, running, elsewhere]) fs.writeFileSync(temporary, 'part of a file');
+    put(path.relative(dir, path.join(leftFolder, 'page.tsx')), 'part of a folder');
+    await render('page.tsx', {cwd: dir, out: 'stale.html'});
+    const restored = /** @type {any} */ (await render('page.html', {cwd: dir, reverse: true}));
+    expect(fs.existsSync(left)).toBe(false);
+    expect(fs.existsSync(leftFolder)).toBe(false);
+    expect(fs.existsSync(running)).toBe(true);
+    expect(fs.existsSync(elsewhere)).toBe(true);
+    fs.rmSync(running);
+    fs.rmSync(elsewhere);
+    fs.rmSync(path.join(dir, path.dirname(restored.data.output)), {recursive: true});
+  }, 60_000);
+
+  it('leaves no temporary file or folder behind', () => {
+    expect(fs.readdirSync(dir).filter(name => name.includes('.tmp-'))).toEqual([]);
   });
 });
 
@@ -1664,6 +1852,34 @@ console.log(JSON.stringify({inside, outside}));
     const {inside, outside} = JSON.parse(run.stdout.trim().split('\n').pop() ?? '{}');
     expect(inside).toBe('@astryxdesign/core is not installed where the page is, so the page has no Astryx styles; install it, or render from inside the project.');
     expect(outside).toContain('and the CLI runs without one');
+  }, 60_000);
+
+  it("compiles a page's StyleX that reads Core's theme variables, with the names Core's stylesheet defines", () => {
+    const sub = path.join(away, 'tokens');
+    fs.mkdirSync(sub, {recursive: true});
+    fs.writeFileSync(
+      path.join(sub, 'page.tsx'),
+      [
+        "import * as stylex from '@stylexjs/stylex';",
+        "import {colorVars, spacingVars} from '@astryxdesign/core/theme/tokens.stylex';",
+        "import {Text} from '@astryxdesign/core/Text';",
+        '',
+        "const styles = stylex.create({box: {backgroundColor: colorVars['--color-background-surface'], padding: spacingVars['--spacing-2']}});",
+        '',
+        'export default function Page() {',
+        '  return <div {...stylex.props(styles.box)}><Text>Themed box</Text></div>;',
+        '}',
+        '',
+      ].join('\n'),
+    );
+    const run = runBin(sub, ['experimental', 'render', 'page.tsx']);
+    expect(run.status, JSON.stringify(run.json)).toBe(0);
+    const html = fs.readFileSync(path.join(sub, 'page.html'), 'utf8');
+    const style = html.slice(html.indexOf('<style>'), html.indexOf('</style>'));
+    for (const name of ['--color-background-surface', '--spacing-2']) {
+      expect(style).toContain(`var(${name})`);
+      expect(style).toContain(`${name}:`);
+    }
   }, 60_000);
 
   it('still names a package the CLI does not carry as not installed', () => {
