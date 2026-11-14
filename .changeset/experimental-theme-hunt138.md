@@ -6,7 +6,7 @@
 
 - a field `defineTheme()` or an `onDark`/`onLight` block does not take (`component`, `tokenz`), with the field meant, read from the installed Core's own types;
 - a `tokens` key one typo from a design token (`--color-acent`), pointing a property of the theme's own to `localTokens`;
-- a part's pseudo-class no browser knows (`:hovr`), a part variable the part does not read (`--button-focus-ofset`), and a part variable's value of the wrong kind for its default;
+- a part's pseudo-class one typo from one browsers know (`:hovr`), a part variable one typo from one the part reads that nothing in the theme reads (`--button-focus-ofset`), and a part variable's value of the wrong kind for its default;
 - an unknown component (`cardd`, or a part named by its class), and a component entry that holds no block of properties;
 - a typography role or field Core does not read, a heading level outside 1–6, a scale with no ratio, and the `fallbacks` field when it is what a family refuses;
 - a part's `fontFamily` read as `set` reads a family list, and a `var()` of the theme's own property read as the text it holds;

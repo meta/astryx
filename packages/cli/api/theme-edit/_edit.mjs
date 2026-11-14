@@ -2387,6 +2387,21 @@ async function ownTokenProblems(ctx, slug, data) {
    */
   const targetKey = name => (ctx.project.target.has(name) ? name : null);
   /**
+   * Every custom property a var() anywhere in the theme reads: a name it
+   * reads is the theme's own helper, never a typo of another.
+   * @type {Set<string>}
+   */
+  const readVars = new Set();
+  /** @param {unknown} node @param {number} depth */
+  const collectReads = (node, depth) => {
+    if (typeof node === 'string')
+      for (const m of node.matchAll(/var\(\s*(--[A-Za-z0-9_-]+)/g))
+        readVars.add(m[1]);
+    else if (node && typeof node === 'object' && depth < 24)
+      for (const v of Object.values(node)) collectReads(v, depth + 1);
+  };
+  collectReads(input, 0);
+  /**
    * The text the theme's own page gives each custom property it sets (its
    * tokens and local tokens), for a part property that reads one.
    * @type {Map<string, string>}
@@ -2525,16 +2540,21 @@ async function ownTokenProblems(ctx, slug, data) {
       for (const [k, v] of Object.entries(node)) {
         if (k.startsWith('--') && component && v !== undefined) {
           const own = partVars.find(x => x.name === k);
-          // A variable named for the part that the part does not read.
-          if (!own && k.startsWith(`--${component}-`) && !(k in known)) {
-            const near = nearest(
-              k,
-              partVars.map(x => x.name),
-            )[0];
+          // A variable named for the part, one typo from a variable the
+          // part reads, that nothing in the theme reads: that variable
+          // misspelled. Any other is the theme's own helper.
+          const near =
+            !own && k.startsWith(`--${component}-`) && !readVars.has(k)
+              ? nearest(
+                  k,
+                  partVars.map(x => x.name),
+                )[0]
+              : undefined;
+          if (near) {
             refuse(
               at,
               k,
-              `${k} is no variable ${component} reads (${partVars.map(x => x.name).join(', ') || 'it reads none'}), so the build writes a custom property that never applies${near ? `; did you mean ${near}?` : ''}`,
+              `${k} is no variable ${component} reads (${partVars.map(x => x.name).join(', ')}), and nothing in the theme reads it, so the build writes a custom property that never applies; did you mean ${near}?`,
               asWritten(v),
             );
             continue;
@@ -2561,22 +2581,25 @@ async function ownTokenProblems(ctx, slug, data) {
           token(at, k, v, here, false);
           continue;
         }
-        // A pseudo-class no browser knows: a rule that never applies.
+        // A pseudo-class one typo from one browsers know (or a state the
+        // part takes): that one misspelled, a rule that never applies. A
+        // name near none of them is the author's own call.
         const pseudo = /^:([a-z-]+)/i.exec(k)?.[1]?.toLowerCase();
-        if (
+        const nearPseudo =
           pseudo &&
           !k.startsWith('::') &&
           !CSS_PSEUDO_CLASSES.has(pseudo) &&
           !pseudo.startsWith('-')
-        ) {
-          const states = [...(target?.states ?? []), ...COMMON_STATES];
-          const near =
-            nearest(pseudo, states)[0] ??
-            nearest(pseudo, [...CSS_PSEUDO_CLASSES])[0];
+            ? (nearest(pseudo, [
+                ...(target?.states ?? []),
+                ...COMMON_STATES,
+              ])[0] ?? nearest(pseudo, [...CSS_PSEUDO_CLASSES])[0])
+            : undefined;
+        if (nearPseudo) {
           refuse(
             at,
             k,
-            `${k} is no pseudo-class a browser knows, so the build writes a selector that never matches${near ? `; did you mean :${near}?` : ''}`,
+            `${k} is no pseudo-class a browser knows, so the build writes a selector that never matches; did you mean :${nearPseudo}?`,
             '',
             whereKey(at.join('.'), k),
           );

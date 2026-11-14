@@ -854,13 +854,15 @@ export const WRAPPED_PARTS = /** @type {Record<string, {box: string}>} */ ({
 });
 
 /**
- * The pseudo-classes of CSS Selectors (Level 4 and the HTML and media
- * states browsers ship), by name: a part's `:name` block that names none of
- * them is a selector no browser matches, so the build writes a rule that
- * never applies.
+ * The pseudo-classes of CSS Selectors (Level 4 and 5, and the HTML, media,
+ * view-transition, scroll-marker and interest states browsers ship), by
+ * name: the names a part's `:name` block is read against, so one a typo
+ * away from a name here is named as that typo.
  */
 export const CSS_PSEUDO_CLASSES = new Set([
   'active',
+  'active-view-transition',
+  'active-view-transition-type',
   'any-link',
   'autofill',
   'blank',
@@ -884,11 +886,14 @@ export const CSS_PSEUDO_CLASSES = new Set([
   'future',
   'has',
   'has-slotted',
+  'heading',
   'host',
   'host-context',
   'hover',
   'in-range',
   'indeterminate',
+  'interest-source',
+  'interest-target',
   'invalid',
   'is',
   'lang',
@@ -927,6 +932,9 @@ export const CSS_PSEUDO_CLASSES = new Set([
   'stalled',
   'state',
   'target',
+  'target-after',
+  'target-before',
+  'target-current',
   'target-within',
   'user-invalid',
   'user-valid',
@@ -934,6 +942,7 @@ export const CSS_PSEUDO_CLASSES = new Set([
   'visited',
   'volume-locked',
   'where',
+  'xr-overlay',
 ]);
 
 /** States every part takes, beyond the ones its doc lists. */

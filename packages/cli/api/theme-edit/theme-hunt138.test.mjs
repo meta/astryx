@@ -124,6 +124,13 @@ describe("a part's keys", () => {
       "  components: {button: {base: {':checked': {backgroundColor: 'red'}, ':focus-visible': {color: 'red'}}}},",
     );
     await accepted('pb');
+    // Pseudo-classes browsers ship that are new to the selectors list, and
+    // a name near no known one, are the author's own call.
+    await withOwn(
+      'pc',
+      "  components: {button: {base: {':active-view-transition': {color: 'red'}, ':target-current': {color: 'blue'}, ':zzqq-state': {color: 'green'}}}},",
+    );
+    await accepted('pc');
   }, 240_000);
 
   it("names a variable the part does not read, and judges one it reads by its default's kind", async () => {
@@ -148,6 +155,13 @@ describe("a part's keys", () => {
       "  components: {button: {base: {'--button-focus-offset': '3px'}}},",
     );
     await accepted('vc');
+    // A part-prefixed helper the same block reads is the theme's own, even
+    // one a typo from a variable the part reads.
+    await withOwn(
+      'vd',
+      "  components: {button: {base: {'--button-brand-gap': '6px', gap: 'var(--button-brand-gap)', '--button-focus-ofset': '2px', outlineOffset: 'var(--button-focus-ofset)'}}},",
+    );
+    await accepted('vd');
   }, 240_000);
 
   it("reads a part's font-family as set reads it", async () => {
