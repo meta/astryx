@@ -80,6 +80,8 @@ interface SelectedItemPlacement {
   anchorTop: number;
   /** The listbox's clamped top, viewport px. */
   clampedTop: number;
+  /** The layer's margin at the viewport's block end, which the clamp keeps. */
+  gutter: number;
   /** Whether the browser placed the layer above its anchor (a flip). */
   isAboveAnchor: boolean;
 }
@@ -173,6 +175,7 @@ function measureSelectedItem(
     listboxHeight,
     anchorTop: anchorRect.top,
     clampedTop,
+    gutter: blockEndGutter,
     isAboveAnchor,
   };
 }
@@ -285,18 +288,27 @@ export function useSelectedItemOverlayMargin({
       : null;
     let margin: string | undefined;
     if (placement != null) {
-      const {offset, anchorBottom, listboxHeight} = placement;
-      if (placement.isAboveAnchor) {
-        // The browser flipped the layer above its anchor. The flip swaps the
-        // block margins. So this margin sets the list's end from the anchor's
-        // top, at the same clamped top.
-        margin = `${placement.anchorTop - placement.clampedTop - listboxHeight}px`;
+      const {offset, anchorTop, anchorBottom, listboxHeight} = placement;
+      const viewport = layoutViewportHeight(window);
+      // The browser flipped the layer above its anchor, and its swapped
+      // margins set the list's end from the anchor's top. This margin puts
+      // the list's top at the clamped top.
+      const flipped = anchorTop - placement.clampedTop - listboxHeight;
+      if (
+        placement.isAboveAnchor &&
+        anchorBottom + flipped + listboxHeight + placement.gutter > viewport
+      ) {
+        // Below the anchor, that margin would not fit, so the layer stays
+        // flipped. Like the margin below, it keeps the list's end above a
+        // software keyboard, and its top on screen.
+        const keyboardEnd = anchorTop - viewport;
+        margin = `min(${anchorTop - listboxHeight}px, max(${flipped}px, calc(${keyboardEnd}px + var(${LAYER_KEYBOARD_INSET_PROPERTY}, 0px))))`;
       } else {
-        // The room below the anchor for the list, in the keyboard inset's
-        // layout px. With no keyboard the inset falls back to the room
-        // itself. The keyboard term is then 0, and the measured shift stands.
-        const room =
-          layoutViewportHeight(window) - listboxHeight - anchorBottom;
+        // Otherwise this margin brings the layer back below its anchor. The
+        // room there for the list is in the keyboard inset's layout px. With
+        // no keyboard the inset falls back to the room itself. The keyboard
+        // term is then 0, and the measured shift stands.
+        const room = viewport - listboxHeight - anchorBottom;
         margin = `min(${-offset}px, max(${-anchorBottom}px, calc(${room}px - var(${LAYER_KEYBOARD_INSET_PROPERTY}, ${room}px))))`;
       }
     }

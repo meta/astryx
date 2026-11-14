@@ -11,7 +11,8 @@
  *   view, whether the keyboard was up before the list opened or rose after.
  *   When the keyboard's report ends, the open list keeps its top: a list the
  *   cap held grows downward in place. A list that slid above a late keyboard
- *   holds against a shorter one.
+ *   holds against a shorter one. A list beside a field near the viewport's
+ *   end, which the browser flips above it, also ends above the keyboard.
  * @position Chromium contract for the Selector overlay beside the keyboard
  */
 
@@ -273,6 +274,57 @@ for (const drop of [80, 150, 190]) {
     expectTopHeld(tops, placed.top, JSON.stringify({placed, tops}));
   });
 }
+
+// The Selector's field, fixed 8 px above the viewport's end: the list has no
+// room below it, so the browser flips it above.
+const NEAR_END = 8;
+
+async function openStoryNearEnd(page: Page) {
+  const trigger = await openStory(page, 0);
+  const gap = await page.evaluate(() => {
+    const field = document
+      .querySelector<HTMLElement>('[role="combobox"]')
+      ?.closest<HTMLElement>('.astryx-selector');
+    if (field == null) {
+      throw new Error('the Selector field must be in the document');
+    }
+    field.style.position = 'fixed';
+    field.style.width = '250px';
+    field.style.insetInlineStart = '24px';
+    field.style.insetBlockStart = 'auto';
+    field.style.insetBlockEnd = '8px';
+    return window.innerHeight - field.getBoundingClientRect().bottom;
+  });
+  expect(gap).toBeCloseTo(NEAR_END, 0);
+  return trigger;
+}
+
+test("a list beside a field near the viewport's end ends above a keyboard that was up before the open", async ({
+  page,
+}) => {
+  const trigger = await openStoryNearEnd(page);
+  await raiseKeyboard(page);
+  await trigger.click();
+  await expect(page.getByRole('listbox')).toBeVisible();
+  await expect(async () => {
+    expectClearOfKeyboard(await listFacts(page));
+  }).toPass({timeout: 3_000});
+});
+
+test("a list beside a field near the viewport's end moves above a keyboard that rises while it is open", async ({
+  page,
+}) => {
+  const trigger = await openStoryNearEnd(page);
+  await trigger.click();
+  await expect(page.getByRole('listbox')).toBeVisible();
+  // Without the keyboard the list ends under the keyboard's line.
+  const before = await listFacts(page);
+  expect(before.bottom, JSON.stringify(before)).toBeGreaterThan(LIMIT);
+  await raiseKeyboard(page);
+  await expect(async () => {
+    expectClearOfKeyboard(await listFacts(page));
+  }).toPass({timeout: 3_000});
+});
 
 test('a list the cap holds above the keyboard grows downward in place when the report ends', async ({
   page,
