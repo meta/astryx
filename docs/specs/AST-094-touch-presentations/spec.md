@@ -1669,9 +1669,11 @@ option values and no tap choice: `HitAreaGroupContext`, the group flag that a
 Button in a toggle group reads; `touchTargetRect`, the box reader that grows a
 box toward 44 px; `distanceTo`, the distance from the finger to a box;
 `BAND_ON_DESCENDANT`, the band option for a host whose band is on a
-descendant; and `targetUnderFinger`, the press check's choice, which a group
-that takes its members' presses runs before it claims one, so a member's band
-takes no tap on a control outside the group.
+descendant; and `targetUnderFinger`, the press check's choice. A group that
+takes its members' presses runs it before it claims one, so a member's band
+takes no tap on a control outside the group. The group reuses the lone
+Button's check rather than its own, so both paths make the same hand-off
+decision (`architecture:knowledge-contracts` DEC-22).
 
 Rejected: a measured, page-wide watch of every control's neighbors.
 
