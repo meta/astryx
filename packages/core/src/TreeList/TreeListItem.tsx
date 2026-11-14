@@ -40,7 +40,11 @@ import {mergeProps} from '../utils/mergeProps';
 import {useFocusAcrossSwap} from '../utils/useFocusAcrossSwap';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import {TreeListBranches} from './TreeListBranches';
-import type {TreeListDensity, TreeListVariant} from './TreeListTypes';
+import type {
+  TreeListDensity,
+  TreeListExpandIconState,
+  TreeListVariant,
+} from './TreeListTypes';
 import {themeProps} from '../utils/themeProps';
 import {disabledInteractionProps} from '../utils/disabledInteraction';
 import {
@@ -253,6 +257,33 @@ const styles = stylex.create({
     color: colorVars['--color-icon-secondary'],
     borderRadius: radiusVars['--radius-inner'],
   },
+  // A caller's glyph inside the toggle, centred in the chevron column.
+  // A caller's glyph inside the toggle: the Chevron's box. Artwork drawn at
+  // `1em` fills it at every text size, and a larger node is clipped, so the
+  // column never widens.
+  customGlyph: {
+    flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: spacingVars['--spacing-4'],
+    height: spacingVars['--spacing-4'],
+    fontSize: spacingVars['--spacing-4'],
+    overflow: 'hidden',
+  },
+  // A leaf's indicator slot (a file icon from `renderExpandIcon`): the toggle's
+  // box, so leaves line up with parents, without its button behavior.
+  leafIndicator: {
+    flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: spacingVars['--spacing-4'],
+    height: spacingVars['--spacing-4'],
+    fontSize: spacingVars['--spacing-4'],
+    color: colorVars['--color-icon-secondary'],
+    overflow: 'hidden',
+  },
   chevronSvg: {
     display: 'flex',
     // The chevron column is sized in spacing tokens by the button/container
@@ -365,6 +396,11 @@ export interface TreeListItemInternalProps {
    */
   isExiting?: boolean;
   onToggle?: (id: string) => void;
+  /**
+   * Custom expand/collapse indicator (see TreeListProps.renderExpandIcon).
+   * `undefined` keeps the default; any other result fills the indicator box.
+   */
+  renderExpandIcon?: (state: TreeListExpandIconState) => ReactNode;
   density: TreeListDensity;
   /**
    * Guide-line visual treatment. `noGuides` suppresses the connector lines;
@@ -415,6 +451,7 @@ export function TreeListItem({
   isExpanded,
   isExiting = false,
   onToggle,
+  renderExpandIcon,
   density,
   variant,
   renderedChildren,
@@ -517,18 +554,35 @@ export function TreeListItem({
     disabled: isDisabled || !forwardsToLink,
   });
 
+  const customIcon =
+    renderExpandIcon != null
+      ? renderExpandIcon({
+          // A stale user expansion can outlive an item's children; a leaf is
+          // never expanded (TreeListExpandIconState.isExpanded).
+          isExpanded: hasChildren && isExpanded,
+          hasChildren,
+          isDisabled,
+        })
+      : undefined;
+  // `undefined` keeps the default; any other result, `null` included, fills
+  // the indicator box, which keeps the column's width when it renders nothing.
+  const hasCustomIcon = customIcon !== undefined;
+
   // Per-level indent distance. The per-level step is the public, themeable
   // `--tree-list-indent` lever (default `--spacing-4`, set on the tree-list
   // root). A leaf adds a fixed chevron-column offset (chevron width + gap) so
   // its label lines up past an expandable ancestor/sibling's caret — but ONLY
   // when the tree actually contains an expandable item somewhere. In a fully
   // flat tree there is no caret to align under, so the offset is pointless and
-  // every row sits flush, like a parent at that level. That offset is tied to
-  // the chevron's own dimensions, not the indent step, so it does not scale
-  // with the lever. Published as the private `--_tree-indent` and consumed by
+  // every row sits flush, like a parent at that level. A leaf that renders its
+  // own indicator (renderExpandIcon gave it an icon) fills the column itself,
+  // so it takes no offset either. That offset is tied to the chevron's own
+  // dimensions, not the indent step, so it does not scale with the lever.
+  // Published as the private `--_tree-indent` and consumed by
   // `indentedContent`'s stylesheet `padding-inline-start`; the step stays
   // themeable through `--tree-list-indent` (see #4308).
-  const reservesChevronColumn = !hasChildren && hasExpandableItems;
+  const reservesChevronColumn =
+    !hasChildren && !hasCustomIcon && hasExpandableItems;
   const indentDistance = reservesChevronColumn
     ? `calc(${nestedLevel} * var(--tree-list-indent) + ${spacingVars['--spacing-4']} + ${spacingVars['--spacing-2']})`
     : `calc(${nestedLevel} * var(--tree-list-indent))`;
@@ -583,7 +637,18 @@ export function TreeListItem({
     />
   );
 
-  const chevron = hasChildren ? (
+  // A custom icon renders as given. It does not rotate, so an open folder does
+  // not also turn. It does not mirror; the caller owns any directional
+  // artwork. It is decorative, so the toggle keeps the row's name and state.
+  const indicatorIcon = hasCustomIcon ? (
+    <span aria-hidden="true" inert {...stylex.props(styles.customGlyph)}>
+      {customIcon}
+    </span>
+  ) : (
+    chevronIcon
+  );
+
+  const indicator = hasChildren ? (
     handleToggle != null ? (
       // Real toggle button whenever expand/collapse is supported, so the row
       // can be expanded from the keyboard even when the item has no onClick/href
@@ -616,7 +681,7 @@ export function TreeListItem({
           }),
           stylex.props(styles.chevronButton),
         )}>
-        {chevronIcon}
+        {indicatorIcon}
       </button>
     ) : (
       // Non-interactive chevron only when toggling is not wired up at all
@@ -627,14 +692,18 @@ export function TreeListItem({
           }),
           stylex.props(styles.chevronContainer),
         )}>
-        {chevronIcon}
+        {indicatorIcon}
       </span>
     )
+  ) : hasCustomIcon ? (
+    <span aria-hidden="true" inert {...stylex.props(styles.leafIndicator)}>
+      {customIcon}
+    </span>
   ) : null;
 
   const innerContent = (
     <>
-      {chevron}
+      {indicator}
       {isRenderable(startContent) && (
         <span {...stylex.props(styles.startContent)}>{startContent}</span>
       )}

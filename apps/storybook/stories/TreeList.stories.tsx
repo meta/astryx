@@ -11,6 +11,7 @@ import {Badge} from '@astryxdesign/core/Badge';
 import {Theme, defineTheme} from '@astryxdesign/core/theme';
 import {
   FolderIcon,
+  FolderOpenIcon,
   DocumentIcon,
   Cog6ToothIcon,
   ChevronRightIcon,
@@ -162,6 +163,40 @@ export const WithIcons: Story = {
         startContent: <Icon icon={DocumentIcon} />,
       },
     ],
+  },
+};
+
+export const CustomExpandIcons: Story = {
+  args: {
+    items: fileTreeItems,
+    // Drawn at 1em, the glyphs fill the indicator column at every text size.
+    renderExpandIcon: ({isExpanded, hasChildren}) =>
+      hasChildren ? (
+        isExpanded ? (
+          <FolderOpenIcon width="1em" height="1em" />
+        ) : (
+          <FolderIcon width="1em" height="1em" />
+        )
+      ) : (
+        <DocumentIcon width="1em" height="1em" />
+      ),
+  },
+};
+
+/**
+ * Browser fixture: unsized Icons (Icon's default size is larger than the
+ * column) as custom indicators, to prove the column never widens.
+ */
+export const CustomExpandIconUnsized: Story = {
+  tags: ['!autodocs'],
+  args: {
+    items: fileTreeItems,
+    renderExpandIcon: ({isExpanded, hasChildren}) =>
+      hasChildren ? (
+        <Icon icon={isExpanded ? FolderOpenIcon : FolderIcon} />
+      ) : (
+        <Icon icon={DocumentIcon} />
+      ),
   },
 };
 

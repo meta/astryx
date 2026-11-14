@@ -26,7 +26,14 @@ const anatomy = [
   {
     name: 'Chevron glyph',
     required: false,
-    description: 'Directional symbol rendered by Icon inside a Chevron.',
+    description:
+      'Default directional symbol rendered by Icon inside a Chevron; a renderExpandIcon result takes its place.',
+  },
+  {
+    name: 'Leaf indicator',
+    required: false,
+    description:
+      'Caller-provided icon from renderExpandIcon shown in a leaf row, in the Chevron\'s box.',
   },
   {
     name: 'Item label',
@@ -132,6 +139,12 @@ export const docs = {
           slotElements: [{__element: 'Text', props: {type: 'body'}, children: 'Header'}],
         },
         {
+          name: 'renderExpandIcon',
+          type: '(state: TreeListExpandIconState) => ReactNode',
+          description:
+            'Custom expand/collapse indicator in place of the default rotating chevron. Called per item with {isExpanded, hasChildren, isDisabled}, so collapsed, expanded and leaf icons can differ (a closed or open folder, a file). Return undefined to keep the default: the chevron on a parent, no indicator on a leaf. Any other result, null included, fills the indicator box, which keeps the column width when it renders nothing. The result is decorative (hidden from assistive technology, never focusable); the row keeps its name, aria-expanded state and keys. TreeList does not rotate or mirror it; a glyph that points reads `useDirection()` from `@astryxdesign/core/i18n`. Draw glyphs at `1em`: the column is the default chevron\'s box (`--spacing-4`, 16px by default), and a larger node is clipped.',
+        },
+        {
           name: 'xstyle',
           type: 'StyleXStyles',
           description:
@@ -148,6 +161,7 @@ export const docs = {
       {guidance: true, description: 'Provide meaningful labels and icons for each node to make the hierarchy easy to scan.'},
       {guidance: true, description: 'Pre-expand important branches so users see key content immediately.'},
       {guidance: true, description: 'Leaf rows reserve space for a chevron column whenever the tree has any expandable item to line up under; only a fully flat tree (no expandable items at all) renders its rows flush. Rely on this rather than nudging indentation with custom CSS.'},
+      {guidance: true, description: 'Draw renderExpandIcon glyphs at `1em`. The indicator column is the default chevron\'s box (--spacing-4, 16px by default); 1em artwork fills it at every text size, and a larger node is clipped, so the column never widens.'},
       {guidance: false, description: 'Nest more than 4–5 levels deep; flatten the structure or use a different pattern.'},
       {guidance: false, description: 'Use a tree for flat, non-hierarchical data; use a List instead.'},
     ],
@@ -218,6 +232,12 @@ export const docsZh = {
             '标题内容，通过 aria-labelledby 与树关联。',
         },
         {
+          name: 'renderExpandIcon',
+          type: '(state: TreeListExpandIconState) => ReactNode',
+          description:
+            '自定义展开/折叠指示图标，替代默认的旋转箭头。按项调用并传入 {isExpanded, hasChildren, isDisabled}，可为折叠、展开和叶子节点渲染不同图标（如打开/关闭的文件夹、文件）。返回 undefined 时保留默认：父节点使用默认箭头，叶子节点不渲染指示器。其他返回值（包括 null）填入指示器盒子，渲染为空时仍保留列宽。返回内容仅作装饰（对辅助技术隐藏，不可聚焦）；行保留其名称、aria-expanded 状态和按键。TreeList 不旋转也不镜像它；有方向的图标请通过 `@astryxdesign/core/i18n` 的 `useDirection()` 获取方向。图标请以 `1em` 绘制：该列与默认箭头同为 `--spacing-4` 的盒子（默认 16px），更大的内容会被裁剪。',
+        },
+        {
           name: 'xstyle',
           type: 'StyleXStyles',
           description:
@@ -234,6 +254,7 @@ export const docsZh = {
       {guidance: true, description: 'Provide meaningful labels and icons for each node to make the hierarchy easy to scan.'},
       {guidance: true, description: 'Pre-expand important branches so users see key content immediately.'},
       {guidance: true, description: 'Leaf rows reserve space for a chevron column whenever the tree has any expandable item to line up under; only a fully flat tree (no expandable items at all) renders its rows flush. Rely on this rather than nudging indentation with custom CSS.'},
+      {guidance: true, description: 'Draw renderExpandIcon glyphs at `1em`. The indicator column is the default chevron\'s box (--spacing-4, 16px by default); 1em artwork fills it at every text size, and a larger node is clipped, so the column never widens.'},
       {guidance: false, description: 'Nest more than 4–5 levels deep; flatten the structure or use a different pattern.'},
       {guidance: false, description: 'Use a tree for flat, non-hierarchical data; use a List instead.'},
     ],
@@ -252,6 +273,7 @@ export const docsDense = {
       {guidance: true, description: 'Provide meaningful labels and icons for each node to make the hierarchy easy to scan.'},
       {guidance: true, description: 'Pre-expand important branches so users see key content immediately.'},
       {guidance: true, description: 'Leaf rows reserve space for a chevron column whenever the tree has any expandable item to line up under; only a fully flat tree (no expandable items at all) renders its rows flush. Rely on this rather than nudging indentation with custom CSS.'},
+      {guidance: true, description: 'Draw renderExpandIcon glyphs at `1em`. The indicator column is the default chevron\'s box (--spacing-4, 16px by default); 1em artwork fills it at every text size, and a larger node is clipped, so the column never widens.'},
       {guidance: false, description: 'Nest more than 4–5 levels deep; flatten the structure or use a different pattern.'},
       {guidance: false, description: 'Use a tree for flat, non-hierarchical data; use a List instead.'},
     ],
@@ -262,6 +284,7 @@ export const docsDense = {
     variant: 'Guide-line treatment: lineGuides shows connectors, noGuides hides them (indent kept). Orthogonal to density.',
     animatedLayout: 'handle from useAnimatedLayout({containerRef}); expand/collapse glides the content after the row inside that container on one shared motion role. Omit: content after the row snaps.',
     header: 'Header content, linked to tree via aria-labelledby.',
+    renderExpandIcon: 'Custom indicator per item state {isExpanded, hasChildren, isDisabled}; no rotation or mirror; undefined → default chevron (parents) / no indicator (leaves); null → empty box that keeps the width; decorative (aria-hidden, inert); draw at 1em (column = default chevron box, --spacing-4; larger is clipped).',
     xstyle: 'StyleX styles for layout. Must be stylex.create() value.',
   },
   components: [
@@ -274,6 +297,7 @@ export const docsDense = {
         density: 'Spacing density for items.',
         variant: 'Guide-line treatment: lineGuides shows connectors, noGuides hides them (indent kept). Orthogonal to density.',
         header: 'Header content, linked to tree via aria-labelledby.',
+        renderExpandIcon: 'Custom indicator per item state {isExpanded, hasChildren, isDisabled}; no rotation or mirror; undefined → default chevron (parents) / no indicator (leaves); null → empty box that keeps the width; decorative (aria-hidden, inert); draw at 1em (column = default chevron box, --spacing-4; larger is clipped).',
         xstyle: 'StyleX styles for layout. Must be stylex.create() value.',
       },
     },

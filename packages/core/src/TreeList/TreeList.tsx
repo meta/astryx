@@ -34,6 +34,7 @@ import type {
   TreeListItemData,
   TreeListDensity,
   TreeListVariant,
+  TreeListExpandIconState,
 } from './TreeListTypes';
 import {themeProps} from '../utils/themeProps';
 import {useTreeFocusInternal} from '../hooks/useTreeFocus';
@@ -102,7 +103,11 @@ function clipWhileMoving(tree: HTMLElement): void {
 // Types
 // =============================================================================
 
-export {type TreeListDensity, type TreeListVariant} from './TreeListTypes';
+export {
+  type TreeListDensity,
+  type TreeListVariant,
+  type TreeListExpandIconState,
+} from './TreeListTypes';
 
 export interface TreeListProps extends BaseProps<HTMLDivElement> {
   /** Ref forwarded to the root element */
@@ -145,6 +150,41 @@ export interface TreeListProps extends BaseProps<HTMLDivElement> {
    * Semantically associated via aria-labelledby.
    */
   header?: ReactNode;
+
+  /**
+   * Custom expand/collapse indicator, in place of the default rotating
+   * chevron. Called per item with its state, so collapsed and expanded rows
+   * can differ (a closed and an open folder). Also called for leaves
+   * (`hasChildren: false`), so a file tree can show a file icon in the same
+   * column.
+   *
+   * Return `undefined` to keep the default: the chevron on a parent, and no
+   * indicator on a leaf. Any other result, `null` included, renders in the
+   * default chevron's box (`--spacing-4`, 16px by default) and never widens
+   * the column. Draw custom glyphs at `1em` so they fill that box at every
+   * text size; a larger node is clipped.
+   *
+   * The result is decorative: it is hidden from assistive technology and is
+   * never focusable, and the row keeps its name, `aria-expanded` state and
+   * keys. TreeList does not rotate or mirror it; a glyph that points (a caret,
+   * an arrow) reads `useDirection()` from `@astryxdesign/core/i18n` to face the
+   * right way.
+   *
+   * @example
+   * ```
+   * <TreeList
+   *   items={items}
+   *   renderExpandIcon={({isExpanded, hasChildren}) =>
+   *     hasChildren
+   *       ? isExpanded
+   *         ? <FolderOpenIcon width="1em" height="1em" />
+   *         : <FolderIcon width="1em" height="1em" />
+   *       : <DocumentIcon width="1em" height="1em" />
+   *   }
+   * />
+   * ```
+   */
+  renderExpandIcon?: (state: TreeListExpandIconState) => ReactNode;
 
   /**
    * Test ID for testing frameworks.
@@ -280,6 +320,7 @@ export function TreeList({
   density = 'balanced',
   variant = 'lineGuides',
   header,
+  renderExpandIcon,
   xstyle,
   className,
   style,
@@ -709,6 +750,7 @@ export function TreeList({
           isExpanded={isExpanded}
           isExiting={isExiting && !isExpanded}
           onToggle={handleToggle}
+          renderExpandIcon={renderExpandIcon}
           density={density}
           variant={variant}
           renderedChildren={renderedChildren}
