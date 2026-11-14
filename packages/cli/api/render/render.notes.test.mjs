@@ -221,6 +221,22 @@ describe('render --reverse says what changed after the render', () => {
     ]);
   });
 
+  it('reads a copy whose line ends changed on the way as not edited, as a browser reads it', async () => {
+    for (const [name, ends] of [['crlf', '\r\n'], ['cr', '\r']]) {
+      put(`line-ends-${name}.html`, html.replace(/\n/g, ends));
+      const result = /** @type {any} */ (await render(`line-ends-${name}.html`, {cwd: dir, reverse: true, out: `line-ends-${name}-back/report.tsx`}));
+      expect(result.data).toMatchObject({exact: true, edited: false, stylesEdited: false});
+    }
+    // An edit in such a copy is still one.
+    put('line-ends-edited.html', editBody(html.replace(/\n/g, '\r\n'), body => body.replace('Q3 report', 'Q4 report')));
+    const edited = /** @type {any} */ (await render('line-ends-edited.html', {cwd: dir, reverse: true, out: 'line-ends-edited-back/report.tsx'}));
+    expect(edited.data.edits).toEqual([{was: 'Q3 report', now: 'Q4 report', file: 'line-ends-edited-back/report.tsx', line: 7}]);
+    // A title given with a CR in it (from a CR LF file) reads the same.
+    await render('src/report.tsx', {cwd: dir, out: 'cr-title.html', title: 'Quarterly\r'});
+    const titled = /** @type {any} */ (await render('cr-title.html', {cwd: dir, reverse: true, out: 'cr-title-back/report.tsx'}));
+    expect(titled.data).toMatchObject({exact: true, edited: false});
+  });
+
   it('names the JSON file that holds an edited run of text', async () => {
     put('json-edit/data.json', '{"regions": ["North", "South"]}\n');
     put('json-edit/page.tsx', "import data from './data.json';\nexport default function Page() {\n  return <ul>{data.regions.map(r => <li key={r}>{r}</li>)}</ul>;\n}\n");
