@@ -588,6 +588,44 @@ describe('render(): every write stays inside the current folder', () => {
       const r = /** @type {any} */ (await render(`${root}/src/page.tsx`, {cwd: dir}));
       expect(r.data.files, name).toEqual(['page.tsx', 'ui/Panel.tsx']);
     }
+    // A config package read through a link: from where it really is, so a
+    // package it extends in turn, and paths that climb out of it, resolve
+    // from there; and a nearer copy without the config is passed by.
+    const panel = 'export function Panel() { return <section>Panel</section>; }\n';
+    const page = "import {Panel} from '@ui/Panel';\nexport default function Page() { return <Panel />; }\n";
+    put('ext-store/package.json', '{"name":"ext-store","private":true}');
+    put('ext-store/node_modules/.pnpm/cfg@1.0.0/node_modules/cfg/package.json', '{"name":"cfg","version":"1.0.0"}');
+    put('ext-store/node_modules/.pnpm/cfg@1.0.0/node_modules/cfg/tsconfig.json', '{"extends": "cfg-base"}\n');
+    put('ext-store/node_modules/.pnpm/cfg@1.0.0/node_modules/cfg-base/package.json', '{"name":"cfg-base","version":"1.0.0"}');
+    put('ext-store/node_modules/.pnpm/cfg@1.0.0/node_modules/cfg-base/tsconfig.json', '{"compilerOptions": {"paths": {"@ui/*": ["${configDir}/src/ui/*"]}}}\n');
+    fs.symlinkSync(path.join(dir, 'ext-store/node_modules/.pnpm/cfg@1.0.0/node_modules/cfg'), path.join(dir, 'ext-store/node_modules/cfg'), 'junction');
+    put('ext-store/tsconfig.json', '{"extends": "cfg"}\n');
+    put('ext-store/src/ui/Panel.tsx', panel);
+    put('ext-store/src/page.tsx', page);
+    const store = /** @type {any} */ (await render('ext-store/src/page.tsx', {cwd: dir}));
+    expect(store.data.files).toEqual(['page.tsx', 'ui/Panel.tsx']);
+    put('ext-ws/package.json', '{"name":"ext-ws","private":true}');
+    put('ext-ws/packages/tsconfig/package.json', '{"name":"@acme/tsconfig","version":"1.0.0"}');
+    put('ext-ws/packages/tsconfig/base.json', '{"compilerOptions": {"paths": {"@ui/*": ["../ui/src/*"]}}}\n');
+    put('ext-ws/packages/ui/src/Panel.tsx', panel);
+    put('ext-ws/apps/web/package.json', '{"name":"web","private":true}');
+    fs.mkdirSync(path.join(dir, 'ext-ws/apps/web/node_modules/@acme'), {recursive: true});
+    fs.symlinkSync(path.join(dir, 'ext-ws/packages/tsconfig'), path.join(dir, 'ext-ws/apps/web/node_modules/@acme/tsconfig'), 'junction');
+    put('ext-ws/apps/web/tsconfig.json', '{"extends": "@acme/tsconfig/base"}\n');
+    put('ext-ws/apps/web/src/page.tsx', page);
+    // The alias leads out of the app, to the workspace package it names.
+    await render('ext-ws/apps/web/src/page.tsx', {cwd: dir});
+    expect(fs.readFileSync(path.join(dir, 'ext-ws/apps/web/src/page.html'), 'utf8')).toContain('<section>Panel</section>');
+    put('ext-near/package.json', '{"name":"ext-near","private":true}');
+    put('ext-near/node_modules/shared-cfg/package.json', '{"name":"shared-cfg","version":"1.0.0"}');
+    put('ext-near/node_modules/shared-cfg/tsconfig.json', '{"compilerOptions": {"paths": {"@ui/*": ["${configDir}/src/ui/*"]}}}\n');
+    put('ext-near/app/package.json', '{"name":"app","private":true}');
+    put('ext-near/app/node_modules/shared-cfg/package.json', '{"name":"shared-cfg","version":"0.1.0"}');
+    put('ext-near/app/tsconfig.json', '{"extends": "shared-cfg"}\n');
+    put('ext-near/app/src/ui/Panel.tsx', panel);
+    put('ext-near/app/src/page.tsx', page);
+    const near = /** @type {any} */ (await render('ext-near/app/src/page.tsx', {cwd: dir}));
+    expect(near.data.files).toEqual(['page.tsx', 'ui/Panel.tsx']);
   }, 60_000);
 
   it('gives back a page that imports through an alias where this project\'s alias points', async () => {

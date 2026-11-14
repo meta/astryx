@@ -19,6 +19,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {conditionalExportTarget} from '../discovery/package-exports.mjs';
 import {findNodeModulesPackage} from '../fs/paths.mjs';
 
 /**
@@ -69,93 +70,57 @@ function readJsonc(file) {
   }
 }
 
-/** The conditions TypeScript matches in a package's `exports` for a config. */
-const CONFIG_CONDITIONS = ['require', 'types', 'node', 'default'];
+/** The conditions TypeScript matches in a package's `exports` for a config (`default` always matches). */
+const CONFIG_CONDITIONS = ['require', 'types', 'node'];
+
+/** @param {string} file */
+const jsonFile = file => (isFile(file) ? file : isFile(`${file}.json`) ? `${file}.json` : null);
 
 /**
- * The target an `exports` value gives under the config conditions: a path,
- * the first matching condition of an object, the first that resolves of a
- * list.
- * @param {unknown} value
+ * The config one installed copy of a package holds for a subpath (`''` for
+ * the package alone): where its `exports` send it, else the subpath as
+ * written, else the file its package.json names in `tsconfig`, else its
+ * `tsconfig.json`. A package's `main` is code, never its config.
+ * @param {string} packageDir
+ * @param {string} sub
  * @returns {string | null}
  */
-function conditionTarget(value) {
-  if (typeof value === 'string') return value;
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const target = conditionTarget(item);
-      if (target) return target;
-    }
-    return null;
+function packageConfig(packageDir, sub) {
+  const pkg = readJsonc(path.join(packageDir, 'package.json')) ?? {};
+  if (pkg.exports !== undefined && pkg.exports !== null) {
+    const target = conditionalExportTarget(pkg.exports, sub ? `./${sub}` : '.', CONFIG_CONDITIONS);
+    return target === null ? null : jsonFile(path.join(packageDir, target));
   }
-  if (value && typeof value === 'object') {
-    for (const [condition, item] of Object.entries(value)) {
-      if (!CONFIG_CONDITIONS.includes(condition)) continue;
-      const target = conditionTarget(item);
-      if (target) return target;
-    }
-  }
-  return null;
-}
-
-/**
- * Where a package's `exports` send a subpath (`.` or `./base`): its own key,
- * else the pattern with one `*` whose part before the star is longest, the
- * star taking the rest.
- * @param {unknown} exports
- * @param {string} subpath
- * @returns {string | null}
- */
-function exportTarget(exports, subpath) {
-  const keyed = exports && typeof exports === 'object' && !Array.isArray(exports) && Object.keys(exports).some(k => k.startsWith('.'));
-  /** @type {Record<string, unknown>} */
-  const map = keyed ? /** @type {Record<string, unknown>} */ (exports) : {'.': exports};
-  if (Object.hasOwn(map, subpath)) return conditionTarget(map[subpath]);
-  /** @type {{key: string, before: string, star: string} | null} */
-  let best = null;
-  for (const key of Object.keys(map)) {
-    const at = key.indexOf('*');
-    if (at < 0 || key.indexOf('*', at + 1) >= 0) continue;
-    const before = key.slice(0, at);
-    const after = key.slice(at + 1);
-    if (subpath.length < key.length - 1 || !subpath.startsWith(before) || !subpath.endsWith(after)) continue;
-    if (!best || before.length > best.before.length) best = {key, before, star: subpath.slice(before.length, subpath.length - after.length)};
-  }
-  if (!best) return null;
-  const target = conditionTarget(map[best.key]);
-  return target === null ? null : target.split('*').join(best.star);
+  if (sub) return jsonFile(path.join(packageDir, sub));
+  return jsonFile(path.join(packageDir, typeof pkg.tsconfig === 'string' ? pkg.tsconfig : 'tsconfig.json'));
 }
 
 /**
  * The config file an `extends` entry names, from the folder of the config
  * that writes it, as TypeScript finds it: a path (`.json` may be left off);
- * or a package's config, in the nearest `node_modules` that has it: where
- * its `exports` send the subpath (`.` for the package alone), else the
- * subpath as written (`.json` may be left off), else the file its
- * package.json names in `tsconfig`, else its `tsconfig.json`. A package's
- * `main` is code, never its config.
+ * or a package's config, from the nearest installed copy that holds it. A
+ * package's config is read where it really is, through any link, so what it
+ * names in turn resolves from there.
  * @param {unknown} spec
  * @param {string} fromDir
  * @returns {string | null}
  */
 function extendedFile(spec, fromDir) {
   if (typeof spec !== 'string' || !spec) return null;
-  /** @param {string} file */
-  const jsonFile = file => (isFile(file) ? file : isFile(`${file}.json`) ? `${file}.json` : null);
   if (spec.startsWith('.') || path.isAbsolute(spec)) return jsonFile(path.resolve(fromDir, spec));
   const parts = spec.split('/');
   const scoped = spec.startsWith('@');
   const name = parts.slice(0, scoped ? 2 : 1).join('/');
   const sub = parts.slice(scoped ? 2 : 1).join('/');
-  const found = findNodeModulesPackage(fromDir, name);
-  if (!found) return null;
-  const pkg = readJsonc(path.join(found.packageDir, 'package.json')) ?? {};
-  if (pkg.exports !== undefined && pkg.exports !== null) {
-    const target = exportTarget(pkg.exports, sub ? `./${sub}` : '.');
-    return target === null ? null : jsonFile(path.join(found.packageDir, target));
+  for (let from = fromDir; ; ) {
+    const found = findNodeModulesPackage(from, name);
+    if (!found) return null;
+    const file = packageConfig(found.packageDir, sub);
+    if (file) return fs.realpathSync(file);
+    const above = path.dirname(found.hostDir);
+    if (above === found.hostDir) return null;
+    from = above;
   }
-  if (sub) return jsonFile(path.join(found.packageDir, sub));
-  return jsonFile(path.join(found.packageDir, typeof pkg.tsconfig === 'string' ? pkg.tsconfig : 'tsconfig.json'));
 }
 
 /**
