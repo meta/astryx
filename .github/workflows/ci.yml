@@ -126,9 +126,11 @@ jobs:
   # no CI (FR17); the required contexts still report through their own status
   # rules. Neither fails, so each job's own condition decides exactly as before,
   # except for a pull-request run CI is full for, which ci-full stops. `peak` is
-  # the most jobs a run holds at once: a release-check's from its legs, a pull
-  # request's from its measured most plus the suites its labels opt into
-  # (ci-admission.test.mjs). A pull request waits at most twelve minutes in all,
+  # the most jobs a run holds at once with its widening matrices at tight
+  # width: a release-check's from its legs, a pull request's from its measured
+  # most plus the suites its labels opt into (ci-admission.test.mjs). At full
+  # width a pull-request run holds `peak` plus those matrices' extra legs
+  # (`leg-widths`). A pull request waits at most twelve minutes in all,
   # inside the fifteen-minute job budget.
   room:
     # Finds room for the run's first job, its Storybook build, and records
@@ -151,6 +153,7 @@ jobs:
       started: ${{ steps.room.outputs.started }}
       looks: ${{ steps.room.outputs.looks }}
       next: ${{ steps.room.outputs.next }}
+      wide: ${{ steps.room.outputs.wide }}
       attempt: ${{ github.run_attempt }}
     steps:
       - name: Check out the admission action
@@ -188,6 +191,8 @@ jobs:
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 12 }}
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
           label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 8}'
+          # A dispatch runs neither widening matrix.
+          leg-widths: '${{ github.event_name == ''workflow_dispatch'' && ''{}'' || ''{"test-node": {"tight": 2, "full": 5}, "swizzle-proof": {"tight": 2, "full": 8}}'' }}'
 
       # A run stopped for no room fails here, so a re-run of its failed jobs
       # waits again from this job, not from this look's result.
@@ -209,6 +214,8 @@ jobs:
       contents: read
     outputs:
       full: ${{ steps.rest.outputs.full }}
+      # How many legs of each widening matrix run at once (ci-admission).
+      widths: ${{ steps.rest.outputs.widths }}
     steps:
       - name: Stop when CI is full
         if: needs.room.outputs.full == 'true'
@@ -238,11 +245,21 @@ jobs:
           started: ${{ needs.room.outputs.started }}
           looks: ${{ needs.room.outputs.looks }}
           next: ${{ needs.room.outputs.next }}
+          wide: ${{ needs.room.outputs.wide }}
           peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 21 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 12 }}
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
           label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 8}'
+          # A dispatch runs neither widening matrix.
+          leg-widths: '${{ github.event_name == ''workflow_dispatch'' && ''{}'' || ''{"test-node": {"tight": 2, "full": 5}, "swizzle-proof": {"tight": 2, "full": 8}}'' }}'
+
+      # Runs when the widening matrices start at full width, and skips at
+      # tight width, so another run's count reads the width this run took
+      # (count.mjs).
+      - name: Run the legs at full width
+        if: steps.rest.outputs.wide == 'true'
+        run: echo "Legs at full width"
 
       # A pull-request run that waited its longest while another started at
       # its longest wait is turned away (spec:AST-030 DEC-16): ci-full stops
@@ -1178,10 +1195,11 @@ jobs:
     # the files across the legs; `test` joins them.
     strategy:
       fail-fast: false
-      # A pull request or merge-queue entry runs at most two legs at a time,
-      # so many open pull requests cannot flood the organization's shared
-      # runner pool; the legs still all run, in waves.
-      max-parallel: 2
+      # All five legs run at once when admission found room for them, and
+      # two at a time otherwise, in waves, so many open pull requests cannot
+      # flood the shared runner pool. Admission counts the width it picks
+      # (its `leg-widths`).
+      max-parallel: ${{ fromJSON(needs.admission.outputs.widths)['test-node'] }}
       # Five legs keep each leg near nine minutes of the fifteen-minute
       # limit; at four, a leg reached about thirteen and a half minutes of
       # tests and hit the limit (scripts/vitest-node-durations.json).
@@ -1469,9 +1487,9 @@ jobs:
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (needs.admission.result == 'success' && (github.event_name != 'workflow_dispatch' && (needs.swizzle-proof-scope.outputs.mode == 'affected' || needs.swizzle-proof-scope.outputs.mode == 'all')))) }}
     strategy:
       fail-fast: false
-      # At most two legs at a time, as the Node legs, for the shared runner
-      # pool.
-      max-parallel: 2
+      # All eight legs at once when admission found room for them, else two
+      # at a time, as the Node legs (admission's `leg-widths`).
+      max-parallel: ${{ fromJSON(needs.admission.outputs.widths)['swizzle-proof'] }}
       # One leg per swizzle-proof.<n>.test.mjs file.
       matrix:
         slice: [1, 2, 3, 4, 5, 6, 7, 8]
