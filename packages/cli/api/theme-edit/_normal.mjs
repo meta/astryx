@@ -1227,12 +1227,17 @@ export function typoOf(typed, word) {
 }
 
 /**
- * The edits a typo of a typed word may hold: one for a word of five letters
- * or fewer, two for a longer one. Every typo reading of the editor (a value,
- * a setting, a part, a state, a theme or token name) uses this limit.
+ * The edits a typo of a typed word may hold: none for a word under four
+ * letters (leading dashes aside), so only that word in other letters is
+ * near it; one for a word of five letters or fewer; two for a longer one.
+ * Every typo reading of the editor (a value, a setting, a part, a state, a
+ * theme or token name) uses this limit.
  * @param {string} typed
  */
-export const typoLimit = typed => (String(typed).trim().length <= 5 ? 1 : 2);
+export const typoLimit = typed => {
+  const n = String(typed).trim().replace(/^-+/, '').length;
+  return n < 4 ? 0 : n <= 5 ? 1 : 2;
+};
 
 /**
  * Whether `word` is within the typo limit of `typed` (two letters swapped

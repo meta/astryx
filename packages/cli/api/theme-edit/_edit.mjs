@@ -82,6 +82,11 @@ import {
   clearNewMarker,
   refuseThemeSource,
   settingsEntriesOk,
+  entriesReadable,
+  readAsMeant,
+  onBuiltIn,
+  readFields,
+  settingsJson,
   slugFor,
   typedThemeName,
   themeNameReadings,
@@ -105,7 +110,6 @@ import {
   folderIsEmpty,
   dialValueFits,
   holdAfterBuild,
-  fieldsMeant,
 } from './_settings.mjs';
 import {checkSetting, normalizeEntry, storedProblems} from './_check.mjs';
 import {MODAL, isColorToken} from './_compiler.mjs';
@@ -234,9 +238,7 @@ function readableJson(file) {
   try {
     // An entry with no thing or no source is damage too: `new` keeps the
     // file aside, as the refusal for it says.
-    return settingsEntriesOk(
-      JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '')),
-    );
+    return settingsEntriesOk(settingsJson(fs.readFileSync(file, 'utf8')));
   } catch {
     return false;
   }
@@ -370,6 +372,15 @@ export async function themeEditNew(name, options = {}) {
     /** @type {string} */ newName,
     /** @type {string | null | undefined} */ likeValue = likeFixed,
   ) => `${P} new ${newName}${newFlags(likeValue, fitSettings, png)}`;
+  // The same new as lines that run here: a built-in base the project has
+  // not installed is installed first.
+  const againLines = (
+    /** @type {string} */ newName,
+    /** @type {string | null | undefined} */ likeValue = likeFixed,
+  ) =>
+    likeValue && LIKE.includes(likeValue)
+      ? onBuiltIn(cwd, likeValue, again(newName, likeValue))
+      : [again(newName, likeValue)];
   if (!slugOk(name)) {
     // A path typed for the name (themes/brand, ./t, t/) names the theme the
     // path ends in.
@@ -391,7 +402,7 @@ export async function themeEditNew(name, options = {}) {
       {
         run: exists
           ? [`${P} show ${fixed}`]
-          : [again(usableNewName(cwd, fixed))],
+          : againLines(usableNewName(cwd, fixed)),
       },
     );
   }
@@ -402,7 +413,7 @@ export async function themeEditNew(name, options = {}) {
     refuse(
       E.ERR_INVALID_ARGUMENT,
       `"${name}" is not a theme name the theme commands take: a dash only between letters or digits (no two in a row, none at the end), so its app copy in src/themes/ would be skipped by theme add, theme list and doctor.${dropped}`,
-      {run: [again(usableNewName(cwd, cleaned))]},
+      {run: againLines(usableNewName(cwd, cleaned))},
     );
   }
   // A built-in theme's name would collide with the theme of that name the
@@ -412,16 +423,19 @@ export async function themeEditNew(name, options = {}) {
       E.ERR_FILE_EXISTS,
       `${name} is a built-in theme; an editor theme needs a name of its own. To start from ${name}, build on it.${dropped}`,
       {
-        run: [
-          again(
-            fs.existsSync(themeFiles(cwd, `my-${name}`).dir)
-              ? freeThemeName(cwd, `my-${name}`)
-              : `my-${name}`,
-            // Built on the theme named when it is installed, unless another
-            // base (or none) was given.
-            likeFixed ?? name,
-          ),
-        ],
+        run: (() => {
+          const mine = fs.existsSync(themeFiles(cwd, `my-${name}`).dir)
+            ? freeThemeName(cwd, `my-${name}`)
+            : `my-${name}`;
+          // Built on the theme named (installed first when it is not),
+          // unless another base (or none) was given; or on no base.
+          return likeFixed !== undefined
+            ? againLines(mine, likeFixed)
+            : [
+                ...againLines(mine, name),
+                ...(baseInstalled(cwd, name) ? [] : [again(mine, null)]),
+              ];
+        })(),
       },
     );
   const f = themeFiles(cwd, name);
@@ -445,7 +459,7 @@ export async function themeEditNew(name, options = {}) {
     refuse(
       E.ERR_FILE_EXISTS,
       `themes/${name} is ${dirSt.isSymbolicLink() ? 'a link' : 'a file'}, so a theme is not made there.${dropped}`,
-      {run: [again(freeThemeName(cwd, name))]},
+      {run: againLines(freeThemeName(cwd, name))},
     );
   // Settings that are not valid JSON are kept aside, and the theme is
   // made again beside them.
@@ -453,12 +467,15 @@ export async function themeEditNew(name, options = {}) {
   if (fs.existsSync(f.settings) && !damaged)
     refuse(E.ERR_FILE_EXISTS, `Theme "${name}" already exists.${dropped}`, {
       // What the command asked for, on the theme that exists or as a new one.
+      // A base's install line, when one is needed, is given once.
       run: [
-        `${P} show ${name}`,
-        ...(likeFixed && LIKE.includes(likeFixed)
-          ? [`${P} set ${name} base ${likeFixed}`]
-          : []),
-        again(freeThemeName(cwd, name)),
+        ...new Set([
+          `${P} show ${name}`,
+          ...(likeFixed && LIKE.includes(likeFixed)
+            ? onBuiltIn(cwd, likeFixed, `${P} set ${name} base ${likeFixed}`)
+            : []),
+          ...againLines(freeThemeName(cwd, name)),
+        ]),
       ],
     });
   // A `new` stopped part way (killed, out of memory) leaves its own marker
@@ -477,7 +494,7 @@ export async function themeEditNew(name, options = {}) {
     refuse(
       E.ERR_FILE_EXISTS,
       `themes/${name}/ already holds files this command did not make; choose another name.${dropped}`,
-      {run: [again(freeThemeName(cwd, name))]},
+      {run: againLines(freeThemeName(cwd, name))},
     );
   if (like != null && !LIKE.includes(like))
     refuse(
@@ -1870,12 +1887,10 @@ function carryTyped(e, sub, slug, thing, typed, data) {
  */
 function savedAsWritten(cwd, slug) {
   try {
-    const j = JSON.parse(
-      fs
-        .readFileSync(themeFiles(cwd, slug).settings, 'utf8')
-        .replace(/^\uFEFF/, ''),
+    const data = settingsJson(
+      fs.readFileSync(themeFiles(cwd, slug).settings, 'utf8'),
     );
-    return j && Array.isArray(j.settings) ? j : undefined;
+    return entriesReadable(data) ? data : undefined;
   } catch {
     return undefined;
   }
@@ -2260,43 +2275,16 @@ async function changeOnce(
   });
   const data = loadTheme(cwd, slug, target);
   /** @type {string[]} */
-  const fieldNotes = [...entryNotes(data)];
-  {
-    // A damaged field the command does not set goes back to its default,
-    // so the theme loads again (a change or removal of any setting repairs
-    // it on the way).
-    // One written in other letters or as a package name (`Dark-Only`,
-    // `@astryxdesign/theme-neutral`) is cleaned to the value meant, never
-    // reset.
-    const meant = fieldsMeant(data);
-    if (
-      thing !== 'mode' &&
-      !['both', 'light-only', 'dark-only'].includes(data.mode)
-    ) {
-      if (['both', 'light-only', 'dark-only'].includes(meant.mode)) {
-        fieldNotes.push(
-          `mode was written "${data.mode}", so it is saved as ${meant.mode}`,
-        );
-        data.mode = /** @type {'both' | 'light-only' | 'dark-only'} */ (
-          meant.mode
-        );
-      } else {
-        data.mode = 'both';
-        fieldNotes.push('mode was missing or damaged, so it is both again');
-      }
-    }
-    if (thing !== 'base' && data.like != null && !LIKE.includes(data.like)) {
-      if (LIKE.includes(meant.like) && baseInstalled(cwd, meant.like)) {
-        fieldNotes.push(
-          `base was written "${data.like}", so it is saved as ${meant.like}`,
-        );
-        data.like = meant.like;
-      } else {
-        delete data.like;
-        fieldNotes.push('base was not a built-in theme, so it is none again');
-      }
-    }
-  }
+  // A damaged mode or base the command does not set itself is read as
+  // meant, or goes back to its default, so the theme loads again.
+  const fieldNotes = [
+    ...entryNotes(data),
+    ...readFields(
+      data,
+      cwd,
+      thing === 'mode' || thing === 'base' ? thing : undefined,
+    ),
+  ];
   const ctx = await context(cwd);
   // An undo of one setting only removes it, so it never waits on the
   // others being fixed.
@@ -2738,9 +2726,13 @@ async function changeOnce(
     if (prev) data.settings.splice(prevIdx, 1);
     data.settings.push(s);
   }
-  // A setting listed twice by hand keeps only the entry this command left.
+  // A setting listed twice by hand keeps only the entry this command left;
+  // every other entry it replaces is named in the notes.
+  /** @type {import('./_settings.mjs').Setting[]} */
+  let alsoReplaced = [];
   if (sub === 'set') {
     const last = data.settings.map(x => keyOf(x)).lastIndexOf(k);
+    alsoReplaced = data.settings.filter((x, i) => keyOf(x) === k && i !== last);
     data.settings = data.settings.filter(
       (x, i) => keyOf(x) !== k || i === last,
     );
@@ -3067,6 +3059,11 @@ async function changeOnce(
   /** @type {string[]} */
   const notes = [
     ...fieldNotes,
+    ...(alsoReplaced.length && prev
+      ? [
+          `${describe({...prev, value: '?'}).replace(' = ?', '')} was listed ${alsoReplaced.length === 1 ? 'twice' : `${alsoReplaced.length + 1} times`} (${[...alsoReplaced, prev].map(x => x.value).join(', ')}); each is replaced`,
+        ]
+      : []),
     ...(covered.length ? [`replaces ${covered.map(describe).join(', ')}`] : []),
     ...(ownPartHits.length
       ? [
@@ -4681,22 +4678,13 @@ async function undoTheme(theme, options) {
   // its two writes) changes nothing: skip it.
   const nowText = fs.readFileSync(f.settings, 'utf8');
   const same = (/** @type {string} */ a, /** @type {string} */ b) => {
-    try {
-      return (
-        JSON.stringify({
-          ...JSON.parse(a.replace(/^\uFEFF/, '')),
-          lifted: 0,
-          built: 0,
-        }) ===
-        JSON.stringify({
-          ...JSON.parse(b.replace(/^\uFEFF/, '')),
-          lifted: 0,
-          built: 0,
-        })
-      );
-    } catch {
-      return false;
-    }
+    const [x, y] = [settingsJson(a), settingsJson(b)];
+    return (
+      x !== undefined &&
+      y !== undefined &&
+      JSON.stringify({...x, lifted: 0, built: 0}) ===
+        JSON.stringify({...y, lifted: 0, built: 0})
+    );
   };
   while (history.length && same(history[history.length - 1], nowText))
     history.pop();
@@ -4709,8 +4697,10 @@ async function undoTheme(theme, options) {
   const ctx = await context(cwd);
   const prevText = /** @type {string} */ (history.pop());
   let prev = /** @type {import('./_settings.mjs').ThemeData} */ (
-    JSON.parse(prevText.replace(/^\uFEFF/, ''))
+    settingsJson(prevText)
   );
+  // A step is read as a change reads the settings file.
+  readAsMeant(prev, cwd);
   // A step always restores into this theme, whatever name it holds.
   prev.name = theme;
   // What the step's build showed is restored with it, not saved as a

@@ -89,6 +89,7 @@ import {
   baseModule,
   baseResolved,
   baseThemeFile,
+  installLine,
 } from './_project.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
@@ -129,9 +130,9 @@ const LIFT_GROUND_TOKENS = new Set(LIFT_PARTS.map(([, , g]) => g));
 /** @typedef {import('./_parts.mjs').PaintSide} PaintSide */
 /** @typedef {import('./_parts.mjs').TextPair} TextPair */
 
-/** What a theme name may be, in words. */
-export const NAME_RULE =
-  'lowercase letters, digits and dashes, starting with a letter, 64 characters at most, and not a name Windows reserves (con, prn, aux, nul, com0-com9, lpt0-lpt9, and com¹-com³, lpt¹-lpt³)';
+import {NAME_RULE} from './_name-rule.mjs';
+
+export {NAME_RULE};
 
 /** A theme name: lowercase letters, digits and dashes, starting with a letter, 64 characters at most. @param {string} s */
 export const slugOk = s =>
@@ -505,19 +506,25 @@ export function nearest(x, list, n = 3) {
   // A long input (a pasted stylesheet or blob) holds many names inside
   // it: it is near nothing.
   if (x.length > 64) return [];
-  // Within the editor's one typo limit (typoLimit), nearest by edit
-  // distance first (brand-drak is brand-dark, not brand); a name one holds
-  // inside the other is near too, after the close ones.
+  // Within the editor's one typo limit (typoLimit: none under four
+  // letters, so only the name itself in other letters is near those),
+  // nearest by edit distance first (brand-drak is brand-dark, not brand); a
+  // name one holds inside the other is near too, after the close ones, for
+  // a word long enough to be a typo.
   const limit = typoLimit(x);
+  const typed = x.toLowerCase();
   return [...list]
     .filter(c => c.length > 2)
     .map(c => {
-      const d = levenshteinDistance(x.toLowerCase(), c.toLowerCase(), limit, {
-        swaps: true,
-      });
+      const name = c.toLowerCase();
+      const d = levenshteinDistance(typed, name, limit, {swaps: true});
       return /** @type {[string, number]} */ ([
         c,
-        d <= limit ? d : c.includes(x) || x.includes(c) ? limit + 0.5 : d,
+        d <= limit
+          ? d
+          : limit > 0 && (name.includes(typed) || typed.includes(name))
+            ? limit + 0.5
+            : d,
       ]);
     })
     .filter(([, s]) => s <= limit + 0.5)
@@ -899,7 +906,18 @@ export function loadTheme(
             ...(fs.existsSync(themeFiles(cwd, `my-${slug}`).settings)
               ? [`${P} show my-${slug}`]
               : []),
-            `${P} new ${usableNewName(cwd, `my-${slug}`)}${LIKE.includes(slug) ? ` --like ${slug}` : ''}`,
+            ...(LIKE.includes(slug)
+              ? [
+                  ...onBuiltIn(
+                    cwd,
+                    slug,
+                    `${P} new ${usableNewName(cwd, `my-${slug}`)} --like ${slug}`,
+                  ),
+                  ...(baseInstalled(cwd, slug)
+                    ? []
+                    : [`${P} new ${usableNewName(cwd, `my-${slug}`)}`]),
+                ]
+              : [`${P} new ${usableNewName(cwd, `my-${slug}`)}`]),
           ],
         },
       );
@@ -954,18 +972,13 @@ export function loadTheme(
         run: [{name: `${P} new ${slug}`, reason: 'do this instead'}],
       };
   /** @type {any} */
-  let data;
-  try {
-    data = JSON.parse(
-      fs.readFileSync(f.settings, 'utf8').replace(/^\uFEFF/, ''),
-    );
-  } catch {
+  const data = settingsJson(fs.readFileSync(f.settings, 'utf8'));
+  if (data === undefined)
     throw new AstryxError(
       `themes/${slug}/${slug}.settings.json is not valid JSON. Fix it by hand${recover.text}.`,
       recover.run,
       ERROR_CODES.ERR_THEME_INVALID,
     );
-  }
   // Valid JSON of the wrong shape ([], {}, settings: null) is damage like
   // invalid JSON: `new` makes the theme again, keeping the file aside.
   if (!settingsShapeOk(data))
@@ -978,6 +991,11 @@ export function loadTheme(
       ERROR_CODES.ERR_THEME_INVALID,
     );
   readEntryWords(data);
+  // `like: "none"`, the word for no base, is no base.
+  if (data.like === 'none') delete data.like;
+  // The folder names the theme: a name missing or changed by hand in the
+  // file is the folder's, and the next save writes it back.
+  data.name = slug;
   const problem = settingsProblem(data, skip);
   // An entry whose mode or source means nothing: `undo` with its name
   // removes that entry only; a step back loses the last change.
@@ -1094,7 +1112,7 @@ export function loadTheme(
         ...(example && !['mode', 'base'].includes(bad.thing)
           ? [
               {
-                name: `${P} set ${slug} ${undoArgs(bad).replace(bad.thing, `${bad.thing} ${quoteCommandArgument(example)}`)}`,
+                name: `${P} set ${slug} ${setArgs(bad, example)}`,
                 reason: meant
                   ? 'or set the value it holds, cleaned'
                   : 'or give it a value it takes',
@@ -1141,7 +1159,7 @@ export function loadTheme(
         ...(meant
           ? [
               {
-                name: `${P} set ${slug} ${undoArgs(alsoBad).replace(alsoBad.thing, `${alsoBad.thing} ${quoteCommandArgument(meant)}`)}`,
+                name: `${P} set ${slug} ${setArgs(alsoBad, meant)}`,
                 reason: 'do this instead: set the value it holds, cleaned',
               },
             ]
@@ -1174,7 +1192,7 @@ export function loadTheme(
                 )
                 .slice(0, 2)
                 .map(v => ({
-                  name: `${P} set ${slug} ${undoArgs(twice.setting).replace(twice.setting.thing, `${twice.setting.thing} ${quoteCommandArgument(String(v))}`)}`,
+                  name: `${P} set ${slug} ${setArgs(twice.setting, String(v))}`,
                   reason: `keep ${v}`,
                 })),
               {
@@ -1187,6 +1205,21 @@ export function loadTheme(
       ERROR_CODES.ERR_THEME_INVALID,
     );
   return data;
+}
+
+/**
+ * A command that builds on a built-in theme, as it runs here: after the
+ * line that installs that theme's package when the project does not have
+ * it, so the first line offered always works.
+ * @param {string} cwd
+ * @param {string} base a built-in theme
+ * @param {string} line the command on that base
+ * @returns {string[]}
+ */
+export function onBuiltIn(cwd, base, line) {
+  return baseInstalled(cwd, base)
+    ? [line]
+    : [installLine(cwd, [`@astryxdesign/theme-${base}`]), line];
 }
 
 /**
@@ -1259,15 +1292,18 @@ export function settingsProblem(
       return `${s.thing} has mode ${JSON.stringify(s.mode)}, not light or dark`;
     if (s.only != null && s.only !== true)
       return `${s.thing} has only ${JSON.stringify(s.only)}, not true or false`;
+    // A bad value comes first: an entry under the wrong headings half is
+    // that, not a second entry of the half it names.
+    if (!skips(s, skip)) {
+      const problem = valueProblem(s);
+      if (problem) return problem;
+    }
     const key = keyOf(s);
     // The command that changes or removes a setting listed twice keeps one
     // value, or none, so it fixes the list.
     if (keys.has(key) && !skips(s, skip))
       return `${describe({...s, value: '?'}).replace(' = ?', '')} is listed twice (${JSON.stringify(keys.get(key).value)}, ${JSON.stringify(s.value)})`;
     keys.set(key, s);
-    if (skips(s, skip)) continue;
-    const problem = valueProblem(s);
-    if (problem) return problem;
   }
   return null;
 }
@@ -1449,12 +1485,37 @@ export function undoArgs(x) {
     // when it is listed twice (a bare `undo headings` then reads the weight
     // half).
     ...(x.thing === 'headings' && x.axis === 'tracking' ? ['tracking'] : []),
+    ...scopeFlags(x),
+  ].join(' ');
+}
+
+/**
+ * The words of a `set` that gives a setting's scope a value: set reads a
+ * headings half from its word, so no half is named.
+ * @param {import('./_settings.mjs').Setting} x
+ * @param {string} value
+ */
+export function setArgs(x, value) {
+  return [
+    quoteCommandArgument(String(x.thing)),
+    quoteCommandArgument(value),
+    ...scopeFlags(x),
+  ].join(' ');
+}
+
+/**
+ * The flags that name a setting's scope, as set and undo take them.
+ * @param {import('./_settings.mjs').Setting} x
+ * @returns {string[]}
+ */
+function scopeFlags(x) {
+  return [
     ...(x.on ? [`--on ${quoteCommandArgument(String(x.on))}`] : []),
     ...(x.when ? [`--when ${quoteCommandArgument(String(x.when))}`] : []),
     ...(x.state ? [`--state ${quoteCommandArgument(String(x.state))}`] : []),
     ...(x.mode ? [`--mode ${quoteCommandArgument(String(x.mode))}`] : []),
     ...(x.only ? ['--only'] : []),
-  ].join(' ');
+  ];
 }
 
 /**
@@ -1519,6 +1580,17 @@ export function valueProblem(s) {
     if (PALETTE_DIALS.includes(s.thing) && isColorValue(s.value)) {
       const seed = colorProblem(s.value);
       if (seed) return `${bad} ${seed.message}`;
+    }
+    // `axis` names the half of headings a value sets; no other dial has
+    // one, and each half takes only its own words.
+    if (s.axis != null && s.thing !== 'headings')
+      return `${s.thing} has an axis (${JSON.stringify(s.axis)}), which only headings takes`;
+    if (s.thing === 'headings') {
+      if (s.axis != null && s.axis !== 'weight' && s.axis !== 'tracking')
+        return `headings has axis ${JSON.stringify(s.axis)}, not weight or tracking`;
+      const half = s.axis === 'tracking' ? HEADING_TRACKING : HEADING_WEIGHTS;
+      if (!Object.hasOwn(half, s.value))
+        return `${bad} is not a ${s.axis ?? 'weight'} headings takes (${Object.keys(half).join('|')})`;
     }
     const words = d.values.split('|').filter(w => !w.startsWith('<'));
     const ok =
@@ -2491,8 +2563,9 @@ export const keyOf = s =>
   [
     s.thing,
     // A headings value saved with no axis is its weight half, as the build
-    // reads it, so a set or undo of the weight replaces it.
-    s.thing === 'headings' ? (s.axis ?? 'weight') : (s.axis ?? ''),
+    // reads it, so a set or undo of the weight replaces it. Only headings
+    // has halves: an axis on any other setting names nothing.
+    s.thing === 'headings' ? (s.axis ?? 'weight') : '',
     s.on ?? '',
     s.when ?? '',
     s.state ?? '',
@@ -6268,7 +6341,7 @@ export function buildColorModes(cwd, slug) {
   try {
     return oneColorMode(
       modesOf(
-        JSON.parse(fs.readFileSync(themeFiles(cwd, slug).settings, 'utf8')),
+        settingsJson(fs.readFileSync(themeFiles(cwd, slug).settings, 'utf8')),
       ),
     );
   } catch {
@@ -6725,13 +6798,121 @@ export async function contrastProblems(ctx, data, res) {
  * @returns {ThemeData | null}
  */
 function parseSettings(text) {
-  if (text == null) return null;
+  const data = settingsJson(text);
+  return entriesReadable(data) ? data : null;
+}
+
+/**
+ * A settings file's or an undo step's text as JSON, a byte-order mark
+ * aside; undefined when there is no text or it does not parse. Every reader
+ * of settings text reads it here.
+ * @param {string | null | undefined} text
+ * @returns {any}
+ */
+export function settingsJson(text) {
+  if (text == null) return undefined;
   try {
-    const data = JSON.parse(text);
-    return settingsShapeOk(data) ? data : null;
+    return JSON.parse(text.replace(/^\uFEFF/, ''));
   } catch {
-    return null;
+    return undefined;
   }
+}
+
+/**
+ * Whether settings data has its shape and every entry is an object with a
+ * thing name: what a reader may go through entry by entry. Any other entry
+ * (null, a number, text) is damage the file check names.
+ * @param {any} data
+ */
+export function entriesReadable(data) {
+  return (
+    settingsShapeOk(data) &&
+    data.settings.every(
+      (/** @type {any} */ s) =>
+        s != null &&
+        typeof s === 'object' &&
+        !Array.isArray(s) &&
+        typeof s.thing === 'string',
+    )
+  );
+}
+
+/**
+ * Read a damaged mode or base the way a change reads it, in place: one
+ * written in other letters or as a package name (`Dark-Only`,
+ * `@astryxdesign/theme-neutral`) is the value meant; any other goes back to
+ * its default. `like: "none"` is no base. The field a command sets itself
+ * is left to that command.
+ * @param {any} data
+ * @param {string} cwd
+ * @param {string} [fixing] `mode` or `base` when the command sets it
+ * @returns {string[]} a note for each field read differently from the file
+ */
+export function readFields(data, cwd, fixing) {
+  /** @type {string[]} */
+  const notes = [];
+  const meant = fieldsMeant(data);
+  if (
+    fixing !== 'mode' &&
+    !['both', 'light-only', 'dark-only'].includes(data.mode)
+  ) {
+    if (['both', 'light-only', 'dark-only'].includes(meant.mode)) {
+      notes.push(
+        `mode was written "${data.mode}", so it is saved as ${meant.mode}`,
+      );
+      data.mode = meant.mode;
+    } else {
+      data.mode = 'both';
+      notes.push('mode was missing or damaged, so it is both again');
+    }
+  }
+  if (data.like === 'none') delete data.like;
+  if (fixing !== 'base' && data.like != null && !LIKE.includes(data.like)) {
+    if (LIKE.includes(meant.like) && baseInstalled(cwd, meant.like)) {
+      notes.push(
+        `base was written "${data.like}", so it is saved as ${meant.like}`,
+      );
+      data.like = meant.like;
+    } else {
+      delete data.like;
+      notes.push('base was not a built-in theme, so it is none again');
+    }
+  }
+  return notes;
+}
+
+/**
+ * The text an undo step keeps for the settings before a change: the file
+ * as the change read it (entry words and fields read as meant), so the
+ * step back restores what the change started from and passes undo's check.
+ * Text that reads as written is kept byte for byte.
+ * @param {string} text
+ * @param {string} cwd
+ * @param {Record<string, string> | null} radii the whole-theme radii it was built with
+ */
+function stepText(text, cwd, radii) {
+  const data = settingsJson(text);
+  if (!entriesReadable(data)) return text;
+  const asWritten = JSON.stringify(data);
+  readAsMeant(data, cwd);
+  return JSON.stringify(data) !== asWritten
+    ? `${JSON.stringify(radii ? {...data, built: {radii}} : data, null, 2)}\n`
+    : withBuilt(text, radii);
+}
+
+/**
+ * Read settings data as a change reads it, in place: entry modes and
+ * sources in other words, and a damaged mode or base (see
+ * {@link readFields}). The settings file and every undo step are read
+ * through here.
+ * @param {any} data
+ * @param {string} cwd
+ * @param {string} [fixing] `mode` or `base` when the command sets it
+ * @returns {string[]} a note for each thing read differently from the text
+ */
+export function readAsMeant(data, cwd, fixing) {
+  readEntryWords(data);
+  return [...entryNotes(data), ...readFields(data, cwd, fixing)];
 }
 
 /**
@@ -6741,13 +6922,10 @@ function parseSettings(text) {
  */
 export function settingsEntriesOk(data) {
   return (
-    settingsShapeOk(data) &&
+    entriesReadable(data) &&
     data.settings.every(
       (/** @type {any} */ s) =>
-        s &&
-        typeof s.thing === 'string' &&
-        'value' in s &&
-        ['dial', 'token', 'property'].includes(s.source),
+        'value' in s && ['dial', 'token', 'property'].includes(s.source),
     )
   );
 }
@@ -7038,13 +7216,9 @@ export function radiiIn(source) {
  */
 function withBuilt(text, radii) {
   if (!radii) return text;
-  try {
-    const data = JSON.parse(text.replace(/^\uFEFF/, ''));
-    if (!settingsShapeOk(data)) return text;
-    return `${JSON.stringify({...data, built: {radii}}, null, 2)}\n`;
-  } catch {
-    return text;
-  }
+  const data = settingsJson(text);
+  if (!settingsShapeOk(data)) return text;
+  return `${JSON.stringify({...data, built: {radii}}, null, 2)}\n`;
 }
 
 /**
@@ -7326,12 +7500,15 @@ export function refuseLinks(cwd, slug) {
  * @param {ThemeData} data
  */
 export function settingsStamp(data) {
+  // The settings as the file keeps them, so the stamp of a build matches
+  // the file it was built from.
+  const saved = savedForm(data);
   const hash = createHash('sha256')
     .update(
       JSON.stringify({
-        like: data.like ?? null,
-        mode: data.mode,
-        settings: data.settings,
+        like: saved.like ?? null,
+        mode: saved.mode,
+        settings: saved.settings,
       }),
     )
     .digest('hex')
@@ -7568,10 +7745,7 @@ export function readHistory(file) {
   if (!Array.isArray(h)) return {steps: [], dropped: 1};
   const ok = (/** @type {unknown} */ x) => {
     try {
-      return (
-        typeof x === 'string' &&
-        Array.isArray(JSON.parse(x.replace(/^\uFEFF/, '')).settings)
-      );
+      return typeof x === 'string' && settingsShapeOk(settingsJson(x));
     } catch {
       return false;
     }
@@ -7773,7 +7947,9 @@ export async function commitTheme(
         writeWhole(
           f.history,
           JSON.stringify(
-            [...past, withBuilt(snapBefore, radiiNow)].slice(-HISTORY_STEPS),
+            [...past, stepText(snapBefore, cwd, radiiNow)].slice(
+              -HISTORY_STEPS,
+            ),
           ),
         );
     });

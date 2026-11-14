@@ -320,8 +320,10 @@ describe('review on #11303', () => {
     await themeEditNew('sg', {cwd});
     await themeEditSet('sg', 'spacing', 'tight', {cwd, on: 'card'});
     await themeEditSet('sg', 'spacing', 'spacious', {cwd, on: 'containers'});
-    const r = await themeEditSet('sg', 'spacing', 'more', {cwd, on: 'card'});
-    expect(r.data.setting.value).toBe('spacious');
+    // A step from spacious (the group's value) goes down to roomy; up from
+    // the largest step is refused.
+    const r = await themeEditSet('sg', 'spacing', 'less', {cwd, on: 'card'});
+    expect(r.data.setting.value).toBe('roomy');
     fs.rmSync(path.join(cwd, 'themes/sg'), {recursive: true, force: true});
   }, 240_000);
 

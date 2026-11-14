@@ -223,7 +223,8 @@ describe('new with several bad dial flags', () => {
         '--accent',
         '#zzz',
         '--corners',
-        'pil',
+        // A typo by the shared rule: four letters or more.
+        'pilll',
         '--spacing',
         'roomie',
       ]);

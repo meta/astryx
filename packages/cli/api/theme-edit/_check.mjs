@@ -3017,7 +3017,9 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
     refuse(E.ERR_MISSING_ARGUMENT, '--when and --state need --on <part>.', {
       run: [`${HOW} --list parts`],
     });
-  if (s.only) {
+  // --only is checked on a part this Core has; a part in other letters or
+  // misspelt gets the part's own refusal first, with --only kept.
+  if (s.only && (!s.on || TARGET.has(s.on) || FAMILIES[s.on])) {
     const fam = s.on ? familyOf(s.on) : null;
     if (!fam || FAMILIES[/** @type {string} */ (s.on)])
       refuse(
@@ -3139,16 +3141,22 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
             run: [setLine(slug, thing, v, {...s, on: named}, unset)],
           },
         );
+      // A plural or another case names the part it means; a typo of one
+      // part leads with the same command on that part.
+      const near = nearest(s.on.toLowerCase().replace(/s$/, ''), [
+        ...TARGET.keys(),
+        ...Object.keys(FAMILIES),
+      ]);
+      const typo = near.filter(n => typoOf(lower, n));
       refuse(
         E.ERR_THEME_UNKNOWN_PART,
         `"${s.on}" is not a part you can style.`,
         {
-          // A plural or another case names the part it means.
-          didYouMean: nearest(s.on.toLowerCase().replace(/s$/, ''), [
-            ...TARGET.keys(),
-            ...Object.keys(FAMILIES),
-          ]),
+          didYouMean: near,
           run: [
+            ...(typo.length === 1
+              ? [setLine(slug, thing, v, {...s, on: typo[0]}, unset)]
+              : []),
             `${HOW} --list parts ${quoteCommandArgument(lower.replace(/s$/, '').split('-')[0] || 'button')}`,
             `${HOW} ${quoteCommandArgument(s.on)}`,
           ],
@@ -3744,10 +3752,16 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         (s.on && typeof def !== 'number' ? own('') : undefined) ??
         def;
       const at = L.findIndex(([n]) => n === cur);
+      const stepped = at + (v === 'more' ? 1 : -1);
+      if (at >= 0 && stepped >= 0 && stepped < L.length) return L[stepped][0];
+      // At the last rung that way, a step goes nowhere: refused as every
+      // dial refuses it at its end, with the other way.
       if (at >= 0)
-        return L[
-          Math.max(0, Math.min(L.length - 1, at + (v === 'more' ? 1 : -1)))
-        ][0];
+        refuse(
+          E.ERR_THEME_NO_EFFECT,
+          `${thing} is already at its ${v === 'more' ? 'largest' : 'smallest'} step, ${L[at][0]}${s.on ? ` on ${s.on}` : ''}, so "${v}" has nowhere to go.`,
+          {run: [setLine(slug, thing, v === 'more' ? 'less' : 'more', s)]},
+        );
       // A size between rungs steps to the next rung that way, never past it.
       const px =
         typeof cur === 'number'
@@ -3775,7 +3789,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         );
         refuse(
           E.ERR_THEME_BAD_VALUE,
-          `${thing} is ${typeof cur === 'number' ? `${cur}px` : cur}, already ${v === 'more' ? 'above' : 'below'} its ${v === 'more' ? 'largest' : 'smallest'} step (${edge[0]}, ${edge[1]}px), so "${v}" has nowhere to go.${atEnd ? ` It is also the ${v === 'more' ? 'largest' : 'smallest'} size ${thing} takes (${lo} to ${hi}); the base font size token takes any size.` : ' Give an exact size.'}`,
+          `${thing} is ${typeof cur === 'number' ? `${cur}px` : cur}, already ${Math.abs(px - edge[1]) < 0.01 ? 'at' : v === 'more' ? 'above' : 'below'} its ${v === 'more' ? 'largest' : 'smallest'} step (${edge[0]}, ${edge[1]}px), so "${v}" has nowhere to go.${atEnd ? ` It is also the ${v === 'more' ? 'largest' : 'smallest'} size ${thing} takes (${lo} to ${hi}); the base font size token takes any size.` : ' Give an exact size.'}`,
           {
             run: atEnd
               ? [
