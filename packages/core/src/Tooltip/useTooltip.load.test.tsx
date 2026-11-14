@@ -126,9 +126,10 @@ const TIP = 'Saves your changes';
 
 function Harness(props: {
   isOpen?: boolean;
+  onHide?: () => void;
   onReady?: (tooltip: UseTooltipModule.TooltipReturn) => void;
 }): ReactElement {
-  const tooltip = useTooltip({isOpen: props.isOpen});
+  const tooltip = useTooltip({isOpen: props.isOpen, onHide: props.onHide});
   props.onReady?.(tooltip);
   return (
     <>
@@ -235,6 +236,20 @@ describe('the tooltip loads after first paint (architecture:component-import-bou
     expect(shows()).toBe(true);
   });
 
+  it('a finger tap before the load shows nothing when the load lands, though the browser keeps :hover on the tapped trigger (FR5, FR14)', async () => {
+    render(<Harness />);
+    // Touch browsers leave the tapped element in :hover after the tap.
+    hovered = trigger();
+    fireEvent.pointerEnter(trigger(), {pointerType: 'touch'});
+    fireEvent.pointerDown(trigger(), {pointerType: 'touch'});
+    fireEvent.pointerUp(trigger(), {pointerType: 'touch'});
+    await paintAndLoad();
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(shows()).toBe(false);
+  });
+
   it('a pointer that left before the load shows nothing until the next hover', async () => {
     render(<Harness />);
     fireEvent.mouseEnter(trigger());
@@ -327,6 +342,56 @@ describe('the tooltip loads after first paint (architecture:component-import-bou
     await paintAndLoad();
     expect(loads.surface).toBe(2);
     expect(layerOf()).not.toBeNull();
+    warn.mockRestore();
+  });
+
+  it('a show() made before a failed load is dropped and reported through onHide, and a later load does not open it (INV5, INV6)', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    loads.failures = 1;
+    const onHide = vi.fn();
+    let tooltip: UseTooltipModule.TooltipReturn | null = null;
+    render(
+      <Harness
+        onHide={onHide}
+        onReady={t => {
+          tooltip = t;
+        }}
+      />,
+    );
+    act(() => tooltip?.show());
+    await paintAndLoad();
+    expect(onHide).toHaveBeenCalledTimes(1);
+
+    fireEvent.pointerEnter(trigger(), {pointerType: 'mouse'});
+    await act(async () => {
+      await pendingTooltipLoad();
+    });
+    expect(loads.surface).toBe(2);
+    expect(layerOf()).not.toBeNull();
+    expect(shows()).toBe(false);
+    warn.mockRestore();
+  });
+
+  it('after a failed load, a show() asks for the load again at once and opens when it lands (INV6)', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    loads.failures = 1;
+    let tooltip: UseTooltipModule.TooltipReturn | null = null;
+    render(
+      <Harness
+        onReady={t => {
+          tooltip = t;
+        }}
+      />,
+    );
+    await paintAndLoad();
+    expect(loads.surface).toBe(1);
+
+    act(() => tooltip?.show());
+    await act(async () => {
+      await pendingTooltipLoad();
+    });
+    expect(loads.surface).toBe(2);
+    expect(shows()).toBe(true);
     warn.mockRestore();
   });
 

@@ -31,6 +31,7 @@ import type {
   LayerPlacement,
 } from '../Layer/useLayer';
 import type {LayerTouchTrigger} from '../Layer/useTouchTrigger';
+import {useCommittedRef} from '../hooks/useCommittedRef';
 import {warnOnce} from '../utils/devWarning';
 import {createModuleLoader} from '../utils/moduleLoader';
 import {isElement} from '../utils/nodeType';
@@ -227,6 +228,8 @@ const surfaceModule = createModuleLoader(
 let loadedSurface: TooltipSurfaceComponent | null = null;
 let isScheduled = false;
 let hasFailed = false;
+// Open requests that wait for the load. A failed load drops them.
+const heldShows = new Set<() => void>();
 let pendingLoad: Promise<void> | null = null;
 const listeners = new Set<() => void>();
 
@@ -255,11 +258,16 @@ function publish(surface: TooltipSurfaceComponent | null): void {
 async function loadSurface(): Promise<void> {
   try {
     publish((await surfaceModule.load()).TooltipSurface);
+    // Each mounted tooltip answers its own request when it connects.
+    heldShows.clear();
   } catch (error: unknown) {
     // The triggers keep working without tooltips. A later intent on a
     // trigger, or the next trigger that mounts, asks for the load again.
     isScheduled = false;
     hasFailed = true;
+    for (const drop of [...heldShows]) {
+      drop();
+    }
     warnOnce(
       'tooltip-load',
       'Tooltip',
@@ -299,13 +307,13 @@ function scheduleTooltipLoad(view: Window | null): void {
   });
 }
 
-/** What the loaded surface gives the bridge when it connects. Internal. */
 /** The loaded layer's ids, which the trigger names once the layer exists. */
 export interface TooltipLayerIds {
   readonly describedBy: string;
   readonly anchorId: string;
 }
 
+/** What the loaded surface gives the bridge when it connects. Internal. */
 export interface TooltipSurfaceHandle {
   readonly positionRef: RefCallback<HTMLElement>;
   readonly interactionRef: RefCallback<HTMLElement>;
@@ -360,7 +368,10 @@ function matchesSelector(element: Element, selector: string): boolean {
  * The intent on the trigger when the surface connects: keyboard focus still
  * in it, or a pointer still over it. The surface answers it by its own rules.
  */
-function heldIntent(trigger: HTMLElement | null): 'focus' | 'hover' | null {
+function heldIntent(
+  trigger: HTMLElement | null,
+  wasTapped: boolean,
+): 'focus' | 'hover' | null {
   if (trigger == null) {
     return null;
   }
@@ -372,11 +383,13 @@ function heldIntent(trigger: HTMLElement | null): 'focus' | 'hover' | null {
   ) {
     return 'focus';
   }
-  return matchesSelector(trigger, ':hover') ? 'hover' : null;
+  // Touch browsers keep :hover on a tapped element, and a tap is not held.
+  return !wasTapped && matchesSelector(trigger, ':hover') ? 'hover' : null;
 }
 
 function createTooltipBridge(
   reportLayer: (ids: TooltipLayerIds | null) => void,
+  onShowDropped: () => void,
 ): TooltipBridge {
   const interestRef: RefObject<TooltipPresentInterestState> = {
     current: {interest: null, tapEvent: null, isRead: true},
@@ -387,6 +400,18 @@ function createTooltipBridge(
   let detachPosition: (() => void) | null = null;
   let detachInteraction: (() => void) | null = null;
   let isShowRequested = false;
+  const setShowRequested = (isRequested: boolean) => {
+    isShowRequested = isRequested;
+    if (isRequested) {
+      heldShows.add(dropHeldShow);
+    } else {
+      heldShows.delete(dropHeldShow);
+    }
+  };
+  const dropHeldShow = () => {
+    setShowRequested(false);
+    onShowDropped();
+  };
   // Only a tooltip that mounted before the page loaded the surface can hold
   // an intent its own listeners did not see, and only at its first connect.
   // A surface that mounts again later (a trigger that a component renders
@@ -396,11 +421,20 @@ function createTooltipBridge(
   // When a mouse or pen last entered the trigger before the surface loaded,
   // so a hover held at the load waits only the rest of the show delay.
   let hoverStartedAt: number | undefined;
+  // Whether the last pointer on the trigger before the load was a finger, or
+  // a pen that pressed: such a tap is not held.
+  let wasTapped = false;
   const noteEntry = (event: PointerEvent) => {
-    if (event.pointerType !== 'touch') {
+    wasTapped = event.pointerType === 'touch';
+    if (!wasTapped) {
       hoverStartedAt = performance.now();
     }
     retryFailedLoad();
+  };
+  const notePress = (event: PointerEvent) => {
+    if (event.pointerType !== 'mouse') {
+      wasTapped = true;
+    }
   };
 
   const setPosition = (element: HTMLElement | null) => {
@@ -420,15 +454,18 @@ function createTooltipBridge(
     detachInteraction?.();
     detachInteraction = null;
     interactionElement?.removeEventListener('pointerenter', noteEntry);
+    interactionElement?.removeEventListener('pointerdown', notePress);
     interactionElement?.removeEventListener('focusin', retryFailedLoad);
     interactionElement = element;
     hoverStartedAt = undefined;
+    wasTapped = false;
     if (element == null) {
       return;
     }
     if (surface == null) {
       scheduleTooltipLoad(element.ownerDocument.defaultView);
       element.addEventListener('pointerenter', noteEntry);
+      element.addEventListener('pointerdown', notePress);
       element.addEventListener('focusin', retryFailedLoad);
     } else {
       detachInteraction = attach(surface.interactionRef, element);
@@ -483,14 +520,15 @@ function createTooltipBridge(
     reportLayer,
     show: () => {
       if (surface == null) {
-        isShowRequested = true;
+        setShowRequested(true);
+        retryFailedLoad();
       } else {
         surface.actionsRef.current.show();
       }
     },
     hide: () => {
       if (surface == null) {
-        isShowRequested = false;
+        setShowRequested(false);
       } else {
         surface.actionsRef.current.hide();
       }
@@ -498,12 +536,14 @@ function createTooltipBridge(
     connect: (next, readsHeldIntent) => {
       surface = next;
       interactionElement?.removeEventListener('pointerenter', noteEntry);
+      interactionElement?.removeEventListener('pointerdown', notePress);
+      interactionElement?.removeEventListener('focusin', retryFailedLoad);
       if (positionElement != null) {
         detachPosition = attach(next.positionRef, positionElement);
       }
       const interest =
         readsHeldIntent && isMountedBeforeLoad && !hasConnected
-          ? heldIntent(interactionElement)
+          ? heldIntent(interactionElement, wasTapped)
           : null;
       hasConnected = true;
       interestRef.current = {
@@ -517,7 +557,7 @@ function createTooltipBridge(
       }
       interestRef.current.isRead = true;
       if (isShowRequested) {
-        isShowRequested = false;
+        setShowRequested(false);
         next.actionsRef.current.show();
       }
       return () => {
@@ -561,7 +601,10 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   // The layer reports from its commit, so the reference goes out in the
   // same task, before the frame paints, and never ahead of the layer.
   const [layerIds, setLayerIds] = useState<TooltipLayerIds | null>(null);
-  const [bridge] = useState(() => createTooltipBridge(setLayerIds));
+  const optionsRef = useCommittedRef(options);
+  const [bridge] = useState(() =>
+    createTooltipBridge(setLayerIds, () => optionsRef.current.onHide?.()),
+  );
   // Set only by a Core component that mounts the tooltip on interaction.
   const heldInterestRef = use(TooltipPresentInterestContext);
   const Surface = useSyncExternalStore(subscribe, getSurface, getServerSurface);
