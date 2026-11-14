@@ -258,8 +258,6 @@ export function CommentActions({
 }) {
   const t = useTranslator();
   const linkCopyFailedLabel = t('@astryx.comments.linkCopyFailed');
-  // A failed write shows for as long as a copied one and is announced
-  // assertively, as CodeBlock's copy button does.
   const {
     copy: copyToClipboard,
     isCopied: isLinkCopied,
