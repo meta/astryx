@@ -43,7 +43,7 @@ export function cssImports(css) {
 }
 
 /** Extensions an extensionless import may stand for, in resolution order. */
-const RESOLVE_EXTENSIONS = ['.tsx', '.ts', '.jsx', '.js', '.mjs', '.json'];
+const RESOLVE_EXTENSIONS = ['.tsx', '.ts', '.jsx', '.js', '.mjs', '.mts', '.cts', '.cjs', '.json'];
 
 /**
  * The string specifiers one module imports.

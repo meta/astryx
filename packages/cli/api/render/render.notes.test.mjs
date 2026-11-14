@@ -390,16 +390,18 @@ export default function Page() {
     put('kinds/lib/a.mts', "export const a = 'from mts';\n");
     put('kinds/lib/b.cjs', "exports.b = 'from cjs';\n");
     put('kinds/lib/c.cts', "export const c = 'from cts';\n");
+    put('kinds/lib/d.cjs', "exports.d = 'from cjs without its extension';\n");
+    put('kinds/lib/e.mts', "export const e = 'from mts without its extension';\n");
     put(
       'kinds/page.tsx',
-      "import {a} from './lib/a.mts';\nimport {b} from './lib/b.cjs';\nimport {c} from './lib/c.cts';\nexport default function Page() {\n  return <p>{a} {b} {c}</p>;\n}\n",
+      "import {a} from './lib/a.mts';\nimport {b} from './lib/b.cjs';\nimport {c} from './lib/c.cts';\nimport {d} from './lib/d';\nimport {e} from './lib/e';\nexport default function Page() {\n  return <p>{a} {b} {c} {d} {e}</p>;\n}\n",
     );
     const result = /** @type {any} */ (await render('kinds/page.tsx', {cwd: dir}));
-    expect(result.data.files).toEqual(expect.arrayContaining(['page.tsx', 'lib/a.mts', 'lib/b.cjs', 'lib/c.cts']));
-    expect(read('kinds/page.html')).toContain('from mts from cjs from cts');
+    expect(result.data.files).toEqual(expect.arrayContaining(['page.tsx', 'lib/a.mts', 'lib/b.cjs', 'lib/c.cts', 'lib/d.cjs', 'lib/e.mts']));
+    expect(read('kinds/page.html')).toContain('from mts from cjs from cts from cjs without its extension from mts without its extension');
     const back = /** @type {any} */ (await render('kinds/page.html', {cwd: dir, reverse: true, out: 'kinds-back/page.tsx'}));
     expect(back.data.exact).toBe(true);
-    for (const name of ['lib/a.mts', 'lib/b.cjs', 'lib/c.cts']) expect(read(`kinds-back/${name}`)).toBe(read(`kinds/${name}`));
+    for (const name of ['lib/a.mts', 'lib/b.cjs', 'lib/c.cts', 'lib/d.cjs', 'lib/e.mts']) expect(read(`kinds-back/${name}`)).toBe(read(`kinds/${name}`));
   });
 });
 
