@@ -57,6 +57,8 @@ export {withListingCache} from '../../foundation/fs/listing-cache.mjs';
  * @typedef {object} ComponentWords
  * @property {string} name The component's name, e.g. `DateRangeInput`.
  * @property {string[]} keywords The keywords its own doc declares.
+ * @property {string} [category] The category its own doc files it under,
+ *   e.g. `Table & List`.
  */
 
 /**

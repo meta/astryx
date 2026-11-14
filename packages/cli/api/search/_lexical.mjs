@@ -88,6 +88,7 @@ import {toResult, searchedComponentsOf} from './_result.mjs';
  * @property {string} [_command] - The command that reads exactly this doc part.
  * @property {string} [_parent] - The command that opens the level above a doc
  *   part: its topic's section list, or the docs-tree namespace it sits in.
+ * @property {string} [_category] - The category its own doc files it under.
  * @property {string} [_package] - The npm package that owns the candidate:
  *   Core's package for its components, hooks, and templates, the integration's
  *   for what it contributed, and for a doc part the package that wrote it.
@@ -351,7 +352,11 @@ export function rankLexical(query, options, catalog) {
   if (catalog.searchedComponents) {
     searchedComponentsOf.set(
       response,
-      components.map(c => ({name: c.name, keywords: c.keywords ?? []})),
+      components.map(c => ({
+        name: c.name,
+        keywords: c.keywords ?? [],
+        category: c._category ?? '',
+      })),
     );
   }
   return response;
