@@ -419,14 +419,14 @@ function absolute(result, root, from) {
         /^themes\/\S*$/.test(v) && !(key && PROSE.has(key))
         ? path.join(root, v)
         : key && PROSE.has(key)
-          ? v.replace(
+          ? previewCommandsFrom(v, root, from).replace(
               /(^|[\s(,])((?:themes|src|app)\/[^\s,;)]*)/g,
               (all, before, file) =>
                 /^themes\//.test(file) || inRoot(file)
                   ? `${before}${path.join(root, file)}`
                   : all,
             )
-          : v
+          : previewCommandsFrom(v, root, from)
       : Array.isArray(v)
         ? v.map(x => map(x, key))
         : v && typeof v === 'object'
@@ -481,6 +481,23 @@ async function inProject(options, lock, fn, bestEffort = false, again = null) {
  */
 function fromCaller(e, root, from) {
   if (path.resolve(from) === root || !Array.isArray(e?.suggestions)) return e;
+  for (const s of e.suggestions)
+    if (typeof s?.name === 'string')
+      s.name = previewCommandsFrom(s.name, root, from);
+  return e;
+}
+
+/**
+ * The preview commands in a line, rebased from the project root onto the
+ * folder the command ran in: each `--path` and each `preview app` folder,
+ * so a pointer works where it is printed (in a refusal, a `see` line, a
+ * note). A folder that comes out starting with `-` goes after `--`.
+ * @param {string} line
+ * @param {string} root
+ * @param {string} from
+ */
+export function previewCommandsFrom(line, root, from) {
+  if (path.resolve(from) === root) return line;
   const ARG = String.raw`('(?:[^']|'\\'')*'|"[^"]*"|[^\s'"]+)`;
   /** @param {string} v */
   const unquote = v =>
@@ -493,32 +510,40 @@ function fromCaller(e, root, from) {
   const rel = v =>
     /^<.*>$/.test(v)
       ? v
-      : quoteCommandArgument(
-          path.relative(path.resolve(from), path.resolve(root, unquote(v))) ||
-            '.',
-        );
-  for (const s of e.suggestions) {
-    if (typeof s?.name !== 'string') continue;
-    if (!s.name.startsWith('astryx experimental theme preview ')) continue;
-    s.name = s.name
-      .replace(
+      : path.relative(path.resolve(from), path.resolve(root, unquote(v))) ||
+        '.';
+  const CMD = 'astryx experimental theme preview ';
+  const parts = line.split(CMD);
+  return parts
+    .map((part, i) => {
+      // A command after a `cd … &&` runs in the folder it names: as given.
+      if (i === 0 || /\bcd [^&]*&& (?:npx \S+ )?$/.test(parts[i - 1]))
+        return part;
+      let out = part.replace(
         new RegExp(`(--path )${ARG}`, 'g'),
         (
           /** @type {string} */ _m,
           /** @type {string} */ flag,
           /** @type {string} */ v,
-        ) => flag + rel(v),
-      )
-      .replace(
-        new RegExp(`^(astryx experimental theme preview app )${ARG}`),
-        (
-          /** @type {string} */ _m,
-          /** @type {string} */ cmd,
-          /** @type {string} */ v,
-        ) => cmd + rel(v),
+        ) => flag + quoteCommandArgument(rel(v)),
       );
-  }
-  return e;
+      out = out.replace(
+        new RegExp(`^app ((?:--theme ${ARG} )?)(-- )?${ARG}`),
+        (
+          /** @type {string} */ m,
+          /** @type {string} */ flags,
+          /** @type {string} */ _t,
+          /** @type {string | undefined} */ dash,
+          /** @type {string} */ v,
+        ) => {
+          if (!dash && v.startsWith('-')) return m;
+          const r = rel(v);
+          return `app ${flags}${r.startsWith('-') ? '-- ' : ''}${quoteCommandArgument(r)}`;
+        },
+      );
+      return out;
+    })
+    .join(CMD);
 }
 
 /**
@@ -620,7 +645,8 @@ export const themeEditPreviewAdd = (description, options = {}) =>
  * saying where the change stands (a change stopped part way is finished by
  * the next preview command), never an ok with exit 0.
  * @template T
- * @param {string} where where the change stands, and what finishes it
+ * @param {string | (() => string)} where where the change stands, and what
+ *   finishes it; a function is asked when the stop lands, so it can look
  * @param {() => Promise<T>} fn
  * @returns {Promise<T>}
  */
@@ -628,7 +654,9 @@ async function stopTold(where, fn) {
   const on = (/** @type {NodeJS.Signals} */ sig) => {
     process.removeListener('SIGINT', on);
     process.removeListener('SIGTERM', on);
-    process.stderr.write(`Stopped: ${where}.\n`);
+    process.stderr.write(
+      `Stopped: ${typeof where === 'function' ? where() : where}.\n`,
+    );
     // With no other listener (a lock's, which ends the process itself),
     // the stop ends it here.
     if (process.listenerCount(sig) === 0) process.kill(process.pid, sig);
@@ -657,9 +685,23 @@ async function stopTold(where, fn) {
  */
 export const themeEditPreviewApp = async (dir, options = {}) => {
   const from = options.cwd ?? process.cwd();
+  // The app is written into a temp folder and moved into place in one step,
+  // with no pause on the way: when a stop lands, the folder holds the whole
+  // app or is as it was. Which one is told.
+  const target =
+    typeof dir === 'string' && dir.trim() ? path.resolve(from, dir) : null;
+  /** @param {string} d */
+  const holdsApp = d => fs.existsSync(path.join(d, 'package.json'));
+  const hadApp = target != null && holdsApp(target);
+  const shownTarget = target
+    ? path.relative(from, target).split(path.sep).join('/') || '.'
+    : null;
   return fromHere(
     await stopTold(
-      `the new app may be part made; ${PREVIEW_WORDS} app with a new folder name makes a whole one`,
+      () =>
+        target && !hadApp && holdsApp(target)
+          ? `the new app in ${shownTarget}/ is written whole (it is moved into place in one step); cd ${quoteCommandArgument(shownTarget?.startsWith('-') ? `./${shownTarget}` : (shownTarget ?? '.'))} && npm install && npm run dev opens it`
+          : `nothing was written${shownTarget ? ` (${shownTarget}/ is as it was)` : ''}; run the same command again`,
       () =>
         inProject(
           options,
