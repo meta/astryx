@@ -2,9 +2,10 @@
 
 /**
  * @file BackdropPressA11y.stories.tsx
- * @input Dialog, Drawer and CommandPalette, each with a text field, opened
- *   from a button; Dialog and Drawer also hold a DropdownMenu; a second
- *   Dialog holds a Typeahead, a DateInput, an InfoTip and a ContextMenu
+ * @input Dialog, Drawer, CommandPalette, BottomSheet and a BottomSheetSwitcher
+ *   step, each with a text field, opened from a button; all but CommandPalette
+ *   also hold a DropdownMenu; a second Dialog holds a Typeahead, a DateInput,
+ *   an InfoTip and a ContextMenu
  * @output Fixtures for the Chromium check that a backdrop press dismisses only
  *   when it starts and ends on the backdrop, and that a press which closes a
  *   menu open inside leaves the host open; excluded from the visual matrix
@@ -100,6 +101,7 @@ export const Members: StoryObj = {
             defaultValue={NOTE}
             style={{width: '100%'}}
           />
+          <DropdownMenu button={{label: 'Actions'}} items={menuItems} />
         </BottomSheet>
         <BottomSheetSwitcher
           activeSheet={open === 'switcher' ? 'note' : null}
@@ -114,6 +116,7 @@ export const Members: StoryObj = {
               defaultValue={NOTE}
               style={{width: '100%'}}
             />
+            <DropdownMenu button={{label: 'Actions'}} items={menuItems} />
           </BottomSheet>
         </BottomSheetSwitcher>
       </>
