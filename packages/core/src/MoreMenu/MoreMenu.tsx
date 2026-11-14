@@ -66,7 +66,8 @@ export interface MoreMenuProps extends Pick<
   variant?: ButtonVariant;
 
   /**
-   * Size of the trigger button.
+   * Size of the trigger button. Without it, the trigger takes the
+   * surrounding size, else `'md'`.
    * @default 'md'
    */
   size?: ButtonSize;
@@ -107,7 +108,7 @@ export interface MoreMenuProps extends Pick<
   presentation?: DropdownMenuPresentation;
 
   /**
-   * Controlled open state for the menu.
+   * Controlled open state for the menu. Pair it with `onOpenChange`.
    */
   isMenuOpen?: boolean;
 
