@@ -66,7 +66,7 @@ import {
   parsedSpecifiers,
 } from '../../foundation/discovery/template-needs.mjs';
 import {detectStylingSystem} from '../../foundation/agent-docs/agent-docs.mjs';
-import {requireProject, context} from './_context.mjs';
+import {coreApp, requireProject, context} from './_context.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
   formatCliCommand,
@@ -545,6 +545,56 @@ function nextConfigNotes(cwd) {
  * @param {string} dir
  */
 function reservedFolder(cwd, dir) {
+  // The rules of every app the folder is in: the project's, and a Next app
+  // below it that holds the folder (a workspace app, from the root).
+  for (const owner of appsOver(cwd, dir)) {
+    const why = reservedIn(owner, dir);
+    if (why) return why;
+  }
+  return null;
+}
+
+/**
+ * The app folders that hold `dir`, nearest first: each Next app between it
+ * and the project root (a workspace app, a starter app an earlier
+ * `preview app` made), then the project root itself.
+ * @param {string} cwd
+ * @param {string} dir
+ * @returns {string[]}
+ */
+function appsOver(cwd, dir) {
+  /** @type {string[]} */
+  const out = [];
+  for (
+    let at = path.dirname(path.resolve(dir));
+    at.startsWith(path.resolve(cwd) + path.sep);
+    at = path.dirname(at)
+  )
+    if (nextAppAt(at)) out.push(at);
+  return [...out, cwd];
+}
+
+/**
+ * Whether a folder is a Next app: its package.json depends on `next`.
+ * @param {string} dir
+ */
+function nextAppAt(dir) {
+  try {
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(dir, 'package.json'), 'utf8'),
+    );
+    return ['dependencies', 'devDependencies'].some(k => pkg?.[k]?.next);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * {@link reservedFolder} for one app folder.
+ * @param {string} cwd the app folder
+ * @param {string} dir
+ */
+function reservedIn(cwd, dir) {
   const segs = shown(cwd, dir).split('/').filter(Boolean);
   if (segs[0] === 'themes')
     return 'themes/ holds the themes, and everything in a theme folder is copied with the theme';
@@ -855,6 +905,14 @@ function nestedRootLayouts(app) {
  * @param {Retry} retry
  */
 function checkPlacement(cwd, dir, where, retry) {
+  // A folder in a Next app below the project (a workspace app, from the
+  // root) gets that app's own checks: its routes folder, its next.config,
+  // its root layouts. Retries keep the folder as given from here.
+  const owner = appsOver(cwd, dir)[0];
+  if (owner !== cwd)
+    return checkPlacement(owner, dir, where, p =>
+      retry(p == null ? null : shown(cwd, path.resolve(owner, p))),
+    );
   const served = [path.join(cwd, 'app'), path.join(cwd, 'src', 'app')].find(
     r => fs.existsSync(r) && fs.statSync(r).isDirectory(),
   );
@@ -933,7 +991,9 @@ function checkPlacement(cwd, dir, where, retry) {
   const odd = segs.filter(
     seg => seg && !/^\(.+\)$|^\[.+\]$/.test(seg) && !PLAIN.test(seg),
   );
-  if (app && odd.length) {
+  // A preview already there is updated where it is (its pages are served at
+  // the encoded URL `see` gives); only a new preview gets a plain name.
+  if (app && odd.length && !fs.existsSync(path.join(dir, PREVIEW_DATA))) {
     const slug = (/** @type {string} */ seg) =>
       seg
         .normalize('NFD')
@@ -1077,7 +1137,9 @@ function checkPlacement(cwd, dir, where, retry) {
  * serves (`app/`, else `src/app/`).
  * @param {string} cwd
  * @param {string | undefined} where
- * @param {{optional?: boolean, write?: boolean, retry?: Retry}} [opts]
+ * @param {{optional?: boolean, write?: boolean, retry?: Retry, theme?: string | null}} [opts]
+ *   `theme`: the theme the command was given, kept by a pointer to a new
+ *   starter app
  *   `optional`: null instead of a refusal when there is no routes folder;
  *   `write`: the folder is checked as a place to write; `retry`: the
  *   command again with another --path, for refusals
@@ -1091,8 +1153,16 @@ function previewDir(cwd, where, opts = {}) {
   const routes = ['app', path.join('src', 'app')]
     .map(r => path.join(cwd, r))
     .filter(r => fs.existsSync(r) && fs.statSync(r).isDirectory());
-  const appOf = (/** @type {string} */ dir) =>
-    routes.find(r => dir.startsWith(r + path.sep)) ?? null;
+  // The routes folder of the app that holds the folder (a workspace app's,
+  // from the root).
+  const appOf = (/** @type {string} */ dir) => {
+    const owner = appsOver(cwd, dir)[0];
+    return (
+      [path.join(owner, 'app'), path.join(owner, 'src', 'app')].find(r =>
+        dir.startsWith(r + path.sep),
+      ) ?? null
+    );
+  };
   if (where != null) {
     checkFolderName(where, '--path', retry);
     /** @type {string} */
@@ -1216,24 +1286,30 @@ function previewDir(cwd, where, opts = {}) {
   const dir = known ?? (served && path.join(nested ?? served, 'theme-preview'));
   if (!dir && opts.optional) return /** @type {any} */ (null);
   if (!dir) {
-    // A workspace root: the Next apps below it, each with a --path into
-    // its routes folder.
+    // A workspace root: the Next apps below it.
     const apps = nextAppsUnder(cwd);
+    const rootIsProject = coreApp(cwd) === path.resolve(cwd);
+    const themesHere = editedThemes(cwd);
+    const starterTheme =
+      opts.theme ?? (themesHere.length === 1 ? themesHere[0] : null);
     refuse(
       E.ERR_NOT_FOUND,
       apps.length
         ? `No app routes folder here (app/ or src/app/); the Next ${apps.length > 1 ? 'apps' : 'app'} below ${apps.length > 1 ? 'are' : 'is'} ${apps.map(a => `${shown(cwd, a.root)}/`).join(', ')}.`
         : 'No app routes folder here (app/ or src/app/), so there is no app to put the preview in.',
       {
-        // Each app's own folder is where a preview command for it runs.
+        // The same command for each app below, with every argument kept: a
+        // root that is a project (its themes are here) reaches the app with
+        // --path; any other root runs it from the app's own folder.
         run: [
           ...apps
             .slice(0, 3)
-            .map(
-              a =>
-                `cd ${quoteCommandArgument(shown(cwd, a.root))} && ${PREVIEW} add`,
+            .map(a =>
+              rootIsProject
+                ? retry(shown(cwd, path.join(a.routes, 'theme-preview')))
+                : `${cdTo(shown(cwd, a.root))} && ${retry(null)}`,
             ),
-          `${PREVIEW} app ${quoteCommandArgument(freeAppFolder(cwd))}  # a new starter app with the preview in it`,
+          `${PREVIEW} app ${quoteCommandArgument(freeAppFolder(cwd))}${starterTheme ? ` --theme ${quoteCommandArgument(starterTheme)}` : ''}  # a new starter app with the preview in it`,
         ],
       },
     );
@@ -1244,14 +1320,61 @@ function previewDir(cwd, where, opts = {}) {
 }
 
 /**
+ * Whether `preview add` takes this folder (null: its usual one): the checks
+ * add itself runs before it writes, run here with nothing written. A
+ * pointer to `preview add` is offered only when this says so.
+ * @param {string} cwd
+ * @param {string | null} where
+ */
+function addTakes(cwd, where) {
+  try {
+    previewDir(cwd, where ?? undefined, {write: true, retry: () => ''});
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A `cd` to a folder as a shell runs it: quoted, and a name that starts with
+ * `-` given as `./-name`, which `cd` would read as an option.
+ * @param {string} folder
+ */
+function cdTo(folder) {
+  return `cd ${quoteCommandArgument(folder.startsWith('-') ? `./${folder}` : folder)}`;
+}
+
+/**
  * A folder name for a new starter app that is free in `cwd`: theme-app, else
  * theme-app-2, theme-app-3 and so on.
  * @param {string} cwd
  */
 function freeAppFolder(cwd) {
-  let free = 'theme-app';
-  for (let n = 2; fs.existsSync(path.join(cwd, free)); n++)
-    free = `theme-app-${n}`;
+  return shown(cwd, freeFolder(cwd, cwd, 'theme-app'));
+}
+
+/**
+ * A folder in `parent` that `preview app` takes: `base`, else `base-2`,
+ * `base-3` and so on, passing over a name that is there in any form (a
+ * file, a folder, a dangling link), one that differs from a name there only
+ * in case, and a folder no app goes in.
+ * @param {string} cwd the project
+ * @param {string} parent
+ * @param {string} base
+ * @returns {string} the folder, absolute
+ */
+function freeFolder(cwd, parent, base) {
+  /** @param {string} f */
+  const taken = f => {
+    try {
+      fs.lstatSync(f);
+      return true;
+    } catch {
+      return Boolean(sameCaseSibling(f) || reservedFolder(cwd, f));
+    }
+  };
+  let free = path.join(parent, base);
+  for (let n = 2; taken(free); n++) free = path.join(parent, `${base}-${n}`);
   return free;
 }
 
@@ -1538,22 +1661,26 @@ function planStarterApp(cwd, where, extra, dependencies, slug = null) {
     throw e;
   }
   /** A free folder name inside the current folder, near `dir`. @param {string} dir */
-  const freeNear = dir => {
-    const parent = dir === cwd ? cwd : path.dirname(dir);
-    const base = dir === cwd ? 'theme-app' : `${path.basename(dir)}-preview`;
-    let free = base;
-    for (let n = 2; fs.existsSync(path.join(parent, free)); n++)
-      free = `${base}-${n}`;
-    return shown(cwd, path.join(parent, free));
-  };
+  const freeNear = dir =>
+    dir === cwd
+      ? freeAppFolder(cwd)
+      : shown(
+          cwd,
+          freeFolder(cwd, path.dirname(dir), `${path.basename(dir)}-preview`),
+        );
   const name = shownDir(cwd, root);
-  const routes = ['app', path.join('src', 'app')]
-    .map(r => path.join(cwd, r))
+  // The routes folders of every app the folder is in (the project's, and a
+  // workspace app's from the root).
+  const routes = appsOver(cwd, root)
+    .flatMap(a => ['app', path.join('src', 'app')].map(r => path.join(a, r)))
     .filter(r => fs.existsSync(r) && fs.statSync(r).isDirectory());
+  const inRoutes = routes.find(
+    r => root === r || root.startsWith(r + path.sep),
+  );
   const why =
     reservedFolder(cwd, root) ??
-    (routes.some(r => root === r || root.startsWith(r + path.sep))
-      ? "it is inside this app's routes folder, where Next would serve the new app's files as pages of this one"
+    (inRoutes
+      ? `it is inside the routes folder ${shownDir(cwd, inRoutes)}/, where Next would serve the new app's files as pages of that app`
       : null) ??
     (t =>
       t
@@ -1567,7 +1694,9 @@ function planStarterApp(cwd, where, extra, dependencies, slug = null) {
       {
         run: [
           again(free),
-          `${PREVIEW} add  # the preview inside this app instead`,
+          ...(addTakes(cwd, null)
+            ? [`${PREVIEW} add  # the preview inside this app instead`]
+            : []),
         ],
       },
     );
@@ -1659,11 +1788,22 @@ function starterLayout(text) {
  * @param {string} root the new app's folder
  */
 function starterName(cwd, root) {
+  // One spelling per path, no two paths alike: lowercase letters, digits
+  // and `-` stay; a folder break is `.`; every other character (a capital,
+  // a dot, an accent) is `_<its code point in hex>_`.
   const rel = (path.relative(cwd, root) || path.basename(root))
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-  return `astryx-theme-preview-${rel || 'app'}`;
+    .split(path.sep)
+    .map(seg =>
+      [...seg]
+        .map(c =>
+          /[a-z0-9-]/.test(c)
+            ? c
+            : `_${/** @type {number} */ (c.codePointAt(0)).toString(16)}_`,
+        )
+        .join(''),
+    )
+    .join('.');
+  return `astryx-theme-preview-${rel}`;
 }
 
 /**
@@ -3577,7 +3717,10 @@ export function seeLine(cwd, slug, focus, notChecked = null, extra = {}) {
     return `${own}; the in-app preview in ${damaged.slice(0, 2).join(', ')}/ has a damaged ${PREVIEW_DATA}, so it does not follow this change: fix it by hand, or give the folder a new name that starts with _ and run ${PREVIEW} add${editorThemeCount(cwd) > 1 ? ` --theme ${slug}` : ''}`;
   // With more than one editor theme, a bare add may wear another one.
   const many = editorThemeCount(cwd) > 1;
-  return `${own}; to see it inside your app, ${PREVIEW} add${many ? ` --theme ${slug}` : ''} puts the preview pages there, each at its own URL`;
+  // An add this app takes; else a new app of its own, with the preview.
+  return addTakes(cwd, null)
+    ? `${own}; to see it inside your app, ${PREVIEW} add${many ? ` --theme ${slug}` : ''} puts the preview pages there, each at its own URL`
+    : `${own}; this app has no routes folder for the preview pages, so ${PREVIEW} app ${quoteCommandArgument(freeAppFolder(cwd))} --theme ${slug} makes a new app with them`;
 }
 
 /**
@@ -4094,6 +4237,17 @@ function wornTheme(cwd, slug, again, without) {
         },
       );
     }
+    // A theme of a workspace app below (from the workspace root): the same
+    // command, run from that app.
+    const owners = nextAppsUnder(cwd).filter(a =>
+      fs.existsSync(themeFiles(a.root, name).settings),
+    );
+    if (!themes.includes(name) && owners.length)
+      refuse(
+        E.ERR_UNKNOWN_THEME,
+        `There is no theme "${slug}" under themes/ here; ${owners.map(a => `${shown(cwd, a.root)}/themes/${name}/`).join(', ')} ${owners.length > 1 ? 'hold' : 'holds'} it, in the app that uses it.`,
+        {run: owners.map(a => `${cdTo(shown(cwd, a.root))} && ${again(name)}`)},
+      );
     const near = themes.includes(name) ? [name] : nearest(name, themes);
     if (near.length)
       refuse(
@@ -4380,7 +4534,11 @@ async function addPreview(description, options, box) {
   }
   const retry = (/** @type {string | null} */ p) =>
     `${PREVIEW} add${said ? ` ${quoteCommandArgument(said)}` : ''}${named != null ? ` --template ${quoteCommandArgument(named)}` : ''}${options.top != null ? ` --top ${quoteCommandArgument(String(options.top))}` : ''}${tf}${p == null ? '' : ` --path ${quoteCommandArgument(p)}`}`;
-  const at = previewDir(cwd, options.path, {write: true, retry});
+  const at = previewDir(cwd, options.path, {
+    write: true,
+    retry,
+    theme: options.theme ?? null,
+  });
   const recovered = recoverPreview(cwd, at.dir);
   if (recovered) notes.push(recovered);
   const unstyled = coreStylesheetMissing(cwd, at);
@@ -5016,7 +5174,7 @@ export async function themeEditPreviewApp(dir, options = {}) {
       files,
       notes,
       // A folder named like a flag (`-`, `-k`) is a path to cd only with ./.
-      open: `cd ${quoteCommandArgument(folder.startsWith('-') ? `./${folder}` : folder)} && npm install && npm run dev, then open /theme-preview`,
+      open: `${cdTo(folder)} && npm install && npm run dev, then open /theme-preview`,
     },
   };
 }
@@ -5246,9 +5404,7 @@ function refuseThemeAway(cwd, dir, slug, again) {
     E.ERR_INVALID_ARGUMENT,
     `The preview wears ${slug}, whose theme folder is ${away}/, outside this project folder (${cwd}). Run the command from the folder that holds themes/${slug}/.`,
     {
-      run: [
-        `cd ${quoteCommandArgument(root)} && ${again(path.relative(root, dir))}`,
-      ],
+      run: [`${cdTo(root)} && ${again(path.relative(root, dir))}`],
     },
   );
 }

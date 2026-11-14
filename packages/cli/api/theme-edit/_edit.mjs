@@ -1071,9 +1071,16 @@ function changeFocus(s) {
  * @param {string} slug
  * @param {'set' | 'undo' | 'new'} [kind] the command that saved
  * @param {string} [cwd] the project, for the CLI invocation
+ * @param {boolean} [png] pictures were asked for: the command named takes
+ *   them too
  * @returns {(sig: NodeJS.Signals) => void}
  */
-export function stoppedAfterSave(slug, kind = 'set', cwd = process.cwd()) {
+export function stoppedAfterSave(
+  slug,
+  kind = 'set',
+  cwd = process.cwd(),
+  png = false,
+) {
   const done =
     kind === 'undo'
       ? `the undo is done: ${slug} is saved and built as it was before that change`
@@ -1082,7 +1089,7 @@ export function stoppedAfterSave(slug, kind = 'set', cwd = process.cwd()) {
         : `the change to ${slug} is saved and built (and its undo step kept)`;
   return sig => {
     process.stderr.write(
-      `Stopped: ${done}; its checks and pictures did not run. ${formatCliCommand(`${P} show ${slug}`, cwd)} runs them.\n`,
+      `Stopped: ${done}; its checks and pictures did not run. ${formatCliCommand(`${P} show ${slug}${png ? ' --png' : ''}`, cwd)} runs them.\n`,
     );
     if (process.listenerCount(sig) === 0) process.kill(process.pid, sig);
   };
@@ -1110,7 +1117,7 @@ async function previewAndRoute(
 ) {
   // Stopped (Ctrl-C) while the checks and pictures run: the change is saved
   // and built already, which one line says before the process ends.
-  const stopped = stoppedAfterSave(slug, kind, ctx.project.cwd);
+  const stopped = stoppedAfterSave(slug, kind, ctx.project.cwd, png);
   process.once('SIGINT', stopped);
   process.once('SIGTERM', stopped);
   /** @type {Awaited<ReturnType<typeof previewAfter>>} */

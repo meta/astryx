@@ -2066,7 +2066,19 @@ export function runBrowser(script, args, bound = BROWSER_BOUND_MS, opts = {}) {
     const onStop = async sig => {
       stopping = true;
       for (const s of STOP_SIGNALS) process.removeListener(s, onStop);
+      // A second stop during the grace does not wait for it: the group is
+      // killed and the files removed at once, then the process ends.
+      /** @param {NodeJS.Signals} again */
+      const onAgain = again => {
+        for (const s of STOP_SIGNALS) process.removeListener(s, onAgain);
+        signalAll('SIGKILL');
+        remove([temp, ...drop]);
+        if (process.listenerCount(again) === 0)
+          process.kill(process.pid, again);
+      };
+      for (const s of STOP_SIGNALS) process.once(s, onAgain);
       await finish();
+      for (const s of STOP_SIGNALS) process.removeListener(s, onAgain);
       settle({status: null, signal: null, stderr, stoppedBy: sig});
       // Nothing else listening: the stop ends this process, as it would
       // have without this listener.
