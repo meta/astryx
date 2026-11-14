@@ -366,7 +366,7 @@ those contracts.
   target helpers apart from the tracking runtime, so a group's static code
   finds its neighbours without loading gesture code. Gap: these modules still
   import the shared touch modules statically, so a page that renders them
-  carries the touch runtime in its first load: Resizable (`resizablePane`),
+  carries the touch runtime in its first load: AlertDialog (`useAlertMotion`), Resizable (`resizablePane`),
   Slider (`sliderTouchController`), SnapPaging, Chat (`useChatKeyboard`), and
   the date and time fields' wheels (`motion/reducedMotion`). A surface
   revealed by interaction that a component loads with `import()` under
