@@ -67,8 +67,8 @@ describe('hunt67', () => {
     expect(r.command).not.toMatch(/--color-error/);
   }, 120_000);
 
-  it('an amount of padding with nothing to take it of says it is a step', async () => {
+  it('an amount of padding is taken of what the part has now', async () => {
     const r = await top('double the padding on list items');
-    expect(r.first).toContain('one step, not an exact amount');
+    expect(r.first).toMatch(/^padding on list-item: \S+ \(now \S+\)/);
   }, 120_000);
 });

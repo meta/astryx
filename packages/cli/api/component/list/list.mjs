@@ -25,7 +25,6 @@ import {
 import {EXACT_CODEC} from '../../../foundation/fs/exact-codec.mjs';
 import {persistedGather} from '../../../foundation/fs/gather-cache.mjs';
 import {CLI_ROOT, discoverExternalPackages, realDir} from '../../../foundation/fs/paths.mjs';
-import {hostedRun} from '../../../foundation/runtime/package-root.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {AstryxError} from '../../error.mjs';
 import {
@@ -34,6 +33,7 @@ import {
   loadIntegrationsSafely,
   withOwnership,
 } from '../_adapter.mjs';
+import {compareText} from '../../../foundation/text/compare-text.mjs';
 
 /**
  * @typedef {import('../component.type.mjs').ComponentListResponse} ComponentListResponse
@@ -177,7 +177,6 @@ export async function componentList(coreDir, opts) {
         realDir(cwd),
         coreDir,
         CLI_ROOT,
-        hostedRun()?.integrations ?? [],
         category ?? null,
         detail,
         zh,
@@ -472,7 +471,7 @@ async function componentListNow(coreDir, {cwd, category, detail, zh, dense, lang
       });
     }
     for (const [key, members] of byGroup) {
-      members.sort((a, b) => a.name.localeCompare(b.name));
+      members.sort((a, b) => compareText(a.name, b.name));
       listData[key] = members;
     }
   }
