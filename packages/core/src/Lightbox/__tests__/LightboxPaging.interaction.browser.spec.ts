@@ -1960,8 +1960,8 @@ test('no caption read follows a write in the same resize delivery, from opening 
   // A read after a write in one delivery forces a layout before the
   // browser's own. A delivery lasts until the microtasks it queued have run.
   // A transform or an opacity changes no layout, so it counts as no write.
-  // Two limits: a plain style property set by assignment is no write here,
-  // and a microtask that a queued microtask queues runs after the window.
+  // Two limits: a plain style property set by assignment, other than
+  // `display`, is no write here, and a microtask that a queued microtask queues runs after the window.
   await page.addInitScript(() => {
     const reads: string[] = [];
     (window as unknown as {__lateReads: string[]}).__lateReads = reads;
@@ -2008,6 +2008,33 @@ test('no caption read follows a write in the same resize delivery, from opening 
         set(this: unknown, value: unknown) {
           noteWrite();
           set.call(this, value);
+        },
+      });
+    }
+    // `display` is set by assignment on an element's style, which no
+    // prototype setter sees in Chromium. A proxy over the style reports it.
+    const styleOwn = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'style',
+    );
+    if (styleOwn?.get != null) {
+      const getStyle = styleOwn.get;
+      Object.defineProperty(HTMLElement.prototype, 'style', {
+        ...styleOwn,
+        get(this: HTMLElement) {
+          const style = getStyle.call(this) as CSSStyleDeclaration;
+          return new Proxy(style, {
+            get(target, key) {
+              const value = Reflect.get(target, key, target);
+              return typeof value === 'function' ? value.bind(target) : value;
+            },
+            set(target, key, value) {
+              if (key === 'display') {
+                noteWrite();
+              }
+              return Reflect.set(target, key, value, target);
+            },
+          });
         },
       });
     }
@@ -2137,4 +2164,28 @@ test('no caption read follows a write in the same resize delivery, from opening 
     () => (window as unknown as {__lateReads: string[]}).__lateReads,
   );
   expect(reads).toEqual([]);
+
+  // A caption that ends in a block image wider than the room beside "less"
+  // counts its lines without the toggle's place, and a widening window
+  // delivers that count again. Both counts read only.
+  await page.setViewportSize({width: 362, height: 874});
+  await openStory(
+    page,
+    storybook(),
+    'core-lightbox--caption-ending-in-wide-image',
+  );
+  await page.getByRole('button', {name: 'Open wide-image caption'}).click();
+  const wideDialog = page.getByRole('dialog');
+  await wideDialog.getByRole('button', {name: 'more'}).click();
+  await expect(wideDialog.getByRole('button', {name: 'less'})).toBeVisible();
+  await frames(page, 2);
+  await page.setViewportSize({width: 420, height: 874});
+  await frames(page, 4);
+  await wideDialog.getByRole('button', {name: 'less'}).click();
+  await expect(wideDialog.getByRole('button', {name: 'more'})).toBeVisible();
+  await frames(page, 2);
+  const wideReads = await page.evaluate(
+    () => (window as unknown as {__lateReads: string[]}).__lateReads,
+  );
+  expect(wideReads).toEqual([]);
 });

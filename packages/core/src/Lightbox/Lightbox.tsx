@@ -1005,27 +1005,40 @@ export function Lightbox({
           ? Math.round(flow.getBoundingClientRect().height / line)
           : 0;
       // A caption with a block below its place keeps the place off while it
-      // stays open. A new width gives the block no reason to fit beside the
-      // place, and the caption's height may not change to deliver again.
+      // stays open. The place stays off until the caption closes. A wider
+      // caption could fit the block beside the place, but the caption's
+      // height may not change, so no delivery would turn the place back on.
       let isPlaceOff = isCaptionOpen && captionPlaceOffRef.current;
       if (isCaptionOpen && hasLine && flow != null && place != null) {
         const placeBottom = place.getBoundingClientRect().bottom;
-        const hasBlockBelowPlace =
-          place.getBoundingClientRect().height > 0 &&
-          Array.from(flow.querySelectorAll<HTMLElement>('*')).some(
-            element =>
-              element !== place &&
-              !/^(?:inline|contents|none)/.test(
-                view.getComputedStyle(element).display,
-              ) &&
-              Math.abs(element.getBoundingClientRect().top - placeBottom) <= 1,
-          );
-        if (hasBlockBelowPlace) {
-          const shownDisplay = place.style.display;
-          place.style.display = 'none';
-          const ownHeight = flow.getBoundingClientRect().height;
-          place.style.display = shownDisplay;
-          textLines = Math.round(ownHeight / line);
+        const blockBelowPlace =
+          place.getBoundingClientRect().height > 0
+            ? Array.from(flow.querySelectorAll<HTMLElement>('*')).find(
+                element =>
+                  element !== place &&
+                  !/^(?:inline|contents|none)/.test(
+                    view.getComputedStyle(element).display,
+                  ) &&
+                  Math.abs(element.getBoundingClientRect().top - placeBottom) <=
+                    1,
+              )
+            : undefined;
+        if (blockBelowPlace != null) {
+          // The lines without the place, from reads alone: the text before
+          // the block, and everything from the block's top down. The block
+          // starts at the place's bottom edge, so the flow's height below
+          // it is the same with or without the place.
+          const text = flow.ownerDocument.createRange();
+          text.setStartAfter(place);
+          text.setEndBefore(blockBelowPlace);
+          const textBox = text.getBoundingClientRect();
+          const textHeight =
+            textBox.height > 0 ? textBox.bottom - textBox.top : 0;
+          const belowHeight =
+            flow.getBoundingClientRect().bottom -
+            blockBelowPlace.getBoundingClientRect().top;
+          textLines =
+            Math.round(textHeight / line) + Math.round(belowHeight / line);
           lineCount = Math.min(lineCount, textLines);
           isPlaceOff = true;
         }
