@@ -105,16 +105,15 @@ export function hasNameLine(lines, name) {
 
 /**
  * What a kept tree summary is kept under, and what makes it.
- * @typedef {{kind: string, roots: Array<string | {root: string, skip?: (name: string) => boolean}>, code: string[], skip?: (name: string) => boolean, key?: unknown[], recorded?: boolean, installed?: string[]}} TreeSummaryOptions
+ * @typedef {{kind: string, roots: Array<string | {root: string, skip?: (name: string) => boolean}>, code: string[], skip?: (name: string) => boolean, key?: unknown[], recorded?: boolean, accept?: (value: any) => boolean}} TreeSummaryOptions
  *   `roots`: each a folder, or a folder with the folder names its own walk
  *   does not enter; `code`: the files whose code makes the summary; `skip`:
  *   folder names the walk of a root without its own does not enter (both are
  *   part of `kind`); `key`: anything else the summary depends on;
  *   `recorded`: every path `summarize` reads through fs or probes is checked
  *   too, by its own stamp, so it can read files outside the trees and through
- *   caches that stat a file before they reuse it; `installed`: the folders of
- *   packages whose files, where the package is installed, its own
- *   package.json stamps instead (gather-cache.mjs persistedSummary)
+ *   caches that stat a file before they reuse it; `accept`: whether a stored
+ *   summary serves this call (gather-cache.mjs persistedSummary)
  */
 
 /**
@@ -206,7 +205,7 @@ export function keptTreeSummary(options, summarize) {
       finish(seen);
       return {value, stamps};
     },
-    {installed: options.installed},
+    {accept: options.accept},
   );
 }
 
@@ -234,6 +233,6 @@ export function keptTreeSummaryAsync(options, summarize) {
       finish(seen);
       return {value, stamps};
     },
-    {installed: options.installed},
+    {accept: options.accept},
   );
 }

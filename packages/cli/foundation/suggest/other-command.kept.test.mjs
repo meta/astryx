@@ -75,8 +75,17 @@ beforeAll(async () => {
     path.join(project, 'astryx.config.mjs'),
     "export default {integrations: ['@acme/glints']};\n",
   );
-  const pkgDir = path.join(project, 'node_modules', '@acme', 'glints');
+  // The integration is linked, as while it is developed beside the project:
+  // a summary stamps a linked package's files one by one, so an edit shows
+  // without a reinstall.
+  const pkgDir = path.join(TEMP_ROOT, 'glints');
   fs.mkdirSync(path.join(pkgDir, 'components'), {recursive: true});
+  fs.mkdirSync(path.join(project, 'node_modules', '@acme'), {recursive: true});
+  fs.symlinkSync(
+    pkgDir,
+    path.join(project, 'node_modules', '@acme', 'glints'),
+    'dir',
+  );
   fs.writeFileSync(
     path.join(pkgDir, 'package.json'),
     JSON.stringify({name: '@acme/glints', version: '1.0.0'}),

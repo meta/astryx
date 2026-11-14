@@ -4,9 +4,9 @@
  * @file The not-found hint's one name index: a project's first miss makes
  * the kept gathers' folder and keeps the index there, later misses reuse it,
  * adding, renaming or removing a doc, a template or an integration shows in
- * the very next hint, a new CLI build makes it again, and an installed Core
- * is kept by its package.json (a Core upgrade makes it again) while a linked
- * one is stamped file by file. The index is kept
+ * the very next hint, a new CLI build makes it again, and an installed
+ * package (Core, an integration) is kept by its package.json (an upgrade or
+ * reinstall makes it again) while a linked one is stamped file by file. The index is kept
  * only by an installed CLI with a build id, so the CLI's root is set to an
  * installed-looking folder with one.
  *
@@ -86,7 +86,16 @@ beforeAll(async () => {
     path.join(project, 'astryx.config.mjs'),
     "export default {integrations: ['@acme/glints']};\n",
   );
-  pkgDir = path.join(project, 'node_modules', '@acme', 'glints');
+  // The integration is linked, as while it is developed beside the project:
+  // the index stamps a linked package's files one by one, so an edit shows
+  // without a reinstall.
+  pkgDir = path.join(TEMP_ROOT, 'glints');
+  fs.mkdirSync(path.join(project, 'node_modules', '@acme'), {recursive: true});
+  fs.symlinkSync(
+    pkgDir,
+    path.join(project, 'node_modules', '@acme', 'glints'),
+    'dir',
+  );
   for (const dir of ['components', 'templates', 'docs']) {
     fs.mkdirSync(path.join(pkgDir, dir), {recursive: true});
   }
@@ -342,6 +351,45 @@ describe('the name index', () => {
       expect((await hintNameIndex(project, linked, [])).core).toContain(
         'tglimmertwo',
       );
+    },
+    SLOW,
+  );
+
+  it(
+    'keeps an installed integration by its package.json: a reinstall shows an edit',
+    async () => {
+      const {hintNameIndex} = await import('./name-index.mjs');
+      const docs = path.join(project, 'node_modules', '@acme', 'shiny', 'docs');
+      fs.mkdirSync(docs, {recursive: true});
+      const manifest = path.join(docs, '..', 'package.json');
+      fs.writeFileSync(
+        manifest,
+        JSON.stringify({name: '@acme/shiny', version: '1.0.0'}),
+      );
+      const doc = (/** @type {string} */ name) =>
+        `export const docs = ${JSON.stringify({type: 'generic', name, title: 'T', description: 'D.', sections: [{title: 'One', content: [{type: 'prose', text: 'One.'}]}]})};\n`;
+      fs.writeFileSync(
+        path.join(docs, 'shiny-guide.doc.mjs'),
+        doc('shiny-guide'),
+      );
+      const names = async () =>
+        (
+          await hintNameIndex(project, null, [{name: '@acme/shiny', docs}])
+        ).docs[0].map(entry => entry.declared?.name);
+      await sleep(SETTLE_WAIT_MS);
+      expect(await names()).toEqual(['shiny-guide']);
+      // An edit in place, with no reinstall, keeps the kept index.
+      fs.writeFileSync(
+        path.join(docs, 'shiny-guide.doc.mjs'),
+        doc('glossy-guide'),
+      );
+      expect(await names()).toEqual(['shiny-guide']);
+      // A reinstall rewrites its package.json: the index is made again.
+      fs.writeFileSync(
+        manifest,
+        JSON.stringify({name: '@acme/shiny', version: '1.0.1'}),
+      );
+      expect(await names()).toEqual(['glossy-guide']);
     },
     SLOW,
   );

@@ -9,7 +9,9 @@
  * gathers' store under one stamp set: every folder it listed and every file
  * it read. While all of them keep their stamps, a miss reads the index and
  * stats those paths, and nothing else. The CLI's own files are covered by its
- * build id, and an installed Core's by its package.json.
+ * build id, and each installed package's (Core's, an integration's, a
+ * dependency's) by its package.json; a linked package keeps a stamp of each
+ * file (gather-cache.mjs).
  *
  * @input Core's folder, the integrations the project loads, the CLI's own
  *   folders
@@ -97,24 +99,36 @@ const INDEX_CODE = [
  *   the docs tree groups doc kinds in, as lines; `selfDocs`: the route
  *   segments the CLI's typed docs can carry (cli-self-doc-names.mjs);
  *   `routes`: every route `astryx docs` reads in the project ({@link
- *   DocsRoutes}), kept with the index; null where no index is kept, so a
- *   checkout works them out only when a name can end one, or where the
- *   caller gives none
+ *   DocsRoutes}), kept with the index once a caller asks for them; null
+ *   until then, and where no index is kept (a checkout works them out only
+ *   when a name can end one)
  */
+
+/**
+ * Whether this run keeps the name index (gather-cache.mjs
+ * makeGatherCacheDir, which makes the folder where none exists).
+ * @returns {boolean}
+ */
+export function nameIndexKept() {
+  return makeGatherCacheDir();
+}
 
 /**
  * The name index of the project at `cwd`, with Core at `coreDir` and these
  * integrations: the kept one while every folder it listed and every file it
  * read is unchanged, else made now and kept. Making it loads each integration
- * doc once, to keep the name it declares, and works out the project's docs
- * routes; what those read is checked too. The kept gathers' folder is made
- * first where none exists (gather-cache.mjs makeGatherCacheDir), so the
- * first miss keeps it for the next.
+ * doc once, to keep the name it declares; what those loads read is checked
+ * too. With `docsRoutes`, it also holds the project's docs routes: a kept
+ * index without them is made again with them, under the same key, so only a
+ * miss that can name a route works them out, once. The kept gathers' folder
+ * is made first where none exists (gather-cache.mjs makeGatherCacheDir), so
+ * the first miss keeps it for the next.
  * @param {string} cwd
  * @param {string | null} coreDir
  * @param {Array<{name?: string, components?: string, templates?: string, docs?: unknown, iconSets?: unknown} | null | undefined>} integrations
  * @param {DocsRoutes} [docsRoutes]
- * @returns {Promise<NameIndex>}
+ * @returns {Promise<NameIndex>} with `routes` set when `docsRoutes` is given
+ *   and the index is kept
  */
 export function hintNameIndex(cwd, coreDir, integrations, docsRoutes) {
   const withRoutes = makeGatherCacheDir() && docsRoutes != null;
@@ -144,9 +158,6 @@ export function hintNameIndex(cwd, coreDir, integrations, docsRoutes) {
         ...selfDocs.map(root => ({root, skip: skipCliSelfDocFolder})),
       ],
       code: INDEX_CODE,
-      // An installed Core is kept by its own package.json, which its install
-      // rewrites; a linked Core keeps a stamp of each file.
-      installed: coreDir ? [coreDir] : [],
       // The routes depend on the project, which integrations load, where
       // their docs and icon sets are, and what a hosted run approves.
       key: [
@@ -157,9 +168,12 @@ export function hintNameIndex(cwd, coreDir, integrations, docsRoutes) {
           typeof each?.docs === 'string' ? each.docs : null,
           typeof each?.iconSets === 'string' ? each.iconSets : null,
         ]),
-        withRoutes,
       ],
       recorded: true,
+      // A kept index without the routes serves only a call that does not
+      // ask for them.
+      accept: (/** @type {NameIndex} */ index) =>
+        !withRoutes || index.routes != null,
     },
     async trees => {
       const [names, ids, self, levels, sections] = await Promise.all([

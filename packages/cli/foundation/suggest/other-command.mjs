@@ -37,7 +37,11 @@ import {hasNameLine, keptTreeSummary} from '../fs/kept-tree.mjs';
 import {carriesEveryTypedWord} from '../text/suggest-order.mjs';
 import {findCoreDir} from '../fs/paths.mjs';
 import {mayHaveIntegrations} from '../integrations/may-have-integrations.mjs';
-import {hintNameIndex, templateFilesNaming} from './name-index.mjs';
+import {
+  hintNameIndex,
+  nameIndexKept,
+  templateFilesNaming,
+} from './name-index.mjs';
 
 /** The code that makes the kept integration component names. */
 const NAMES_CODE = [
@@ -326,12 +330,7 @@ export async function findOtherCommand(
   /** @type {import('./name-index.mjs').NameIndex | undefined} */
   let index;
   const indexOnce = async () =>
-    (index ??= await hintNameIndex(
-      cwd,
-      coreDir,
-      await integrationsOnce(),
-      docsRoutes,
-    ));
+    (index ??= await hintNameIndex(cwd, coreDir, await integrationsOnce()));
   /** @type {ReturnType<typeof coreFilesNaming> | {component: boolean, hook: boolean, componentTops?: undefined, hookTops?: undefined}} */
   let inCore = {component: false, hook: false};
   try {
@@ -410,9 +409,19 @@ export async function findOtherCommand(
         if (!docsRoutes || !docNamed(docsDirs, names, segment)) {
           return {docs: []};
         }
+        // The routes are kept with the index once a miss asks for them; where
+        // no index is kept, they are worked out now.
+        const routed = nameIndexKept()
+          ? await hintNameIndex(
+              cwd,
+              coreDir,
+              await integrationsOnce(),
+              docsRoutes,
+            )
+          : names;
         return {
           docs:
-            names.routes ?? (await docsRoutes(cwd, await integrationsOnce())),
+            routed.routes ?? (await docsRoutes(cwd, await integrationsOnce())),
         };
       },
     ],
