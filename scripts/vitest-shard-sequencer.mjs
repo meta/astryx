@@ -30,6 +30,16 @@ import {costOf, slowestFirst, splitByDuration} from './lib/duration-split.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const DURATIONS = path.join(ROOT, 'scripts/vitest-node-durations.json');
+
+/**
+ * The record this run reads and writes: `VITEST_DURATIONS_FILE` (relative to
+ * the repository) when set, so a workflow on another Node version packs by
+ * that version's times; else DURATIONS.
+ */
+export function durationsFile() {
+  const other = process.env.VITEST_DURATIONS_FILE;
+  return other ? path.resolve(ROOT, other) : DURATIONS;
+}
 const PROJECT = 'node';
 // Seconds of import and transform per Node test file, as the legs report.
 export const PER_FILE_SECONDS = 0.4;
@@ -70,7 +80,7 @@ export function partitionByDuration(
  * Seconds of the steps only the first leg runs (the record's legOneSteps), or
  * 0 when the record has none.
  */
-export function readLegOneSeconds(file = DURATIONS) {
+export function readLegOneSeconds(file = durationsFile()) {
   try {
     const steps = JSON.parse(fs.readFileSync(file, 'utf8')).legOneSteps ?? {};
     return Object.values(steps).reduce((sum, s) => sum + (Number(s) || 0), 0);
@@ -108,7 +118,7 @@ export function recordLegOneSteps(text, names) {
 }
 
 /** Recorded seconds per file, or none when the file cannot be read. */
-export function readDurations(file = DURATIONS) {
+export function readDurations(file = durationsFile()) {
   try {
     return JSON.parse(fs.readFileSync(file, 'utf8')).seconds ?? {};
   } catch {
@@ -279,8 +289,9 @@ if (
     console.error('No Node test file times found in those logs.');
     process.exit(1);
   }
-  const current = fs.existsSync(DURATIONS)
-    ? JSON.parse(fs.readFileSync(DURATIONS, 'utf8'))
+  const record = durationsFile();
+  const current = fs.existsSync(record)
+    ? JSON.parse(fs.readFileSync(record, 'utf8'))
     : {};
   // The first leg's own steps, from the same logs; a step the logs do not
   // show keeps its earlier time.
@@ -291,7 +302,7 @@ if (
       recordLegOneSteps(fs.readFileSync(log, 'utf8'), Object.keys(legOneSteps)),
     );
   fs.writeFileSync(
-    DURATIONS,
+    record,
     `${JSON.stringify(
       {
         ...current,
@@ -304,6 +315,6 @@ if (
     )}\n`,
   );
   console.error(
-    `Recorded ${Object.keys(seconds).length} Node test files in ${path.relative(ROOT, DURATIONS)}.`,
+    `Recorded ${Object.keys(seconds).length} Node test files in ${path.relative(ROOT, record)}.`,
   );
 }

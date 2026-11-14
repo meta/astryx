@@ -131,6 +131,76 @@ export function readLegVerdicts(dir, count) {
   return verdicts;
 }
 
+/** How far past its minimum-Node record a file may run before it is named. */
+export const SLOW_RATIO = 1.5;
+/** Seconds past its record a file must also run before it is named. */
+export const SLOW_MARGIN_S = 10;
+
+/**
+ * The files that ran past their minimum-Node record: more than SLOW_RATIO
+ * times it and more than SLOW_MARGIN_S over it, slowest past it first. A
+ * file the record lacks is not judged.
+ * @param {Record<string, number>} times seconds per test file, this run
+ * @param {Record<string, number>} recorded seconds per test file, the record
+ * @returns {{file: string, recorded: number, measured: number}[]}
+ */
+export function slowFiles(times, recorded) {
+  return Object.entries(times)
+    .filter(([file, seconds]) => {
+      const before = recorded[file];
+      return (
+        typeof before === 'number' &&
+        seconds > before * SLOW_RATIO &&
+        seconds - before > SLOW_MARGIN_S
+      );
+    })
+    .map(([file, measured]) => ({file, recorded: recorded[file], measured}))
+    .sort((a, b) => b.measured - b.recorded - (a.measured - a.recorded));
+}
+
+/**
+ * The record with this run's times in it: each measured file takes its new
+ * time, and every other file keeps its own.
+ * @param {{seconds?: Record<string, number>}} record
+ * @param {Record<string, number>} times
+ */
+export function refreshRecord(record, times) {
+  const seconds = {...record.seconds, ...times};
+  return {
+    ...record,
+    seconds: Object.fromEntries(
+      Object.entries(seconds).sort(([a], [b]) => a.localeCompare(b)),
+    ),
+  };
+}
+
+/**
+ * Every leg's per-file times, as one map, from the files the legs upload:
+ * each artifact downloads into its own folder under `dir`.
+ * @param {string} dir
+ * @returns {Record<string, number>}
+ */
+export function readLegTimes(dir) {
+  const times = {};
+  let files = [];
+  try {
+    files = fs
+      .readdirSync(dir, {recursive: true, withFileTypes: true})
+      .filter(entry => entry.isFile() && entry.name.endsWith('.json'))
+      .map(entry => path.join(entry.parentPath ?? entry.path, entry.name));
+  } catch {
+    // No leg uploaded its times.
+  }
+  for (const file of files) {
+    try {
+      Object.assign(times, JSON.parse(fs.readFileSync(file, 'utf8')));
+    } catch {
+      // An unreadable file adds no times.
+    }
+  }
+  return times;
+}
+
 /** A job's result as a verdict: only success passes and only failure fails. */
 const jobVerdict = result =>
   result === 'success' ? 'pass' : result === 'failure' ? 'fail' : 'none';
@@ -196,10 +266,36 @@ if (
   process.argv[1] &&
   fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
-  const [, , command, flag, file] = process.argv;
+  const [, , command, flag, file, recordFlag, recordFile] = process.argv;
+  if (command === 'slow' && flag === '--times' && recordFlag === '--record') {
+    // One leg's files past their minimum-Node record: a warning each, and a
+    // line in the step summary. Never a failure.
+    let times = {};
+    try {
+      times = JSON.parse(fs.readFileSync(file, 'utf8'));
+    } catch {
+      console.log(`No per-file times at ${file}.`);
+      process.exit(0);
+    }
+    const recorded =
+      JSON.parse(fs.readFileSync(recordFile, 'utf8')).seconds ?? {};
+    const slow = slowFiles(times, recorded);
+    for (const {file: test, recorded: before, measured} of slow)
+      console.log(
+        `::warning file=${test},title=Past its minimum-Node time::${test} ran ${measured} s; ${recordFile} records ${before} s.`,
+      );
+    if (slow.length && process.env.GITHUB_STEP_SUMMARY)
+      fs.appendFileSync(
+        process.env.GITHUB_STEP_SUMMARY,
+        `### Files past their minimum-Node time\n\n${slow.map(({file: test, recorded: before, measured}) => `- \`${test}\`: ${measured} s (recorded ${before} s)`).join('\n')}\n`,
+      );
+    if (!slow.length)
+      console.log('Every file ran within its minimum-Node time.');
+    process.exit(0);
+  }
   if (command !== 'minimum' || flag !== '--package' || !file) {
     console.error(
-      'usage: cli-minimum-node.mjs minimum --package <package.json>',
+      'usage: cli-minimum-node.mjs minimum --package <package.json>\n       cli-minimum-node.mjs slow --times <file> --record <file>',
     );
     process.exit(2);
   }

@@ -73,6 +73,9 @@ jobs:
         id: tests
         env:
           SHARD: ${{ matrix.shard }}
+          # The legs pack by this Node's own times, not the main Node legs'.
+          VITEST_DURATIONS_FILE: scripts/vitest-node-durations.min-node.json
+          VITEST_SHARD_TIMES_FILE: ${{ runner.temp }}/min-node-times.json
         run: |
           node --version
           started=$(ps -o etimes= -C Runner.Worker 2>/dev/null | sort -n | tail -1 | tr -d ' ')
@@ -106,6 +109,20 @@ jobs:
         with:
           name: cli-tests-verdict-${{ matrix.shard }}
           path: verdict/leg-${{ matrix.shard }}.json
+          retention-days: 7
+
+      # A warning, never a failure: a scheduled run has no change to fix.
+      - name: Name the files past their minimum-Node time
+        if: always() && steps.tests.outcome != 'skipped'
+        run: node .github/scripts/cli-minimum-node.mjs slow --times "$RUNNER_TEMP/min-node-times.json" --record scripts/vitest-node-durations.min-node.json
+
+      - name: Keep this leg's times
+        if: always() && steps.tests.outcome != 'skipped'
+        uses: actions/upload-artifact@v7
+        with:
+          name: min-node-times-${{ matrix.shard }}
+          path: ${{ runner.temp }}/min-node-times.json
+          if-no-files-found: ignore
           retention-days: 7
 
   pack:
@@ -173,9 +190,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          sparse-checkout: .github/scripts/cli-minimum-node.mjs
+          sparse-checkout: |
+            .github/scripts/cli-minimum-node.mjs
+            scripts/vitest-node-durations.min-node.json
           sparse-checkout-cone-mode: false
           persist-credentials: false
+      - name: Read the legs' times
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          pattern: min-node-times-*
+          path: times
       - name: Read the legs' verdicts
         uses: actions/download-artifact@v8
         continue-on-error: true
@@ -193,13 +218,26 @@ jobs:
           PACK_RESULT: ${{ needs.pack.result }}
           SMOKE_RESULT: ${{ needs.smoke.result }}
           NODE_VERSION: ${{ needs.version.outputs.node || 'unknown' }}
+          VERDICTS: ${{ github.workspace }}/verdicts
+          TIMES: ${{ github.workspace }}/times
         with:
           script: |
-            const {reportIssue, runVerdict, readLegVerdicts} = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/cli-minimum-node.mjs`);
+            const {reportIssue, runVerdict, readLegVerdicts, readLegTimes, slowFiles, refreshRecord} = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/cli-minimum-node.mjs`);
+            const fs = require('node:fs');
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            // This run's times: the refreshed record, and the files past theirs.
+            const recordFile = `${process.env.GITHUB_WORKSPACE}/scripts/vitest-node-durations.min-node.json`;
+            const record = JSON.parse(fs.readFileSync(recordFile, 'utf8'));
+            const times = readLegTimes(process.env.TIMES);
+            fs.mkdirSync(`${process.env.GITHUB_WORKSPACE}/refreshed`, {recursive: true});
+            fs.writeFileSync(`${process.env.GITHUB_WORKSPACE}/refreshed/vitest-node-durations.min-node.json`, `${JSON.stringify(refreshRecord(record, times), null, 2)}\n`);
+            const slow = slowFiles(times, record.seconds ?? {});
+            core.summary.addHeading('Files past their minimum-Node time', 3);
+            core.summary.addRaw(slow.length ? slow.map(({file, recorded, measured}) => `- \`${file}\`: ${measured} s (recorded ${recorded} s)`).join('\n') : `None of the ${Object.keys(times).length} timed files.`, true);
+            await core.summary.write();
             const verdict = runVerdict({
               version: process.env.VERSION_RESULT,
-              legs: readLegVerdicts('verdicts', 4),
+              legs: readLegVerdicts(process.env.VERDICTS, 4),
               pack: process.env.PACK_RESULT,
               smoke: process.env.SMOKE_RESULT,
             });
@@ -207,3 +245,11 @@ jobs:
             core.info(`minimum-Node verdict: ${verdict}; issue: ${done}`);
             if (verdict === 'fail') core.setFailed(`The CLI failed on Node ${process.env.NODE_VERSION}.`);
             if (verdict === 'none') core.setFailed(`No verdict on Node ${process.env.NODE_VERSION}: a part of the run stopped or was cancelled before it judged anything.`);
+      - name: Keep the refreshed minimum-Node record
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: min-node-record
+          path: refreshed/vitest-node-durations.min-node.json
+          if-no-files-found: ignore
+          retention-days: 14
