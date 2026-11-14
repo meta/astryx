@@ -9,6 +9,7 @@
  * @position packages/cli/api/theme-edit — pure helpers, no environment access
  */
 
+import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {DIALS} from './_tables.mjs';
 
 /**
@@ -619,3 +620,20 @@ export function carriesTyped(offered, typed) {
 export const offersTyped = (offered, typed) =>
   !STOCK_VALUES.has(String(offered).toLowerCase()) ||
   carriesTyped(offered, typed);
+
+/**
+ * Whether a typed word is a typo of a word: both words of four letters or
+ * more, within one edit for a typed word of five letters or fewer and two
+ * for a longer one (`nnone` is none, `normall` normal; `line` is no none).
+ * @param {string} typed
+ * @param {string} word
+ */
+export function typoOf(typed, word) {
+  const t = String(typed).trim().toLowerCase();
+  const w = String(word).trim().toLowerCase();
+  return (
+    /^[a-z][a-z-]{3,}$/.test(t) &&
+    /^[a-z][a-z-]{3,}$/.test(w) &&
+    levenshteinDistance(t, w) <= (t.length <= 5 ? 1 : 2)
+  );
+}

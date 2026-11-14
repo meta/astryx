@@ -115,6 +115,7 @@ import {
   normalValueText,
   normalizeEntry,
   withoutDebris,
+  typoOf,
 } from './_normal.mjs';
 
 export {
@@ -1690,11 +1691,7 @@ function propertyProblem(prop, value) {
   // corrected.
   const RESETS =
     /^(0|0px|none|1|auto|normal|initial|unset|inherit|revert|transparent)$/i;
-  const typedAs = (/** @type {string} */ x) =>
-    x === typed ||
-    (/^[a-z][a-z-]{3,}$/.test(typed) &&
-      /^[a-z][a-z-]{3,}$/.test(x) &&
-      levenshteinDistance(x, typed) <= 2);
+  const typedAs = (/** @type {string} */ x) => x === typed || typoOf(typed, x);
   const takes = (/** @type {string | null} */ x) =>
     x != null &&
     matchValue(prop, x) != null &&

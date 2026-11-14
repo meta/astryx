@@ -137,6 +137,14 @@ const CASES =
       / background none/,
     ],
     // A reset typed with a typo is that reset, corrected.
+    // A short word two edits from a reset is no typo of it.
+    [
+      'border-style',
+      'line',
+      {on: 'card'},
+      [/ how border-style$/],
+      / border-style none/,
+    ],
     [
       'display',
       'nnone',
