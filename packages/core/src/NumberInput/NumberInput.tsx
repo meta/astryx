@@ -505,7 +505,9 @@ interface NumberInputPropsBase extends Omit<
    * Keeps locale digit grouping while the field is focused. Off by default:
    * focus shows the ungrouped number. When on, each edit regroups the integer
    * digits, the caret stays before the same digits, and Backspace or Delete
-   * next to a separator deletes the digit beyond it. Composition is left
+   * next to a separator deletes the digit beyond it. A draft that holds a
+   * group character the person typed or pasted stays as typed instead, and
+   * Backspace or Delete there removes just the character. Composition is left
    * alone until it ends. A sign, a letter, or a decimal mark stays as typed.
    * @default false
    */
