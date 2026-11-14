@@ -1325,8 +1325,9 @@ export async function editorCompileProblem(
             );
       } catch (e) {
         // A settings file damaged by hand is refused like any refusal,
-        // never as a raw error.
-        if (e instanceof AstryxError) return e;
+        // never as a raw error, with the lines every command gives it.
+        if (e instanceof AstryxError)
+          return edit.editorSavedRefusal(e, root, slug);
         throw e;
       }
       // An own change to the theme source is what compile builds (and what

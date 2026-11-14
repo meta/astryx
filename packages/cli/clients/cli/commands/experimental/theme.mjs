@@ -51,7 +51,6 @@ import {
 } from '../../../../api/theme-edit/theme-edit.mjs';
 import {
   builtInThemes,
-  dialTakesText,
   dialValueFits,
   newFlagList,
   editorCheckedLine,
@@ -1556,22 +1555,19 @@ export function registerExperimentalTheme(group, program) {
               const words = [];
               // Each word in the order typed: one that follows a dial's
               // value with no option between is more of that value, read as
-              // set reads it (`--font Open Sans` is the family Open Sans),
-              // when the dial takes a value of its own kind; a base name
-              // (--like) and a dial of named words (--mode) take one word,
-              // and a word after it is a word of the name.
+              // set reads it (`--font Open Sans` is the family Open Sans,
+              // `--mode Dark Only` the mode dark-only), while a word is left
+              // for the name or the name was typed already; a base name
+              // (--like) takes one word, and a word after it is a word of the
+              // name.
               const valueFlags = new Set(
                 (newDoc.options ?? [])
                   .filter(opt => /</.test(String(opt.flag)))
                   .map(opt => String(opt.flag).split(' ')[0]),
               );
-              const textFlags = new Set(
+              const dialFlags = new Set(
                 (newDoc.options ?? [])
-                  .filter(
-                    opt =>
-                      opt.param === 'options.settings' &&
-                      dialTakesText(String(opt.flag).split(' ')[0].slice(2)),
-                  )
+                  .filter(opt => opt.param === 'options.settings')
                   .map(opt => String(opt.flag).split(' ')[0]),
               );
               const camel = (/** @type {string} */ f) =>
@@ -1586,13 +1582,25 @@ export function registerExperimentalTheme(group, program) {
               /** The words read as more of a value. @type {string[]} */
               const intoValues = [];
               /**
-               * Whether a word is left for the name after argv[i] in the same
-               * run of words (up to the next option): the last word of the
-               * run straight after an option's value is the name.
+               * Whether a word is left for the name after argv[i]: a later
+               * word that is no option's value (`--font Open Sans --like
+               * neutral my-theme` leaves my-theme). The last such word is
+               * the name.
                * @param {number} i
                */
-              const wordLeft = i =>
-                i + 1 < argv.length && !argv[i + 1].startsWith('-');
+              const wordLeft = i => {
+                for (let j = i + 1; j < argv.length; j++) {
+                  const x = argv[j];
+                  if (x === '--') return false;
+                  if (x.startsWith('-')) {
+                    if (valueFlags.has(x.split('=')[0]) && !x.includes('='))
+                      j += 1;
+                    continue;
+                  }
+                  return true;
+                }
+                return false;
+              };
               for (let i = from + 1; from >= 0 && i < argv.length; i++) {
                 const w = argv[i];
                 if (w === '--') {
@@ -1609,7 +1617,7 @@ export function registerExperimentalTheme(group, program) {
                 if (w.startsWith('-')) {
                   const flag = w.split('=')[0];
                   if (valueFlags.has(flag) && !w.includes('=')) i += 1;
-                  open = textFlags.has(flag) ? camel(flag) : null;
+                  open = dialFlags.has(flag) ? camel(flag) : null;
                   continue;
                 }
                 // Words straight after an option's value are more of it

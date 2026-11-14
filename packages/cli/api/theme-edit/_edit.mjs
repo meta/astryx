@@ -770,11 +770,9 @@ async function newTheme(
   // A name that reads as a built-in base (Neutral, stoneTheme, its package
   // @astryxdesign/theme-stone), by the one base reader, is that base: it
   // gets the built-in name's answer below, which keeps the base.
-  // A path names the base its last part does (`./x/theme-stone`).
-  const asBase =
-    typeof name === 'string'
-      ? baseWord(name.replace(/[\\/]+$/, '').replace(/^.*[\\/]/, ''))
-      : '';
+  // A path names the base its last part does (`./x/theme-stone`): the
+  // one base reader reads it so.
+  const asBase = typeof name === 'string' ? baseWord(name) : '';
   if (LIKE.includes(asBase) && name !== asBase) name = asBase;
   if (!slugOk(name)) {
     // A path typed for the name (themes/brand, ./t, t/) names the theme the
@@ -894,7 +892,7 @@ async function newTheme(
       {run: againLines(freeThemeName(cwd, name))},
     );
   if (like != null && !LIKE.includes(like)) {
-    const message = `--like takes a built-in theme (${LIKE.join(', ')}), not "${like}"${fs.existsSync(themeFiles(cwd, String(like)).settings) ? `; ${like} is a theme made here, and a new theme builds only on a built-in one` : ''}. Nothing was changed.${dropped}`;
+    const message = `--like takes a built-in theme (${LIKE.join(', ')}), not "${String(options.like ?? '').trim()}"${fs.existsSync(themeFiles(cwd, String(like)).settings) ? `; ${like} is a theme made here, and a new theme builds only on a built-in one` : ''}. Nothing was changed.${dropped}`;
     // The built-in theme it names in another case, or a typo of one
     // (installed or not, with its install first: the one install helper);
     // the did-you-mean and the lines agree.
@@ -909,7 +907,11 @@ async function newTheme(
                 : [{name: again(name, null), reason: 'build on no theme'}]),
             ]
           : [
-              {name: again(name, likeFixed ?? null), reason: 'do this instead'},
+              // No base read: the same new on no theme, said as such.
+              {
+                name: again(name, likeFixed ?? null),
+                reason: likeFixed ? 'do this instead' : 'build on no theme',
+              },
             ]),
         ...(likeFixed ? [{name: likeFixed, reason: 'did you mean'}] : []),
       ],
@@ -1861,6 +1863,27 @@ function savedEntryRead(thing, value) {
 }
 
 /**
+ * A refusal about what the settings file holds, as every command gives it
+ * (set, undo, show, compile): its lines checked (against the theme as loaded
+ * when there is one), and set's repair for a damaged saved value beside the
+ * undo. The one path for saved damage.
+ * @param {unknown} e
+ * @param {string} slug
+ * @param {string} cwd
+ * @param {{ctx?: import('./_settings.mjs').Ctx, data?: import('./_settings.mjs').ThemeData}} [seen]
+ * @returns {Promise<unknown>}
+ */
+async function savedDamageRefusal(e, slug, cwd, seen = {}) {
+  return withSavedRepair(
+    seen.ctx
+      ? vetSuggestions(e, seen.ctx, slug, /** @type {any} */ (seen.data))
+      : await vetLoadRefusal(e, cwd, slug),
+    slug,
+    cwd,
+  );
+}
+
+/**
  * A refusal of a saved entry whose value the editor no longer accepts,
  * with the repair `set` offers for that value as typed (a typo, a unit, a
  * label read as set reads them) beside the undo: the line is followed as
@@ -1964,10 +1987,21 @@ async function withSavedRepair(e, slug, cwd) {
   for (const name of kept) {
     const read = readSetLine(name, slug);
     // The setting the line names, by its scope: what set skips.
-    /** @type {{thing: string, on?: string, when?: string, state?: string, mode?: 'light' | 'dark'} | undefined} */
+    /** @type {{thing: string, axis?: string, on?: string, when?: string, state?: string, mode?: 'light' | 'dark'} | undefined} */
     const target = read
       ? {
           thing: read.thing,
+          // A headings word sets one half: the tracking for a tracking word,
+          // else the weight (what set replaces).
+          ...(read.thing === 'headings'
+            ? {
+                axis:
+                  HEADING_TRACKING[String(read.value).toLowerCase()] !==
+                  undefined
+                    ? 'tracking'
+                    : 'weight',
+              }
+            : {}),
           ...(read.flags.on ? {on: String(read.flags.on)} : {}),
           ...(read.flags.when ? {when: String(read.flags.when)} : {}),
           ...(read.flags.state ? {state: String(read.flags.state)} : {}),
@@ -2279,22 +2313,37 @@ function refuseStoredTokens(ctx, slug, data, skip) {
 }
 
 /**
- * For `compile`: the refusal `show` gives for saved settings the editor no
- * longer accepts (naming the undo that removes each), or null.
+ * For `compile`: a refusal of what the settings file holds, with the lines
+ * every command gives it (the undo and set's repair).
+ * @param {AstryxError} e
  * @param {string} root
  * @param {string} slug
- * @returns {Promise<import('../error.mjs').AstryxError | null>}
+ * @returns {Promise<AstryxError>}
+ */
+export async function editorSavedRefusal(e, root, slug) {
+  return /** @type {AstryxError} */ (await savedDamageRefusal(e, slug, root));
+}
+
+/**
+ * For `compile`: the refusal `show` gives for saved settings the editor no
+ * longer accepts, with the same lines (the undo and set's repair), or null.
+ * @param {string} root
+ * @param {string} slug
+ * @returns {Promise<AstryxError | null>}
  */
 export async function editorStoredRefusal(root, slug) {
+  /** @type {{ctx?: import('./_settings.mjs').Ctx, data?: import('./_settings.mjs').ThemeData}} */
+  const seen = {};
   try {
-    const ctx = await context(root);
-    refuseStoredTokens(ctx, slug, loadTheme(root, slug));
+    seen.ctx = await context(root);
+    seen.data = loadTheme(root, slug);
+    refuseStoredTokens(seen.ctx, slug, seen.data);
     return null;
   } catch (e) {
-    // With set's repair for a damaged saved value beside its undo, as
-    // show and every change give it.
+    // The lines every command gives saved damage (the undo and set's
+    // repair), as set and show give them.
     if (e instanceof AstryxError) {
-      const repaired = await withSavedRepair(e, slug, root);
+      const repaired = await savedDamageRefusal(e, slug, root, seen);
       return repaired instanceof AstryxError ? repaired : e;
     }
     throw e;
@@ -3725,10 +3774,11 @@ async function change(sub, slug, thing, value, options) {
       obj && typeof obj === 'object'
         ? Object.keys(obj).filter(k => !SCOPE.includes(k))
         : [];
-    const savedForm =
-      typeof obj?.thing === 'string' &&
-      'value' in obj &&
-      rest.every(k => ['thing', 'value', 'source', 'axis'].includes(k));
+    // The saved form is read by its thing and value; a key beside them the
+    // editor does not write (`comment`, `id`) is left out, and said.
+    const SAVED = ['thing', 'value', 'source', 'axis'];
+    const savedForm = typeof obj?.thing === 'string' && 'value' in obj;
+    const unread = savedForm ? rest.filter(k => !SAVED.includes(k)) : [];
     const scoped =
       !savedForm &&
       rest.length === 1 &&
@@ -3736,7 +3786,12 @@ async function change(sub, slug, thing, value, options) {
     if (savedForm || scoped) {
       /** @type {any} */
       const entry = savedForm
-        ? {...obj, value: String(obj.value ?? '')}
+        ? {
+            ...Object.fromEntries(
+              Object.entries(obj).filter(([k]) => !unread.includes(k)),
+            ),
+            value: String(obj.value ?? ''),
+          }
         : {
             ...Object.fromEntries(
               SCOPE.filter(k => k in obj).map(k => [k, obj[k]]),
@@ -3746,7 +3801,7 @@ async function change(sub, slug, thing, value, options) {
           };
       refuse(
         E.ERR_INVALID_ARGUMENT,
-        `This is one setting${savedForm ? ' in the form the settings file saves it' : ' with its scope'}; ${sub} takes its thing${sub === 'set' ? ' and value' : ''}, with its scope as flags.`,
+        `This is one setting${savedForm ? ' in the form the settings file saves it' : ' with its scope'}; ${sub} takes its thing${sub === 'set' ? ' and value' : ''}, with its scope as flags.${unread.length ? ` ${unread.map(k => JSON.stringify(k)).join(', ')} ${unread.length === 1 ? 'is no field' : 'are no fields'} the editor reads, so ${unread.length === 1 ? 'it is' : 'they are'} left out.` : ''}`,
         {
           run: await workingLines(
             sub,
@@ -4006,13 +4061,7 @@ async function change(sub, slug, thing, value, options) {
       carryTyped(
         // A refusal of a saved entry gets set's repair for its value
         // beside the undo.
-        await withSavedRepair(
-          seen.ctx
-            ? vetSuggestions(e, seen.ctx, slug, seen.data)
-            : await vetLoadRefusal(e, options.cwd ?? process.cwd(), slug),
-          slug,
-          options.cwd ?? process.cwd(),
-        ),
+        await savedDamageRefusal(e, slug, options.cwd ?? process.cwd(), seen),
         sub,
         slug,
         oneEntry ? thing : typedThing,
@@ -5584,22 +5633,18 @@ export async function themeEditShow(theme, options = {}) {
   } catch (e) {
     // The settings reader's one refusal, with set's repair for a damaged
     // saved value beside its undo, as every change command gives it.
-    throw await withSavedRepair(
-      await vetLoadRefusal(e, cwd, theme),
-      theme,
-      cwd,
-    );
+    throw await savedDamageRefusal(e, theme, cwd);
   }
   const ctx = await context(cwd);
   // The app copy is written once show succeeds (at its end), never by a
   // build a later refusal puts back.
   holdAfterBuild(ctx);
-  // A damaged saved value gets set's repair beside its undo, as on every
-  // change.
+  // A saved value or scope set refuses gets set's lines (the undo and the
+  // repair), as a change does.
   try {
     refuseStoredTokens(ctx, theme, data);
-  } catch (x) {
-    throw await withSavedRepair(x, theme, cwd);
+  } catch (e) {
+    throw await savedDamageRefusal(e, theme, cwd, {ctx, data});
   }
   await refuseOwnTokenValues(ctx, theme, data);
   // Without React, show still lists the settings and builds the theme, as
@@ -6932,11 +6977,7 @@ async function undoTheme(theme, options) {
   // reader's refusal, its undo and set's repair (never a `new` that is
   // refused for a theme that is there).
   if (!history.length && readsDamaged)
-    throw await withSavedRepair(
-      await vetLoadRefusal(readsDamaged, cwd, theme),
-      theme,
-      cwd,
-    );
+    throw await savedDamageRefusal(readsDamaged, theme, cwd);
   if (!history.length)
     refuse(
       E.ERR_THEME_NOTHING_TO_UNDO,

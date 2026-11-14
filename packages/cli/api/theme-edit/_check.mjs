@@ -2178,18 +2178,22 @@ function propertyProblem(prop, value) {
       // Below the property's range (a negative width) is no size of the
       // other sign: the mirrored value is never offered.
       (takes(joined) && joined !== v ? joined : null) ??
-      // A comma between two bare numbers that the grammar pairs with a
-      // slash (`grid-row 2,4`) separates them only when both are whole
-      // numbers of 1 or more and the property does not take the number a
-      // decimal comma makes (`aspect-ratio 1,5` is 1.5, which it takes);
-      // any other comma between digits (`0,75`) is a decimal comma.
+      // A comma between two whole numbers of 1 or more that the grammar
+      // pairs with a slash separates them (`aspect-ratio 16,9` is 16 / 9,
+      // `grid-row 2,4` is 2 / 4), unless it reads as a decimal comma: written
+      // tight after a 1 (`1,5`) or after one digit with two or more after it
+      // (`1,78`, `2,35`), where the property takes that decimal. Any other
+      // comma between digits (`0,75`) is a decimal comma.
       (() => {
-        const pair = /^\s*([1-9]\d*)\s*,\s*([1-9]\d*)\s*$/.exec(v);
-        return pair &&
-          takes(`${pair[1]} / ${pair[2]}`) &&
-          !takes(`${pair[1]}.${pair[2]}`)
-          ? `${pair[1]} / ${pair[2]}`
-          : null;
+        const pair = /^\s*([1-9]\d*)(\s*),(\s*)([1-9]\d*)\s*$/.exec(v);
+        if (!pair) return null;
+        const [, a, before, after, b] = pair;
+        const decimal =
+          !before &&
+          !after &&
+          (a === '1' || (a.length === 1 && b.length >= 2)) &&
+          takes(`${a}.${b}`);
+        return !decimal && takes(`${a} / ${b}`) ? `${a} / ${b}` : null;
       })() ??
       // A comma between digits is a decimal point (1,5rem is 1.5rem), never
       // a split into layers.
@@ -3693,9 +3697,17 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
             .filter(([, on]) => TARGET.has(on) || FAMILIES[on])
             .map(([w]) => w),
         ].filter(n => n !== lower && n !== dashed);
-        // The one typo ranker (closestOf), each word read as its part.
+        // The one typo ranker (closestOf). A hit that is a part or group
+        // name is that name (`tabel` is table); a word that is no name is
+        // read as its part (`sidebr` is side-nav).
+        const isName = (/** @type {string} */ n) =>
+          TARGET.has(n) || Boolean(FAMILIES[n]);
         return [
-          ...new Set(closestOf(dashed, candidates).map(n => words.get(n) ?? n)),
+          ...new Set(
+            closestOf(dashed, candidates).map(n =>
+              isName(n) ? n : (words.get(n) ?? n),
+            ),
+          ),
         ];
       })();
       // A plain plural of a part (cards, dialogs, tabs) is that part.

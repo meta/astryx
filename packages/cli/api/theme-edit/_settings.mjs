@@ -1608,6 +1608,30 @@ function readEntryWords(data) {
   readTypedEntries(data, notes);
   for (const s of Array.isArray(data?.settings) ? data.settings : []) {
     if (!s || typeof s !== 'object' || typeof s.thing !== 'string') continue;
+    // A dial name saved in a typed form (`text size`, `Text Size`) is that
+    // dial, as set reads the name typed (the one thing reader).
+    if (
+      !DIALS[s.thing] &&
+      ['dial', undefined, null, ''].includes(s.source) &&
+      !s.on
+    ) {
+      const entry = normalizeEntry(s.thing, String(s.value ?? ''));
+      // The name alone: an entry whose value is saved inside its thing
+      // (`corners: pill`) is left to the saved-entry repair.
+      const read =
+        String(entry.value ?? '') === String(s.value ?? '')
+          ? String(entry.thing ?? '')
+          : '';
+      // Not when the theme holds that dial already: the entry is then
+      // damage its own undo removes, never a second copy of the dial.
+      const held = data.settings.some(
+        (/** @type {any} */ x) => x !== s && x?.thing === read && !x.on,
+      );
+      if (read !== s.thing && DIALS[read] && !held) {
+        notes.push(`${s.thing} was saved as "${s.thing}", read as ${read}`);
+        s.thing = read;
+      }
+    }
     if (typeof s.mode === 'string' && s.mode !== 'light' && s.mode !== 'dark') {
       const read = modeWord(s.mode);
       if (read) {
@@ -1825,6 +1849,11 @@ function skips(s, skip) {
   if (typeof skip === 'string') return s.thing === skip;
   return (
     s.thing === skip.thing &&
+    // A headings half set or undone is that half alone, as keyOf reads it
+    // (an entry with no axis is the weight).
+    (s.thing !== 'headings' ||
+      /** @type {any} */ (skip).axis == null ||
+      (s.axis ?? 'weight') === /** @type {any} */ (skip).axis) &&
     (s.on ?? '') === (skip.on ?? '') &&
     (s.when ?? '') === (skip.when ?? '') &&
     (s.state ?? '') === (skip.state ?? '') &&

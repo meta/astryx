@@ -948,12 +948,18 @@ export function modeWord(text) {
  * @returns {string}
  */
 export function baseWord(v) {
-  return String(v ?? '')
-    .trim()
-    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
-    .toLowerCase()
-    .replace(/[\s_]+/g, '-')
-    .replace(/^(@astryxdesign\/)?theme-|-theme$/g, '');
+  return (
+    String(v ?? '')
+      .trim()
+      // A path names the package its last part does
+      // (`./node_modules/@astryxdesign/theme-neutral` is theme-neutral).
+      .replace(/[\\/]+$/, '')
+      .replace(/^.*[\\/]/, '')
+      .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+      .toLowerCase()
+      .replace(/[\s_]+/g, '-')
+      .replace(/^(@astryxdesign\/)?theme-|-theme$/g, '')
+  );
 }
 
 /**
