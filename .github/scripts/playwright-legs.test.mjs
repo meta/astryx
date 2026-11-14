@@ -651,7 +651,12 @@ describe('the interaction leg count job in ci.yml', () => {
     // its count and send every run back to the ten-leg fallback.
     for (const lane of lanes) {
       const job = ci.jobs[lane.id];
-      expect(counter.steps[0]).toEqual(job.steps[0]);
+      // The same checkout, each with the bound its own job's time allows
+      // (ci-checkout-timeout.test.mjs owns the bounds).
+      const {'timeout-minutes': _counterBound, ...counterCheckout} =
+        counter.steps[0];
+      const {'timeout-minutes': _laneBound, ...laneCheckout} = job.steps[0];
+      expect(counterCheckout).toEqual(laneCheckout);
       const keep = "Keep the leg planner from the workflow's commit";
       expect(step(counter, keep).run).toBe(step(job, keep).run);
     }
@@ -1216,9 +1221,15 @@ describe('the interaction proof legs in ci.yml', () => {
     const scopes = Object.keys(join.env).filter(name =>
       /^\$\{\{ steps\.scope\.outputs\.\w+_only \}\}$/.test(join.env[name]),
     );
+    // A lane that starts only when its scope job proves work (the swizzle
+    // proof) passes with that scope set to prove work.
+    const workScopes = Object.keys(join.env).filter(name =>
+      /^\$\{\{ needs\.[\w-]+\.outputs\.mode \}\}$/.test(join.env[name]),
+    );
     const passing = {
       ...Object.fromEntries(laneResults.map(([name]) => [name, 'success'])),
       ...Object.fromEntries(scopes.map(name => [name, 'false'])),
+      ...Object.fromEntries(workScopes.map(name => [name, 'all'])),
       RELEASE_BUMP: 'false',
       RELEASE_BUMP_RESULT: 'skipped',
     };

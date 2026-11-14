@@ -31,18 +31,20 @@
  * @position api/theme-edit — adapter for api/theme-edit/theme-edit.mjs
  */
 
+import {writeThemeTemplate} from '../theme/template/template.mjs';
+import {buildSuggestion, realLocation} from '../theme/build/build.mjs';
 import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
+import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import * as edit from './_edit.mjs';
-import {themeCacheRoot} from './_project.mjs';
+import {baseInstalled, themeCacheRoot} from './_project.mjs';
 import * as preview from './_preview-app.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
-import {
-  findAstryxProject,
-  findPackageRoot,
-} from '../../foundation/fs/paths.mjs';
+import {findPackageRoot} from '../../foundation/fs/paths.mjs';
+import {context, coreApp} from './_context.mjs';
+import {APP_COPY_MARK} from './_marks.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {withFolderLock} from '../../foundation/release/folder-lock.mjs';
 import {
@@ -50,10 +52,38 @@ import {
   quoteCommandArgument,
 } from '../../foundation/env/package-manager.mjs';
 import {LIKE, P} from './_tables.mjs';
-import {camel} from './_settings.mjs';
+
+/** The preview command, as a person runs it. */
+const PREVIEW_WORDS = P.replace(/ editor$/, ' preview');
+import {setLine} from './_check.mjs';
+import {splitCommand} from './_vet.mjs';
+import {
+  SHOWCASE_GROUPS,
+  appCopyBehind,
+  appCopyStale,
+  copyFontsCss,
+  takeFirstAppCopy,
+  writeAppCopy,
+  writeAppCopyAt,
+} from './_preview.mjs';
+import {humanWarn} from '../../foundation/response/json.mjs';
+import {
+  buildColorModes,
+  camel,
+  folderIsEmpty,
+  loadTheme,
+  setAfterBuild,
+  editedThemes,
+  themeFiles,
+  typedThemeName,
+} from './_settings.mjs';
+
+// Every build of a theme writes its app copy (src/themes/<theme>/).
+setAfterBuild(writeAppCopy);
 import {LOCAL_THEME_ROOT} from '../../foundation/config/theme-state.mjs';
 
 export {parsePoints} from './_how.mjs';
+export {newFlagList} from './_edit.mjs';
 import {themeEditHow as howAt} from './_how.mjs';
 
 /**
@@ -91,6 +121,22 @@ export async function themeEditHow(subject, options = {}) {
 export const builtInThemes = () => [...LIKE];
 
 /**
+ * The base the editor can start a theme from in a project: `slug` when it
+ * is a built-in base installed there (the check `new --like` makes), else
+ * neutral.
+ * @param {string | null | undefined} slug
+ * @param {string} cwd
+ * @returns {string}
+ */
+export const editorBaseIn = (slug, cwd) =>
+  slug && LIKE.includes(slug) && baseInstalled(cwd, slug) ? slug : 'neutral';
+
+/** The sections `show --section` takes. */
+export const showSections = () => [...SHOWCASE_GROUPS];
+
+export {dialValueFits} from './_settings.mjs';
+
+/**
  * The project a command acts on: the Astryx project at or above `cwd`, found
  * as `upgrade` finds it (the nearest package that declares an Astryx package
  * in any dependency list; the search stops at a repository root and never
@@ -102,7 +148,9 @@ export const builtInThemes = () => [...LIKE];
  */
 export function projectRoot(cwd) {
   const start = path.resolve(cwd);
-  const project = findAstryxProject(start);
+  // One rule: the nearest folder at or above cwd whose package.json lists
+  // @astryxdesign/core.
+  const project = coreApp(start);
   const pkg = findPackageRoot(start);
   const inReach = (/** @type {string} */ dir) =>
     project ? !path.relative(project, dir).startsWith('..') : true;
@@ -112,13 +160,19 @@ export function projectRoot(cwd) {
     let json;
     try {
       json = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
-    } catch {
+    } catch (e) {
+      // Name the file and what the parser says is wrong, with its place.
+      const rel = path.relative(start, file) || 'package.json';
+      const why = String(/** @type {Error} */ (e).message ?? '').replace(
+        /^Unexpected token.*?, /,
+        '',
+      );
       throw new AstryxError(
-        `${path.relative(start, file) || 'package.json'} is not valid JSON, so the app it belongs to is unknown. Fix it, then run the command again. Nothing was written.`,
+        `${rel} is not valid JSON (${why}), so the app it belongs to is unknown. Fix it, then run the command again. Nothing was written.`,
         [
           {
-            name: runLine(start, 'doctor'),
-            reason: 'names the file and what is wrong in it',
+            name: `\${EDITOR:-vi} ${quoteCommandArgument(rel)}`,
+            reason: 'open the file and fix it',
           },
         ],
         ERROR_CODES.ERR_PROJECT_REQUIRED,
@@ -195,9 +249,15 @@ function lockDir(root) {
  * @param {boolean} [bestEffort] a command that can run read-only runs
  *   without the lock when it cannot be taken (a read-only node_modules),
  *   told so, and then writes nothing
+ * @param {string | null} [again] the command's own words after the CLI
+ *   name, to suggest running it again (never the host process's argv: an
+ *   API caller is not a CLI run)
  * @returns {Promise<T>}
  */
-async function withLock(root, name, fn, bestEffort = false) {
+async function withLock(root, name, fn, bestEffort = false, again = null) {
+  // A preview command, which holds the preview lock, suggests the list of
+  // previews (what the other command may be changing).
+  again ??= name === 'preview' ? 'experimental theme preview list' : null;
   /** @type {string | null} */
   let dir;
   try {
@@ -239,16 +299,17 @@ async function withLock(root, name, fn, bestEffort = false) {
       {
         onBusy: (o, held) => {
           throw new AstryxError(
-            `Another command has been changing ${name.replace(/^theme-/, '')} for 30 seconds${o ? ` (process ${o.pid} on ${o.host}${held != null ? `, holding it ${held} s` : ''})` : ''}. Nothing was changed; run this command again. If no astryx command is running, the lock is left from one that stopped: remove the folder ${lock}.`,
-            // A look that takes no lock: the last build as it is.
-            [
-              {
-                name: name.startsWith('theme-')
-                  ? `${P} show ${name.replace(/^theme-/, '')}`
-                  : 'astryx experimental theme preview list',
-                reason: 'see it as it is now',
-              },
-            ],
+            `Another command has been changing ${name.replace(/^theme-/, '')} for 30 seconds${o ? ` (process ${o.pid} on ${o.host}${held != null ? `, holding it ${held} s` : ''})` : ''}. Nothing was changed; run this command again once the other one ends. If no astryx command is running, the lock is left from one that stopped: remove the folder ${lock}.`,
+            // Every editor command (show too) takes this lock, so none of
+            // them works meanwhile: this same command, once the other ends.
+            again
+              ? [
+                  {
+                    name: runLine(root, again),
+                    reason: 'run it again once the other command ends',
+                  },
+                ]
+              : [],
             ERROR_CODES.ERR_THEME_BUSY,
           );
         },
@@ -324,16 +385,43 @@ const lockName = name =>
  */
 function absolute(result, root, from) {
   if (path.resolve(from) === root) return result;
-  /** @param {any} v @returns {any} */
-  const map = v =>
+  /**
+   * Lines that name project files inside them: `see`, a picture note, the
+   * in-app preview's stale entries. Every project path in them (a theme
+   * file, an in-app preview folder) is made absolute, one style per line.
+   */
+  const PROSE = new Set(['see', 'pictureProblem', 'previewStale']);
+  /** A project-relative path that names a file or folder there. @param {string} p */
+  const inRoot = p => {
+    const bare = p.replace(/\/+$/, '');
+    return (
+      Boolean(bare) &&
+      !path.isAbsolute(bare) &&
+      !bare.startsWith('.') &&
+      fs.existsSync(path.join(root, bare))
+    );
+  };
+  /** @param {any} v @param {string} [key] @returns {any} */
+  const map = (v, key) =>
     typeof v === 'string'
-      ? /^themes\//.test(v)
+      ? // A path alone; a line that starts with one is read as prose below.
+        /^themes\/\S*$/.test(v) && !(key && PROSE.has(key))
         ? path.join(root, v)
-        : v
+        : key && PROSE.has(key)
+          ? v.replace(
+              /(^|[\s(,])((?:themes|src|app)\/[^\s,;)]*)/g,
+              (all, before, file) =>
+                /^themes\//.test(file) || inRoot(file)
+                  ? `${before}${path.join(root, file)}`
+                  : all,
+            )
+          : v
       : Array.isArray(v)
-        ? v.map(map)
+        ? v.map(x => map(x, key))
         : v && typeof v === 'object'
-          ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, map(x)]))
+          ? Object.fromEntries(
+              Object.entries(v).map(([k, x]) => [k, map(x, k)]),
+            )
           : v;
   return map(result);
 }
@@ -346,9 +434,11 @@ function absolute(result, root, from) {
  * @param {O} options
  * @param {string | null} lock
  * @param {(o: O & {cwd: string}) => Promise<T>} fn
+ * @param {boolean} [bestEffort]
+ * @param {string | null} [again] the command's own words, for a busy lock
  * @returns {Promise<T>}
  */
-async function inProject(options, lock, fn, bestEffort = false) {
+async function inProject(options, lock, fn, bestEffort = false, again = null) {
   const from = options.cwd ?? process.cwd();
   const o = atRoot(options);
   try {
@@ -360,6 +450,7 @@ async function inProject(options, lock, fn, bestEffort = false) {
           lock,
           locked => fn(locked ? o : {...o, readOnly: true}),
           bestEffort,
+          again,
         )
       : await fn(o);
     return absolute(r, o.cwd, from);
@@ -434,53 +525,187 @@ const withThemeLock = o => ({
   ) => withLock(o.cwd, lockName(slug), fn),
 });
 
+/**
+ * A command's own words after the CLI name, from what it was called with,
+ * every option kept: set and undo as `set` writes them (scope flags and
+ * --only), new with --like and each dial, --png where given.
+ * @param {string} line a command as the editor writes one (`astryx …`)
+ * @param {{png?: boolean}} [o]
+ */
+const words = (line, o = {}) =>
+  `${line.replace(/^astryx /, '').trimEnd()}${o.png ? ' --png' : ''}`;
+
 /** @type {typeof edit.themeEditNew} */
 export const themeEditNew = (name, options = {}) =>
-  inProject(options, lockName(name), o => edit.themeEditNew(name, o));
+  inProject(
+    options,
+    lockName(name),
+    o => edit.themeEditNew(name, o),
+    false,
+    words(
+      `${P} new ${quoteCommandArgument(name)} ${edit
+        .newFlagList(
+          options.like,
+          options.settings ?? {},
+          /** @type {boolean} */ (options.png),
+        )
+        .join(' ')}`,
+    ),
+  );
 /** @type {typeof edit.themeEditSet} */
 export const themeEditSet = (theme, thing, value, options = {}) =>
-  inProject(options, lockName(theme), o =>
-    edit.themeEditSet(theme, thing, value, o),
+  inProject(
+    options,
+    lockName(theme),
+    o => edit.themeEditSet(theme, thing, value, o),
+    false,
+    words(setLine(theme, thing, value, options), options),
   );
 /** @type {typeof edit.themeEditUndo} */
 export const themeEditUndo = (theme, options = {}) =>
-  inProject(options, lockName(theme), o => edit.themeEditUndo(theme, o));
+  inProject(
+    options,
+    lockName(theme),
+    o => edit.themeEditUndo(theme, o),
+    false,
+    words(
+      options.thing
+        ? setLine(
+            theme,
+            options.thing,
+            /** @type {string} */ (options.value ?? ''),
+            options,
+            true,
+          )
+        : `${P} undo ${theme}`,
+      options,
+    ),
+  );
 /** @type {typeof edit.themeEditShow} */
 export const themeEditShow = (theme, options = {}) =>
-  inProject(options, lockName(theme), o => edit.themeEditShow(theme, o), true);
+  inProject(
+    options,
+    lockName(theme),
+    o => edit.themeEditShow(theme, o),
+    true,
+    words(
+      `${P} show ${theme}${options.section ? ` --section ${quoteCommandArgument(String(options.section))}` : ''}`,
+      options,
+    ),
+  );
 /** @type {typeof preview.themeEditPreviewAdd} */
 export const themeEditPreviewAdd = (description, options = {}) =>
-  inProject(options, 'preview', o =>
-    preview.themeEditPreviewAdd(description, withThemeLock(o)),
+  stopTold(
+    `a preview change stopped part way is finished by the next ${PREVIEW_WORDS} add, and one written in full stands (${PREVIEW_WORDS} list says which)`,
+    () =>
+      inProject(options, 'preview', o =>
+        preview.themeEditPreviewAdd(description, withThemeLock(o)),
+      ),
   );
+
+/**
+ * Run a preview command with a stop (Ctrl-C, SIGTERM) heard for its whole
+ * run, and after it: the stop ends the process as stopped, with one line
+ * saying where the change stands (a change stopped part way is finished by
+ * the next preview command), never an ok with exit 0.
+ * @template T
+ * @param {string} where where the change stands, and what finishes it
+ * @param {() => Promise<T>} fn
+ * @returns {Promise<T>}
+ */
+async function stopTold(where, fn) {
+  const on = (/** @type {NodeJS.Signals} */ sig) => {
+    process.removeListener('SIGINT', on);
+    process.removeListener('SIGTERM', on);
+    process.stderr.write(`Stopped: ${where}.\n`);
+    // With no other listener (a lock's, which ends the process itself),
+    // the stop ends it here.
+    if (process.listenerCount(sig) === 0) process.kill(process.pid, sig);
+  };
+  process.on('SIGINT', on);
+  process.on('SIGTERM', on);
+  try {
+    const r = await fn();
+    // A turn of the event loop, so a stop that came while the work ran
+    // without a pause is heard now, before the result is printed.
+    await new Promise(resolve => setImmediate(resolve));
+    // Every listener added here is removed on return: the caller's process
+    // keeps its own stop handling. The CLI client, which owns its process,
+    // holds a stop that lands while it prints the result.
+    return r;
+  } finally {
+    process.removeListener('SIGINT', on);
+    process.removeListener('SIGTERM', on);
+  }
+}
 /**
  * `preview app` runs from the project root, with `dir` kept pointing where
  * it was given. With a theme it holds that theme's lock, since it may build
  * the theme and copies its files: a `set` beside it waits.
  * @type {typeof preview.themeEditPreviewApp}
  */
-export const themeEditPreviewApp = (dir, options = {}) => {
+export const themeEditPreviewApp = async (dir, options = {}) => {
   const from = options.cwd ?? process.cwd();
-  return inProject(
-    options,
-    options.theme == null ? null : lockName(options.theme),
-    o =>
-      preview.themeEditPreviewApp(
-        typeof dir === 'string' && dir.trim() && dir === dir.trim()
-          ? path.relative(o.cwd, path.resolve(from, dir)) || '.'
-          : dir,
-        o,
-      ),
-    true,
+  return fromHere(
+    await stopTold(
+      `the new app may be part made; ${PREVIEW_WORDS} app with a new folder name makes a whole one`,
+      () =>
+        inProject(
+          options,
+          options.theme == null ? null : lockName(options.theme),
+          o =>
+            preview.themeEditPreviewApp(
+              typeof dir === 'string' && dir.trim() && dir === dir.trim()
+                ? path.relative(o.cwd, path.resolve(from, dir)) || '.'
+                : dir,
+              o,
+            ),
+          true,
+        ),
+    ),
+    from,
   );
 };
+/**
+ * A new app's folder and its open line, as they work from where the command
+ * ran (`cd ../../theme-app` from src/app), not from the project root.
+ * @template T
+ * @param {T} r
+ * @param {string} from
+ * @returns {T}
+ */
+function fromHere(r, from) {
+  const d = /** @type {any} */ (r)?.data;
+  if (!d || typeof d.folder !== 'string') return r;
+  const root = projectRoot(from);
+  if (!root || path.resolve(from) === root) return r;
+  const here = path.relative(from, path.join(root, d.folder)) || '.';
+  const shown = here.split(path.sep).join('/');
+  const cdArg = quoteCommandArgument(
+    shown.startsWith('-') ? `./${shown}` : shown,
+  );
+  return /** @type {T} */ ({
+    ...r,
+    data: {
+      ...d,
+      folder: shown,
+      ...(typeof d.open === 'string'
+        ? {open: d.open.replace(/^cd \S+ &&/, `cd ${cdArg} &&`)}
+        : {}),
+    },
+  });
+}
 /** @type {typeof preview.themeEditPreviewList} */
 export const themeEditPreviewList = (options = {}) =>
   inProject(options, null, async o => preview.themeEditPreviewList(o));
 /** @type {typeof preview.themeEditPreviewRemove} */
 export const themeEditPreviewRemove = (page, options = {}) =>
-  inProject(options, 'preview', o =>
-    preview.themeEditPreviewRemove(page, withThemeLock(o)),
+  stopTold(
+    `a removal stopped part way is finished by the next ${PREVIEW_WORDS} remove, and one made in full stands (${PREVIEW_WORDS} list says which)`,
+    () =>
+      inProject(options, 'preview', o =>
+        preview.themeEditPreviewRemove(page, withThemeLock(o)),
+      ),
   );
 
 /**
@@ -569,32 +794,198 @@ function runLine(cwd, rest) {
  * @returns {AstryxError | null}
  */
 export function editorThemeRefusal(err, cwd) {
-  // A refused compile ends here: its theme locks go now, not at exit.
-  void releaseCompileHold?.();
+  // A refused compile ends here: its theme locks go now, not at exit, and
+  // it writes no app copy (from build files it refused).
+  void releaseCompileHold?.(true);
   if (
     err.code !== ERROR_CODES.ERR_UNKNOWN_THEME &&
     !/unknown theme|is not added|not a theme package/i.test(err.message)
   )
     return null;
   const root = projectRoot(cwd);
-  const named = /"([a-z][a-z0-9-]*)"|'([a-z][a-z0-9-]*)'/.exec(err.message);
-  const slug = named ? editorThemeOf(root, named[1] ?? named[2]) : null;
+  // The name as typed, read the way the editor reads a theme name: a path
+  // to its folder or a file in it, in any case, names the theme.
+  const named = /"([^"]+)"|'([^']+)'/.exec(err.message);
+  const word = named ? typedThemeName(named[1] ?? named[2]) : '';
+  const slug = word ? editorThemeOf(root, word) : null;
   if (!slug) return null;
+  // The command that refused: list, add, use, remove or eject.
+  const verb =
+    process.argv
+      .slice(2)
+      .find(a => ['list', 'add', 'use', 'remove', 'eject'].includes(a)) ?? null;
+  // eject copies a theme package's source into the app; an editor theme's
+  // source is the app's already.
+  if (verb === 'eject')
+    return new AstryxError(
+      `${slug} is a theme the editor made: its source is yours already, themes/${slug}/${slug}.theme.ts (your edits there survive every change), and the editor changes the rest. eject copies a theme package's source into the app, so it has nothing to do for ${slug}.`,
+      [
+        {
+          name: runLine(cwd, `experimental theme editor show ${slug}`),
+          reason: 'the theme as it is now',
+        },
+      ],
+      ERROR_CODES.ERR_UNKNOWN_THEME,
+    );
+  const copyThere = !folderIsEmpty(path.join(root, LOCAL_THEME_ROOT, slug));
+  // A path to the theme ("themes/d", "src/themes/d"): the commands take its
+  // name.
+  const typed = named ? (named[1] ?? named[2]) : '';
+  if (copyThere && verb && typed !== slug)
+    return new AstryxError(
+      `"${typed}" is ${/[\\/]|\.[a-z]+$/i.test(typed) ? 'a path' : "not the theme's name"}; the theme commands take the theme's name: ${slug}.`,
+      [
+        {
+          name: runLine(cwd, `theme ${verb} ${slug}`),
+          reason: 'the same, by name',
+        },
+      ],
+      ERROR_CODES.ERR_UNKNOWN_THEME,
+    );
   // A local theme of that name (a fork in the app's own themes folder) is
   // one the stable commands take: their own message stands.
-  if (fs.existsSync(path.join(root, LOCAL_THEME_ROOT, slug))) return null;
-  const id = `${camel(slug)}Theme`;
-  const key = /^[a-z][a-z0-9]*$/i.test(slug) ? slug : JSON.stringify(slug);
+  // A folder of only system files (or empty) holds no theme: as absent.
+  if (copyThere) return null;
+  // No app copy yet (a theme made before the editor wrote one, or the
+  // copy removed): the next build writes it, then the same steps every
+  // place gives (`wiring` of new and show).
+  // A one-mode theme's mode is a step too, as in `wiring`.
+  /** @type {'light' | 'dark' | 'system'} */
+  let mode = 'system';
+  try {
+    const m = JSON.parse(
+      fs.readFileSync(
+        path.join(root, 'themes', slug, `${slug}.settings.json`),
+        'utf8',
+      ),
+    ).mode;
+    if (m === 'light-only') mode = 'light';
+    else if (m === 'dark-only') mode = 'dark';
+  } catch {
+    // Settings that do not read: both modes.
+  }
+  const steps = preview.addWiring(root, slug, mode);
   return new AstryxError(
-    `${slug} is a theme the editor made (themes/${slug}/), not a theme package, so list, add, use, remove and eject do not take it. To use it, import its module and its stylesheet in a file of your own (import {${id}} from './themes/${slug}/${slug}.js'; import './themes/${slug}/${slug}.css';) and merge it into the themes there ({...themes, ${key}: ${id}}); do not add it to src/astryx-themes.ts, which add, use and remove write again. Change it with the editor.`,
+    `${slug} is a theme the editor made (themes/${slug}/), and it has no app copy yet: list, add, use, remove and eject take the copy every build of it writes in src/themes/${slug}/, a standard local theme. Build it once, then: ${steps.join('; ')}.`,
     [
       {
         name: runLine(cwd, `experimental theme editor show ${slug}`),
-        reason: 'see the theme',
+        reason: `builds it and writes its app copy, src/themes/${slug}/`,
+      },
+      {
+        name: runLine(cwd, `theme add ${slug}`),
+        reason: 'then adds it to the app',
       },
     ],
     ERROR_CODES.ERR_UNKNOWN_THEME,
   );
+}
+
+/**
+ * A refused compile whose first suggestion is another compile: that compile
+ * is run through compile's own checks before it is offered (in memory,
+ * nothing built), and each repair a refusal of it offers is folded into the
+ * one line. An --out outside the working folder is dropped, and the reason
+ * says why; when the rest cannot be repaired, the reason says so. A line
+ * that starts with `cd` runs elsewhere, so it is not checked from here.
+ * @param {AstryxError} err
+ * @param {string} cwd
+ * @returns {Promise<AstryxError>}
+ */
+export async function editorFollowCompile(err, cwd) {
+  const list = err.suggestions ?? [];
+  const first = list[0];
+  // The build's own refusals name `theme build`; the group's words replace
+  // those words when the refusal is shown.
+  const wordsIn = (/** @type {string} */ line) =>
+    [' experimental theme compile ', ' theme build '].find(w =>
+      line.includes(w),
+    );
+  if (!first || /^cd /.test(first.name) || !wordsIn(first.name)) return err;
+  /** @param {string} line */
+  const read = line => {
+    const words = wordsIn(line);
+    if (!words) return null;
+    const args = splitCommand(line.slice(line.indexOf(words) + words.length));
+    if (!args) return null;
+    /** @type {{source?: string, out?: string, iconsSpecifier?: string, check?: boolean}} */
+    const r = {};
+    for (let i = 0; i < args.length; i += 1) {
+      const a = args[i];
+      if (a === '--check') r.check = true;
+      else if (a === '--out') r.out = args[(i += 1)];
+      else if (a === '--icons-specifier') r.iconsSpecifier = args[(i += 1)];
+      else if (a.startsWith('-') || r.source) return null;
+      else r.source = a;
+    }
+    return r.source ? r : null;
+  };
+  const COMPILE = {group: 'experimental theme', build: 'compile'};
+  const inside = (/** @type {string} */ p) => {
+    const rel = path.relative(
+      realLocation(path.resolve(cwd)),
+      realLocation(path.resolve(p)),
+    );
+    return !rel.startsWith('..') && !path.isAbsolute(rel);
+  };
+  let line = first.name;
+  let reason = first.reason;
+  for (let i = 0; i < 6; i += 1) {
+    const r = read(line);
+    if (!r || !r.source) break;
+    const source = r.source;
+    const abs = path.resolve(cwd, source);
+    if (r.out && !inside(path.resolve(cwd, r.out))) {
+      line = buildSuggestion(
+        source,
+        {check: r.check, iconsSpecifier: r.iconsSpecifier},
+        cwd,
+        COMPILE,
+      );
+      reason = `do this instead, without --out: ${r.out} is outside the working folder, where a build may not write, so the outputs go beside the source`;
+      continue;
+    }
+    /** @type {{message: string, next?: string} | null} */
+    let problem = null;
+    if (!fs.existsSync(abs)) problem = {message: `${source} is not there`};
+    else if (fs.statSync(abs).isDirectory()) {
+      const own = `${path.basename(abs)}.theme.ts`;
+      problem = {
+        message: `${source} is a folder`,
+        next: fs.existsSync(path.join(abs, own))
+          ? buildSuggestion(
+              path.posix.join(source.replace(/\/+$/, ''), own),
+              r,
+              cwd,
+              COMPILE,
+            )
+          : undefined,
+      };
+    } else if (!r.out && !inside(path.dirname(abs)))
+      problem = {message: `${source} is outside the working folder`};
+    else {
+      const refused = await editorCompileProblem([source], {cwd, ...r});
+      if (refused)
+        problem = {
+          message: refused.message,
+          next: refused.suggestions?.[0]?.name,
+        };
+    }
+    if (!problem) break;
+    if (problem.next && problem.next !== line) {
+      line = problem.next;
+      if (/^cd /.test(line)) break;
+      continue;
+    }
+    reason = `${reason}; it is still refused: ${problem.message}`;
+    break;
+  }
+  if (line === first.name && reason === first.reason) return err;
+  err.suggestions = [
+    {...first, name: line, reason},
+    ...list.slice(1).filter(x => x.name !== line),
+  ];
+  return err;
 }
 
 /**
@@ -603,24 +994,173 @@ export function editorThemeRefusal(err, cwd) {
  * take an editor theme, and `--check` checks an editor theme by the editor's
  * own rules (waiting for a change in progress).
  * @param {string[]} files
- * @param {{cwd: string, check?: boolean, family?: boolean}} options
+ * @param {{cwd: string, check?: boolean, family?: boolean, iconsSpecifier?: string, out?: string}} options
+ *   `check`, `out` and `iconsSpecifier` are kept in every compile a refusal
+ *   suggests
  * @returns {Promise<AstryxError | null>}
  */
-export async function editorCompileProblem(files, {cwd, check, family}) {
+export async function editorCompileProblem(
+  files,
+  {cwd, check, family, iconsSpecifier, out},
+) {
   const cwdRoot = projectRoot(cwd);
+  const COMPILE = {group: 'experimental theme', build: 'compile'};
+  /**
+   * The compile of `source` (from `from`) with the caller's mode: a check
+   * stays a check, and --out names the same file from there.
+   * @param {string} source @param {string} from
+   */
+  const compileLine = (source, from) =>
+    buildSuggestion(
+      source,
+      {
+        check,
+        iconsSpecifier,
+        out: out
+          ? path.relative(from, path.resolve(cwd, out)) || out
+          : undefined,
+      },
+      from,
+      COMPILE,
+    );
+  // An --out into an editor theme's app copy folder: the copy refresh would
+  // write the theme's own build over it.
+  if (out) {
+    // Any --out in the copy folder, the folder itself too, in any case,
+    // written with backslashes or through a link, as the build reads it.
+    const rel = path
+      .relative(
+        realLocation(cwdRoot),
+        realLocation(path.resolve(cwd, slashed(out))),
+      )
+      .split(path.sep)
+      .filter(Boolean)
+      .map(x => x.toLowerCase());
+    if (
+      rel[0] === 'src' &&
+      rel[1] === 'themes' &&
+      rel.length >= 3 &&
+      fs.existsSync(themeFiles(cwdRoot, rel[2]).settings)
+    ) {
+      const t = rel[2];
+      return new AstryxError(
+        `--out ${out} is in ${t}'s app copy (src/themes/${t}/), which the editor writes after every build of themes/${t}/; write the build somewhere else.`,
+        [
+          {
+            // The same compile without --out: it builds into themes/<t>/,
+            // and the copy follows.
+            // From a subfolder, with the cd to the app root, where an
+            // editor theme compiles.
+            name:
+              path.resolve(cwd) === path.resolve(cwdRoot)
+                ? buildSuggestion(
+                    files.length === 1 ? files[0] : `themes/${t}/${t}.theme.ts`,
+                    {check, iconsSpecifier},
+                    cwd,
+                    COMPILE,
+                  )
+                : `cd ${quoteCommandArgument(path.relative(cwd, cwdRoot) || '.')} && ${buildSuggestion(
+                    files.length === 1
+                      ? path.relative(cwdRoot, path.resolve(cwd, files[0])) ||
+                          files[0]
+                      : `themes/${t}/${t}.theme.ts`,
+                    {check, iconsSpecifier},
+                    cwdRoot,
+                    COMPILE,
+                  )}`,
+            reason: 'do this instead',
+          },
+        ],
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
+    }
+  }
   for (const file of files) {
-    const at = editorThemeAt(cwdRoot, path.resolve(cwd, file));
+    const abs = path.resolve(cwd, file);
+    const relParts = path
+      .relative(
+        realLocation(cwdRoot),
+        realLocation(path.resolve(cwd, slashed(file))),
+      )
+      .split(path.sep);
+    // The app's theme module `theme add` writes: not a theme source.
+    if (relParts.join('/') === 'src/astryx-themes.ts')
+      return new AstryxError(
+        `${file} is the app's theme module (\`theme add\` writes it), not a theme source; compile the editor theme instead.`,
+        editedThemes(cwdRoot)
+          .slice(0, 3)
+          .map(t => ({
+            name: compileLine(`themes/${t}/${t}.theme.ts`, cwdRoot),
+            reason: 'do this instead',
+          })),
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
+    // A file of an editor theme's app copy (src/themes/<t>/): the copy
+    // is written from themes/<t>/, so that is what compiles.
+    if (
+      relParts[0] === 'src' &&
+      relParts[1] === 'themes' &&
+      (relParts.length === 3 || relParts.length === 4) &&
+      fs.existsSync(themeFiles(cwdRoot, relParts[2]).settings) &&
+      // A file of yours there (no editor mark, no build header) compiles
+      // like any theme source.
+      (relParts.length === 3 ||
+        isCopyFile(path.join(cwdRoot, ...relParts)) ||
+        relParts[3] === `${camel(relParts[2])}Theme.ts`)
+    ) {
+      const t = relParts[2];
+      const own = `themes/${t}/${t}.theme.ts`;
+      if (path.resolve(cwd) !== path.resolve(cwdRoot))
+        return new AstryxError(
+          `${t} is a theme the editor made; compile it from the app root (${path.relative(cwd, cwdRoot) || '.'}), where the editor builds it.`,
+          [
+            {
+              name: `cd ${quoteCommandArgument(path.relative(cwd, cwdRoot) || '.')} && ${compileLine(own, cwdRoot)}`,
+              reason: 'do this instead',
+            },
+          ],
+          ERROR_CODES.ERR_INVALID_ARGUMENT,
+        );
+      // Its source too: a compile of the copy builds neither the theme
+      // nor a current copy.
+      return new AstryxError(
+        `${file} is ${relParts.length === 3 ? '' : 'part of '}${t}'s app copy, which the editor writes from themes/${t}/ after every build; compile the theme itself.`,
+        [
+          {name: compileLine(own, cwd), reason: 'do this instead'},
+          {
+            name: runLine(cwdRoot, `experimental theme editor show ${t}`),
+            reason: 'writes the app copy again from the theme',
+          },
+        ],
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
+    }
+    const at = editorThemeAt(cwdRoot, abs);
     if (!at || !editorOwnFile(at.slug, file)) continue;
     const {root, slug} = at;
     const source = `themes/${slug}/${slug}.theme.ts`;
+    // An editor theme is built from its project's root, as every editor
+    // command runs there: from a subfolder the build would write outside
+    // its working folder. The run names the root.
+    if (path.resolve(cwd) !== path.resolve(root))
+      return new AstryxError(
+        `${slug} is a theme the editor made; compile it from the app root (${path.relative(cwd, root) || '.'}), where the editor builds it.`,
+        [
+          {
+            name: `cd ${quoteCommandArgument(path.relative(cwd, root) || '.')} && ${compileLine(source, root)}`,
+            reason: 'do this instead',
+          },
+        ],
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
     if (/\.settings\.(ts|json)$/.test(file))
       return new AstryxError(
         `${file} is the editor's own settings for ${slug}, not a theme source; compile the theme source.`,
         [
           {
-            name: runLine(
+            name: compileLine(
+              path.relative(cwd, path.join(root, source)) || source,
               cwd,
-              `experimental theme compile ${quoteCommandArgument(path.relative(cwd, path.join(root, source)) || source)}`,
             ),
             reason: 'do this instead',
           },
@@ -632,9 +1172,9 @@ export async function editorCompileProblem(files, {cwd, check, family}) {
         `${slug} is a theme the editor made; --family builds package theme families, not editor themes. Compile it on its own.`,
         [
           {
-            name: runLine(
+            name: compileLine(
+              path.relative(cwd, path.join(root, source)) || source,
               cwd,
-              `experimental theme compile ${quoteCommandArgument(path.relative(cwd, path.join(root, source)) || source)}`,
             ),
             reason: 'do this instead',
           },
@@ -661,6 +1201,28 @@ export async function editorCompileProblem(files, {cwd, check, family}) {
         if (e instanceof AstryxError) return e;
         throw e;
       }
+      // An own change to the theme source is what compile builds (and what
+      // --check compares): never a reason to refuse it.
+      if (
+        why &&
+        /\.theme\.ts (or a module it imports )?changed since the last build$/.test(
+          why,
+        )
+      )
+        why = null;
+      // A missing built output is one compile writes itself.
+      if (
+        why &&
+        !check &&
+        /^[^/]+\.(css|js|d\.ts|css\.d\.ts) was missing$/.test(why)
+      )
+        why = null;
+      // Saved settings the editor no longer accepts: show refuses them too,
+      // so the refusal names the undo that removes each.
+      if (why) {
+        const stored = await edit.editorStoredRefusal(root, slug);
+        if (stored) return stored;
+      }
       if (why && !check)
         return new AstryxError(
           `${slug}'s generated settings do not match its settings (${why}), so compile would build the old ones. The editor builds it from its settings.`,
@@ -683,6 +1245,16 @@ export async function editorCompileProblem(files, {cwd, check, family}) {
           ],
           ERROR_CODES.ERR_THEME_INVALID,
         );
+      // A [light, dark] pair on a token that is not a color, however the
+      // file writes it: what the theme builds now is read (never written
+      // beside it), as the editor's own build reads it.
+      if (path.basename(file) === `${slug}.theme.ts`) {
+        const pairs = await edit.editorPairRefusal(root, slug);
+        if (pairs) return pairs;
+        // A token value the file gives that set refuses ships as it is.
+        const values = await edit.editorOwnTokenRefusal(root, slug);
+        if (values) return values;
+      }
     }
   }
   return null;
@@ -691,7 +1263,7 @@ export async function editorCompileProblem(files, {cwd, check, family}) {
 /** The editor themes a running `compile` holds the lock of, by project and name. */
 const COMPILE_HELD = new Set();
 
-/** @type {(() => Promise<void>) | null} The release of the running compile's hold. */
+/** @type {((refused?: boolean) => Promise<void>) | null} The release of the running compile's hold; `refused`: it wrote nothing, so no app copy either. */
 let releaseCompileHold = null;
 
 /**
@@ -711,13 +1283,23 @@ export async function editorThemeHold(files, {cwd}) {
     const at = editorThemeAt(cwdRoot, path.resolve(cwd, f));
     if (at && editorOwnFile(at.slug, f))
       found.set(`${at.root}\0${at.slug}`, at);
+    // The app copy's source (src/themes/<t>/<t>Theme.ts) of an editor
+    // theme: built under the theme's lock, so it never lands between a
+    // change's two writes.
+    const copy = appCopyTheme(cwdRoot, path.resolve(cwd, f));
+    if (copy) found.set(`${copy.root}\0${copy.slug}`, copy);
   }
   const themes = [...found.keys()].sort().map(k => found.get(k));
-  /** @type {Array<() => Promise<void>>} */
+  /** @type {Array<{copy: (refused: boolean) => boolean, finish: (later: boolean) => Promise<void>}>} */
   const releases = [];
-  const releaseAll = async () => {
+  // Every theme's copy is written first, at once (a refusal ends the run
+  // without waiting), then each lock goes.
+  const releaseAll = async (refused = false) => {
     if (releaseCompileHold === releaseAll) releaseCompileHold = null;
-    for (const r of releases.splice(0).reverse()) await r();
+    const items = releases.splice(0);
+    const later = items.map(x => x.copy(refused));
+    for (const [i, x] of [...items.entries()].reverse())
+      await x.finish(later[i]);
   };
   releaseCompileHold = releaseAll;
   for (const {
@@ -735,6 +1317,17 @@ export async function editorThemeHold(files, {cwd}) {
       ready = r;
     });
     const key = `${root}\0${slug}`;
+    // When the lock was taken, and the context a copy write needs (its
+    // font stylesheets), ready before the build so the copy is written at
+    // once when the run ends.
+    const heldAt = Date.now() - 1;
+    /** @type {any} */
+    let copyCtx = null;
+    try {
+      copyCtx = await context(root);
+    } catch {
+      copyCtx = null;
+    }
     const done = withLock(root, lockName(slug), async () => {
       COMPILE_HELD.add(key);
       ready();
@@ -749,10 +1342,285 @@ export async function editorThemeHold(files, {cwd}) {
       await releaseAll();
       throw err;
     }
-    releases.push(async () => {
-      release();
-      await done;
+    releases.push({
+      // A compile that wrote the build refreshes the app's copy too
+      // (src/themes/<theme>/), under the same lock; a check writes
+      // nothing. Each theme's copy follows its own build: a theme this run
+      // built (its build now matches its settings) gets its copy, whatever
+      // a later theme did; one that was refused or failed keeps its copy.
+      // True when the copy still needs its font stylesheet from the
+      // theme's settings (written in finish).
+      copy: (/** @type {boolean} */ refused) => {
+        if (process.argv.includes('--check')) return false;
+        // This run built the theme: its outputs were written since the
+        // lock was taken, or the run ended well. A refused or failed
+        // compile writes no copy.
+        const f = themeFiles(root, slug);
+        const written = [f.css, f.js].some(x => {
+          try {
+            return fs.statSync(x).mtimeMs >= heldAt;
+          } catch {
+            return false;
+          }
+        });
+        if (!written && (refused || (process.exitCode ?? 0) !== 0))
+          return false;
+        try {
+          // From what was just built, its font stylesheets from the fonts
+          // the theme loads now.
+          if (copyCtx) writeAppCopy(copyCtx, slug, loadTheme(root, slug));
+          else writeAppCopyAt(root, slug, null);
+        } catch {
+          try {
+            writeAppCopyAt(root, slug, null);
+          } catch {
+            // A theme that does not load keeps its copy as it was.
+          }
+        }
+        return false;
+      },
+      finish: async () => {
+        if (!process.argv.includes('--check')) {
+          // The first write of the app copy is named once (the compile's
+          // own JSON envelope is the stable command's).
+          const wrote = takeFirstAppCopy(root, slug);
+          if (wrote)
+            humanWarn(
+              `wrote ${slug}'s app copy, a local theme \`theme add ${slug}\` takes, written again after every build: ${wrote.join(', ')}`,
+            );
+          // A copy a file or a link keeps behind, or one that could not be
+          // written, is said, as set and show say it.
+          const stale = appCopyStale(root, slug).appCopyStale;
+          if (stale) humanWarn(stale);
+        }
+        release();
+        await done;
+      },
     });
   }
   return releaseAll;
+}
+
+/** @param {string} p a path as typed, with Windows separators read as `/` */
+const slashed = p => String(p).replace(/\\/g, '/');
+
+/**
+ * Whether a file in an app copy folder is the editor's: its mark, or the
+ * header the build writes. A missing file counts (it would be the copy's).
+ * @param {string} file
+ */
+function isCopyFile(file) {
+  try {
+    const head = fs.readFileSync(file, 'utf8').slice(0, 600);
+    return (
+      head.includes(APP_COPY_MARK) ||
+      /@generated by `astryx theme build`/.test(head)
+    );
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * The editor theme whose app copy source a file is
+ * (`src/themes/<t>/<t>Theme.ts`, with themes/<t>/ an editor theme), or
+ * null.
+ * @param {string} root the project root
+ * @param {string} file absolute
+ * @returns {{root: string, slug: string} | null}
+ */
+function appCopyTheme(root, file) {
+  const rel = path.relative(root, file).split(path.sep);
+  if (rel.length !== 4 || rel[0] !== 'src' || rel[1] !== 'themes') return null;
+  const slug = rel[2];
+  if (rel[3] !== `${camel(slug)}Theme.ts`) return null;
+  return fs.existsSync(themeFiles(root, slug).settings) ? {root, slug} : null;
+}
+
+/**
+ * For `compile` of an editor theme: `appCopyStale` for its result data when
+ * the app copy is behind (the same line set and show give); null for any
+ * other file or a current copy.
+ * @param {string} file the path as given
+ * @param {string} cwd
+ * @param {{check: boolean, upToDate?: boolean}} opts `upToDate`: the
+ *   check's own verdict on the theme's outputs
+ * @returns {Promise<Record<string, unknown> | null>}
+ */
+export async function editorBuildExtra(file, cwd, opts) {
+  const root = projectRoot(cwd);
+  const abs = path.resolve(cwd, file);
+  const own = editorThemeAt(root, abs);
+  const slug =
+    appCopyTheme(root, abs)?.slug ??
+    (own && editorOwnFile(own.slug, file) ? own.slug : null);
+  if (!slug) return null;
+  if (opts.check) {
+    // A theme output that is stale is the check's own finding (it names
+    // the file); the copy is compared only with a current build.
+    if (opts.upToDate === false) return null;
+    /** @type {string[] | null} */
+    let fonts;
+    try {
+      fonts = copyFontsCss(await context(root), slug, loadTheme(root, slug));
+    } catch {
+      fonts = null;
+    }
+    const behind = appCopyBehind(root, slug, fonts);
+    return behind
+      ? {
+          upToDate: false,
+          code: 'ERR_THEME_STALE',
+          // Something of yours in the way: its own line says what to move;
+          // no editor command writes over it.
+          appCopyStale: appCopyStale(root, slug).appCopyStale
+            ? `${slug}'s app copy in src/themes/${slug}/ is not up to date: ${behind}`
+            : `${slug}'s app copy in src/themes/${slug}/ is not up to date: ${behind}. ${runLine(root, `experimental theme editor show ${slug}`)} writes it again`,
+        }
+      : null;
+  }
+  const stale = appCopyStale(root, slug).appCopyStale;
+  return stale ? {appCopyStale: stale} : null;
+}
+
+/**
+ * For `compile` of an editor theme's own source (themes/<t>/<t>.theme.ts):
+ * the one color mode a light-only or dark-only theme has, which its source
+ * cannot say, for the build to write into the built module. Null for any
+ * other file (the app copy's source re-exports it from its build).
+ * @param {string} file the path as given
+ * @param {string} cwd
+ * @returns {['light'] | ['dark'] | null}
+ */
+export function editorColorModes(file, cwd) {
+  const root = projectRoot(cwd);
+  const at = editorThemeAt(root, path.resolve(cwd, file));
+  if (!at || path.basename(file) !== `${at.slug}.theme.ts`) return null;
+  return buildColorModes(at.root, at.slug);
+}
+
+/**
+ * For `compile` of an editor theme (themes/<t>/ or its app copy's source):
+ * whether a font family is loaded by the app copy's font stylesheet as
+ * this compile writes it (src/themes/<t>/<t>.fonts.css, from the fonts the
+ * theme loads now: an @fontsource package by its name, a stylesheet by the
+ * `family=` it requests), so the build's "named but not loaded" notice
+ * leaves it out. Null for any other file.
+ * @param {string} file the path as given
+ * @param {string} cwd
+ * @returns {Promise<((family: string) => boolean) | null>}
+ */
+export async function editorLoadedFonts(file, cwd) {
+  const root = projectRoot(cwd);
+  const abs = path.resolve(cwd, file);
+  const slug =
+    appCopyTheme(root, abs)?.slug ??
+    (editorThemeAt(root, abs) &&
+    editorOwnFile(editorThemeAt(root, abs)?.slug ?? '', file)
+      ? editorThemeAt(root, abs)?.slug
+      : null);
+  if (!slug) return null;
+  /** @param {string} s */
+  const key = s =>
+    String(s)
+      .replace(/["']/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '');
+  /** @type {Set<string>} */
+  const loaded = new Set();
+  // The stylesheets the copy's font file imports once this compile has
+  // written it: from the fonts the theme loads now (a package installed or
+  // removed since the last write), as the copy write computes them.
+  /** @type {string[]} */
+  let specs;
+  try {
+    specs = copyFontsCss(await context(root), slug, loadTheme(root, slug));
+  } catch {
+    try {
+      specs = [
+        ...fs
+          .readFileSync(
+            path.join(root, 'src', 'themes', slug, `${slug}.fonts.css`),
+            'utf8',
+          )
+          .matchAll(/@import\s+"([^"]+)"/g),
+      ].map(m => m[1]);
+    } catch {
+      return null;
+    }
+  }
+  const req = createRequire(path.join(root, 'package.json'));
+  for (const spec of specs) {
+    const pkg = /^@fontsource(?:-variable)?\/([^/]+)/.exec(spec);
+    if (pkg) {
+      loaded.add(key(pkg[1]));
+      continue;
+    }
+    try {
+      const css = fs.readFileSync(req.resolve(spec), 'utf8');
+      for (const f of css.matchAll(/family=([^:&'")]+)/g))
+        loaded.add(key(decodeURIComponent(f[1].replace(/\+/g, ' '))));
+    } catch {
+      // A stylesheet that cannot be read loads nothing known here.
+    }
+  }
+  return family => loaded.has(key(family));
+}
+
+/**
+ * For `compile` of a file that is not there: when it is an editor theme's
+ * own source (`themes/<t>/<t>.theme.ts` beside its settings), the command
+ * that writes it again; null otherwise.
+ * @param {string} file the path as given
+ * @param {string} cwd
+ * @returns {{name: string, reason: string} | null}
+ */
+export function editorMissingSource(file, cwd) {
+  // The app copy's source of an editor theme, its folder gone: the editor
+  // writes it again.
+  const copy = appCopyTheme(projectRoot(cwd), path.resolve(cwd, slashed(file)));
+  if (copy)
+    // A copy file named with Windows separators: the theme is what
+    // compiles (the copy follows); with the copy gone, show writes it.
+    return fs.existsSync(path.join(copy.root, 'src', 'themes', copy.slug))
+      ? {
+          name: runLine(
+            cwd,
+            `experimental theme compile ${
+              path
+                .relative(
+                  cwd,
+                  path.join(
+                    copy.root,
+                    'themes',
+                    copy.slug,
+                    `${copy.slug}.theme.ts`,
+                  ),
+                )
+                .split(path.sep)
+                .join('/') || `themes/${copy.slug}/${copy.slug}.theme.ts`
+            }`,
+          ),
+          reason: `${copy.slug}'s app copy follows every compile of the theme`,
+        }
+      : {
+          name: runLine(cwd, `experimental theme editor show ${copy.slug}`),
+          reason: `the editor writes ${copy.slug}'s app copy in src/themes/${copy.slug}/ again`,
+        };
+  const at = editorThemeAt(projectRoot(cwd), path.resolve(cwd, file));
+  if (!at || path.basename(file) !== `${at.slug}.theme.ts`) return null;
+  return {
+    name: runLine(cwd, `experimental theme editor show ${at.slug}`),
+    reason: `the editor writes ${at.slug}.theme.ts again from its settings`,
+  };
+}
+
+/**
+ * `theme template` for the experimental command: in a folder the theme
+ * editor made, only the editor's own files are protected.
+ * @param {{targetPath?: string, overwrite?: boolean, cwd?: string}} options
+ * @returns {import('../theme/theme.type.mjs').ThemeTemplateResponse}
+ */
+export function editorThemeTemplate(options) {
+  return writeThemeTemplate(options, true);
 }

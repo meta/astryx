@@ -8,163 +8,173 @@
  * @position api/theme-edit — pure helpers
  */
 
-import {CSS_WIDE} from './_tables.mjs';
-import {MATH_FUNCTION, matchType} from './_css.mjs';
+import {CSS_WIDE, wordTable} from './_tables.mjs';
+import {
+  MATH_FUNCTION,
+  cssNumber,
+  keywordsOf,
+  matchType,
+  splitTop,
+} from './_css.mjs';
+
+export {splitTop};
 import {luminance, oklabToLinearRgb} from '../theme/palette/generate/color.mjs';
 
 /** @typedef {[number, number, number]} Rgb */
 
 /** The CSS named colors. */
-const NAMED = /** @type {Record<string, string>} */ ({
-  aliceblue: '#f0f8ff',
-  antiquewhite: '#faebd7',
-  aqua: '#00ffff',
-  aquamarine: '#7fffd4',
-  azure: '#f0ffff',
-  beige: '#f5f5dc',
-  bisque: '#ffe4c4',
-  black: '#000000',
-  blanchedalmond: '#ffebcd',
-  blue: '#0000ff',
-  blueviolet: '#8a2be2',
-  brown: '#a52a2a',
-  burlywood: '#deb887',
-  cadetblue: '#5f9ea0',
-  chartreuse: '#7fff00',
-  chocolate: '#d2691e',
-  coral: '#ff7f50',
-  cornflowerblue: '#6495ed',
-  cornsilk: '#fff8dc',
-  crimson: '#dc143c',
-  cyan: '#00ffff',
-  darkblue: '#00008b',
-  darkcyan: '#008b8b',
-  darkgoldenrod: '#b8860b',
-  darkgray: '#a9a9a9',
-  darkgreen: '#006400',
-  darkgrey: '#a9a9a9',
-  darkkhaki: '#bdb76b',
-  darkmagenta: '#8b008b',
-  darkolivegreen: '#556b2f',
-  darkorange: '#ff8c00',
-  darkorchid: '#9932cc',
-  darkred: '#8b0000',
-  darksalmon: '#e9967a',
-  darkseagreen: '#8fbc8f',
-  darkslateblue: '#483d8b',
-  darkslategray: '#2f4f4f',
-  darkslategrey: '#2f4f4f',
-  darkturquoise: '#00ced1',
-  darkviolet: '#9400d3',
-  deeppink: '#ff1493',
-  deepskyblue: '#00bfff',
-  dimgray: '#696969',
-  dimgrey: '#696969',
-  dodgerblue: '#1e90ff',
-  firebrick: '#b22222',
-  floralwhite: '#fffaf0',
-  forestgreen: '#228b22',
-  fuchsia: '#ff00ff',
-  gainsboro: '#dcdcdc',
-  ghostwhite: '#f8f8ff',
-  gold: '#ffd700',
-  goldenrod: '#daa520',
-  gray: '#808080',
-  green: '#008000',
-  greenyellow: '#adff2f',
-  grey: '#808080',
-  honeydew: '#f0fff0',
-  hotpink: '#ff69b4',
-  indianred: '#cd5c5c',
-  indigo: '#4b0082',
-  ivory: '#fffff0',
-  khaki: '#f0e68c',
-  lavender: '#e6e6fa',
-  lavenderblush: '#fff0f5',
-  lawngreen: '#7cfc00',
-  lemonchiffon: '#fffacd',
-  lightblue: '#add8e6',
-  lightcoral: '#f08080',
-  lightcyan: '#e0ffff',
-  lightgoldenrodyellow: '#fafad2',
-  lightgray: '#d3d3d3',
-  lightgreen: '#90ee90',
-  lightgrey: '#d3d3d3',
-  lightpink: '#ffb6c1',
-  lightsalmon: '#ffa07a',
-  lightseagreen: '#20b2aa',
-  lightskyblue: '#87cefa',
-  lightslategray: '#778899',
-  lightslategrey: '#778899',
-  lightsteelblue: '#b0c4de',
-  lightyellow: '#ffffe0',
-  lime: '#00ff00',
-  limegreen: '#32cd32',
-  linen: '#faf0e6',
-  magenta: '#ff00ff',
-  maroon: '#800000',
-  mediumaquamarine: '#66cdaa',
-  mediumblue: '#0000cd',
-  mediumorchid: '#ba55d3',
-  mediumpurple: '#9370db',
-  mediumseagreen: '#3cb371',
-  mediumslateblue: '#7b68ee',
-  mediumspringgreen: '#00fa9a',
-  mediumturquoise: '#48d1cc',
-  mediumvioletred: '#c71585',
-  midnightblue: '#191970',
-  mintcream: '#f5fffa',
-  mistyrose: '#ffe4e1',
-  moccasin: '#ffe4b5',
-  navajowhite: '#ffdead',
-  navy: '#000080',
-  oldlace: '#fdf5e6',
-  olive: '#808000',
-  olivedrab: '#6b8e23',
-  orange: '#ffa500',
-  orangered: '#ff4500',
-  orchid: '#da70d6',
-  palegoldenrod: '#eee8aa',
-  palegreen: '#98fb98',
-  paleturquoise: '#afeeee',
-  palevioletred: '#db7093',
-  papayawhip: '#ffefd5',
-  peachpuff: '#ffdab9',
-  peru: '#cd853f',
-  pink: '#ffc0cb',
-  plum: '#dda0dd',
-  powderblue: '#b0e0e6',
-  purple: '#800080',
-  rebeccapurple: '#663399',
-  red: '#ff0000',
-  rosybrown: '#bc8f8f',
-  royalblue: '#4169e1',
-  saddlebrown: '#8b4513',
-  salmon: '#fa8072',
-  sandybrown: '#f4a460',
-  seagreen: '#2e8b57',
-  seashell: '#fff5ee',
-  sienna: '#a0522d',
-  silver: '#c0c0c0',
-  skyblue: '#87ceeb',
-  slateblue: '#6a5acd',
-  slategray: '#708090',
-  slategrey: '#708090',
-  snow: '#fffafa',
-  springgreen: '#00ff7f',
-  steelblue: '#4682b4',
-  tan: '#d2b48c',
-  teal: '#008080',
-  thistle: '#d8bfd8',
-  tomato: '#ff6347',
-  turquoise: '#40e0d0',
-  violet: '#ee82ee',
-  wheat: '#f5deb3',
-  white: '#ffffff',
-  whitesmoke: '#f5f5f5',
-  yellow: '#ffff00',
-  yellowgreen: '#9acd32',
-});
+const NAMED = wordTable(
+  /** @type {Record<string, string>} */ ({
+    aliceblue: '#f0f8ff',
+    antiquewhite: '#faebd7',
+    aqua: '#00ffff',
+    aquamarine: '#7fffd4',
+    azure: '#f0ffff',
+    beige: '#f5f5dc',
+    bisque: '#ffe4c4',
+    black: '#000000',
+    blanchedalmond: '#ffebcd',
+    blue: '#0000ff',
+    blueviolet: '#8a2be2',
+    brown: '#a52a2a',
+    burlywood: '#deb887',
+    cadetblue: '#5f9ea0',
+    chartreuse: '#7fff00',
+    chocolate: '#d2691e',
+    coral: '#ff7f50',
+    cornflowerblue: '#6495ed',
+    cornsilk: '#fff8dc',
+    crimson: '#dc143c',
+    cyan: '#00ffff',
+    darkblue: '#00008b',
+    darkcyan: '#008b8b',
+    darkgoldenrod: '#b8860b',
+    darkgray: '#a9a9a9',
+    darkgreen: '#006400',
+    darkgrey: '#a9a9a9',
+    darkkhaki: '#bdb76b',
+    darkmagenta: '#8b008b',
+    darkolivegreen: '#556b2f',
+    darkorange: '#ff8c00',
+    darkorchid: '#9932cc',
+    darkred: '#8b0000',
+    darksalmon: '#e9967a',
+    darkseagreen: '#8fbc8f',
+    darkslateblue: '#483d8b',
+    darkslategray: '#2f4f4f',
+    darkslategrey: '#2f4f4f',
+    darkturquoise: '#00ced1',
+    darkviolet: '#9400d3',
+    deeppink: '#ff1493',
+    deepskyblue: '#00bfff',
+    dimgray: '#696969',
+    dimgrey: '#696969',
+    dodgerblue: '#1e90ff',
+    firebrick: '#b22222',
+    floralwhite: '#fffaf0',
+    forestgreen: '#228b22',
+    fuchsia: '#ff00ff',
+    gainsboro: '#dcdcdc',
+    ghostwhite: '#f8f8ff',
+    gold: '#ffd700',
+    goldenrod: '#daa520',
+    gray: '#808080',
+    green: '#008000',
+    greenyellow: '#adff2f',
+    grey: '#808080',
+    honeydew: '#f0fff0',
+    hotpink: '#ff69b4',
+    indianred: '#cd5c5c',
+    indigo: '#4b0082',
+    ivory: '#fffff0',
+    khaki: '#f0e68c',
+    lavender: '#e6e6fa',
+    lavenderblush: '#fff0f5',
+    lawngreen: '#7cfc00',
+    lemonchiffon: '#fffacd',
+    lightblue: '#add8e6',
+    lightcoral: '#f08080',
+    lightcyan: '#e0ffff',
+    lightgoldenrodyellow: '#fafad2',
+    lightgray: '#d3d3d3',
+    lightgreen: '#90ee90',
+    lightgrey: '#d3d3d3',
+    lightpink: '#ffb6c1',
+    lightsalmon: '#ffa07a',
+    lightseagreen: '#20b2aa',
+    lightskyblue: '#87cefa',
+    lightslategray: '#778899',
+    lightslategrey: '#778899',
+    lightsteelblue: '#b0c4de',
+    lightyellow: '#ffffe0',
+    lime: '#00ff00',
+    limegreen: '#32cd32',
+    linen: '#faf0e6',
+    magenta: '#ff00ff',
+    maroon: '#800000',
+    mediumaquamarine: '#66cdaa',
+    mediumblue: '#0000cd',
+    mediumorchid: '#ba55d3',
+    mediumpurple: '#9370db',
+    mediumseagreen: '#3cb371',
+    mediumslateblue: '#7b68ee',
+    mediumspringgreen: '#00fa9a',
+    mediumturquoise: '#48d1cc',
+    mediumvioletred: '#c71585',
+    midnightblue: '#191970',
+    mintcream: '#f5fffa',
+    mistyrose: '#ffe4e1',
+    moccasin: '#ffe4b5',
+    navajowhite: '#ffdead',
+    navy: '#000080',
+    oldlace: '#fdf5e6',
+    olive: '#808000',
+    olivedrab: '#6b8e23',
+    orange: '#ffa500',
+    orangered: '#ff4500',
+    orchid: '#da70d6',
+    palegoldenrod: '#eee8aa',
+    palegreen: '#98fb98',
+    paleturquoise: '#afeeee',
+    palevioletred: '#db7093',
+    papayawhip: '#ffefd5',
+    peachpuff: '#ffdab9',
+    peru: '#cd853f',
+    pink: '#ffc0cb',
+    plum: '#dda0dd',
+    powderblue: '#b0e0e6',
+    purple: '#800080',
+    rebeccapurple: '#663399',
+    red: '#ff0000',
+    rosybrown: '#bc8f8f',
+    royalblue: '#4169e1',
+    saddlebrown: '#8b4513',
+    salmon: '#fa8072',
+    sandybrown: '#f4a460',
+    seagreen: '#2e8b57',
+    seashell: '#fff5ee',
+    sienna: '#a0522d',
+    silver: '#c0c0c0',
+    skyblue: '#87ceeb',
+    slateblue: '#6a5acd',
+    slategray: '#708090',
+    slategrey: '#708090',
+    snow: '#fffafa',
+    springgreen: '#00ff7f',
+    steelblue: '#4682b4',
+    tan: '#d2b48c',
+    teal: '#008080',
+    thistle: '#d8bfd8',
+    tomato: '#ff6347',
+    turquoise: '#40e0d0',
+    violet: '#ee82ee',
+    wheat: '#f5deb3',
+    white: '#ffffff',
+    whitesmoke: '#f5f5f5',
+    yellow: '#ffff00',
+    yellowgreen: '#9acd32',
+  }),
+);
 
 /** The CSS named colors, for suggestions. */
 export const COLOR_NAMES = Object.keys(NAMED);
@@ -275,11 +285,11 @@ const d50ToD65 = ([x, y, z]) => [
 /** One number with its unit, or null. @param {string} part @param {boolean} modern */
 function num(part, modern) {
   if (modern && part.toLowerCase() === 'none') return {n: 0, unit: ''};
-  const m =
-    /^([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)(%|deg|grad|rad|turn)?$/i.exec(
-      part,
-    );
-  return m ? {n: Number(m[1]), unit: (m[2] ?? '').toLowerCase()} : null;
+  // Read as CSS reads a number: `255.` is none.
+  const c = cssNumber(part);
+  return c && ['', '%', 'deg', 'grad', 'rad', 'turn'].includes(c.unit)
+    ? {n: c.value, unit: c.unit}
+    : null;
 }
 
 /**
@@ -432,6 +442,20 @@ const polar = (c, h) => [
 ];
 
 /**
+ * The colors written inside a value (a shadow's layers, a gradient's
+ * stops): each hex color and each color function, in order.
+ * @param {string} value
+ * @returns {string[]}
+ */
+export function colorsIn(value) {
+  return [...String(value ?? '').matchAll(COLOR_IN_VALUE)].map(m => m[0]);
+}
+
+/** One color written inside a value: a hex color or a color function. */
+export const COLOR_IN_VALUE =
+  /#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\((?:[^()]|\([^()]*\))*\)/gi;
+
+/**
  * The opacity of a CSS color, 0 to 1: the alpha of an 8- or 4-digit hex,
  * `rgba()`/`hsla()`, or a `/ alpha` part; 0 for `transparent`; 1 otherwise.
  * @param {unknown} value
@@ -490,30 +514,6 @@ function linearToOklab([r, g, b]) {
 }
 
 /**
- * A value split at `sep` outside brackets: `a(b, c), d` by `,` is
- * [`a(b, c)`, ` d`]. A space separator also splits runs of spaces.
- * @param {string} v
- * @param {',' | ' '} sep
- * @returns {string[]}
- */
-export function splitTop(v, sep) {
-  /** @type {string[]} */
-  const out = [];
-  let depth = 0;
-  let cur = '';
-  for (const c of v) {
-    if (c === '(') depth++;
-    if (c === ')') depth--;
-    if (depth === 0 && (sep === ' ' ? /\s/.test(c) : c === sep)) {
-      if (cur.trim() || sep === ',') out.push(cur);
-      cur = '';
-    } else cur += c;
-  }
-  if (cur.trim() || sep === ',') out.push(cur);
-  return out.filter(x => sep === ',' || x.trim());
-}
-
-/**
  * One side of a color-mix(): the color, and the share written before or
  * after it at the top level (null when none). A percentage inside the
  * color (`hsl(0 100% 50%) 30%`) is the color's own.
@@ -522,22 +522,45 @@ export function splitTop(v, sep) {
  */
 export function mixSide(side) {
   const words = splitTop(side.trim(), ' ');
-  const share = (/** @type {string | undefined} */ w) =>
-    w != null && /^-?\d*\.?\d+%$/.test(w) ? Number.parseFloat(w) : null;
-  // A share outside 0-100% is invalid CSS: the side then names no color,
-  // so the mix is refused rather than extrapolated.
+  // Any CSS percentage: an exponent or a sign (5e1%, +50%), or math that
+  // gives one percentage (calc(50%)).
+  const share = (/** @type {string | undefined} */ w) => {
+    if (w == null) return null;
+    const plain = /^calc\(\s*(.*?)\s*\)$/i.exec(w)?.[1] ?? w;
+    const n = cssNumber(plain);
+    if (n) return n.unit === '%' ? n.value : null;
+    // Math of two terms that gives a percentage: percentages added or
+    // taken away (`25% + 25%`), a percentage scaled by a number
+    // (`50% * 1`, `100% / 2`).
+    const m = /^(\S+)\s*([*/+-])\s*(\S+)$/.exec(plain);
+    if (!m) return null;
+    const [a, b] = [cssNumber(m[1]), cssNumber(m[3])];
+    if (!a || !b) return null;
+    const pct = (/** @type {{unit: string}} */ x) => x.unit === '%';
+    const plainNum = (/** @type {{unit: string}} */ x) => x.unit === '';
+    const r =
+      m[2] === '+' || m[2] === '-'
+        ? pct(a) && pct(b)
+          ? m[2] === '+'
+            ? a.value + b.value
+            : a.value - b.value
+          : null
+        : m[2] === '*'
+          ? pct(a) && plainNum(b)
+            ? a.value * b.value
+            : plainNum(a) && pct(b)
+              ? a.value * b.value
+              : null
+          : pct(a) && plainNum(b) && b.value !== 0
+            ? a.value / b.value
+            : null;
+    return r != null && Number.isFinite(r) ? r : null;
+  };
   if (words.length < 2) return {color: side.trim(), pct: null};
-  const inRange = (/** @type {number} */ p) => p >= 0 && p <= 100;
   const last = share(words.at(-1));
-  if (last != null)
-    return inRange(last)
-      ? {color: words.slice(0, -1).join(' '), pct: last}
-      : {color: '', pct: null};
+  if (last != null) return {color: words.slice(0, -1).join(' '), pct: last};
   const first = share(words[0]);
-  if (first != null)
-    return inRange(first)
-      ? {color: words.slice(1).join(' '), pct: first}
-      : {color: '', pct: null};
+  if (first != null) return {color: words.slice(1).join(' '), pct: first};
   return {color: side.trim(), pct: null};
 }
 
@@ -548,9 +571,11 @@ export function mixSide(side) {
  * color with no fixed value, a space this reader does not mix in, or
  * shares that add up to 0.
  * @param {string} inner the arguments
+ * @param {boolean} [approx] mix a space this reader does not mix in as
+ *   OKLab, for a suggestion only
  * @returns {{rgb: Rgb, alpha: number} | null}
  */
-function mixColor(inner) {
+function mixColor(inner, approx = false) {
   const args = splitTop(inner, ',').map(x => x.trim());
   if (args.length !== 3) return null;
   const sp =
@@ -558,12 +583,15 @@ function mixColor(inner) {
       args[0],
     );
   const space = sp?.[1].toLowerCase() ?? '';
-  if (!MIX_SPACES.includes(space)) return null;
+  if (!MIX_SPACES.includes(space) && !approx) return null;
   const hueWay = (sp?.[2] ?? 'shorter').toLowerCase();
+  const mixIn = MIX_SPACES.includes(space) ? space : 'oklab';
   const sides = args.slice(1).map(a => {
     const {color, pct} = mixSide(a);
     return {read: readColor(color), pct};
   });
+  // A share is 0% to 100%; past that the mix is no color at all.
+  if (sides.some(x => x.pct != null && (x.pct < 0 || x.pct > 100))) return null;
   if (sides.some(x => !x.read)) return null;
   let [p1, p2] = sides.map(x => x.pct);
   if (p1 == null && p2 == null) [p1, p2] = [50, 50];
@@ -578,10 +606,10 @@ function mixColor(inner) {
   );
   /** @param {Rgb} rgb @returns {number[]} */
   const into = rgb => {
-    if (space === 'srgb') return rgb.map(c => c / 255);
+    if (mixIn === 'srgb') return rgb.map(c => c / 255);
     const lin = rgb.map(toLinear);
-    if (space === 'srgb-linear') return lin;
-    if (space === 'xyz' || space === 'xyz-d65')
+    if (mixIn === 'srgb-linear') return lin;
+    if (mixIn === 'xyz' || mixIn === 'xyz-d65')
       return [
         0.41239079926595934 * lin[0] +
           0.357584339383878 * lin[1] +
@@ -594,7 +622,7 @@ function mixColor(inner) {
           0.9505321522496607 * lin[2],
       ];
     const lab = linearToOklab(lin);
-    if (space === 'oklab') return lab;
+    if (mixIn === 'oklab') return lab;
     const c = Math.hypot(lab[1], lab[2]);
     return [
       lab[0],
@@ -604,12 +632,12 @@ function mixColor(inner) {
   };
   /** @param {number[]} v @returns {Rgb} */
   const back = v => {
-    if (space === 'srgb')
+    if (mixIn === 'srgb')
       return /** @type {Rgb} */ (v.map(c => clamp(c, 0, 1) * 255));
-    if (space === 'srgb-linear') return fromLinear(v);
-    if (space === 'xyz' || space === 'xyz-d65')
+    if (mixIn === 'srgb-linear') return fromLinear(v);
+    if (mixIn === 'xyz' || mixIn === 'xyz-d65')
       return colorSpaceToRgb('xyz-d65', v);
-    if (space === 'oklab') return oklabToRgb(v[0], v[1], v[2]);
+    if (mixIn === 'oklab') return oklabToRgb(v[0], v[1], v[2]);
     const h = (v[2] * Math.PI) / 180;
     return oklabToRgb(v[0], v[1] * Math.cos(h), v[1] * Math.sin(h));
   };
@@ -618,7 +646,7 @@ function mixColor(inner) {
   // Premultiplied by alpha, as CSS mixes; a missing hue takes the other's.
   const alpha = a.alpha * w1 + b.alpha * w2;
   const out = x.map((_, i) => {
-    if (space === 'oklch' && i === 2) {
+    if (mixIn === 'oklch' && i === 2) {
       let h1 = Number.isNaN(x[2]) ? y[2] : x[2];
       let h2 = Number.isNaN(y[2]) ? x[2] : y[2];
       if (Number.isNaN(h1)) return 0;
@@ -635,6 +663,21 @@ function mixColor(inner) {
   });
   return {rgb: back(out), alpha: alpha * Math.min(1, total / 100)};
 }
+
+/** The channel keywords of each relative color function, in order. */
+const RELATIVE_CHANNELS = wordTable(
+  /** @type {Record<string, string>} */ ({
+    rgb: 'r g b',
+    rgba: 'r g b',
+    hsl: 'h s l',
+    hsla: 'h s l',
+    hwb: 'h w b',
+    lab: 'l a b',
+    lch: 'l c h',
+    oklab: 'l a b',
+    oklch: 'l c h',
+  }),
+);
 
 /**
  * A fixed CSS color read as CSS Color 4 reads it: hues wrap, saturation,
@@ -660,6 +703,34 @@ function readColor(s) {
   if (named) return readColor(named);
   const fn = /^([a-z-]+)\((.*)\)$/i.exec(s);
   if (fn && fn[1].toLowerCase() === 'color-mix') return mixColor(fn[2]);
+  if (fn) {
+    const name = fn[1].toLowerCase();
+    // The same color in both modes is that color.
+    if (name === 'light-dark') {
+      const halves = splitTop(fn[2], ',').map(x => x.trim());
+      const [a, b] = halves.map(x => readColor(x));
+      return halves.length === 2 &&
+        a &&
+        b &&
+        hex(a.rgb) === hex(b.rgb) &&
+        a.alpha === b.alpha
+        ? a
+        : null;
+    }
+    // A relative color that keeps every channel as it is (rgb(from red r g
+    // b)) is its origin color.
+    const rel =
+      /^from\s+(.+?)\s+([a-z]+)\s+([a-z]+)\s+([a-z]+)(?:\s*\/\s*([a-z]+))?$/i.exec(
+        fn[2].trim(),
+      );
+    const keep = RELATIVE_CHANNELS[name];
+    if (rel && keep) {
+      const kept =
+        [rel[2], rel[3], rel[4]].map(x => x.toLowerCase()).join(' ') === keep &&
+        (rel[5] == null || rel[5].toLowerCase() === 'alpha');
+      return kept ? readColor(rel[1]) : null;
+    }
+  }
   if (!fn || !FIXED.test(fn[1])) return null;
   const name = fn[1].toLowerCase();
   if (name === 'color') {
@@ -800,11 +871,51 @@ export function colorProblem(value) {
     return {kind: 'malformed', message: 'is not a valid CSS color'};
   // A mix this reader cannot work out (another space, a color with no
   // fixed value) says so, rather than calling the mix unfixed.
-  if (fn && fn[1].toLowerCase() === 'color-mix' && !/var\(|env\(/i.test(fn[2]))
+  if (
+    fn &&
+    fn[1].toLowerCase() === 'color-mix' &&
+    !/var\(|env\(/i.test(fn[2])
+  ) {
+    // The shares, beside each color (a color's own percentages aside).
+    const [space, ...sides] = splitTop(fn[2], ',').map(x => x.trim());
+    const parts = sides.map(mixSide);
+    if (parts.some(x => x.pct != null && (x.pct < 0 || x.pct > 100)))
+      return {
+        kind: 'malformed',
+        message:
+          'has a color-mix() share outside 0% to 100%, which CSS does not take',
+        ...(() => {
+          const near = mixColor(
+            [
+              space,
+              ...parts.map(x =>
+                x.pct == null
+                  ? x.color
+                  : `${x.color} ${Math.max(0, Math.min(100, x.pct))}%`,
+              ),
+            ].join(', '),
+          );
+          return near ? {opaque: hex(near.rgb)} : {};
+        })(),
+      };
+    const near = mixColor(fn[2], true);
     return {
       kind: 'unfixed',
-      message: `is a color-mix() this editor cannot work out (it mixes in ${MIX_SPACES.join(', ')}, from colors with fixed values); give the mixed color itself`,
+      message: `is a color-mix() this editor does not work out (it mixes in ${MIX_SPACES.join(', ')}, from colors with fixed values)${near ? `; mixed in oklab it is about ${hex(near.rgb)}` : ''}: give the mixed color itself`,
+      ...(near ? {opaque: hex(near.rgb)} : {}),
     };
+  }
+  // A relative color that changes its channels is not worked out here.
+  const rel =
+    fn && /^from\s+(.+?)\s+\S+\s+\S+\s+\S+(\s*\/.*)?$/i.exec(fn[2].trim());
+  if (rel && !/var\(|env\(/i.test(fn?.[2] ?? '')) {
+    const origin = readColor(rel[1]);
+    return {
+      kind: 'unfixed',
+      message: `is a relative color that changes its channels, which this editor does not work out${origin ? ` (it starts from ${hex(origin.rgb)})` : ''}: give the color itself`,
+      ...(origin ? {opaque: hex(origin.rgb)} : {}),
+    };
+  }
   if (isColorValue(s))
     return {
       kind: 'unfixed',
@@ -876,15 +987,13 @@ export const isColorValue = v => {
  */
 export const isSize = (v, name = '') => {
   const s = String(v).trim();
-  const length =
-    /^-?(\d+\.?\d*|\.\d+)(e-?\d+)?(px|rem|em|ex|ch|lh|rlh|cap|ic|pt|pc|cm|mm|in|q|%|vh|vw|vmin|vmax|dvh|dvw|svh|svw|lvh|lvw|cqw|cqh|cqi|cqb)$/i;
   if (s === '0') return true;
-  // Only a property that takes a negative length gets one: an offset, a
-  // letter spacing, an indent.
-  if (length.test(s))
-    return (
-      !s.startsWith('-') || /offset|tracking|letter-spacing|indent/.test(name)
-    );
+  // One length or percentage, read as CSS reads it (+4px, 4e+1px; never
+  // 1.px). Only a property that takes a negative length gets one: an
+  // offset, a letter spacing, an indent.
+  const n = cssNumber(s);
+  if (n && n.unit && matchType('length-percentage', s) != null)
+    return n.value >= 0 || /offset|tracking|letter-spacing|indent/.test(name);
   if (/^var\(--[a-z0-9-]+\)$/i.test(s)) return true;
   if (/^env\([a-z-]+(,.*)?\)$/i.test(s)) return true;
   return MATH_FUNCTION.test(s) && matchType('length-percentage', s) != null;
@@ -900,20 +1009,24 @@ export const isSize = (v, name = '') => {
 export const isNumber = (v, name = '') => {
   const s = String(v).trim();
   if (/^var\(--[a-z0-9-]+\)$/i.test(s)) return true;
+  const n = cssNumber(s);
+  // A weight: a font-weight keyword, or a number from 1 to 1000.
   if (/weight/.test(name))
     return (
-      /^(normal|bold|bolder|lighter)$/.test(s) ||
-      (/^\d+(\.\d+)?$/.test(s) && Number(s) >= 1 && Number(s) <= 1000) ||
+      keywordsOf('font-weight').includes(s.toLowerCase()) ||
+      (n?.unit === '' && n.value >= 1 && n.value <= 1000) ||
       (MATH_FUNCTION.test(s) && matchType('number', s) != null)
     );
   if (/leading|line-height/.test(name))
     return (
       s === 'normal' ||
-      (/^\d*\.?\d+(px|rem|em|%)?$/.test(s) && Number.parseFloat(s) >= 0) ||
+      (n != null &&
+        ['', 'px', 'rem', 'em', '%'].includes(n.unit) &&
+        n.value >= 0) ||
       (MATH_FUNCTION.test(s) && matchType('length-percentage', s) != null) ||
       (MATH_FUNCTION.test(s) && matchType('number', s) != null)
     );
-  return /^-?\d*\.?\d+$/.test(s);
+  return n?.unit === '';
 };
 
 /**

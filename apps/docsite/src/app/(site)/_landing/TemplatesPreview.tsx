@@ -10,7 +10,6 @@
 'use client';
 
 import * as stylex from '@stylexjs/stylex';
-import {useMediaQuery} from '@astryxdesign/core/hooks';
 import {
   spacingVars,
   radiusVars,
@@ -157,11 +156,10 @@ export function TemplatesPreview({
    */
   maxRows?: number;
 }) {
-  const {themeMode} = useThemeMode();
+  const {themeMode, osMode} = useThemeMode();
   const rows =
     maxRows != null ? TEMPLATE_ROWS.slice(0, maxRows) : TEMPLATE_ROWS;
-  const osPrefersDark = useMediaQuery('(prefers-color-scheme: dark)');
-  const colorMode = previewColorModeFragment(themeMode, osPrefersDark);
+  const colorMode = previewColorModeFragment(themeMode, osMode);
 
   return (
     <div {...stylex.props(styles.container)} inert>

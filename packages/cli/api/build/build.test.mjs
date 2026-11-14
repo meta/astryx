@@ -539,9 +539,38 @@ describe('build kit — every page starts from a template', () => {
     expect(r.data.start?.name).toBe('shell-top-nav');
   });
 
+  it('starts a whole-page idea that would start on the shell from a page template', async () => {
+    const r = await build('a support inbox', {cwd: REPO});
+    if (r.type !== 'build.kit') throw new Error(r.type);
+    expect(r.data.start).toMatchObject({name: 'table-inbox', basis: 'closest'});
+  });
+
+  it('starts a part that reads as a whole page from a page template', async () => {
+    const r = await build('a sortable list of tasks with priority and assignee', {cwd: REPO});
+    if (r.type !== 'build.kit') throw new Error(r.type);
+    expect(r.data.start).toMatchObject({name: 'table-page', basis: 'closest'});
+  });
+
+  it('keeps the shell for a part and for a change to an existing page', async () => {
+    for (const idea of [
+      'a tooltip on the save button',
+      'existing support inbox with filters, tags, assignees, and saved views',
+    ]) {
+      const r = await build(idea, {cwd: REPO});
+      if (r.type !== 'build.kit') throw new Error(r.type);
+      expect(r.data.start?.name).toBe('shell-top-nav');
+    }
+  });
+
+  it('names an unready direct match instead of lifting the start', async () => {
+    const r = await build('a list of incidents with severity and owners', {cwd: REPO});
+    if (r.type !== 'build.kit') throw new Error(r.type);
+    expect(r.data.start?.reason).toMatch(/`incident-console` matches but is not ready/);
+  });
+
   it('starts a page the words describe from its template', async () => {
     for (const [idea, name] of [
-      ['a weekly report of sales by region', 'dashboard-scorecard'],
+      ['a weekly report of sales by region', 'dashboard'],
       ['a pricing page with three plans and a comparison table', 'table-comparison'],
     ]) {
       const r = await build(idea, {cwd: REPO});
@@ -550,13 +579,21 @@ describe('build kit — every page starts from a template', () => {
     }
   });
 
-  it('starts a component in a container from a template with that frame', async () => {
-    // "in a modal": the modal is the frame, so the dialog template leads
-    // instead of the app shell.
+  it('starts a page in a frame from the template with that frame', async () => {
+    // "in a dialog" holds the checkout form, the page the idea names, so the
+    // dialog template leads.
+    const r = await build('a checkout form in a dialog', {cwd: REPO});
+    expect(r.type).toBe('build.kit');
+    if (r.type !== 'build.kit') return;
+    expect(r.data.start?.name).toBe('form-wizard-dialog');
+  });
+
+  it('starts a part in a frame from the app shell', async () => {
+    // The modal holds saved drafts, a part, not a page family.
     const r = await build('saved drafts in a modal with resume and delete row actions', {cwd: REPO});
     expect(r.type).toBe('build.kit');
     if (r.type !== 'build.kit') return;
-    expect(r.data.start?.name).toBe('settings-dialog');
+    expect(r.data.start?.name).toBe('shell-top-nav');
   });
 
   it('does not start from a template named only by a word that modifies another', async () => {

@@ -10,8 +10,10 @@
  */
 
 import {createRef, useRef} from 'react';
+import * as stylex from '@stylexjs/stylex';
 import {describe, it, expect, vi} from 'vitest';
 import {cleanup, render, screen} from '@testing-library/react';
+import {createSwipe} from '../Swipe/createSwipe';
 import userEvent from '@testing-library/user-event';
 import {rulesDeclaredFor} from '../__tests__/pressState';
 import {swipeLayerLoaded} from '../Item/__tests__/swipeLayerLoaded';
@@ -1205,10 +1207,58 @@ function DelegateSwipeRow() {
           Open
         </button>
       }
-      swipeActions={{trailing: [{label: 'Archive', onActivate: () => {}}]}}
+      swipeActions={{
+        trailing: [{id: 'archive', label: 'Archive', onActivate: () => {}}],
+      }}
     />
   );
 }
+
+describe('ListItem passthrough', () => {
+  const callerStyles = stylex.create({
+    uncounted: {counterIncrement: 'none'},
+  });
+
+  it('forwards ref to its <li>, in a List and outside one', () => {
+    for (const inList of [true, false]) {
+      const ref = createRef<HTMLLIElement>();
+      const row = <ListItem ref={ref} label="Row" onClick={() => {}} />;
+      const {container} = render(inList ? <List>{row}</List> : row);
+      expect(ref.current).toBe(container.querySelector('li'));
+      cleanup();
+    }
+  });
+
+  it('merges className and style onto the row beside its list-item and item targets', () => {
+    const {container} = render(
+      <List>
+        <ListItem label="Row" className="consumer" style={{maxWidth: 320}} />
+      </List>,
+    );
+    const row = container.querySelector('li')!;
+    expect(row).toHaveClass('astryx-list-item', 'astryx-item', 'consumer');
+    expect(row.style.maxWidth).toBe('320px');
+  });
+
+  it("applies xstyle after the row's own styles, so a caller's value for the same property wins", () => {
+    const {container} = render(
+      <List listStyle="disc">
+        <ListItem label="First" xstyle={callerStyles.uncounted} />
+        <ListItem label="Second" />
+      </List>,
+    );
+    const counters = (row: Element) =>
+      rulesDeclaredFor(row)
+        .map(rule => rule.replace(/\s+/g, ''))
+        .filter(rule => rule.includes('counter-increment:'));
+    const [first, second] = [...container.querySelectorAll('li')];
+    expect(counters(first).length).toBeGreaterThan(0);
+    expect(counters(first).every(rule => rule.includes(':none'))).toBe(true);
+    expect(counters(second).some(rule => rule.includes('astryx-list'))).toBe(
+      true,
+    );
+  });
+});
 
 describe('List and swipe actions', () => {
   it('clips the rows in the inline axis with clip, never hidden, so a row dragged aside paints no further than the list', () => {
@@ -1262,12 +1312,16 @@ describe('List and swipe actions', () => {
         <ListItem
           label="Swipeable"
           onClick={() => {}}
-          swipeActions={{trailing: [{label: 'Archive', onActivate: () => {}}]}}
+          swipeActions={{
+            trailing: [{id: 'archive', label: 'Archive', onActivate: () => {}}],
+          }}
         />
         <ListItem label="Pressable" onClick={() => {}} />
         <ListItem
           label="Static"
-          swipeActions={{trailing: [{label: 'Archive', onActivate: () => {}}]}}
+          swipeActions={{
+            trailing: [{id: 'archive', label: 'Archive', onActivate: () => {}}],
+          }}
         />
         <ListItem
           label="Empty sides"
@@ -1314,7 +1368,9 @@ describe('List and swipe actions', () => {
         <ListItem
           label="Outside"
           onClick={() => {}}
-          swipeActions={{trailing: [{label: 'Archive', onActivate: () => {}}]}}
+          swipeActions={{
+            trailing: [{id: 'archive', label: 'Archive', onActivate: () => {}}],
+          }}
         />
       </ul>,
     );
@@ -1336,14 +1392,39 @@ describe('List and swipe actions', () => {
     ).toEqual([]);
   });
 
-  it('passes swipeActions and swipeBehavior through to the row unchanged', async () => {
+  it('passes swipe through to the row unchanged', () => {
+    render(
+      <List>
+        <ListItem
+          label="A"
+          data-testid="row"
+          swipe={createSwipe({
+            trailing: [{id: 'archive', label: 'Archive', onActivate: () => {}}],
+            swipeBehavior: 'commit',
+          })}
+        />
+      </List>,
+    );
+    const row = screen.getByTestId('row');
+    expect(row.tagName).toBe('LI');
+    expect(row.parentElement).toBe(screen.getByRole('list'));
+    // Commit: presentational, at the row's first render.
+    expect(row.querySelector('[data-swipe-panel="trailing"]')).toHaveAttribute(
+      'aria-hidden',
+      'true',
+    );
+  });
+
+  it('passes the deprecated swipeActions and swipeBehavior through to the row unchanged (spec:AST-057 DEP-0017)', async () => {
     render(
       <List>
         <ListItem
           label="A"
           data-testid="row"
           swipeBehavior="commit"
-          swipeActions={{trailing: [{label: 'Archive', onActivate: () => {}}]}}
+          swipeActions={{
+            trailing: [{id: 'archive', label: 'Archive', onActivate: () => {}}],
+          }}
         />
       </List>,
     );

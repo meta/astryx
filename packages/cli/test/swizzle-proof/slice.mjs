@@ -7,7 +7,7 @@
  *   (spec:AST-110 FR7). It prints each step's time, and fails with
  *   each target's failure.
  * @position Shared by the swizzle-proof.<n>.test.mjs files, one per slice,
- *   so the test-node shards split the proof between them
+ *   so CI runs one per leg of its swizzle-proof job
  */
 
 import fs from 'node:fs';

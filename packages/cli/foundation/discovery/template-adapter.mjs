@@ -24,11 +24,11 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {createRequire} from 'node:module';
+import {fileURLToPath} from 'node:url';
 import {readDocView} from '../doc-compiler/read.mjs';
 import {importDocModule} from '../doc-compiler/import.mjs';
 import {readStore, storedKey} from '../doc-compiler/stored-docs.mjs';
-import {CLI_ROOT, discoverExternalPackages} from '../fs/paths.mjs';
+import {CLI_ROOT, discoverExternalPackages, realDir} from '../fs/paths.mjs';
 import {listDirEntries} from '../fs/listing-cache.mjs';
 import {CORE_PROVIDER_ID} from '../identity/providers.mjs';
 import {Project} from '../config/project.mjs';
@@ -40,8 +40,11 @@ import {
   writtenNames,
   TEMPLATE_COMPONENTS_FILE,
 } from './template-source-tree.mjs';
-
-const require = createRequire(import.meta.url);
+import {persistedGather} from '../fs/gather-cache.mjs';
+import {hasNameLine, keptTreeSummary, nameLines} from '../fs/kept-tree.mjs';
+import {foldEntryName} from './entry-name-files.mjs';
+import {EXACT_CODEC} from '../fs/exact-codec.mjs';
+import {babelParser} from '../runtime/lazy-dependencies.mjs';
 
 /** Identity used for core (built-in) templates in package-scoped listings. */
 const CORE_PACKAGE = CORE_PROVIDER_ID;
@@ -1070,19 +1073,6 @@ function expressionUse(source, open, close) {
   return null;
 }
 
-/** @type {typeof import('@babel/parser') | undefined} */
-let babelParser;
-
-/**
- * The template source parser, loaded on first use so listing templates
- * never pays for it.
- * @returns {typeof import('@babel/parser')}
- */
-function templateSourceParser() {
-  babelParser ??= require('@babel/parser');
-  return /** @type {typeof import('@babel/parser')} */ (babelParser);
-}
-
 /**
  * The [start, end) range of every comment in `source`, or none when it does
  * not parse as TSX.
@@ -1091,7 +1081,7 @@ function templateSourceParser() {
  */
 function commentRanges(source) {
   try {
-    const {comments} = templateSourceParser().parse(source, {
+    const {comments} = babelParser().parse(source, {
       sourceType: 'module',
       plugins: ['jsx', 'typescript'],
     });
@@ -1261,6 +1251,99 @@ async function discoverBlocks() {
     });
   }
   return blocks;
+}
+
+/**
+ * The ids of Core's templates that `keep` accepts, read from file names: each
+ * page folder, and each block doc that has its same-stem source. Discovery
+ * gives Core's templates exactly these ids. Only a kept block's source is
+ * looked for.
+ * @param {(id: string) => boolean} [keep]
+ * @returns {string[]}
+ */
+export function coreTemplateIds(keep = () => true) {
+  const ids = listTemplates().filter(keep);
+  /** @param {string} dir */
+  const walk = dir => {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, {withFileTypes: true});
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+        continue;
+      }
+      if (!TEMPLATE_SUFFIX_RE.test(entry.name)) continue;
+      const suffix = matchedTemplateSuffix(entry.name);
+      if (!suffix) continue;
+      const basename = entry.name.slice(0, -suffix.length);
+      if (keep(basename) && fs.existsSync(path.join(dir, basename + '.tsx'))) {
+        ids.push(basename);
+      }
+    }
+  };
+  walk(BLOCKS_DIR);
+  return ids;
+}
+
+/** This module's own file: its code decides the kept summaries' shape. */
+const OWN_FILE = fileURLToPath(import.meta.url);
+
+/** The file of foldEntryName, which decides the template-ids summary too. */
+const FOLD_FILE = fileURLToPath(
+  new URL('./entry-name-files.mjs', import.meta.url),
+);
+
+/**
+ * Which template files can give an id that folds to `wanted`, read from a
+ * kept summary of file names: `blocks` false means {@link coreTemplateIds}
+ * gives no block id that folds to it, and `listed` says whether any of the
+ * integrations ships a template doc whose id ({@link integrationTemplateIds})
+ * folds to it.
+ * @param {Array<{templates?: string}>} integrations
+ * @param {string} wanted a folded name
+ * @returns {{blocks: boolean, listed: boolean}}
+ */
+export function templateFilesNaming(integrations, wanted) {
+  const roots = integrations.flatMap(integration =>
+    typeof integration?.templates === 'string' && integration.templates !== ''
+      ? [integration.templates]
+      : [],
+  );
+  /** @type {Array<string | string[]>} */
+  const [blocks, ...listed] = keptTreeSummary(
+    {
+      kind: 'template-ids',
+      roots: [BLOCKS_DIR, ...roots],
+      code: [OWN_FILE, FOLD_FILE],
+    },
+    trees =>
+      trees.map(({folders}, at) => {
+        const folded = new Set();
+        for (const {rel, entries} of folders) {
+          for (const {name, isDir} of entries) {
+            if (isDir) continue;
+            const suffix = matchedTemplateSuffix(name);
+            if (!suffix) continue;
+            // Core's block ids are stems; an integration's are paths.
+            const id =
+              at === 0
+                ? name.slice(0, -suffix.length)
+                : path.join(rel, name).slice(0, -suffix.length);
+            folded.add(foldEntryName(id.split(path.sep).join('/')));
+          }
+        }
+        return nameLines(folded);
+      }),
+  );
+  return {
+    blocks: hasNameLine(blocks, wanted),
+    listed: listed.some(ids => hasNameLine(ids, wanted)),
+  };
 }
 
 /**
@@ -1569,6 +1652,18 @@ export async function discoverAllUnresolved(cwd = process.cwd()) {
   );
 }
 
+/** Template discovery's records, kept exactly, with the shape they need. */
+const TEMPLATE_SOURCES_CODEC = {
+  ...EXACT_CODEC,
+  valid: (/** @type {any} */ value) =>
+    value != null &&
+    Array.isArray(value.templates) &&
+    Array.isArray(value.errors) &&
+    value.templates.every(
+      (/** @type {any} */ t) => t != null && typeof t.name === 'string',
+    ),
+};
+
 /**
  * Resolve replacement declarations while retaining package-addressable entries
  * that are shadowed or rejected in the default discovery view.
@@ -1576,6 +1671,26 @@ export async function discoverAllUnresolved(cwd = process.cwd()) {
  * @returns {Promise<{templates: DiscoveredTemplate[], errors: Array<TemplateDiscoveryError | TemplateReplacementError>}>}
  */
 async function resolveAllSources(cwd = process.cwd()) {
+  // A function of the files discovery reads, which the kept gather stamps:
+  // a later run with every one unchanged reads the records back.
+  return /** @type {Awaited<ReturnType<typeof resolveAllSourcesNow>>} */ (
+    await persistedGather(
+      // The folder, and the copy of the CLI that answers: outside a project
+      // the integrations beside the answering copy load too. A host's inputs
+      // are in every entry's key (gather-cache.mjs).
+      ['template-sources', realDir(cwd), CLI_ROOT],
+      () => resolveAllSourcesNow(cwd),
+      TEMPLATE_SOURCES_CODEC,
+    )
+  );
+}
+
+/**
+ * resolveAllSources, worked out now.
+ * @param {string} cwd
+ * @returns {Promise<{templates: DiscoveredTemplate[], errors: Array<TemplateDiscoveryError | TemplateReplacementError>}>}
+ */
+async function resolveAllSourcesNow(cwd) {
   const discovered = await discoverAllSources(cwd);
   const replacementErrors = discovered.errors.filter(
     error => error.replacementTarget != null,
@@ -1654,6 +1769,79 @@ function findIntegrationDocFiles(root) {
   };
   walk(root);
   return results;
+}
+
+/**
+ * Code that lets a template doc declare a replacement: the field itself, or an
+ * import, a require or a spread that can bring it in. Comments do not count.
+ */
+const MAY_REPLACE_RE =
+  /\breplaces\b|^\s*import\b|\bimport\s*\(|\brequire\s*\(|\.\.\.\s*[A-Za-z_$]/m;
+
+/**
+ * The id of each template doc an integration ships, valid or not, read from
+ * file names alone.
+ * @param {{templates?: string}} integration
+ * @returns {string[]}
+ */
+export function integrationTemplateIds(integration) {
+  const root = integration?.templates;
+  if (!root) return [];
+  return findIntegrationDocFiles(root).flatMap(docPath => {
+    const suffix = matchedTemplateSuffix(docPath);
+    if (!suffix) return [];
+    return [
+      path
+        .relative(root, docPath)
+        .slice(0, -suffix.length)
+        .split(path.sep)
+        .join('/'),
+    ];
+  });
+}
+
+/**
+ * Whether any template doc an integration ships can declare a replacement,
+ * read from its text without loading it.
+ * @param {{templates?: string}} integration
+ * @returns {boolean}
+ */
+export function integrationMayReplaceTemplate(integration) {
+  return integrationsMayReplaceTemplate([integration]);
+}
+
+/**
+ * Whether any template doc any of the integrations ships can declare a
+ * replacement, read from a kept summary of the docs' text.
+ * @param {Array<{templates?: string}>} integrations
+ * @returns {boolean}
+ */
+export function integrationsMayReplaceTemplate(integrations) {
+  const roots = integrations.flatMap(integration =>
+    typeof integration?.templates === 'string' && integration.templates !== ''
+      ? [integration.templates]
+      : [],
+  );
+  if (roots.length === 0) return false;
+  return keptTreeSummary(
+    {kind: 'integration-template-replaces', roots, code: [OWN_FILE]},
+    trees =>
+      trees.some(({folders, readText}) =>
+        folders.some(({rel, entries}) =>
+          entries.some(({name, isDir}) => {
+            if (isDir || !matchedTemplateSuffix(name)) return false;
+            try {
+              const code = readText(rel === '' ? name : path.join(rel, name))
+                .replace(/\/\*[\s\S]*?\*\//g, '')
+                .replace(/^\s*\/\/.*$/gm, '');
+              return MAY_REPLACE_RE.test(code);
+            } catch {
+              return true;
+            }
+          }),
+        ),
+      ),
+  );
 }
 
 /**
@@ -2079,7 +2267,7 @@ function topLevelBindings(src) {
   const astryxImports = new Map();
   let program;
   try {
-    program = templateSourceParser().parse(src, {
+    program = babelParser().parse(src, {
       sourceType: 'module',
       plugins: ['jsx', 'typescript'],
       errorRecovery: true,

@@ -34,10 +34,16 @@ verified_by:
   "paths": [
     "packages/core/src/Layer/holdEntranceInput.ts",
     "packages/core/src/Layer/inputHold.ts",
+    "packages/core/src/gestures/contextRequest.ts",
     "packages/core/src/gestures/tapWobble.ts",
     "packages/core/src/hooks/usePager.ts",
     "packages/core/src/motion/uikit/segmented.ts",
-    "packages/core/src/motion/uikit/slider.ts"
+    "packages/core/src/motion/uikit/slider.ts",
+    "packages/core/src/Swipe/useSwipeAction.ts",
+    "packages/core/src/dragToSnapPoints/compositorSettle.ts",
+    "packages/core/src/Item/Item.sharedDrag.test.tsx",
+    "packages/core/src/Item/Item.test.tsx",
+    "packages/core/src/Item/__tests__/ItemSwipeActions.interaction.browser.spec.ts"
   ]
 }
 ```
@@ -256,6 +262,10 @@ a measured, sourced difference exists.
   and MUST keep advancing at display rate through a main-thread block. It MUST
   NOT animate layout properties, and MUST NOT step a frame from script when the
   compositor can run the curve.
+  A snap-point drag whose parts read one custom property settles through
+  `dragToSnapPoints/compositorSettle.ts`: one `translate` animation per part,
+  from one spring on one clock. The animator cannot do this: its custom
+  property animates on the main thread, and its `translate` moves one element.
   A press shows at once. Every press release that fades does so on the
   theme's exit motion tokens (`--duration-exit`, `--ease-exit`), on every
   device and pointer, by the owner's decision (2026-11-03); under Reduce
@@ -295,7 +305,12 @@ a measured, sourced difference exists.
   keeps the call's clock. Calls made in one callback, such as one event
   listener or one observer callback, share the clock of its first call, so
   several elements line up; a call more than 34 ms after that first call
-  starts a new clock.
+  starts a new clock. A swipe row's close that a touch tap on its content,
+  Escape or a press outside it starts is made in that input event's own task.
+  It uses the animator's internal `start: 'next-frame'`
+  (`architecture:react-component-runtime` INV13). The first frame after the
+  task commits it, however long a later listener holds the page, so the close
+  never skips ahead into its curve.
 - **FR7 — Exits keep the native counterpart's look.** A touch presentation MUST
   play an exit with the look of its UIKit counterpart's exit, on every touch
   platform: a menu shrinks into its trigger, and an alert fades. In a component
@@ -344,7 +359,11 @@ a measured, sourced difference exists.
   duration and its `character` offsets the role's measured bounce by the role's
   fixed weight (`spec:AST-108` FR3); the follow and the rubber band themselves
   stay fixed (`spec:AST-108` FR4). A part that follows a pointer follows it
-  under every pointer (FR43). In a component whose main interaction is a tap,
+  under every pointer (FR43). A swipe row that a finger holds plays no follow
+  spring: from its claim on the touch its offset is the finger's travel since
+  touch-down at every frame until the release, plus the lead it gains past the
+  confirm point (DEC-32). In a component whose main
+  interaction is a tap,
   every other motion, which a tap, a click, a hold, a key or the program starts,
   MUST play the theme's motion tokens, its duration and easing tokens scaled by
   `tempo` (`architecture:theme-tokens`, `spec:AST-108` FR2), under every
@@ -870,8 +889,13 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   Every followed trackpad pan runs one shared path (the splitter, the pan, the
   snap-point drag and the animator), and a component declares only its detents
   and actions, a row's being `spec:AST-057`'s. One shared
-  context request answers a finger's or a pen's long press, a right click, and
-  Shift+F10; the
+  context request module, `gestures/contextRequest.ts`, answers a finger's or
+  a pen's long press, a right click, and Shift+F10 or the context-menu key. It
+  makes one request per gesture, names the input that made it, and keeps the
+  browser's own menu closed. A hold loses to a claim another recognizer made
+  first. The headless context menu (`spec:AST-107` FR8) makes its request
+  through it, and ContextMenu through that menu (`component:ContextMenu`
+  FR10). One module keeps these rules the same in every menu. The
   press model has a fine-pointer profile with no delay (FR11); and with a
   mouse, a trackpad, or a pen where the primary pointer is fine a reorder
   starts on a drag from its handle without a hold, while a pen where the
@@ -1103,6 +1127,7 @@ Motion that FR45 moves, by component. Each component's record carries its own li
 | FR45            | Component source and token tests for a tap component's motion whose record names no step, with a platform measurement                               | a small anchored surface (a popover, a menu, a toggle, a row) and a full-screen surface (a Dialog, an AlertDialog), each with its own measurement; a tap component's overlay exit                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | a token cited as nearest to the measurement in the Storybook theme passes, and a tap component's overlay exit on `--duration-exit` passes; a token chosen by role alone, or nearest at Core's unthemed defaults, fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | FR45            | Browser frame capture of companion motion in a gesture and a tap component                                                                          | a sheet's scrim, handle and content fade; a Lightbox's chrome fade; a menu's backdrop                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | a companion fade on its own duration fails; one driven by the main motion's progress or settle time passes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | FR45            | Browser frame trace of RefreshControl's end at `tempo` 1 and at each `tempo` bound, and a unit test of the end's timing                             | a refresh that ends with its indicator shown, at `tempo` 1 (300 ms), 0.75 (225 ms) and 1.5 (450 ms); a theme whose move easing differs from UIKit's curve                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | an end whose per-frame trace leaves UIKit's measured 300 ms ease-in-out by more than 0.75 pt at `tempo` 1, an end on the theme's move easing instead of UIKit's curve, or a duration that ignores the theme's `tempo`, fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| FR45 swipe row  | Browser frame traces of a held swipe row in Chromium and WebKit, read against each touch move                                                       | a 140 px drag over 0.4 s, held 0.6 s; a slow drag from the open row to 40 px past the confirm point, held 0.6 s                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Short of the confirm point, a frame from the claim to the lift whose row travel differs from the finger's travel since touch-down by more than 1 px fails; past it, a lead that shrinks, or that ends away from the confirmation offset, fails                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | FR9, FR10       | Recognizer unit tests on synthetic streams and browser tests with real touch input                                                                  | drag, second finger, pinch, page zoom, main-thread block                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | a second finger that breaks a drag, or a page pinch blocked other than by the author's `touch-action`, fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | FR11, FR12      | Press and long-press tests on synthetic streams with explicit timestamps                                                                            | inside and outside a scroll view; a drag the browser takes; a lift inside; a menu row under a finger; a press on a row of a menu whose rows fit and of one that scrolls; a slide-off lift on a Switch and on a Radio                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | the wrong profile's timing, a press that survives the browser taking the touch, or a control outside an action group activated other than by the browser's click, outside `spec:AST-020` FR9's slide-off exception, a row of a menu whose rows fit that waits 150 ms, or one of a scrolling menu that does not, or a slide-off lift that completes a control outside `spec:AST-020` FR9's exception, fails                                                                                                                                                                                                                                                                                               |
 | FR11 theme      | `generateThemeRules.test.ts` themed-`:active` cases; real-browser forced `:active` on the Themed press story                                        | a theme `:active` on a base and on a variant with a trailing pseudo; fine pointer; coarse pointer with forced `:active` and with the press attribute                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | a bare theme `:active` rule a coarse pointer matches, or a coarse arm keyed on `:active`, fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
@@ -1127,7 +1152,7 @@ Motion that FR45 moves, by component. Each component's record carries its own li
 | FR43 trackpad   | Unit tests on timed wheel streams; WebKit browser tests with trackpad streams (Chromium's driver wheels read as a mouse wheel)                      | a form and a required sheet pulled 30 to 240 px by a finger and by a trackpad; mouse lines, notches, ticks and accelerated deltas over a sheet, a pager and a row; ten swipes each starting mid-momentum, ten whose momentum ends, and a slow drag with 150 ms pauses; a trackpad flick and a slow stopped drag on an info sheet; a fling, a slow 60 px swipe, a 42 px spike and back-to-back swipes on a pager; a row opened and swiped back within one gesture, and a long fast swipe; a pinch ending; a trackpad pan through a window blur and through a hidden page                                                                                                                                                                                                                                                                    | a trackpad stretch that differs from a finger's for the same travel (120 px gives 54 px on the reference sheet), a mouse wheel that moves a sheet, a pager or a row, splitter counts other than ten, ten and one, momentum that moves a surface, a flick released with no velocity, a pager that travels past one page or pages on a spike, an info sheet a flick leaves open or a slow stopped drag closes, an open row that reveals its other side within one gesture, a trackpad pan a window blur or a hidden page leaves mid-gesture, or a pinch that ends after 100 ms fails                                                                                                                       |
 | FR44            | Unit tests of a pen press a window blur ends, on a Switch, a Slider and the host, under a coarse and a fine pointer                                 | a pen press on a Switch and on a Slider, blur mid-press: nothing toggles or commits; a pen whose contact ends in `pointercancel`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | with the host keeping no note of a blur-cancelled pen, the Switch toggles at the pen's click                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | all             | iOS simulator: the UIKit reference capture and the same gesture in Safari; real iOS Safari devices; Android Chrome in the Android emulator (DEC-27) | per component                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | an unmatched curve or timing is a parity defect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| all (DEC-31)    | The evidence-carry check, before device or emulator evidence from an earlier head counts at a later head                                            | a later head that only merges `main`; the pull request's own changes byte-identical or changed; a merge that changes a file the pull request changes, a direct import of those changes, a shared motion or layer module, or none of them                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | the evidence-carry check compares the PR's own diff between the two heads, and the merge's changed files against the files the PR changes, the changes' direct imports and the shared motion and layer modules (currently `motion/transientCopy`, `motion/inertClone`, `motion/animator`, `motion/carryAnimations`, `Layer/useLayer`, `hooks/usePager`); any overlap fails                                                                                                                                                                                                                                                                                                                               |
+| all (DEC-31)    | The evidence-carry check, before device or emulator evidence from an earlier head counts at a later head                                            | a later head that only merges `main`; the pull request's own changes byte-identical or changed; a merge that changes a file the pull request changes, a direct import of those changes, a shared motion or layer module, or none of them; a generated file among the pull request's own files that CI proves regenerates identically, or does not prove; a commit, or an overlap with the pull request's own files, confined to test-only files as DEC-31 defines them, or knowledge records, or not                                                                                                                                                                                                                                                                                                                                       | the evidence-carry check compares the PR's own diff between the two heads, and the merge's changed files against the files the PR changes, the changes' direct imports and the shared motion and layer modules (currently `motion/transientCopy`, `motion/inertClone`, `motion/animator`, `motion/carryAnimations`, `Layer/useLayer`, `hooks/usePager`); any overlap fails, except a generated file among the pull request's own files that CI proves regenerates identically at the new head; a changed own diff, or an overlap with the pull request's own files, confined to test-only files as DEC-31 defines them, knowledge records or `.changeset/` release notes, passes                         |
 
 ## Decision log
 
@@ -1510,7 +1535,7 @@ checks there.
 
 Rejected: a physical Android phone as a gate or as a follow-up check.
 
-### DEC-31 — Device and emulator evidence carries across a main merge that touches none of the pull request's files, direct imports or shared motion and layer modules
+### DEC-31 — Device and emulator evidence carries across a main merge that touches none of the pull request's hand-edited source files, direct imports or shared motion and layer modules
 
 **Reference:** `spec:AST-094/DEC-31`
 **Decider:** `cixzhang`, `2026-11-09`
@@ -1533,6 +1558,24 @@ steps and frame-checked evidence, instead of by her; it returns to her only when
 the side-by-side shows a major difference. A first check of a behavior still
 goes to her. The owner's words: "Can you just check it yourself after and only
 ahow me if theres major differences".
+
+Amended by the owner (`cixzhang`, 2026-11-13): a merge whose only overlap
+with the pull request's own files is generated files (route manifests, registry
+lockfiles, CLI fixtures) keeps the evidence when CI proves each of those files
+regenerates identically at the new head. A merge that changes one of the pull
+request's hand-edited source files, a file its changes import directly, or a
+shared motion or layer module still requires a new take. The owner's words:
+"Yes, when CI proves they regenerate identically."
+
+Amended by the owner (`cixzhang`, 2026-11-12): evidence also carries over a
+commit, or a merge's change to the pull request's own files, that touches only
+test-only files or knowledge records. A test-only file is one under a
+`__tests__/` folder or named `*.test.*` or `*.spec.*` that no rendered or
+shipped code imports, a story included; a knowledge record is Markdown under
+`docs/specs/`, `docs/architecture/`, `docs/families/` or `docs/design/`. A
+release note under `.changeset/` carries the same way, since it renders
+nothing (`spec:AST-030` FR13). Any other file, apart from the generated files above, requires a new take. The
+owner's choice: "Test and spec-only".
 
 ### DEC-28 — Sheet stretch at the tallest detent
 
@@ -1560,6 +1603,20 @@ the sheet moves beside it. WebKit ends a touch's click when one of its moves is
 cancelled, so waiting out the wobble keeps a tap's click on a control in the
 sheet. The trade-off: a tap that wobbles 5 to 8 px toward the edge loses its
 click.
+
+### DEC-32 — A held swipe row stays under the finger
+
+**Reference:** `spec:AST-094/DEC-32`
+**Decider:** `cixzhang`, `2026-11-11`
+
+While a finger holds a swipe row, from the moment the swipe claims the gesture
+the row's offset equals the finger's travel since touch-down, every frame,
+until release; past the confirm point a lead grows to the confirmation offset
+on the measured confirm motion (`spec:AST-057` FR5) and the row keeps that
+lead. No spring follows the finger; the release's settle keeps its measured
+roles. The owners' words: "…If im dragging a portion of the listitem undermy
+finger i expect that to stay under my finger the entire duration of the
+gesture until i release".
 
 ## Open questions
 

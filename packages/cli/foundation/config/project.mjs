@@ -45,6 +45,7 @@ import {
   resolveInstalledIntegrationDir,
 } from '../integrations/integrations.mjs';
 import {loadAutolinkCandidates} from '../integrations/autolink.mjs';
+import {missingDeclaredDependency} from '../integrations/missing-dependency.mjs';
 import {
   computerInstallRoots,
   loadComputerIntegrations,
@@ -118,6 +119,16 @@ import {
 const ISSUES_CODEC = {
   encode: (/** @type {any} */ value) => value,
   decode: (/** @type {any} */ value) => value,
+  /** A list of issue records, each with its code, severity and message. */
+  valid: (/** @type {any} */ value) =>
+    Array.isArray(value) &&
+    value.every(
+      issue =>
+        issue != null &&
+        typeof issue.code === 'string' &&
+        typeof issue.severity === 'string' &&
+        typeof issue.message === 'string',
+    ),
 };
 
 export {CONFIG_BASENAMES, findConfigPath} from './config-path.mjs';
@@ -1077,6 +1088,7 @@ export class Project {
         sets,
         this.#config.experimental?.iconSet,
         withdrawn,
+        this.#config.experimental?.iconVariant,
       );
       return {sets: orderIconSets(sets, choice), withdrawn, choice};
     });
@@ -1321,6 +1333,63 @@ export class Project {
   }
 
   /**
+   * The passes that find every integration issue: template and component
+   * replacement validity (over Core plus every integration), then each
+   * integration's own checks.
+   */
+  async #runIssuePasses() {
+    // Template replacement validity depends on the combined Core +
+    // integration catalog. Resolve it first so issue results never depend
+    // on which discovery method the caller happened to invoke earlier. Only
+    // an integration's own templates can replace one, so with none, Core's
+    // templates stay unread.
+    if (this.#loadedIntegrations.some(hasTemplatesRoot)) {
+      await this.templates();
+    }
+    // Component replacement validity likewise depends on Core plus every
+    // integration's components.
+    await this.componentReplacements();
+    for (const integration of this.#loadedIntegrations) {
+      await this.#collectIssues(integration);
+    }
+    // An installed dependency whose manifest could not be loaded for want of
+    // a package leaves no loaded record, so nothing above sees it: report it
+    // here, as a package named in astryx.config that fails to load is.
+    for (const failed of this.#unloadedDependencies()) {
+      this.#pushIssue(failed.spec, {
+        code: 'integration_error',
+        severity: 'error',
+        message: failed.error,
+      });
+    }
+  }
+
+  /**
+   * The installed dependencies, linked without a config entry, whose manifest
+   * could not be loaded because a package that the importing package requires
+   * (a dependency or a required peer) is missing, with the load error. That is a broken install, which the
+   * project can fix by installing again; a dependency's own packaging bug (a
+   * manifest that throws, does not validate, or imports what it does not
+   * declare) stays out of the project's issues, since the project cannot fix
+   * it.
+   * @returns {Array<{spec: string, error: string}>}
+   */
+  #unloadedDependencies() {
+    return [...(PROVIDER_LEDGERS.get(this)?.values() ?? [])].flatMap(entry =>
+      entry.outcome === 'load-failed' &&
+      entry.candidate.source === 'autolinked' &&
+      missingDeclaredDependency(entry.error ?? '') != null
+        ? [
+            {
+              spec: entry.candidate.spec ?? entry.label,
+              error: entry.error ?? 'its manifest could not be loaded',
+            },
+          ]
+        : [],
+    );
+  }
+
+  /**
    * The accumulated integration issues (deduped by package, code, message).
    * When called directly, also validates any configured integration not yet
    * visited by a discovery call, so the returned set is complete on demand.
@@ -1330,22 +1399,40 @@ export class Project {
   async issues() {
     // Each issue these passes find belongs to an integration, because Core's
     // templates and components declare no replacement. A project with no
-    // integration skips them.
-    if (this.#loadedIntegrations.length > 0) {
-      // Template replacement validity depends on the combined Core +
-      // integration catalog. Resolve it first so issue results never depend
-      // on which discovery method the caller happened to invoke earlier. Only
-      // an integration's own templates can replace one, so with none, Core's
-      // templates stay unread.
-      if (this.#loadedIntegrations.some(hasTemplatesRoot)) {
-        await this.templates();
-      }
-      // Component replacement validity likewise depends on Core plus every
-      // integration's components.
-      await this.componentReplacements();
-      for (const integration of this.#loadedIntegrations) {
-        await this.#collectIssues(integration);
-      }
+    // integration skips them (one whose manifest failed to load counts).
+    if (
+      this.#loadedIntegrations.length > 0 ||
+      this.#unloadedDependencies().length > 0
+    ) {
+      // A function of the files the passes read and of the issues already
+      // found (which the key holds): the kept gather stamps the files, so a
+      // later run with every one unchanged reads the whole list back and
+      // skips the passes, discovery included.
+      const before = this.#issues.map(i => ({...i}));
+      const all = await persistedGather(
+        [
+          'project-issues',
+          this.#cwd,
+          // The Core the replacement pass reads: a carried Core for everyday
+          // commands, the project's own for doctor.
+          this.#core,
+          this.coreDir() ?? null,
+          this.#loadedIntegrations.map(
+            integration => integration.__packageDir ?? integration.name ?? null,
+          ),
+          Boolean(this.#config.experimental?.iconSet),
+          this.#unloadedDependencies(),
+          before,
+        ],
+        async () => {
+          await this.#runIssuePasses();
+          return this.#issues.map(i => ({...i}));
+        },
+        ISSUES_CODEC,
+      );
+      this.#issues = all.map((/** @type {ProjectIntegrationIssue} */ i) => ({
+        ...i,
+      }));
     }
     // Return a stable copy so callers can't mutate internal state.
     return this.#issues.map(i => ({...i}));

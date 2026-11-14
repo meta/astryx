@@ -96,6 +96,14 @@ registerEnglishFallback(english);
  */
 const PRESSED_ON: string = '[data-astryx-press="on"]';
 
+/**
+ * The button's own popup is open. A press does not scale it then, so the
+ * popup anchors to the button at rest. A disclosure button, with no popup,
+ * keeps its press.
+ */
+const POPUP_OPEN: string =
+  '[aria-expanded="true"][aria-haspopup]:not([aria-haspopup="false"])';
+
 /** `aria-haspopup` values of a trigger that keeps its own press and opening. */
 const MENU_POPUPS: ReadonlySet<string> = new Set(['true', 'menu', 'listbox']);
 
@@ -142,8 +150,11 @@ const styles = stylex.create({
       default: 'pointer',
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
-    transitionProperty:
-      'background-image, background-color, color, opacity, transform',
+    transitionProperty: {
+      default: 'background-image, background-color, color, opacity, transform',
+      // The press scale goes at once as the popup opens.
+      [POPUP_OPEN]: 'background-image, background-color, color, opacity',
+    },
     transitionDuration: {
       default: durationVars['--duration-fast'],
       '@media (prefers-reduced-motion: reduce)': '0s',
@@ -156,7 +167,7 @@ const styles = stylex.create({
       // A mouse press. Under a coarse pointer `:active` is not a press (it
       // paints on the touch and outlives a scroll), so the touch press model
       // writes `data-astryx-press` instead; see interactionOverlay.stylex.ts.
-      ':active:where(:not(:disabled,[aria-disabled="true"]))': {
+      [`:active:where(:not(:disabled,[aria-disabled="true"],${POPUP_OPEN}))`]: {
         default: 'scale(0.98)',
         '@media (pointer: coarse)': 'scale(1)',
         // Under reduced motion a press never scales the button. The overlay
@@ -166,7 +177,7 @@ const styles = stylex.create({
         '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
           'scale(1)',
       },
-      [PRESSED_ON]: {
+      [`${PRESSED_ON}:not(${POPUP_OPEN})`]: {
         default: 'scale(0.98)',
         '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
           'scale(1)',
@@ -184,7 +195,7 @@ const styles = stylex.create({
   pressableTracked: {
     transform: {
       default: 'scale(1)',
-      [PRESSED_ON]: {
+      [`${PRESSED_ON}:not(${POPUP_OPEN})`]: {
         default: 'scale(0.98)',
         '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
           'scale(1)',
@@ -322,11 +333,10 @@ const variants = stylex.create({
   destructive: {
     backgroundColor: colorVars['--color-error'],
     color: colorVars['--color-on-error'],
-    // Forced colors replace the fill with ButtonFace; a border keeps the
-    // destructive fill's shape visible (architecture:theme-tokens INV11). A
-    // border, not an outline, leaves the shared focus ring intact.
-    borderWidth: {default: 0, '@media (forced-colors: active)': '1px'},
-    borderStyle: {default: 'none', '@media (forced-colors: active)': 'solid'},
+    // Forced colors replace the fill with ButtonFace; the solid-variant edge
+    // (`forcedColorsEdge`) keeps the destructive fill's shape visible
+    // (architecture:theme-tokens INV11), in this color. A border, not an
+    // outline, leaves the shared focus ring intact.
     borderColor: {
       default: null,
       '@media (forced-colors: active)': 'CanvasText',
@@ -635,6 +645,115 @@ const groupStyles = stylex.create({
 });
 
 /**
+ * A solid variant's edge in forced colors. These variants separate themselves
+ * from the page with a fill alone and have no border; forced colors discards
+ * the fill, which would leave plain text with no perceivable boundary
+ * (WCAG 1.4.11). `ButtonText` is the platform's own button edge. `ghost` is
+ * flat by design and keeps none.
+ *
+ * Outside forced colors a standalone button keeps the base's borderless
+ * values, and a grouped button's longhands are `null`, so the group's own
+ * values stay. A grouped button gets only the longhands its group does not own: the group's
+ * dividers stay where they are under both StyleX style resolutions, and the
+ * group's first and last buttons close its outer edge.
+ */
+const FORCED_COLORS = '@media (forced-colors: active)';
+
+const forcedColorsEdge = stylex.create({
+  standalone: {
+    // Repeats the base's 0 and none: these keys replace the base's own.
+    borderWidth: {default: 0, [FORCED_COLORS]: '1px'},
+    borderStyle: {default: 'none', [FORCED_COLORS]: 'solid'},
+    borderColor: {default: null, [FORCED_COLORS]: 'ButtonText'},
+  },
+  groupHorizontal: {
+    borderBlockStartWidth: {default: null, [FORCED_COLORS]: '1px'},
+    borderBlockStartStyle: {default: null, [FORCED_COLORS]: 'solid'},
+    borderBlockEndWidth: {default: null, [FORCED_COLORS]: '1px'},
+    borderBlockEndStyle: {default: null, [FORCED_COLORS]: 'solid'},
+    // Repeats the group's divider and gives the first button a leading edge.
+    borderInlineStartWidth: {
+      default: borderVars['--border-width'],
+      ':first-child': {default: 0, [FORCED_COLORS]: '1px'},
+    },
+    borderInlineStartStyle: {
+      default: 'solid',
+      ':first-child': {default: 'none', [FORCED_COLORS]: 'solid'},
+    },
+    borderInlineEndWidth: {
+      default: null,
+      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: '1px'},
+    },
+    borderInlineEndStyle: {
+      default: null,
+      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: 'solid'},
+    },
+  },
+  groupVertical: {
+    borderInlineStartWidth: {default: null, [FORCED_COLORS]: '1px'},
+    borderInlineStartStyle: {default: null, [FORCED_COLORS]: 'solid'},
+    borderInlineEndWidth: {default: null, [FORCED_COLORS]: '1px'},
+    borderInlineEndStyle: {default: null, [FORCED_COLORS]: 'solid'},
+    // Repeats the group's divider and gives the first button a leading edge.
+    borderBlockStartWidth: {
+      default: borderVars['--border-width'],
+      ':first-child': {default: 0, [FORCED_COLORS]: '1px'},
+    },
+    borderBlockStartStyle: {
+      default: 'solid',
+      ':first-child': {default: 'none', [FORCED_COLORS]: 'solid'},
+    },
+    borderBlockEndWidth: {
+      default: null,
+      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: '1px'},
+    },
+    borderBlockEndStyle: {
+      default: null,
+      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: 'solid'},
+    },
+  },
+});
+
+// The color of a grouped button's forced-colors edge: `destructive` takes
+// `CanvasText`, the others `ButtonText`. These are the same longhands the
+// edge sets, so the color holds whichever order a build puts shorthands and
+// longhands in.
+const forcedColorsEdgeColor = stylex.create({
+  horizontal: {
+    borderBlockStartColor: {default: null, [FORCED_COLORS]: 'ButtonText'},
+    borderBlockEndColor: {default: null, [FORCED_COLORS]: 'ButtonText'},
+    borderInlineEndColor: {
+      default: null,
+      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: 'ButtonText'},
+    },
+  },
+  horizontalOnError: {
+    borderBlockStartColor: {default: null, [FORCED_COLORS]: 'CanvasText'},
+    borderBlockEndColor: {default: null, [FORCED_COLORS]: 'CanvasText'},
+    borderInlineEndColor: {
+      default: null,
+      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: 'CanvasText'},
+    },
+  },
+  vertical: {
+    borderInlineStartColor: {default: null, [FORCED_COLORS]: 'ButtonText'},
+    borderInlineEndColor: {default: null, [FORCED_COLORS]: 'ButtonText'},
+    borderBlockEndColor: {
+      default: null,
+      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: 'ButtonText'},
+    },
+  },
+  verticalOnError: {
+    borderInlineStartColor: {default: null, [FORCED_COLORS]: 'CanvasText'},
+    borderInlineEndColor: {default: null, [FORCED_COLORS]: 'CanvasText'},
+    borderBlockEndColor: {
+      default: null,
+      [IS_LAST_ITEM]: {default: null, [FORCED_COLORS]: 'CanvasText'},
+    },
+  },
+});
+
+/**
  * Whether `node` adds nothing to a content name: nothing renders, or an Icon
  * with no label. Any other node can add text.
  */
@@ -705,6 +824,10 @@ export function Button({
   const t = useComponentTranslator();
   const size = useSize(sizeProp, 'md');
   const buttonGroup = useButtonGroup();
+  const isSolidVariant =
+    variant === 'primary' ||
+    variant === 'secondary' ||
+    variant === 'destructive';
   // A tracking group's tracker paints this button's pointer press. A menu
   // trigger is not tracked: it keeps its own press and opening.
   const groupPointers = use(PressGroupContext);
@@ -866,6 +989,21 @@ export function Button({
     // by the ButtonGroup so the shared surface lifts as one unit.
     !buttonGroup && elevationStyles[elevation],
     width != null && dynamicStyles.width(width),
+    isSolidVariant &&
+      (buttonGroup == null
+        ? forcedColorsEdge.standalone
+        : buttonGroup.orientation === 'horizontal'
+          ? forcedColorsEdge.groupHorizontal
+          : forcedColorsEdge.groupVertical),
+    isSolidVariant &&
+      buttonGroup != null &&
+      (buttonGroup.orientation === 'horizontal'
+        ? variant === 'destructive'
+          ? forcedColorsEdgeColor.horizontalOnError
+          : forcedColorsEdgeColor.horizontal
+        : variant === 'destructive'
+          ? forcedColorsEdgeColor.verticalOnError
+          : forcedColorsEdgeColor.vertical),
     // AFTER the shared focus outline: the outline supplies width/style/offset
     // for every variant, and `destructive` re-colors just the ring to match
     // its own surface. Ordering is the mechanism — StyleX is last-wins.

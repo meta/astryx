@@ -143,7 +143,15 @@ describe('CSS values by their grammar', () => {
         themeEditSet('t', prop, value, {cwd, on: 'card'}),
       );
       expect(r.code, `${prop} ${value}`).toBe('ERR_THEME_BAD_VALUE');
-      expect(r.run[0]).toMatch(new RegExp(` set t ${prop} `));
+      // padding auto, min-height bogus: never a reset (0, auto) as a
+      // repair, only how.
+      expect(r.run[0]).toMatch(
+        new RegExp(
+          /^(padding|min-height)$/.test(prop)
+            ? ` how ${prop}$`
+            : ` set t ${prop} `,
+        ),
+      );
     }
   }, 240_000);
 });
