@@ -8,7 +8,8 @@
  * outside any project. A second run with the same inputs hits and answers
  * byte for byte as the first; an edit to a file the gather read misses and
  * gives the fresh answer; a run of the bin in the same folder never uses the
- * hosted entry, whose answer depends on what the host passed.
+ * hosted entry, whose answer depends on what the host passed; and a host that
+ * runs the CLI as another command gets that command in its answer.
  */
 
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
@@ -19,6 +20,7 @@ import {
   usePackedCli,
   work,
   packed,
+  project,
   widgets,
   writeTemplate,
   run,
@@ -29,6 +31,7 @@ import {
   hasModuleHooks,
 } from '../test-utils/packed-gather-cache-fixture.mjs';
 import {REPO_ROOT} from '../test-utils/repo-root.mjs';
+import {COMPONENT_REPLACES_CLI} from '../foundation/integrations/cli-requirement.mjs';
 
 usePackedCli();
 
@@ -51,6 +54,37 @@ beforeAll(() => {
     JSON.stringify({name: 'package-set', private: true}),
   );
   writeTemplate('sprockets', 'Sprocket counts by team.');
+  // A component whose replacement target is not in Core: its finding names
+  // the command the host runs the CLI as.
+  fs.writeFileSync(
+    path.join(widgets, 'astryx.integration.mjs'),
+    "export default {templates: './templates', components: './components'};\n",
+  );
+  fs.writeFileSync(
+    path.join(widgets, 'package.json'),
+    JSON.stringify({
+      name: '@acme/widgets',
+      version: '1.0.0',
+      peerDependencies: {'@astryxdesign/cli': `>=${COMPONENT_REPLACES_CLI}`},
+    }),
+  );
+  fs.mkdirSync(path.join(widgets, 'components'), {recursive: true});
+  fs.writeFileSync(
+    path.join(widgets, 'components', 'AcmeGauge.doc.mjs'),
+    `export default ${JSON.stringify({
+      type: 'component',
+      name: 'AcmeGauge',
+      displayName: 'AcmeGauge',
+      import: '@acme/widgets/components/AcmeGauge',
+      replaces: 'NoSuchCoreGauge',
+      usage: {description: 'AcmeGauge for Acme apps.'},
+      props: [],
+    })};\n`,
+  );
+  fs.writeFileSync(
+    path.join(widgets, 'components', 'AcmeGauge.tsx'),
+    'export function AcmeGauge() { return null; }\n',
+  );
   const modules = path.join(root, 'node_modules');
   fs.symlinkSync(
     path.join(REPO_ROOT, 'packages', 'core'),
@@ -79,7 +113,7 @@ finally { fs.rmSync(configPath, {force: true}); }
 const {runHostedCli} = await import(${JSON.stringify(path.join(packed, 'host', 'index.mjs'))});
 const {status} = await runHostedCli({
   argv, cwd: config.cwd, roots: [config.root],
-  integrations: config.integrations, cliCommand: 'acme-tool astryx',
+  integrations: config.integrations, cliCommand: config.door,
 });
 process.exitCode = status;
 `,
@@ -106,18 +140,20 @@ let runs = 0;
  * One hosted run, as a host makes it: a new config file, which the host
  * deletes after reading it, in the empty folder.
  * @param {string} tmp
+ * @param {{ask?: string[], door?: string, cwd?: string}} [options] - the
+ *   arguments, the command the host runs the CLI as, and the folder
  */
-function hosted(tmp) {
+function hosted(tmp, {ask = ASK, door = 'acme-tool astryx', cwd = empty} = {}) {
   fs.mkdirSync(tmp, {recursive: true});
   const config = path.join(work, `host-config-${runs++}.json`);
   fs.writeFileSync(
     config,
-    JSON.stringify({root, cwd: empty, integrations: ['@acme/widgets']}),
+    JSON.stringify({root, cwd, integrations: ['@acme/widgets'], door}),
   );
   const base = {...process.env};
   delete base.CI;
-  const result = spawnSync(process.execPath, [host, config, ...ASK], {
-    cwd: empty,
+  const result = spawnSync(process.execPath, [host, config, ...ask], {
+    cwd,
     encoding: 'utf8',
     env: {
       ...base,
@@ -194,6 +230,39 @@ describe.skipIf(process.platform !== 'linux' || process.getuid?.() === 0)(
         expect(bin.stdout).not.toBe(answer.stdout);
         // And the bin's entry is not what the next hosted run answers.
         expect(hosted(tmp).stdout).toBe(answer.stdout);
+      },
+      120_000,
+    );
+
+    it.skipIf(!hasModuleHooks)(
+      'answers with the command each host runs it as',
+      () => {
+        // In the project, doctor reports the integration's replacement
+        // finding, which names the command. Its cache row names the folder
+        // and counts what it holds, which differ between two folders.
+        const ask = ['doctor', '--json'];
+        const doctor = (
+          /** @type {string} */ tmp,
+          /** @type {string} */ door,
+        ) => {
+          const r = hosted(tmp, {ask, door, cwd: project});
+          return {
+            ...r,
+            stdout: r.stdout
+              .split(tmp)
+              .join('<cache>')
+              .replace(/\(\d+ entr(?:y|ies), [\d.]+ MB\)/g, '(<count>)'),
+          };
+        };
+        const tmp = keptTmp('hosted-doors');
+        const acme = doctor(tmp, 'acme-tool astryx');
+        expect(acme.status, acme.stderr).toBe(0);
+        expect(acme.stdout).toContain('acme-tool astryx component --list');
+        const other = doctor(tmp, 'other-tool astryx');
+        expect(other.stdout).toContain('other-tool astryx component --list');
+        expect(other).toEqual(
+          doctor(keptTmp('hosted-doors-fresh'), 'other-tool astryx'),
+        );
       },
       120_000,
     );

@@ -58,6 +58,7 @@ import {currentUid, isPrivateDir} from '../env/private-dir.mjs';
 import {userCacheDir} from '../env/user-dirs.mjs';
 import {jitiCacheDir} from './jiti-cache.mjs';
 import {hostedRun} from '../runtime/package-root.mjs';
+import {cliDoor} from '../env/cli-command.mjs';
 import {CACHE_LIMIT_BYTES, evictOldest} from './cache-eviction.mjs';
 import {
   fileStamp,
@@ -538,11 +539,12 @@ function entryKey(key, id) {
 
 /**
  * What a host passed that decides a gather, or null outside a hosted run: its
- * package sets, by real path and in its order, and the integrations it
- * approves. A run reads only some of a package set's files, so their stamps
- * cannot tell a hosted run from a run of the bin in the same folder. The
- * run's folder is in each gather's own key.
- * @returns {{roots: string[], integrations: string[]} | null}
+ * package sets, by real path and in its order, the integrations it approves,
+ * and the command it runs the CLI as, which kept findings print. A run reads
+ * only some of a package set's files, so their stamps cannot tell a hosted
+ * run from a run of the bin in the same folder, and no file holds the
+ * command. The run's folder is in each gather's own key.
+ * @returns {{roots: string[], integrations: string[], door: string | null} | null}
  */
 function hostInputs() {
   const hosted = hostedRun();
@@ -550,6 +552,7 @@ function hostInputs() {
   return {
     roots: hosted.roots.map(root => withoutRecording(() => realDir(root))),
     integrations: [...hosted.integrations],
+    door: cliDoor() ?? null,
   };
 }
 
