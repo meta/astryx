@@ -18,6 +18,7 @@ applies_to:
     packages/cli/api/theme/build/build.mjs,
     packages/cli/api/theme/build/core-interception.mjs,
     packages/build/,
+    packages/core/src/reset.css,
   ]
 verified_by:
   [

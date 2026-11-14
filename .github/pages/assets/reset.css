@@ -77,12 +77,11 @@
    * inject their toggle-variable initialization in the same CSS bundle.
    * XDSTheme overrides color-scheme per-wrapper as needed.
    *
-   * html takes the --font-family-body token, and body inherits it. Text that
-   * a library adds to the body outside a Theme wrapper (a hidden span that
-   * measures a label, a portal) then uses the font that the token names at
-   * the page root. Where no stylesheet defines the token, the declaration has
-   * no value and html keeps the browser's default font. An app's own html or
-   * body font wins.
+   * html takes the --font-family-body token, and body inherits it. Libraries
+   * add text to the body outside a Theme wrapper, such as a span that
+   * measures a label. That text gets the token's font at the page root. Where
+   * no stylesheet defines the token, the declaration has no value and html
+   * keeps the browser's default font. An app's own html or body font wins.
    */
   :where(html) {
     font-family: var(--font-family-body);
