@@ -346,8 +346,9 @@ describe('weighStart', () => {
     });
 
     it('takes the table score the listed templates hold at its place in the ranker order', () => {
-      // Every idea word is in a table, so the listed templates get distinct
-      // table scores: board 3 and charts 2 in the first table, grid 1 in the
+      // The idea's listed words are in the tables ("gauges" names only
+      // gauge-fleet's label), so the listed templates get distinct table
+      // scores: board 3 and charts 2 in the first table, grid 1 in the
       // second. The ranker ties gauge-fleet with charts at the top, so it
       // takes the best listed score in each table and starts. A place one
       // lower, or a table order read from the bottom, gives it a lower score,
@@ -369,6 +370,50 @@ describe('weighStart', () => {
         },
       );
       expect(start).toBe('gauge-fleet');
+    });
+
+    it('takes the table score below the listed template the ranker puts above it', () => {
+      // board ranks above gauge-fleet, so gauge-fleet takes the table's second
+      // score, not its best, and board starts.
+      const below = [
+        page('board', 5, 'Board'),
+        page('gauge-fleet', 4, 'Gauges'),
+        page('charts', 3, 'Charts'),
+        page('grid', 1, 'Grid'),
+        page('top-nav', 0, 'Shell'),
+      ];
+      const start = weighStart(
+        'kanban charts cards gauges',
+        below,
+        null,
+        catalog,
+        {
+          weights: blendWeights,
+        },
+      );
+      expect(start).toBe('board');
+    });
+
+    it('takes the middle of a tie with listed templates', () => {
+      // gauge-fleet ties board and charts: half of the two listed templates it
+      // ties puts it at the second place, so board keeps the lead.
+      const tied3 = [
+        page('gauge-fleet', 4, 'Gauges'),
+        page('board', 4, 'Board'),
+        page('charts', 4, 'Charts'),
+        page('grid', 1, 'Grid'),
+        page('top-nav', 0, 'Shell'),
+      ];
+      const start = weighStart(
+        'kanban charts cards gauges',
+        tied3,
+        null,
+        catalog,
+        {
+          weights: blendWeights,
+        },
+      );
+      expect(start).toBe('board');
     });
 
     it('stays below the listed templates when the idea names only a word labels share', () => {
