@@ -113,17 +113,21 @@ export function makeCompiler(project, parts) {
     if (cond === 'always') return '';
     const attrs = MAP[target]?.attrs ?? {};
     const [attrPart, ...css] = cond.split(' ');
+    const t = TARGET.get(target);
     const kept = (attrPart.includes('=') ? attrPart.split(',') : []).filter(
       kv => {
         const [k] = kv.split('=');
-        // (The place another component puts the part in, from the part
-        // data's context conditions, stays: it is never the part at rest.)
+        // Only the part's own visual props are read down to what a person
+        // acts on (a size or an elevation the render happened to use is not
+        // a condition). Anything else stays: a runtime state of the part, a
+        // prop of another target on the same element (a selectable card's
+        // selection on its card), and the place another component puts the
+        // part in (the part data's aria context conditions); none is the
+        // part at rest.
+        if (!t?.props.includes(k) || t.states.includes(k)) return true;
         return (
-          k === 'selected' ||
-          k === 'current' ||
-          k === 'pressed' ||
-          (['variant', 'status', 'tone', 'color'].includes(k) &&
-            (attrs[k]?.length ?? 0) > 1)
+          ['variant', 'status', 'tone', 'color'].includes(k) &&
+          (attrs[k]?.length ?? 0) > 1
         );
       },
     );

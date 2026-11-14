@@ -32,7 +32,7 @@ import {SAMPLE_PAGE, elementNames, pageSource} from './_catalog.mjs';
 import {removeOnStop} from '../../foundation/fs/stop-cleanup.mjs';
 
 /** Bump when the shape of the cached part data changes. */
-const PART_DATA_VERSION = 11;
+const PART_DATA_VERSION = 12;
 
 /**
  * Flags that change what a component does or whether it shows, not how it
@@ -662,7 +662,7 @@ async function buildPartData(project) {
     // No stylesheet: every part reads nothing.
   }
   const tokens = new Set(Object.keys(project.core.tokenDefaults ?? {}));
-  const result = walkMarkup(markup, declarations(css), tokens);
+  const result = walkMarkup(markup, declarations(css), tokens, project.target);
   addInlineStatePaint(project, result.map);
   addIndicatorRings(project, result.map);
   return {
@@ -858,9 +858,10 @@ function resolvePrivate(v, env, tokens, depth = 0) {
  * @param {string} html
  * @param {ReturnType<typeof declarations>} decls
  * @param {Set<string>} tokens
+ * @param {Map<string, {props: string[], states: string[]}>} [targets] the theming targets by key: the visual props and runtime states each declares are the data attributes read as its conditions
  * @returns {{map: Record<string, PartRecord>, pairs: TextPair[]}}
  */
-export function walkMarkup(html, decls, tokens) {
+export function walkMarkup(html, decls, tokens, targets = new Map()) {
   /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, tags: Set<string>, innerCorners: Set<string>}>} */
   const map = {};
   /** @type {Array<{env: Record<string, string>, target: string | null, fg: PaintSide | null, bg: PaintSide | null}>} */
@@ -892,25 +893,35 @@ export function walkMarkup(html, decls, tokens) {
     const cls = (/class="([^"]*)"/.exec(attrs)?.[1] ?? '')
       .split(/\s+/)
       .filter(Boolean);
+    const parent = stack[stack.length - 1];
+    // The theming targets the element carries (else the one it sits in).
+    const keys = cls
+      .filter(c => c.startsWith('astryx-') && !c.startsWith('astryx-theme'))
+      .map(c => c.slice(7));
+    const declaredBy = (keys.length ? keys : [parent.target])
+      .map(k => (k ? targets.get(k) : undefined))
+      .filter(t => t != null);
+    const props = new Set(declaredBy.flatMap(t => t.props));
+    const states = new Set(declaredBy.flatMap(t => t.states));
+    // A data attribute the element's target declares (a visual prop or a
+    // runtime state, written by `themeProps` as `data-<name>`) is a
+    // condition of what the part reads.
     const dataAttrs = Object.fromEntries(
-      [
-        ...attrs.matchAll(
-          /data-(variant|status|size|selected|state|elevation|tone|color|level|weight|checked)="([^"]*)"/g,
-        ),
-      ].map(x => [x[1], x[2]]),
+      [...attrs.matchAll(/\bdata-([a-z][\w-]*)="([^"]*)"/g)]
+        .filter(x => props.has(x[1]) || states.has(x[1]))
+        .map(x => [x[1], x[2]]),
     );
     // The place another component puts a part in (the current page's
     // button in a pagination, a pressed toggle) is a condition of what that
     // component styles it with there, never the part's look at rest. A part
-    // that marks the place with a theme state of its own (a selected tab)
+    // that marks the place with a runtime state of its own (a selected tab)
     // is conditioned by that state already.
-    const ownState = ['selected', 'checked', 'state'].some(k => k in dataAttrs);
+    const ownState = Object.keys(dataAttrs).some(k => states.has(k));
     const context = ownState
       ? []
-      : [...attrs.matchAll(/\baria-(current|pressed)="([^"]*)"/g)]
+      : [...attrs.matchAll(/\b(aria-(?:current|pressed))="([^"]*)"/g)]
           .filter(x => x[2] !== 'false')
           .map(x => `${x[1]}=${x[2]}`);
-    const parent = stack[stack.length - 1];
     const env = {...parent.env};
     const own = cls.flatMap(c => decls.get(c) ?? []);
     for (const d of own)
