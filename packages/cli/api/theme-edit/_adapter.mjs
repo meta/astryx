@@ -32,7 +32,7 @@
  */
 
 import {writeThemeTemplate} from '../theme/template/template.mjs';
-import {buildSuggestion} from '../theme/build/build.mjs';
+import {buildSuggestion, realLocation} from '../theme/build/build.mjs';
 import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import {createRequire} from 'node:module';
@@ -923,8 +923,8 @@ export async function editorFollowCompile(err, cwd) {
   const COMPILE = {group: 'experimental theme', build: 'compile'};
   const inside = (/** @type {string} */ p) => {
     const rel = path.relative(
-      realPathOf(path.resolve(cwd)),
-      realPathOf(path.resolve(p)),
+      realLocation(path.resolve(cwd)),
+      realLocation(path.resolve(p)),
     );
     return !rel.startsWith('..') && !path.isAbsolute(rel);
   };
@@ -1030,8 +1030,8 @@ export async function editorCompileProblem(
     // written with backslashes or through a link, as the build reads it.
     const rel = path
       .relative(
-        realPathOf(cwdRoot),
-        realPathOf(path.resolve(cwd, slashed(out))),
+        realLocation(cwdRoot),
+        realLocation(path.resolve(cwd, slashed(out))),
       )
       .split(path.sep)
       .filter(Boolean)
@@ -1079,8 +1079,8 @@ export async function editorCompileProblem(
     const abs = path.resolve(cwd, file);
     const relParts = path
       .relative(
-        realPathOf(cwdRoot),
-        realPathOf(path.resolve(cwd, slashed(file))),
+        realLocation(cwdRoot),
+        realLocation(path.resolve(cwd, slashed(file))),
       )
       .split(path.sep);
     // The app's theme module `theme add` writes: not a theme source.
@@ -1403,27 +1403,6 @@ export async function editorThemeHold(files, {cwd}) {
 
 /** @param {string} p a path as typed, with Windows separators read as `/` */
 const slashed = p => String(p).replace(/\\/g, '/');
-
-/**
- * A path with its nearest existing parent resolved through links, so a
- * link into a folder names that folder.
- * @param {string} abs
- */
-function realPathOf(abs) {
-  /** @type {string[]} */
-  const rest = [];
-  let at = abs;
-  for (;;) {
-    try {
-      return path.join(fs.realpathSync(at), ...rest.reverse());
-    } catch {
-      const up = path.dirname(at);
-      if (up === at) return abs;
-      rest.push(path.basename(at));
-      at = up;
-    }
-  }
-}
 
 /**
  * Whether a file in an app copy folder is the editor's: its mark, or the
