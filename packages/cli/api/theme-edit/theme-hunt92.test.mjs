@@ -137,6 +137,15 @@ const CASES =
       / background none/,
     ],
     // A reset typed with a typo is that reset, corrected.
+    // A typo within the one limit: two letters swapped are one edit; a
+    // keyword two edits away is no typo of a four-letter word.
+    [
+      'display',
+      'flxe',
+      {on: 'card'},
+      [/ set b display flex --on card$/],
+      / display flow/,
+    ],
     // A short word two edits from a reset is no typo of it.
     [
       'border-style',

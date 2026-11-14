@@ -632,8 +632,30 @@ export function typoOf(typed, word) {
   const t = String(typed).trim().toLowerCase();
   const w = String(word).trim().toLowerCase();
   return (
-    /^[a-z][a-z-]{3,}$/.test(t) &&
-    /^[a-z][a-z-]{3,}$/.test(w) &&
-    levenshteinDistance(t, w) <= (t.length <= 5 ? 1 : 2)
+    /^[a-z][a-z-]{3,}$/.test(t) && /^[a-z][a-z-]{3,}$/.test(w) && typoNear(t, w)
+  );
+}
+
+/**
+ * The edits a typo of a typed word may hold: one for a word of five letters
+ * or fewer, two for a longer one. Every typo reading of the editor (a value,
+ * a setting, a part, a state, a theme or token name) uses this limit.
+ * @param {string} typed
+ */
+export const typoLimit = typed => (String(typed).trim().length <= 5 ? 1 : 2);
+
+/**
+ * Whether `word` is within the typo limit of `typed` (two letters swapped
+ * count as one edit, as typed: flxe is flex).
+ * @param {string} typed
+ * @param {string} word
+ */
+export function typoNear(typed, word) {
+  const t = String(typed).trim().toLowerCase();
+  const limit = typoLimit(t);
+  return (
+    levenshteinDistance(t, String(word).trim().toLowerCase(), limit, {
+      swaps: true,
+    }) <= limit
   );
 }

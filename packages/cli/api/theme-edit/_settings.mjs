@@ -47,7 +47,7 @@ import {
   WRAPPED_PARTS,
   CARD_LIKE,
 } from './_tables.mjs';
-import {cleanDialValue} from './_normal.mjs';
+import {cleanDialValue, typoLimit} from './_normal.mjs';
 import {
   alphaOf,
   colorProblem,
@@ -505,13 +505,16 @@ export function nearest(x, list, n = 3) {
   // A phrase that negates a word (not round, no caps, unbold,
   // rounded-none) never has that word as its nearest: it asks the opposite.
   if (negates(x)) return [];
-  const limit = Math.max(2, Math.floor(x.length / 3));
-  // Nearest by edit distance first (brand-drak is brand-dark, not brand); a
-  // name one holds inside the other is near too, after the close ones.
+  // Within the editor's one typo limit (typoLimit), nearest by edit
+  // distance first (brand-drak is brand-dark, not brand); a name one holds
+  // inside the other is near too, after the close ones.
+  const limit = typoLimit(x);
   return [...list]
     .filter(c => c.length > 2)
     .map(c => {
-      const d = levenshteinDistance(x, c);
+      const d = levenshteinDistance(x.toLowerCase(), c.toLowerCase(), limit, {
+        swaps: true,
+      });
       return /** @type {[string, number]} */ ([
         c,
         d <= limit ? d : c.includes(x) || x.includes(c) ? limit + 0.5 : d,

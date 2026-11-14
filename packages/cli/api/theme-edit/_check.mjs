@@ -15,7 +15,6 @@ import * as path from 'node:path';
 import {partForWord} from './_how-question.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {baseInstalled, baseThemeFile, installLine} from './_project.mjs';
-import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {
   withFallbacks,
   MATH_FUNCTION,
@@ -116,6 +115,7 @@ import {
   normalizeEntry,
   withoutDebris,
   typoOf,
+  typoNear,
 } from './_normal.mjs';
 
 export {
@@ -2432,8 +2432,8 @@ export function checkSetting(
 function fallbackVarTypo(v, TOKENS) {
   for (const [, name] of v.matchAll(/var\(\s*(--[a-z0-9-]+)\s*,/gi)) {
     if (name in TOKENS || name.startsWith('--_')) continue;
-    const near = nearest(name, Object.keys(TOKENS)).filter(
-      n => levenshteinDistance(n, name) <= 2,
+    const near = nearest(name, Object.keys(TOKENS)).filter(n =>
+      typoNear(name, n),
     );
     if (near.length)
       return `${name} is not a design token, so its fallback always shows; did you mean ${near[0]}?`;
@@ -5042,8 +5042,8 @@ export function unknownVarRef(v, TOKENS, thing) {
     // A fallback always gives a value: never "reads nothing" (a likely
     // typo is noted when the setting is made).
     if (comma) continue;
-    const near = nearest(name, Object.keys(TOKENS)).filter(
-      n => levenshteinDistance(n, name) <= 2,
+    const near = nearest(name, Object.keys(TOKENS)).filter(n =>
+      typoNear(name, n),
     );
     if (near.length)
       return {
