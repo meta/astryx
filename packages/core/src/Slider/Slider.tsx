@@ -5,7 +5,7 @@
 /**
  * @file Slider.tsx
  * @input Uses React, useId, useRef, useCallback, useEffect, Field, useTooltip, VisuallyHidden, the touch presentation resolver and useSliderTouch (UISlider's touch tracking)
- * @output Exports Slider and its props. Unfilled marks share the track token. Modifier-only key presses do not restore the thumb focus ring. A drag belongs to the pointer that started it. The thumbs and the filled range travel by `translate` in container units, so moving them never lays out. Padding on the control moves no part. The value tooltip anchors to a box that layout places at the value. During a drag and its coast, the box keeps its place and the tooltip moves with the thumb by translate. A drag on a thumb is a pan for every pointer, tracked as UISlider does. Under a coarse primary pointer, each thumb's `::before` is its touch target. A finger's tap on the track sets the value on its lift. A mouse press on the track keeps the pointer handlers. Two coincident range thumbs separate toward the press or the first movement
+ * @output Exports Slider and its props. Unfilled marks share the track token. Modifier-only key presses do not restore the thumb focus ring. A drag belongs to the pointer that started it. The thumbs and the filled range travel by `translate` in container units, so moving them never lays out. Padding on the control moves no part. The value tooltip anchors to a box that layout places at the value. During a drag and its coast, the box keeps its place and the tooltip moves with the thumb by translate. A drag on a thumb is a pan for every pointer, tracked as UISlider does. Under a coarse primary pointer, each thumb's `::before` is its touch target. A finger's tap on the track sets the value on its lift. A mouse press on the track keeps the pointer handlers. Two coincident range thumbs separate toward the press or the first movement. The text value keeps the width of its longest likely label, so the track keeps its length.
  * @position Core implementation; consumed by index.ts, tested by Slider.test.tsx
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -504,6 +504,7 @@ const styles = stylex.create({
     color: colorVars['--color-text-primary'],
     whiteSpace: 'nowrap',
     flexShrink: 0,
+    textAlign: 'end',
   },
   marksContainer: {
     position: 'absolute',
@@ -603,6 +604,41 @@ function snapToStep(val: number, min: number, step: number): number {
     20, // toFixed() throws past 20 digits
   );
   return Number(snapped.toFixed(precision));
+}
+
+const RANGE_SEPARATOR = ' – ';
+
+const textValueWidthStyles = stylex.create({
+  // The text value's width, in characters, for its longest likely label.
+  reserve: (characters: number) => ({minInlineSize: `${characters}ch`}),
+});
+
+/**
+ * Snapped values whose labels the text value reserves room for: the ends,
+ * their neighbours, and the quarter points. A label is longest at an end or
+ * where its digits grow, so these few stand for the range.
+ */
+function getTextValueCandidates(
+  min: number,
+  max: number,
+  step: number,
+): number[] {
+  const count = Math.ceil((max - min) / step);
+  if (!(step > 0) || !Number.isFinite(count) || count <= 0) {
+    return [min, max];
+  }
+  const indices = [
+    0,
+    1,
+    Math.round(count / 4),
+    Math.round(count / 2),
+    Math.round((count * 3) / 4),
+    count - 1,
+    count,
+  ];
+  return [...new Set(indices)]
+    .filter(i => i >= 0 && i <= count)
+    .map(i => clamp(snapToStep(min + i * step, min, step), min, max));
 }
 
 function getPercent(val: number, min: number, max: number): number {
@@ -1654,15 +1690,32 @@ export function Slider({ref, ...props}: SliderProps) {
   const fillEnd = getPercent(values[isRange ? 1 : 0], min, max) / 100;
   const fillStyle: FillStyle = {[FILL_START]: fillStart, [FILL_END]: fillEnd};
 
-  // Text value display
-  const textDisplay =
-    valueDisplay === 'text' ? (
-      <span {...stylex.props(styles.textValue)}>
+  // Text value display. The label sits in the same flex row as the track
+  // (which flex-grows), so a label that changes width while dragging resizes
+  // the track and shifts the thumb under the pointer. The label keeps the
+  // width of its longest likely label, so the track keeps its length.
+  let textDisplay = null;
+  if (valueDisplay === 'text') {
+    const longestLabel = Math.max(
+      ...getTextValueCandidates(min, max, step).map(
+        candidate => displayValue(candidate).length,
+      ),
+    );
+    const reservedCharacters = isRange
+      ? longestLabel * 2 + RANGE_SEPARATOR.length
+      : longestLabel;
+    textDisplay = (
+      <span
+        {...stylex.props(
+          styles.textValue,
+          textValueWidthStyles.reserve(reservedCharacters),
+        )}>
         {isRange
-          ? `${displayValue(values[0])} – ${displayValue(values[1])}`
+          ? `${displayValue(values[0])}${RANGE_SEPARATOR}${displayValue(values[1])}`
           : displayValue(values[0])}
       </span>
-    ) : null;
+    );
+  }
 
   return (
     <Field

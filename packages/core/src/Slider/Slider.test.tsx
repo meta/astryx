@@ -1296,6 +1296,113 @@ describe('Slider', () => {
     });
   });
 
+  describe('text value display width stability', () => {
+    // jsdom has no layout, so these check the reservation the browser is
+    // given: the text value's minimum width in characters, from its longest
+    // likely label. SliderTextValue.a11y.chromium.spec.ts measures the track.
+    function getTextDisplay(): HTMLElement {
+      // The text display is the span that follows the track in the slider
+      // row.
+      let node: Element | null = screen.getAllByRole('slider')[0];
+      while (node != null && node.nextElementSibling?.tagName !== 'SPAN') {
+        node = node.parentElement;
+      }
+      const span = node?.nextElementSibling ?? null;
+      expect(span).not.toBeNull();
+      return span as HTMLElement;
+    }
+
+    function reservedWidth(): string | undefined {
+      return getTextDisplay()
+        .getAttribute('style')
+        ?.match(/(\d+)ch/)?.[0];
+    }
+
+    it('reserves its longest likely label whatever the current value', () => {
+      const {rerender} = render(
+        <Slider
+          label="Volume"
+          value={5}
+          min={0}
+          max={100}
+          valueDisplay="text"
+        />,
+      );
+      expect(reservedWidth()).toBe('3ch');
+      expect(getTextDisplay()).toHaveTextContent('5');
+
+      rerender(
+        <Slider
+          label="Volume"
+          value={100}
+          min={0}
+          max={100}
+          valueDisplay="text"
+        />,
+      );
+      expect(reservedWidth()).toBe('3ch');
+      expect(getTextDisplay()).toHaveTextContent('100');
+    });
+
+    it('counts the characters of formatted labels', () => {
+      render(
+        <Slider
+          label="Volume"
+          value={5}
+          min={0}
+          max={100}
+          valueDisplay="text"
+          formatValue={v => `${v}%`}
+        />,
+      );
+      expect(reservedWidth()).toBe('4ch');
+    });
+
+    it('reserves both values and the separator in range mode', () => {
+      render(
+        <Slider
+          label="Price"
+          value={[20, 80] as [number, number]}
+          min={0}
+          max={100}
+          valueDisplay="text"
+        />,
+      );
+      expect(reservedWidth()).toBe('9ch');
+      expect(getTextDisplay()).toHaveTextContent('20 – 80');
+    });
+
+    it('reserves snapped labels for decimal steps', () => {
+      render(
+        <Slider
+          label="Opacity"
+          value={0.5}
+          min={0}
+          max={1}
+          step={0.1}
+          valueDisplay="text"
+        />,
+      );
+      expect(reservedWidth()).toBe('3ch');
+    });
+
+    it('reads only a few labels however long the range', () => {
+      const formatValue = vi.fn((v: number) => String(v));
+      render(
+        <Slider
+          label="Distance"
+          value={5}
+          min={0}
+          max={10000}
+          valueDisplay="text"
+          formatValue={formatValue}
+        />,
+      );
+      expect(reservedWidth()).toBe('5ch');
+      expect(formatValue.mock.calls.length).toBeLessThan(40);
+    });
+  });
+
   describe('focus ring modality', () => {
     beforeEach(() => {
       __resetInteractionModalityForTest();

@@ -1,0 +1,6 @@
+---
+'@astryxdesign/core': patch
+---
+
+[fix] Slider: the track no longer resizes while dragging with `valueDisplay="text"`. The value text keeps the width of its longest likely label (the ends, their neighbours and the quarter points, as your `formatValue` writes them), so the thumb stays under the pointer instead of shifting as the label grows and shrinks. A format with digits or other glyphs wider than `0`, such as `%`, can still widen it slightly. (#4050)
+@AKnassa
