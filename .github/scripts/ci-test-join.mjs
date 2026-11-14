@@ -16,6 +16,8 @@
 const requiredSuccess = [
   ['test-ui', process.env.TEST_UI_RESULT],
   ['test-node', process.env.TEST_NODE_RESULT],
+  ['node-browser-contracts', process.env.NODE_BROWSER_CONTRACTS_RESULT],
+  ['swizzle-proof-scope', process.env.SWIZZLE_PROOF_SCOPE_RESULT],
   ['test-build', process.env.TEST_BUILD_RESULT],
   ['test-native-swift', process.env.TEST_NATIVE_SWIFT_RESULT],
   ['pr-interaction', process.env.PR_INTERACTION_RESULT],
@@ -34,6 +36,21 @@ function fail(message) {
 
 for (const [name, result] of requiredSuccess) {
   if (result !== 'success') fail(`${name}: ${result ?? 'missing'}`);
+}
+
+// The swizzle proof's legs run exactly when its scope proves a target: they
+// must succeed then, and must not have run when it proves none.
+const proofMode = process.env.SWIZZLE_PROOF_MODE;
+if (!['none', 'affected', 'all'].includes(proofMode)) {
+  fail(`swizzle-proof scope: ${proofMode || 'missing'}`);
+} else {
+  const expectedProof = proofMode === 'none' ? 'skipped' : 'success';
+  if (process.env.SWIZZLE_PROOF_RESULT !== expectedProof) {
+    fail(
+      `swizzle-proof: ${process.env.SWIZZLE_PROOF_RESULT ?? 'missing'} ` +
+        `(expected ${expectedProof} for scope ${proofMode})`,
+    );
+  }
 }
 
 // A release-branch pull request must pass its bump validation; any other
