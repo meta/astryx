@@ -17,8 +17,8 @@
  *   drop measures the rows in one pass, before their glides start. The
  *   preview follows the finger one to one and stops at the list's top. The
  *   drop's glides keep moving while the main thread is blocked. A focused
- *   handle shows one whole ring. Its finger target grows toward 44 pt and
- *   stops halfway to the next one's, and its row is no taller for it
+ *   handle shows one whole ring. Its finger target grows toward 44 pt where
+ *   it has room, and its row is no taller for it
  * @position Interaction evidence for List's reorder (List/listReorderEngine.tsx,
  *   List/ListReorderTouch.ts, List/ListReorderHandle.tsx) in the touch phone
  *   context
@@ -940,55 +940,32 @@ test.describe('the preview, the drop and the handle under a finger', () => {
     expect(ring.right).toBeGreaterThanOrEqual(-0.5);
   });
 
-  test("the handle keeps a small control's size; a finger's target grows toward 44 pt and meets the next handle's halfway, its ring clears its lines, and its row is no taller for it", async ({
+  test("the handle keeps a small control's size; a finger's target grows to 44 pt, its ring clears its lines, and its row is no taller for it", async ({
     page,
   }) => {
     const handle = page.getByRole('button', {name: 'Reorder Inbox'});
     await page.keyboard.press('Shift');
     await handle.focus();
-    // The handle's hit layer takes the insets the shared hit area writes, a
-    // frame after layout.
-    await expect
-      .poll(
-        async () =>
-          handle.evaluate(element =>
-            getComputedStyle(element)
-              .getPropertyValue('--astryx-hit-inset-top')
-              .trim(),
-          ),
-        {message: 'the hit area writes its insets', timeout: 5000},
-      )
-      .not.toBe('');
     const geometry = await handle.evaluate(element => {
       const row = element.closest('li') as HTMLElement;
       const style = getComputedStyle(element);
       const inset =
         -parseFloat(style.outlineOffset) || parseFloat(style.outlineWidth);
       const box = element.getBoundingClientRect();
-      const hitInset = (target: Element, side: string) =>
-        parseFloat(
-          getComputedStyle(target).getPropertyValue(
-            `--astryx-hit-inset-${side}`,
-          ),
-        ) || 0;
+      const hitInset = (
+        target: Element,
+        side: 'top' | 'right' | 'bottom' | 'left',
+      ) =>
+        Math.max(
+          0,
+          -(parseFloat(getComputedStyle(target, '::after')[side]) || 0),
+        );
       const hit = {
         top: box.top - hitInset(element, 'top'),
         bottom: box.bottom + hitInset(element, 'bottom'),
         left: box.left - hitInset(element, 'left'),
         right: box.right + hitInset(element, 'right'),
       };
-      // The next row's handle, and the top of its target.
-      const next = row.nextElementSibling?.querySelector<HTMLElement>(
-        '[data-astryx-list-reorder]',
-      );
-      const nextTop =
-        next == null
-          ? Number.POSITIVE_INFINITY
-          : next.getBoundingClientRect().top - hitInset(next, 'top');
-      const pitch =
-        next == null
-          ? Number.POSITIVE_INFINITY
-          : next.getBoundingClientRect().top - box.top;
       // A point in the hit layer outside the visible handle, above it.
       const probe = document.elementFromPoint(
         box.left + box.width / 2,
@@ -1016,8 +993,6 @@ test.describe('the preview, the drop and the handle under a finger', () => {
         height: box.height,
         hitHeight: hit.bottom - hit.top,
         hitWidth: hit.right - hit.left,
-        gapToNext: nextTop - hit.bottom,
-        pitch,
         probeHits: probe === element,
         above: glyph.top - (box.top + inset),
         below: box.bottom - inset - glyph.bottom,
@@ -1028,18 +1003,11 @@ test.describe('the preview, the drop and the handle under a finger', () => {
     // A small control for every pointer, as on a desktop.
     expect(geometry.width).toBeLessThan(44);
     expect(geometry.height).toBeLessThan(44);
-    // A finger's target grows toward 44 pt through the invisible hit layer.
-    // Where the next handle sits closer, the target stops halfway, where it
-    // meets the next handle's.
-    expect(geometry.hitHeight).toBeLessThanOrEqual(44.5);
-    expect(geometry.hitHeight).toBeGreaterThanOrEqual(
-      Math.min(44, geometry.pitch) - 0.5,
-    );
+    // A finger's target grows to 44 pt through the invisible touch band. A
+    // tap where it meets the next handle's band goes to the nearer handle
+    // (utils/touchHitArea.ts).
+    expect(geometry.hitHeight).toBeCloseTo(44, 0);
     expect(geometry.hitWidth).toBeCloseTo(44, 0);
-    expect(geometry.gapToNext).toBeGreaterThanOrEqual(-0.5);
-    if (geometry.pitch < 44) {
-      expect(geometry.gapToNext).toBeLessThanOrEqual(0.5);
-    }
     expect(geometry.probeHits).toBe(true);
     // The ring clears the lines above and below. It shows, so the band
     // judged is the ring's.

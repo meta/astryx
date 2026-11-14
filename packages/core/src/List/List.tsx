@@ -30,6 +30,7 @@
 import {useCallback, useId, useMemo, useRef, type ReactNode} from 'react';
 import type {Reorderable} from '../reorderable/createReorderable';
 import * as stylex from '@stylexjs/stylex';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import type {BaseProps} from '../BaseProps';
 import {
@@ -438,6 +439,10 @@ export function List({
           animatedLayout != null && styles.animatedIsolation,
           isOrdered && styles.numberColumns,
           hasDividers && styles.withDividers,
+          // Half the rows' gap is each row's touch room toward the next.
+          hasDividers
+            ? touchHitAreaStyles.blockGroup0
+            : touchHitAreaStyles.blockGroupSpacing05,
           reachesContainerPadding && styles.reachesContainerPadding,
           edge === 'bleed' && header == null && styles.bleedCorners,
           listStyle !== 'none' &&

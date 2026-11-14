@@ -13,6 +13,8 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {createRef, useState} from 'react';
 import {renderToString} from 'react-dom/server';
 import {act, fireEvent, render, screen} from '@testing-library/react';
+import * as stylex from '@stylexjs/stylex';
+import {touchHitAreaStyles} from '@astryxdesign/core/internal/touch';
 import {PageControl} from './PageControl';
 import {SWITCH} from './pageControlModel';
 
@@ -558,48 +560,17 @@ describe('PageControl', () => {
     }
   });
 
-  it('under a coarse pointer, an invisible hit area grows the 25.67 px tall control toward 44 px', () => {
+  it('under a coarse pointer, an invisible touch band grows the 25.67 px tall control toward 44 px', () => {
     asTouch();
-    let reveal: ((entries: IntersectionObserverEntry[]) => void) | null = null;
-    const frames: Array<() => void> = [];
-    vi.stubGlobal(
-      'IntersectionObserver',
-      class {
-        constructor(callback: (entries: IntersectionObserverEntry[]) => void) {
-          reveal = callback;
-        }
-        observe() {}
-        unobserve() {}
-        disconnect() {}
-      },
-    );
-    vi.stubGlobal('requestAnimationFrame', (run: () => void) => {
-      frames.push(run);
-      return frames.length;
-    });
-    vi.stubGlobal('cancelAnimationFrame', () => {});
     renderControl();
     const slider = screen.getByRole('slider');
-    slider.getBoundingClientRect = () => new DOMRect(100, 100, 108.33, 25.67);
-    act(() => {
-      reveal?.([
-        {
-          target: slider,
-          isIntersecting: true,
-        } as unknown as IntersectionObserverEntry,
-      ]);
-      for (const run of frames.splice(0)) {
-        run();
-      }
-    });
-    const inset = (side: string) =>
-      Number.parseFloat(
-        slider.style.getPropertyValue(`--astryx-hit-inset-${side}`),
-      );
-    expect(inset('top')).toBeCloseTo((44 - 25.67) / 2, 1);
-    expect(inset('bottom')).toBeCloseTo((44 - 25.67) / 2, 1);
-    expect(inset('left')).toBe(0);
-    expect(inset('right')).toBe(0);
+    const band = (stylex.props(touchHitAreaStyles.band).className ?? '')
+      .split(' ')
+      .filter(name => name !== '' && !name.startsWith('touchHitArea__'));
+    expect(band.length).toBeGreaterThan(0);
+    for (const name of band) {
+      expect(slider.classList).toContain(name);
+    }
   });
 
   it('with a mouse, a press held past 155 ms shows no platter and dims nothing: the held look is the touch presentation', () => {

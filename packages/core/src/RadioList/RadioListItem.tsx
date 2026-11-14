@@ -285,10 +285,9 @@ export function RadioListItem({
 
   // Under a coarse pointer an option's row grows toward 44 px through an
   // invisible band, and the row keeps its size. A tap on the band lands on
-  // the row, which hands it to the radio. The band's insets stay live while
-  // the row takes taps, and clear when it stops.
-  const watchRowHitArea = useTouchHitArea(!isDisabled);
-  const mergedRowRef = useMergedRefs(ref, watchRowHitArea);
+  // the row, which hands it to the radio.
+  const rowHitAreaRef = useTouchHitArea(!isDisabled);
+  const mergedRowRef = useMergedRefs(ref, rowHitAreaRef);
 
   const radioCircle = (
     <div
@@ -410,6 +409,7 @@ export function RadioListItem({
           rowStyles.root,
           !isDisabled && rowPressPaintStyles.radioRow,
           !isDisabled && touchHitAreaStyles.layer,
+          !isDisabled && touchHitAreaStyles.member,
           xstyle,
         ] as StyleXStyles
       }

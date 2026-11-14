@@ -143,6 +143,12 @@ Consumer migration instructions belong in consumer docs and release notes.
 - The disabled-reason Tooltip composition: DateInput renders the reason Tooltip
   and links it from its focusable controls (`family:input-fields`
   representative matrix, "Member with `disabledMessage`").
+- Marking its frame on each surface (pointer, touch sheet and native) for
+  the touch press check. DateInput writes the private attribute
+  `data-astryx-field-frame` only through its owner module,
+  `packages/core/src/privateAttributes/fieldFrame.stylex.ts`
+  (`architecture:public-component-api` INV23). The press check reads the mark
+  and measures the frame as the entry's visible box (`spec:AST-094` FR42).
 
 **Does not own / non-goals**
 

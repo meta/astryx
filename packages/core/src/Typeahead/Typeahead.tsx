@@ -96,6 +96,7 @@ export type {
   InputStatus as TypeaheadStatus,
   InputStatusType as TypeaheadStatusType,
 } from '../Field';
+import {fieldFrameProps} from '../privateAttributes/fieldFrame.stylex';
 
 export type TypeaheadSize = 'sm' | 'md' | 'lg';
 
@@ -710,6 +711,7 @@ export function Typeahead<T extends SearchableItem>({
   const typeaheadContent = (
     <>
       <div
+        {...fieldFrameProps}
         ref={useMergedRefs(wrapperRef, disabledMessageTooltip.ref)}
         onClick={handleWrapperClick}
         onBlur={handleBlur}

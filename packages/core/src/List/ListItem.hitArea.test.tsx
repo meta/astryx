@@ -2,59 +2,47 @@
 
 /**
  * @file ListItem.hitArea.test.tsx
- * @input Vitest, Testing Library, and utils/hitArea.ts with `watchHitArea`
- *   spied (the rest real)
- * @output Checks that ListItem keeps an enabled interactive row's touch hit
- *   insets live. It covers the rows watched, the insets, the target size, a
- *   mid-motion measurement, and the stop.
+ * @input Vitest, Testing Library, stubbed row rects and a stubbed
+ *   `document.elementsFromPoint`
+ * @output Checks that ListItem gives each enabled interactive row the touch
+ *   band, with the List's room between rows, and that a tap on a row's band
+ *   that lies on the next row goes to the next row, also after a re-render
+ *   passes a new inline ref.
  * @position Test for ListItem's hit area wiring. List.test.tsx checks the
- *   layer's CSS, and ListTouchHitArea.interaction.browser.spec.ts its hit
+ *   band's CSS, and ListTouchHitArea.interaction.browser.spec.ts its hit
  *   testing.
  */
 
 import {createRef} from 'react';
+import * as stylex from '@stylexjs/stylex';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {render, screen} from '@testing-library/react';
-import type * as HitAreaModule from '../utils/hitArea';
-import type {HitInsets} from '../utils/hitArea';
-
-const watches = vi.hoisted(
-  () =>
-    [] as {
-      element: Element;
-      onInsets: (insets: HitInsets) => void;
-      minSize: number | undefined;
-      stop: ReturnType<typeof vi.fn>;
-    }[],
-);
-
-vi.mock('../utils/hitArea', async importOriginal => {
-  const actual = await importOriginal<typeof HitAreaModule>();
-  return {
-    ...actual,
-    watchHitArea: (
-      element: Element,
-      onInsets: (insets: HitInsets) => void,
-      options?: {readonly minSize?: number},
-    ) => {
-      const stop = vi.fn();
-      watches.push({element, onInsets, minSize: options?.minSize, stop});
-      return stop;
-    },
-  };
-});
-
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {List} from './List';
 import {ListItem} from './ListItem';
 
+const bandClasses = [touchHitAreaStyles.band, touchHitAreaStyles.member]
+  .flatMap(style => (stylex.props(style).className ?? '').split(/\s+/))
+  .filter(name => name !== '' && !name.startsWith('touchHitArea__'));
+
+function hasBand(element: Element): boolean {
+  return bandClasses.every(name => element.classList.contains(name));
+}
+
+function rect(top: number) {
+  const box = {left: 0, top, right: 300, bottom: top + 32};
+  return {...box, x: 0, y: top, width: 300, height: 32, toJSON: () => box};
+}
+
 describe('ListItem touch hit area', () => {
   afterEach(() => {
-    watches.length = 0;
+    delete (document as {elementsFromPoint?: unknown}).elementsFromPoint;
+    vi.restoreAllMocks();
   });
 
   const row = (text: string) => screen.getByText(text).closest('li')!;
 
-  it('watches each interactive, enabled row, and no other', () => {
+  it('gives each interactive, enabled row the band, and no other', () => {
     const control = createRef<HTMLButtonElement>();
     render(
       <List>
@@ -73,73 +61,59 @@ describe('ListItem touch hit area', () => {
         <ListItem label="Disabled" onClick={() => {}} isDisabled />
       </List>,
     );
-    expect(watches.map(watch => watch.element)).toEqual([
-      row('Pressable'),
-      row('Link'),
-      row('Delegated'),
-    ]);
+    const banded = screen.getAllByRole('listitem').filter(hasBand);
+    expect(banded).toEqual([row('Pressable'), row('Link'), row('Delegated')]);
   });
 
-  it('puts the measured insets on the row, where its layer reads them', () => {
-    render(
-      <List>
-        <ListItem label="Pressable" onClick={() => {}} />
-      </List>,
+  it('gives a tap on a row’s band that lies on the next row to the next row, after a re-render too', () => {
+    // The press check runs while the primary pointer is coarse.
+    vi.spyOn(window, 'matchMedia').mockImplementation(
+      media =>
+        ({
+          media,
+          matches: media.includes('pointer: coarse'),
+          addEventListener: () => {},
+          removeEventListener: () => {},
+          addListener: () => {},
+          removeListener: () => {},
+        }) as unknown as MediaQueryList,
     );
-    expect(watches).toHaveLength(1);
-    watches[0].onInsets({top: 4, right: 0, bottom: 1, left: 0});
-    const style = row('Pressable').style;
-    expect(style.getPropertyValue('--astryx-hit-inset-top')).toBe('4px');
-    expect(style.getPropertyValue('--astryx-hit-inset-bottom')).toBe('1px');
-    expect(style.getPropertyValue('--astryx-hit-inset-left')).toBe('0px');
-  });
-
-  it('stops watching when the row goes or turns disabled', async () => {
-    const {rerender, unmount} = render(
-      <List>
-        <ListItem label="Pressable" onClick={() => {}} />
-      </List>,
-    );
-    expect(watches).toHaveLength(1);
-    rerender(
-      <List>
-        <ListItem label="Pressable" onClick={() => {}} isDisabled />
-      </List>,
-    );
-    await Promise.resolve();
-    expect(watches[0].stop).toHaveBeenCalledTimes(1);
-    expect(watches).toHaveLength(1);
-    rerender(
-      <List>
-        <ListItem label="Pressable" onClick={() => {}} />
-      </List>,
-    );
-    expect(watches).toHaveLength(2);
-    unmount();
-    await Promise.resolve();
-    expect(watches[1].stop).toHaveBeenCalledTimes(1);
-  });
-
-  it('keeps its watch and its insets when a parent re-render passes a new inline ref', async () => {
+    const onFirst = vi.fn();
+    const onSecond = vi.fn();
     const rowRef = (tick: number) => (node: HTMLLIElement | null) => {
       node?.setAttribute('data-tick', String(tick));
     };
-    const {rerender} = render(
+    const rows = (tick: number) => (
       <List>
-        <ListItem label="Filter" onClick={() => {}} ref={rowRef(0)} />
-      </List>,
+        <ListItem label="First" onClick={onFirst} ref={rowRef(tick)} />
+        <ListItem label="Second" onClick={onSecond} />
+      </List>
     );
-    const row = screen.getByRole('listitem');
-    watches[0].onInsets({top: 4, right: 0, bottom: 4, left: 0});
-    rerender(
-      <List>
-        <ListItem label="Filter" onClick={() => {}} ref={rowRef(1)} />
-      </List>,
-    );
-    await Promise.resolve();
-    expect(row.getAttribute('data-tick')).toBe('1');
-    expect(watches).toHaveLength(1);
-    expect(watches[0].stop).not.toHaveBeenCalled();
-    expect(row.style.getPropertyValue('--astryx-hit-inset-top')).toBe('4px');
+    const {rerender} = render(rows(0));
+    rerender(rows(1));
+    const first = row('First');
+    const second = row('Second');
+    expect(first.getAttribute('data-tick')).toBe('1');
+    // The second row's own target covers the row.
+    const secondTarget = second.querySelector('button') as HTMLElement;
+    first.getBoundingClientRect = () => rect(0);
+    second.getBoundingClientRect = () => rect(34);
+    secondTarget.getBoundingClientRect = () => rect(34);
+    Object.defineProperty(document, 'elementsFromPoint', {
+      configurable: true,
+      value: () => [first, secondTarget, second, first.parentElement],
+    });
+    const press = new Event('pointerdown', {bubbles: true});
+    Object.assign(press, {pointerType: 'touch', clientX: 100, clientY: 36});
+    first.dispatchEvent(press);
+    const click = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      detail: 1,
+    });
+    first.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(true);
+    expect(onFirst).not.toHaveBeenCalled();
+    expect(onSecond).toHaveBeenCalledTimes(1);
   });
 });

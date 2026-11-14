@@ -214,6 +214,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/DateInput/DateInput.generated';
+import {fieldFrameProps} from '../privateAttributes/fieldFrame.stylex';
 
 registerEnglishFallback(english);
 export interface DateInputProps extends Omit<
@@ -944,6 +945,7 @@ function PointerDateField({
 
   const inputWrapper = (
     <div
+      {...fieldFrameProps}
       ref={el => {
         fieldElementRef.current = el;
         popover.triggerRef(el);

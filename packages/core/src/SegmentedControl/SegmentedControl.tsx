@@ -19,6 +19,7 @@
 
 import React, {useMemo, useCallback, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {colorVars, spacingVars, radiusVars} from '../theme/tokens.stylex';
 import {SegmentedControlContext} from './SegmentedControlContext';
 import {useInternalListFocus} from '../hooks/useListFocus';
@@ -481,6 +482,8 @@ export function SegmentedControl({
           themeProps('segmented-control', {size}),
           stylex.props(
             styles.container,
+            // Half the gap is each segment's touch room toward the next.
+            touchHitAreaStyles.inlineGroupSpacing05,
             sizeStyles[size],
             layout === 'fill' && styles.fill,
             (isTouchPresentation || !isDisabled) && styles.lens,

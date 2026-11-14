@@ -4,11 +4,11 @@
  * @file InfoTipTouch.a11y.chromium.spec.ts
  * @input The built Storybook's Core/InfoTip stories in Chromium, with a fine
  *   and a coarse primary pointer
- * @output Proofs that under a coarse pointer the info button takes taps out
- *   toward 44 px and stops halfway to a neighbouring button, and grows nothing
- *   under a fine pointer (component:InfoTip AR1)
- * @position Browser test for InfoTip.tsx's hit area; the geometry itself is
- *   utils/hitArea.ts's, unit-tested there
+ * @output Proofs that under a coarse pointer the info button takes taps
+ *   toward 44 px up and down and none sideways, and grows nothing under a
+ *   fine pointer (component:InfoTip AR1)
+ * @position Browser test for InfoTip.tsx's touch band
+ *   (internal/touchHitArea.stylex.ts)
  */
 
 import {
@@ -87,131 +87,69 @@ async function hitsButton(page: Page, x: number, y: number): Promise<boolean> {
   );
 }
 
-test('under a coarse pointer the info button takes taps out toward 44 px', async ({
+/** How far the button's band reaches past its box on each side, px. */
+async function bandReach(page: Page) {
+  return page
+    .locator('#storybook-root')
+    .getByRole('button')
+    .first()
+    .evaluate(element => {
+      const band = getComputedStyle(element, '::after');
+      const read = (side: 'top' | 'right' | 'bottom' | 'left') =>
+        band.position === 'absolute'
+          ? Math.max(0, -(Number.parseFloat(band[side]) || 0))
+          : 0;
+      return {
+        top: read('top'),
+        right: read('right'),
+        bottom: read('bottom'),
+        left: read('left'),
+      };
+    });
+}
+
+test('under a coarse pointer the info button takes taps toward 44 px up and down, and none sideways', async ({
   browser,
 }) => {
   const page = await pageWith(browser, 'coarse');
   await openStory(page, 'default');
-  const {button, box} = await infoButton(page);
-  expect(box.width).toBeLessThan(MIN_TOUCH_TARGET);
-  // The shared hit area measures in its next frame pass.
-  await expect
-    .poll(async () =>
-      button.evaluate(element =>
-        Number.parseFloat(
-          getComputedStyle(element).getPropertyValue('--astryx-hit-inset-left'),
-        ),
-      ),
-    )
-    .toBeGreaterThan(0);
+  const {box} = await infoButton(page);
+  expect(box.height).toBeLessThan(MIN_TOUCH_TARGET);
   const centerX = box.x + box.width / 2;
   const centerY = box.y + box.height / 2;
   const reach = MIN_TOUCH_TARGET / 2;
-  for (const [dx, dy] of [
-    [-(reach - 1), 0],
-    [reach - 1, 0],
-    [0, -(reach - 1)],
-    [0, reach - 1],
-  ]) {
-    expect(
-      await hitsButton(page, centerX + dx, centerY + dy),
-      `a tap ${dx}, ${dy} px from the center`,
-    ).toBe(true);
-  }
-  // No further than 44 px across.
-  expect(await hitsButton(page, centerX - (reach + 2), centerY)).toBe(false);
-  expect(await hitsButton(page, centerX + reach + 2, centerY)).toBe(false);
+  expect(await hitsButton(page, centerX, centerY - (reach - 1))).toBe(true);
+  expect(await hitsButton(page, centerX, centerY + (reach - 1))).toBe(true);
+  // No further than 44 px tall.
+  expect(await hitsButton(page, centerX, centerY - (reach + 2))).toBe(false);
+  // It sits in running text, so it grows no room sideways.
+  expect(await hitsButton(page, box.x - 2, centerY)).toBe(false);
+  expect(await hitsButton(page, box.x + box.width + 2, centerY)).toBe(false);
 });
 
-test('the hit area stops halfway to a neighbouring button', async ({
-  browser,
-}) => {
-  const page = await pageWith(browser, 'coarse');
-  await openStory(page, 'sizes');
-  const buttons = page.locator('#storybook-root').getByRole('button');
-  await expect(buttons).toHaveCount(4);
-  const boxes = await Promise.all(
-    [0, 1, 2, 3].map(async index => buttons.nth(index).boundingBox()),
-  );
-  for (const box of boxes) {
-    expect(box, 'each info button has a layout box').not.toBeNull();
-    expect(box?.width ?? 0).toBeGreaterThan(0);
-  }
-  await expect
-    .poll(async () =>
-      buttons
-        .first()
-        .evaluate(element =>
-          Number.parseFloat(
-            getComputedStyle(element).getPropertyValue(
-              '--astryx-hit-inset-top',
-            ),
-          ),
-        ),
-    )
-    .toBeGreaterThan(0);
-  // Which of the four buttons a tap at (x, y) lands on, or -1.
-  const hitIndex = async (x: number, y: number) =>
-    page.evaluate(
-      ([px, py]) => {
-        const all = Array.from(
-          document.querySelectorAll('#storybook-root button'),
-        );
-        const hit = document.elementFromPoint(px, py)?.closest('button');
-        return hit == null ? -1 : all.indexOf(hit);
-      },
-      [x, y] as const,
-    );
-  for (let index = 0; index < 3; index += 1) {
-    const left = boxes[index];
-    const right = boxes[index + 1];
-    if (left == null || right == null) {
-      throw new Error('unreachable');
-    }
-    const gap = right.x - (left.x + left.width);
-    expect(gap, 'the buttons sit apart').toBeGreaterThan(4);
-    const middle = left.x + left.width + gap / 2;
-    const y = left.y + left.height / 2;
-    // Each side of the middle belongs to the nearer button.
-    expect(await hitIndex(middle - 1, y)).toBe(index);
-    expect(await hitIndex(middle + 1, y)).toBe(index + 1);
-  }
-});
-
-test('inside a divided List row the info button reaches its measured inset and no further', async ({
+test('in a divided List row’s end slot the info button grows no taller, and the row’s divider stays on the row', async ({
   browser,
 }) => {
   const page = await pageWith(browser, 'coarse');
   await openStory(page, 'in-a-divided-list');
   const buttons = page.locator('#storybook-root').getByRole('button');
   await expect(buttons).toHaveCount(2);
-  const button = buttons.first();
-  const box = await button.boundingBox();
-  expect(box?.width ?? 0).toBeGreaterThan(0);
+  const box = await buttons.first().boundingBox();
   expect(box?.height ?? 0).toBeGreaterThan(0);
-  await expect
-    .poll(async () =>
-      button.evaluate(element =>
-        Number.parseFloat(
-          getComputedStyle(element).getPropertyValue(
-            '--astryx-hit-inset-bottom',
-          ),
-        ),
-      ),
-    )
-    .toBeGreaterThan(0);
-  const [inset, layerBottom, inheritedBorder] = await button.evaluate(
-    element => [
-      Number.parseFloat(
-        getComputedStyle(element).getPropertyValue('--astryx-hit-inset-bottom'),
-      ),
-      Number.parseFloat(getComputedStyle(element, '::after').bottom),
-      getComputedStyle(element).getPropertyValue('--_hit-border-bottom').trim(),
-    ],
-  );
-  // The row's divider width stays on the row's own layer.
-  expect(inheritedBorder).toBe('');
-  expect(layerBottom).toBeCloseTo(-inset, 1);
+  const reach = await bandReach(page);
+  const inheritedDivider = await buttons
+    .first()
+    .evaluate(element =>
+      getComputedStyle(element)
+        .getPropertyValue('--_hit-border-block-end')
+        .trim(),
+    );
+  // The row's divider width stays on the row's own band.
+  expect(inheritedDivider).toBe('');
+  // In the row's end slot the row's edge is the boundary: the row takes the
+  // taps above and below the button.
+  expect(reach.top).toBeCloseTo(0, 1);
+  expect(reach.bottom).toBeCloseTo(0, 1);
 });
 
 test('under a fine pointer the info button grows nothing', async ({
@@ -219,22 +157,8 @@ test('under a fine pointer the info button grows nothing', async ({
 }) => {
   const page = await pageWith(browser, 'fine');
   await openStory(page, 'default');
-  const {button, box} = await infoButton(page);
-  // Give the shared hit area the frames it would take to measure.
-  await page.evaluate(async () => {
-    await new Promise<void>(resolve => {
-      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-    });
-  });
-  // Unset, or 0 where the shared hit area answers a fine pointer.
-  expect(
-    await button.evaluate(element =>
-      Number.parseFloat(
-        getComputedStyle(element).getPropertyValue('--astryx-hit-inset-left') ||
-          '0',
-      ),
-    ),
-  ).toBe(0);
+  const {box} = await infoButton(page);
+  expect(await bandReach(page)).toEqual({top: 0, right: 0, bottom: 0, left: 0});
   const centerY = box.y + box.height / 2;
   expect(await hitsButton(page, box.x + 1, centerY)).toBe(true);
   expect(await hitsButton(page, box.x - 2, centerY)).toBe(false);

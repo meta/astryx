@@ -176,6 +176,8 @@ export type {
   InputStatus as TimeInputStatus,
   InputStatusType as TimeInputStatusType,
 } from '../Field';
+import {fieldFrameProps} from '../privateAttributes/fieldFrame.stylex';
+
 export type {TimeInputEntryError} from './useTypedTime';
 export type {EntryErrorBehavior} from '../FormLayout/FormLayoutContext';
 
@@ -815,6 +817,7 @@ function TimeField({
 
   const inputWrapper = (
     <div
+      {...fieldFrameProps}
       ref={el => {
         containerRef.current = el;
         // Anchor + hover/focus listeners for the disabled-message tooltip.

@@ -52,6 +52,7 @@ function startWait() {
     event: unknown,
   ) => void;
   const browserClick = (target: Node, defaultPrevented = false) => ({
+    type: 'click',
     isTrusted: true,
     target,
     defaultPrevented,
@@ -82,7 +83,7 @@ describe('awaitBrowserClick', () => {
   it('ignores a script’s click and a click elsewhere', () => {
     const {clicked, listener, browserClick} = startWait();
     listener({...browserClick(document.body)});
-    listener({isTrusted: false, target: document.body});
+    listener({type: 'click', isTrusted: false, target: document.body});
     vi.advanceTimersByTime(0);
     expect(clicked).toEqual([]);
   });

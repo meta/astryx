@@ -2,25 +2,23 @@
 /**
  * @file touchTarget.test.tsx
  * @input CheckboxInput, RadioList and CheckboxList in jsdom, their injected
- *   styles, the shared hit band, and stubbed matchMedia, IntersectionObserver,
- *   requestAnimationFrame and element rects
+ *   styles, the shared hit band, and stubbed element rects
  * @output Checks the hit band under a coarse pointer. A labelled checkbox and
- *   an enabled radio option carry it and keep their size. It is at least
- *   44 px and never smaller than the row. A tap on a checkbox's band toggles
- *   it. Composed rows keep their pitch.
+ *   an enabled radio option carry it and keep their size. A tap on a
+ *   checkbox's band toggles it. Composed rows keep their pitch. The band's
+ *   geometry is checked in the browser layer.
  * @position Unit layer; the browser layer is
  *   Indicator/__tests__/TouchTargets.interaction.browser.spec.ts
  */
 
 import * as stylex from '@stylexjs/stylex';
 import {fireEvent, render, screen} from '@testing-library/react';
-import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {describe, expect, it, vi} from 'vitest';
 import {CheckboxInput} from '../CheckboxInput/CheckboxInput';
 import {CheckboxList} from '../CheckboxList/CheckboxList';
 import {CheckboxListItem} from '../CheckboxList/CheckboxListItem';
 import {RadioList} from '../RadioList/RadioList';
 import {RadioListItem} from '../RadioList/RadioListItem';
-import {HIT_INSET_PROPERTIES, resetHitAreaForTests} from '../utils/hitArea';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 
 interface Declared {
@@ -91,9 +89,9 @@ function paddingBlockOf(el: Element, media: string | null): string[] {
 
 /** Whether `el` carries every class of the shared hit band. */
 function hasHitLayer(el: Element): boolean {
-  const layer = (stylex.props(touchHitAreaStyles.layer).className ?? '')
+  const layer = (stylex.props(touchHitAreaStyles.band).className ?? '')
     .split(/\s+/)
-    .filter(Boolean);
+    .filter(name => name !== '' && !name.startsWith('touchHitArea__'));
   if (layer.length === 0) {
     throw new Error('the hit band has no classes');
   }
@@ -184,167 +182,6 @@ describe('CheckboxInput under a finger', () => {
     fireEvent.click(row, {clientX: 30, clientY: 10, detail: 1});
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange.mock.calls[0][0]).toBe(true);
-  });
-});
-
-describe('the hit band is at least 44 px and never smaller than the row (FR42)', () => {
-  let frames: (() => void)[];
-  let intersection: ((entries: IntersectionObserverEntry[]) => void) | null;
-
-  beforeEach(() => {
-    frames = [];
-    intersection = null;
-    vi.stubGlobal('matchMedia', (media: string) => ({
-      media,
-      matches: media === TOUCH,
-      addEventListener: () => {},
-      removeEventListener: () => {},
-      addListener: () => {},
-      removeListener: () => {},
-    }));
-    vi.stubGlobal(
-      'IntersectionObserver',
-      class {
-        constructor(callback: (entries: IntersectionObserverEntry[]) => void) {
-          intersection = callback;
-        }
-        observe() {}
-        unobserve() {}
-        disconnect() {}
-      },
-    );
-    vi.stubGlobal('requestAnimationFrame', (run: () => void) => {
-      frames.push(run);
-      return frames.length;
-    });
-    vi.stubGlobal('cancelAnimationFrame', () => {});
-  });
-
-  afterEach(() => {
-    resetHitAreaForTests();
-    vi.restoreAllMocks();
-    vi.unstubAllGlobals();
-  });
-
-  /** Lays the row out at `height` px, shows it, and runs the next frame. */
-  function measure(row: HTMLElement, height: number): void {
-    vi.spyOn(row, 'getBoundingClientRect').mockReturnValue(
-      DOMRect.fromRect({x: 100, y: 100, width: 200, height}),
-    );
-    intersection?.([
-      {
-        target: row,
-        isIntersecting: true,
-      } as unknown as IntersectionObserverEntry,
-    ]);
-    const due = frames;
-    frames = [];
-    due.forEach(run => run());
-  }
-
-  /** The row's target, px: its box grown by the band's written insets. */
-  function target(row: HTMLElement, height: number) {
-    const inset = (side: keyof typeof HIT_INSET_PROPERTIES) =>
-      parseFloat(row.style.getPropertyValue(HIT_INSET_PROPERTIES[side])) || 0;
-    return {
-      width: 200 + inset('left') + inset('right'),
-      height: height + inset('top') + inset('bottom'),
-      hasBand: hasHitLayer(row),
-    };
-  }
-
-  it('grows a 24 px checkbox row to 44 px, and leaves a 60 px one at its own box', () => {
-    for (const [height, expected] of [
-      [24, 44],
-      [60, 60],
-    ] as const) {
-      const {unmount} = render(
-        <CheckboxInput
-          label={`Accept ${height}`}
-          value={false}
-          onChange={() => {}}
-        />,
-      );
-      const row = closestOrThrow(
-        screen.getByRole('checkbox', {name: `Accept ${height}`}),
-        '[data-astryx-pressable]',
-      );
-      measure(row, height);
-      expect(target(row, height), `${height} px row`).toEqual({
-        width: 200,
-        height: expected,
-        hasBand: true,
-      });
-      unmount();
-      resetHitAreaForTests();
-    }
-  });
-
-  it('clears a checkbox row’s insets when it stops taking taps', async () => {
-    const {rerender} = render(
-      <CheckboxInput label="Accept" value={false} onChange={() => {}} />,
-    );
-    const row = closestOrThrow(
-      screen.getByRole('checkbox', {name: 'Accept'}),
-      '[data-astryx-pressable]',
-    );
-    measure(row, 24);
-    expect(row.style.getPropertyValue(HIT_INSET_PROPERTIES.top)).toBe('10px');
-    rerender(
-      <CheckboxInput
-        label="Accept"
-        value={false}
-        onChange={() => {}}
-        isDisabled
-      />,
-    );
-    await Promise.resolve();
-    expect(row.style.getPropertyValue(HIT_INSET_PROPERTIES.top)).toBe('0px');
-    expect(row.style.getPropertyValue(HIT_INSET_PROPERTIES.bottom)).toBe('0px');
-  });
-
-  it('clears a radio option’s insets when it stops taking taps', async () => {
-    const options = (isDisabled: boolean) => (
-      <RadioList label="Plan" value="a" onChange={() => {}}>
-        <RadioListItem label="Option A" value="a" isDisabled={isDisabled} />
-      </RadioList>
-    );
-    const {rerender} = render(options(false));
-    const row = closestOrThrow(
-      screen.getByRole('radio', {name: 'Option A'}),
-      '.astryx-item',
-    );
-    measure(row, 24);
-    expect(row.style.getPropertyValue(HIT_INSET_PROPERTIES.top)).toBe('10px');
-    rerender(options(true));
-    await Promise.resolve();
-    expect(row.style.getPropertyValue(HIT_INSET_PROPERTIES.top)).toBe('0px');
-    expect(row.style.getPropertyValue(HIT_INSET_PROPERTIES.bottom)).toBe('0px');
-  });
-
-  it('grows a 24 px radio option to 44 px, and leaves a 60 px one at its own box', () => {
-    for (const [height, expected] of [
-      [24, 44],
-      [60, 60],
-    ] as const) {
-      const {unmount} = render(
-        <RadioList label={`Plan ${height}`} value="a" onChange={() => {}}>
-          <RadioListItem label={`Option ${height}`} value="a" />
-        </RadioList>,
-      );
-      const row = closestOrThrow(
-        screen.getByRole('radio', {name: `Option ${height}`}),
-        '.astryx-item',
-      );
-      measure(row, height);
-      expect(target(row, height), `${height} px option`).toEqual({
-        width: 200,
-        height: expected,
-        hasBand: true,
-      });
-      unmount();
-      resetHitAreaForTests();
-    }
   });
 });
 
