@@ -186,10 +186,13 @@ describe('BaseTypeahead incremental results (spec:AST-092)', () => {
     const input = renderTypeahead(source);
     const announced: string[] = [];
     let lastText = '';
+    // Result announcements only. The busy start is announced once per query
+    // too (AST-086); whether it is written before the query settles depends on
+    // frame timing, so it does not count here.
     const observer = new MutationObserver(() => {
       const text = liveRegion()?.textContent ?? '';
       if (text !== lastText) {
-        if (text !== '') {
+        if (text !== '' && text !== 'Loading') {
           announced.push(text);
         }
         lastText = text;
