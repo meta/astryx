@@ -69,6 +69,13 @@ function runOver(files, mentions) {
   return {seen, result};
 }
 
+/**
+ * A run result with its temp folder name replaced, so two runs compare.
+ * @param {any} r
+ */
+const strip = r =>
+  JSON.parse(JSON.stringify(r).replaceAll(/codemod-mentions-[^/"\\\\]+/g, 'D'));
+
 const FILES = {
   'uses.tsx': 'export const a = <Box oldProp="x" />;\n',
   'plain.tsx': 'export const b = <Box other="x" />;\n',
@@ -87,10 +94,6 @@ describe('a codemod that declares the words a file must say', () => {
     // The unparseable file still reaches the transform, so it is reported
     // exactly as before.
     expect(declared.seen.sort()).toEqual(['broken.tsx', 'uses.tsx']);
-    const strip = (/** @type {any} */ r) =>
-      JSON.parse(
-        JSON.stringify(r).replaceAll(/codemod-mentions-[^/"\\\\]+/g, 'D'),
-      );
     expect(strip(declared.result)).toEqual(strip(undeclared.result));
     expect(declared.result.filesChanged).toBe(1);
     expect(
@@ -103,6 +106,44 @@ describe('a codemod that declares the words a file must say', () => {
       'escaped.tsx': "export const d = <Box {...{'old\\u0050rop': 1}} />;\n",
     };
     expect(runOver(escaped, ['oldProp']).seen).toEqual(['escaped.tsx']);
+  });
+
+  it.each([
+    [
+      'a braced \\u escape',
+      "export const d = <Box {...{'old\\u{50}rop': 1}} />;\n",
+    ],
+    ['a \\x escape', "export const d = <Box {...{'old\\x50rop': 1}} />;\n"],
+    ['an escaped letter', "export const d = <Box {...{'old\\Prop': 1}} />;\n"],
+    [
+      'a line continuation',
+      "export const d = <Box {...{'old\\\nProp': 1}} />;\n",
+    ],
+    [
+      'a character reference, beside a backslash',
+      'export const d = <Box title="old&#80;rop" tip={\'a\\nb\'} />;\n',
+    ],
+    [
+      'a hex character reference, beside a backslash',
+      'export const d = <Box title="old&#x50;rop" tip={\'a\\nb\'} />;\n',
+    ],
+  ])('runs on a file that spells a word with %s', (_, source) => {
+    expect(runOver({'escaped.tsx': source}, ['oldProp']).seen).toEqual([
+      'escaped.tsx',
+    ]);
+  });
+
+  it('skips a file whose escapes spell none of the words, with the same result', () => {
+    const files = {
+      'uses.tsx': FILES['uses.tsx'],
+      'escapes.tsx':
+        "export const e = <Box tip={'line\\none \\u00e9 \\x41'} test={/\\d+\\./} />;\n",
+    };
+    const declared = runOver(files, ['oldProp']);
+    const undeclared = runOver(files, undefined);
+    expect(undeclared.seen.sort()).toEqual(['escapes.tsx', 'uses.tsx']);
+    expect(declared.seen).toEqual(['uses.tsx']);
+    expect(strip(declared.result)).toEqual(strip(undeclared.result));
   });
 
   it('runs on every file when it declares no words', () => {
