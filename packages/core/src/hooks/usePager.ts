@@ -21,6 +21,7 @@ import {getGestureHost, type GestureHost} from '../gestures/GestureHost';
 import type {GestureRecognizer} from '../gestures/GestureRecognizer';
 import {LongPressGestureRecognizer} from '../gestures/LongPressGestureRecognizer';
 import {useAttachmentPair} from './useAttachment';
+import {mod, nearestLoopCopy} from './pagerIndex';
 import {lockSelection, locksSelectionFor} from '../gestures/selectionLock';
 import {
   PanGestureRecognizer,
@@ -49,6 +50,8 @@ import {resolveSnapPoint} from '../motion/resolveSnapPoint';
 import {rubberBandClamp, rubberBandUnclamp} from '../motion/rubberBand';
 import {paging, registerPagingTable} from '../motion/uikit/paging';
 import {observeResize} from '../utils/sharedResizeObserver';
+
+export {mod, nearestLoopCopy};
 import {isRtlElement} from './isRtlElement';
 import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
 
@@ -256,27 +259,6 @@ export interface Pager {
   dispose(): void;
 }
 
-/**
- * The copy of page `index` nearest virtual page `from`, in a loop of `count`
- * pages. Two copies can be equally near: with two pages, or half an even
- * count away. Then it is `index` itself when that is one of them, so a step
- * to `from + 1` always goes forward.
- */
-export function nearestLoopCopy(
-  index: number,
-  from: number,
-  count: number,
-): number {
-  if (Math.abs(index - from) * 2 <= count) {
-    return index;
-  }
-  return Math.round(
-    from +
-      (((mod(index, count) - mod(from, count) + count + count / 2) % count) -
-        count / 2),
-  );
-}
-
 /** Whether two measured page lists are the same to within half a pixel. */
 function sameOffsets(
   a: ReadonlyArray<number>,
@@ -369,10 +351,6 @@ function positionIn(
   }
   const i = Math.max(0, Math.min(n - 2, Math.floor(page)));
   return offsets[i] + (page - i) * (offsets[i + 1] - offsets[i]);
-}
-
-export function mod(value: number, count: number): number {
-  return ((value % count) + count) % count;
 }
 
 /** A position curve seen as the track's x (mirrored for LTR). */

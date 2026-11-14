@@ -5,6 +5,7 @@ import {
   it,
   expect,
   vi,
+  beforeAll,
   beforeEach,
   afterEach,
   type MockInstance,
@@ -17,6 +18,16 @@ import {getFocusableElements} from '../hooks/useFocusTrap';
 import {getGestureHost} from '../gestures/GestureHost';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import {InternationalizationProvider} from '../i18n';
+import {
+  __loadTouchRuntimeForTest,
+  __resetTouchRuntimeForTest,
+} from '../utils/touchRuntime';
+
+// The gallery's drag paging and slides come with the shared touch runtime
+// once the page has loaded it.
+beforeAll(async () => {
+  await __loadTouchRuntimeForTest();
+});
 
 // Mock showModal/close for jsdom
 beforeEach(() => {
@@ -1237,6 +1248,36 @@ describe('Lightbox', () => {
       );
       fireEvent.click(screen.getByLabelText('Next'));
       expect(onIndexChange).toHaveBeenCalledWith(1);
+    });
+
+    it('pages at once by its button before the touch runtime loads, the track resting on the page', async () => {
+      __resetTouchRuntimeForTest();
+      try {
+        function Gallery() {
+          const [index, setIndex] = useState(0);
+          return (
+            <Lightbox
+              isOpen={true}
+              onOpenChange={() => {}}
+              media={media}
+              index={index}
+              onIndexChange={setIndex}
+            />
+          );
+        }
+        render(<Gallery />);
+        fireEvent.click(screen.getByLabelText('Next'));
+        const current = document.querySelector(
+          '[data-lightbox-page][data-current]',
+        );
+        expect(current?.getAttribute('data-lightbox-page')).toBe('1');
+        const track = current?.parentElement;
+        expect(track?.getAttribute('style') ?? '').toContain(
+          'calc(-1 * (100% +',
+        );
+      } finally {
+        await __loadTouchRuntimeForTest();
+      }
     });
 
     it('calls onIndexChange when prev is clicked', () => {
