@@ -1435,10 +1435,15 @@ export function Step({
   // complete ordered sequence with `aria-current` intact, while the summary row
   // below it owns the compact navigation controls and remains decorative apart
   // from those buttons.
+  // A compact step has no button to carry `aria-disabled`, and a list item
+  // cannot carry it, so a disabled step adds a hidden status word.
   const compactNameNode = isCompact ? (
     <>
       <VisuallyHidden>{label}</VisuallyHidden>
       {statusTextNode}
+      {isDisabled ? (
+        <VisuallyHidden>{t('@astryx.step.status.unavailable')}</VisuallyHidden>
+      ) : null}
     </>
   ) : null;
 
