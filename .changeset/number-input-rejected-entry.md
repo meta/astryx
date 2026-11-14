@@ -1,7 +1,0 @@
----
-'@astryxdesign/core': patch
----
-
-[fix] NumberInput: a rejected entry now shows a message and stays in the field, so the field meets WCAG 2.2 1.4.1 (Use of Color) and 3.3.1 (Error Identification). Before, every draft that was not an accepted number, an unfinished one such as `-` included, set `aria-invalid` and was announced on each keystroke, while the text only turned secondary; blur then reverted a draft that did not parse, with no message. Now nothing is marked or announced while a person types, because a typed number is complete only at Enter or blur. At Enter or blur, text that is not a number, a fraction when `isIntegerOnly`, or any number while `min` is above `max` stays in the field: the field shows "Invalid number" as its error status, tied to the input by `aria-describedby`, sets `aria-invalid`, and announces it once. Inside an InputGroup the rejection sets `aria-invalid` and is announced. An edit that makes the draft valid or empty clears it at once. A number outside an ordinary range still clamps and commits through `onChange`. A caller `error` status with a message still shows in place of the field's message; a `warning` or `success` status no longer hides a rejection. What a form posts does not change: while blur keeps a rejected draft, a hidden input posts the committed number as the field showed it before. Pagination's `input` variant shows the message on its page box's status icon and widens the box beside the typed text while a rejected entry stays, so the bar keeps its height. No app code changes are needed.
-
-@nynexman4464
