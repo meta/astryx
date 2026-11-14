@@ -3,7 +3,8 @@
 /**
  * @file Preloaded into a child process (`node --import`) to stop that
  * process part way through a preview change, as a kill would: right after
- * the file system step the rule in `ASTRYX_STOP_AT` names, the process
+ * the file system step the rule after `--stop-at` on its command line
+ * names (`node --import … -- --stop-at '<rule>'`), the process
  * exits at once, with no catch or finally of the change run. Its exit
  * handlers still run (a lock it holds is released, as for any stopped
  * command), so the next command does not wait out the lock.
@@ -22,7 +23,8 @@ import path from 'node:path';
 /** The exit code of a process stopped by this rule. */
 export const STOPPED_CODE = 86;
 
-const rule = JSON.parse(process.env.ASTRYX_STOP_AT ?? 'null');
+const at = process.argv.indexOf('--stop-at');
+const rule = at >= 0 ? JSON.parse(process.argv[at + 1] ?? 'null') : null;
 const PENDING = '.theme-preview.pending.json';
 const RECORD = 'theme-preview.json';
 let afterRecord = false;

@@ -35,11 +35,18 @@ export function stoppedRun(fn, args, rule) {
   return new Promise((resolve, reject) => {
     const child = spawn(
       process.execPath,
-      ['--import', PRELOAD, '--input-type=module', '--eval', call],
-      {
-        env: {...process.env, ASTRYX_STOP_AT: JSON.stringify(rule)},
-        stdio: ['ignore', 'ignore', 'pipe'],
-      },
+      [
+        '--import',
+        PRELOAD,
+        '--input-type=module',
+        '--eval',
+        call,
+        // The stop rule, on the child's own command line.
+        '--',
+        '--stop-at',
+        JSON.stringify(rule),
+      ],
+      {stdio: ['ignore', 'ignore', 'pipe']},
     );
     let stderr = '';
     child.stderr.on('data', d => {
