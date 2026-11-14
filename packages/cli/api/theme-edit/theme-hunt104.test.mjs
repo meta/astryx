@@ -111,6 +111,31 @@ const CASES =
     ['color', 'red less', {on: 'button'}, [/ how color$/], /#1f2937/],
     ['gray', 'more', {}, [/ how gray$/], /#7c3aed/],
     ['brand', 'more', {}, [/ how brand$/], /#7c3aed/],
+    // A comma inside a function separates its arguments: never a number
+    // mark (the copy debris around it is still read away).
+    [
+      '--color-accent',
+      'rgb(255,0,0);',
+      {},
+      [/ set b --color-accent 'rgb\(255,0,0\)'$/],
+      / how /,
+    ],
+    [
+      'accent',
+      'hsl(210,50%,40%) !important',
+      {},
+      [/ set b accent 'hsl\(210,50%,40%\)'$/],
+      / how /,
+    ],
+    [
+      'transition-timing-function',
+      'cubic-bezier(0,0,1,1);',
+      {on: 'button'},
+      [
+        / set b transition-timing-function 'cubic-bezier\(0,0,1,1\)' --on button$/,
+      ],
+      / how /,
+    ],
     // A thousands comma on a weight.
     [
       '--font-weight-bold',
@@ -248,6 +273,8 @@ describe('hunt104', () => {
       readsTyped({offered: 'pointer', typed: 'not pointer', thing: 'cursor'}),
     ).not.toBe(true);
     expect(typedReading('0,5')).toBe('0.5');
+    expect(typedReading('rgb(255,0,0)')).toBe('rgb(255,0,0)');
+    expect(typedReading('cubic-bezier(0,0,1,1)')).toBe('cubic-bezier(0,0,1,1)');
     expect(typedReading('1,000')).toBe('1000');
     expect(readsTyped({offered: '5', typed: '0,5'})).toBe(false);
     expect(readsTyped({offered: 'bold', typed: 'extra bold'})).toEqual([1]);

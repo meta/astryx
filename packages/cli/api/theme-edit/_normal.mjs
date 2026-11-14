@@ -725,16 +725,36 @@ export function typedReading(typed) {
 }
 
 /**
- * A text with each comma between digits read as a number mark: before
- * exactly three digits after a whole number other than 0 (`1,000`), a
- * thousands mark; otherwise (`1,5`, `0,500`) a decimal point.
+ * A text with each comma between digits, outside parentheses, read as a
+ * number mark: before exactly three digits after a whole number other than
+ * 0 (`1,000`), a thousands mark; otherwise (`1,5`, `0,500`) a decimal
+ * point. Inside a function (`rgb(255,0,0)`) a comma separates arguments.
  * @param {string} text
  * @returns {string}
  */
 export function commaNumbers(text) {
-  return String(text).replace(/(\d+),(\d+)(?![\d.,])/g, (_, a, b) =>
-    b.length === 3 && !/^0+$/.test(a) ? `${a}${b}` : `${a}.${b}`,
-  );
+  // Only outside parentheses: inside a function (`rgb(255,0,0)`,
+  // `cubic-bezier(0,0,1,1)`) a comma separates its arguments.
+  let depth = 0;
+  let out = '';
+  let plain = '';
+  const flush = () => {
+    out += plain.replace(/(\d+),(\d+)(?![\d.,])/g, (_, a, b) =>
+      b.length === 3 && !/^0+$/.test(a) ? `${a}${b}` : `${a}.${b}`,
+    );
+    plain = '';
+  };
+  for (const c of String(text)) {
+    if (c === '(') {
+      if (depth === 0) flush();
+      depth += 1;
+    }
+    if (depth > 0) out += c;
+    else plain += c;
+    if (c === ')' && depth > 0) depth -= 1;
+  }
+  flush();
+  return out;
 }
 
 /** The CSS functions a value is written in, whose names carry no value. */

@@ -2236,11 +2236,16 @@ export function checkSetting(
   ) {
     const family = familyWeight[1].trim();
     const w = familyWeight[2].toLowerCase().replace('-', '');
-    const word = /^\d+$/.test(w)
-      ? Object.keys(HEADING_WEIGHTS).find(k => HEADING_WEIGHTS[k] === w)
+    // The headings rung nearest the weight, in any form the weight table
+    // reads (ExtraBold is heavy, 900 is heavy).
+    const number = /^\d+$/.test(w)
+      ? Number(w)
       : HEADING_WEIGHTS[w] !== undefined
-        ? w
-        : null;
+        ? Number(HEADING_WEIGHTS[w])
+        : WEIGHT_WORDS[w] !== undefined
+          ? Number(WEIGHT_WORDS[w])
+          : null;
+    const word = number != null ? weightRung(number) : null;
     refuse(
       E.ERR_THEME_BAD_VALUE,
       `"${value.trim()}" puts a weight after the family, so the browser reads one family named that and falls back. ${thing} takes the family (${family}); a weight is set with headings, font-weight or a --font-weight-* token.`,
