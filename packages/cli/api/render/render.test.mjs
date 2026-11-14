@@ -218,6 +218,10 @@ describe('render(): page to one HTML file', () => {
     expect(refused?.code).toBe('ERR_RENDER_SOURCE_DAMAGED');
     expect(refused.message).toContain('cut-short.html is cut short');
     expect(fs.existsSync(path.join(dir, 'cut-short-back'))).toBe(false);
+    // A whole file a host added to after </html> is not cut short.
+    put('added-to.html', `${html}<script>track()</script>\n`);
+    const back = /** @type {any} */ (await render('added-to.html', {cwd: dir, reverse: true, out: 'added-to-back/page.tsx'}));
+    expect(back.data).toMatchObject({mode: 'embedded', exact: true});
   });
 
   it('refuses a file a merge left with conflict markers, instead of choosing a side', async () => {
@@ -234,6 +238,9 @@ describe('render(): page to one HTML file', () => {
     expect(refused?.code).toBe('ERR_RENDER_SOURCE_DAMAGED');
     expect(refused.message).toContain('merge conflict markers');
     expect(fs.existsSync(path.join(dir, 'conflicted-back'))).toBe(false);
+    // A page that is not an Astryx page is still named as such.
+    put('plain-conflicted.html', '<html><body>\n<<<<<<< HEAD\n<p>a</p>\n=======\n<p>b</p>\n>>>>>>> theirs\n</body></html>\n');
+    expect(await codeOf(() => render('plain-conflicted.html', {cwd: dir, reverse: true}))).toBe('ERR_RENDER_NOT_ASTRYX');
   });
 });
 

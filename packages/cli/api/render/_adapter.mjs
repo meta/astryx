@@ -455,16 +455,18 @@ function pageChanges(source, html, modules) {
  */
 export function reverseToFile({cwd, input, output, overwrite}) {
   const html = readInput(input, cwd).toString('utf8');
-  // A merge that left conflict markers holds two versions at once, the
-  // embedded source too: choosing one would choose for the user.
-  if (/^<{7}(?: |$)/m.test(html) && /^>{7}(?: |$)/m.test(html)) {
+  const block = readSourceBlock(html);
+  const rendered = /<meta name="generator" content="Astryx[ "]/.test(html);
+  // A merge that left conflict markers in an Astryx page holds two versions
+  // of it at once, the embedded source too: choosing one would choose for
+  // the user.
+  if ((block.found || rendered || isAstryxMarkup(html)) && /^<{7}(?: |$)/m.test(html) && /^>{7}(?: |$)/m.test(html)) {
     throw new AstryxError(
-      `${shown(cwd, input)} holds unresolved merge conflict markers (<<<<<<< and >>>>>>>), so it holds two versions at once; nothing was written. Keep one side's whole file, or render the merged page again, then run this again.`,
+      `${shown(cwd, input)} holds unresolved merge conflict markers (<<<<<<< and >>>>>>>), so it holds two versions at once; nothing was written. Keep the whole file from one side, or render the merged page again, then run this again.`,
       [],
       ERROR_CODES.ERR_RENDER_SOURCE_DAMAGED,
     );
   }
-  const block = readSourceBlock(html);
   /** @param {string[]} files */
   const refuseExisting = files => {
     if (overwrite) return;
@@ -650,11 +652,10 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       ...pageChanges(source, html, modules),
     };
   }
-  const rendered = /<meta name="generator" content="Astryx[ "]/.test(html);
   // A render always ends its file with `</html>`. A file a render wrote that
-  // ends before then lost its end on the way, the embedded source with it:
-  // the markup left is only part of the page.
-  if (rendered && !/<\/html>\s*$/i.test(html)) {
+  // has none lost its end on the way, the embedded source with it: the
+  // markup left is only part of the page.
+  if (rendered && !/<\/html>/i.test(html)) {
     throw new AstryxError(
       `${shown(cwd, input)} is cut short: it ends before its embedded source, so the page cannot be given back; nothing was written. Get the whole file again.`,
       [],
