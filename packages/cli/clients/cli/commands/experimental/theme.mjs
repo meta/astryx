@@ -552,13 +552,33 @@ function changeBlocks(r) {
       c => `\\${c.codePointAt(0)?.toString(16).toUpperCase()} `,
     ),
   };
-  const status =
+  const done =
     d.was != null
       ? `[ok] ${d.theme}: ${s.thing} ${d.was} -> ${s.value}`
       : `[ok] ${d.theme}: ${d.action === 'set' ? describe(s) : `removed ${describe(s)}; now ${/** @type {any} */ (d).now ?? "the base theme's value"} applies`}`;
+  // A problem the change made leads the result, right under the status
+  // line, which counts them: a tail-cut or head-cut output still shows it.
+  const {newProblems = [], ...rest} = /** @type {any} */ (d);
+  const status = newProblems.length
+    ? `${done}, but it made ${newProblems.length} new problem${newProblems.length > 1 ? 's' : ''}:`
+    : done;
   // On undo, `setting` and `removed` both name the setting removed, as in
   // the JSON; the status line says the base theme's value is back.
-  return [status, ...project(/** @type {any} */ (d))];
+  return [
+    status,
+    ...(newProblems.length ? [problemList(newProblems)] : []),
+    ...project(rest),
+  ];
+}
+
+/**
+ * Problems, one to an item: what is wrong, then the command that fixes it.
+ * @param {Array<{problem: string, fix: string | null}>} problems
+ */
+function problemList(problems) {
+  return list(
+    problems.map(p => (p.fix ? [p.problem, `fix: ${p.fix}`] : p.problem)),
+  );
 }
 
 /**
@@ -567,7 +587,17 @@ function changeBlocks(r) {
  * @param {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditShowResponse['data']} d
  */
 function showBlocks(d) {
-  const {settings, colors, colorNotes, colorFiles, unreached, ...rest} = d;
+  const {
+    settings,
+    colors,
+    colorNotes,
+    colorFiles,
+    unreached,
+    // Every problem is in the open problems at the end, with its fix.
+    problems: _problems,
+    openProblems = [],
+    ...rest
+  } = d;
   const [head, ...others] = project(/** @type {any} */ (rest));
   return [
     head,
@@ -598,6 +628,16 @@ function showBlocks(d) {
     colorFiles
       ? [section('colorFiles:'), record(colorFiles)]
       : record({colorFiles: 'none'}),
+    // Last, so the end of the output names what the theme still gets wrong
+    // (none, as an empty list in the JSON, prints nothing).
+    openProblems.length
+      ? [
+          section(
+            `openProblems: ${openProblems.length} the theme has now; each fix line fixes one`,
+          ),
+          problemList(openProblems),
+        ]
+      : [],
   ].flat();
 }
 
@@ -1804,8 +1844,18 @@ export function registerExperimentalTheme(group, program) {
                   ? [
                       // What was undone is in the headline, so a tail of
                       // the output keeps it.
-                      `[ok] ${r.data.theme}: undid ${/** @type {any} */ (r.data).undid ?? 'the last change'}${/** @type {any} */ (r.data).refusedBefore ? ` (${/** @type {any} */ (r.data).refusedBefore})` : ''}`,
-                      ...project(/** @type {any} */ (r.data)),
+                      ...(() => {
+                        const {newProblems = [], ...rest} = /** @type {any} */ (
+                          r.data
+                        );
+                        return [
+                          `[ok] ${rest.theme}: undid ${rest.undid ?? 'the last change'}${rest.refusedBefore ? ` (${rest.refusedBefore})` : ''}${newProblems.length ? `, but it made ${newProblems.length} new problem${newProblems.length > 1 ? 's' : ''}:` : ''}`,
+                          ...(newProblems.length
+                            ? [problemList(newProblems)]
+                            : []),
+                          ...project(rest),
+                        ];
+                      })(),
                     ]
                   : changeBlocks(
                       /** @type {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditChangeResponse} */ (

@@ -7307,11 +7307,14 @@ export function nonTextMessage(ctx, slug, [name, value, kind = 'value']) {
 /**
  * Contrast problems this theme caused: text below 4.5:1 that was not as low
  * in the base theme. A part's own color or background setting, or a token
- * set on that part, counts for that part.
+ * set on that part or on the part the text sits on, counts for that part.
+ * Each comes with the set line that fixes it, when one color does: the text
+ * token set where the text sits, for its mode, to the black or white that
+ * reads on what it sits on.
  * @param {Ctx} ctx
  * @param {ThemeData} data
  * @param {{light: Record<string, string>, dark: Record<string, string>}} res
- * @returns {Promise<string[]>}
+ * @returns {Promise<ThemeProblem[]>}
  */
 export async function contrastProblems(ctx, data, res) {
   const base = await baseResolved(ctx.project, data.like);
@@ -7374,11 +7377,33 @@ export async function contrastProblems(ctx, data, res) {
       ? (res[/** @type {'light' | 'dark'} */ (m)][ref[1]] ?? null)
       : own;
   };
+  /**
+   * A token set on the part the text sits on, which every part inside it
+   * reads: card text set on the card reaches the card's heading.
+   * @param {TextPair} p @param {string} m
+   */
+  const tokenAround = (p, m) => {
+    const around = p.bg.target;
+    if (!around || around === p.fg.target || !p.fg.tokens.length) return null;
+    const hit = [...data.settings]
+      .reverse()
+      .find(
+        x =>
+          x.source === 'token' &&
+          p.fg.tokens.includes(x.thing) &&
+          partsOf(ctx, x).includes(around) &&
+          (!x.when || x.when === /** @type {any} */ (p).when) &&
+          !x.state &&
+          (!x.mode || x.mode === m),
+      );
+    return hit?.value ?? null;
+  };
   /** @type {(p: TextPair, side: 'fg' | 'bg', m: string) => string | null} */
   const value = (p, side, m) => {
     const s = p[side];
     return (
       override(s, side, m, /** @type {any} */ (p).when) ??
+      (side === 'fg' ? tokenAround(p, m) : null) ??
       // The base theme's own part style (neutral's destructive button),
       // which Core's reads do not know.
       ofBase(p, side, m) ??
@@ -7481,14 +7506,23 @@ export async function contrastProblems(ctx, data, res) {
     },
     [...variantPairs, ...headerPairs],
   );
+  const slug = data.name;
+  const modeFlag = (/** @type {string} */ m) =>
+    modesOf(data).length > 1 ? ` --mode ${m}` : '';
+  /** @type {(text: string) => ThemeProblem} */
+  const plain = text => ({text, fix: null});
   return [
-    ...problems.map(
-      x =>
-        `text in ${x.part} ("${x.sample}") is ${x.ratio}:1 in ${x.mode} (${x.fg} on ${x.bgPart ?? 'the page'}'s ${x.bg}${x.over ? ` over ${x.over}` : ''}); text needs 4.5:1`,
-    ),
+    ...problems.map(x => ({
+      text: `text in ${x.part} ("${x.sample}") is ${x.ratio}:1 in ${x.mode} (${x.fg} on ${x.bgPart ?? 'the page'}'s ${x.bg}${x.over ? ` over ${x.over}` : ''}); text needs 4.5:1`,
+      fix: x.fgToken
+        ? `${P} set ${slug} ${x.fgToken} '${plainOn(x.ground)}'${x.bgPart ? ` --on ${x.bgPart}` : ''}${x.when ? ` --when ${x.when}` : ''}${modeFlag(x.mode)}`
+        : x.textPart
+          ? `${P} set ${slug} color '${plainOn(x.ground)}' --on ${x.textPart}${x.when ? ` --when ${x.when}` : ''}${modeFlag(x.mode)}`
+          : null,
+    })),
     ...borderContrastProblems(ctx, data, res, base),
     ...(more
-      ? [`and ${more} more text pair${more > 1 ? 's' : ''} below 4.5:1`]
+      ? [plain(`and ${more} more text pair${more > 1 ? 's' : ''} below 4.5:1`)]
       : []),
     // Pairs styled for one variant or state are not measured yet.
     ...(() => {
@@ -7504,21 +7538,42 @@ export async function contrastProblems(ctx, data, res) {
       );
       return scoped.length
         ? [
-            `not checked: text contrast for ${scoped
-              .slice(0, 3)
-              .map(describe)
-              .join(
-                '; ',
-              )}${scoped.length > 3 ? ` and ${scoped.length - 3} more` : ''}, set for one variant or state`,
+            plain(
+              `not checked: text contrast for ${scoped
+                .slice(0, 3)
+                .map(describe)
+                .join(
+                  '; ',
+                )}${scoped.length > 3 ? ` and ${scoped.length - 3} more` : ''}, set for one variant or state`,
+            ),
           ]
         : [];
     })(),
     ...(unchecked.length
       ? [
-          `not checked: text on or in ${unchecked.slice(0, 3).join(', ')}${unchecked.length > 3 ? ` and ${unchecked.length - 3} more` : ''}, which the editor cannot read as one fixed color`,
+          plain(
+            `not checked: text on or in ${unchecked.slice(0, 3).join(', ')}${unchecked.length > 3 ? ` and ${unchecked.length - 3} more` : ''}, which the editor cannot read as one fixed color`,
+          ),
         ]
       : []),
   ];
+}
+
+/**
+ * One problem the theme has, with the command that fixes it, or null when
+ * no one command does.
+ * @typedef {{text: string, fix: string | null}} ThemeProblem
+ */
+
+/**
+ * The plain black or white that stands out most from a drawn color: what a
+ * fix sets text or a border to so it reads.
+ * @param {[number, number, number]} rgb
+ */
+function plainOn(rgb) {
+  return ratio([0, 0, 0], rgb) >= ratio([255, 255, 255], rgb)
+    ? '#000000'
+    : '#ffffff';
 }
 
 /**
@@ -7532,9 +7587,18 @@ export async function contrastProblems(ctx, data, res) {
  * @param {ThemeData} data
  * @param {{light: Record<string, string>, dark: Record<string, string>}} res
  * @param {{light: Record<string, string>, dark: Record<string, string>}} base
- * @returns {string[]}
+ * @returns {ThemeProblem[]}
  */
 function borderContrastProblems(ctx, data, res, base) {
+  const modeFlag = (/** @type {string} */ m) =>
+    modesOf(data).length > 1 ? ` --mode ${m}` : '';
+  /** The fix color for a border on a ground, or null. @param {string} ground @param {string} page */
+  const fixOn = (ground, page) => {
+    const p = parseColor(page);
+    const g0 = parseColor(ground);
+    if (!p || !g0) return null;
+    return plainOn(compositeOver(g0, alphaOf(ground), p));
+  };
   /** A value as one color in a mode: its half of light-dark(), a token read. @param {string} v @param {'light' | 'dark'} m @param {Record<string, string>} tokens */
   const inMode = (v, m, tokens) => {
     let x = String(v ?? '').trim();
@@ -7565,14 +7629,39 @@ function borderContrastProblems(ctx, data, res, base) {
     const b = compositeOver(b0, alphaOf(border), g);
     return ratio(b, g);
   };
-  /** @type {string[]} */
-  const out = [];
+  /** @type {Map<string, ThemeProblem>} */
+  const out = new Map();
+  /** @param {string} text @param {string | null} fix */
+  const add = (text, fix) => {
+    if (!out.has(text)) out.set(text, {text, fix});
+  };
+  /** The border a setting draws: a border or an outline. @param {string} thing */
+  const edge = thing => thing.replace(/-color$/, '');
   for (const m of modesOf(data)) {
     const mode = /** @type {'light' | 'dark'} */ (m);
     const page = res[mode]['--color-background-body'];
     const basePage = base[mode]['--color-background-body'];
-    for (const x of data.settings) {
+    for (const [i, x] of data.settings.entries()) {
       if (x.state || x.when || (x.mode && x.mode !== mode)) continue;
+      // A later setting of the same border for this mode on the same
+      // parts is the one that shows.
+      const parts = x.on ? partsOf(ctx, x) : [];
+      if (
+        data.settings
+          .slice(i + 1)
+          .some(
+            y =>
+              !y.state &&
+              !y.when &&
+              (!y.mode || y.mode === mode) &&
+              y.source === x.source &&
+              (x.source === 'token'
+                ? y.thing === x.thing && !y.on && !x.on
+                : edge(y.thing) === edge(x.thing) &&
+                  parts.every(t => partsOf(ctx, y).includes(t))),
+          )
+      )
+        continue;
       // A border token for the whole theme, on the page.
       if (
         x.source === 'token' &&
@@ -7589,10 +7678,15 @@ function borderContrastProblems(ctx, data, res, base) {
           basePage,
           basePage,
         );
-        if (now != null && now < 3 && (was == null || was > now))
-          out.push(
+        if (now != null && now < 3 && (was == null || was > now)) {
+          const color = fixOn(page, page);
+          add(
             `the border ${x.thing} (${inMode(res[mode][x.thing], mode, res[mode])}) is ${now.toFixed(2)}:1 on the page in ${mode} (${page}); a border needs 3:1 to show as an edge`,
+            color
+              ? `${P} set ${data.name} ${x.thing} '${color}'${modeFlag(mode)}`
+              : null,
           );
+        }
         continue;
       }
       // A part's own border color, on the part's background.
@@ -7643,15 +7737,19 @@ function borderContrastProblems(ctx, data, res, base) {
           basePage,
         );
         if (now != null && now < 3 && (was == null || was > now)) {
-          out.push(
+          const color = fixOn(ground || page, page);
+          add(
             `the border on ${t} (${border}) is ${now.toFixed(2)}:1 on its ${ground && ground !== page ? `background ${ground}` : `page ${page}`} in ${mode}; a border needs 3:1 to show as an edge`,
+            color
+              ? `${P} set ${data.name} ${/-color$/.test(x.thing) ? x.thing : `${x.thing.replace(/^(border|outline).*$/, '$1')}-color`} '${color}' --on ${t}${modeFlag(mode)}`
+              : null,
           );
           break;
         }
       }
     }
   }
-  return [...new Set(out)];
+  return [...out.values()];
 }
 
 /**
@@ -8916,6 +9014,8 @@ export async function commitTheme(
       changed: [],
       res: {light: {}, dark: {}},
       problems: [],
+      problemList: [],
+      newProblems: [],
       warnings: [],
       lifted: [],
       notes,
@@ -9155,6 +9255,10 @@ export async function commitTheme(
   const changed = [];
   /** @type {string[]} */
   let problems = [];
+  /** @type {ThemeProblem[]} */
+  let problemList = [];
+  /** @type {ThemeProblem[]} */
+  let newProblems = [];
   try {
     res = await resolvedTokens(ctx, slug);
     const modes = modesOf(data);
@@ -9187,10 +9291,22 @@ export async function commitTheme(
         }
       }
     }
-    problems = await contrastProblems(ctx, data, res);
+    const found = await contrastProblems(ctx, data, res);
     // What cannot be measured is a note, not a problem.
-    notes.push(...problems.filter(x => x.startsWith('not checked')));
-    problems = problems.filter(x => !x.startsWith('not checked'));
+    notes.push(
+      ...found.filter(x => x.text.startsWith('not checked')).map(x => x.text),
+    );
+    problemList = found.filter(x => !x.text.startsWith('not checked'));
+    problems = problemList.map(x => x.text);
+    // The problems this change made: the ones the settings before it did
+    // not have, measured the same way.
+    const had =
+      before && resBefore
+        ? new Set(
+            (await contrastProblems(ctx, before, resBefore)).map(x => x.text),
+          )
+        : new Set();
+    newProblems = problemList.filter(x => !had.has(x.text));
   } catch (e) {
     ctx.unchecked ??= `checking it failed: ${e instanceof Error ? e.message : String(e)}`;
   }
@@ -9198,6 +9314,8 @@ export async function commitTheme(
     changed,
     res,
     problems,
+    problemList,
+    newProblems,
     warnings: built.warnings,
     lifted: built.lifted.filter(x => !liftedBefore.has(x)),
     notes,

@@ -2633,6 +2633,49 @@ export function mappingRows(dial) {
 }
 
 /**
+ * The contrast checks of the colors a dial makes, in the theme's modes.
+ * @param {PaletteMapping} pal
+ * @param {string} dial
+ * @param {Mode[]} modes
+ */
+function dialChecks(pal, dial, modes) {
+  return pal.contrast.filter(
+    c =>
+      (pal.tokens[c.token]?.family === dial || c.dials?.includes(dial)) &&
+      // A theme with one mode never shows the other one's shades.
+      modes.includes(c.mode),
+  );
+}
+
+/**
+ * What one contrast check says: its own note, or for a failed one the
+ * ratio it reached.
+ * @param {PaletteMapping['contrast'][number]} c
+ * @param {string} dial
+ */
+function checkNote(c, dial) {
+  return (
+    c.note ||
+    `${c.token} reads at only ${c.ratio}:1 in ${c.mode} on ${c.against} (needs ${c.needs}:1) even at shade ${shade(c.stop)}, the most contrasting one: pick a lighter or darker ${dial}, or set ${c.token} exactly`
+  );
+}
+
+/**
+ * The contrast checks a dial's colors fail, as their notes say them: the
+ * problems a color change leaves.
+ * @param {PaletteMapping | null} pal
+ * @param {string} dial
+ * @param {Mode[]} [modes] the modes the theme has
+ * @returns {string[]}
+ */
+export function paletteProblems(pal, dial, modes = ['light', 'dark']) {
+  if (!pal) return [];
+  return dialChecks(pal, dial, modes)
+    .filter(c => !c.pass)
+    .map(c => checkNote(c, dial));
+}
+
+/**
  * What one color dial did, for the result notes: what its main token uses
  * in each mode, every token contrast moved, and last the generated files.
  * What the config writer kept or replaced of a hand edit comes from the
@@ -2680,16 +2723,8 @@ export function paletteNotes(pal, dial, slug, modes = ['light', 'dark']) {
     notes.push(
       `your ${dial} ${given.value} is outside the colors every screen shows (sRGB), so the nearest one, ${given.seed}, is used`,
     );
-  for (const c of pal.contrast) {
-    if (pal.tokens[c.token]?.family !== dial && !c.dials?.includes(dial))
-      continue;
-    // A theme with one mode never shows the other one's shades.
-    if (!modes.includes(c.mode)) continue;
-    if (c.note) notes.push(c.note);
-    else if (!c.pass)
-      notes.push(
-        `${c.token} reads at only ${c.ratio}:1 in ${c.mode} on ${c.against} (needs ${c.needs}:1) even at shade ${shade(c.stop)}, the most contrasting one: pick a lighter or darker ${dial}, or set ${c.token} exactly`,
-      );
+  for (const c of dialChecks(pal, dial, modes)) {
+    if (c.note || !c.pass) notes.push(checkNote(c, dial));
     else if (c.stop !== c.preferred)
       notes.push(
         `${c.token} uses shade ${shade(c.stop)} in ${c.mode}, not ${shade(c.preferred)}, so it reads at ${c.ratio}:1 on ${c.against}`,

@@ -76,6 +76,15 @@
  */
 
 /**
+ * One problem a theme has, with the command that fixes it: the text token
+ * set where the text sits, or the border color, for the mode, to the black
+ * or white that reads there. `fix` is null when no one command does (a
+ * color the palette cannot make read: its note says what to change).
+ * @experimental May change or be removed in a patch release.
+ * @typedef {{problem: string, fix: string | null}} ThemeEditProblem
+ */
+
+/**
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditChangeData
  * @property {string} theme
@@ -93,6 +102,7 @@
  * @property {string[]} lifted - Variant keys the setting was newly repeated on, so a more specific base rule cannot beat it.
  * @property {string[]} notes - What else to know: the shade a color's main token uses and any shade contrast moved, then the generated color files; font loading; what a token feeds.
  * @property {string[]} problems - Text this theme made unreadable (below 4.5:1, and not that low in the base theme).
+ * @property {ThemeEditProblem[]} newProblems - What this change made unreadable or unseen, each with the command that fixes it: text and borders that read well before it, and the contrast checks the colors it made fail. The text output leads with them, under the status line.
  * @property {string[]} warnings - Warnings from the theme build.
  * @property {string | null} preview
  * @property {string[]} pictures
@@ -130,6 +140,7 @@
  * @property {ThemeEditColor[]} data.colors - Each color the theme sets, with the shade each token uses.
  * @property {string[]} data.colorNotes - What the color config keeps or replaced of a hand edit, tokens that use another shade than usual so they read, and any that still do not.
  * @property {string[]} data.problems
+ * @property {ThemeEditProblem[]} data.openProblems - Every contrast problem the theme has now: its text, its borders, and the checks its colors fail, each with the command that fixes it. The text output ends with them.
  * @property {string[]} data.notes
  * @property {string} data.preview
  * @property {string[]} [data.previewStale] - In-app preview files changed by hand, so they were not written again and still show the theme as it was.
@@ -173,7 +184,7 @@
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditUndoResponse
  * @property {'themeEdit.undo'} type
- * @property {{theme: string, action: 'step', undid: string, refusedBefore?: string, undone: string[], next?: string, settings: number, stepsLeft: number, changedTokens: string[], problems: string[]} & ThemeEditPreviewFields} data - `undid` names what the step took back (each setting, base and mode, in one line); `refusedBefore` says a change command refused since the last change changed nothing, so the step took back the change before it; `next` names the change now on top, which the next undo takes back.
+ * @property {{theme: string, action: 'step', undid: string, refusedBefore?: string, undone: string[], next?: string, settings: number, stepsLeft: number, changedTokens: string[], problems: string[], newProblems: ThemeEditProblem[]} & ThemeEditPreviewFields} data - `undid` names what the step took back (each setting, base and mode, in one line); `refusedBefore` says a change command refused since the last change changed nothing, so the step took back the change before it; `next` names the change now on top, which the next undo takes back.
  */
 
 /**

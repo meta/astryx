@@ -501,7 +501,7 @@ export function makeCompiler(project, parts) {
       if (!under || !top) return null;
       return [compositeOver(top, alphaOf(fg), under), under];
     };
-    /** @type {Array<{part: string, mode: string, ratio: number, sample: string, fg: string, bgPart: string | null, bg: string, over: string | null}>} */
+    /** @type {Array<{part: string, mode: string, ratio: number, sample: string, fg: string, fgToken: string | null, textPart: string | null, when: string | null, bgPart: string | null, bg: string, ground: [number, number, number], over: string | null}>} */
     const out = [];
     const seen = new Set();
     /** @type {Set<string>} */
@@ -604,6 +604,13 @@ export function makeCompiler(project, parts) {
               : bg !== baseValue(p, 'bg', m)
                 ? String(bg)
                 : (p.bg.tokens[0] ?? String(bg)),
+          // What a fix needs: the token the text reads, the part that draws
+          // it, the variant it was measured in, and the opaque color the
+          // text sits on.
+          fgToken: p.fg.tokens[0] ?? null,
+          textPart: p.fg.target ?? null,
+          when: /** @type {any} */ (p).when ?? null,
+          ground: pair[1],
         });
       }
     }

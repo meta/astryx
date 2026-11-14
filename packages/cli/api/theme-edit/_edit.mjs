@@ -139,6 +139,7 @@ import {
   paletteMapping,
   paletteDialOf,
   paletteNotes,
+  paletteProblems,
   lockHeld,
   refuseIfLockLost,
   writeWhole,
@@ -4519,6 +4520,7 @@ async function changeOnce(
             ),
         ],
         problems: r.problems,
+        newProblems: problemLines(r.newProblems),
         warnings: r.warnings,
         ...p,
       },
@@ -5269,14 +5271,17 @@ async function changeOnce(
     notes.push(
       `${slug}.theme.ts sets ${ownWins.slice(0, 4).join(', ')}${ownWins.length > 4 ? ` and ${ownWins.length - 4} more` : ''} itself, and your own source wins over the settings, so ${ownWins.length > 1 ? 'those do' : 'that does'} not change; ${ownTakeOut(slug, s.thing, ownWins, data)}`,
     );
+  /** The contrast checks the colors this change made fail. @type {string[]} */
+  const colorFails = [];
+  const dialPal =
+    PALETTE_DIALS.includes(s.thing) && sub === 'set'
+      ? paletteMapping(cwd, slug, data, base, ctx.project.core.tokenDefaults)
+      : null;
+  if (dialPal)
+    colorFails.push(...paletteProblems(dialPal, s.thing, modesOf(data)));
   if (PALETTE_DIALS.includes(s.thing) && sub === 'set')
     notes.push(
-      ...paletteNotes(
-        paletteMapping(cwd, slug, data, base, ctx.project.core.tokenDefaults),
-        s.thing,
-        slug,
-        modesOf(data),
-      )
+      ...paletteNotes(dialPal, s.thing, slug, modesOf(data))
         // A shade the mapping would pick for a token the theme's own source
         // sets never shows: the file's value does (named once above).
         .filter(n => {
@@ -5316,12 +5321,14 @@ async function changeOnce(
       base,
       ctx.project.core.tokenDefaults,
     );
-    if (pal?.families.some(x => x.dial === dialOfToken))
+    if (pal?.families.some(x => x.dial === dialOfToken)) {
       notes.push(
         ...paletteNotes(pal, dialOfToken, slug, modesOf(data)).filter(
           n => !n.startsWith('the generated colors are in '),
         ),
       );
+      colorFails.push(...paletteProblems(pal, dialOfToken, modesOf(data)));
+    }
   }
   if (PALETTE_DIALS.includes(s.thing) && sub === 'undo')
     notes.push(
@@ -5438,6 +5445,13 @@ async function changeOnce(
       kept,
       lifted: r.lifted,
       problems: r.problems,
+      // What this change made unreadable or unseen, with each fix: text
+      // and borders measured against the settings before it, and the
+      // contrast checks the colors it made fail.
+      newProblems: [
+        ...problemLines(r.newProblems),
+        ...colorFails.map(problem => ({problem, fix: null})),
+      ],
       warnings: r.warnings,
       ...p,
     },
@@ -5535,6 +5549,15 @@ function renderFix(ctx, cwd) {
   if (ctx.uncheckedCode === 'ERR_RENDER_ASSET_TOO_LARGE') return [];
   if (reactCopies(ctx.project)) return [copiesLine(cwd, 'react')];
   return [`${getCliInvocation(cwd)} doctor`];
+}
+
+/**
+ * Problems as a result names them: each with the command that fixes it.
+ * @param {import('./_settings.mjs').ThemeProblem[] | undefined} list
+ * @returns {Array<{problem: string, fix: string | null}>}
+ */
+function problemLines(list) {
+  return (list ?? []).map(x => ({problem: x.text, fix: x.fix}));
 }
 
 /**
@@ -5715,7 +5738,8 @@ export async function themeEditShow(theme, options = {}) {
   const ownMasked = ownOverNotes.map(n => n.slice(0, n.indexOf(': ')));
   const checked = await contrastProblems(ctx, data, res);
   // What cannot be measured is a note, not a problem.
-  const problems = checked.filter(x => !x.startsWith('not checked'));
+  const open = checked.filter(x => !x.text.startsWith('not checked'));
+  const problems = open.map(x => x.text);
   const pal = paletteMapping(
     cwd,
     theme,
@@ -5723,6 +5747,7 @@ export async function themeEditShow(theme, options = {}) {
     await baseResolved(ctx.project, data.like),
     ctx.project.core.tokenDefaults,
   );
+  const {colorProblems, ...colorPart} = colorsReport(pal, data, res, theme);
   // A render that fails here (two copies of React, a component that
   // throws) is refused as the one above: what this show built goes back,
   // and the result says so.
@@ -5886,11 +5911,13 @@ export async function themeEditShow(theme, options = {}) {
           : []),
         // A setting the theme file wins over is not live: no contrast
         // caveat for it (its own note says it does not show).
-        ...checked.filter(
-          x =>
-            x.startsWith('not checked') &&
-            !ownMasked.some(d => x.includes(` for ${d},`)),
-        ),
+        ...checked
+          .map(x => x.text)
+          .filter(
+            x =>
+              x.startsWith('not checked') &&
+              !ownMasked.some(d => x.includes(` for ${d},`)),
+          ),
         ...fontNotes(ctx, data),
         // Images and files of the theme the previews cannot show.
         ...themeImageNotes(ctx, theme),
@@ -5919,7 +5946,7 @@ export async function themeEditShow(theme, options = {}) {
         res,
         modes[0],
       ),
-      ...colorsReport(pal, data, res, theme),
+      ...colorPart,
       unreached: unreachedParts(
         ctx,
         data,
@@ -5927,6 +5954,12 @@ export async function themeEditShow(theme, options = {}) {
         await baseResolved(ctx.project, data.like),
       ),
       problems,
+      // Every problem the theme has now, its text, border and color
+      // contrast, each with the command that fixes it when one does.
+      openProblems: [
+        ...problemLines(open),
+        ...colorProblems.map(problem => ({problem, fix: null})),
+      ],
       preview,
       previewStale,
       sheet: sheet.file,
@@ -6527,10 +6560,12 @@ function partValues(ctx, data, res, mode) {
  *   built theme's resolved values: where one differs from the generated
  *   shade with no exact setting, the theme's own source changed it
  * @param {string} [slug]
- * @returns {{vibrancy: number | null, colors: import('./theme-edit.type.mjs').ThemeEditColor[], colorNotes: string[]}}
+ * @returns {{vibrancy: number | null, colors: import('./theme-edit.type.mjs').ThemeEditColor[], colorNotes: string[], colorProblems: string[]}}
+ *   `colorProblems`: the color notes of pairings that fail their contrast
  */
 function colorsReport(pal, data, built, slug = '') {
-  if (!pal) return {vibrancy: null, colors: [], colorNotes: []};
+  if (!pal)
+    return {vibrancy: null, colors: [], colorNotes: [], colorProblems: []};
   /** What the user set for each token exactly, in each mode. */
   const exactBy =
     /** @type {Record<string, {light?: string, dark?: string}>} */ ({});
@@ -6561,6 +6596,22 @@ function colorsReport(pal, data, built, slug = '') {
   const modes = modesOf(data);
   /** @param {{light: import('./_palette.mjs').StopRef, dark: import('./_palette.mjs').StopRef}} v */
   const shades = v => modes.map(m => `${m} ${shade(v[m])}`).join(', ');
+  // The pairings the color config checked, in the theme's modes; one the
+  // theme's own source changed no longer holds.
+  const pairings = pal.contrast
+    .filter(c => modes.includes(c.mode))
+    .filter(
+      c =>
+        !ownBy[c.token]?.[/** @type {'light' | 'dark'} */ (c.mode)] &&
+        !ownBy[c.against]?.[/** @type {'light' | 'dark'} */ (c.mode)],
+    );
+  /** @param {(typeof pairings)[number]} c */
+  const pairingNote = c =>
+    c.note
+      ? c.note
+      : c.pass
+        ? `${c.token} ${c.mode}: shade ${c.stop}, not ${c.preferred}, so it reads at ${c.ratio}:1 on ${c.against}`
+        : `${c.token} ${c.mode}: only ${c.ratio}:1 on ${c.against} at shade ${c.stop} (needs ${c.needs}:1)`;
   return {
     vibrancy: pal.vibrancy,
     colors: pal.families.map(fam => ({
@@ -6596,28 +6647,16 @@ function colorsReport(pal, data, built, slug = '') {
             new RegExp(`${k.replace(/[-]/g, '\\-')}(?![\\w-])`).test(n),
           ),
       ),
-      ...pal.contrast
-        .filter(c => modes.includes(c.mode))
-        // A pairing the theme's own source changed no longer holds.
-        .filter(
-          c =>
-            !ownBy[c.token]?.[/** @type {'light' | 'dark'} */ (c.mode)] &&
-            !ownBy[c.against]?.[/** @type {'light' | 'dark'} */ (c.mode)],
-        )
+      ...pairings
         .filter(c => c.note || !c.pass || c.stop !== c.preferred)
-        .map(c =>
-          c.note
-            ? c.note
-            : c.pass
-              ? `${c.token} ${c.mode}: shade ${c.stop}, not ${c.preferred}, so it reads at ${c.ratio}:1 on ${c.against}`
-              : `${c.token} ${c.mode}: only ${c.ratio}:1 on ${c.against} at shade ${c.stop} (needs ${c.needs}:1)`,
-        ),
+        .map(pairingNote),
     ].filter(
       n =>
         !Object.keys(ownBy).some(k =>
           new RegExp(`${k.replace(/[-]/g, '\\-')}(?![\\w-])`).test(n),
         ),
     ),
+    colorProblems: pairings.filter(c => !c.pass).map(pairingNote),
   };
 }
 
@@ -7087,6 +7126,7 @@ async function undoTheme(theme, options) {
       // What the step back changed, as a change reports it.
       changedTokens: committed.changed,
       problems: committed.problems,
+      newProblems: problemLines(committed.newProblems),
       ...p,
     },
   };
