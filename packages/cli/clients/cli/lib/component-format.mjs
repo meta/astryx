@@ -126,6 +126,32 @@ function wholePropsPointer(props, name) {
 }
 
 /**
+ * Render best practices as runs of Do and Don't items. A label line starts
+ * each run of items with the same guidance, so every item keeps its place in
+ * the list and its guidance.
+ * @param {{guidance?: boolean, description: string}[] | undefined} practices
+ * @returns {string[]}
+ */
+export function formatBestPractices(practices) {
+  if (!practices?.length) return [];
+  const lines = ['## Best Practices\n'];
+  let label = '';
+  for (const bp of practices) {
+    const next = bp.guidance ? 'Do:' : "Don't:";
+    if (next !== label) {
+      // In Markdown, a line right under a list item continues that item, so a
+      // later label needs a blank line before it to start its own run.
+      if (label) lines.push('');
+      lines.push(next);
+      label = next;
+    }
+    lines.push(`- ${bp.description}`);
+  }
+  lines.push('');
+  return lines;
+}
+
+/**
  * Render component-specific accessibility requirements.
  * @param {{name: string, description: string}[] | undefined} accessibility
  * @param {'##' | '####'} [heading]
@@ -277,7 +303,7 @@ function formatComponentIconSlots(slots) {
   const lines = [
     '**Component icon slots** - set in `defineTheme({componentIcons})` to a shared icon name, `null`, a partial `{icon, variant, size}` request, or a function of the slot state.\n',
     '| Slot | State | Fallback | Role | `null` |',
-    '|------|-------|----------|------|--------|',
+    '|---|---|---|---|---|',
   ];
   for (const slot of slots) {
     const state = slot.state?.length
@@ -310,9 +336,7 @@ function formatTargetsTable(docs, themeData) {
   lines.push(
     '| Component class | Preferred data attributes | Props | States |',
   );
-  lines.push(
-    '|-----------------|---------------------------|-------|--------|',
-  );
+  lines.push('|---|---|---|---|');
 
   for (const target of docs.theming.targets) {
     const coreVariants = getTargetVariants(target, docs);
@@ -376,7 +400,7 @@ export function formatFull(docs, options = {}) {
   if (docs.usage?.anatomy?.length) {
     sections.push('## Anatomy\n');
     sections.push('| Element | Required | Description |');
-    sections.push('|---------|----------|-------------|');
+    sections.push('|---|---|---|');
     for (const el of docs.usage.anatomy) {
       const req = el.required ? 'Yes' : 'No';
       sections.push(
@@ -386,14 +410,7 @@ export function formatFull(docs, options = {}) {
     sections.push('');
   }
 
-  if (docs.usage?.bestPractices?.length) {
-    sections.push('## Best Practices\n');
-    for (const bp of docs.usage.bestPractices) {
-      const badge = bp.guidance ? '**Do:**' : "**Don't:**";
-      sections.push(`- ${badge} ${bp.description}`);
-    }
-    sections.push('');
-  }
+  sections.push(...formatBestPractices(docs.usage?.bestPractices));
 
   sections.push(...formatAccessibility(docs.usage?.accessibility));
 
@@ -496,7 +513,7 @@ export function formatFull(docs, options = {}) {
         );
         const varLines = [];
         varLines.push('| CSS Variable | Default | Description |');
-        varLines.push('|-------------|---------|-------------|');
+        varLines.push('|---|---|---|');
         for (const v of publicVars) {
           varLines.push(
             `| \`${mdCell(v.name)}\` | \`${mdCell(v.default)}\` | ${mdCell(v.description)} |`,
@@ -583,14 +600,7 @@ export function formatCompact(docs, componentName, importHint) {
     );
   }
 
-  if (docs.usage?.bestPractices?.length) {
-    sections.push('## Best Practices\n');
-    for (const bp of docs.usage.bestPractices) {
-      const badge = bp.guidance ? '**Do:**' : "**Don't:**";
-      sections.push(`- ${badge} ${bp.description}`);
-    }
-    sections.push('');
-  }
+  sections.push(...formatBestPractices(docs.usage?.bestPractices));
 
   sections.push(...formatAccessibility(docs.usage?.accessibility));
 
@@ -620,7 +630,7 @@ export function formatCompact(docs, componentName, importHint) {
     sections.push('Standard CSS properties that also set internal vars:\n');
     const propLines = [];
     propLines.push('| CSS Property | Sets |');
-    propLines.push('|-------------|------|');
+    propLines.push('|---|---|');
     for (const d of docs.theming.derived) {
       const target =
         d.expand === 'container'

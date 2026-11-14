@@ -55,14 +55,18 @@ export default class ShardWatchdog {
     }
   }
 
-  /** @param {{moduleId: string}} testModule */
+  /** @param {{moduleId: string, diagnostic?: () => {duration: number}}} testModule */
   onTestModuleEnd(testModule) {
     const start = this.running.get(testModule.moduleId);
     this.running.delete(testModule.moduleId);
-    if (start != null) {
-      this.seconds[relative(testModule.moduleId)] =
-        Math.round((Date.now() - start) / 100) / 10;
-    }
+    // The times file holds Vitest's own per-file duration (tests and hooks,
+    // no import), as the recorded times do; the queued clock above only names
+    // a stuck file.
+    const ms =
+      testModule.diagnostic?.().duration ??
+      (start != null ? Date.now() - start : undefined);
+    if (ms != null)
+      this.seconds[relative(testModule.moduleId)] = Math.round(ms / 100) / 10;
     this.writeTimes();
   }
 

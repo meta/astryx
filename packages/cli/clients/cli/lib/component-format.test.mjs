@@ -2,6 +2,7 @@
 
 import {describe, it, expect} from 'vitest';
 import {
+  formatBestPractices,
   formatBrief,
   formatCompact,
   formatFull,
@@ -420,5 +421,35 @@ describe('prop descriptions in a component read', () => {
     const short = {...docs, props: [docs.props[1]]};
 
     expect(formatFull(short)).not.toContain('first sentence');
+  });
+});
+
+describe('formatBestPractices', () => {
+  it("labels each run of Do and Don't items and keeps their order", () => {
+    const lines = formatBestPractices([
+      {guidance: true, description: 'Use one primary action.'},
+      {guidance: true, description: 'Write clear labels.'},
+      {guidance: false, description: 'Stack two primary buttons.'},
+      {guidance: true, description: 'Show progress.'},
+    ]);
+
+    expect(lines).toEqual([
+      '## Best Practices\n',
+      'Do:',
+      '- Use one primary action.',
+      '- Write clear labels.',
+      '',
+      "Don't:",
+      '- Stack two primary buttons.',
+      '',
+      'Do:',
+      '- Show progress.',
+      '',
+    ]);
+  });
+
+  it('prints nothing when there are no practices', () => {
+    expect(formatBestPractices([])).toEqual([]);
+    expect(formatBestPractices(undefined)).toEqual([]);
   });
 });
