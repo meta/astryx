@@ -27,7 +27,7 @@ export const doc = {
       name: 'theme',
       type: 'string',
       description:
-        'The theme name: lowercase letters, digits and dashes, starting with a letter, 64 characters at most, not a name Windows reserves (con, prn, aux, nul, com1-com9, lpt1-lpt9).',
+        'The theme name: lowercase letters, digits and dashes, starting with a letter, 64 characters at most, not a name Windows reserves (con, prn, aux, nul, com0-com9, lpt0-lpt9, and com¹-com³, lpt¹-lpt³).',
       required: true,
     },
     {

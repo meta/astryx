@@ -14,7 +14,12 @@ import * as fs from 'node:fs';
 import {coversProperty} from './_css.mjs';
 import * as path from 'node:path';
 import {AstryxError} from '../error.mjs';
-import {readSetLine, vetSuggestions} from './_vet.mjs';
+import {
+  followLine,
+  readSetLine,
+  splitCommand,
+  vetSuggestions,
+} from './_vet.mjs';
 import {colorPair, offersTyped} from './_normal.mjs';
 import {
   AUTO_SPREAD,
@@ -505,6 +510,18 @@ export async function themeEditNew(name, options = {}) {
   // Every check comes before the first change to the folder: the settings,
   // and a source of the user's own kept from before (it must still extend
   // the settings, or the build fails after the folder was cleared).
+  try {
+    applyNewSettings(
+      ctx,
+      name,
+      structuredClone(data),
+      settings,
+      png,
+      likeFixed ?? undefined,
+    );
+  } catch (e) {
+    throw await followNewLine(e, ctx, name, data);
+  }
   applyNewSettings(ctx, name, data, settings, png, likeFixed ?? undefined);
   if (left?.keep.some(p => path.basename(p) === `${name}.theme.ts`))
     refuseThemeSource(cwd, name);
@@ -644,6 +661,77 @@ export async function themeEditNew(name, options = {}) {
       wiring: appWiring(ctx, name, data),
     },
   };
+}
+
+/**
+ * A refused `new` whose suggestions include another `new` of the theme:
+ * that line is checked as `new` checks its dial flags (in memory, nothing
+ * written), and each repair a refusal of it offers is folded in, so the one
+ * line fixes or drops every bad flag. It comes first.
+ * @param {unknown} e
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data the theme before any dial
+ * @returns {Promise<unknown>}
+ */
+async function followNewLine(e, ctx, slug, data) {
+  if (!(e instanceof AstryxError)) return e;
+  const prefix = `${P} new ${slug}`;
+  const isNew = (/** @type {string} */ n) =>
+    n === prefix || n.startsWith(`${prefix} `);
+  const first = (e.suggestions ?? []).find(x => isNew(x.name));
+  if (!first) return e;
+  const followed = await followLine(
+    first.name,
+    line => {
+      const args = splitCommand(line.slice(prefix.length));
+      if (!args) return null;
+      /** @type {Record<string, string | string[]>} */
+      const settings = {};
+      /** @type {string | undefined} */
+      let like;
+      let png = false;
+      for (let j = 0; j < args.length; j += 1) {
+        const m = /^--([a-z-]+)$/.exec(args[j]);
+        if (m?.[1] === 'png') png = true;
+        else if (m && args[j + 1] != null) {
+          const v = args[(j += 1)];
+          if (m[1] === 'like') like = v;
+          else {
+            const had = settings[m[1]];
+            settings[m[1]] = had == null ? v : [...[had].flat(), v];
+          }
+        } else return null;
+      }
+      try {
+        applyNewSettings(
+          ctx,
+          slug,
+          structuredClone(data),
+          settings,
+          png,
+          like ?? data.like,
+        );
+        return null;
+      } catch (again) {
+        if (again instanceof AstryxError) return again;
+        throw again;
+      }
+    },
+    isNew,
+  );
+  if (followed.line === first.name) return e;
+  e.suggestions = [
+    {
+      ...first,
+      name: followed.line,
+      reason: `do this instead: every flag fixed${followed.why ? `, but this still needs a fix: ${followed.why}` : ''}`,
+    },
+    ...(e.suggestions ?? []).filter(
+      x => x !== first && x.name !== followed.line,
+    ),
+  ];
+  return e;
 }
 
 /**
@@ -1108,7 +1196,61 @@ function modeWiringNotes(slug, before, after) {
  * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditChangeResponse>}
  */
 export async function themeEditSet(theme, thing, value, options = {}) {
-  return change('set', theme, thing, value, options);
+  try {
+    return await change('set', theme, thing, value, options);
+  } catch (e) {
+    throw await swappedOrder(e, 'set', [theme, thing, value], options);
+  }
+}
+
+/**
+ * A refused theme name when the theme was typed after the setting (`set
+ * --color-accent '#123457' t`): the same command with the theme first,
+ * checked by that command, comes first, and no `new` of the setting's name
+ * is offered.
+ * @param {unknown} e
+ * @param {'set' | 'undo'} sub
+ * @param {Array<string | undefined>} words the positionals as typed
+ * @param {{cwd?: string, on?: string, when?: string, state?: string, mode?: string, only?: boolean}} options
+ * @returns {Promise<unknown>}
+ */
+async function swappedOrder(e, sub, words, options) {
+  if (
+    !(e instanceof AstryxError) ||
+    (e.code !== E.ERR_INVALID_ARGUMENT && e.code !== E.ERR_UNKNOWN_THEME)
+  )
+    return e;
+  const cwd = options.cwd ?? process.cwd();
+  const [first, ...rest] = words.map(w => (w == null ? '' : String(w)));
+  if (slugOk(first) && fs.existsSync(themeFiles(cwd, first).settings)) return e;
+  const at = rest.findIndex(
+    w => slugOk(w) && fs.existsSync(themeFiles(cwd, w).settings),
+  );
+  if (at < 0) return e;
+  const theme = rest[at];
+  const moved = [first, ...rest.filter((_, i) => i !== at)].filter(
+    w => w !== '',
+  );
+  const flags = [
+    ...(options.on ? ['--on', options.on] : []),
+    ...(options.when ? ['--when', options.when] : []),
+    ...(options.state ? ['--state', options.state] : []),
+    ...(options.mode ? ['--mode', options.mode] : []),
+  ];
+  const line = `${P} ${sub} ${theme} ${[...moved, ...flags]
+    .map(w => quoteCommandArgument(w))
+    .join(' ')}${options.only ? ' --only' : ''}`;
+  const followed = await followChangeLine(sub, theme, line, cwd);
+  e.suggestions = [
+    {
+      name: followed.line,
+      reason: `do this instead: ${theme} is the theme, so it comes first${followed.why ? `, but this still needs a fix: ${followed.why}` : ''}`,
+    },
+    ...(e.suggestions ?? []).filter(
+      x => x.name !== followed.line && !x.name.startsWith(`${P} new `),
+    ),
+  ];
+  return e;
 }
 
 /**
@@ -1670,48 +1812,36 @@ async function followChangeLine(sub, slug, line, cwd) {
     return {line, why: null};
   }
   const prefix = `${P} ${sub} ${slug} `;
-  let now = line;
-  for (let i = 0; i < 6; i += 1) {
-    const read = readSetLine(
-      sub === 'undo' ? now.replace(`${P} undo `, `${P} set `) : now,
-      slug,
-    );
-    if (!read) return {line: now, why: null};
-    try {
-      const s = checkSetting(
-        ctx,
+  return followLine(
+    line,
+    now => {
+      const read = readSetLine(
+        sub === 'undo' ? now.replace(`${P} undo `, `${P} set `) : now,
         slug,
-        structuredClone(data),
-        read.thing,
-        read.value,
-        read.flags,
-        sub === 'undo',
       );
-      if (sub === 'undo' && !data.settings.some(x => keyOf(x) === keyOf(s)))
-        return {
-          line: now,
-          why: `${slug} does not set ${describe({...s, value: '?'}).replace(' = ?', '')}`,
-        };
-      return {line: now, why: null};
-    } catch (e) {
-      const next =
-        e instanceof AstryxError
-          ? (e.suggestions ?? []).find(
-              x => x.name.startsWith(prefix) && x.name !== now,
+      if (!read) return null;
+      try {
+        const s = checkSetting(
+          ctx,
+          slug,
+          structuredClone(data),
+          read.thing,
+          read.value,
+          read.flags,
+          sub === 'undo',
+        );
+        return sub === 'undo' && !data.settings.some(x => keyOf(x) === keyOf(s))
+          ? new AstryxError(
+              `${slug} does not set ${describe({...s, value: '?'}).replace(' = ?', '')}`,
             )
-          : undefined;
-      if (!next)
-        return {
-          line: now,
-          why:
-            e instanceof Error
-              ? e.message.replace(/\s*Nothing was changed\.$/, '')
-              : String(e),
-        };
-      now = next.name;
-    }
-  }
-  return {line: now, why: null};
+          : null;
+      } catch (e) {
+        if (e instanceof AstryxError) return e;
+        throw e;
+      }
+    },
+    name => name.startsWith(prefix),
+  );
 }
 
 /**
@@ -2052,8 +2182,9 @@ async function changeOnce(
             (x.on ?? null) === (flags.on ?? null) &&
             (x.when ?? null) === (flags.when ?? null) &&
             (x.state ?? null) === (flags.state ?? null) &&
-            Boolean(x.only) === Boolean(flags.only) &&
-            (entryDamage(x) === 'source'
+            (entryDamage(x) === 'only' ||
+              Boolean(x.only) === Boolean(flags.only)) &&
+            (entryDamage(x) === 'source' || entryDamage(x) === 'only'
               ? (x.mode ?? null) === (flags.mode ?? null)
               : entryDamage(x) === 'mode' && !flags.mode),
         )
@@ -3535,6 +3666,10 @@ function dialWrites(ctx, data, dial, base) {
  * @returns {string}
  */
 function nowApplies(ctx, data, removed, base) {
+  // Vibrancy has no base theme value: the colors are made again at the
+  // default.
+  if (removed.source === 'dial' && removed.thing === 'vibrancy')
+    return `the default vibrancy, ${VIBRANCY_DEFAULT}`;
   // A token the theme's own source sets shows its value, whatever else
   // the settings give it.
   if (removed.source === 'token' && !removed.on && !removed.when) {
@@ -4102,7 +4237,14 @@ function colorFiles(slug) {
  */
 export async function themeEditUndo(theme, options = {}) {
   try {
-    return await undoTheme(theme, options);
+    return await undoTheme(theme, options).catch(async e => {
+      throw await swappedOrder(
+        e,
+        'undo',
+        [theme, options.thing, options.value],
+        options,
+      );
+    });
   } catch (e) {
     // A theme name typed in another form (tTheme, T, brand_dark, themes/t):
     // the same undo with the theme's name comes first, never a look at the

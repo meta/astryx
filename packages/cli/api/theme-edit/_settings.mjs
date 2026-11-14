@@ -124,7 +124,7 @@ const LIFT_GROUND_TOKENS = new Set(LIFT_PARTS.map(([, , g]) => g));
 
 /** What a theme name may be, in words. */
 export const NAME_RULE =
-  'lowercase letters, digits and dashes, starting with a letter, 64 characters at most, and not a name Windows reserves (con, prn, aux, nul, com1-com9, lpt1-lpt9)';
+  'lowercase letters, digits and dashes, starting with a letter, 64 characters at most, and not a name Windows reserves (con, prn, aux, nul, com0-com9, lpt0-lpt9, and com¹-com³, lpt¹-lpt³)';
 
 /** A theme name: lowercase letters, digits and dashes, starting with a letter, 64 characters at most. @param {string} s */
 export const slugOk = s =>
@@ -1005,10 +1005,10 @@ export function loadTheme(
   const damaged = problem ? damagedEntry(data, problem) : null;
   if (damaged)
     throw new AstryxError(
-      `themes/${slug}/${slug}.settings.json: ${problem}. Remove that setting with ${P} undo ${slug} ${undoArgs({...damaged, mode: entryDamage(damaged) === 'mode' ? undefined : damaged.mode})}; nothing else needs to change${steps ? `, or step back to the settings before the last change with ${P} undo ${slug} (the last change is then lost)` : ''}. Nothing was changed.`,
+      `themes/${slug}/${slug}.settings.json: ${problem}. Remove that setting with ${P} undo ${slug} ${undoArgs(damagedUndo(damaged))}; nothing else needs to change${steps ? `, or step back to the settings before the last change with ${P} undo ${slug} (the last change is then lost)` : ''}. Nothing was changed.`,
       [
         {
-          name: `${P} undo ${slug} ${undoArgs({...damaged, mode: entryDamage(damaged) === 'mode' ? undefined : damaged.mode})}`,
+          name: `${P} undo ${slug} ${undoArgs(damagedUndo(damaged))}`,
           reason: 'do this instead: removes only that setting',
         },
         ...(steps
@@ -1278,6 +1278,8 @@ export function settingsProblem(
         : `${s.thing} has source ${JSON.stringify(s.source)}, not dial, token or property`;
     if (s.mode != null && s.mode !== 'light' && s.mode !== 'dark')
       return `${s.thing} has mode ${JSON.stringify(s.mode)}, not light or dark`;
+    if (s.only != null && s.only !== true)
+      return `${s.thing} has only ${JSON.stringify(s.only)}, not true or false`;
     const key = keyOf(s);
     // The command that changes or removes a setting listed twice keeps one
     // value, or none, so it fixes the list.
@@ -1315,6 +1317,16 @@ function readEntryWords(data) {
         s.mode = read;
       }
     }
+    // `only` is true or absent; `"true"` and `"false"` written as text are
+    // read as what they say, since the build reads any other value as true.
+    if (typeof s.only === 'string' && /^\s*(true|false)\s*$/i.test(s.only)) {
+      const read = s.only.trim().toLowerCase() === 'true';
+      notes.push(
+        `${s.thing} was saved with only ${JSON.stringify(s.only)}, read as ${read}`,
+      );
+      if (read) s.only = true;
+      else delete s.only;
+    } else if (s.only === false) delete s.only;
     if (!['dial', 'token', 'property'].includes(s.source)) {
       const typed = typeof s.source === 'string' ? s.source.trim() : '';
       const read = typed
@@ -1355,21 +1367,36 @@ export function entryNotes(data) {
 }
 
 /**
- * Which part of an entry means nothing after reading: its mode or its
- * source, or null.
+ * Which part of an entry means nothing after reading: its source, mode or
+ * `only`, or null.
  * @param {any} s
- * @returns {'mode' | 'source' | null}
+ * @returns {'mode' | 'source' | 'only' | null}
  */
 export function entryDamage(s) {
   if (!s || typeof s.thing !== 'string') return null;
   if (!['dial', 'token', 'property'].includes(s.source)) return 'source';
   if (s.mode != null && s.mode !== 'light' && s.mode !== 'dark') return 'mode';
+  if (s.only != null && s.only !== true) return 'only';
   return null;
 }
 
 /**
+ * The entry as an undo names it: without the mode or `only` that means
+ * nothing (an undo without them removes that entry).
+ * @param {any} s
+ */
+function damagedUndo(s) {
+  const damage = entryDamage(s);
+  return {
+    ...s,
+    mode: damage === 'mode' ? undefined : s.mode,
+    only: damage === 'only' ? undefined : s.only,
+  };
+}
+
+/**
  * The entry a settings problem names when that problem is its mode or
- * source, or null.
+ * `only`, or null.
  * @param {any} data
  * @param {string} problem
  */
@@ -1382,7 +1409,9 @@ function damagedEntry(data, problem) {
           s.source !== '' &&
           problem.startsWith(`${s.thing} has source `)) ||
         (entryDamage(s) === 'mode' &&
-          problem.startsWith(`${s.thing} has mode `)),
+          problem.startsWith(`${s.thing} has mode `)) ||
+        (entryDamage(s) === 'only' &&
+          problem.startsWith(`${s.thing} has only `)),
     ) ?? null
   );
 }
@@ -6655,6 +6684,23 @@ export function settingsShapeOk(data) {
 }
 
 /**
+ * The settings as the file keeps them: a setting's `note` is what the
+ * command that made it says in its result, not part of the setting.
+ * @param {ThemeData} data
+ * @returns {ThemeData}
+ */
+function savedForm(data) {
+  return {
+    ...data,
+    settings: data.settings.map(s => {
+      const entry = {...s};
+      delete entry.note;
+      return entry;
+    }),
+  };
+}
+
+/**
  * Every regular file under `dir` and the hash of its bytes; empty when
  * there is no folder.
  * @param {string} dir
@@ -7429,8 +7475,8 @@ export async function commitTheme(
   // no undo step.
   const same = (/** @type {ThemeData | null} */ a) =>
     a != null &&
-    JSON.stringify({...a, lifted: undefined}) ===
-      JSON.stringify({...data, lifted: undefined});
+    JSON.stringify({...savedForm(a), lifted: undefined}) ===
+      JSON.stringify({...savedForm(data), lifted: undefined});
   // A no-op change still mends a build that does not match the settings
   // (an undo stopped part way): it is built again, with no new step.
   const noop = history && same(parseSettings(snapBefore));
@@ -7565,7 +7611,7 @@ export async function commitTheme(
     // for an undo, a top step equal to the settings, which undo skips),
     // never a step that undoes nothing or a lost step.
     await track(f.dir, wrote, () => {
-      writeWhole(f.settings, `${JSON.stringify(data, null, 2)}\n`);
+      writeWhole(f.settings, `${JSON.stringify(savedForm(data), null, 2)}\n`);
       if (historyAfter)
         writeWhole(
           f.history,

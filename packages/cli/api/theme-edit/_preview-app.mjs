@@ -589,6 +589,21 @@ function reservedFolder(cwd, dir) {
 }
 
 /**
+ * The compile of an editor theme as it runs from the folder the command ran
+ * in: an editor theme compiles from the app root, so from a subfolder the
+ * line goes there first.
+ * @param {string} cwd the app root
+ * @param {string} slug
+ */
+function compileFromHere(cwd, slug) {
+  const line = `${P.replace(/ editor$/, '')} compile ${shown(cwd, themeFiles(cwd, slug).ts)}`;
+  const up = path.relative(process.cwd(), cwd);
+  return up && path.resolve(process.cwd()) !== path.resolve(cwd)
+    ? `cd ${quoteCommandArgument(up.split(path.sep).join('/'))} && ${line}`
+    : line;
+}
+
+/**
  * The app's tsconfig.json compiler options (comments and trailing commas
  * allowed), or null when there is none.
  * @param {string} cwd
@@ -1305,7 +1320,7 @@ export function addWiring(cwd, slug, mode = 'system') {
       : [
           `${slug} is ${mode}-only: give the <Theme> that theme add's wiring puts in the app root mode="${mode}" (<Theme theme={…} mode="${mode}">); the theme keeps both halves of its colors, so a toast or a lightbox Core draws in the other mode stays readable`,
         ]),
-    `every set and undo builds the theme and its app copy again, so the app takes each change; after editing ${shown(cwd, themeFiles(cwd, slug).ts)} by hand, ${P.replace(/ editor$/, '')} compile ${shown(cwd, themeFiles(cwd, slug).ts)} builds both again`,
+    `every set and undo builds the theme and its app copy again, so the app takes each change; after editing ${shown(cwd, themeFiles(cwd, slug).ts)} by hand, ${compileFromHere(cwd, slug)} builds both again`,
   ];
 }
 
@@ -1358,7 +1373,7 @@ export function appWiring(ctx, slug, data) {
           `${appModule} (written by theme add and use) stays as it is: to keep its themes too, merge them in your own file ({...themes, ${JSON.stringify(slug)}: ${name}}), never in ${appModule}, which add, use and remove write again`,
         ]
       : []),
-    `every set and undo builds ${shown(cwd, themeFiles(cwd, slug).js)} and ${shown(cwd, themeFiles(cwd, slug).css)} again, so the app takes each change; after editing ${shown(cwd, themeFiles(cwd, slug).ts)} by hand, ${P.replace(/ editor$/, '')} compile ${shown(cwd, themeFiles(cwd, slug).ts)} builds it again`,
+    `every set and undo builds ${shown(cwd, themeFiles(cwd, slug).js)} and ${shown(cwd, themeFiles(cwd, slug).css)} again, so the app takes each change; after editing ${shown(cwd, themeFiles(cwd, slug).ts)} by hand, ${compileFromHere(cwd, slug)} builds it again`,
   ];
 }
 

@@ -823,7 +823,7 @@ function confineOutputs(writes, root, remedy) {
 }
 
 /** @param {string} dest absolute output path @param {string} root @returns {boolean} whether a build at `root` refuses to write `dest` */
-function refusedOutput(dest, root) {
+export function refusedOutput(dest, root) {
   try {
     confineOutput(dest, root, '');
     return false;
@@ -1239,6 +1239,45 @@ export function setEditorFolderListener(listener) {
  * and `familyKey` names its key (a family run never takes --out).
  * @typedef {{glob?: boolean, family?: boolean, familyKey?: string}} SuggestionShape
  */
+
+/**
+ * The refusal a build gives the file it is given before it reads it, or
+ * null: a file that is not there, and a folder. The build throws it, and a
+ * suggested build is checked by it before it is offered.
+ * @param {string} file as typed, from cwd
+ * @param {BuildMode} options
+ * @param {string} cwd
+ * @returns {AstryxError | null}
+ */
+export function buildInputProblem(file, options, cwd) {
+  const filePath = path.resolve(cwd, file);
+  if (!fs.existsSync(filePath))
+    return new AstryxError(
+      `File not found: ${filePath}`,
+      themeSourceGuesses(file, cwd).map(guess => ({
+        name: buildSuggestion(guess, options, cwd),
+        reason: 'a theme source that exists',
+      })),
+      ERROR_CODES.ERR_FILE_NOT_FOUND,
+    );
+  if (fs.statSync(filePath).isDirectory())
+    return new AstryxError(
+      `${path.relative(cwd, filePath) || '.'} is a folder. Pass the theme file inside it.`,
+      themeFilesIn(filePath).map(name => ({
+        name: buildSuggestion(
+          path
+            .relative(cwd, path.join(filePath, name))
+            .split(path.sep)
+            .join('/'),
+          options,
+          cwd,
+        ),
+        reason: 'a theme source in that folder',
+      })),
+      ERROR_CODES.ERR_INVALID_ARGUMENT,
+    );
+  return null;
+}
 
 /**
  * The `theme build` command for `source` with the caller's mode flags, so a
@@ -3872,15 +3911,9 @@ async function themeBuildInternal(
     options = {...options, out: options.out.replace(/\\/g, '/')};
   const filePath = path.resolve(cwd, file);
 
-  if (!fs.existsSync(filePath)) {
-    throw new AstryxError(
-      `File not found: ${filePath}`,
-      themeSourceGuesses(file, cwd).map(guess => ({
-        name: buildSuggestion(guess, options, cwd),
-        reason: 'a theme source that exists',
-      })),
-      ERROR_CODES.ERR_FILE_NOT_FOUND,
-    );
+  {
+    const problem = buildInputProblem(file, options, cwd);
+    if (problem) throw problem;
   }
 
   // A theme the theme editor made is built from its settings by the editor;
@@ -3897,24 +3930,6 @@ async function themeBuildInternal(
       (editorFolderListener ?? (w => logger.warn(w)))(
         `Warning: ${path.relative(cwd, filePath)} is a theme the theme editor made (${slug}.settings.json is beside it). This build reads ${slug}.settings.ts as last written; to build it from its settings, run ${formatCliCommand(`experimental theme editor show ${shellWord(slug)}`, cwd)}.`,
       );
-  }
-
-  if (fs.statSync(filePath).isDirectory()) {
-    throw new AstryxError(
-      `${path.relative(cwd, filePath) || '.'} is a folder. Pass the theme file inside it.`,
-      themeFilesIn(filePath).map(name => ({
-        name: buildSuggestion(
-          path
-            .relative(cwd, path.join(filePath, name))
-            .split(path.sep)
-            .join('/'),
-          options,
-          cwd,
-        ),
-        reason: 'a theme source in that folder',
-      })),
-      ERROR_CODES.ERR_INVALID_ARGUMENT,
-    );
   }
 
   assertThemeSourceFile(filePath, cwd, options);

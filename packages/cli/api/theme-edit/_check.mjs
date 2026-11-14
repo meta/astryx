@@ -1996,6 +1996,16 @@ export function checkSetting(
   // makes both modes from it. Never one of them for both.
   // A light-dark() written with another separator (`light-dark(red /
   // blue)`, `light-dark(red; blue)`): the pair meant, with a comma.
+  // A dial's own words in any case (ROOMY, MORE, Both, NONE): the word.
+  if (!unset && typeof value === 'string' && DIALS[thing]) {
+    const words = new Set(
+      String(DIALS[thing].values ?? '')
+        .split('|')
+        .filter(w => /^[a-z][a-z-]*$/.test(w)),
+    );
+    const lower = value.trim().toLowerCase();
+    if (lower && lower.split(/\s+/).every(w => words.has(w))) value = lower;
+  }
   if (!unset && typeof value === 'string') {
     const near =
       /^\s*light-dark\(\s*([^,;/()]+?)\s*(?:\s\/\s|\/|;)\s*([^,;/()]+?)\s*\)\s*$/i.exec(
@@ -3623,12 +3633,16 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       } else {
         // A rung in any case, a size in px written any way: the plain form.
         const lower = v.toLowerCase();
-        // Any CSS number in px (2e1px, +4px), the shared length parse.
-        const pxLen = /px$/.test(lower) ? lengthPx(lower) : null;
+        // Any CSS number in px (2e1px, +4px), the shared length parse; a
+        // rem is that many 16px, saved in px.
+        const pxLen = /\d(px|rem)$/.test(lower) ? lengthPx(lower) : null;
         if (CORNERS.some(([n]) => n === lower)) s.value = lower;
-        else if (pxLen != null && pxLen >= 0)
+        else if (pxLen != null && pxLen >= 0) {
           s.value =
             pxLen >= 1000 ? 'pill' : `${Math.round(pxLen * 10000) / 10000}px`;
+          if (/rem$/.test(lower))
+            s.note = `corners ${v.trim()} is saved as ${s.value}`;
+        }
         // No rounding, said any way, is square.
         else if (/^(0|0%|none|sharp|zero|no|flat)$/.test(lower))
           s.value = 'square';
@@ -3693,9 +3707,18 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
               ...(meant ? {didYouMean: [meant]} : {}),
               // The same scope, flags included.
               // Nothing near: how corners, never a stock rung.
-              run: [
-                meant ? setLine(slug, 'corners', meant, s) : `${HOW} corners`,
-              ],
+              // A bare number gets the line with px, the unit it most
+              // likely meant, and how corners.
+              run: bareNumber
+                ? [
+                    setLine(slug, 'corners', `${Number(lower)}px`, s),
+                    `${HOW} corners`,
+                  ]
+                : [
+                    meant
+                      ? setLine(slug, 'corners', meant, s)
+                      : `${HOW} corners`,
+                  ],
             },
           );
         }
