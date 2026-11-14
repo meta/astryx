@@ -28,6 +28,7 @@ import {
   serveStorybook,
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
+import {requireFrames} from '@astryxdesign/interaction-harness';
 
 // The frame evidence is Chromium's: CI's interaction proofs run the chromium
 // project, and these cases have not been run in WebKit.
@@ -403,12 +404,15 @@ interface MotionPart {
  * One press feedback animation `recordMotion` keeps apart: the toggle's own,
  * or on a copy of it the old state holds (`onCopy`). `name` is a CSS
  * animation's; `startTime` is read while it runs, since a cancelled animation
- * drops it.
+ * drops it. `firstSeen` and `goneAt` are the record's frame times when it
+ * first saw the animation and first missed it.
  */
 interface PressPart {
   readonly onCopy: boolean;
   readonly name: string | null;
   startTime: number | null;
+  readonly firstSeen: number;
+  goneAt: number | null;
 }
 
 /** The record `recordMotion` keeps on the page, for `settledMotion`. */
@@ -416,7 +420,9 @@ interface MotionRecord {
   readonly seen: Map<Animation, MotionPart>;
   /** Press feedback, apart from the motion. */
   readonly press: Map<Animation, PressPart>;
-  readonly collect: () => void;
+  /** The time of each frame the record sampled. */
+  readonly frames: {t: number}[];
+  readonly collect: (at?: number) => void;
   sampling: boolean;
 }
 
@@ -434,11 +440,15 @@ async function recordMotion(page: Page): Promise<void> {
   await toggleButton(page).evaluate(toggle => {
     const seen = new Map<Animation, MotionPart>();
     const press = new Map<Animation, PressPart>();
-    const collect = () => {
+    const frames: {t: number}[] = [];
+    const collect = (at?: number) => {
+      const now = at ?? performance.now();
+      const present = new Set<Animation>();
       for (const animation of document.getAnimations()) {
         const effect = animation.effect;
         const known = press.get(animation);
         if (known != null) {
+          present.add(animation);
           if (animation.startTime != null) {
             known.startTime = Number(animation.startTime);
           }
@@ -459,7 +469,22 @@ async function recordMotion(page: Page): Promise<void> {
                 : null,
             startTime:
               animation.startTime == null ? null : Number(animation.startTime),
+            firstSeen: now,
+            goneAt: null,
           });
+          present.add(animation);
+          // The start resolves on the frame that first draws the animation.
+          // On a busy page, that frame's callbacks can run after the copy
+          // is gone, so the start is also read as the animation turns ready.
+          animation.ready.then(
+            ready => {
+              const part = press.get(ready);
+              if (part != null && ready.startTime != null) {
+                part.startTime = Number(ready.startTime);
+              }
+            },
+            () => undefined,
+          );
           continue;
         }
         const properties = new Set<string>();
@@ -480,12 +505,27 @@ async function recordMotion(page: Page): Promise<void> {
             effect.target.contains(document.querySelector('[role="main"]')),
         });
       }
+      for (const [animation, part] of press) {
+        if (part.goneAt == null && !present.has(animation)) {
+          part.goneAt = now;
+        }
+      }
     };
-    const record: MotionRecord = {seen, press, collect, sampling: true};
+    const record: MotionRecord = {
+      seen,
+      press,
+      frames,
+      collect,
+      sampling: true,
+    };
     (window as unknown as {railMotion: MotionRecord}).railMotion = record;
     const sample = () => {
       if (record.sampling) {
-        collect();
+        // One time for the frame and what it saw, so the frame that first
+        // misses an animation is not counted as holding it.
+        const t = performance.now();
+        frames.push({t});
+        collect(t);
         requestAnimationFrame(sample);
       }
     };
@@ -542,19 +582,34 @@ async function settledMotion(page: Page): Promise<ReadonlyArray<MotionPart>> {
  * settled. For each: where it ran (the toggle, or a copy of it), a CSS
  * animation's name, and its start time as read while it ran.
  */
-async function pressFeedback(
-  page: Page,
-): Promise<
-  ReadonlyArray<{onCopy: boolean; name: string | null; startTime: number}>
+async function pressFeedback(page: Page): Promise<
+  ReadonlyArray<{
+    onCopy: boolean;
+    name: string | null;
+    startTime: number;
+    firstSeen: number;
+    goneAt: number | null;
+  }>
 > {
   return page.evaluate(() => {
     const record = (window as unknown as {railMotion: MotionRecord}).railMotion;
-    return [...record.press.values()].map(({onCopy, name, startTime}) => ({
-      onCopy,
-      name,
-      startTime: startTime ?? Number.NaN,
-    }));
+    return [...record.press.values()].map(
+      ({onCopy, name, startTime, firstSeen, goneAt}) => ({
+        onCopy,
+        name,
+        startTime: startTime ?? Number.NaN,
+        firstSeen,
+        goneAt,
+      }),
+    );
   });
+}
+
+/** The time of each frame the record sampled. */
+async function recordedFrames(page: Page): Promise<ReadonlyArray<{t: number}>> {
+  return page.evaluate(
+    () => (window as unknown as {railMotion: MotionRecord}).railMotion.frames,
+  );
 }
 
 test.describe('component:SideNav FR6 and component:AppShell FR17 under a finger', () => {
@@ -727,6 +782,22 @@ test.describe('component:SideNav FR6 and component:AppShell FR17 under a finger'
         other => !other.onCopy && other.name === fade.name,
       );
       expect(own, JSON.stringify(press)).toBeDefined();
+      if (Number.isNaN(fade.startTime)) {
+        // The copy's fade never started. A new animation's start reaches
+        // script only after the frame that starts it. So the copy is judged
+        // once the page drew two frames while it held the fade. Fewer is
+        // starvation when the trace shows a long gap.
+        requireFrames(await recordedFrames(page), {
+          min: 2,
+          during: "the old state's copy held the toggle's press fade",
+          where: frame =>
+            frame.t > fade.firstSeen &&
+            (fade.goneAt == null || frame.t < fade.goneAt),
+        });
+        throw new Error(
+          `the copy's press fade never started while the page drew frames: ${JSON.stringify(press)}`,
+        );
+      }
       expect(
         Math.abs(fade.startTime - (own?.startTime ?? Number.NaN)),
         JSON.stringify(press),
@@ -801,9 +872,36 @@ test.describe('component:SideNav FR6 and component:AppShell FR17 under a mouse',
           new Promise<void>(resolve => {
             requestAnimationFrame(() => resolve());
           });
+        const beforeCollapse = new Set(document.getAnimations());
         toggle().click();
         const collapsed = performance.now();
-        while (performance.now() - collapsed < 1150 - blockMs) {
+        await new Promise<void>(resolve => {
+          setTimeout(resolve, 0);
+        });
+        const collapse = document
+          .getAnimations()
+          .filter(animation => !beforeCollapse.has(animation));
+        if (collapse.length === 0) {
+          throw new Error('the collapse made no animation');
+        }
+        // The block comes after the page draws the collapse running: a frame
+        // later than the one it starts on. A starved page can draw only that
+        // first frame by then. The timeline the block holds would then read
+        // the collapse as not yet moved, though it carries on to its end.
+        // Chromium can read a start back a fraction of a millisecond below
+        // its frame time. A later frame comes 1 ms or more after it.
+        const isDrawnRunning = () =>
+          collapse.some(
+            animation =>
+              animation.startTime != null &&
+              Number(document.timeline.currentTime) -
+                Number(animation.startTime) >=
+                1,
+          );
+        while (
+          performance.now() - collapsed < 1150 - blockMs ||
+          !isDrawnRunning()
+        ) {
           await frame();
         }
         await new Promise<void>(resolve => {

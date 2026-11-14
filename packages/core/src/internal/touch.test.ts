@@ -120,6 +120,9 @@ describe('internal/touch', () => {
     expect(entry).not.toHaveProperty('springs');
     expect(entry.focusForLastInput).toBe(focusReturn.focusForLastInput);
     expect(entry.isFocusLost).toBe(focusReturn.isFocusLost);
+    expect(entry.prepareFocusReturnOnRemoval).toBe(
+      focusReturn.prepareFocusReturnOnRemoval,
+    );
     expect(entry.useInteractionModalityTracking).toBe(
       modality.useInteractionModalityTracking,
     );
@@ -130,6 +133,7 @@ describe('internal/touch', () => {
       'toSpring',
       'focusForLastInput',
       'isFocusLost',
+      'prepareFocusReturnOnRemoval',
       'useInteractionModalityTracking',
     ]) {
       expect(typeof entry[name], name).toBe('function');
@@ -186,6 +190,24 @@ describe('internal/touch', () => {
     for (const [name, module] of Object.entries(modules)) {
       expect(entry[name], name).toBe(module[name]);
     }
+  });
+
+  it("re-exports by name UIKit's timing table, which Lab's SearchField reads", async () => {
+    const entry: Record<string, unknown> = await import('./touch');
+    const uikit = await import('../motion/uikit/timing');
+    // Identity alone passes when both sides are undefined.
+    expect(typeof entry.timing).toBe('object');
+    expect(entry.timing).toBe(uikit.timing);
+  });
+
+  it("re-exports by name the scroll test Lab's TabBar reads", async () => {
+    const entry: Record<string, unknown> = await import('./touch');
+    const geometry = await import('../hooks/scrollGeometry');
+    // Identity alone passes when both sides are undefined.
+    expect(typeof entry.measureLogicalScrollAxis).toBe('function');
+    expect(entry.measureLogicalScrollAxis).toBe(
+      geometry.measureLogicalScrollAxis,
+    );
   });
 
   it('attaches no window or document listeners when it loads', async () => {

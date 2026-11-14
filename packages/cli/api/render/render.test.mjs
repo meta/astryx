@@ -5,7 +5,7 @@
  * self-contained HTML file and back, each refusal, and the warnings.
  */
 
-import {spawnSync} from 'node:child_process';
+import {spawn, spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import {createRequire} from 'node:module';
 import * as os from 'node:os';
@@ -13,6 +13,7 @@ import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {render} from './render.mjs';
+import {segmenterWarning} from '../../foundation/render/render-page.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
 import {makeLinkedFixture, removeLinkedFixture} from '../../test-utils/linked-fixture.mjs';
 
@@ -1371,7 +1372,9 @@ describe('astryx experimental render (CLI)', () => {
     expect(r.status).toBe(1);
     const out = JSON.parse(r.stdout);
     expect(out.code).toBe('ERR_UNKNOWN_SUBCOMMAND');
-    expect(out.suggestions.map((/** @type {any} */ s) => s.name)).toContain('render');
+    expect(
+      out.suggestions.some((/** @type {any} */ s) => /experimental render$/.test(s.name)),
+    ).toBe(true);
   });
 
   it('fails with exit 1 and a readable message without --json', async () => {
@@ -1433,6 +1436,126 @@ describe('render(): refusals', () => {
     put('big.tsx', "import big from './big.png';\nexport default () => <img src={big} alt='' />;");
     expect(await codeOf(() => render('big.tsx', {cwd: dir}))).toBe('ERR_RENDER_ASSET_TOO_LARGE');
   }, 30_000);
+});
+
+describe('render(): a crash of Node itself', () => {
+  // A signal that Node raises when it fails ends only the page's process.
+  it.skipIf(process.platform === 'win32')('fails with a message that names this Node', async () => {
+    put('crash.tsx', "process.kill(process.pid, 'SIGSEGV');\nexport default () => <p>Hi</p>;\n");
+    /** @type {any} */
+    let error;
+    try {
+      await render('crash.tsx', {cwd: dir});
+    } catch (e) {
+      error = e;
+    }
+    expect(error?.code).toBe('ERR_RENDER_FAILED');
+    expect(error.message).toContain(`Node ${process.version}`);
+    expect(error.message).toContain('crashed (SIGSEGV)');
+    expect(fs.existsSync(path.join(dir, 'crash.html'))).toBe(false);
+  }, 60_000);
+
+  // A page that loops forever must not outlive a CLI that is stopped by its
+  // process id, as a caller's own time limit stops it.
+  it.skipIf(process.platform === 'win32').each(['SIGTERM', 'SIGKILL'])('ends the page process when the CLI is stopped with %s', async signal => {
+    const name = `loop-${signal}`;
+    put(
+      `${name}.tsx`,
+      `import {writeFileSync} from 'node:fs';\nwriteFileSync(${JSON.stringify(path.join(dir, `${name}.pid`))}, String(process.pid));\nwhile (true) {}\nexport default () => <p>Hi</p>;\n`,
+    );
+    const cli = spawn(process.execPath, [path.join(CLI_DIR, 'clients/cli/bin/astryx.mjs'), 'experimental', 'render', `${name}.tsx`], {cwd: dir, stdio: 'ignore'});
+    const pidFile = path.join(dir, `${name}.pid`);
+    const until = async (/** @type {() => boolean} */ done, /** @type {number} */ ms) => {
+      for (const start = Date.now(); !done() && Date.now() - start < ms; ) await new Promise(r => setTimeout(r, 50));
+      return done();
+    };
+    expect(await until(() => fs.existsSync(pidFile) && fs.readFileSync(pidFile, 'utf8') !== '', 30_000)).toBe(true);
+    const pagePid = Number(fs.readFileSync(pidFile, 'utf8'));
+    expect(pagePid).not.toBe(cli.pid);
+    const alive = () => {
+      try {
+        process.kill(pagePid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    cli.kill(/** @type {NodeJS.Signals} */ (signal));
+    const ended = await until(() => !alive(), 10_000);
+    if (!ended) process.kill(pagePid, 'SIGKILL');
+    expect(ended).toBe(true);
+  }, 60_000);
+});
+
+describe('render(): a page that ends without an answer', () => {
+  // The message says why, so a failure in a list of renders says why too.
+  it('says where it ended, how long it ran and the memory left', async () => {
+    put('ends.tsx', 'process.exit(0);\nexport default () => <p>Hi</p>;\n');
+    /** @type {any} */
+    let error;
+    try {
+      await render('ends.tsx', {cwd: dir});
+    } catch (e) {
+      error = e;
+    }
+    expect(error?.code).toBe('ERR_RENDER_FAILED');
+    expect(error.message).toMatch(/without an answer \(exit 0\) while importing the page, after \d+ seconds, with \d+ MB of memory free\./);
+    expect(fs.existsSync(path.join(dir, 'ends.html'))).toBe(false);
+  }, 60_000);
+});
+
+describe('render(): Avatar initials without Intl.Segmenter', () => {
+  // A render on a Node build that crashes in Intl.Segmenter removes it before
+  // the page loads. A local module imported first does the same here.
+  const NAMES = [
+    ['Ada Lovelace', 'AL', 'AL'],
+    ['José Ñúñez', 'JÑ', 'JÑ'],
+    ['Zoë Kravitz', 'ZK', 'ZK'],
+    ['Åsa Öberg', 'ÅÖ', 'ÅÖ'],
+    ['李小龙', '李', '李'],
+    ['김민준', '김', '김'],
+    // The accent is a separate mark after E.
+    ['E\u0301mile Zola', 'E\u0301Z', 'EZ'],
+    ['👩‍💻 Dev Team', '👩‍💻T', '👩T'],
+    ['🇯🇵 Tanaka', '🇯🇵T', '🇯T'],
+  ];
+  const body = `import {Avatar} from '@astryxdesign/core/Avatar';
+const NAMES = ${JSON.stringify(NAMES.map(([name]) => name))};
+export default function Page() {
+  return <main>{NAMES.map((name, i) => <div key={i} data-name={i}><Avatar name={name} /></div>)}</main>;
+}
+`;
+
+  /** @param {string} name */
+  async function initialsOf(name) {
+    await render(`initials/${name}.tsx`, {cwd: dir});
+    const html = fs.readFileSync(path.join(dir, 'initials', `${name}.html`), 'utf8');
+    // Generated content draws the initials from a private inline custom
+    // property, not a text node. The plain string is the one not followed by
+    // its empty alternative text.
+    return [...html.matchAll(/<div data-name="\d+">([\s\S]*?)(?=<div data-name=|<\/main>)/g)].map(
+      m => /--[\w-]+:\s*(?:&quot;|")([^&"]*)(?:&quot;|")\s*(?:;|"|$)/.exec(m[1])?.[1] ?? '',
+    );
+  }
+
+  // On a Node build that crashes in Intl.Segmenter, both renders run without it.
+  const segmenterCrashes =
+    spawnSync(process.execPath, ['-e', "[...new Intl.Segmenter('en').segment('a b')]"], {stdio: 'ignore'}).signal !== null;
+
+  it.skipIf(segmenterCrashes)('match for ordinary names and differ only for joined emoji, flags and separate accent marks', async () => {
+    put('initials/with.tsx', body);
+    put('initials/no-segmenter.ts', 'delete (Intl as any).Segmenter;\nexport {};\n');
+    put('initials/without.tsx', `import './no-segmenter';\n${body}`);
+    expect(await initialsOf('with')).toEqual(NAMES.map(([, withSegmenter]) => withSegmenter));
+    expect(await initialsOf('without')).toEqual(NAMES.map(([, , withoutSegmenter]) => withoutSegmenter));
+  }, 60_000);
+
+  it('names the Node build in the warning and says the output may differ slightly', () => {
+    const warning = segmenterWarning();
+    expect(warning.code).toBe('node-crash');
+    expect(warning.message).toContain(`${process.version} at ${process.execPath}`);
+    expect(warning.message).toContain('may differ slightly');
+  });
 });
 
 describe('render(): a page outside a project', () => {

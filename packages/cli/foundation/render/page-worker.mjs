@@ -5,8 +5,10 @@
  * the project (TypeScript, JSX and StyleX compiled in memory) and renders its
  * default export to static markup with the project's own React.
  *
- * It runs in a worker thread so a page that never finishes rendering can be
- * stopped, and so nothing the page prints reaches the CLI's own output.
+ * It runs in a worker thread of a small host process (page-host.mjs), so a
+ * page that never finishes rendering can be stopped, nothing the page prints
+ * reaches the CLI's own output, and a crash of Node itself ends only the host,
+ * never the CLI.
  *
  * Outside a project, the Astryx packages the page's folder lacks resolve
  * from the package set the CLI runs from (served-packages.mjs), and React and
@@ -16,10 +18,10 @@
  * so the server render sets them aside and draws them after it with React
  * DOM in a small document (charts.mjs).
  *
- * @input workerData {entry, root, served}
+ * @input workerData {entry, root, served, withoutSegmenter}
  * @output one message: {ok: true, markup, css, files, texts, logs} or
  *   {ok: false, error: {code, message, detail?}}
- * @position foundation/render — started by render-page.mjs
+ * @position foundation/render — started by page-host.mjs
  */
 
 import * as fs from 'node:fs';
@@ -29,17 +31,22 @@ import {pathToFileURL} from 'node:url';
 import {format} from 'node:util';
 import {parentPort, workerData} from 'node:worker_threads';
 import {transformSync} from '@babel/core';
-import {matchPath, readPathsIn, resolvePath} from './ts-paths.mjs';
+import {LOAD_EXTENSIONS, existingFile, matchPath, readPathsIn, resolvePath} from './ts-paths.mjs';
 import {createJiti} from 'jiti';
 import {assetDataUri, isAssetPath} from './assets.mjs';
 import {SINGLE_COPY, isServedPackage, packageOf} from './served-packages.mjs';
 import {findNodeModulesPackage} from '../fs/paths.mjs';
+import {importSpecifiers} from './embedded-imports.mjs';
 import {CHART_GLOBAL, CHART_ROOTS, chartDocument, chartSize, markLegends} from './charts.mjs';
 
 /** @typedef {{level: string, text: string}} PageLog */
 
-/** @type {{entry: string, root: string, served: {dir: string, integrations: string[]} | null}} */
+/** @type {{entry: string, root: string, served: {dir: string, integrations: string[]} | null, withoutSegmenter?: boolean}} */
 const {entry, root} = workerData;
+
+// Some Node builds crash in Intl.Segmenter. Without it, Core splits text by
+// code points, so a joined emoji can count as several characters.
+if (workerData.withoutSegmenter) delete (/** @type {any} */ (Intl)).Segmenter;
 
 /** The package set, for a page outside a project whose folder has no Core of its own. */
 const served = workerData.served && findNodeModulesPackage(path.dirname(entry), '@astryxdesign/core') === null ? workerData.served : null;
@@ -601,6 +608,20 @@ const namesAlias = spec => {
  */
 const resolveAlias = spec => resolvePath(PATHS, spec) ?? spec;
 
+/**
+ * The file a relative or aliased import names, found the way the render
+ * loads it, or null for a package import or a file that does not exist.
+ * @param {string} spec
+ * @param {string} from the importing file
+ * @returns {string | null}
+ */
+function importedFile(spec, from) {
+  const raw = spec.split('?')[0];
+  if (raw.startsWith('.')) return existingFile(path.resolve(path.dirname(from), raw), LOAD_EXTENSIONS);
+  // An alias resolves by TypeScript's rules, as the import rewrite loads it.
+  return isAliased(raw) ? resolveAlias(raw) : null;
+}
+
 /** Packages the page took from the package set, by name: their folders. */
 /** @type {Map<string, string>} */
 const fromSet = new Map();
@@ -697,13 +718,16 @@ const plain = createJiti(entry, {fsCache: false, jsx: {runtime: 'automatic'}});
 const jiti = createJiti(entry, {
   fsCache: false,
   tryNative: false,
-  extensions: ['.js', '.mjs', '.cjs', '.jsx', '.ts', '.tsx', '.mts', '.cts', '.json'],
+  extensions: [...LOAD_EXTENSIONS],
   moduleCache: true,
   interopDefault: true,
   alias: SINGLE_COPY_ALIASES,
   jsx: {runtime: 'automatic'},
   transform(opts) {
-    const filename = opts.filename ?? '';
+    // jiti names the file with forward slashes on Windows (`C:/...`), while
+    // `entry`, `root` and the node_modules test use the platform separator.
+    // Without this, no file reads as local there and none is transformed.
+    const filename = opts.filename ? path.normalize(opts.filename) : '';
     let source = opts.source;
     if (filename && isLocal(filename) && /\.json$/i.test(filename) && !localFiles.includes(filename)) {
       localFiles.push(filename);
@@ -829,10 +853,20 @@ function classify(e) {
   return fail('ERR_RENDER_FAILED', `The page threw while rendering: ${message.split('\n')[0]}`);
 }
 
+/**
+ * Tell the host what the page is doing, so an end without an answer can say
+ * where it ended.
+ * @param {string} name
+ */
+function reach(name) {
+  parentPort?.postMessage({stage: name});
+}
+
 try {
   /** @type {any} */
   let mod;
   try {
+    reach('importing the page');
     mod = await jiti.import(entry);
   } catch (e) {
     classify(e);
@@ -851,6 +885,7 @@ try {
   /** @type {any} */
   let server;
   try {
+    reach('loading React');
     React = await jiti.import('react');
     createElement = React.createElement;
     useContext = React.useContext;
@@ -868,11 +903,13 @@ try {
   /** @type {false | 'error' | 'changed' | 'rerendered'} */
   let chartsAlone = false;
   try {
+    reach('rendering on the server');
     markup = server.renderToStaticMarkup(React.createElement(Page));
     if (charts.length > 0) {
       // Drawing the page again re-runs its code: what it prints then was
       // already reported by the server render.
       const printed = logs.length;
+      reach('drawing charts');
       ({markup, failed: chartsFailed, alone: chartsAlone} = await drawCharts(markup, Page));
       logs.length = printed;
     }
@@ -887,7 +924,30 @@ try {
   /** @type {string} */
   let css = '';
   if (stylexRules.length > 0) {
+    reach('compiling styles');
     css = stylexPlugin.processStylexRules(stylexRules, {useLayers: false});
+  }
+  // Node loads some local modules itself (jiti hands it a plain ES module,
+  // such as a built theme), so they never pass the transform that records
+  // local files. Follow the imports of every local module instead, so the
+  // file carries each module the page reaches, as --reverse expects.
+  for (let i = 0; i < localFiles.length; i++) {
+    const file = localFiles[i];
+    if (!/\.[cm]?[jt]sx?$/.test(file)) continue;
+    let source;
+    try {
+      source = fs.readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    for (const spec of importSpecifiers(source, file)) {
+      const target = importedFile(spec, file);
+      // Modules and JSON only: the transform already carries the stylesheets
+      // and images a module imports, and a Sass file is never carried.
+      if (target && /\.([cm]?[jt]sx?|json)$/i.test(target) && isLocal(target) && !localFiles.includes(target)) {
+        localFiles.push(target);
+      }
+    }
   }
   parentPort?.postMessage({
     ok: true,

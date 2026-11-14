@@ -246,7 +246,11 @@ const FILE_MODULE_SUBPATH_EXPORTS = [
   'internal/calendar-system',
   'internal/dialog-context',
   'internal/scroll-anchoring',
+  'internal/page-scroller',
   'internal/line-clamp',
+  'internal/virtualization',
+  'internal/committed-ref',
+  'internal/shared-context',
 ];
 
 /**

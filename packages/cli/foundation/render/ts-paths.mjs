@@ -27,6 +27,9 @@ import * as path from 'node:path';
 /** Extensions an extensionless candidate may stand for, in resolution order. */
 const EXTENSIONS = ['.tsx', '.ts', '.jsx', '.js', '.mjs', '.cjs', '.mts', '.cts', '.json'];
 
+/** The extensions the render's module loader tries for an extensionless import, in its order. */
+export const LOAD_EXTENSIONS = ['.js', '.mjs', '.cjs', '.jsx', '.ts', '.tsx', '.mts', '.cts', '.json'];
+
 /**
  * The path patterns of the config in `dir` (tsconfig.json, else
  * jsconfig.json), or none. Comments and trailing commas are allowed.
@@ -103,9 +106,10 @@ export const candidatesOf = match => match.pattern.targets.map(t => t.replace('*
  * The file a candidate path stands for: itself, with an extension, or its
  * folder's index; null when none exists.
  * @param {string} candidate
+ * @param {readonly string[]} [extensions] the extensions to try, in order (default: TypeScript's)
  * @returns {string | null}
  */
-export function existingFile(candidate) {
+export function existingFile(candidate, extensions = EXTENSIONS) {
   const isFile = (/** @type {string} */ f) => {
     try {
       return fs.statSync(f).isFile();
@@ -114,8 +118,8 @@ export function existingFile(candidate) {
     }
   };
   if (isFile(candidate)) return candidate;
-  for (const ext of EXTENSIONS) if (isFile(candidate + ext)) return candidate + ext;
-  for (const ext of EXTENSIONS) if (isFile(path.join(candidate, `index${ext}`))) return path.join(candidate, `index${ext}`);
+  for (const ext of extensions) if (isFile(candidate + ext)) return candidate + ext;
+  for (const ext of extensions) if (isFile(path.join(candidate, `index${ext}`))) return path.join(candidate, `index${ext}`);
   return null;
 }
 

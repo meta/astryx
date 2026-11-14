@@ -14,7 +14,10 @@ import {createRequire} from 'node:module';
 import {pathToFileURL} from 'node:url';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import {runCli} from '../../../test-utils/run-cli.mjs';
-import {writeIconSetProject} from '../../../test-utils/icon-set-fixture.mjs';
+import {
+  glyphsData,
+  writeIconSetProject,
+} from '../../../test-utils/icon-set-fixture.mjs';
 import {ICON_NAMES} from '../../../authoring/doctypes/icon-set/icon-names.mjs';
 
 /** @type {string} */
@@ -794,6 +797,68 @@ describe('experimental icon map and new-definition', () => {
 });
 
 describe('experimental icon use', () => {
+  it('prints the look with --variant, each set that draws another, the theme map, and the variant it removes', async () => {
+    const {variants, default: _default, ...plain} = glyphsData();
+    const app = writeIconSetProject(tmp, {
+      packages: [
+        {
+          data: {
+            ...glyphsData(),
+            module: '@acme/glyphs',
+            generated: './icon-sets/glyphs/glyphs.generated.js',
+          },
+        },
+        {
+          name: '@acme/lines',
+          data: {
+            ...plain,
+            module: '@acme/lines',
+            icons: plain.icons.map(({variants: _v, ...each}) => each),
+          },
+        },
+      ],
+    });
+    const used = await runCli(
+      [
+        'experimental',
+        'icon',
+        'use',
+        'glyphs',
+        '--backup',
+        'lines',
+        '--variant',
+        'solid',
+      ],
+      app,
+    );
+    expect(used.code).toBe(0);
+    expect(used.stdout).toContain(
+      '[ok] experimental.iconVariant is now "solid": every icon draws its solid look where its set has one.',
+    );
+    expect(used.stdout).toContain(
+      '[note] @acme/lines/lines declares no variants: its icons draw its one look.',
+    );
+    expect(used.stdout).toContain(
+      "A theme draws the built-in icons in this look with `icons: themeIconsSolid` (import {themeIconsSolid} from '@acme/glyphs').",
+    );
+    const removed = await runCli(
+      ['experimental', 'icon', 'use', 'glyphs', '--backup', 'lines'],
+      app,
+    );
+    expect(removed.stdout).toContain(
+      '[ok] experimental.iconSet already names main set "glyphs" (@acme/glyphs/glyphs), then "lines" (@acme/lines/lines)',
+    );
+    expect(removed.stdout).toContain(
+      '[ok] Removed experimental.iconVariant (it was "solid"): each set draws its default look.',
+    );
+    const refused = await json(
+      ['experimental', 'icon', 'use', 'lines', '--variant', 'solid'],
+      app,
+    );
+    expect(refused.code).toBe(1);
+    expect(refused.body.code).toBe('ERR_INVALID_ARGUMENT');
+  });
+
   it("writes the project's experimental.iconSet, creating astryx.config.mjs, and refuses a set that is not installed", async () => {
     const app = writeIconSetProject(tmp);
     const used = await json(['experimental', 'icon', 'use', 'glyphs'], app);
@@ -1537,7 +1602,7 @@ describe('experimental icon new-set: aliases, providers, exclude, peers', () => 
     );
     expect(again.code).toBe(0);
     expect(again.stdout).toContain('Icon set refreshed');
-    expect(again.stdout).not.toContain('New icon set added');
+    expect(again.stdout).not.toContain('Icon set created');
     data = dataOf('outline');
     expect(
       data.icons.some((/** @type {{id: string}} */ each) => each.id === 'meta'),
@@ -1747,7 +1812,9 @@ describe('blind run 4 fixes', () => {
     expect(close).toMatchObject({builtIn: true});
     expect(close.words).toContain('x');
     const text = await runCli(['experimental', 'icon', '--definitions'], pkg);
-    expect(text.stdout).toMatch(/^- close \[built-in\]: /mu);
+    expect(text.stdout).toMatch(
+      /^- close \[built-in(?:, \d+ templates?)?(?:, (?:not )?mapped)?\]: /mu,
+    );
   });
 
   it('suggests an icon by another name its library gives it, and new-set names the typecheck script and a description note', async () => {
@@ -1863,7 +1930,9 @@ describe('blind run 5 fixes', () => {
       './art/check-double.js is not in package.json "files", so it would not be published; set "files" to `["index.js","icon-sets","astryx.integration.mjs","art"]`.',
     );
     const text = await runCli(['experimental', 'icon', '--definitions'], pkg);
-    expect(text.stdout).toMatch(/^- activity \[optional\]: /mu);
+    expect(text.stdout).toMatch(
+      /^- activity \[optional(?:, \d+ templates?)?(?:, (?:not )?mapped)?\]: /mu,
+    );
   });
 });
 
@@ -2107,7 +2176,8 @@ describe('a refresh that first records the source', () => {
       '@acme/glyph-library',
     ]);
     expect(refreshed.code).toBe(0);
-    expect(refreshed.body.data.refreshed).toBe(true);
+    // The set had no icons, so this wrap creates them: no `refreshed`.
+    expect(refreshed.body.data.refreshed).toBeUndefined();
     expect(refreshed.body.data.files).toEqual(
       expect.arrayContaining([
         'icon-sets/glyphs/glyphs.doc.mjs',

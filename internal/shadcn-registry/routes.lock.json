@@ -693,6 +693,11 @@
       "aliases": []
     },
     {
+      "name": "component-lab-tab-bar-more-list",
+      "path": "components/lab/tab-bar-more-list",
+      "aliases": []
+    },
+    {
       "name": "component-lab-three-d-bar",
       "path": "components/lab/three-d-bar",
       "aliases": []
@@ -735,6 +740,11 @@
     {
       "name": "component-lab-transfer-list-selector",
       "path": "components/lab/transfer-list-selector",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-weighted-svg-icon",
+      "path": "components/lab/weighted-svg-icon",
       "aliases": []
     },
     {
@@ -1390,6 +1400,11 @@
     {
       "name": "example-base-typeahead-custom-search-bar",
       "path": "examples/base-typeahead/custom-search-bar",
+      "aliases": []
+    },
+    {
+      "name": "example-base-typeahead-menu",
+      "path": "examples/base-typeahead/menu",
       "aliases": []
     },
     {
@@ -2369,6 +2384,11 @@
     {
       "name": "example-input-group-basic",
       "path": "examples/input-group/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-internationalization-provider-calendar",
+      "path": "examples/internationalization-provider/calendar",
       "aliases": []
     },
     {
@@ -3742,6 +3762,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-chat-dictation-voice-input",
+      "path": "examples/use-chat-dictation/voice-input",
+      "aliases": []
+    },
+    {
       "name": "example-use-clickable-container-clickable-project-card",
       "path": "examples/use-clickable-container/clickable-project-card",
       "aliases": []
@@ -3769,6 +3794,11 @@
     {
       "name": "example-use-container-reveal-reveal-on-hover-row-actions",
       "path": "examples/use-container-reveal/reveal-on-hover-row-actions",
+      "aliases": []
+    },
+    {
+      "name": "example-use-direction-hook-usage",
+      "path": "examples/use-direction/hook-usage",
       "aliases": []
     },
     {
@@ -3867,6 +3897,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-outline-from-dom-article",
+      "path": "examples/use-outline-from-dom/article",
+      "aliases": []
+    },
+    {
       "name": "example-use-outline-from-markdown-docs-article",
       "path": "examples/use-outline-from-markdown/docs-article",
       "aliases": []
@@ -3932,6 +3967,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-syntax-theme-keyword-color",
+      "path": "examples/use-syntax-theme/keyword-color",
+      "aliases": []
+    },
+    {
       "name": "example-use-table-column-resize-draggable-columns",
       "path": "examples/use-table-column-resize/draggable-columns",
       "aliases": []
@@ -3942,8 +3982,18 @@
       "aliases": []
     },
     {
+      "name": "example-use-table-columns-virtualization-wide-table",
+      "path": "examples/use-table-columns-virtualization/wide-table",
+      "aliases": []
+    },
+    {
       "name": "example-use-table-grouped-rows-collapsible-groups",
       "path": "examples/use-table-grouped-rows/collapsible-groups",
+      "aliases": []
+    },
+    {
+      "name": "example-use-table-infinite-scroll-load-more-products",
+      "path": "examples/use-table-infinite-scroll/load-more-products",
       "aliases": []
     },
     {
@@ -3997,6 +4047,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-theme-name-active-theme",
+      "path": "examples/use-theme-name/active-theme",
+      "aliases": []
+    },
+    {
       "name": "example-use-theme-token-values",
       "path": "examples/use-theme/token-values",
       "aliases": []
@@ -4014,6 +4069,11 @@
     {
       "name": "example-use-tree-focus-keyboard-file-tree",
       "path": "examples/use-tree-focus/keyboard-file-tree",
+      "aliases": []
+    },
+    {
+      "name": "example-use-truncation-tooltip-on-cut-off-text",
+      "path": "examples/use-truncation/tooltip-on-cut-off-text",
       "aliases": []
     },
     {
@@ -4097,6 +4157,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-chat-dictation",
+      "path": "hooks/use-chat-dictation",
+      "aliases": []
+    },
+    {
       "name": "hook-use-clickable-container",
       "path": "hooks/use-clickable-container",
       "aliases": []
@@ -4129,6 +4194,11 @@
     {
       "name": "hook-use-dev-warning",
       "path": "hooks/use-dev-warning",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-direction",
+      "path": "hooks/use-direction",
       "aliases": []
     },
     {
@@ -4262,6 +4332,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-outline-from-dom",
+      "path": "hooks/use-outline-from-dom",
+      "aliases": []
+    },
+    {
       "name": "hook-use-outline-from-markdown",
       "path": "hooks/use-outline-from-markdown",
       "aliases": []
@@ -4327,6 +4402,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-syntax-theme",
+      "path": "hooks/use-syntax-theme",
+      "aliases": []
+    },
+    {
       "name": "hook-use-table-column-resize",
       "path": "hooks/use-table-column-resize",
       "aliases": []
@@ -4342,6 +4422,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-table-columns-virtualization",
+      "path": "hooks/use-table-columns-virtualization",
+      "aliases": []
+    },
+    {
       "name": "hook-use-table-filter-state",
       "path": "hooks/use-table-filter-state",
       "aliases": []
@@ -4354,6 +4439,11 @@
     {
       "name": "hook-use-table-grouped-rows",
       "path": "hooks/use-table-grouped-rows",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-infinite-scroll",
+      "path": "hooks/use-table-infinite-scroll",
       "aliases": []
     },
     {
@@ -4422,6 +4512,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-theme-name",
+      "path": "hooks/use-theme-name",
+      "aliases": []
+    },
+    {
       "name": "hook-use-toast",
       "path": "hooks/use-toast",
       "aliases": []
@@ -4439,6 +4534,11 @@
     {
       "name": "hook-use-tree-focus",
       "path": "hooks/use-tree-focus",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-truncation",
+      "path": "hooks/use-truncation",
       "aliases": []
     },
     {

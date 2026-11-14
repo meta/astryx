@@ -87,7 +87,13 @@ owns response fields and compatibility.
   many entries as its candidate set gives: for a component, the near-top
   matches of the component matcher (at most five, and at least two when two
   exist); for a template, every template; for docs, the routes its error
-  gives (for an unknown route, the set `spec:AST-046` FR6 names). Every suggestion is a real catalog entry for that command, and a
+  gives (for an unknown route, the set `spec:AST-046` FR6 names). Every suggestion is a real catalog entry for that command, with one
+  exception: when the docs argument is, in any case and without spaces and
+  hyphens, the exact name of a component, hook (with or without `use`) or
+  template, the first docs suggestion is the command that reads that entry
+  (`astryx component Button`), and the last route drops; when no route it
+  suggests shares a word with the argument, that command is the only
+  suggestion. A
   name that resolves keeps resolving to the same entry. A component's exact
   name in another case is that component's: a module that only shares its
   spelling never resolves for it. Which candidates fill

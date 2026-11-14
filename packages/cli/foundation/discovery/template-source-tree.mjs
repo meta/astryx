@@ -7,33 +7,40 @@
  *
  * @input Template source text
  * @output Its parsed tree, node visits, names, and module scope
- * @position packages/cli/foundation/discovery — read by template-icons and by
- *   the demo-content replacement in template-adapter
+ * @position packages/cli/foundation/discovery — read by template-icons, by
+ *   the demo-content replacement in template-adapter, and by template-needs
  */
 
-import {createRequire} from 'node:module';
+import * as path from 'node:path';
+import {CLI_ROOT} from '../fs/paths.mjs';
+import {babelCore, babelParser} from '../runtime/lazy-dependencies.mjs';
 
-const require = createRequire(import.meta.url);
-
-/** @type {typeof import('@babel/parser') | undefined} */
-let babelParser;
-/** @type {typeof import('@babel/core') | undefined} */
-let babelCore;
+/**
+ * Where what parsing returns for each template Astryx ships is stored at
+ * publish (scripts/generate-template-components.mjs): its component list
+ * under its source's key, and the module specifiers it imports under
+ * `imports:` and that key.
+ */
+export const TEMPLATE_COMPONENTS_FILE = path.join(
+  CLI_ROOT,
+  'assets',
+  'templates',
+  'components.generated.json',
+);
 
 /**
  * Parse template source as TSX. Babel loads on first use, so a command that
  * only lists templates never pays for it.
  * @param {string} source
+ * @param {{errorRecovery?: boolean}} [options] `errorRecovery`: keep parsing
+ *   past a recoverable error, for a reader that only needs part of the tree
  * @returns {any} The file node.
  */
-export function parseTemplateSource(source) {
-  babelParser ??= /** @type {typeof import('@babel/parser')} */ (
-    require('@babel/parser')
-  );
-  return babelParser.parse(source, {
+export function parseTemplateSource(source, {errorRecovery = false} = {}) {
+  return babelParser().parse(source, {
     sourceType: 'module',
     plugins: ['jsx', 'typescript'],
-    errorRecovery: false,
+    errorRecovery,
   });
 }
 
@@ -62,10 +69,7 @@ export function programPath(file) {
  * @param {import('@babel/core').Visitor} visitor
  */
 export function traverseTemplateSource(file, visitor) {
-  babelCore ??= /** @type {typeof import('@babel/core')} */ (
-    require('@babel/core')
-  );
-  babelCore.traverse(file, visitor);
+  babelCore().traverse(file, visitor);
 }
 
 /**

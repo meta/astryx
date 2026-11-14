@@ -1,7 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-'use client';
-
 /**
  * @file index.ts
  * @input Imports TimeInput components and types
@@ -20,5 +18,7 @@ export type {
   TimeInputPresentation,
   TimeInputStatus,
   TimeInputStatusType,
+  TimeInputEntryError,
+  EntryErrorBehavior,
 } from './TimeInput';
 export type {ISOTimeString} from '../utils';

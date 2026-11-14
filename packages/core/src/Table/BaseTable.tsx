@@ -3,7 +3,7 @@
 'use client';
 /**
  * @file BaseTable.tsx
- * @input React, canonical identity/admission, private window planning and tracked row context
+ * @input React, canonical identity/admission, private row and column window planning and tracked row context
  * @output Exports BaseTable component and passes immutable transform contexts
  * @position Core structural component; wrapped by Table.tsx
  *
@@ -18,7 +18,7 @@ import {
   memo,
   useId,
   useMemo,
-  useRef,
+  useSyncExternalStore,
   type ReactElement,
   type ReactNode,
   type Ref,
@@ -31,6 +31,11 @@ import {
 import {resolveTableIdentity, resolveTableAdmission} from './tableIdentity';
 import {useTableWindow} from './plugins/virtualization/useTableWindow';
 import {getTableVirtualizationConfig} from './plugins/virtualization/useTableRowsVirtualization';
+import {
+  resolveTableVirtualization,
+  type TableColumnFocusProps,
+  type TableColumnLayout,
+} from './tableColumnWindowing';
 import {TableContext} from './TableContext';
 import {use} from 'react';
 import {
@@ -40,6 +45,7 @@ import {
   withLogicalPositionWidths,
 } from './tableColumnAdmission';
 import {isRenderable} from '../utils/isRenderable';
+import {chainEventHandlers} from '../utils/chainEventHandlers';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import type {
@@ -53,6 +59,7 @@ import type {
   BodyCellRenderProps,
   ScrollWrapperRenderProps,
   TableRenderContext,
+  TablePluginRenderState,
   TableRowContext,
   TableRowComponentProps,
   TableCellComponentProps,
@@ -72,6 +79,7 @@ import {TableHeader} from './TableHeader';
 import {TableBody} from './TableBody';
 import {mergeProps} from '../utils';
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {internByIdentity} from './internByIdentity';
 import {
   readsRowCount,
   readsRowIndex,
@@ -187,25 +195,6 @@ function applyRowPlugins<
 // Stable empty array to avoid creating new reference on each render
 const EMPTY_PLUGINS: TablePlugin<Record<string, unknown>>[] = [];
 
-/**
- * Shallow-compare two arrays by element identity.
- * Used to stabilize the resolved columns array across renders.
- */
-function areArraysShallowEqual<T>(a: T[], b: T[]): boolean {
-  if (a === b) {
-    return true;
-  }
-  if (a.length !== b.length) {
-    return false;
-  }
-  for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) {
-      return false;
-    }
-  }
-  return true;
-}
-
 interface TableRowProps<T extends Record<string, unknown>> {
   item: T;
   rowIndex: number;
@@ -227,6 +216,8 @@ interface TableRowProps<T extends Record<string, unknown>> {
   };
   renderContext: TableRenderContext;
   rowHeight?: number;
+  /** Mounted columns and spacers, only while columns window. */
+  columnLayout?: TableColumnLayout;
   onRowFocus?: (key: string | number, focusTarget?: HTMLElement) => void;
   onRowBlur?: () => void;
 }
@@ -249,6 +240,7 @@ function TableRowInner<T extends Record<string, unknown>>({
   contextIdentity,
   renderContext,
   rowHeight,
+  columnLayout,
   onRowFocus,
   onRowBlur,
 }: TableRowProps<T>): ReactElement {
@@ -267,9 +259,10 @@ function TableRowInner<T extends Record<string, unknown>>({
     [contextIdentity, rowIndex, renderContext],
   );
   // Build cells first
-  const cells = columns.map((col, columnIndex) => {
+  const renderCell = (col: TableColumn<T>, columnIndex: number) => {
     // Apply column alignment to body cells
-    const initialCellHtmlProps: Record<string, unknown> = {};
+    const initialCellHtmlProps: Record<string, unknown> =
+      columnLayout == null ? {} : {'aria-colindex': columnIndex + 1};
     if (col.align) {
       initialCellHtmlProps.style = {textAlign: col.align};
     }
@@ -333,7 +326,11 @@ function TableRowInner<T extends Record<string, unknown>>({
         {content}
       </CellComponent>
     );
-  });
+  };
+  const cells =
+    columnLayout == null
+      ? columns.map(renderCell)
+      : columnLayout.mapColumns(columns, renderCell);
 
   // Apply plugin transforms for row (with pre-rendered children).
   // Seed `aria-rowindex` (when the table opts into ARIA row indexing) as a
@@ -440,6 +437,7 @@ function areRowPropsEqual<T extends Record<string, unknown>>(
         prevProps.renderContext.viewport !==
           nextProps.renderContext.viewport)) ||
     prevProps.rowHeight !== nextProps.rowHeight ||
+    prevProps.columnLayout !== nextProps.columnLayout ||
     prevProps.onRowFocus !== nextProps.onRowFocus ||
     prevProps.onRowBlur !== nextProps.onRowBlur
   ) {
@@ -608,17 +606,21 @@ function BaseTableInner<T extends Record<string, unknown>>({
   // new array on every call, but if the contents haven't changed, we
   // reuse the previous reference. This prevents MemoizedTableRow from
   // re-rendering all rows when the column array is structurally identical.
-  const resolvedColumnsRef = useRef(transformedColumns);
-  if (!areArraysShallowEqual(resolvedColumnsRef.current, transformedColumns)) {
-    resolvedColumnsRef.current = transformedColumns;
-  }
-  const resolvedColumns = resolvedColumnsRef.current;
+  // Every render with the same columns gets one array, so a render React
+  // discards cannot leave another. No state or ref is written during render.
+  const resolvedColumns = internByIdentity(transformedColumns);
   const headerRowCount = mode === 'data' && resolvedColumns.length > 0 ? 1 : 0;
-  const config = getTableVirtualizationConfig(virtualization);
-  const windowFallbackReason = useMemo(() => {
-    if (virtualization != null && config == null) {
-      return 'virtualization is not a value from useTableRowsVirtualization';
-    }
+  const {
+    rows: rowsCapability,
+    columns: columnsConfig,
+    invalidReason,
+  } = useMemo(
+    () => resolveTableVirtualization(virtualization),
+    [virtualization],
+  );
+  const config = getTableVirtualizationConfig(rowsCapability);
+  // Conditions both axes need before any cell renders.
+  const sharedFallbackReason = useMemo(() => {
     if (mode !== 'data') {
       return 'windowing requires data mode';
     }
@@ -637,39 +639,31 @@ function BaseTableInner<T extends Record<string, unknown>>({
     if (textOverflowProp === 'wrap') {
       return 'explicit wrapped content is not fixed-height';
     }
-    if (rowIndexStart != null || rowCount != null) {
-      return 'legacy row offsets or counts conflict with windowed metadata';
-    }
-    if (!resolvedColumns.every(isFixedHeightColumn)) {
-      return 'a custom cell renderer has no fixed-height admission';
-    }
-    if (
-      config == null ||
-      !Number.isFinite(config.rowHeight) ||
-      config.rowHeight <= 0 ||
-      !Number.isFinite(config.viewportHeight) ||
-      config.viewportHeight <= 0
-    ) {
-      return 'row and viewport geometry must be positive finite CSS pixels';
-    }
     return undefined;
-  }, [
-    mode,
-    ScrollWrapper,
-    admission.rowModel,
-    identity,
-    textOverflowProp,
-    rowIndexStart,
-    rowCount,
-    resolvedColumns,
-    virtualization,
-    config,
-  ]);
-  const windowAdmitted = windowFallbackReason === undefined;
+  }, [mode, ScrollWrapper, admission.rowModel, identity, textOverflowProp]);
+  // Admission reads the resolved columns: widened row-number columns are new
+  // objects that the admission registry does not know.
+  const hasFixedHeightColumns = resolvedColumns.every(isFixedHeightColumn);
+  const windowFallbackReason =
+    invalidReason ??
+    (config == null
+      ? undefined
+      : (sharedFallbackReason ??
+        (rowIndexStart != null || rowCount != null
+          ? 'legacy row offsets or counts conflict with windowed metadata'
+          : !hasFixedHeightColumns
+            ? 'a custom cell renderer has no fixed-height admission'
+            : !Number.isFinite(config.rowHeight) ||
+                config.rowHeight <= 0 ||
+                !Number.isFinite(config.initialViewportHeight) ||
+                config.initialViewportHeight <= 0
+              ? 'row and viewport geometry must be positive finite CSS pixels'
+              : undefined)));
+  const windowAdmitted = config != null && windowFallbackReason === undefined;
   useDevWarningPerMessage(
     'Table',
     `Windowing disabled: ${windowFallbackReason}. Rendering all rows.`,
-    virtualization != null && windowFallbackReason != null,
+    windowFallbackReason != null,
   );
   const logicalPositionColumns = useMemo(
     () =>
@@ -681,7 +675,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
     [resolvedColumns],
   );
   const windowPlan = useTableWindow({
-    capability: virtualization,
+    capability: rowsCapability,
     data: data ?? [],
     keys,
     isAdmitted: windowAdmitted,
@@ -702,8 +696,50 @@ function BaseTableInner<T extends Record<string, unknown>>({
       }),
     [mode, admission, data?.length, headerRowCount, runtime],
   );
-  const textOverflow =
-    textOverflowProp ?? (windowPlan.isWindowed ? 'truncate' : 'wrap');
+
+  // A loading plugin publishes its request state through `renderState`. Table
+  // reads it before it builds the sections, and only where loading is
+  // admitted: data mode, a flat row model, and the default scroll wrapper.
+  const loadingSource = useMemo(() => {
+    const sources = plugins.flatMap(plugin =>
+      plugin.renderState ? [plugin.renderState] : [],
+    );
+    // The snapshot is a number, so the store compares it by value: bit 0 is
+    // set while a source loads, bit 1 while a source has more rows.
+    const readIsLoading = (
+      read: (source: TablePluginRenderState) => {
+        isLoading: boolean;
+        hasMore?: boolean;
+      },
+    ) =>
+      (sources.some(source => read(source).isLoading) ? 1 : 0) |
+      (sources.some(source => read(source).hasMore === true) ? 2 : 0);
+    return {
+      subscribe(onChange: () => void) {
+        const cleanups = sources.map(source => source.subscribe(onChange));
+        return () => cleanups.forEach(cleanup => cleanup());
+      },
+      getSnapshot: () => readIsLoading(source => source.getSnapshot()),
+      getServerSnapshot: () =>
+        readIsLoading(source => source.getServerSnapshot()),
+    };
+  }, [plugins]);
+  const loadingSnapshot = useSyncExternalStore(
+    loadingSource.subscribe,
+    loadingSource.getSnapshot,
+    loadingSource.getServerSnapshot,
+  );
+  // Table admits loading only with its own scroll wrapper. The loading plugin
+  // reads this admission from the runtime context, so a caller's wrapper gets
+  // the whole loading behavior or none of it.
+  const isLoadingAdmitted =
+    mode === 'data' &&
+    admission.rowModel === 'flat' &&
+    ScrollWrapper != null &&
+    isTableScrollWrapperOwned(ScrollWrapper);
+  const isLoading = isLoadingAdmitted && (loadingSnapshot & 1) === 1;
+  // While any admitted source may load more rows, the total is unknown.
+  const hasMoreRows = isLoadingAdmitted && (loadingSnapshot & 2) === 2;
 
   // Resolve all column widths in a single pass — produces per-column
   // inline styles and the aggregate table min-width.
@@ -711,9 +747,14 @@ function BaseTableInner<T extends Record<string, unknown>>({
   // the last logical row, before that row mounts, so a number never clips.
   // Fixed layout sizes columns from the header, so rows keep their columns;
   // pinned offsets read the extra width from a table variable.
-  const sizedColumns = withLogicalPositionWidths(
-    resolvedColumns,
-    windowPlan.logicalPositionWidths,
+  // Column pitches and the inline anchor compare this array by identity.
+  const sizedColumns = useMemo(
+    () =>
+      withLogicalPositionWidths(
+        resolvedColumns,
+        windowPlan.logicalPositionWidths,
+      ),
+    [resolvedColumns, windowPlan.logicalPositionWidths],
   );
   const resolvedWidths = resolveColumnWidths(sizedColumns);
   const logicalExtraStyle: Record<string, string> = {};
@@ -734,270 +775,353 @@ function BaseTableInner<T extends Record<string, unknown>>({
     htmlProps: {},
     xstyle: children ? [styles.table, styles.tableAutoLayout] : [styles.table],
   } satisfies TableRenderProps);
-
-  // --- Plugin pipeline: header cells ---
-  const headerLabelIdBase = useId();
-  const headerCells = resolvedColumns.map((col, columnIndex) => {
-    const headerContent = col.header ?? col.key;
-
-    // Build initial htmlProps with column alignment if specified.
-    // `scope: 'col'` is the default so every column header associates its
-    // data cells with the correct column for screen readers; a plugin's
-    // transformHeaderCell can override it via htmlProps.scope.
-    const initialHeaderHtmlProps: Record<string, unknown> = {
-      'data-column-key': col.key,
-      scope: 'col',
-    };
-    if (col.align) {
-      initialHeaderHtmlProps.style = {textAlign: col.align};
-    }
-
-    const initialHeaderRenderProps: HeaderCellRenderProps = {
-      htmlProps: initialHeaderHtmlProps,
-      xstyle: [],
-      content: headerContent,
-      columnIndex,
-      columns: resolvedColumns as ReadonlyArray<
-        TableColumn<Record<string, unknown>>
-      >,
-    };
-    const cellRenderProps = applyPlugins(
-      plugins,
-      p => p.transformHeaderCell,
-      initialHeaderRenderProps,
-      col,
-      columnIndex,
-      resolvedColumns,
-    );
-
-    // Apply pre-computed column width styles on the <th>.
-    // With table-layout: fixed, header cell sizing controls column widths.
-    const widthStyle = resolvedWidths.columns.get(col.key)?.style ?? {};
-
-    const existingStyle = cellRenderProps.htmlProps.style;
-    const mergedHtmlProps = {
-      ...cellRenderProps.htmlProps,
-      style: existingStyle ? {...widthStyle, ...existingStyle} : widthStyle,
-    };
-
-    // Resolve header content from slots — plugins write to named slots
-    // to avoid conflicts (e.g. sort writes `after`, resize writes `overlay`)
-    const resolvedContent = cellRenderProps.content ?? headerContent;
-    const headerTitleProp =
-      typeof resolvedContent === 'string' && resolvedContent.length > 0
-        ? {title: resolvedContent}
-        : {};
-    const {before, after, overlay, below} = cellRenderProps;
-    const hasSlots =
-      before != null || after != null || overlay != null || below != null;
-
-    const labelRow = isRenderable(after) ? (
-      <div {...stylex.props(styles.headerLabelRow)}>
-        {resolvedContent}
-        {after}
-      </div>
-    ) : (
-      resolvedContent
-    );
-
-    // The overlay is a control of its own. Keep its name and value out of the
-    // header's name.
-    const namesOwnHeader =
-      isRenderable(overlay) &&
-      mergedHtmlProps['aria-label'] == null &&
-      mergedHtmlProps['aria-labelledby'] == null;
-    const labelId = `${headerLabelIdBase}-label-${columnIndex}`;
-    const belowId = `${headerLabelIdBase}-below-${columnIndex}`;
-    const hasBelow = isRenderable(below);
-
-    const headerInner = !hasSlots ? (
-      resolvedContent
-    ) : namesOwnHeader ? (
-      <>
-        {/* Inline, so the cell's text-overflow still reaches the label. */}
-        <span id={labelId}>
-          {before}
-          {labelRow}
-        </span>
-        {overlay}
-        {hasBelow && <div id={belowId}>{below}</div>}
-      </>
-    ) : (
-      <>
-        {before}
-        {labelRow}
-        {overlay}
-        {below}
-      </>
-    );
-    const headerNameProps = namesOwnHeader
-      ? {'aria-labelledby': hasBelow ? `${labelId} ${belowId}` : labelId}
-      : {};
-
-    return (
-      <HeaderCellComponent
-        key={col.key}
-        {...mergedHtmlProps}
-        {...headerNameProps}
-        {...headerTitleProp}
-        contextMenuActions={cellRenderProps.contextMenuActions}
-        xstyle={cellRenderProps.xstyle}>
-        {headerInner}
-      </HeaderCellComponent>
-    );
-  });
-
-  // --- Plugin pipeline: header row ---
-  const headerRowRenderProps = applyPlugins(
-    plugins,
-    p => p.transformHeaderRow,
-    {
-      htmlProps: {},
-      xstyle: [],
-      children: <>{headerCells}</>,
-    } satisfies HeaderRowRenderProps,
-  );
-
-  // --- Render ---
-  const hasData = data != null && data.length > 0;
-  const hasColumns = resolvedColumns.length > 0;
-
-  // The table is at least as wide as the column floors require and at least
-  // as wide as any minWidth the consumer (or a plugin) set: whichever is
-  // larger wins, so column floors never shrink a consumer's minimum.
   const mergedStyle: React.CSSProperties = {
     ...tableRenderProps.htmlProps.style,
     ...style,
   };
-  const tableStyle: React.CSSProperties = {
-    ...(resolvedWidths.tableMinWidth > 0
-      ? {
-          ...mergedStyle,
-          minWidth: resolveTableMinWidth(
-            mergedStyle.minWidth,
-            resolvedWidths.tableMinWidth,
-          ),
-        }
-      : mergedStyle),
-    ...logicalExtraStyle,
-  };
 
-  let tableElement: ReactNode = (
-    <table
-      ref={useMergedRefs(ref, runtime.setTable)}
-      {...(windowPlan.isWindowed
-        ? {'aria-rowcount': headerRowCount + (data?.length ?? 0)}
-        : ariaRowCount != null
-          ? {'aria-rowcount': ariaRowCount}
-          : null)}
-      {...tableRenderProps.htmlProps}
-      {...mergeProps(
-        themeProps('table'),
-        stylex.props(...tableRenderProps.xstyle, xstyle),
-        [tableRenderProps.htmlProps.className, className]
-          .filter(Boolean)
-          .join(' ') || undefined,
-        tableStyle,
-      )}
-      {...rest}>
-      {children ? (
-        children
+  // Windowing keeps content single-line at every width, so rows keep their
+  // height as the viewport crosses the table minimum width.
+  const textOverflow =
+    textOverflowProp ??
+    (windowPlan.isWindowed || columnsConfig != null ? 'truncate' : 'wrap');
+  const headerLabelIdBase = useId();
+  const tableRef = useMergedRefs(ref, runtime.setTable);
+  const hasData = data != null && data.length > 0;
+
+  // Everything that reads the column layout renders inside the column
+  // window, which a columns capability supplies.
+  const renderTable = (
+    columnLayout: TableColumnLayout | undefined,
+    columnFocusProps?: TableColumnFocusProps,
+  ): ReactNode => {
+    // --- Plugin pipeline: header cells ---
+    const renderHeaderCell = (col: TableColumn<T>, columnIndex: number) => {
+      const headerContent = col.header ?? col.key;
+
+      // Build initial htmlProps with column alignment if specified.
+      // `scope: 'col'` is the default so every column header associates its
+      // data cells with the correct column for screen readers; a plugin's
+      // transformHeaderCell can override it via htmlProps.scope.
+      const initialHeaderHtmlProps: Record<string, unknown> = {
+        'data-column-key': col.key,
+        scope: 'col',
+        ...(columnLayout == null ? null : {'aria-colindex': columnIndex + 1}),
+      };
+      if (col.align) {
+        initialHeaderHtmlProps.style = {textAlign: col.align};
+      }
+
+      const initialHeaderRenderProps: HeaderCellRenderProps = {
+        htmlProps: initialHeaderHtmlProps,
+        xstyle: [],
+        content: headerContent,
+        columnIndex,
+        columns: resolvedColumns as ReadonlyArray<
+          TableColumn<Record<string, unknown>>
+        >,
+      };
+      const cellRenderProps = applyPlugins(
+        plugins,
+        p => p.transformHeaderCell,
+        initialHeaderRenderProps,
+        col,
+        columnIndex,
+        resolvedColumns,
+      );
+
+      // Apply pre-computed column width styles on the <th>.
+      // With table-layout: fixed, header cell sizing controls column widths.
+      // A windowed table renders at its minimum width, so each mounted column
+      // takes its pitch in pixels: a percentage would resolve against spacers.
+      const widthStyle =
+        columnLayout == null
+          ? (resolvedWidths.columns.get(col.key)?.style ?? {})
+          : columnLayout.widthOf(columnIndex);
+
+      const existingStyle = cellRenderProps.htmlProps.style;
+      const mergedHtmlProps = {
+        ...cellRenderProps.htmlProps,
+        style: existingStyle ? {...widthStyle, ...existingStyle} : widthStyle,
+      };
+
+      // Resolve header content from slots — plugins write to named slots
+      // to avoid conflicts (e.g. sort writes `after`, resize writes `overlay`)
+      const resolvedContent = cellRenderProps.content ?? headerContent;
+      const headerTitleProp =
+        typeof resolvedContent === 'string' && resolvedContent.length > 0
+          ? {title: resolvedContent}
+          : {};
+      const {before, after, overlay, below} = cellRenderProps;
+      const hasSlots =
+        before != null || after != null || overlay != null || below != null;
+
+      const labelRow = isRenderable(after) ? (
+        <div {...stylex.props(styles.headerLabelRow)}>
+          {resolvedContent}
+          {after}
+        </div>
+      ) : (
+        resolvedContent
+      );
+
+      // The overlay is a control of its own. Keep its name and value out of the
+      // header's name.
+      const namesOwnHeader =
+        isRenderable(overlay) &&
+        mergedHtmlProps['aria-label'] == null &&
+        mergedHtmlProps['aria-labelledby'] == null;
+      const labelId = `${headerLabelIdBase}-label-${columnIndex}`;
+      const belowId = `${headerLabelIdBase}-below-${columnIndex}`;
+      const hasBelow = isRenderable(below);
+
+      const headerInner = !hasSlots ? (
+        resolvedContent
+      ) : namesOwnHeader ? (
+        <>
+          {/* Inline, so the cell's text-overflow still reaches the label. */}
+          <span id={labelId}>
+            {before}
+            {labelRow}
+          </span>
+          {overlay}
+          {hasBelow && <div id={belowId}>{below}</div>}
+        </>
       ) : (
         <>
-          {hasColumns && (
-            <TableHeader>
-              <RowComponent
-                {...headerRowRenderProps.htmlProps}
-                aria-rowindex={
-                  windowPlan.isWindowed
-                    ? 1
-                    : headerRowRenderProps.htmlProps['aria-rowindex']
-                }
-                isHeaderRow
-                xstyle={headerRowRenderProps.xstyle}>
-                {headerRowRenderProps.children}
-              </RowComponent>
-            </TableHeader>
-          )}
-          <TableBody ref={runtime.setBody}>
-            {hasData
-              ? windowPlan.segments.flatMap<ReactNode>(segment => {
-                  if (segment.type === 'gap') {
-                    return [
-                      <tr
-                        key={`gap:${segment.start}:${segment.end}`}
-                        aria-hidden="true">
-                        <td
-                          colSpan={resolvedColumns.length}
-                          {...stylex.props(styles.spacer(segment.height))}
-                        />
-                      </tr>,
-                    ];
-                  }
-                  const rows: ReactNode[] = [];
-                  for (
-                    let rowIndex = segment.start;
-                    rowIndex < segment.end;
-                    rowIndex++
-                  ) {
-                    const item = data[rowIndex];
-                    const rowIdentity = identity[rowIndex];
-                    rows.push(
-                      <MemoizedTableRow<T>
-                        key={rowIdentity.reactKey}
-                        item={item}
-                        rowIndex={rowIndex}
-                        rowKey={rowIdentity.reactKey}
-                        contextIdentity={rowIdentity}
-                        renderContext={renderContext}
-                        columns={resolvedColumns}
-                        plugins={plugins}
-                        textOverflow={textOverflow}
-                        RowComponent={RowComponent}
-                        CellComponent={CellComponent}
-                        rowHeight={
-                          windowPlan.isWindowed ? config?.rowHeight : undefined
-                        }
-                        onRowFocus={
-                          windowPlan.isWindowed
-                            ? windowPlan.onRowFocus
-                            : undefined
-                        }
-                        onRowBlur={
-                          windowPlan.isWindowed
-                            ? windowPlan.onRowBlur
-                            : undefined
-                        }
-                        ariaRowIndex={
-                          windowPlan.isWindowed
-                            ? headerRowCount + rowIndex + 1
-                            : ariaRowIndexingEnabled
-                              ? firstRowAriaIndex + rowIndex
-                              : undefined
-                        }
-                      />,
-                    );
-                  }
-                  return rows;
-                })
-              : data != null &&
-                emptyState !== false && (
-                  <tr>
-                    <td colSpan={resolvedColumns.length}>
-                      {emptyState ?? (
-                        <EmptyState
-                          title={t('@astryx.table.noData')}
-                          isCompact
-                        />
-                      )}
-                    </td>
-                  </tr>
-                )}
-          </TableBody>
+          {before}
+          {labelRow}
+          {overlay}
+          {below}
         </>
-      )}
-    </table>
-  );
+      );
+      const headerNameProps = namesOwnHeader
+        ? {'aria-labelledby': hasBelow ? `${labelId} ${belowId}` : labelId}
+        : {};
+
+      return (
+        <HeaderCellComponent
+          key={col.key}
+          {...mergedHtmlProps}
+          {...headerNameProps}
+          {...headerTitleProp}
+          contextMenuActions={cellRenderProps.contextMenuActions}
+          xstyle={cellRenderProps.xstyle}>
+          {headerInner}
+        </HeaderCellComponent>
+      );
+    };
+    const headerCells =
+      columnLayout == null
+        ? resolvedColumns.map(renderHeaderCell)
+        : columnLayout.mapColumns(resolvedColumns, renderHeaderCell);
+
+    // --- Plugin pipeline: header row ---
+    const headerRowRenderProps = applyPlugins(
+      plugins,
+      p => p.transformHeaderRow,
+      {
+        htmlProps: {},
+        xstyle: [],
+        children: <>{headerCells}</>,
+      } satisfies HeaderRowRenderProps,
+    );
+
+    // --- Render ---
+    // A row gap spans every cell of a mounted row: pinned cells, spacers and
+    // mounted columns.
+    const mountedCellCount = columnLayout?.cellCount ?? resolvedColumns.length;
+    const hasColumns = resolvedColumns.length > 0;
+
+    // The table is at least as wide as the column floors require and at least
+    // as wide as any minWidth the consumer (or a plugin) set: whichever is
+    // larger wins, so column floors never shrink a consumer's minimum.
+    const tableStyle: React.CSSProperties = {
+      ...(resolvedWidths.tableMinWidth > 0
+        ? {
+            ...mergedStyle,
+            minWidth: resolveTableMinWidth(
+              mergedStyle.minWidth,
+              resolvedWidths.tableMinWidth,
+            ),
+          }
+        : mergedStyle),
+      ...logicalExtraStyle,
+    };
+
+    return (
+      <table
+        ref={tableRef}
+        {...(windowPlan.isWindowed
+          ? {
+              'aria-rowcount': hasMoreRows
+                ? -1
+                : headerRowCount + (data?.length ?? 0),
+            }
+          : ariaRowCount != null
+            ? {'aria-rowcount': ariaRowCount}
+            : null)}
+        {...(columnLayout == null
+          ? null
+          : {'aria-colcount': resolvedColumns.length})}
+        {...tableRenderProps.htmlProps}
+        {...mergeProps(
+          themeProps('table'),
+          stylex.props(...tableRenderProps.xstyle, xstyle),
+          [tableRenderProps.htmlProps.className, className]
+            .filter(Boolean)
+            .join(' ') || undefined,
+          tableStyle,
+        )}
+        {...rest}
+        {...(columnFocusProps && {
+          onFocus: chainEventHandlers(
+            tableRenderProps.htmlProps.onFocus,
+            rest.onFocus,
+            columnFocusProps.onFocus,
+          ),
+          onBlur: chainEventHandlers(
+            tableRenderProps.htmlProps.onBlur,
+            rest.onBlur,
+            columnFocusProps.onBlur,
+          ),
+          onPointerDown: chainEventHandlers(
+            tableRenderProps.htmlProps.onPointerDown,
+            rest.onPointerDown,
+            columnFocusProps.onPointerDown,
+          ),
+          onContextMenu: chainEventHandlers(
+            tableRenderProps.htmlProps.onContextMenu,
+            rest.onContextMenu,
+            columnFocusProps.onContextMenu,
+          ),
+        })}>
+        {children ? (
+          children
+        ) : (
+          <>
+            {hasColumns && (
+              <TableHeader>
+                <RowComponent
+                  {...headerRowRenderProps.htmlProps}
+                  aria-rowindex={
+                    windowPlan.isWindowed
+                      ? 1
+                      : headerRowRenderProps.htmlProps['aria-rowindex']
+                  }
+                  isHeaderRow
+                  xstyle={headerRowRenderProps.xstyle}>
+                  {headerRowRenderProps.children}
+                </RowComponent>
+              </TableHeader>
+            )}
+            <TableBody ref={runtime.setBody}>
+              {hasData
+                ? windowPlan.segments.flatMap<ReactNode>(segment => {
+                    if (segment.type === 'gap') {
+                      return [
+                        <tr
+                          key={`gap:${segment.start}:${segment.end}`}
+                          aria-hidden="true">
+                          <td
+                            colSpan={mountedCellCount}
+                            {...stylex.props(styles.spacer(segment.height))}
+                          />
+                        </tr>,
+                      ];
+                    }
+                    const rows: ReactNode[] = [];
+                    for (
+                      let rowIndex = segment.start;
+                      rowIndex < segment.end;
+                      rowIndex++
+                    ) {
+                      const item = data[rowIndex];
+                      const rowIdentity = identity[rowIndex];
+                      rows.push(
+                        <MemoizedTableRow<T>
+                          key={rowIdentity.reactKey}
+                          item={item}
+                          rowIndex={rowIndex}
+                          rowKey={rowIdentity.reactKey}
+                          contextIdentity={rowIdentity}
+                          renderContext={renderContext}
+                          columns={resolvedColumns}
+                          plugins={plugins}
+                          textOverflow={textOverflow}
+                          RowComponent={RowComponent}
+                          CellComponent={CellComponent}
+                          rowHeight={
+                            windowPlan.isWindowed
+                              ? config?.rowHeight
+                              : undefined
+                          }
+                          columnLayout={columnLayout}
+                          onRowFocus={
+                            windowPlan.isWindowed
+                              ? windowPlan.onRowFocus
+                              : undefined
+                          }
+                          onRowBlur={
+                            windowPlan.isWindowed
+                              ? windowPlan.onRowBlur
+                              : undefined
+                          }
+                          ariaRowIndex={
+                            windowPlan.isWindowed
+                              ? headerRowCount + rowIndex + 1
+                              : ariaRowIndexingEnabled
+                                ? firstRowAriaIndex + rowIndex
+                                : undefined
+                          }
+                        />,
+                      );
+                    }
+                    return rows;
+                  })
+                : data != null &&
+                  emptyState !== false &&
+                  // While the first rows load, the default "no data" message
+                  // would be wrong. Caller-owned empty content still shows.
+                  !(isLoading && emptyState == null) && (
+                    <tr>
+                      <td colSpan={mountedCellCount}>
+                        {emptyState ?? (
+                          <EmptyState
+                            title={t('@astryx.table.noData')}
+                            isCompact
+                          />
+                        )}
+                      </td>
+                    </tr>
+                  )}
+            </TableBody>
+          </>
+        )}
+      </table>
+    );
+  };
+  // The column window is a component from the capability, so its hooks
+  // stay behind it. Adding or removing the capability remounts the table.
+  const ColumnWindow = columnsConfig?.windowing.Window;
+  let tableElement: ReactNode =
+    ColumnWindow == null ? (
+      renderTable(undefined)
+    ) : (
+      <ColumnWindow
+        capability={columnsConfig}
+        input={{
+          fallbackReason: sharedFallbackReason,
+          hasFixedHeightColumns,
+          columns: sizedColumns,
+          plugins,
+          minWidth: mergedStyle.minWidth,
+          hasRows: hasData,
+          runtime,
+        }}
+        render={renderTable}
+      />
+    );
 
   // Wrap the <table> in a scroll container so it scrolls horizontally
   // when columns exceed the container width. This wrapper sits between
@@ -1062,10 +1186,16 @@ function BaseTableInner<T extends Record<string, unknown>>({
     () => ({
       ...runtime,
       viewportHeight: windowPlan.isWindowed
-        ? config?.viewportHeight
+        ? config?.initialViewportHeight
         : undefined,
+      isLoadingAdmitted,
     }),
-    [runtime, windowPlan.isWindowed, config?.viewportHeight],
+    [
+      runtime,
+      windowPlan.isWindowed,
+      config?.initialViewportHeight,
+      isLoadingAdmitted,
+    ],
   );
   return (
     <TableRuntimeContext value={runtimeValue}>

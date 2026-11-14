@@ -120,7 +120,7 @@ function exportsOf(entry) {
  * helpers that follow the last input. Lab components that watch a finger's
  * scroll read the finger-scroll watch. PageControl reads an element's shared
  * animator, the Reduce Motion cross-fade, and the touch hit area's hook and
- * layer.
+ * layer. SearchField reads UIKit's timing table.
  */
 const LAB_ONLY_NAMES = [
   'PanGestureRecognizer',
@@ -155,6 +155,8 @@ const LAB_ONLY_NAMES = [
   'reducedMotionFade',
   'useTouchHitArea',
   'touchHitAreaStyles',
+  'measureLogicalScrollAxis',
+  'timing',
 ];
 
 /** The inputs matching `pattern` that put bytes in `bytes`. */

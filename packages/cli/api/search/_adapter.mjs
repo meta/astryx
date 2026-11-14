@@ -8,19 +8,26 @@
 
 import {readFileSync} from 'node:fs';
 import * as path from 'node:path';
-import {requireCoreDir} from '../../foundation/fs/paths.mjs';
+import {realDir, requireCoreDir} from '../../foundation/fs/paths.mjs';
 import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
+import {persistedGather} from '../../foundation/fs/gather-cache.mjs';
 import {
   reusedWhileUnchanged,
   unchangedSince,
 } from '../../foundation/fs/read-record.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {coreDirOrThrow} from '../error.mjs';
+import {loadBlockPicker} from '../build/_adapter.mjs';
 import {CORELESS_DOMAINS} from './_query.mjs';
 import {gatherComponents} from './_gather-components.mjs';
 import {gatherHooks} from './_gather-hooks.mjs';
 import {gatherDocs} from './_gather-docs.mjs';
-import {gatherTemplates, gatherThemes} from './_gather-templates.mjs';
+import {
+  derivedFromSource,
+  gatherTemplates,
+  gatherThemes,
+} from './_gather-templates.mjs';
+import {componentsInSource} from '../../foundation/discovery/template-adapter.mjs';
 
 export {componentKeywords} from './_gather-components.mjs';
 
@@ -124,6 +131,111 @@ async function gatherDomains(options) {
 }
 
 /**
+ * A gathered catalog as plain JSON and back, for a gather kept between runs
+ * (persistedGather). A template's derived component names are read once and
+ * stored as their value; `components` is stored by position in `all`, whose
+ * objects it shares.
+ */
+const GATHER_CODEC = {
+  /**
+   * The shape a read-back gather needs: its candidates and components.
+   * @param {any} gathered
+   */
+  valid: gathered =>
+    gathered != null &&
+    Array.isArray(gathered.all) &&
+    Array.isArray(gathered.components) &&
+    gathered.all.every(
+      (/** @type {any} */ c) => c != null && typeof c === 'object',
+    ) &&
+    gathered.components.every((/** @type {any} */ c) => c != null),
+  /**
+   * @param {any} gathered
+   * @returns {any}
+   */
+  encode(gathered) {
+    const position = new Map(
+      gathered.all.map((/** @type {any} */ c, /** @type {number} */ i) => [
+        c,
+        i,
+      ]),
+    );
+    return {
+      ...gathered,
+      all: gathered.all.map((/** @type {any} */ c) => {
+        if (!Object.getOwnPropertyDescriptor(c, 'weakKeywords')?.get) return c;
+        // The names come from the source file, read again when first asked
+        // for (its content is one of the stored inputs); a source that could
+        // not be read derives none.
+        const from = derivedFromSource.get(c);
+        const names = from?.derivedSoFar();
+        /** @type {Record<string, unknown>} */
+        const out = {};
+        for (const k of Object.keys(c)) {
+          out[k] =
+            k === 'weakKeywords'
+              ? {[DERIVED]: names ?? from?.file ?? null}
+              : c[k];
+        }
+        return out;
+      }),
+      components: gathered.components.map((/** @type {any} */ c) =>
+        position.get(c),
+      ),
+    };
+  },
+  /**
+   * @param {any} stored
+   * @returns {any}
+   */
+  decode(stored) {
+    const all = stored.all.map((/** @type {any} */ c) => {
+      const stored = c.weakKeywords?.[DERIVED];
+      if (stored === undefined) return c;
+      // Names read by the run that stored them, or the file to read them from.
+      const file = typeof stored === 'string' ? stored : null;
+      /** @type {string[] | undefined} */
+      let derived = Array.isArray(stored) ? stored : undefined;
+      const derive = () => {
+        if (derived === undefined) {
+          try {
+            derived =
+              file == null
+                ? []
+                : componentsInSource(readFileSync(file, 'utf-8'));
+          } catch {
+            derived = [];
+          }
+        }
+        return derived;
+      };
+      /** @type {Record<string, unknown>} */
+      const out = {};
+      for (const k of Object.keys(c)) {
+        if (k === 'weakKeywords') {
+          Object.defineProperty(out, k, {
+            get: derive,
+            enumerable: true,
+            configurable: true,
+          });
+        } else {
+          out[k] = c[k];
+        }
+      }
+      return out;
+    });
+    return {
+      ...stored,
+      all,
+      components: stored.components.map((/** @type {number} */ i) => all[i]),
+    };
+  },
+};
+
+/** The key a stored template's derived component names sit under. */
+const DERIVED = '\0derived';
+
+/**
  * @typedef {Awaited<ReturnType<typeof gatherCandidates>>} Gathered
  * @type {Map<string, (options?: {fresh?: boolean}) => Promise<Gathered>>}
  */
@@ -149,7 +261,16 @@ export function gatherCandidatesReused(options) {
   let gather = gathered.get(key);
   if (!gather) {
     gather = reusedWhileUnchanged(
-      () => gatherCandidates({cwd, type}),
+      () =>
+        persistedGather(
+          [realDir(cwd), type ?? null],
+          () => gatherCandidates({cwd, type}),
+          GATHER_CODEC,
+          // A gather that skipped Core (a failed install still in its
+          // backoff, spec:AST-081 FR2) is not kept: once the backoff ends,
+          // the next run must try again.
+          value => value.coreSkipped == null,
+        ),
       unchangedSince,
     );
     gathered.set(key, gather);
@@ -167,6 +288,10 @@ export function gatherCandidatesReused(options) {
  * @property {SearcherWeights} main The main searcher's weights.
  * @property {SearcherWeights} doc The doc searcher's weights.
  * @property {SearcherWeights} template The template searcher's weights.
+ * @property {import('../build/blocks/blocks.mjs').BlockPickerWeights | null} picker
+ *   Build's block-picker weights, which the fit pass (_fit-order.mjs) reads;
+ *   null when build's loader finds the file absent, unreadable, or the wrong
+ *   shape.
  * @typedef {Awaited<ReturnType<typeof gatherCandidates>> & {data: SearchData}} SearchCatalog
  */
 
@@ -174,8 +299,10 @@ export function gatherCandidatesReused(options) {
 let searchData = null;
 
 /**
- * The search tree's static data, read once: the entry cards and each node's
- * weights file.
+ * The search tree's static data, read once: the entry cards, each node's
+ * weights file, and build's block-picker weights for the fit pass. Build's
+ * loader (loadBlockPicker) reads and checks the picker weights, only when the
+ * pass first needs them.
  *
  * These files are static, reviewed data that only order matches inside a score
  * band; ORDERING.md beside them says what each holds and how
@@ -193,6 +320,10 @@ export function loadSearchData() {
       main: read('./_main-searcher.weights.json'),
       doc: read('./_doc-searcher.weights.json'),
       template: read('./_template-searcher.weights.json'),
+      // Read on first use: most searches never reach the fit pass.
+      get picker() {
+        return loadBlockPicker();
+      },
     };
   }
   return searchData;
