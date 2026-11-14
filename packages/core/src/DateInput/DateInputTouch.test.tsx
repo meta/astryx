@@ -847,6 +847,39 @@ describe('DateInput — calendar surface', () => {
     expect(pane('March 2026')).toBeInTheDocument();
   });
 
+  it('opens on the month of a value set after mount while closed', () => {
+    withLayout(() => {
+      const {rerender} = render(
+        <DateInput
+          nativePicker="never"
+          label="Ship date"
+          presentation="bottom-sheet"
+          onChange={() => {}}
+        />,
+      );
+      rerender(
+        <DateInput
+          nativePicker="never"
+          label="Ship date"
+          presentation="bottom-sheet"
+          value="2026-06-14"
+          onChange={() => {}}
+        />,
+      );
+      expect(field()).toHaveValue('June 14, 2026');
+      fireEvent.click(field());
+    });
+    expect(
+      document.querySelector('[data-title="month-year"]'),
+    ).toHaveTextContent('June 2026');
+    const june = within(pane('June 2026'));
+    expect(
+      june
+        .getByRole('button', {name: /June 14, 2026/})
+        .closest('[role="gridcell"]'),
+    ).toHaveAttribute('aria-selected', 'true');
+  });
+
   it('mounts a window of months around the visible one, not the whole century', () => {
     // The one test that wants the full default reach.
     renderAndOpen(

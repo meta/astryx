@@ -752,6 +752,16 @@ export function TouchDateField({
       ? null
       : clampIndex(anchoredMonthIndex, minMonthIndex, maxMonthIndex),
   );
+  // A value that arrives or changes while the sheet is closed moves the
+  // opening month to it. An open sheet is never moved under the user.
+  const [anchoredValue, setAnchoredValue] = useState(value);
+  if (!isSheetOpen && value !== anchoredValue) {
+    setAnchoredValue(value);
+    if (value != null && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      setAnchoredMonthIndex(monthModel.indexOf(plainDateFromISO(value)));
+      setMonthIndex(null);
+    }
+  }
   const monthIndex =
     chosenMonthIndex ??
     clampIndex(anchorMonthIndex, minMonthIndex, maxMonthIndex);
