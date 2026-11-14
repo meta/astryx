@@ -188,7 +188,9 @@ function serverOnlyModules(packageDir, packageName, exportsField) {
       if (folder !== root && !folder.startsWith(root + path.sep)) continue;
       for (const file of filesUnder(folder)) {
         if (!importsServerOnly(file)) continue;
-        const subpath = subpathFor(exportsField, packageDir, file);
+        // This key's own subpath for the file: an earlier key that also
+        // names it is a second specifier for the same module.
+        const subpath = subpathFor({[key]: map[key]}, packageDir, file);
         if (subpath != null && targets(subpath).includes(file)) add(subpath);
       }
     }

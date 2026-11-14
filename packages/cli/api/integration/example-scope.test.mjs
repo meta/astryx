@@ -163,6 +163,26 @@ describe('integrationExampleScope', () => {
     expect(refused).toHaveLength(4);
   });
 
+  it('lists a server-only module under every key that exports it', async () => {
+    write({
+      'package.json': JSON.stringify({
+        name: '@acme/kit',
+        version: '1.2.3',
+        exports: {
+          '.': './index.mjs',
+          './server': './src/server.mjs',
+          './src/*': './src/*.mjs',
+        },
+      }),
+      'src/server.mjs': "import 'server-only';\nexport const load = 1;\n",
+    });
+    const {data} = await integrationExampleScope(undefined, {cwd: dir});
+    expect(data.scope?.serverOnlyModules).toEqual([
+      '@acme/kit/server',
+      '@acme/kit/src/server',
+    ]);
+  });
+
   it('says why there is no scope when no integration manifest loads', async () => {
     fs.rmSync(path.join(dir, 'astryx.integration.mjs'));
     const {data} = await integrationExampleScope(undefined, {cwd: dir});
