@@ -214,7 +214,7 @@ const CASES =
     ],
   ]);
 
-describe('hunt98', () => {
+describe('a refusal offers only values read from what was typed', () => {
   it.each(CASES)(
     '%s %s %j offers only exact readings',
     async (thing, value, flags, lines, never) => {
