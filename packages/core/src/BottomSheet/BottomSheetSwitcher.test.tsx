@@ -535,6 +535,26 @@ describe('BottomSheetSwitcher', () => {
     expect(getActiveDialog()).toHaveAccessibleName('Details');
   });
 
+  it('wraps Tab and Shift+Tab inside an active modal sheet', () => {
+    render(
+      <BottomSheetSwitcher activeSheet="details" onActiveSheetChange={() => {}}>
+        <BottomSheet sheetId="details" label="Details">
+          <button type="button">First</button>
+          <button type="button">Last</button>
+        </BottomSheet>
+      </BottomSheetSwitcher>,
+    );
+
+    const first = screen.getByRole('button', {name: 'First'});
+    const last = screen.getByRole('button', {name: 'Last'});
+    last.focus();
+    expect(fireEvent.keyDown(last, {key: 'Tab'})).toBe(false);
+    expect(first).toHaveFocus();
+
+    expect(fireEvent.keyDown(first, {key: 'Tab', shiftKey: true})).toBe(false);
+    expect(last).toHaveFocus();
+  });
+
   it('forwards sheet DOM props and refs to its panel in its dialog', () => {
     const panelRef = createRef<HTMLDivElement>();
 

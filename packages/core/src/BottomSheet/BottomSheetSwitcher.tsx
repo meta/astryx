@@ -62,7 +62,10 @@ import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import type {DialogPurpose} from '../Dialog';
 import {useScrollLock} from '../hooks/useScrollLock';
-import {useFocusTrapEscapeCompatibilitySignal} from '../hooks/useFocusTrap';
+import {
+  useFocusRegionContainment,
+  useFocusTrapEscapeCompatibilitySignal,
+} from '../hooks/useFocusTrap';
 import {dispatchLayerEscapeKeyDown} from '../Layer/layerStack';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {composeEventHandlers} from '../utils';
@@ -462,6 +465,12 @@ export function BottomSheetSwitcher({
       onActiveSheetChange(null);
     }
   }, [allowsLightDismiss, onActiveSheetChange]);
+  // Native modal dialogs provide this boundary in the browser, but the
+  // switcher's host moves between child dialogs during a flow. Keep the same
+  // Tab containment as a standalone BottomSheet on every active host.
+  useFocusRegionContainment(hostDialogRef, isModal, {
+    preserveNativeEmptyRegion: true,
+  });
   // Focus containment is the native modal dialog's: showModal() makes the
   // page inert, so Tab cannot leave the active sheet. The released read-only
   // `hasActiveFocusTrapEscape()` signal still reports a modal flow as a trap,
