@@ -212,7 +212,7 @@ const ADOPTERS: Record<string, () => Promise<void>> = {
     fireEvent.change(screen.getByRole('combobox'), {target: {value: 'zzz'}});
     await expectDelegated('No results found');
   },
-  'Tooltip/useTooltip.tsx': async () => {
+  'Tooltip/tooltipSurface.tsx': async () => {
     // A tooltip that show() holds says its own text (component:Tooltip FR12).
     render(
       <InfoTip

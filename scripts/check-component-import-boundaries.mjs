@@ -91,7 +91,12 @@ export const CORE_BOUNDARIES = {
   // Trigger contract and context plumbing that live in a surface folder. A
   // truncated Text hands its held intent to the tooltip through
   // `tooltipPresentInterest`; every scoped context uses `layerScopedContext`.
+  // The Tooltip entry, its component and `useTooltip` are the tooltip's
+  // trigger contract: they load `Tooltip/tooltipSurface` after first paint.
   baseModulesInSurfaceFolders: [
+    'Tooltip',
+    'Tooltip/Tooltip',
+    'Tooltip/useTooltip',
     'Tooltip/tooltipPresentInterest',
     'Layer/layerScopedContext',
   ],
@@ -187,9 +192,13 @@ export function findBoundaryViolations({entryName, graph, boundaries}) {
       if (kind === 'dynamic-import') deferredTargets.add(moduleName(target));
     }
   }
+  // A module the boundaries list as base code stays base code when an
+  // import() also targets it (the truncation tooltip loads the Tooltip
+  // component, which is itself the tooltip's trigger contract).
   const isSurface = name =>
     inSurfaceFolder(name, boundaries) ||
     (deferredTargets.has(name) &&
+      !boundaries.baseModulesInSurfaceFolders.includes(name) &&
       !isTouchModule(name, boundaries) &&
       capabilityOf(name, boundaries) === undefined);
   const defersSurface = modulePath =>

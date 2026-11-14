@@ -14,7 +14,8 @@
 /// <reference types="@testing-library/jest-dom" />
 import '@testing-library/jest-dom/vitest';
 import {configure} from '@testing-library/react';
-import {afterEach} from 'vitest';
+import {afterEach, beforeAll} from 'vitest';
+import {__loadTooltipForTest} from '../../../packages/core/src/Tooltip/useTooltip';
 import {__resetClickGuardForTest} from '../../../packages/core/src/utils/clickGuard';
 import {GROUP_LAST_MEMBER} from './jsdomRefusedRules';
 
@@ -29,6 +30,13 @@ import {GROUP_LAST_MEMBER} from './jsdomRefusedRules';
 // that assert an announcement query the region directly, e.g. by role="status").
 // Keeps the jsdom defaults (script, style).
 configure({defaultIgnore: 'script, style, [data-astryx-live-region]'});
+
+// A tooltip loads its behavior and visible layer after the page's first paint
+// (Tooltip/useTooltip.tsx). Most tests exercise the loaded tooltip, so each
+// file starts with it loaded. The load tests reset it.
+beforeAll(async () => {
+  await __loadTooltipForTest();
+});
 
 // The click guard (packages/core/src/utils/clickGuard.ts) is armed per
 // document by a gesture that already acted and disarms itself 400 ms later.

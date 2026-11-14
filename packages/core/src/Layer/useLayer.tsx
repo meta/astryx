@@ -487,6 +487,17 @@ interface InternalContextLayerOptions extends ContextLayerOptions {
    */
   keepsAnchorClear?: boolean;
   /**
+   * The CSS anchor name the trigger carries, given by an owner that hands out
+   * its anchor name before this layer mounts (the deferred tooltip). Without
+   * it, the layer derives one from its own id.
+   */
+  anchorId?: string;
+  /**
+   * The layer's id, given by an owner that hands out the id before this layer
+   * mounts (the deferred tooltip). Without it, the layer takes its own.
+   */
+  id?: string;
+  /**
    * With `lazyMount`, the layer stays mounted once its first `show()` mounted
    * it: hiding leaves it in place, so its close plays out and every later
    * `show()` opens it at once. A layer never shown still mounts only its inert
@@ -1279,8 +1290,11 @@ function useLayerImplementation(
     mode === 'context' ? (options.writesEntranceSide ?? false) : false;
   const onCloseStart = mode === 'context' ? options.onCloseStart : undefined;
   const onCloseStartRef = useCommittedRef(onCloseStart);
-  const id = useId();
-  const anchorId = `--astryx-layer-${id.replace(/:/g, '')}`;
+  const ownId = useId();
+  const id = (mode === 'context' ? options.id : undefined) ?? ownId;
+  const anchorId =
+    (mode === 'context' ? options.anchorId : undefined) ??
+    `--astryx-layer-${id.replace(/:/g, '')}`;
 
   const [isOpen, setIsOpen] = useState(false);
   // Whether the anchor is inside the viewport (spec:AST-059 FR5). The slide

@@ -80,11 +80,13 @@ module. A static import of a touch module from a base module that defers a
 surface is a crossing too (INV8). The walk stops at a crossing, so imports
 inside a surface's or a capability's own graph are not crossings. Each pair
 of a base module and the module it first crosses into is one crossing and
-one allowlist row. A module that an `import()` targets is a surface module.
+one allowlist row. A module that an `import()` targets is a surface module,
+unless it is one of the base modules in a surface folder named below.
 
 Some modules in a surface or capability folder are base code: the trigger
-contract a surface folder keeps for base imports
-(`Tooltip/tooltipPresentInterest`, `Layer/layerScopedContext`), and a
+contract a surface folder keeps for base imports (`Tooltip`,
+`Tooltip/Tooltip`, `Tooltip/useTooltip`, `Tooltip/tooltipPresentInterest`,
+`Layer/layerScopedContext`), and a
 capability's own import (a Table plugin's folder index and the modules it
 re-exports, and `SnapPaging/SnapPaging`). INV7's wiring lives in base code:
 the component's own modules or the capability's own import. A wiring module
@@ -187,8 +189,6 @@ one pending load per module, caches a success, and resets after a failure.
 | Crossing (base module → module it imports statically)             | Entries that reach it                          | Cost, gzip             | Invariant  | Row leaves when                                                          |
 | ----------------------------------------------------------------- | ---------------------------------------------- | ---------------------- | ---------- | ------------------------------------------------------------------------ |
 | `Text/TruncationTooltip` → `Layer/useTouchTrigger`                | Text, Heading, Button, IconButton, Link, Table | 4.6 KB (Text, Heading) | INV1, INV8 | the truncation tooltip's eager code carries no touch tap recognizer      |
-| `Button/Button` → `Tooltip/useTooltip`                            | Button, IconButton                             | 15.5 KB                | INV1       | Button's tooltip layer code is lazy                                      |
-| `Link/Link` → `Tooltip`                                           | Link                                           | 17.6 KB                | INV1       | Link's tooltip layer code is lazy                                        |
 | `Table/tableContextMenu` → `ContextMenu`                          | Table                                          | 78.2 KB                | INV1       | cells without actions reach no menu module                               |
 | `Table/BaseTable` → `Table/plugins/virtualization/useTableWindow` | Table                                          | 3.0 KB                 | INV7       | a Table that never windows reaches neither the controller nor its engine |
 
@@ -205,26 +205,23 @@ crossings brings the same module. Table carries 123.5 KB eager.
   through the truncation tooltip, 4.6 KB gzip each, on pages whose text never
   truncates. Button, IconButton, Link, and Table reach it the same way
   through Text.
-- INV1 gap: the `Tooltip`, `HoverCard`, `Popover`, `DropdownMenu`, and
-  `ContextMenu` imports load their layer statically. `useTooltip`,
-  `useHoverCard`, `usePopover`, and `ContextMenu` import the layer hook from
-  `Layer/useLayer`, and `DropdownMenu` reaches it through `usePopover`. These
-  five are not in INV9's entry list, so the check does not hold them; it
-  holds only the listed entries.
-- INV1 gap: Button's and IconButton's imports reach the tooltip hook and the
-  layer runtime, 15.5 KB gzip, with or without a `tooltip` prop. Through
-  Button, Link, or their own code, 32 of Core's 95 component imports that are
-  not surfaces carry 17–24 KB of tooltip code, and 52 carry at least 1 KB.
-- INV1 gap: Link's import reaches the Tooltip component and the layer
-  runtime, 17.6 KB gzip, with or without a `tooltip` prop.
+- INV1 gap: the `HoverCard`, `Popover`, `DropdownMenu`, and `ContextMenu`
+  imports load their layer statically. `useHoverCard`, `usePopover`, and
+  `ContextMenu` import the layer hook from `Layer/useLayer`, and
+  `DropdownMenu` reaches it through `usePopover`. These four are not in
+  INV9's entry list, so the check does not hold them; it holds only the
+  listed entries.
+- INV2 gap: HoverCard still loads with the page. Deferring it needs the
+  loaded card to adopt a node rendered before the load, a layer-runtime
+  render change: its trigger names the card through `aria-controls`,
+  `aria-haspopup` and `aria-expanded`, which its own record gives its closed
+  state, so the reference cannot wait for the card as a tooltip's
+  description does (`component:Tooltip` FR2).
 - INV1 gap: Table's import reaches the cell context menu, 78.2 KB gzip, for
   cells with no actions, while `component:TableCell` PR1 loads a menu only
   when actions are given.
 - INV7 gap: Table's import reaches the window controller and the shared
   windowing module, 3.0 KB gzip, for a Table that never windows.
-- INV3 gap: no record says how a tooltip's description reaches assistive
-  technology before its surface loads, for the triggers whose tooltip is
-  their description.
 - INV6 gap: a menu holding an essential action has no path to that action
   when its module fails to load (`architecture:interaction-modality` INV7).
 - INV9 gap: the check does not measure INV7's wiring allowance. An entry's
@@ -248,6 +245,9 @@ Review against this record when a change:
 - `packages/core/src/utils/moduleLoader.ts` — the shared module loader.
 - `packages/core/src/Text/TruncationTooltip.tsx` — the truncation tooltip's
   intent tracking and load.
+- `packages/core/src/Tooltip/useTooltip.tsx` — the tooltip's trigger
+  contract (refs, description, open requests) and its after-paint load;
+  `packages/core/src/Tooltip/tooltipSurface.tsx` is the surface it loads.
 - `packages/core/src/Tooltip/`, `packages/core/src/HoverCard/`,
   `packages/core/src/Popover/`, `packages/core/src/DropdownMenu/`,
   `packages/core/src/ContextMenu/` — surfaces and their triggers.
