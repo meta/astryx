@@ -52,7 +52,9 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     expect(plain).not.toContain("Plug'n'Play");
     // Every kind of entry the folder holds is named, the docs not-found
     // hint's name summaries (kept-tree.mjs) included.
-    expect(plain).toContain("the docs not-found hint's name summaries");
+    expect(plain).toContain(
+      "the lookup commands' not-found hint's name summaries",
+    );
     // The bound on the folder, and on jiti's folder beside it.
     expect(plain).toContain('at most 64 MB');
     expect(plain).toContain(path.join(tmp, 'astryx', 'jiti'));

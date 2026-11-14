@@ -11,7 +11,7 @@
  *
  * @input  made-up names, a project whose integration contributes made-up
  *   components and a template, and Core's own files
- * @output assertions on entryCommand, the cheap name checks, and the docs()
+ * @output assertions on the docs hint, the cheap name checks, and the docs()
  *   not-found error
  * @position api/docs/ beside the docs dispatcher tests
  */
@@ -20,7 +20,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import {docs} from './docs.mjs';
-import {entryCommand} from './_adapter.mjs';
+import {otherCommand} from '../../foundation/suggest/other-command.mjs';
 import {
   discoverComponentNamesWhere,
   discoverComponents,
@@ -49,7 +49,14 @@ const NAMES = {
   templates: ['glimmer-panel', 'wobble'],
 };
 
-describe('entryCommand', () => {
+/**
+ * The hint the docs lookup gets for a typed name.
+ * @param {string} typed
+ * @param {import('../../foundation/suggest/other-command.mjs').LookupNames} names
+ */
+const entryCommand = (typed, names) => otherCommand(typed, names, 'docs');
+
+describe('the docs hint', () => {
   it('names the command for an exact name in any case, with or without spaces and hyphens', () => {
     for (const typed of [
       'ZorbletCard',

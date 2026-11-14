@@ -144,6 +144,70 @@ export function discoverBuiltinTopics() {
 }
 
 /**
+ * The name of the root namespace a docs tree file declares, read from its
+ * text without loading it, or null: a namespace doc without `placement`.
+ *
+ * @param {string} text the file's text
+ * @returns {string | null}
+ */
+export function rootNamespaceName(text) {
+  if (!/["']?type["']?\s*:\s*["']namespace["']/u.test(text)) return null;
+  if (/["']?placement["']?\s*:/u.test(text)) return null;
+  return /["']?name["']?\s*:\s*["']([\w-]+)["']/u.exec(text)?.[1] ?? null;
+}
+
+/**
+ * The names `keep` accepts among those `astryx docs <name>` reads from the
+ * CLI's own docs: each flat topic, and each root namespace of its docs tree.
+ * A topic's name comes from its file name, and a tree file is named after its
+ * doc, so only the tree files whose names `keep` accepts are read.
+ *
+ * @param {(name: string) => boolean} keep
+ * @returns {string[]}
+ */
+export function builtinDocNamesWhere(keep) {
+  const names = Object.keys(discoverBuiltinTopics()).filter(keep);
+  const tree = path.join(BUILTIN_DOCS_DIR, 'tree');
+  if (!fs.existsSync(tree)) return names;
+  for (const file of listDir(tree)) {
+    const stem = /^([\w-]+)\.doc\.mjs$/u.exec(file)?.[1];
+    if (!stem || !keep(stem)) continue;
+    const name = rootNamespaceName(
+      fs.readFileSync(path.join(tree, file), 'utf8'),
+    );
+    if (name && keep(name)) names.push(name);
+  }
+  return names;
+}
+
+/**
+ * The names `keep` accepts among the topics and root namespaces these
+ * integration docs declare: each doc without `placement`, by the name its
+ * text gives. A doc that does not load or parse names nothing.
+ *
+ * @param {string[]} files integration doc files
+ * @param {(name: string) => boolean} keep
+ * @returns {Promise<string[]>}
+ */
+export async function integrationDocNamesWhere(files, keep) {
+  /** @type {string[]} */
+  const names = [];
+  for (const file of files) {
+    let doc;
+    try {
+      doc = /** @type {any} */ (
+        parseReadableDoc(await loadTopicModule(file), path.basename(file))
+      );
+    } catch {
+      continue;
+    }
+    if (doc?.placement != null || typeof doc?.name !== 'string') continue;
+    if (keep(doc.name)) names.push(doc.name);
+  }
+  return names;
+}
+
+/**
  * The CLI's own guide files: every flat topic and every doc in its docs tree,
  * without the dense, translated, and draft variants.
  *

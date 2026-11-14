@@ -1,18 +1,21 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Whether a component or hook can carry a name, read without loading
- * any doc: from Core's file and folder names, and from integrations' doc file
- * names and the words in those docs' text. Each is a summary kept between
- * runs while those folders and docs are unchanged (../fs/kept-tree.mjs).
+ * @file Whether a component, hook or integration docs topic can carry a
+ * name, read without loading any doc: from Core's file and folder names, and
+ * from integrations' doc file names and the words in those docs' text. The
+ * Core and components-folder summaries are kept between runs while those
+ * folders and docs are unchanged (../fs/kept-tree.mjs); a docs folder is read
+ * from the disk.
  *
- * @input  Core's folder or integrations' components folders, and a name
- *   folded as a reader may type it ({@link foldEntryName})
- * @output false only when discovery lists no component or hook there whose
- *   folded name is that name; for Core, the top folders that can hold one
- * @position foundation/discovery: lets the docs not-found error skip
- *   component and hook discovery for a name no Core file or folder name, and
- *   no integration doc's file name or text, carries
+ * @input  Core's folder, or integrations' components or docs folders, and a
+ *   name folded as a reader may type it ({@link foldEntryName})
+ * @output false only when discovery lists no component, hook or docs topic
+ *   there whose folded name is that name; for Core, the top folders that can
+ *   hold one
+ * @position foundation/discovery: lets the lookup commands' not-found hint
+ *   (../suggest/other-command.mjs) skip discovery for a name no Core file or
+ *   folder name, and no integration doc's file name or text, carries
  */
 
 import * as fs from 'node:fs';
@@ -261,4 +264,38 @@ function docsSpell(componentsDir, wanted) {
       return true;
     }
   });
+}
+
+/**
+ * The docs under an integration's docs folder that can name a topic or
+ * namespace that folds to `wanted`: those whose text spells the name as one
+ * word, in any case and with or without spaces and hyphens between its
+ * letters. Docs discovery takes each name from the doc's text, so no other
+ * doc there names it.
+ * @param {string | undefined} docsDir
+ * @param {string} wanted a folded name
+ * @returns {string[]} the docs' paths
+ */
+export function integrationDocsSpelling(docsDir, wanted) {
+  /** @type {string[]} */
+  const files = [];
+  if (!docsDir || wanted === '') return files;
+  const letters = [...wanted].map(c =>
+    c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+  );
+  const token = new RegExp(
+    `(?<![\\w$-])${letters.join('[\\s-]*')}(?![\\w$-])`,
+    'i',
+  );
+  walkUntil(docsDir, (name, dir, isDir) => {
+    if (isDir || !INTEGRATION_DOC_RE.test(name)) return false;
+    const file = path.join(dir, name);
+    try {
+      if (token.test(fs.readFileSync(file, 'utf8'))) files.push(file);
+    } catch {
+      // A doc that cannot be read names nothing.
+    }
+    return false;
+  });
+  return files;
 }

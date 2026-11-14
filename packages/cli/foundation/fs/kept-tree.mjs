@@ -11,7 +11,7 @@
  *   has the stamp it was stored with, else a new one, which is stored. The
  *   kept gathers' store holds it (gather-cache.mjs persistedSummary), under
  *   that store's rules.
- * @position Used by the docs not-found hint (foundation/discovery) to check
+ * @position Used by the lookup commands' not-found hint (foundation/discovery) to check
  *   one name against Core's sources, the CLI's blocks and each integration's
  *   folders without listing every folder on each run.
  */

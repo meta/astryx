@@ -59,6 +59,10 @@ import {
   linkComponentDoc,
   loadDocsCatalog,
 } from '../docs/_adapter.mjs';
+import {
+  findOtherCommand,
+  withOtherCommand,
+} from '../../foundation/suggest/other-command.mjs';
 
 /** How far below the first suggestion's score a later one may be. */
 const NEAR_FIRST = 10;
@@ -896,6 +900,46 @@ export async function withExampleBlockPointer(error, dirName, {coreDir, cwd}) {
     return new AstryxError(
       `${error.message}. It is an example block: astryx template ${block.dirName} prints its source${listing}.`,
       error.suggestions,
+      ERROR_CODES.ERR_UNKNOWN_COMPONENT,
+    );
+  } catch {
+    return error;
+  }
+}
+
+/**
+ * When `error` is the unknown-component error for a name that is exactly a
+ * hook, template or docs topic, returns the same error with the command that
+ * reads that entry as its first suggestion, in the last suggestion's place
+ * (foundation/suggest/other-command.mjs). Returns `error` unchanged
+ * otherwise, and when the check fails.
+ * @param {unknown} error
+ * @param {string} dirName
+ * @param {{coreDir: string, cwd: string, loadedIntegrations: import('../../foundation/integrations/integrations.mjs').LoadedIntegration[]}} context
+ * @returns {Promise<unknown>}
+ */
+export async function withOtherCommandHint(
+  error,
+  dirName,
+  {coreDir, cwd, loadedIntegrations},
+) {
+  if (
+    !(error instanceof AstryxError) ||
+    error.code !== ERROR_CODES.ERR_UNKNOWN_COMPONENT
+  ) {
+    return error;
+  }
+  try {
+    const hint = await findOtherCommand(dirName, {
+      from: 'component',
+      cwd,
+      coreDir,
+      integrations: loadedIntegrations,
+    });
+    if (!hint) return error;
+    return new AstryxError(
+      error.message,
+      withOtherCommand(error.suggestions, hint),
       ERROR_CODES.ERR_UNKNOWN_COMPONENT,
     );
   } catch {

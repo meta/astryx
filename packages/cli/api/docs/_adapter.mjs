@@ -68,26 +68,18 @@ import {
 import {CLI_PROVIDER_ID} from '../../foundation/identity/providers.mjs';
 import {
   CORE_PACKAGE,
-  discoverComponentNamesWhere,
-  discoverIntegrationComponents,
   discoverOwnedComponents,
   discoverValidIntegrationComponents,
 } from '../../foundation/discovery/component-discovery.mjs';
 import {loadComponentDoc} from '../../foundation/discovery/component-loader.mjs';
 import {
-  coreFilesNaming,
-  foldEntryName,
-  integrationsFilesNaming,
-} from '../../foundation/discovery/entry-name-files.mjs';
-import {getAllHookNames} from '../../foundation/discovery/hook-discovery.mjs';
-import {
-  coreTemplateIds,
   discoverCoreTemplates,
   discoverIntegrationTemplatesForOne,
-  integrationsMayReplaceTemplate,
-  listTemplates,
-  templateFilesNaming,
 } from '../../foundation/discovery/template-adapter.mjs';
+import {
+  findOtherCommand,
+  withOtherCommand,
+} from '../../foundation/suggest/other-command.mjs';
 import {findCoreDir} from '../../foundation/fs/paths.mjs';
 import {reusedWhileUnchanged} from '../../foundation/fs/read-record.mjs';
 import {AstryxError} from '../error.mjs';
@@ -2032,15 +2024,23 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
       ERROR_CODES.ERR_UNKNOWN_TOPIC,
     );
   }
-  const elsewhere =
-    suggestions.length > 0 ? await entryElsewhere(topic, catalog, cwd) : null;
+  // A project that does not load gives no hint.
+  const project =
+    suggestions.length > 0 ? await catalogProject(catalog, cwd) : undefined;
+  const elsewhere = project
+    ? await findOtherCommand(topic, {
+        from: 'docs',
+        cwd,
+        coreDir: project.coreDir(),
+        integrations: project.loadedIntegrations,
+      })
+    : null;
   if (elsewhere) {
     const sharesAWord =
       !everyDoc ||
       suggestions.some(entry => carriesTypedWord(String(topic), entry.name));
-    suggestions = sharesAWord
-      ? [elsewhere, ...suggestions.slice(0, -1)]
-      : [elsewhere];
+    suggestions =
+      withOtherCommand(suggestions, elsewhere, {alone: !sharesAWord}) ?? [];
   }
   return new AstryxError(
     `Unknown topic "${String(topic)}"${notLoaded(catalog)}`,
@@ -2050,174 +2050,20 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
 }
 
 /**
- * The command that reads the component, hook or template a docs argument
- * names, or null. Only an exact name counts, in any case and with or without
- * spaces and hyphens; a hook also answers to its name without `use`. A
- * component wins over a hook, and a hook over a template. A route never names
- * one of them.
- * @param {string} topic
- * @param {{components?: string[], hooks?: string[], templates?: string[]}} names
- * @returns {{name: string, reason: string} | null}
- */
-export function entryCommand(
-  topic,
-  {components = [], hooks = [], templates = []},
-) {
-  if (topic.includes('/')) return null;
-  const wanted = foldEntryName(topic);
-  if (wanted === '') return null;
-  const component = components.find(name => foldEntryName(name) === wanted);
-  if (component) {
-    return {
-      name: `astryx component ${component}`,
-      reason: 'a component, not a docs topic',
-    };
-  }
-  const hook = hooks.find(name => {
-    const folded = foldEntryName(name);
-    return folded === wanted || folded === `use${wanted}`;
-  });
-  if (hook) {
-    return {name: `astryx hook ${hook}`, reason: 'a hook, not a docs topic'};
-  }
-  const template = templates.find(name => foldEntryName(name) === wanted);
-  if (template) {
-    return {
-      name: `astryx template ${template}`,
-      reason: 'a template, not a docs topic',
-    };
-  }
-  return null;
-}
-
-/**
- * {@link entryCommand} over the names the project's catalogs hold. File names
- * and doc text say first which catalogs can hold the argument; a catalog is
- * asked only then, only for the names that fold to the argument, and only
- * when the one before it has no match. So a name no file carries reads no doc.
- * A check that fails gives no hint.
- * @param {unknown} topic
- * @param {DocsCatalog} catalog the catalog the read used; its project is
- *   reused
+ * The project a catalog came from, loaded again when the catalog is not one
+ * {@link loadDocsCatalog} made. Undefined when the project does not load.
+ * @param {DocsCatalog} catalog
  * @param {string} [cwd]
- * @returns {Promise<{name: string, reason: string} | null>}
+ * @returns {Promise<Project | undefined>}
  */
-async function entryElsewhere(topic, catalog, cwd = process.cwd()) {
-  if (typeof topic !== 'string' || topic.includes('/')) return null;
-  const wanted = foldEntryName(topic);
-  if (wanted === '') return null;
-  let project = projectOfCatalog.get(catalog);
+async function catalogProject(catalog, cwd = process.cwd()) {
+  const known = projectOfCatalog.get(catalog);
+  if (known) return known;
   try {
-    project ??= await Project.load(cwd);
+    return await Project.load(cwd);
   } catch {
-    return null;
+    return undefined;
   }
-  const coreDir = project.coreDir();
-  const integrations = project.loadedIntegrations;
-  /** @param {string} name */
-  const isWanted = name => foldEntryName(name) === wanted;
-  /** @param {string} name */
-  const isWantedHook = name =>
-    isWanted(name) || foldEntryName(name) === `use${wanted}`;
-  /** @type {{component: boolean, hook: boolean, componentTops?: Set<string>, hookTops?: Set<string>}} */
-  let inCore = {component: false, hook: false};
-  try {
-    if (coreDir) inCore = coreFilesNaming(coreDir, wanted);
-  } catch {
-    inCore = {component: true, hook: true};
-  }
-  /** @type {Array<() => Promise<{components?: string[], hooks?: string[], templates?: string[]}>>} */
-  const catalogs = [
-    async () => ({
-      components:
-        coreDir && inCore.component
-          ? discoverComponentNamesWhere(coreDir, isWanted, inCore.componentTops)
-          : [],
-    }),
-    async () => ({
-      components: await integrationComponentNames(
-        integrations,
-        wanted,
-        isWanted,
-      ),
-    }),
-    async () => ({
-      hooks:
-        coreDir && inCore.hook
-          ? getAllHookNames(coreDir, isWantedHook, inCore.hookTops)
-          : [],
-    }),
-    async () => ({
-      templates: await templateNames(project, integrations, wanted),
-    }),
-  ];
-  for (const load of catalogs) {
-    let names;
-    try {
-      names = await load();
-    } catch {
-      continue;
-    }
-    const found = entryCommand(topic, names);
-    if (found) return found;
-  }
-  return null;
-}
-
-/**
- * The names `isWanted` accepts among the valid components of the loaded
- * integrations, in project order. Only an integration whose files can carry
- * the name is read, and it loads its docs only when it lists such a name.
- * @param {import('../../foundation/integrations/integrations.mjs').LoadedIntegration[]} integrations
- * @param {string} wanted the folded name
- * @param {(name: string) => boolean} isWanted
- * @returns {Promise<string[]>}
- */
-async function integrationComponentNames(integrations, wanted, isWanted) {
-  const naming = integrationsFilesNaming(
-    integrations.map(integration => integration.components),
-    wanted,
-  );
-  for (const [at, integration] of integrations.entries()) {
-    if (!naming[at]) continue;
-    if (!discoverIntegrationComponents(integration).some(r => isWanted(r.name)))
-      continue;
-    const {components} = await discoverValidIntegrationComponents(integration);
-    const names = components.map(r => r.name).filter(isWanted);
-    if (names.length > 0) return names;
-  }
-  return [];
-}
-
-/**
- * The template ids that fold to `wanted`, as the project's template list
- * holds them. Core's ids come from file names. The whole list loads only when
- * an integration ships a template doc with such an id, when more than one
- * Core id folds to it (the list decides their order), or when one does and
- * an integration template may replace it.
- * @param {Project} project
- * @param {import('../../foundation/integrations/integrations.mjs').LoadedIntegration[]} integrations
- * @param {string} wanted the folded name
- * @returns {Promise<string[]>}
- */
-async function templateNames(project, integrations, wanted) {
-  /** @param {string} name */
-  const isWanted = name => foldEntryName(name) === wanted;
-  const {blocks, listed} = templateFilesNaming(integrations, wanted);
-  const core = blocks
-    ? coreTemplateIds(isWanted)
-    : listTemplates().filter(isWanted);
-  if (
-    !listed &&
-    core.length < 2 &&
-    (core.length === 0 || !integrationsMayReplaceTemplate(integrations))
-  ) {
-    return core;
-  }
-  return /** @type {Array<{dirName?: unknown}>} */ (await project.templates())
-    .map(record => record.dirName)
-    .filter(name => typeof name === 'string')
-    .filter(isWanted);
 }
 
 /**

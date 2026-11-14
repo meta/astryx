@@ -19,8 +19,11 @@ import {CORE_PACKAGE, resolveCoreDir, resolveHookDoc} from '../_adapter.mjs';
  * @param {{cwd?: string, zh?: boolean, lang?: string|null}} [options]
  * @returns {Promise<import('../hook.type.mjs').HookDetailResponse>}
  */
-export async function detail(name, {cwd = process.cwd(), zh = false, lang = null} = {}) {
+export async function detail(
+  name,
+  {cwd = process.cwd(), zh = false, lang = null} = {},
+) {
   const coreDir = resolveCoreDir(cwd);
-  const docs = await resolveHookDoc(coreDir, name, {zh, lang});
+  const docs = await resolveHookDoc(coreDir, name, {zh, lang, cwd});
   return {type: 'hook.detail', package: CORE_PACKAGE, data: docs};
 }

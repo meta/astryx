@@ -24,6 +24,7 @@ import {listDir} from '../fs/listing-cache.mjs';
 import {loadCliSelfDocs} from '../discovery/cli-self-docs.mjs';
 import {astryxIconDefinitions} from '../discovery/icon-definition-discovery.mjs';
 import {routeSegment} from '../discovery/docs-section-key.mjs';
+import {rootNamespaceName} from '../discovery/docs-discovery.mjs';
 import {diagnostic, sortDiagnostics} from './diagnostics.mjs';
 import {readDocView} from './read.mjs';
 import {packageSource} from './source.mjs';
@@ -832,10 +833,7 @@ export function cliRootNamespaceNames(dir = TREE_DOCS_DIR) {
   /** @type {string[]} */
   const names = [];
   for (const file of treeDocFiles(dir)) {
-    const text = fs.readFileSync(file, 'utf8');
-    if (!/["']?type["']?\s*:\s*["']namespace["']/u.test(text)) continue;
-    if (/["']?placement["']?\s*:/u.test(text)) continue;
-    const name = /["']?name["']?\s*:\s*["']([\w-]+)["']/u.exec(text)?.[1];
+    const name = rootNamespaceName(fs.readFileSync(file, 'utf8'));
     if (name) names.push(name);
   }
   return names.sort(byText);

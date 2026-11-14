@@ -25,7 +25,7 @@
  *   by `doctor` (api/doctor/_adapter.mjs) for its file-only docs checks and
  *   its theme-wiring scan,
  *   in a run that records modules and variables to its end, and, through
- *   `persistedSummary`, by kept-tree.mjs for the docs not-found hint's
+ *   `persistedSummary`, by kept-tree.mjs for the lookup commands' not-found hint's
  *   summaries of folder trees, each kept while every path it stamped is
  *   unchanged, in any command. The commands whose runs keep the other
  *   entries are `search`, `build`, `component`, `template`, `theme`,
