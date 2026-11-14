@@ -220,13 +220,13 @@ Platform-specific details stay inside that compiler.
     4.5:1 on the theme's pale status fill over the default surface.
   - `--color-on-accent`, when the theme sets `--color-accent` but not
     `--color-on-accent`, is chosen the same way as `--color-on-<status>`
-    (`architecture:theme-tokens` DEC-3).
+    (`architecture:theme-tokens` DEC-5).
   - On an `onDark` or `onLight` media surface, `--color-text-accent` and
     `--color-icon-accent`, when the theme sets no value for them on that
     surface, follow the surface's `--color-accent`, which collapses to the
     surface's content colour (`--color-on-dark` or `--color-on-light`), so
     accent text on a media band reads as that content colour
-    (`architecture:theme-tokens` DEC-3).
+    (`architecture:theme-tokens` DEC-5).
 
   Fills are never derived: a `--color-<status>` or `--color-<status>-muted` the
   theme does not set is Core's. A role is derived again when the theme sets a
@@ -246,7 +246,7 @@ Platform-specific details stay inside that compiler.
 
 - **INV18 — A pair below its floor is reported.** When a theme sets one or
   both colours of a pair whose floor `architecture:theme-tokens` INV11, INV12,
-  or INV13 names, and the pair measures below that floor in a colour mode, the
+  or INV15 names, and the pair measures below that floor in a colour mode, the
   compiler appends one warning that names the pair, the mode, and the measured
   ratio, through INV14's channel. The theme's value still wins and the
   generated CSS does not change. On a media surface, whose own background
