@@ -169,8 +169,16 @@ const CASES =
     ['fill', 'red', {}, [/ how fill$/], /--on card/],
     // A bare fraction on a radius token gets no unit guessed.
     ['--radius-element', '0.5', {}, [/ how --radius-element$/], /0\.5px/],
-    // A long input is near nothing.
+    // A long input is near nothing, even when it holds a setting's word
+    // (a pasted blob that names square somewhere is no typo of it).
     ['corners', 'x'.repeat(3100), {}, [/ how corners$/], / corners square$/],
+    [
+      'corners',
+      `square ${'x'.repeat(70)}`,
+      {},
+      [/ how corners$/],
+      / corners square$/,
+    ],
     // A CSS-wide keyword on a token the theme does not set: how, no undo.
     [
       '--color-accent',
