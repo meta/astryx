@@ -200,15 +200,15 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Design relationships
 
-| Anatomy or state     | Design requirement                                      | Representation authority         | Hierarchy role    | Component contract |
-| -------------------- | ------------------------------------------------------- | -------------------------------- | ----------------- | ------------------ |
-| Input                | caller-owned visible chrome and focus treatment         | Caller; OQ3                      | prominent         | AR2                |
-| Loading status       | shared Spinner                                          | `component:Spinner`              | supporting        | FR6                |
-| Dropdown             | Popover surface with bounded listbox                    | current source and layer runtime | prominent         | FR4, FR8           |
-| Highlighted result   | overlay plus forced-color outline                       | Current source                   | prominent         | FR5                |
-| Empty state          | empty-search message; today a disabled option (FR4 gap) | Current source                   | supporting        | FR4                |
-| Default item content | TypeaheadItem                                           | `component:Typeahead`            | prominent         | ORD1               |
-| Caller item content  | caller-owned                                            | caller                           | context-dependent | ORD1               |
+| Anatomy or state     | Design requirement                              | Representation authority         | Hierarchy role    | Component contract |
+| -------------------- | ----------------------------------------------- | -------------------------------- | ----------------- | ------------------ |
+| Input                | caller-owned visible chrome and focus treatment | Caller; OQ3                      | prominent         | AR2                |
+| Loading status       | shared Spinner                                  | `component:Spinner`              | supporting        | FR6                |
+| Dropdown             | Popover surface with bounded listbox            | current source and layer runtime | prominent         | FR4, FR8           |
+| Highlighted result   | overlay plus forced-color outline               | Current source                   | prominent         | FR5                |
+| Empty state          | presentational empty-search message             | Current source                   | supporting        | FR4                |
+| Default item content | TypeaheadItem                                   | `component:Typeahead`            | prominent         | ORD1               |
+| Caller item content  | caller-owned                                    | caller                           | context-dependent | ORD1               |
 
 ### Theming anatomy
 

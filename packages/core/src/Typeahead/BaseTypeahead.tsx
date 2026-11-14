@@ -475,16 +475,13 @@ const styles = stylex.create({
   // into the option's press target and the action's slot. The action cell is
   // a real cell for the active-descendant ring, drawn with the focus tokens
   // because no element in the popup has DOM focus.
+  // With `itemContent`, which already sizes it.
   optionCell: {
-    display: 'flex',
     alignItems: 'center',
-    flex: 1,
-    minWidth: 0,
     alignSelf: 'stretch',
   },
   actionCell: {
     display: 'flex',
-    alignItems: 'center',
     marginInlineStart: spacingVars['--spacing-2'],
     borderRadius: radiusVars['--radius-element'],
   },
@@ -608,7 +605,7 @@ const checkActionName =
   process.env.NODE_ENV === 'production'
     ? undefined
     : (cell: HTMLElement | null) => {
-        const control = cell?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
+        const control = cell?.querySelector<HTMLElement>(ACTION_CONTROL);
         if (
           control != null &&
           (control.getAttribute('aria-label') ?? '').trim() === '' &&
@@ -625,6 +622,10 @@ const checkActionName =
           );
         }
       };
+
+// The controls a result's action cell fires and checks for a name: the same
+// set MultiSelector's option actions use.
+const ACTION_CONTROL = 'button,a,input,[role=button],[tabindex]';
 
 function preventOptionFocus(event: React.MouseEvent) {
   event.preventDefault();
@@ -2123,11 +2124,10 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         isGridRowReached &&
         (e.key === 'ArrowLeft' || e.key === 'ArrowRight')
       ) {
+        // The arrow toward the row's inline end, mirrored in right-to-left.
         const toAction =
-          e.key ===
-            (getComputedStyle(e.currentTarget).direction === 'rtl'
-              ? 'ArrowLeft'
-              : 'ArrowRight') &&
+          (e.key === 'ArrowRight') !==
+            (getComputedStyle(e.currentTarget).direction === 'rtl') &&
           displayedResults[highlightedIndex]?.action != null;
         if (toAction !== isActionCellActive) {
           e.preventDefault();
@@ -2160,7 +2160,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
             // The input's root node finds the cell in a shadow root too.
             (e.currentTarget.getRootNode() as Document | ShadowRoot)
               .getElementById(`${getItemId(highlightedIndex)}-action`)
-              ?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)
+              ?.querySelector<HTMLElement>(ACTION_CONTROL)
               ?.click();
           } else if (
             highlightedIndex >= 0 &&
@@ -2451,7 +2451,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
                       role="gridcell"
                       id={`${itemId}-option`}
                       onClick={() => handleSelect(item)}
-                      {...stylex.props(styles.optionCell)}>
+                      {...stylex.props(styles.itemContent, styles.optionCell)}>
                       {optionContent}
                     </div>
                     <div

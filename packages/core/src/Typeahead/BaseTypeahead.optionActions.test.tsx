@@ -320,6 +320,39 @@ describe('BaseTypeahead option actions', () => {
       }
     });
 
+    it.each([
+      ['a role="button" element', 'role'],
+      ['a link with no href', 'link'],
+    ])('fires %s in the action cell with Enter', async (_, kind) => {
+      const onAct = vi.fn();
+      const source: SearchSource<SearchableItem> = {
+        search: () => [
+          {
+            id: 'boston',
+            label: 'Boston',
+            action:
+              kind === 'role' ? (
+                <span role="button" aria-label="Pin Boston" onClick={onAct}>
+                  Pin
+                </span>
+              ) : (
+                <a aria-label="Pin Boston" onClick={onAct}>
+                  Pin
+                </a>
+              ),
+          },
+        ],
+        bootstrap: () => [],
+      };
+      const onChange = vi.fn();
+      render(<Field source={source} onChange={onChange} />);
+      const {user} = await openFor('b');
+      await screen.findByRole('grid', {hidden: true});
+      await user.keyboard('{Home}{ArrowRight}{Enter}');
+      expect(onAct).toHaveBeenCalledTimes(1);
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
     it('follows visual direction in right-to-left', async () => {
       render(<Field source={officeSource(() => {})} dir="rtl" />);
       const {user, input} = await openFor('o');
