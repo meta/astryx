@@ -122,13 +122,17 @@ function addsToPage(text, familyWords, pages, components) {
   const piece = text.slice(0, place.index).split(HEAD_END)[0] ?? '';
   const target =
     text.slice(place.index + place[0].length).split(HEAD_END)[0] ?? '';
+  const named = new Set(terms(target));
   const known = new Set([
     ...familyWords.keys(),
-    ...pages.flatMap(templateTerms),
     ...components.flatMap(componentTerms),
   ]);
+  const namesTemplate = pages.some(page => {
+    const name = templateTerms(page);
+    return name.length > 0 && name.every(t => named.has(t));
+  });
   return (
-    terms(target).some(t => known.has(t)) &&
+    ([...named].some(t => known.has(t)) || namesTemplate) &&
     !namesPage(piece, familyWords, pages) &&
     !asksNewPage(text.toLowerCase().split(PHRASE_END), familyWords)
   );

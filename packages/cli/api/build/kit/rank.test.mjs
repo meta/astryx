@@ -376,6 +376,15 @@ describe('ideaKind: a part of a page, told by the components the system ships', 
     expect(kind('add a tooltip')).toBe('part');
   });
 
+  it('names a template in an "add" place only by its whole name', () => {
+    const own = [page('product-detail', 'Content - Detail', 'One product.')];
+    const parts = [component('Banner')];
+    expect(ideaKind('add a task board to my product', own, parts)).toBe('page');
+    expect(
+      ideaKind('add a banner to the product detail page', own, parts),
+    ).toBe('edit');
+  });
+
   it('does not take "existing" that names no page or part as an edit', () => {
     expect(kind('a new settings page inspired by the existing one')).toBe(
       'page',
