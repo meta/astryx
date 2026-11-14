@@ -60,8 +60,7 @@ import {
 const HOVER_BRIDGE_DELAY = 100;
 
 const styles = stylex.create({
-  // Base container styles: the theme's inverted surface (as Toast's), with
-  // the page surface's color as its text
+  // The same inverted surface Toast paints, so the two match in every theme.
   container: {
     backgroundColor: colorVars['--color-background-inverted'],
     color: colorVars['--color-background-surface'],
