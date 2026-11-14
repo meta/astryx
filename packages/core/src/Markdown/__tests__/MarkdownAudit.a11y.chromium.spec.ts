@@ -194,13 +194,16 @@ async function tableBlock(page: Page) {
   );
 }
 
-/** Direction of each prose block, and where its text starts inside the document. */
+/**
+ * Direction of each prose block, and where its text starts inside that block.
+ * A block can be narrower than the document and sit at its inline start, so
+ * the edge is read from the block's own box.
+ */
 async function blockDirections(page: Page) {
   return page.evaluate(() => {
     const root = document.querySelector(
       '#storybook-root .astryx-markdown',
     ) as HTMLElement;
-    const rootRect = root.getBoundingClientRect();
     const textEdge = (el: Element) => {
       const range = document.createRange();
       range.selectNodeContents(el);
@@ -208,9 +211,10 @@ async function blockDirections(page: Page) {
       if (rects.length === 0) {
         return null;
       }
+      const box = el.getBoundingClientRect();
       return {
-        fromLeft: Math.round(rects[0].left - rootRect.left),
-        fromRight: Math.round(rootRect.right - rects[0].right),
+        fromLeft: Math.round(rects[0].left - box.left),
+        fromRight: Math.round(box.right - rects[0].right),
       };
     };
     return Array.from(
