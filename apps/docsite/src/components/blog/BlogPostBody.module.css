@@ -14,8 +14,12 @@
   margin-block-start: var(--spacing-6);
 }
 
-/* Keep a blank line between prose and an adjacent photograph in either order. */
-.body :global(.astryx-markdown-paragraph) + img,
-.body img + :global(.astryx-markdown-paragraph) {
+.body picture {
+  display: block;
+}
+
+/* Keep the same media/prose gap before and after themed images hydrate. */
+.body :global(.astryx-markdown-paragraph) + :is(img, picture),
+.body :is(img, picture) + :global(.astryx-markdown-paragraph) {
   margin-block-start: var(--spacing-8);
 }
