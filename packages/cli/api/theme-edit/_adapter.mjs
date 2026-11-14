@@ -32,7 +32,12 @@
  */
 
 import {writeThemeTemplate} from '../theme/template/template.mjs';
-import {buildSuggestion, realLocation} from '../theme/build/build.mjs';
+import {
+  buildInputProblem,
+  buildSuggestion,
+  realLocation,
+  refusedOutput,
+} from '../theme/build/build.mjs';
 import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import {createRequire} from 'node:module';
@@ -45,6 +50,10 @@ import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {findPackageRoot} from '../../foundation/fs/paths.mjs';
 import {context, coreApp} from './_context.mjs';
 import {APP_COPY_MARK} from './_marks.mjs';
+import {
+  fontKey,
+  importedFontFamilies,
+} from '../../foundation/fonts/font-stylesheet.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {withFolderLock} from '../../foundation/release/folder-lock.mjs';
 import {
@@ -56,7 +65,7 @@ import {LIKE, P} from './_tables.mjs';
 /** The preview command, as a person runs it. */
 const PREVIEW_WORDS = P.replace(/ editor$/, ' preview');
 import {setLine} from './_check.mjs';
-import {splitCommand} from './_vet.mjs';
+import {followLine, splitCommand} from './_vet.mjs';
 import {
   SHOWCASE_GROUPS,
   appCopyBehind,
@@ -75,6 +84,8 @@ import {
   setAfterBuild,
   editedThemes,
   themeFiles,
+  fontsourcePackageOf,
+  themeSourceRefusal,
   typedThemeName,
 } from './_settings.mjs';
 
@@ -390,7 +401,7 @@ function absolute(result, root, from) {
    * in-app preview's stale entries. Every project path in them (a theme
    * file, an in-app preview folder) is made absolute, one style per line.
    */
-  const PROSE = new Set(['see', 'pictureProblem', 'previewStale']);
+  const PROSE = new Set(['see', 'pictureProblem', 'previewStale', 'wiring']);
   /** A project-relative path that names a file or folder there. @param {string} p */
   const inRoot = p => {
     const bare = p.replace(/\/+$/, '');
@@ -882,6 +893,20 @@ export function editorThemeRefusal(err, cwd) {
 }
 
 /**
+ * The editor themes of the app the folder `cwd` is in, by name; none when
+ * the folder is in no app or its themes cannot be read.
+ * @param {string} cwd
+ * @returns {string[]}
+ */
+export function editorThemesAt(cwd) {
+  try {
+    return editedThemes(projectRoot(cwd));
+  } catch {
+    return [];
+  }
+}
+
+/**
  * A refused compile whose first suggestion is another compile: that compile
  * is run through compile's own checks before it is offered (in memory,
  * nothing built), and each repair a refusal of it offers is folded into the
@@ -901,6 +926,8 @@ export async function editorFollowCompile(err, cwd) {
     [' experimental theme compile ', ' theme build '].find(w =>
       line.includes(w),
     );
+  const isCompile = (/** @type {string} */ line) =>
+    /^cd /.test(line) || Boolean(wordsIn(line));
   if (!first || /^cd /.test(first.name) || !wordsIn(first.name)) return err;
   /** @param {string} line */
   const read = line => {
@@ -921,69 +948,49 @@ export async function editorFollowCompile(err, cwd) {
     return r.source ? r : null;
   };
   const COMPILE = {group: 'experimental theme', build: 'compile'};
-  const inside = (/** @type {string} */ p) => {
-    const rel = path.relative(
-      realLocation(path.resolve(cwd)),
-      realLocation(path.resolve(p)),
-    );
-    return !rel.startsWith('..') && !path.isAbsolute(rel);
-  };
-  let line = first.name;
-  let reason = first.reason;
-  for (let i = 0; i < 6; i += 1) {
-    const r = read(line);
-    if (!r || !r.source) break;
-    const source = r.source;
-    const abs = path.resolve(cwd, source);
-    if (r.out && !inside(path.resolve(cwd, r.out))) {
-      line = buildSuggestion(
-        source,
-        {check: r.check, iconsSpecifier: r.iconsSpecifier},
-        cwd,
-        COMPILE,
-      );
-      reason = `do this instead, without --out: ${r.out} is outside the working folder, where a build may not write, so the outputs go beside the source`;
-      continue;
-    }
-    /** @type {{message: string, next?: string} | null} */
-    let problem = null;
-    if (!fs.existsSync(abs)) problem = {message: `${source} is not there`};
-    else if (fs.statSync(abs).isDirectory()) {
-      const own = `${path.basename(abs)}.theme.ts`;
-      problem = {
-        message: `${source} is a folder`,
-        next: fs.existsSync(path.join(abs, own))
-          ? buildSuggestion(
-              path.posix.join(source.replace(/\/+$/, ''), own),
-              r,
+  /** @type {string | null} */
+  let outDropped = null;
+  const followed = await followLine(
+    first.name,
+    async line => {
+      // A line that runs elsewhere is not checked from here.
+      if (/^cd /.test(line)) return null;
+      const r = read(line);
+      if (!r?.source) return null;
+      const refused =
+        (await editorCompileProblem([r.source], {cwd, ...r})) ??
+        buildInputProblem(r.source, r, cwd);
+      if (refused) return refused;
+      // A build writes only inside the working folder: the same build
+      // without --out writes beside the source.
+      if (r.out && refusedOutput(path.resolve(cwd, r.out), cwd)) {
+        outDropped = r.out;
+        return new AstryxError(`--out ${r.out} is outside the working folder`, [
+          {
+            name: buildSuggestion(
+              r.source,
+              {check: r.check, iconsSpecifier: r.iconsSpecifier},
               cwd,
               COMPILE,
-            )
-          : undefined,
-      };
-    } else if (!r.out && !inside(path.dirname(abs)))
-      problem = {message: `${source} is outside the working folder`};
-    else {
-      const refused = await editorCompileProblem([source], {cwd, ...r});
-      if (refused)
-        problem = {
-          message: refused.message,
-          next: refused.suggestions?.[0]?.name,
-        };
-    }
-    if (!problem) break;
-    if (problem.next && problem.next !== line) {
-      line = problem.next;
-      if (/^cd /.test(line)) break;
-      continue;
-    }
-    reason = `${reason}; it is still refused: ${problem.message}`;
-    break;
-  }
-  if (line === first.name && reason === first.reason) return err;
+            ),
+            reason: 'do this instead',
+          },
+        ]);
+      }
+      return null;
+    },
+    isCompile,
+  );
+  if (followed.line === first.name) return err;
+  const reason = [
+    outDropped && !/ --out /.test(followed.line)
+      ? `do this instead, without --out: ${outDropped} is outside the working folder, where a build may not write, so the outputs go beside the source`
+      : first.reason,
+    ...(followed.why ? [`it is still refused: ${followed.why}`] : []),
+  ].join('; ');
   err.suggestions = [
-    {...first, name: line, reason},
-    ...list.slice(1).filter(x => x.name !== line),
+    {...first, name: followed.line, reason},
+    ...list.slice(1).filter(x => x.name !== followed.line),
   ];
   return err;
 }
@@ -1167,6 +1174,13 @@ export async function editorCompileProblem(
         ],
         ERROR_CODES.ERR_INVALID_ARGUMENT,
       );
+    // A source that no longer carries the settings (another theme's name,
+    // or no extends of them) is refused as set refuses it: a build would
+    // write another theme's files, or drop every setting.
+    {
+      const refusal = themeSourceRefusal(root, slug);
+      if (refusal) return refusal;
+    }
     if (family)
       return new AstryxError(
         `${slug} is a theme the editor made; --family builds package theme families, not editor themes. Compile it on its own.`,
@@ -1520,51 +1534,35 @@ export async function editorLoadedFonts(file, cwd) {
       ? editorThemeAt(root, abs)?.slug
       : null);
   if (!slug) return null;
-  /** @param {string} s */
-  const key = s =>
-    String(s)
-      .replace(/["']/g, '')
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, '');
-  /** @type {Set<string>} */
-  const loaded = new Set();
   // The stylesheets the copy's font file imports once this compile has
-  // written it: from the fonts the theme loads now (a package installed or
-  // removed since the last write), as the copy write computes them.
+  // written it: from the fonts the theme loads now, as the copy write
+  // computes them.
   /** @type {string[]} */
   let specs;
   try {
     specs = copyFontsCss(await context(root), slug, loadTheme(root, slug));
   } catch {
-    try {
-      specs = [
-        ...fs
-          .readFileSync(
-            path.join(root, 'src', 'themes', slug, `${slug}.fonts.css`),
-            'utf8',
-          )
-          .matchAll(/@import\s+"([^"]+)"/g),
-      ].map(m => m[1]);
-    } catch {
-      return null;
-    }
+    return null;
   }
+  const copyDir = path.join(root, 'src', 'themes', slug);
+  const from = fs.existsSync(copyDir) ? copyDir : root;
+  /** @type {Set<string>} */
+  const loaded = new Set();
+  for (const spec of specs)
+    for (const f of importedFontFamilies(spec, from)) loaded.add(f);
+  // A family the build names whose @fontsource package is installed: the
+  // copy written after this build imports that package (copyFontsCss).
   const req = createRequire(path.join(root, 'package.json'));
-  for (const spec of specs) {
-    const pkg = /^@fontsource(?:-variable)?\/([^/]+)/.exec(spec);
-    if (pkg) {
-      loaded.add(key(pkg[1]));
-      continue;
-    }
+  /** @param {string} family */
+  const installed = family => {
     try {
-      const css = fs.readFileSync(req.resolve(spec), 'utf8');
-      for (const f of css.matchAll(/family=([^:&'")]+)/g))
-        loaded.add(key(decodeURIComponent(f[1].replace(/\+/g, ' '))));
+      req.resolve(`${fontsourcePackageOf(family)}/package.json`);
+      return true;
     } catch {
-      // A stylesheet that cannot be read loads nothing known here.
+      return false;
     }
-  }
-  return family => loaded.has(key(family));
+  };
+  return family => loaded.has(fontKey(family)) || installed(family);
 }
 
 /**

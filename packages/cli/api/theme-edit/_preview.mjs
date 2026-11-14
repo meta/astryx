@@ -14,6 +14,8 @@
 
 import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
+import {declarationValues} from '../../foundation/fonts/font-stylesheet.mjs';
+import {loadableFontFamilies} from '../theme/build/font-warning.mjs';
 import * as path from 'node:path';
 import {spawn} from 'node:child_process';
 import * as os from 'node:os';
@@ -33,12 +35,13 @@ import {
 } from './_parts.mjs';
 import {OVERVIEW_SECTIONS} from './_overview.mjs';
 import {
-  folderIsEmpty,
   camel,
+  folderIsEmpty,
   fontPackages,
+  fontsourcePackageOf,
   modesOf,
-  themeFiles,
   shown,
+  themeFiles,
 } from './_settings.mjs';
 import {writeWhole} from './_palette.mjs';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
@@ -1409,6 +1412,14 @@ export function previewRouteSource({
 /** @param {string} slug */
 const camelName = camel;
 
+/** The script that takes one picture through the project's Playwright. */
+const PLAYWRIGHT_PICTURE = fileURLToPath(
+  new URL('./_playwright-picture.mjs', import.meta.url),
+);
+
+/** How long a browser may take for one picture before it is stopped. */
+const BROWSER_BOUND_MS = 60_000;
+
 /**
  * A PNG of an HTML file, with a Playwright the project has installed, else
  * a Chrome or Chromium found on the machine. Not ok with a reason when
@@ -1435,6 +1446,30 @@ export async function screenshot(project, html, png, mode) {
       .find(Boolean)
       ?.split(project.cwd)
       .join('.') ?? 'it stopped with no message';
+  /**
+   * Why a browser did not start: Playwright's first line names only the
+   * call ("browserType.launch: Target … closed"); the cause, such as a
+   * missing library, is in a later line, so that line comes too.
+   */
+  const causeOf = (/** @type {string} */ text) => {
+    const head = firstLine(text);
+    const rest = String(text ?? '')
+      .split('\n')
+      .slice(1)
+      .map(l => l.replace(/^[\s=<>-]+/, '').trim())
+      .filter(Boolean)
+      .find(l =>
+        /error|cannot|can't|missing|not found|while loading|no such|failed|denied/i.test(
+          l,
+        ),
+      );
+    return rest ? `${head} (${rest.split(project.cwd).join('.')})` : head;
+  };
+  // The project's Playwright, its own browser first and the system Chrome
+  // when that one is missing or does not start. Each run is a process of
+  // its own under the browser runner: one temp folder, one time bound and
+  // one stop for every browser the editor starts.
+  const sys = chromeBinary();
   for (const pkg of ['playwright', 'playwright-core']) {
     /** @type {string} */
     let entry;
@@ -1444,41 +1479,33 @@ export async function screenshot(project, html, png, mode) {
       continue;
     }
     pwFound = true;
-    try {
-      const pw = await import(pathToFileURL(entry).href);
-      const chromium = pw.chromium ?? pw.default?.chromium;
-      // Playwright's own browser first; the system Chrome when that one is
-      // not installed or does not start.
-      /** @type {any} */
-      let browser;
-      try {
-        browser = await chromium.launch({});
-      } catch (own) {
-        const sys = chromeBinary();
-        if (
-          /Executable doesn't exist|playwright install/i.test(
-            String(/** @type {any} */ (own)?.message),
-          )
-        )
-          pwMissing = true;
-        if (!sys) throw own;
-        failed.push(`${pkg} with its own browser: ${firstLine(own)}`);
-        browser = await chromium.launch({executablePath: sys});
-      }
-      try {
-        const page = await browser.newPage({
-          viewport: {width: 1280, height: 900},
-          colorScheme: mode,
-        });
-        await page.goto(pathToFileURL(html).href, {waitUntil: 'load'});
-        await page.screenshot({path: png, fullPage: true});
-      } finally {
-        await browser.close();
-      }
-      return {ok: true, file: shown(project.cwd, png)};
-    } catch (e) {
-      // This Playwright could not launch its browser: try Chrome directly.
-      failed.push(`${pkg}: ${firstLine(e)}`);
+    const deadline = Date.now() + BROWSER_BOUND_MS;
+    for (const exe of sys ? [null, sys] : [null]) {
+      const r = await runBrowser(
+        process.execPath,
+        [PLAYWRIGHT_PICTURE, entry, html, png, mode, ...(exe ? [exe] : [])],
+        Math.max(1, deadline - Date.now()),
+        {profileArg: false},
+      );
+      if (r.stoppedBy)
+        return {
+          ok: false,
+          stopped: r.stoppedBy,
+          reason: `the pictures were stopped (${r.stoppedBy}) before the browser finished`,
+        };
+      if (r.timedOut)
+        return {
+          ok: false,
+          reason: `the browser did not finish the picture within ${BROWSER_BOUND_MS / 1000} seconds, so it was stopped; run the command again, or open the .html beside the picture to look without one`,
+        };
+      if (r.status === 0 && fs.existsSync(png))
+        return {ok: true, file: shown(project.cwd, png)};
+      const text = r.error ? String(r.error.message) : r.stderr;
+      if (!exe && /Executable doesn't exist|playwright install/i.test(text))
+        pwMissing = true;
+      failed.push(
+        `${pkg}${exe ? ` with ${exe}` : sys ? ' with its own browser' : ''}: ${causeOf(text)}`,
+      );
     }
   }
   const chrome = chromeBinary();
@@ -1537,13 +1564,14 @@ export async function screenshot(project, html, png, mode) {
       ok: false,
       // Advice that can change the result: Playwright's browser only when
       // it is missing, else the browsers that were tried.
+      // A Chrome to check only when there is one; else one to install.
       reason: `A browser was found, but it could not take the picture (${failed.join('; ')}). ${
         !pwFound
-          ? `Install Playwright with its browser (${installLine(project.cwd, ['playwright'])}, then npx playwright install chromium), or check`
+          ? `Install Playwright with its browser (${installLine(project.cwd, ['playwright'])}, then npx playwright install chromium), or`
           : pwMissing
-            ? 'Give Playwright its browser (npx playwright install chromium), or check'
-            : "Playwright's own browser did not start either: check"
-      } that ${chrome ?? 'Google Chrome or Chromium'} starts on this machine. The HTML preview needs neither.`,
+            ? 'Give Playwright its browser (npx playwright install chromium), or'
+            : "Playwright's own browser did not start (the reason is above):"
+      } ${chrome ? `check that ${chrome} starts on this machine` : 'install Google Chrome or Chromium'}. The HTML preview needs neither.`,
     };
   return {
     ok: false,
@@ -1602,12 +1630,34 @@ import {builtColorMode} from '../../foundation/discovery/theme-imports.mjs';
  * @returns {string[]}
  */
 export function copyFontsCss(ctx, slug, data) {
-  return themeImports(
+  const css = themeImports(
     ctx,
     slug,
     data,
     path.join(ctx.project.cwd, 'src', 'themes', slug),
   ).css.slice(1);
+  // A family the built theme uses that its settings do not name (set in
+  // the theme's own source, by a token or typography): its installed
+  // @fontsource package loads it too.
+  /** @type {string} */
+  let built;
+  try {
+    built = fs.readFileSync(themeFiles(ctx.project.cwd, slug).css, 'utf8');
+  } catch {
+    return css;
+  }
+  for (const value of declarationValues(built, /^--font-family-/))
+    for (const family of loadableFontFamilies(value)) {
+      const pkg = fontsourcePackageOf(family);
+      if (css.some(c => c.startsWith(`${pkg}/`))) continue;
+      try {
+        ctx.project.req.resolve(`${pkg}/package.json`);
+        css.push(`${pkg}/index.css`);
+      } catch {
+        // Not installed: nothing to import.
+      }
+    }
+  return css;
 }
 
 /**
@@ -1944,20 +1994,29 @@ export function takeFirstAppCopy(cwd, slug) {
  * @param {string} bin
  * @param {string[]} args
  * @param {number} [bound] milliseconds before the browser is stopped
+ * @param {{profileArg?: boolean}} [opts] `profileArg`: give Chrome the
+ *   temp folder as its profile (`--user-data-dir`); off for a process that
+ *   starts its browser itself, which still gets the folder as its temp
  * @returns {Promise<{status: number | null, signal: string | null, stderr: string, error?: Error, stoppedBy?: string, timedOut?: boolean}>}
  */
-export function runBrowser(bin, args, bound = 60_000) {
+export function runBrowser(
+  bin,
+  args,
+  bound = BROWSER_BOUND_MS,
+  {profileArg = true} = {},
+) {
   return new Promise(resolve => {
     /** @type {string | undefined} */
     let stoppedBy;
     let stderr = '';
-    // A profile folder of its own, removed on every way out (done, failed,
-    // timed out, stopped): Chrome leaves its org.chromium.* folders in the
-    // system temp folder otherwise.
+    // A temp folder of its own, removed on every way out (done, failed,
+    // timed out, stopped): Chrome leaves its org.chromium.* folders and
+    // Playwright its profile and artifacts folders in the system temp
+    // folder otherwise.
     /** @type {string | null} */
     let profile = null;
     try {
-      profile = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-chrome-'));
+      profile = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-browser-'));
     } catch {
       // No temp folder: Chrome's own default.
     }
@@ -1972,10 +2031,15 @@ export function runBrowser(bin, args, bound = 60_000) {
     process.once('exit', dropProfile);
     const child = spawn(
       bin,
-      [...(profile ? [`--user-data-dir=${profile}`] : []), ...args],
+      [
+        ...(profile && profileArg ? [`--user-data-dir=${profile}`] : []),
+        ...args,
+      ],
       {
         stdio: ['ignore', 'ignore', 'pipe'],
-        env: profile ? {...process.env, TMPDIR: profile} : process.env,
+        env: profile
+          ? {...process.env, TMPDIR: profile, TMP: profile, TEMP: profile}
+          : process.env,
         // A group of its own, so a stop takes Chrome's helper processes
         // with it, before its profile folder is removed.
         detached: process.platform !== 'win32',

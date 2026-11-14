@@ -52,8 +52,13 @@ describe('hunt21', () => {
           "name: 'p',\n  tokens: {'--color-accent': ['rgb(0, 0, 0)', null]},",
         ),
     );
+    // The check judges what the build writes: the missing half ships as
+    // `null` inside light-dark(), which no color reads, and the comma in
+    // the other half does not hide it.
     const r = await refusal(() => themeEditShow('p', {cwd}));
-    expect(r.message).toMatch(/not text/);
+    expect(r.message).toMatch(
+      /--color-accent: "light-dark\(rgb\(0, 0, 0\), null\)".* is not one\. Change it/,
+    );
   }, 240_000);
 
   it('F11-N2: require() and import-equals count as the source imports', () => {

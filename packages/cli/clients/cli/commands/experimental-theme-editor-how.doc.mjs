@@ -12,7 +12,7 @@ export const doc = {
   summary:
     "Look up a part, group, setting or aspect; answer a question in plain words; read a picture's colors; or list what you can set",
   description:
-    'One command for every question. With nothing named, it prints its usage and examples. A part (button, card; --list parts): what it reads for each aspect (text, background, border, corners, shadow, spacing, font, size), each condition written as the --when and --state flags `set` takes or marked not settable with the reason, its variants, every state `set` accepts, the parts inside it (a token set --on the part reaches them), and its group; a part the part data does not have says so, with commands that still apply. A group (inputs, containers, checks, menus): its members and whether styling one styles all. A setting: a dial\'s rungs and examples, a token\'s type, default and the parts that read it (and, when none does, whether Core\'s stylesheet still uses it), or a CSS property and the parts that set it. An aspect (text, background, border, corners, shadow, spacing, font, size): the dial and the whole-theme tokens most parts read for it. `colors` (or `palette`): how the theme\'s colors are made: one seed per color, light and dark shades generated with the same generator as `theme palette generate`, the shade each token starts from, vibrancy, the Colors preview page and the exact-token escape hatch. A lookup takes any case, a plural, and a token name without its dashes. A question in plain words ("bold white text in the header", "remove shadows from cards", "cards: 8px radius; buttons: 4px"): it reads each clause for the parts (and their variant, size, state or mode), what to change, the values typed (hex, rgb(), lengths, dashed), and whether it asks for more, less or none ("shouldn\'t", "turn off", "never", "too sharp", "everything except X" included), and answers with exact commands; a typed value always wins over a color word, and a hex color with the wrong number of digits is refused by name, never replaced with a sample. "In dark mode" carries --mode dark to every color command; a change that cannot differ by mode, or a dark-mode ask on a light-only theme, says so instead. A question about what something is ("what does --color-accent do") gets the lookup. Several changes in one question come first as one sequence (`sequence: true`: run every command in order, at most 12), with repeated and overwritten steps left out; two asks that contradict each other are offered as choices. Changes come before lookups. Every suggested command names the theme (`theme`: the one named with `theme`, the only one, or the one an editor command changed last, said in `themeNote`; `themeChosenBy` says which: named, only, last-changed or none; with none, my-theme, made first), holds a real value, never a placeholder or a comment, and is checked as `set` checks it: a command `set` would refuse, or that changes nothing, is left out and listed in `refused` with the reason. A question with no answer says why in `hint`, with the next commands in `run`. A PNG picture (by any file name; other formats are refused by their bytes): its main colors from every pixel (on an even grid past 4 million), biggest share first, with where each sits, see-through pixels skipped, tRNS included (a number after the file sets how many, default 14), or with --at the exact color and alpha at pixel points; a picture over 40 million pixels (20 million at 16 bits), or with pixel data that is damaged or shorter than its header says, is refused before it is decoded. --list <what> lists what a change can name (dials, tokens, parts, groups or properties, in any case, singular or plural; kinds or no word lists those kinds), and the other words filter the list. Experimental: it may change or be removed in a patch release.',
+    'One command for every question. With nothing named, it prints its usage and examples. A part (button, card; --list parts): what it reads for each aspect (text, background, border, corners, shadow, spacing, font, size), each condition written as the --when and --state flags `set` takes or marked not settable with the reason, its variants, every state `set` accepts, the parts inside it (a token set --on the part reaches them), and its group; a part the part data does not have says so, with commands that still apply. A group (inputs, containers, checks, menus): its members and whether styling one styles all. A setting: a dial\'s rungs and examples, a token\'s type, default and the parts that read it (and, when none does, whether Core\'s stylesheet still uses it), or a CSS property and the parts that set it. An aspect (text, background, border, corners, shadow, spacing, font, size): the dial and the whole-theme tokens most parts read for it. `colors` (or `palette`): how the theme\'s colors are made: one seed per color, light and dark shades generated with the same generator as `theme palette generate`, the shade each token starts from, vibrancy, the Colors preview page and the exact-token escape hatch. A lookup takes any case, a plural, and a token name without its dashes. A question in plain words ("bold white text in the header", "remove shadows from cards", "cards: 8px radius; buttons: 4px"): it reads each clause for the parts (and their variant, size, state or mode), what to change, the values typed (hex, rgb(), lengths, dashed), and whether it asks for more, less or none ("shouldn\'t", "turn off", "never", "too sharp", "everything except X" included), and answers with exact commands; a typed value always wins over a color word, and a hex color with the wrong number of digits is refused by name, never replaced with a sample. "In dark mode" carries --mode dark to every color command; a change that cannot differ by mode, or a dark-mode ask on a light-only theme, says so instead. A question about what something is ("what does --color-accent do") gets the lookup. Several changes in one question come first as one sequence (`sequence: true`: run every command in order, at most 12), with repeated and overwritten steps left out; two asks that contradict each other are offered as choices. Changes come before lookups. Every suggested command names the theme (`theme`: the one named with `theme`, the only one, or the one an editor command changed last, said in `themeNote`; `themeChosenBy` says which: named, only, last-changed or none; with none, my-theme, made first), holds a real value, never a placeholder or a comment, and is checked as `set` checks it: a command `set` would refuse, or that changes nothing, is left out and listed in `refused` with the reason. A question with no answer says why in `hint`, with the next commands in `run`, the first of them this help, whose examples labeled "Asks how understands" list the kinds of ask it answers. A PNG picture (by any file name; other formats are refused by their bytes): its main colors from every pixel (on an even grid past 4 million), biggest share first, with where each sits, see-through pixels skipped, tRNS included (a number after the file sets how many, default 14), or with --at the exact color and alpha at pixel points; a picture over 40 million pixels (20 million at 16 bits), or with pixel data that is damaged or shorter than its header says, is refused before it is decoded. --list <what> lists what a change can name (dials, tokens, parts, groups or properties, in any case, singular or plural; kinds or no word lists those kinds), and the other words filter the list. Experimental: it may change or be removed in a patch release.',
   fn: 'themeEditHow',
   args: [
     {
@@ -79,9 +79,95 @@ export const doc = {
       label: 'Accent tokens',
       cli: 'astryx experimental theme editor how accent --list tokens',
     },
+    {
+      label: 'Asks how understands: change a dial',
+      cli: 'astryx experimental theme editor how "make everything more compact"',
+    },
+    {
+      label: 'Asks how understands: change a dial',
+      cli: 'astryx experimental theme editor how "make it more colorful"',
+    },
+    {
+      label: "Asks how understands: a part's property, by an amount or a value",
+      cli: 'astryx experimental theme editor how "card padding 2 steps more"',
+    },
+    {
+      label: "Asks how understands: a part's property, by an amount or a value",
+      cli: 'astryx experimental theme editor how "card padding 24x24px"',
+    },
+    {
+      label: 'Asks how understands: a direction, with or without a reference',
+      cli: 'astryx experimental theme editor how "make the card background lighter"',
+    },
+    {
+      label: 'Asks how understands: a direction, with or without a reference',
+      cli: 'astryx experimental theme editor how "make the card padding bigger than 24px"',
+    },
+    {
+      label: 'Asks how understands: comparisons with another part',
+      cli: 'astryx experimental theme editor how "make primary buttons as round as cards"',
+    },
+    {
+      label: 'Asks how understands: comparisons with another part',
+      cli: 'astryx experimental theme editor how "make cards 4px rounder than buttons"',
+    },
+    {
+      label:
+        'Asks how understands: everything except some parts, or keeping a part',
+      cli: 'astryx experimental theme editor how "make everything rounder except buttons and cards"',
+    },
+    {
+      label:
+        'Asks how understands: everything except some parts, or keeping a part',
+      cli: 'astryx experimental theme editor how "make everything rounder but keep cards as they are"',
+    },
+    {
+      label: 'Asks how understands: prohibitions',
+      cli: 'astryx experimental theme editor how "make everything rounder; never round the inputs"',
+    },
+    {
+      label: 'Asks how understands: prohibitions',
+      cli: 'astryx experimental theme editor how "never use pure black for text"',
+    },
+    {
+      label: 'Asks how understands: one mode',
+      cli: 'astryx experimental theme editor how "make shadows darker in dark mode"',
+    },
+    {
+      label: 'Asks how understands: one mode',
+      cli: 'astryx experimental theme editor how "in dark mode, cards should be #1c1c1e"',
+    },
+    {
+      label: 'Asks how understands: removals',
+      cli: 'astryx experimental theme editor how "no shadow and no border on dialogs"',
+    },
+    {
+      label: 'Asks how understands: removals',
+      cli: 'astryx experimental theme editor how "remove the card background"',
+    },
+    {
+      label: 'Asks how understands: several changes in one ask',
+      cli: 'astryx experimental theme editor how "cards: 8px radius; buttons: 4px"',
+    },
+    {
+      label: 'Asks how understands: several changes in one ask',
+      cli: 'astryx experimental theme editor how "rounder cards without shadows"',
+    },
+    {
+      label: 'Asks how understands: value questions',
+      cli: 'astryx experimental theme editor how "what is the padding of buttons"',
+    },
+    {
+      label: 'Asks how understands: value questions',
+      cli: 'astryx experimental theme editor how "how round are the cards now?"',
+    },
   ],
   outsideProject: 'refuse',
   notes: [
+    {
+      type: 'prose',
+      text: 'The examples labeled "Asks how understands" list the kinds of ask a question in plain words can be, each with examples it answers with commands: a dial for the whole theme, a part\'s property by an amount or a value, a direction (lighter, darker, bigger, smaller, with or without a reference), a comparison with another part, everything except some parts or keeping a part, a prohibition (never …), one mode (in dark mode), a removal (no shadow, remove …), several changes in one ask, and a question about a value. An ask of another kind may still be answered; one it cannot answer says so and points here.',
+    },
     {
       type: 'prose',
       text: "In global mode: outside a project, with no package.json in the folder or above it, experimental theme editor how writes nothing and stops with `ERR_PROJECT_REQUIRED`; run it in the app project. In a project, the project's version of Astryx runs it, whichever astryx command you start. See {@link namespace:global} and {@link generic:problems}.",
