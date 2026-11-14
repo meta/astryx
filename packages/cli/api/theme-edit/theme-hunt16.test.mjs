@@ -18,7 +18,10 @@ import {
   makeLinkedFixture,
   removeLinkedFixture,
 } from '../../test-utils/linked-fixture.mjs';
-import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
+import {
+  FIXTURE_PACKAGES,
+  writeFixtureBaseTheme,
+} from '../../test-utils/base-theme-fixture.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
 
 vi.mock('./_preview.mjs', async importOriginal =>
@@ -178,7 +181,9 @@ describe('corrected new commands keep every option', () => {
         '--mode',
         'dark-only',
       ],
-      / new brand --like neutral (--accent '#e11d48' --mode dark-only|--mode dark-only --accent '#e11d48')$/,
+      // Neutral in any case is neutral, which this app has not installed:
+      // the same new on no base is the new offered.
+      / new brand (--accent '#e11d48' --mode dark-only|--mode dark-only --accent '#e11d48')$/,
     ],
     [
       [
@@ -196,7 +201,8 @@ describe('corrected new commands keep every option', () => {
     ],
     [
       ['new', 'z', '--accent', '#ggg', '--mode', 'light-only', '--png'],
-      / new z .*--accent '#7c3aed'.* --png$/,
+      // Never a stock color the user did not type: the same new without it.
+      / new z --mode light-only --png$/,
     ],
   ])(
     '%j',
@@ -216,6 +222,47 @@ describe('corrected new commands keep every option', () => {
     },
     120_000,
   );
+});
+
+describe('a guessed base', () => {
+  it('is the nearest installed base, and the corrected new keeps every option', async () => {
+    const withBase = makeLinkedFixture(
+      'astryx-theme-hunt16-base-',
+      FIXTURE_PACKAGES,
+    );
+    try {
+      writeFixtureBaseTheme(withBase, 'neutral');
+      const r = await runCli(
+        [
+          '--json',
+          'experimental',
+          'theme',
+          'editor',
+          'new',
+          'y',
+          '--like',
+          'neutralx',
+          '--accent',
+          'red',
+          '--mode',
+          'dark-only',
+        ],
+        withBase,
+      );
+      expect(r.status).toBe(1);
+      const names = JSON.parse(r.stdout).suggestions.map(
+        (/** @type {any} */ x) => x.name,
+      );
+      expect(
+        names.some((/** @type {string} */ n) =>
+          / new y --like neutral --accent red --mode dark-only$/.test(n),
+        ),
+        names.join('\n'),
+      ).toBe(true);
+    } finally {
+      removeLinkedFixture(withBase);
+    }
+  }, 120_000);
 });
 
 describe('how changes by an amount from the theme it reads', () => {
@@ -260,7 +307,9 @@ describe('corrected new commands keep every option (r78e)', () => {
         '--headings',
         'tight',
         '--headings',
-        'BOLD',
+        // A dial word in capitals is that word (no refusal), so the bad
+        // value here is a misspelt one in capitals.
+        'BOLDD',
         '--accent',
         'red',
       ],

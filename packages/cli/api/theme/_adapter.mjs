@@ -20,7 +20,7 @@ import {
   requireCoreDir,
 } from '../../foundation/fs/paths.mjs';
 import {tryLock, userCacheDir} from '../../foundation/release/cache.mjs';
-import {Project} from '../../foundation/config/project.mjs';
+import {Project, providerLedgerOf} from '../../foundation/config/project.mjs';
 import {
   BUNDLED_THEME_PACKAGE,
   THEMES_DIR,
@@ -61,6 +61,7 @@ import {
 import {fsErrorMessage} from '../../foundation/fs/fs-error.mjs';
 import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
 import {analyzeTemplateNeeds} from '../../foundation/discovery/template-needs.mjs';
+import {compareText} from '../../foundation/text/compare-text.mjs';
 
 export {BUNDLED_THEME_PACKAGE, THEMES_DIR};
 
@@ -137,9 +138,23 @@ async function availableThemeState(cwd, {includeLocal = true} = {}) {
     // One broken local folder must not hide every other theme: it is
     // skipped with its reason, and only a lookup of that slug fails.
     const themes = await project.themes({includeLocal, skipBrokenLocal: true});
+    // An installed dependency whose manifest could not load for want of a
+    // package it requires has an issue too (INV14), but nothing of it was
+    // ever discovered: a lookup in it stays an unknown theme, as before.
+    const unloaded = new Set(
+      [...providerLedgerOf(project).values()].flatMap(entry =>
+        entry.outcome === 'load-failed' &&
+        entry.candidate.source === 'autolinked'
+          ? [entry.candidate.spec ?? entry.label]
+          : [],
+      ),
+    );
     return {
       themes,
-      issues: await project.issues(),
+      issues: (await project.issues()).filter(
+        issue =>
+          !(issue.code === 'integration_error' && unloaded.has(issue.package)),
+      ),
       skipped: project.skippedLocalThemes(),
     };
   } catch (error) {
@@ -991,7 +1006,7 @@ export function themeCommandsFor(command, slug, available, cwd) {
       (a, b) =>
         levenshteinDistance(needle, a.slug.toLowerCase()) -
           levenshteinDistance(needle, b.slug.toLowerCase()) ||
-        a.slug.localeCompare(b.slug),
+        compareText(a.slug, b.slug),
     )
     .slice(0, 5)
     .map(theme => ({
@@ -1172,6 +1187,7 @@ async function writeThemeApp(
         stylesheet: theme.stylesheet,
         ...(theme.fontStylesheet ? {fontStylesheet: theme.fontStylesheet} : {}),
         source: theme.source,
+        ...(theme.mode ? {mode: theme.mode} : {}),
       })),
       default: defaultSlug,
       modulePath: prepared.module.path,
@@ -1180,6 +1196,15 @@ async function writeThemeApp(
         slug,
         changed,
         firstAdd: action === 'add' && !state.configured,
+        // The module lists one-mode themes' modes for the first time, after
+        // the app was wired without them: the wiring takes the mode now.
+        ...(state.configured &&
+        /\bexport const themeModes\b/.test(prepared.moduleContents) &&
+        !/\bexport const themeModes\b/.test(
+          String(prepared.module.expectedOriginal ?? ''),
+        )
+          ? {wireModes: true}
+          : {}),
       },
       ...(notes.length > 0 ? {notes} : {}),
     },

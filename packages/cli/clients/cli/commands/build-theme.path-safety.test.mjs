@@ -288,8 +288,9 @@ describe('theme build output-path failures carry registered codes', () => {
     // Outputs inside cwd keep the plain rebuild line.
     const local = await runCli(['theme', 'build', inside, '--check'], project);
     expect(local.code).toBe(1);
-    expect(local.stderr).toContain(
-      `Rebuild with: astryx theme build ${inside}`,
+    // The project's own invocation, as every printed command (batch 10).
+    expect(local.stderr).toMatch(
+      new RegExp(`Rebuild with: \\S.* theme build ${inside}$`, 'm'),
     );
     expect(local.stderr).not.toMatch(/^\s*cd /m);
   });

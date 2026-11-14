@@ -20,6 +20,7 @@ import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import nodeModule from 'node:module';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -31,6 +32,7 @@ import {
 import {logger} from '../../logger.mjs';
 import {
   themeBuild,
+  themeBuildWithHandOff,
   themeSourceFiles,
   validateComponentOverridesAgainstRegistry,
   validateThemePrivateInputs,
@@ -51,6 +53,12 @@ vi.mock('@astryxdesign/core/theme', async importActual => {
 });
 
 vi.setConfig({testTimeout: 30000});
+
+// Node runs module hooks in the loading thread from 22.15. On an older Node
+// the CLI supports (its oldest is 22.13), a stylesheet that a base theme's
+// module imports from another folder fails the load, as a case below shows.
+const hasModuleHooks =
+  typeof (/** @type {any} */ (nodeModule).registerHooks) === 'function';
 
 let tmpDir;
 beforeEach(() => {
@@ -1169,6 +1177,141 @@ describe('themeBuild() — extends', () => {
     expect(css).toContain('.astryx-switch {');
   });
 
+  describe('a base theme module that imports its own stylesheet', () => {
+    // Valid JavaScript, so a stylesheet that ran would leave this mark.
+    const STYLESHEET_RAN = '__astryxBaseThemeStylesheetRan';
+    afterEach(() => {
+      Reflect.deleteProperty(globalThis, STYLESHEET_RAN);
+    });
+
+    /**
+     * A package whose `./themes/<slug>` entry imports the theme's stylesheet
+     * from another folder and re-exports the theme object.
+     * @param {string} root the folder whose node_modules holds the package
+     * @param {string} [stylesheet] the stylesheet import the entry writes
+     */
+    function writeStyledBase(root, stylesheet = '../Theme/brand.css') {
+      const pkg = path.join(root, 'node_modules', '@acme', 'brand');
+      fs.mkdirSync(path.join(pkg, 'dist', 'themes'), {recursive: true});
+      fs.mkdirSync(path.join(pkg, 'dist', 'Theme'), {recursive: true});
+      fs.writeFileSync(
+        path.join(pkg, 'package.json'),
+        JSON.stringify({
+          name: '@acme/brand',
+          type: 'module',
+          exports: {
+            './themes/brand': './dist/themes/brand.mjs',
+            './themes/brand.css': './dist/Theme/brand.css',
+          },
+        }),
+      );
+      fs.writeFileSync(
+        path.join(pkg, 'dist', 'Theme', 'brand.css'),
+        `globalThis.${STYLESHEET_RAN} = true;\n`,
+      );
+      fs.writeFileSync(
+        path.join(pkg, 'dist', 'Theme', 'brand-theme.mjs'),
+        BASE_SOURCE,
+      );
+      fs.writeFileSync(
+        path.join(pkg, 'dist', 'themes', 'brand.mjs'),
+        `import '${stylesheet}';\nexport {brandTheme} from '../Theme/brand-theme.mjs';\n`,
+      );
+    }
+
+    const STYLED_CHILD_SOURCE = `import {defineTheme} from '@astryxdesign/core/theme';
+    import {brandTheme} from '@acme/brand/themes/brand';
+    export const styledChildTheme = defineTheme({
+      name: 'styled-child',
+      extends: brandTheme,
+      tokens: {'--color-accent': '#ff0000'},
+    });\n`;
+
+    /** @param {string} dir */
+    function expectBaseInherited(dir) {
+      const css = fs.readFileSync(path.join(dir, 'styled-child.css'), 'utf8');
+      expect(css).toContain('--radius-element: 6px;');
+      expect(css).toContain('.astryx-switch {');
+      expect(css).toContain('--color-accent: #ff0000;');
+      expect(Reflect.get(globalThis, STYLESHEET_RAN)).toBeUndefined();
+    }
+
+    it.skipIf(!hasModuleHooks)(
+      'builds and checks the child, without running the stylesheet',
+      async () => {
+        writeStyledBase(extDir);
+        fs.writeFileSync(
+          path.join(extDir, 'styled-child.mjs'),
+          STYLED_CHILD_SOURCE,
+        );
+
+        await themeBuild('styled-child.mjs', {}, {cwd: extDir});
+        expectBaseInherited(extDir);
+
+        const check = await themeBuild(
+          'styled-child.mjs',
+          {check: true},
+          {cwd: extDir},
+        );
+        expect(check?.data.upToDate).toBe(true);
+      },
+    );
+
+    it.skipIf(!hasModuleHooks)(
+      "builds the child in a folder with no Core, on the CLI's Core",
+      async () => {
+        // No Core beside the theme: the build hands the theme the CLI's Core
+        // and loads it through the synchronous path.
+        const bare = fs.realpathSync(
+          fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-styled-base-')),
+        );
+        try {
+          fs.writeFileSync(
+            path.join(bare, 'package.json'),
+            '{"type": "module"}\n',
+          );
+          writeStyledBase(bare);
+          fs.writeFileSync(
+            path.join(bare, 'styled-child.mjs'),
+            STYLED_CHILD_SOURCE,
+          );
+
+          await themeBuild('styled-child.mjs', {}, {cwd: bare});
+          expectBaseInherited(bare);
+        } finally {
+          fs.rmSync(bare, {recursive: true, force: true});
+        }
+      },
+    );
+
+    it('still fails on a stylesheet that the base module imports and that is missing', async () => {
+      writeStyledBase(extDir, '../Theme/missing.css');
+      fs.writeFileSync(
+        path.join(extDir, 'styled-child.mjs'),
+        STYLED_CHILD_SOURCE,
+      );
+
+      await expect(
+        themeBuild('styled-child.mjs', {}, {cwd: extDir}),
+      ).rejects.toThrow(/missing\.css/);
+    });
+
+    it.skipIf(hasModuleHooks)(
+      'fails on a Node without module hooks, naming the stylesheet',
+      async () => {
+        writeStyledBase(extDir);
+        fs.writeFileSync(
+          path.join(extDir, 'styled-child.mjs'),
+          STYLED_CHILD_SOURCE,
+        );
+
+        await expect(
+          themeBuild('styled-child.mjs', {}, {cwd: extDir}),
+        ).rejects.toThrow(/Unknown file extension "\.css".*brand\.css/);
+      },
+    );
+  });
+
   it('fails loudly when the base import resolved to nothing', async () => {
     fs.writeFileSync(
       path.join(extDir, 'ext-broken.mjs'),
@@ -1455,8 +1598,8 @@ describe('themeBuild() — outputs it may replace', () => {
   });
 
   it.each([
-    ['o/x.scss', './o/x.scss', 'o/x.css'],
-    ['o/y', './o/y', 'o/y.css'],
+    ['o/x.scss', '../o/x.scss', 'o/x.css'],
+    ['o/y', '../o/y', 'o/y.css'],
   ])(
     'builds an --out of %s with a warning, and imports the stylesheet by its name',
     async (out, cssImport, suggested) => {
@@ -1819,14 +1962,38 @@ describe('themeBuild() — outputs it may replace', () => {
   it('refuses a second theme that would replace outputs written earlier in the run', async () => {
     fs.writeFileSync(path.join(tmpDir, 'ocean2.mjs'), theme);
     const claimed = new Map();
-    await themeBuild('ocean.mjs', {__claimedOutputs: claimed}, {cwd: tmpDir});
+    await themeBuildWithHandOff(
+      'ocean.mjs',
+      {},
+      {cwd: tmpDir},
+      {claimedOutputs: claimed},
+    );
     const first = fs.readFileSync(path.join(tmpDir, 'ocean.css'), 'utf-8');
     await expect(
-      themeBuild('ocean2.mjs', {__claimedOutputs: claimed}, {cwd: tmpDir}),
+      themeBuildWithHandOff(
+        'ocean2.mjs',
+        {},
+        {cwd: tmpDir},
+        {claimedOutputs: claimed},
+      ),
     ).rejects.toMatchObject({code: 'ERR_THEME_INVALID'});
     expect(fs.readFileSync(path.join(tmpDir, 'ocean.css'), 'utf-8')).toBe(
       first,
     );
+  });
+
+  it('takes no hand-off through the public options', async () => {
+    const deferred = /** @type {any[]} */ ([]);
+    await themeBuild(
+      'ocean.mjs',
+      /** @type {any} */ ({
+        __deferredWrites: deferred,
+        deferredWrites: deferred,
+      }),
+      {cwd: tmpDir},
+    );
+    expect(deferred).toEqual([]);
+    expect(fs.existsSync(path.join(tmpDir, 'ocean.css'))).toBe(true);
   });
 });
 
@@ -2012,5 +2179,78 @@ describe('themeBuild() — the --out path it suggests', () => {
     expect(fs.readFileSync(path.join(dist, 'o.txt-2.css'), 'utf8')).toBe(
       'body {}\n',
     );
+  });
+});
+
+describe('themeBuild() — the former hand-off keys are ignored', () => {
+  const run = async (/** @type {Record<string, unknown>} */ extra) => {
+    for (const f of fs.readdirSync(tmpDir))
+      if (f !== 'hidden.mjs')
+        fs.rmSync(path.join(tmpDir, f), {recursive: true, force: true});
+    const {result, warnings} = await withWarnings(() =>
+      themeBuild('hidden.mjs', /** @type {any} */ ({...extra}), {cwd: tmpDir}),
+    );
+    const files = Object.fromEntries(
+      fs
+        .readdirSync(tmpDir)
+        .filter(f => f !== 'hidden.mjs')
+        .sort()
+        .map(f => [f, fs.readFileSync(path.join(tmpDir, f), 'utf8')]),
+    );
+    return {result: JSON.stringify(result), warnings, files};
+  };
+
+  it.each([
+    ['__prepareFamily', true],
+    ['__familyLoader', {}],
+    ['__familyInterception', {}],
+    ['__writeRoot', path.join(os.tmpdir(), 'astryx-no-such-root')],
+    ['__claimedOutputs', new Map([['hidden.css', 'other.mjs']])],
+    ['__deferredWrites', []],
+    ['__commandWords', {group: 'zzz', build: 'yyy'}],
+  ])('%s changes nothing', async (key, value) => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'hidden.mjs'),
+      `export default { name: 'hidden', tokens: { '--color-bg': '#0a0a0a' } };\n`,
+    );
+    const plain = await run({});
+    expect(Object.keys(plain.files).length).toBeGreaterThan(0);
+    // Claimed outputs are keyed by absolute path when honored.
+    const v =
+      key === '__claimedOutputs'
+        ? new Map([[path.join(tmpDir, 'hidden.css'), 'other.mjs']])
+        : value;
+    const withKey = await run({[key]: v});
+    expect(withKey).toEqual(plain);
+  });
+
+  it('__commandWords does not change the --check rebuild line', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'hidden.mjs'),
+      `export default { name: 'hidden', tokens: { '--color-bg': '#0a0a0a' } };\n`,
+    );
+    const lines = [];
+    const silent = logger.silent;
+    const {warn, log, error} = logger;
+    logger.setSilent(false);
+    logger.warn =
+      logger.log =
+      logger.error =
+        (/** @type {string} */ l) => void lines.push(l);
+    try {
+      await themeBuild(
+        'hidden.mjs',
+        /** @type {any} */ ({
+          check: true,
+          __commandWords: {group: 'zzz', build: 'yyy'},
+        }),
+        {cwd: tmpDir},
+      );
+    } finally {
+      Object.assign(logger, {warn, log, error});
+      logger.setSilent(silent);
+    }
+    expect(lines.join('\n')).toMatch(/Rebuild with: .*theme build/);
+    expect(lines.join('\n')).not.toContain('zzz');
   });
 });

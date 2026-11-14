@@ -74,6 +74,14 @@ export function measureSegments(track: HTMLElement): SegmentSpan[] {
   );
 }
 
+/**
+ * Whether no segment has a width: the control has no layout, as in a unit
+ * test's DOM. A single collapsed segment does not count.
+ */
+function hasNoLayout(segments: ReadonlyArray<SegmentSpan>): boolean {
+  return segments.every(({left, right}) => right - left <= 0);
+}
+
 function isDisabled(element: HTMLElement): boolean {
   return (
     element.hasAttribute('disabled') ||
@@ -284,6 +292,13 @@ export function useSegmentedTouchTracking(
             // The browser's own click for this lift still comes when it ends
             // on the segment the press began on. The guard takes it.
             armClickGuard(track.ownerDocument);
+            break;
+          }
+          if (hasNoLayout(segmentsRef.current)) {
+            // Without layout the lift names no segment. The click on the
+            // segment the press reached selects it, as under a fine pointer.
+            tracker.cancel();
+            motion.cancel();
             break;
           }
           // The lift decides, wherever the press began.

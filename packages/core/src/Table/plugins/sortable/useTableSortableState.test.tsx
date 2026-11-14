@@ -17,7 +17,7 @@ import {
   within,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {useState} from 'react';
+import {Suspense, startTransition, use, useState} from 'react';
 import {Table} from '../../Table';
 import type {TableColumn} from '../../types';
 import {useTableSortable} from './useTableSortable';
@@ -635,5 +635,69 @@ describe('useTableSortableState', () => {
       const sorted = capturedApplySort!(subset);
       expect(sorted.map(e => e.name)).toEqual(['Aaron', 'Zara']);
     });
+  });
+  it('calls the sort callback of the last committed render, not one from a render React set aside', () => {
+    const committed = vi.fn();
+    const setAside = vi.fn();
+    const never = new Promise<never>(() => {});
+    function Waits({isWaiting}: {isWaiting: boolean}) {
+      if (isWaiting) {
+        use(never);
+      }
+      return null;
+    }
+    function Harness({
+      onSortChange,
+      isWaiting,
+    }: {
+      onSortChange: (sort: TableSortState<string>) => void;
+      isWaiting: boolean;
+    }) {
+      const {sortConfig} = useTableSortableState<Employee>({
+        data: employees,
+        sort: [],
+        onSortChange,
+      });
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() =>
+              sortConfig.onSortChange([
+                {sortKey: 'name', direction: 'ascending'},
+              ])
+            }>
+            Sort
+          </button>
+          <Waits isWaiting={isWaiting} />
+        </>
+      );
+    }
+    type HarnessProps = {
+      onSortChange: (sort: TableSortState<string>) => void;
+      isWaiting: boolean;
+    };
+    let update: (next: HarnessProps) => void = () => {};
+    function App() {
+      const [props, setProps] = useState<HarnessProps>({
+        onSortChange: committed,
+        isWaiting: false,
+      });
+      update = setProps;
+      return (
+        <Suspense fallback={null}>
+          <Harness {...props} />
+        </Suspense>
+      );
+    }
+    render(<App />);
+    // The transition's render runs the hook with the new callback, then
+    // waits, so React keeps the committed screen.
+    act(() => {
+      startTransition(() => update({onSortChange: setAside, isWaiting: true}));
+    });
+    fireEvent.click(screen.getByRole('button', {name: 'Sort'}));
+    expect(setAside).not.toHaveBeenCalled();
+    expect(committed).toHaveBeenCalledTimes(1);
   });
 });

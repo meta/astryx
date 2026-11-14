@@ -10,8 +10,8 @@
  *   open layer's rectangle, its layout box and its computed transform must
  *   match an open that no press touched. A layer that opens on the press must
  *   be placed from the trigger's untransformed box in its first frame and
- *   after the release. A case for a layer that does not meet this yet is
- *   marked fixme.
+ *   after the release. A press on a trigger whose own layer is open does
+ *   not scale the trigger.
  * @position Evidence for architecture:layer-runtime INV22
  */
 
@@ -130,6 +130,34 @@ async function scaleOf(locator: Locator): Promise<number> {
   });
 }
 
+/**
+ * Waits until the press reaches `trigger`, then checks that it leaves
+ * `scaled` at full size: a trigger whose own layer is open takes no press
+ * scale.
+ */
+async function expectPressedUnscaled(
+  page: Page,
+  trigger: Locator,
+  scaled: Locator = trigger,
+) {
+  await expect
+    .poll(
+      async () =>
+        trigger.evaluate(
+          element =>
+            element.matches(':active') ||
+            element.closest('[data-astryx-press="on"]') != null,
+        ),
+      {message: 'the press reaches the trigger'},
+    )
+    .toBe(true);
+  await settle(page);
+  expect(
+    await scaleOf(scaled),
+    'the press does not scale a trigger whose layer is open',
+  ).toBeCloseTo(1, 4);
+}
+
 /** Waits until the press scale on `scaled` has fully applied. */
 async function expectPressed(scaled: Locator) {
   await expect
@@ -173,7 +201,7 @@ async function firstFrameLayout(page: Page, act: () => Promise<void>) {
 test.describe('with a mouse', () => {
   test.use(desktop);
 
-  test('a press on an open Popover trigger leaves the popover in place', async ({
+  test('a press on an open Popover trigger neither scales it nor moves the popover', async ({
     page,
   }) => {
     await openStory(page, storybook(), 'core-popover--default');
@@ -185,13 +213,12 @@ test.describe('with a mouse', () => {
 
     await page.mouse.move(at.x, at.y);
     await page.mouse.down();
-    await expectPressed(trigger);
-    await settle(page);
+    await expectPressedUnscaled(page, trigger);
     expectSameBox(await layerBox(page), open, 'during the press');
     await page.mouse.up();
   });
 
-  test.fixme('INV22: a press on the Button that anchors a Popover through anchorRef leaves the popover in place', async ({
+  test('a press on the Button that anchors an open Popover through anchorRef neither scales it nor moves the popover', async ({
     page,
   }) => {
     await openStory(page, storybook(), 'core-popover--anchor-ref');
@@ -203,20 +230,14 @@ test.describe('with a mouse', () => {
 
     await page.mouse.move(at.x, at.y);
     await page.mouse.down();
-    await expectPressed(trigger);
-    await settle(page);
+    await expectPressedUnscaled(page, trigger);
     expectSameBox(await layerBox(page), open, 'during the press');
     await page.mouse.up();
   });
 
   test('the press that opens a DropdownMenu places the menu from the unpressed trigger', async ({
     page,
-    browserName,
   }) => {
-    test.fixme(
-      browserName === 'webkit',
-      'INV22: a mouse press scales the DropdownMenu trigger in WebKit',
-    );
     await openStory(page, storybook(), 'core-dropdownmenu--default');
     const trigger = page.getByRole('button', {name: 'Actions'});
     const at = await centerOf(trigger);
@@ -224,6 +245,10 @@ test.describe('with a mouse', () => {
     const first = await firstFrameLayout(page, async () => page.mouse.down());
     await settle(page);
     const held = await layerBox(page);
+    expect(
+      await scaleOf(trigger),
+      'the opening press does not scale the trigger',
+    ).toBeCloseTo(1, 4);
     await page.mouse.up();
     await settle(page);
     const released = await layerBox(page);
@@ -238,7 +263,7 @@ test.describe('with a mouse', () => {
   });
 
   for (const variant of ['ghost', 'secondary'] as const) {
-    test.fixme(`INV22: a press and release that opens a ${variant} Selector places the list as an unpressed open does`, async ({
+    test(`a press and release that opens a ${variant} Selector places the list as an unpressed open does`, async ({
       page,
     }) => {
       await openStory(page, storybook(), `core-selector--${variant}-variant`);
@@ -255,7 +280,7 @@ test.describe('with a mouse', () => {
     });
   }
 
-  test.fixme('INV22: a press on an open ghost MultiSelector trigger leaves the list in place', async ({
+  test('a press on an open ghost MultiSelector trigger neither scales it nor moves the list', async ({
     page,
   }) => {
     await openStory(page, storybook(), 'core-multiselector--ghost-variant');
@@ -266,7 +291,7 @@ test.describe('with a mouse', () => {
     );
   });
 
-  test.fixme('INV22: a press on an open secondary ComplexSelector trigger leaves the list in place', async ({
+  test('a press on an open secondary ComplexSelector trigger neither scales it nor moves the list', async ({
     page,
   }) => {
     await openStory(
@@ -309,14 +334,13 @@ async function expectHeldTriggerKeepsLayer(
 
   await page.mouse.move(at.x, at.y);
   await page.mouse.down();
-  await expectPressed(scaled);
-  await settle(page);
+  await expectPressedUnscaled(page, trigger, scaled);
   expectSameBox(await layerBox(page), open, 'during the press');
   await page.mouse.up();
 }
 
 test.describe('with a finger', () => {
-  test('a finger held on an open Popover trigger leaves the popover in place', async ({
+  test('a finger held on an open Popover trigger neither scales it nor moves the popover', async ({
     page,
   }) => {
     await openStory(page, storybook(), 'core-popover--default');
@@ -339,13 +363,12 @@ test.describe('with a finger', () => {
       .toBe(true);
 
     const finger = await touch.press(at);
-    await expectPressed(trigger);
-    await settle(page);
+    await expectPressedUnscaled(page, trigger);
     expectSameBox(await layerBox(page), open, 'while the finger is down');
     await finger.lift();
   });
 
-  test.fixme('INV22: a finger held on a DropdownMenu trigger opens and keeps the menu at its unpressed place', async ({
+  test('a finger held on a DropdownMenu trigger opens the menu without scaling the trigger and keeps it in place', async ({
     page,
   }) => {
     await openStory(page, storybook(), 'core-dropdownmenu--default');
@@ -353,16 +376,15 @@ test.describe('with a finger', () => {
     const at = await centerOf(trigger);
     const touch = await touchDriver(page);
     const finger = await touch.press(at);
-    await expectPressed(trigger);
     await expect(page.locator(OPEN_LAYER)).toHaveCount(1);
-    await settle(page);
+    await expectPressedUnscaled(page, trigger);
     const held = await layerBox(page);
     await finger.lift();
     await settle(page);
     expectSameBox(held, await layerBox(page), 'while the finger is down');
   });
 
-  test.fixme('INV22: a finger press and lift that opens a ghost Selector places the list as an unpressed open does', async ({
+  test('a finger press and lift that opens a ghost Selector places the list as an unpressed open does', async ({
     page,
     browserName,
   }) => {

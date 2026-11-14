@@ -70,6 +70,8 @@ export const OVERVIEW_SECTIONS = [
             'Popover',
             {
               isOpen: true,
+              // Shown open on the page: it never takes focus.
+              hasAutoFocus: false,
               label: 'Menu',
               placement: 'below',
               content: h(

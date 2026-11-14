@@ -29,13 +29,21 @@ import {
 } from './_tables.mjs';
 import {colorsAt, decodePng, mainColors} from './_png.mjs';
 import {baseInstalled, installLine} from './_project.mjs';
-import {loadTheme, nearest, refuse, themeSourceProblem} from './_settings.mjs';
-import {ASPECTS, checkSetting} from './_check.mjs';
+import {
+  editedThemes,
+  loadTheme,
+  nearest,
+  partComponentDocs,
+  refuse,
+  themeSourceParseError,
+  themeSourceProblem,
+} from './_settings.mjs';
+import {ASPECTS, settableStates} from './_check.mjs';
 import {MODAL} from './_compiler.mjs';
 import {PALETTE_DIALS, mappingRows, paletteFiles} from './_palette.mjs';
 import {requireProject, context} from './_context.mjs';
 import {checked, exampleStep, howTheme, render} from './_how-commands.mjs';
-import {draftAnswer} from './_how-question.mjs';
+import {draftAnswer, partLexicon, valueAsked} from './_how-question.mjs';
 import {
   getCliInvocation,
   quoteCommandArgument,
@@ -182,7 +190,41 @@ function withPrefix(value, cwd) {
  */
 async function answer(subject, options, cwd) {
   const {list, at = [], count} = options;
-  const t = (subject ?? '').trim();
+  // "½rem": a fraction is a number before anything reads the question.
+  const t = (subject ?? '')
+    .trim()
+    // "corners:", "var(--radius-element)": a setting pasted as written is
+    // a lookup of it.
+    .replace(/^([a-z][a-z -]*):\s*$/i, '$1')
+    .replace(/^var\(\s*(--[a-z0-9-]+)\s*\)$/i, '$1')
+    // A lone "½" with no unit after it is a share of now ("card padding
+    // ½"), never 0.5px.
+    .replace(
+      /(\d*)(?:½|1\u20442)(?!\s*(?:rem|px|em|%|x\b|×|times\b))/g,
+      (_, n) => (n ? `${n}½` : ' half '),
+    )
+    .replace(/(\d*)(?:½|1\u20442)/g, (_, n) => `${n ? Number(n) + 0.5 : '0.5'}`)
+    .replace(
+      /(\d*)(?:¼|1\u20444)/g,
+      (_, n) => `${n ? Number(n) + 0.25 : '0.25'}`,
+    )
+    .replace(
+      /(\d*)(?:¾|3\u20444)/g,
+      (_, n) => `${n ? Number(n) + 0.75 : '0.75'}`,
+    );
+  // "paddingLeft", "borderRadius": a property as JavaScript spells it is
+  // that CSS property, as set takes it.
+  if (/^[a-z]+(?:[A-Z][a-z]+)+$/.test(t)) {
+    const kebab = t.replace(/[A-Z]/g, ch => `-${ch.toLowerCase()}`);
+    if (cssProperties().has(kebab)) return answer(kebab, options, cwd);
+  }
+  // "explain spacing", "tell me about the accent": the lookup of what is
+  // named, never a change.
+  const explain =
+    /^(?:explain|describe|tell me about)\s+(?:the |my )?([a-z][a-z -]*?)\s*$/i.exec(
+      t,
+    );
+  if (explain && explain[1] !== t) return answer(explain[1], options, cwd);
   // --theme names a theme whatever the subject, so a bad one is refused
   // for a picture and a list too.
   if (options.theme === '')
@@ -190,14 +232,36 @@ async function answer(subject, options, cwd) {
       run: [`${HOW} ${t ? JSON.stringify(t) : 'card'}`],
     });
   if (options.theme != null) {
-    loadTheme(cwd, options.theme);
+    try {
+      loadTheme(cwd, options.theme);
+    } catch (e) {
+      // A theme name near the one typed: the same question for it, never
+      // only `show` (the question is kept).
+      const err = /** @type {any} */ (e);
+      // (A name typed in another case or as a path too.)
+      if (err?.suggestions)
+        for (const s of err.suggestions) {
+          const near = / show ([a-z][a-z0-9-]*)$/.exec(
+            String(s.name ?? ''),
+          )?.[1];
+          if (near)
+            s.name = `${HOW} ${quoteCommandArgument(t || 'card')} --theme ${near}`;
+        }
+      throw e;
+    }
     // A theme whose source no longer extends its settings takes no setting:
     // an answer would suggest commands that cannot run.
-    const broken = themeSourceProblem(cwd, options.theme);
+    const parseError = themeSourceParseError(cwd, options.theme);
+    const broken = parseError
+      ? {
+          problem: parseError,
+          fix: `Fix themes/${options.theme}/${options.theme}.theme.ts.`,
+        }
+      : await themeSourceProblem(cwd, options.theme);
     if (broken)
       refuse(
         E.ERR_THEME_INVALID,
-        `${broken}, so settings cannot take effect and no command here would change the theme. Put back the import, extends and name lines in themes/${options.theme}/${options.theme}.theme.ts, then ask again.`,
+        `${broken.problem}, so settings cannot take effect and no command here would change the theme. ${broken.fix} Then ask again.`,
         {run: [`${P} show ${options.theme}`]},
       );
   }
@@ -223,16 +287,21 @@ async function answer(subject, options, cwd) {
   }
   if (isPicture(t, cwd))
     return {kind: 'picture', subject: t, ...pictureColors(t, cwd, at, count)};
+  // What runs instead: the same subject without the picture option (a
+  // real command), never a made-up file name.
+  const without = t ? `${HOW} ${quoteCommandArgument(t)}` : `${HOW} --help`;
   if (at.length)
     refuse(
       E.ERR_INVALID_ARGUMENT,
-      '--at reads the color at points of a PNG picture; name the picture first.',
-      {run: [`${HOW} picture.png --at "40,20"`]},
+      `--at reads the color at points of a PNG picture; name your picture first (${HOW} <your .png file> --at x,y).`,
+      {run: [without]},
     );
   if (count != null)
-    refuse(E.ERR_INVALID_ARGUMENT, 'A count applies only to a picture.', {
-      run: [`${HOW} picture.png 5`],
-    });
+    refuse(
+      E.ERR_INVALID_ARGUMENT,
+      `A count applies only to a picture (${HOW} <your .png file> 5).`,
+      {run: [without]},
+    );
   if (!t) {
     refuse(
       E.ERR_MISSING_ARGUMENT,
@@ -246,6 +315,22 @@ async function answer(subject, options, cwd) {
       },
     );
   }
+  // "how b make buttons pill": a first word typed as its own argument that
+  // names an existing theme, with more words after it, is the theme, as for
+  // set, show and undo. A quoted question ("how 'accent red'") is one
+  // argument: its first word is never a theme.
+  const argv = /** @type {string[] | undefined} */ (options.words);
+  if (
+    !options.theme &&
+    argv &&
+    argv.length >= 2 &&
+    editedThemes(cwd).includes(argv[0])
+  )
+    return answer(
+      argv.slice(1).join(' '),
+      {...options, words: undefined, theme: argv[0]},
+      cwd,
+    );
   const ctx = await context(cwd);
   const {C} = ctx;
   const env = await howTheme(ctx, cwd, options.theme);
@@ -390,9 +475,31 @@ async function answer(subject, options, cwd) {
   // "What does --color-accent do", "what's the variable for card padding":
   // "--focus-outline-width: 3px": a token typed with a value is set exactly,
   // or refused with the nearest names; never another token.
+  // "cards: --color-border red", "--color-border red on inputs": the token
+  // on that part.
+  const scopeLead = /^\s*([a-z][a-z -]*?)\s*:\s*(?=--)/i.exec(t)?.[1];
+  const scopeTail =
+    /\s+(?:on|for)\s+(?:the |my |all )?([a-z][a-z -]*?)\s*$/i.exec(t)?.[1];
+  const scopeWord = scopeLead ?? scopeTail;
+  const scopeOn = scopeWord
+    ? (() => {
+        const w = ` ${scopeWord.trim().toLowerCase()} `;
+        return (
+          partLexicon(ctx).parts.find(([re]) => re.test(w))?.[1].on ?? null
+        );
+      })()
+    : null;
   const typedToken =
     /^\s*(--[a-z][a-z0-9-]*)\s*(?::|\s+to\s+|\s+)\s*([^;]+?)\s*;?\s*(?:\bin (light|dark) mode\b.*)?$/i.exec(
-      t.replace(/^\s*(?:change|set|make|token)\s+/i, ' '),
+      t
+        .replace(/^\s*(?:change|set|make|token)\s+/i, ' ')
+        .replace(/^\s*[a-z][a-z -]*?\s*:\s*(?=--)/i, ' ')
+        .replace(
+          scopeOn && scopeTail
+            ? /\s+(?:on|for)\s+(?:the |my |all )?[a-z][a-z -]*?\s*$/i
+            : /$^/,
+          '',
+        ),
     );
   if (
     typedToken &&
@@ -431,6 +538,7 @@ async function answer(subject, options, cwd) {
           verb: 'set',
           thing: token,
           value,
+          ...(scopeOn ? {on: scopeOn} : {}),
           ...(mode && env.data.mode === 'both' ? {mode} : {}),
         },
       ],
@@ -470,8 +578,10 @@ async function answer(subject, options, cwd) {
       results: tool,
       ...unknown,
     };
-  // a question about what something is gets the lookup, not a change.
+  // a question about what something is gets the lookup, not a change; a
+  // question about a part's value now gets the value (draftAnswer).
   if (
+    !valueAsked(t) &&
     (/^\s*(what|which|where)\b.*\b(variables?|tokens?|do|does|means?|controls?|for)\b|^\s*what('s| is) the (css )?(variable|token|property)/i.test(
       t,
     ) ||
@@ -538,10 +648,13 @@ async function answer(subject, options, cwd) {
     ...unknown,
     ...(empty
       ? {
-          hint: results.length
-            ? `No command does all of "${t}" on ${env.slug}; the lines above say why.`
-            : `No match for "${t}". Name the part (header, nav links, card, button, banner, input...) and what to change (text color, background, gradient, corners, border, shadow, spacing, bold), in English.`,
+          hint: `${
+            results.length
+              ? `No command does all of "${t}" on ${env.slug}; the lines above say why.`
+              : `No match for "${t}". Name the part (header, nav links, card, button, banner, input...) and what to change (text color, background, gradient, corners, border, shadow, spacing, bold), in English.`
+          } See ${HOW} --help for the asks it understands.`,
           run: [
+            `${HOW} --help`,
             `${HOW} --list parts`,
             `${HOW} "rounder buttons"`,
             `${HOW} colors`,
@@ -552,21 +665,152 @@ async function answer(subject, options, cwd) {
 }
 
 /**
+ * The commands a refusal names to run instead that answer the draft: the
+ * same thing set, accepted by set's check, and (for a draft that carries
+ * what its clause asks) measured to do it.
+ * @param {import('./_how-commands.mjs').HowTheme} env
+ * @param {import('./_how-question.mjs').Draft} d
+ * @param {Array<{command: string, why: string, run?: string[]}>} refused
+ * @returns {string[]}
+ */
+function insteadOf(env, d, refused) {
+  // (The same thing on the same part: another part is another ask.)
+  const things = new Set(
+    d.options.flat().map(st => `${st.thing}|${st.on ?? ''}`),
+  );
+  /** @type {string[]} */
+  const out = [];
+  for (const line of refused.flatMap(r => r.run ?? [])) {
+    const words = [
+      ...line
+        .replace(/^.*? editor /, '')
+        .matchAll(/'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)"|(\S+)/g),
+    ].map(m => m[1] ?? m[2] ?? m[3]);
+    const st = exampleStep(
+      words.map(w => (/\s/.test(w) ? `"${w}"` : w)).join(' '),
+    );
+    if (
+      !st ||
+      !things.has(`${st.thing}|${st.on ?? ''}`) ||
+      /[<>]/.test(String(st.value ?? ''))
+    )
+      continue;
+    if (!env.check([st]).ok) continue;
+    // Held to what the draft asks, else to the way its own dial step went
+    // ("more"): never offered unmeasured.
+    const way = d.options
+      .flat()
+      .map(x => x.value)
+      .find(v => v === 'more' || v === 'less');
+    const intent =
+      d.intent ??
+      (way
+        ? /** @type {import('./_how-commands.mjs').MeasureIntent} */ ({
+            families: [],
+            typed: [],
+            opacityDir: null,
+            dir: way,
+            zero: false,
+            lighter: null,
+            subjects: [],
+            keep: [],
+            mode: null,
+          })
+        : null);
+    if (!intent || typeof env.measure !== 'function') continue;
+    // A dial word the other way round from the one asked never answers it.
+    if (way && (st.value === 'more' || st.value === 'less') && st.value !== way)
+      continue;
+    if (env.measure([st], intent)) continue;
+    out.push(render(st, env.slug));
+  }
+  return out;
+}
+
+/**
  * Check each draft's commands and keep what passes; a draft whose commands
  * are all refused says why, and points to the lookup that helps.
  * @param {import('./_how-commands.mjs').HowTheme} env
  * @param {import('./_how-question.mjs').Draft[]} drafts
  */
 function finish(env, drafts) {
-  /** @type {Array<{text: string, commands: string[], sequence?: boolean, refused?: Array<{command: string, why: string}>}>} */
+  /** @type {Array<{text: string, commands: string[], sequence?: boolean, refused?: Array<{command: string, why: string, run?: string[]}>}>} */
   const out = [];
+  // The measured check runs first on the drafts that carry what their
+  // clause asks; a draft that joins them ("all of it, in order") then keeps
+  // only the steps some kept option still has, so it never brings back a
+  // step the check left out.
+  const key = (/** @type {import('./_how-commands.mjs').Step} */ st) =>
+    JSON.stringify([
+      st.verb,
+      st.thing,
+      st.value,
+      st.on,
+      st.when,
+      st.state,
+      st.mode,
+    ]);
+  /** @type {Set<string>} */
+  const dropped = new Set();
+  /** @type {Set<string>} */
+  const kept = new Set();
+  /** @type {Map<object, string[]>} */
+  const unmetOf = new Map();
+  if (typeof env.measure === 'function')
+    for (const d of drafts) {
+      if (!d.intent) continue;
+      const intent = d.intent;
+      /** @type {string[]} */
+      const unmet = [];
+      d.options = d.options.filter(o => {
+        const why = env.measure(o, intent);
+        for (const st of o) (why ? dropped : kept).add(key(st));
+        if (why) unmet.push(why);
+        return !why;
+      });
+      unmetOf.set(d, unmet);
+    }
   for (const d of drafts) {
+    if (!d.intent && dropped.size) {
+      d.options = d.options
+        .map(o => o.filter(st => !dropped.has(key(st)) || kept.has(key(st))))
+        .filter(o => o.length);
+      // A joined answer left holding what another answer already says is
+      // that answer: it is not given twice (and never as "all of it").
+      const same = (/** @type {import('./_how-commands.mjs').Step[]} */ o) =>
+        drafts.some(
+          x =>
+            x !== d &&
+            x.options.some(
+              y =>
+                y.length === o.length &&
+                y.every((st, i) => key(st) === key(o[i])),
+            ),
+        );
+      if (d.options.length && d.options.every(same)) continue;
+    }
+    // The measured check: an option whose built result does not do what
+    // the question asks is left out, with a plain line saying why.
+    const unmet = unmetOf.get(d) ?? [];
+    if (unmet.length) {
+      if (unmet.length && !d.options.length)
+        d.text = `couldn't work out a command that does "${d.text}" as asked: ${[...new Set(unmet)].join('; ')}`;
+      else if (unmet.length)
+        d.text = `${d.text} (left out: ${[...new Set(unmet)].join('; ')})`;
+    }
     const {commands, refused} = checked(env, d.options);
     const lookups = d.lookup ? [d.lookup] : [];
+    if (!commands.length && !d.options.length && unmet.length) {
+      out.push({text: d.text, commands: lookups});
+      continue;
+    }
     if (!commands.length && d.options.length && !lookups.length) {
       out.push({
         text: `${d.text}: no command does it on ${env.slug}${refused[0] ? `: ${refused[0].why}` : ''}`,
-        commands: [],
+        // The command the refusal itself names to run instead, when it
+        // sets the same thing, passes set's check and does what the
+        // question asks.
+        commands: insteadOf(env, d, refused),
         refused,
       });
       continue;
@@ -642,25 +886,7 @@ function partAnswer(ctx, env, subject, key, unknown, themeFields) {
     ctx.project.target.get(key)
   );
   const group = familyOf(key);
-  // Only the states set takes on this part (it refuses one that never
-  // applies there).
-  // Only the states set takes on this part: a state is dropped when the
-  // same change without it passes and with it is refused.
-  const takes = (/** @type {string | undefined} */ st) => {
-    try {
-      checkSetting(ctx, env.slug, env.data, 'opacity', '1', {
-        on: key,
-        ...(st ? {state: st} : {}),
-      });
-      return true;
-    } catch {
-      return false;
-    }
-  };
-  const plainOk = takes(undefined);
-  const states = [...new Set([...target.states, ...COMMON_STATES])].filter(
-    st => !plainOk || takes(st),
-  );
+  const states = settableStates(ctx, env.slug, env.data, key);
   const reads = Object.fromEntries(
     Object.keys(GROUPS).map(g => [
       g,
@@ -681,7 +907,9 @@ function partAnswer(ctx, env, subject, key, unknown, themeFields) {
   const extra = {};
   if (!recorded && !ctx.unchecked) {
     const {commands} = checked(env, [
-      [{verb: 'set', thing: 'background', value: '#f3f4f6', on: key}],
+      // (A fill of one color is the background color: the shorthand would
+      // clear the image Core draws its hover tint with.)
+      [{verb: 'set', thing: 'background-color', value: '#f3f4f6', on: key}],
       [{verb: 'set', thing: 'color', value: '#111827', on: key}],
       [{verb: 'set', thing: 'border-radius', value: '8px', on: key}],
     ]);
@@ -694,6 +922,9 @@ function partAnswer(ctx, env, subject, key, unknown, themeFields) {
     kind: 'part',
     subject,
     component: target.component ?? null,
+    // What the part is, from its component's doc (a side nav heading is the
+    // product or account heading at the top, not a section title).
+    is: partComponentDocs(ctx, key).at(-1)?.doc.description || null,
     components,
     recorded,
     group,
@@ -840,8 +1071,11 @@ function tokenAnswer(ctx, env, subject, key, unknown, themeFields) {
   const {C} = ctx;
   const readers = C.anyReader(key);
   const type = C.typeOf(key);
+  // The theme's own value (its settings applied), else the base theme's.
   const now =
-    env.base.light[key] ?? String(ctx.project.core.tokenDefaults[key]);
+    env.own?.light[key] ??
+    env.base.light[key] ??
+    String(ctx.project.core.tokenDefaults[key]);
   const value = exampleForToken(type, key, now);
   const {commands, refused} = value
     ? checked(env, [
@@ -1025,7 +1259,37 @@ function toolAnswer(t, env, targets) {
     /^(how (round|big|small|large|thick|dark|light|bold|wide|tall) (is|are)|what (is|are) the (current|available)|which \w+ (does|do|is|are)|what (font|color|colour|radius|accent) (does|do|is|are)|what (values|options|choices))\b|\b(right now|currently|at the moment)\??$|\bnow\?$/.exec(
       q,
     );
-  if (asks || /^which parts (are|does|do)\b/.test(q)) {
+  // "is my theme valid", "how many dials", "list every change".
+  if (
+    /^(is|are) (my|the|this) theme (valid|ok|okay|broken|working)\b|^(check|validate) (my|the) theme\b/.test(
+      q,
+    )
+  )
+    return [
+      {
+        text: `show builds ${env.slug} and says what is wrong with it, if anything`,
+        commands: [`${P} show ${env.slug}`],
+      },
+    ];
+  if (
+    /^how many (dials|settings|tokens|parts)\b|^(list|show) (every|all|each) (dial|setting|token|part)s?\b/.test(
+      q,
+    )
+  )
+    return 'list';
+  if (/^(list|show) (every|all|my) (changes?|edits?|settings)\b/.test(q))
+    return [
+      {
+        text: `show lists every setting ${env.slug} has`,
+        commands: [`${P} show ${env.slug}`],
+      },
+    ];
+  if (
+    // A question about a part's value now is answered with that value.
+    (asks && !valueAsked(q)) ||
+    /^which parts (are|does|do)\b/.test(q) ||
+    (/^why (is|are|does|do)\b/.test(q) && !/\bnot\b|n'?t\b/.test(q))
+  ) {
     // The part or setting the question names gets its own lookup.
     const named = q
       .split(/[^a-z-]+/)
@@ -1112,7 +1376,7 @@ function wholeThemeTokens(ctx, env, aspect) {
   /** @type {string[]} */
   let commands = [];
   for (const tok of toks) {
-    const now = env.base.light[tok] ?? '';
+    const now = env.own?.light[tok] ?? env.base.light[tok] ?? '';
     if (parseFloat(now) >= 999) continue;
     const value = exampleForToken(C.typeOf(tok), tok, now);
     if (!value) continue;
@@ -1270,14 +1534,18 @@ async function listItems(kind, filter, cwd) {
  * Read `--at` points: "x,y;x,y", "x,y x,y", repeated, or a flat "a,b,c,d".
  * Each number is a whole pixel; anything else is refused by name.
  * @param {string[]} at
+ * @param {string | null} [file] the picture the points are on
  * @returns {Array<{x: number, y: number}>}
  */
-export function parsePoints(at) {
+export function parsePoints(at, file = null) {
   const words = at
     .join(' ')
     .split(/[;\s]+/)
     .filter(Boolean);
-  const example = `${HOW} picture.png --at "40,20;300,180"`;
+  // The picture named, never a made-up file.
+  const example = file
+    ? `${HOW} ${quoteCommandArgument(file)} --at "40,20;300,180"`
+    : `${HOW} --help`;
   if (!words.length)
     refuse(E.ERR_INVALID_ARGUMENT, '--at names no point; give x,y pairs.', {
       run: [example],
@@ -1337,7 +1605,7 @@ function pictureColors(file, cwd, at, count) {
       `The count must be a positive whole number, not "${count}".`,
       {run: [`${HOW} ${file} 5`]},
     );
-  const points = at.length ? parsePoints(at) : null;
+  const points = at.length ? parsePoints(at, file) : null;
   // The header holds the size, so a huge picture is refused unread.
   const fd = fs.openSync(abs, 'r');
   const head = Buffer.alloc(8);

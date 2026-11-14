@@ -106,8 +106,20 @@ const configSchema = z
         iconSet: z
           .union([z.string().min(1), z.array(z.string().min(1)).min(1)])
           .optional(),
+        iconVariant: z.string().min(1).optional(),
       })
       .strict()
+      // The variant is the look of the sets `iconSet` names, so it needs them.
+      .superRefine((value, ctx) => {
+        if (value.iconVariant !== undefined && value.iconSet === undefined) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['iconVariant'],
+            message:
+              'iconVariant is the look of the icon sets experimental.iconSet names: set experimental.iconSet too (`astryx experimental icon use <set> --variant <variant>` writes both)',
+          });
+        }
+      })
       .optional(),
   })
   .strict();

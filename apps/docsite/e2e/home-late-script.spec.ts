@@ -2,8 +2,8 @@
 
 /**
  * @file home-late-script.spec.ts
- * @input Production docsite home page at a desktop width, with the page's own
- *   script held until the site shell is live
+ * @input Production docsite home page at a desktop and a phone width, with the
+ *   page's own script held until the site shell is live
  * @output Regression proof that a page whose script arrives late hydrates its
  *   server HTML and does not render it again, and that the shell knows the
  *   color mode before the page is live
@@ -73,6 +73,49 @@ for (const colorScheme of ['light', 'dark'] as const) {
     }
   });
 }
+
+test('the home page keeps its server HTML at a phone width when its script arrives after the shell is live', async ({
+  page,
+}) => {
+  await page.setViewportSize({width: 390, height: 844});
+  let releasePageScript = () => {};
+  const shellIsLive = new Promise<void>(resolve => {
+    releasePageScript = resolve;
+  });
+  await page.route(HOME_PAGE_SCRIPT, async route => {
+    await shellIsLive;
+    await route.continue();
+  });
+
+  try {
+    await page.goto('/', {waitUntil: 'domcontentloaded'});
+    const hero = page.locator('[data-home-page="true"]').first();
+    await expect(hero).toBeVisible();
+    const serverHero = await hero.elementHandle();
+
+    // Below its mobile breakpoint the shell changes layout when it goes live.
+    const nav = page.getByRole('navigation', {name: 'Astryx navigation'});
+    await expect(nav.locator('[role="tooltip"]').first()).toBeAttached();
+
+    releasePageScript();
+    // The reel does not advance on its own at this width. It answers a press
+    // once the page is live.
+    const secondTheme = page
+      .getByRole('navigation', {name: 'Preview Astryx themes'})
+      .getByRole('radio', {name: 'Page 2'});
+    await expect(async () => {
+      await secondTheme.click();
+      await expect(secondTheme).toBeChecked({timeout: 1000});
+    }).toPass();
+
+    const isServerHeroInPage = await serverHero?.evaluate(
+      element => element.isConnected,
+    );
+    expect(isServerHeroInPage).toBe(true);
+  } finally {
+    releasePageScript();
+  }
+});
 
 test('the color mode toggle leaves the OS mode when a visitor uses it before the page is live', async ({
   page,

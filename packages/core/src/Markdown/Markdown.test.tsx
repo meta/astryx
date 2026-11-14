@@ -16,8 +16,15 @@ import {
   beforeEach,
   afterEach,
 } from 'vitest';
-import {render, screen, fireEvent} from '@testing-library/react';
-import type {ComponentProps, ReactNode} from 'react';
+import {act, render, screen, fireEvent} from '@testing-library/react';
+import {
+  Suspense,
+  startTransition,
+  use,
+  type ComponentProps,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Markdown} from './Markdown';
 import {markdownSourceLinesPlugin} from './plugins';
@@ -921,6 +928,116 @@ describe('Markdown', () => {
         'a | b',
         'c',
       ]);
+    });
+  });
+
+  // The parser's caches are written while Markdown renders: its incremental
+  // state, the option flags that reset it, and the plugins' syntax entries. A
+  // render React discards can leave an entry there. The parser reuses settled
+  // blocks only while the input still starts with their text. So such an entry
+  // can never put a discarded render's text on screen.
+  describe('a streamed render that React discards', () => {
+    // A transition that suspends for good: React renders its element, then
+    // keeps the committed tree and never commits that render.
+    const forever = new Promise<never>(() => {});
+    function Forever(): null {
+      use(forever);
+      return null;
+    }
+    function Discardable({
+      children,
+      isPending = false,
+    }: {
+      children: ReactNode;
+      isPending?: boolean;
+    }) {
+      return (
+        <Suspense fallback={null}>
+          {children}
+          {isPending ? <Forever /> : null}
+        </Suspense>
+      );
+    }
+    async function discardRender(
+      rerender: (ui: ReactElement) => void,
+      ui: ReactElement,
+    ): Promise<void> {
+      await act(async () => {
+        startTransition(() => {
+          rerender(<Discardable isPending>{ui}</Discardable>);
+        });
+      });
+    }
+
+    // Reduced motion makes the reveal synchronous, so each render parses
+    // exactly the text it is given.
+    beforeEach(() => {
+      stubMatchMedia({reduceMotion: true});
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    /** Each block's tag and text, in document order. */
+    function blocks(container: HTMLElement): string[] {
+      const doc = container.querySelector('[role="document"]');
+      return Array.from(doc?.querySelectorAll('div, li, strong, em') ?? []).map(
+        node =>
+          `${node.tagName.toLowerCase()}: ${(node.textContent ?? '')
+            .replace(/\s+/g, ' ')
+            .trim()}`,
+      );
+    }
+
+    async function streamAround(discarded: ReactElement) {
+      const settled = 'Intro with **bold**\n\nA settled paragraph\n\n';
+      const first = `${settled}Streaming`;
+      const next = `${settled}Streaming goes on`;
+      // The control: the same two committed renders, with nothing discarded.
+      const control = render(
+        <Discardable>
+          <Markdown isStreaming>{first}</Markdown>
+        </Discardable>,
+      );
+      control.rerender(
+        <Discardable>
+          <Markdown isStreaming>{next}</Markdown>
+        </Discardable>,
+      );
+      const {container, rerender} = render(
+        <Discardable>
+          <Markdown isStreaming>{first}</Markdown>
+        </Discardable>,
+      );
+      await discardRender(rerender, discarded);
+      rerender(
+        <Discardable>
+          <Markdown isStreaming>{next}</Markdown>
+        </Discardable>,
+      );
+      return {committed: blocks(container), control: blocks(control.container)};
+    }
+
+    it('never shows its text: the parser re-checks its settled blocks', async () => {
+      const {committed, control} = await streamAround(
+        <Markdown isStreaming>
+          {'Other *text* that never commits\n\n- a list\n- of items\n\nMore'}
+        </Markdown>,
+      );
+
+      // None of the discarded render's own text shows: not its paragraph, its
+      // list or its tail.
+      for (const text of [
+        'Other',
+        'never commits',
+        'a list',
+        'of items',
+        'More',
+      ]) {
+        expect(committed.join('\n')).not.toContain(text);
+      }
+      expect(committed).toEqual(control);
     });
   });
 

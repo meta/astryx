@@ -366,6 +366,10 @@ describe('calculateVariableListRange', () => {
     (all, size) => [...all, all[all.length - 1] + size],
     [0],
   );
+  const startEnd = ({start, end}: {start: number; end: number}) => ({
+    start,
+    end,
+  });
   const range = (
     options: Partial<Parameters<typeof calculateVariableListRange>[0]>,
   ) =>
@@ -380,17 +384,23 @@ describe('calculateVariableListRange', () => {
 
   it('seeds the items that start inside the first viewport, plus overscan after them', () => {
     // Items 0..2 start before 250.
-    assert.deepEqual(range({isMeasured: false}), {start: 0, end: 5});
+    assert.deepEqual(startEnd(range({isMeasured: false})), {start: 0, end: 5});
   });
 
   it('mounts the items that intersect the viewport, plus overscan on each side', () => {
     // 320..570 shows items 3 (300..400) through 5 (500..600).
-    assert.deepEqual(range({scrollOffset: 320}), {start: 1, end: 8});
+    assert.deepEqual(startEnd(range({scrollOffset: 320})), {start: 1, end: 8});
+  });
+
+  it('reports the first visible item and the scrolled distance into it', () => {
+    const visible = range({scrollOffset: 320});
+    assert.equal(visible.firstVisibleIndex, 3);
+    assert.equal(visible.offset, 20);
   });
 
   it('clamps the scroll offset to the full extent', () => {
     // The last 250px start inside item 7.
-    assert.deepEqual(range({scrollOffset: 99999}), {
+    assert.deepEqual(startEnd(range({scrollOffset: 99999})), {
       start: 5,
       end: sizes.length,
     });
@@ -405,13 +415,48 @@ describe('calculateVariableListRange', () => {
 
   it('keeps one visible item when the viewport has no space', () => {
     // Item 3 holds the scroll offset.
-    assert.deepEqual(range({viewportSize: 0, scrollOffset: 320}), {
+    assert.deepEqual(startEnd(range({viewportSize: 0, scrollOffset: 320})), {
       start: 1,
       end: 6,
     });
   });
 
   it('returns an empty range for no items', () => {
-    assert.deepEqual(range({offsets: [0]}), {start: 0, end: 0});
+    assert.deepEqual(startEnd(range({offsets: [0]})), {start: 0, end: 0});
+  });
+});
+
+describe('reconcileListAnchor with item offsets', () => {
+  // Widths 100, 150 and 50 after "a" is removed.
+  const anchor = (
+    overrides: Partial<Parameters<typeof reconcileListAnchor>[0]>,
+  ) =>
+    reconcileListAnchor({
+      previousKeys: ['a', 'b', 'c', 'd'],
+      keys: ['b', 'c', 'd'],
+      firstVisibleIndex: 2,
+      offset: 0.5,
+      offsets: [0, 100, 250, 300],
+      rowHeight: 0,
+      viewportHeight: 50,
+      startOffset: 0,
+      ...overrides,
+    });
+
+  it('keeps the first visible key and the fraction of its new size', () => {
+    // "c" now starts at 100 and is 150 wide.
+    assert.equal(anchor({}), 175);
+  });
+
+  it('moves to the next surviving key when the anchor is removed', () => {
+    // "d" now starts at 100 and is 50 wide.
+    assert.equal(
+      anchor({keys: ['b', 'd'], offsets: [0, 100, 150], viewportHeight: 10}),
+      125,
+    );
+  });
+
+  it('clamps to the end of the new extent', () => {
+    assert.equal(anchor({viewportHeight: 200}), 100);
   });
 });

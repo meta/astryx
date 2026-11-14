@@ -10,6 +10,7 @@
  */
 
 import {DIRECT, GROUPS, HOW} from './_tables.mjs';
+import {splitTop} from './_css.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 
 /** Only these token types may differ between light and dark. */
@@ -115,8 +116,12 @@ export function makeCompiler(project, parts) {
     const kept = (attrPart.includes('=') ? attrPart.split(',') : []).filter(
       kv => {
         const [k] = kv.split('=');
+        // (The place another component puts the part in, from the part
+        // data's context conditions, stays: it is never the part at rest.)
         return (
           k === 'selected' ||
+          k === 'current' ||
+          k === 'pressed' ||
           (['variant', 'status', 'tone', 'color'].includes(k) &&
             (attrs[k]?.length ?? 0) > 1)
         );
@@ -278,7 +283,23 @@ export function makeCompiler(project, parts) {
       void fed;
       return null;
     }
-    const reads = g ? partReads(target, g) : [];
+    // Only a token of the same kind takes the value: a weight never goes to
+    // a line height, a line height never to a weight.
+    // Font tokens share a type across kinds (a weight and a leading are
+    // both numbers), so the kind is read from the name.
+    const kindOf = (/** @type {string} */ t) =>
+      /family/.test(t)
+        ? 'family'
+        : /weight/.test(t)
+          ? 'weight'
+          : /leading|line-height/.test(t)
+            ? 'leading'
+            : /tracking|letter-spacing/.test(t)
+              ? 'tracking'
+              : typeOf(t);
+    const reads = g
+      ? partReads(target, g).filter(r => kindOf(r.token) === kindOf(token))
+      : [];
     const v = quoteCommandArgument(value);
     /** @type {string[]} */
     const run = [];
@@ -368,7 +389,16 @@ export function makeCompiler(project, parts) {
   function variantValues(target) {
     const comp = TARGET.get(target)?.component;
     const info = comp ? project.components[comp] : undefined;
+    // The component named like the part (Heading for heading) owns its
+    // values before any other component whose docs name the same class.
+    const pascal = target.replace(/(^|-)([a-z0-9])/g, (_, __, ch) =>
+      ch.toUpperCase(),
+    );
+    const own = project.components?.[pascal]?.targets?.find(
+      (/** @type {any} */ x) => x.className === `astryx-${target}`,
+    );
     const t =
+      own ??
       info?.targets.find(x => x.className === `astryx-${target}`) ??
       info?.targets[0];
     const fromDocs = t?.values ?? {};
@@ -377,7 +407,53 @@ export function makeCompiler(project, parts) {
     const out = {};
     for (const p of TARGET.get(target)?.props ?? [])
       out[p] = fromDocs[p]?.length ? fromDocs[p] : (seen[p] ?? []);
+    // A state Core marks with more than one value (a checkbox's checked and
+    // indeterminate looks) is a condition --when names by value.
+    for (const st of TARGET.get(target)?.states ?? [])
+      if ((seen[st] ?? []).some(v => v !== st)) out[st] = seen[st];
     return out;
+  }
+
+  /**
+   * The color stops of a background made of gradients, or null when any
+   * layer is an image or any stop has no color the editor can name.
+   * @param {string} v
+   * @returns {string[] | null}
+   */
+  function gradientStops(v) {
+    /** The parts between commas outside parentheses. @param {string} x */
+    const top = x =>
+      splitTop(x, ',')
+        .map(part => part.trim())
+        .filter(Boolean);
+    /** @type {string[]} */
+    const stops = [];
+    for (const layer of top(v)) {
+      const m =
+        /^(?:repeating-)?(?:linear|radial|conic)-gradient\((.*)\)$/s.exec(
+          layer,
+        );
+      if (!m) {
+        // A layer that is one color (the shorthand's last) is a stop too.
+        if (/url\(|gradient\(/.test(layer)) return null;
+        stops.push(layer);
+        continue;
+      }
+      for (const arg of top(m[1])) {
+        // The direction, shape or position comes first, with no color.
+        if (
+          /^(to\b|at\b|from\b|-?[\d.]+(deg|turn|rad|grad)\b|circle\b|ellipse\b|closest|farthest)/.test(
+            arg,
+          )
+        )
+          continue;
+        // A stop is its color and up to two positions after it.
+        const color = arg.replace(/(\s+-?[\d.]+(%|px|rem|em)?)+$/, '').trim();
+        if (!color || /^-?[\d.]+(%|px|rem|em)?$/.test(color)) continue;
+        stops.push(color);
+      }
+    }
+    return stops.length ? stops : null;
   }
 
   /**
@@ -430,9 +506,30 @@ export function makeCompiler(project, parts) {
         continue;
       for (const m of modes) {
         const fg = value(p, 'fg', m);
-        const bg = value(p, 'bg', m);
-        if (/gradient|url\(/.test(String(bg))) continue;
-        const pair = drawn(fg, bg, m);
+        const whole = value(p, 'bg', m);
+        // A gradient is measured at each of its color stops, the worst one
+        // counting; an image, or a stop with no fixed color, is not checked.
+        const stops = /gradient|url\(/.test(String(whole))
+          ? gradientStops(String(whole))
+          : [whole];
+        if (!stops) {
+          if (whole !== baseValue(p, 'bg', m)) unchecked.add(String(whole));
+          continue;
+        }
+        const measured = stops.map(stop => ({stop, pair: drawn(fg, stop, m)}));
+        if (stops.length > 1 && measured.some(x => !x.pair)) {
+          if (whole !== baseValue(p, 'bg', m)) unchecked.add(String(whole));
+          continue;
+        }
+        const worst = measured.reduce((a, b) =>
+          a.pair &&
+          b.pair &&
+          ratio(b.pair[0], b.pair[1]) < ratio(a.pair[0], a.pair[1])
+            ? b
+            : a,
+        );
+        const bg = worst.stop;
+        const pair = worst.pair;
         if (!pair) {
           for (const [v, side] of /** @type {const} */ ([
             [fg, 'fg'],
@@ -467,9 +564,11 @@ export function makeCompiler(project, parts) {
               : (p.fg.tokens[0] ?? String(fg)),
           bgPart: p.bg.target,
           bg:
-            bg !== baseValue(p, 'bg', m)
-              ? String(bg)
-              : (p.bg.tokens[0] ?? String(bg)),
+            stops.length > 1
+              ? `${bg}, a stop of its gradient`
+              : bg !== baseValue(p, 'bg', m)
+                ? String(bg)
+                : (p.bg.tokens[0] ?? String(bg)),
         });
       }
     }

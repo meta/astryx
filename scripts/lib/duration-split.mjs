@@ -50,11 +50,19 @@ export function assertEachOnce(items, legs, what = 'item') {
 
 /**
  * Splits items into `count` legs, slowest first, each to the leg with the
- * least time so far.
+ * least time so far. `reserved[i]` starts leg i with that much time already
+ * taken, for work the leg does besides these items.
+ * @param {string[]} items
+ * @param {number} count
+ * @param {(item: string) => number} cost
+ * @param {number[]} [reserved]
  * @returns {string[][]} each leg's items, sorted; together exactly `items`
  */
-export function splitByDuration(items, count, cost) {
-  const legs = Array.from({length: count}, () => ({items: [], total: 0}));
+export function splitByDuration(items, count, cost, reserved = []) {
+  const legs = Array.from({length: count}, (_, i) => ({
+    items: [],
+    total: reserved[i] ?? 0,
+  }));
   for (const item of slowestFirst(new Set(items), cost)) {
     const leg = legs.reduce((best, next) =>
       next.total < best.total ? next : best,

@@ -33,6 +33,7 @@ import {useTableWindow} from './plugins/virtualization/useTableWindow';
 import {getTableVirtualizationConfig} from './plugins/virtualization/useTableRowsVirtualization';
 import {
   resolveTableVirtualization,
+  type TableColumnFocusProps,
   type TableColumnLayout,
 } from './tableColumnWindowing';
 import {TableContext} from './TableContext';
@@ -44,6 +45,7 @@ import {
   withLogicalPositionWidths,
 } from './tableColumnAdmission';
 import {isRenderable} from '../utils/isRenderable';
+import {chainEventHandlers} from '../utils/chainEventHandlers';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import type {
@@ -745,9 +747,14 @@ function BaseTableInner<T extends Record<string, unknown>>({
   // the last logical row, before that row mounts, so a number never clips.
   // Fixed layout sizes columns from the header, so rows keep their columns;
   // pinned offsets read the extra width from a table variable.
-  const sizedColumns = withLogicalPositionWidths(
-    resolvedColumns,
-    windowPlan.logicalPositionWidths,
+  // Column pitches and the inline anchor compare this array by identity.
+  const sizedColumns = useMemo(
+    () =>
+      withLogicalPositionWidths(
+        resolvedColumns,
+        windowPlan.logicalPositionWidths,
+      ),
+    [resolvedColumns, windowPlan.logicalPositionWidths],
   );
   const resolvedWidths = resolveColumnWidths(sizedColumns);
   const logicalExtraStyle: Record<string, string> = {};
@@ -786,6 +793,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
   // window, which a columns capability supplies.
   const renderTable = (
     columnLayout: TableColumnLayout | undefined,
+    columnFocusProps?: TableColumnFocusProps,
   ): ReactNode => {
     // --- Plugin pipeline: header cells ---
     const renderHeaderCell = (col: TableColumn<T>, columnIndex: number) => {
@@ -920,6 +928,9 @@ function BaseTableInner<T extends Record<string, unknown>>({
     );
 
     // --- Render ---
+    // A row gap spans every cell of a mounted row: pinned cells, spacers and
+    // mounted columns.
+    const mountedCellCount = columnLayout?.cellCount ?? resolvedColumns.length;
     const hasColumns = resolvedColumns.length > 0;
 
     // The table is at least as wide as the column floors require and at least
@@ -962,7 +973,29 @@ function BaseTableInner<T extends Record<string, unknown>>({
             .join(' ') || undefined,
           tableStyle,
         )}
-        {...rest}>
+        {...rest}
+        {...(columnFocusProps && {
+          onFocus: chainEventHandlers(
+            tableRenderProps.htmlProps.onFocus,
+            rest.onFocus,
+            columnFocusProps.onFocus,
+          ),
+          onBlur: chainEventHandlers(
+            tableRenderProps.htmlProps.onBlur,
+            rest.onBlur,
+            columnFocusProps.onBlur,
+          ),
+          onPointerDown: chainEventHandlers(
+            tableRenderProps.htmlProps.onPointerDown,
+            rest.onPointerDown,
+            columnFocusProps.onPointerDown,
+          ),
+          onContextMenu: chainEventHandlers(
+            tableRenderProps.htmlProps.onContextMenu,
+            rest.onContextMenu,
+            columnFocusProps.onContextMenu,
+          ),
+        })}>
         {children ? (
           children
         ) : (
@@ -991,7 +1024,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
                           key={`gap:${segment.start}:${segment.end}`}
                           aria-hidden="true">
                           <td
-                            colSpan={resolvedColumns.length}
+                            colSpan={mountedCellCount}
                             {...stylex.props(styles.spacer(segment.height))}
                           />
                         </tr>,
@@ -1052,7 +1085,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
                   // would be wrong. Caller-owned empty content still shows.
                   !(isLoading && emptyState == null) && (
                     <tr>
-                      <td colSpan={resolvedColumns.length}>
+                      <td colSpan={mountedCellCount}>
                         {emptyState ?? (
                           <EmptyState
                             title={t('@astryx.table.noData')}
@@ -1080,7 +1113,6 @@ function BaseTableInner<T extends Record<string, unknown>>({
         input={{
           fallbackReason: sharedFallbackReason,
           hasFixedHeightColumns,
-          isRowsWindowing: config != null,
           columns: sizedColumns,
           plugins,
           minWidth: mergedStyle.minWidth,

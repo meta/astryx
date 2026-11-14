@@ -16,6 +16,7 @@
  *
  * Usage:
  *   astryx docs                          List available topics
+ *   astryx docs --list                   The same list, asked for by flag
  *   astryx docs <topic>                  List the topic's sections (a topic
  *                                        with one section prints whole)
  *   astryx docs <topic> <section>        Print one section
@@ -650,7 +651,7 @@ export function registerDocs(program) {
     action: async (
       /** @type {string | undefined} */ topic,
       /** @type {string | undefined} */ sectionName,
-      /** @type {{index?: boolean, full?: boolean, depth?: string}} */ options = {},
+      /** @type {{list?: boolean, index?: boolean, full?: boolean, depth?: string}} */ options = {},
     ) => {
       const run = getCliInvocation();
       const lang = program.opts().lang || null;
@@ -697,6 +698,7 @@ export function registerDocs(program) {
           lang,
           zh,
           dense,
+          list: options.list,
           index: listSections,
           ...(depth != null ? {depth, detail: childDetail} : {}),
         });

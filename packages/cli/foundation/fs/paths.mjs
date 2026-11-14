@@ -269,7 +269,7 @@ function isCoreSource(dir) {
  * @param {string} p
  * @returns {string}
  */
-function realDir(p) {
+export function realDir(p) {
   try {
     return fs.realpathSync(path.resolve(p));
   } catch {
@@ -282,7 +282,7 @@ function realDir(p) {
  *
  * @returns {string|null}
  */
-function homeFolder() {
+export function homeFolder() {
   try {
     const home = os.homedir();
     return home ? realDir(home) : null;
@@ -292,15 +292,28 @@ function homeFolder() {
 }
 
 /**
+ * Whether a relative path climbs out of the folder it starts in: `..`
+ * itself, or a path that begins with `../` (or `..` and the platform's
+ * separator). A name that only
+ * begins with two dots (`..x`) is a folder or file like any other.
+ *
+ * @param {string} rel
+ * @returns {boolean}
+ */
+export function climbsOut(rel) {
+  return rel === '..' || rel.startsWith('../') || rel.startsWith(`..${path.sep}`);
+}
+
+/**
  * Whether `child` lies strictly inside `parent`.
  *
  * @param {string} child
  * @param {string} parent
  * @returns {boolean}
  */
-function isInside(child, parent) {
+export function isInside(child, parent) {
   const rel = path.relative(parent, child);
-  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+  return rel !== '' && !climbsOut(rel) && !path.isAbsolute(rel);
 }
 
 /**
@@ -399,8 +412,22 @@ export function findAstryxProject(startDir) {
  * @returns {string}
  */
 export function findWorkspaceRoot(startDir) {
-  /** @type {string|null} */
-  let nearestPackage = null;
+  return (
+    findDeclaredWorkspaceRoot(startDir) ??
+    findPackageRoot(startDir) ??
+    path.resolve(startDir)
+  );
+}
+
+/**
+ * The nearest directory at or above `startDir` that declares a workspace,
+ * by a `pnpm-workspace.yaml` or a package.json `workspaces` field; null
+ * outside a workspace.
+ *
+ * @param {string} startDir
+ * @returns {string|null}
+ */
+export function findDeclaredWorkspaceRoot(startDir) {
   for (const dir of foldersUpFrom(startDir)) {
     if (
       fs.existsSync(path.join(dir, 'pnpm-workspace.yaml')) ||
@@ -408,14 +435,8 @@ export function findWorkspaceRoot(startDir) {
     ) {
       return dir;
     }
-    if (
-      nearestPackage == null &&
-      fs.existsSync(path.join(dir, 'package.json'))
-    ) {
-      nearestPackage = dir;
-    }
   }
-  return nearestPackage ?? path.resolve(startDir);
+  return null;
 }
 
 /**
