@@ -15,6 +15,9 @@
 
 import type {ComponentStyleMap} from './defineTheme';
 
+/** A value a theme's component map can hold: a CSS value or a block. */
+type StyleValue = string | number | boolean | null | undefined | object;
+
 /** The style keys that hold a block for one color mode. */
 const COLOR_MODE_KEYS = ['@light', '@dark'] as const;
 
@@ -27,7 +30,7 @@ const COLOR_MODE_KEYS = ['@light', '@dark'] as const;
  */
 function readEntries<T>(
   value: T,
-  read: (entry: unknown) => unknown,
+  read: (entry: StyleValue) => StyleValue,
 ): T | undefined {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     return value;
@@ -36,7 +39,7 @@ function readEntries<T>(
   let changed = false;
   const kept: [string, unknown][] = [];
   for (const [key, entry] of entries) {
-    const set = entry === undefined ? undefined : read(entry);
+    const set = entry === undefined ? undefined : read(entry as StyleValue);
     if (set === undefined) {
       changed = true;
       continue;
@@ -55,7 +58,7 @@ function readEntries<T>(
  * nested block (a pseudo-class or color-mode block) stays even when that
  * empties it: a restated pseudo-class block still replaces the base's.
  */
-function withoutUndefined(value: unknown): unknown {
+function withoutUndefined(value: StyleValue): StyleValue {
   const set = readEntries(value, withoutUndefined);
   return set === undefined ? {} : set;
 }
@@ -70,8 +73,14 @@ function withoutUndefined(value: unknown): unknown {
 export function withoutUnsetComponents(
   map: ComponentStyleMap | undefined,
 ): ComponentStyleMap | undefined {
-  return readEntries(map, rules =>
-    readEntries(rules, styles => readEntries(styles, withoutUndefined)),
+  return readEntries(
+    map,
+    (rules: StyleValue): StyleValue =>
+      readEntries(
+        rules,
+        (styles: StyleValue): StyleValue =>
+          readEntries(styles, withoutUndefined),
+      ),
   );
 }
 
