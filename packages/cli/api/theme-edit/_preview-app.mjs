@@ -1098,11 +1098,30 @@ function previewDir(cwd, where, opts = {}) {
     checkFolderName(where, '--path', retry);
     /** @type {string} */
     let dir;
+    // A --path read from the folder the command ran in; one that names a
+    // preview from the project root (as every printed folder is) is read
+    // from there, so a printed tip works from a subfolder too.
+    const fromRoot = (() => {
+      // The --path as given from the subfolder the command ran in, rebased
+      // onto the project root by the caller: when that names no folder and
+      // the path without the subfolder names a preview, that one.
+      const sub = path.relative(cwd, process.cwd());
+      if (!sub || sub.startsWith('..') || path.isAbsolute(where)) return null;
+      const given = path.normalize(where);
+      if (!given.startsWith(sub + path.sep)) return null;
+      const there = path.resolve(cwd, given.slice(sub.length + 1));
+      return !fs.existsSync(path.resolve(cwd, where)) &&
+        fs.existsSync(path.join(there, PREVIEW_DATA))
+        ? there
+        : null;
+    })();
     try {
-      dir = assertWithin(path.resolve(cwd, where), cwd, {
-        allowAbsolute: true,
-        label: '--path',
-      });
+      dir =
+        fromRoot ??
+        assertWithin(path.resolve(cwd, where), cwd, {
+          allowAbsolute: true,
+          label: '--path',
+        });
     } catch (e) {
       if (e instanceof PathSafetyError)
         refuse(
@@ -1501,7 +1520,7 @@ function planStarterApp(cwd, where, extra, dependencies, slug = null) {
     if (e instanceof PathSafetyError)
       refuse(
         E.ERR_PATH_TRAVERSAL,
-        `${where} is outside the current folder; make the app inside the folder you run the command from.`,
+        `${where} is outside the project; make the app inside the project folder.`,
         {run: [again(null)]},
       );
     throw e;
@@ -3260,7 +3279,20 @@ export async function refreshPreviewRoute(cwd, slug) {
         `${shownDir(cwd, dir)}/ (${slug} has generated colors now; ${PREVIEW} add${dirFlag(cwd, dir)} adds its Colors page)`,
       );
     if (!writes.length) continue;
-    commitPreview(cwd, dir, data, writes, [], `${EDITOR} show ${slug}`);
+    // A route that cannot be written (its permissions, a folder in its
+    // place) does not follow this change: said, never a quiet ok.
+    try {
+      commitPreview(cwd, dir, data, writes, [], `${EDITOR} show ${slug}`);
+    } catch (e) {
+      const code =
+        /\b(E[A-Z]{2,})\b/.exec(
+          `${/** @type {any} */ (e)?.code ?? ''} ${e instanceof Error ? e.message : ''}`,
+        )?.[1] ?? 'it could not be written';
+      stale.push(
+        `${shownDir(cwd, dir)}/ (could not be written: ${code}, so the in-app preview does not follow this change; fix its permissions, then ${PREVIEW} add${dirFlag(cwd, dir)} writes it again)`,
+      );
+      continue;
+    }
     changed = true;
   }
   return {changed, stale};
@@ -3367,6 +3399,20 @@ function previewPath(cwd, at) {
 function unservedWhy(cwd, dir) {
   const app = routesOf(cwd, {dir, app: null});
   if (!app) return null;
+  // The same rules add keeps: src/app/ while app/ is what Next serves, and
+  // a next.config whose page extensions leave out page.tsx.
+  const served = [path.join(cwd, 'app'), path.join(cwd, 'src', 'app')].find(
+    r => fs.existsSync(r) && fs.statSync(r).isDirectory(),
+  );
+  if (served && path.resolve(app) !== path.resolve(served))
+    return `Next serves ${shown(cwd, served)}/ instead of ${shown(cwd, app)}/ when both are there`;
+  try {
+    const exts = readNextConfig(cwd).pageExtensions;
+    if (exts && !exts.includes('tsx'))
+      return `next.config sets pageExtensions to ${exts.join(', ')}, so Next does not serve page.tsx`;
+  } catch {
+    // A config this cannot read is not a reason to hide the URL.
+  }
   // A [param] folder is served, with a value for it; only _private, @slot
   // and intercepting folders are not.
   const segs = path.relative(app, dir).split(path.sep);
@@ -3414,10 +3460,14 @@ export function seeLine(cwd, slug, focus, notChecked = null, extra = {}) {
   const unplain = [];
   /** Previews in a folder Next does not serve. @type {string[]} */
   const unserved = [];
+  /** Their folders, as --path takes them. @type {string[]} */
+  const unservedDirs = [];
   /** @type {string[]} */
   const stale = extra.stale ?? [];
   /** Previews whose route was changed by hand. @type {string[]} */
   const handEdited = [];
+  /** Previews whose record is damaged. @type {string[]} */
+  const damaged = [];
   // The previews recorded for the theme, and any found in the routes
   // folders that wear it (a folder renamed by hand), as remove finds them.
   const dirs = [
@@ -3428,19 +3478,28 @@ export function seeLine(cwd, slug, focus, notChecked = null, extra = {}) {
     let data;
     try {
       data = JSON.parse(fs.readFileSync(path.join(dir, PREVIEW_DATA), 'utf8'));
-    } catch {
+    } catch (e) {
+      // A record that is there but damaged: the preview commands refuse
+      // it until it is fixed, so no add tip, the repair instead.
+      if (
+        fs.existsSync(path.join(dir, PREVIEW_DATA)) &&
+        !(/** @type {any} */ (e)?.code)
+      )
+        damaged.push(shownDir(cwd, dir));
       continue;
     }
     if (data?.theme !== slug) continue;
     const why = unservedWhy(cwd, dir);
     if (why) {
       unserved.push(`${shownDir(cwd, dir)}/ (${why})`);
+      unservedDirs.push(shownDir(cwd, dir));
       continue;
     }
     if (
       stale.some(
         f =>
-          f.startsWith(`${shownDir(cwd, dir)}/`) && /changed by hand/.test(f),
+          f.startsWith(`${shownDir(cwd, dir)}/`) &&
+          /changed by hand|could not be written/.test(f),
       )
     ) {
       handEdited.push(shownDir(cwd, dir));
@@ -3461,24 +3520,36 @@ export function seeLine(cwd, slug, focus, notChecked = null, extra = {}) {
   const f = themeFiles(cwd, slug);
   // What keeps --png from taking pictures, when this result's own picture
   // run failed (a file of yours named like a picture).
+  // A command that only takes pictures, whatever this one was (an undo run
+  // again undoes another change; new refuses a theme that exists).
   const pngNote = extra.pictureProblem
     ? `--png took no pictures: ${extra.pictureProblem}`
-    : `run it with --png for pictures in ${shownDir(cwd, f.dir)}/ with no dev server (it needs a Playwright or a Chrome)`;
+    : `${EDITOR} show ${slug} --png takes pictures in ${shownDir(cwd, f.dir)}/ with no dev server (it needs a Playwright or a Chrome)`;
   const own = notChecked
     ? /could not be written/.test(notChecked.cause)
       ? `the change is saved, but ${notChecked.cause}; --png takes no pictures until that is fixed`
       : `the change is saved, but the components could not be rendered here (${notChecked.cause}), so ${shown(cwd, f.preview)} still shows the theme as it was and --png takes no pictures until that is fixed`
     : `look without changing your app: open or screenshot ${shown(cwd, f.preview)} (one self-contained page, current after this change; ${EDITOR} show ${slug} also writes ${shown(cwd, f.sheet)}, every component), or ${pngNote}`;
   const edited = handEdited.length
-    ? `; the in-app preview in ${handEdited.slice(0, 2).join(', ')}/ was changed by hand, so it does not follow this change (previewStale says what to move out, then ${PREVIEW} add writes it again)`
+    ? `; the in-app preview in ${handEdited.slice(0, 2).join(', ')}/ ${stale.some(f => /could not be written/.test(f)) && !stale.some(f => /changed by hand/.test(f)) ? 'could not be written' : 'was changed by hand'}, so it does not follow this change (previewStale says what to move out, then ${PREVIEW} add writes it again)`
     : '';
   if (urls.length)
     return `${own}; in the running app: open ${urls.slice(0, 2).join(' or ')}${edited}`;
   if (unplain.length)
     return `${own}; the in-app preview is in ${unplain.slice(0, 2).join(', ')}, at a URL that depends on the app's routing${edited}`;
-  if (unserved.length)
-    return `${own}; the in-app preview is in ${unserved.slice(0, 2).join(', ')}, which the app does not serve: move it back, or make one with ${PREVIEW} add --theme ${slug}${edited}`;
+  if (unserved.length) {
+    // What fixes it, by why it is not served: add's own answer for each.
+    const why = unserved.join(' ');
+    const fix = /Next serves .* when both are there/.test(why)
+      ? `${PREVIEW} remove --path ${quoteCommandArgument(unservedDirs[0])}, then ${PREVIEW} add --theme ${slug} puts it in the folder Next serves`
+      : /pageExtensions/.test(why)
+        ? `add "tsx" to pageExtensions in next.config so Next serves the preview's page.tsx`
+        : `move it back into a folder Next routes, or make one there with ${PREVIEW} add --theme ${slug} --path <a routed folder>`;
+    return `${own}; the in-app preview is in ${unserved.slice(0, 2).join(', ')}, which the app does not serve: ${fix}${edited}`;
+  }
   if (edited) return `${own}${edited}`;
+  if (damaged.length)
+    return `${own}; the in-app preview in ${damaged.slice(0, 2).join(', ')}/ has a damaged ${PREVIEW_DATA}, so it does not follow this change: fix it by hand, or give the folder a new name that starts with _ and run ${PREVIEW} add${editorThemeCount(cwd) > 1 ? ` --theme ${slug}` : ''}`;
   // With more than one editor theme, a bare add may wear another one.
   const many = editorThemeCount(cwd) > 1;
   return `${own}; to see it inside your app, ${PREVIEW} add${many ? ` --theme ${slug}` : ''} puts the preview pages there, each at its own URL`;
@@ -4687,6 +4758,8 @@ export async function themeEditPreviewApp(dir, options = {}) {
         from.sheet,
         from.previewPng,
         from.sheetPng,
+        // The record of pictures, none of which come along.
+        from.pictures,
       ].map(f => path.basename(f)),
     );
     // The whole folder, tokens/ included, as bytes: a font or a picture
@@ -4701,6 +4774,12 @@ export async function themeEditPreviewApp(dir, options = {}) {
         else if (
           entry.isFile() &&
           !(rel === '' && skip.has(entry.name)) &&
+          // No picture or preview page of any kind (dark pictures, section
+          // sheets): the new app builds its own.
+          !(
+            rel === '' &&
+            /^(preview|sheet)(-[a-z0-9-]+)?\.(html|png)$/.test(entry.name)
+          ) &&
           // A temp file a stopped command left is no part of the theme.
           !isEditorTemp(entry.name)
         )
