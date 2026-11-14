@@ -591,6 +591,13 @@ for (const direction of ['ltr', 'rtl'] as const) {
         }
         await frame(`open-${edge}`, open);
         await page.keyboard.press('Escape');
+        await page.waitForFunction(
+          name =>
+            Array.from(document.querySelectorAll('#storybook-root button'))
+              .find(el => el.getAttribute('aria-label') === name)
+              ?.getAttribute('aria-expanded') === 'false',
+          label,
+        );
         await settle(page);
       }
     },
@@ -610,20 +617,12 @@ for (const mode of ['light', 'dark'] as const) {
       const trigger = page.getByRole('button', {name: 'Project actions'});
       const haspopup = await trigger.getAttribute('aria-haspopup');
       check(haspopup === 'dialog', `aria-haspopup ${haspopup}`);
+      // The story opens its sheet on load.
       const dialog = page.getByRole('dialog');
-      const open = await dialog
-        .first()
-        .waitFor({state: 'visible', timeout: 3000})
-        .then(() => true)
-        .catch(() => false);
-      if (!open) {
-        await trigger.click();
-      }
-      await dialog.first().waitFor({state: 'visible', timeout: 3000});
+      await dialog.first().waitFor({state: 'visible', timeout: 5000});
       await settle(page);
       const sheet = await dialog.first().evaluate(el => ({
         text: el.textContent ?? '',
-        rows: el.querySelectorAll('button').length,
       }));
       for (const label of ['Edit', 'Duplicate', 'Share', 'Delete']) {
         check(sheet.text.includes(label), `sheet has no "${label}" row`);
