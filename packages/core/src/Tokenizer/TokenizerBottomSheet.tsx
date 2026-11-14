@@ -221,6 +221,10 @@ export interface TokenizerBottomSheetProps<T extends SearchableItem> {
    * (`component:Tokenizer` FR18).
    */
   initialQuery: string;
+  /**
+   * The typed query. When set, the sheet is controlled and shows this text.
+   */
+  query?: string;
   /** The field label; names the sheet, the search field, and the list. */
   label: string;
   searchSource: SearchSource<T>;
@@ -327,6 +331,7 @@ type TokenizerSheetContentProps<T extends SearchableItem> = Omit<
 function TokenizerSheetContent<T extends SearchableItem>({
   isOpen,
   initialQuery,
+  query: queryProp,
   clearQueryRef,
   requestDismissRef,
   onCloseSheet,
@@ -405,7 +410,9 @@ function TokenizerSheetContent<T extends SearchableItem>({
   // ---- sheet session ----
   // Starts from the field's copy, which `onChangeQuery` keeps current, so the
   // query survives the sheet's unmount between presentations (FR18).
-  const [query, setQuery] = useState(initialQuery);
+  const isQueryControlled = queryProp !== undefined;
+  const [uncontrolledQuery, setUncontrolledQuery] = useState(initialQuery);
+  const query = isQueryControlled ? queryProp : uncontrolledQuery;
   const [sourceResults, setSourceResults] = useState<T[]>([]);
   const trimmedQueryForSearch = query.trim();
   // A query shorter than `minQueryLength` is never searched: no source rows,
@@ -501,11 +508,13 @@ function TokenizerSheetContent<T extends SearchableItem>({
     clearQueryRef,
     () => () => {
       if (query !== '') {
-        setQuery('');
+        if (!isQueryControlled) {
+          setUncontrolledQuery('');
+        }
         onChangeQuery?.('');
       }
     },
-    [query, onChangeQuery],
+    [query, isQueryControlled, onChangeQuery],
   );
 
   // The source is read through a ref at request time, as the inline field
@@ -706,7 +715,9 @@ function TokenizerSheetContent<T extends SearchableItem>({
     } else {
       announcedSearchIdRef.current = searchId;
     }
-    setQuery(next);
+    if (!isQueryControlled) {
+      setUncontrolledQuery(next);
+    }
     onChangeQuery?.(next);
   };
 

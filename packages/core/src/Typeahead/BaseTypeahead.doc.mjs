@@ -240,9 +240,22 @@ export const docs = {
         'Additional keydown handler called before internal keyboard navigation. Call e.preventDefault() to skip internal handling.',
     },
     {
+      name: 'query',
+      type: 'string',
+      description:
+        'The typed query. When set, the field is controlled: it shows this text and reports every change through onChangeQuery, including a pick, a clear, and entering edit mode. Hold this value after a pick to keep the text. A change from outside does not move focus, and it does not open the listbox or announce a result count unless the field has focus. Clearing this value while the field is focused does what emptying the field does: the listbox closes, or shows the focus entries with hasEntriesOnFocus.',
+    },
+    {
+      name: 'defaultQuery',
+      type: 'string',
+      description:
+        'Initial typed query when query is not set. Use this to restore a search without owning the text afterward.',
+    },
+    {
       name: 'onChangeQuery',
       type: '(query: string) => void',
-      description: 'Callback fired when the search query text changes.',
+      description:
+        'Callback fired when the search query text changes, including a pick, a clear, and entering edit mode, so a controlled field stays in sync.',
     },
     {
       name: 'onOpenChange',
@@ -410,9 +423,22 @@ export const docsZh = {
         '在内部键盘导航之前调用的附加 keydown 处理函数。调用 e.preventDefault() 可跳过内部处理。',
     },
     {
+      name: 'query',
+      type: 'string',
+      description:
+        '已输入的查询。设置后字段为受控：显示该文本，并通过 onChangeQuery 报告每一次变更（包括选择、清除和进入编辑），以便受控用法保持同步。选择后继续传入该值即可保留文本。从外部设置查询不会移动焦点；字段未聚焦时不会打开列表框，也不会播报结果数量。字段聚焦时将查询清空，效果与用户清空输入相同：列表框关闭，或在设置 hasEntriesOnFocus 时显示聚焦条目。',
+    },
+    {
+      name: 'defaultQuery',
+      type: 'string',
+      description:
+        '未设置 query 时的初始查询。用于恢复一次搜索，之后由字段自行管理文本。',
+    },
+    {
       name: 'onChangeQuery',
       type: '(query: string) => void',
-      description: '搜索查询文本变更时触发的回调。',
+      description:
+        '搜索查询文本变更时触发的回调，包括选择、清除和进入编辑，以便受控字段保持同步。',
     },
     {
       name: 'onOpenChange',
@@ -517,7 +543,11 @@ export const docsDense = {
       'Legacy tabIndex alias; defined alias wins, otherwise native tabIndex passes through.',
     onKeyDown:
       'Keydown before internal nav. preventDefault() skips internal handling.',
-    onChangeQuery: 'Fired on query text change.',
+    query:
+      'Controlled typed query. Reports every change through onChangeQuery, including a pick, a clear, and entering edit mode. Hold it after a pick to keep the text. Setting it from outside does not move focus or open the listbox, and announces a result count only while focused.',
+    defaultQuery: 'Initial typed query when query is not set.',
+    onChangeQuery:
+      'Fired on query text change, including a pick, a clear, and entering edit mode.',
     onOpenChange: 'Fired on dropdown open/close.',
     menu: "Menu content: {role:'listbox', render?({listbox,query,isBusy,isEmptySearch,close})} (info around the list; actions stay results) | {role:'dialog', label, render({query,close})} (takes focus; close returns focus to opener, else input). Astryx owns the layer. open() from onChange keeps it open across a role switch.",
     handleRef:

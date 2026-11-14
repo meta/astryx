@@ -210,9 +210,22 @@ export const docs = {
       default: 'false',
     },
     {
+      name: 'query',
+      type: 'string',
+      description:
+        'The typed query. When set, the field is controlled: it shows this text and reports every change through onChangeQuery, including a pick and a clear. Hold this value after a pick to keep the text. A change from outside does not move focus, and it does not open the listbox or announce a result count unless the field has focus. Clearing this value while the field is focused does what emptying the field does: the listbox closes, or shows the focus entries with hasEntriesOnFocus.',
+    },
+    {
+      name: 'defaultQuery',
+      type: 'string',
+      description:
+        'Initial typed query when query is not set. Use this to restore a search without owning the text afterward.',
+    },
+    {
       name: 'onChangeQuery',
       type: '(query: string) => void',
-      description: 'Callback fired when the search query text changes.',
+      description:
+        'Callback fired when the search query text changes, including a pick and a clear, so a controlled field stays in sync.',
     },
     {
       name: 'startIcon',
@@ -351,6 +364,11 @@ export const docs = {
         guidance: true,
         description:
           'Use inside InputGroup only when the tokenizer needs a short prefix or suffix addon as part of one decorated input surface; the grouped row stays single-line, so keep selections few (maxEntries) or use tokenOverflowBehavior to summarize them.',
+      },
+      {
+        guidance: true,
+        description:
+          'Pass query and onChangeQuery to restore a search, clear it from another control, or keep the text after a pick. Pass defaultQuery when the field should start with text and then own it.',
       },
       {
         guidance: false,
@@ -603,10 +621,22 @@ export const docsZh = {
       default: '150',
     },
     {
+      name: 'query',
+      type: 'string',
+      description:
+        '已输入的查询。设置后字段为受控：显示该文本，并通过 onChangeQuery 报告每一次变更（包括选择和清除），以便受控用法保持同步。选择后继续传入该值即可保留文本。从外部设置查询不会移动焦点；字段未聚焦时不会打开列表框，也不会播报结果数量。字段聚焦时将查询清空，效果与用户清空输入相同：列表框关闭，或在设置 hasEntriesOnFocus 时显示聚焦条目。',
+    },
+    {
+      name: 'defaultQuery',
+      type: 'string',
+      description:
+        '未设置 query 时的初始查询。用于恢复一次搜索，之后由字段自行管理文本。',
+    },
+    {
       name: 'onChangeQuery',
       type: '(query: string) => void',
       description:
-        '\u641c\u7d22\u67e5\u8be2\u6587\u672c\u53d8\u66f4\u65f6\u89e6\u53d1\u7684\u56de\u8c03\u3002',
+        '搜索查询文本变更时触发的回调，包括选择和清除，以便受控字段保持同步。',
     },
     {
       name: 'startIcon',
@@ -717,6 +747,11 @@ export const docsZh = {
           'Use inside InputGroup only when the tokenizer needs a short prefix or suffix addon as part of one decorated input surface; the grouped row stays single-line, so keep selections few (maxEntries) or use tokenOverflowBehavior to summarize them.',
       },
       {
+        guidance: true,
+        description:
+          'Pass query and onChangeQuery to restore a search, clear it from another control, or keep the text after a pick. Pass defaultQuery when the field should start with text and then own it.',
+      },
+      {
         guidance: false,
         description:
           "Don't use Tokenizer for single-item selection; use Typeahead instead. Tokenizer is for building sets of two or more items.",
@@ -817,6 +852,11 @@ export const docsDense = {
           'Use inside InputGroup only for a short prefix or suffix addon; the grouped row stays single-line, so keep selections few (maxEntries) or use tokenOverflowBehavior.',
       },
       {
+        guidance: true,
+        description:
+          'Pass query and onChangeQuery to restore, clear, or keep the text after a pick. Pass defaultQuery to start with text the field then owns.',
+      },
+      {
         guidance: false,
         description:
           "Don't use for single-item selection; use Typeahead instead.",
@@ -882,7 +922,10 @@ export const docsDense = {
     hasAutoFocus: 'Auto-focus input on mount.',
     size: 'Input+token size; the group size applies inside InputGroup.',
     debounceMs: 'Search debounce delay ms. 0 for sync sources.',
-    onChangeQuery: 'Fired on search query text change.',
+    query:
+      'Controlled typed query. Reports every change through onChangeQuery, including a pick and a clear. Hold it after a pick to keep the text. Setting it from outside does not move focus or open the listbox, and announces a result count only while focused.',
+    defaultQuery: 'Initial typed query when query is not set.',
+    onChangeQuery: 'Fired on query text change, including a pick and a clear.',
     startIcon:
       'Icon at input start, before tokens. Icon name, SVG component, or ReactNode.',
     endContent: 'Content at input row end. For buttons, counts, controls.',

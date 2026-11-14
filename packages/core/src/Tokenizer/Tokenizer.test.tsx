@@ -2740,6 +2740,52 @@ describe('Tokenizer', () => {
       });
     });
 
+    it('keeps the Added announcement and does not reopen the list when the app echoes an empty query after a pick', async () => {
+      const bootstrap = vi.fn(() => users.slice(0, 3));
+      const source: SearchSource = {
+        search: (query: string) =>
+          users.filter(u =>
+            u.label.toLowerCase().includes(query.toLowerCase()),
+          ),
+        bootstrap,
+      };
+      function Controlled() {
+        const [query, setQuery] = useState('');
+        const [value, setValue] = useState<SearchableItem[]>([]);
+        return (
+          <Tokenizer
+            label="Members"
+            searchSource={source}
+            value={value}
+            onChange={setValue}
+            query={query}
+            onChangeQuery={setQuery}
+            hasEntriesOnFocus
+            debounceMs={0}
+            presentation="popover"
+          />
+        );
+      }
+      render(<Controlled />);
+      const input = screen.getByRole('combobox');
+      fireEvent.focus(input);
+      fireEvent.change(input, {target: {value: 'Ali'}});
+      await waitFor(() => {
+        expect(
+          screen.getByRole('option', {name: 'Alice', hidden: true}),
+        ).toBeInTheDocument();
+      });
+      const bootstrapCallsAtPick = bootstrap.mock.calls.length;
+      fireEvent.click(
+        screen.getByRole('option', {name: 'Alice', hidden: true}),
+      );
+      await waitFor(() => {
+        expect(politeRegion()?.textContent).toMatch(/Added Alice/);
+      });
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+      expect(bootstrap.mock.calls.length).toBe(bootstrapCallsAtPick);
+    });
+
     it('announces addition politely when creating a token with hasCreate', async () => {
       const emptySource: SearchSource = {
         search: () => [],
