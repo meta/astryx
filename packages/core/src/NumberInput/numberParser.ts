@@ -531,7 +531,8 @@ function findIntegerRun(
  * True when the edit from `previous` to `next` only inserted digits, only
  * deleted text, or replaced a selection with digits.
  */
-function isDigitOrDeletionEdit(previous: string, next: string): boolean {
+/** The text an edit inserted between the unchanged prefix and suffix. */
+function insertedByEdit(previous: string, next: string): string {
   const maxPrefix = Math.min(previous.length, next.length);
   let prefix = 0;
   while (prefix < maxPrefix && previous[prefix] === next[prefix]) {
@@ -545,8 +546,11 @@ function isDigitOrDeletionEdit(previous: string, next: string): boolean {
   ) {
     suffix++;
   }
-  const inserted = next.slice(prefix, next.length - suffix);
-  return /^[0-9]*$/.test(inserted);
+  return next.slice(prefix, next.length - suffix);
+}
+
+function isDigitOrDeletionEdit(previous: string, next: string): boolean {
+  return /^[0-9]*$/.test(insertedByEdit(previous, next));
 }
 
 /**
@@ -603,6 +607,16 @@ export function groupEditableDraft(
   const run = text.slice(runStart, runEnd);
   const digits = extractDigits(run, group);
   if (digits === '') {
+    return {text, caret: clampedCaret};
+  }
+
+  // A group character the person just typed may be a decimal (vi-VN / de-DE
+  // `1.500` then `.5`) or a typo (en-US `1,500` then `,5`). Never fold it into
+  // the digits: leave the text as typed so the parser decides.
+  if (
+    previousText !== undefined &&
+    insertedByEdit(previousText, text).includes(group)
+  ) {
     return {text, caret: clampedCaret};
   }
 
