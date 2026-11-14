@@ -913,11 +913,12 @@ function isStable(scope, name) {
  * works: a `this`, a binding of an inner function such as a map callback, or
  * a value read at render. Null too for a binding written after its
  * declaration, or declared after the row's statement or after an early
- * return.
- * @param {any} j @param {any} root @param {any} rowPath @param {any} objectPath @param {Set<any>} created
+ * return. Null too for a binding the options read at render that code writes
+ * through or hands on.
+ * @param {any} j @param {any} root @param {any} rowPath @param {any} objectPath @param {Set<any>} created @param {Set<any>} swipeOptions
  * @returns {{kind: 'module', after: any} | {kind: 'memo', owner: any, deps: string[], after: any} | null}
  */
-function placementOf(j, root, rowPath, objectPath, created) {
+function placementOf(j, root, rowPath, objectPath, created, swipeOptions) {
   const object = objectPath.node;
   let movable = true;
   j(objectPath)
@@ -963,9 +964,22 @@ function placementOf(j, root, rowPath, objectPath, created) {
     return null;
   }
   // A binding written after its declaration can hold another value at each
-  // row, or by the time the row renders, where a definition keeps one.
-  if (outer.some(r => reassigned(j, r.scope, r.name))) {
-    return null;
+  // row, or by the time the row renders, where a definition keeps one. So can
+  // one the options read at render that code writes through or hands on. A
+  // handler reads its bindings when its action fires.
+  const changes = new Map();
+  for (const r of outer) {
+    const through = !r.inHandler;
+    const key = `${r.name}\u0000${through}`;
+    if (!changes.has(key)) {
+      changes.set(
+        key,
+        reassigned(j, r.scope, r.name, through, swipeOptions, created),
+      );
+    }
+    if (changes.get(key)) {
+      return null;
+    }
   }
   const local = outer.filter(r => r.scope.path.node.type !== 'Program');
   if (local.length === 0) {
@@ -1112,12 +1126,13 @@ function reachedAbove(j, body, index, row) {
 }
 
 /**
- * Whether a binding takes another value after its declaration. An
- * assignment, an update or a `for…in` or `for…of` loop writes it, or it is
- * declared more than once.
- * @param {any} j @param {any} scope @param {string} name
+ * Whether a binding takes another value after its declaration. Something
+ * writes it (`written`), or it is declared more than once. With `through`, a
+ * write through it counts too, and so does handing it on (`escapes`). A node
+ * in `created` is the codemod's own and counts for nothing.
+ * @param {any} j @param {any} scope @param {string} name @param {boolean} through @param {Set<any>} options @param {Set<any>} created
  */
-function reassigned(j, scope, name) {
+function reassigned(j, scope, name, through, options, created) {
   if ((scope.getBindings()[name] ?? []).length > 1) {
     return true;
   }
@@ -1126,20 +1141,65 @@ function reassigned(j, scope, name) {
       .find(j.Identifier, {name})
       .filter(
         (/** @type {any} */ p) =>
-          p.scope?.lookup(name)?.path.node === scope.path.node && written(p),
+          !created.has(p.node) &&
+          p.scope?.lookup(name)?.path.node === scope.path.node &&
+          written(p, through, options),
       )
       .size() > 0
   );
 }
 
 /**
- * Whether an identifier is the target of an assignment, an update, or a
- * `for…in` or `for…of` loop, directly or inside a destructuring pattern.
- * @param {any} path
+ * Whether an identifier is written. A write is the target of an assignment,
+ * an update, or a `for…in` or `for…of` loop, directly or inside a
+ * destructuring pattern. With `through`, a write through it counts too. It
+ * assigns, updates or deletes a property read from it, or calls a method read
+ * from it. Handing on it or a property read from it counts as well
+ * (`escapes`).
+ * @param {any} path @param {boolean} through @param {Set<any>} options
  */
-function written(path) {
+function written(path, through, options) {
   let child = path;
   let parent = path.parent;
+  // A property read from it, such as `labels.remove` or `words.push`, through
+  // any TypeScript wrapper.
+  let member = false;
+  while (parent != null) {
+    const node = parent.node;
+    const reads =
+      through &&
+      (node.type === 'MemberExpression' ||
+        node.type === 'OptionalMemberExpression') &&
+      node.object === child.node;
+    const wraps =
+      (node.type === 'TSNonNullExpression' ||
+        node.type === 'TSAsExpression' ||
+        node.type === 'TSSatisfiesExpression' ||
+        node.type === 'TSTypeAssertion' ||
+        node.type === 'ParenthesizedExpression') &&
+      node.expression === child.node;
+    if (!reads && !wraps) {
+      break;
+    }
+    member = member || reads;
+    child = parent;
+    parent = parent.parent;
+  }
+  const called = parent?.node;
+  if (
+    member &&
+    (((called?.type === 'CallExpression' ||
+      called?.type === 'OptionalCallExpression') &&
+      called.callee === child.node) ||
+      (called?.type === 'UnaryExpression' &&
+        called.operator === 'delete' &&
+        called.argument === child.node))
+  ) {
+    return true;
+  }
+  if (through && escapes(child, options)) {
+    return true;
+  }
   while (parent != null) {
     const node = parent.node;
     const nests =
@@ -1163,6 +1223,99 @@ function written(path) {
     ((node?.type === 'ForInStatement' || node?.type === 'ForOfStatement') &&
       node.left === child.node)
   );
+}
+
+/**
+ * Whether a value read here is handed on, so that code can change it under
+ * another name. A call or `new` that takes it counts anywhere. Outside every
+ * row's options (`options`), so does a binding that takes it as an alias. So
+ * do an object or array that stores it, and a return that yields it.
+ * @param {any} path @param {Set<any>} options
+ */
+function escapes(path, options) {
+  let child = path;
+  let parent = path.parent;
+  // A choice between values may still yield this one.
+  while (parent != null) {
+    const node = parent.node;
+    const chooses =
+      (node.type === 'ConditionalExpression' && node.test !== child.node) ||
+      node.type === 'LogicalExpression' ||
+      (node.type === 'SequenceExpression' &&
+        node.expressions.at(-1) === child.node) ||
+      ((node.type === 'TSNonNullExpression' ||
+        node.type === 'TSAsExpression' ||
+        node.type === 'TSSatisfiesExpression' ||
+        node.type === 'TSTypeAssertion' ||
+        node.type === 'ParenthesizedExpression') &&
+        node.expression === child.node);
+    if (!chooses) {
+      break;
+    }
+    child = parent;
+    parent = parent.parent;
+  }
+  const node = parent?.node;
+  if (node == null) {
+    return false;
+  }
+  if (
+    (node.type === 'CallExpression' ||
+      node.type === 'OptionalCallExpression' ||
+      node.type === 'NewExpression') &&
+    node.arguments.includes(child.node)
+  ) {
+    return true;
+  }
+  // A value stored in a row's options is that row's own. The codemod moves
+  // those objects and merges into them, so their identity decides.
+  for (let q = parent; q != null; q = q.parent) {
+    if (options.has(q.node)) {
+      return false;
+    }
+  }
+  return (
+    (node.type === 'VariableDeclarator' && node.init === child.node) ||
+    (node.type === 'AssignmentExpression' && node.right === child.node) ||
+    ((node.type === 'ObjectProperty' || node.type === 'Property') &&
+      node.value === child.node &&
+      parent.parent?.node?.type === 'ObjectExpression') ||
+    (node.type === 'ArrayExpression' && !dependencyList(parent)) ||
+    node.type === 'SpreadElement' ||
+    node.type === 'ReturnStatement' ||
+    (node.type === 'ArrowFunctionExpression' && node.body === child.node)
+  );
+}
+
+/** Where each React hook takes its dependency list. */
+const DEPENDENCY_ARGUMENT = new Map([
+  ['useCallback', 1],
+  ['useEffect', 1],
+  ['useImperativeHandle', 2],
+  ['useInsertionEffect', 1],
+  ['useLayoutEffect', 1],
+  ['useMemo', 1],
+]);
+
+/**
+ * Whether an array is a React hook's dependency list. The hook only compares
+ * the values in it, so it hands none of them on.
+ * @param {any} path
+ */
+function dependencyList(path) {
+  const call = path.parent?.node;
+  if (call?.type !== 'CallExpression') {
+    return false;
+  }
+  const callee = call.callee;
+  const name =
+    callee.type === 'Identifier'
+      ? callee.name
+      : callee.type === 'MemberExpression' && !callee.computed
+        ? callee.property.name
+        : null;
+  const index = DEPENDENCY_ARGUMENT.get(name);
+  return index != null && call.arguments[index] === path.node;
 }
 
 /**
@@ -1544,6 +1697,28 @@ export default function transformer(file, api) {
   const rewrites = [];
   /** Nodes this codemod made, which read nothing from the file. */
   const created = new Set();
+  /**
+   * Every object a row's `swipeActions` holds. A value stored in one is that
+   * row's own, not one handed on.
+   */
+  const swipeOptions = new Set();
+  root
+    .find(j.JSXAttribute, {name: {name: 'swipeActions'}})
+    .forEach((/** @type {any} */ p) => {
+      const collect = (/** @type {any} */ node) => {
+        const value = unwrap(node);
+        if (value?.type === 'ObjectExpression') {
+          swipeOptions.add(value);
+        } else if (value?.type === 'ConditionalExpression') {
+          collect(value.consequent);
+          collect(value.alternate);
+        } else if (value?.type === 'LogicalExpression') {
+          collect(value.left);
+          collect(value.right);
+        }
+      };
+      collect(p.node.value?.expression);
+    });
   /** @type {Map<string, string>} */
   const definitions = new Map();
   /** Each definition's declaration, by the name it defines. */
@@ -1652,7 +1827,14 @@ export default function transformer(file, api) {
                 : j.stringLiteral(behaviorText),
             );
           }
-          const placement = placementOf(j, root, rowPath, objectPath, created);
+          const placement = placementOf(
+            j,
+            root,
+            rowPath,
+            objectPath,
+            created,
+            swipeOptions,
+          );
           let replacement;
           if (placement == null) {
             replacement = j.callExpression(j.identifier(create), [object]);
@@ -1683,7 +1865,11 @@ export default function transformer(file, api) {
                     : j.callExpression(ensureUseMemo(j, root), [
                         j.arrowFunctionExpression([], call),
                         j.arrayExpression(
-                          placement.deps.map(dep => j.identifier(dep)),
+                          placement.deps.map(dep => {
+                            const dependency = j.identifier(dep);
+                            created.add(dependency);
+                            return dependency;
+                          }),
                         ),
                       ]),
                 ),
