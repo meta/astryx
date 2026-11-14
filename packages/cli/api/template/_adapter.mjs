@@ -38,16 +38,19 @@ export async function loadTemplateIconSets(cwd) {
 
 /**
  * The unknown-template suggestions with the command that reads a component,
- * hook or docs topic of exactly that name first, in the last suggestion's
- * place (foundation/suggest/other-command.mjs). The suggestions stay as they
+ * hook or docs topic of exactly that name in them, in the place
+ * foundation/suggest/other-command.mjs gives it. The suggestions stay as they
  * are when no such entry exists or the check fails. The hint's modules load
  * only on this path.
  * @param {string} name
  * @param {import('../../foundation/response/base').Suggestion[]} suggestions
  * @param {string} cwd
+ * @param {(suggestion: import('../../foundation/response/base').Suggestion) => Array<string | undefined>} namesOf
+ *   the names the template matcher ranked a suggestion by: its id and its
+ *   human name
  * @returns {Promise<import('../../foundation/response/base').Suggestion[] | undefined>}
  */
-export async function withOtherCommandHint(name, suggestions, cwd) {
+export async function withOtherCommandHint(name, suggestions, cwd, namesOf) {
   try {
     const {findOtherCommand, withOtherCommand} =
       await import('../../foundation/suggest/other-command.mjs');
@@ -55,7 +58,10 @@ export async function withOtherCommandHint(name, suggestions, cwd) {
       from: 'template',
       cwd,
     });
-    return withOtherCommand(suggestions, hint);
+    return withOtherCommand(suggestions, hint, name, {
+      from: 'template',
+      namesOf,
+    });
   } catch {
     return suggestions;
   }

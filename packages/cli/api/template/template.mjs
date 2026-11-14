@@ -189,15 +189,24 @@ export async function template(name, options = {}) {
   }
 
   if (name && candidates.length === 0) {
-    const suggestions = orderByAffinity(
-      name,
-      templates,
-      t => [t.dirName, t.name],
-      {closest: true, typos: true},
-    ).map(t => ({name: t.dirName, reason: `${t.type} template`}));
+    /** @param {{dirName: string, name?: string}} t */
+    const namesOf = t => [t.dirName, t.name];
+    const ordered = orderByAffinity(name, templates, namesOf, {
+      closest: true,
+      typos: true,
+    });
+    const suggestions = ordered.map(t => ({
+      name: t.dirName,
+      reason: `${t.type} template`,
+    }));
+    /** @type {Map<import('../../foundation/response/base').Suggestion, (typeof ordered)[number]>} */
+    const matched = new Map(suggestions.map((s, i) => [s, ordered[i]]));
     throw new AstryxError(
       `Unknown template "${name}"`,
-      await withOtherCommandHint(name, suggestions, cwd),
+      await withOtherCommandHint(name, suggestions, cwd, s => {
+        const template = matched.get(s);
+        return template ? namesOf(template) : [s.name];
+      }),
       ERROR_CODES.ERR_UNKNOWN_TEMPLATE,
     );
   }

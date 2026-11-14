@@ -131,7 +131,7 @@ const FOLD_FILE = fileURLToPath(
  * kept summary of file names: `blocks` false means {@link coreTemplateIds}
  * gives no block id that folds to it, and `listed` says whether any of the
  * integrations ships a template doc whose id ({@link integrationTemplateIds})
- * folds to it.
+ * or the id's last segment folds to it.
  * @param {Array<{templates?: string}>} integrations
  * @param {string} wanted a folded name
  * @returns {{blocks: boolean, listed: boolean}}
@@ -162,7 +162,11 @@ export function templateFilesNaming(integrations, wanted) {
               at === 0
                 ? name.slice(0, -suffix.length)
                 : path.join(rel, name).slice(0, -suffix.length);
-            folded.add(foldEntryName(id.split(path.sep).join('/')));
+            // A reader types an integration's id in full or by its last
+            // segment.
+            const parts = id.split(path.sep);
+            folded.add(foldEntryName(parts.join('/')));
+            folded.add(foldEntryName(parts[parts.length - 1]));
           }
         }
         return nameLines(folded);

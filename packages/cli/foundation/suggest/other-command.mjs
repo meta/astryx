@@ -32,6 +32,7 @@ import {
   templateFilesNaming,
 } from '../discovery/template-ids.mjs';
 import {keptTreeSummary} from '../fs/kept-tree.mjs';
+import {carriesEveryTypedWord} from '../text/suggest-order.mjs';
 import {findCoreDir} from '../fs/paths.mjs';
 import {mayHaveIntegrations} from '../integrations/may-have-integrations.mjs';
 
@@ -42,6 +43,7 @@ const NAMES_CODE = [
     new URL('../discovery/component-discovery.mjs', import.meta.url),
   ),
   fileURLToPath(new URL('../discovery/module-exports.mjs', import.meta.url)),
+  fileURLToPath(new URL('../discovery/entry-name-files.mjs', import.meta.url)),
 ];
 
 /**
@@ -49,6 +51,8 @@ const NAMES_CODE = [
  * @typedef {{components?: string[], hooks?: string[], templates?: string[], docs?: string[]}} LookupNames
  * @typedef {import('../response/base').Suggestion} Suggestion
  * @typedef {{name: string, reason: string}} Hint
+ * @typedef {{hint: Hint, tier: number}} Found a hint and the tier its entry
+ *   matches the typed name at
  */
 
 /** The lookup commands, in the order the hint prefers them. */
@@ -59,6 +63,14 @@ export const LOOKUP_COMMANDS = /** @type {const} */ ([
   'docs',
 ]);
 
+/** The field of {@link LookupNames} that holds each command's entries. */
+const LISTED = /** @type {const} */ ({
+  component: 'components',
+  hook: 'hooks',
+  template: 'templates',
+  docs: 'docs',
+});
+
 /** What an entry of each command is, as the hint's reason names it. */
 const ENTRY_KIND = {
   component: 'a component',
@@ -68,76 +80,182 @@ const ENTRY_KIND = {
 };
 
 /**
- * Whether `name` is the entry `wanted` names for `command`: the same folded
- * name, and for a hook also the folded name with `use` before it.
+ * How closely a name matches what a reader typed, best first. A name is an
+ * entry's full id: a component, hook or template id, or a docs route.
+ */
+export const MATCH_TIER = /** @type {const} */ ({
+  /** The whole name, in any case. */
+  exact: 0,
+  /** The whole name without spaces and hyphens, and a hook without `use`. */
+  folded: 1,
+  /** Only the last segment of a path name, as exact or folded. */
+  segment: 2,
+  /** A name that carries every typed word. */
+  words: 3,
+  /** None of the above. */
+  none: 4,
+});
+
+/**
+ * The tier at which `name`, an entry of `command`, matches `typed`, by the
+ * name alone ({@link MATCH_TIER}): exact, folded or segment.
  * @param {LookupCommand} command
  * @param {string} name
- * @param {string} wanted a folded name
- * @returns {boolean}
+ * @param {string} typed
+ * @returns {number}
  */
-function names(command, name, wanted) {
-  const folded = foldEntryName(name);
-  return folded === wanted || (command === 'hook' && folded === `use${wanted}`);
+function nameTier(command, name, typed) {
+  const lower = typed.toLowerCase();
+  const wanted = foldEntryName(typed);
+  /** @param {string} spelling */
+  const folds = spelling => {
+    const folded = foldEntryName(spelling);
+    return (
+      folded === wanted || (command === 'hook' && folded === `use${wanted}`)
+    );
+  };
+  if (name.toLowerCase() === lower) return MATCH_TIER.exact;
+  if (folds(name)) return MATCH_TIER.folded;
+  const at = name.lastIndexOf('/');
+  if (at !== -1) {
+    const last = name.slice(at + 1);
+    if (last.toLowerCase() === lower || folds(last)) return MATCH_TIER.segment;
+  }
+  return MATCH_TIER.none;
+}
+
+/**
+ * The best tier at which any of `names`, the names one suggestion of
+ * `command` answers to, matches `typed` ({@link MATCH_TIER}).
+ * @param {LookupCommand} command
+ * @param {Array<string | undefined>} names
+ * @param {string} typed
+ * @returns {number}
+ */
+export function suggestionTier(command, names, typed) {
+  /** @type {number} */
+  let best = MATCH_TIER.none;
+  for (const name of names) {
+    if (!name) continue;
+    const tier = nameTier(command, name, typed);
+    best = Math.min(
+      best,
+      tier === MATCH_TIER.none && carriesEveryTypedWord(typed, name)
+        ? MATCH_TIER.words
+        : tier,
+    );
+  }
+  return best;
+}
+
+/**
+ * The entry of `command` that `typed` names at the best tier, the first such
+ * entry in catalog order, or null when none matches by name.
+ * @param {LookupCommand} command
+ * @param {string[] | undefined} names
+ * @param {string} typed
+ * @returns {{name: string, tier: number} | null}
+ */
+function bestMatch(command, names, typed) {
+  /** @type {{name: string, tier: number} | null} */
+  let best = null;
+  for (const name of names ?? []) {
+    const tier = nameTier(command, name, typed);
+    if (tier < (best?.tier ?? MATCH_TIER.words)) best = {name, tier};
+    if (tier === MATCH_TIER.exact) break;
+  }
+  return best;
+}
+
+/**
+ * The hint that names `name`, an entry of `command`, for `from`, at `tier`.
+ * @param {LookupCommand} command
+ * @param {string} name
+ * @param {LookupCommand} from
+ * @param {number} tier
+ * @returns {Found}
+ */
+function hintFor(command, name, from, tier) {
+  return {
+    hint: {
+      name: `astryx ${command} ${name}`,
+      reason: `${ENTRY_KIND[command]}, not ${ENTRY_KIND[from]}`,
+    },
+    tier,
+  };
 }
 
 /**
  * The command, other than `from`, that reads the entry `typed` names among
- * `entries`, or null. Only an exact name counts, in any case and with or
- * without spaces and hyphens; a hook also answers to its name without `use`.
- * A component wins over a hook, a hook over a template, and a template over
- * a docs topic. A name with a `/` names none of them.
+ * `entries`, with the tier it matches at, or null. The entry must match by
+ * name: exact, folded, or by the last segment of a path id
+ * ({@link MATCH_TIER}). A better tier wins. Inside a tier, a component wins
+ * over a hook, a hook over a template, and a template over a docs topic.
  * @param {string} typed
  * @param {LookupNames} entries
  * @param {LookupCommand} from the command that did not find `typed`
- * @returns {Hint | null}
+ * @returns {Found | null}
  */
 export function otherCommand(typed, entries, from) {
-  if (typed.includes('/')) return null;
-  const wanted = foldEntryName(typed);
-  if (wanted === '') return null;
-  /** @type {Record<LookupCommand, string[] | undefined>} */
-  const listed = {
-    component: entries.components,
-    hook: entries.hooks,
-    template: entries.templates,
-    docs: entries.docs,
-  };
+  if (foldEntryName(typed) === '') return null;
+  /** @type {Found | null} */
+  let best = null;
   for (const command of LOOKUP_COMMANDS) {
     if (command === from) continue;
-    const name = (listed[command] ?? []).find(n => names(command, n, wanted));
-    if (name) {
-      return {
-        name: `astryx ${command} ${name}`,
-        reason: `${ENTRY_KIND[command]}, not ${ENTRY_KIND[from]}`,
-      };
+    const match = bestMatch(command, entries[LISTED[command]], typed);
+    if (match && match.tier < (best?.tier ?? MATCH_TIER.words)) {
+      best = hintFor(command, match.name, from, match.tier);
     }
   }
-  return null;
+  return best;
 }
 
 /**
- * The suggestion list with the hint first. The list never grows: the hint
- * takes the last suggestion's place. It is the only suggestion when `alone`
- * holds or when the list is empty, since then no suggestion shares a word
- * with the name.
+ * The suggestion list with the hint in it. The hint goes right after the
+ * last suggestion that matches `typed` at the hint's tier or a better one
+ * ({@link MATCH_TIER}), so it goes first when no suggestion does. The list
+ * never grows: the last suggestion drops, and a hint that would come last is
+ * left out. The hint is the only suggestion when `alone` holds or when the
+ * list is empty, since then no suggestion shares a word with the name.
  * @template {Suggestion} T
  * @param {T[] | undefined} suggestions
- * @param {Hint | null} hint
- * @param {{alone?: boolean}} [options]
+ * @param {Found | null} found
+ * @param {string} typed the name the lookup did not find
+ * @param {{
+ *   from: LookupCommand,
+ *   alone?: boolean,
+ *   namesOf?: (suggestion: T) => Array<string | undefined>,
+ * }} options `namesOf` gives the names the command matched a suggestion by;
+ *   by default its name
  * @returns {Array<T | Hint> | undefined}
  */
-export function withOtherCommand(suggestions, hint, {alone = false} = {}) {
-  if (!hint) return suggestions;
-  if (alone || !suggestions || suggestions.length === 0) return [hint];
-  return [hint, ...suggestions.slice(0, -1)];
+export function withOtherCommand(
+  suggestions,
+  found,
+  typed,
+  {from, alone = false, namesOf = suggestion => [suggestion.name]},
+) {
+  if (!found) return suggestions;
+  if (alone || !suggestions || suggestions.length === 0) return [found.hint];
+  let at = 0;
+  suggestions.forEach((suggestion, index) => {
+    if (suggestionTier(from, namesOf(suggestion), typed) <= found.tier) {
+      at = index + 1;
+    }
+  });
+  return [
+    ...suggestions.slice(0, at),
+    found.hint,
+    ...suggestions.slice(at),
+  ].slice(0, suggestions.length);
 }
 
 /**
  * {@link otherCommand} over the names the project's catalogs hold. File names
  * and doc text say first which catalogs can hold the name; a catalog is asked
- * only then, only for the names that fold to it, and only when the one before
- * it has no match. So a name no file carries reads no doc. A check that fails
- * gives no hint.
+ * only then, only for the names that fold to it, and only until a catalog
+ * before it has an exact match. So a name no file carries reads no doc.
+ * A check that fails gives no hint.
  * @param {unknown} typed
  * @param {{
  *   from: LookupCommand,
@@ -146,15 +264,17 @@ export function withOtherCommand(suggestions, hint, {alone = false} = {}) {
  *   integrations?: import('../integrations/integrations.mjs').LoadedIntegration[],
  * }} context `coreDir` and `integrations` are the ones the lookup found, if
  *   any
- * @returns {Promise<Hint | null>}
+ * @returns {Promise<Found | null>}
  */
 export async function findOtherCommand(
   typed,
   {from, cwd = process.cwd(), coreDir: knownCoreDir, integrations: known},
 ) {
-  if (typeof typed !== 'string' || typed.includes('/')) return null;
+  if (typeof typed !== 'string') return null;
   const wanted = foldEntryName(typed);
   if (wanted === '') return null;
+  // A name with a `/` can be only an integration template's full id.
+  const isPath = typed.includes('/');
   /** @type {import('../integrations/integrations.mjs').LoadedIntegration[] | undefined} */
   let loaded = known;
   const integrationsOnce = async () =>
@@ -162,7 +282,8 @@ export async function findOtherCommand(
   /** @param {string} name */
   const isWanted = name => foldEntryName(name) === wanted;
   /** @param {string} name */
-  const isWantedHook = name => names('hook', name, wanted);
+  const isWantedHook = name =>
+    foldEntryName(name) === wanted || foldEntryName(name) === `use${wanted}`;
 
   /** @type {string | null} */
   let coreDir = null;
@@ -170,7 +291,7 @@ export async function findOtherCommand(
   let inCore = {component: false, hook: false};
   try {
     coreDir = knownCoreDir ?? findCoreDir(cwd);
-    if (coreDir) inCore = coreFilesNaming(coreDir, wanted);
+    if (coreDir && !isPath) inCore = coreFilesNaming(coreDir, wanted);
   } catch {
     inCore = {component: true, hook: true};
   }
@@ -232,18 +353,23 @@ export async function findOtherCommand(
       },
     ],
   ];
+  /** @type {Found | null} */
+  let best = null;
   for (const [command, load] of catalogs) {
-    if (command === from) continue;
+    if (command === from || (isPath && command !== 'template')) continue;
     let entries;
     try {
       entries = await load();
     } catch {
       continue;
     }
-    const found = otherCommand(typed, entries, from);
-    if (found) return found;
+    const match = bestMatch(command, entries[LISTED[command]], typed);
+    if (match && match.tier < (best?.tier ?? MATCH_TIER.words)) {
+      best = hintFor(command, match.name, from, match.tier);
+      if (match.tier === MATCH_TIER.exact) break;
+    }
   }
-  return null;
+  return best;
 }
 
 /**
@@ -331,7 +457,8 @@ async function integrationComponentNames(integrations, wanted, isWanted) {
 }
 
 /**
- * The template ids that fold to `wanted`, from file names alone: Core's, then
+ * The template ids whose full id or last segment folds to `wanted`, from
+ * file names alone: Core's, then
  * each integration's when an integration ships a template doc with such an
  * id.
  * @param {import('../integrations/integrations.mjs').LoadedIntegration[]} integrations
@@ -340,7 +467,9 @@ async function integrationComponentNames(integrations, wanted, isWanted) {
  */
 function templateNames(integrations, wanted) {
   /** @param {string} name */
-  const isWanted = name => foldEntryName(name) === wanted;
+  const isWanted = name =>
+    foldEntryName(name) === wanted ||
+    foldEntryName(name.slice(name.lastIndexOf('/') + 1)) === wanted;
   const {blocks, listed} = templateFilesNaming(integrations, wanted);
   const core = blocks
     ? coreTemplateIds(isWanted)

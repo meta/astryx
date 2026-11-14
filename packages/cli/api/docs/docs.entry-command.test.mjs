@@ -54,7 +54,8 @@ const NAMES = {
  * @param {string} typed
  * @param {import('../../foundation/suggest/other-command.mjs').LookupNames} names
  */
-const entryCommand = (typed, names) => otherCommand(typed, names, 'docs');
+const entryCommand = (typed, names) =>
+  otherCommand(typed, names, 'docs')?.hint ?? null;
 
 describe('the docs hint', () => {
   it('names the command for an exact name in any case, with or without spaces and hyphens', () => {
@@ -84,11 +85,11 @@ describe('the docs hint', () => {
     expect(entryCommand('use-wobble', NAMES)).toEqual(hook);
   });
 
-  it('prefers a component to a hook, and a hook to a template', () => {
+  it('prefers a component to a hook, and an exact name to a hook without use', () => {
     expect(entryCommand('zorblet', NAMES)?.name).toBe(
       'astryx component Zorblet',
     );
-    expect(entryCommand('wobble', NAMES)?.name).toBe('astryx hook useWobble');
+    expect(entryCommand('wobble', NAMES)?.name).toBe('astryx template wobble');
   });
 
   it('gives nothing for a near name, a route, or an empty name', () => {

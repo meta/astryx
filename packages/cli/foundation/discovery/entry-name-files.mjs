@@ -162,10 +162,17 @@ export function coreFilesNaming(coreDir, wanted) {
 const WORD_RE = /[A-Za-z0-9_$]+/g;
 
 /**
+ * The shape of a component name a component doc spells out (its export, or
+ * a family member). Component discovery lists a spelled name only when it
+ * has this shape, so the words index keeps only such words.
+ */
+export const COMPONENT_NAME_RE = /^[A-Z][\w$]*$/;
+
+/**
  * What each integration's component docs can name: each doc's folded file
- * stem, and each word in its text that starts with a capital letter, in
- * lower case: a name a doc spells out is a component name, which starts with
- * one. `unreadable` when a doc could not be read.
+ * stem, and each word in its text that has the shape of a component name
+ * ({@link COMPONENT_NAME_RE}), in lower case. `unreadable` when a doc could
+ * not be read.
  * @param {string[]} componentsDirs
  * @returns {Array<{stems: string | string[], words: string | string[], unreadable: boolean}>}
  */
@@ -195,7 +202,7 @@ function integrationNameIndexes(componentsDirs) {
               continue;
             }
             for (const word of text.match(WORD_RE) ?? []) {
-              if (/^[A-Z]/.test(word)) words.add(word.toLowerCase());
+              if (COMPONENT_NAME_RE.test(word)) words.add(word.toLowerCase());
             }
           }
         }
@@ -208,8 +215,8 @@ function integrationNameIndexes(componentsDirs) {
  * Whether an integration component can fold to `wanted`, for each
  * components folder in order. Integration discovery names a component after
  * its doc's file, or after a name the doc spells out (its export, or a family
- * member), which starts with a capital letter, so a doc whose file name and
- * text both lack the name lists no such component.
+ * member) of the shape {@link COMPONENT_NAME_RE}, so a doc whose file name
+ * and text both lack the name lists no such component.
  * @param {Array<string | undefined>} componentsDirs
  * @param {string} wanted a folded name
  * @returns {boolean[]}

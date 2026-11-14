@@ -910,8 +910,8 @@ export async function withExampleBlockPointer(error, dirName, {coreDir, cwd}) {
 /**
  * When `error` is the unknown-component error for a name that is exactly a
  * hook, template or docs topic, returns the same error with the command that
- * reads that entry as its first suggestion, in the last suggestion's place
- * (foundation/suggest/other-command.mjs). Returns `error` unchanged
+ * reads that entry among its suggestions, in the place
+ * foundation/suggest/other-command.mjs gives it. Returns `error` unchanged
  * otherwise, and when the check fails.
  * @param {unknown} error
  * @param {string} dirName
@@ -939,7 +939,9 @@ export async function withOtherCommandHint(
     if (!hint) return error;
     return new AstryxError(
       error.message,
-      withOtherCommand(error.suggestions, hint),
+      withOtherCommand(error.suggestions, hint, dirName, {
+        from: 'component',
+      }),
       ERROR_CODES.ERR_UNKNOWN_COMPONENT,
     );
   } catch {

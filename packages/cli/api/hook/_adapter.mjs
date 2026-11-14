@@ -83,8 +83,8 @@ export async function resolveHookDoc(
 
 /**
  * The unknown-hook suggestions with the command that reads a component,
- * template or docs topic of exactly that name first, in the last suggestion's
- * place (foundation/suggest/other-command.mjs). The suggestions stay as they
+ * template or docs topic of exactly that name in them, in the place
+ * foundation/suggest/other-command.mjs gives it. The suggestions stay as they
  * are when no such entry exists or the check fails. The hint's modules load
  * only on this path.
  * @param {string} name
@@ -101,7 +101,7 @@ async function withOtherCommandHint(name, suggestions, {coreDir, cwd}) {
       cwd,
       coreDir,
     });
-    return withOtherCommand(suggestions, hint);
+    return withOtherCommand(suggestions, hint, name, {from: 'hook'});
   } catch {
     return suggestions;
   }

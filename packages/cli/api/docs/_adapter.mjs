@@ -1949,8 +1949,9 @@ function movedRoute(topic, tree) {
  * failing that the topics and top-level namespaces, closest first and cut
  * where the matches get weaker (every one of them when none shares a word
  * with the argument). When the argument is the name of a component, hook or
- * template, the command that reads that entry comes first and takes the last
- * suggestion's place, so the list keeps its length; when no suggested doc
+ * template, the command that reads that entry joins the list as
+ * foundation/suggest/other-command.mjs places it, and the list keeps its
+ * length; when no suggested doc
  * shares a word with the argument, that command is the only suggestion.
  * @param {unknown} topic
  * @param {DocsCatalog} catalog
@@ -2040,7 +2041,10 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
       !everyDoc ||
       suggestions.some(entry => carriesTypedWord(String(topic), entry.name));
     suggestions =
-      withOtherCommand(suggestions, elsewhere, {alone: !sharesAWord}) ?? [];
+      withOtherCommand(suggestions, elsewhere, String(topic), {
+        from: 'docs',
+        alone: !sharesAWord,
+      }) ?? [];
   }
   return new AstryxError(
     `Unknown topic "${String(topic)}"${notLoaded(catalog)}`,

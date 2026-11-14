@@ -117,7 +117,8 @@ const keptLists = () =>
 
 /** @param {string} name */
 const hint = async name =>
-  (await findOtherCommand(name, {from: 'hook', cwd: project}))?.name ?? null;
+  (await findOtherCommand(name, {from: 'hook', cwd: project}))?.hint.name ??
+  null;
 
 describe('the kept integration component names', () => {
   it(

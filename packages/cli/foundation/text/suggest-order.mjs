@@ -220,6 +220,19 @@ export function carriesTypedWord(typedName, name) {
 }
 
 /**
+ * Whether a name carries every typed word longer than one character: the
+ * closest tier the `closest` cut of {@link orderByAffinity} keeps. False when
+ * no typed word is longer than one character.
+ * @param {string} typedName
+ * @param {string} name
+ * @returns {boolean}
+ */
+export function carriesEveryTypedWord(typedName, name) {
+  const words = nameWords(typedName).filter(w => w.length > 1);
+  return affinityOf(words, name) >= 20;
+}
+
+/**
  * Docs route suggestions, closest to the typed route first. When every
  * suggestion sits under one namespace the typed route also starts with, that
  * shared part is left out of the comparison: it says nothing about which page

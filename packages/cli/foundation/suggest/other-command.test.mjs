@@ -19,7 +19,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
-import {otherCommand, withOtherCommand} from './other-command.mjs';
+import {MATCH_TIER, otherCommand, withOtherCommand} from './other-command.mjs';
 import {component} from '../../api/component/component.mjs';
 import {docs} from '../../api/docs/docs.mjs';
 import {hook} from '../../api/hook/hook.mjs';
@@ -36,6 +36,9 @@ const NAMES = {
 };
 
 describe('otherCommand', () => {
+  /** @param {Parameters<typeof otherCommand>} args */
+  const named = (...args) => otherCommand(...args)?.hint ?? null;
+
   it('names the command for an exact name in any case, with or without spaces and hyphens', () => {
     for (const typed of [
       'ZorbletCard',
@@ -43,12 +46,12 @@ describe('otherCommand', () => {
       'zorblet-card',
       'Zorblet Card',
     ]) {
-      expect(otherCommand(typed, NAMES, 'docs')).toEqual({
+      expect(named(typed, NAMES, 'docs')).toEqual({
         name: 'astryx component ZorbletCard',
         reason: 'a component, not a docs topic',
       });
     }
-    expect(otherCommand('QuoxleGuide', NAMES, 'hook')).toEqual({
+    expect(named('QuoxleGuide', NAMES, 'hook')).toEqual({
       name: 'astryx docs quoxle-guide',
       reason: 'a docs topic, not a hook',
     });
@@ -59,68 +62,190 @@ describe('otherCommand', () => {
       name: 'astryx hook useWobble',
       reason: 'a hook, not a template',
     };
-    expect(otherCommand('use-wobble', NAMES, 'template')).toEqual(hint);
-    expect(otherCommand('Wobble', NAMES, 'component')).toEqual({
+    const hooks = {hooks: ['useWobble']};
+    expect(named('use-wobble', hooks, 'template')).toEqual(hint);
+    expect(named('Wobble', hooks, 'component')).toEqual({
       ...hint,
       reason: 'a hook, not a component',
     });
   });
 
   it('prefers a component, then a hook, then a template, then a docs topic', () => {
-    expect(otherCommand('zorblet', NAMES, 'docs')?.name).toBe(
+    expect(named('zorblet', NAMES, 'docs')?.name).toBe(
       'astryx component Zorblet',
     );
-    expect(otherCommand('wobble', NAMES, 'docs')?.name).toBe(
-      'astryx hook useWobble',
-    );
-    expect(otherCommand('glimmer-panel', NAMES, 'component')?.name).toBe(
+    expect(
+      named(
+        'usewobble',
+        {hooks: ['useWobble'], templates: ['use-wobble']},
+        'docs',
+      )?.name,
+    ).toBe('astryx hook useWobble');
+    expect(named('glimmer-panel', NAMES, 'component')?.name).toBe(
       'astryx template glimmer-panel',
     );
   });
 
   it('never names the command that looked', () => {
-    expect(otherCommand('zorblet', NAMES, 'component')?.name).toBe(
+    expect(named('zorblet', {hooks: ['useZorblet']}, 'component')?.name).toBe(
       'astryx hook useZorblet',
     );
-    expect(otherCommand('glimmer-panel', NAMES, 'template')?.name).toBe(
-      'astryx docs glimmer-panel',
+    expect(
+      named('glimmer-panel', {docs: ['glimmer-panel']}, 'template')?.name,
+    ).toBe('astryx docs glimmer-panel');
+    expect(named('quoxle-guide', NAMES, 'docs')).toBeNull();
+  });
+
+  it('matches a template by its full path id or its last segment, and names the full id', () => {
+    const entries = {templates: ['parts/Frobnic/FrobnicShowcase']};
+    const hint = {
+      name: 'astryx template parts/Frobnic/FrobnicShowcase',
+      reason: 'a template, not a hook',
+    };
+    for (const typed of [
+      'parts/Frobnic/FrobnicShowcase',
+      'FrobnicShowcase',
+      'frobnic-showcase',
+    ]) {
+      expect(named(typed, entries, 'hook')).toEqual(hint);
+    }
+    expect(named('Frobnic', entries, 'hook')).toBeNull();
+    expect(named('parts/Frobnic', entries, 'hook')).toBeNull();
+  });
+
+  it('prefers a name in any case over a name that matches only without spaces and hyphens', () => {
+    const twins = {templates: ['dazzle-deck', 'DazzleDeck']};
+    expect(named('DazzleDeck', twins, 'hook')?.name).toBe(
+      'astryx template DazzleDeck',
     );
-    expect(otherCommand('quoxle-guide', NAMES, 'docs')).toBeNull();
+    expect(named('dazzle-deck', twins, 'hook')?.name).toBe(
+      'astryx template dazzle-deck',
+    );
+    const across = {components: ['GlintRow'], docs: ['glint-row']};
+    expect(named('glint-row', across, 'hook')?.name).toBe(
+      'astryx docs glint-row',
+    );
+    expect(named('GlintRow', across, 'hook')?.name).toBe(
+      'astryx component GlintRow',
+    );
+    expect(named('glint row', across, 'hook')?.name).toBe(
+      'astryx component GlintRow',
+    );
+  });
+
+  it('gives the tier the entry matches at', () => {
+    const entries = {
+      components: ['Plinth'],
+      hooks: ['usePlinthKit'],
+      templates: ['parts/Plinth/plinth-deck'],
+    };
+    expect(otherCommand('Plinth', entries, 'docs')?.tier).toBe(
+      MATCH_TIER.exact,
+    );
+    expect(otherCommand('plinth-kit', entries, 'docs')?.tier).toBe(
+      MATCH_TIER.folded,
+    );
+    expect(otherCommand('PlinthDeck', entries, 'docs')?.tier).toBe(
+      MATCH_TIER.segment,
+    );
+  });
+
+  it('prefers a better tier over the command order', () => {
+    const entries = {components: ['MosselKit'], docs: ['mossel-kit']};
+    expect(named('mossel-kit', entries, 'hook')?.name).toBe(
+      'astryx docs mossel-kit',
+    );
   });
 
   it('gives nothing for a near name, a route, or an empty name', () => {
-    expect(otherCommand('Zorblt', NAMES, 'docs')).toBeNull();
-    expect(otherCommand('ZorbletCards', NAMES, 'hook')).toBeNull();
-    expect(otherCommand('components/Zorblet', NAMES, 'docs')).toBeNull();
-    expect(otherCommand(' - ', NAMES, 'template')).toBeNull();
-    expect(otherCommand('Zorblet', {}, 'docs')).toBeNull();
+    expect(named('Zorblt', NAMES, 'docs')).toBeNull();
+    expect(named('ZorbletCards', NAMES, 'hook')).toBeNull();
+    expect(named('components/Zorblet', NAMES, 'docs')).toBeNull();
+    expect(named(' - ', NAMES, 'template')).toBeNull();
+    expect(named('Zorblet', {}, 'docs')).toBeNull();
   });
 });
 
 describe('withOtherCommand', () => {
   const hint = {
-    name: 'astryx hook useWobble',
-    reason: 'a hook, not a template',
+    name: 'astryx component Zinnet',
+    reason: 'a component, not a docs topic',
   };
+  /** @param {number} tier */
+  const at = tier => ({hint, tier});
   const list = [
     {name: 'a', reason: 'x'},
     {name: 'b', reason: 'x'},
     {name: 'c', reason: 'x'},
   ];
+  const from = /** @type {const} */ ('docs');
 
-  it('puts the hint first and drops the last suggestion', () => {
-    expect(withOtherCommand(list, hint)).toEqual([hint, list[0], list[1]]);
+  it('puts the hint first and drops the last suggestion when no suggestion matches as well', () => {
+    expect(
+      withOtherCommand(list, at(MATCH_TIER.exact), 'Zinnet', {from}),
+    ).toEqual([hint, list[0], list[1]]);
+    const routes = [
+      {name: 'guides/icons/zinnet', reason: 'x'},
+      {name: 'zinnet-row', reason: 'x'},
+    ];
+    expect(
+      withOtherCommand(routes, at(MATCH_TIER.exact), 'Zinnet', {from}),
+    ).toEqual([hint, routes[0]]);
+  });
+
+  it('puts the hint right after the last suggestion at its tier or a better one', () => {
+    const own = [
+      {name: 'zinnet', reason: 'x'},
+      {name: 'zinnet-row', reason: 'x'},
+      {name: 'Zinnet', reason: 'x'},
+      {name: 'other', reason: 'x'},
+    ];
+    expect(
+      withOtherCommand(own, at(MATCH_TIER.exact), 'Zinnet', {from}),
+    ).toEqual([own[0], own[1], own[2], hint]);
+    expect(
+      withOtherCommand(own, at(MATCH_TIER.folded), 'zin-net', {from}),
+    ).toEqual([own[0], own[1], own[2], hint]);
+  });
+
+  it('matches a suggestion by every name the command ranked it by', () => {
+    const own = [
+      {name: 'parts/zn/showcase', reason: 'x'},
+      {name: 'other', reason: 'x'},
+    ];
+    const human = new Map([[own[0], ['parts/zn/showcase', 'Zinnet View']]]);
+    expect(
+      withOtherCommand(own, at(MATCH_TIER.folded), 'Zinnet View', {
+        from: 'template',
+        namesOf: s => human.get(s) ?? [s.name],
+      }),
+    ).toEqual([own[0], hint]);
+  });
+
+  it('leaves the hint out when every suggestion matches as well', () => {
+    const own = [
+      {name: 'zinnet', reason: 'x'},
+      {name: 'ZINNET', reason: 'x'},
+    ];
+    expect(
+      withOtherCommand(own, at(MATCH_TIER.exact), 'Zinnet', {from}),
+    ).toEqual(own);
   });
 
   it('gives the hint alone for an empty list, or when asked', () => {
-    expect(withOtherCommand([], hint)).toEqual([hint]);
-    expect(withOtherCommand(undefined, hint)).toEqual([hint]);
-    expect(withOtherCommand(list, hint, {alone: true})).toEqual([hint]);
+    const found = at(MATCH_TIER.exact);
+    expect(withOtherCommand([], found, 'Zinnet', {from})).toEqual([hint]);
+    expect(withOtherCommand(undefined, found, 'Zinnet', {from})).toEqual([
+      hint,
+    ]);
+    expect(
+      withOtherCommand(list, found, 'Zinnet', {from, alone: true}),
+    ).toEqual([hint]);
   });
 
   it('leaves the list alone without a hint', () => {
-    expect(withOtherCommand(list, null)).toBe(list);
-    expect(withOtherCommand(undefined, null)).toBeUndefined();
+    expect(withOtherCommand(list, null, 'Zinnet', {from})).toBe(list);
+    expect(withOtherCommand(undefined, null, 'Zinnet', {from})).toBeUndefined();
   });
 });
 
@@ -131,7 +256,11 @@ let tmpDir;
  * A project whose stand-in Core ships the hook useWobble, and whose one
  * integration ships the component ZorbletCard, the block template
  * glimmer-panel, the page template shimmer-deck and the docs topic
- * quoxle-guide.
+ * quoxle-guide. It also ships the components GlintRow and Plonk, the block
+ * parts/Frobnic/FrobnicShowcase under a path id, the twin templates
+ * DazzleDeck and dazzle-deck, the page template plonk, the block
+ * glint-row-list, the component VexaPanel with the block
+ * parts/Vexa/VexaShowcase named "Vexa Panel", and the docs topic glint-row.
  */
 function scaffold() {
   fs.writeFileSync(
@@ -191,6 +320,50 @@ function scaffold() {
     path.join(pkgDir, 'templates', 'shimmer-deck.tsx'),
     'export default function Fixture() { return null; }\n',
   );
+  for (const name of ['GlintRow', 'Plonk', 'VexaPanel']) {
+    fs.writeFileSync(
+      path.join(pkgDir, 'components', `${name}.doc.mjs`),
+      `export default {type: 'component', name: '${name}', description: 'A part.', props: []};\n`,
+    );
+    fs.writeFileSync(
+      path.join(pkgDir, 'components', `${name}.tsx`),
+      `export function ${name}() { return null; }\n`,
+    );
+  }
+  for (const [stem, type, title = path.basename(stem)] of [
+    ['parts/Frobnic/FrobnicShowcase', 'block'],
+    ['DazzleDeck', 'block'],
+    ['dazzle-deck', 'page'],
+    ['plonk', 'page'],
+    ['glint-row-list', 'block'],
+    ['parts/Vexa/VexaShowcase', 'block', 'Vexa Panel'],
+  ]) {
+    fs.mkdirSync(path.dirname(path.join(pkgDir, 'templates', stem)), {
+      recursive: true,
+    });
+    fs.writeFileSync(
+      path.join(pkgDir, 'templates', `${stem}.doc.mjs`),
+      `export default {type: '${type}', name: '${title}', description: 'A ${type}.'};\n`,
+    );
+    fs.writeFileSync(
+      path.join(pkgDir, 'templates', `${stem}.tsx`),
+      'export default function Fixture() { return null; }\n',
+    );
+  }
+  for (const topic of ['glint-row']) {
+    fs.writeFileSync(
+      path.join(pkgDir, 'docs', `${topic}.doc.mjs`),
+      `export default ${JSON.stringify({
+        type: 'generic',
+        name: topic,
+        title: 'Glint row',
+        description: 'Set up a glint row.',
+        sections: [
+          {title: 'Overview', content: [{type: 'prose', text: 'Use it.'}]},
+        ],
+      })};\n`,
+    );
+  }
   fs.writeFileSync(
     path.join(pkgDir, 'docs', 'quoxle-guide.doc.mjs'),
     `export default ${JSON.stringify({
@@ -259,6 +432,24 @@ const PAIRS = /** @type {const} */ ([
   ['docs', 'Zorblet Card', 'astryx component ZorbletCard'],
   ['docs', 'wobble', 'astryx hook useWobble'],
   ['docs', 'GlimmerPanel', 'astryx template glimmer-panel'],
+  ['hook', 'FrobnicShowcase', 'astryx template parts/Frobnic/FrobnicShowcase'],
+  [
+    'hook',
+    'parts/Frobnic/FrobnicShowcase',
+    'astryx template parts/Frobnic/FrobnicShowcase',
+  ],
+  ['docs', 'FrobnicShowcase', 'astryx template parts/Frobnic/FrobnicShowcase'],
+  [
+    'docs',
+    'parts/Frobnic/FrobnicShowcase',
+    'astryx template parts/Frobnic/FrobnicShowcase',
+  ],
+  ['hook', 'DazzleDeck', 'astryx template DazzleDeck'],
+  ['hook', 'dazzle-deck', 'astryx template dazzle-deck'],
+  ['docs', 'DazzleDeck', 'astryx template DazzleDeck'],
+  ['docs', 'dazzle-deck', 'astryx template dazzle-deck'],
+  ['hook', 'glint-row', 'astryx docs glint-row'],
+  ['hook', 'GlintRow', 'astryx component GlintRow'],
 ]);
 
 describe("each lookup's not-found error for another command's entry", () => {
@@ -307,6 +498,27 @@ describe("each lookup's not-found error for another command's entry", () => {
           )
           .slice(0, hinted.suggestions.length - 1),
       );
+    },
+    SLOW,
+  );
+
+  it(
+    "puts the hint after the command's own suggestions at its tier or a better one",
+    async () => {
+      // `plonk` is exact, as the component Plonk is: the hint would come
+      // last, so it is left out.
+      const own = await LOOKUPS.template('Plonk');
+      expect(own.code).toBe(CODES.template);
+      expect(own.suggestions.map(s => s.name)).toEqual(['plonk']);
+      // The block is named "Vexa Panel" exactly; the component only folds.
+      const human = await LOOKUPS.template('Vexa Panel');
+      expect(human.suggestions[0].name).toBe('parts/Vexa/VexaShowcase');
+      expect(
+        human.suggestions.some(s => s.name === 'astryx component VexaPanel'),
+      ).toBe(false);
+      // `glint-row-list` only carries the typed words; the component folds.
+      const words = await LOOKUPS.template('Glint Row');
+      expect(words.suggestions[0].name).toBe('astryx component GlintRow');
     },
     SLOW,
   );
