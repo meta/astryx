@@ -23,6 +23,7 @@ verified_by:
   [
     packages/core/src/theme/generateThemeRules.test.ts,
     packages/core/src/theme/colorModeBlocks.test.ts,
+    packages/cli/clients/cli/commands/build-theme.color-mode-blocks.test.mjs,
     packages/core/src/theme/__tests__/colorModeBlocks.a11y.chromium.spec.ts,
     packages/core/src/theme/defineTheme.test.ts,
     packages/core/src/theme/themeAdaptations.test.ts,
@@ -238,18 +239,20 @@ Platform-specific details stay inside that compiler.
   (INV16), and runtime and static output derive the same values.
 
 - **INV18 — A color-mode block applies only in its mode.** The web compiler
-  writes a component style key's `@light` or `@dark` block (properties and
-  pseudo-class overrides) as rules that match only where the element's color
-  mode is that mode, as Theme resolves it: the theme root's `data-theme`, the
-  system preference when the root sets none, and a media surface of that mode,
-  the nearest deciding. A surface of the other mode inside them stops them.
-  The rules add no specificity to the style key's selector and follow its own
-  rules, so in its mode the block wins over the style key's values, and in the
-  other mode it writes nothing: every other rule, including the base layer's
-  rules in context, applies there as it would without the block. A block
-  takes the same derived variables and container padding as the style key. On
-  a media surface only the block of the surface's mode is written. A theme
-  without color-mode blocks has no mode rules in its CSS.
+  writes a component style key's `@light` or `@dark` block (properties,
+  pseudo-class overrides, and pseudo-elements) as rules that match only where
+  the element's color mode is that mode, as Theme resolves it. The nearest
+  media surface between the theme root and the element decides; with none,
+  the theme root's `data-theme` decides, and a root mode other than `light` or
+  `dark` follows the system preference. The mode conditions sit on the style
+  key's selector before any pseudo-class, press state, or pseudo-element, and
+  add no specificity. The rules follow the style key's own, so in its mode
+  the block wins over the style key's values, and in the other mode it writes
+  nothing: every other rule, including the base layer's rules in context,
+  applies there as it would without the block. A block takes the same derived
+  variables and container padding as the style key. On a media surface only
+  the block of the surface's mode is written. A theme without color-mode
+  blocks has no mode rules in its CSS.
 
 This record does not own:
 
@@ -360,7 +363,7 @@ tiers.
 | INV9, INV10      | Platform compiler tests when another compiler ships                                                                                                                                                                                                                                                                                                                                       | CSS details enter shared authoring, or shared theme intent silently disappears                                                                                                                                                                                                                    |
 | INV11            | `defineTheme.test.ts` and `build.test.mjs` local-token fixtures                                                                                                                                                                                                                                                                                                                           | Runtime/static output rewrites a local name, disagrees, or leaves partial output after failure                                                                                                                                                                                                    |
 | INV12            | `themeAdaptations.test.ts` and CLI adaptation build fixtures                                                                                                                                                                                                                                                                                                                              | Rule blocks merge/reorder/drop, surfaces lose precedence, or runtime/static CSS diverges                                                                                                                                                                                                          |
-| INV18            | `colorModeBlocks.test.ts` output tests and `colorModeBlocks.a11y.chromium.spec.ts` (the ColorModeBlocks story: the Theme's mode, system preference, nested Theme, media surface, Pagination's current page and a text field's status border kept in the other mode)                                                                                                                       | A mode block applies in the other mode, overrides a base-layer rule there, or changes CSS for a theme without blocks                                                                                                                                                                              |
+| INV18            | `colorModeBlocks.test.ts` output tests, `build-theme.color-mode-blocks.test.mjs` (CLI-built CSS), and `colorModeBlocks.a11y.chromium.spec.ts` (the ColorModeBlocks story: the Theme's mode, system preference, a mode that is neither, nested Theme, alternating media surfaces, a press, Pagination's current page and a text field's status border kept in the other mode)              | A mode block applies in the other mode, overrides a base-layer rule there, or changes CSS for a theme without blocks                                                                                                                                                                              |
 | INV13, INV14     | Declaration scanner, generator, Theme mounting, CLI receipt tests, and the existing theme-family Chromium guard                                                                                                                                                                                                                                                                           | One unsafe declaration corrupts neighbors, valid CSS changes, legacy token generation crashes, or reporting changes CSS                                                                                                                                                                           |
 | Built themes     | Theme and CLI build tests                                                                                                                                                                                                                                                                                                                                                                 | Runtime recompiles a built theme, or built output omits canonical rules                                                                                                                                                                                                                           |
 | INV15            | CLI build fixtures with function entries, slot functions, a variant list, and an inherited entry under a replaced list, compared with runtime resolution                                                                                                                                                                                                                                  | Built and runtime icons differ, a function is dropped silently, or tooling enumerates a variant an entry cannot receive                                                                                                                                                                           |

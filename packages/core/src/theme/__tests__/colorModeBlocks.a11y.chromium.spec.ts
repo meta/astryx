@@ -7,7 +7,8 @@
  *   `@light`/`@dark` blocks
  * @output Real-Chromium evidence that a color-mode block applies only where
  *   the element's color mode is that mode (the Theme's mode, the system
- *   preference, a nested Theme, a MediaTheme surface) and, in the other
+ *   preference for any other mode, a nested Theme, the nearest MediaTheme
+ *   surface), pseudo-classes included, and, in the other
  *   mode, leaves the current page and the status border as Core draws them
  * @position Browser evidence for color-mode blocks in component overrides
  */
@@ -22,6 +23,7 @@ import {
 const STORY = 'core-themes-colormodeblocks--cases';
 const MAGENTA = 'rgb(255, 0, 255)';
 const GREEN = 'rgb(0, 255, 0)';
+const PRESSED = 'rgb(85, 0, 85)';
 
 let storybook: StaticServer;
 test.beforeAll(async () => {
@@ -35,7 +37,7 @@ test.afterAll(async () => {
 
 async function openStory(page: Page): Promise<void> {
   await page.goto(`${storybook.origin}/iframe.html?id=${STORY}&viewMode=story`);
-  await page.locator('[data-case="surface"]').waitFor();
+  await page.locator('[data-case="alternating-dark-again"]').waitFor();
 }
 
 interface Shown {
@@ -97,6 +99,51 @@ test.describe('color-mode blocks', () => {
       const system = await shown(page, 'blocks-system');
       expect(system.ghost === MAGENTA, scheme).toBe(scheme === 'dark');
       expect(system.plain === GREEN, scheme).toBe(scheme === 'light');
+    }
+  });
+
+  test('apply a pseudo-class in a block after its mode conditions', async ({
+    page,
+  }) => {
+    await openStory(page);
+    const ghost = page.locator(
+      '[data-case="blocks-dark"] .astryx-button[data-variant="ghost"]:not([aria-current])',
+    );
+    const box = await ghost.first().boundingBox();
+    if (!box) {
+      throw new Error('no ghost button');
+    }
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    const pressed = await ghost
+      .first()
+      .evaluate(element => getComputedStyle(element).backgroundColor);
+    await page.mouse.up();
+    expect(pressed).toBe(PRESSED);
+  });
+
+  test('follow the system preference for a mode that is neither', async ({
+    page,
+  }) => {
+    for (const scheme of ['dark', 'light'] as const) {
+      await page.emulateMedia({colorScheme: scheme});
+      await openStory(page);
+      const other = await shown(page, 'blocks-other-mode');
+      expect(other.ghost === MAGENTA, scheme).toBe(scheme === 'dark');
+      expect(other.plain === GREEN, scheme).toBe(scheme === 'light');
+    }
+  });
+
+  test('follow the nearest of alternating surfaces', async ({page}) => {
+    await openStory(page);
+    for (const [id, dark] of [
+      ['alternating-dark', true],
+      ['alternating-light', false],
+      ['alternating-dark-again', true],
+    ] as const) {
+      const inner = await shown(page, id);
+      expect(inner.ghost === MAGENTA, id).toBe(dark);
+      expect(inner.plain === GREEN, id).toBe(!dark);
     }
   });
 

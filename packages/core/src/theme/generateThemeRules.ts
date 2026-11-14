@@ -1366,132 +1366,111 @@ function generateComponentRules(
 ): void {
   for (const [component, rules] of Object.entries(components)) {
     for (const [key, styles] of Object.entries(rules)) {
-      const entries = Object.entries(styles);
-      if (entries.length === 0) {
-        continue;
-      }
-
-      const suffix = parseStyleKey(key);
-      const baseSelector = componentSelector(component, suffix, surface);
-      const location = componentLocation(locationPrefix, component, key);
-      const split = splitStyleBlock(entries, location, sink);
-      const expand = (props: [string, string][]) =>
-        expandComponentDeclarations(
+      /**
+       * Emit a style block on a selector: its declarations, then its
+       * pseudo-class overrides, each rule passed through `wrap`; then, for a
+       * style key, its color-mode blocks.
+       */
+      const emit = (
+        block: StyleOverrides,
+        selector: string,
+        location: string,
+        wrap: (rule: string) => string,
+        withModes: boolean,
+      ): void => {
+        const props: [string, string][] = [];
+        const nested: [string, StyleBlock][] = [];
+        for (const [prop, value] of Object.entries(block)) {
+          if (typeof value === 'object') {
+            nested.push([prop, value]);
+          } else if (
+            acceptDeclaration(toKebabCase(prop), `${value}`, location, sink)
+          ) {
+            props.push([prop, `${value}`]);
+          }
+        }
+        const finalProps = expandComponentDeclarations(
           component,
           props,
           resetInheritedPaddingSpecificity,
         );
-
-      // Emit base rule
-      const finalProps = expand(split.props);
-      if (finalProps.length > 0) {
-        const declarations = joinDeclarations(
-          finalProps,
-          location,
-          sink,
-          toKebabCase,
-        );
-        parts.push(`  ${baseSelector} {\n${declarations}\n  }`);
-      }
-
-      // Emit pseudo-class rules
-      for (const [pseudo, pseudoStyles] of split.pseudos) {
-        const pseudoEntries = Object.entries(pseudoStyles);
-        if (pseudoEntries.length > 0) {
+        if (finalProps.length > 0) {
           const declarations = joinDeclarations(
-            pseudoEntries,
-            `${location}[${JSON.stringify(pseudo)}]`,
+            finalProps,
+            location,
             sink,
             toKebabCase,
           );
-          parts.push(...pseudoRules(baseSelector, pseudo, declarations));
+          parts.push(wrap(`  ${selector} {\n${declarations}\n  }`));
         }
-      }
-
-      // Emit color-mode rules after the rules they refine, at the same
-      // weight, so a mode's value wins over the block's own in that mode
-      // and leaves every other rule as it was in the other mode.
-      for (const [mode, modeStyles] of split.modes) {
-        // A media surface already fixes the mode: only its own mode applies.
-        if (surface && surface !== mode) {
-          continue;
-        }
-        const modeLocation = `${location}[${JSON.stringify(`@${mode}`)}]`;
-        const modeSplit = splitStyleBlock(
-          Object.entries(modeStyles),
-          modeLocation,
-          sink,
-        );
-        const modeProps = expand(modeSplit.props);
-        if (modeProps.length > 0) {
-          const declarations = joinDeclarations(
-            modeProps,
-            modeLocation,
-            sink,
-            toKebabCase,
-          );
-          parts.push(
-            ...(surface
-              ? [`  ${baseSelector} {\n${declarations}\n  }`]
-              : colorModeRules(baseSelector, mode, declarations)),
-          );
-        }
-        for (const [pseudo, pseudoStyles] of modeSplit.pseudos) {
+        for (const [pseudo, pseudoStyles] of nested) {
           const pseudoEntries = Object.entries(pseudoStyles);
-          if (pseudoEntries.length === 0) {
+          if (pseudo.startsWith(':') && pseudoEntries.length > 0) {
+            const declarations = joinDeclarations(
+              pseudoEntries as [string, string][],
+              `${location}[${JSON.stringify(pseudo)}]`,
+              sink,
+              toKebabCase,
+            );
+            for (const rule of pseudoRules(selector, pseudo, declarations)) {
+              parts.push(wrap(rule));
+            }
+          }
+        }
+        if (!withModes) {
+          return;
+        }
+        // Color-mode blocks follow the rules they refine at the same weight,
+        // so in their mode they win over the style key's own values, and in
+        // the other mode they write nothing.
+        for (const [mode, modeStyles] of nested) {
+          if (mode !== '@light' && mode !== '@dark') {
             continue;
           }
-          const declarations = joinDeclarations(
-            pseudoEntries,
-            `${modeLocation}[${JSON.stringify(pseudo)}]`,
-            sink,
-            toKebabCase,
-          );
-          for (const rule of pseudoRules(baseSelector, pseudo, declarations)) {
-            parts.push(...(surface ? [rule] : colorModeRulesFor(rule, mode)));
+          const name = mode.slice(1) as MediaSurface;
+          const modeLocation = `${location}[${JSON.stringify(mode)}]`;
+          const modeEmit = (at: string, modeWrap: (rule: string) => string) =>
+            emit(modeStyles, at, modeLocation, modeWrap, false);
+          if (surface) {
+            // A media surface fixes the mode: only its own block applies.
+            if (surface === name) {
+              modeEmit(selector, wrap);
+            }
+            continue;
           }
+          const other = name === 'dark' ? 'light' : 'dark';
+          // The theme root decides where no surface lies between it and the
+          // element; the nearest surface decides inside one.
+          const inRoot = (root: string) =>
+            `:is(${selector}):where(${root} *):where(:not(:scope [data-${dataAttrNamespace}-media] *))`;
+          modeEmit(inRoot(`:scope[${THEME_MODE_ATTR}="${name}"]`), wrap);
+          modeEmit(
+            inRoot(
+              `:scope:not([${THEME_MODE_ATTR}="light"], [${THEME_MODE_ATTR}="dark"])`,
+            ),
+            rule =>
+              wrap(`  @media (prefers-color-scheme: ${name}) {\n${rule}\n  }`),
+          );
+          modeEmit(`:is(${selector})`, rule =>
+            wrap(
+              `  @scope (${mediaSelector(name)}) to (${mediaSelector(other)}) {\n${rule}\n  }`,
+            ),
+          );
         }
-      }
+      };
+      emit(
+        styles,
+        componentSelector(component, parseStyleKey(key), surface),
+        componentLocation(locationPrefix, component, key),
+        rule => rule,
+        true,
+      );
     }
   }
 }
 
-/** A style key that holds declarations for one color mode. */
-const COLOR_MODE_KEY = /^@(light|dark)$/;
-
-interface SplitStyleBlock {
-  props: [string, string][];
-  pseudos: [string, Record<string, string>][];
-  modes: [ColorMode, StyleBlock][];
-}
-
-type ColorMode = 'light' | 'dark';
-
-/**
- * Split a style block into its declarations, its pseudo-class overrides
- * and its color-mode blocks.
- */
-function splitStyleBlock(
-  entries: [string, StyleOverrides[string]][],
-  location: string,
-  sink: DiagnosticSink,
-): SplitStyleBlock {
-  const out: SplitStyleBlock = {props: [], pseudos: [], modes: []};
-  for (const [prop, value] of entries) {
-    const mode = COLOR_MODE_KEY.exec(prop)?.[1] as ColorMode | undefined;
-    if (mode && typeof value === 'object') {
-      out.modes.push([mode, value]);
-    } else if (prop.startsWith(':') && typeof value === 'object') {
-      out.pseudos.push([prop, value as Record<string, string>]);
-    } else if (
-      typeof value !== 'object' &&
-      acceptDeclaration(toKebabCase(prop), `${value}`, location, sink)
-    ) {
-      out.props.push([prop, `${value}`]);
-    }
-  }
-  return out;
-}
+/** Theme's own color-mode attribute (`<Theme mode>` and `<html data-theme>`). */
+const THEME_MODE_ATTR = 'data-theme';
 
 /**
  * A component block's declarations with Core's derived variables added,
@@ -1572,68 +1551,6 @@ function expandComponentDeclarations(
     finalProps = [...finalProps, ...derivedProps];
   }
   return finalProps;
-}
-
-/** Theme's own color-mode attribute (`<Theme mode>` and `<html data-theme>`). */
-const THEME_MODE_ATTR = 'data-theme';
-
-/**
- * A selector list that matches only inside an ancestor and outside an
- * excluded subtree, with no added specificity. The list leads, so the rule
- * stays a component rule (a leading `:where(` marks a prose rule).
- */
-function scopeSelectorList(
-  selector: string,
-  ancestor: string,
-  exclude: string,
-): string {
-  return `:is(${selector}):where(${ancestor} *):where(:not(${exclude}))`;
-}
-
-/**
- * The rules that apply declarations to a selector only where the element's
- * color mode is `mode`, as Theme resolves it: the theme root's own mode
- * (`data-theme`), the system preference when the root sets none, and a media
- * surface of that mode. The nearest of these decides; a surface of the other
- * mode inside them stops them. The conditions add no specificity.
- */
-function colorModeRules(
-  selector: string,
-  mode: ColorMode,
-  declarations: string,
-): string[] {
-  return colorModeRulesFor(`  ${selector} {\n${declarations}\n  }`, mode);
-}
-
-/**
- * {@link colorModeRules} for a rule already written (a pseudo-class rule,
- * which may sit in an `@media` block): each of its selectors gets the mode
- * conditions.
- */
-function colorModeRulesFor(rule: string, mode: ColorMode): string[] {
-  const other: ColorMode = mode === 'dark' ? 'light' : 'dark';
-  const own = mediaSelector(mode);
-  const otherSurface = mediaSelector(other);
-  const rewrite = (ancestor: string, exclude: string) =>
-    rule.replace(
-      /^(\s*)([^{}@][^{}]*?)\s*\{/m,
-      (_, indent: string, selector: string) =>
-        `${indent}${scopeSelectorList(selector.trim(), ancestor, exclude)} {`,
-    );
-  const explicit = rewrite(
-    `:scope[${THEME_MODE_ATTR}="${mode}"]`,
-    `${otherSurface} *`,
-  );
-  const system = rewrite(
-    `:scope:not([${THEME_MODE_ATTR}])`,
-    `${otherSurface} *`,
-  );
-  const onSurface = rewrite(own, `${own} ${otherSurface} *`);
-  return [
-    explicit,
-    `  @media (prefers-color-scheme: ${mode}) {\n${system}\n  }`,
-    onSurface,
-  ];
 }
 
 /**

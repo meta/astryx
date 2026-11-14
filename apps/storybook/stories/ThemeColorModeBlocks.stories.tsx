@@ -38,7 +38,14 @@ const plainTheme = defineTheme({name: 'color-mode-plain'});
 const blocksTheme = defineTheme({
   name: 'color-mode-blocks',
   components: {
-    button: {'variant:ghost': {'@dark': {backgroundColor: '#ff00ff'}}},
+    button: {
+      'variant:ghost': {
+        '@dark': {
+          backgroundColor: '#ff00ff',
+          ':active': {backgroundColor: '#550055'},
+        },
+      },
+    },
     'text-input': {base: {'@light': {borderColor: '#00ff00'}}},
   },
 });
@@ -106,6 +113,29 @@ function CasesDemo() {
           <Subjects label="a light surface inside a dark Theme" />
         </MediaTheme>
       </Case>
+      {/* A mode Theme does not name light or dark follows the system. */}
+      <Case
+        id="blocks-other-mode"
+        theme={blocksTheme}
+        mode={'high-contrast' as ThemeMode}
+      />
+      <Case id="alternating" theme={blocksTheme} mode="light">
+        <MediaTheme mode="dark">
+          <div data-case="alternating-dark">
+            <Subjects label="a dark surface" />
+          </div>
+          <MediaTheme mode="light">
+            <div data-case="alternating-light">
+              <Subjects label="a light surface inside it" />
+            </div>
+            <MediaTheme mode="dark">
+              <div data-case="alternating-dark-again">
+                <Subjects label="a dark surface inside that" />
+              </div>
+            </MediaTheme>
+          </MediaTheme>
+        </MediaTheme>
+      </Case>
     </Stack>
   );
 }
@@ -116,7 +146,7 @@ export const Cases: StoryObj = {
     docs: {
       description: {
         story:
-          'The same components under a theme with nothing set and under one with a dark-only ghost button background and a light-only field border, in each mode, the system mode, a nested Theme, and a MediaTheme surface.',
+          'The same components under a theme with nothing set and under one with a dark-only ghost button background and press, and a light-only field border: in each mode, the system mode, a mode that is neither, a nested Theme, a MediaTheme surface, and alternating surfaces.',
       },
     },
   },

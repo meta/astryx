@@ -21,20 +21,23 @@ describe('color-mode blocks', () => {
     expect(plain).not.toMatch(/prefers-color-scheme|data-theme=/);
   });
 
-  it("applies a block only in its mode: the root's mode, the system preference, and a surface", () => {
+  it("applies a block only in its mode: the root's mode, the system preference, and the nearest surface", () => {
     const out = css({
       button: {
         base: {backgroundColor: 'red', '@dark': {backgroundColor: 'blue'}},
       },
     });
+    const outsideSurfaces = ':where(:not(:scope [data-astryx-media] *))';
     expect(out).toContain(
-      ':is(.astryx-button):where(:scope[data-theme="dark"] *):where(:not([data-astryx-media="light"] *)) {',
+      `:is(.astryx-button):where(:scope[data-theme="dark"] *)${outsideSurfaces} {`,
     );
-    expect(out).toMatch(
-      /@media \(prefers-color-scheme: dark\) \{\s*:is\(\.astryx-button\):where\(:scope:not\(\[data-theme\]\) \*\)/,
-    );
+    // Any mode other than light and dark follows the system preference.
     expect(out).toContain(
-      ':is(.astryx-button):where([data-astryx-media="dark"] *):where(:not([data-astryx-media="dark"] [data-astryx-media="light"] *)) {',
+      `@media (prefers-color-scheme: dark) {\n  :is(.astryx-button):where(:scope:not([data-theme="light"], [data-theme="dark"]) *)${outsideSurfaces} {`,
+    );
+    // A surface decides up to the nearest surface of the other mode.
+    expect(out).toContain(
+      '@scope ([data-astryx-media="dark"]) to ([data-astryx-media="light"]) {\n  :is(.astryx-button) {',
     );
     // The mode rules are component rules, after the block's own rule.
     expect(out).not.toMatch(/^\s*:where\(/m);
@@ -43,17 +46,39 @@ describe('color-mode blocks', () => {
     );
   });
 
-  it('carries pseudo-classes and derived variables into the mode rules', () => {
+  it('adds the mode conditions before a pseudo-class, a press, or a pseudo-element', () => {
     const out = css({
       button: {
         'variant:primary': {
-          '@light': {borderRadius: '2px', ':hover': {backgroundColor: 'green'}},
+          '@light': {
+            borderRadius: '2px',
+            ':hover': {backgroundColor: 'green'},
+            ':active': {backgroundColor: 'navy'},
+          },
         },
       },
+      'text-input': {
+        base: {'@dark': {'::placeholder': {color: 'gray'}}},
+      },
     });
-    expect(out).toMatch(
-      /:is\(\.astryx-button\[data-variant="primary"\]:hover[^{]*\):where\(:scope\[data-theme="light"\] \*\)/,
+    const light =
+      ':is(.astryx-button[data-variant="primary"]):where(:scope[data-theme="light"] *):where(:not(:scope [data-astryx-media] *))';
+    expect(out).toContain(
+      `${light}:hover:where(:not(:disabled,[aria-disabled="true"])) {`,
     );
+    // A press keeps the press model: :active off a coarse pointer, the
+    // believed press under one, each after the mode conditions.
+    expect(out).toContain(
+      `@media not all and (pointer: coarse) {\n  ${light}:active {`,
+    );
+    expect(out).toMatch(
+      /@media \(pointer: coarse\) \{\n {2}:is\(\.astryx-button\[data-variant="primary"\]\):where\(:scope\[data-theme="light"\] \*\)[^{]*\[data-astryx-press/,
+    );
+    // A pseudo-element ends the selector.
+    expect(out).toContain(
+      ':is(.astryx-text-input):where(:scope[data-theme="dark"] *):where(:not(:scope [data-astryx-media] *))::placeholder {',
+    );
+    expect(out).not.toMatch(/:is\([^)]*::placeholder/);
     expect(out).toMatch(/--_button-radius: 2px/);
   });
 
@@ -89,6 +114,38 @@ describe('color-mode blocks', () => {
     });
     expect(out).toContain('font-weight: 600');
     expect(out).toContain('line-height: 1');
+  });
+
+  it('composes a mode block over the generated type-scale rules', () => {
+    const theme = defineTheme({
+      name: 'modes',
+      typography: {scale: {base: 14, ratio: 1.2}},
+      components: {heading: {'level:1': {'@dark': {color: 'red'}}}},
+    });
+    const level1 = theme.components?.heading?.['level:1'];
+    // The generated rule keeps its properties beside the block.
+    expect(level1?.fontSize).toBe('var(--text-heading-1-size)');
+    expect(level1?.['@dark']).toEqual({color: 'red'});
+  });
+
+  it('merges a mode block by property in an inherited media surface', () => {
+    const base = defineTheme({
+      name: 'base',
+      onDark: {
+        components: {
+          button: {base: {'@dark': {color: 'red', backgroundColor: 'black'}}},
+        },
+      },
+    });
+    const child = defineTheme({
+      name: 'child',
+      extends: base,
+      onDark: {components: {button: {base: {'@dark': {color: 'blue'}}}}},
+    });
+    expect(child.__onDark?.components?.button?.base?.['@dark']).toEqual({
+      color: 'blue',
+      backgroundColor: 'black',
+    });
   });
 
   it('merges a mode block by property through extends', () => {
