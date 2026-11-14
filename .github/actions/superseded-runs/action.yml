@@ -3,12 +3,14 @@
 # Stops pull-request runs for a head that is no longer the pull request's head
 # (spec:AST-030 FR16). A re-run takes a concurrency group of its own, so a new
 # push does not cancel it, and a re-run of an old head would otherwise build
-# for a commit nobody merges. ci.yml runs this twice, at the start of each run:
+# for a commit nobody merges. ci.yml runs it in `room`, in the three required
+# joins, and in the `superseded-runs` job:
 #
 # - It reads the pull request's current head once.
 # - `superseded` is 'true' when this run's own head is not the current head.
-#   The `room` job reads only that, with a read-only token, and stops the run
-#   with the reason, so the required contexts fail, never pass.
+#   `room` and the joins read only that, with a read-only token: `room` stops
+#   the run before it waits, and each join fails with the reason as it
+#   reports, so a required context never passes for a superseded head.
 # - With `cancel: true` (the `superseded-runs` job, which alone holds
 #   `actions: write`), it also cancels each unfinished run of this workflow
 #   for this pull request whose head is not the current head. The run for the

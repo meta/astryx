@@ -116,17 +116,7 @@ describe('where runs wait', () => {
           (need !== BESIDE && need !== DEFERRAL && reaches(need)),
       );
     for (const id of Object.keys(ci.jobs)) {
-      if (
-        ![
-          'room',
-          'admission',
-          'ci-full',
-          // It cancels runs for a superseded head once room ends.
-          'superseded-runs',
-          BESIDE,
-          DEFERRAL,
-        ].includes(id)
-      )
+      if (!['room', 'admission', 'ci-full', BESIDE, DEFERRAL].includes(id))
         expect(reaches(id), id).toBe(true);
     }
   });

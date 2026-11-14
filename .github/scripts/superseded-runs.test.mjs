@@ -345,18 +345,29 @@ describe('a superseded run in ci.yml', () => {
 
   it('cancels from one pull-request job, the only new holder of actions: write', () => {
     const job = ci.jobs['superseded-runs'];
-    // It starts once room ends: after room found room, or right after room
-    // stopped this run for a superseded head, so the run cancels itself.
-    expect(job.needs).toEqual(['room']);
-    for (const result of ['success', 'failure'])
-      expect(
-        evaluate(job.if, {
-          github: github(),
-          needs: {room: {result, outputs: {}}},
-          jobNeeds: job.needs,
-        }),
-        result,
-      ).toBe(true);
+    // It starts once admission found room, or right after room stopped this
+    // run for a superseded head, so the run cancels itself; never while the
+    // run waits, nor after room turned it away as CI full.
+    expect(job.needs).toEqual(['room', 'admission']);
+    const startsAfter = (room, admission) =>
+      evaluate(job.if, {
+        github: github(),
+        needs: {room, admission: {result: admission, outputs: {}}},
+        jobNeeds: job.needs,
+      });
+    expect(startsAfter({result: 'success', outputs: {}}, 'success')).toBe(true);
+    expect(
+      startsAfter(
+        {result: 'failure', outputs: {superseded: 'true'}},
+        'skipped',
+      ),
+    ).toBe(true);
+    expect(
+      startsAfter({result: 'failure', outputs: {full: 'true'}}, 'skipped'),
+    ).toBe(false);
+    expect(startsAfter({result: 'success', outputs: {}}, 'failure')).toBe(
+      false,
+    );
     expect(job.permissions).toEqual({
       actions: 'write',
       contents: 'read',
@@ -405,7 +416,7 @@ describe('a superseded run in ci.yml', () => {
     },
   );
 
-  it("fails every required context of a re-run of only the failed jobs on an older head, which keeps room's earlier look", () => {
+  it("fails every required context when the head moved after room's look: a newer push mid-run, or a re-run of only the failed jobs", () => {
     for (const id of REQUIRED) {
       expect(conclusion(id, {rerunFailed: true}), id).toBe(
         'failure: Stop for a superseded head',
