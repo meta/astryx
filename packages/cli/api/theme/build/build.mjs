@@ -63,7 +63,6 @@ import * as path from 'node:path';
 import {createRequire, isBuiltin} from 'node:module';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {babelParse as parse} from '../../../foundation/runtime/lazy-dependencies.mjs';
-import {createJiti} from 'jiti';
 import {jitiCacheOptions} from '../../../foundation/fs/jiti-cache.mjs';
 import {
   formatCliCommand,
@@ -93,7 +92,10 @@ import {applyWrites} from '../../integration/add-helpers.mjs';
 import {logger} from '../../logger.mjs';
 import {loadComponentDoc} from '../../../foundation/discovery/component-loader.mjs';
 import {THEME_SOURCE_EXTENSIONS} from '../../../foundation/discovery/theme-module-extensions.mjs';
-import {withEmptyStylesheets} from '../../../foundation/fs/module-loader.mjs';
+import {
+  createJiti,
+  withEmptyStylesheets,
+} from '../../../foundation/fs/module-loader.mjs';
 import {
   collectThemingTargets,
   targetsByKey,
