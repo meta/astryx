@@ -12,8 +12,9 @@
  *   When the keyboard's report ends, the open list keeps its top: a list the
  *   cap held grows downward in place. A list that slid above a late keyboard
  *   holds against a shorter one. A list beside a field near the viewport's
- *   end, which the browser flips above it, also ends above the keyboard. A
- *   list taller than the room above the keyboard shrinks to that room.
+ *   end, which the browser flips above it, also ends above the keyboard, as
+ *   its options grow. A list taller than the room above the keyboard shrinks
+ *   to that room.
  * @position Chromium contract for the Selector overlay beside the keyboard
  */
 
@@ -326,6 +327,42 @@ test("a list beside a field near the viewport's end moves above a keyboard that 
   const before = await listFacts(page);
   expect(before.bottom, JSON.stringify(before)).toBeGreaterThan(LIMIT);
   await raiseKeyboard(page);
+  await expect(async () => {
+    expectClearOfKeyboard(await listFacts(page));
+  }).toPass({timeout: 3_000});
+});
+
+/**
+ * Makes one option of the open list taller, as a late web font does, and
+ * waits two frames. The overlay measures again after the browser's layout, so
+ * by then the list is where it stays.
+ */
+async function growOption(page: Page, index: number, height: number) {
+  await page
+    .getByRole('option')
+    .nth(index)
+    .evaluate(async (option, value) => {
+      (option as HTMLElement).style.minHeight = `${value}px`;
+      for (let frame = 0; frame < 2; frame++) {
+        await new Promise(resolve => requestAnimationFrame(resolve));
+      }
+    }, height);
+}
+
+test("a list that a grown option flips above a field near the viewport's end stays above a keyboard as another option grows", async ({
+  page,
+}) => {
+  const trigger = await openStoryNearEnd(page);
+  await trigger.click();
+  await expect(page.getByRole('listbox')).toBeVisible();
+  await openEnded(page);
+  // The grown list no longer fits below the field, so the browser flips it.
+  await growOption(page, 0, 96);
+  await raiseKeyboard(page);
+  await expect(async () => {
+    expectClearOfKeyboard(await listFacts(page));
+  }).toPass({timeout: 3_000});
+  await growOption(page, OPTIONS - 1, 120);
   await expect(async () => {
     expectClearOfKeyboard(await listFacts(page));
   }).toPass({timeout: 3_000});

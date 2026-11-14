@@ -136,10 +136,10 @@ function measureSelectedItem(
   // The layer keeps a gutter from the viewport's block end. A list that
   // reaches into it overflows the layer's room, and the browser then takes a
   // position fallback, which can flip the list off screen. The gutter is the
-  // layer's far-edge margin. The browser can flip the layer above its anchor
-  // before the overlay margin applies. The flip moves the gutter to the
-  // block-start margin. So read the larger of the two margins. A software
-  // keyboard's own inset replaces the gutter.
+  // layer's far-edge margin, the one that the overlay margin does not set. A
+  // flip swaps the two block margins, so a flipped layer keeps the gutter in
+  // its block-start margin. A software keyboard's own inset replaces the
+  // gutter.
   const layer = countsLayerGutter
     ? listbox.closest<HTMLElement>('[popover]')
     : null;
@@ -147,11 +147,6 @@ function measureSelectedItem(
   let isAboveAnchor = false;
   if (layer != null) {
     const layerStyle = getComputedStyle(layer);
-    blockEndGutter = Math.max(
-      0,
-      parseFloat(layerStyle.marginBlockStart) || 0,
-      parseFloat(layerStyle.marginBlockEnd) || 0,
-    );
     // The position area's block keyword names the side the browser chose:
     // its block-start side once a fallback flipped the layer. An engine
     // without anchor positioning reads an empty string here.
@@ -159,6 +154,12 @@ function measureSelectedItem(
       .getPropertyValue('position-area')
       .split(' ');
     isAboveAnchor = /start$|^top$/.test(blockArea);
+    blockEndGutter = Math.max(
+      0,
+      parseFloat(
+        isAboveAnchor ? layerStyle.marginBlockStart : layerStyle.marginBlockEnd,
+      ) || 0,
+    );
   }
   const viewportHeight = window.innerHeight;
   const maxTop = Math.max(0, viewportHeight - listboxHeight - blockEndGutter);
