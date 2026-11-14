@@ -107,6 +107,51 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     120_000,
   );
 
+  it.skipIf(!hasModuleHooks || process.getuid?.() === 0)(
+    'lets the first run answer the same, silently, when it cannot make or write its folder',
+    () => {
+      const fresh = run(QUERIES[0], {tmp: freshTmp()});
+      expect(fresh.status).toBe(0);
+      /**
+       * Run the query on a new machine whose cache folder is set up by
+       * `prepare`, then make every folder writable again.
+       * @param {string} name
+       * @param {(tmp: string) => string[]} prepare - returns the folders it
+       *   made read only
+       */
+      const firstRun = (name, prepare) => {
+        const tmp = path.join(work, 'tmp', name);
+        fs.mkdirSync(tmp, {recursive: true});
+        const locked = prepare(tmp);
+        try {
+          return {result: run(QUERIES[0], {tmp}), kept: entries(tmp).size};
+        } finally {
+          for (const dir of locked) fs.chmodSync(dir, 0o700);
+        }
+      };
+      // The user cache folder is read only: the catalogs folder cannot be
+      // made.
+      const noFolder = firstRun('first-locked-home', tmp => {
+        fs.mkdirSync(path.join(tmp, 'astryx', 'releases'), {recursive: true});
+        fs.chmodSync(path.join(tmp, 'astryx'), 0o500);
+        return [path.join(tmp, 'astryx')];
+      });
+      // The catalogs folder exists but nothing can be written in it.
+      const noWrite = firstRun('first-locked-folder', tmp => {
+        const catalogs = path.join(tmp, CACHE_NAME);
+        fs.mkdirSync(catalogs, {recursive: true, mode: 0o700});
+        fs.mkdirSync(path.join(tmp, 'astryx', 'releases'), {recursive: true});
+        fs.chmodSync(catalogs, 0o500);
+        return [catalogs];
+      });
+      for (const {result, kept} of [noFolder, noWrite]) {
+        expect(result).toEqual(fresh);
+        expect(kept).toBe(0);
+      }
+    },
+    120_000,
+  );
+
   it.skipIf(!hasModuleHooks)(
     "is used once a TypeScript integration's first load filled the transpile cache",
     () => {
