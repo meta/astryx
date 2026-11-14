@@ -11,7 +11,10 @@ import {useEffect, useMemo, useRef, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {Meta, StoryObj} from '@storybook/react';
 import {List, ListItem} from '@astryxdesign/core/List';
-import {createReorderable} from '@astryxdesign/core';
+import {
+  createReorderable,
+  type ReorderHandleOptions as ReorderHandle,
+} from '@astryxdesign/core';
 import {Avatar} from '@astryxdesign/core/Avatar';
 import {Badge} from '@astryxdesign/core/Badge';
 import {Button} from '@astryxdesign/core/Button';
@@ -932,11 +935,13 @@ function ReorderDemo({
   pinned = [],
   edge,
   listStyle,
+  handle,
 }: {
   initial: ReadonlyArray<string>;
   pinned?: ReadonlyArray<string>;
   edge?: (typeof EDGES)[number];
   listStyle?: 'decimal';
+  handle?: ReorderHandle;
 }) {
   const [rows, setRows] = useState(initial);
   return (
@@ -947,6 +952,7 @@ function ReorderDemo({
       reorderable={createReorderable({
         onReorder: ({key, to}) => setRows(current => moveKey(current, key, to)),
         isReorderable: key => !pinned.includes(key as string),
+        handle,
       })}>
       {rows.map(label => (
         <ListItem key={label} itemKey={label} label={label} />
@@ -974,6 +980,40 @@ export const Reorderable: Story = {
           'or Enter) to turn on reorder mode for its row: each arrow key, or ' +
           'each move in the hint below the handle, moves it a place, and ' +
           'Escape or Done ends the mode.',
+      },
+    },
+  },
+};
+
+type ReorderHandleArgs = {
+  visibility: 'always' | 'hover';
+  placement: 'start' | 'end';
+};
+
+export const ReorderHandleOptions: StoryObj<ReorderHandleArgs> = {
+  args: {visibility: 'always', placement: 'start'},
+  argTypes: {
+    visibility: {control: 'inline-radio', options: ['always', 'hover']},
+    placement: {control: 'inline-radio', options: ['start', 'end']},
+  },
+  render: ({visibility, placement}) => (
+    <ReorderDemo
+      initial={['Inbox', 'Sent', 'Drafts', 'Archive', 'Spam', 'Trash']}
+      pinned={['Trash']}
+      handle={{visibility, placement}}
+    />
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "`createReorderable`'s `handle` option. `placement` puts each " +
+          "handle at its row's start or end. List's handles always show, " +
+          "each in a place of its own. With `visibility: 'hover'`, the " +
+          'handle shows while its row is hovered or holds the focus, and ' +
+          "hangs outside the row's content, so the content keeps its place; " +
+          'on a touch screen it then shows in the row. Trash stays put, so it ' +
+          'has no handle, and it keeps the handles’ room.',
       },
     },
   },
@@ -1007,7 +1047,11 @@ export const ReorderInCard: Story = {
         <Card key={edge} data-edge={edge}>
           <VStack gap={3}>
             <Heading level={3}>{`edge="${edge}"`}</Heading>
-            <ReorderDemo initial={['Inbox', 'Sent', 'Drafts']} edge={edge} />
+            <ReorderDemo
+              initial={['Inbox', 'Sent', 'Drafts']}
+              edge={edge}
+              handle={{visibility: 'hover'}}
+            />
           </VStack>
         </Card>
       ))}
@@ -1018,6 +1062,7 @@ export const ReorderInCard: Story = {
             initial={['Inbox', 'Sent', 'Drafts']}
             pinned={['Sent']}
             listStyle="decimal"
+            handle={{visibility: 'hover'}}
           />
         </VStack>
       </Card>
@@ -1027,7 +1072,7 @@ export const ReorderInCard: Story = {
     docs: {
       description: {
         story:
-          "A handle that shows on hover hangs before its row's text. The " +
+          "With `handle.visibility: 'hover'`, a handle shows on hover and hangs before its row's text. The " +
           "list takes that room from the card's padding, and its rows move " +
           'in by the room the padding lacks, so the card never cuts a ' +
           "handle. Under outset and bleed, whose rows reach the card's " +

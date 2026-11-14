@@ -6,7 +6,7 @@
  * @file Item.tsx
  * @input Uses React, ReactNode, StyleXStyles, theme tokens, useClickableContainer,
  *   the shared press overlays and the compositor press layer, and a row's
- *   leading control (ItemLeadingContext)
+ *   control a row adds at one edge of the slots (ItemEdgeControlContext)
  * @output Exports Item component, ItemProps type; publishes the shared inline inset.
  *   Only numbered composing rows keep their start/label/end slots in one flex
  *   group, through Item's private exact-marker scope; other marked rows keep
@@ -58,7 +58,7 @@ import {ItemDescriptionContext} from './ItemDescriptionContext';
 import {ItemLabelContext, ItemLabelNeededContext} from './ItemLabelContext';
 import {ItemListRowContext} from './ItemListRowContext';
 import {ItemMarkerColumnsContext} from './ItemMarkerColumnsContext';
-import {ItemLeadingContext} from './ItemLeadingContext';
+import {ItemEdgeControlContext} from './ItemEdgeControlContext';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {computeTargetAndRel} from '../Link/computeTargetAndRel';
 import {useLinkComponent} from '../Link/useLinkComponent';
@@ -407,6 +407,10 @@ const styles = stylex.create({
     // derived var registry, keeping padding and compensation in sync.
     '--_item-inset-inline': spacingVars['--spacing-2'],
     paddingInline: 'var(--_item-inset-inline)',
+    // Room a row keeps after its marker, for a control its neighbours put
+    // there (a List row's reorder handle). Each row resets it, so a nested
+    // row never takes its parent's room.
+    '--_item-marker-room': '0px',
     position: 'relative',
     boxSizing: 'border-box',
     textAlign: 'start',
@@ -422,6 +426,7 @@ const styles = stylex.create({
     alignItems: 'inherit',
     alignSelf: 'stretch',
     gap: 'inherit',
+    paddingInlineStart: 'var(--_item-marker-room)',
   },
   markerContentFirstLine: {
     // A tall start/end slot moves the first text baseline down. The marker
@@ -866,9 +871,11 @@ export function Item({
     onClick?.(e);
   };
 
-  // A control a row adds before the slots, unwrapped (ItemLeadingContext):
-  // a List row's reorder handle.
-  const leading = use(ItemLeadingContext);
+  // A control a row adds before or after the slots, unwrapped
+  // (ItemEdgeControlContext): a List row's reorder handle.
+  const edgeControl = use(ItemEdgeControlContext);
+  const leading = edgeControl?.edge === 'start' ? edgeControl.control : null;
+  const trailing = edgeControl?.edge === 'end' ? edgeControl.control : null;
 
   const content = (
     <>
@@ -945,6 +952,7 @@ export function Item({
           {endContent}
         </span>
       )}
+      {trailing}
     </>
   );
 
@@ -1073,7 +1081,7 @@ export function Item({
       )}
       role={role}
       onClick={rootOnClick}>
-      <ItemLeadingContext value={null}>
+      <ItemEdgeControlContext value={null}>
         <ItemDescriptionContext
           value={hasRenderableDescription ? descriptionID : null}>
           <ItemLabelContext value={publishedLabelID}>
@@ -1095,7 +1103,7 @@ export function Item({
             </ItemLabelNeededContext>
           </ItemLabelContext>
         </ItemDescriptionContext>
-      </ItemLeadingContext>
+      </ItemEdgeControlContext>
       {hasSwipe && (
         // The panels: out-of-flow children of this root, so the DOM is the one
         // the row had before the split. Suspense and lazy add no element, and

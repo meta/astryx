@@ -131,6 +131,15 @@ const {detach} = reorderable.attach(listElement, {
   handle and cannot be picked up (DEC-2). A row it rejects at either end of the
   collection also bounds the drop range: nothing drops beyond it, and a
   keyboard or assistive-technology move past it is refused and announced (FR4).
+  An optional `handle` sets how each item's handle shows: `placement` is the
+  item edge it sits at, `'start'` (the default) or `'end'`, and
+  `visibility` when it shows, `'always'` or `'hover'`. Without `visibility`,
+  each collection keeps its own default: List and TransferList use
+  `'always'`, and ListInput uses `'hover'`. A handle that always shows takes
+  its own place in its item. With `'hover'` the handle shows while
+  its item is hovered or holds the focus, and always under a coarse pointer;
+  where it shows only on hover or focus, it takes no space and hangs outside
+  the item's content, so the content keeps its place.
   Each item's key comes from the data,
   never from React's `key`: List reads each `ListItem`'s `itemKey`, a string or a number, the
   shape Table's `idKey` returns, and `onReorder` reports that key as given;

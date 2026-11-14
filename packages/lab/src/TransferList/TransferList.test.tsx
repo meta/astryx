@@ -638,6 +638,26 @@ describe('TransferList', () => {
       expect(onChange).not.toHaveBeenCalled();
     });
 
+    it("puts the handle after Remove when the owner's object places handles at the end", () => {
+      render(
+        <TransferList
+          label="Columns"
+          options={OPTIONS}
+          value={['name', 'status']}
+          onChange={() => {}}
+          reorderable={createReorderable<string>({
+            onReorder: () => {},
+            handle: {placement: 'end'},
+          })}
+        />,
+      );
+      const row = screen.getByText('Name').closest('li') as HTMLElement;
+      const buttons = within(row).getAllByRole('button');
+      expect(buttons).toHaveLength(2);
+      expect(buttons[0]).toHaveAccessibleName('Remove Name');
+      expect(buttons[1]).toHaveAccessibleName('Reorder Name');
+    });
+
     it("applies an owner object's moves the way it reports them, a value without an option keeping its place among the hidden", async () => {
       const user = userEvent.setup();
       const onValueChange = vi.fn();
