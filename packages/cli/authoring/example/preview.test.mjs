@@ -279,6 +279,37 @@ describe('previewableExample', () => {
     ).toEqual(['example_renders_nothing']);
   });
 
+  it('never renders a browser global as an element, nor a constant made by a call', () => {
+    const [image] = problemsOf('<Image src="/a.png" alt="" />');
+    expect(image).toMatchObject({
+      code: 'example_undefined_name',
+      names: ['Image'],
+    });
+    expect(image.message).toContain("the browser's `Image` is not a component");
+    expect(
+      read('const size = new Map();\n<Text>{size.size}</Text>').previewable,
+    ).toBe(true);
+    const [columns] = problemsOf(
+      "const Columns = ['a'].map(x => x.toUpperCase());",
+    );
+    expect(columns.code).toBe('example_renders_nothing');
+    expect(moduleOf('const Card = React.memo(() => <AcmeCard />);')).toContain(
+      'export default Card;',
+    );
+  });
+
+  it('reports a transform error without its file or code frame', () => {
+    const [problem] = problemsOf("import z = require('zod');\n<AcmeCard />");
+    expect(problem.code).toBe('example_does_not_compile');
+    expect(problem.message).not.toContain('example.tsx');
+    expect(problem.message).not.toContain('\n');
+    expect(problem.message).not.toContain('\u001b');
+    const [own] = problemsOf(
+      "import z = require('zod');\nexport default function Demo() { return <AcmeCard />; }",
+    );
+    expect(own.message).toMatch(/^does not compile: /u);
+  });
+
   it('reports code that renders nothing', () => {
     const problems = problemsOf(
       "const options = {label: 'a'};\n// <AcmeCard options={options} />",

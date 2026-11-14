@@ -238,11 +238,29 @@ function isDefaultExport(node) {
 /** A component name: a capital first letter and a lowercase letter. */
 const COMPONENT_NAME = /^[A-Z](?=.*[a-z])/u;
 
+/** The React calls that return a component made from the one they take. */
+const COMPONENT_WRAPPERS = new Set(['memo', 'forwardRef', 'lazy']);
+
 /**
- * The function a component is declared with: a function or class, or a call
- * that wraps one (`memo(() => …)`), seen through parentheses and type
- * assertions.
+ * Whether a call is `memo(…)`, `forwardRef(…)` or `lazy(…)`, bare or on
+ * `React`.
+ * @param {any} callee
+ */
+const isComponentWrapper = callee =>
+  (callee?.type === 'Identifier' && COMPONENT_WRAPPERS.has(callee.name)) ||
+  (callee?.type === 'MemberExpression' &&
+    !callee.computed &&
+    callee.object?.type === 'Identifier' &&
+    callee.object.name === 'React' &&
+    callee.property?.type === 'Identifier' &&
+    COMPONENT_WRAPPERS.has(callee.property.name));
+
+/**
+ * The function a component is declared with: a function or class, or
+ * `memo`, `forwardRef` or `lazy` called on one, seen through parentheses and
+ * type assertions.
  * @param {any} node an initializer
+ * @returns {boolean}
  */
 function isComponentValue(node) {
   let value = node;
@@ -263,9 +281,8 @@ function isComponentValue(node) {
   }
   return (
     value?.type === 'CallExpression' &&
-    value.arguments.some((/** @type {any} */ argument) =>
-      isComponentValue(argument),
-    )
+    isComponentWrapper(value.callee) &&
+    isComponentValue(value.arguments[0])
   );
 }
 
@@ -347,6 +364,8 @@ function markupPiece(code, node, offset = 0) {
  * @typedef {object} ExampleModule
  * @property {string} module
  * @property {boolean} renders
+ * @property {boolean} [wrapped] whether the module runs the code inside a
+ *   component it adds, so an error can come from that component
  * @property {(position: number) => number | null} toExample the position in
  *   the example's code that a position in `module` comes from, or null for
  *   text the module adds around it
@@ -547,6 +566,7 @@ function composed(code, directives, statements, element) {
       '\n);\n}\n',
     ]),
     renders: true,
+    wrapped: true,
   };
 }
 
@@ -605,7 +625,11 @@ function lineAndColumn(text, position) {
  * @returns {ExampleProblem}
  */
 function compileProblem(error, code, read) {
+  // A transform error starts with the file it read and ends with a code
+  // frame of the module; the note keeps only what went wrong.
   const message = String(error?.message ?? error)
+    .split('\n')[0]
+    .replace(/^.*?example\.tsx: /u, '')
     .replace(/\s*\(\d+:\d+\)$/u, '')
     .replace(/\.$/u, '');
   const position =
@@ -691,11 +715,11 @@ function valueImports(ast) {
 
 /**
  * The names a module uses but never binds, in order of first use, once its
- * types are stripped (a type is not a runtime name); the imported names it
- * uses, with the module each comes from; and whether it reads `process.env`
- * past `NODE_ENV`.
+ * types are stripped (a type is not a runtime name), and which of them name
+ * an element; the imported names it uses, with the module each comes from;
+ * and whether it reads `process.env` past `NODE_ENV`.
  * @param {string} module
- * @returns {{free: string[], imported: Array<{source: string, name: string}>, readsEnvironment: boolean} | {error: any}}
+ * @returns {{free: string[], elements: Set<string>, imported: Array<{source: string, name: string}>, readsEnvironment: boolean} | {error: any}}
  */
 function unboundNames(module) {
   /** @type {any} */
@@ -722,6 +746,8 @@ function unboundNames(module) {
   }
   /** @type {string[]} */
   const free = [];
+  /** @type {Set<string>} */
+  const elements = new Set();
   /** @type {Array<{source: string, name: string}>} */
   const imported = [];
   let readsEnvironment = false;
@@ -773,9 +799,10 @@ function unboundNames(module) {
       }
       if (binding || path.scope.hasBinding(name, true)) return;
       if (!free.includes(name)) free.push(name);
+      if (path.isJSXIdentifier()) elements.add(name);
     },
   });
-  return {free, imported, readsEnvironment};
+  return {free, elements, imported, readsEnvironment};
 }
 
 /**
@@ -810,13 +837,14 @@ export function previewableExample(example, scope) {
   if ('error' in read) {
     return notPreviewable([compileProblem(read.error, code)]);
   }
+  const wrapper = read.wrapped ? read : undefined;
   const parsed = tryParse(read.module);
   if ('error' in parsed) {
-    return notPreviewable([compileProblem(parsed.error, code, read)]);
+    return notPreviewable([compileProblem(parsed.error, code, wrapper)]);
   }
   const unbound = unboundNames(read.module);
   if ('error' in unbound) {
-    return notPreviewable([compileProblem(unbound.error, code, read)]);
+    return notPreviewable([compileProblem(unbound.error, code, wrapper)]);
   }
   const table = scopeTable(scope);
   /** @type {ExampleProblem[]} */
@@ -888,15 +916,23 @@ export function previewableExample(example, scope) {
       names: [name],
     });
   }
+  // A browser global such as `Image` or `Map` is not a component, so an
+  // element takes its name only from the example or its scope.
   const globals = globalNames();
   const undefinedNames = unbound.free.filter(
-    name => !table.names.has(name) && !globals.has(name),
+    name =>
+      !table.names.has(name) &&
+      (unbound.elements.has(name) || !globals.has(name)),
   );
   if (undefinedNames.length > 0) {
     const shown = undefinedNames.map(name => `\`${name}\``).join(', ');
+    const notComponents = undefinedNames.filter(name => globals.has(name));
     problems.push({
       code: 'example_undefined_name',
-      message: `uses ${shown} but never defines or imports ${undefinedNames.length === 1 ? 'it' : 'them'}, so a live preview throws a ReferenceError when that code runs`,
+      message:
+        notComponents.length === 0
+          ? `uses ${shown} but never defines or imports ${undefinedNames.length === 1 ? 'it' : 'them'}, so a live preview throws a ReferenceError when that code runs`
+          : `uses ${shown} but never defines or imports ${undefinedNames.length === 1 ? 'it' : 'them'}, so a live preview throws when that code runs (the browser's ${notComponents.map(name => `\`${name}\``).join(', ')} ${notComponents.length === 1 ? 'is' : 'are'} not a component)`,
       fix: "Define each one in the example (a sample value is enough) or import it; only the package's documented components, Core's documented components and hooks, React's exports and browser globals need no import. If the code needs values from an app, set `kind: 'setup'` to show it as code only.",
       names: undefinedNames,
     });

@@ -15,7 +15,7 @@ export const doc = {
   displayName: 'ExampleScope',
   namespace: 'authoring',
   description:
-    "What `previewableExample(example, scope)` from `@astryxdesign/cli/authoring` reads a component doc example against, as JSON. `integrationExampleScope()` in `@astryxdesign/cli/api` builds the scope Doctor reads a package's examples with, so a catalog can store it and a preview tool read examples exactly as Doctor does. A tool that shows an example as a live preview calls it, and `{@command doctor integration validate}` uses the same rule, so the two agree. An example with `kind: 'setup'` is code only. Any other example must run on its own: its code compiles as a TSX module; it renders something (a default export, then JSX at its end, then the last component it declares); it imports only the package, the packages the package declares, React and Core, never a relative path or code that runs only on a server; and every name it uses is defined in it, imported, named in the scope, or a JavaScript or browser global. The result is `{previewable: true, module}`, a module that imports each scope name it uses and default-exports what it renders, so a bundler can build it as is; `{previewable: false, setup: true}`; or `{previewable: false, setup: false, problems}`, each problem with a `code`, a `message` and a `fix`.",
+    "What `previewableExample(example, scope)` from `@astryxdesign/cli/authoring` reads a component doc example against, as JSON. `integrationExampleScope()` in `@astryxdesign/cli/api` builds the scope Doctor reads a package's examples with, so a catalog can store it and a preview tool read examples exactly as Doctor does. A tool that shows an example as a live preview calls it, and `{@command doctor integration validate}` uses the same rule, so the two agree. An example with `kind: 'setup'` is code only. Any other example must run on its own: its code compiles as a TSX module; it renders something (a default export, then JSX at its end, then the last component it declares); it imports only the package, the packages the package declares, React and Core, never a relative path or code that runs only on a server; and every name it uses is defined in it, imported, named in the scope, or a JavaScript or browser global (the name of an element only from the example or the scope, as a global such as `Image` is not a component). The result is `{previewable: true, module}`, a module that imports each scope name it uses and default-exports what it renders, so a bundler can build it as is; `{previewable: false, setup: true}`; or `{previewable: false, setup: false, problems}`, each problem with a `code` (`example_does_not_compile` with `line` and `column`, `example_renders_nothing`, `example_undefined_name` with `names`, `example_server_only`, or `example_import_unresolvable` with `specifier`), a `message` and a `fix`.",
   appliesTo:
     'The second argument of `previewableExample`, from `@astryxdesign/cli/authoring`',
   fields: [
@@ -64,13 +64,6 @@ export const doc = {
       type: 'string[]',
       description:
         "The package's documented components that only a server renders: async function components. An example that renders one, without importing it or through an import of the package, cannot preview.",
-    },
-    {
-      name: 'returns',
-      type: 'PreviewableExample',
-      description:
-        "What `previewableExample` returns. Each problem's `code` is one of `example_does_not_compile` (with `line` and `column`), `example_renders_nothing`, `example_undefined_name` (with `names`), `example_server_only` and `example_import_unresolvable` (with `specifier`).",
-      required: true,
     },
   ],
 };

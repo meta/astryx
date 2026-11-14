@@ -956,10 +956,12 @@ agree on every example. `integrationExampleScope(pkg)` in
 with, as JSON: `ExampleScope` is the contract, so a catalog can store it and a
 preview tool read examples with it as Doctor does. It reads the example as a TSX module that renders
 its default export, else the JSX it ends with, else the last component it
-declares: a function or class, or a call that wraps one. The example may
-use, without importing them, the components its package documents, the
-components and hooks Core documents, React's exports, and the JavaScript
-and browser globals of the `globals` package. It may import the
+declares: a function or class, or `memo`, `forwardRef` or `lazy` called
+on one. The example may use, without importing them, the components its
+package documents, the components and hooks Core documents, React's
+exports, and the JavaScript and browser globals of the `globals` package;
+an element takes its name only from the example or those components, as a
+global such as `Image` is not a component. It may import the
 package, the packages the package declares in `dependencies`,
 `peerDependencies` and `optionalDependencies`, React, and Core. Server-only
 code is what `showcase_not_standalone` names, with the same declared
