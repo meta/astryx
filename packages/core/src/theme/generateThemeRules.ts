@@ -49,6 +49,7 @@ import {
 } from './declarationBoundary';
 import {readerTextSizeEntries} from './dynamicType';
 import {splitTopLevelWhitespace} from './tokenReferences';
+import {withoutUnsetComponents} from './mergeComponents';
 import {PRESS_BELIEVED_SELECTOR} from '../privateAttributes/press';
 
 /**
@@ -1226,25 +1227,28 @@ export function generateThemeRules(
   }
 
   // 2. Component overrides: stable .astryx-* target classes combined with
-  // reflected data-* selectors for visual props and runtime states.
-  if (theme.components) {
-    generateComponentRules(theme.components, parts, {sink});
+  // reflected data-* selectors for visual props and runtime states. A
+  // source's map is read as every layer reads one: what it leaves undefined
+  // is not set.
+  const components = withoutUnsetComponents(theme.components);
+  if (components) {
+    generateComponentRules(components, parts, {sink});
   }
 
   // 3. Prose HTML element rules (h1-h6, p, small, code, hr)
   generateProseRules(val, parts);
 
   // 4. Prop-level color overrides (for text/heading/link specificity)
-  generateColorOverrides(theme.components || {}, parts);
+  generateColorOverrides(components || {}, parts);
 
   // 5. Text `size`-prop font-size overrides (so an explicit size beats a
   //    themed type's font-size across the astryx-base → astryx-theme layers)
-  generateSizeOverrides(theme.components || {}, parts);
+  generateSizeOverrides(components || {}, parts);
 
   // 6. Heading `weight`-prop overrides. These are emitted after authored type
   //    rules in the same layer so an explicit prop remains an override even
   //    when a custom visual type declares its own default weight.
-  generateHeadingWeightOverrides(theme.components || {}, parts);
+  generateHeadingWeightOverrides(components || {}, parts);
 
   // (on-media rules are generated separately — see generateOnMediaCSS)
 
@@ -1372,14 +1376,7 @@ function generateComponentRules(
   }: ComponentRuleOptions = {},
 ): void {
   for (const [component, rules] of Object.entries(components)) {
-    // A component or style key left undefined is not set.
-    if (rules === undefined) {
-      continue;
-    }
     for (const [key, styles] of Object.entries(rules)) {
-      if (styles === undefined) {
-        continue;
-      }
       /**
        * Emit a style block on a selector: its declarations, then its
        * pseudo-class overrides, each rule passed through `wrap`; then, for a
@@ -1395,10 +1392,6 @@ function generateComponentRules(
         const props: [string, string][] = [];
         const nested: [string, StyleBlock][] = [];
         for (const [prop, value] of Object.entries(block)) {
-          // An undefined value sets nothing, as a page token's does.
-          if (value === undefined) {
-            continue;
-          }
           const isObject = value !== null && typeof value === 'object';
           // A pseudo-class override or a color-mode block nests. Anything
           // else is a declaration as written, so the boundary check reports
@@ -1434,9 +1427,7 @@ function generateComponentRules(
           parts.push(wrap(`  ${selector} {\n${declarations}\n  }`));
         }
         for (const [pseudo, pseudoStyles] of nested) {
-          const pseudoEntries = Object.entries(pseudoStyles).filter(
-            ([, value]) => value !== undefined,
-          );
+          const pseudoEntries = Object.entries(pseudoStyles);
           if (pseudo.startsWith(':') && pseudoEntries.length > 0) {
             const declarations = joinDeclarations(
               pseudoEntries,
@@ -1662,9 +1653,9 @@ function generateColorOverrides(
     inherit: 'inherit',
   };
 
-  const touchesText = components.text !== undefined;
-  const touchesHeading = components.heading !== undefined;
-  const touchesLink = components.link !== undefined;
+  const touchesText = 'text' in components;
+  const touchesHeading = 'heading' in components;
+  const touchesLink = 'link' in components;
 
   if (touchesText || touchesHeading || touchesLink) {
     for (const [colorName, colorValue] of Object.entries(TEXT_COLOR_MAP)) {
@@ -1729,7 +1720,7 @@ function generateSizeOverrides(
   parts: string[],
   surface?: MediaSurface,
 ): void {
-  if (components.text === undefined) {
+  if (!('text' in components)) {
     return;
   }
   for (const [sizeName, sizeValue] of Object.entries(TEXT_SIZE_TOKEN_MAP)) {

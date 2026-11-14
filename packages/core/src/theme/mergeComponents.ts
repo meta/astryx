@@ -26,32 +26,41 @@ const COLOR_MODE_KEYS = ['@light', '@dark'] as const;
 /**
  * A value without what it leaves undefined: each property of a plain
  * object, at every depth (a style key's nested pseudo-class and color-mode
- * blocks). A null is kept: it is a value. A value with nothing undefined is
- * returned as it is.
+ * blocks). A block whose every value is left undefined is not set either,
+ * so it is undefined too; a block written empty stays. A null is kept: it
+ * is a value. A value with nothing undefined is returned as it is.
  */
-function withoutUndefined<T>(value: T): T {
+function withoutUndefined<T>(value: T): T | undefined {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     return value;
   }
+  const entries = Object.entries(value);
+  if (entries.length === 0) {
+    return value;
+  }
   let changed = false;
-  const entries: [string, unknown][] = [];
-  for (const [key, nested] of Object.entries(value)) {
-    if (nested === undefined) {
+  const kept: [string, unknown][] = [];
+  for (const [key, nested] of entries) {
+    const set = nested === undefined ? undefined : withoutUndefined(nested);
+    if (set === undefined) {
       changed = true;
       continue;
     }
-    const kept = withoutUndefined(nested);
-    changed ||= kept !== nested;
-    entries.push([key, kept]);
+    changed ||= set !== nested;
+    kept.push([key, set]);
   }
-  return changed ? (Object.fromEntries(entries) as T) : value;
+  if (kept.length === 0) {
+    return undefined;
+  }
+  return changed ? (Object.fromEntries(kept) as T) : value;
 }
 
 /**
  * A component style map without what it leaves undefined: a component, a
- * style key, or a property at any depth is not set. Every layer that reads
- * a theme's component map (the merge, each resolved layer) reads it through
- * this.
+ * style key, a block, or a property at any depth is not set, and so is a
+ * component or block whose every value is left undefined. Every layer that
+ * reads a theme's component map (the merge, each resolved layer, the
+ * stylesheet) reads it through this.
  */
 export function withoutUnsetComponents(
   map: ComponentStyleMap | undefined,

@@ -267,6 +267,28 @@ describe('generateThemeRules', () => {
     expect(unset).toEqual(plain);
   });
 
+  it('writes no Text, Heading or Link override for a component whose every value is left undefined', () => {
+    const plain = generateThemeRules({tokens: {}});
+    expect(
+      generateThemeRules({
+        tokens: {},
+        components: {
+          text: {base: undefined as unknown as Record<string, string>},
+          link: {
+            base: {color: undefined as unknown as string},
+          },
+        },
+      }),
+    ).toEqual(plain);
+    const defined = defineTheme({
+      name: 'unset-text',
+      components: {
+        text: {base: undefined as unknown as Record<string, string>},
+      },
+    });
+    expect(defined.components?.text).toBeUndefined();
+  });
+
   it('keeps null as it was: it replaces an inherited value and is written as it is', () => {
     const base = defineTheme({
       name: 'null-base',

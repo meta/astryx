@@ -324,6 +324,36 @@ describe('rule order and writes', () => {
     ).toThrow(/must resolve to a concrete CSS string/);
   });
 
+  it('takes a type-scale value a scale rule leaves undefined as no write, so an earlier rule keeps it', () => {
+    const theme = defineTheme({
+      name: 'scaled',
+      typography: {scale: {base: 16, ratio: 1.2}},
+      adaptations: {
+        rules: [
+          {
+            when: {pointer: 'coarse'},
+            value: {components: {text: {'type:body': {fontSize: '20px'}}}},
+          },
+          {
+            when: {pointer: 'coarse'},
+            value: {
+              typography: {scale: {base: 16, ratio: 1.3}},
+              components: {
+                text: {
+                  'type:body': {fontSize: undefined as unknown as string},
+                },
+              },
+            },
+          },
+        ],
+      },
+    });
+    const css = generateAdaptationCSS(theme).component;
+    const blocks = css.split('@media (pointer: coarse)');
+    expect(blocks[1]).toContain('font-size: 20px');
+    expect(blocks[2]).not.toMatch(/\[data-type="body"\][^}]*font-size/);
+  });
+
   it('uses declaration order rather than inferred condition specificity', () => {
     const theme = defineTheme(
       adaptationInput([

@@ -28,10 +28,10 @@ describe('deepMergeComponents', () => {
         link: {base: undefined},
       }),
     );
-    expect(merged).toEqual({
+    // A component whose every style key is left undefined is not set.
+    expect(merged).toStrictEqual({
       card: {base: {padding: '8px', '@dark': {color: 'white'}}},
       button: {base: {margin: '2px'}},
-      link: {},
     });
   });
 
@@ -44,13 +44,13 @@ describe('deepMergeComponents', () => {
           button: undefined,
         }),
       ),
-    ).toEqual({card: {base: {margin: '4px'}}});
+    ).toStrictEqual({card: {base: {margin: '4px'}}});
   });
 
   it('keeps null as a value that replaces the inherited one', () => {
     expect(
       deepMergeComponents(base, map({card: {base: {padding: null}}}))?.card
         ?.base,
-    ).toEqual({padding: null, '@dark': {color: 'white'}});
+    ).toStrictEqual({padding: null, '@dark': {color: 'white'}});
   });
 });
