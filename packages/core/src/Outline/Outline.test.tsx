@@ -1081,7 +1081,152 @@ describe('Outline scroll scoping', () => {
     pane.remove();
     cleanup();
   });
+
+  it('follows the page scroll when <html> scrolls the page', async () => {
+    const cleanup = mountHeadings();
+    const restorePage = makeScroller(document.documentElement, -1000);
+    const [, installRect] = mockHeadingTops([-500, 300, 900]);
+
+    render(<Outline items={items} />);
+    installRect.mockReturnValue({top: -10} as DOMRect);
+    await scrollAndWait(window);
+
+    expect(screen.getByRole('link', {name: 'Installation'})).toHaveAttribute(
+      'aria-current',
+      'location',
+    );
+
+    restorePage();
+    cleanup();
+  });
+
+  it('lands below a fixed header and settles when <html> scrolls the page', async () => {
+    const user = userEvent.setup();
+    const cleanup = mountHeadings();
+    const restorePage = makeScroller(document.documentElement, -1000);
+    const install = document.getElementById('install') as HTMLElement;
+    vi.spyOn(install, 'getBoundingClientRect').mockReturnValue({
+      top: 400,
+    } as DOMRect);
+    const onNavigateEnd = vi.fn();
+
+    render(<Outline items={items} offset={48} onNavigateEnd={onNavigateEnd} />);
+    await user.click(screen.getByRole('link', {name: 'Installation'}));
+
+    expect(window.scrollBy).toHaveBeenCalledWith({
+      top: 400 - 48,
+      behavior: 'smooth',
+    });
+    expect(Element.prototype.scrollBy).not.toHaveBeenCalled();
+
+    act(() => {
+      window.dispatchEvent(new Event('scrollend'));
+    });
+    expect(onNavigateEnd).toHaveBeenCalledTimes(1);
+    expect(onNavigateEnd).toHaveBeenCalledWith('install');
+
+    restorePage();
+    cleanup();
+  });
+
+  it('follows the page scroll when <body> gives its overflow to the page', async () => {
+    const cleanup = mountHeadings();
+    // jsdom reports an unset overflow as an empty string, not `visible`.
+    const html = document.documentElement;
+    html.style.overflowX = 'visible';
+    html.style.overflowY = 'visible';
+    // Not at the bottom of the page.
+    Object.defineProperty(html, 'scrollHeight', {
+      value: 4000,
+      configurable: true,
+    });
+    const restoreBody = makeScroller(document.body, -1000);
+    const [, installRect] = mockHeadingTops([-500, 300, 900]);
+
+    render(<Outline items={items} />);
+    installRect.mockReturnValue({top: -10} as DOMRect);
+    await scrollAndWait(window);
+
+    expect(screen.getByRole('link', {name: 'Installation'})).toHaveAttribute(
+      'aria-current',
+      'location',
+    );
+
+    restoreBody();
+    html.style.overflowX = '';
+    html.style.overflowY = '';
+    Reflect.deleteProperty(html, 'scrollHeight');
+    cleanup();
+  });
+
+  it('follows <body> when the root clips and the body scrolls a box of its own', async () => {
+    const cleanup = mountHeadings();
+    const html = document.documentElement;
+    html.style.overflowX = 'hidden';
+    html.style.overflowY = 'hidden';
+    const restoreBody = makeScroller(document.body, 0);
+    const [, installRect] = mockHeadingTops([-500, 300, 900]);
+
+    render(<Outline items={items} />);
+    installRect.mockReturnValue({top: -10} as DOMRect);
+    await scrollAndWait(document.body);
+
+    expect(screen.getByRole('link', {name: 'Installation'})).toHaveAttribute(
+      'aria-current',
+      'location',
+    );
+
+    restoreBody();
+    html.style.overflowX = '';
+    html.style.overflowY = '';
+    cleanup();
+  });
 });
+
+/** Mock each heading's box top, in `items` order. */
+function mockHeadingTops(tops: number[]) {
+  return items.map((item, index) =>
+    vi
+      .spyOn(
+        document.getElementById(item.id) as HTMLElement,
+        'getBoundingClientRect',
+      )
+      .mockReturnValue({top: tops[index]} as DOMRect),
+  );
+}
+
+/** Send a scroll event to `target` and wait for the frame that handles it. */
+async function scrollAndWait(target: EventTarget) {
+  await act(async () => {
+    target.dispatchEvent(new Event('scroll'));
+    await new Promise(resolve => requestAnimationFrame(resolve));
+  });
+}
+
+/**
+ * Make `element` scroll on the block axis, with its box top at `top`. For the
+ * root, or a body that gives its overflow to the viewport, the box moves up by
+ * the page's scroll and the scroll events go to the window.
+ */
+function makeScroller(element: HTMLElement, top: number) {
+  element.style.overflowY = 'scroll';
+  Object.defineProperty(element, 'clientHeight', {
+    value: 800,
+    configurable: true,
+  });
+  Object.defineProperty(element, 'scrollHeight', {
+    value: 4000,
+    configurable: true,
+  });
+  vi.spyOn(element, 'getBoundingClientRect').mockReturnValue({
+    top,
+  } as DOMRect);
+  return () => {
+    element.style.overflowY = '';
+    Reflect.deleteProperty(element, 'clientHeight');
+    Reflect.deleteProperty(element, 'scrollHeight');
+  };
+}
 
 describe('useOutlineFromDOM', () => {
   it('collects headings from DOM container', () => {
