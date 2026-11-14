@@ -74,8 +74,7 @@ describe('tokenizeQuery', () => {
   });
 
   it('gives one token for a one-word query', () => {
-    // Callers read a single token as "few tokens" and fall back to scoring
-    // the whole phrase; an empty list would mean the query had no content.
+    // Callers score a query of zero or one token as a whole phrase.
     expect(tokenizeQuery('table')).toEqual(['table']);
   });
 
@@ -195,6 +194,7 @@ describe('pluralOf', () => {
   });
 
   it('never reads a word of under three letters as having a plural', () => {
+    expect(pluralOf('ids', 'id')).toBe(false);
     expect(pluralOf('as', 'a')).toBe(false);
     expect(pluralOf('s', '')).toBe(false);
   });

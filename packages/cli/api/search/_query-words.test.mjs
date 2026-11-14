@@ -58,6 +58,7 @@ describe('fold', () => {
     expect(fold('boxes')).toBe('box');
     expect(fold('classes')).toBe('class');
     expect(fold('buses')).toBe('bus');
+    expect(fold('buzzes')).toBe('buzz');
   });
 
   it('leaves a word ending in ss alone', () => {

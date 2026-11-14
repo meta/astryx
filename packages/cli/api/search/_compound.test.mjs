@@ -100,6 +100,13 @@ describe('compoundHit: part-of-a-name hits', () => {
     expect(hit).toMatchObject({score: 95, alias: 'partial', aliasWords: 3});
   });
 
+  it('scores 95 for a run just over three quarters of the name', () => {
+    // "daterangein" is 11 of the 14 letters of "daterangeinput" (79%).
+    expect(
+      compoundHit(['date', 'range', 'in'], component('DateRangeInput'))?.score,
+    ).toBe(95);
+  });
+
   it("scores 92 for a name's leading words covering half of it", () => {
     const hit = compoundHit(
       ['top', 'nav', 'mega'],
@@ -147,9 +154,11 @@ describe('compoundHit: part-of-a-name hits', () => {
   });
 
   it('needs the words to cover at least half of the name', () => {
-    expect(compoundHit(['table'], component('TableHeaderCell'))).toBeNull();
     expect(
       compoundHit(['table', 'header'], component('TableHeaderCellGroupRow')),
+    ).toBeNull();
+    expect(
+      compoundHit(['cell', 'group'], component('TableHeaderCellGroupRow')),
     ).toBeNull();
   });
 });
