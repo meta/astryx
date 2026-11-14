@@ -101,6 +101,99 @@ const QUOTE_PAIRS = {
   '`': '`',
 };
 
+/** CSS functions whose names a value may write in any case. */
+const CSS_FUNCTIONS =
+  /\b(light-dark|rgba?|hsla?|hwb|lab|lch|oklab|oklch|color|color-mix|calc|min|max|clamp|var)\(/gi;
+
+/**
+ * A value as meant when typed with escapes or in another notation: CSS
+ * function names in lower case (`LIGHT-DARK(` is `light-dark(`, as CSS reads
+ * it); a shell or JSON backslash before `#`, a quote or a space taken off;
+ * a JavaScript escape in a `content` string written as CSS writes it
+ * (`\u2022` is `\2022 `, `\n` a line break, `\t` a tab); and the JSON
+ * shapes a design-tokens file or an array writes (`{"$value": "#e11d48"}`,
+ * `{"value": 18, "unit": "px"}`, `["#e11d48"]`, `["Inter", "sans-serif"]`).
+ * @param {string} thing
+ * @param {string} value
+ * @returns {string}
+ */
+export function escapesMeant(thing, value) {
+  let v = value;
+  const content = /^content$/i.test(thing);
+  if (content)
+    return (
+      v
+        .replace(
+          /\\u\{?([0-9a-f]{2,6})\}?/gi,
+          (_, h) => `\\${h.toUpperCase()} `,
+        )
+        // `\x` with four hex digits is written for the code point (as
+        // `\u`), with two for that character.
+        .replace(
+          /\\x([0-9a-f]{4}|[0-9a-f]{2})/gi,
+          (_, h) => `\\${h.toUpperCase()} `,
+        )
+        .replace(/\\n/g, '\\A ')
+        .replace(/\\t/g, '\\9 ')
+        .replace(/\\r/g, '\\D ')
+    );
+  v = v.replace(CSS_FUNCTIONS, f => f.toLowerCase());
+  // A JS escape of a printable character in a font family (`Inter\u0020
+  // Tight`) is that character, as CSS would read its own escape.
+  if (/font/i.test(thing))
+    v = v.replace(
+      /\\(?:u\{?([0-9a-f]{4,6})\}?|x([0-9a-f]{2}))/gi,
+      (m, u, x) => {
+        const c = String.fromCodePoint(parseInt(u ?? x, 16));
+        return /^[\p{L}\p{N} _-]$/u.test(c) ? c : m;
+      },
+    );
+  // (A JSON string holding escaped quotes is unwrapped whole later.)
+  if (!/^\s*"(?:[^"\\]|\\.)*"\s*$/.test(v)) v = v.replace(/\\([#"' ])/g, '$1');
+  else v = v.replace(/\\([# ])/g, '$1');
+  const t = v.trim();
+  if (/^[[{]/.test(t)) {
+    /** @type {any} */
+    let j;
+    try {
+      j = JSON.parse(t);
+    } catch {
+      return v;
+    }
+    /** @param {any} x */
+    const text = x =>
+      typeof x === 'string' || typeof x === 'number' ? String(x) : null;
+    if (Array.isArray(j) && j.length && j.every(x => text(x) != null)) {
+      if (j.length === 1) return String(j[0]);
+      if (/font/i.test(thing))
+        return j
+          .map(x =>
+            /\s/.test(String(x)) && !/^["']/.test(String(x))
+              ? `"${x}"`
+              : String(x),
+          )
+          .join(', ');
+      return v;
+    }
+    if (j && typeof j === 'object' && !Array.isArray(j)) {
+      const inner =
+        '$value' in j ? j.$value : 'value' in j ? j.value : undefined;
+      if (text(inner) != null)
+        return `${inner}${typeof j.unit === 'string' ? j.unit : ''}`;
+      // One labeled entry (`{"color": "#e11d48"}`) is read as the same
+      // label in its CSS form (`color: #e11d48`): one reader for both.
+      const keys = Object.keys(j);
+      if (
+        keys.length === 1 &&
+        /^(--)?[a-z][a-z0-9-]*$/i.test(keys[0]) &&
+        text(j[keys[0]]) != null
+      )
+        return `${keys[0]}: ${j[keys[0]]}`;
+    }
+  }
+  return v;
+}
+
 /**
  * The thing and value a setting was typed as, put right before any check: a
  * declaration pasted whole or split (`accent: #e11d48`, `--color-accent=red`,
@@ -109,7 +202,7 @@ const QUOTE_PAIRS = {
  * Unicode spaces. A thing it cannot read is left as typed.
  * @param {string} thing
  * @param {string | undefined} value
- * @returns {{thing: string, value: string | undefined}}
+ * @returns {{thing: string, value: string | undefined, dropped?: string}} `dropped`: a second declaration pasted after the first, which is not set
  */
 export function normalizeEntry(thing, value) {
   let t = normalValueText(String(thing ?? '')).trim();
@@ -175,9 +268,20 @@ export function normalizeEntry(thing, value) {
       .toLowerCase();
     if (DIALS[dial]) t = dial;
   }
+  if (typeof v === 'string') v = escapesMeant(t, v);
   // A second declaration pasted after the first (`accent: red; text-size:
   // 18`): the first is this setting.
-  if (typeof v === 'string') v = withoutSecondDeclaration(v);
+  /** A second declaration pasted after the first, which this does not set. @type {string | null} */
+  let dropped = null;
+  if (typeof v === 'string') {
+    const cut = withoutSecondDeclaration(v);
+    if (cut !== v)
+      dropped = v
+        .slice(cut.length)
+        .replace(/^\s*;\s*/, '')
+        .trim();
+    v = cut;
+  }
   if (pasted && typeof v === 'string') {
     v = v.replace(/\s*!\s*important\s*;?\s*$/i, '').replace(/;+\s*$/, '');
   }
@@ -197,10 +301,14 @@ export function normalizeEntry(thing, value) {
       // Not a JSON string.
     }
   }
+  // A font stack with its quotes escaped, as it sits inside a JSON or JS
+  // string (`\"Inter\", sans-serif`): the stack.
+  if (typeof v === 'string' && /font/i.test(t) && /\\["']/.test(v))
+    v = v.replace(/\\(["'])/g, '$1');
   // A font family's name never starts or ends with a space: French quotes
   // (« Inter », with a no-break or narrow no-break space) hold the name.
   if (typeof v === 'string' && /font/i.test(t)) v = trimInsideQuotes(v);
-  return {thing: t, value: v};
+  return {thing: t, value: v, ...(dropped ? {dropped} : {})};
 }
 
 /**
@@ -393,11 +501,15 @@ export function trimInsideQuotes(v) {
  */
 export function otherSettingLabel(dial, value) {
   const m =
-    /^\s*["']?([a-z][a-z0-9-]*|--[a-z0-9-]+)["']?\s*[:=]\s*(.+?)\s*;?\s*$/i.exec(
+    /^\s*["']?([a-z][a-z0-9_-]*|--[a-z0-9-]+)["']?\s*[:=]\s*["']?(.+?)["']?\s*;?\s*$/i.exec(
       String(value),
     );
   if (!m) return null;
-  const label = m[1].toLowerCase();
+  // A label in camelCase or snake_case (textSize, text_size) is the dial.
+  const label = m[1]
+    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+    .replace(/_/g, '-')
+    .toLowerCase();
   if (label === dial) return null;
   if (!DIALS[label] && !label.startsWith('--')) return null;
   return {thing: label, value: m[2]};
@@ -433,3 +545,68 @@ export function colorPair(value) {
   if (two) return {light: unq(two[1]), dark: unq(two[2])};
   return null;
 }
+
+/**
+ * The stock values a repair would put in when it could read nothing from
+ * the input: the example of each value type, and the dials' defaults. A
+ * line with one of these is offered only when the input held it.
+ */
+export const STOCK_VALUES = new Set([
+  '#1f2937',
+  '#7c3aed',
+  '#ffffff',
+  'inter',
+  'inter, sans-serif',
+  'system',
+  '1px',
+  '6px',
+  '12px',
+  '16',
+  '600',
+  '1.4',
+  '150ms',
+  'solid',
+  // The dials' fallback words and the size tokens' Core defaults, offered
+  // when nothing could be read.
+  'medium',
+  'roomy',
+  'compact',
+  'round',
+  'light-dark(#1f2937, #f9fafb)',
+]);
+
+/**
+ * Whether a suggested value carries what was typed: each of its words and
+ * numbers is in the typed text (cleaned: case, quotes, escapes), apart from
+ * a unit added to a bare number and the words of the CSS form it is written
+ * in (`light-dark()`, `var()`, `calc()`, a generic family). A stock value
+ * the input never held (a gray, a violet, `system`, `small`) does not.
+ * @param {string} offered
+ * @param {string} typed
+ */
+export function carriesTyped(offered, typed) {
+  const flat = String(typed)
+    .toLowerCase()
+    .replace(/\\(?=[#"' ])/g, '')
+    .replace(/[\s"'\u201C\u201D\u2018\u2019\u300C\u300D]/g, '');
+  const FORM = new Set(['light', 'dark', 'var', 'calc', 'px', 'rem', 'em']);
+  return (
+    String(offered)
+      .toLowerCase()
+      .match(/[a-z0-9.]+/g) ?? []
+  )
+    .map(w => w.replace(/^([0-9.]+)(px|rem|em)$/, '$1'))
+    .filter(w => !FORM.has(w))
+    .every(w => flat.includes(w));
+}
+
+/**
+ * Whether a repair may offer `offered` for `typed`: a stock value only when
+ * the input held it; any other value (one read from the input, or mapped
+ * from it by a documented rule) may be.
+ * @param {string} offered
+ * @param {string} typed
+ */
+export const offersTyped = (offered, typed) =>
+  !STOCK_VALUES.has(String(offered).toLowerCase()) ||
+  carriesTyped(offered, typed);

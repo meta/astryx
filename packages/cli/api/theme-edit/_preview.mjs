@@ -15,7 +15,8 @@
 import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {spawnSync} from 'node:child_process';
+import {spawn} from 'node:child_process';
+import * as os from 'node:os';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {
   SAMPLE_PAGE,
@@ -1416,7 +1417,7 @@ const camelName = camel;
  * @param {string} html absolute
  * @param {string} png absolute
  * @param {'light' | 'dark'} mode
- * @returns {Promise<{ok: true, file: string, cut?: boolean} | {ok: false, reason: string}>} `cut` when the picture is of the window, not the whole page
+ * @returns {Promise<{ok: true, file: string, cut?: boolean} | {ok: false, reason: string, stopped?: string}>} `cut` when the picture is of the window, not the whole page
  */
 export async function screenshot(project, html, png, mode) {
   /** What was found and why it could not take the picture. @type {string[]} */
@@ -1461,30 +1462,52 @@ export async function screenshot(project, html, png, mode) {
   }
   const chrome = chromeBinary();
   if (chrome) {
-    const r = spawnSync(
-      chrome,
-      [
-        '--headless=new',
-        '--disable-gpu',
-        '--no-sandbox',
-        '--hide-scrollbars',
-        `--screenshot=${png}`,
-        '--window-size=1280,2400',
-        ...(mode === 'dark' ? ['--force-dark-mode'] : []),
-        pathToFileURL(html).href,
-      ],
-      {encoding: 'utf8', timeout: 60_000},
-    );
+    // Run without blocking, so a stop (Ctrl-C, SIGTERM) reaches this
+    // process while the browser runs: the browser is stopped with it, and
+    // the stop is reported as a stop, never as a browser that failed.
+    const r = await runBrowser(chrome, [
+      '--headless=new',
+      '--disable-gpu',
+      '--no-sandbox',
+      '--hide-scrollbars',
+      `--screenshot=${png}`,
+      '--window-size=1280,2400',
+      ...(mode === 'dark' ? ['--force-dark-mode'] : []),
+      pathToFileURL(html).href,
+    ]);
+    if (r.stoppedBy)
+      return {
+        ok: false,
+        stopped: r.stoppedBy,
+        reason: `the pictures were stopped (${r.stoppedBy}) before the browser finished`,
+      };
+    // The editor's own bound, not an outside kill: said so, with a retry.
+    if (r.timedOut)
+      return {
+        ok: false,
+        reason: `the browser (${chrome}) did not finish the picture within 60 seconds, so it was stopped; run the command again, or open the .html beside the picture to look without one`,
+      };
+    // A picture folder it cannot write: the folder, never the browser.
+    try {
+      fs.accessSync(path.dirname(png), fs.constants.W_OK);
+    } catch (e) {
+      return {
+        ok: false,
+        reason: `${shown(project.cwd, path.dirname(png))}/ cannot be written (${/** @type {any} */ (e)?.code ?? 'no access'}), so no picture was taken; fix its permissions, then run the command again`,
+      };
+    }
     // Chrome alone takes the window, not the whole page.
     if (r.status === 0 && fs.existsSync(png))
       return {ok: true, file: shown(project.cwd, png), cut: true};
     failed.push(
       `${chrome}: ${firstLine(
         r.error ??
-          (r.stderr ||
-            (r.signal
-              ? `stopped by ${r.signal}`
-              : `exit ${r.status}, and no picture was written`)),
+          // A browser stopped by a signal says so first: its stderr opens
+          // with unrelated noise (dbus) on Linux.
+          (r.signal
+            ? `stopped by ${r.signal}`
+            : meaningfulLine(r.stderr) ||
+              `exit ${r.status}, and no picture was written`),
       )}`,
     );
   }
@@ -1530,6 +1553,23 @@ import {APP_COPY_MARK, appCopyMark} from './_marks.mjs';
 import {builtColorMode} from '../../foundation/discovery/theme-imports.mjs';
 
 /**
+ * The font stylesheets a theme's app copy imports, from the fonts the theme
+ * loads now (an installed font package, the base theme's fonts).
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {string[]}
+ */
+export function copyFontsCss(ctx, slug, data) {
+  return themeImports(
+    ctx,
+    slug,
+    data,
+    path.join(ctx.project.cwd, 'src', 'themes', slug),
+  ).css.slice(1);
+}
+
+/**
  * The app's copy of an editor theme: a standard local theme in
  * src/themes/<theme>/ (a descriptor, a source that re-exports the built
  * module, the built module, its stylesheet and font stylesheet), the shape
@@ -1545,16 +1585,7 @@ import {builtColorMode} from '../../foundation/discovery/theme-imports.mjs';
  * @returns {string | null}
  */
 export function writeAppCopy(ctx, slug, data) {
-  return writeAppCopyAt(
-    ctx.project.cwd,
-    slug,
-    themeImports(
-      ctx,
-      slug,
-      data,
-      path.join(ctx.project.cwd, 'src', 'themes', slug),
-    ).css.slice(1),
-  );
+  return writeAppCopyAt(ctx.project.cwd, slug, copyFontsCss(ctx, slug, data));
 }
 
 /**
@@ -1618,12 +1649,14 @@ function appCopyFiles(cwd, slug, fontsCss) {
  * whose content is not what the editor would write now.
  * @param {string} cwd
  * @param {string} slug
+ * @param {string[] | null} [fontsCss] the font stylesheets the copy should
+ *   import now (null: the copy's own)
  * @returns {string | null}
  */
-export function appCopyBehind(cwd, slug) {
+export function appCopyBehind(cwd, slug, fontsCss = null) {
   const stale = appCopyStale(cwd, slug).appCopyStale;
   if (stale) return stale;
-  const files = appCopyFiles(cwd, slug, null);
+  const files = appCopyFiles(cwd, slug, fontsCss);
   if (!files) return null;
   const dir = path.join(cwd, 'src', 'themes', slug);
   if (!fs.existsSync(dir))
@@ -1636,7 +1669,10 @@ export function appCopyBehind(cwd, slug) {
     } catch {
       return `src/themes/${slug}/${n} is missing from the app copy`;
     }
-    if (now !== text)
+    // Line endings as a checkout writes them (CRLF on Windows) are the
+    // same content, as the outputs check reads them.
+    const lf = (/** @type {string} */ x) => x.replace(/\r\n/g, '\n');
+    if (lf(now) !== lf(text))
       return `src/themes/${slug}/${n} is not the current build of themes/${slug}/`;
   }
   return null;
@@ -1858,4 +1894,122 @@ export function takeFirstAppCopy(cwd, slug) {
   const wrote = FIRST_COPIES.get(key) ?? null;
   FIRST_COPIES.delete(key);
   return wrote;
+}
+
+/**
+ * Run a browser for a picture without blocking this process: a stop that
+ * reaches it (SIGINT, SIGTERM) stops the browser too, and is reported.
+ * Bounded to 60 seconds, as a picture run always was.
+ * @param {string} bin
+ * @param {string[]} args
+ * @param {number} [bound] milliseconds before the browser is stopped
+ * @returns {Promise<{status: number | null, signal: string | null, stderr: string, error?: Error, stoppedBy?: string, timedOut?: boolean}>}
+ */
+export function runBrowser(bin, args, bound = 60_000) {
+  return new Promise(resolve => {
+    /** @type {string | undefined} */
+    let stoppedBy;
+    let stderr = '';
+    // A profile folder of its own, removed on every way out (done, failed,
+    // timed out, stopped): Chrome leaves its org.chromium.* folders in the
+    // system temp folder otherwise.
+    /** @type {string | null} */
+    let profile = null;
+    try {
+      profile = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-chrome-'));
+    } catch {
+      // No temp folder: Chrome's own default.
+    }
+    const dropProfile = () => {
+      if (profile)
+        try {
+          fs.rmSync(profile, {recursive: true, force: true});
+        } catch {
+          // Gone already.
+        }
+    };
+    process.once('exit', dropProfile);
+    const child = spawn(
+      bin,
+      [...(profile ? [`--user-data-dir=${profile}`] : []), ...args],
+      {
+        stdio: ['ignore', 'ignore', 'pipe'],
+        env: profile ? {...process.env, TMPDIR: profile} : process.env,
+        // A group of its own, so a stop takes Chrome's helper processes
+        // with it, before its profile folder is removed.
+        detached: process.platform !== 'win32',
+      },
+    );
+    const killAll = () => {
+      try {
+        if (process.platform !== 'win32' && child.pid)
+          process.kill(-child.pid, 'SIGKILL');
+        else child.kill('SIGKILL');
+      } catch {
+        child.kill('SIGKILL');
+      }
+    };
+    child.stderr?.setEncoding('utf8');
+    child.stderr?.on('data', d => {
+      if (stderr.length < 8000) stderr += d;
+    });
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      killAll();
+    }, bound);
+    /** @param {NodeJS.Signals} sig */
+    const onStop = sig => {
+      stoppedBy = sig;
+      killAll();
+      dropProfile();
+      // Nothing else listening: the stop ends this process, as it would
+      // have without this listener.
+      if (process.listenerCount(sig) === 0) {
+        process.removeListener('SIGINT', onStop);
+        process.removeListener('SIGTERM', onStop);
+        process.kill(process.pid, sig);
+      }
+    };
+    process.once('SIGINT', onStop);
+    process.once('SIGTERM', onStop);
+    const done = (/** @type {any} */ out) => {
+      clearTimeout(timer);
+      dropProfile();
+      process.removeListener('exit', dropProfile);
+      process.removeListener('SIGINT', onStop);
+      process.removeListener('SIGTERM', onStop);
+      resolve({
+        ...out,
+        stderr,
+        ...(stoppedBy ? {stoppedBy} : {}),
+        ...(timedOut ? {timedOut} : {}),
+      });
+    };
+    child.on('error', error => done({status: null, signal: null, error}));
+    child.on('close', (status, signal) => done({status, signal}));
+  });
+}
+
+/**
+ * The first stderr line that says something about the picture: Chrome's
+ * startup warnings (dbus, GPU, sandbox notices) come first on Linux and
+ * say nothing about why no picture was written.
+ * @param {string} text
+ */
+export function meaningfulLine(text) {
+  const lines = String(text ?? '')
+    .split(/\r?\n/)
+    .map(l => l.trim())
+    .filter(Boolean);
+  return (
+    lines.find(
+      l =>
+        !/dbus|bus\.cc|gpu_|gl_|sandbox|fontconfig|crashpad|DevTools listening|WARNING:/i.test(
+          l,
+        ),
+    ) ??
+    lines[0] ??
+    ''
+  );
 }

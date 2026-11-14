@@ -92,6 +92,7 @@ import {applyWrites} from '../../integration/add-helpers.mjs';
 import {logger} from '../../logger.mjs';
 import {loadComponentDoc} from '../../../foundation/discovery/component-loader.mjs';
 import {THEME_SOURCE_EXTENSIONS} from '../../../foundation/discovery/theme-module-extensions.mjs';
+import {withEmptyStylesheets} from '../../../foundation/fs/module-loader.mjs';
 import {
   collectThemingTargets,
   targetsByKey,
@@ -2709,6 +2710,10 @@ function isSyncLoaderLimitation(error) {
  * source export and old-Core adaptation checks keep treating that path as
  * degraded/fail-closed.
  *
+ * On Node 22.15 and later, on every path, a stylesheet that a module in the
+ * theme's graph imports loads as an empty module (`withEmptyStylesheets`): a
+ * base theme's module can import its own stylesheet for the app's bundler.
+ *
  * @param {string} filePath
  * @param {import('./core-interception.mjs').CoreInterception} [interception]
  * @returns {Promise<{theme: any, exportName: string, degraded: {topLevelAwait: boolean, commonJs: boolean}, colorModes: ["light"] | ["dark"] | null}>}
@@ -2738,7 +2743,7 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
     const commonJsPatch = interception.patchCommonJs(filePath);
     try {
       try {
-        mod = jiti(filePath);
+        mod = await withEmptyStylesheets(async () => jiti(filePath));
       } catch (error) {
         // Only a sync-loader limitation may fall back. Anything else is the
         // theme's own failure and belongs to the caller unchanged.
@@ -2747,14 +2752,16 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
         // Force asynchronous transformation instead of native import: this
         // keeps virtual Core interception active even when the module uses
         // top-level await.
-        mod = await jiti.evalModule(fs.readFileSync(filePath, 'utf8'), {
-          id: filePath,
-          filename: filePath,
-          ext: path.extname(filePath),
-          cache: jiti.cache,
-          async: true,
-          forceTranspile: true,
-        });
+        mod = await withEmptyStylesheets(() =>
+          jiti.evalModule(fs.readFileSync(filePath, 'utf8'), {
+            id: filePath,
+            filename: filePath,
+            ext: path.extname(filePath),
+            cache: jiti.cache,
+            async: true,
+            forceTranspile: true,
+          }),
+        );
       }
     } finally {
       // Read after the load: the root is wrapped when the load requires it.
@@ -2762,7 +2769,7 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
       commonJsPatch.undo();
     }
   } else {
-    mod = await jiti.import(filePath);
+    mod = await withEmptyStylesheets(() => jiti.import(filePath));
   }
 
   // Both loads hand back the module. The theme is read from the module's own
@@ -5110,7 +5117,7 @@ function planFamilySources(files, cwd) {
 // prettier-ignore
 async function preloadFamilySource(filePath, loader, interception) {
   const patch = interception.patchCommonJs(filePath);
-  try { try { loader(filePath); } catch (error) { if (!isSyncLoaderLimitation(error)) throw error; await loader.evalModule(fs.readFileSync(filePath, 'utf8'), {id: filePath, filename: filePath, ext: path.extname(filePath), cache: loader.cache, async: true, forceTranspile: true}); } }
+  try { try { await withEmptyStylesheets(async () => loader(filePath)); } catch (error) { if (!isSyncLoaderLimitation(error)) throw error; await withEmptyStylesheets(() => loader.evalModule(fs.readFileSync(filePath, 'utf8'), {id: filePath, filename: filePath, ext: path.extname(filePath), cache: loader.cache, async: true, forceTranspile: true})); } }
   finally { patch.undo(); }
 }
 
