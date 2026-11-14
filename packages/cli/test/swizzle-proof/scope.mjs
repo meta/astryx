@@ -6,8 +6,8 @@
  *   SWIZZLE_PROOF_CHANGED
  * @output Which targets the swizzle proof proves for it (spec:AST-110 FR7):
  *   none, the affected ones, or all
- * @position Read first by every slice (proof.mjs), by the Node legs' split,
- *   and, run directly, by CI's swizzle-proof legs before anything is
+ * @position Read first by every slice (proof.mjs), by a Node project split,
+ *   and, run directly, by CI's swizzle-proof-scope job before anything is
  *   installed, so it imports only Node
  * @effect Runs git to read the change
  */
@@ -188,8 +188,9 @@ function hasParentCommit() {
 
 /**
  * The change this run proves and the scope {@link proofScope} gives it: what
- * every slice reads first, and what the Node legs' split reads to know whether
- * the slices run at all (scripts/vitest-shard-sequencer.mjs).
+ * every slice reads first, what CI's swizzle-proof-scope job reads to start
+ * the slices' legs, and what a split of the Node project reads to book idle
+ * slices (scripts/vitest-shard-sequencer.mjs).
  * @param {{all?: boolean}} [options]
  */
 export function runScope({all = false} = {}) {

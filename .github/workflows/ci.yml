@@ -63,10 +63,12 @@ permissions: {}
 # dispatches keep longer limits; macOS-only `test-native-swift` keeps 30). Split
 # a job that nears the limit (shard, scope, cache); do not raise it.
 #
-# There is no scope job. Each job that owns tests decides its own scope in its
-# first steps (.github/actions/test-scope: the PR's file list against the
-# base's trusted classifier) and skips its work, reporting success, when
-# nothing in its scope changed; anything undecidable runs everything.
+# Each job that owns tests decides its own scope in its first steps
+# (.github/actions/test-scope: the PR's file list against the base's trusted
+# classifier) and skips its work, reporting success, when nothing in its scope
+# changed; anything undecidable runs everything. The one scope job,
+# swizzle-proof-scope, reads the swizzle proof's own scope, so its eight legs
+# start only when the change proves a target.
 #
 # Visual, accessibility and RTL owners (pr-a11y*, visual-scout, pr-visual,
 # pr-rtl*) do not run on pull request updates (a shared primitive's dependent
