@@ -63,6 +63,7 @@ import {template} from '../template/template.mjs';
 import {
   analyzeTemplateNeeds,
   extractImportedPackages,
+  parsedSpecifiers,
 } from '../../foundation/discovery/template-needs.mjs';
 import {detectStylingSystem} from '../../foundation/agent-docs/agent-docs.mjs';
 import {requireProject, context} from './_context.mjs';
@@ -209,10 +210,10 @@ function layoutImportsSheet(cwd, app, sheet, dir = app) {
 }
 
 /**
- * The modules a file imports, from its import statements: the import
- * declarations, re-exports and `import()` / `require()` of a script (read
- * from its syntax tree, so a comment or a string says nothing), or the
- * `@import` rules of a stylesheet (comments left out).
+ * The modules a file imports, from its import statements: a script's
+ * through the shared reader of import statements (its syntax tree, so a
+ * comment or a string says nothing), or the `@import` rules of a stylesheet
+ * (comments left out).
  * @param {string} file
  * @param {string} text
  * @returns {string[]}
@@ -224,44 +225,7 @@ function importSpecifiers(file, text) {
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .matchAll(/@import\s+(?:url\()?\s*['"]([^'"]+)['"]/g),
     ].map(m => m[1]);
-  /** @type {any} */
-  let ast;
-  try {
-    ast = parseModule(text, {
-      sourceType: 'unambiguous',
-      plugins: ['typescript', 'jsx'],
-      errorRecovery: true,
-    });
-  } catch {
-    return [];
-  }
-  /** @type {string[]} */
-  const out = [];
-  /** @param {any} node */
-  const visit = node => {
-    if (!node || typeof node !== 'object') return;
-    if (Array.isArray(node)) return node.forEach(visit);
-    if (
-      (node.type === 'ImportDeclaration' ||
-        node.type === 'ExportAllDeclaration' ||
-        node.type === 'ExportNamedDeclaration') &&
-      node.source?.type === 'StringLiteral'
-    )
-      out.push(node.source.value);
-    if (
-      node.type === 'CallExpression' &&
-      (node.callee?.type === 'Import' ||
-        (node.callee?.type === 'Identifier' &&
-          node.callee.name === 'require')) &&
-      node.arguments?.[0]?.type === 'StringLiteral'
-    )
-      out.push(node.arguments[0].value);
-    for (const k of Object.keys(node))
-      if (k !== 'loc' && k !== 'start' && k !== 'end' && k !== 'comments')
-        visit(node[k]);
-  };
-  visit(ast.program);
-  return out;
+  return parsedSpecifiers(text);
 }
 
 /**
@@ -4415,7 +4379,7 @@ async function addPreview(description, options, box) {
     );
   }
   const retry = (/** @type {string | null} */ p) =>
-    `${PREVIEW} add${said ? ` ${quoteCommandArgument(said)}` : ''}${named != null ? ` --template ${quoteCommandArgument(named)}` : ''}${tf}${p == null ? '' : ` --path ${quoteCommandArgument(p)}`}`;
+    `${PREVIEW} add${said ? ` ${quoteCommandArgument(said)}` : ''}${named != null ? ` --template ${quoteCommandArgument(named)}` : ''}${options.top != null ? ` --top ${quoteCommandArgument(String(options.top))}` : ''}${tf}${p == null ? '' : ` --path ${quoteCommandArgument(p)}`}`;
   const at = previewDir(cwd, options.path, {write: true, retry});
   const recovered = recoverPreview(cwd, at.dir);
   if (recovered) notes.push(recovered);
@@ -4456,14 +4420,7 @@ async function addPreview(description, options, box) {
     data.theme = options.theme;
   } else if (data.theme && !fs.existsSync(themeFiles(cwd, data.theme).dir)) {
     // Not gone when the route imports it from outside this project folder.
-    refuseThemeAway(
-      cwd,
-      at.dir,
-      data.theme,
-      ['add', description && quoteCommandArgument(description)]
-        .filter(Boolean)
-        .join(' '),
-    );
+    refuseThemeAway(cwd, at.dir, data.theme, retry);
     const themes = editedThemes(cwd);
     data.theme = themes.length === 1 ? themes[0] : null;
     notes.push(
@@ -5278,9 +5235,10 @@ export async function themeEditPreviewRemove(page, options = {}) {
  * @param {string} cwd
  * @param {string} dir the preview folder
  * @param {string} slug the theme the preview wears
- * @param {string} words the preview command's own words (`remove card`)
+ * @param {Retry} again the same command, with every argument it was given,
+ *   for a --path
  */
-function refuseThemeAway(cwd, dir, slug, words) {
+function refuseThemeAway(cwd, dir, slug, again) {
   const away = themeElsewhere(cwd, dir, slug);
   if (!away) return;
   const root = path.dirname(path.dirname(away));
@@ -5289,7 +5247,7 @@ function refuseThemeAway(cwd, dir, slug, words) {
     `The preview wears ${slug}, whose theme folder is ${away}/, outside this project folder (${cwd}). Run the command from the folder that holds themes/${slug}/.`,
     {
       run: [
-        `cd ${quoteCommandArgument(root)} && ${PREVIEW} ${words} --path ${quoteCommandArgument(path.relative(root, dir))}`,
+        `cd ${quoteCommandArgument(root)} && ${again(path.relative(root, dir))}`,
       ],
     },
   );
@@ -5603,13 +5561,7 @@ async function removePreview(page, options, box) {
     const wore = data.theme;
     /** @type {string | null} */
     let gone = null;
-    if (wore)
-      refuseThemeAway(
-        cwd,
-        at.dir,
-        wore,
-        `remove ${quoteCommandArgument(String(page))}`,
-      );
+    if (wore) refuseThemeAway(cwd, at.dir, wore, retry);
     if (wore && !fs.existsSync(themeFiles(cwd, wore).dir)) {
       gone = wore;
       data.theme = null;

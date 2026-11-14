@@ -150,6 +150,20 @@ describe('a workspace', () => {
     expect(names(e)).toMatch(
       /preview add --path apps\/web\/app\/theme-preview/,
     );
+    // The suggestion is the same command: --template, or a description
+    // with --top, kept.
+    const template = await refusal(() =>
+      themeEditPreviewAdd(undefined, {cwd: web, template: 'blank'}),
+    );
+    expect(names(template)).toMatch(
+      /^cd .* && .*preview add --template blank --path apps\/web\/app\/theme-preview$/m,
+    );
+    const top = await refusal(() =>
+      themeEditPreviewAdd('a settings page', {cwd: web, top: 2}),
+    );
+    expect(names(top)).toMatch(
+      /^cd .* && .*preview add 'a settings page' --top 2 --path apps\/web\/app\/theme-preview$/m,
+    );
     expect(
       JSON.parse(fs.readFileSync(path.join(at, 'theme-preview.json'), 'utf8'))
         .theme,
