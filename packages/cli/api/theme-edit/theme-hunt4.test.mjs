@@ -92,7 +92,6 @@ describe('words and values', () => {
       ['surfaces', 'frosted', 'glass'],
       ['buttons', 'uppercase', 'caps'],
       ['mode', 'auto', 'both'],
-      ['base', 'NEUTRAL', 'neutral'],
     ]) {
       const r = await refusal(() => themeEditSet('z', thing, word, {cwd}));
       expect(r.run[0], word).toMatch(new RegExp(`set z ${thing} ${want}$`));

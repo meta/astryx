@@ -30,7 +30,7 @@
  *   from inside this process, the way the cross-platform smoke workflow does,
  *   with no network.
  *
- * @position packages/cli/test-utils — used by test/global-local.test.mjs,
+ * @position packages/cli/test-utils — used by the test/global-local*.test.mjs files,
  *   and by the theme build test of a packed CLI with an older Core.
  */
 

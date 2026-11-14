@@ -17,7 +17,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {spawn} from 'node:child_process';
 import * as os from 'node:os';
-import {fileURLToPath, pathToFileURL} from 'node:url';
+import {fileURLToPath} from 'node:url';
 import {
   SAMPLE_PAGE,
   SHEET_ORDER,
@@ -33,12 +33,12 @@ import {
 } from './_parts.mjs';
 import {OVERVIEW_SECTIONS} from './_overview.mjs';
 import {
-  folderIsEmpty,
   camel,
+  folderIsEmpty,
   fontPackages,
   modesOf,
-  themeFiles,
   shown,
+  themeFiles,
 } from './_settings.mjs';
 import {writeWhole} from './_palette.mjs';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
@@ -47,6 +47,7 @@ import {COLOR_PROP_PARTS, DIRECT, P, wordTable} from './_tables.mjs';
 import {extractImportedPackages} from '../../foundation/discovery/template-needs.mjs';
 import {findNodeModulesPackage} from '../../foundation/fs/paths.mjs';
 import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
+import {compareText} from '../../foundation/text/compare-text.mjs';
 
 const TEMPLATES_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -163,7 +164,7 @@ export function showcaseItems(project, group) {
   };
   const chosen = items
     .filter(it => !group || it.group === group)
-    .sort((a, b) => order(a) - order(b) || a.name.localeCompare(b.name));
+    .sort((a, b) => order(a) - order(b) || compareText(a.name, b.name));
   /** @type {Record<string, string>} */
   const imports = {};
   for (const n of elementNames(chosen.map(i => i.tree))) {
@@ -1408,113 +1409,163 @@ export function previewRouteSource({
 /** @param {string} slug */
 const camelName = camel;
 
+/** The script that takes one picture through the project's Playwright. */
+const PLAYWRIGHT_PICTURE = fileURLToPath(
+  new URL('../../foundation/render/picture-playwright.mjs', import.meta.url),
+);
+
+/** The script that takes one picture through a Chrome or Chromium. */
+const CHROME_PICTURE = fileURLToPath(
+  new URL('../../foundation/render/picture-chrome.mjs', import.meta.url),
+);
+
+/** How long a stopped browser may take to close before it is killed. */
+const STOP_GRACE_MS = 5_000;
+
+/** The signals that stop a picture run, the terminal closing among them. */
+const STOP_SIGNALS = /** @type {const} */ (['SIGINT', 'SIGTERM', 'SIGHUP']);
+
+/** How long a browser may take for one picture before it is stopped. */
+const BROWSER_BOUND_MS = 60_000;
+
 /**
- * A PNG of an HTML file, with a Playwright the project has installed, else
- * a Chrome or Chromium found on the machine. Not ok with a reason when
- * neither is there, or when one is there and fails: the reason then names
- * its error.
+ * What the pictures of one run share: the browsers that failed or hung,
+ * each with its reason, so a later picture does not wait on them again.
+ * @typedef {{failed: Map<string, string>}} PictureRun
+ */
+
+/** A new picture run. @returns {PictureRun} */
+export function newPictureRun() {
+  return {failed: new Map()};
+}
+
+/**
+ * A whole-page PNG of an HTML file, with a Playwright the project has
+ * installed, else a Chrome or Chromium found on the machine. Each browser
+ * gets its own time bound, and the next one its turn when one fails or
+ * hangs. Not ok with a reason when none is there or every one failed: the
+ * reason then names each one's real error. When a later browser took the
+ * picture, `note` says why an earlier one did not.
  * @param {import('./_project.mjs').ThemeProject} project
  * @param {string} html absolute
  * @param {string} png absolute
  * @param {'light' | 'dark'} mode
- * @returns {Promise<{ok: true, file: string, cut?: boolean} | {ok: false, reason: string, stopped?: string}>} `cut` when the picture is of the window, not the whole page
+ * @param {PictureRun} [run] what earlier pictures of the same run learned:
+ *   a browser that failed or hung there is not tried again
+ * @returns {Promise<{ok: true, file: string, note?: string} | {ok: false, reason: string, stopped?: string}>}
  */
-export async function screenshot(project, html, png, mode) {
-  /** What was found and why it could not take the picture. @type {string[]} */
-  const failed = [];
-  /** The first line of an error, with no path of this machine. @param {unknown} e */
-  const firstLine = e =>
-    String(/** @type {any} */ (e)?.message ?? e ?? '')
+export async function screenshot(
+  project,
+  html,
+  png,
+  mode,
+  run = newPictureRun(),
+) {
+  /** What was tried and why it could not take the picture. @type {string[]} */
+  const failed = [...run.failed.values()];
+  /** Whether a Playwright was found without its own browser installed. */
+  let pwMissing = false;
+  /** Whether a Playwright was found at all. */
+  let pwFound = false;
+  /** A line with no path of this machine. @param {string} line */
+  const local = line => line.split(project.cwd).join('.');
+  /**
+   * Why a browser did not take the picture: Playwright's first line names
+   * only the call ("browserType.launch: Target … closed"); the cause, such
+   * as a missing library, is in a later line, so that line comes too.
+   * Chrome's startup warnings (dbus, GPU) are not a cause.
+   * @param {string} text
+   */
+  const causeOf = text => {
+    const lines = String(text ?? '')
       .split('\n')
-      .map(l => l.trim())
-      .find(Boolean)
-      ?.split(project.cwd)
-      .join('.') ?? 'it stopped with no message';
-  for (const pkg of ['playwright', 'playwright-core']) {
-    /** @type {string} */
-    let entry;
-    try {
-      entry = project.req.resolve(pkg);
-    } catch {
-      continue;
-    }
-    try {
-      const pw = await import(pathToFileURL(entry).href);
-      const chromium = pw.chromium ?? pw.default?.chromium;
-      const browser = await chromium.launch(
-        chromeBinary() ? {executablePath: chromeBinary()} : {},
+      .map(l => l.replace(/^[\s=<>-]+/, '').trim())
+      .filter(Boolean);
+    const head =
+      meaningfulLine(lines.join('\n')) || 'it stopped with no message';
+    const rest = lines
+      .slice(lines.indexOf(head) + 1)
+      .find(l =>
+        /error|cannot|can't|missing|not found|while loading|no such|failed|denied/i.test(
+          l,
+        ),
       );
-      try {
-        const page = await browser.newPage({
-          viewport: {width: 1280, height: 900},
-          colorScheme: mode,
-        });
-        await page.goto(pathToFileURL(html).href, {waitUntil: 'load'});
-        await page.screenshot({path: png, fullPage: true});
-      } finally {
-        await browser.close();
-      }
-      return {ok: true, file: shown(project.cwd, png)};
-    } catch (e) {
-      // This Playwright could not launch its browser: try Chrome directly.
-      failed.push(`${pkg}: ${firstLine(e)}`);
+    return local(rest ? `${head} (${rest})` : head);
+  };
+  /** The browsers to try, in order: each a picture script and its args. */
+  /** @type {Array<{who: string, script: string, args: string[]}>} */
+  const tries = [];
+  for (const pkg of ['playwright', 'playwright-core']) {
+    try {
+      const entry = project.req.resolve(pkg);
+      pwFound = true;
+      tries.push({
+        who: `${pkg}'s own browser`,
+        script: PLAYWRIGHT_PICTURE,
+        args: [entry, html, png, mode],
+      });
+      break;
+    } catch {
+      // Not installed here.
     }
   }
   const chrome = chromeBinary();
-  if (chrome) {
-    // Run without blocking, so a stop (Ctrl-C, SIGTERM) reaches this
-    // process while the browser runs: the browser is stopped with it, and
-    // the stop is reported as a stop, never as a browser that failed.
-    const r = await runBrowser(chrome, [
-      '--headless=new',
-      '--disable-gpu',
-      '--no-sandbox',
-      '--hide-scrollbars',
-      `--screenshot=${png}`,
-      '--window-size=1280,2400',
-      ...(mode === 'dark' ? ['--force-dark-mode'] : []),
-      pathToFileURL(html).href,
-    ]);
+  if (chrome)
+    tries.push({
+      who: chrome,
+      script: CHROME_PICTURE,
+      args: [chrome, html, png, mode],
+    });
+  for (const t of tries) {
+    if (run.failed.has(t.who)) continue;
+    const r = await runBrowser(t.script, t.args, BROWSER_BOUND_MS, {
+      drop: [png],
+    });
     if (r.stoppedBy)
       return {
         ok: false,
         stopped: r.stoppedBy,
         reason: `the pictures were stopped (${r.stoppedBy}) before the browser finished`,
       };
-    // The editor's own bound, not an outside kill: said so, with a retry.
-    if (r.timedOut)
+    if (r.noTemp)
       return {
         ok: false,
-        reason: `the browser (${chrome}) did not finish the picture within 60 seconds, so it was stopped; run the command again, or open the .html beside the picture to look without one`,
+        reason: `no browser was started: the system temp folder cannot be written (${r.noTemp}), and a browser needs a profile folder of its own there; fix the temp folder (TMPDIR), then run the command again`,
       };
-    // A picture folder it cannot write: the folder, never the browser.
-    try {
-      fs.accessSync(path.dirname(png), fs.constants.W_OK);
-    } catch (e) {
-      return {
-        ok: false,
-        reason: `${shown(project.cwd, path.dirname(png))}/ cannot be written (${/** @type {any} */ (e)?.code ?? 'no access'}), so no picture was taken; fix its permissions, then run the command again`,
-      };
-    }
-    // Chrome alone takes the window, not the whole page.
     if (r.status === 0 && fs.existsSync(png))
-      return {ok: true, file: shown(project.cwd, png), cut: true};
-    failed.push(
-      `${chrome}: ${firstLine(
-        r.error ??
-          // A browser stopped by a signal says so first: its stderr opens
-          // with unrelated noise (dbus) on Linux.
-          (r.signal
-            ? `stopped by ${r.signal}`
-            : meaningfulLine(r.stderr) ||
-              `exit ${r.status}, and no picture was written`),
-      )}`,
-    );
+      return {
+        ok: true,
+        file: shown(project.cwd, png),
+        ...(failed.length
+          ? {
+              note: `the picture was taken with ${t.who}; ${failed.join('; ')}`,
+            }
+          : {}),
+      };
+    const text = r.error ? String(r.error.message) : r.stderr;
+    if (
+      t.script === PLAYWRIGHT_PICTURE &&
+      /Executable doesn't exist|playwright install/i.test(text)
+    )
+      pwMissing = true;
+    const why = r.timedOut
+      ? `${t.who} did not finish within ${BROWSER_BOUND_MS / 1000} seconds, so it was stopped`
+      : `${t.who} could not take it: ${causeOf(text)}`;
+    run.failed.set(t.who, why);
+    failed.push(why);
   }
   if (failed.length)
     return {
       ok: false,
-      reason: `A browser was found, but it could not take the picture (${failed.join('; ')}). Give Playwright its browser (npx playwright install chromium), or check that ${chrome ?? 'Google Chrome or Chromium'} starts on this machine. The HTML preview needs neither.`,
+      // Advice that can change the result: Playwright's browser only when
+      // it is missing; a Chrome to check only when there is one.
+      reason: `No picture was taken (${failed.join('; ')}). ${
+        !pwFound
+          ? `Install Playwright with its browser (${installLine(project.cwd, ['playwright'])}, then npx playwright install chromium), or`
+          : pwMissing
+            ? 'Give Playwright its browser (npx playwright install chromium), or'
+            : "Fix what Playwright's browser needs (the reason is above), or"
+      } ${chrome ? `check that ${chrome} starts on this machine` : 'install Google Chrome or Chromium'}. The HTML preview needs neither.`,
     };
   return {
     ok: false,
@@ -1537,11 +1588,23 @@ function chromeBinary() {
     'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
   ];
-  for (const f of fixed) if (fs.existsSync(f)) return f;
+  // Only a file that runs: a folder or a file with no execute permission
+  // by a browser's name is passed over, and the search goes on.
+  /** @param {string} f */
+  const runs = f => {
+    try {
+      if (!fs.statSync(f).isFile()) return false;
+      if (process.platform !== 'win32') fs.accessSync(f, fs.constants.X_OK);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  for (const f of fixed) if (runs(f)) return f;
   for (const dir of (process.env.PATH ?? '').split(path.delimiter)) {
     for (const n of names) {
       const f = path.join(dir, n);
-      if (dir && fs.existsSync(f)) return f;
+      if (dir && runs(f)) return f;
     }
   }
   return null;
@@ -1638,7 +1701,7 @@ function appCopyFiles(cwd, slug, fontsCss) {
     // theme's fonts change (none: a comment only).
     [`${slug}.fonts.css`]: fonts.length
       ? `${head('/*', '*/')}${fonts.map(c => `@import ${JSON.stringify(c)};`).join('\n')}\n`
-      : `${head('/*', '*/')}/* No font stylesheets: the theme uses fonts the system has. */\n`,
+      : `${head('/*', '*/')}/* No font stylesheets: no installed package loads the theme's fonts. A font the system does not have shows only once its package is installed (experimental theme editor show ${slug} names it). */\n`,
   };
   return files;
 }
@@ -1897,97 +1960,128 @@ export function takeFirstAppCopy(cwd, slug) {
 }
 
 /**
- * Run a browser for a picture without blocking this process: a stop that
- * reaches it (SIGINT, SIGTERM) stops the browser too, and is reported.
- * Bounded to 60 seconds, as a picture run always was.
- * @param {string} bin
+ * Run a picture script (one browser, one picture) as its own process group,
+ * without blocking this process. The one owner of every browser run:
+ * - a temp folder of its own (TMPDIR, TMP, TEMP), where the browser keeps
+ *   its profile; with none to make, nothing runs (`noTemp`);
+ * - a time bound (`timedOut`);
+ * - a stop (SIGINT, SIGTERM, SIGHUP) that reaches the run stops it
+ *   (`stoppedBy`), then ends this process as the stop would have.
+ * A stop or the bound asks the whole group to close, waits for it (killing
+ * it past a short grace), then removes the temp folder and the `drop` files
+ * (a picture part a stopped run leaves); a run that ends on its own removes
+ * the temp folder only.
+ * @param {string} script a picture script
  * @param {string[]} args
- * @param {number} [bound] milliseconds before the browser is stopped
- * @returns {Promise<{status: number | null, signal: string | null, stderr: string, error?: Error, stoppedBy?: string, timedOut?: boolean}>}
+ * @param {number} [bound] milliseconds before the run is stopped
+ * @param {{drop?: string[]}} [opts]
+ * @returns {Promise<{status: number | null, signal: string | null, stderr: string, error?: Error, stoppedBy?: string, timedOut?: boolean, noTemp?: string}>}
  */
-export function runBrowser(bin, args, bound = 60_000) {
+export function runBrowser(script, args, bound = BROWSER_BOUND_MS, opts = {}) {
+  const drop = opts.drop ?? [];
+  /** @type {string} */
+  let temp;
+  try {
+    temp = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-browser-'));
+  } catch (e) {
+    return Promise.resolve({
+      status: null,
+      signal: null,
+      stderr: '',
+      noTemp: String(/** @type {any} */ (e)?.code ?? e),
+    });
+  }
   return new Promise(resolve => {
-    /** @type {string | undefined} */
-    let stoppedBy;
     let stderr = '';
-    // A profile folder of its own, removed on every way out (done, failed,
-    // timed out, stopped): Chrome leaves its org.chromium.* folders in the
-    // system temp folder otherwise.
-    /** @type {string | null} */
-    let profile = null;
-    try {
-      profile = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-chrome-'));
-    } catch {
-      // No temp folder: Chrome's own default.
-    }
-    const dropProfile = () => {
-      if (profile)
+    const posix = process.platform !== 'win32';
+    const child = spawn(process.execPath, [script, ...args], {
+      stdio: ['ignore', 'ignore', 'pipe'],
+      env: {...process.env, TMPDIR: temp, TMP: temp, TEMP: temp},
+      // A group of its own, so a stop reaches the browser it starts too.
+      detached: posix,
+    });
+    /** @param {NodeJS.Signals} sig */
+    const signalAll = sig => {
+      try {
+        if (posix && child.pid) process.kill(-child.pid, sig);
+        else child.kill(sig);
+      } catch {
+        // Gone already.
+      }
+    };
+    const closed = new Promise(done => child.once('close', done));
+    /** @param {string[]} files */
+    const remove = files => {
+      for (const f of files)
         try {
-          fs.rmSync(profile, {recursive: true, force: true});
+          fs.rmSync(f, {recursive: true, force: true});
         } catch {
           // Gone already.
         }
     };
-    process.once('exit', dropProfile);
-    const child = spawn(
-      bin,
-      [...(profile ? [`--user-data-dir=${profile}`] : []), ...args],
-      {
-        stdio: ['ignore', 'ignore', 'pipe'],
-        env: profile ? {...process.env, TMPDIR: profile} : process.env,
-        // A group of its own, so a stop takes Chrome's helper processes
-        // with it, before its profile folder is removed.
-        detached: process.platform !== 'win32',
-      },
-    );
-    const killAll = () => {
-      try {
-        if (process.platform !== 'win32' && child.pid)
-          process.kill(-child.pid, 'SIGKILL');
-        else child.kill('SIGKILL');
-      } catch {
-        child.kill('SIGKILL');
+    /** The temp folder goes on every way out; `drop` only with a stop. */
+    const clean = () => remove([temp]);
+    /** Close the group (killed past the grace), then clean up. */
+    const finish = async () => {
+      signalAll('SIGTERM');
+      const grace = new Promise(done =>
+        setTimeout(done, STOP_GRACE_MS).unref(),
+      );
+      if ((await Promise.race([closed.then(() => true), grace])) !== true) {
+        signalAll('SIGKILL');
+        await closed;
       }
+      remove([temp, ...drop]);
     };
+    // This process ending some other way: the group is killed, and the temp
+    // folder and the unfinished files removed, as far as an exit allows.
+    const onExit = () => {
+      signalAll('SIGKILL');
+      remove([temp, ...drop]);
+    };
+    process.once('exit', onExit);
     child.stderr?.setEncoding('utf8');
     child.stderr?.on('data', d => {
       if (stderr.length < 8000) stderr += d;
     });
-    let timedOut = false;
+    /** Set once the run is being stopped (bound, signal): it ends there. */
+    let stopping = false;
+    let settled = false;
+    /** @param {Awaited<ReturnType<typeof runBrowser>>} out */
+    const settle = out => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      process.removeListener('exit', onExit);
+      for (const sig of STOP_SIGNALS) process.removeListener(sig, onStop);
+      resolve(out);
+    };
     const timer = setTimeout(() => {
-      timedOut = true;
-      killAll();
+      stopping = true;
+      void finish().then(() =>
+        settle({status: null, signal: null, stderr, timedOut: true}),
+      );
     }, bound);
     /** @param {NodeJS.Signals} sig */
-    const onStop = sig => {
-      stoppedBy = sig;
-      killAll();
-      dropProfile();
+    const onStop = async sig => {
+      stopping = true;
+      for (const s of STOP_SIGNALS) process.removeListener(s, onStop);
+      await finish();
+      settle({status: null, signal: null, stderr, stoppedBy: sig});
       // Nothing else listening: the stop ends this process, as it would
       // have without this listener.
-      if (process.listenerCount(sig) === 0) {
-        process.removeListener('SIGINT', onStop);
-        process.removeListener('SIGTERM', onStop);
-        process.kill(process.pid, sig);
-      }
+      if (process.listenerCount(sig) === 0) process.kill(process.pid, sig);
     };
-    process.once('SIGINT', onStop);
-    process.once('SIGTERM', onStop);
-    const done = (/** @type {any} */ out) => {
-      clearTimeout(timer);
-      dropProfile();
-      process.removeListener('exit', dropProfile);
-      process.removeListener('SIGINT', onStop);
-      process.removeListener('SIGTERM', onStop);
-      resolve({
-        ...out,
-        stderr,
-        ...(stoppedBy ? {stoppedBy} : {}),
-        ...(timedOut ? {timedOut} : {}),
-      });
-    };
-    child.on('error', error => done({status: null, signal: null, error}));
-    child.on('close', (status, signal) => done({status, signal}));
+    for (const sig of STOP_SIGNALS) process.once(sig, onStop);
+    child.once('error', error => {
+      clean();
+      settle({status: null, signal: null, stderr, error});
+    });
+    child.once('close', (status, signal) => {
+      if (stopping) return;
+      clean();
+      settle({status, signal, stderr});
+    });
   });
 }
 

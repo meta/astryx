@@ -2,7 +2,7 @@
 
 /**
  * The CLI turns on Node's compile cache in the user's own folder in the
- * system temp folder (node-compile-cache-<uid>), once that folder exists and
+ * system temp folder (node-compile-cache-<uid>), from the run that makes that folder, and
  * only while no one else can reach it. It never changes what a command prints
  * or whether it succeeds: not when the cache is off, cold, warm, refused, or
  * cannot be written. Systems without user ids (Windows) keep it off.
@@ -60,7 +60,7 @@ function run(tmp, env = {}) {
 }
 
 describe.skipIf(process.platform === 'win32')("Node's compile cache", () => {
-  it('is not used on the first run, which only makes its folder', () => {
+  it('is written on the first run, which makes its folder, and changes no output', () => {
     const tmp = path.join(work, 'first');
     fs.mkdirSync(tmp);
     const off = run(path.join(work, 'off-first'), {
@@ -68,7 +68,14 @@ describe.skipIf(process.platform === 'win32')("Node's compile cache", () => {
     });
     expect(run(tmp)).toEqual(off);
     expect(fs.readdirSync(tmp)).toEqual([CACHE_NAME]);
-    expect(fs.readdirSync(path.join(tmp, CACHE_NAME))).toEqual([]);
+    expect(fs.statSync(path.join(tmp, CACHE_NAME)).mode & 0o777).toBe(0o700);
+    expect(fs.readdirSync(path.join(tmp, CACHE_NAME)).length).toBeGreaterThan(
+      0,
+    );
+    // The second run reads what the first wrote.
+    const debug = run(tmp, {NODE_DEBUG_NATIVE: 'COMPILE_CACHE'});
+    expect(debug.stderr).toMatch(/was accepted/);
+    expect(debug.stdout).toEqual(off.stdout);
   });
 
   it('is written once its folder exists, then reused, and changes no output', () => {

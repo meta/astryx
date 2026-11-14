@@ -34,6 +34,10 @@ export const PREPACK_FILES = [
     script: 'scripts/generate-template-components.mjs',
   },
   {
+    file: 'assets/component-list.generated.json',
+    script: 'scripts/generate-component-list.mjs',
+  },
+  {
     file: 'assets/docs.generated.json',
     script: 'scripts/generate-stored-docs.mjs',
   },
@@ -48,6 +52,10 @@ export const PREPACK_FILES = [
   {
     file: 'clients/cli/manifest.generated.json',
     script: 'scripts/generate-manifest.mjs',
+  },
+  {
+    file: 'assets/search-catalog.generated.json',
+    script: 'scripts/generate-search-catalog.mjs',
   },
   {
     file: 'clients/cli/build-id.generated.json',
@@ -65,7 +73,15 @@ const PREPACK_STAGES = [
     'scripts/generate-stored-docs.mjs',
     'scripts/generate-command-list.mjs',
   ],
-  ['scripts/generate-self-audit.mjs', 'scripts/generate-manifest.mjs'],
+  // The two that copy a package's published files run side by side, each
+  // waiting mostly on `npm pack --dry-run`.
+  [
+    'scripts/generate-self-audit.mjs',
+    'scripts/generate-component-list.mjs',
+    'scripts/generate-manifest.mjs',
+  ],
+  // Search's catalog reads every store above.
+  ['scripts/generate-search-catalog.mjs'],
   ['scripts/generate-build-id.mjs'],
 ];
 
@@ -151,8 +167,9 @@ export function packCli(dir) {
       path.join(stage, 'packages', 'core'),
     );
     // The generators run in their prepack order's stages, each stage's
-    // scripts side by side: the stores, then the two that read them, then
-    // the build id, which hashes everything before it.
+    // scripts side by side: the stores, then the ones that read them, then
+    // search's catalog, which reads them all, then the build id, which hashes
+    // everything before it.
     // Every generator runs in exactly one stage: a new one left out of the
     // stages would be skipped without a word.
     const staged = PREPACK_STAGES.flat();

@@ -18,8 +18,10 @@
  *   template and component replacement passes), which `component`,
  *   `template`, `theme`, `discover` and `search` report, by template
  *   discovery (foundation/discovery/template-adapter.mjs) for its records, by
- *   the component list (api/component/list/list.mjs), by theme discovery
- *   (foundation/discovery/theme-discovery.mjs) for each integration's themes,
+ *   the component list (api/component/list/list.mjs) and component
+ *   replacement (foundation/discovery/component-replacement.mjs), by theme
+ *   discovery (foundation/discovery/theme-discovery.mjs) for each
+ *   integration's themes,
  *   by `doctor` (api/doctor/_adapter.mjs) for its file-only docs checks and
  *   its theme-wiring scan,
  *   in a run that records modules and variables to its end, and, through
@@ -27,8 +29,11 @@
  *   summaries of folder trees, each kept while every path it stamped is
  *   unchanged, in any command. The commands whose runs keep the other
  *   entries are `search`, `build`, `component`, `template`, `theme`,
- *   `discover`, `docs` and `doctor`. Gathers are kept only once the folder exists: the first such run
- *   on a machine just makes it, so a one-off run pays nothing to store one. Only a published CLI stores anything:
+ *   `discover`, `docs` and `doctor`. The first such run on a machine makes the
+ *   folder and keeps its gathers at once, so the next run (most often the same
+ *   session's next command) uses them; doctor never makes it. A run through
+ *   the host entry keeps them too, keyed on what the host passed
+ *   (hostInputs). Only a published CLI stores anything:
  *   its build id (clients/cli/build-id.generated.json, written at `prepack`)
  *   names its exact code, so a checkout, whose code may change between runs
  *   under the same version, always gathers.
@@ -36,7 +41,7 @@
  *   The folder is `catalogs` in the user's cache folder (userCacheDir):
  *   created 0700, used only while it is a real folder owned by the user and
  *   closed to others (isPrivateDir; never on a system with no user ids), each file written 0600 by a rename, oldest first evicted past
- *   CACHE_LIMIT_BYTES. Any failure to read, check, parse or write is silent
+ *   CACHE_LIMIT_BYTES (cache-eviction.mjs). Any failure to read, check, parse or write is silent
  *   and the run gathers fresh, as it would with no cache.
  */
 
@@ -47,11 +52,14 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {isDeepStrictEqual} from 'node:util';
-import {CLI_ROOT} from './paths.mjs';
+import {CLI_ROOT, realDir} from './paths.mjs';
 import {mayHaveIntegrations} from '../integrations/may-have-integrations.mjs';
 import {currentUid, isPrivateDir} from '../env/private-dir.mjs';
 import {userCacheDir} from '../env/user-dirs.mjs';
 import {jitiCacheDir} from './jiti-cache.mjs';
+import {hostedRun} from '../runtime/package-root.mjs';
+import {cliDoor} from '../env/cli-command.mjs';
+import {CACHE_LIMIT_BYTES, evictOldest} from './cache-eviction.mjs';
 import {
   fileStamp,
   recordReads,
@@ -83,8 +91,9 @@ const KEPT_COMMANDS = new Set([
   'theme',
   'discover',
   'docs',
-  // The project check alone (no subcommand): its docs checks and theme-wiring
-  // scan are kept.
+  // Its project check, with or without `--built`, keeps its docs checks and
+  // theme-wiring scan; its `integration` checks run neither, and keep only
+  // the project gathers they load, as the commands above do.
   'doctor',
 ]);
 
@@ -96,8 +105,12 @@ export const BUILD_ID_FILE = path.join(
   'build-id.generated.json',
 );
 
-/** The most the folder holds; the oldest entries go first past it. */
-export const CACHE_LIMIT_BYTES = 64 * 1024 * 1024;
+/**
+ * Whether a file in the folder is a kept entry, which eviction counts.
+ * @param {string} name
+ * @returns {boolean}
+ */
+const isEntry = name => name.startsWith('gather-');
 
 /** The stored format; a different one is a miss. */
 const FORMAT = 1;
@@ -247,8 +260,6 @@ export async function recordRunFor(argv, fn) {
   if (
     !command ||
     !KEPT_COMMANDS.has(command) ||
-    (command === 'doctor' &&
-      argv.filter(arg => !arg.startsWith('-')).length > 1) ||
     runsUnderPnp() ||
     currentUid() == null ||
     withoutRecording(buildId) == null ||
@@ -260,9 +271,8 @@ export async function recordRunFor(argv, fn) {
   ) {
     return fn();
   }
-  // Gathers are kept only once the folder exists: the first recorded run on a
-  // machine (search, build, component, template, theme, discover or docs) just makes
-  // it, so a one-off run never pays to store one.
+  // The first recorded run on a machine (search, build, component, template,
+  // theme, discover or docs) makes the folder and keeps its gathers at once.
   const dir = cacheDirPath();
   if (!withoutRecording(() => fs.existsSync(dir))) {
     // Once the per-user cache folder exists doctor uses it; it never makes
@@ -273,8 +283,8 @@ export async function recordRunFor(argv, fn) {
       withoutRecording(() => fs.mkdirSync(dir, {recursive: true, mode: 0o700}));
     } catch {
       // A folder that cannot be made keeps no catalogs; nothing more.
+      return fn();
     }
-    return fn();
   }
   // A folder the cache would refuse (not the user's own, open to others, a
   // link) leaves the run exactly as without the cache: no hook is installed.
@@ -522,7 +532,27 @@ function entryKey(key, id) {
     process.platform,
     process.arch,
     ...key,
+    hostInputs(),
   ]);
+}
+
+/**
+ * What a host passed that decides a gather, or null outside a hosted run: its
+ * package sets, by real path and in its order, the integrations it approves,
+ * and the command it runs the CLI as, which kept findings print. A run reads
+ * only some of a package set's files, so their stamps cannot tell a hosted
+ * run from a run of the bin in the same folder, and no file holds the
+ * command. The run's folder is in each gather's own key.
+ * @returns {{roots: string[], integrations: string[], door: string | null} | null}
+ */
+function hostInputs() {
+  const hosted = hostedRun();
+  if (hosted == null) return null;
+  return {
+    roots: hosted.roots.map(root => withoutRecording(() => realDir(root))),
+    integrations: [...hosted.integrations],
+    door: cliDoor() ?? null,
+  };
 }
 
 /**
@@ -750,7 +780,7 @@ export function persistedDerived(key, compute, codec, inputs = []) {
       const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
       fs.writeFileSync(temp, text, {mode: 0o600, flag: 'wx'});
       fs.renameSync(temp, file);
-      evict(dir);
+      evictOldest(dir, isEntry);
     } catch {
       // A value that cannot be stored is computed again next time.
     }
@@ -845,7 +875,7 @@ export function persistedSummary(key, make) {
         const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
         fs.writeFileSync(temp, text, {mode: 0o600, flag: 'wx'});
         fs.renameSync(temp, file);
-        evict(dir);
+        evictOldest(dir, isEntry);
       } catch {
         // A summary that cannot be stored is made again next time.
       }
@@ -900,40 +930,9 @@ function store(dir, file, entry, value, codec) {
     const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
     fs.writeFileSync(temp, text, {mode: 0o600, flag: 'wx'});
     fs.renameSync(temp, file);
-    evict(dir);
+    evictOldest(dir, isEntry);
   } catch {
     // A gather that cannot be stored is gathered again next time.
-  }
-}
-
-/**
- * Delete the oldest entries until the folder holds at most CACHE_LIMIT_BYTES.
- * @param {string} dir
- */
-function evict(dir) {
-  const entries = fs
-    .readdirSync(dir)
-    .filter(name => name.startsWith('gather-'))
-    .map(name => {
-      const entry = path.join(dir, name);
-      try {
-        const {size, mtimeMs} = fs.statSync(entry);
-        return {entry, size, mtimeMs};
-      } catch {
-        return null;
-      }
-    })
-    .filter(e => e != null)
-    .sort((a, b) => a.mtimeMs - b.mtimeMs);
-  let total = entries.reduce((sum, e) => sum + e.size, 0);
-  for (const {entry, size} of entries) {
-    if (total <= CACHE_LIMIT_BYTES) break;
-    try {
-      fs.unlinkSync(entry);
-      total -= size;
-    } catch {
-      // Another run removed it.
-    }
   }
 }
 
@@ -951,15 +950,16 @@ export function runsUnderPnp() {
 /**
  * The cache folder and how much it holds, for `doctor`: null when the CLI
  * keeps no gathers (a checkout) or has no usable folder.
- * @returns {{dir: string, bytes: number, entries: number, pnp: boolean} | null}
- *   `pnp`: whether this run is under Yarn Plug'n'Play's loader (runsUnderPnp)
+ * @returns {{dir: string, bytes: number, entries: number, pnp: boolean, limitBytes: number, jitiDir: string} | null}
+ *   `pnp`: whether this run is under Yarn Plug'n'Play's loader (runsUnderPnp);
+ *   `limitBytes`: the most the folder, and jiti's folder `jitiDir`, holds
  */
 export function gatherCacheSummary() {
   // The cache's own bookkeeping, never an input of what it keeps.
   return withoutRecording(summarize);
 }
 
-/** @returns {{dir: string, bytes: number, entries: number, pnp: boolean} | null} */
+/** @returns {{dir: string, bytes: number, entries: number, pnp: boolean, limitBytes: number, jitiDir: string} | null} */
 function summarize() {
   if (buildId() == null) return null;
   const dir = gatherCacheDir();
@@ -979,5 +979,12 @@ function summarize() {
   } catch {
     return null;
   }
-  return {dir, bytes, entries, pnp: runsUnderPnp()};
+  return {
+    dir,
+    bytes,
+    entries,
+    pnp: runsUnderPnp(),
+    limitBytes: CACHE_LIMIT_BYTES,
+    jitiDir: jitiCacheDir(),
+  };
 }

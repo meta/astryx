@@ -16,6 +16,7 @@ export const doc = {
     'card',
     'request',
     'work item',
+    'subtasks',
   ],
   isReady: true,
   category: 'Content - Work Item Detail',

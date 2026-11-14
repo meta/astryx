@@ -808,6 +808,31 @@ export function splitTop(v, sep) {
   return out.filter(x => sep === ',' || x.trim());
 }
 
+/**
+ * Several values of one kind (`-4px -8px`, `1.5 2`, `var(--a) var(--b)`):
+ * the items, split as CSS splits them, and their kind (a number's unit, ''
+ * for a bare number, `var` for a var()), when every item is of the first
+ * one's kind; null otherwise (`all 200`). The one reading of "several
+ * values of one kind" that a repair offers the first of and the repair
+ * gate allows.
+ * @param {string} v
+ * @returns {{items: string[], kind: string} | null}
+ */
+export function sameKindValues(v) {
+  const items = splitTop(String(v).trim(), ' ');
+  /** @param {string} x */
+  const kind = x =>
+    /^var\(/i.test(x)
+      ? 'var'
+      : (/^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?([a-z%]*)$/i
+          .exec(x)?.[1]
+          ?.toLowerCase() ?? null);
+  const first = kind(items[0] ?? '');
+  if (items.length < 2 || first === null || items.some(x => kind(x) !== first))
+    return null;
+  return {items, kind: first};
+}
+
 /** The longhand each type of the `font` grammar sets, where css-tree names a type, not a property. */
 const FONT_TYPE_LONGHAND = wordTable(
   /** @type {Record<string, string>} */ ({

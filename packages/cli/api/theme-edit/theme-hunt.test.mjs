@@ -279,7 +279,8 @@ describe('exact tokens', () => {
     const r = await refusal(() =>
       themeEditSet('h', '--color-accnt', 'red', {cwd}),
     );
-    expect(r.run[0]).toMatch(/how --list tokens accnt$/);
+    // No token holds "accnt": the whole list, never one that shows nothing.
+    expect(r.run[0]).toMatch(/how --list tokens$/);
   });
 
   it('accepts Core own shadows and a negative offset, and undo removes a shadow saved for one mode', async () => {
