@@ -42,6 +42,7 @@ import {
   ThemeStateError,
   planThemeAppWrite,
   readThemeState,
+  themeModuleHeader,
 } from '../../foundation/config/theme-state.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
@@ -1119,6 +1120,8 @@ export async function resolveThemeApp(cwd = process.cwd()) {
  * @param {boolean} changed
  * @param {import('../../foundation/discovery/theme-discovery.mjs').DiscoveredTheme[]} available
  * @param {string[]} [notes] what the command did beyond its change
+ * @param {ThemeModuleRenderer} [renderModule] the module body on a base
+ *   other than Core; Core's body otherwise
  * @returns {Promise<import('./theme.type.mjs').ThemeAppResponse>}
  */
 async function writeThemeApp(
@@ -1130,6 +1133,7 @@ async function writeThemeApp(
   changed,
   available,
   notes = [],
+  renderModule = undefined,
 ) {
   // A recorded theme whose folder or package is gone would make every later
   // add, use and remove fail, and the record is generated, so it cannot be
@@ -1156,6 +1160,14 @@ async function writeThemeApp(
     prepared = planThemeAppWrite(finalState, themes, defaultSlug, resolved);
   } catch (error) {
     throw asThemeError(error);
+  }
+  if (renderModule) {
+    const body = await renderModule(prepared.entries, defaultSlug);
+    const owners = Object.fromEntries(
+      prepared.entries.map(theme => [theme.slug, theme.owner]),
+    );
+    prepared.moduleContents = `${themeModuleHeader(owners, defaultSlug)}\n\n${body.replace(/\n*$/u, '\n')}`;
+    prepared.plan.contents = prepared.moduleContents;
   }
   try {
     applyWrites([prepared.plan]);
@@ -1325,9 +1337,15 @@ async function withThemeAppLock(cwd, fn) {
 }
 
 /**
+ * Renders the generated module's body, without its header, from the final
+ * resolved themes.
+ * @typedef {(themes: import('../../foundation/config/theme-state.mjs').ResolvedAppTheme[], defaultSlug: string) => Promise<string>} ThemeModuleRenderer
+ */
+
+/**
  * Add one available built theme to the app record.
  * @param {string} slug
- * @param {{cwd?: string, package?: string}} [options]
+ * @param {{cwd?: string, package?: string, renderModule?: ThemeModuleRenderer}} [options]
  * @returns {Promise<import('./theme.type.mjs').ThemeAppResponse>}
  */
 export async function addThemeToApp(slug, options = {}) {
@@ -1338,7 +1356,7 @@ export async function addThemeToApp(slug, options = {}) {
 /**
  * @param {string} slug
  * @param {string} cwd
- * @param {{package?: string}} options
+ * @param {{package?: string, renderModule?: ThemeModuleRenderer}} options
  */
 async function addThemeToAppLocked(slug, cwd, options) {
   const match = await findTheme(slug, {cwd, package: options.package});
@@ -1398,6 +1416,7 @@ async function addThemeToAppLocked(slug, cwd, options) {
     changed,
     available,
     notes,
+    options.renderModule,
   );
 }
 
@@ -1416,16 +1435,22 @@ function recordedThemeSlug(state, slug) {
 /**
  * Remove one non-default theme from the app record.
  * @param {string} slug
- * @param {{cwd?: string}} [options]
+ * @param {{cwd?: string, renderModule?: ThemeModuleRenderer}} [options]
  * @returns {Promise<import('./theme.type.mjs').ThemeAppResponse>}
  */
 export async function removeThemeFromApp(slug, options = {}) {
   const cwd = options.cwd ?? process.cwd();
-  return withThemeAppLock(cwd, () => removeThemeFromAppLocked(slug, cwd));
+  return withThemeAppLock(cwd, () =>
+    removeThemeFromAppLocked(slug, cwd, options.renderModule),
+  );
 }
 
-/** @param {string} slug @param {string} cwd */
-async function removeThemeFromAppLocked(slug, cwd) {
+/**
+ * @param {string} slug
+ * @param {string} cwd
+ * @param {ThemeModuleRenderer} [renderModule]
+ */
+async function removeThemeFromAppLocked(slug, cwd, renderModule) {
   const state = readAppThemeState(cwd);
   const recordedSlug = recordedThemeSlug(state, slug);
   if (!state.configured || recordedSlug == null) {
@@ -1480,22 +1505,30 @@ async function removeThemeFromAppLocked(slug, cwd) {
     recordedSlug,
     true,
     available,
+    undefined,
+    renderModule,
   );
 }
 
 /**
  * Select one added theme as the app default.
  * @param {string} slug
- * @param {{cwd?: string}} [options]
+ * @param {{cwd?: string, renderModule?: ThemeModuleRenderer}} [options]
  * @returns {Promise<import('./theme.type.mjs').ThemeAppResponse>}
  */
 export async function useThemeInApp(slug, options = {}) {
   const cwd = options.cwd ?? process.cwd();
-  return withThemeAppLock(cwd, () => useThemeInAppLocked(slug, cwd));
+  return withThemeAppLock(cwd, () =>
+    useThemeInAppLocked(slug, cwd, options.renderModule),
+  );
 }
 
-/** @param {string} slug @param {string} cwd */
-async function useThemeInAppLocked(slug, cwd) {
+/**
+ * @param {string} slug
+ * @param {string} cwd
+ * @param {ThemeModuleRenderer} [renderModule]
+ */
+async function useThemeInAppLocked(slug, cwd, renderModule) {
   const state = readAppThemeState(cwd);
   const recordedSlug = recordedThemeSlug(state, slug);
   if (!state.configured || recordedSlug == null) {
@@ -1510,6 +1543,8 @@ async function useThemeInAppLocked(slug, cwd) {
     recordedSlug,
     state.defaultSlug !== recordedSlug,
     available,
+    undefined,
+    renderModule,
   );
 }
 

@@ -59,9 +59,11 @@ export interface BaseRequirement {
   argument: {name: string; value: string} | null;
   requires: string[];
   missing: string[];
-  /** `not-declared`: no declared adapter exports the step. `failed-to-load`:
-   *  the declared adapter module does not load; `module` names it. */
-  reason: 'not-declared' | 'failed-to-load';
+  /** `not-declared`: the base does not serve the step. `failed-to-load`:
+   *  the declared adapter module does not load. `not-exported`: the base
+   *  lists the step but its module does not export it. `module` names the
+   *  module for the last two. */
+  reason: 'not-declared' | 'failed-to-load' | 'not-exported';
   module?: string;
   base: {name: string; version: string | null};
 }

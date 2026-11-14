@@ -3,8 +3,8 @@
 /**
  * @file The closed, append-only list of platform steps a base can serve.
  * @input nothing
- * @output BASE_STEPS, BASE_CAPABILITIES, and helpers that read a step name
- *   or a manifest's adapters
+ * @output BASE_STEPS, BASE_CAPABILITIES, STEP_CALLERS, and helpers that
+ *   read a step name or a manifest's adapters
  * @position foundation/bases — the step vocabulary that base declarations,
  *   the requirement check, and help share. The authoring schemas check only
  *   a step's shape; a test holds every command declaration to this list.
@@ -29,6 +29,39 @@ export const BASE_STEPS = Object.freeze([
   'icons.appModule',
   'setup.guide',
 ]);
+
+/**
+ * Each step a command calls on a base other than Core, with the commands
+ * that call it. A base serves a step only to these commands, whatever else
+ * it declares: any other command that needs the step runs only on Core.
+ * @type {Readonly<Partial<Record<import('../../authoring/integration/type').BaseStep, readonly string[]>>>}
+ */
+export const STEP_CALLERS = Object.freeze({
+  'themes.targets': ['theme targets', 'experimental theme targets'],
+  'themes.compile': ['theme build', 'experimental theme compile'],
+  'themes.appModule': [
+    'theme add',
+    'theme use',
+    'theme remove',
+    'experimental theme add',
+    'experimental theme use',
+    'experimental theme remove',
+  ],
+});
+
+/**
+ * Does `command` call `step` on a base other than Core?
+ * @param {string} command the command path, such as `theme build`
+ * @param {string} step
+ * @returns {boolean}
+ */
+export function callsStep(command, step) {
+  return (
+    /** @type {Record<string, readonly string[] | undefined>} */ (STEP_CALLERS)[
+      step
+    ]?.includes(command) ?? false
+  );
+}
 
 /**
  * The capability a step belongs to.

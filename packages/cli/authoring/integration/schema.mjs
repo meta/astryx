@@ -101,7 +101,17 @@ export const integrationBaseSchema = z.object({
   docsiteUrl: z.string().url().optional(),
   logo: z.object({light: z.string(), dark: z.string().optional()}).optional(),
   base: z
-    .object({adapters: z.record(z.string(), z.string()).optional()})
+    .object({
+      adapters: z
+        .record(
+          z.string(),
+          z.union([
+            z.string(),
+            z.object({module: z.string(), steps: z.array(z.string())}),
+          ]),
+        )
+        .optional(),
+    })
     .optional(),
 });
 

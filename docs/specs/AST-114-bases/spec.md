@@ -120,10 +120,16 @@ exports, named `<capability>.<step>`, from the closed list in FR4.
   the who-answered line names the carried Core.
 
 - **FR3 — A base declares its adapters in one place.** An integration
-  manifest MAY carry `base: {adapters: {<capability>: <module path>, …}}`.
-  The presence of `base` makes the package a base; `base: {}` declares a base
-  that serves content only. The steps a base serves are exactly the
-  functions each declared adapter module exports from FR4's list. This one
+  manifest MAY carry `base: {adapters: {<capability>: <entry>, …}}`. An entry
+  is a module path, which serves every step of that capability, or
+  `{module: <path>, steps: [<step>, …]}`, which serves only the listed steps,
+  named without the capability prefix. The presence of `base` makes the
+  package a base; `base: {}` declares a base that serves content only. Help
+  and the manifest read the served steps from this declaration without
+  loading a module. A function the module exports for a step the entry does
+  not list is never called; a listed step the module does not export refuses
+  with `reason: "not-exported"` (FR8). A step name the CLI does not know is
+  ignored. This one
   declaration is both what the base serves and how the CLI reaches it; no
   other declaration says either. A capability the CLI does not know is
   ignored, so a base written for a newer CLI still loads. Core is a base
@@ -131,8 +137,17 @@ exports, named `<capability>.<step>`, from the closed list in FR4.
   steps with its own code, so Core needs no integration manifest.
   `@astryxdesign/cli/authoring` MUST publish the capability and step names and
   one type per adapter. An adapter:
-  - receives typed inputs from the CLI and returns data, source text, or a
-    typed failure;
+  - receives typed inputs and a context (`cwd`, `projectDir`, the base,
+    `cliVersion`, `typescript`, and a `read` confined to the project and the
+    base package) and returns `{ok: true, value, warnings?, notices?}` or
+    `{ok: false, failure: {code, message, at?, fix?}}`. A failure's `code`
+    is `invalid-input`, `unsupported`, `not-found`, or `conflict`; the CLI
+    fails with the command's invalid-input code, `ERR_BASE_CAPABILITY`, the
+    command's not-found code, or `ERR_FILE_EXISTS`, with the message as
+    written and `fix` as a suggestion. A throw, a result of another shape,
+    or a value that breaks the step's contract fails with `ERR_BASE_ADAPTER`,
+    naming the base, the step, and the module, and writes nothing. Extra
+    value fields are ignored;
   - MUST NOT write files, print, read stdin, or exit; the CLI does every write
     under its confinement rules (`architecture:cli-surface` INV10) and every
     output;
@@ -146,9 +161,30 @@ exports, named `<capability>.<step>`, from the closed list in FR4.
   does not resolve, a module that fails its type, a capability not on FR4's
   list, and an export that is not a step of its capability.
 
-  FR3 gap: `@astryxdesign/cli/authoring` publishes the capability and step
-  names but no per-step input and output types, and `doctor integration
-validate` does not check `base`.
+  On a base other than Core, the theme commands use these steps:
+  - `theme targets` lists the targets `themes.targets` returns; the CLI
+    applies the filter, the exact-component match, and the near-miss
+    suggestions.
+  - `theme build` loads each theme source with no Core interception and
+    passes the export, its name, and the theme's name to `themes.compile`.
+    The result holds exactly one `role: "module"` file, named
+    `<theme name>.js`, `.mjs`, `.ts`, or `.tsx`. The CLI writes every file
+    into the source's folder, or the folder `--out` names, inside the
+    project, as one atomic write; `--check` compares the returned contents
+    with the files on disk and writes nothing. The JSON receipt is
+    `theme.build.base`. `--family`, `--watch`, and `--out` with several
+    files fail with `ERR_THEME_INVALID`.
+  - `theme add`, `use`, and `remove` resolve a local theme's module as the
+    file named for its slug with one of those extensions, with the
+    stylesheet beside it when one exists, else `null`. They pass every added
+    theme, with import specifiers relative to the generated module, and the
+    default to `themes.appModule`. The returned source exports `themes` and
+    `defaultThemeSlug`; the CLI writes it below its own generated header and
+    record, so it reads the record back on every base.
+
+  FR3 gap: `@astryxdesign/cli/authoring` publishes the input and output
+  types of `themes.targets`, `themes.compile`, and `themes.appModule` only,
+  and `doctor integration validate` does not check `base`.
 
 - **FR4 — The step list is closed and append-only.** The CLI owns the list.
   A step, once shipped, keeps its inputs, outputs, and meaning; a new step or
@@ -220,14 +256,21 @@ theme` differs from `integration add component`. A step a command can do
   value's `requires`. A command's `spec:AST-081` FR4 `refuse` comes before
   them all: in a folder no project encloses, the check leaves a `refuse`
   command to its own refusal. A usage error, such as a missing
-  required argument, fails before the check. A step passes when the base declares its
-  capability's adapter, the module loads, and it exports the step. The check
+  required argument, fails before the check. A step passes when the base serves it, the
+  command calls it on a base other than Core, the module loads, and it
+  exports the step. A command that declares a step but does not call it
+  refuses with `reason: "not-declared"` on every base other than Core, and
+  help and the manifest treat it as unavailable. The check
   passes the loaded adapters to the command, so the command calls the active
   base's adapter with no flag and no lookup of its own.
 
-  FR6 gap: no command calls an adapter step, so a base other than Core serves
-  no step whatever its adapters declare: help hides every command and option
-  that declares one, and a run of one refuses with `reason: "not-declared"`.
+  FR6 gap: no command calls `themes.template`, `themes.scaffold`,
+  `themes.checks`, or a `templates`, `render`, `icons`, or `setup` step, so a
+  base other than Core serves none of them whatever its adapters declare:
+  help hides every command and option that needs one, and a run of one
+  refuses with `reason: "not-declared"`. `experimental theme editor` and
+  `experimental theme preview add` call no step, so they are hidden and
+  refused the same way on every base other than Core.
 
 - **FR7 — Help shows what works; the manifest shows everything.** `astryx
 help`, `astryx --help`, and a group's help MUST list only the commands,
@@ -277,9 +320,14 @@ help`, `astryx --help`, and a group's help MUST list only the commands,
       }
 
   `option` names the long flag and `argument` the `{name, value}` when that
-  part declared the step. `reason` is `not-declared` when the base declares
-  no adapter that exports the step, or `failed-to-load` when it declares one
-  that does not load; then the line and a `module` member name the module. A
+  part declared the step. `reason` is `not-declared` when the base does not
+  serve the step, `failed-to-load` when it declares an adapter that does not
+  load, or `not-exported` when it lists the step but the module does not
+  export it; for the last two the line and a `module` member name the
+  module:
+
+      Error: astryx theme build needs the themes.compile step; the active base @acme/native-ui lists it but ./adapters/themes.mjs does not export it.
+ A
   typed name that matches a hidden command MUST fail this way and MUST NOT
   fail with `ERR_UNKNOWN_COMMAND`.
 
@@ -331,8 +379,8 @@ before any work when the package is not a base the run can read (FR2).
   check between dispatch and work that hands the command its adapters (FR6);
   INV7 lists `requires` among the command-doc fields the manifest publishes;
   INV2 names the `requirement` member of the `ERR_BASE_CAPABILITY` envelope;
-  INV3 registers `ERR_BASE_CAPABILITY`, `ERR_BASE_NOT_FOUND`, and
-  `ERR_BASE_AMBIGUOUS`; INV21's adapter seam reaches a base adapter only
+  INV3 registers `ERR_BASE_CAPABILITY`, `ERR_BASE_NOT_FOUND`,
+  `ERR_BASE_AMBIGUOUS`, and `ERR_BASE_ADAPTER`; INV21's adapter seam reaches a base adapter only
   through the check; INV30's package set holds the active base in Core's
   place.
 - `spec:AST-017`: FR14's commands and options appear in help unless the
@@ -348,7 +396,7 @@ before any work when the package is not a base the run can read (FR2).
 - `contributing:cli-conventions`: a new command declares `requires` only for
   a step it cannot run without; a new platform step is added to FR4's list.
 - Consumer docs: the CLI reference documents `--base`, `requires`, and the
-  three codes; the integration authoring guide documents `base`, each adapter
+  four codes; the integration authoring guide documents `base`, each adapter
   type, and FR9.
 
 ## Verification

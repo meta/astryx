@@ -312,6 +312,11 @@ export const doc = {
       description:
         'The project installs two or more bases and no Core, and the run named none with `--base`. Nothing was done.',
     },
+    {
+      value: 'ERR_BASE_ADAPTER',
+      description:
+        "The active base's adapter threw, or returned something that is not a step result or does not match the step's contract. The message names the base, the step, and the module. Nothing was written.",
+    },
 
     // Render (experimental: may change or be removed in a patch release)
     {

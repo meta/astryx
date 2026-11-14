@@ -16,7 +16,13 @@ import {ERROR_CODES} from '../response/error-codes.mjs';
 import {installedProjectCoreDir} from '../fs/paths.mjs';
 import {resolveInstalledPackageDir} from '../integrations/installed-package.mjs';
 import {CORE_BASE_NAME, coreBase} from './core.mjs';
-import {BASE_CAPABILITIES} from './steps.mjs';
+import {
+  BASE_CAPABILITIES,
+  BASE_STEPS,
+  STEP_CALLERS,
+  capabilityOf,
+  exportOf,
+} from './steps.mjs';
 import {registerRunBaseResolver} from './state.mjs';
 
 /**
@@ -29,7 +35,9 @@ import {registerRunBaseResolver} from './state.mjs';
  * @property {string | null} version the package version, when known
  * @property {Record<string, string>} adapters capability to module path,
  *   relative to `dir`, for the capabilities this CLI knows
- * @property {readonly string[]} steps the steps the base serves
+ * @property {readonly string[]} steps the steps the base serves: every
+ *   step of a capability declared as a plain path, or the listed steps of
+ *   one declared as `{module, steps}`; only steps a command calls
  */
 
 /**
@@ -110,13 +118,24 @@ export function isBaseIntegration(integration) {
 export function baseOf(integration) {
   /** @type {Record<string, string>} */
   const adapters = {};
-  for (const [capability, file] of Object.entries(
+  /** @type {string[]} */
+  const steps = [];
+  for (const [capability, entry] of Object.entries(
     integration.base?.adapters ?? {},
   )) {
     if (
-      /** @type {readonly string[]} */ (BASE_CAPABILITIES).includes(capability)
+      !(/** @type {readonly string[]} */ (BASE_CAPABILITIES).includes(capability))
     ) {
-      adapters[capability] = file;
+      continue;
+    }
+    const listed = typeof entry === 'string' ? null : entry.steps;
+    adapters[capability] = typeof entry === 'string' ? entry : entry.module;
+    for (const step of BASE_STEPS) {
+      if (capabilityOf(step) !== capability) continue;
+      // A step no command calls on this base is not served, so its commands
+      // stay hidden rather than run Core's code.
+      if (!(step in STEP_CALLERS)) continue;
+      if (listed == null || listed.includes(exportOf(step))) steps.push(step);
     }
   }
   return {
@@ -125,10 +144,7 @@ export function baseOf(integration) {
     dir: integration.__packageDir,
     version: integration.version ?? null,
     adapters,
-    // No command calls an adapter step, so a base other than Core serves no
-    // step, whatever its adapters declare. Help hides each command that needs
-    // one, and a run refuses it.
-    steps: [],
+    steps,
   };
 }
 

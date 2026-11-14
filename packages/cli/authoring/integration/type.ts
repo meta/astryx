@@ -75,9 +75,10 @@ export interface AstryxIntegration {
   cliCommand?: string;
   /** Makes this package a base: a component library that stands in for
    *  Core in a project that uses it. `adapters` maps a capability to the
-   *  module, relative to the package, that performs its platform steps; the
-   *  steps the module exports are the steps the base serves. `base: {}`
-   *  declares a base that serves content only. Core is a base too; the CLI
+   *  module, relative to the package, that performs its platform steps. A
+   *  plain path serves every step of the capability; `{module, steps}`
+   *  serves only the listed steps. `base: {}` declares a base that serves
+   *  content only. Core is a base too; the CLI
    *  holds its declaration. See `astryx docs authoring`. */
   base?: BaseDeclaration;
 }
@@ -102,12 +103,40 @@ export type BaseStep =
   | 'icons.appModule'
   | 'setup.guide';
 
+/** One capability's adapter: its module, and the steps it serves. */
+export interface BaseAdapterEntry {
+  /** The module path, relative to the package. */
+  module: string;
+  /** The steps the module serves, without the capability prefix, such as
+   *  `['targets', 'appModule']`. Help reads this list without loading the
+   *  module. A name this CLI does not know is ignored. */
+  steps: string[];
+}
+
 /** What a base declares in its integration manifest. */
 export interface BaseDeclaration {
-  /** One module path per capability, relative to the package. A capability
-   *  this CLI does not know is ignored, so a newer base still loads. */
-  adapters?: Record<string, string>;
+  /** One adapter per capability. A plain module path serves every step of
+   *  the capability. A capability this CLI does not know is ignored, so a
+   *  newer base still loads. */
+  adapters?: Record<string, string | BaseAdapterEntry>;
 }
+
+export type {
+  OutFile,
+  Step,
+  StepContext,
+  StepFailure,
+  StepResult,
+  ThemesAdapter,
+  ThemesAppModuleInput,
+  ThemesAppModuleOutput,
+  ThemesAppModuleTheme,
+  ThemesCompileInput,
+  ThemesCompileOutput,
+  ThemesTarget,
+  ThemesTargetsInput,
+  ThemesTargetsOutput,
+} from './adapter.js';
 
 /**
  * A handler that receives a normalized gap report. Used as a named export

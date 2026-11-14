@@ -190,7 +190,7 @@ function describeCommand(cmd, root, jsonSupported, base = null) {
       o => longFlag(o.flag) === longFlag(option.flag),
     );
     if (declared?.requires?.length) option.requires = [...declared.requires];
-    option.available = isAvailable(base ?? coreBase(), option.requires);
+    option.available = isAvailable(base ?? coreBase(), option.requires, name);
   }
   for (const argument of entry.arguments) {
     const declared = (docs?.doc.args ?? []).find(a => a.name === argument.name);
@@ -313,11 +313,12 @@ export function rebaseManifest(manifest, base) {
       const available = isAvailable(
         shown,
         cmd.requires,
+        cmd.name,
         subcommands?.map(sub => Boolean(sub.available)),
       );
       const options = (cmd.options ?? []).map(option => ({
         ...option,
-        available: isAvailable(shown, option.requires),
+        available: isAvailable(shown, option.requires, cmd.name),
       }));
       return {...cmd, options, ...(subcommands ? {subcommands} : {}), available};
     });
