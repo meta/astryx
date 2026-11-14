@@ -765,6 +765,47 @@ describe('Button', () => {
     expect(handleKeyDown).toHaveBeenCalledTimes(1);
   });
 
+  describe('a held Enter key', () => {
+    it('cancels the auto-repeated keydowns and leaves the first one alone', () => {
+      render(<Button label="Add" />);
+      const button = screen.getByRole('button');
+
+      // fireEvent returns false when the event's default was prevented, which
+      // is what stops the native button from clicking again.
+      expect(fireEvent.keyDown(button, {key: 'Enter'})).toBe(true);
+      expect(fireEvent.keyDown(button, {key: 'Enter', repeat: true})).toBe(
+        false,
+      );
+    });
+
+    it('still lets a caller onKeyDown see the repeats', () => {
+      const onKeyDown = vi.fn();
+      render(<Button label="Add" onKeyDown={onKeyDown} />);
+      const button = screen.getByRole('button');
+
+      fireEvent.keyDown(button, {key: 'Enter'});
+      fireEvent.keyDown(button, {key: 'Enter', repeat: true});
+
+      expect(onKeyDown).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not cancel a repeated key that is not Enter', () => {
+      render(<Button label="Add" />);
+      const button = screen.getByRole('button');
+
+      expect(fireEvent.keyDown(button, {key: 'ArrowDown', repeat: true})).toBe(
+        true,
+      );
+    });
+
+    it('cancels the repeats on a Button that renders as a link', () => {
+      render(<Button label="Docs" href="https://example.com" />);
+      const link = screen.getByRole('link');
+
+      expect(fireEvent.keyDown(link, {key: 'Enter', repeat: true})).toBe(false);
+    });
+  });
+
   it('uses aria-disabled (not native disabled) when isDisabled, even without a tooltip (AST-085)', () => {
     render(<Button label="Save" isDisabled />);
     const button = screen.getByRole('button');
