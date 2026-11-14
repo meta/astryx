@@ -410,6 +410,7 @@ const NEUTRAL_STOPS = wordTable(
       '--color-icon-secondary',
       '--color-icon-disabled',
       '--color-border-emphasized',
+      '--color-border-control',
       '--color-skeleton',
     ].map(t => [t, officialStops(t)]),
   ),

@@ -250,6 +250,7 @@ export const butterTheme = defineTheme({
     // Border — softer taupe card outline (emphasized) in light mode.
     '--color-border': [neutral.light[85], withAlpha(neutral.dark[90], '1a')],
     '--color-border-emphasized': [neutral.light[75], neutral.dark[60]],
+    '--color-border-control': [neutral.light[60], neutral.dark[55]],
 
     // Effects
     '--color-skeleton': [neutral.light[85], neutral.dark[35]],
@@ -580,7 +581,7 @@ export const butterTheme = defineTheme({
       base: {
         paddingBlock: 'var(--spacing-2)',
         paddingInline: 'var(--spacing-3)',
-        borderColor: 'var(--color-border)',
+        borderColor: 'var(--color-border-control)',
       },
       ...INPUT_STATUS_VARS,
     },
@@ -588,7 +589,7 @@ export const butterTheme = defineTheme({
       base: {
         paddingBlock: 'var(--spacing-2)',
         paddingInline: 'var(--spacing-3)',
-        borderColor: 'var(--color-border)',
+        borderColor: 'var(--color-border-control)',
       },
       ...INPUT_STATUS_VARS,
     },
@@ -596,7 +597,7 @@ export const butterTheme = defineTheme({
       base: {
         paddingBlock: 'var(--spacing-2)',
         paddingInline: 'var(--spacing-3)',
-        borderColor: 'var(--color-border)',
+        borderColor: 'var(--color-border-control)',
       },
       ...INPUT_STATUS_VARS,
     },
@@ -604,7 +605,7 @@ export const butterTheme = defineTheme({
       base: {
         paddingBlock: 'var(--spacing-2)',
         paddingInline: 'var(--spacing-3)',
-        borderColor: 'var(--color-border)',
+        borderColor: 'var(--color-border-control)',
       },
       ...INPUT_STATUS_VARS,
     },
@@ -612,7 +613,7 @@ export const butterTheme = defineTheme({
       base: {
         paddingBlock: 'var(--spacing-2)',
         paddingInline: 'var(--spacing-3)',
-        borderColor: 'var(--color-border)',
+        borderColor: 'var(--color-border-control)',
       },
       ...INPUT_STATUS_VARS,
     },
@@ -620,7 +621,7 @@ export const butterTheme = defineTheme({
       base: {
         paddingBlock: 'var(--spacing-2)',
         paddingInline: 'var(--spacing-3)',
-        borderColor: 'var(--color-border)',
+        borderColor: 'var(--color-border-control)',
       },
       ...INPUT_STATUS_VARS,
       'variant:secondary': SECONDARY_SELECTOR,
@@ -629,7 +630,7 @@ export const butterTheme = defineTheme({
       base: {
         paddingBlock: 'var(--spacing-2)',
         paddingInline: 'var(--spacing-3)',
-        borderColor: 'var(--color-border)',
+        borderColor: 'var(--color-border-control)',
       },
       ...INPUT_STATUS_VARS,
       'variant:secondary': SECONDARY_SELECTOR,
@@ -639,7 +640,7 @@ export const butterTheme = defineTheme({
       base: {
         paddingBlock: 'var(--spacing-2)',
         paddingInline: 'var(--spacing-3)',
-        borderColor: 'var(--color-border)',
+        borderColor: 'var(--color-border-control)',
       },
       ...INPUT_STATUS_VARS,
     },
@@ -647,7 +648,7 @@ export const butterTheme = defineTheme({
       base: {
         paddingBlock: 'var(--spacing-2)',
         paddingInline: 'var(--spacing-3)',
-        borderColor: 'var(--color-border)',
+        borderColor: 'var(--color-border-control)',
       },
       ...INPUT_STATUS_VARS,
     },

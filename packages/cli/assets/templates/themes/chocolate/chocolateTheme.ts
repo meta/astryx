@@ -159,6 +159,7 @@ export const chocolateTheme = defineTheme({
     // Border
     '--color-border': ['#C4AC95', '#EDE4D41A'],
     '--color-border-emphasized': ['#B88859', '#6b5540'],
+    '--color-border-control': ['#A67A50', '#7C6855'],
 
     // Effects
     '--color-skeleton': ['#C4AC95', '#6b5540'],

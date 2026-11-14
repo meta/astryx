@@ -45,9 +45,9 @@ const styles = stylex.create({
   },
   unchecked: {
     borderColor: {
-      default: colorVars['--color-border-emphasized'],
+      default: colorVars['--color-border-control'],
       [stylex.when.ancestor(':hover', indicatorScope)]: {
-        '@media (hover: hover)': `color-mix(in srgb, ${colorVars['--color-border-emphasized']}, ${colorVars['--color-tint-hover']} 20%)`,
+        '@media (hover: hover)': `color-mix(in srgb, ${colorVars['--color-border-control']}, ${colorVars['--color-tint-hover']} 20%)`,
       },
     },
     backgroundColor: {

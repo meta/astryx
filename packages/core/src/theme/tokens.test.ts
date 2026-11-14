@@ -394,6 +394,8 @@ describe('colour token name grammar (architecture:theme-tokens INV10)', () => {
   const shapes = [
     // 1 and 3: property first, then role, then an optional variant.
     `^--color-${property}-(?:${emphasis}|${intent}|${surface}|${hue})${variant}$`,
+    // 1: the edge of a form control.
+    '^--color-border-control$',
     // 2 and 3: the intent's own colour, then an optional variant.
     `^--color-${intent}${variant}$`,
     // 4: content on a fill.

@@ -152,6 +152,7 @@ export const matchaTheme = defineTheme({
     // Softer sage borders (default + emphasized/card) in light mode.
     '--color-border': [neutral.light[85], withAlpha(neutral.dark[75], '1a')],
     '--color-border-emphasized': [neutral.light[70], neutral.dark[30]],
+    '--color-border-control': [neutral.light[45], neutral.dark[35]],
 
     // Effects
     '--color-skeleton': [neutral.light[75], neutral.dark[30]],

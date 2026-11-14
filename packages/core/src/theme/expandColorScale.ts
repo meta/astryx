@@ -28,8 +28,10 @@
  *   regardless of hue/chroma, so the fixed tone assignments hold for any
  *   accent/neutralStyle (WCAG 1.4.3), and each half of a tuple pairs with
  *   surfaces derived from that same seed.
- * - --color-border-emphasized (form-control boundaries) is tone-bumped
- *   until it reaches >= 3:1 against the generated surface (WCAG 1.4.11).
+ * - --color-border-emphasized is tone-bumped until it reaches >= 3:1
+ *   against the generated surface (WCAG 1.4.11).
+ * - --color-border-control (form-control edges) is tone-bumped until it
+ *   reaches >= 3:1 against both the generated surface and page body.
  * - --color-border, --color-skeleton, and --color-track are intentionally
  *   decorative/redundant cues and are NOT held to 3:1 — see the test file
  *   for the rationale.
@@ -266,6 +268,29 @@ export function expandColorScale(config: ColorScaleConfig): ColorScaleTokens {
     ),
   );
 
+  // A form control's edge holds 3:1 against both the surface and the page
+  // body. The body is darker than the surface in both schemes. The light edge
+  // is darker than both, so the body is its nearest match. The dark edge is
+  // lighter than both, so the surface is its nearest match.
+  const borderControl = ld(
+    ensureContrastTone(
+      lightSeed.hue,
+      neutralVariantChroma,
+      borderEmphasizedStartLight,
+      -1,
+      NL[95],
+      NON_TEXT_MIN_CONTRAST,
+    ),
+    ensureContrastTone(
+      darkSeed.hue,
+      neutralVariantChroma,
+      borderEmphasizedStartDark,
+      1,
+      ND[10],
+      NON_TEXT_MIN_CONTRAST,
+    ),
+  );
+
   return {
     // Core semantic — only with a seed accent. Without one these fall through
     // to colorDefaults, whose --color-accent is NOT what the default seed
@@ -340,6 +365,7 @@ export function expandColorScale(config: ColorScaleConfig): ColorScaleTokens {
       hexWithAlpha(ND[95], borderSubtleAlpha),
     ),
     '--color-border-emphasized': borderEmphasized,
+    '--color-border-control': borderControl,
 
     // Effects
     '--color-skeleton': ld(NVL[70], NVD[30]),

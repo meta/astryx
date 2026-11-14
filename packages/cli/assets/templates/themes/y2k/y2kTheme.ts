@@ -226,6 +226,7 @@ export const y2kTheme = defineTheme({
     // Bold borders preserve the heavy-outline Y2K look.
     '--color-border': [neutral.light[20], withAlpha(neutral.dark[95], '1A')],
     '--color-border-emphasized': [neutral.light[20], neutral.dark[45]],
+    '--color-border-control': [neutral.light[20], neutral.dark[45]],
 
     // Effects
     '--color-skeleton': [neutral.light[80], neutral.dark[25]],

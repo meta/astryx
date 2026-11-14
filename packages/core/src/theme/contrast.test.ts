@@ -4,6 +4,7 @@ import {describe, it, expect} from 'vitest';
 import {relativeLuminance, compositeOver, contrastRatio} from './contrast';
 import {parseColor} from '../utils/color';
 import {resolveThemeToken} from './tokens';
+import {defineTheme, type DefinedTheme} from './defineTheme';
 
 describe('relativeLuminance', () => {
   it('is 0 for black and 1 for white', () => {
@@ -101,5 +102,61 @@ describe('the stock accent pair', () => {
     const accent = resolveThemeToken(null, '--color-accent', {mode});
     const onAccent = resolveThemeToken(null, '--color-on-accent', {mode});
     expect(contrastRatio(onAccent, accent)).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+// architecture:theme-tokens INV13: a form control's edge is often the only cue
+// to where the control is, so --color-border-control meets 3:1 (WCAG 1.4.11)
+// against the surface and the page body.
+describe('the form-control edge (--color-border-control)', () => {
+  const MODES = ['light', 'dark'] as const;
+  const AGAINST = [
+    '--color-background-surface',
+    '--color-background-body',
+  ] as const;
+
+  function expectControlEdge(theme: DefinedTheme | null, label: string): void {
+    for (const mode of MODES) {
+      const edge = resolveThemeToken(theme, '--color-border-control', {mode});
+      for (const background of AGAINST) {
+        const against = resolveThemeToken(theme, background, {mode});
+        const ratio = edge === '' ? 0 : contrastRatio(edge, against);
+        expect(
+          ratio,
+          `${label} ${mode}: ${edge || '(unset)'} on ${background} ${against}`,
+        ).toBeGreaterThanOrEqual(3);
+      }
+    }
+  }
+
+  it("meets 3:1 in Core's defaults", () => {
+    expectControlEdge(null, 'Core');
+  });
+
+  // The first-party theme templates live in the CLI, outside Core's
+  // type-checked sources, so they load at run time.
+  const TEMPLATES = '../../../cli/assets/templates/themes';
+  it.each([
+    'butter',
+    'chocolate',
+    'gothic',
+    'matcha',
+    'neutral',
+    'stone',
+    'y2k',
+  ])('meets 3:1 in the %s theme template', async name => {
+    const module = (await import(
+      /* @vite-ignore */ `${TEMPLATES}/${name}/${name}Theme.ts`
+    )) as Record<string, DefinedTheme>;
+    expectControlEdge(module[`${name}Theme`], name);
+  });
+
+  it.each([
+    {accent: '#0064E0'},
+    {accent: '#B7410E', neutralStyle: 'warm'},
+    {accent: '#B7410E', neutralStyle: 'warm', contrast: 'high'},
+    {neutralStyle: 'neutral'},
+  ] as const)('meets 3:1 in a generated theme (%o)', color => {
+    expectControlEdge(defineTheme({name: 'generated', color}), 'generated');
   });
 });

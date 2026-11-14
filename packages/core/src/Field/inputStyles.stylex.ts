@@ -47,7 +47,7 @@ export const inputWrapperStyles = stylex.create({
     // there. A focused field's border takes the system Highlight color instead
     // (`spec:AST-020` FR1).
     borderColor: {
-      default: colorVars['--color-border-emphasized'],
+      default: colorVars['--color-border-control'],
       ':focus-within': {
         default: colorVars['--color-accent'],
         '@media (forced-colors: active)': 'Highlight',
@@ -66,7 +66,7 @@ export const inputWrapperStyles = stylex.create({
       default: 'none',
       ':hover:not(:focus-within):where(:not(:disabled,[aria-disabled="true"]))':
         {
-          '@media (hover: hover)': `inset 0px 0px 0px 2px color-mix(in srgb, ${colorVars['--color-border-emphasized']} 30%, transparent)`,
+          '@media (hover: hover)': `inset 0px 0px 0px 2px color-mix(in srgb, ${colorVars['--color-border-control']} 30%, transparent)`,
         },
       ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
     },
@@ -75,7 +75,7 @@ export const inputWrapperStyles = stylex.create({
   disabled: {
     cursor: 'default',
     opacity: 0.5,
-    borderColor: colorVars['--color-border-emphasized'],
+    borderColor: colorVars['--color-border-control'],
     // Suppress the base hover ring — a disabled control must not react to hover.
     boxShadow: 'none',
   },

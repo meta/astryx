@@ -17,7 +17,7 @@ export const inputDisabledFocusStyles = stylex.create({
   // focused status button keeps only its own outline.
   ring: {
     borderColor: {
-      default: colorVars['--color-border-emphasized'],
+      default: colorVars['--color-border-control'],
       ':has(> [aria-disabled="true"]:focus-visible)': {
         default: colorVars['--color-accent'],
         // Forced colors repaint author borders in one system color and drop
@@ -35,7 +35,7 @@ export const inputDisabledFocusStyles = stylex.create({
   // focused token or status button keeps only its own outline.
   nestedRing: {
     borderColor: {
-      default: colorVars['--color-border-emphasized'],
+      default: colorVars['--color-border-control'],
       ':has(input[aria-disabled="true"]:focus-visible)': {
         default: colorVars['--color-accent'],
         // Forced colors repaint author borders in one system color and drop
@@ -53,7 +53,7 @@ export const inputDisabledFocusStyles = stylex.create({
   // it (TimeInput, DateRangeInput, DateTimeInput and their touch fields).
   withinRing: {
     borderColor: {
-      default: colorVars['--color-border-emphasized'],
+      default: colorVars['--color-border-control'],
       ':focus-within': {
         default: colorVars['--color-accent'],
         // Forced colors repaint author borders in one system color and drop
@@ -70,7 +70,7 @@ export const inputDisabledFocusStyles = stylex.create({
   // (DateInput and its native and touch fields).
   inputFocusRing: {
     borderColor: {
-      default: colorVars['--color-border-emphasized'],
+      default: colorVars['--color-border-control'],
       ':has(input:focus)': {
         default: colorVars['--color-accent'],
         // Forced colors repaint author borders in one system color and drop

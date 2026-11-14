@@ -711,7 +711,7 @@ const styles = stylex.create({
   // base values, since StyleX merges per property.
   sheetTriggerDisabled: {
     borderColor: {
-      default: colorVars['--color-border-emphasized'],
+      default: colorVars['--color-border-control'],
       '@media (forced-colors: active)': 'GrayText',
     },
     color: {

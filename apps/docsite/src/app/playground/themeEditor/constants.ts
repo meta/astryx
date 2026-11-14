@@ -418,7 +418,11 @@ export const COLOR_CATEGORIES = {
     '--color-warning',
     '--color-warning-muted',
   ],
-  Divider: ['--color-border', '--color-border-emphasized'],
+  Divider: [
+    '--color-border',
+    '--color-border-emphasized',
+    '--color-border-control',
+  ],
   Effects: ['--color-skeleton', '--color-shadow', '--color-tint-hover'],
 } as const;
 

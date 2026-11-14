@@ -166,6 +166,7 @@ export const gothicTheme = defineTheme({
 
     '--color-border': withAlpha(neutral.dark[95], '1a'),
     '--color-border-emphasized': neutral.dark[40],
+    '--color-border-control': neutral.dark[55],
 
     '--color-skeleton': neutral.dark[40],
     '--color-shadow': withAlpha(neutral.dark[0], '4d'),
