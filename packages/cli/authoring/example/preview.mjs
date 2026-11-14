@@ -148,6 +148,7 @@ export function isNodeEnvRead(node) {
  * @property {Map<string, string>} names name → specifier, own > Core > React
  * @property {Set<string>} importable packages an example may import
  * @property {ReadonlyArray<string>} dependencies
+ * @property {Set<string>} serverOnly the package's own server-only specifiers
  */
 
 /** @type {WeakMap<ExampleScope, ScopeTable>} */
@@ -181,6 +182,7 @@ function scopeTable(scope) {
       ...ALWAYS_IMPORTABLE,
     ]),
     dependencies,
+    serverOnly: new Set(scope.serverOnlyModules ?? []),
   };
   TABLES.set(scope, table);
   return table;
@@ -790,7 +792,7 @@ export function previewableExample(example, scope) {
   for (const specifier of new Set(valueImports(parsed.ast))) {
     if (
       isServerOnlyImport(specifier, table.dependencies) ||
-      scope.isServerOnly?.(specifier) === true
+      table.serverOnly.has(specifier)
     ) {
       problems.push({
         code: 'example_server_only',

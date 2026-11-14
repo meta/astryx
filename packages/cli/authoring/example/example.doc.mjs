@@ -15,7 +15,7 @@ export const doc = {
   displayName: 'ExampleScope',
   namespace: 'authoring',
   description:
-    "What `previewableExample(example, scope)` from `@astryxdesign/cli/authoring` reads a component doc example against. A tool that shows an example as a live preview calls it, and `{@command doctor integration validate}` uses the same rule, so the two agree. An example with `kind: 'setup'` is code only. Any other example must run on its own: its code compiles as a TSX module; it renders something (a default export, then JSX at its end, then the last component it declares); it imports only the package, the packages the package declares, React and Core, never a relative path or code that runs only on a server; and every name it uses is defined in it, imported, named in the scope, or a JavaScript or browser global. The result is `{previewable: true, module}`, a module that imports each scope name it uses and default-exports what it renders, so a bundler can build it as is; `{previewable: false, setup: true}`; or `{previewable: false, setup: false, problems}`, each problem with a `code`, a `message` and a `fix`.",
+    "What `previewableExample(example, scope)` from `@astryxdesign/cli/authoring` reads a component doc example against, as JSON. `integrationExampleScope()` in `@astryxdesign/cli/api` builds the scope Doctor reads a package's examples with, so a catalog can store it and a preview tool read examples exactly as Doctor does. A tool that shows an example as a live preview calls it, and `{@command doctor integration validate}` uses the same rule, so the two agree. An example with `kind: 'setup'` is code only. Any other example must run on its own: its code compiles as a TSX module; it renders something (a default export, then JSX at its end, then the last component it declares); it imports only the package, the packages the package declares, React and Core, never a relative path or code that runs only on a server; and every name it uses is defined in it, imported, named in the scope, or a JavaScript or browser global. The result is `{previewable: true, module}`, a module that imports each scope name it uses and default-exports what it renders, so a bundler can build it as is; `{previewable: false, setup: true}`; or `{previewable: false, setup: false, problems}`, each problem with a `code`, a `message` and a `fix`.",
   appliesTo:
     'The second argument of `previewableExample`, from `@astryxdesign/cli/authoring`',
   fields: [
@@ -54,10 +54,10 @@ export const doc = {
       required: true,
     },
     {
-      name: 'isServerOnly',
-      type: '(specifier: string) => boolean',
+      name: 'serverOnlyModules',
+      type: 'string[]',
       description:
-        'Whether an import names a module that runs only on a server, beyond the ones every scope knows (`server-only`, `next/headers`, `next/server`, `next/cache`, a Node built-in the package does not install). Answer true for a module of the package that imports `server-only`.',
+        "The package's own import specifiers whose module runs only on a server: it imports `server-only`. Every scope also counts `server-only`, `next/headers`, `next/server`, `next/cache`, and a Node built-in the package does not install.",
     },
     {
       name: 'serverComponents',

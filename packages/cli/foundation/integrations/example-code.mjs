@@ -1,12 +1,15 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Doctor's check that each component example runs on its own unless it
- *   is `kind: 'setup'`, judged by the rule a live preview uses.
+ * @file The scope a package's component examples are read against, and
+ *   Doctor's check that each example runs on its own unless it is
+ *   `kind: 'setup'`, judged by the rule a live preview uses.
  * @input A loaded integration: its components root, package directory and
  *   package.json, and the Core and React installed beside it.
- * @output A note for each example `previewableExample` refuses, with its
- *   fix, and the examples whose names could not be judged.
+ * @output `exampleScopeFor`: the ExampleScope as JSON, which
+ *   `integrationExampleScope` returns. `exampleCodeCheck`: a note for each
+ *   example `previewableExample` refuses, with its fix, and the examples it
+ *   could not judge.
  * @position foundation/integrations, beside the other contribution
  *   validators; run by `astryx doctor integration validate` (and so by
  *   `integration check`) through api/integration/validate-integration.mjs,
@@ -30,12 +33,8 @@ import {
 import {discoverHooks} from '../discovery/hook-discovery.mjs';
 import {loadComponentDoc} from '../discovery/component-loader.mjs';
 import {babelParse} from '../runtime/lazy-dependencies.mjs';
-import {
-  declaredTargets,
-  readImports,
-  splitSpecifier,
-} from './public-imports.mjs';
-import {isRecord, subpathDeclaration} from './exports-subpaths.mjs';
+import {declaredTargets, readImports} from './public-imports.mjs';
+import {allTargets, isRecord, subpathDeclaration} from './exports-subpaths.mjs';
 
 /**
  * @typedef {{code: string, message: string}} ExampleCodeNote
@@ -99,38 +98,122 @@ function coreNames(packageDir) {
 }
 
 /**
- * Whether an import of the package's own name loads a module that imports
- * `server-only`, the marker of code that runs only on a server.
+ * Whether a module imports `server-only`, the marker of code that runs only
+ * on a server. A file that cannot be read imports nothing.
+ * @param {string} file
+ */
+function importsServerOnly(file) {
+  try {
+    return readImports(fs.readFileSync(file, 'utf8')).some(
+      statement => statement.source === 'server-only' && !statement.typeOnly,
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** How many files a wildcard `exports` target may be matched against. */
+const WILDCARD_FILE_LIMIT = 5_000;
+
+/**
+ * The files under a folder, `node_modules` aside, up to a limit.
+ * @param {string} dir
+ * @param {string[]} [out]
+ * @returns {string[]}
+ */
+function filesUnder(dir, out = []) {
+  /** @type {fs.Dirent[]} */
+  let entries;
+  try {
+    entries = fs.readdirSync(dir, {withFileTypes: true});
+  } catch {
+    return out;
+  }
+  for (const entry of entries) {
+    if (out.length >= WILDCARD_FILE_LIMIT) break;
+    if (entry.name === 'node_modules') continue;
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) filesUnder(full, out);
+    else if (entry.isFile()) out.push(full);
+  }
+  return out;
+}
+
+/**
+ * The package's own import specifiers whose module imports `server-only`:
+ * each subpath its `exports` declares, a wildcard subpath matched against the
+ * files its targets can name. A package with no `exports` names none, as no
+ * subpath of it is declared.
  * @param {string} packageDir
  * @param {string} packageName
  * @param {unknown} exportsField
- * @returns {(specifier: string) => boolean}
+ * @returns {string[]}
  */
-function ownServerModules(packageDir, packageName, exportsField) {
-  /** @type {Map<string, boolean>} */
-  const known = new Map();
-  return specifier => {
-    const parts = splitSpecifier(specifier);
-    if (!parts || parts.pkg !== packageName) return false;
-    const cached = known.get(parts.subpath);
-    if (cached !== undefined) return cached;
+function serverOnlyModules(packageDir, packageName, exportsField) {
+  /** @type {Set<string>} */
+  const found = new Set();
+  /** @type {Set<string>} */
+  const seen = new Set();
+  /** @param {string} subpath `.` or `./…` */
+  const consider = subpath => {
+    if (seen.has(subpath)) return;
+    seen.add(subpath);
     const {files} = declaredTargets(
       packageDir,
-      subpathDeclaration(exportsField, parts.subpath),
+      subpathDeclaration(exportsField, subpath),
     );
-    const serverOnly = files.some(file => {
-      try {
-        return readImports(fs.readFileSync(file, 'utf8')).some(
-          statement =>
-            statement.source === 'server-only' && !statement.typeOnly,
-        );
-      } catch {
-        return false;
-      }
-    });
-    known.set(parts.subpath, serverOnly);
-    return serverOnly;
+    if (files.some(importsServerOnly)) {
+      found.add(
+        subpath === '.' ? packageName : `${packageName}${subpath.slice(1)}`,
+      );
+    }
   };
+  if (exportsField == null) return [];
+  const keys = isRecord(exportsField) ? Object.keys(exportsField) : [];
+  if (keys.length === 0 || !keys.every(key => key.startsWith('.'))) {
+    consider('.');
+    return [...found];
+  }
+  const map = /** @type {Record<string, unknown>} */ (exportsField);
+  for (const key of keys) {
+    const keyParts = key.split('*');
+    if (keyParts.length === 1) {
+      consider(key);
+      continue;
+    }
+    if (keyParts.length !== 2) continue;
+    for (const target of allTargets(map[key])) {
+      const targetParts = target.split('*');
+      if (!target.startsWith('./') || targetParts.length !== 2) continue;
+      const [prefix, suffix] = targetParts;
+      const folder = path.resolve(
+        packageDir,
+        prefix.slice(0, prefix.lastIndexOf('/') + 1),
+      );
+      if (
+        folder !== path.resolve(packageDir) &&
+        !folder.startsWith(path.resolve(packageDir) + path.sep)
+      ) {
+        continue;
+      }
+      for (const file of filesUnder(folder)) {
+        const shown = `./${rel(packageDir, file)}`;
+        if (
+          shown.length < prefix.length + suffix.length ||
+          !shown.startsWith(prefix) ||
+          !shown.endsWith(suffix)
+        ) {
+          continue;
+        }
+        const wildcard = shown.slice(
+          prefix.length,
+          shown.length - suffix.length,
+        );
+        consider(`${keyParts[0]}${wildcard}${keyParts[1]}`);
+      }
+    }
+  }
+  return [...found].sort();
 }
 
 /**
@@ -201,28 +284,41 @@ function asyncFunctionNames(file) {
 }
 
 /**
- * Check every example of every component doc the package ships.
- * @param {any} integration a loaded integration
- * @returns {Promise<{notes: ExampleCodeNote[], unchecked: ExampleCodeUnchecked[]}>}
+ * @typedef {object} ExampleScopeRead
+ * @property {ExampleScope | null} scope null when there is nothing to read
+ *   examples against: no package.json with a name
+ * @property {string} [reason] why `scope` is null
+ * @property {string} [incomplete] why names Core or React give could not be
+ *   read: the scope then lists none of them, so a name it does not list may
+ *   still be defined
+ * @property {Map<string, any>} docs each component doc that loaded, by path
  */
-export async function exampleCodeCheck(integration) {
-  /** @type {ExampleCodeNote[]} */
-  const notes = [];
-  /** @type {ExampleCodeUnchecked[]} */
-  const unchecked = [];
+
+/**
+ * The scope a package's component examples are read against, as JSON: the
+ * components the package documents with the import an app uses for each,
+ * the components and hooks the Core installed beside it documents, the
+ * React it resolves, the packages it declares, and its server-only modules
+ * and async components.
+ * @param {any} integration a loaded integration
+ * @returns {Promise<ExampleScopeRead>}
+ */
+export async function exampleScopeFor(integration) {
+  /** @type {Map<string, any>} */
+  const docs = new Map();
   const packageDir = integration?.__packageDir;
   const manifest = packageDir ? readManifest(packageDir) : null;
   const packageName = typeof manifest?.name === 'string' ? manifest.name : null;
-  if (!packageDir || !manifest || !packageName) return {notes, unchecked};
+  if (!packageDir || !manifest || !packageName) {
+    return {scope: null, reason: 'package.json has no name', docs};
+  }
   /** @type {ReturnType<typeof discoverIntegrationComponents>} */
-  let records;
+  let records = [];
   try {
     records = discoverIntegrationComponents(integration);
   } catch {
-    return {notes, unchecked}; // an unreadable root is reported elsewhere
+    // An unreadable root is reported by the root validators.
   }
-  /** @type {Map<string, any>} */
-  const docs = new Map();
   for (const record of records) {
     if (docs.has(record.docPath)) continue;
     try {
@@ -256,17 +352,33 @@ export async function exampleCodeCheck(integration) {
     coreNames: core ?? [],
     reactNames: react ?? [],
     dependencies: packagesInstalledWith(manifest),
-    isServerOnly: ownServerModules(packageDir, packageName, exportsField),
+    serverOnlyModules: serverOnlyModules(packageDir, packageName, exportsField),
     serverComponents: asyncComponents(records),
   };
   // Without Core or React, a name either provides cannot be told from an
   // undefined one.
-  const missing =
+  const incomplete =
     core == null
       ? "Core's docs cannot be read beside the package"
       : react == null
         ? 'React cannot be loaded from the package'
         : null;
+  return {scope, ...(incomplete ? {incomplete} : {}), docs};
+}
+
+/**
+ * Check every example of every component doc the package ships.
+ * @param {any} integration a loaded integration
+ * @returns {Promise<{notes: ExampleCodeNote[], unchecked: ExampleCodeUnchecked[]}>}
+ */
+export async function exampleCodeCheck(integration) {
+  /** @type {ExampleCodeNote[]} */
+  const notes = [];
+  /** @type {ExampleCodeUnchecked[]} */
+  const unchecked = [];
+  const {scope, incomplete: missing, docs} = await exampleScopeFor(integration);
+  if (!scope) return {notes, unchecked};
+  const packageDir = integration.__packageDir;
   for (const [docPath, doc] of docs) {
     const shownDoc = rel(packageDir, docPath);
     const entries = [

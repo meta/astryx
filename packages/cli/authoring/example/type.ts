@@ -57,7 +57,9 @@ export interface ExampleScopeName {
 }
 
 /**
- * What an example may use without importing it, and what it may import.
+ * What an example may use without importing it, and what it may import, as
+ * JSON: one tool can build it (`integrationExampleScope` in
+ * `@astryxdesign/cli/api`) and store it, and another read examples with it.
  * When two lists give one name, the package's own wins over Core's, and
  * Core's over React's.
  */
@@ -77,12 +79,12 @@ export interface ExampleScope {
    */
   dependencies: ReadonlyArray<string>;
   /**
-   * Whether an import names a module that runs only on a server, beyond the
-   * imports every scope knows (`server-only`, `next/headers`, `next/server`,
-   * `next/cache`, a Node built-in). Answer for the package's own modules,
-   * such as one that imports `server-only`.
+   * The package's own import specifiers whose module runs only on a server
+   * (it imports `server-only`), such as `'@acme/widgets/server'`. Every scope
+   * also counts `server-only`, `next/headers`, `next/server`, `next/cache` and
+   * a Node built-in the package does not install.
    */
-  isServerOnly?: (specifier: string) => boolean;
+  serverOnlyModules?: ReadonlyArray<string>;
   /**
    * The package's documented components that only a server renders: async
    * function components. An example that renders one is server-only.

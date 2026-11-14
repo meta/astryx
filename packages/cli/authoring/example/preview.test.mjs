@@ -24,7 +24,7 @@ const scope = {
   ],
   reactNames: ['useState', 'useEffect', 'Fragment'],
   dependencies: ['zod', 'buffer'],
-  isServerOnly: specifier => specifier === '@acme/widgets/server',
+  serverOnlyModules: ['@acme/widgets/server'],
 };
 
 /**
