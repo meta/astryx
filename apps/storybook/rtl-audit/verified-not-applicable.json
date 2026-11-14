@@ -86,6 +86,10 @@
     "reason": "ChartTooltip uses explicitly physical left/right/top viewport placement and clamping. It has no logical start/end placement, direction-dependent control order, horizontal scrolling action, or coarse form hit target; tooltip rows inherit bidi layout without component-specific directional logic."
   },
   {
+    "component": "charts/Sparkline",
+    "reason": "Sparkline renders a bare Chart with no axes, legend, or title of its own: one SVG line or area trend on a Cartesian data scale inside a fixed 2px margin. The optional tooltip is owned by ChartTooltip, the optional title is block-flow text, and the Position/Value data table is visually hidden. It owns no inline-axis placement or order, directional glyph, scroll, drag, overlay, or keyboard behavior."
+  },
+  {
     "component": "richtext/RichTextEditorAutoLinkPlugin",
     "reason": "RichTextEditorAutoLinkPlugin renders no visual or interactive DOM of its own. It transforms typed URL and email text into native-direction links inside the editor and owns no directional glyph, layout, placement, order, scrolling, dragging, overlay, or keyboard behavior."
   },

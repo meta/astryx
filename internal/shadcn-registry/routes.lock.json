@@ -137,6 +137,11 @@
       "aliases": []
     },
     {
+      "name": "component-charts-sparkline",
+      "path": "components/charts/sparkline",
+      "aliases": []
+    },
+    {
       "name": "component-chat-composer",
       "path": "components/chat-composer",
       "aliases": []

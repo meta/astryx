@@ -753,6 +753,7 @@ describe('audited package and story routing', () => {
       'ChartLegend',
       'ChartSwatch',
       'ChartTooltip',
+      'Sparkline',
     ]);
     expect(richTextComponents).toEqual([
       'RichTextEditor',
@@ -1035,18 +1036,22 @@ describe('audited package and story routing', () => {
           rollup: 'RTL-ready',
         },
       ],
-      verifiedNa: ['ChartAxis', 'ChartGrid', 'ChartSwatch', 'ChartTooltip'].map(
-        component => ({
-          component: `charts/${component}`,
-          reason: 'Direction-neutral chart-space rendering.',
-        }),
-      ),
+      verifiedNa: [
+        'ChartAxis',
+        'ChartGrid',
+        'ChartSwatch',
+        'ChartTooltip',
+        'Sparkline',
+      ].map(component => ({
+        component: `charts/${component}`,
+        reason: 'Direction-neutral chart-space rendering.',
+      })),
     });
 
     expect(coverage).toMatchObject({
-      total: 6,
+      total: 7,
       measured: 2,
-      verifiedNa: 4,
+      verifiedNa: 5,
       gaps: 0,
       staleVerifiedNa: 0,
     });
