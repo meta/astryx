@@ -88,6 +88,7 @@ import {
 import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
 import {cliPeerVersionProblem} from '../../foundation/integrations/cli-peer-version.mjs';
 import {publicImportIssues} from '../../foundation/integrations/public-imports.mjs';
+import {exampleCodeCheck} from '../../foundation/integrations/example-code.mjs';
 import {runChoice} from '../../foundation/release/run-context.mjs';
 
 /** The running CLI is outside the package's `@astryxdesign/cli` peer range. */
@@ -891,6 +892,11 @@ export async function validateIntegration(pkg, options = {}) {
   const examples = integration
     ? await componentExamplesCheck(integration)
     : undefined;
+  // Component doc examples that are not `kind: 'setup'` but cannot run on
+  // their own, by the rule a live preview uses.
+  const exampleCode = integration
+    ? await exampleCodeCheck(integration)
+    : undefined;
   // What a catalog needs to list the package: a logo, and an example of
   // its components.
   const listing = integration
@@ -920,6 +926,7 @@ export async function validateIntegration(pkg, options = {}) {
           each.notes.map(note => ({...note, next: true})),
         ),
         ...(examples?.notes ?? []).map(note => ({...note, next: true})),
+        ...(exampleCode?.notes ?? []).map(note => ({...note, next: true})),
         // What a catalog needs to list the package is information only:
         // these notes fail no check, under any flag.
         ...(listing?.notes ?? []),
@@ -994,6 +1001,16 @@ export async function validateIntegration(pkg, options = {}) {
       // What the public-import check could not judge: listed, never failed on.
       ...(result.found && result.publicImports
         ? {publicImports: result.publicImports}
+        : {}),
+      // Examples whose names could not be judged, when there are any.
+      ...(exampleCode && exampleCode.unchecked.length > 0
+        ? {
+            exampleCode: {
+              status: 'checked',
+              findings: [],
+              unchecked: exampleCode.unchecked,
+            },
+          }
         : {}),
     },
   };
