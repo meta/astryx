@@ -421,12 +421,9 @@ export function ToastSurface({
     onDismiss('manual');
   }, [onDismiss]);
 
-  // The surface is *usually* dark in light mode and light in dark mode, but a
-  // theme can define --color-background-inverted as anything — so the mode is
-  // measured, not assumed. Before the measurement (a server render, a static
-  // page), the side comes from the theme's own resolved surface color, by the
-  // same rule the measurement uses; only a surface that is not one plain
-  // color falls back to the mode.
+  // Before the surface is measured, pick the side from the theme's resolved
+  // surface by the measurement's rule. A surface parseColor cannot read
+  // falls back to the mode.
   const {mode, tokens} = useTheme();
   const surface = parseColor(
     tokens[

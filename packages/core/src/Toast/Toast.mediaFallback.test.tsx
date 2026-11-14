@@ -16,13 +16,17 @@ import {Theme, defineTheme} from '../theme';
 import {Toast} from './Toast';
 
 /** A theme whose inverted surface is `surface` in both modes. */
-const withSurface = (surface: string) => ({
+const withSurface = (
+  surface: string,
+  onDark = '#ffffff',
+  onLight = '#111111',
+) => ({
   ...defineTheme({
-    name: `toast-surface-${surface.slice(1)}`,
+    name: `toast-surface-${surface.replace(/[^a-z0-9]+/gi, '-')}`,
     tokens: {
       '--color-background-inverted': [surface, surface],
-      '--color-on-dark': ['#ffffff', '#ffffff'],
-      '--color-on-light': ['#111111', '#111111'],
+      '--color-on-dark': [onDark, onDark],
+      '--color-on-light': [onLight, onLight],
     },
   }),
   __built: true as const,
@@ -52,5 +56,17 @@ describe('Toast media side before measurement', () => {
   it('a dark inverted surface takes light text, in a dark page too', () => {
     expect(media(withSurface('#0a1317'), 'light')).toBe('dark');
     expect(media(withSurface('#0a1317'), 'dark')).toBe('dark');
+  });
+
+  it('a gothic-like light surface in a light page takes dark text', () => {
+    // Gothic's inverted surface and its on-dark / on-light text colors.
+    expect(media(withSurface('#e8f1f6', '#e8f1f6', '#101314'), 'light')).toBe(
+      'light',
+    );
+  });
+
+  it('a surface parseColor cannot read starts from the color mode', () => {
+    expect(media(withSurface('oklch(0.95 0.01 230)'), 'light')).toBe('dark');
+    expect(media(withSurface('hsl(200 30% 95%)'), 'dark')).toBe('light');
   });
 });
