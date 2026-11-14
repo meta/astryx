@@ -1200,6 +1200,8 @@ jobs:
         env:
           SCOPED: ${{ github.event_name == 'pull_request' && steps.scope.outputs.vitest_full_suite == 'false' }}
           VITEST_SHARD_TIMES_FILE: ${{ runner.temp }}/node-file-times.json
+          # Each swizzle-proof slice adds its summary here, for the drift check.
+          SWIZZLE_PROOF_SUMMARY: ${{ runner.temp }}/swizzle-proof.jsonl
           # The split gives the first leg its own later steps' time
           # (scripts/vitest-node-durations.json legOneSteps), under those
           # steps' scope condition. Every leg sets the same value, so every
@@ -1237,7 +1239,7 @@ jobs:
       # job limit. Files the change does not touch are not checked.
       - name: Check the recorded times of the test files this change touches
         if: always() && github.event_name == 'pull_request' && steps.node-tests.outcome != 'skipped'
-        run: node .github/scripts/node-time-drift.mjs --times "$RUNNER_TEMP/node-file-times.json" --changed HEAD^1
+        run: node .github/scripts/node-time-drift.mjs --times "$RUNNER_TEMP/node-file-times.json" --swizzle "$RUNNER_TEMP/swizzle-proof.jsonl" --changed HEAD^1
 
       # A Lab-only change may carry a Lab component's CLI discovery entry; the
       # committed list must match its generator (spec:AST-030 FR26).

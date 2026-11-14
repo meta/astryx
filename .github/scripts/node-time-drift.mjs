@@ -17,7 +17,8 @@
  * seconds over that. A file with no recorded time counts as the median and is
  * not checked. The failure names the one entry to update and its value.
  *
- * @input --times <file> (the shard watchdog's per-file seconds),
+ * @input --times <file> (the shard watchdog's per-file seconds), --swizzle
+ *   <file> (optional: each swizzle-proof slice's summary, one JSON a line),
  *   --changed <base> (the merge commit's first parent)
  * @output exit 1 and one error line per drifted file; exit 0 otherwise
  * @position .github/scripts — run by ci.yml's Node legs after their tests
@@ -27,6 +28,8 @@ import {execFileSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
+
+import {slowSlices} from '../../scripts/lib/swizzle-cost.mjs';
 
 export const RATIO = 1.5;
 export const MARGIN_S = 60;
@@ -94,6 +97,28 @@ export function drifted(measured, recorded, changed) {
     .sort((a, b) => b.measured - b.recorded - (a.measured - a.recorded));
 }
 
+/** Paths whose change can make the swizzle-proof model wrong. */
+const MODEL_INPUTS =
+  /^(?:packages\/cli\/test\/swizzle-proof\/|scripts\/vitest-shard-sequencer\.mjs$|scripts\/lib\/swizzle-cost\.mjs$|scripts\/vitest-node-durations\.json$)/;
+
+/**
+ * The swizzle-proof slices that ran past the record's model, and whether
+ * that fails the leg: only when the change touches what the model depends on
+ * (the proof, the split, the model's code or the record). Elsewhere a slow
+ * slice is a warning, so a slow runner never fails an unrelated change.
+ * @param {import('../../scripts/lib/swizzle-cost.mjs').SliceSample[]} samples
+ * @param {import('../../scripts/lib/swizzle-cost.mjs').SliceModel | undefined} model
+ * @param {string[]} changed
+ * @param {number} factor the leg's slowdown
+ */
+export function slowSwizzleSlices(samples, model, changed, factor) {
+  if (!model) return {fails: false, slow: []};
+  return {
+    fails: changed.some(file => MODEL_INPUTS.test(file)),
+    slow: slowSlices(samples, model, {factor, ratio: RATIO, margin: MARGIN_S}),
+  };
+}
+
 /** @param {string[]} args */
 function main(args) {
   const option = (/** @type {string} */ name) => args[args.indexOf(name) + 1];
@@ -110,9 +135,8 @@ function main(args) {
     return 0;
   }
   const measured = JSON.parse(fs.readFileSync(timesFile, 'utf8'));
-  const recorded = JSON.parse(
-    fs.readFileSync(path.join(ROOT, RECORD), 'utf8'),
-  ).seconds;
+  const record = JSON.parse(fs.readFileSync(path.join(ROOT, RECORD), 'utf8'));
+  const recorded = record.seconds;
   const changed = execFileSync(
     'git',
     ['-C', ROOT, 'diff', '--name-only', base, 'HEAD'],
@@ -144,7 +168,23 @@ function main(args) {
   }
   if (late.length === 0)
     console.log('The changed Node test files run within their recorded times.');
-  return late.length ? 1 : 0;
+  const swizzleFile = args.includes('--swizzle') ? option('--swizzle') : '';
+  const samples =
+    swizzleFile && fs.existsSync(swizzleFile)
+      ? fs
+          .readFileSync(swizzleFile, 'utf8')
+          .split('\n')
+          .filter(Boolean)
+          .map(line => JSON.parse(line))
+      : [];
+  const model = record.swizzleProof;
+  const swizzle = slowSwizzleSlices(samples, model, changed, leg.factor);
+  for (const {slice, affected, measured: now, expected} of swizzle.slow) {
+    console.log(
+      `::${swizzle.fails ? 'error' : 'warning'} title=Recorded swizzle-proof model is stale::Swizzle-proof slice ${slice} proved ${affected} target(s) in ${now} s; the model in ${RECORD} (setup ${model.setupSeconds} s, proof setup ${model.proveBaseSeconds} s, ${model.perTargetSeconds} s per target) gives ${expected} s, and ${legSays}. Run \`node scripts/vitest-shard-sequencer.mjs record\` on this run's Node leg logs to refit it.`,
+    );
+  }
+  return late.length || (swizzle.fails && swizzle.slow.length) ? 1 : 0;
 }
 
 if (

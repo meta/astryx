@@ -15,6 +15,8 @@ import DurationShardSequencer, {
   readDurations,
   recordDurations,
   idleSwizzleSlices,
+  swizzleSliceCosts,
+  boundWithin,
 } from './vitest-shard-sequencer.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -371,6 +373,84 @@ describe('duration-balanced Node legs', () => {
     vi.stubEnv('SWIZZLE_PROOF_CHANGED', 'docs/README.md');
     vi.stubEnv('SWIZZLE_PROOF_ALL', '1');
     expect([...(await idleSwizzleSlices(files))]).toEqual([]);
+  });
+
+  describe('a slice the change reaches is costed by the targets it holds', () => {
+    const slices = Array.from(
+      {length: 8},
+      (_, i) =>
+        `packages/cli/test/swizzle-proof/swizzle-proof.${i + 1}.test.mjs`,
+    );
+    const files = ['a.test.mjs', ...slices];
+    const model = {setupSeconds: 28, proveBaseSeconds: 97, perTargetSeconds: 4};
+    const record = {
+      seconds: Object.fromEntries(slices.map(file => [file, 300])),
+      swizzleProof: model,
+    };
+    const scope =
+      (mode, relevant = []) =>
+      () => ({scope: {mode}, relevant});
+    const held = [16, 0, 1, 21, 3, 0, 2, 60];
+
+    it('by the model, held by held, capped at the recorded time', async () => {
+      const {idle, costs} = await swizzleSliceCosts(files, record, {
+        plan: scope('affected', ['packages/core/src/Button/Button.tsx']),
+        bound: async (relevant, count) => {
+          expect(relevant).toEqual(['packages/core/src/Button/Button.tsx']);
+          expect(count).toBe(8);
+          return held;
+        },
+      });
+      expect(idle.size).toBe(0);
+      expect(slices.map(file => costs.get(file))).toEqual([
+        189, 28, 129, 209, 137, 28, 133, 300,
+      ]);
+    });
+
+    it('at the recorded time when the bound misses its budget, the record has no model, or the scope is all', async () => {
+      const cases = [
+        [record, scope('affected'), async () => null],
+        [{seconds: record.seconds}, scope('affected'), async () => held],
+        [record, scope('all'), async () => held],
+      ];
+      for (const [rec, plan, bound] of cases) {
+        const {idle, costs} = await swizzleSliceCosts(files, rec, {
+          plan,
+          bound,
+        });
+        expect(idle.size).toBe(0);
+        expect(costs.size).toBe(0);
+      }
+    });
+
+    it('idle in the scope none, without computing a bound', async () => {
+      const {idle, costs} = await swizzleSliceCosts(files, record, {
+        plan: scope('none'),
+        bound: async () => {
+          throw new Error('no bound in the scope none');
+        },
+      });
+      expect([...idle].sort()).toEqual([...slices].sort());
+      expect(costs.size).toBe(0);
+    });
+
+    it('spreads the legs by those costs', () => {
+      const costs = new Map(slices.map((file, i) => [file, i < 2 ? 300 : 28]));
+      const legs = partitionByDuration(files, 4, record.seconds, {costs});
+      const legOf = file => legs.findIndex(leg => leg.includes(file));
+      expect(legOf(slices[0])).not.toBe(legOf(slices[1]));
+      expect(legs.flat().sort()).toEqual([...files].sort());
+    });
+
+    it('stops waiting for the bound at its budget', async () => {
+      const started = Date.now();
+      expect(
+        await boundWithin(['packages/core/src/Button/Button.tsx'], 8, {
+          budgetMs: 1,
+        }),
+      ).toBeNull();
+      expect(Date.now() - started).toBeLessThan(15_000);
+    }, 30_000);
   });
 
   it('reads no swizzle-proof scope when no slice is in the run', async () => {

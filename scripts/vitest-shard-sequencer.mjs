@@ -25,8 +25,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
+import {Worker} from 'node:worker_threads';
 import {BaseSequencer} from 'vitest/node';
 import {costOf, slowestFirst, splitByDuration} from './lib/duration-split.mjs';
+import {
+  fitSwizzleModel,
+  sliceCost,
+  swizzleSamples,
+} from './lib/swizzle-cost.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const DURATIONS = path.join(ROOT, 'scripts/vitest-node-durations.json');
@@ -48,12 +54,14 @@ export function partitionByDuration(
   files,
   count,
   seconds,
-  {legOneSeconds = 0, idle = new Set()} = {},
+  {legOneSeconds = 0, idle = new Set(), costs = new Map()} = {},
 ) {
   const recorded = costOf(files, seconds);
   // A file that runs no test in this run (the swizzle-proof slices when the
-  // change reaches no component) costs only its import.
-  const cost = file => (idle.has(file) ? 0 : recorded(file));
+  // change reaches no component) costs only its import; a slice the change
+  // reaches costs what its targets take (swizzleSliceCosts).
+  const cost = file =>
+    idle.has(file) ? 0 : (costs.get(file) ?? recorded(file));
   // Every file also costs its import and transform, which its recorded time
   // leaves out; without it the hundreds of files recorded at 0 s would all go
   // to one leg.
@@ -105,6 +113,15 @@ export function recordLegOneSteps(text, names) {
       Math.round((to - from) / 1000),
     ]),
   );
+}
+
+/** The whole record, or an empty one when the file cannot be read. */
+export function readRecord(file = DURATIONS) {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return {};
+  }
 }
 
 /** Recorded seconds per file, or none when the file cannot be read. */
@@ -179,6 +196,90 @@ export async function idleSwizzleSlices(files) {
   return new Set(scope.mode === 'none' ? slices : []);
 }
 
+/** How long the split waits for the affected targets once they are listed. */
+export const BOUND_BUDGET_MS = 2000;
+/** How long the split waits for the target list itself. */
+const LIST_BUDGET_MS = 10_000;
+
+/**
+ * For each slice, how many of its targets the change can affect, from
+ * swizzle-proof/bound-worker.mjs (the same functions the slices run), or
+ * null when the worker fails or misses its time budget.
+ * @param {string[]} relevant
+ * @param {number} count slices
+ * @param {{budgetMs?: number, listMs?: number}} [budget]
+ * @returns {Promise<number[] | null>}
+ */
+export function boundWithin(
+  relevant,
+  count,
+  {budgetMs = BOUND_BUDGET_MS, listMs = LIST_BUDGET_MS} = {},
+) {
+  return new Promise(resolve => {
+    const worker = new Worker(
+      path.join(ROOT, 'packages/cli/test/swizzle-proof/bound-worker.mjs'),
+      {workerData: {relevant, count}},
+    );
+    let timer = setTimeout(() => finish(null), listMs);
+    let done = false;
+    const finish = result => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      void worker.terminate();
+      resolve(result);
+    };
+    worker.on('message', message => {
+      if (message.listed) {
+        clearTimeout(timer);
+        timer = setTimeout(() => finish(null), budgetMs);
+      } else finish(message.held);
+    });
+    worker.on('error', () => finish(null));
+    worker.on('exit', () => finish(null));
+  });
+}
+
+/**
+ * The swizzle-proof slices' cost in this run. In the scope `none` every slice
+ * is idle. In the scope `affected` each slice costs what the record's model
+ * gives for the targets it holds that the change can affect (the targets
+ * come from the same proof.mjs functions the slices run). Every other case
+ * keeps the slices' recorded time: the scope `all`, a record without the
+ * model, and a bound that fails or misses its budget.
+ * @param {string[]} files
+ * @param {any} record the whole record (readRecord)
+ * @param {{bound?: typeof boundWithin, plan?: () => {scope: {mode: string}, relevant: string[]}}} [inject]
+ * @returns {Promise<{idle: Set<string>, costs: Map<string, number>}>}
+ */
+export async function swizzleSliceCosts(files, record, inject = {}) {
+  const slices = files.filter(file => SWIZZLE_PROOF.test(file));
+  const costs = new Map();
+  if (slices.length === 0) return {idle: new Set(), costs};
+  const plan =
+    inject.plan ??
+    (async () => {
+      const {runScope} = await import(
+        pathToFileURL(
+          path.join(ROOT, 'packages/cli/test/swizzle-proof/proof.mjs'),
+        ).href
+      );
+      return runScope({all: process.env.SWIZZLE_PROOF_ALL === '1'});
+    });
+  const {scope, relevant} = await plan();
+  if (scope.mode === 'none') return {idle: new Set(slices), costs};
+  const model = record?.swizzleProof;
+  if (scope.mode !== 'affected' || !model) return {idle: new Set(), costs};
+  const held = await (inject.bound ?? boundWithin)(relevant, slices.length);
+  if (!held) return {idle: new Set(), costs};
+  for (const file of slices) {
+    const index = Number(/swizzle-proof\.(\d+)\.test\./.exec(file)?.[1]) - 1;
+    if (!(index >= 0 && index < held.length)) return {idle: new Set(), costs};
+    costs.set(file, sliceCost(model, held[index], record.seconds?.[file]));
+  }
+  return {idle: new Set(), costs};
+}
+
 /**
  * The record after a run. The run's times replace those files' times; files
  * the run did not reach keep their earlier times; a swizzle-proof slice keeps
@@ -223,10 +324,13 @@ export default class DurationShardSequencer extends BaseSequencer {
     const legOneSeconds =
       process.env.VITEST_LEG_ONE_RESERVE === '1' ? readLegOneSeconds() : 0;
     const files = node.map(relative);
+    const record = readRecord();
+    const {idle, costs} = await swizzleSliceCosts(files, record);
     const mine = new Set(
-      partitionByDuration(files, count, readDurations(), {
+      partitionByDuration(files, count, record.seconds ?? {}, {
         legOneSeconds,
-        idle: await idleSwizzleSlices(files),
+        idle,
+        costs,
       })[index - 1],
     );
     return [
@@ -290,6 +394,12 @@ if (
       legOneSteps,
       recordLegOneSteps(fs.readFileSync(log, 'utf8'), Object.keys(legOneSteps)),
     );
+  // The swizzle-proof slices' model, from their summary lines in the same
+  // logs; a part the logs cannot show keeps its earlier value.
+  const swizzleProof = fitSwizzleModel(
+    logs.flatMap(log => swizzleSamples(fs.readFileSync(log, 'utf8'))),
+    current.swizzleProof,
+  );
   fs.writeFileSync(
     DURATIONS,
     `${JSON.stringify(
@@ -298,6 +408,7 @@ if (
         source: 'recorded Node leg logs',
         seconds: mergeRecord(current.seconds ?? {}, seconds),
         legOneSteps,
+        ...(swizzleProof ? {swizzleProof} : {}),
       },
       null,
       2,

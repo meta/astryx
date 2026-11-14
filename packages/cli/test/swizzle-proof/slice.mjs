@@ -35,17 +35,19 @@ export function proveSlice(index, count) {
           browser: process.env.SWIZZLE_PROOF_BROWSER === '1',
         });
         const failures = run.results.filter(r => r.failure);
-        console.log(
-          `SWIZZLE_PROOF ${JSON.stringify({
-            slice: `${index + 1}/${count}`,
-            offered: run.offered,
-            affected: run.affected,
-            reason: run.reason,
-            failed: failures.length,
-            timings: run.timings,
-            totalMs: run.totalMs,
-          })}`,
-        );
+        const summary = JSON.stringify({
+          slice: `${index + 1}/${count}`,
+          offered: run.offered,
+          affected: run.affected,
+          reason: run.reason,
+          failed: failures.length,
+          timings: run.timings,
+          totalMs: run.totalMs,
+        });
+        console.log(`SWIZZLE_PROOF ${summary}`);
+        // The Node legs' drift check reads every slice's summary from here.
+        if (process.env.SWIZZLE_PROOF_SUMMARY)
+          fs.appendFileSync(process.env.SWIZZLE_PROOF_SUMMARY, `${summary}\n`);
         for (const r of failures) {
           console.log(
             `SWIZZLE_PROOF_FAIL ${r.key} [${r.failure.step}] ${r.failure.error}`,

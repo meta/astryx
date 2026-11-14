@@ -1083,6 +1083,7 @@
     "packages/cli/test/readme-prose.test.mjs": 0.5,
     "packages/cli/test/runner-commands.test.mjs": 2.6,
     "packages/cli/test/search-consumer-ranking.test.mjs": 3,
+    "packages/cli/test/swizzle-proof/bound.test.mjs": 21.0,
     "packages/cli/test/swizzle-proof/scope.test.mjs": 0,
     "packages/cli/test/swizzle-proof/swizzle-proof.1.test.mjs": 348,
     "packages/cli/test/swizzle-proof/swizzle-proof.2.test.mjs": 340,
@@ -1230,5 +1231,10 @@
     "Offline-media browser cases": 17,
     "Theme editor browser case": 30,
     "Run the theme-family contract": 42
+  },
+  "swizzleProof": {
+    "setupSeconds": 27.8,
+    "proveBaseSeconds": 96.8,
+    "perTargetSeconds": 3.8
   }
 }

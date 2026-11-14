@@ -7,6 +7,7 @@ import {
   RATIO,
   drifted,
   legFactor,
+  slowSwizzleSlices,
 } from './node-time-drift.mjs';
 
 const CHANGES = 'packages/cli/test/packed-gather-cache.changes.test.mjs';
@@ -128,5 +129,48 @@ describe('the recorded-time check for the test files a change touches', () => {
 
   it('skips a changed file with no recorded time (the legs count it as the median)', () => {
     expect(drifted({'new.test.mjs': 400}, {}, ['new.test.mjs'])).toEqual([]);
+  });
+});
+
+describe('the swizzle-proof slices against the recorded model', () => {
+  const model = {setupSeconds: 28, proveBaseSeconds: 97, perTargetSeconds: 4};
+  const slow = {
+    slice: '2/8',
+    affected: 1,
+    timings: {list: 1000, eject: 25_000, affected: 2000},
+    totalMs: 310_000,
+  };
+  const quick = {...slow, slice: '1/8', totalMs: 130_000};
+
+  it('fails the leg only when the change touches what the model depends on', () => {
+    for (const file of [
+      'packages/cli/test/swizzle-proof/proof.mjs',
+      'scripts/vitest-shard-sequencer.mjs',
+      'scripts/lib/swizzle-cost.mjs',
+      'scripts/vitest-node-durations.json',
+    ]) {
+      const result = slowSwizzleSlices([slow, quick], model, [file], 1);
+      expect(result.fails).toBe(true);
+      expect(result.slow.map(each => each.slice)).toEqual(['2/8']);
+    }
+  });
+
+  it('only warns on any other change, so a slow runner never fails it', () => {
+    const result = slowSwizzleSlices(
+      [slow, quick],
+      model,
+      ['packages/core/src/Button/Button.tsx'],
+      1,
+    );
+    expect(result).toEqual({
+      fails: false,
+      slow: [{slice: '2/8', affected: 1, measured: 310, expected: 129}],
+    });
+  });
+
+  it('judges nothing without a recorded model', () => {
+    expect(
+      slowSwizzleSlices([slow], undefined, ['scripts/lib/swizzle-cost.mjs'], 1),
+    ).toEqual({fails: false, slow: []});
   });
 });

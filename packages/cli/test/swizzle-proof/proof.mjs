@@ -266,7 +266,7 @@ export function keyOf(t) {
  * @param {Map<string, {dir: string, outBase: string, files: string[]}>} copies
  * @param {(key: string, step: string, error: unknown) => void} fail
  */
-async function eject(targets, project, copies, fail) {
+export async function eject(targets, project, copies, fail) {
   const {swizzle} = await cliApi();
   for (const t of targets) {
     const out = path.join(
@@ -367,8 +367,6 @@ export function sourcesOf(t, copy, packages, memo, closures = new Map()) {
   if (componentSource == null) return null;
   /** @type {Set<string>} */
   const sources = new Set();
-  const named =
-    /import\s+(?:type\s+)?(\{[^}]*\}|\*\s+as\s+\w+|\w+)?\s*(?:,\s*(\{[^}]*\}))?\s*from\s*['"](@astryxdesign\/[^'"]+)['"]/g;
   for (const file of copy.files) {
     // Swizzle writes the component's own files under its output folder,
     // whatever folder they come from; helpers keep their path in the
@@ -386,44 +384,297 @@ export function sourcesOf(t, copy, packages, memo, closures = new Map()) {
           : path.join(srcOf(t.pkg), rel),
       );
     }
-    if (!/\.tsx?$/.test(file)) continue;
-    for (const [, head, tail, spec] of fs
-      .readFileSync(file, 'utf8')
-      .matchAll(named)) {
-      const [, name, ...sub] = spec.split('/');
-      const owner = packages.get(`@astryxdesign/${name}`);
-      if (!owner) continue;
-      const target = sourceExportTarget(
-        owner.manifest,
-        owner.dir,
-        sub.length ? `./${sub.join('/')}` : '.',
-      );
-      if (!target) continue;
-      // The export's entry module routes the import as the manifest does.
-      sources.add(target);
-      const list = [head, tail].filter(x => x && x.startsWith('{'));
-      if (list.length === 0) continue;
-      if (!memo.has(target)) {
-        let origins;
-        try {
-          origins = moduleExportOrigins(target, {types: true});
-        } catch {
-          origins = new Map();
-        }
-        memo.set(target, origins);
+    if (/\.tsx?$/.test(file))
+      addImportedSources(file, packages, memo, closures, sources);
+  }
+  return sources;
+}
+
+/**
+ * Adds what one module's package imports reach: the entry module of each
+ * package export it imports from, and the module that defines each public
+ * name it imports with every module that one imports. A slice reads a copy's
+ * files with it, and the Node legs' split reads the repository's own (see
+ * {@link affectedBound}) in the same order: a package export's entry module,
+ * then what it reaches.
+ * @param {string} file
+ * @param {Map<string, {dir: string, manifest: any}>} packages
+ * @param {Map<string, Map<string, {file: string}>>} memo
+ * @param {Map<string, Set<string>>} closures
+ * @param {Set<string>} sources
+ */
+function addImportedSources(file, packages, memo, closures, sources) {
+  const named =
+    /import\s+(?:type\s+)?(\{[^}]*\}|\*\s+as\s+\w+|\w+)?\s*(?:,\s*(\{[^}]*\}))?\s*from\s*['"](@astryxdesign\/[^'"]+)['"]/g;
+  for (const [, head, tail, spec] of fs
+    .readFileSync(file, 'utf8')
+    .matchAll(named)) {
+    const [, name, ...sub] = spec.split('/');
+    const owner = packages.get(`@astryxdesign/${name}`);
+    if (!owner) continue;
+    const target = sourceExportTarget(
+      owner.manifest,
+      owner.dir,
+      sub.length ? `./${sub.join('/')}` : '.',
+    );
+    if (!target) continue;
+    // The export's entry module routes the import as the manifest does.
+    sources.add(target);
+    const list = [head, tail].filter(x => x && x.startsWith('{'));
+    if (list.length === 0) continue;
+    if (!memo.has(target)) {
+      let origins;
+      try {
+        origins = moduleExportOrigins(target, {types: true});
+      } catch {
+        origins = new Map();
       }
-      for (const entry of list.join(',').replace(/[{}]/g, '').split(',')) {
-        const imported = entry
-          .trim()
-          .replace(/^type\s+/, '')
-          .split(/\s+as\s+/)[0];
-        if (!imported) continue;
-        const origin = memo.get(target).get(imported)?.file ?? target;
-        for (const file of localClosure(origin, closures)) sources.add(file);
+      memo.set(target, origins);
+    }
+    for (const entry of list.join(',').replace(/[{}]/g, '').split(',')) {
+      const imported = entry
+        .trim()
+        .replace(/^type\s+/, '')
+        .split(/\s+as\s+/)[0];
+      if (!imported) continue;
+      const origin = memo.get(target).get(imported)?.file ?? target;
+      for (const file of localClosure(origin, closures)) sources.add(file);
+    }
+  }
+}
+
+/**
+ * The targets slice `index` of `count` proves: every `count`-th target from
+ * `index`. The Node legs' split uses it too, so it costs each slice by the
+ * targets that slice holds.
+ * @template T
+ * @param {T[]} targets
+ * @param {number} index
+ * @param {number} count
+ * @returns {T[]}
+ */
+export function sliceOf(targets, index, count) {
+  return targets.filter((_, i) => i % count === index);
+}
+
+/**
+ * A target's entry module in the repository: the shipped `<name>.tsx` (or
+ * `.ts`) in its package's source, outside the generated translations, and the
+ * one in a folder of the same name when there are several. Null when there is
+ * no single one.
+ * @param {{name: string, pkg: string}} t
+ * @param {Map<string, {dir: string}>} packages
+ * @param {Map<string, string[]>} listings cache of each package's shipped modules
+ */
+function entryModule(t, packages, listings) {
+  const owner = packages.get(t.pkg);
+  if (!owner) return null;
+  const src = path.join(owner.dir, 'src');
+  if (!listings.has(src)) {
+    let files = [];
+    try {
+      files = fs
+        .readdirSync(src, {recursive: true})
+        .map(String)
+        .filter(
+          rel =>
+            /\.tsx?$/.test(rel) &&
+            !NOT_SHIPPED.test(rel) &&
+            !rel.startsWith(`i18n${path.sep}`),
+        )
+        .map(rel => path.join(src, rel));
+    } catch {
+      // A package without a source folder has no entry module.
+    }
+    listings.set(src, files);
+  }
+  const named = listings
+    .get(src)
+    .filter(file => /^(.*)\.tsx?$/.exec(path.basename(file))?.[1] === t.name);
+  const own = named.filter(
+    file => path.basename(path.dirname(file)) === t.name,
+  );
+  if (own.length === 1) return own[0];
+  return named.length === 1 ? named[0] : null;
+}
+
+/**
+ * A module and every module it imports by relative path, transitively, as
+ * {@link localClosure} finds them, with each module read and resolved once
+ * across every call: the bound walks the same shared modules for many
+ * targets. The same read keeps the module's package import specifiers.
+ * @param {string} file
+ * @param {{edges: Map<string, string[]>, closures: Map<string, Set<string>>, specs: Map<string, string[]>}} caches
+ * @returns {Set<string>}
+ */
+function cachedClosure(file, caches) {
+  const cached = caches.closures.get(file);
+  if (cached) return cached;
+  /** @type {Set<string>} */
+  const seen = new Set();
+  const queue = [file];
+  while (queue.length > 0) {
+    const next = /** @type {string} */ (queue.pop());
+    if (seen.has(next)) continue;
+    seen.add(next);
+    let edges = caches.edges.get(next);
+    if (!edges) {
+      edges = [];
+      let code = '';
+      try {
+        code = fs.readFileSync(next, 'utf8');
+      } catch {
+        // A module that cannot be read imports nothing.
+      }
+      caches.specs.set(
+        next,
+        [...code.matchAll(/\bfrom\s*['"](@astryxdesign\/[^'"]+)['"]/g)].map(
+          match => match[1],
+        ),
+      );
+      for (const [, spec] of code.matchAll(
+        /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)['"](\.[^'"]+)['"]/g,
+      )) {
+        const resolved = resolveLocalModule(spec, next);
+        if (resolved) edges.push(resolved);
+      }
+      caches.edges.set(next, edges);
+    }
+    for (const each of edges) if (!seen.has(each)) queue.push(each);
+  }
+  caches.closures.set(file, seen);
+  return seen;
+}
+
+/**
+ * The folder named after a target in its package's source: the top-level one,
+ * else the only one outside the generated translations, else null.
+ * @param {{name: string, pkg: string}} t
+ * @param {Map<string, {dir: string}>} packages
+ */
+function componentFolder(t, packages) {
+  const owner = packages.get(t.pkg);
+  if (!owner) return null;
+  const src = path.join(owner.dir, 'src');
+  const top = path.join(src, t.name);
+  if (fs.existsSync(top) && fs.statSync(top).isDirectory()) return top;
+  let matches = [];
+  try {
+    matches = fs
+      .readdirSync(src, {recursive: true, withFileTypes: true})
+      .filter(entry => entry.isDirectory() && entry.name === t.name)
+      .map(entry => path.join(entry.parentPath ?? entry.path, entry.name))
+      .filter(dir => !path.relative(src, dir).startsWith(`i18n${path.sep}`));
+  } catch {
+    // A package without a source folder has no component folder.
+  }
+  return matches.length === 1 ? matches[0] : null;
+}
+
+/**
+ * Every shipped file under a folder, outside the generated translations.
+ * @param {string} folder
+ * @param {Map<string, string[]>} listings cache, by folder
+ */
+function folderFiles(folder, listings) {
+  const key = `files:${folder}`;
+  if (!listings.has(key))
+    listings.set(
+      key,
+      fs
+        .readdirSync(folder, {recursive: true, withFileTypes: true})
+        .filter(entry => entry.isFile())
+        .map(entry => path.join(entry.parentPath ?? entry.path, entry.name))
+        .filter(file => {
+          const rel = path.relative(folder, file);
+          return !NOT_SHIPPED.test(rel) && !rel.startsWith(`i18n${path.sep}`);
+        }),
+    );
+  return listings.get(key);
+}
+
+/**
+ * Every source file a copy of the target can depend on, read from the
+ * repository without copying it: every shipped file of the folder that
+ * holds the target's entry module, each module those import by relative
+ * path, and what
+ * every module the entry of each package export they import reaches. This
+ * holds every file {@link sourcesOf} finds for a copy, and more: where
+ * {@link addImportedSources} follows each imported name to the module that
+ * defines it, this takes all the entry reaches, which needs no syntax tree
+ * and keeps it fast enough to run before the tests. A component with no
+ * entry module named after it uses its folder. Null when neither is found.
+ * @param {{name: string, pkg: string}} t
+ * @param {Map<string, {dir: string, manifest: any}>} packages
+ * @param {{closures: Map<string, Set<string>>, listings: Map<string, string[]>, edges: Map<string, string[]>, specs: Map<string, string[]>, entries: Map<string, string | null>}} caches
+ * @returns {Set<string> | null}
+ */
+export function boundSources(t, packages, caches) {
+  const entry = entryModule(t, packages, caches.listings);
+  // A component without an entry module named after it is a folder of
+  // modules (Layer, Swipe): its folder is its source.
+  const folder =
+    entry == null ? componentFolder(t, packages) : path.dirname(entry);
+  if (folder == null) return null;
+  // A copy carries the component's folder, and a flat package's copy (Charts,
+  // Rich Text) or a shared folder's (Lab's Chart) carries its neighbours too:
+  // every shipped file of the folder is a root, so the bound never misses one.
+  const roots = folderFiles(folder, caches.listings);
+  /** @type {Set<string>} */
+  const sources = new Set();
+  for (const file of roots) {
+    sources.add(file);
+    if (!/\.[cm]?[jt]sx?$/.test(file)) continue;
+    for (const reached of cachedClosure(file, caches)) {
+      sources.add(reached);
+      for (const spec of caches.specs.get(reached) ?? []) {
+        let entry = caches.entries.get(spec);
+        if (entry === undefined) {
+          const [, name, ...sub] = spec.split('/');
+          const owner = packages.get(`@astryxdesign/${name}`);
+          entry = owner
+            ? sourceExportTarget(
+                owner.manifest,
+                owner.dir,
+                sub.length ? `./${sub.join('/')}` : '.',
+              )
+            : null;
+          caches.entries.set(spec, entry);
+        }
+        if (entry)
+          for (const each of cachedClosure(entry, caches)) sources.add(each);
       }
     }
   }
   return sources;
+}
+
+/**
+ * The targets a change can affect, read from the repository alone: those
+ * whose {@link boundSources} hold a changed file, and those whose folder
+ * cannot be found (fail closed). It never misses a target the slice proves,
+ * so the Node legs' split can cost the slices by it before any of them runs.
+ * @param {Array<{name: string, pkg: string, key: string}>} targets
+ * @param {string[]} relevant the changed component source files, repository-relative
+ * @returns {Set<string>} target keys
+ */
+export function affectedBound(targets, relevant) {
+  const packages = workspacePackages();
+  const caches = {
+    closures: new Map(),
+    listings: new Map(),
+    edges: new Map(),
+    specs: new Map(),
+    entries: new Map(),
+  };
+  const changed = new Set(relevant.map(file => path.join(REPO, file)));
+  const keys = new Set();
+  for (const t of targets) {
+    const sources = boundSources(t, packages, caches);
+    if (sources == null || [...sources].some(file => changed.has(file)))
+      keys.add(t.key);
+  }
+  return keys;
 }
 
 /**
@@ -506,6 +757,35 @@ export function runScope({all = false} = {}) {
 }
 
 /**
+ * The targets among `targets` a change affects, read from their copies: those
+ * whose copy depends on a changed source file ({@link sourcesOf}), and those
+ * that did not eject, cannot be mapped, or depend on a file that does not
+ * exist (each is proven, so its failure shows). The slices prove these, and
+ * {@link affectedBound} must hold every one of them.
+ * @param {Array<{name: string, pkg: string, key: string}>} targets
+ * @param {Map<string, any>} ejected the copies, by target key
+ * @param {string[]} relevant the changed component source files, repository-relative
+ * @param {{memo?: Map<string, any>, closures?: Map<string, Set<string>>}} [caches]
+ *   kept across calls for the same targets (a test that asks about several changes)
+ * @returns {Array<{name: string, pkg: string, key: string}>}
+ */
+export function exactAffected(targets, ejected, relevant, caches = {}) {
+  const packages = workspacePackages();
+  const memo = (caches.memo ??= new Map());
+  const closures = (caches.closures ??= new Map());
+  const changedFiles = new Set(relevant.map(file => path.join(REPO, file)));
+  return targets.filter(t => {
+    if (!ejected.has(t.key)) return true;
+    const sources = sourcesOf(t, ejected.get(t.key), packages, memo, closures);
+    if (sources == null) return true;
+    for (const file of sources) {
+      if (changedFiles.has(file) || !fs.existsSync(file)) return true;
+    }
+    return false;
+  });
+}
+
+/**
  * Runs one slice of the proof: the targets at `index` of every `count`, in
  * the scope {@link proofScope} chooses. In the affected scope the slice
  * proves the targets whose copy depends on a changed source file.
@@ -534,9 +814,7 @@ export async function runSlice({
   createProject(project);
   const timings = {};
   const listStart = Date.now();
-  const slice = (await listTargets(project)).filter(
-    (_, i) => i % count === index,
-  );
+  const slice = sliceOf(await listTargets(project), index, count);
   timings.list = Date.now() - listStart;
   /** @type {Map<string, any>} */
   const ejected = new Map();
@@ -550,28 +828,8 @@ export async function runSlice({
   let affected = slice;
   let reason = scope.mode === 'all' ? scope.reason : '';
   if (!reason) {
-    const packages = workspacePackages();
-    const memo = new Map();
-    const closures = new Map();
-    const changedFiles = new Set(relevant.map(file => path.join(REPO, file)));
     const affectStart = Date.now();
-    affected = slice.filter(t => {
-      // A target that did not eject is proven, so its failure shows.
-      if (!ejected.has(t.key)) return true;
-      const sources = sourcesOf(
-        t,
-        ejected.get(t.key),
-        packages,
-        memo,
-        closures,
-      );
-      if (sources == null) return true;
-      for (const file of sources) {
-        // A source that does not exist means the mapping is wrong: prove it.
-        if (changedFiles.has(file) || !fs.existsSync(file)) return true;
-      }
-      return false;
-    });
+    affected = exactAffected(slice, ejected, relevant);
     timings.affected = Date.now() - affectStart;
     reason = `${relevant.length} changed source file(s); ${affected.length} of ${slice.length} target(s) in this slice depend on them`;
   }

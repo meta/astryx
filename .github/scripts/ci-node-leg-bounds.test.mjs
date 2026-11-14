@@ -50,7 +50,7 @@ describe('the Node legs inside their job limit', () => {
       "always() && github.event_name == 'pull_request' && steps.node-tests.outcome != 'skipped'",
     );
     expect(check.run).toBe(
-      'node .github/scripts/node-time-drift.mjs --times "$RUNNER_TEMP/node-file-times.json" --changed HEAD^1',
+      'node .github/scripts/node-time-drift.mjs --times "$RUNNER_TEMP/node-file-times.json" --swizzle "$RUNNER_TEMP/swizzle-proof.jsonl" --changed HEAD^1',
     );
   });
 
