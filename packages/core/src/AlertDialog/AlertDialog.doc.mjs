@@ -170,6 +170,13 @@ export const docs = {
       description: 'Shows loading spinner on the action button.',
     },
     {
+      name: 'isActionDisabled',
+      type: 'boolean',
+      default: 'false',
+      description:
+        'Disables the action button (disabled look, not activatable); Cancel and Escape still work. For a confirmation that waits on the person, such as an unchecked "I understand" box. Use isActionLoading for the action\'s own work in progress.',
+    },
+    {
       name: 'width',
       type: 'number | string',
       default: '400',
