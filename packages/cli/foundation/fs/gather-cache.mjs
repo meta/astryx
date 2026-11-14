@@ -31,7 +31,9 @@
  *   entries are `search`, `build`, `component`, `template`, `theme`,
  *   `discover`, `docs` and `doctor`. The first such run on a machine makes the
  *   folder and keeps its gathers at once, so the next run (most often the same
- *   session's next command) uses them; doctor never makes it. Only a published CLI stores anything:
+ *   session's next command) uses them; doctor never makes it. A run through
+ *   the host entry keeps them too, keyed on what the host passed
+ *   (hostInputs). Only a published CLI stores anything:
  *   its build id (clients/cli/build-id.generated.json, written at `prepack`)
  *   names its exact code, so a checkout, whose code may change between runs
  *   under the same version, always gathers.
@@ -55,6 +57,7 @@ import {mayHaveIntegrations} from '../integrations/may-have-integrations.mjs';
 import {currentUid, isPrivateDir} from '../env/private-dir.mjs';
 import {userCacheDir} from '../env/user-dirs.mjs';
 import {jitiCacheDir} from './jiti-cache.mjs';
+import {hostedRun} from '../runtime/package-root.mjs';
 import {
   fileStamp,
   recordReads,
@@ -524,7 +527,33 @@ function entryKey(key, id) {
     process.platform,
     process.arch,
     ...key,
+    hostInputs(),
   ]);
+}
+
+/**
+ * What a host passed that decides a gather, or null outside a hosted run: its
+ * package sets, by real path and in its order, and the integrations it
+ * approves. A run reads only some of a package set's files, so their stamps
+ * cannot tell a hosted run from a run of the bin in the same folder. The
+ * run's folder is in each gather's own key.
+ * @returns {{roots: string[], integrations: string[]} | null}
+ */
+function hostInputs() {
+  const hosted = hostedRun();
+  if (hosted == null) return null;
+  return {
+    roots: hosted.roots.map(root =>
+      withoutRecording(() => {
+        try {
+          return fs.realpathSync(root);
+        } catch {
+          return root;
+        }
+      }),
+    ),
+    integrations: [...hosted.integrations],
+  };
 }
 
 /**
