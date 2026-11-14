@@ -18,7 +18,7 @@
  * so the server render sets them aside and draws them after it with React
  * DOM in a small document (charts.mjs).
  *
- * @input workerData {entry, root, served, withoutSegmenter}
+ * @input workerData {entry, root, scope, served, withoutSegmenter}
  * @output one message: {ok: true, markup, css, files, texts, logs} or
  *   {ok: false, error: {code, message, detail?}}
  * @position foundation/render — started by page-host.mjs
@@ -41,8 +41,8 @@ import {CHART_GLOBAL, CHART_ROOTS, chartDocument, chartSize, markLegends} from '
 
 /** @typedef {{level: string, text: string}} PageLog */
 
-/** @type {{entry: string, root: string, served: {dir: string, integrations: string[]} | null, withoutSegmenter?: boolean}} */
-const {entry, root} = workerData;
+/** @type {{entry: string, root: string, scope: string, served: {dir: string, integrations: string[]} | null, withoutSegmenter?: boolean}} */
+const {entry, root, scope} = workerData;
 
 // Some Node builds crash in Intl.Segmenter. Without it, Core splits text by
 // code points, so a joined emoji can count as several characters.
@@ -50,7 +50,8 @@ if (workerData.withoutSegmenter) delete (/** @type {any} */ (Intl)).Segmenter;
 
 /** The package set, for a page outside a project whose folder has no Core of its own. */
 const served = workerData.served && findNodeModulesPackage(path.dirname(entry), '@astryxdesign/core') === null ? workerData.served : null;
-const ROOT_PREFIX = root.endsWith(path.sep) ? root : root + path.sep;
+/** The folder whose modules the page carries (see render-page.mjs `carryScopeOf`). */
+const SCOPE_PREFIX = scope.endsWith(path.sep) ? scope : scope + path.sep;
 
 /** @type {PageLog[]} */
 const logs = [];
@@ -144,10 +145,10 @@ const fnKey = p => {
 
 const NODE_MODULES = `${path.sep}node_modules${path.sep}`;
 
-/** A module of the project itself: inside its folder, not a package.
+/** A module of the page's own: inside the folder whose modules it carries, not a package.
  * @param {string} file */
 const isLocal = file =>
-  !file.includes(NODE_MODULES) && (file === entry || file.startsWith(ROOT_PREFIX));
+  !file.includes(NODE_MODULES) && (file === entry || file.startsWith(SCOPE_PREFIX));
 
 /** Charts the server render set aside, drawn after it. @type {any[]} */
 const charts = [];
