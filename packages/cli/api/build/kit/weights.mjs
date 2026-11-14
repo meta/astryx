@@ -398,7 +398,7 @@ function blend(idea, ranked, pick, catalog, weights) {
 
 /**
  * The most typical of the ready templates the ranker ties with `name` in its
- * family (same score, same id length): the one whose descriptor's words are
+ * family (same score, and both the family's base or both variants): the one whose descriptor's words are
  * shared by the most of its family's templates, on average. `name` keeps its
  * place on an equal value. Reads only the templates' descriptors.
  * @param {string} name
@@ -409,13 +409,12 @@ function blend(idea, ranked, pick, catalog, weights) {
 function typicalOfTie(name, ranked, cands) {
   const self = ranked.find(r => r.name === name);
   if (!self || self.family === SHELL_FAMILY || !self.family) return name;
-  const length = (/** @type {string} */ n) => n.split('-').length;
   let chosen = self;
   for (const r of ranked) {
     if (
       r.score === self.score &&
       r.family === self.family &&
-      length(r.name) === length(self.name) &&
+      r.base === self.base &&
       cands.includes(r.name) &&
       r.typical > chosen.typical
     )
@@ -444,6 +443,38 @@ function descriptorWords(t, order) {
 }
 
 /**
+ * How strongly each of a set of tied templates' own descriptors answers the
+ * idea. Words every tied template names cannot choose between them, so they
+ * are left out; each other word of the idea that a template's descriptor
+ * names adds its rarity among the templates of the tied templates' families.
+ * Reads only the templates' descriptors.
+ * @param {string[]} names the tied templates' ids
+ * @param {string} idea
+ * @param {DescribedTemplate[]} catalog
+ * @returns {number[]} one reading per name, in order
+ */
+export function tieReading(names, idea, catalog) {
+  const families = new Set(names.map(name => familyOf(name, catalog)));
+  const pool = catalog.filter(t => families.has(familyOf(t.name, catalog)));
+  const order = contentWords(idea);
+  const words = new Map(pool.map(t => [t.name, descriptorWords(t, order)]));
+  const df = (/** @type {string} */ w) =>
+    pool.filter(t => words.get(t.name)?.has(w)).length;
+  const said = new Set(order);
+  const own = names.map(name => words.get(name) ?? new Set());
+  const n = pool.length;
+  return names.map((_, i) => {
+    let s = 0;
+    for (const w of said) {
+      if (!own[i].has(w) || own.every(o => o.has(w))) continue;
+      const d = df(w);
+      s += Math.log(1 + (n - d + 0.5) / (d + 0.5));
+    }
+    return s;
+  });
+}
+
+/**
  * Settles an exact tie in the ranker by a fuller reading of each tied
  * template's own descriptor. Words every tied template names cannot choose
  * between them, so they are left out; each other word of the idea that a
@@ -460,32 +491,19 @@ function descriptorWords(t, order) {
 function fullerOfTie(name, idea, ranked, cands, catalog) {
   const self = ranked.find(r => r.name === name);
   if (!self || self.family === SHELL_FAMILY || !self.family) return name;
-  const length = (/** @type {string} */ n) => n.split('-').length;
   const tied = ranked.filter(
     r =>
       r.score === self.score &&
       r.family === self.family &&
-      length(r.name) === length(self.name) &&
+      r.base === self.base &&
       cands.includes(r.name),
   );
   if (tied.length < 2) return name;
-  const family = catalog.filter(t => familyOf(t.name, catalog) === self.family);
-  const order = contentWords(idea);
-  const words = new Map(family.map(t => [t.name, descriptorWords(t, order)]));
-  const df = (/** @type {string} */ w) =>
-    family.filter(t => words.get(t.name)?.has(w)).length;
-  const said = new Set(order);
-  const own = tied.map(r => words.get(r.name) ?? new Set());
-  const n = family.length;
-  const score = tied.map((_, i) => {
-    let s = 0;
-    for (const w of said) {
-      if (!own[i].has(w) || own.every(o => o.has(w))) continue;
-      const d = df(w);
-      s += Math.log(1 + (n - d + 0.5) / (d + 0.5));
-    }
-    return s;
-  });
+  const score = tieReading(
+    tied.map(r => r.name),
+    idea,
+    catalog,
+  );
   const top = Math.max(...score);
   if (top === 0) return typicalOfTie(name, ranked, cands);
   const leaders = tied.filter((_, i) => score[i] >= top - 1e-9);

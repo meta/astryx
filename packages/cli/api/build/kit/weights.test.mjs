@@ -261,6 +261,63 @@ describe('weighStart', () => {
     });
   });
 
+  describe('an exact tie between templates with ids of different lengths', () => {
+    // The family's base and its variants are told apart by the ranker's base
+    // flag, not by how many parts an id has.
+    const catalog = [
+      ...CATALOG,
+      {
+        name: 'list-alpha',
+        displayName: 'Plain List',
+        category: 'Lists - Plain',
+        description: 'A plain list of records.',
+      },
+      {
+        name: 'list-with-reading-pane',
+        displayName: 'List with Reading Pane',
+        category: 'Lists - Pane',
+        description: 'A list of records with a reading pane beside it.',
+        keywords: ['reading pane'],
+      },
+    ];
+    const variant = (/** @type {string} */ name) => ({
+      ...page(name, 5, 'Lists'),
+      base: false,
+    });
+
+    it('settles a tie between two variants by their descriptors', () => {
+      const tied = [
+        variant('list-alpha'),
+        variant('list-with-reading-pane'),
+        ...RANKED,
+      ];
+      const start = weighStart(
+        'a list of orders with a reading pane',
+        tied,
+        tied[0],
+        catalog,
+        {weights: WEIGHTS},
+      );
+      expect(start).toBe('list-with-reading-pane');
+    });
+
+    it("keeps the family's base ahead of a tied variant", () => {
+      const tied = [
+        page('list-alpha', 5, 'Lists'),
+        variant('list-with-reading-pane'),
+        ...RANKED,
+      ];
+      const start = weighStart(
+        'a list of orders with a reading pane',
+        tied,
+        tied[0],
+        catalog,
+        {weights: WEIGHTS},
+      );
+      expect(start).toBe('list-alpha');
+    });
+  });
+
   describe('a template the tables do not list (cold start)', () => {
     // A made-up family the tables have never seen, described only by its own
     // descriptor, next to listed templates with descriptors of their own.
