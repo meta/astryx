@@ -26,6 +26,7 @@ import {
 } from './module-exports.mjs';
 import {inspectPackageExport, sourceExportTarget} from './package-exports.mjs';
 import {babelParser} from '../runtime/lazy-dependencies.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 const SKIP_DIRS = new Set(['hooks', 'utils', '__tests__', 'node_modules']);
 
@@ -530,7 +531,7 @@ function readComponentGroups(coreDir, keep = () => true, tops) {
   for (const name of ungrouped) {
     entries.push({key: name, values: [name]});
   }
-  entries.sort((a, b) => a.key.localeCompare(b.key));
+  entries.sort((a, b) => compareText(a.key, b.key));
 
   /** @type {Record<string, string[]>} */
   const ordered = {};
@@ -1013,7 +1014,7 @@ export function discoverExternalComponentsGrouped(docsDir) {
   for (const name of ungrouped) {
     entries.push({key: name, values: [name]});
   }
-  entries.sort((a, b) => a.key.localeCompare(b.key));
+  entries.sort((a, b) => compareText(a.key, b.key));
 
   /** @type {Record<string, string[]>} */
   const ordered = {};

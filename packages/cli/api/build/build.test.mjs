@@ -596,3 +596,59 @@ describe('build kit — every page starts from a template', () => {
     expect(r.data.start?.name).not.toMatch(/^product-/);
   });
 });
+
+describe('build is deterministic', () => {
+  // Made-up phrases, several of them close to exact ties between templates.
+  const ideas = [
+    'code editor',
+    'item detail page',
+    'settings in a modal dialog',
+    'ide with a file tree',
+    'chat',
+    'inbox table with filters',
+    'yearly report with charts',
+  ];
+  /** @param {any} r */
+  const answer = r => ({
+    start: r.data?.start?.name ?? null,
+    basis: r.data?.start?.basis ?? null,
+    alternatives: (r.data?.start?.alternatives ?? []).map(a => a.name),
+    blocks: (r.data?.blocks ?? []).map(b => b.name),
+  });
+  const answers = async () => {
+    const out = [];
+    for (const idea of ideas) out.push(answer(await build(idea, {cwd: REPO})));
+    return out;
+  };
+
+  it('gives the same answers twice in one process', async () => {
+    const first = await answers();
+    expect(await answers()).toEqual(first);
+  }, 120000);
+
+  it('gives the same answers under another host locale', async () => {
+    const {spawnSync} = await import('node:child_process');
+    const expected = await answers();
+    const url = new URL('./build.mjs', import.meta.url).href;
+    const script = `import {build} from ${JSON.stringify(url)};
+      const out = [];
+      for (const idea of ${JSON.stringify(ideas)}) {
+        const d = (await build(idea, {cwd: ${JSON.stringify(REPO)}})).data ?? {};
+        out.push({start: d.start?.name ?? null, basis: d.start?.basis ?? null,
+          alternatives: (d.start?.alternatives ?? []).map(a => a.name),
+          blocks: (d.blocks ?? []).map(b => b.name)});
+      }
+      console.log(JSON.stringify(out));`;
+    for (const lang of ['tr_TR.UTF-8', 'lt_LT.UTF-8', 'cs_CZ.UTF-8']) {
+      const res = spawnSync(
+        process.execPath,
+        ['--input-type=module', '-e', script],
+        {encoding: 'utf8', env: {...process.env, LANG: lang, LC_ALL: lang}},
+      );
+      expect(res.status, res.stderr).toBe(0);
+      expect(JSON.parse(res.stdout.trim().split('\n').pop() ?? '[]')).toEqual(
+        expected,
+      );
+    }
+  }, 180000);
+});

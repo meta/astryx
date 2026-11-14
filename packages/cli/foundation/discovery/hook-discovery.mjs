@@ -9,6 +9,7 @@ import * as path from 'node:path';
 import {listDir, listDirEntries, pathExists} from '../fs/listing-cache.mjs';
 import {existsCaseExact} from '../fs/paths.mjs';
 import {levenshteinDistance} from '../text/string-utils.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 const SKIP_DIRS = new Set(['utils', '__tests__', 'node_modules']);
 
@@ -130,7 +131,7 @@ export function discoverHooks(coreDir, keep = () => true, tops) {
   const sortedEntries = Array.from(groups.entries()).sort((a, b) => {
     if (a[0] === 'Other') return 1;
     if (b[0] === 'Other') return -1;
-    return a[0].localeCompare(b[0]);
+    return compareText(a[0], b[0]);
   });
 
   /** @type {Record<string, string[]>} */

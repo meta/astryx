@@ -34,6 +34,7 @@ import {
   storedKey,
   STORED_DOCS_FILE,
 } from '../doc-compiler/stored-docs.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 export const BUNDLED_THEME_PACKAGE = '@astryxdesign/cli';
 export const THEMES_DIR = path.join(CLI_ROOT, 'assets', 'templates', 'themes');
@@ -1328,7 +1329,7 @@ export function discoverUnmigratedThemeCopies(
     .filter(entry => entry.isDirectory() && !isIgnoredThemeEntry(entry.name))
     .map(entry => unmigratedThemeCopy(path.join(root, entry.name)))
     .filter(copy => copy !== null)
-    .sort((a, b) => a.slug.localeCompare(b.slug));
+    .sort((a, b) => compareText(a.slug, b.slug));
 }
 
 /** @param {string[]} files */
@@ -1434,7 +1435,7 @@ export function discoverThemeDirectory(
   }
   const directories = rootEntries
     .filter(entry => entry.isDirectory())
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => compareText(a.name, b.name));
 
   for (const directory of directories) {
     const slug = directory.name;

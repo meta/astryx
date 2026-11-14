@@ -903,6 +903,29 @@ export default defineConfig(
       ],
     },
   },
+  // `localeCompare` with no locale reads the host's locale, so the same
+  // catalog sorts differently on different machines and `build` and `search`
+  // pick different answers. Code they run sorts machine text with
+  // compareText.
+  {
+    files: [
+      'packages/cli/api/build/**/*.mjs',
+      'packages/cli/api/search/**/*.mjs',
+      'packages/cli/foundation/**/*.mjs',
+    ],
+    ignores: ['**/*.test.mjs'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "CallExpression[callee.property.name='localeCompare'][arguments.length<2]",
+          message:
+            'Sort machine text with compareText (foundation/text/compare-text.mjs): localeCompare without a locale follows the host locale, so the order changes between machines.',
+        },
+      ],
+    },
+  },
   // CLI tests — relax author-ergonomics rules (test files emit freely and may
   // keep intentionally-unused fixtures). Must come after the CLI block above.
   {
