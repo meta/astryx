@@ -504,9 +504,17 @@ const RUNNERS = {
     runs: "`astryx manifest --json`, from a folder beside each package manager's lockfile, to store the manifest at `prepack` (build time)",
     sites: ['child_process.spawnSync'],
   },
+  'scripts/generate-component-list.mjs': {
+    runs: "node, to work out Core's component list on a copy of exactly the files Core publishes (at `prepack`)",
+    sites: ['child_process.spawnSync'],
+  },
   'scripts/generate-self-audit.mjs': {
-    runs: "`npm pack --dry-run --json --ignore-scripts`, to list the files the package publishes, and node, to run Doctor's audit of the CLI's own files on a copy of exactly those files (at `prepack`)",
-    sites: ['child_process.spawnSync ×2'],
+    runs: "node, to run Doctor's audit of the CLI's own files on a copy of exactly the files the package publishes (at `prepack`)",
+    sites: ['child_process.spawnSync'],
+  },
+  'scripts/published-files.mjs': {
+    runs: '`npm pack --dry-run --json --ignore-scripts`, to list the files a package publishes (at `prepack`)',
+    sites: ['child_process.spawnSync'],
   },
   'scripts/generate-stored-docs.mjs': {
     runs: 'each shipped doc file that imports nothing and runs nothing as it loads, to store its exports (build time, not shipped)',

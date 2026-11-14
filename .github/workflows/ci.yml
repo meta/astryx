@@ -63,10 +63,12 @@ permissions: {}
 # dispatches keep longer limits; macOS-only `test-native-swift` keeps 30). Split
 # a job that nears the limit (shard, scope, cache); do not raise it.
 #
-# There is no scope job. Each job that owns tests decides its own scope in its
-# first steps (.github/actions/test-scope: the PR's file list against the
-# base's trusted classifier) and skips its work, reporting success, when
-# nothing in its scope changed; anything undecidable runs everything.
+# Each job that owns tests decides its own scope in its first steps
+# (.github/actions/test-scope: the PR's file list against the base's trusted
+# classifier) and skips its work, reporting success, when nothing in its scope
+# changed; anything undecidable runs everything. The one scope job,
+# swizzle-proof-scope, reads the swizzle proof's own scope, so its eight legs
+# start only when the change proves a target.
 #
 # Visual, accessibility and RTL owners (pr-a11y*, visual-scout, pr-visual,
 # pr-rtl*) do not run on pull request updates (a shared primitive's dependent
@@ -161,7 +163,7 @@ jobs:
         timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 125 || 13 }}
         with:
           phase: room
-          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 18 }}
+          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 20 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 12 }}
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
@@ -216,7 +218,7 @@ jobs:
           started: ${{ needs.room.outputs.started }}
           looks: ${{ needs.room.outputs.looks }}
           next: ${{ needs.room.outputs.next }}
-          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 18 }}
+          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 20 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 12 }}
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
@@ -1200,11 +1202,8 @@ jobs:
         env:
           SCOPED: ${{ github.event_name == 'pull_request' && steps.scope.outputs.vitest_full_suite == 'false' }}
           VITEST_SHARD_TIMES_FILE: ${{ runner.temp }}/node-file-times.json
-          # The split gives the first leg its own later steps' time
-          # (scripts/vitest-node-durations.json legOneSteps), under those
-          # steps' scope condition. Every leg sets the same value, so every
-          # leg computes the same split.
-          VITEST_LEG_ONE_RESERVE: "${{ steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && '1' || '0' }}"
+          # The swizzle proof's slices run in their own job (swizzle-proof).
+          VITEST_SWIZZLE_PROOF_OWN_JOB: '1'
         run: |
           started=$(ps -o etimes= -C Runner.Worker 2>/dev/null | sort -n | tail -1 | tr -d ' ')
           VITEST_SHARD_WATCHDOG_SECONDS=$(( 14 * 60 - ${started:-180} ))
@@ -1246,42 +1245,78 @@ jobs:
         # One Node-project test file: Vitest finds its project from the path.
         run: pnpm exec vitest run scripts/check-cli-official-packages.test.mjs --maxWorkers=1
 
-      # Theme-family compilation is owned by `theme-build`, not Build. Until
-      # that surface has an admitted dedicated lane, broad CI keeps its browser
-      # contract inside the existing Node test owner rather than `test-build`.
-      # One leg runs it.
+  # The Node project's browser contracts run in a job of their own, beside the
+  # Node legs: theme-family compilation (owned by `theme-build`, not Build,
+  # until that surface has an admitted lane of its own), offline-media's
+  # real-browser cases and the theme editor's render case. No Node leg runs a
+  # step the others don't, so the legs split the Node files evenly. Same scope
+  # as the Node tests; `test` requires it.
+  node-browser-contracts:
+    needs: [admission, heavy-ci]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (needs.admission.result == 'success' && (github.event_name != 'workflow_dispatch'))) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Check out the scope action
+        uses: actions/checkout@v7
+        timeout-minutes: 8
+        with:
+          sparse-checkout: .github/actions/test-scope
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Decide this job's scope
+        id: scope
+        uses: ./.test-scope/.github/actions/test-scope
+
+      - uses: actions/checkout@v7
+        timeout-minutes: 8
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        with:
+          fetch-depth: 2
+
+      - uses: ./.github/actions/setup
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+
+      - name: Build core package
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        run: pnpm -F @astryxdesign/core build
+
       - name: Install Playwright for theme-family contract
-        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
         run: npx playwright install chromium
 
-      # The Node tests above run before any browser is installed, so they skip
-      # offline-media's real-browser cases. This step runs them once Chromium
-      # is in place, under the install's own condition; with
+      # The Node legs run without a browser, so they skip offline-media's
+      # real-browser cases. This step runs them once Chromium is in place,
+      # under the install's own condition; with
       # ASTRYX_OFFLINE_MEDIA_BROWSER set, a missing browser fails them.
       # ci-browser-gated-tests.test.mjs keeps this step after the install.
       - name: Offline-media browser cases
-        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
         env:
           ASTRYX_OFFLINE_MEDIA_BROWSER: '1'
         # One Node-project test file: Vitest finds its project from the path.
         run: pnpm exec vitest run .github/scripts/lib/offline-media.test.mjs --maxWorkers=1
 
       # theme-real-bases.test.mjs's text-direction render case skips in the
-      # shard above, before any browser is installed. This runs it in the
+      # Node legs, which run without a browser. This runs it in the
       # pinned Chromium once that is in place; with ASTRYX_THEME_EDITOR_BROWSER
       # set, a missing browser fails it.
       - name: Theme editor browser case
-        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
         env:
           ASTRYX_THEME_EDITOR_BROWSER: '1'
         run: pnpm exec vitest run packages/cli/api/theme-edit/theme-real-bases.test.mjs -t 'renders own and editor sides|names what it waited on' --maxWorkers=1
 
       # The contract runs in the time the job's 15-minute limit leaves, less a
-      # minute, counted as the Node shard counts it: a contract that runs out of
+      # minute, counted from the job's start: a contract that runs out of
       # it fails by name with its last lines, before the limit cancels the job
       # and cuts its log.
       - name: Run the theme-family contract
-        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
         run: |
           started=$(ps -o etimes= -C Runner.Worker 2>/dev/null | sort -n | tail -1 | tr -d ' ')
           if [ -z "$started" ]; then
@@ -1300,6 +1335,85 @@ jobs:
             echo "::error title=Theme-family contract stopped::still running after $left s, a minute before the job's 15-minute limit; its last lines: $(tail -n 3 "$RUNNER_TEMP/theme-family.log" | tr '\n' ' ')"
           fi
           exit "$rc"
+
+  # The swizzle proof (spec:AST-110 FR7) runs in legs of its own, one slice
+  # each, beside the Node legs rather than inside them. When a change reaches
+  # every copy, its slices take about 2,300 s of test time, more than the Node
+  # legs hold under their limit with the rest of the suite. This job reads the
+  # proof's scope first, with Node alone and nothing installed; the legs start
+  # only when the change proves a target, as each slice decides. `test`
+  # requires this job, and the legs whenever the scope is not `none`.
+  swizzle-proof-scope:
+    needs: [admission, heavy-ci]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (needs.admission.result == 'success' && (github.event_name != 'workflow_dispatch'))) }}
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      mode: ${{ steps.proof.outputs.mode }}
+    steps:
+      - name: Check out the scope action
+        uses: actions/checkout@v7
+        timeout-minutes: 8
+        with:
+          sparse-checkout: .github/actions/test-scope
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Decide this job's scope
+        id: scope
+        uses: ./.test-scope/.github/actions/test-scope
+
+      - uses: actions/checkout@v7
+        timeout-minutes: 8
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        with:
+          fetch-depth: 2
+
+      # A docsite-only or spec-only change runs no Node test, so no slice.
+      - name: Decide the proof's scope
+        id: proof
+        env:
+          SPECIALIZED: ${{ steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.spec_only == 'true' }}
+        run: |
+          if [ "$SPECIALIZED" = true ]; then
+            echo "Specialized PR lane: the swizzle proof proves no target"
+            echo 'mode=none' >> "$GITHUB_OUTPUT"
+          else
+            node packages/cli/test/swizzle-proof/scope.mjs
+          fi
+
+  swizzle-proof:
+    name: swizzle-proof (${{ matrix.slice }}/${{ strategy.job-total }})
+    needs: [admission, heavy-ci, swizzle-proof-scope]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (needs.admission.result == 'success' && (github.event_name != 'workflow_dispatch' && (needs.swizzle-proof-scope.outputs.mode == 'affected' || needs.swizzle-proof-scope.outputs.mode == 'all')))) }}
+    strategy:
+      fail-fast: false
+      # At most two legs at a time, as the Node legs, for the shared runner
+      # pool.
+      max-parallel: 2
+      # One leg per swizzle-proof.<n>.test.mjs file.
+      matrix:
+        slice: [1, 2, 3, 4, 5, 6, 7, 8]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        timeout-minutes: 8
+        with:
+          fetch-depth: 2
+
+      - uses: ./.github/actions/setup
+
+      - name: Build core package
+        run: pnpm -F @astryxdesign/core build
+
+      - name: Run this slice of the swizzle proof
+        run: pnpm test:node packages/cli/test/swizzle-proof/swizzle-proof.${{ matrix.slice }}.test.mjs
 
   # The one pre-job left: a runner must be picked before its job starts, so
   # this decides on a free slim runner whether native Swift changed, and
@@ -1450,6 +1564,9 @@ jobs:
         release-bump,
         test-ui,
         test-node,
+        node-browser-contracts,
+        swizzle-proof-scope,
+        swizzle-proof,
         test-build,
         test-native-swift,
         pr-interaction,
@@ -1535,6 +1652,10 @@ jobs:
           LAB_ONLY: ${{ steps.scope.outputs.lab_only }}
           TEST_UI_RESULT: ${{ needs.test-ui.result }}
           TEST_NODE_RESULT: ${{ needs.test-node.result }}
+          NODE_BROWSER_CONTRACTS_RESULT: ${{ needs.node-browser-contracts.result }}
+          SWIZZLE_PROOF_SCOPE_RESULT: ${{ needs.swizzle-proof-scope.result }}
+          SWIZZLE_PROOF_MODE: ${{ needs.swizzle-proof-scope.outputs.mode }}
+          SWIZZLE_PROOF_RESULT: ${{ needs.swizzle-proof.result }}
           TEST_BUILD_RESULT: ${{ needs.test-build.result }}
           TEST_NATIVE_SWIFT_RESULT: ${{ needs.test-native-swift.result }}
           PR_INTERACTION_RESULT: ${{ needs.pr-interaction.result }}

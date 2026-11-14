@@ -6,6 +6,7 @@
  */
 
 import {spawn, spawnSync} from 'node:child_process';
+import {randomUUID} from 'node:crypto';
 import * as fs from 'node:fs';
 import {createRequire} from 'node:module';
 import * as os from 'node:os';
@@ -261,6 +262,182 @@ describe('render(): page to one HTML file', () => {
   });
 });
 
+describe('render(): every write takes its place in one step', () => {
+  const BIN = path.join(CLI_DIR, 'clients/cli/bin/astryx.mjs');
+  /**
+   * Run the CLI in a process of its own.
+   * @param {string[]} args
+   * @returns {Promise<{code: number | null, out: string}>}
+   */
+  const cliRun = args =>
+    new Promise(resolve => {
+      const child = spawn(process.execPath, [BIN, '--json', ...args], {cwd: dir, stdio: ['ignore', 'pipe', 'ignore']});
+      let out = '';
+      child.stdout.on('data', chunk => (out += chunk));
+      child.on('close', code => resolve({code, out}));
+    });
+
+  it('replaces a rendered file in one step: a reader that has the old file open keeps reading all of it', async () => {
+    put('swap-a.tsx', 'export default function A() {\n  return <p>First page</p>;\n}\n');
+    put('swap-b.tsx', 'export default function B() {\n  return <p>Second page</p>;\n}\n');
+    await render('swap-a.tsx', {cwd: dir, out: 'swap.html'});
+    const file = path.join(dir, 'swap.html');
+    const before = fs.readFileSync(file);
+    const fd = fs.openSync(file, 'r');
+    try {
+      await render('swap-b.tsx', {cwd: dir, out: 'swap.html'});
+      const held = Buffer.alloc(before.length + 1);
+      expect(held.subarray(0, fs.readSync(fd, held, 0, held.length, 0))).toEqual(before);
+    } finally {
+      fs.closeSync(fd);
+    }
+    expect(fs.readFileSync(file, 'utf8')).toContain('Second page');
+  }, 60_000);
+
+  it('restores one file from many processes at once: each run gets a folder of its own, whole', async () => {
+    const runs = await Promise.all(Array.from({length: 8}, () => cliRun(['experimental', 'render', '--reverse', 'page.html'])));
+    expect(runs.map(r => r.code)).toEqual(Array(8).fill(0));
+    const pages = runs.map(r => JSON.parse(r.out).data.output);
+    expect(new Set(pages.map(p => path.dirname(p))).size).toBe(8);
+    for (const p of pages) expect(fs.readFileSync(path.join(dir, p), 'utf8')).toBe(PAGE);
+  }, 120_000);
+
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'says a file it cannot read cannot be read, not that it does not exist',
+    async () => {
+      put('unreadable/page.tsx', 'export default function Page() {\n  return <p>Unreadable</p>;\n}\n');
+      await render('unreadable/page.tsx', {cwd: dir});
+      const files = ['unreadable/page.tsx', 'unreadable/page.html'];
+      for (const file of files) fs.chmodSync(path.join(dir, file), 0o000);
+      try {
+        for (const [file, options] of [[files[0], {}], [files[1], {reverse: true}]]) {
+          /** @type {any} */
+          let refused;
+          try {
+            await render(file, {cwd: dir, ...options});
+          } catch (e) {
+            refused = e;
+          }
+          expect(refused?.code, file).toBe('ERR_READ_FAILED');
+          expect(refused.message).toBe(`${file} cannot be read (EACCES: no permission); nothing was written.`);
+        }
+      } finally {
+        for (const file of files) fs.chmodSync(path.join(dir, file), 0o644);
+      }
+      expect(await codeOf(() => render('unreadable/missing.tsx', {cwd: dir}))).toBe('ERR_FILE_NOT_FOUND');
+      // A folder or a pipe given as the file is refused before it is opened,
+      // so nothing waits on a pipe no one writes.
+      fs.mkdirSync(path.join(dir, 'unreadable/folder.tsx'));
+      const entries = [['unreadable/folder.tsx', 'it is a folder']];
+      if (spawnSync('mkfifo', [path.join(dir, 'unreadable/pipe.tsx')]).status === 0) entries.push(['unreadable/pipe.tsx', 'it is not a regular file']);
+      for (const [file, why] of entries) {
+        /** @type {any} */
+        let refused;
+        try {
+          await render(file, {cwd: dir});
+        } catch (e) {
+          refused = e;
+        }
+        expect(refused?.code, file).toBe('ERR_READ_FAILED');
+        expect(refused.message).toBe(`${file} cannot be read (${why}); nothing was written.`);
+      }
+    },
+    60_000,
+  );
+
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'leaves a file this user cannot write as it is, and keeps the permission bits of a file it replaces',
+    async () => {
+      await render('page.tsx', {cwd: dir, out: 'modes.html'});
+      const file = path.join(dir, 'modes.html');
+      fs.chmodSync(file, 0o444);
+      expect(await codeOf(() => render('page.tsx', {cwd: dir, out: 'modes.html'}))).toBe('ERR_WRITE_FAILED');
+      fs.chmodSync(file, 0o640);
+      await render('page.tsx', {cwd: dir, out: 'modes.html'});
+      expect(fs.statSync(file).mode & 0o777).toBe(0o640);
+    },
+    60_000,
+  );
+
+  it('lands every copy but the page at its target in the one new folder: a copy an alias places is refused outside it', async () => {
+    put('alias-loop/tsconfig.json', '{"compilerOptions": {"paths": {"@/*": ["./src/*"]}}}\n');
+    put('alias-loop/package.json', '{"name":"alias-loop","private":true}');
+    put('alias-loop/src/lib/helper.ts', "import {title} from '@/app/page';\nexport const label = 'Helper';\nexport const echo = () => title;\n");
+    const page = "import {label} from '../lib/helper';\nexport const title = 'Loop';\nexport default function Page() { return <p>{label}</p>; }\n";
+    put('alias-loop/src/app/page.tsx', page);
+    const cwd = path.join(dir, 'alias-loop');
+    await render('src/app/page.tsx', {cwd});
+    /** @type {any} */
+    let refused;
+    try {
+      await render('src/app/page.html', {cwd, reverse: true, out: 'restored/app/page.tsx'});
+    } catch (e) {
+      refused = e;
+    }
+    expect(refused?.code).toBe('ERR_PATH_TRAVERSAL');
+    expect(refused.message).toContain('src/app/page.tsx');
+    expect(fs.existsSync(path.join(cwd, 'restored'))).toBe(false);
+    expect(fs.readFileSync(path.join(cwd, 'src/app/page.tsx'), 'utf8')).toBe(page);
+  }, 60_000);
+
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)('names the folder that takes no new file, not a temporary one', async () => {
+    fs.mkdirSync(path.join(dir, 'locked'), {recursive: true});
+    fs.chmodSync(path.join(dir, 'locked'), 0o555);
+    /** @type {any} */
+    let refused;
+    try {
+      await render('page.tsx', {cwd: dir, out: 'locked/page.html'});
+    } catch (e) {
+      refused = e;
+    } finally {
+      fs.chmodSync(path.join(dir, 'locked'), 0o755);
+    }
+    expect(refused?.code).toBe('ERR_WRITE_FAILED');
+    expect(refused.message).toBe('Could not write locked/page.html: locked does not take a new file (EACCES); nothing was written.');
+  }, 60_000);
+
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'a restore with --overwrite replaces a file this user cannot write, as it did',
+    async () => {
+      const solo = 'export default function Solo() {\n  return <p>Solo</p>;\n}\n';
+      put('solo.tsx', solo);
+      await render('solo.tsx', {cwd: dir});
+      const file = put('read-only-back/solo.tsx', 'old\n');
+      fs.chmodSync(file, 0o444);
+      await render('solo.html', {cwd: dir, reverse: true, out: 'read-only-back/solo.tsx', overwrite: true});
+      expect(fs.readFileSync(file, 'utf8')).toBe(solo);
+    },
+    60_000,
+  );
+
+  it('removes a temporary that a stopped run in this process space left beside its target, and keeps any other', async () => {
+    const {pidSpace} = await import('../../foundation/release/cache.mjs');
+    const space = `${os.hostname()}-${/\[(\d+)\]/.exec(pidSpace() ?? '')?.[1] ?? 'x'}`;
+    // A process id no system gives out, so its run is gone.
+    const left = path.join(dir, `.stale.html.tmp-${space}-999999999-${randomUUID()}`);
+    const running = path.join(dir, `.stale.html.tmp-${space}-${process.pid}-${randomUUID()}`);
+    // A run in another process-ID namespace cannot be seen from here, so its
+    // temporary stays, whatever its process id.
+    const elsewhere = path.join(dir, `.stale.html.tmp-${os.hostname()}-1-999999999-${randomUUID()}`);
+    const leftFolder = path.join(dir, `.page-restored.tmp-${space}-999999999-${randomUUID()}`);
+    for (const temporary of [left, running, elsewhere]) fs.writeFileSync(temporary, 'part of a file');
+    put(path.relative(dir, path.join(leftFolder, 'page.tsx')), 'part of a folder');
+    await render('page.tsx', {cwd: dir, out: 'stale.html'});
+    const restored = /** @type {any} */ (await render('page.html', {cwd: dir, reverse: true}));
+    expect(fs.existsSync(left)).toBe(false);
+    expect(fs.existsSync(leftFolder)).toBe(false);
+    expect(fs.existsSync(running)).toBe(true);
+    expect(fs.existsSync(elsewhere)).toBe(true);
+    fs.rmSync(running);
+    fs.rmSync(elsewhere);
+    fs.rmSync(path.join(dir, path.dirname(restored.data.output)), {recursive: true});
+  }, 60_000);
+
+  it('leaves no temporary file or folder behind', () => {
+    expect(fs.readdirSync(dir).filter(name => name.includes('.tmp-'))).toEqual([]);
+  });
+});
+
 describe('render(): embedded files stay inside the current folder', () => {
   it('refuses an embedded path that climbs out', async () => {
     const {sourceBlock} = await import('../../foundation/render/source-block.mjs');
@@ -392,6 +569,108 @@ describe('render(): every write stays inside the current folder', () => {
     expect(fs.readFileSync(path.join(dir, 'aliased/src/page.html'), 'utf8')).toContain('Aliased header');
     expect(r.data.files).toEqual(['page.tsx', 'Header.tsx']);
     expect(await codeOf(() => render('aliased/src/bad.tsx', {cwd: dir}))).toBe('ERR_FILE_NOT_FOUND');
+  }, 60_000);
+
+  it('reads the aliases of the referenced project that holds the page, behind a solution-style tsconfig.json', async () => {
+    const vite = (/** @type {string} */ name) => {
+      put(`${name}/package.json`, `{"name":"${name}","private":true}`);
+      put(`${name}/tsconfig.json`, '{\n  "files": [],\n  "references": [{"path": "./tsconfig.app.json"}, {"path": "./tsconfig.node.json"}]\n}\n');
+      put(`${name}/tsconfig.app.json`, '{\n  "compilerOptions": {"paths": {"@/*": ["./src/*"]}},\n  "include": ["src"],\n}\n');
+      put(`${name}/tsconfig.node.json`, '{"compilerOptions": {"paths": {"@/*": ["./config/*"]}}, "include": ["vite.config.ts"]}\n');
+    };
+    vite('solution');
+    put('solution/src/components/Header.tsx', 'export function Header() { return <p>Solution header</p>; }\n');
+    put('solution/src/pages/page.tsx', "import {Header} from '@/components/Header';\nexport default function Page() { return <Header />; }\n");
+    const r = /** @type {any} */ (await render('solution/src/pages/page.tsx', {cwd: dir}));
+    expect(r.data.files).toEqual(['pages/page.tsx', 'components/Header.tsx']);
+    expect(fs.readFileSync(path.join(dir, 'solution/src/pages/page.html'), 'utf8')).toContain('Solution header');
+    // A project laid out the same way takes it back where its own alias points.
+    vite('solution-to');
+    fs.copyFileSync(path.join(dir, 'solution/src/pages/page.html'), path.join(dir, 'solution-to/page.html'));
+    const back = /** @type {any} */ (await render('page.html', {cwd: path.join(dir, 'solution-to'), reverse: true, out: 'src/pages/page.tsx'}));
+    expect(back.data).toMatchObject({exact: true, files: ['src/pages/page.tsx', 'src/components/Header.tsx']});
+  }, 60_000);
+
+  it('reads aliases through extends: a path without .json, a package, and a list whose later config wins', async () => {
+    // A base config above the project: its baseUrl is read from its own folder.
+    put('ext/tsconfig.base.json', '{"compilerOptions": {"baseUrl": "apps/web", "paths": {"@data/*": ["src/data/*"]}}}\n');
+    put('ext/apps/web/package.json', '{"name":"web","private":true}');
+    put('ext/apps/web/tsconfig.json', '{"extends": "../../tsconfig.base"}\n');
+    put('ext/apps/web/src/data/rows.ts', "export const rows = ['North', 'South'];\n");
+    put('ext/apps/web/src/pages/page.tsx', "import {rows} from '@data/rows';\nexport default function Page() { return <ul>{rows.map(r => <li key={r}>{r}</li>)}</ul>; }\n");
+    const web = /** @type {any} */ (await render('ext/apps/web/src/pages/page.tsx', {cwd: dir}));
+    expect(web.data.files).toEqual(['pages/page.tsx', 'data/rows.ts']);
+    // A package's config, after one of the project's own: the later one wins,
+    // and ${configDir} is the folder of the config the project reads.
+    put('ext-pkg/package.json', '{"name":"ext-pkg","private":true}');
+    put('ext-pkg/node_modules/@acme/tsconfig/package.json', '{"name":"@acme/tsconfig","version":"1.0.0"}');
+    put('ext-pkg/node_modules/@acme/tsconfig/base.json', '{"compilerOptions": {"paths": {"@ui/*": ["${configDir}/src/ui/*"]}}}\n');
+    put('ext-pkg/tsconfig.first.json', '{"compilerOptions": {"paths": {"@ui/*": ["./elsewhere/*"]}}}\n');
+    put('ext-pkg/tsconfig.json', '{"extends": ["./tsconfig.first.json", "@acme/tsconfig/base.json"]}\n');
+    put('ext-pkg/src/ui/Panel.tsx', 'export function Panel() { return <section>Panel from the package alias</section>; }\n');
+    put('ext-pkg/src/page.tsx', "import {Panel} from '@ui/Panel';\nexport default function Page() { return <Panel />; }\n");
+    const pkg = /** @type {any} */ (await render('ext-pkg/src/page.tsx', {cwd: dir}));
+    expect(pkg.data.files).toEqual(['page.tsx', 'ui/Panel.tsx']);
+    expect(fs.readFileSync(path.join(dir, 'ext-pkg/src/page.html'), 'utf8')).toContain('Panel from the package alias');
+    // A package named alone: its tsconfig field, else its tsconfig.json,
+    // never its code `main`.
+    const config = '{"compilerOptions": {"paths": {"@ui/*": ["${configDir}/src/ui/*"]}}}\n';
+    for (const [name, files, extendsName = name] of [
+      ['js-main', {'package.json': '{"name":"js-main","version":"1.0.0","main":"index.js"}', 'index.js': 'module.exports = {};\n', 'tsconfig.json': config}],
+      ['field', {'package.json': '{"name":"field","version":"1.0.0","main":"index.js","tsconfig":"./configs/base.json"}', 'index.js': 'module.exports = {};\n', 'configs/base.json': config}],
+      // A package whose exports send "." to its config, or a pattern a subpath matches.
+      ['dot', {'package.json': '{"name":"dot","version":"1.0.0","exports":{".":{"import":"./esm.json","require":"./configs/base.json"}}}', 'configs/base.json': config}],
+      ['star', {'package.json': '{"name":"star","version":"1.0.0","exports":{"./*":"./configs/*.json"}}', 'configs/strict.json': config}, 'star/strict'],
+      // Of two patterns, the one with the longer part before the `*` wins, as in Node.
+      ['order', {'package.json': '{"name":"order","version":"1.0.0","exports":{"./*.json":"./wrong/*.json","./a*":"./right/a*"}}', 'right/ab.json': config, 'wrong/ab.json': '{"compilerOptions": {"paths": {"@ui/*": ["${configDir}/src/nowhere/*"]}}}\n'}, 'order/ab.json'],
+    ]) {
+      const root = `ext-${name}`;
+      put(`${root}/package.json`, `{"name":"${root}","private":true}`);
+      for (const [file, text] of Object.entries(files)) put(`${root}/node_modules/${name}/${file}`, text);
+      put(`${root}/tsconfig.json`, `{"extends": "${extendsName}"}\n`);
+      put(`${root}/src/ui/Panel.tsx`, 'export function Panel() { return <section>Panel</section>; }\n');
+      put(`${root}/src/page.tsx`, "import {Panel} from '@ui/Panel';\nexport default function Page() { return <Panel />; }\n");
+      const r = /** @type {any} */ (await render(`${root}/src/page.tsx`, {cwd: dir}));
+      expect(r.data.files, name).toEqual(['page.tsx', 'ui/Panel.tsx']);
+    }
+    // A config package read through a link: from where it really is, so a
+    // package it extends in turn, and paths that climb out of it, resolve
+    // from there; and a nearer copy without the config is passed by.
+    const panel = 'export function Panel() { return <section>Panel</section>; }\n';
+    const page = "import {Panel} from '@ui/Panel';\nexport default function Page() { return <Panel />; }\n";
+    put('ext-store/package.json', '{"name":"ext-store","private":true}');
+    put('ext-store/node_modules/.pnpm/cfg@1.0.0/node_modules/cfg/package.json', '{"name":"cfg","version":"1.0.0"}');
+    put('ext-store/node_modules/.pnpm/cfg@1.0.0/node_modules/cfg/tsconfig.json', '{"extends": "cfg-base"}\n');
+    put('ext-store/node_modules/.pnpm/cfg@1.0.0/node_modules/cfg-base/package.json', '{"name":"cfg-base","version":"1.0.0"}');
+    put('ext-store/node_modules/.pnpm/cfg@1.0.0/node_modules/cfg-base/tsconfig.json', '{"compilerOptions": {"paths": {"@ui/*": ["${configDir}/src/ui/*"]}}}\n');
+    fs.symlinkSync(path.join(dir, 'ext-store/node_modules/.pnpm/cfg@1.0.0/node_modules/cfg'), path.join(dir, 'ext-store/node_modules/cfg'), 'junction');
+    put('ext-store/tsconfig.json', '{"extends": "cfg"}\n');
+    put('ext-store/src/ui/Panel.tsx', panel);
+    put('ext-store/src/page.tsx', page);
+    const store = /** @type {any} */ (await render('ext-store/src/page.tsx', {cwd: dir}));
+    expect(store.data.files).toEqual(['page.tsx', 'ui/Panel.tsx']);
+    put('ext-ws/package.json', '{"name":"ext-ws","private":true}');
+    put('ext-ws/packages/tsconfig/package.json', '{"name":"@acme/tsconfig","version":"1.0.0"}');
+    put('ext-ws/packages/tsconfig/base.json', '{"compilerOptions": {"paths": {"@ui/*": ["../ui/src/*"]}}}\n');
+    put('ext-ws/packages/ui/src/Panel.tsx', panel);
+    put('ext-ws/apps/web/package.json', '{"name":"web","private":true}');
+    fs.mkdirSync(path.join(dir, 'ext-ws/apps/web/node_modules/@acme'), {recursive: true});
+    fs.symlinkSync(path.join(dir, 'ext-ws/packages/tsconfig'), path.join(dir, 'ext-ws/apps/web/node_modules/@acme/tsconfig'), 'junction');
+    put('ext-ws/apps/web/tsconfig.json', '{"extends": "@acme/tsconfig/base"}\n');
+    put('ext-ws/apps/web/src/page.tsx', page);
+    // The alias leads out of the app, to the workspace package it names.
+    await render('ext-ws/apps/web/src/page.tsx', {cwd: dir});
+    expect(fs.readFileSync(path.join(dir, 'ext-ws/apps/web/src/page.html'), 'utf8')).toContain('<section>Panel</section>');
+    put('ext-near/package.json', '{"name":"ext-near","private":true}');
+    put('ext-near/node_modules/shared-cfg/package.json', '{"name":"shared-cfg","version":"1.0.0"}');
+    put('ext-near/node_modules/shared-cfg/tsconfig.json', '{"compilerOptions": {"paths": {"@ui/*": ["${configDir}/src/ui/*"]}}}\n');
+    put('ext-near/app/package.json', '{"name":"app","private":true}');
+    put('ext-near/app/node_modules/shared-cfg/package.json', '{"name":"shared-cfg","version":"0.1.0"}');
+    put('ext-near/app/tsconfig.json', '{"extends": "shared-cfg"}\n');
+    put('ext-near/app/src/ui/Panel.tsx', panel);
+    put('ext-near/app/src/page.tsx', page);
+    const near = /** @type {any} */ (await render('ext-near/app/src/page.tsx', {cwd: dir}));
+    expect(near.data.files).toEqual(['page.tsx', 'ui/Panel.tsx']);
   }, 60_000);
 
   it('gives back a page that imports through an alias where this project\'s alias points', async () => {
@@ -1671,6 +1950,31 @@ describe('render(): a page outside a project', () => {
     expect(fs.readFileSync(path.join(away, 'page-restored', 'page.tsx'), 'utf8')).toBe(PAGE);
   }, 60_000);
 
+  it('carries the modules a page imports from above its own folder, as a restore lays them out', () => {
+    const tree = path.join(away, 'tree');
+    fs.mkdirSync(path.join(tree, 'app/x'), {recursive: true});
+    fs.mkdirSync(path.join(tree, 'components'), {recursive: true});
+    fs.writeFileSync(path.join(tree, 'components/Banner.tsx'), 'export function Banner() {\n  return <p>Banner above the page</p>;\n}\n');
+    fs.writeFileSync(path.join(tree, 'app/x/page.tsx'), "import {Banner} from '../../components/Banner';\nexport default function Page() {\n  return <main><Banner /></main>;\n}\n");
+    const run = runBin(tree, ['experimental', 'render', 'app/x/page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.files).toEqual(['app/x/page.tsx', 'components/Banner.tsx']);
+    const back = runBin(tree, ['experimental', 'render', '--reverse', 'app/x/page.html']);
+    expect(back.json.data).toMatchObject({exact: true, files: ['app/x/page-restored/app/x/page.tsx', 'app/x/page-restored/components/Banner.tsx']});
+    // The page's own folder still holds the tsconfig.json and the public/
+    // images it is rendered with.
+    fs.mkdirSync(path.join(tree, 'site/public'), {recursive: true});
+    fs.writeFileSync(path.join(tree, 'site/tsconfig.json'), '{"compilerOptions": {"paths": {"@/*": ["./*"]}}}\n');
+    fs.writeFileSync(path.join(tree, 'site/public/logo.png'), PNG);
+    fs.writeFileSync(path.join(tree, 'site/Note.tsx'), 'export function Note() {\n  return <p>Note by alias</p>;\n}\n');
+    fs.writeFileSync(path.join(tree, 'site/page.tsx'), "import {Note} from '@/Note';\nexport default function Page() {\n  return <main><Note /><img src=\"/logo.png\" alt=\"\" /></main>;\n}\n");
+    const site = runBin(tree, ['experimental', 'render', 'site/page.tsx']);
+    expect(site.status).toBe(0);
+    const siteHtml = fs.readFileSync(path.join(tree, 'site/page.html'), 'utf8');
+    expect(siteHtml).toContain('Note by alias');
+    expect(siteHtml).toContain('src="data:image/png;base64,');
+  }, 60_000);
+
   it('loads one React outside a project, even when the folder holds its own copy', () => {
     const sub = path.join(away, 'own-react');
     for (const name of ['react', 'react-dom']) {
@@ -1741,6 +2045,34 @@ console.log(JSON.stringify({inside, outside}));
     const {inside, outside} = JSON.parse(run.stdout.trim().split('\n').pop() ?? '{}');
     expect(inside).toBe('@astryxdesign/core is not installed where the page is, so the page has no Astryx styles; install it, or render from inside the project.');
     expect(outside).toContain('and the CLI runs without one');
+  }, 60_000);
+
+  it("compiles a page's StyleX that reads Core's theme variables, with the names Core's stylesheet defines", () => {
+    const sub = path.join(away, 'tokens');
+    fs.mkdirSync(sub, {recursive: true});
+    fs.writeFileSync(
+      path.join(sub, 'page.tsx'),
+      [
+        "import * as stylex from '@stylexjs/stylex';",
+        "import {colorVars, spacingVars} from '@astryxdesign/core/theme/tokens.stylex';",
+        "import {Text} from '@astryxdesign/core/Text';",
+        '',
+        "const styles = stylex.create({box: {backgroundColor: colorVars['--color-background-surface'], padding: spacingVars['--spacing-2']}});",
+        '',
+        'export default function Page() {',
+        '  return <div {...stylex.props(styles.box)}><Text>Themed box</Text></div>;',
+        '}',
+        '',
+      ].join('\n'),
+    );
+    const run = runBin(sub, ['experimental', 'render', 'page.tsx']);
+    expect(run.status, JSON.stringify(run.json)).toBe(0);
+    const html = fs.readFileSync(path.join(sub, 'page.html'), 'utf8');
+    const style = html.slice(html.indexOf('<style>'), html.indexOf('</style>'));
+    for (const name of ['--color-background-surface', '--spacing-2']) {
+      expect(style).toContain(`var(${name})`);
+      expect(style).toContain(`${name}:`);
+    }
   }, 60_000);
 
   it('still names a package the CLI does not carry as not installed', () => {

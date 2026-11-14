@@ -23,8 +23,26 @@ import {decode, readTag, scanHtml} from './html-reader.mjs';
 /** The script type of the embedded-source block. */
 export const SOURCE_TYPE = 'application/x-astryx-source';
 
-/** The render format this CLI writes, and the newest one it reads. */
-export const RENDER_FORMAT = 1;
+/** The newest render format this CLI reads, and the newest it writes. */
+export const RENDER_FORMAT = 2;
+
+/**
+ * The module kinds a format 1 reader refuses as a kind no render embeds,
+ * which format 2 adds. A file that carries one says format 2, so an earlier
+ * CLI names the CLI that reads it instead of calling the file damaged; every
+ * other file says format 1, which every CLI that reads render files opens.
+ * The list stays as it is: a kind a later CLI adds needs a format of its own.
+ */
+const FORMAT_2_EXTENSIONS = ['.mts', '.cts', '.cjs'];
+
+/**
+ * The render format a file that carries these files says.
+ * @param {{path: string}[]} files
+ * @returns {number}
+ */
+export function formatFor(files) {
+  return files.some(f => FORMAT_2_EXTENSIONS.some(ext => f.path.toLowerCase().endsWith(ext))) ? 2 : 1;
+}
 
 /**
  * @typedef {object} EmbeddedFile
@@ -52,6 +70,14 @@ export const RENDER_FORMAT = 1;
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 
 /**
+ * Text as a browser's HTML parser reads it: a CR LF pair or a lone CR is a
+ * line feed. A copy whose line ends a mailer, an editor or git changed reads
+ * the same.
+ * @param {string} text
+ */
+export const asParsed = text => text.replace(/\r\n?/g, '\n');
+
+/**
  * The data block for a page's files.
  * @param {string} entry the page's file name
  * @param {{path: string, bytes: Buffer}[]} files the page first
@@ -61,7 +87,7 @@ export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 export function sourceBlock(entry, files, record = {}) {
   /** @type {EmbeddedSource} */
   const payload = {
-    version: RENDER_FORMAT,
+    version: formatFor(files),
     entry,
     ...(record.cli ? {cli: record.cli} : {}),
     ...(record.page ? {page: record.page} : {}),
@@ -181,7 +207,7 @@ export function readSourceBlock(html) {
     return {found: true, newer: {format: payload.version, cli: isValidSemver(payload.cli) ? payload.cli : null}};
   }
   if (
-    payload?.version !== 1 ||
+    !(Number.isInteger(payload?.version) && payload.version >= 1) ||
     typeof payload.entry !== 'string' ||
     !Array.isArray(payload.files) ||
     payload.files.length === 0

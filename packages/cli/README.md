@@ -221,6 +221,7 @@ if (isError(result)) {
 | `ERR_FILE_EXISTS`                 | Refused to overwrite an existing file.                                                                                                                                                             |
 | `ERR_PATH_TRAVERSAL`              | A path escaped its allowed root, or a name contained traversal markers.                                                                                                                            |
 | `ERR_WRITE_FAILED`                | Writing output files failed (and was rolled back).                                                                                                                                                 |
+| `ERR_READ_FAILED`                 | An input file cannot be read: no permission on it or on a folder on its path, a folder or other entry that is not a regular file, or another error from the file system.                           |
 | `ERR_THEME_INVALID`               | A theme definition or contributed theme descriptor is invalid.                                                                                                                                     |
 | `ERR_THEME_LOAD`                  | A theme file could not be loaded / parsed into a defineTheme result.                                                                                                                               |
 | `ERR_THEME_STALE`                 | `theme build --check` found stale or missing outputs: exit 1, in the check result (`code`), not an error.                                                                                          |
@@ -543,34 +544,23 @@ Every response has a `type` discriminant. The full set is below (generated from 
 
 `astryx doctor` runs health checks against your project and environment. It
 changes nothing in the project; once the per-user cache folder exists, it
-keeps its docs checks, its theme-wiring scan and integration check results there. Each record uses `[ok]`, `[warn]`, `[fail]`, or `[info]`, and
-includes an actionable `fix` when one is available. Field names match the
-`--json` keys. The exact checks and values depend on the project; the output
-shape is stable:
+keeps its docs checks, its theme-wiring scan and integration check results there. Each check prints on one
+line: its status (`[ok]`, `[warn]`, `[fail]`, or `[info]`), then its id, label and message, and an actionable
+`fix` when one is available. The legend under the heading names each field by its `--json` key. The exact
+checks and values depend on the project; the output shape is stable:
 
 ```
 $ astryx doctor
-astryx doctor - diagnosing your setup
+astryx doctor
+Each check: status, id, label, message, fix
 
-id:      node-version
-status:  [ok]
-label:   Node.js version
-message: Node v24.18.1 meets the minimum (>=22.13.0).
-
-id:      themes
-status:  [warn]
-label:   Theme packages
-message: No @astryxdesign/theme-* packages are installed.
-fix:     Install a theme, e.g. `npm install @astryxdesign/theme-neutral`, then import its CSS or set astryx.theme.
-
+[ok]    node-version - Node.js version - Node v24.18.1 meets the minimum (>=22.13.0).
+[warn]  themes - Theme packages - No @astryxdesign/theme-* packages are installed. - fix: Install a theme, e.g. `npm
+        install @astryxdesign/theme-neutral`, then import its CSS or set astryx.theme.
 ...
 
 summary
-
-pass: 4
-warn: 2
-fail: 0
-info: 2
+pass: 4, warn: 2, fail: 0, info: 2
 
 No failures - but review the [warn] warnings above when you can.
 ```

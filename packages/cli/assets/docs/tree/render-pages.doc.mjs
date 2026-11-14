@@ -123,7 +123,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'The embedded source carries a render format number. Every CLI reads each format up to its own, and a new optional field never changes the number, so an older CLI keeps reading files a newer one writes. A file in a newer format than the running CLI reads is refused with `ERR_RENDER_NEWER_FORMAT`, and the message names the CLI version that wrote it, which reads it. A file from an older CLI carries no note, but its `generator` meta names the version that wrote it, and `--reverse` reports that version as `renderedBy`.',
+          text: 'The embedded source carries a render format number. Every CLI reads each format up to its own, and a new optional field never changes the number, so an older CLI keeps reading files a newer one writes. A file that carries a kind of file an older CLI does not take (an `.mts`, `.cts` or `.cjs` module) says format 2; every other file says format 1. A file in a newer format than the running CLI reads is refused with `ERR_RENDER_NEWER_FORMAT`, and the message names the CLI version that wrote it, which reads it. A file from an older CLI carries no note, but its `generator` meta names the version that wrote it, and `--reverse` reports that version as `renderedBy`.',
         },
         {
           type: 'prose',
