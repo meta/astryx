@@ -645,16 +645,7 @@ export function TouchDateTimeField({
       ? null
       : clampIndex(anchoredMonthIndex, minMonthIndex, maxMonthIndex),
   );
-  // A value that arrives or changes while the sheet is closed moves the
-  // opening month to it. An open sheet is never moved under the user.
   const [anchoredDate, setAnchoredDate] = useState(valueParts.date);
-  if (!isSheetOpen && valueParts.date !== anchoredDate) {
-    setAnchoredDate(valueParts.date);
-    if (selectedDate != null) {
-      setAnchoredMonthIndex(monthModel.indexOf(selectedDate));
-      setMonthIndex(null);
-    }
-  }
   // min/max can narrow underneath the mounted sheet. Keep the visible month in
   // range during render, so no commit shows an out-of-range month; the month
   // scroller is keyed on the range and remounts at the clamped month.
@@ -749,12 +740,27 @@ export function TouchDateTimeField({
   const openSheet = useCallback(
     (panel: TouchDateTimePanel) => {
       if (!isEffectivelyDisabled) {
+        // A value that arrives while the sheet is closed sets the month it
+        // opens on. The open sheet keeps its month.
+        if (valueParts.date !== anchoredDate) {
+          setAnchoredDate(valueParts.date);
+          if (selectedDate != null) {
+            setAnchoredMonthIndex(monthModel.indexOf(selectedDate));
+            setMonthIndex(null);
+          }
+        }
         setIsWheelOpen(false);
         setActivePanel(panel);
         setIsSheetOpen(true);
       }
     },
-    [isEffectivelyDisabled],
+    [
+      isEffectivelyDisabled,
+      valueParts.date,
+      anchoredDate,
+      selectedDate,
+      monthModel,
+    ],
   );
 
   const closeSheet = useCallback(() => {
@@ -1119,7 +1125,7 @@ export function TouchDateTimeField({
                 ))}
               </div>
               <MonthScroller
-                key={`${minMonthIndex}:${maxMonthIndex}`}
+                key={`${minMonthIndex}:${maxMonthIndex}:${anchorMonthIndex}`}
                 handleRef={scrollerHandleRef}
                 monthModel={monthModel}
                 minMonthIndex={minMonthIndex}

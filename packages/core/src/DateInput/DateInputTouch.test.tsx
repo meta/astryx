@@ -880,6 +880,46 @@ describe('DateInput — calendar surface', () => {
     ).toHaveAttribute('aria-selected', 'true');
   });
 
+  it('opens on the month of a value set after mount while closed when min and max are set', () => {
+    withLayout(() => {
+      const {rerender} = render(
+        <DateInput
+          nativePicker="never"
+          label="Ship date"
+          presentation="bottom-sheet"
+          min="2026-01-01"
+          max="2026-12-31"
+          onChange={() => {}}
+        />,
+      );
+      rerender(
+        <DateInput
+          nativePicker="never"
+          label="Ship date"
+          presentation="bottom-sheet"
+          min="2026-01-01"
+          max="2026-12-31"
+          value="2026-08-14"
+          onChange={() => {}}
+        />,
+      );
+      fireEvent.click(field());
+    });
+    expect(
+      document.querySelector('[data-title="month-year"]'),
+    ).toHaveTextContent('August 2026');
+    const scroller = document.querySelector<HTMLElement>(
+      '[data-scroller="months"]',
+    );
+    expect(scroller?.scrollLeft).toBe(7 * SCROLLPORT_WIDTH);
+    const august = within(pane('August 2026'));
+    expect(
+      august
+        .getByRole('button', {name: /August 14, 2026/})
+        .closest('[role="gridcell"]'),
+    ).toHaveAttribute('aria-selected', 'true');
+  });
+
   it('mounts a window of months around the visible one, not the whole century', () => {
     // The one test that wants the full default reach.
     renderAndOpen(
