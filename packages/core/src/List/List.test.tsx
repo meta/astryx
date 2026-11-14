@@ -13,6 +13,7 @@ import {createRef, useRef} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {describe, it, expect, vi} from 'vitest';
 import {cleanup, render, screen} from '@testing-library/react';
+import {createSwipe} from '../Swipe/createSwipe';
 import userEvent from '@testing-library/user-event';
 import {rulesDeclaredFor} from '../__tests__/pressState';
 import {swipeLayerLoaded} from '../Item/__tests__/swipeLayerLoaded';
@@ -1200,7 +1201,9 @@ function DelegateSwipeRow() {
           Open
         </button>
       }
-      swipeActions={{trailing: [{label: 'Archive', onActivate: () => {}}]}}
+      swipeActions={{
+        trailing: [{id: 'archive', label: 'Archive', onActivate: () => {}}],
+      }}
     />
   );
 }
@@ -1303,7 +1306,9 @@ describe('List and swipe actions', () => {
         <ListItem
           label="Swipeable"
           onClick={() => {}}
-          swipeActions={{trailing: [{label: 'Archive', onActivate: () => {}}]}}
+          swipeActions={{
+            trailing: [{id: 'archive', label: 'Archive', onActivate: () => {}}],
+          }}
         />
         <ListItem label="Pressable" onClick={() => {}} />
         <DelegateSwipeRow />
@@ -1332,7 +1337,9 @@ describe('List and swipe actions', () => {
         <ListItem
           label="Outside"
           onClick={() => {}}
-          swipeActions={{trailing: [{label: 'Archive', onActivate: () => {}}]}}
+          swipeActions={{
+            trailing: [{id: 'archive', label: 'Archive', onActivate: () => {}}],
+          }}
         />
       </ul>,
     );
@@ -1355,14 +1362,39 @@ describe('List and swipe actions', () => {
     ).toEqual([]);
   });
 
-  it('passes swipeActions and swipeBehavior through to the row unchanged', async () => {
+  it('passes swipe through to the row unchanged', () => {
+    render(
+      <List>
+        <ListItem
+          label="A"
+          data-testid="row"
+          swipe={createSwipe({
+            trailing: [{id: 'archive', label: 'Archive', onActivate: () => {}}],
+            swipeBehavior: 'commit',
+          })}
+        />
+      </List>,
+    );
+    const row = screen.getByTestId('row');
+    expect(row.tagName).toBe('LI');
+    expect(row.parentElement).toBe(screen.getByRole('list'));
+    // Commit: presentational, at the row's first render.
+    expect(row.querySelector('[data-swipe-panel="trailing"]')).toHaveAttribute(
+      'aria-hidden',
+      'true',
+    );
+  });
+
+  it('passes the deprecated swipeActions and swipeBehavior through to the row unchanged (spec:AST-057 DEP-0017)', async () => {
     render(
       <List>
         <ListItem
           label="A"
           data-testid="row"
           swipeBehavior="commit"
-          swipeActions={{trailing: [{label: 'Archive', onActivate: () => {}}]}}
+          swipeActions={{
+            trailing: [{id: 'archive', label: 'Archive', onActivate: () => {}}],
+          }}
         />
       </List>,
     );

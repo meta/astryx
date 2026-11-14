@@ -98,7 +98,9 @@ describe('a refused change writes nothing', () => {
 
 describe('names', () => {
   it('every name the check accepts builds, and the suggested name does too', async () => {
-    for (const name of ['b-2', 'x--y', 'brand-']) {
+    // ("x--y" and "brand-" are refused since hunt62: the theme commands'
+    // own discovery skips them.)
+    for (const name of ['b-2', 'x-y', 'brand']) {
       await themeEditNew(name, {cwd});
       expect(exists(`themes/${name}/${name}.js`), name).toBe(true);
       fs.rmSync(path.join(cwd, 'themes', name), {recursive: true, force: true});
@@ -169,7 +171,8 @@ describe('new takes its flags as set does', () => {
       themeEditNew('v1', {cwd, settings: {vibrancy: '60'}}),
     );
     expect(r.code).toBe('ERR_THEME_NO_EFFECT');
-    expect(r.run[0]).toMatch(/new v1 --vibrancy 60 --accent '#7c3aed'$/);
+    // No stock color is put in for the vibrancy: the color is the user's.
+    expect(r.run.join(' ')).not.toMatch(/#7c3aed/);
   });
 
   it('refuses a font or text size that would not build', async () => {
@@ -721,7 +724,7 @@ describe('hunt2: order and scope', () => {
     fs.rmSync(path.join(cwd, 'themes/o1'), {recursive: true, force: true});
   }, 240_000);
 
-  it('a setting for both modes replaces the one-mode ones; one mode on a part with variants is refused', async () => {
+  it('a setting for both modes replaces the one-mode ones; one mode on a part with variants goes to each variant', async () => {
     await themeEditNew('o2', {cwd});
     await themeEditSet('o2', '--color-background-surface', '#ff0000', {
       cwd,
@@ -739,17 +742,14 @@ describe('hunt2: order and scope', () => {
     expect(
       JSON.parse(read('themes/o2/o2.settings.json')).settings,
     ).toHaveLength(1);
-    expect(
-      (
-        await refusal(() =>
-          themeEditSet('o2', 'background-color', '#00ff00', {
-            cwd,
-            on: 'button',
-            mode: 'light',
-          }),
-        )
-      ).code,
-    ).toBe('ERR_THEME_NO_MODE');
+    await themeEditSet('o2', 'background-color', '#00ff00', {
+      cwd,
+      on: 'button',
+      mode: 'light',
+    });
+    expect(read('themes/o2/o2.css')).toMatch(
+      /\.astryx-button\[data-variant="[a-z]+"\] \{[^}]*background-color: light-dark\(#00ff00, /,
+    );
     fs.rmSync(path.join(cwd, 'themes/o2'), {recursive: true, force: true});
   }, 240_000);
 

@@ -7,11 +7,12 @@
  * user-authored module (`.ts` via jiti, `.mjs`/`.js` via native dynamic
  * import) and (b) find conventional files by basename in a fixed
  * load-precedence order. Generated theme artifacts also use a dedicated jiti
- * path that resolves extensionless JSX/TSX registry imports and loads the
- * stylesheets they import as empty modules. These helpers centralize that
- * behavior so callers stay in lockstep. A module's stdout writes go to stderr
- * while it loads, so project code that prints cannot corrupt a `--json`
- * envelope.
+ * path that resolves extensionless JSX/TSX registry imports. On Node 22.15 and
+ * later, a theme module load, of a built artifact or of theme source, loads
+ * the stylesheets its modules import as empty modules. These helpers
+ * centralize that behavior so callers stay in lockstep. A module's stdout
+ * writes go to stderr while it loads, so project code that prints cannot
+ * corrupt a `--json` envelope.
  *
  * `loadModuleWithParser` builds on these primitives to provide the single
  * load/validation boundary shared by config, integration, codemod, and
@@ -21,7 +22,7 @@
 
 import * as path from 'node:path';
 import {AsyncLocalStorage} from 'node:async_hooks';
-import {createRequire} from 'node:module';
+import nodeModule, {createRequire} from 'node:module';
 import {pathToFileURL} from 'node:url';
 import * as fs from 'node:fs';
 import {findPresentFiles} from './present-files.mjs';
@@ -138,16 +139,80 @@ function resolvesToStylesheet(specifier, from) {
 }
 
 /**
- * A built theme module may import a stylesheet so that the app's bundler emits
- * it. Node cannot load a stylesheet, so an import that ends in `.css` and
- * resolves from the theme module to an existing `.css` file loads as an empty
- * module. Any other import loads as before: a missing stylesheet fails like
- * any missing import, and `./tokens.css` loads `tokens.css.js` when that is
- * the file it names. jiti shows only the import text, so the check resolves it
- * from the theme module's folder, not from the importing module's. A module in
- * another folder fails on a stylesheet it reaches by a different relative
- * path, and passes on a missing stylesheet whose path exists from the theme
- * module's folder.
+ * Module hooks that run in the loading thread: Node 22.15 and later have them.
+ * @type {((hooks: object) => {deregister: () => void}) | undefined}
+ */
+const registerHooks = /** @type {any} */ (nodeModule).registerHooks;
+/** Set in the async context of a theme module load, and only there. */
+const themeModuleLoad = new AsyncLocalStorage();
+let themeModuleLoadsInFlight = 0;
+/** @type {{deregister: () => void} | null} */
+let stylesheetHooks = null;
+
+/** @param {string} url */
+function isStylesheetUrl(url) {
+  return url.startsWith('file:') && new URL(url).pathname.endsWith('.css');
+}
+
+/**
+ * In a theme module load, a module that Node resolves to a `.css` file loads
+ * as an empty module. Any other module loads unchanged.
+ * @param {string} url
+ * @param {any} context
+ * @param {(url: string, context: any) => any} next
+ */
+function loadStylesheetAsEmptyModule(url, context, next) {
+  if (themeModuleLoad.getStore() && isStylesheetUrl(url)) {
+    return {format: 'module', source: '', shortCircuit: true};
+  }
+  return next(url, context);
+}
+
+function removeStylesheetHooks() {
+  try {
+    stylesheetHooks?.deregister();
+    stylesheetHooks = null;
+  } catch {
+    // A hook that Node cannot remove stays inert: it acts only in a theme
+    // module load, and the next load uses it again.
+  }
+}
+
+/**
+ * Run a theme module load with every stylesheet that the theme's modules
+ * import, at any depth, loaded as an empty module. A theme module can import
+ * a stylesheet so that the app's bundler emits it, and Node cannot load a
+ * stylesheet. Node resolves each import from the module that writes it, so a
+ * missing stylesheet fails like any missing import, and an import that ends
+ * in `.css` but names a JavaScript file loads that file. Module loads outside
+ * this call's async context do not change. The module hook is installed for
+ * the first overlapping load and removed after the last. A Node without module
+ * hooks (before 22.15) runs the load unchanged.
+ * @template T
+ * @param {() => Promise<T>} load
+ * @returns {Promise<T>}
+ */
+export async function withEmptyStylesheets(load) {
+  if (typeof registerHooks !== 'function') return await load();
+  stylesheetHooks ??= registerHooks({load: loadStylesheetAsEmptyModule});
+  themeModuleLoadsInFlight++;
+  try {
+    return await themeModuleLoad.run(true, load);
+  } finally {
+    if (--themeModuleLoadsInFlight === 0) removeStylesheetHooks();
+  }
+}
+
+/**
+ * The stylesheet rule for a Node without module hooks. An import that ends in
+ * `.css` and resolves from the theme module to an existing `.css` file loads
+ * as an empty module. Any other import loads as before: a missing stylesheet
+ * fails like any missing import, and `./tokens.css` loads `tokens.css.js` when
+ * that is the file it names. jiti shows only the import text, so the check
+ * resolves it from the theme module's folder, not from the importing module's.
+ * A module in another folder fails on a stylesheet it reaches by a different
+ * relative path, and passes on a missing stylesheet whose path exists from the
+ * theme module's folder.
  * @param {() => string} themeModule returns the theme module's path
  * @returns {Record<string, unknown>}
  */
@@ -193,8 +258,9 @@ function isMissingPackageExport(error) {
 /**
  * Load a generated theme artifact and its extensionless JS/JSX/TS/TSX graph.
  * Package specifiers resolve from the consumer project, while relative paths
- * resolve from that same project root. An import of an existing `.css` file
- * loads as an empty module.
+ * resolve from that same project root. A stylesheet that a module in the graph
+ * imports loads as an empty module (`withEmptyStylesheets`). A target that is
+ * itself a stylesheet is not a theme module, and fails as one.
  * @param {string} specifier
  * @param {string} cwd
  * @returns {Promise<Record<string, unknown>>}
@@ -207,7 +273,9 @@ export async function importThemeArtifact(specifier, cwd) {
     jsx: true,
     interopDefault: true,
     extensions: THEME_ARTIFACT_EXTENSIONS,
-    virtualModules: themeArtifactStylesheets(() => themeModule),
+    ...(typeof registerHooks === 'function'
+      ? {}
+      : {virtualModules: themeArtifactStylesheets(() => themeModule)}),
   });
   let target;
   if (specifier.startsWith('.') || path.isAbsolute(specifier)) {
@@ -224,7 +292,11 @@ export async function importThemeArtifact(specifier, cwd) {
     throw new ThemeArtifactNotFoundError(specifier);
   }
   themeModule = target;
-  return await withStdoutOnStderr(() => loader.import(target));
+  /** @type {() => Promise<Record<string, unknown>>} */
+  const load = () => loader.import(target);
+  return await withStdoutOnStderr(
+    isStylesheetSpecifier(target) ? load : () => withEmptyStylesheets(load),
+  );
 }
 
 /**

@@ -84,15 +84,16 @@ describe('round 4 (2): what is in the copy folder', () => {
     }
   }, 240_000);
 
-  it('a file of yours stops it, and wiring gives the steps by hand naming it', async () => {
+  it('a file of yours at a copy name stops it, and wiring gives the steps by hand naming it', async () => {
+    // (A file at another name no longer stops it: hunt62.)
     await themeEditNew('n', {cwd});
-    fs.writeFileSync(path.join(cwd, 'src/themes/n/notes.md'), 'mine');
+    fs.writeFileSync(path.join(cwd, 'src/themes/n/nTheme.ts'), '// mine\n');
     const before = read('src/themes/n/n.css');
     const r = await themeEditSet('n', 'corners', 'pill', {cwd});
     expect(read('src/themes/n/n.css')).toBe(before);
     const shown = await themeEditShow('n', {cwd});
     const wiring = /** @type {any} */ (shown.data).wiring.join('\n');
-    expect(wiring).toContain("src/themes/n/notes.md is not the editor's");
+    expect(wiring).toContain('src/themes/n/nTheme.ts is yours');
     expect(wiring).toContain('<Theme theme={nTheme}');
     expect(wiring).not.toMatch(/ theme add n:/);
     expect(r.data.setting.value).toBe('pill');

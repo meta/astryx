@@ -77,7 +77,10 @@ import {
 import {useMultiCombobox} from './hooks';
 import {getInputARIA, isImeKeyEvent, mergeProps} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
-import {withholdCallerHandlers} from '../utils/disabledInteraction';
+import {
+  disabledInteractionProps,
+  withholdCallerHandlers,
+} from '../utils/disabledInteraction';
 import {devWarn, warnOnce} from '../utils/devWarning';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {useKeyboardHighlight} from '../hooks/useKeyboardHighlight';
@@ -1550,7 +1553,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
 
   // Open dropdown on mount when isDefaultOpen is true and interaction is allowed.
   useEffect(() => {
-    if (isDefaultOpen && !isEffectivelyReadOnly) {
+    if (isDefaultOpen && !isDisabled && !isEffectivelyReadOnly) {
       surface.show();
     }
     // eslint-disable-next-line @eslint-react/exhaustive-deps -- mount-only: isDefaultOpen is not reactive
@@ -2555,7 +2558,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     const triggerProps: MultiSelectorRenderTriggerProps = {
       // Base props reach the caller's control, the primary semantic control
       // in this mode; the selector's own wiring below wins over them.
-      ...rest,
+      ...callerProps,
       'aria-describedby': ariaDescribedByProp,
       // Only a caller value is handed back, so a control that names itself
       // with its own aria-labelledby before spreading keeps it.
@@ -2587,6 +2590,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       onKeyDown: isEffectivelyReadOnly
         ? onKeyDownProp
         : composeEventHandlers(onKeyDown, onKeyDownProp),
+      ...(isDisabled ? disabledInteractionProps<HTMLElement>() : undefined),
       onFocus: event => {
         onFocus?.(event);
         surface.onTriggerFocus(event);
@@ -2607,6 +2611,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       'aria-expanded': isEffectivelyReadOnly ? false : surface.isOpen,
       'aria-controls': isEffectivelyReadOnly ? undefined : listboxId,
       'aria-busy': isBusy || undefined,
+      'aria-disabled': isDisabled || callerProps['aria-disabled'],
       // Withholding the disclosure attributes stops the control lying about
       // a panel, but leaves it silent about WHY it does not open. The field
       // path says so through its own chrome; the caller's control has none,
