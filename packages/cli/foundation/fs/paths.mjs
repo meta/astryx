@@ -292,15 +292,16 @@ export function homeFolder() {
 }
 
 /**
- * Whether `child` lies strictly inside `parent`.
+ * Whether `child` lies strictly inside `parent`. A name that only begins with
+ * two dots (`..x`) is a folder or file like any other.
  *
  * @param {string} child
  * @param {string} parent
  * @returns {boolean}
  */
-function isInside(child, parent) {
+export function isInside(child, parent) {
   const rel = path.relative(parent, child);
-  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+  return rel !== '' && rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel);
 }
 
 /**

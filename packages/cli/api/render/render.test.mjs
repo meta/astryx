@@ -1985,6 +1985,11 @@ describe('render(): a page outside a project', () => {
     expect(run.json.data.files).toEqual(['app/x/page.tsx', 'components/Banner.tsx']);
     const back = runBin(tree, ['experimental', 'render', '--reverse', 'app/x/page.html']);
     expect(back.json.data).toMatchObject({exact: true, files: ['app/x/page-restored/app/x/page.tsx', 'app/x/page-restored/components/Banner.tsx']});
+    // The note names the page by its path among the files it lists.
+    const note = fs.readFileSync(path.join(tree, 'app/x/page.html'), 'utf8');
+    expect(note).toContain('Page: app/x/page.tsx\n');
+    expect(note).toContain('Carried files (2): app/x/page.tsx, components/Banner.tsx');
+    expect(note).toContain('edit app/x/page.tsx there instead');
     // The page's own folder still holds the tsconfig.json and the public/
     // images it is rendered with.
     fs.mkdirSync(path.join(tree, 'site/public'), {recursive: true});

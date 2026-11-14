@@ -56,7 +56,7 @@ export function formatFor(files) {
  * optional: files from older CLIs have none of them.
  * @typedef {object} RenderRecord
  * @property {string} [cli] - The version of the CLI that rendered the file.
- * @property {string} [page] - The page's path from its project's root, `/`-separated.
+ * @property {string} [page] - The page's path from its project's root, `/`-separated; outside a project, from the folder whose files it carries.
  * @property {string} [title] - The title given with --title, which a render again needs too.
  * @property {Record<string, string>} [packages] - The packages the page rendered with, by name: their versions.
  * @property {{sha256: string, style?: string, text?: string}} [markup] - The page as rendered, so a reverse can tell what changed after the render: the SHA-256 of the markup in <body> and of the <style> element, and `text`, the base64 of the JSON `{title, runs}` (the title and the markup's runs of text in order). The text stays encoded so that a find-and-replace over the page's text cannot change the record too.
