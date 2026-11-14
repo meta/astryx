@@ -268,8 +268,9 @@ const QUESTIONS = [
     'in dark mode make cards slightly lighter',
     {
       parts: ['card'],
-      top: /--on card --mode dark$/,
-      adds: /card\.variant:default\.backgroundColor=light-dark\(/,
+      // Each card variant from its own fill, dark mode only.
+      top: /--on card( --when variant:default)? --mode dark( && |$)/,
+      adds: /card\.variant:default\.background(Color)?=/,
     },
   ],
   [
@@ -392,8 +393,10 @@ const QUESTIONS = [
   [
     'stronger shadow on dialogs',
     {
-      top: /^set q box-shadow 'var\(--shadow-high\)' --on dialog$/,
-      adds: /dialog\.base\.boxShadow=var\(--shadow-high\)/,
+      // The dialog already reads the strongest shared shadow: that shadow,
+      // its colors stronger (never the same shadow again).
+      top: /^set q box-shadow '(?!var\(--shadow-high\)).+' --on dialog$/,
+      adds: /dialog\.base\.boxShadow=/,
     },
   ],
   [
@@ -616,7 +619,15 @@ const QUESTIONS = [
       adds: /:active\.transform=scale/,
     },
   ],
-  ['selected table row light blue', {parts: ['table-row'], top: null}],
+  [
+    'selected table row light blue',
+    {
+      parts: ['table-row'],
+      // Core paints the selected wash inline from this token.
+      top: /^set q --color-accent-muted '#[0-9a-f]{6}' --on table-row --state selected$/,
+      adds: /table-row\.selected\.--color-accent-muted=#/,
+    },
+  ],
   ['dark mode only', {top: /^set q mode dark-only$/, adds: /mode=dark-only/}],
   [
     'make dark mode text less bright',
@@ -1031,8 +1042,10 @@ const QUESTIONS_2 = [
   [
     'all buttons blue except the danger one',
     {
-      top: /--on button && set q background 'var\(--color-error\)' --on button --when variant:destructive$/,
-      adds: /variant:destructive\.background=var\(--color-error\)/,
+      // The danger variant keeps the fill (and the text on it) the base
+      // theme gives it.
+      top: /--on button && set q background 'var\(--color-error(-muted)?\)' --on button --when variant:destructive( && set q color 'var\(--color-on-error(-muted)?\)' --on button --when variant:destructive)?$/,
+      adds: /variant:destructive\.background=var\(--color-error(-muted)?\)/,
     },
   ],
   [
@@ -1308,7 +1321,7 @@ const QUESTIONS_2 = [
   [
     'dialgo shadow stronger',
     {
-      top: /^set q box-shadow 'var\(--shadow-high\)' --on dialog$/,
+      top: /^set q box-shadow '(?!var\(--shadow-high\)).+' --on dialog$/,
       adds: /dialog\.base\.boxShadow/,
     },
   ],
@@ -1886,7 +1899,9 @@ const QUESTIONS_F = [
   ],
   [
     'the shadows are too strong',
-    {top: /^set q --shadow-low '0 1px 2px rgb\(0 0 0 \/ 0\.05\)'/},
+    // Each shared shadow from its own layers, its colors fainter (both
+    // modes kept), never a stock light-mode set.
+    {top: /^set q --shadow-low '.*light-dark\(/},
   ],
   [
     'card shadows too strong',
@@ -3203,7 +3218,9 @@ const QUESTIONS_K = [
   ],
   [
     'only in dark mode and only on cards, darker background',
-    {top: /^set q background '#[0-9a-f]{6}' --on card --mode dark$/},
+    {
+      top: /^set q background '#[0-9a-f]{6}' --on card( --when variant:default)? --mode dark( && .*)?$/,
+    },
   ],
   [
     'in daytime mode use a cream background',

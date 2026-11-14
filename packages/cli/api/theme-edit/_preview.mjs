@@ -1422,6 +1422,10 @@ const camelName = camel;
 export async function screenshot(project, html, png, mode) {
   /** What was found and why it could not take the picture. @type {string[]} */
   const failed = [];
+  /** Whether a Playwright was found without its own browser installed. */
+  let pwMissing = false;
+  /** Whether a Playwright was found at all. */
+  let pwFound = false;
   /** The first line of an error, with no path of this machine. @param {unknown} e */
   const firstLine = e =>
     String(/** @type {any} */ (e)?.message ?? e ?? '')
@@ -1438,12 +1442,28 @@ export async function screenshot(project, html, png, mode) {
     } catch {
       continue;
     }
+    pwFound = true;
     try {
       const pw = await import(pathToFileURL(entry).href);
       const chromium = pw.chromium ?? pw.default?.chromium;
-      const browser = await chromium.launch(
-        chromeBinary() ? {executablePath: chromeBinary()} : {},
-      );
+      // Playwright's own browser first; the system Chrome when that one is
+      // not installed or does not start.
+      /** @type {any} */
+      let browser;
+      try {
+        browser = await chromium.launch({});
+      } catch (own) {
+        const sys = chromeBinary();
+        if (
+          /Executable doesn't exist|playwright install/i.test(
+            String(/** @type {any} */ (own)?.message),
+          )
+        )
+          pwMissing = true;
+        if (!sys) throw own;
+        failed.push(`${pkg} with its own browser: ${firstLine(own)}`);
+        browser = await chromium.launch({executablePath: sys});
+      }
       try {
         const page = await browser.newPage({
           viewport: {width: 1280, height: 900},
@@ -1514,7 +1534,15 @@ export async function screenshot(project, html, png, mode) {
   if (failed.length)
     return {
       ok: false,
-      reason: `A browser was found, but it could not take the picture (${failed.join('; ')}). Give Playwright its browser (npx playwright install chromium), or check that ${chrome ?? 'Google Chrome or Chromium'} starts on this machine. The HTML preview needs neither.`,
+      // Advice that can change the result: Playwright's browser only when
+      // it is missing, else the browsers that were tried.
+      reason: `A browser was found, but it could not take the picture (${failed.join('; ')}). ${
+        !pwFound
+          ? `Install Playwright with its browser (${installLine(project.cwd, ['playwright'])}, then npx playwright install chromium), or check`
+          : pwMissing
+            ? 'Give Playwright its browser (npx playwright install chromium), or check'
+            : "Playwright's own browser did not start either: check"
+      } that ${chrome ?? 'Google Chrome or Chromium'} starts on this machine. The HTML preview needs neither.`,
     };
   return {
     ok: false,
@@ -1537,11 +1565,23 @@ function chromeBinary() {
     'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
   ];
-  for (const f of fixed) if (fs.existsSync(f)) return f;
+  // Only a file that runs: a folder or a file with no execute permission
+  // by a browser's name is passed over, and the search goes on.
+  /** @param {string} f */
+  const runs = f => {
+    try {
+      if (!fs.statSync(f).isFile()) return false;
+      if (process.platform !== 'win32') fs.accessSync(f, fs.constants.X_OK);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  for (const f of fixed) if (runs(f)) return f;
   for (const dir of (process.env.PATH ?? '').split(path.delimiter)) {
     for (const n of names) {
       const f = path.join(dir, n);
-      if (dir && fs.existsSync(f)) return f;
+      if (dir && runs(f)) return f;
     }
   }
   return null;
@@ -1638,7 +1678,7 @@ function appCopyFiles(cwd, slug, fontsCss) {
     // theme's fonts change (none: a comment only).
     [`${slug}.fonts.css`]: fonts.length
       ? `${head('/*', '*/')}${fonts.map(c => `@import ${JSON.stringify(c)};`).join('\n')}\n`
-      : `${head('/*', '*/')}/* No font stylesheets: the theme uses fonts the system has. */\n`,
+      : `${head('/*', '*/')}/* No font stylesheets: no installed package loads the theme's fonts. A font the system does not have shows only once its package is installed (experimental theme editor show ${slug} names it). */\n`,
   };
   return files;
 }

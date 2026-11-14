@@ -999,7 +999,12 @@ function checkPlacement(cwd, dir, where, retry) {
   if (served && app !== served)
     refuse(
       E.ERR_INVALID_ARGUMENT,
-      `${where} is in ${shown(cwd, app)}/, and Next serves ${shown(cwd, served)}/ instead when both are there.`,
+      // Next serves the root app/ when both are there: a preview in src/app/
+      // under a root app/ is not served, and a new root app/ beside the
+      // app's src/app/ would hide the whole app.
+      path.resolve(app) === path.join(path.resolve(cwd), 'app')
+        ? `${where} would make ${shown(cwd, app)}/ beside ${shown(cwd, served)}/, and Next serves the root app/ when both are there, so the whole app in ${shown(cwd, served)}/ would stop being served.`
+        : `${where} is in ${shown(cwd, app)}/, and Next serves ${shown(cwd, served)}/ instead when both are there.`,
       {
         run: fs.existsSync(path.join(dir, PREVIEW_DATA))
           ? [
@@ -3224,8 +3229,15 @@ function dirFlag(cwd, dir) {
  */
 export async function refreshPreviewRoute(cwd, slug) {
   const at = previewDir(cwd, undefined, {optional: true});
+  // The same previews `see` names: the usual folder, the recorded ones,
+  // and any in the routes folders that wear the theme (a folder renamed by
+  // hand, or one whose record was lost).
   const dirs = [
-    ...new Set([...(at ? [at.dir] : []), ...recordedPreviews(cwd, slug)]),
+    ...new Set([
+      ...(at ? [at.dir] : []),
+      ...recordedPreviews(cwd, slug),
+      ...previewsIn(cwd),
+    ]),
   ];
   let changed = false;
   /** @type {string[]} */

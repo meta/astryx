@@ -336,10 +336,12 @@ function realOrSelf(file) {
 /**
  * `target` spelled through real directories: the deepest ancestor that exists
  * is resolved through its symlinks, and the missing rest is appended as given.
+ * The build confines its outputs by it, and the theme editor's compile guard
+ * reads paths through it too, so both read a path the same way.
  * @param {string} target absolute path
  * @returns {string}
  */
-function realLocation(target) {
+export function realLocation(target) {
   /** @type {string[]} */
   const missing = [];
   let existing = target;

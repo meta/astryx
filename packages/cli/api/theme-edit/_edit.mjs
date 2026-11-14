@@ -14,7 +14,7 @@ import * as fs from 'node:fs';
 import {coversProperty} from './_css.mjs';
 import * as path from 'node:path';
 import {AstryxError} from '../error.mjs';
-import {vetSuggestions} from './_vet.mjs';
+import {readSetLine, vetSuggestions} from './_vet.mjs';
 import {colorPair, offersTyped} from './_normal.mjs';
 import {
   AUTO_SPREAD,
@@ -40,6 +40,8 @@ import {
   radiusTokenOf,
   contrastProblems,
   describe,
+  entryDamage,
+  entryNotes,
   keyOf,
   loadTheme,
   maskedSettings,
@@ -78,6 +80,7 @@ import {
   ownSourceTokens,
   ownSourceTokenValues,
   ownTokenEntries,
+  evaluatedOwnTokens,
   nonTextMessage,
   ownPartTokens,
   PHONE_TYPE,
@@ -1234,22 +1237,17 @@ export async function editorStoredRefusal(root, slug) {
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
- * @returns {Array<{token: string, value: string, why: string, line: number | null}>}
+ * @returns {Promise<Array<{token: string, value: string, why: string, line: number | null}>>}
  */
-function ownTokenProblems(ctx, slug, data) {
+async function ownTokenProblems(ctx, slug, data) {
   const {cwd} = ctx.project;
   /** @type {Array<{token: string, value: string, why: string, line: number | null}>} */
   const out = [];
   const known = ctx.project.core.tokenDefaults;
   /** @param {string} token @param {string} value @returns {string | null} */
   const refused = (token, value) => {
-    // A family list wholly in quotes (`"Georgia, serif"`, as Core returns
-    // a family set through typography) is that list.
-    const v = /^--font-family-/.test(token)
-      ? value.replace(/^\s*"([^"]*,[^"]*)"\s*$/, '$1')
-      : value;
     try {
-      checkSetting(ctx, slug, {...data, settings: []}, token, v, {});
+      checkSetting(ctx, slug, {...data, settings: []}, token, value, {});
       return null;
     } catch (e) {
       if (!(e instanceof AstryxError)) throw e;
@@ -1258,11 +1256,37 @@ function ownTokenProblems(ctx, slug, data) {
   };
   // The tokens map as written, entry by entry, with the line that sets
   // each: every value is checked as `set` checks it (each half of a
-  // [light, dark] pair; a number is not text, as show says), and a key no
-  // read of the file can resolve is named as not checked.
+  // [light, dark] pair; a number is not text, as show says), and what only
+  // a build can read (an imported module, an expression) is read from a
+  // build made now, so nothing ships unchecked.
   const entries = ownTokenEntries(cwd, slug);
+  const needsBuild = entries.some(
+    e => e.kind === 'unresolved' || (e.kind === 'other' && e.token),
+  );
+  const evaluated = needsBuild ? await evaluatedOwnTokens(ctx, slug) : null;
   const seen = new Set();
   for (const e of entries) {
+    if (e.kind === 'duplicate') {
+      out.push({
+        token: 'tokens',
+        value: '',
+        why: `defineTheme is given tokens twice (lines ${(e.lines ?? []).join(' and ')}); the build keeps only the last, so the first does nothing: merge them into one`,
+        line: e.line,
+      });
+      continue;
+    }
+    if (e.kind === 'typography') {
+      const why = typographyProblem(e.key, e.value);
+      if (why)
+        out.push({
+          token: `typography.${e.key}`,
+          value: e.value == null ? '' : String(e.value),
+          why,
+          line: e.line,
+        });
+      continue;
+    }
+    if (e.kind === 'unresolved') continue;
     if (e.token == null) {
       out.push({
         token: e.key,
@@ -1272,54 +1296,146 @@ function ownTokenProblems(ctx, slug, data) {
       });
       continue;
     }
-    seen.add(e.token);
-    if (!(e.token in known)) continue;
+    const token = e.token;
+    seen.add(token);
+    if (!(token in known)) continue;
+    if (e.kind === 'object') {
+      out.push({
+        token,
+        value: '',
+        why: nonTextMessage(ctx, slug, [token, e.value, 'object']),
+        line: e.line,
+      });
+      continue;
+    }
     if (e.kind === 'number') {
       out.push({
-        token: e.token,
+        token,
         value: String(e.value),
-        why: nonTextMessage(ctx, slug, [e.token, e.value]),
+        why: nonTextMessage(ctx, slug, [token, e.value]),
         line: e.line,
       });
       continue;
     }
     if (e.kind === 'text') {
-      const why = refused(e.token, String(e.value));
-      if (why)
-        out.push({token: e.token, value: String(e.value), why, line: e.line});
+      const why = refused(token, String(e.value));
+      if (why) out.push({token, value: String(e.value), why, line: e.line});
       continue;
     }
-    const token = e.token;
-    if (e.kind === 'pair' && isColorToken(token)) {
+    if (e.kind === 'pair') {
       const halves = e.halves ?? [];
+      if (halves.length === 2 && halves.some(h => typeof h !== 'string')) {
+        out.push({
+          token,
+          value: '',
+          why: nonTextMessage(ctx, slug, [token, halves]),
+          line: e.line,
+        });
+        continue;
+      }
+      // A pair is exactly two values in quotes: one or none builds
+      // light-dark(red, undefined), a third is dropped.
+      if (halves.length !== 2) {
+        out.push({
+          token,
+          value: `[${halves.map(h => (h === undefined ? '' : JSON.stringify(h))).join(', ')}]`,
+          why: `a [light, dark] pair holds exactly two values in quotes, and this holds ${halves.length}; the build would write ${halves.length < 2 ? 'light-dark() with an undefined half' : 'the first two and drop the rest'}`,
+          line: e.line,
+        });
+        continue;
+      }
+      if (!isColorToken(token)) continue;
       halves.forEach((h, i) => {
-        const half = i === 0 ? 'light' : 'dark';
-        const why =
-          typeof h === 'string'
-            ? refused(token, h)
-            : nonTextMessage(ctx, slug, [token, halves]);
+        const why = refused(token, String(h));
         if (why)
           out.push({
             token,
             value: String(h),
-            why: `its ${half} half: ${why}`,
+            why: `its ${i === 0 ? 'light' : 'dark'} half: ${why}`,
             line: e.line,
           });
       });
+      continue;
     }
+    // An expression ('ban' + 'ana', a ternary, a template with ${}): the
+    // value a build makes of it, else named as not checked.
+    const v = evaluated?.get(token);
+    // A pair on a token that is not a color is the pair refusal's.
+    if (
+      typeof v === 'string' &&
+      /^light-dark\(/i.test(v) &&
+      !isColorToken(token)
+    )
+      continue;
+    if (typeof v === 'string') {
+      const why = refused(token, v);
+      if (why) out.push({token, value: v, why, line: e.line});
+    } else
+      out.push({
+        token,
+        value: '',
+        why: 'its value is an expression the editor could not evaluate, so it has not been checked; write it as text in quotes',
+        line: e.line,
+      });
   }
-  // A value the file gives another way (a spread, a const), as the build
-  // or the file shows it; a family set through typography is not in the
-  // map, so it is not checked here (the font dial checks it).
-  for (const [token, value] of Object.entries(
-    ownSourceTokenValues(cwd, slug),
-  )) {
-    if (seen.has(token) || !(token in known)) continue;
-    if (/^--font-family-/.test(token)) continue;
+  // A value the map gives another way (a spread of an imported module, a
+  // call), as a build made now evaluates it, else as the current build or
+  // the file shows it. A family the build shows that the map does not
+  // name came from typography, checked above.
+  const others =
+    evaluated ?? new Map(Object.entries(ownSourceTokenValues(cwd, slug)));
+  const tokensLine = entries.find(e => e.kind === 'unresolved')?.line ?? null;
+  for (const [token, value] of others) {
+    if (seen.has(token) || !(token in known) || value == null) continue;
+    if (/^light-dark\(/i.test(value) && !isColorToken(token)) continue;
+    if (!evaluated && /^--font-family-/.test(token)) continue;
     const why = refused(token, value);
-    if (why) out.push({token, value, why, line: null});
+    if (why) out.push({token, value, why, line: tokensLine});
   }
   return out;
+}
+
+/**
+ * What is wrong with one typography field of a theme's own source, or
+ * null: a family is one family name (Core quotes it whole), the scale's
+ * ratio is above 1 and at most 4, its base a positive size.
+ * @param {string} key the dotted field (`body.family`, `scale.ratio`)
+ * @param {unknown} value
+ * @returns {string | null}
+ */
+function typographyProblem(key, value) {
+  const field = key.split('.').pop();
+  if (field === 'family') {
+    if (typeof value !== 'string')
+      return 'a typography family is a family name in quotes, such as "Inter"';
+    const v = value.trim();
+    // Core quotes a family with a space whole, so a list here is one
+    // family by that whole name, which exists nowhere.
+    if (v.includes(','))
+      return `a typography family is one family name, which Core quotes whole ("${v}" is one family that exists nowhere); give the first as family and the rest as fallbacks, such as family: '${v
+        .split(',')[0]
+        .trim()
+        .replace(
+          /^["']|["']$/g,
+          '',
+        )}', fallbacks: '${v.split(',').slice(1).join(',').trim()}'`;
+    if (!v || /^[-+]?\d/.test(v) || /^(inherit|initial|unset|revert)$/i.test(v))
+      return `"${v}" is no font family name; give one such as "Inter"`;
+    return null;
+  }
+  if (field === 'ratio') {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 1 || n > 4)
+      return `the type scale's ratio is how much each size grows over the last, a number above 1 and at most 4 (such as 1.2); ${JSON.stringify(value)} makes ${n <= 0 ? 'sizes that are not numbers' : n <= 1 ? 'every size the same or smaller' : 'sizes no page can use'}`;
+    return null;
+  }
+  if (field === 'base') {
+    const n = typeof value === 'number' ? value : parseFloat(String(value));
+    if (!Number.isFinite(n) || n <= 0)
+      return `the type scale's base is the body size, a positive number of pixels (such as 16); ${JSON.stringify(value)} makes sizes no page can use`;
+    return null;
+  }
+  return null;
 }
 
 /**
@@ -1330,8 +1446,8 @@ function ownTokenProblems(ctx, slug, data) {
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
  */
-function refuseOwnTokenValues(ctx, slug, data) {
-  const err = ownTokenRefusal(ctx, slug, data);
+async function refuseOwnTokenValues(ctx, slug, data) {
+  const err = await ownTokenRefusal(ctx, slug, data);
   if (err) throw err;
 }
 
@@ -1340,10 +1456,10 @@ function refuseOwnTokenValues(ctx, slug, data) {
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
- * @returns {AstryxError | null}
+ * @returns {Promise<AstryxError | null>}
  */
-function ownTokenRefusal(ctx, slug, data) {
-  const bad = ownTokenProblems(ctx, slug, data);
+async function ownTokenRefusal(ctx, slug, data) {
+  const bad = await ownTokenProblems(ctx, slug, data);
   if (!bad.length) return null;
   const file = `themes/${slug}/${slug}.theme.ts`;
   return new AstryxError(
@@ -1507,6 +1623,75 @@ function carryTyped(e, sub, slug, thing, typed) {
 }
 
 /**
+ * A `set` or `undo` line for the theme a path or other letters named, run
+ * through that command's own check (in memory, nothing written). Each
+ * repair a refusal of it offers is folded into the one line, so the line
+ * runs as offered; `why` names what is still refused when no repair is
+ * offered.
+ * @param {'set' | 'undo'} sub
+ * @param {string} slug
+ * @param {string} line
+ * @param {string} cwd
+ * @returns {Promise<{line: string, why: string | null}>}
+ */
+async function followChangeLine(sub, slug, line, cwd) {
+  /** @type {import('./_settings.mjs').ThemeData} */
+  let data;
+  /** @type {import('./_settings.mjs').Ctx} */
+  let ctx;
+  try {
+    data = loadTheme(cwd, slug);
+    ctx = /** @type {import('./_settings.mjs').Ctx} */ (await context(cwd));
+    ctx.base = await baseResolved(ctx.project, data.like);
+  } catch {
+    return {line, why: null};
+  }
+  const prefix = `${P} ${sub} ${slug} `;
+  let now = line;
+  for (let i = 0; i < 6; i += 1) {
+    const read = readSetLine(
+      sub === 'undo' ? now.replace(`${P} undo `, `${P} set `) : now,
+      slug,
+    );
+    if (!read) return {line: now, why: null};
+    try {
+      const s = checkSetting(
+        ctx,
+        slug,
+        structuredClone(data),
+        read.thing,
+        read.value,
+        read.flags,
+        sub === 'undo',
+      );
+      if (sub === 'undo' && !data.settings.some(x => keyOf(x) === keyOf(s)))
+        return {
+          line: now,
+          why: `${slug} does not set ${describe({...s, value: '?'}).replace(' = ?', '')}`,
+        };
+      return {line: now, why: null};
+    } catch (e) {
+      const next =
+        e instanceof AstryxError
+          ? (e.suggestions ?? []).find(
+              x => x.name.startsWith(prefix) && x.name !== now,
+            )
+          : undefined;
+      if (!next)
+        return {
+          line: now,
+          why:
+            e instanceof Error
+              ? e.message.replace(/\s*Nothing was changed\.$/, '')
+              : String(e),
+        };
+      now = next.name;
+    }
+  }
+  return {line: now, why: null};
+}
+
+/**
  * @param {'set' | 'undo'} sub
  * @param {string} slug
  * @param {string} thing
@@ -1553,6 +1738,43 @@ async function change(sub, slug, thing, value, options) {
             ),
         },
       );
+  }
+  // A flag typed inside the value (`'red --mode dark'`, `'4px --state
+  // hover'`, `'pill --on button'`): the same command with the flag lifted
+  // out, never the value alone, which would change another scope.
+  if (typeof value === 'string' && /\s--(mode|state|on|when)\b/.test(value)) {
+    /** @type {Record<string, string>} */
+    const lifted = {};
+    const bare = value
+      .replace(
+        /\s+--(mode|state|on|when)(?:\s*=\s*|\s+)("[^"]*"|'[^']*'|\S+)/g,
+        (_, f, x) => {
+          lifted[f] = x.replace(/^(["'])(.*)\1$/, '$2');
+          return '';
+        },
+      )
+      .trim();
+    if (bare && Object.keys(lifted).length) {
+      const opts = /** @type {Record<string, unknown>} */ ({
+        ...options,
+        ...lifted,
+      });
+      const flagText = ['on', 'when', 'state', 'mode']
+        .filter(f => opts[f])
+        .map(f => ` --${f} ${quoteCommandArgument(String(opts[f]))}`)
+        .join('');
+      refuse(
+        E.ERR_INVALID_ARGUMENT,
+        `"${value}" holds ${Object.keys(lifted)
+          .map(f => `--${f}`)
+          .join(' and ')} inside the value; a flag goes outside the quotes.`,
+        {
+          run: [
+            `${P} ${sub} ${slug} ${quoteCommandArgument(String(thing))}${sub === 'set' ? ` ${quoteCommandArgument(bare)}` : ''}${flagText}${options.only ? ' --only' : ''}`,
+          ],
+        },
+      );
+    }
   }
   // How it was typed, put right before anything reads it (a pasted
   // declaration, a dash, a var(), invisible spaces).
@@ -1637,10 +1859,16 @@ async function change(sub, slug, thing, value, options) {
           .map(w =>
             String(w).startsWith('--') ? w : quoteCommandArgument(String(w)),
           );
+        const followed = await followChangeLine(
+          sub,
+          near.name,
+          `${P} ${sub} ${near.name}${words.length ? ` ${words.join(' ')}` : ''}`,
+          options.cwd ?? process.cwd(),
+        );
         e.suggestions = [
           {
-            name: `${P} ${sub} ${near.name}${words.length ? ` ${words.join(' ')}` : ''}`,
-            reason: `do this instead: ${near.name} is a theme here`,
+            name: followed.line,
+            reason: `do this instead: ${near.name} is a theme here${followed.why ? `, but this still needs a fix: ${followed.why}` : ''}`,
           },
           ...(e.suggestions ?? []).filter(
             x => x !== near && x.name !== `${P} show ${near.name}`,
@@ -1695,10 +1923,13 @@ async function changeOnce(
     when: options.when,
     state: options.state,
     mode: options.mode,
+    // An undo removes the entry it names even when that entry's mode or
+    // source means nothing.
+    ...(sub === 'undo' ? {removing: true} : {}),
   });
   const data = loadTheme(cwd, slug, target);
   /** @type {string[]} */
-  const fieldNotes = [];
+  const fieldNotes = [...entryNotes(data)];
   {
     // A damaged field the command does not set goes back to its default,
     // so the theme loads again (a change or removal of any setting repairs
@@ -1746,8 +1977,10 @@ async function changeOnce(
       state: options.state,
       mode: options.mode,
     });
-    refuseOwnTokenValues(ctx, slug, data);
   }
+  // The own source's token values are checked before every change, an
+  // undo too: an undo rebuilds the theme from that source.
+  await refuseOwnTokenValues(ctx, slug, data);
   const flags = {
     on: options.on,
     when: options.when,
@@ -1786,8 +2019,24 @@ async function changeOnce(
             Boolean(x.only) === Boolean(flags.only),
         )
       : -1;
-  let rawIdx = -1;
-  if (exactIdx >= 0) {
+  // An entry of this name whose mode or source means nothing is the one an
+  // undo removes: only that entry, never a valid one beside it.
+  const damagedIdx =
+    sub === 'undo'
+      ? data.settings.findIndex(
+          x =>
+            (x.thing === typedThing || x.thing === thing) &&
+            (x.on ?? null) === (flags.on ?? null) &&
+            (x.when ?? null) === (flags.when ?? null) &&
+            (x.state ?? null) === (flags.state ?? null) &&
+            Boolean(x.only) === Boolean(flags.only) &&
+            (entryDamage(x) === 'source'
+              ? (x.mode ?? null) === (flags.mode ?? null)
+              : entryDamage(x) === 'mode' && !flags.mode),
+        )
+      : -1;
+  let rawIdx = damagedIdx;
+  if (exactIdx >= 0 && rawIdx < 0) {
     // Only an entry the editor would not save as written: one it refuses,
     // or reads as another name, part or state.
     const entry = data.settings[exactIdx];
@@ -2874,7 +3123,7 @@ export async function themeEditShow(theme, options = {}) {
   // build a later refusal puts back.
   holdAfterBuild(ctx);
   refuseStoredTokens(ctx, theme, data);
-  refuseOwnTokenValues(ctx, theme, data);
+  await refuseOwnTokenValues(ctx, theme, data);
   // Without React, show still lists the settings and builds the theme, as
   // set does; only the pages, pictures and the checks that render are
   // skipped, and the result says how to fix it.
@@ -3831,10 +4080,16 @@ export async function themeEditUndo(theme, options = {}) {
         ].map(w =>
           String(w).startsWith('--') ? w : quoteCommandArgument(String(w)),
         );
+        const followed = await followChangeLine(
+          'undo',
+          name,
+          `${P} undo ${name}${words.length ? ` ${words.join(' ')}` : ''}`,
+          cwd,
+        );
         e.suggestions = [
           {
-            name: `${P} undo ${name}${words.length ? ` ${words.join(' ')}` : ''}`,
-            reason: `do this instead: ${name} is a theme here`,
+            name: followed.line,
+            reason: `do this instead: ${name} is a theme here${followed.why ? `, but this still needs a fix: ${followed.why}` : ''}`,
           },
           ...(e.suggestions ?? []).filter(x => x !== near),
         ];
@@ -3987,6 +4242,9 @@ async function undoTheme(theme, options) {
       `Nothing to undo: ${theme} has no earlier change${repair ? `, and ${theme}.settings.json cannot be read` : ''}.`,
       {run: repair ?? [`${P} show ${theme}`]},
     );
+  // The step rebuilds the theme from its own source: a token value there
+  // that set refuses is refused here too, before anything is written.
+  if (current) await refuseOwnTokenValues(await context(cwd), theme, current);
   // A top step equal to the settings now (left by an undo stopped between
   // its two writes) changes nothing: skip it.
   const nowText = fs.readFileSync(f.settings, 'utf8');

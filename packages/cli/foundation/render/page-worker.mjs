@@ -31,7 +31,7 @@ import {pathToFileURL} from 'node:url';
 import {format} from 'node:util';
 import {parentPort, workerData} from 'node:worker_threads';
 import {transformSync} from '@babel/core';
-import {LOAD_EXTENSIONS, existingFile, matchPath, readPathsIn, resolvePath} from './ts-paths.mjs';
+import {LOAD_EXTENSIONS, existingFile, matchPath, pathsFor, resolvePath} from './ts-paths.mjs';
 import {createJiti} from 'jiti';
 import {assetDataUri, isAssetPath} from './assets.mjs';
 import {SINGLE_COPY, isServedPackage, packageOf, resolveServed} from './served-packages.mjs';
@@ -581,10 +581,11 @@ function pagePlugin(filename) {
 }
 
 /**
- * The project's path aliases (`compilerOptions.paths` in tsconfig.json or
- * jsconfig.json), matched by TypeScript's rules (see ts-paths.mjs).
+ * The page's path aliases (`compilerOptions.paths` in the tsconfig.json or
+ * jsconfig.json that TypeScript reads for the page), matched by TypeScript's
+ * rules (see ts-paths.mjs).
  */
-const PATHS = readPathsIn(root) ?? [];
+const PATHS = pathsFor(path.resolve(entry));
 
 /** @param {string} spec whether a specifier goes through a project alias */
 const isAliased = spec => resolvePath(PATHS, spec) !== null;
