@@ -21,9 +21,10 @@
  *   file is transpiled again wherever the cache is. Each new source path adds
  *   a file, so the folder is kept within CACHE_LIMIT_BYTES (cache-eviction.mjs):
  *   a run that finds it grown since the last check removes its least recently
- *   used copies (isTranspiledCopy), and nothing else, never one used in the
- *   last day. A copy that is gone or cut short is a miss, and jiti transpiles
- *   the source again.
+ *   used copies (isTranspiledCopy), and nothing else, never one written in
+ *   the last day or read in the last day where the file system records reads.
+ *   A copy that is gone or cut short is a miss, and jiti transpiles the
+ *   source again.
  *   A set JITI_FS_CACHE is jiti's own setting and left to jiti.
  */
 
@@ -78,31 +79,36 @@ export function jitiCacheOptions() {
 }
 
 /**
- * The file in the folder that holds the folder's time at the last check.
- * jiti names its files for their sources, so none starts with a dot.
+ * The file in the folder that holds the folder's time at the last check. Its
+ * name has no hash, so it is never taken for a copy (isTranspiledCopy).
  */
 const CHECKED = '.checked';
+
+/** A day, in milliseconds. */
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * How long a copy is kept after its last use, whatever the folder holds.
  * jiti checks that a copy exists and then reads it, with no fallback if the
  * copy is gone in between, so the size limit never removes a copy a run may
- * be reading: one written or read within this time.
+ * be reading: one written in the last day, or read in the last day where the
+ * file system records reads. Most systems record a read time at most once a
+ * day, so a read in the last day leaves a read time in the last two days.
  */
-const RECENT_USE_MS = 24 * 60 * 60 * 1000;
+const RECENT_USE_MS = 2 * DAY_MS;
 
 /**
  * When a copy was last used: its last write (jiti writes a copy when it
- * transpiles the source), or its last read where the system records one
- * (access times, which most systems update at least once a day).
+ * transpiles the source), or its last read where the file system records one.
  * @param {fs.Stats} stat
  * @returns {number}
  */
 const lastUse = stat => Math.max(stat.mtimeMs, stat.atimeMs);
 
 /**
- * How jiti names a transpiled copy: the source's folder and stem, a hash of
- * the source's path, and `.cjs` or `.mjs` (with `x` for JSX).
+ * How jiti names a transpiled copy: the source's folder and stem (a dot
+ * folder keeps its dot), a hash of the source's path, and `.cjs` or `.mjs`
+ * (with `x` for JSX).
  */
 const TRANSPILED_COPY = /\.[0-9a-f]{8}\.[cm]jsx?$/;
 
@@ -113,7 +119,50 @@ const TRANSPILED_COPY = /\.[0-9a-f]{8}\.[cm]jsx?$/;
  * @returns {boolean}
  */
 export function isTranspiledCopy(name) {
-  return !name.startsWith('.') && TRANSPILED_COPY.test(name);
+  return TRANSPILED_COPY.test(name);
+}
+
+/**
+ * The folder's time at the last check, or null when there is no record: a
+ * record that is not a regular file is never read or written (links in the
+ * folder are never followed).
+ * @param {string} checked
+ * @returns {string | null}
+ */
+function lastCheck(checked) {
+  try {
+    if (!fs.lstatSync(checked).isFile()) return null;
+    return fs.readFileSync(checked, 'utf8');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Record the folder's time. The record is made once, empty, which moves the
+ * folder's time; after that it is written in place, which does not, so the
+ * time it holds is the time a later run reads. Making it never replaces
+ * anything at its name, and writing it never follows a link.
+ * @param {string} dir
+ * @param {string} checked
+ */
+function recordCheck(dir, checked) {
+  let stat = null;
+  try {
+    stat = fs.lstatSync(checked);
+  } catch {
+    fs.writeFileSync(checked, '', {flag: 'wx', mode: 0o600});
+  }
+  if (stat != null && !stat.isFile()) return;
+  const fd = fs.openSync(
+    checked,
+    fs.constants.O_WRONLY | fs.constants.O_TRUNC | fs.constants.O_NOFOLLOW,
+  );
+  try {
+    fs.writeSync(fd, String(fs.statSync(dir).mtimeMs));
+  } finally {
+    fs.closeSync(fd);
+  }
 }
 
 /**
@@ -127,22 +176,14 @@ export function isTranspiledCopy(name) {
  */
 export function keepWithinLimit(dir, limit = CACHE_LIMIT_BYTES) {
   const checked = path.join(dir, CHECKED);
-  const folderTime = () => String(fs.statSync(dir).mtimeMs);
   try {
-    if (fs.readFileSync(checked, 'utf8') === folderTime()) return;
-  } catch {
-    // Never checked, or unreadable: check now.
-  }
-  try {
+    if (lastCheck(checked) === String(fs.statSync(dir).mtimeMs)) return;
     evictOldest(dir, isTranspiledCopy, {
       limit,
       keepUsedSince: Date.now() - RECENT_USE_MS,
       lastUse,
     });
-    // Making the file moves the folder's time; writing it again in place
-    // does not, so the second write holds the time a later run compares.
-    if (!fs.existsSync(checked)) fs.writeFileSync(checked, '');
-    fs.writeFileSync(checked, folderTime());
+    recordCheck(dir, checked);
   } catch {
     // A folder that cannot be checked is checked again by a later run.
   }

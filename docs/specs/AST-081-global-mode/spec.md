@@ -404,7 +404,8 @@ works on is `spec:AST-040` FR9's.
     kept value used only while every input its gather read is unchanged; a
     run under Yarn Plug'n'Play's loader, such as `yarn astryx`, keeps and
     uses no catalog; `doctor` lists that folder and its size in an info row,
-    which in such a run also says that it keeps none;
+    which also names the size limit it shares with the transpile cache below
+    and in such a run says that it keeps none;
   - the same per-user cache directory, for the code jiti transpiles from the
     files the CLI loads through it (an integration's manifest, TypeScript doc
     topics and codemods, a TypeScript config, a built theme artifact, and the
@@ -412,7 +413,8 @@ works on is `spec:AST-040` FR9's.
     use and used at once, only while it is a real folder the user owns and
     others cannot open, and kept within the same size limit as the catalogs
     by removing its least recently used copies once it has grown, never one
-    written or read in the last day; otherwise nothing is
+    written in the last day or read in the last day where the file system
+    records reads; otherwise nothing is
     cached on disk; where the system has no user ids jiti keeps its own
     default, and a set `JITI_FS_CACHE` is left to jiti;
   - the platform's temporary directory, for scratch work such as building or

@@ -13,6 +13,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {afterEach, beforeAll, beforeEach, describe, expect, it} from 'vitest';
 import {ensureCoreBuilt} from './ensure-core-built.mjs';
+import {userCacheDir} from '../../../foundation/env/user-dirs.mjs';
 import {CLI_ROOT} from '../../../foundation/fs/paths.mjs';
 
 const BIN = path.join(CLI_ROOT, 'clients', 'cli', 'bin', 'astryx.mjs');
@@ -51,13 +52,25 @@ function writeTheme(file, color) {
 }
 
 /**
- * Build `theme.ts` in `project` with `cache` as the user cache folder, and
+ * The settings that make `user` the run's home folder, and the jiti folder
+ * the CLI uses there on this platform (macOS keeps its cache under the home
+ * folder whatever XDG_CACHE_HOME says).
+ * @param {string} user
+ */
+function userDirs(user) {
+  const home = path.join(user, 'home');
+  const env = {HOME: home, XDG_CACHE_HOME: path.join(user, 'cache')};
+  return {env, jiti: path.join(userCacheDir({home, env}), 'jiti')};
+}
+
+/**
+ * Build `theme.ts` in `project` with `user` as the run's home folder, and
  * return what the run printed and the stylesheet it wrote (named for the
  * theme).
  * @param {string} project
- * @param {string} cache
+ * @param {string} user
  */
-function build(project, cache) {
+function build(project, user) {
   const env = {...process.env};
   for (const key of Object.keys(env)) {
     if (key.startsWith('VITEST') || key === 'NODE_OPTIONS') delete env[key];
@@ -71,7 +84,7 @@ function build(project, cache) {
       encoding: 'utf8',
       env: {
         ...env,
-        XDG_CACHE_HOME: cache,
+        ...userDirs(user).env,
         NO_UPDATE_NOTIFIER: '1',
         NODE_DISABLE_COMPILE_CACHE: '1',
       },
@@ -86,13 +99,13 @@ function build(project, cache) {
 }
 
 /**
- * The transpiled copies of the theme in a user cache folder, by name, with
+ * The transpiled copies of the theme in a user's jiti folder, by name, with
  * each one's inode and time.
- * @param {string} cache
+ * @param {string} user
  * @returns {Map<string, {ino: number, mtimeMs: number}>}
  */
-function themeCopies(cache) {
-  const dir = path.join(cache, 'astryx', 'jiti');
+function themeCopies(user) {
+  const dir = userDirs(user).jiti;
   /** @type {Map<string, {ino: number, mtimeMs: number}>} */
   const out = new Map();
   if (!fs.existsSync(dir)) return out;
@@ -109,49 +122,49 @@ describe.skipIf(process.platform === 'win32')(
   () => {
     it('keeps the transpiled theme and reads it back on the next build', () => {
       const project = path.join(work, 'project');
-      const cache = path.join(work, 'cache');
+      const user = path.join(work, 'user');
       writeTheme(path.join(project, 'theme.ts'), '#ffffff');
-      const first = build(project, cache);
+      const first = build(project, user);
       expect(first.status, first.stderr).toBe(0);
-      const kept = themeCopies(cache);
+      const kept = themeCopies(user);
       expect(kept.size).toBe(1);
-      expect(build(project, cache)).toEqual(first);
+      expect(build(project, user)).toEqual(first);
       // Read back, not transpiled and written again.
-      expect(themeCopies(cache)).toEqual(kept);
+      expect(themeCopies(user)).toEqual(kept);
     }, 120_000);
 
     it('transpiles an edited theme again and builds it as with no cache', () => {
       const project = path.join(work, 'project');
-      const cache = path.join(work, 'cache');
+      const user = path.join(work, 'user');
       const theme = path.join(project, 'theme.ts');
       writeTheme(theme, '#ffffff');
-      expect(build(project, cache).status).toBe(0);
+      expect(build(project, user).status).toBe(0);
       writeTheme(theme, '#123456');
-      const edited = build(project, cache);
+      const edited = build(project, user);
       expect(edited.status, edited.stderr).toBe(0);
       expect(edited.css).toContain('#123456');
-      expect(edited).toEqual(build(project, path.join(work, 'empty-cache')));
+      expect(edited).toEqual(build(project, path.join(work, 'new-user')));
       // The edit wrote over the theme's copy: the folder holds one.
-      expect(themeCopies(cache).size).toBe(1);
+      expect(themeCopies(user).size).toBe(1);
     }, 120_000);
 
     it('transpiles the theme again, with no error, when its kept copy is gone or cut short', () => {
       const project = path.join(work, 'project');
-      const cache = path.join(work, 'cache');
+      const user = path.join(work, 'user');
       writeTheme(path.join(project, 'theme.ts'), '#ffffff');
-      const first = build(project, cache);
+      const first = build(project, user);
       expect(first.status, first.stderr).toBe(0);
-      const dir = path.join(cache, 'astryx', 'jiti');
-      const [name] = [...themeCopies(cache).keys()];
+      const dir = userDirs(user).jiti;
+      const [name] = [...themeCopies(user).keys()];
       const copy = path.join(dir, name);
       const whole = fs.readFileSync(copy, 'utf8');
       // Removed, as the size limit removes the oldest copies.
       fs.rmSync(copy);
-      expect(build(project, cache)).toEqual(first);
+      expect(build(project, user)).toEqual(first);
       expect(fs.readFileSync(copy, 'utf8')).toBe(whole);
       // Cut short, as a write that did not finish leaves it.
       fs.writeFileSync(copy, whole.slice(0, whole.length / 2));
-      expect(build(project, cache)).toEqual(first);
+      expect(build(project, user)).toEqual(first);
       expect(fs.readFileSync(copy, 'utf8')).toBe(whole);
     }, 120_000);
   },
