@@ -389,19 +389,16 @@ export function generatePageRange(
 function navigatesHere(event: React.MouseEvent<HTMLElement>): boolean {
   const link = event.currentTarget;
   const target = link.getAttribute('target');
-  const isInert = link.tagName === 'A' && !link.hasAttribute('href');
   return (
-    !isInert &&
+    !link.matches('a:not([href])') &&
     !isModifiedClick(event) &&
-    (target == null || target === '' || target.toLowerCase() === '_self')
+    (!target || target.toLowerCase() === '_self')
   );
 }
 
 /**
- * A Button control of Pagination. Button replaces its element when the
- * control starts or stops being a link: a link that becomes unavailable is a
- * disabled button, and that button is a link when the control is available
- * again. The element that replaces a focused one takes its focus.
+ * Button replaces the element when the control starts or stops being a link.
+ * The new element takes the focus.
  */
 function PaginationButton(props: React.ComponentProps<typeof Button>) {
   const ref = useFocusAcrossSwap<HTMLButtonElement>();
@@ -482,11 +479,6 @@ export function Pagination({
   // A caller that sets no page size has none in its URLs.
   const hrefPageSize =
     pageSizeProp !== undefined || hasPageSizeOptions ? pageSize : undefined;
-  // A disabled control is never a link, so it gets no URL.
-  const pageHref = (target: number): string | undefined =>
-    getPageHref != null && !isDisabled
-      ? getPageHref(target, hrefPageSize)
-      : undefined;
 
   // Prev/next stride. Same guard as pageSize: non-integer or < 1 falls back to
   // a single-page step so a bad value never freezes or reverses navigation.
@@ -520,16 +512,9 @@ export function Pagination({
   const [clickedFromPage, setClickedFromPage] = useState<number | null>(null);
   const linkPage = clickedFromPage ?? optimisticPage;
   const countFromCurrentPage = () => setClickedFromPage(null);
-  const clickOverTimerRef = useRef<number | null>(null);
+  const clickOverTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   // Releases the timer that waits for the click to be over on unmount.
-  useEffect(
-    () => () => {
-      if (clickOverTimerRef.current != null) {
-        clearTimeout(clickOverTimerRef.current);
-      }
-    },
-    [],
-  );
+  useEffect(() => () => clearTimeout(clickOverTimerRef.current), []);
   // A kept rejected entry widens the page box to fit the status icon beside
   // the typed text.
   const [isPageEntryRejected, setIsPageEntryRejected] = useState(false);
@@ -625,29 +610,28 @@ export function Pagination({
       : lower;
   };
 
-  // An unavailable control gets no URL. Its Button is disabled, so its click
-  // handler does not run.
+  // An unavailable or disabled control gets no URL. Its Button is disabled,
+  // so its click handler does not run.
   const controlProps = (target: number, isAvailable: boolean) => {
-    const href = isAvailable ? pageHref(target) : undefined;
+    const href =
+      isAvailable && !isDisabled
+        ? getPageHref?.(target, hrefPageSize)
+        : undefined;
     return {
       href,
       as,
       onClick: (event: React.MouseEvent<HTMLElement>) => {
-        // A link click that opens the URL elsewhere changes no page here.
-        if (href == null || navigatesHere(event)) {
-          if (href != null) {
-            setClickedFromPage(linkPage);
-            if (clickOverTimerRef.current != null) {
-              clearTimeout(clickOverTimerRef.current);
-            }
-            // The browser follows the link before the next task starts.
-            clickOverTimerRef.current = window.setTimeout(() => {
-              clickOverTimerRef.current = null;
-              countFromCurrentPage();
-            }, 0);
+        if (href != null) {
+          // A link click that opens the URL elsewhere changes no page here.
+          if (!navigatesHere(event)) {
+            return;
           }
-          handlePageChange(target);
+          setClickedFromPage(linkPage);
+          clearTimeout(clickOverTimerRef.current);
+          // The browser follows the link before the next task starts.
+          clickOverTimerRef.current = setTimeout(countFromCurrentPage, 0);
         }
+        handlePageChange(target);
       },
     };
   };
