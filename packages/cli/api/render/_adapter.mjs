@@ -437,13 +437,18 @@ function pageChanges(source, html, modules) {
   if (!markupEdited && !titleEdited && !stylesEdited) return {edited: false, ...styles};
   const {edits, more} = markupEdited ? textEdits(text?.runs ?? [], textRuns(now ?? '')) : {edits: [], more: 0};
   // A title that changed with the heading it comes from is one change, not two.
-  const titleEdit = {was: clip(/** @type {string} */ (text?.title)), now: titleNow === null ? null : clip(titleNow)};
+  const titleEdit = {was: /** @type {string} */ (text?.title), now: titleNow};
   const titleAgain = edits.some(edit => edit.was === titleEdit.was && edit.now === titleEdit.now);
   const all = [...(titleEdited && !titleAgain ? [titleEdit] : []), ...edits];
   return {
     edited: true,
     ...styles,
-    edits: all.map(edit => ({...edit, ...((edit.was && locate(edit.was, modules)) || {})})),
+    // Each change is found in the source by its whole text, then cut to show.
+    edits: all.map(edit => ({
+      was: edit.was === null ? null : clip(edit.was),
+      now: edit.now === null ? null : clip(edit.now),
+      ...((edit.was && locate(edit.was, modules)) || {}),
+    })),
     ...(more > 0 ? {moreEdits: more} : {}),
   };
 }

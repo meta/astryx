@@ -59,7 +59,8 @@ export const clip = text => (text.length > MAX_TEXT ? `${text.slice(0, MAX_TEXT 
 
 /**
  * The runs of text that differ between the markup as rendered and the markup
- * now, paired where one replaced another.
+ * now, paired where one replaced another, whole (a caller that shows them
+ * cuts them with {@link clip}).
  * @param {string[]} before
  * @param {string[]} after
  * @returns {{edits: TextEdit[], more: number}} at most MAX_EDITS changes, and how many more there are
@@ -117,8 +118,8 @@ export function textEdits(before, after) {
     const pairs = Math.max(removed.length, added.length);
     for (let k = 0; k < pairs; k++) {
       all.push({
-        was: k < removed.length ? clip(removed[k]) : null,
-        now: k < added.length ? clip(added[k]) : null,
+        was: k < removed.length ? removed[k] : null,
+        now: k < added.length ? added[k] : null,
       });
     }
   }
@@ -126,21 +127,25 @@ export function textEdits(before, after) {
 }
 
 /**
- * Where a piece of text sits in the restored source: the file and line, when
- * it appears exactly once across the files.
- * @param {string} text
+ * Where a run of text sits in the restored source: the file and line where
+ * it starts, when it appears exactly once across the files. A run is text
+ * with its white space collapsed, and in source the same text may wrap
+ * across lines (JSX joins them with one space), so any white space in the
+ * source matches a space in the run.
+ * @param {string} text a whole run of text
  * @param {{file: string, text: string}[]} files the restored modules
  * @returns {{file: string, line: number} | null}
  */
 export function locate(text, files) {
+  const words = text.split(' ').filter(Boolean);
+  if (words.length === 0) return null;
+  const pattern = new RegExp(words.map(word => word.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')).join('\\s+'), 'g');
   /** @type {{file: string, line: number} | null} */
   let found = null;
   for (const {file, text: source} of files) {
-    let at = source.indexOf(text);
-    while (at >= 0) {
+    for (const match of source.matchAll(pattern)) {
       if (found) return null;
-      found = {file, line: source.slice(0, at).split('\n').length};
-      at = source.indexOf(text, at + 1);
+      found = {file, line: source.slice(0, match.index).split('\n').length};
     }
   }
   return found;
