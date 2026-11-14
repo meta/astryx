@@ -29,8 +29,10 @@
  *   the page is ("audit dashboard: dense table with …"); a family word there
  *   outweighs the same word among the parts.
  * - The container. In "draft history in a modal", the modal is the page's
- *   frame, and a template is its frame; container words count double, and a
- *   container match is evidence enough to start from. Only an overlay frame
+ *   frame, and a template is its frame; container words count double. A
+ *   container match is evidence enough to start from only when the frame holds
+ *   a word of the template's own family ("settings in a modal"); a frame that
+ *   holds a part ("saved drafts in a modal") is not. Only an overlay frame
  *   counts: "inside a data card" names a component the part lives in, and "in
  *   an existing dashboard" names the page being changed.
  * - Phrase heads. In "side-by-side product response", "product" describes the
@@ -56,7 +58,11 @@ import {
   normalized,
   SYNONYMS_OF,
   familyWordsOf,
+  keywordUnits,
+  keywordWordsFor,
+  framesOf,
 } from './words.mjs';
+import {compareText} from '../../../foundation/text/compare-text.mjs';
 
 /**
  * @typedef {import('./words.mjs').PageTemplate} PageTemplate
@@ -136,14 +142,17 @@ const START_TERMS = 2;
 export function rankPages(query, pages) {
   const docs = pages.map(page => {
     const [family = '', ...variantParts] = page.category.split(' - ');
+    const keywords = page.keywords ?? [];
+    const phrases = keywordUnits(keywords, terms).filter(u => u.includes(' '));
     /** @type {Record<keyof typeof FIELD_WEIGHT, string>} */
     const fields = {
       id: page.name.replace(/-/g, ' '),
       variant: variantParts.join(' - '),
       family,
       display: page.displayName,
-      // Each keyword is its own phrase: a pair never spans two of them.
-      keywords: (page.keywords ?? []).join(', '),
+      // A one-word keyword is a term like any other. A longer one gives its
+      // words only to an idea that names the whole phrase (keywordWordsFor).
+      keywords: keywords.filter(k => terms(k).length === 1).join(', '),
       description: page.description,
     };
     /** @type {Map<string, number>} */
@@ -158,7 +167,9 @@ export function rankPages(query, pages) {
       page,
       family: family.trim(),
       bag,
-      pairs: pairsOf(Object.values(fields)),
+      phrases,
+      // Each keyword is its own phrase: a pair never spans two of them.
+      pairs: pairsOf([...Object.values(fields), keywords.join(', ')]),
     };
   });
 
@@ -169,9 +180,14 @@ export function rankPages(query, pages) {
   for (const {bag} of docs)
     for (const t of bag.keys()) df.set(t, (df.get(t) ?? 0) + 1);
   const n = docs.length;
-  /** @param {string} t */
-  const idf = t => {
-    const d = df.get(t);
+  /**
+   * @param {string} t
+   * @param {number} [own] 1 when the template scored carries `t` only through
+   *   a phrase keyword the idea names, so it counts among the templates that
+   *   carry `t`
+   */
+  const idf = (t, own = 0) => {
+    const d = (df.get(t) ?? 0) + own;
     return d ? Math.log(1 + (n - d + 0.5) / (d + 0.5)) : 0;
   };
 
@@ -190,16 +206,26 @@ export function rankPages(query, pages) {
   const familiesIn = ts =>
     new Set(ts.filter(t => familyOfWord.has(t)).map(t => familyOfWord.get(t)));
 
-  const queryTerms = [...new Set(terms(query))];
+  const queryWords = terms(query);
+  const queryTerms = [...new Set(queryWords)];
   const headFamilies = familiesIn(
     terms(String(query).split(HEAD_END)[0] ?? ''),
   );
   const namedFamilies = familiesIn(queryTerms);
   const modifiers = modifiersOf(query);
   const containers = containersOf(query);
+  const frames = framesOf(query);
 
   const ranked = docs
-    .map(({page, family, bag, pairs}) => {
+    .map(({page, family, bag, phrases, pairs}) => {
+      // The words of the phrase keywords this idea names count as keywords.
+      const phraseWords = new Set(keywordWordsFor(phrases, queryWords));
+      /** @param {string} t */
+      const weightOf = t =>
+        Math.max(
+          bag.get(t) ?? 0,
+          phraseWords.has(t) ? FIELD_WEIGHT.keywords : 0,
+        );
       let score = 0;
       let hits = 0;
       let containerMatched = false;
@@ -212,7 +238,10 @@ export function rankPages(query, pages) {
         const discounted =
           modified !== undefined &&
           ![...modified].some(n => pairs.has(`${t} ${n}`));
-        const direct = idf(t) * (bag.get(t) ?? 0) * (discounted ? MODIFIER : 1);
+        const direct =
+          idf(t, bag.has(t) ? 0 : Number(phraseWords.has(t))) *
+          weightOf(t) *
+          (discounted ? MODIFIER : 1);
         let viaSynonym = 0;
         for (const s of SYNONYMS_OF.get(t) ?? []) {
           if (queryTerms.includes(s)) continue;
@@ -227,7 +256,12 @@ export function rankPages(query, pages) {
           score += value;
           hits++;
           matched.add(t);
-          if (containers.has(t)) containerMatched = true;
+          // A frame is start evidence only when it holds the template's
+          // family itself, not a part placed on some page.
+          if (
+            [...(frames.get(t) ?? [])].some(h => familyOfWord.get(h) === family)
+          )
+            containerMatched = true;
         }
       }
       const familyNamed = namedFamilies.has(family);
@@ -256,7 +290,7 @@ export function rankPages(query, pages) {
       (a, b) =>
         b.score - a.score ||
         a.name.split('-').length - b.name.split('-').length ||
-        a.name.localeCompare(b.name),
+        compareText(a.name, b.name),
     );
   return baseFirst(ranked);
 }

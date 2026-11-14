@@ -24,10 +24,16 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {spawnSync} from 'node:child_process';
-import {builtinModules, createRequire} from 'node:module';
+import {createRequire} from 'node:module';
 import {isValidSemver} from '../env/semver.mjs';
 import {findProjectCoreDir} from '../fs/paths.mjs';
 import {KNOWN_INTEGRATION_KEYS} from '../../authoring/integration/schema.mjs';
+import {
+  isNodeEnvRead,
+  isProcessEnv,
+  isServerOnlyImport,
+  packagesInstalledWith,
+} from '../../authoring/example/preview.mjs';
 import {
   contributionFiles,
   findSourceOnlyCandidates,
@@ -1049,10 +1055,6 @@ export async function blockComponentsCheck(integration) {
 // `A/B Testing`).
 const PATH_CATEGORY = /^[a-z0-9][\w.-]*(?:\/[\w.-]+)+$/u;
 
-/** Imports a browser cannot load, which a showcase must not make. */
-const SERVER_ONLY_IMPORTS =
-  /^(?:server-only|next\/headers|next\/server|next\/cache|node:.+)$/u;
-
 /**
  * Every spelling a glob's `{a,b}` braces stand for, nested braces included.
  * @param {string} pattern
@@ -1341,10 +1343,10 @@ function literalPath(node) {
  * (which bundlers replace). `assets` are the relative paths it loads with `new URL('./x', import.meta.url)`. A module
  * that does not parse reports nothing; the template check owns that.
  * @param {string} source
- * @param {Set<string>} builtins
+ * @param {ReadonlyArray<string>} dependencies the packages the package declares
  * @returns {{server: string[], assets: string[]}}
  */
-function readModule(source, builtins) {
+function readModule(source, dependencies) {
   /** @type {any} */
   let ast;
   try {
@@ -1362,10 +1364,7 @@ function readModule(source, builtins) {
   const found = [];
   /** @param {unknown} spec */
   const checkSpec = spec => {
-    if (
-      typeof spec === 'string' &&
-      (SERVER_ONLY_IMPORTS.test(spec) || builtins.has(spec))
-    ) {
+    if (typeof spec === 'string' && isServerOnlyImport(spec, dependencies)) {
       found.push(`imports '${spec}'`);
     }
   };
@@ -1431,30 +1430,13 @@ function readModule(source, builtins) {
         }
         break;
       }
-      case 'MemberExpression': {
-        const object = node.object;
-        if (
-          object.type === 'Identifier' &&
-          object.name === 'process' &&
-          !node.computed &&
-          node.property.name === 'env'
-        ) {
-          found.push('reads process.env');
-          return;
-        }
-        if (
-          object.type === 'MemberExpression' &&
-          object.object.type === 'Identifier' &&
-          object.object.name === 'process' &&
-          !object.computed &&
-          object.property.name === 'env'
-        ) {
-          if (!node.computed && node.property.name === 'NODE_ENV') return;
+      case 'MemberExpression':
+        if (isNodeEnvRead(node)) return;
+        if (isProcessEnv(node) || isProcessEnv(node.object)) {
           found.push('reads process.env');
           return;
         }
         break;
-      }
       default:
         break;
     }
@@ -1560,21 +1542,14 @@ export async function componentExamplesCheck(integration) {
   const rel = (/** @type {string} */ file) => slash(path.relative(base, file));
   /** @type {unknown} */
   let packedFiles;
-  /** @type {Set<string>} */
-  const declared = new Set();
+  /** @type {string[]} the packages an app installs with this one */
+  let dependencies = [];
   try {
     const pkg = JSON.parse(
       fs.readFileSync(path.join(base, 'package.json'), 'utf8'),
     );
     packedFiles = pkg.files;
-    for (const field of [
-      'dependencies',
-      'peerDependencies',
-      'optionalDependencies',
-      'devDependencies',
-    ]) {
-      for (const name of Object.keys(pkg[field] ?? {})) declared.add(name);
-    }
+    dependencies = packagesInstalledWith(pkg);
   } catch {
     packedFiles = undefined;
   }
@@ -1582,9 +1557,6 @@ export async function componentExamplesCheck(integration) {
   const npm = {};
   /** @type {Array<{file: string, asset: string, reason: string}>} */
   const unchecked = [];
-  // A bare builtin name the package installs from npm (`buffer`, `events`)
-  // is that package, which bundlers ship to the browser.
-  const builtins = new Set(builtinModules.filter(name => !declared.has(name)));
   /** @type {Set<string>} */
   const shown = new Set();
   for (const template of templates) {
@@ -1616,7 +1588,7 @@ export async function componentExamplesCheck(integration) {
     } catch {
       continue;
     }
-    const parsed = readModule(source, builtins);
+    const parsed = readModule(source, dependencies);
     // A block is a showcase when it says so, or when it shows components
     // through `alsoShowcaseFor`, which counts them as shown above.
     const showcase =

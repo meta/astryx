@@ -564,6 +564,7 @@
       "debug-event",
       "gap-report-handler",
       "discover-source",
+      "example-scope",
       "codemod",
       "provider-identity",
       "authored-doc-graph-fields",

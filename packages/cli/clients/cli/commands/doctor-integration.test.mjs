@@ -509,8 +509,8 @@ describe('doctor integration — command', () => {
         (/** @type {any} */ f) => `${f.doc} ${f.field} ${f.problem}`,
       ),
     ).toEqual([
-      'components/__fixtures__/AcmeFixture.doc.mjs keyword unknown_field',
       'components/.drafts/AcmeDraft.doc.mjs keyword unknown_field',
+      'components/__fixtures__/AcmeFixture.doc.mjs keyword unknown_field',
       'components/AcmeLinked.doc.mjs keyword unknown_field',
     ]);
   });

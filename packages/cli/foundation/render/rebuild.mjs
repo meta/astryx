@@ -13,6 +13,7 @@
 
 import {astryxClass, decode, find, FORM_TAGS, hasTag, isEl, parseHtml, textOf, VOID} from './html-reader.mjs';
 import {componentMap, pascal} from './component-map.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 /** @typedef {import('./html-reader.mjs').ElementNode} ElementNode */
 /** @typedef {import('./html-reader.mjs').Node} Node */
@@ -240,7 +241,7 @@ export function rebuildPage(html, fromDir) {
 
   const lines = body.children.flatMap(c => emit(c, '    '));
   const importLines = [...imports.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
+    .sort(([a], [b]) => compareText(a, b))
     .map(([mod, names]) => `import {${[...names].sort().join(', ')}} from '${mod}';`);
   const title = decode(textOf(find(doc, 'title') ?? {text: ''})).trim();
   const source = [

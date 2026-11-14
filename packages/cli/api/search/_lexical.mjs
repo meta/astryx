@@ -59,6 +59,7 @@ import {scoreQuery} from './_score.mjs';
 import {scoreCandidate} from './_candidate-score.mjs';
 import {domainPriority} from './_priority.mjs';
 import {toResult, searchedComponentsOf} from './_result.mjs';
+import {compareText} from '../../foundation/text/compare-text.mjs';
 
 /**
  * A search candidate gathered from one content domain. Extra underscore-
@@ -295,7 +296,7 @@ export function rankLexical(query, options, catalog) {
   const byScore = ({result: a, key: ka}, {result: b, key: kb}) =>
     kb - ka ||
     (domainOrder[a.domain] ?? 9) - (domainOrder[b.domain] ?? 9) ||
-    a.name.localeCompare(b.name);
+    compareText(a.name, b.name);
   const others = ranked.filter(r => r.result.domain !== 'doc').sort(byScore);
   // Against other domains, a doc the reader asked for competes ahead of docs
   // they did not, so it is not held behind a broad page that outscores it.
