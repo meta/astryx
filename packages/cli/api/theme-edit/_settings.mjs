@@ -1364,7 +1364,10 @@ export function valueProblem(s) {
  * One entry of the top-level `tokens` map in a theme's own source, as
  * written: its token (null for a computed key no read of the file can
  * resolve), the key as typed, the line that sets it, and its value's shape.
- * @typedef {{token: string | null, key: string, line: number | null, kind: 'text' | 'number' | 'pair' | 'other', value?: string | number, halves?: Array<string | number | undefined>}} OwnTokenEntry
+ * A `duplicate` entry names a second `tokens` key (with every line); a
+ * `typography` entry is one typography field (its dotted key and value);
+ * an `unresolved` entry says the map holds something only a build reads.
+ * @typedef {{token: string | null, key: string, line: number | null, kind: 'text' | 'number' | 'pair' | 'object' | 'other' | 'duplicate' | 'typography' | 'unresolved', value?: any, halves?: Array<string | number | undefined>, lines?: Array<number | null>}} OwnTokenEntry
  */
 
 /**
@@ -1495,10 +1498,59 @@ function ownPageTokens(
   if (!chosen) return out;
   const def = unwrap(chosen.call.arguments[0]);
   if (def?.type !== 'ObjectExpression') return out;
-  const tokensProp = def.properties.find(
+  // JavaScript keeps the last of two `tokens` keys: that one is read, and
+  // both are named.
+  const tokensProps = def.properties.filter(
     (/** @type {any} */ p) =>
       p.type === 'ObjectProperty' && !p.computed && keyOf(p.key) === 'tokens',
   );
+  if (detail && tokensProps.length > 1)
+    detail.push({
+      token: null,
+      key: 'tokens',
+      kind: 'duplicate',
+      line: tokensProps[0].loc?.start?.line ?? null,
+      lines: tokensProps.map((/** @type {any} */ p) => p.loc?.start?.line),
+    });
+  // The typography fields, as written, for their own checks.
+  const typo = def.properties.find(
+    (/** @type {any} */ p) =>
+      p.type === 'ObjectProperty' &&
+      !p.computed &&
+      keyOf(p.key) === 'typography',
+  );
+  if (detail && typo) {
+    /** @param {any} node @param {string[]} at */
+    const walk = (node, at) => {
+      const obj = unwrap(node);
+      if (obj?.type !== 'ObjectExpression') return;
+      for (const p of obj.properties) {
+        if (p.type !== 'ObjectProperty' || p.computed) continue;
+        const k = keyOf(p.key);
+        if (!k) continue;
+        const v = unwrap(p.value);
+        if (v?.type === 'ObjectExpression') walk(v, [...at, k]);
+        else
+          detail.push({
+            token: null,
+            key: [...at, k].join('.'),
+            kind: 'typography',
+            line: p.loc?.start?.line ?? null,
+            value:
+              textOf(v) ??
+              (v?.type === 'NumericLiteral'
+                ? v.value
+                : v?.type === 'UnaryExpression' &&
+                    v.operator === '-' &&
+                    v.argument?.type === 'NumericLiteral'
+                  ? -v.argument.value
+                  : undefined),
+          });
+      }
+    };
+    walk(typo.value, []);
+  }
+  const tokensProp = tokensProps[tokensProps.length - 1];
   if (!tokensProp) return out;
   let unresolved = false;
   /** @param {any} node @param {number} depth */
@@ -1547,12 +1599,30 @@ function ownPageTokens(
           );
         }),
       };
+    if (node?.type === 'ObjectExpression')
+      return {
+        kind: 'object',
+        value: Object.fromEntries(
+          node.properties
+            .filter((/** @type {any} */ p) => p.type === 'ObjectProperty')
+            .map((/** @type {any} */ p) => [
+              keyOf(p.key) ?? '?',
+              textOf(unwrap(p.value)) ?? null,
+            ]),
+        ),
+      };
     return {kind: 'other'};
   };
   collect(tokensProp.value, 0);
   // A value no read of the file can resolve (a call, an import) is read
   // from the build (ownTokens), and checked again after the next one.
-  void unresolved;
+  if (detail && unresolved)
+    detail.push({
+      token: null,
+      key: 'tokens',
+      kind: 'unresolved',
+      line: tokensProp.loc?.start?.line ?? null,
+    });
   return out;
 }
 
@@ -1926,7 +1996,7 @@ function ownTokens(cwd, slug) {
  * @param {string} slug
  * @returns {Map<string, string | null> | null}
  */
-function builtOwnTokens(cwd, slug) {
+function builtOwnTokens(cwd, slug, js = /** @type {string | null} */ (null)) {
   const f = themeFiles(cwd, slug);
   /** @type {string} */
   let module;
@@ -1938,7 +2008,10 @@ function builtOwnTokens(cwd, slug) {
   const built = /\/\/ Built with \S+\.theme\.ts ([0-9a-f]{16})\./.exec(
     module,
   )?.[1];
-  if (!built || !fs.existsSync(f.js) || built !== themeSourceHash(cwd, slug))
+  if (
+    !js &&
+    (!built || !fs.existsSync(f.js) || built !== themeSourceHash(cwd, slug))
+  )
     return null;
   // What the settings module gives each top-level token: a text value as
   // it is, a [light, dark] pair as a pair.
@@ -1993,7 +2066,7 @@ function builtOwnTokens(cwd, slug) {
   const named = namedInOwnSource(cwd, slug);
   /** @type {Map<string, string | null>} */
   const out = new Map();
-  for (const [k, v] of builtTopTokens(cwd, slug)) {
+  for (const [k, v] of js ? topTokensOf(js) : builtTopTokens(cwd, slug)) {
     const given = settings.get(k);
     const own =
       given === undefined
@@ -5217,6 +5290,39 @@ function refuseOwnPairs(ctx, cwd, slug) {
  * @returns {Promise<string[]>}
  */
 export async function builtPairs(ctx, slug) {
+  const tops = await cacheBuild(ctx, slug, js => topTokensOf(js));
+  return [...(tops ?? [])]
+    .filter(
+      ([k, v]) =>
+        /^light-dark\(/.test(String(v ?? '')) && ctx.C.typeOf(k) !== 'color',
+    )
+    .map(([k]) => k);
+}
+
+/**
+ * The page-wide tokens the theme's own source gives, as a build made now
+ * evaluates them (an imported module, an expression, a template): read
+ * from a build into the project's cache folder, never beside the theme.
+ * Null when it does not build there.
+ * @param {Ctx} ctx
+ * @param {string} slug
+ * @returns {Promise<Map<string, string | null> | null>}
+ */
+export async function evaluatedOwnTokens(ctx, slug) {
+  return cacheBuild(ctx, slug, js => builtOwnTokens(ctx.project.cwd, slug, js));
+}
+
+/**
+ * Build the theme into the project's cache folder and read the built
+ * module with `read` before the folder is removed; null when it does not
+ * build there.
+ * @template T
+ * @param {Ctx} ctx
+ * @param {string} slug
+ * @param {(js: string) => T} read
+ * @returns {Promise<T | null>}
+ */
+async function cacheBuild(ctx, slug, read) {
   const {cwd} = ctx.project;
   const f = themeFiles(cwd, slug);
   // The build writes only inside the project: the cache folder when it is
@@ -5237,15 +5343,10 @@ export async function builtPairs(ctx, slug) {
     const js = fs
       .readdirSync(dir)
       .find(n => n.endsWith('.js') && !n.endsWith('.d.js'));
-    if (!js) return [];
-    return [...topTokensOf(path.join(dir, js))]
-      .filter(
-        ([k, v]) =>
-          /^light-dark\(/.test(String(v ?? '')) && ctx.C.typeOf(k) !== 'color',
-      )
-      .map(([k]) => k);
+    if (!js) return null;
+    return read(path.join(dir, js));
   } catch {
-    return [];
+    return null;
   } finally {
     logger.setSilent(silent);
     fs.rmSync(dir, {recursive: true, force: true});

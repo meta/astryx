@@ -78,6 +78,7 @@ import {
   ownSourceTokens,
   ownSourceTokenValues,
   ownTokenEntries,
+  evaluatedOwnTokens,
   nonTextMessage,
   ownPartTokens,
   PHONE_TYPE,
@@ -1234,22 +1235,17 @@ export async function editorStoredRefusal(root, slug) {
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
- * @returns {Array<{token: string, value: string, why: string, line: number | null}>}
+ * @returns {Promise<Array<{token: string, value: string, why: string, line: number | null}>>}
  */
-function ownTokenProblems(ctx, slug, data) {
+async function ownTokenProblems(ctx, slug, data) {
   const {cwd} = ctx.project;
   /** @type {Array<{token: string, value: string, why: string, line: number | null}>} */
   const out = [];
   const known = ctx.project.core.tokenDefaults;
   /** @param {string} token @param {string} value @returns {string | null} */
   const refused = (token, value) => {
-    // A family list wholly in quotes (`"Georgia, serif"`, as Core returns
-    // a family set through typography) is that list.
-    const v = /^--font-family-/.test(token)
-      ? value.replace(/^\s*"([^"]*,[^"]*)"\s*$/, '$1')
-      : value;
     try {
-      checkSetting(ctx, slug, {...data, settings: []}, token, v, {});
+      checkSetting(ctx, slug, {...data, settings: []}, token, value, {});
       return null;
     } catch (e) {
       if (!(e instanceof AstryxError)) throw e;
@@ -1258,11 +1254,37 @@ function ownTokenProblems(ctx, slug, data) {
   };
   // The tokens map as written, entry by entry, with the line that sets
   // each: every value is checked as `set` checks it (each half of a
-  // [light, dark] pair; a number is not text, as show says), and a key no
-  // read of the file can resolve is named as not checked.
+  // [light, dark] pair; a number is not text, as show says), and what only
+  // a build can read (an imported module, an expression) is read from a
+  // build made now, so nothing ships unchecked.
   const entries = ownTokenEntries(cwd, slug);
+  const needsBuild = entries.some(
+    e => e.kind === 'unresolved' || (e.kind === 'other' && e.token),
+  );
+  const evaluated = needsBuild ? await evaluatedOwnTokens(ctx, slug) : null;
   const seen = new Set();
   for (const e of entries) {
+    if (e.kind === 'duplicate') {
+      out.push({
+        token: 'tokens',
+        value: '',
+        why: `defineTheme is given tokens twice (lines ${(e.lines ?? []).join(' and ')}); the build keeps only the last, so the first does nothing: merge them into one`,
+        line: e.line,
+      });
+      continue;
+    }
+    if (e.kind === 'typography') {
+      const why = typographyProblem(e.key, e.value);
+      if (why)
+        out.push({
+          token: `typography.${e.key}`,
+          value: e.value == null ? '' : String(e.value),
+          why,
+          line: e.line,
+        });
+      continue;
+    }
+    if (e.kind === 'unresolved') continue;
     if (e.token == null) {
       out.push({
         token: e.key,
@@ -1272,54 +1294,146 @@ function ownTokenProblems(ctx, slug, data) {
       });
       continue;
     }
-    seen.add(e.token);
-    if (!(e.token in known)) continue;
+    const token = e.token;
+    seen.add(token);
+    if (!(token in known)) continue;
+    if (e.kind === 'object') {
+      out.push({
+        token,
+        value: '',
+        why: nonTextMessage(ctx, slug, [token, e.value, 'object']),
+        line: e.line,
+      });
+      continue;
+    }
     if (e.kind === 'number') {
       out.push({
-        token: e.token,
+        token,
         value: String(e.value),
-        why: nonTextMessage(ctx, slug, [e.token, e.value]),
+        why: nonTextMessage(ctx, slug, [token, e.value]),
         line: e.line,
       });
       continue;
     }
     if (e.kind === 'text') {
-      const why = refused(e.token, String(e.value));
-      if (why)
-        out.push({token: e.token, value: String(e.value), why, line: e.line});
+      const why = refused(token, String(e.value));
+      if (why) out.push({token, value: String(e.value), why, line: e.line});
       continue;
     }
-    const token = e.token;
-    if (e.kind === 'pair' && isColorToken(token)) {
+    if (e.kind === 'pair') {
       const halves = e.halves ?? [];
+      if (halves.length === 2 && halves.some(h => typeof h !== 'string')) {
+        out.push({
+          token,
+          value: '',
+          why: nonTextMessage(ctx, slug, [token, halves]),
+          line: e.line,
+        });
+        continue;
+      }
+      // A pair is exactly two values in quotes: one or none builds
+      // light-dark(red, undefined), a third is dropped.
+      if (halves.length !== 2) {
+        out.push({
+          token,
+          value: `[${halves.map(h => (h === undefined ? '' : JSON.stringify(h))).join(', ')}]`,
+          why: `a [light, dark] pair holds exactly two values in quotes, and this holds ${halves.length}; the build would write ${halves.length < 2 ? 'light-dark() with an undefined half' : 'the first two and drop the rest'}`,
+          line: e.line,
+        });
+        continue;
+      }
+      if (!isColorToken(token)) continue;
       halves.forEach((h, i) => {
-        const half = i === 0 ? 'light' : 'dark';
-        const why =
-          typeof h === 'string'
-            ? refused(token, h)
-            : nonTextMessage(ctx, slug, [token, halves]);
+        const why = refused(token, String(h));
         if (why)
           out.push({
             token,
             value: String(h),
-            why: `its ${half} half: ${why}`,
+            why: `its ${i === 0 ? 'light' : 'dark'} half: ${why}`,
             line: e.line,
           });
       });
+      continue;
     }
+    // An expression ('ban' + 'ana', a ternary, a template with ${}): the
+    // value a build makes of it, else named as not checked.
+    const v = evaluated?.get(token);
+    // A pair on a token that is not a color is the pair refusal's.
+    if (
+      typeof v === 'string' &&
+      /^light-dark\(/i.test(v) &&
+      !isColorToken(token)
+    )
+      continue;
+    if (typeof v === 'string') {
+      const why = refused(token, v);
+      if (why) out.push({token, value: v, why, line: e.line});
+    } else
+      out.push({
+        token,
+        value: '',
+        why: 'its value is an expression the editor could not evaluate, so it has not been checked; write it as text in quotes',
+        line: e.line,
+      });
   }
-  // A value the file gives another way (a spread, a const), as the build
-  // or the file shows it; a family set through typography is not in the
-  // map, so it is not checked here (the font dial checks it).
-  for (const [token, value] of Object.entries(
-    ownSourceTokenValues(cwd, slug),
-  )) {
-    if (seen.has(token) || !(token in known)) continue;
-    if (/^--font-family-/.test(token)) continue;
+  // A value the map gives another way (a spread of an imported module, a
+  // call), as a build made now evaluates it, else as the current build or
+  // the file shows it. A family the build shows that the map does not
+  // name came from typography, checked above.
+  const others =
+    evaluated ?? new Map(Object.entries(ownSourceTokenValues(cwd, slug)));
+  const tokensLine = entries.find(e => e.kind === 'unresolved')?.line ?? null;
+  for (const [token, value] of others) {
+    if (seen.has(token) || !(token in known) || value == null) continue;
+    if (/^light-dark\(/i.test(value) && !isColorToken(token)) continue;
+    if (!evaluated && /^--font-family-/.test(token)) continue;
     const why = refused(token, value);
-    if (why) out.push({token, value, why, line: null});
+    if (why) out.push({token, value, why, line: tokensLine});
   }
   return out;
+}
+
+/**
+ * What is wrong with one typography field of a theme's own source, or
+ * null: a family is one family name (Core quotes it whole), the scale's
+ * ratio is above 1 and at most 4, its base a positive size.
+ * @param {string} key the dotted field (`body.family`, `scale.ratio`)
+ * @param {unknown} value
+ * @returns {string | null}
+ */
+function typographyProblem(key, value) {
+  const field = key.split('.').pop();
+  if (field === 'family') {
+    if (typeof value !== 'string')
+      return 'a typography family is a family name in quotes, such as "Inter"';
+    const v = value.trim();
+    // Core quotes a family with a space whole, so a list here is one
+    // family by that whole name, which exists nowhere.
+    if (v.includes(','))
+      return `a typography family is one family name, which Core quotes whole ("${v}" is one family that exists nowhere); give the first as family and the rest as fallbacks, such as family: '${v
+        .split(',')[0]
+        .trim()
+        .replace(
+          /^["']|["']$/g,
+          '',
+        )}', fallbacks: '${v.split(',').slice(1).join(',').trim()}'`;
+    if (!v || /^[-+]?\d/.test(v) || /^(inherit|initial|unset|revert)$/i.test(v))
+      return `"${v}" is no font family name; give one such as "Inter"`;
+    return null;
+  }
+  if (field === 'ratio') {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 1 || n > 4)
+      return `the type scale's ratio is how much each size grows over the last, a number above 1 and at most 4 (such as 1.2); ${JSON.stringify(value)} makes ${n <= 0 ? 'sizes that are not numbers' : n <= 1 ? 'every size the same or smaller' : 'sizes no page can use'}`;
+    return null;
+  }
+  if (field === 'base') {
+    const n = typeof value === 'number' ? value : parseFloat(String(value));
+    if (!Number.isFinite(n) || n <= 0)
+      return `the type scale's base is the body size, a positive number of pixels (such as 16); ${JSON.stringify(value)} makes sizes no page can use`;
+    return null;
+  }
+  return null;
 }
 
 /**
@@ -1330,8 +1444,8 @@ function ownTokenProblems(ctx, slug, data) {
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
  */
-function refuseOwnTokenValues(ctx, slug, data) {
-  const err = ownTokenRefusal(ctx, slug, data);
+async function refuseOwnTokenValues(ctx, slug, data) {
+  const err = await ownTokenRefusal(ctx, slug, data);
   if (err) throw err;
 }
 
@@ -1340,10 +1454,10 @@ function refuseOwnTokenValues(ctx, slug, data) {
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
- * @returns {AstryxError | null}
+ * @returns {Promise<AstryxError | null>}
  */
-function ownTokenRefusal(ctx, slug, data) {
-  const bad = ownTokenProblems(ctx, slug, data);
+async function ownTokenRefusal(ctx, slug, data) {
+  const bad = await ownTokenProblems(ctx, slug, data);
   if (!bad.length) return null;
   const file = `themes/${slug}/${slug}.theme.ts`;
   return new AstryxError(
@@ -1746,8 +1860,10 @@ async function changeOnce(
       state: options.state,
       mode: options.mode,
     });
-    refuseOwnTokenValues(ctx, slug, data);
   }
+  // The own source's token values are checked before every change, an
+  // undo too: an undo rebuilds the theme from that source.
+  await refuseOwnTokenValues(ctx, slug, data);
   const flags = {
     on: options.on,
     when: options.when,
@@ -2874,7 +2990,7 @@ export async function themeEditShow(theme, options = {}) {
   // build a later refusal puts back.
   holdAfterBuild(ctx);
   refuseStoredTokens(ctx, theme, data);
-  refuseOwnTokenValues(ctx, theme, data);
+  await refuseOwnTokenValues(ctx, theme, data);
   // Without React, show still lists the settings and builds the theme, as
   // set does; only the pages, pictures and the checks that render are
   // skipped, and the result says how to fix it.
@@ -3987,6 +4103,9 @@ async function undoTheme(theme, options) {
       `Nothing to undo: ${theme} has no earlier change${repair ? `, and ${theme}.settings.json cannot be read` : ''}.`,
       {run: repair ?? [`${P} show ${theme}`]},
     );
+  // The step rebuilds the theme from its own source: a token value there
+  // that set refuses is refused here too, before anything is written.
+  if (current) await refuseOwnTokenValues(await context(cwd), theme, current);
   // A top step equal to the settings now (left by an undo stopped between
   // its two writes) changes nothing: skip it.
   const nowText = fs.readFileSync(f.settings, 'utf8');
