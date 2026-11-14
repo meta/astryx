@@ -3,7 +3,7 @@
 import {describe, expect, it} from 'vitest';
 
 import {isWeightsFile} from '../_adapter.mjs';
-import {SHELL, stem, weighStart, weightWords} from './weights.mjs';
+import {SHELL, blendOrder, stem, weighStart, weightWords} from './weights.mjs';
 
 // A made-up table for tests only: three page templates and the app shell.
 const CANDIDATES = [SHELL, 'board', 'charts', 'grid'];
@@ -523,5 +523,79 @@ describe('isWeightsFile', () => {
     ).toBe(false);
     expect(isWeightsFile({version: 1})).toBe(false);
     expect(isWeightsFile(null)).toBe(false);
+  });
+});
+
+describe('an exact tie in the pick model', () => {
+  // The pick table scores `board` and `grid` the same, and the ranker ties
+  // them too (and starts neither), so the blend gives both exactly the same
+  // score.
+  const catalog = [
+    {
+      name: 'board',
+      displayName: 'Kanban board',
+      category: 'Board - Kanban',
+      description: 'cards in lanes',
+    },
+    {
+      name: 'charts',
+      displayName: 'Charts',
+      category: 'Charts - Basic',
+      description: 'a chart',
+    },
+    {
+      name: 'grid',
+      displayName: 'Card grid',
+      category: 'Grid - Cards',
+      description: 'cards in a grid',
+    },
+  ];
+  const ranked = [
+    page('board', 1, 'Board'),
+    page('grid', 1, 'Grid'),
+    page('charts', 0, 'Charts'),
+  ];
+  const weights = {
+    ...WEIGHTS,
+    pick: {
+      tables: [table({[stem('cards')]: [0, 2, 0, 2]})],
+      blend: [1, 0, 0, 0.5, 0, 0, 0],
+    },
+  };
+
+  it('goes to the template whose own descriptor names more of the idea', () => {
+    const order = blendOrder(
+      'cards laid out in a grid',
+      ranked,
+      null,
+      catalog,
+      weights,
+    );
+    expect(order?.slice(0, 2)).toEqual(['grid', 'board']);
+  });
+
+  it('does not depend on the order of the candidates in the weights file', () => {
+    const reversed = {
+      ...weights,
+      candidates: [SHELL, 'grid', 'charts', 'board'],
+      tables: WEIGHTS.tables.map(t => ({
+        ...t,
+        bias: [t.bias[0], t.bias[3], t.bias[2], t.bias[1]],
+        rows: t.rows.map(r => r[0] + r[3] + r[2] + r[1]),
+      })),
+      pick: {
+        ...weights.pick,
+        tables: [table({[stem('cards')]: [0, 2, 0, 2]})],
+      },
+    };
+    expect(
+      blendOrder(
+        'cards laid out in a grid',
+        ranked,
+        null,
+        catalog,
+        reversed,
+      )?.slice(0, 2),
+    ).toEqual(['grid', 'board']);
   });
 });

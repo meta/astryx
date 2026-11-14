@@ -24,6 +24,7 @@
 import {STOPWORDS} from '../../search/search.mjs';
 import {keywordUnits, keywordWordsFor} from './words.mjs';
 import {isWordModel} from './word-model.mjs';
+import {compareText} from '../../../foundation/text/compare-text.mjs';
 
 /** The app shell, as one candidate. */
 export const SHELL = 'SHELL';
@@ -528,6 +529,23 @@ function fullerOfTie(name, idea, ranked, cands, catalog) {
  * @returns {string | null}
  */
 function bestPage(idea, ranked, pick, catalog, weights, ok = () => true) {
+  return pickOrder(idea, ranked, pick, catalog, weights).find(ok) ?? null;
+}
+
+/**
+ * Every ready, non-shell template in the pick model's order, best first.
+ * Templates the pick model scores exactly the same are ordered like an exact
+ * tie in the ranker: by how strongly each one's own descriptor answers the
+ * idea (`tieReading`), then by how typical of its family it is, then by name.
+ * The weights file's candidate order never decides.
+ * @param {string} idea
+ * @param {import('./rank.mjs').RankedPage[]} ranked
+ * @param {import('./rank.mjs').RankedPage | null} pick
+ * @param {DescribedTemplate[]} catalog
+ * @param {WeightsFile} weights
+ * @returns {string[]}
+ */
+function pickOrder(idea, ranked, pick, catalog, weights) {
   const {cands, scores} = blend(
     idea,
     ranked,
@@ -535,16 +553,30 @@ function bestPage(idea, ranked, pick, catalog, weights, ok = () => true) {
     catalog,
     pickModel(weights),
   );
-  let at = -1;
-  for (let c = 0; c < cands.length; c++) {
-    if (
-      cands[c] !== SHELL &&
-      ok(cands[c]) &&
-      (at < 0 || scores[c] > scores[at])
-    )
-      at = c;
+  const sorted = cands
+    .map((c, i) => ({c, s: scores[i]}))
+    .filter(x => x.c !== SHELL)
+    .sort((x, y) => y.s - x.s);
+  const typical = new Map(ranked.map(r => [r.name, r.typical]));
+  const out = [];
+  for (let i = 0; i < sorted.length; ) {
+    let j = i + 1;
+    while (j < sorted.length && sorted[j].s === sorted[i].s) j++;
+    const run = sorted.slice(i, j).map(x => x.c);
+    if (run.length > 1) {
+      const reading = tieReading(run, idea, catalog);
+      const at = new Map(run.map((c, k) => [c, reading[k]]));
+      run.sort(
+        (a, b) =>
+          Number(at.get(b)) - Number(at.get(a)) ||
+          (typical.get(b) ?? 0) - (typical.get(a) ?? 0) ||
+          compareText(a, b),
+      );
+    }
+    out.push(...run);
+    i = j;
   }
-  return at < 0 ? null : cands[at];
+  return out;
 }
 
 /**
@@ -560,18 +592,7 @@ function bestPage(idea, ranked, pick, catalog, weights, ok = () => true) {
  */
 export function blendOrder(idea, ranked, pick, catalog, weights) {
   if (!weights) return null;
-  const {cands, scores} = blend(
-    idea,
-    ranked,
-    pick,
-    catalog,
-    pickModel(weights),
-  );
-  return cands
-    .map((c, i) => ({c, s: scores[i], i}))
-    .filter(x => x.c !== SHELL)
-    .sort((x, y) => y.s - x.s || x.i - y.i)
-    .map(x => x.c);
+  return pickOrder(idea, ranked, pick, catalog, weights);
 }
 
 /**
