@@ -238,7 +238,7 @@ describe('the weekly full WebKit run', () => {
     );
   });
 
-  it('records a green or failed verdict for the release check to read', () => {
+  it('records a green or failed verdict of each weekly run (no release check reads it)', () => {
     const verdict = ci.jobs['webkit-weekly-verdict'];
     expect(verdict.needs).toEqual([
       'webkit-weekly-request',

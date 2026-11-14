@@ -3320,9 +3320,8 @@ jobs:
   # a WebKit break elsewhere never turns an unrelated pull request red; the
   # motion adopters spec renders Storybook components and stays with the
   # Chromium proofs. A release interaction check (an `interaction-check/`
-  # branch from the release tooling) runs the same subset. It runs every spec
-  # only after a failed or stale weekly full run and at a minor release. The
-  # weekly run on main runs every spec.
+  # branch from the release tooling) and the weekly run on main run every
+  # WebKit interaction spec, a release check at its release commit.
   # Out of scope every step after the scope step skips and the job reports
   # success, so the `test` join reads it without a new required context. Specs that need Chromium-only evidence skip themselves
   # in WebKit.
