@@ -21,7 +21,6 @@ import {
   useRef,
   useState,
   type ReactNode,
-  type RefCallback,
 } from 'react';
 import {useCommittedRef} from '../hooks/useCommittedRef';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
@@ -79,13 +78,12 @@ const styles = stylex.create({
 
 /**
  * The tooltip's behavior on the trigger elements the bridge records, and its
- * layer, which takes the id that useTooltip.tsx hands out.
+ * layer. The layer reports its ids from its own commit, so the trigger names
+ * it only once it exists.
  */
 function useTooltipSurface(
   options: TooltipOptions,
-  givenLayerId: string,
-  anchorId: string,
-  onLayerContent: RefCallback<HTMLDivElement>,
+  reportLayer: TooltipBridge['reportLayer'],
 ): TooltipReturn {
   const {
     placement = 'above',
@@ -110,8 +108,6 @@ function useTooltipSurface(
     onShow,
     onHide,
     keepsAnchorClear: true,
-    id: givenLayerId,
-    anchorId,
   });
   const {
     ref: layerRef,
@@ -279,10 +275,20 @@ function useTooltipSurface(
   // description.
   const contentRef = useRef<HTMLDivElement | null>(null);
   useAnnounceRenderedText(contentRef, isHoldShown, 'pinned');
+  const reportsLayer = useCallback(
+    (element: HTMLDivElement | null) => {
+      if (element == null) {
+        return;
+      }
+      reportLayer({describedBy: layerId, anchorId: layerAnchorId});
+      return () => reportLayer(null);
+    },
+    [reportLayer, layerId, layerAnchorId],
+  );
   const contentRefs = useMergedRefs<HTMLDivElement>(
     contentRef,
     registerLayerSurface,
-    onLayerContent,
+    reportsLayer,
   );
 
   // Schedule show with delay (suppressed when isOpen is false). A hover that
@@ -863,15 +869,12 @@ function useTooltipSurface(
 
 export interface TooltipSurfaceProps {
   readonly options: TooltipOptions;
-  /** The id the trigger's `aria-describedby` names once the layer exists. */
-  readonly layerId: string;
   /**
    * The interaction a Core component held for this tooltip before mounting
    * it (the truncation tooltip), which the surface answers instead of the
    * bridge's own.
    */
   readonly heldInterestRef: TooltipBridge['interestRef'] | null;
-  readonly anchorId: string;
   readonly bridge: TooltipBridge;
   readonly content: ReactNode;
   readonly renderProps?: Omit<ContextRenderProps, 'positioning'>;
@@ -892,19 +895,12 @@ export function TooltipSurface(props: TooltipSurfaceProps): ReactNode {
 
 function TooltipSurfaceLayer({
   options,
-  layerId,
-  anchorId,
   bridge,
   heldInterestRef,
   content,
   renderProps,
 }: TooltipSurfaceProps): ReactNode {
-  const tooltip = useTooltipSurface(
-    options,
-    layerId,
-    anchorId,
-    bridge.layerContentRef,
-  );
+  const tooltip = useTooltipSurface(options, bridge.reportLayer);
   const readsHeldIntent = heldInterestRef == null;
   const actionsRef = useCommittedRef({show: tooltip.show, hide: tooltip.hide});
   const {positionRef, interactionRef} = tooltip;

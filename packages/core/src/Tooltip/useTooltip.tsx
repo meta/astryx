@@ -20,7 +20,6 @@
 import {
   use,
   useEffect,
-  useId,
   useState,
   useSyncExternalStore,
   type ReactNode,
@@ -167,6 +166,7 @@ export interface TooltipReturn {
    * The CSS anchor name to use for positioning.
    * Use this when you need to set anchorName manually (e.g., display:contents wrapper).
    * Set it only while the layer is shown or its exit animation runs.
+   * Empty until the tooltip's layer loads, after the page's first paint.
    */
   anchorId: string;
 
@@ -300,6 +300,12 @@ function scheduleTooltipLoad(): void {
 }
 
 /** What the loaded surface gives the bridge when it connects. Internal. */
+/** The loaded layer's ids, which the trigger names once the layer exists. */
+export interface TooltipLayerIds {
+  readonly describedBy: string;
+  readonly anchorId: string;
+}
+
 export interface TooltipSurfaceHandle {
   readonly positionRef: RefCallback<HTMLElement>;
   readonly interactionRef: RefCallback<HTMLElement>;
@@ -329,8 +335,8 @@ export interface TooltipBridge {
     surface: TooltipSurfaceHandle,
     readsHeldIntent: boolean,
   ) => () => void;
-  /** Goes on the loaded layer's content: it reports that the layer exists. */
-  readonly layerContentRef: RefCallback<HTMLDivElement>;
+  /** The loaded layer reports its ids when it exists, and null when it goes. */
+  readonly reportLayer: (ids: TooltipLayerIds | null) => void;
 }
 
 function attach(
@@ -370,7 +376,7 @@ function heldIntent(trigger: HTMLElement | null): 'focus' | 'hover' | null {
 }
 
 function createTooltipBridge(
-  onLayerExists: (exists: boolean) => void,
+  reportLayer: (ids: TooltipLayerIds | null) => void,
 ): TooltipBridge {
   const interestRef: RefObject<TooltipPresentInterestState> = {
     current: {interest: null, tapEvent: null, isRead: true},
@@ -465,13 +471,7 @@ function createTooltipBridge(
     ref,
     positionRef,
     interactionRef,
-    layerContentRef: element => {
-      if (element == null) {
-        return;
-      }
-      onLayerExists(true);
-      return () => onLayerExists(false);
-    },
+    reportLayer,
     show: () => {
       if (surface == null) {
         isShowRequested = true;
@@ -549,12 +549,10 @@ function createTooltipBridge(
  * ```
  */
 export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
-  const layerId = useId();
-  const anchorId = `--astryx-tooltip-${layerId.replace(/[^\w-]/g, '')}`;
   // The layer reports from its commit, so the reference goes out in the
   // same task, before the frame paints, and never ahead of the layer.
-  const [hasLayer, setHasLayer] = useState(false);
-  const [bridge] = useState(() => createTooltipBridge(setHasLayer));
+  const [layerIds, setLayerIds] = useState<TooltipLayerIds | null>(null);
+  const [bridge] = useState(() => createTooltipBridge(setLayerIds));
   // Set only by a Core component that mounts the tooltip on interaction.
   const heldInterestRef = use(TooltipPresentInterestContext);
   const Surface = useSyncExternalStore(subscribe, getSurface, getServerSurface);
@@ -569,8 +567,6 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     Surface == null ? null : (
       <Surface
         options={options}
-        layerId={layerId}
-        anchorId={anchorId}
         bridge={bridge}
         heldInterestRef={heldInterestRef}
         content={children}
@@ -582,8 +578,8 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     ref: bridge.ref,
     positionRef: bridge.positionRef,
     interactionRef: bridge.interactionRef,
-    anchorId,
-    describedBy: hasLayer ? layerId : '',
+    anchorId: layerIds?.anchorId ?? '',
+    describedBy: layerIds?.describedBy ?? '',
     renderTooltip,
     show: bridge.show,
     hide: bridge.hide,

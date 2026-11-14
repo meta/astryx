@@ -44,7 +44,7 @@ test('the trigger names its tooltip only once the tooltip layer exists, and the 
 }) => {
   // Records every state of the trigger's reference from the first parse on.
   await page.addInitScript(() => {
-    const log: Array<{hasReference: boolean; dangling: boolean}> = [];
+    const log: {hasReference: boolean; dangling: boolean}[] = [];
     (window as unknown as {__referenceLog: typeof log}).__referenceLog = log;
     const record = () => {
       for (const button of Array.from(document.querySelectorAll('button'))) {
@@ -93,10 +93,10 @@ test('the trigger names its tooltip only once the tooltip layer exists, and the 
   const {root} = (await cdp.send('DOM.getDocument', {depth: 0})) as unknown as {
     root: {nodeId: number};
   };
-  const {nodeId} = (await cdp.send('DOM.querySelector', {
+  const {nodeId} = await cdp.send('DOM.querySelector', {
     nodeId: root.nodeId,
     selector: `button[aria-describedby="${id}"]`,
-  })) as unknown as {nodeId: number};
+  });
   expect(nodeId).not.toBe(0);
   const {nodes} = (await cdp.send('Accessibility.getPartialAXTree', {
     nodeId,
